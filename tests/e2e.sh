@@ -11,9 +11,10 @@
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, its token stays on the
 #                host, and the self-check, on relaunch too
-#     --from     every section, with from: the longest. from makes VMs from node:24 (Debian 12, with
-#                node, python and claude) and alpine:3 (musl tools, Docker on OpenRC), and builds base
-#                from ubuntu:26.04, with a docker that isn't running
+#     --from     every section, with from, and every base image feature: the longest. from makes VMs
+#                from node:24 (Debian 12, with node, python and claude) and alpine:3 (musl tools,
+#                Docker on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
+#                docker that isn't running
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
@@ -56,8 +57,11 @@ src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/tools" "$root/guest" "$root/oci" "$src/"
-: > "$XDG_CONFIG_HOME/devvm/base-features"
+cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/features" "$root/tools" "$root/guest" "$root/oci" "$src/"
+# The features are in base's key, so only a run with from (which checks them) builds them; every
+# other selection shares one smaller base.
+if want from; then for f in "$root"/features/*.sh; do basename "$f" .sh; done > "$XDG_CONFIG_HOME/devvm/base-features"
+else : > "$XDG_CONFIG_HOME/devvm/base-features"; fi
 D=$src/devvm
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
@@ -176,8 +180,17 @@ fi
 if want images; then
 section "images"
 # base stays cached between runs (--clean deletes it); the fixture layers' images are this run's.
-check "build base" quiet "$D" build base
-kb=$(keys_of base | head -1)
+check "build base" quiet env DEVVM_MESSAGES=names "$D" build base
+# Its key: the build's, else the newest base from Ubuntu's image (from's bases are cached too).
+kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
+if [[ -n $kb ]] && want from; then
+  features=$(tr '\n' ' ' < "$XDG_CONFIG_HOME/devvm/base-features")
+  runlog=$(sed -n 's/^ *log_details file=//p' "$work/last.log")
+  check "base ran base.sh, then every feature" bash -c "
+    for f in base $features; do grep -q \"^# \\[[0-9]*/[0-9]*\\] running_script script=\$f.sh vm=devvm-img-$kb\$\" '$runlog' || exit 1; done"
+fi
+# shellcheck disable=SC2012  # key-named files
+[[ -n $kb ]] || kb=$(grep -lx name=base "$images"/* 2>/dev/null | xargs grep -lx 'from=' 2>/dev/null | xargs ls -t 2>/dev/null | head -1 | xargs basename 2>/dev/null)
 check "base is a stopped image, recorded with Ubuntu's image and its C library" bash -c "
   [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
   grep -qx 'chain=base=$kb' '$images/$kb' && grep -qx 'libc=gnu' '$images/$kb' &&
@@ -534,7 +547,8 @@ check "a node+python+claude VM from node:24 (Debian 12) boots, its base keyed by
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
   grep -qx from=node:24 '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
   grep -qE '^digest=node@sha256:[0-9a-f]{64}$' \"\$(from_record node:24)\""
-check "its node and claude work" in_vm "$vm" 'node --version && claude --version'
+check "its node, claude and every feature work" in_vm "$vm" \
+  'node --version && claude --version && eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 check "python, python3 and claude are the locked versions" in_vm "$vm" \
   "[[ \$(python --version) == 'Python $(lockv python)' && \$(python3 --version) == 'Python $(lockv python)' && \$(claude --version) == '$(lockv claude) '* ]]"
 check "an interactive shell starts without errors" bash -c "out=\$(limactl shell --workdir / $vm bash -ic true </dev/null 2>&1) && ! grep -iE 'error|unknown option|not found' <<<\"\$out\""
@@ -547,6 +561,7 @@ check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && 
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
+check "and every feature" in_vm "$vm" 'eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 # As root: syslog's and acpid's pid files are root-only, so a user's rc-status calls them crashed.
 check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/dev/null)" ]]'
 (cd "$al" && quiet "$D" rm -f)

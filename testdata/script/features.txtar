@@ -1,0 +1,83 @@
+# Base image features: chosen the first time anything is built (without a
+# terminal, every one: devvm's own, then the user's), saved in
+# base-features, and run in base after base.sh, in the order chosen.
+env DEVVM_MESSAGES=names
+env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
+rm $CHOSEN
+mkdir $XDG_CONFIG_HOME/devvm/features
+cp mine.sh $XDG_CONFIG_HOME/devvm/features/mine.sh
+cp fzf.sh $XDG_CONFIG_HOME/devvm/features/fzf.sh
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+
+# A user feature named like a built-in one is ignored, with a warning.
+exec devvm build base
+stderr '^devvm: feature_shadowed feature=fzf file=.*/config/devvm/features/fzf\.sh$'
+! stdout features_help
+stdout '^==> base_features features=cli-tools fzf omb mine$'
+cmp $CHOSEN all
+cmp $STUB_DIR/scripts ran-all
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
+stdout '^# \[4/9\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[5/9\] running_script script=cli-tools\.sh vm=devvm-img-'
+stdout '^# \[8/9\] running_script script=mine\.sh vm=devvm-img-'
+stdout '^# \[9/9\] stopping vm=devvm-img-'
+
+# Chosen once: the next build keeps the choice, and base.
+exec devvm build base
+! stderr feature_shadowed
+! stdout 'base_features|building_image'
+
+# Editing a chosen feature's script rebuilds base on next use.
+exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/features/mine.sh"'
+exec devvm build base
+stdout '^==> building_image image=base key='
+
+# A chosen feature without a script is skipped, with a warning; the steps
+# count only what runs. A layer runs only its own script.
+exec sh -c 'printf "fzf\nomb\nnope\n" > "$CHOSEN"; : > "$STUB_DIR/scripts"'
+exec devvm build foo
+stderr '^devvm: unknown_feature feature=nope$'
+! stdout base_features
+cmp $STUB_DIR/scripts ran-some
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
+stdout '^# \[4/7\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[5/7\] running_script script=fzf\.sh vm=devvm-img-'
+stdout '^# \[6/7\] running_script script=omb\.sh vm=devvm-img-'
+stdout '^# \[7/7\] stopping vm=devvm-img-'
+stdout '^# \[4/5\] running_script script=foo\.sh vm=devvm-img-'
+! stdout '\[8/7\]|\[6/5\]'
+
+# None chosen: base runs only base.sh.
+exec sh -c ': > "$CHOSEN"; : > "$STUB_DIR/scripts"'
+exec devvm build base
+! stderr .
+cmp $STUB_DIR/scripts ran-none
+
+-- mine.sh --
+#!/bin/bash
+# my tools
+-- fzf.sh --
+#!/bin/bash
+# my fzf
+-- foo.sh --
+#!/bin/bash
+echo foo
+-- all --
+cli-tools
+fzf
+omb
+mine
+-- ran-all --
+# Essentials, Docker, and mise for the shared tools (tools/).
+# CLI tools: bat, fd, eza, zoxide (z), btop, tree, tldr
+# fzf: fuzzy Ctrl-R history and Ctrl-T file search
+# oh-my-bash: themed prompt, completions, aliases
+# my tools
+-- ran-some --
+# Essentials, Docker, and mise for the shared tools (tools/).
+# fzf: fuzzy Ctrl-R history and Ctrl-T file search
+# oh-my-bash: themed prompt, completions, aliases
+echo foo
+-- ran-none --
+# Essentials, Docker, and mise for the shared tools (tools/).

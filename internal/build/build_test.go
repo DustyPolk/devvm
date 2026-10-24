@@ -42,6 +42,7 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 	write(t, filepath.Join(root, "layers", "base.sh"), "#!/bin/bash\n")
 	write(t, filepath.Join(d.Layers(), "foo.sh"), "#!/bin/bash\necho foo\n")
 	write(t, filepath.Join(d.Layers(), "bar.sh"), "#!/bin/bash\necho bar\n")
+	write(t, d.BaseFeatures(), "") // chosen: none
 	caps := backend.Caps{}
 	for _, f := range backend.Features {
 		caps[f] = backend.Native

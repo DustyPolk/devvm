@@ -97,6 +97,16 @@ func BaseBuildTime() M {
 	return M{id: "base_build_time"}
 }
 
+// BaseFeatures is [base_features]: "base features: {{.features}}"
+func BaseFeatures(features string) M {
+	return M{id: "base_features", vals: []val{{"features", features}}}
+}
+
+// BaseFeaturesNone is [base_features_none]: "base features: none"
+func BaseFeaturesNone() M {
+	return M{id: "base_features_none"}
+}
+
 // BranchNamesInvalid is [branch_names_invalid]: "skipping the VM's branches with names git refuses: {{.refs}}"
 func BranchNamesInvalid(refs string) M {
 	return M{id: "branch_names_invalid", vals: []val{{"refs", refs}}}
@@ -345,6 +355,16 @@ func Exported(file string, vm string) M {
 // ExportingDocker is [exporting_docker]: "exporting {{.from}} from Docker"
 func ExportingDocker(from string) M {
 	return M{id: "exporting_docker", vals: []val{{"from", from}}}
+}
+
+// FeatureShadowed is [feature_shadowed]: "ignoring {{.file}}: a built-in feature is named {{.feature}}; rename yours"
+func FeatureShadowed(feature string, file string) M {
+	return M{id: "feature_shadowed", vals: []val{{"feature", feature}, {"file", file}}}
+}
+
+// FeaturesHelp is [features_help]: "Base image features (up/down to move, space to toggle, enter to confirm):"
+func FeaturesHelp() M {
+	return M{id: "features_help"}
 }
 
 // FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before deleting?"
@@ -1062,6 +1082,11 @@ func UnfinishedImage(vm string) M {
 	return M{id: "unfinished_image", vals: []val{{"vm", vm}}}
 }
 
+// UnknownFeature is [unknown_feature]: "skipping feature {{.feature}}: it has no script"
+func UnknownFeature(feature string) M {
+	return M{id: "unknown_feature", vals: []val{{"feature", feature}}}
+}
+
 // UnknownLayer is [unknown_layer]: "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
 func UnknownLayer(agents string, envs string, layer string) M {
 	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
@@ -1188,6 +1213,8 @@ var specs = map[string]spec{
 	"bad_path":                    {fields: []string{"dir"}},
 	"bad_secret_service":          {},
 	"base_build_time":             {},
+	"base_features":               {fields: []string{"features"}},
+	"base_features_none":          {},
 	"branch_names_invalid":        {fields: []string{"refs"}},
 	"build_failed":                {fields: []string{"image", "reason"}},
 	"building_image":              {fields: []string{"image", "key"}},
@@ -1238,6 +1265,8 @@ var specs = map[string]spec{
 	"export_failed":               {fields: []string{"vm"}},
 	"exported":                    {fields: []string{"file", "vm"}},
 	"exporting_docker":            {fields: []string{"from"}},
+	"feature_shadowed":            {fields: []string{"feature", "file"}},
+	"features_help":               {},
 	"fetch_before_delete":         {fields: []string{"prefix"}},
 	"fetch_failed":                {fields: []string{"vm"}},
 	"fetch_until":                 {fields: []string{"file", "remote"}},
@@ -1381,6 +1410,7 @@ var specs = map[string]spec{
 	"uncommitted_not_copied":      {fields: []string{"branch", "dir", "remote"}},
 	"unfetched_commits":           {fields: []string{"refs"}},
 	"unfinished_image":            {fields: []string{"vm"}},
+	"unknown_feature":             {fields: []string{"feature"}},
 	"unknown_layer":               {fields: []string{"agents", "envs", "layer"}},
 	"unsafe_folder":               {fields: []string{"dir", "holds"}},
 	"unsafe_folder_inside":        {fields: []string{"dir", "inside"}},

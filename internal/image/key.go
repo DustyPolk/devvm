@@ -111,6 +111,10 @@ func LayerName(name string) bool {
 
 var layerName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
+// FeatureName reports whether a base image feature can have that name:
+// lowercase letters, digits and dashes, starting with a letter or digit.
+func FeatureName(name string) bool { return layerName.MatchString(name) }
+
 // Parent is the image an image is built on: foo+bar's is foo, foo's is
 // base. Base has none ("").
 func Parent(name string) string {
@@ -194,7 +198,7 @@ func (in Inputs) baseKey() (string, error) {
 		}
 	}
 	for _, f := range in.BaseFeatures {
-		if !layerName.MatchString(f) {
+		if !FeatureName(f) {
 			return "", fmt.Errorf("invalid feature name %q", f)
 		}
 		k.field("feature", f)

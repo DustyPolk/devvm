@@ -26,7 +26,7 @@ import (
 // Builder builds images on one backend.
 type Builder struct {
 	Dirs    paths.Dirs
-	Root    string // devvm's own files: base.yaml, layers/, oci/ (paths.Root)
+	Root    string // devvm's own files: base.yaml, layers/, features/, oci/ (paths.Root)
 	Backend backend.Backend
 	Tools   *tools.Tools // the shared tools image names hold
 	// From is the container image base starts from (--from); "" for the
@@ -46,13 +46,19 @@ func (b *Builder) Inputs() (image.Inputs, error) {
 	if err != nil {
 		return image.Inputs{}, err
 	}
+	features, err := b.chosenFeatures()
+	if err != nil {
+		return image.Inputs{}, err
+	}
 	return image.Inputs{
-		Backend:    b.Backend.Name(),
-		Root:       os.DirFS(b.Root),
-		Layers:     os.DirFS(b.Dirs.Layers()),
-		Rebuilds:   os.DirFS(b.Dirs.Rebuilds()),
-		From:       b.From,
-		FromDigest: digest,
+		Backend:      b.Backend.Name(),
+		Root:         os.DirFS(b.Root),
+		Layers:       os.DirFS(b.Dirs.Layers()),
+		Features:     os.DirFS(b.Dirs.Features()),
+		BaseFeatures: features,
+		Rebuilds:     os.DirFS(b.Dirs.Rebuilds()),
+		From:         b.From,
+		FromDigest:   digest,
 	}, nil
 }
 
@@ -162,6 +168,10 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if err := b.CheckLayers(name); err != nil {
 		return err
 	}
+	// Every key holds base's, so its features are chosen first.
+	if err := b.chooseFeatures(); err != nil {
+		return err
+	}
 	if err := b.build(ctx, image.WithoutTools(name)); err != nil {
 		return err
 	}
@@ -223,6 +233,16 @@ func (b *Builder) build(ctx context.Context, name string) error {
 		script = backend.Script{Name: layer + ".sh", Path: b.LayerScript(layer)}
 	}
 	spec.Scripts = []backend.Script{script}
+	if name == image.Base {
+		// Then its features, in the order chosen.
+		features, err := b.featureScripts()
+		if err != nil {
+			return err
+		}
+		for _, p := range features {
+			spec.Scripts = append(spec.Scripts, backend.Script{Name: filepath.Base(p), Path: p})
+		}
+	}
 
 	switch {
 	case b.From != "":
@@ -339,6 +359,9 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 	// The tools lock versions the shared tools: they aren't rebuilt.
 	if t := image.ToolsOf(name); len(t) > 0 {
 		return msg.ToolsNotImages(strings.Join(t, " "))
+	}
+	if err := b.chooseFeatures(); err != nil {
+		return err
 	}
 	old, err := b.Key(name)
 	if err != nil {

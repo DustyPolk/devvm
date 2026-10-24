@@ -5,7 +5,7 @@ weight: 20
 
 ## Base
 
-`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `--from` starts it from a container image instead ([details](from.md)). `base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `layers/base.sh` installs it.
+`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `--from` starts it from a container image instead ([details](from.md)). `base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `layers/base.sh` installs it, then the optional [features](customizing.md) you chose.
 
 It drops the server extras Ubuntu's cloud image comes with: snapd, multipath, ModemManager, udisks, firmware updates, crash reporting, tracing tools, kernel headers, and apt's background updates and upgrades. That saves 0.9 GB of disk and 100 MB of memory per VM. The everyday tools stay (htop, tmux, lsof, strace, tcpdump, rsync, nano and so on).
 
@@ -103,7 +103,7 @@ Each image is built in a VM of its own, which then is the image:
 
 1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings, or with `--from`, from a container image [converted into a disk](from.md#how-its-converted). A layer's VM is a copy of its parent image.
 2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement).
-3. The script runs: `layers/base.sh` for base, yours for a layer.
+3. The script runs: `layers/base.sh` for base, then its chosen [features](customizing.md), yours for a layer.
 4. The VM stops. Its record is written last, with its chain, what base started from, and its C library.
 
 Nothing from the host is mounted into a build: layer scripts run third-party installers, which mustn't see your files. base gets `base.yaml`'s memory, or half the host's when that would leave the host less than 2 GiB. The images built on it, and their VMs, keep that.

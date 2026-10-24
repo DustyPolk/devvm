@@ -163,6 +163,22 @@ other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's c
 description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
 other = "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
 
+[features_help]
+other = "Base image features (up/down to move, space to toggle, enter to confirm):"
+
+[base_features]
+description = "features is a space-separated list of names"
+other = "base features: {{.features}}"
+
+[base_features_none]
+other = "base features: none"
+
+[feature_shadowed]
+other = "ignoring {{.file}}: a built-in feature is named {{.feature}}; rename yours"
+
+[unknown_feature]
+other = "skipping feature {{.feature}}: it has no script"
+
 [build_failed]
 description = "reason is an error from the system, in English"
 other = "couldn't build {{.image}}: {{.reason}}"

@@ -48,7 +48,7 @@ func buildDevvm(t *testing.T) string {
 	if err == nil {
 		err = os.WriteFile(filepath.Join(dir, "base.yaml"), data, 0o600) //nolint:gosec // the test's own folder
 	}
-	for _, d := range []string{"layers", "tools", "guest", "oci"} {
+	for _, d := range []string{"layers", "features", "tools", "guest", "oci"} {
 		if err == nil {
 			err = os.CopyFS(filepath.Join(dir, d), os.DirFS(filepath.Join(repo, d)))
 		}
@@ -94,6 +94,13 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		return err
 	}
 	env.Setenv("STUB_LOG", log)
+	// Base's features are chosen (none), so nothing asks.
+	if err := os.MkdirAll(filepath.Join(root, "config", "devvm"), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(root, "config", "devvm", "base-features"), nil, 0o600); err != nil {
+		return err
+	}
 	// Ubuntu's cloud images: one dated release in a folder, never the
 	// network.
 	rel := filepath.Join(root, "ubuntu", "release-20260101")
