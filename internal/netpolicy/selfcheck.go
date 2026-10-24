@@ -75,6 +75,32 @@ func SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, restart fun
 	return st.Set(KeyCheck, CheckOK)
 }
 
+// Listed is a VM's network policy as devvm ls shows it: off, on, or
+// unenforced: on, but the last self-check failed, or the VM runs but not
+// confined (started some other way since). A stopped VM starts confined
+// next time, unless that self-check failed. "" when its creation didn't
+// record it.
+func Listed(ctx context.Context, b backend.Backend, st *state.VM, running bool) (string, error) {
+	switch {
+	case st.Get(KeyNet) == "":
+		return "", nil
+	case !On(st):
+		return "off", nil
+	case st.Get(KeyCheck) == CheckUnenforced:
+		return CheckUnenforced, nil
+	case !running:
+		return "on", nil
+	}
+	confined, err := b.Confined(ctx, st.Name())
+	if err != nil {
+		return "", err
+	}
+	if !confined {
+		return CheckUnenforced, nil
+	}
+	return "on", nil
+}
+
 // enforced reports whether the VM runs confined and can't connect out
 // directly.
 func enforced(ctx context.Context, b backend.Backend, vm string) (bool, error) {

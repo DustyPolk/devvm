@@ -497,3 +497,42 @@ func TestSelfCheck(t *testing.T) {
 		t.Errorf("no policy: %v, %q", err, f.Methods())
 	}
 }
+
+// What ls shows: running VMs are checked on the host; a failed self-check
+// stands either way.
+func TestListed(t *testing.T) {
+	for _, tc := range []struct {
+		name, net, check    string
+		running, unconfined bool
+		want                string
+		asks                bool
+	}{
+		{name: "unfinished", want: ""},
+		{name: "off", net: "off", running: true, want: "off"},
+		{name: "on, stopped", net: "on", want: "on"},
+		{name: "on, stopped, unconfined", net: "on", unconfined: true, want: "on"},
+		{name: "on, running", net: "on", running: true, want: "on", asks: true},
+		{name: "on, running elsewhere", net: "on", running: true, unconfined: true, want: "unenforced", asks: true},
+		{name: "failed self-check", net: "on", check: "unenforced", running: true, want: "unenforced"},
+		{name: "failed self-check, stopped", net: "on", check: "unenforced", want: "unenforced"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := paths.Dirs{Data: t.TempDir()}
+			st, _ := state.CreateVM(d, "V", state.NewVM{Image: "base"})
+			for k, v := range map[string]string{KeyNet: tc.net, KeyCheck: tc.check} {
+				if v != "" {
+					_ = st.Set(k, v)
+				}
+			}
+			f := backendtest.New("fake", nil)
+			f.Unconfined = tc.unconfined
+			got, err := Listed(t.Context(), f, st, tc.running)
+			if err != nil || got != tc.want {
+				t.Errorf("Listed = %q, %v; want %q", got, err, tc.want)
+			}
+			if asked := slices.Contains(f.Methods(), "Confined"); asked != tc.asks {
+				t.Errorf("asked the backend: %v", asked)
+			}
+		})
+	}
+}

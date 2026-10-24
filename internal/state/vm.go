@@ -3,9 +3,27 @@ package state
 import (
 	"errors"
 	"io/fs"
+	"os"
 
 	"github.com/w3cj/devvm/internal/paths"
 )
+
+// VMNames returns the names of the VMs that have state, sorted.
+func VMNames(d paths.Dirs) ([]string, error) {
+	es, err := os.ReadDir(d.VMs())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range es {
+		if e.Type().IsRegular() && checkName("VM name", e.Name()) == nil {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
+}
 
 // Keys of a VM's state. Other lowercase keys (a-z, 0-9, _) may be set too.
 const (

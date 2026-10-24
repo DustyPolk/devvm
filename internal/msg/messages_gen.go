@@ -487,6 +487,11 @@ func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
 }
 
+// ImageFrom is [image_from]: "{{.image}} (from {{.from}})"
+func ImageFrom(from string, image string) M {
+	return M{id: "image_from", vals: []val{{"from", from}, {"image", image}}}
+}
+
 // ImageInUse is [image_in_use]: "can't delete image {{.key}}: {{.vms}} use its disk"
 func ImageInUse(key string, vms string) M {
 	return M{id: "image_in_use", vals: []val{{"key", key}, {"vms", vms}}}
@@ -595,6 +600,11 @@ func LogEnd(file string) M {
 // LoginCopyFailed is [login_copy_failed]: "couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}"
 func LoginCopyFailed(agent string, reason string, vm string) M {
 	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
+}
+
+// LsFailed is [ls_failed]: "couldn't list the VMs: {{.reason}}"
+func LsFailed(reason string) M {
+	return M{id: "ls_failed", vals: []val{{"reason", reason}}}
 }
 
 // MiseChecksum is [mise_checksum]: "the mise {{.version}} download doesn't match its checksum: not using it"
@@ -1291,6 +1301,7 @@ var specs = map[string]spec{
 	"git_replaced":                {fields: []string{"git"}},
 	"git_worktree_stray":          {fields: []string{"wt"}},
 	"home_not_absolute":           {},
+	"image_from":                  {fields: []string{"from", "image"}},
 	"image_in_use":                {fields: []string{"key", "vms"}},
 	"image_leftover":              {fields: []string{"image", "key"}},
 	"image_missing":               {fields: []string{"key"}},
@@ -1313,6 +1324,7 @@ var specs = map[string]spec{
 	"log_details":                 {fields: []string{"file"}},
 	"log_end":                     {fields: []string{"file"}},
 	"login_copy_failed":           {fields: []string{"agent", "reason", "vm"}},
+	"ls_failed":                   {fields: []string{"reason"}},
 	"mise_checksum":               {fields: []string{"version"}},
 	"mise_download_failed":        {fields: []string{"version"}},
 	"mount_comma":                 {fields: []string{"path"}},

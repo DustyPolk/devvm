@@ -195,6 +195,24 @@ func TestVMMissing(t *testing.T) {
 	}
 }
 
+func TestVMNames(t *testing.T) {
+	d := testDirs(t)
+	if names, err := VMNames(d); err != nil || names != nil {
+		t.Fatalf("no state folder: %v, %v", names, err)
+	}
+	write(t, d.VMState("devvm-b-00000000000000"), "net=off\n")
+	write(t, d.VMState("devvm-a-00000000000000"), "net=off\n")
+	write(t, d.VMState(".devvm-c-00000000000000.tmp-1"), "")
+	if err := os.MkdirAll(filepath.Join(d.VMs(), "folder"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	names, err := VMNames(d)
+	want := []string{"devvm-a-00000000000000", "devvm-b-00000000000000"}
+	if err != nil || !reflect.DeepEqual(names, want) {
+		t.Errorf("VMNames = %v, %v; want %v", names, err, want)
+	}
+}
+
 func TestVMCorrupt(t *testing.T) {
 	d := testDirs(t)
 	write(t, d.VMState("vm"), "image=base\ngarbage\n")

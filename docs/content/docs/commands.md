@@ -15,6 +15,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm remove TOOLS` | take shared tools out of this folder's VM (`devvm remove python+claude`), then open a shell in it |
 | `devvm rm [-f]` | delete this folder's VM, exporting its agents' history first ([details](#deleting-a-vm)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
+| `devvm ls` | list the project VMs ([details](#listing-vms)) |
 
 A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)); with `--clone`, the folder isn't mounted and the VM gets its own clone of the repo ([working on a clone](clone.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
@@ -89,6 +90,22 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 
 - `devvm rm` deletes it, without an export (its folder is gone), with `-f` or not. It may hold that project's work.
 - `devvm adopt` gives it to this folder, with its files, tokens and allowlist. Its `.git` protection starts again, as if `.git` had just appeared.
+
+### Listing VMs
+
+`devvm ls` prints a table of the project VMs on every backend, sorted by name, a header first. Images and build VMs aren't in it.
+
+| Column | |
+| --- | --- |
+| `NAME` | the VM's name: `devvm-<folder>-<hash>` |
+| `STATUS` | as its backend reports it: `Running`, `Stopped`, or another state it has |
+| `IMAGE` | its image, with what it added in place; a base from a container image as `base (from node:24)` ([details](from.md)) |
+| `GIT` | its [`.git` protection](git-protection.md): `on` or `off`; `clone` for a [`--clone`](clone.md) VM |
+| `NET` | its [network policy](network.md): `on`, `off`, or `unenforced` ([the self-check](network.md#the-self-check)) |
+| `BACKEND` | the [backend](backends.md) that runs it |
+| `FOLDER` | its project folder |
+
+A value the VM's state doesn't have is `-`: a VM whose creation didn't finish has only its name, status and backend. A backend that can't list its VMs (Lima not installed, say) fails `devvm ls` only when a VM's state names it.
 
 ## Images
 

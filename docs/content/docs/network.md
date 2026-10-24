@@ -90,6 +90,8 @@ Network policy holds only while the VM runs on the Lima process devvm started co
 - **Started outside devvm:** in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
 - **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
 
+`devvm ls` shows such a VM's network policy as `unenforced`: one whose last self-check failed, or one running that isn't on the process devvm started (checked on the host each time).
+
 ## Secrets
 
 Tokens stay on the host. A VM gets a placeholder of its own instead, ending in a random value of its own (its salt, not its password), and its proxy puts the real value into requests for that token's hosts, in one header:

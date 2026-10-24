@@ -201,6 +201,10 @@ other = "creating {{.vm}} from Ubuntu's cloud image"
 [building_image_from]
 other = "building image {{.image}} ({{.key}}) from {{.from}}"
 
+[image_from]
+description = "an image's label, as devvm ls shows it: base (from node:24)"
+other = "{{.image}} (from {{.from}})"
+
 [bad_from]
 description = "from is quoted like a Go string when it holds control characters"
 other = "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
@@ -297,6 +301,10 @@ other = "couldn't delete this folder's VM: {{.reason}}"
 [adopt_failed]
 description = "reason is an error from the system, in English"
 other = "couldn't adopt this folder's VM: {{.reason}}"
+
+[ls_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't list the VMs: {{.reason}}"
 
 [bad_path]
 description = "dir is quoted like a Go string when it holds control characters"
