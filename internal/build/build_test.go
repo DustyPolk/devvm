@@ -1,15 +1,20 @@
 package build
 
 import (
+	"context"
 	"errors"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -117,7 +122,7 @@ func TestBuildTools(t *testing.T) {
 	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images", "BuildImage", "BuildImage", "BuildTools"}) {
 		t.Fatalf("calls = %q", ms)
 	}
-	chain, err := b.Inputs().Chain("foo")
+	chain, err := b.Chain("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +181,7 @@ func TestBuild(t *testing.T) {
 	if err := b.Build(ctx, "foo+bar"); err != nil {
 		t.Fatal(err)
 	}
-	chain, err := b.Inputs().Chain("foo+bar")
+	chain, err := b.Chain("foo+bar")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +234,7 @@ func TestBuildKeepsTheLibc(t *testing.T) {
 	if err := b.Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}
-	key, err := b.Inputs().Key("foo")
+	key, err := b.Key("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,14 +297,14 @@ func TestRebuild(t *testing.T) {
 	if err := b.Build(ctx, "foo+bar"); err != nil {
 		t.Fatal(err)
 	}
-	old, err := b.Inputs().Chain("foo+bar")
+	old, err := b.Chain("foo+bar")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Rebuild(ctx, "foo"); err != nil {
 		t.Fatal(err)
 	}
-	newFoo, err := b.Inputs().Key("foo")
+	newFoo, err := b.Key("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,5 +344,129 @@ func TestRebuildKeepsImagesInUse(t *testing.T) {
 	}
 	if _, err := state.ReadImage(b.Dirs, old); err != nil {
 		t.Errorf("the image in use lost its record: %v", err)
+	}
+}
+
+// fromBuilder is testBuilder with --from node:24, the conversion's
+// scripts, and a registry whose digest for it is *digest; lookups counts
+// what it's asked.
+func fromBuilder(t *testing.T, digest *string, lookups *int) (*Builder, *backendtest.Fake) {
+	t.Helper()
+	b, f := testBuilder(t)
+	for _, s := range []string{"build.sh", "bootify.sh", "kernel.sh"} {
+		write(t, filepath.Join(b.Root, "oci", s), "#!/bin/bash\n")
+	}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		*lookups++
+		w.Header().Set("Docker-Content-Digest", *digest)
+	}))
+	t.Cleanup(srv.Close)
+	b.From = "node:24"
+	b.Lookup = &from.Lookup{
+		Dirs:     b.Dirs,
+		Registry: &from.Registry{Client: srv.Client(), Base: func(string) string { return srv.URL }},
+		DockerID: func(context.Context, string) (string, bool) { t.Error("Docker asked"); return "", false },
+		Warn:     func(m msg.M) { t.Errorf("warned: %s", m.Names()) },
+	}
+	return b, f
+}
+
+// --from: base starts from the image's digest, looked up when building;
+// every image on it records both.
+func TestBuildFrom(t *testing.T) {
+	digest, lookups := "sha256:"+strings.Repeat("a", 64), 0
+	b, f := fromBuilder(t, &digest, &lookups)
+	f.Built = backend.Built{Origin: "node@" + digest, Libc: "musl"}
+	if err := b.Build(t.Context(), "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if lookups != 1 {
+		t.Errorf("looked up %d times", lookups)
+	}
+	chain, err := b.Chain("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var specs []backend.ImageSpec
+	for _, c := range f.Calls() {
+		if c.Method == "BuildImage" {
+			specs = append(specs, c.Args[0].(backend.ImageSpec))
+		}
+	}
+	if len(specs) != 2 || specs[0].From == nil || *specs[0].From != (backend.From{Ref: "node:24", Digest: "node@" + digest}) || specs[1].From != nil {
+		t.Fatalf("specs: %+v", specs)
+	}
+	for i, name := range []string{"base", "foo"} {
+		rec, err := state.ReadImage(b.Dirs, chain[i].Key)
+		if want := (state.Image{Name: name, Chain: chain[:i+1].String(), From: "node:24", Digest: "node@" + digest, Libc: "musl"}); err != nil || rec != want {
+			t.Errorf("%s's record: %+v, %v; want %+v", name, rec, err, want)
+		}
+	}
+	// Ubuntu's base is another image.
+	ubuntu := &Builder{Dirs: b.Dirs, Root: b.Root, Backend: b.Backend, Tools: b.Tools}
+	if k, err := ubuntu.Key("base"); err != nil || k == chain[0].Key {
+		t.Errorf("Ubuntu's base: %s, %v", k, err)
+	}
+	// Keys, lists and outdated checks use the recorded digest: no lookups.
+	if imgs, err := b.List(t.Context()); err != nil || len(imgs) != 2 || !imgs[0].Current || !imgs[1].Current || imgs[0].From != "node:24" {
+		t.Errorf("List: %+v, %v", imgs, err)
+	}
+	if err := b.WarnIfOutdated(chain.String()); err != nil || lookups != 1 {
+		t.Errorf("WarnIfOutdated: %v, %d lookups", err, lookups)
+	}
+
+	// The tag moved: the next build looks it up, and base and foo are new.
+	digest = "sha256:" + strings.Repeat("b", 64)
+	again := &Builder{Dirs: b.Dirs, Root: b.Root, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup}
+	if err := again.Build(t.Context(), "foo"); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := again.Chain("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved[0].Key == chain[0].Key || moved[1].Key == chain[1].Key {
+		t.Errorf("a moved tag kept the keys: %s, %s", moved, chain)
+	}
+	if imgs, err := again.List(t.Context()); err != nil || len(imgs) != 4 || imgs[0].Current || imgs[1].Current {
+		t.Errorf("after the move, the old images are stale: %+v, %v", imgs, err)
+	}
+}
+
+// A pinned digest is never looked up, and rebuilds count apart from
+// other bases'.
+func TestBuildFromPinned(t *testing.T) {
+	digest, lookups := "", 0
+	b, f := fromBuilder(t, &digest, &lookups)
+	b.From = "node:24@sha256:" + strings.Repeat("c", 64)
+	if err := b.Rebuild(t.Context(), "base"); err != nil {
+		t.Fatal(err)
+	}
+	if lookups != 0 {
+		t.Errorf("looked up %d times", lookups)
+	}
+	if _, err := os.Stat(b.Dirs.RebuildFile("base", b.From)); err != nil {
+		t.Error(err)
+	}
+	if _, err := os.Stat(b.Dirs.RebuildFile("base", "")); err == nil {
+		t.Error("Ubuntu's base was rebuilt")
+	}
+	for _, c := range f.Calls() {
+		if c.Method == "BuildImage" && c.Args[0].(backend.ImageSpec).From.Digest != b.From {
+			t.Errorf("built %+v", c.Args[0])
+		}
+	}
+}
+
+// A backend without --from is refused before anything is built.
+func TestBuildFromRequires(t *testing.T) {
+	digest, lookups := "sha256:"+strings.Repeat("a", 64), 0
+	b, f := fromBuilder(t, &digest, &lookups)
+	delete(f.Capabilities, backend.FeatureFrom)
+	if err := b.Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
+		t.Errorf("Build = %v, want backend_lacks", err)
+	}
+	if slices.Contains(f.Methods(), "BuildImage") {
+		t.Error("built anyway")
 	}
 }

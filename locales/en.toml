@@ -182,6 +182,58 @@ other = "image {{.image}} ready"
 [creating_from_ubuntu]
 other = "creating {{.vm}} from Ubuntu's cloud image"
 
+[building_image_from]
+other = "building image {{.image}} ({{.key}}) from {{.from}}"
+
+[bad_from]
+description = "from is quoted like a Go string when it holds control characters"
+other = "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
+
+[from_ignored]
+other = "--from only applies to new VMs: {{.vm}} keeps what it was made from"
+
+[from_unreachable]
+other = "can't reach {{.host}} to look up {{.from}} (offline?)"
+
+[from_not_found]
+other = "{{.host}} doesn't have {{.from}}, or it's private: devvm takes public images, and images Docker has"
+
+[from_cached_unreachable]
+other = "can't reach {{.host}} to look up {{.from}} (offline?): using the digest devvm last saw"
+
+[from_cached_not_found]
+other = "{{.host}} doesn't have {{.from}}, or it's private: using the digest devvm last saw"
+
+[no_digest]
+other = "devvm has no digest for {{.from}}"
+
+[docker_only]
+other = "{{.from}} is an image only Docker has (built and never pushed, or private): start Docker and try again"
+
+[exporting_docker]
+other = "exporting {{.from}} from Docker"
+
+[docker_export_failed]
+other = "couldn't export {{.from}} from Docker"
+
+[docker_image_changed]
+other = "{{.from}} changed in Docker while devvm built from it (a rebuild?): run devvm again"
+
+[oci_waiting]
+other = "waiting for another devvm's --from conversion to finish"
+
+[converting_in_vm]
+other = "converting {{.from}} into a disk, in a throwaway VM ({{.vm}})"
+
+[converting]
+other = "converting {{.from}}"
+
+[convert_failed]
+other = "couldn't convert {{.from}} into a disk"
+
+[convert_bad_output]
+other = "converting {{.from}} wrote an unexpected {{.file}} (the image may be hostile): not using it"
+
 [cloning_image]
 other = "cloning {{.parent}}'s image"
 

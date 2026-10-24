@@ -12,6 +12,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line |
 | `internal/build/`, `internal/image/` | building and rebuilding images, their records; image keys and names (pure) |
+| `internal/from/` | `--from`: references, registry digests (anonymous token), Docker's IDs, the recorded digests |
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
@@ -20,14 +21,14 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files (errors aren't messages yet) |
 | `internal/platform/`, `internal/ubuntu/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads) |
-| `base.yaml`, `layers/`, `tools/`, `guest/` | base's Lima template and scripts; shared tools (`mise.toml`, `build.sh`, `*.policy`); in-VM scripts sent on every launch |
+| `base.yaml`, `layers/`, `tools/`, `guest/`, `oci/` | base's Lima template and scripts; shared tools (`mise.toml`, `build.sh`, `*.policy`); in-VM scripts sent on every launch; `--from`'s conversion (see its `README.md`) |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |
 | `docs/` | the docs site (Hugo + Hextra); `content/docs/cli/` is generated, never edit it |
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
 
-Still to come: smolvm and docker backends; `features/` and `oci/` (next to the binary, like `base.yaml`); `install.sh`, `scripts/`, `packaging/`.
+Still to come: smolvm and docker backends; `features/` (next to the binary, like `base.yaml`); `install.sh`, `scripts/`, `packaging/`.
 
 ## Tasks
 
@@ -83,7 +84,7 @@ Still to come: smolvm and docker backends; `features/` and `oci/` (next to the b
 
 - **Unit tests** are Go table tests next to the code; **CLI tests** are testscript against the built binary in a `/tmp` sandbox, stubs first on `PATH` (`stub_calls`). New logic needs a test. Neither touches the Keychain, real VMs or the user's folders; state-writing tests point the XDG folders at `t.TempDir()`. Go tests never run up: scripts do.
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
-- **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `tools` (a node VM), `network` (a claude VM). Tiers, once they exist: `--quick` (project, `--clone`, size, gc, network; after most changes); none (adds `images`, `tools`); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b`. Hosted CI can't run it on macOS.
+- **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`); `--from` (everything; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b`; to come: `--quick` (project, `--clone`, size, gc, network; after most changes), every feature in `--from`. Hosted CI can't run it on macOS.
 - **e2e to come:** `--backend`; `size gc from`; network: `policy allow` at once, `log`, git over SSH, `secret use github`, `unenforced` in `ls`, opencode's login; project: SSH agent, `devvm stop`, `git-protect`; tools: python, uv, claude, codex, rust, go, adding in place, gc.
 - **Delete test VMs and temp files afterwards.** Long builds run in the background. Tests that `chflags` real files unlock them (`chflags -R nouchg`), only in their own temp folders.
 - **The testscript runner stops the sandbox's proxies** (`pkill -f` on `-lifeline`): the stub hostagent is gone before they look, so they'd wait 15 minutes.
@@ -124,12 +125,14 @@ Copied (here ← there):
 - `.agents/skills/security-audit/`, `skills-lock.json` ← the bash repo's untracked files
 - `testdata/mise.lock`, `testdata/stubs/tmutil` ← `tests/fixtures/`, `tests/stubs/`
 - `testdata/stubs/{gpgv,mise}` ← `tests/stubs/`; edited: comment
-- `testdata/stubs/{limactl,qemu-img,security}` ← `tests/stubs/`, adapted; `limactl`'s `oci/build.sh` and Ctrl+C parts to come
+- `testdata/stubs/{limactl,qemu-img,security}` ← `tests/stubs/`, adapted
+- `testdata/stubs/docker` ← `tests/stubs/`
+- `oci/{bootify,kernel,try}.sh` ← same; `oci/build.sh`, `oci/README.md` ← same, edited: comment, docs link
 - `internal/proxy/` ← `devvm-proxy/` (`main.go` → `proxy.go`), adapted: `Main(args, IO)`, no `-connect`
-- `tests/e2e.sh` ← same, adapted: framework, `images`, `project` (relaunch, restart, rm, `.git` reports, agent folders), `clone`, `tools` (node half, `update`, `remove`), `network` (self-check on relaunch)
+- `tests/e2e.sh` ← same, adapted: framework, `images`, `project` (relaunch, restart, rm, `.git` reports, agent folders), `clone`, `tools` (node half, `update`, `remove`), `network` (self-check on relaunch), `from` (no features, no image only Docker has: it would build one in the user's Docker)
 
 Docs (page ← bash page, all rewritten, partly):
-- `images.md`, `commands.md`, `security.md`, `git-protection.md`, `coding-agents.md`, `ssh.md`, `clone.md` ← same names
+- `images.md`, `commands.md`, `security.md`, `git-protection.md`, `coding-agents.md`, `ssh.md`, `clone.md`, `from.md` ← same names
 - `lima.md` ← `network.md`, `security.md`, `design.md`, `limits.md`
 - `network.md` ← `network.md`, `devvm-proxy/README.md`
 - README "Quickstart" ← README usage
@@ -140,17 +143,16 @@ Bats files (pending cases, by task):
 | --- | --- |
 | `build.bats` | features (step counts) |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
-| `cli.bats` | `--from` (parse_args), secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), doctor (preflight, doctor), version, limactl |
+| `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), doctor (preflight, doctor), version, limactl |
 | `delete.bats` | gc (two, overlay half, `delete_image_key`), ls (VM named like an image), allowlist of a VM deleted outside devvm |
-| `from.bats`, `oci.bats` | `--from` (all but the digest record and key cases) |
 | `guest.bats` | ssh/code (VS Code settings) |
 | `images.bats` | layer, features (listing), gc (three), images (three, `images rm`) |
 | `install.bats` | all (install.sh) |
 | `network.bats` | policy/network (five), log (three), ls, secret (`unuse`), ssh/code (direct route) |
 | `ports.bats` | ports (five) |
-| `project.bats` | `--from` (input checks), git-protect (strict) |
+| `project.bats` | git-protect (strict) |
 | `size.bats` | size (three) |
-| `layers`, `lint`, `messages`, `tools` | none |
+| `from`, `layers`, `lint`, `messages`, `oci`, `tools` | none |
 
 Dropped: `build_proxy` (two), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
@@ -167,11 +169,12 @@ Deliberate changes from the bash:
 - Host keys are kept only as a key type and base64; a linked `~/.ssh/config` is written through its link. A VM whose host keys are read is shown at most 64 KiB, for 30 s.
 - An existing VM without state or `net=` is `vm_unfinished` before anything; rm deletes it without an export. `--backend` on one warns. `size_next_start`/`ports_next_start` replace `*_on_restart`. A VM whose `.git` protection was never set up gets it as new. `adopt` clears `git_inode`, so the next launch locks `.git` as appeared.
 - `--clone`: host git pushes and fetches through devvm's ssh config (pinned host keys), not Lima's; rm fetches unfetched branches into new local `saved/<remote>[-N]/*` branches, keeps the remote's fetched-only work there too, then `git remote remove`s it; a failed copy is retried on the next launch (`clone_seed_failed`); `fetch_failed`, `clone_check_failed`, `remote_add_failed` keep the VM.
+- `--from`: `from_lookup_failed`/`from_cached` are `from_unreachable`, `from_not_found` and `from_cached_*` (no nested message); a registry still failing (5xx, 429) after retries is unreachable; `building_image_from` replaces `building_image`'s `from=`; Lima sets the converted disk with `--set .images` on `base.yaml` (no `lima.yaml`) and the build VM's mounts with `--set .mounts`; `from_ignored` on restart, update and remove too; a missing `--from` value is cobra's `usage_error`.
 - `net_direct_route` doesn't name the Lima config. `DEVVM_SECRET_SERVICE` is checked for reads too. A failed tools resolve is `tools_need_resolve` with the log's end. e2e's sandbox and service differ from the bash's: its rebuilds delete every stale image in its Lima home.
 
 Pending in code:
-- `tools.Garbage` waits for gc. `--from` brings `from_ignored`; `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
-- `ssh_remote_hint` doesn't name `devvm ssh-agent`. `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`; `ls` shows `clone` in GIT for `mode=clone`; `checkAgent` runs only once `--ssh-agent` exists; ssh config entries forward devvm's agent with `devvm ssh-agent`. Base features aren't run or hashed. Lima's `BuildImage` refuses `--from`. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
+- `tools.Garbage` waits for gc. `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
+- `ssh_remote_hint` doesn't name `devvm ssh-agent`. `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`; `ls` shows `clone` in GIT for `mode=clone`; `checkAgent` runs only once `--ssh-agent` exists; ssh config entries forward devvm's agent with `devvm ssh-agent`. Base features aren't run or hashed. `image_from` (the `base (from node:24)` label) waits for `ls`/`images`. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
 - Secret brings `secret_store`, `secret_delete`, `proxies_forget_values`, Keychain writes, and `devvm secret set` in `no_claude_token`/`no_github_token` (they name `CLAUDE_CODE_OAUTH_TOKEN`, or nothing, until then).
 
 Bash fixes copied: none yet.

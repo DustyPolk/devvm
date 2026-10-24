@@ -77,6 +77,11 @@ func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
+// BadFrom is [bad_from]: "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
+func BadFrom(from string) M {
+	return M{id: "bad_from", vals: []val{{"from", from}}}
+}
+
 // BadPath is [bad_path]: "can't mount {{.dir}} into a VM: its path has a comma or a control character"
 func BadPath(dir string) M {
 	return M{id: "bad_path", vals: []val{{"dir", dir}}}
@@ -105,6 +110,11 @@ func BuildFailed(image string, reason string) M {
 // BuildingImage is [building_image]: "building image {{.image}} ({{.key}})"
 func BuildingImage(image string, key string) M {
 	return M{id: "building_image", vals: []val{{"image", image}, {"key", key}}}
+}
+
+// BuildingImageFrom is [building_image_from]: "building image {{.image}} ({{.key}}) from {{.from}}"
+func BuildingImageFrom(from string, image string, key string) M {
+	return M{id: "building_image_from", vals: []val{{"from", from}, {"image", image}, {"key", key}}}
 }
 
 // BuildingTools is [building_tools]: "building shared tools: {{.tools}}"
@@ -207,6 +217,26 @@ func Continue() M {
 	return M{id: "continue"}
 }
 
+// ConvertBadOutput is [convert_bad_output]: "converting {{.from}} wrote an unexpected {{.file}} (the image may be hostile): not using it"
+func ConvertBadOutput(file string, from string) M {
+	return M{id: "convert_bad_output", vals: []val{{"file", file}, {"from", from}}}
+}
+
+// ConvertFailed is [convert_failed]: "couldn't convert {{.from}} into a disk"
+func ConvertFailed(from string) M {
+	return M{id: "convert_failed", vals: []val{{"from", from}}}
+}
+
+// Converting is [converting]: "converting {{.from}}"
+func Converting(from string) M {
+	return M{id: "converting", vals: []val{{"from", from}}}
+}
+
+// ConvertingInVM is [converting_in_vm]: "converting {{.from}} into a disk, in a throwaway VM ({{.vm}})"
+func ConvertingInVM(from string, vm string) M {
+	return M{id: "converting_in_vm", vals: []val{{"from", from}, {"vm", vm}}}
+}
+
 // CopyingBranches is [copying_branches]: "copying the repo's branches into the VM"
 func CopyingBranches() M {
 	return M{id: "copying_branches"}
@@ -282,6 +312,21 @@ func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
 }
 
+// DockerExportFailed is [docker_export_failed]: "couldn't export {{.from}} from Docker"
+func DockerExportFailed(from string) M {
+	return M{id: "docker_export_failed", vals: []val{{"from", from}}}
+}
+
+// DockerImageChanged is [docker_image_changed]: "{{.from}} changed in Docker while devvm built from it (a rebuild?): run devvm again"
+func DockerImageChanged(from string) M {
+	return M{id: "docker_image_changed", vals: []val{{"from", from}}}
+}
+
+// DockerOnly is [docker_only]: "{{.from}} is an image only Docker has (built and never pushed, or private): start Docker and try again"
+func DockerOnly(from string) M {
+	return M{id: "docker_only", vals: []val{{"from", from}}}
+}
+
 // DownloadingMise is [downloading_mise]: "downloading mise {{.version}}"
 func DownloadingMise(version string) M {
 	return M{id: "downloading_mise", vals: []val{{"version", version}}}
@@ -295,6 +340,11 @@ func ExportFailed(vm string) M {
 // Exported is [exported]: "exported {{.vm}}'s agent history to {{.file}}"
 func Exported(file string, vm string) M {
 	return M{id: "exported", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// ExportingDocker is [exporting_docker]: "exporting {{.from}} from Docker"
+func ExportingDocker(from string) M {
+	return M{id: "exporting_docker", vals: []val{{"from", from}}}
 }
 
 // FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before deleting?"
@@ -315,6 +365,31 @@ func FetchUntil(file string, remote string) M {
 // Fetching is [fetching]: "fetching the VM's branches into {{.prefix}}/*"
 func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
+}
+
+// FromCachedNotFound is [from_cached_not_found]: "{{.host}} doesn't have {{.from}}, or it's private: using the digest devvm last saw"
+func FromCachedNotFound(from string, host string) M {
+	return M{id: "from_cached_not_found", vals: []val{{"from", from}, {"host", host}}}
+}
+
+// FromCachedUnreachable is [from_cached_unreachable]: "can't reach {{.host}} to look up {{.from}} (offline?): using the digest devvm last saw"
+func FromCachedUnreachable(from string, host string) M {
+	return M{id: "from_cached_unreachable", vals: []val{{"from", from}, {"host", host}}}
+}
+
+// FromIgnored is [from_ignored]: "--from only applies to new VMs: {{.vm}} keeps what it was made from"
+func FromIgnored(vm string) M {
+	return M{id: "from_ignored", vals: []val{{"vm", vm}}}
+}
+
+// FromNotFound is [from_not_found]: "{{.host}} doesn't have {{.from}}, or it's private: devvm takes public images, and images Docker has"
+func FromNotFound(from string, host string) M {
+	return M{id: "from_not_found", vals: []val{{"from", from}, {"host", host}}}
+}
+
+// FromUnreachable is [from_unreachable]: "can't reach {{.host}} to look up {{.from}} (offline?)"
+func FromUnreachable(from string, host string) M {
+	return M{id: "from_unreachable", vals: []val{{"from", from}, {"host", host}}}
 }
 
 // GitAppeared is [git_appeared]: "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
@@ -602,6 +677,11 @@ func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
 }
 
+// NoDigest is [no_digest]: "devvm has no digest for {{.from}}"
+func NoDigest(from string) M {
+	return M{id: "no_digest", vals: []val{{"from", from}}}
+}
+
 // NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved"
 func NoGithubToken(vm string) M {
 	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
@@ -655,6 +735,11 @@ func NotAnImage(name string) M {
 // NothingChanged is [nothing_changed]: "nothing changed"
 func NothingChanged() M {
 	return M{id: "nothing_changed"}
+}
+
+// OCIWaiting is [oci_waiting]: "waiting for another devvm's --from conversion to finish"
+func OCIWaiting() M {
+	return M{id: "oci_waiting"}
 }
 
 // OpencodeLoginKept is [opencode_login_kept]: "opencode's {{.providers}} login is copied into the VM as it is"
@@ -1099,12 +1184,14 @@ var specs = map[string]spec{
 	"backend_unknown_default":     {fields: []string{"backends", "file", "name"}},
 	"backend_unknown_vm":          {fields: []string{"backend", "vm"}},
 	"backend_unreviewed":          {fields: []string{"backend", "feature", "vm"}},
+	"bad_from":                    {fields: []string{"from"}},
 	"bad_path":                    {fields: []string{"dir"}},
 	"bad_secret_service":          {},
 	"base_build_time":             {},
 	"branch_names_invalid":        {fields: []string{"refs"}},
 	"build_failed":                {fields: []string{"image", "reason"}},
 	"building_image":              {fields: []string{"image", "key"}},
+	"building_image_from":         {fields: []string{"from", "image", "key"}},
 	"building_tools":              {fields: []string{"tools"}},
 	"building_tools_in":           {fields: []string{"vm"}},
 	"checking_tools":              {},
@@ -1125,6 +1212,10 @@ var specs = map[string]spec{
 	"config_redacted":             {fields: []string{"file", "keys", "vm"}},
 	"configuring":                 {fields: []string{"vm"}},
 	"continue":                    {},
+	"convert_bad_output":          {fields: []string{"file", "from"}},
+	"convert_failed":              {fields: []string{"from"}},
+	"converting":                  {fields: []string{"from"}},
+	"converting_in_vm":            {fields: []string{"from", "vm"}},
 	"copying_branches":            {},
 	"cpus_not_number":             {fields: []string{"value"}},
 	"creating":                    {fields: []string{"vm"}},
@@ -1140,13 +1231,22 @@ var specs = map[string]spec{
 	"deleting":                    {fields: []string{"vm"}},
 	"detected":                    {fields: []string{"found"}},
 	"disk_shrink":                 {fields: []string{"have", "vm", "want"}},
+	"docker_export_failed":        {fields: []string{"from"}},
+	"docker_image_changed":        {fields: []string{"from"}},
+	"docker_only":                 {fields: []string{"from"}},
 	"downloading_mise":            {fields: []string{"version"}},
 	"export_failed":               {fields: []string{"vm"}},
 	"exported":                    {fields: []string{"file", "vm"}},
+	"exporting_docker":            {fields: []string{"from"}},
 	"fetch_before_delete":         {fields: []string{"prefix"}},
 	"fetch_failed":                {fields: []string{"vm"}},
 	"fetch_until":                 {fields: []string{"file", "remote"}},
 	"fetching":                    {fields: []string{"prefix"}},
+	"from_cached_not_found":       {fields: []string{"from", "host"}},
+	"from_cached_unreachable":     {fields: []string{"from", "host"}},
+	"from_ignored":                {fields: []string{"vm"}},
+	"from_not_found":              {fields: []string{"from", "host"}},
+	"from_unreachable":            {fields: []string{"from", "host"}},
 	"git_appeared":                {},
 	"git_commondir":               {fields: []string{"git", "target"}},
 	"git_embedded_new":            {fields: []string{"git"}},
@@ -1204,6 +1304,7 @@ var specs = map[string]spec{
 	"net_unenforced_stop":         {fields: []string{"vm"}},
 	"newer_tools":                 {fields: []string{"tools"}},
 	"no_claude_token":             {fields: []string{"vm"}},
+	"no_digest":                   {fields: []string{"from"}},
 	"no_github_token":             {fields: []string{"vm"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
 	"no_secret":                   {fields: []string{"secret"}},
@@ -1215,6 +1316,7 @@ var specs = map[string]spec{
 	"no_vm":                       {fields: []string{"dir"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
+	"oci_waiting":                 {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
 	"port_invalid":                {fields: []string{"value"}},
 	"ports_flag_ignored":          {},

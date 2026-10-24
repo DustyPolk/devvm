@@ -36,7 +36,10 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 	if t.flagIgnored {
 		ui.Warn(msg.BackendFlagIgnored(b.Name(), vm))
 	}
-	builder := &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools}
+	if o.From != "" && o.From != st.Get(state.KeyFrom) {
+		ui.Warn(msg.FromIgnored(vm))
+	}
+	builder := e.builder(b, st.Get(state.KeyFrom))
 	if o.Image != "" {
 		if err := e.addLayers(ctx, o.Image, t, builder); err != nil {
 			return err
@@ -318,7 +321,7 @@ func (e *Env) buildTools(ctx context.Context, builder *build.Builder, libc strin
 	if err := builder.Build(ctx, image.Base); err != nil {
 		return err
 	}
-	base, err := builder.Inputs().Key(image.Base)
+	base, err := builder.Key(image.Base)
 	if err != nil {
 		return err
 	}

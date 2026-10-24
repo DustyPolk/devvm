@@ -1,0 +1,21 @@
+#!/bin/bash
+# Stand-in for docker in unit tests. Logs every call to $STUB_LOG. `info` fails when
+# $STUB_DIR/docker-down exists, `buildx version` when $STUB_DIR/no-buildx exists. `image inspect`
+# finds an image only when $STUB_DIR/docker-image exists, and prints it (its ID). `save -o F` writes
+# a tarball whose manifest.json names that image's config ($STUB_DIR/docker-saved instead, if it
+# exists: the tag moved meanwhile).
+set -euo pipefail
+echo "docker $*" >> "$STUB_LOG"
+case "${1:-} ${2:-}" in
+  "info "*) [[ ! -e "$STUB_DIR/docker-down" ]] ;;
+  "buildx version") [[ ! -e "$STUB_DIR/no-buildx" ]] ;;
+  "image inspect")
+    [[ ! -e "$STUB_DIR/docker-down" && -f "$STUB_DIR/docker-image" ]] || { echo "Error: No such image" >&2; exit 1; }
+    cat "$STUB_DIR/docker-image" ;;
+  "save -o")
+    id=$(cat "$STUB_DIR/docker-saved" 2>/dev/null || cat "$STUB_DIR/docker-image")
+    d=$(mktemp -d)
+    printf '[{"Config":"blobs/sha256/%s","RepoTags":["%s"],"Layers":[]}]' "${id#sha256:}" "$4" > "$d/manifest.json"
+    tar -cf "$3" -C "$d" manifest.json
+    rm -rf "$d" ;;
+esac

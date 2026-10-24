@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -47,7 +48,7 @@ type Lima struct {
 	OS, Arch string
 	// Self is devvm's binary, which the QEMU wrapper runs.
 	Self string
-	// Root holds devvm's own files: base.yaml, layers/.
+	// Root holds devvm's own files: base.yaml, layers/, oci/.
 	Root string
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
@@ -57,6 +58,9 @@ type Lima struct {
 	Ubuntu func(ctx context.Context) (ubuntu.Image, error)
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
+	// DockerRunning reports whether Docker runs, for --from images only
+	// it has.
+	DockerRunning func(ctx context.Context) bool
 	// Info prints what the backend is doing (ui.Info).
 	Info func(msg.M)
 	// Warn prints a warning, and where the run log has more.
@@ -83,7 +87,7 @@ func New(d paths.Dirs) *Lima {
 		Dirs: d, Runner: uiRunner{}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Root: root, SSHTimeout: sshTimeout, Getenv: os.Getenv,
 		Ubuntu: ubuntu.New(root, os.Getenv).Image, Memory: platform.Memory,
-		Info: ui.Info, Warn: warn,
+		DockerRunning: from.DockerRunning, Info: ui.Info, Warn: warn,
 	}
 }
 

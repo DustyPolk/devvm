@@ -82,11 +82,11 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `DEVVM_UBUNTU_URL` | `ubuntu/`, with one dated release |
 | `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
 | `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
-| `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml`, `layers/`, `tools/` and `guest/` next to it |
+| `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml`, `layers/`, `tools/`, `guest/` and `oci/` next to it |
 
 `$WORK`, the script's own folder, is the current folder.
 
-Tests never touch the network. Downloads are served from a test server (`net/http/httptest`) or read from a `file://` folder. `DEVVM_UBUNTU_URL` replaces `https://cloud-images.ubuntu.com/releases/resolute`, where devvm lists Ubuntu's dated releases: point it at a folder of `release-YYYYMMDD/` folders, each with its `SHA256SUMS` and `SHA256SUMS.gpg`, as `file:///path/to/folder`.
+Tests never touch the network. Downloads are served from a test server (`net/http/httptest`) or read from a `file://` folder. `DEVVM_UBUNTU_URL` replaces `https://cloud-images.ubuntu.com/releases/resolute`, where devvm lists Ubuntu's dated releases: point it at a folder of `release-YYYYMMDD/` folders, each with its `SHA256SUMS` and `SHA256SUMS.gpg`, as `file:///path/to/folder`. Container registries (`--from`) are a TLS test server in Go tests; scripts use pinned digests, which need no lookup, or set `HTTPS_PROXY` to a closed port, so lookups fail as offline ones do.
 
 A command left running in the background (`exec devvm … &name&`) can be interrupted with `kill -INT name`. `wait_file FILE` waits up to 10 seconds for a file to appear, such as one a stub writes when it gets somewhere.
 
@@ -111,13 +111,13 @@ limactl list
 | `STUB_UNAME_M` | `uname -m` |
 | `STUB_SW_VERS` | `sw_vers -productVersion` |
 
-`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. In the shared tools' build VM, its `shell` writes the images `build.sh` is asked for into the build's folder (or, on request, a symlink instead), and it keeps what a VM's setup is sent as `$STUB_DIR/sync.tar`. A direct connection from a VM (the self-check's) fails, as a confined VM's does, unless `$STUB_DIR/net-direct` exists. A `--clone` VM's git runs on the host, on `$STUB_DIR/vmfs/<folder>`, and `ssh` pushes to and fetches from there (it fails with `$STUB_DIR/ssh-fails`). `security` stands in for the Keychain: an item is `$STUB_DIR/keychain/<account>`. `tmutil` records exclusions in `$STUB_DIR/tm-excluded`, never in Time Machine. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
+`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. In the shared tools' build VM, its `shell` writes the images `build.sh` is asked for into the build's folder (or, on request, a symlink instead), and it keeps what a VM's setup is sent as `$STUB_DIR/sync.tar`. In the `--from` build VM, its `shell` writes what `oci/build.sh` would (or, on request, a hostile disk, command line, C library or symlink), and a call naming `$STUB_DIR/interrupt-on`'s text interrupts devvm, as Ctrl+C would. `docker` has an image only when `$STUB_DIR/docker-image` holds its ID, and its `save` writes a tarball naming it (or `$STUB_DIR/docker-saved`'s, a tag that moved); it isn't running with `$STUB_DIR/docker-down`. A direct connection from a VM (the self-check's) fails, as a confined VM's does, unless `$STUB_DIR/net-direct` exists. A `--clone` VM's git runs on the host, on `$STUB_DIR/vmfs/<folder>`, and `ssh` pushes to and fetches from there (it fails with `$STUB_DIR/ssh-fails`). `security` stands in for the Keychain: an item is `$STUB_DIR/keychain/<account>`. `tmutil` records exclusions in `$STUB_DIR/tm-excluded`, never in Time Machine. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
 
 devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOME` or devvm's own folders, which it refuses as project folders.
 
 ## End-to-end tests
 
-`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with `base.yaml`, `layers/`, `tools/` and `guest/` next to it, and runs every check through that binary:
+`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with `base.yaml`, `layers/`, `tools/`, `guest/` and `oci/` next to it, and runs every check through that binary:
 
 | | |
 | --- | --- |
@@ -126,7 +126,8 @@ devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOM
 | Keychain | service `devvm-go-e2e` (`DEVVM_SECRET_SERVICE`), fake tokens only, deleted at the end |
 
 ```sh
-tests/e2e.sh                # every section
+tests/e2e.sh                # every section but from
+tests/e2e.sh --from         # every section, from too: the longest
 tests/e2e.sh --only images  # just these sections
 tests/e2e.sh --clean        # delete the sandbox's cached images and tool images first
 ```
@@ -137,8 +138,9 @@ The sections so far:
 - `project`: devvm in a new project folder (under `/tmp/devvm-go-e2e/p`) makes a VM from base and opens a shell there, which reads its commands from devvm's input. The folder and the shared tools are mounted and nothing else is, there's no SSH agent and the hostname is the folder's. The ssh config lists it as `devvm-web` with its host keys pinned; through an `~/.ssh/config` of the run's own that includes it under a `Host *` forwarding the agent, `ssh devvm-web` works, forwards no agent (a throwaway one), and refuses a changed host key. `.git` is locked (macOS) and git in the VM can still commit. `TestE2EExecQuoting` in `internal/backend/lima`, which runs only there (`DEVVM_E2E_VM` names the VM), checks that arguments with spaces, quotes, `$`, newlines and globs, a folder and input reach the guest as given. Then a claude VM with a fake agent config, history, git identity and token in a home of its own: the agent's folder is mounted read-only and linked into the VM's home, its settings are copied and its history isn't, the VM gets the git identity, the timezone and its hostname, and the token itself.
 - `tools`: first, the shared tools resolve to upstream's newest versions, with devvm's pinned mise (downloaded once), each download with its checksum; the rest of the run doesn't check again (`DEVVM_NO_TOOL_CHECK`). Then a node project's VM: node, npm, pnpm, bun and yarn at the locked versions, each a read-only EROFS image, the share read-only even for root, `npm i -g` into the VM's home, a non-login shell over SSH, an `.nvmrc`'s own version, the tools mounted at boot without devvm, and a second node VM that builds nothing.
 - `network`: a claude+codex VM with `--network-policy`, a fake token in devvm's environment and a fake `~/.claude.json` and Codex login in a home of its own. Its proxy runs and the self-check passed; `ssh devvm-net` reaches it; direct connections fail, even as root, to an address and to other ports; an allowed host works and others, or other ports, are blocked; DNS fails at once; the host's loopback services are out of reach, directly or through the proxy; the proxy refuses requests without the VM's password; the token is nowhere in the VM, which has devvm's CA, its own placeholder and logins' copies with placeholders only; the proxy puts the token in for its host (for the VM's own placeholder only), an MCP server's header and Codex's key for theirs, over TLS the VM verifies; the host's login files are unchanged. On macOS, devvm reads a token from the Keychain. `TestE2ESelfCheck` in `internal/netpolicy` runs the self-check on the VM: it passes, then, once the VM is started outside devvm, it fails and stops the VM.
+- `from`: run with a `docker` that isn't running, so nothing comes from Docker. A node+python+claude VM from `node:24` (Debian 12, in a home of its own) boots, with its base keyed by the registry's digest, and its node, python and claude at the locked versions; an `alpine:3` VM runs node and pnpm from musl tool images and Docker on OpenRC, with no crashed services; base builds from `ubuntu:26.04`; and the build VM and its temporary folders are gone.
 
-base and the shared tool images stay cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
+base, the `--from` bases and the shared tool images stay cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
 
 ## Messages
 

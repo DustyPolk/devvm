@@ -1,0 +1,44 @@
+# oci/build.sh's pieces, sourced (it runs main only when executed), with
+# a stand-in crane in the folder it runs in.
+exec bash libc-test.sh $DEVVM_BIN/oci/build.sh
+cmp stdout libc.want
+
+# An image without this VM's architecture says which ones it has.
+! exec bash arch-test.sh $DEVVM_BIN/oci/build.sh
+stderr '^devvm: ''node:24'' has no linux/arm64 build \(it has: amd64 s390x\)$'
+
+# crane is pinned for both architectures.
+exec bash pins-test.sh $DEVVM_BIN/oci/build.sh
+
+-- libc-test.sh --
+# libc_for: gnu for Debian and Ubuntu (and their derivatives), musl for
+# Alpine, else a failure.
+source "$1"
+set +eu
+for os in 'debian ' 'ubuntu debian' 'linuxmint ubuntu debian' 'alpine ' 'fedora rhel centos'; do
+  libc_for "$os" || echo "fails: $os"
+done
+-- libc.want --
+gnu
+gnu
+gnu
+musl
+fails: fedora rhel centos
+-- arch-test.sh --
+source "$1"
+set +eu
+name=node:24 out=$PWD
+uname() { echo aarch64; }
+cat > crane <<'SH'
+#!/bin/bash
+case $1 in
+  export) echo 'Error: no child with platform linux/riscv64 in index node:24' >&2; exit 1 ;;
+  manifest) echo '{"manifests":[{"platform":{"architecture":"amd64","os":"linux"}},{"platform":{"architecture": "s390x","os":"linux"}},{"platform":{"architecture":"unknown","os":"unknown"}}]}' ;;
+esac
+SH
+chmod 755 crane
+export_image node:24 rootfs.tar
+-- pins-test.sh --
+source "$1"
+[[ $crane_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "crane_version: $crane_version" >&2; exit 1; }
+[[ $crane_sha256_arm64 =~ ^[0-9a-f]{64}$ && $crane_sha256_amd64 =~ ^[0-9a-f]{64}$ ]] || { echo "crane's checksums" >&2; exit 1; }

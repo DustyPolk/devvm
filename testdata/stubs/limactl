@@ -22,11 +22,19 @@
 # tools build VM writes the images its build.sh is asked for (below). A
 # --clone VM's git (git -C DIR, and the script that makes its clone) runs
 # here, on $STUB_DIR/vmfs/DIR: the VM's files, which the ssh stub pushes
-# to and fetches from.
+# to and fetches from. A shell running oci/build.sh writes what it would
+# (below), or fails when $STUB_DIR/build-fails exists. A call whose
+# arguments contain $STUB_DIR/interrupt-on's text is Ctrl+C: it interrupts
+# devvm, once.
 # Everything else succeeds.
 set -euo pipefail
 echo "limactl $*" >> "$STUB_LOG"
 echo "cwd=$(pwd -P) LIMA_HOME=${LIMA_HOME:-}" > "$STUB_DIR/limactl-env"
+if [[ -f $STUB_DIR/interrupt-on && "$*" == *"$(cat "$STUB_DIR/interrupt-on")"* ]]; then
+  rm "$STUB_DIR/interrupt-on"
+  kill -INT "$PPID"
+  exit 130
+fi
 inst="$STUB_DIR/instances"
 [[ -f $inst ]] || : > "$inst"
 # set_status NAME [STATUS]: no status removes it.
@@ -60,6 +68,26 @@ if [[ ${1:-} == shell && " $* " == *" devvm-tools-build bash -s -- "* ]]; then
     else echo "image ${args[i]}" > "$out/${args[i]}"; fi
     [[ ! -f $STUB_DIR/tools-hash-symlink ]] || ln -s "$STUB_DIR/tools-hash-symlink" "$out/${args[i]}.sha256"
   done
+fi
+# The --from build VM's oci/build.sh: it writes what it would in its OUT
+# folder (libc: $STUB_DIR/build-libc, else gnu; cmdline:
+# $STUB_DIR/build-cmdline). disk.raw has ext4's superblock magic (0xEF53 at
+# byte 1080), or is a qcow2 header with $STUB_DIR/build-qcow2. A hostile
+# image: "FILE TARGET" lines in $STUB_DIR/build-symlinks replace FILE with
+# a symlink.
+if [[ ${1:-} == shell && " $* " == *"/oci/build.sh "* ]]; then
+  [[ ! -e $STUB_DIR/build-fails ]] || exit 1
+  args=("$@")
+  for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} != */oci/build.sh ]] || out=${args[i + 2]}; done
+  cat "$STUB_DIR/build-libc" 2>/dev/null > "$out/libc" || echo gnu > "$out/libc"
+  cat "$STUB_DIR/build-cmdline" 2>/dev/null > "$out/cmdline" || echo "root=/dev/vda rw console=hvc0" > "$out/cmdline"
+  touch "$out/kernel" "$out/initrd"
+  if [[ -f $STUB_DIR/build-qcow2 ]]; then printf 'QFI\373' > "$out/disk.raw"
+  else { head -c 1080 /dev/zero; printf '\123\357'; } > "$out/disk.raw"; fi
+  if [[ -f $STUB_DIR/build-symlinks ]]; then
+    while read -r f t; do rm -f "$out/$f"; ln -s "$t" "$out/$f"; done < "$STUB_DIR/build-symlinks"
+  fi
+  exit 0
 fi
 case ${1:-} in
   create) for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done ;;

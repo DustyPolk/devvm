@@ -30,6 +30,7 @@ Options for a new VM:
 | `--cpus N`, `--memory GiB`, `--disk GiB` | the VM's size ([details](#size-and-ports)) |
 | `--ports all\|none\|LIST` | which ports the VM forwards ([details](#size-and-ports)) |
 | `--backend NAME` | the [backend](backends.md#choosing-a-backend) that runs it |
+| `--from IMAGE` | start its base from a container image (`node:24`) instead of Ubuntu's cloud image ([details](from.md)) |
 
 Without either network policy flag devvm asks in a terminal, no by default; without a terminal the VM gets no network policy.
 
@@ -57,7 +58,7 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy, `.git` protection, size, ports and backend.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy, `.git` protection, size, ports, backend and `--from`.
 5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size and ports its state asks for; a running one gets them when it next starts, and devvm says so.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)).
@@ -96,7 +97,7 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 | `devvm build IMAGE` | build an image and the images under it, unless they're built, and the shared tool images it names (`devvm build foo+bar`, `devvm build node+claude`) |
 | `devvm rebuild IMAGE` | build an image again, from its parent as it is, and delete the stale images no VM uses, the old one and those built on it among them ([details](images.md#rebuilding)); shared tools follow the tools lock instead |
 
-`--backend NAME` builds on that backend instead of the one new VMs get.
+`--backend NAME` builds on that backend instead of the one new VMs get, and `--from IMAGE` builds on a base from that container image ([details](from.md)).
 
 ## Environment
 
@@ -104,6 +105,7 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 | --- | --- |
 | `DEVVM_VERBOSE=1` | print the output of the commands devvm runs, instead of logging it ([details](images.md#build-logs-and-interrupts)) |
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](lima.md#a-lima-home-of-its-own)) |
+| `DEVVM_FROM` | the container image new VMs' and builds' base starts from when there's no `--from` ([details](from.md)) |
 | `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#versions)) |
 | `DEVVM_SECRET_SERVICE` | the Keychain service devvm reads tokens from, instead of `devvm` ([details](network.md#secrets)) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | the Claude token VMs' proxies put in, over a saved one ([details](network.md#secrets)) |

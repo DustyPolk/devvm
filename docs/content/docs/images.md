@@ -5,7 +5,7 @@ weight: 20
 
 ## Base
 
-`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `layers/base.sh` installs it.
+`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `--from` starts it from a container image instead ([details](from.md)). `base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `layers/base.sh` installs it.
 
 It drops the server extras Ubuntu's cloud image comes with: snapd, multipath, ModemManager, udisks, firmware updates, crash reporting, tracing tools, kernel headers, and apt's background updates and upgrades. That saves 0.9 GB of disk and 100 MB of memory per VM. The everyday tools stay (htop, tmux, lsof, strace, tcpdump, rsync, nano and so on).
 
@@ -101,7 +101,7 @@ The image (base and your layers) is built first if it isn't, with the shared too
 
 Each image is built in a VM of its own, which then is the image:
 
-1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings. A layer's VM is a copy of its parent image.
+1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings, or with `--from`, from a container image [converted into a disk](from.md#how-its-converted). A layer's VM is a copy of its parent image.
 2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement).
 3. The script runs: `layers/base.sh` for base, yours for a layer.
 4. The VM stops. Its record is written last, with its chain, what base started from, and its C library.
@@ -121,7 +121,7 @@ So:
 
 - Edit a script and its layer and every layer above it rebuild on next use. The layers below are reused.
 - Each backend builds its own images, and never uses another's.
-- With `--from`, base's key has the image's digest, recorded when devvm looks it up. When the tag moves to a new image, base and everything on it rebuild.
+- With `--from`, base's key has the image's digest, recorded when devvm looks it up ([digests](from.md#digests)). When the tag moves to a new image, base and everything on it rebuild.
 - A layer whose script is gone hashes as missing, so its images no longer match.
 - Nothing else counts: features you haven't chosen, and network policy files (`*.policy`, which the proxy reads at run time and never go into an image), change no key.
 
@@ -129,7 +129,7 @@ An image whose key no longer matches its inputs is stale. It stays until it's de
 
 ### Rebuilding
 
-`devvm rebuild <image>` builds an image again from its parent as it is: for the newest packages a script installs without a pin, or for base, Ubuntu's newest cloud image. It changes the image's rebuild counter (`~/.local/share/devvm/images/rebuilds/<image>`), which its key hashes, so the image gets a new key, and so does every image on it.
+`devvm rebuild <image>` builds an image again from its parent as it is: for the newest packages a script installs without a pin, or for base, Ubuntu's newest cloud image. It changes the image's rebuild counter (`~/.local/share/devvm/images/rebuilds/<image>`, or `<image>@<from>` with `--from`, kept apart for each image base starts from), which its key hashes, so the image gets a new key, and so does every image on it.
 
 When images are built on it, devvm lists them first, and in a terminal asks before going on. After the build, it deletes every stale image no VM uses: the old one and those built on it among them. They're built again, on the new one, the next time they're needed. On Linux hosts, an image whose disk VMs are overlays of stays, and devvm says which VMs use it.
 
@@ -145,7 +145,7 @@ Nothing is written into the project folder. devvm keeps everything in two folder
 
 | Folder | Holds |
 | --- | --- |
-| `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`) and rebuild counters (`images/rebuilds/`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
+| `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`), rebuild counters (`images/rebuilds/`) and `--from` digests (`images/from-digests`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
 | `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](backends.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, the keys in devvm's SSH agent (`agent-keys`), and the [ssh config](ssh.md) for VMs and their host keys (`ssh_config`, `known_hosts`) |
 
 A VM's state file records the image it came from, its project folder, its backend and its settings, one `key=value` per line. It lasts as long as the VM: `devvm rm` deletes it too, so the next devvm in that folder starts fresh.

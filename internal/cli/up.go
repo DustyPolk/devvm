@@ -2,11 +2,13 @@ package cli
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/backend/backends"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/vm"
@@ -19,6 +21,15 @@ type globals struct {
 	noNetworkPolicy bool
 	size            vm.Size
 	ports           string
+	from            string
+}
+
+// fromRef is --from, else its default from the environment.
+func (g *globals) fromRef() string {
+	if g.from != "" {
+		return g.from
+	}
+	return os.Getenv(from.Env)
 }
 
 // addGlobals adds the global flags to the root command.
@@ -31,6 +42,7 @@ func addGlobals(root *cobra.Command, g *globals) {
 	f.StringVar(&g.size.CPUs, "cpus", "", "the `N` CPUs a new VM gets (default: the size file's, else the image's)")
 	f.StringVar(&g.size.Memory, "memory", "", "a new VM's memory in `GiB`: 16, 16G or 16GiB (default: the size file's, else the image's)")
 	f.StringVar(&g.size.Disk, "disk", "", "a new VM's disk in `GiB`, at least the image's (default: the size file's, else the image's)")
+	f.StringVar(&g.from, "from", "", "the container `IMAGE` a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)")
 	f.StringVar(&g.ports, "ports", "", "which `PORTS` a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)")
 }
 
@@ -52,6 +64,7 @@ func addUpFlags(cmd *cobra.Command, u *upFlags) {
 func (g *globals) options() vm.Options {
 	return vm.Options{
 		Backend: g.backend, NetworkPolicy: g.networkPolicy, NoNetworkPolicy: g.noNetworkPolicy, Size: g.size, Ports: g.ports,
+		From: g.fromRef(),
 	}
 }
 

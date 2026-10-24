@@ -9,6 +9,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backends"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -51,6 +52,10 @@ func newRebuildCmd(g *globals) *cobra.Command {
 // name is one and the backend can run.
 func imageCmd(ctx context.Context, g *globals, name string, do func(*build.Builder, context.Context, string) error) error {
 	b, err := builder(g.backend)
+	if err == nil {
+		b.From = g.fromRef()
+		err = from.Check(b.From)
+	}
 	if err == nil {
 		err = b.CheckLayers(image.Normalize(name))
 	}

@@ -1,7 +1,7 @@
 #!/bin/bash
 # End-to-end tests with real VMs, in a sandbox. Hosted CI can't run nested VMs on macOS.
-#   tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]
-#     (default)  every section: minutes, more on a first run (base's and the tools' builds, and
+#   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]
+#     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then opening it again,
@@ -11,6 +11,9 @@
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, its token stays on the
 #                host, and the self-check, on relaunch too
+#     --from     every section, with from: the longest. from makes VMs from node:24 (Debian 12, with
+#                node, python and claude) and alpine:3 (musl tools, Docker on OpenRC), and builds base
+#                from ubuntu:26.04, with a docker that isn't running
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
@@ -19,12 +22,13 @@
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project clone tools network"
-usage() { echo "usage: tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel=$sections_all
+sections_all="images project clone tools network from"
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone tools network"
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
+    --from)  sel=$sections_all ;;
     --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2"); shift
              for s in $sel; do [[ " $sections_all " == *" $s "* ]] || usage; done ;;
     *) usage ;;
@@ -39,7 +43,7 @@ export LIMA_HOME=$DEVVM_LIMA_HOME
 work=/tmp/devvm-go-e2e
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE=devvm-go-e2e   # its Keychain items: fake tokens only, deleted at the end
-unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN
+unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
 mkdir -p "$LIMA_HOME"
 for real in "$HOME/.lima" "$HOME/.local/share/devvm/lima"; do
   real=$(cd "$real" 2>/dev/null && pwd -P || echo "$real")
@@ -52,7 +56,7 @@ src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/tools" "$root/guest" "$src/"
+cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/tools" "$root/guest" "$root/oci" "$src/"
 : > "$XDG_CONFIG_HOME/devvm/base-features"
 D=$src/devvm
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
@@ -81,7 +85,7 @@ cleanup() {
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
-    "$work/export.list" "$XDG_DATA_HOME/devvm/exports"
+    "$work/export.list" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -507,6 +511,52 @@ check "started outside devvm again: without a terminal, devvm stops it and opens
   ! grep -q e2e-opened '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
 check "rm -f deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '_proxy -listen .* -vm $vm ' >/dev/null"
+fi
+
+if want from; then
+section "--from"
+# Registry images need no Docker: these run with a docker that's installed but not running (it
+# logs what devvm asked it, which may only be whether it has the image).
+mkdir -p "$work/nodocker"; : > "$work/docker-calls"
+printf '#!/bin/sh\necho "docker $*" >> "%s"\necho "Cannot connect to the Docker daemon" >&2; exit 1\n' \
+  "$work/docker-calls" > "$work/nodocker/docker"
+chmod 755 "$work/nodocker/docker"
+nd() { PATH="$work/nodocker:$PATH" "$@"; }
+[[ -f $lock ]] || quiet "$D" _refresh-tools   # the tools' versions, for lockv
+# from_record REF: base's record for that --from.
+from_record() { grep -lx "from=$1" "$images"/* 2>/dev/null | xargs grep -lx name=base 2>/dev/null | head -1; }
+export -f from_record
+
+f=$(newproj fromdocker); echo '{}' > "$f/package.json"
+fh=$work/from-home; mkdir -p "$fh"   # the claude VM's: no agent config of yours
+HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy node+python+claude   # node:24 is Debian 12
+check "a node+python+claude VM from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
+  [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
+  grep -qx from=node:24 '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
+  grep -qE '^digest=node@sha256:[0-9a-f]{64}$' \"\$(from_record node:24)\""
+check "its node and claude work" in_vm "$vm" 'node --version && claude --version'
+check "python, python3 and claude are the locked versions" in_vm "$vm" \
+  "[[ \$(python --version) == 'Python $(lockv python)' && \$(python3 --version) == 'Python $(lockv python)' && \$(claude --version) == '$(lockv claude) '* ]]"
+check "an interactive shell starts without errors" bash -c "out=\$(limactl shell --workdir / $vm bash -ic true </dev/null 2>&1) && ! grep -iE 'error|unknown option|not found' <<<\"\$out\""
+(cd "$f" && HOME=$fh quiet "$D" rm -f)
+
+# Alpine: apk, OpenRC and musl, so its own (musl) tool images.
+al=$(newproj fromalpine); echo '{}' > "$al/package.json"
+nd launch "$al" exit --from alpine:3 --no-network-policy
+check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$vms/$vm' && grep -qx libc=musl \"\$(from_record alpine:3)\""
+check "and node, pnpm work there" in_vm "$vm" \
+  "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
+check "Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
+# As root: syslog's and acpid's pid files are root-only, so a user's rc-status calls them crashed.
+check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/dev/null)" ]]'
+(cd "$al" && quiet "$D" rm -f)
+
+# Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.
+check "base builds from ubuntu:26.04" nd quiet "$D" --from ubuntu:26.04 build base
+check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '$work/docker-calls'"
+check "and the build VM and its temporary folders are gone" bash -c "
+  ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
+# An image only Docker has (built, never pushed) isn't checked: making one would change Docker's images.
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

@@ -14,6 +14,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
@@ -51,6 +52,7 @@ type Options struct {
 	UnsafeFolder    bool   // --unsafe-folder
 	NoGitProtect    bool   // --no-git-protect
 	Clone           bool   // --clone
+	From            string // --from, or its default: the container image a new VM's base starts from
 }
 
 // Env is what up runs with. FromEnv sets every field; tests change them.
@@ -96,6 +98,12 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 	}, nil
 }
 
+// builder returns the builder of images on b whose base starts from
+// fromRef ("" for the backend's own).
+func (e *Env) builder(b backend.Backend, fromRef string) *build.Builder {
+	return &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools, From: fromRef}
+}
+
 // execShell runs cmd in place of devvm, in its folder.
 func execShell(cmd backend.Command) error {
 	if cmd.Dir != "" {
@@ -113,6 +121,9 @@ func execShell(cmd backend.Command) error {
 // changed since checked (open). On success it doesn't return: the shell
 // takes devvm's place.
 func (e *Env) Up(ctx context.Context, o Options) error {
+	if err := from.Check(o.From); err != nil {
+		return err
+	}
 	size, err := o.Size.Parse()
 	if err != nil {
 		return err
@@ -254,7 +265,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 			}
 		}
 	}
-	builder := &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools}
+	builder := e.builder(b, o.From)
 	img, err := e.resolveImage(o.Image, f.Dir, builder)
 	if err != nil {
 		return err
@@ -287,7 +298,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err := builder.Build(ctx, img); err != nil {
 		return err
 	}
-	chain, err := builder.Inputs().Chain(image.WithoutTools(img))
+	chain, err := builder.Chain(image.WithoutTools(img))
 	if err != nil {
 		return err
 	}
@@ -334,7 +345,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	// The state first, with the network choice: if a later step fails,
 	// the VM never starts without it.
 	st, err := state.CreateVM(e.Dirs, vm, state.NewVM{
-		Image: img, Dir: f.Dir, Folder: id, Chain: chain.String(), Backend: b.Name(),
+		Image: img, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(),
 	})
 	if err != nil {
 		return err

@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ubuntu"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -20,7 +22,8 @@ var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
 // BuildImage builds the image's instance, devvm-img-<key>, which is then
 // the image: base is a VM made from Ubuntu's cloud image with base.yaml's
-// settings, a layer a clone of its parent's instance. Neither mounts
+// settings (with spec.From, from that image converted into a disk:
+// convert), a layer a clone of its parent's instance. Neither mounts
 // anything from the host. It starts confined as spec.Net asks (no port
 // forwards, and on macOS a sandbox), runs the scripts in order, and stops.
 //
@@ -29,8 +32,8 @@ var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
 // caller has shown the run log's end. Once it exists, a failure keeps it,
 // stopped, for inspection; the next build deletes it (it has no record).
 func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.Built, error) {
-	if spec.From != nil {
-		return backend.Built{}, errors.New("lima: building base from a container image isn't supported")
+	if spec.From != nil && spec.Parent != "" {
+		return backend.Built{}, errors.New("lima: only base starts from a container image")
 	}
 	if spec.Net != backend.NetInternet && spec.Net != backend.NetNone {
 		return backend.Built{}, fmt.Errorf("lima: builds are confined, not started with network %d", spec.Net)
@@ -70,27 +73,50 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	})
 	// Its steps: create or clone, configure and start (Start's edit is
 	// always there for a build: its ports, and on macOS its ssh port),
-	// each script, stop.
-	ctx = ui.WithSteps(ctx, 4+len(spec.Scripts))
-	var built backend.Built
-	if spec.Parent == "" {
-		img, err := l.Ubuntu(ctx)
-		if err != nil {
-			return backend.Built{}, err
+	// each script, stop; with --from, the conversion's first, and an
+	// image only Docker has its export.
+	steps := 4 + len(spec.Scripts)
+	if spec.From != nil {
+		steps += ociSteps
+		if !strings.Contains(spec.From.Digest, "@") {
+			steps++
 		}
+	}
+	ctx = ui.WithSteps(ctx, steps)
+	var built backend.Built
+	var conv *converted
+	if spec.Parent == "" {
 		mem := spec.MemoryGiB
 		if mem == 0 {
+			var err error
 			if mem, err = l.buildMemory(); err != nil {
 				return backend.Built{}, err
 			}
 		}
-		images := yqJSON([]limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}})
-		if err := l.Runner.Run(ctx, msg.CreatingFromUbuntu(inst), l.limactl(ctx, "create", "--tty=false",
-			"--mount-none", "--name="+inst, "--set", ".images = "+images,
-			"--memory="+gibString(mem), filepath.Join(l.Root, "base.yaml"))); err != nil {
-			return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
+		if spec.From == nil {
+			img, err := l.createFromUbuntu(ctx, inst, mem)
+			if err != nil {
+				return backend.Built{}, err
+			}
+			built = backend.Built{Origin: img.String(), Libc: "gnu"}
+		} else {
+			var err error
+			if conv, err = l.convert(ctx, spec.From, mem); err != nil {
+				return backend.Built{}, err
+			}
+			// base.yaml's settings, booting the converted disk.
+			images := yqJSON([]limaImage{{
+				Location: filepath.Join(conv.dir, "disk.raw"), Arch: limaArch(l.Arch),
+				Kernel: &limaKernel{Location: filepath.Join(conv.dir, "kernel"), Cmdline: conv.cmdline},
+				Initrd: &limaFile{Location: filepath.Join(conv.dir, "initrd")},
+			}})
+			if err := l.Runner.Run(ctx, msg.Creating(inst), l.limactl(ctx, "create", "--tty=false",
+				"--mount-none", "--name="+inst, "--set", ".images = "+images,
+				"--memory="+gibString(mem), filepath.Join(l.Root, "base.yaml"))); err != nil {
+				return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
+			}
+			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
 		}
-		built = backend.Built{Origin: img.String(), Libc: "gnu"}
 	} else if err := l.Runner.Run(ctx, msg.CloningImage(image.Parent(spec.Image)),
 		l.limactl(ctx, "clone", "--tty=false", "--mount-none", parent, inst)); err != nil {
 		return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
@@ -99,6 +125,10 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	// A failed start leaves it stopped, with its console logs.
 	if err := l.Start(ctx, inst, backend.Confinement{Net: spec.Net}); err != nil {
 		return backend.Built{}, err
+	}
+	if conv != nil {
+		// Lima copied the converted files in as it started.
+		conv.done(ctx)
 	}
 	// Once it's running, a failure stops it (unless the run was
 	// interrupted: then it's deleted).
@@ -134,11 +164,41 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	return built, nil
 }
 
-// limaImage is an entry in a Lima config's images.
+// limaImage is an entry in a Lima config's images: a disk image, or a
+// disk with the kernel and initrd Lima boots directly.
 type limaImage struct {
+	Location string      `json:"location"`
+	Arch     string      `json:"arch"`
+	Digest   string      `json:"digest,omitempty"`
+	Kernel   *limaKernel `json:"kernel,omitempty"`
+	Initrd   *limaFile   `json:"initrd,omitempty"`
+}
+
+type limaKernel struct {
 	Location string `json:"location"`
-	Arch     string `json:"arch"`
-	Digest   string `json:"digest"`
+	Cmdline  string `json:"cmdline"`
+}
+
+type limaFile struct {
+	Location string `json:"location"`
+}
+
+// createFromUbuntu creates a VM from Ubuntu's newest cloud image, with
+// base.yaml's settings and nothing from the host mounted, or the mounts a
+// --set in opts gives it (--set applies after --mount-none). It returns
+// the image it used.
+func (l *Lima) createFromUbuntu(ctx context.Context, vm string, mem float64, opts ...string) (ubuntu.Image, error) {
+	img, err := l.Ubuntu(ctx)
+	if err != nil {
+		return ubuntu.Image{}, err
+	}
+	images := yqJSON([]limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}})
+	args := append([]string{"create", "--tty=false", "--mount-none", "--name=" + vm, "--set", ".images = " + images}, opts...)
+	args = append(args, "--memory="+gibString(mem), filepath.Join(l.Root, "base.yaml"))
+	if err := l.Runner.Run(ctx, msg.CreatingFromUbuntu(vm), l.limactl(ctx, args...)); err != nil {
+		return ubuntu.Image{}, backend.Logged(msg.VMCreateFailed(vm))
+	}
+	return img, nil
 }
 
 // limaArch is Lima's name for a Go architecture.

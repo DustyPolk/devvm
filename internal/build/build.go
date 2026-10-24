@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -25,19 +26,69 @@ import (
 // Builder builds images on one backend.
 type Builder struct {
 	Dirs    paths.Dirs
-	Root    string // devvm's own files: base.yaml, layers/ (paths.Root)
+	Root    string // devvm's own files: base.yaml, layers/, oci/ (paths.Root)
 	Backend backend.Backend
 	Tools   *tools.Tools // the shared tools image names hold
+	// From is the container image base starts from (--from); "" for the
+	// backend's own Ubuntu. Its images are apart from other bases'.
+	From string
+	// Lookup looks up From's digest when building; nil for the internet's
+	// (from.NewLookup).
+	Lookup *from.Lookup
+
+	looked bool // From's digest was looked up in this run
 }
 
-// Inputs returns what the backend's image keys hash, read from disk.
-func (b *Builder) Inputs() image.Inputs {
-	return image.Inputs{
-		Backend:  b.Backend.Name(),
-		Root:     os.DirFS(b.Root),
-		Layers:   os.DirFS(b.Dirs.Layers()),
-		Rebuilds: os.DirFS(b.Dirs.Rebuilds()),
+// Inputs returns what the backend's image keys hash, read from disk:
+// From's digest as last recorded.
+func (b *Builder) Inputs() (image.Inputs, error) {
+	digest, err := from.Recorded(b.Dirs, b.From)
+	if err != nil {
+		return image.Inputs{}, err
 	}
+	return image.Inputs{
+		Backend:    b.Backend.Name(),
+		Root:       os.DirFS(b.Root),
+		Layers:     os.DirFS(b.Dirs.Layers()),
+		Rebuilds:   os.DirFS(b.Dirs.Rebuilds()),
+		From:       b.From,
+		FromDigest: digest,
+	}, nil
+}
+
+// Key returns an image's key as it is now.
+func (b *Builder) Key(name string) (string, error) {
+	in, err := b.Inputs()
+	if err != nil {
+		return "", err
+	}
+	return in.Key(name)
+}
+
+// Chain returns an image's chain as it is now.
+func (b *Builder) Chain(name string) (image.Chain, error) {
+	in, err := b.Inputs()
+	if err != nil {
+		return nil, err
+	}
+	return in.Chain(name)
+}
+
+// lookUp looks up From's digest, once a run, before any key that builds
+// is worked out: every key holds base's.
+func (b *Builder) lookUp(ctx context.Context) error {
+	if b.From == "" || b.looked {
+		return nil
+	}
+	l := b.Lookup
+	if l == nil {
+		l = from.NewLookup(b.Dirs)
+	}
+	if err := l.Refresh(ctx, b.From); err != nil {
+		return err
+	}
+	b.looked = true
+	return nil
 }
 
 // Layers returns base and the user's layers, sorted: the scripts in the
@@ -87,7 +138,7 @@ func (b *Builder) CheckLayers(name string) error {
 // BaseLibc is the C library of base as it is now: its record's, gnu when
 // it isn't built. The shared tools are built for it.
 func (b *Builder) BaseLibc() (string, error) {
-	key, err := b.Inputs().Key(image.Base)
+	key, err := b.Key(image.Base)
 	if err != nil {
 		return "", err
 	}
@@ -126,7 +177,7 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	base, err := b.Inputs().Key(image.Base)
+	base, err := b.Key(image.Base)
 	if err != nil {
 		return err
 	}
@@ -134,12 +185,22 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 }
 
 func (b *Builder) build(ctx context.Context, name string) error {
-	chain, err := b.Inputs().Chain(name)
+	if err := b.lookUp(ctx); err != nil {
+		return err
+	}
+	chain, err := b.Chain(name)
 	if err != nil {
 		return err
 	}
 	key := chain.Key()
+	digest, err := from.Recorded(b.Dirs, b.From)
+	if err != nil {
+		return err
+	}
 	spec := backend.ImageSpec{Image: name, Key: key, Net: backend.NetInternet}
+	if name == image.Base && b.From != "" {
+		spec.From = &backend.From{Ref: b.From, Digest: digest}
+	}
 	if err := backend.Require(b.Backend, name, spec.Features()...); err != nil {
 		return err
 	}
@@ -163,9 +224,14 @@ func (b *Builder) build(ctx context.Context, name string) error {
 	}
 	spec.Scripts = []backend.Script{script}
 
-	ui.Info(msg.BuildingImage(name, key))
-	if name == image.Base {
+	switch {
+	case b.From != "":
+		ui.Info(msg.BuildingImageFrom(b.From, name, key))
+	case name == image.Base:
+		ui.Info(msg.BuildingImage(name, key))
 		ui.Say(msg.BaseBuildTime())
+	default:
+		ui.Info(msg.BuildingImage(name, key))
 	}
 	ui.LogNote()
 	out, err := b.Backend.BuildImage(ctx, spec)
@@ -173,9 +239,13 @@ func (b *Builder) build(ctx context.Context, name string) error {
 		return err
 	}
 	// The record is written last: an image without one didn't finish.
-	rec := state.Image{Name: name, Chain: chain.String(), Libc: libc}
+	// Every image on a --from base records it and its digest.
+	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc}
 	if name == image.Base {
-		rec.Digest, rec.Libc = out.Origin, out.Libc
+		rec.Libc = out.Libc
+		if b.From == "" {
+			rec.Digest = out.Origin
+		}
 	}
 	if rec.Libc == "" {
 		rec.Libc = "gnu"
@@ -230,7 +300,10 @@ func (b *Builder) List(ctx context.Context) ([]Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	in := b.Inputs()
+	in, err := b.Inputs()
+	if err != nil {
+		return nil, err
+	}
 	var out []Image
 	for _, key := range keys {
 		rec, err := state.ReadImage(b.Dirs, key)
@@ -241,11 +314,10 @@ func (b *Builder) List(ctx context.Context) ([]Image, error) {
 			return nil, err
 		}
 		img := Image{Key: key, Name: rec.Name, From: rec.From, Chain: image.ParseChain(rec.Chain)}
-		in.From, in.FromDigest = rec.From, ""
-		if rec.From != "" {
-			if in.FromDigest, err = state.FromDigest(b.Dirs, rec.From); err != nil {
-				return nil, err
-			}
+		// Each against its own base's inputs, as last recorded.
+		in.From = rec.From
+		if in.FromDigest, err = from.Recorded(b.Dirs, rec.From); err != nil {
+			return nil, err
 		}
 		if k, err := in.Key(rec.Name); err == nil && k == key {
 			img.Current = true
@@ -268,7 +340,7 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 	if t := image.ToolsOf(name); len(t) > 0 {
 		return msg.ToolsNotImages(strings.Join(t, " "))
 	}
-	old, err := b.Inputs().Key(name)
+	old, err := b.Key(name)
 	if err != nil {
 		return err
 	}
@@ -289,7 +361,7 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 			return nil
 		}
 	}
-	if err := state.BumpRebuild(b.Dirs, name, ""); err != nil {
+	if err := state.BumpRebuild(b.Dirs, name, b.From); err != nil {
 		return err
 	}
 	if err := b.build(ctx, name); err != nil {
@@ -322,7 +394,11 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 // WarnIfOutdated warns when an image a VM was made from has changed since:
 // chain is the VM's, as its state records it. It never changes the VM.
 func (b *Builder) WarnIfOutdated(chain string) error {
-	changed, err := b.Inputs().Outdated(image.ParseChain(chain))
+	in, err := b.Inputs()
+	if err != nil {
+		return err
+	}
+	changed, err := in.Outdated(image.ParseChain(chain))
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
@@ -84,7 +83,7 @@ func (e *Env) Update(ctx context.Context, o Options) error {
 		return err
 	}
 	vm, st := t.f.Name, t.st
-	builder := &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: t.b, Tools: e.Tools}
+	builder := e.builder(t.b, st.Get(state.KeyFrom))
 	libc := st.Get(KeyLibc)
 	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, libc, files) }
 	files, changed, err := e.Tools.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), libc)

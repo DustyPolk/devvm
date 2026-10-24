@@ -48,7 +48,7 @@ func buildDevvm(t *testing.T) string {
 	if err == nil {
 		err = os.WriteFile(filepath.Join(dir, "base.yaml"), data, 0o600) //nolint:gosec // the test's own folder
 	}
-	for _, d := range []string{"layers", "tools", "guest"} {
+	for _, d := range []string{"layers", "tools", "guest", "oci"} {
 		if err == nil {
 			err = os.CopyFS(filepath.Join(dir, d), os.DirFS(filepath.Join(repo, d)))
 		}
