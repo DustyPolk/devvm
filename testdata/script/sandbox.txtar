@@ -1,0 +1,29 @@
+# Every folder devvm uses is in the sandbox.
+exec sh -c 'for v in HOME XDG_DATA_HOME XDG_CONFIG_HOME DEVVM_LIMA_HOME LIMA_HOME STUB_DIR; do eval "echo \$$v"; done'
+stdout -count=6 '^/tmp/dvt\.'
+exec sh -c 'echo "DEVVM_SECRET_SERVICE=$DEVVM_SECRET_SERVICE"'
+stdout '^DEVVM_SECRET_SERVICE=devvm-test$'
+
+# uname and sw_vers answer from the environment when asked.
+env STUB_UNAME_S=Linux STUB_UNAME_M=riscv64 STUB_SW_VERS=26.0
+exec uname -s
+stdout '^Linux$'
+exec uname -m
+stdout '^riscv64$'
+exec sw_vers -productVersion
+stdout '^26\.0$'
+
+# Otherwise they're the real ones.
+env STUB_UNAME_M=
+exec uname -m
+stdout .
+! stdout riscv64
+
+# stub_calls prints what the stubs logged; negated, it checks nothing was.
+! stub_calls
+exec sh -c 'echo "limactl list" >> "$STUB_LOG"'
+stub_calls
+cmp stdout calls
+
+-- calls --
+limactl list

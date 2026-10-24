@@ -57,6 +57,53 @@ Run the tasks with `mise run <task>`:
 
 CI runs `lint` and `test` on macOS and Linux.
 
+### CLI tests
+
+CLI tests are [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scripts in `testdata/script/*.txtar`, run by `internal/cli/script_test.go` against a freshly built `devvm`. Call it with `exec devvm …`:
+
+```txtar
+# An unknown command fails.
+! exec devvm nope
+stderr 'unknown command "nope"'
+```
+
+Run one script with `mise exec -- go test ./internal/cli -run TestScript/<name>`.
+
+Each script runs in a sandbox under `/tmp`, never the real folders:
+
+| Variable | Points to |
+|---|---|
+| `HOME` | `home/` |
+| `XDG_DATA_HOME` | `data/` |
+| `XDG_CONFIG_HOME` | `config/` |
+| `DEVVM_LIMA_HOME`, `LIMA_HOME` | `lima/` (short, for Lima's socket paths) |
+| `STUB_DIR` | `stub/`, for stubs' state |
+| `STUB_LOG` | `stub/calls`, the stubs' call log |
+| `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
+
+`$WORK`, the script's own folder, is the current folder.
+
+### Stubs
+
+`testdata/stubs/` is on `PATH` ahead of the real commands, so tests never run the real tools. A stub is a shell script that appends its command line to `$STUB_LOG` and keeps any state in `$STUB_DIR`. `stub_calls` prints the log for `stdout` or `cmp` to check, and `! stub_calls` fails if anything was logged:
+
+```txtar
+exec devvm …
+stub_calls
+cmp stdout calls
+
+-- calls --
+limactl list
+```
+
+`uname` and `sw_vers` pretend to be another host when these are set, and run the real command otherwise:
+
+| Variable | Printed by |
+|---|---|
+| `STUB_UNAME_S` | `uname -s` |
+| `STUB_UNAME_M` | `uname -m` |
+| `STUB_SW_VERS` | `sw_vers -productVersion` |
+
 ## License
 
 [MIT](LICENSE)

@@ -1,0 +1,14 @@
+# devvm --help prints usage.
+exec devvm --help
+stdout '^Usage:'
+stdout 'devvm \[flags\]'
+! stderr .
+
+# An unknown command fails.
+! exec devvm nope
+stderr 'unknown command "nope"'
+! stdout .
+
+# An unknown flag fails.
+! exec devvm --nope
+stderr 'unknown flag: --nope'
