@@ -106,6 +106,7 @@ Still to come: smolvm and docker backends; `features/` and `oci/` (next to the b
 - **One commit when each task is complete**, its Docs and Review subtasks included. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, `chore`. Then `dex complete <id> --commit <sha>`.
 - **Don't commit or `dex complete` until the gate passes**, with whatever `mise run fmt` changed in the commit.
 - **Dex task IDs never go in commit messages, code comments or docs.**
+- **AGENTS.md stays short:** one line per path, rule or porting entry. Inventories (functions, messages, test names, converted cases) go in the commit message and the `dex complete` result, not here.
 
 ## Porting
 
