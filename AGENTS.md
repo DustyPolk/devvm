@@ -33,7 +33,7 @@ Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/
 
 ## Rules
 
-- **Checks:** `mise run lint && mise run test` after every change. Anything touching VMs also runs `tests/e2e.sh --quick` in the sandbox (see Testing), in the background.
+- **The gate:** `mise run fmt && mise run lint && mise run test`, all passing, before starting a task and before marking it done. A gate that fails at the start gets fixed first. Anything touching VMs also passes `tests/e2e.sh --quick` in the sandbox (see Testing), in the background.
 - **Nothing in project folders:** state goes in `~/.local/share/devvm` and `~/.config/devvm`.
 - **Credentials never go into images.** Host agent history never goes into VMs.
 - **Never auto-delete project VMs:** they may hold unsaved work. Warn instead.
@@ -99,7 +99,7 @@ Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/
 
 - Tasks are in dex (`.dex/`, git-ignored).
 - **One commit when each task is complete**, its Docs and Review subtasks included. Conventional Commits: `type(scope): summary`, with types `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, `chore`. Then `dex complete <id> --commit <sha>`.
-- **Don't commit work whose checks fail.**
+- **Don't commit or `dex complete` until the gate passes**, with whatever `mise run fmt` changed in the commit.
 - **Dex task IDs never go in commit messages, code comments or docs.**
 
 ## Porting

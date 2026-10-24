@@ -51,6 +51,8 @@ Run the tasks with `mise run <task>`:
 
 `mise run test` needs a C compiler for the race detector: Xcode Command Line Tools on macOS, gcc on Linux.
 
+Before and after every change, `mise run fmt && mise run lint && mise run test` must pass.
+
 CI runs `lint` and `test` on macOS and Linux.
 
 ## CLI tests

@@ -7,5 +7,5 @@ The rules for working in this repo, for people and coding agents alike: [AGENTS.
 Before sending a change, run:
 
 ```sh
-mise run lint && mise run test
+mise run fmt && mise run lint && mise run test
 ```
