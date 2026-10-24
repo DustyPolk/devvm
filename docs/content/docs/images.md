@@ -3,6 +3,29 @@ title: Images and VMs
 weight: 20
 ---
 
+## Caching
+
+Images are built in layers and cached, like Docker's. `base` comes first, and each custom layer is built on its parent: `foo+bar` is `bar` on `foo` on `base`. A layer starts from its parent, runs its script inside, and is stored under a key, a hash of everything that goes into it. When an image with the key already exists, devvm uses it; otherwise it builds one.
+
+| Image | Its key hashes |
+| --- | --- |
+| `base` | the backend, `base.yaml`, `layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it |
+| a custom layer | its parent's key, its name, its script (`~/.config/devvm/layers/<name>.sh`) and its rebuild counter |
+
+So:
+
+- Edit a script and its layer and every layer above it rebuild on next use. The layers below are reused.
+- Each backend builds its own images, and never uses another's.
+- With `--from`, base's key has the image's digest, recorded when devvm looks it up. When the tag moves to a new image, base and everything on it rebuild.
+- A layer whose script is gone hashes as missing, so its images no longer match.
+- Nothing else counts: features you haven't chosen, and network policy files (`*.policy`, which the proxy reads at run time and never go into an image), change no key.
+
+An image whose key no longer matches its inputs is stale. It stays until it's deleted, and the next use builds a new one.
+
+Each shared tool image is named `<tool>-<version>-<key>.erofs`, and its key hashes the tool's entry in the tools lock (its version, downloads and their checksums), `tools/build.sh` and the C library it's built for. A new version, a new download or an edited build script builds it again, and a base with a different C library (Alpine's musl) gets its own.
+
+A key is the first 12 hex digits of a SHA-256. Each input goes in with its length, so different inputs never hash the same bytes. An image's record keeps its chain: the key of each image it's built on, from `base` up.
+
 ## Where state lives
 
 Nothing is written into the project folder. devvm keeps everything in two folders:

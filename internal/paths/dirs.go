@@ -81,11 +81,15 @@ var unsafeName = regexp.MustCompile(`[^A-Za-z0-9.]`)
 // RebuildFile is the rebuild counter for an image, kept apart for each
 // image its base starts from (from is empty for the default).
 func (d Dirs) RebuildFile(image, from string) string {
-	name := image
-	if from != "" {
-		name += "@" + unsafeName.ReplaceAllString(from, "-")
+	return filepath.Join(d.Rebuilds(), RebuildName(image, from))
+}
+
+// RebuildName is the name of an image's rebuild counter in Rebuilds.
+func RebuildName(image, from string) string {
+	if from == "" {
+		return image
 	}
-	return filepath.Join(d.Rebuilds(), name)
+	return image + "@" + unsafeName.ReplaceAllString(from, "-")
 }
 
 // Run holds files for running VMs: sandbox profiles, proxy pids, the QEMU

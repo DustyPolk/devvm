@@ -52,6 +52,11 @@ func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
 }
 
+// ToolBadVersion is [tool_bad_version]: "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
+func ToolBadVersion(tool string, version string) M {
+	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
+}
+
 // UsageError is [usage_error]: "{{.reason}}: see devvm --help"
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
@@ -69,5 +74,6 @@ var specs = map[string]spec{
 	"msg_unexpected_value": {fields: []string{"key", "name"}},
 	"msg_unknown":          {fields: []string{"name"}},
 	"run_log_failed":       {fields: []string{"dir", "reason"}},
+	"tool_bad_version":     {fields: []string{"tool", "version"}},
 	"usage_error":          {fields: []string{"reason"}},
 }

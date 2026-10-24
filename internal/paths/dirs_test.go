@@ -79,6 +79,8 @@ func TestFiles(t *testing.T) {
 		{d.FromDigests(), "/d/images/from-digests"},
 		{d.RebuildFile("node", ""), "/d/images/rebuilds/node"},
 		{d.RebuildFile("node", "ghcr.io/o/r:1.2"), "/d/images/rebuilds/node@ghcr.io-o-r-1.2"},
+		{RebuildName("node+bar", ""), "node+bar"},
+		{RebuildName("node", "node:24"), "node@node-24"},
 		{d.Run(), "/d/run"},
 		{d.Logs(), "/d/logs"},
 		{d.RunLogs(), "/d/logs/runs"},
