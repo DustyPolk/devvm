@@ -27,6 +27,11 @@ func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
+// BadPath is [bad_path]: "can't mount {{.dir}} into a VM: its path has a comma or a control character"
+func BadPath(dir string) M {
+	return M{id: "bad_path", vals: []val{{"dir", dir}}}
+}
+
 // BaseBuildTime is [base_build_time]: "    a few minutes, and Ubuntu's cloud image to download the first time"
 func BaseBuildTime() M {
 	return M{id: "base_build_time"}
@@ -57,9 +62,19 @@ func Continue() M {
 	return M{id: "continue"}
 }
 
+// CpusNotNumber is [cpus_not_number]: "--cpus takes a whole number, not {{.value}}"
+func CpusNotNumber(value string) M {
+	return M{id: "cpus_not_number", vals: []val{{"value", value}}}
+}
+
 // Creating is [creating]: "creating {{.vm}}"
 func Creating(vm string) M {
 	return M{id: "creating", vals: []val{{"vm", vm}}}
+}
+
+// CreatingFrom is [creating_from]: "creating {{.vm}} from {{.image}}"
+func CreatingFrom(image string, vm string) M {
+	return M{id: "creating_from", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
 // CreatingFromUbuntu is [creating_from_ubuntu]: "creating {{.vm}} from Ubuntu's cloud image"
@@ -87,9 +102,59 @@ func Deleting(vm string) M {
 	return M{id: "deleting", vals: []val{{"vm", vm}}}
 }
 
+// Detected is [detected]: "detected a {{.found}} project"
+func Detected(found string) M {
+	return M{id: "detected", vals: []val{{"found", found}}}
+}
+
 // DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
 func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
+}
+
+// GitCommondir is [git_commondir]: "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"
+func GitCommondir(git string, target string) M {
+	return M{id: "git_commondir", vals: []val{{"git", git}, {"target", target}}}
+}
+
+// GitGitdirOutside is [git_gitdir_outside]: "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"
+func GitGitdirOutside(git string, sub string) M {
+	return M{id: "git_gitdir_outside", vals: []val{{"git", git}, {"sub", sub}}}
+}
+
+// GitHookLinkInside is [git_hook_link_inside]: "{{.hook}} links to {{.target}}, inside the project folder: the VM can edit that hook, and it runs on this machine"
+func GitHookLinkInside(hook string, target string) M {
+	return M{id: "git_hook_link_inside", vals: []val{{"hook", hook}, {"target", target}}}
+}
+
+// GitHooksPath is [git_hooks_path]: "core.hooksPath is {{.path}}, inside the project folder: the VM can edit those hooks, and they run on this machine"
+func GitHooksPath(path string) M {
+	return M{id: "git_hooks_path", vals: []val{{"path", path}}}
+}
+
+// GitIncludeInside is [git_include_inside]: "{{.config}} includes {{.path}}, inside the project folder: the VM can edit it, and host git reads it"
+func GitIncludeInside(config string, path string) M {
+	return M{id: "git_include_inside", vals: []val{{"config", config}, {"path", path}}}
+}
+
+// GitLockRaced is [git_lock_raced]: "{{.path}} moved while devvm locked it: not locked, and the lock undone where it landed; check .git"
+func GitLockRaced(path string) M {
+	return M{id: "git_lock_raced", vals: []val{{"path", path}}}
+}
+
+// GitNotLocked is [git_not_locked]: "WARNING: {{.path}} is a symlink or under one, so devvm can't lock it: if you didn't make it, check it before running git here"
+func GitNotLocked(path string) M {
+	return M{id: "git_not_locked", vals: []val{{"path", path}}}
+}
+
+// GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine"
+func GitProtectNeedsMacosNew() M {
+	return M{id: "git_protect_needs_macos_new"}
+}
+
+// GitWorktreeStray is [git_worktree_stray]: "WARNING: {{.wt}}/commondir doesn't lead back to this repo, so git in that linked worktree reads config and hooks from elsewhere: if you didn't change it, check it before running git there"
+func GitWorktreeStray(wt string) M {
+	return M{id: "git_worktree_stray", vals: []val{{"wt", wt}}}
 }
 
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path: set it to your home folder"
@@ -120,6 +185,11 @@ func ImageReady(image string) M {
 // InterruptedImage is [interrupted_image]: "interrupted: deleting the unfinished image {{.vm}}"
 func InterruptedImage(vm string) M {
 	return M{id: "interrupted_image", vals: []val{{"vm", vm}}}
+}
+
+// InterruptedVM is [interrupted_vm]: "interrupted: deleting {{.vm}}, which wasn't ready yet"
+func InterruptedVM(vm string) M {
+	return M{id: "interrupted_vm", vals: []val{{"vm", vm}}}
 }
 
 // LimaBroken is [lima_broken]: "limactl --version failed: reinstall Lima"
@@ -202,6 +272,16 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
+// NetworkPolicyUnavailable is [network_policy_unavailable]: "network policy isn't available yet: pass --no-network-policy to create {{.vm}} without it, reaching anything this machine can"
+func NetworkPolicyUnavailable(vm string) M {
+	return M{id: "network_policy_unavailable", vals: []val{{"vm", vm}}}
+}
+
+// NoImageFor is [no_image_for]: "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.layers}} (joined with +)"
+func NoImageFor(dir string, layers string) M {
+	return M{id: "no_image_for", vals: []val{{"dir", dir}, {"layers", layers}}}
+}
+
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
 func NoUbuntuImage(url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
@@ -215,6 +295,11 @@ func NotAnImage(name string) M {
 // NothingChanged is [nothing_changed]: "nothing changed"
 func NothingChanged() M {
 	return M{id: "nothing_changed"}
+}
+
+// PortInvalid is [port_invalid]: "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
+func PortInvalid(value string) M {
+	return M{id: "port_invalid", vals: []val{{"value", value}}}
 }
 
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
@@ -247,6 +332,21 @@ func ScriptFailed(limaHome string, script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"lima_home", limaHome}, {"script", script}, {"vm", vm}}}
 }
 
+// SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+func SetidFiles(files string) M {
+	return M{id: "setid_files", vals: []val{{"files", files}}}
+}
+
+// SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
+func SizeNotGib(flag string, value string) M {
+	return M{id: "size_not_gib", vals: []val{{"flag", flag}, {"value", value}}}
+}
+
+// SSHRemoteHint is [ssh_remote_hint]: "origin is an SSH remote, but {{.vm}} has no SSH agent: git over SSH won't work in it"
+func SSHRemoteHint(vm string) M {
+	return M{id: "ssh_remote_hint", vals: []val{{"vm", vm}}}
+}
+
 // StartFailed is [start_failed]: "couldn't start {{.vm}}"
 func StartFailed(vm string) M {
 	return M{id: "start_failed", vals: []val{{"vm", vm}}}
@@ -277,6 +377,16 @@ func Stopping(vm string) M {
 	return M{id: "stopping", vals: []val{{"vm", vm}}}
 }
 
+// TooManyCpus is [too_many_cpus]: "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
+func TooManyCpus(have string, want string) M {
+	return M{id: "too_many_cpus", vals: []val{{"have", have}, {"want", want}}}
+}
+
+// TooMuchMemory is [too_much_memory]: "this machine has {{.have}} GiB of memory: --memory {{.want}} is more"
+func TooMuchMemory(have string, want string) M {
+	return M{id: "too_much_memory", vals: []val{{"have", have}, {"want", want}}}
+}
+
 // ToolBadVersion is [tool_bad_version]: "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
 func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
@@ -302,6 +412,26 @@ func UnknownLayer(layer string, layers string) M {
 	return M{id: "unknown_layer", vals: []val{{"layer", layer}, {"layers", layers}}}
 }
 
+// UnsafeFolder is [unsafe_folder]: "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, or --unsafe-folder if you mean it"
+func UnsafeFolder(dir string, holds string) M {
+	return M{id: "unsafe_folder", vals: []val{{"dir", dir}, {"holds", holds}}}
+}
+
+// UnsafeFolderInside is [unsafe_folder_inside]: "{{.dir}} is inside {{.inside}}, devvm's own, which the VM would get read-write: keep the project elsewhere, or --unsafe-folder if you mean it"
+func UnsafeFolderInside(dir string, inside string) M {
+	return M{id: "unsafe_folder_inside", vals: []val{{"dir", dir}, {"inside", inside}}}
+}
+
+// UnsafeFolderUsed is [unsafe_folder_used]: "--unsafe-folder: the VM gets {{.dir}} read-write, {{.holds}} included"
+func UnsafeFolderUsed(dir string, holds string) M {
+	return M{id: "unsafe_folder_used", vals: []val{{"dir", dir}, {"holds", holds}}}
+}
+
+// UpFailed is [up_failed]: "couldn't open this folder's VM: {{.reason}}"
+func UpFailed(reason string) M {
+	return M{id: "up_failed", vals: []val{{"reason", reason}}}
+}
+
 // UsageError is [usage_error]: "{{.reason}}: see devvm --help"
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
@@ -312,9 +442,19 @@ func VMCreateFailed(vm string) M {
 	return M{id: "vm_create_failed", vals: []val{{"vm", vm}}}
 }
 
+// VMExists is [vm_exists]: "{{.vm}} already exists, and devvm can't open an existing VM yet"
+func VMExists(vm string) M {
+	return M{id: "vm_exists", vals: []val{{"vm", vm}}}
+}
+
 // VMHasNetworks is [vm_has_networks]: "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
 func VMHasNetworks(file string, vm string) M {
 	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// VMNameNoRoom is [vm_name_no_room]: "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
+func VMNameNoRoom(backend string, max string) M {
+	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
 }
 
 // VMNotRunning is [vm_not_running]: "{{.vm}} isn't running: start it first"
@@ -327,6 +467,11 @@ func VMNotStopped(vm string) M {
 	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
 }
 
+// VMOtherFolder is [vm_other_folder]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm won't use it for this one"
+func VMOtherFolder(vm string, was string) M {
+	return M{id: "vm_other_folder", vals: []val{{"vm", vm}, {"was", was}}}
+}
+
 // VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made: it keeps the image it has"
 func VMOutdated(changed string) M {
 	return M{id: "vm_outdated", vals: []val{{"changed", changed}}}
@@ -334,70 +479,99 @@ func VMOutdated(changed string) M {
 
 // specs describes every message, by ID.
 var specs = map[string]spec{
-	"backend_lacks":            {fields: []string{"backend", "feature", "vm"}},
-	"backend_unknown":          {fields: []string{"backends", "name"}},
-	"backend_unknown_default":  {fields: []string{"backends", "file", "name"}},
-	"backend_unknown_vm":       {fields: []string{"backend", "vm"}},
-	"backend_unreviewed":       {fields: []string{"backend", "feature", "vm"}},
-	"base_build_time":          {},
-	"build_failed":             {fields: []string{"image", "reason"}},
-	"building_image":           {fields: []string{"image", "key"}},
-	"cloning_image":            {fields: []string{"parent"}},
-	"configuring":              {fields: []string{"vm"}},
-	"continue":                 {},
-	"creating":                 {fields: []string{"vm"}},
-	"creating_from_ubuntu":     {fields: []string{"vm"}},
-	"delete_failed":            {fields: []string{"vm"}},
-	"deleted_old_image":        {fields: []string{"image", "key"}},
-	"deleted_unfinished_build": {fields: []string{"key"}},
-	"deleting":                 {fields: []string{"vm"}},
-	"disk_shrink":              {fields: []string{"have", "vm", "want"}},
-	"home_not_absolute":        {},
-	"image_in_use":             {fields: []string{"key", "vms"}},
-	"image_leftover":           {fields: []string{"image", "key"}},
-	"image_missing":            {fields: []string{"key"}},
-	"image_ready":              {fields: []string{"image"}},
-	"interrupted_image":        {fields: []string{"vm"}},
-	"lima_broken":              {},
-	"lima_edit_failed":         {fields: []string{"vm"}},
-	"lima_global_config":       {fields: []string{"files"}},
-	"lima_home_too_long":       {fields: []string{"home", "vm"}},
-	"lima_host_unsupported":    {fields: []string{"os"}},
-	"lima_missing":             {},
-	"lima_old":                 {fields: []string{"version"}},
-	"log_details":              {fields: []string{"file"}},
-	"log_end":                  {fields: []string{"file"}},
-	"mount_comma":              {fields: []string{"path"}},
-	"msg_bad_count":            {fields: []string{"value"}},
-	"msg_missing_value":        {fields: []string{"key", "name"}},
-	"msg_not_pair":             {fields: []string{"arg"}},
-	"msg_repeated_value":       {fields: []string{"key"}},
-	"msg_unexpected_value":     {fields: []string{"key", "name"}},
-	"msg_unknown":              {fields: []string{"name"}},
-	"no_ubuntu_image":          {fields: []string{"url", "version"}},
-	"not_an_image":             {fields: []string{"name"}},
-	"nothing_changed":          {},
-	"qemu_missing":             {fields: []string{"program"}},
-	"qemu_refused":             {},
-	"rebuild_replaces":         {fields: []string{"above", "image"}},
-	"run_log_failed":           {fields: []string{"dir", "reason"}},
-	"running_script":           {fields: []string{"script", "vm"}},
-	"script_failed":            {fields: []string{"lima_home", "script", "vm"}},
-	"start_failed":             {fields: []string{"vm"}},
-	"start_no_ssh":             {fields: []string{"console", "vm"}},
-	"started_with_warnings":    {fields: []string{"vm"}},
-	"starting":                 {fields: []string{"vm"}},
-	"stop_failed":              {fields: []string{"vm"}},
-	"stopping":                 {fields: []string{"vm"}},
-	"tool_bad_version":         {fields: []string{"tool", "version"}},
-	"ubuntu_bad_signature":     {fields: []string{"release", "url"}},
-	"ubuntu_unsigned":          {},
-	"unfinished_image":         {fields: []string{"vm"}},
-	"unknown_layer":            {fields: []string{"layer", "layers"}},
-	"usage_error":              {fields: []string{"reason"}},
-	"vm_create_failed":         {fields: []string{"vm"}},
-	"vm_has_networks":          {fields: []string{"file", "vm"}},
-	"vm_not_running":           {fields: []string{"vm"}},
-	"vm_not_stopped":           {fields: []string{"vm"}},
-	"vm_outdated":              {fields: []string{"changed"}},
+	"backend_lacks":               {fields: []string{"backend", "feature", "vm"}},
+	"backend_unknown":             {fields: []string{"backends", "name"}},
+	"backend_unknown_default":     {fields: []string{"backends", "file", "name"}},
+	"backend_unknown_vm":          {fields: []string{"backend", "vm"}},
+	"backend_unreviewed":          {fields: []string{"backend", "feature", "vm"}},
+	"bad_path":                    {fields: []string{"dir"}},
+	"base_build_time":             {},
+	"build_failed":                {fields: []string{"image", "reason"}},
+	"building_image":              {fields: []string{"image", "key"}},
+	"cloning_image":               {fields: []string{"parent"}},
+	"configuring":                 {fields: []string{"vm"}},
+	"continue":                    {},
+	"cpus_not_number":             {fields: []string{"value"}},
+	"creating":                    {fields: []string{"vm"}},
+	"creating_from":               {fields: []string{"image", "vm"}},
+	"creating_from_ubuntu":        {fields: []string{"vm"}},
+	"delete_failed":               {fields: []string{"vm"}},
+	"deleted_old_image":           {fields: []string{"image", "key"}},
+	"deleted_unfinished_build":    {fields: []string{"key"}},
+	"deleting":                    {fields: []string{"vm"}},
+	"detected":                    {fields: []string{"found"}},
+	"disk_shrink":                 {fields: []string{"have", "vm", "want"}},
+	"git_commondir":               {fields: []string{"git", "target"}},
+	"git_gitdir_outside":          {fields: []string{"git", "sub"}},
+	"git_hook_link_inside":        {fields: []string{"hook", "target"}},
+	"git_hooks_path":              {fields: []string{"path"}},
+	"git_include_inside":          {fields: []string{"config", "path"}},
+	"git_lock_raced":              {fields: []string{"path"}},
+	"git_not_locked":              {fields: []string{"path"}},
+	"git_protect_needs_macos_new": {},
+	"git_worktree_stray":          {fields: []string{"wt"}},
+	"home_not_absolute":           {},
+	"image_in_use":                {fields: []string{"key", "vms"}},
+	"image_leftover":              {fields: []string{"image", "key"}},
+	"image_missing":               {fields: []string{"key"}},
+	"image_ready":                 {fields: []string{"image"}},
+	"interrupted_image":           {fields: []string{"vm"}},
+	"interrupted_vm":              {fields: []string{"vm"}},
+	"lima_broken":                 {},
+	"lima_edit_failed":            {fields: []string{"vm"}},
+	"lima_global_config":          {fields: []string{"files"}},
+	"lima_home_too_long":          {fields: []string{"home", "vm"}},
+	"lima_host_unsupported":       {fields: []string{"os"}},
+	"lima_missing":                {},
+	"lima_old":                    {fields: []string{"version"}},
+	"log_details":                 {fields: []string{"file"}},
+	"log_end":                     {fields: []string{"file"}},
+	"mount_comma":                 {fields: []string{"path"}},
+	"msg_bad_count":               {fields: []string{"value"}},
+	"msg_missing_value":           {fields: []string{"key", "name"}},
+	"msg_not_pair":                {fields: []string{"arg"}},
+	"msg_repeated_value":          {fields: []string{"key"}},
+	"msg_unexpected_value":        {fields: []string{"key", "name"}},
+	"msg_unknown":                 {fields: []string{"name"}},
+	"network_policy_unavailable":  {fields: []string{"vm"}},
+	"no_image_for":                {fields: []string{"dir", "layers"}},
+	"no_ubuntu_image":             {fields: []string{"url", "version"}},
+	"not_an_image":                {fields: []string{"name"}},
+	"nothing_changed":             {},
+	"port_invalid":                {fields: []string{"value"}},
+	"qemu_missing":                {fields: []string{"program"}},
+	"qemu_refused":                {},
+	"rebuild_replaces":            {fields: []string{"above", "image"}},
+	"run_log_failed":              {fields: []string{"dir", "reason"}},
+	"running_script":              {fields: []string{"script", "vm"}},
+	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
+	"setid_files":                 {fields: []string{"files"}},
+	"size_not_gib":                {fields: []string{"flag", "value"}},
+	"ssh_remote_hint":             {fields: []string{"vm"}},
+	"start_failed":                {fields: []string{"vm"}},
+	"start_no_ssh":                {fields: []string{"console", "vm"}},
+	"started_with_warnings":       {fields: []string{"vm"}},
+	"starting":                    {fields: []string{"vm"}},
+	"stop_failed":                 {fields: []string{"vm"}},
+	"stopping":                    {fields: []string{"vm"}},
+	"too_many_cpus":               {fields: []string{"have", "want"}},
+	"too_much_memory":             {fields: []string{"have", "want"}},
+	"tool_bad_version":            {fields: []string{"tool", "version"}},
+	"ubuntu_bad_signature":        {fields: []string{"release", "url"}},
+	"ubuntu_unsigned":             {},
+	"unfinished_image":            {fields: []string{"vm"}},
+	"unknown_layer":               {fields: []string{"layer", "layers"}},
+	"unsafe_folder":               {fields: []string{"dir", "holds"}},
+	"unsafe_folder_inside":        {fields: []string{"dir", "inside"}},
+	"unsafe_folder_used":          {fields: []string{"dir", "holds"}},
+	"up_failed":                   {fields: []string{"reason"}},
+	"usage_error":                 {fields: []string{"reason"}},
+	"vm_create_failed":            {fields: []string{"vm"}},
+	"vm_exists":                   {fields: []string{"vm"}},
+	"vm_has_networks":             {fields: []string{"file", "vm"}},
+	"vm_name_no_room":             {fields: []string{"backend", "max"}},
+	"vm_not_running":              {fields: []string{"vm"}},
+	"vm_not_stopped":              {fields: []string{"vm"}},
+	"vm_other_folder":             {fields: []string{"vm", "was"}},
+	"vm_outdated":                 {fields: []string{"changed"}},
 }

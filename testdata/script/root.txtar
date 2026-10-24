@@ -1,25 +1,25 @@
 # devvm --help prints usage.
 exec devvm --help
 stdout '^Usage:'
-stdout 'devvm \[flags\]'
+stdout 'devvm \[IMAGE\] \[flags\]'
 ! stderr .
 
-# An unknown command fails in one line on stderr, like every error.
-! exec devvm nope
-cmp stderr nope.txt
-! stdout .
-
-# So does an unknown flag.
+# An unknown flag fails in one line on stderr, like every error.
 ! exec devvm --nope
 cmp stderr nope-flag.txt
 ! stdout .
 
+# So does a command given too many arguments.
+! exec devvm build a b
+cmp stderr build-args.txt
+! stdout .
+
 # In names mode, the parser's error is the message's value.
 env DEVVM_MESSAGES=names
-! exec devvm nope
-stderr '^devvm: usage_error reason=unknown command "nope" for "devvm"$'
+! exec devvm --nope
+stderr '^devvm: usage_error reason=unknown flag: --nope$'
 
--- nope.txt --
-devvm: unknown command "nope" for "devvm": see devvm --help
 -- nope-flag.txt --
 devvm: unknown flag: --nope: see devvm --help
+-- build-args.txt --
+devvm: accepts 1 arg(s), received 2: see devvm --help

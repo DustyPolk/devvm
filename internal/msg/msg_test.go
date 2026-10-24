@@ -70,6 +70,22 @@ func TestValuesAsGiven(t *testing.T) {
 	}
 }
 
+// A value with a control character is quoted, so it can't move the cursor.
+func TestShown(t *testing.T) {
+	for in, want := range map[string]string{
+		"/w/My App":   "/w/My App",
+		"/w/café":     "/w/café",
+		"../x\x1b[2J": `"../x\x1b[2J"`,
+		"a\tb":        `"a\tb"`,
+		"a\nb":        `"a\nb"`,
+		"a\u0085b":    `"a\u0085b"`,
+	} {
+		if got := Shown(in); got != want {
+			t.Errorf("Shown(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
 func TestNames(t *testing.T) {
 	m := MsgMissingValue("dir", "no_vm")
 	if got, want := m.Names(), "msg_missing_value key=dir name=no_vm"; got != want {

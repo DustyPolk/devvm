@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
@@ -43,6 +44,16 @@ type val struct{ key, value string }
 type spec struct {
 	plural bool
 	fields []string // sorted; "count" when plural
+}
+
+// Shown returns s as a message value: as it is, or quoted like a Go string
+// when it holds a control character (a path a VM made, say), so it can't
+// move the cursor or rewrite what's shown.
+func Shown(s string) string {
+	if strings.IndexFunc(s, unicode.IsControl) < 0 {
+		return s
+	}
+	return strconv.Quote(s)
 }
 
 // ID returns the message's ID, its table name in en.toml.

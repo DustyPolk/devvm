@@ -42,6 +42,10 @@ When a VM needs a feature its backend lacks, devvm stops and names the VM, the f
 
 To get the feature, use a backend that has it. A VM keeps its backend, so that means a new VM.
 
+## VM names
+
+A project VM's name is `devvm-<folder>-<hash>`: up to 20 characters of the folder's name, lowercase, with other characters as dashes, then 14 hex digits of a hash of its path. A backend may take shorter names, and then the folder's part is cut to fit. When fewer than 4 characters of it would fit, devvm refuses: with Lima, that's a Lima home path too long ([details](lima.md#limits)).
+
 ## Choosing a backend
 
 A new VM gets the first of:

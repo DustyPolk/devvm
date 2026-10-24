@@ -1,0 +1,84 @@
+# A new VM's size and ports: the flags, else the defaults in the config
+# folder, else the image's; checked before anything is built.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+mkdir $WORK/sized
+cd $WORK/sized
+
+# Values that aren't sizes or port lists, and sizes this machine can't
+# give or a disk smaller than the image's, are refused.
+! exec devvm --no-network-policy --cpus 1.5 base
+stderr '^devvm: cpus_not_number value="1\.5"$'
+! exec devvm --no-network-policy --cpus=0 base
+stderr '^devvm: cpus_not_number value="0"$'
+! exec devvm --no-network-policy --memory 16M base
+stderr '^devvm: size_not_gib flag=--memory value="16M"$'
+! exec devvm --no-network-policy --disk lots base
+stderr '^devvm: size_not_gib flag=--disk value="lots"$'
+! exec devvm --no-network-policy --cpus 9999 base
+stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
+! exec devvm --no-network-policy --memory 99999 base
+stderr '^devvm: too_much_memory have=[0-9]+ want=99999$'
+! exec devvm --no-network-policy --disk 50GiB base
+stderr '^devvm: disk_shrink have=100 vm=devvm-sized-[0-9a-f]{14} want=50$'
+! exec devvm --no-network-policy --ports 0 base
+stderr '^devvm: port_invalid value="0"$'
+! exec devvm --no-network-policy --ports 8010-8000 base
+stderr '^devvm: port_invalid value="8010-8000"$'
+# Hand-edited defaults are checked too.
+mkdir $XDG_CONFIG_HOME/devvm
+cp $WORK/bad-size $XDG_CONFIG_HOME/devvm/size
+! exec devvm --no-network-policy base
+stderr '^devvm: size_not_gib flag=--memory value="1\$\(touch x\)"$'
+! exists x
+rm $XDG_CONFIG_HOME/devvm/size
+cp $WORK/bad-ports $XDG_CONFIG_HOME/devvm/ports
+! exec devvm --no-network-policy base
+stderr '^devvm: port_invalid '
+rm $XDG_CONFIG_HOME/devvm/ports
+stub_calls
+! stdout 'create|clone'
+
+# The flags: the VM's size changes after the clone, and its state says so;
+# the ports it forwards are set as it's cloned.
+exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173, 8000-8010,5173' base
+stub_calls
+stdout '^limactl clone .* --set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\},\{"guestPortRange":\[8000,8010\],"proto":"any"\},\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
+stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 --disk 120$'
+exec sh -c 'cat "$VMS"/devvm-sized-*'
+stdout '^cpus=2$'
+stdout '^memory=3$'
+stdout '^disk=120$'
+stdout '^ports=5173,8000-8010$'
+stdout '^ports_set=5173,8000-8010$'
+
+# The defaults, for what the flags leave unset; nothing for what neither
+# sets. A default of every port stores nothing.
+mkdir $WORK/defaults
+cd $WORK/defaults
+exec sh -c 'echo memory=16 > "$XDG_CONFIG_HOME/devvm/size" && echo none > "$XDG_CONFIG_HOME/devvm/ports"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --no-network-policy --cpus 2 base
+stub_calls
+stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
+stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 16$'
+exec sh -c 'cat "$VMS"/devvm-defaults-*'
+stdout '^cpus=2$'
+stdout '^memory=16$'
+! stdout 'disk='
+stdout '^ports=none$'
+mkdir $WORK/all
+cd $WORK/all
+exec sh -c 'echo all > "$XDG_CONFIG_HOME/devvm/ports" && rm "$XDG_CONFIG_HOME/devvm/size"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --no-network-policy base
+stub_calls
+stdout '^limactl clone .* --set \.portForwards = \[\]$'
+! stdout 'limactl edit --tty=false devvm-all'
+exec sh -c 'cat "$VMS"/devvm-all-*'
+! stdout 'ports|cpus|memory|disk'
+
+-- bad-size --
+memory=1$(touch x)
+-- bad-ports --
+80]}]|.mounts=[{"location":"~"

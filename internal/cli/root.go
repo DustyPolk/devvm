@@ -12,20 +12,29 @@ import (
 )
 
 // NewRoot returns the devvm command with every subcommand registered.
+// devvm itself is up: a shell in this folder's VM.
 func NewRoot() *cobra.Command {
+	g := new(globals)
+	u := new(upFlags)
 	root := &cobra.Command{
-		Use:           "devvm",
-		Short:         "One isolated VM per project folder",
+		Use:   "devvm [IMAGE]",
+		Short: "Open a shell in this folder's VM, creating it first",
+		Long: "Open a shell in this folder's VM, at the same path, creating the VM first. A new VM " +
+			"gets IMAGE (base, or your layers joined with +), else the image the folder's files call " +
+			"for, built if it isn't. Only the folder is mounted, read-write, and its .git hooks and " +
+			"config are locked against changes from the VM (macOS).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cmd.Help()
+		Args:          cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return up(cmd.Context(), g, u, args)
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(ui.Stdout())
-	root.AddCommand(newBuildCmd(), newRebuildCmd(), newMsgCmd(), newQEMUCmd())
+	addGlobals(root, g)
+	addUpFlags(root, u)
+	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(), newQEMUCmd())
 	return root
 }
 

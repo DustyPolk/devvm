@@ -16,7 +16,7 @@ import (
 )
 
 // newBuildCmd is devvm build IMAGE.
-func newBuildCmd() *cobra.Command {
+func newBuildCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
@@ -24,13 +24,13 @@ func newBuildCmd() *cobra.Command {
 			"or your layers joined with +, bottom first (foo+bar is bar on foo on base).",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), args[0], (*build.Builder).Build)
+			return imageCmd(cmd.Context(), g, args[0], (*build.Builder).Build)
 		},
 	}
 }
 
 // newRebuildCmd is devvm rebuild IMAGE.
-func newRebuildCmd() *cobra.Command {
+func newRebuildCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rebuild IMAGE",
 		Short: "Build an image again, and delete the old one",
@@ -38,15 +38,15 @@ func newRebuildCmd() *cobra.Command {
 			"no VM uses, the old one and those built on it among them.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), args[0], (*build.Builder).Rebuild)
+			return imageCmd(cmd.Context(), g, args[0], (*build.Builder).Rebuild)
 		},
 	}
 }
 
-// imageCmd runs do on the default backend's builder, once the name is
-// one and the backend can run.
-func imageCmd(ctx context.Context, name string, do func(*build.Builder, context.Context, string) error) error {
-	b, err := builder()
+// imageCmd runs do on the builder of the backend new VMs get, once the
+// name is one and the backend can run.
+func imageCmd(ctx context.Context, g *globals, name string, do func(*build.Builder, context.Context, string) error) error {
+	b, err := builder(g.backend)
 	if err == nil {
 		err = b.CheckLayers(build.Normalize(name))
 	}
@@ -56,12 +56,13 @@ func imageCmd(ctx context.Context, name string, do func(*build.Builder, context.
 	if err == nil {
 		err = do(b, ctx, name)
 	}
-	fail(name, err)
+	fail(err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
 	return nil
 }
 
-// builder returns a builder on the backend new VMs get.
-func builder() (*build.Builder, error) {
+// builder returns a builder on the backend new VMs get: flag's (--backend),
+// else the default.
+func builder(flag string) (*build.Builder, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return nil, err
@@ -74,7 +75,7 @@ func builder() (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := reg.For(dirs, new(state.VM), "")
+	c, err := reg.For(dirs, new(state.VM), flag)
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +83,9 @@ func builder() (*build.Builder, error) {
 }
 
 // fail ends the run on an error: with the run log's end when its details
-// are there, quietly once interrupted.
-func fail(image string, err error) {
+// are there, with what failed (an error that isn't a message, as what's
+// reason) otherwise, quietly once interrupted.
+func fail(err error, what func(reason string) msg.M) {
 	if err == nil {
 		return
 	}
@@ -93,5 +95,5 @@ func fail(image string, err error) {
 	if m, ok := errors.AsType[msg.M](err); ok {
 		ui.Die(m)
 	}
-	ui.Die(msg.BuildFailed(image, err.Error()))
+	ui.Die(what(err.Error()))
 }

@@ -217,3 +217,99 @@ other = "deleted {{.key}}, left over from a failed build"
 [vm_outdated]
 description = "changed is a comma-separated list of image names"
 other = "{{.changed}} changed since this VM was made: it keeps the image it has"
+
+[up_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't open this folder's VM: {{.reason}}"
+
+[bad_path]
+description = "dir is quoted like a Go string when it holds control characters"
+other = "can't mount {{.dir}} into a VM: its path has a comma or a control character"
+
+[vm_name_no_room]
+description = "max is a number of characters"
+other = "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
+
+[vm_other_folder]
+other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm won't use it for this one"
+
+[vm_exists]
+other = "{{.vm}} already exists, and devvm can't open an existing VM yet"
+
+[unsafe_folder]
+other = "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, or --unsafe-folder if you mean it"
+
+[unsafe_folder_inside]
+other = "{{.dir}} is inside {{.inside}}, devvm's own, which the VM would get read-write: keep the project elsewhere, or --unsafe-folder if you mean it"
+
+[unsafe_folder_used]
+other = "--unsafe-folder: the VM gets {{.dir}} read-write, {{.holds}} included"
+
+[cpus_not_number]
+description = "value is quoted, as given"
+other = "--cpus takes a whole number, not {{.value}}"
+
+[size_not_gib]
+description = "flag is --memory or --disk; value is quoted, as given"
+other = "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
+
+[too_many_cpus]
+other = "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
+
+[too_much_memory]
+description = "have and want are sizes in GiB"
+other = "this machine has {{.have}} GiB of memory: --memory {{.want}} is more"
+
+[port_invalid]
+description = "value is quoted, as given"
+other = "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
+
+[detected]
+other = "detected a {{.found}} project"
+
+[no_image_for]
+description = "layers is a space-separated list of layer names"
+other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.layers}} (joined with +)"
+
+[network_policy_unavailable]
+other = "network policy isn't available yet: pass --no-network-policy to create {{.vm}} without it, reaching anything this machine can"
+
+[creating_from]
+other = "creating {{.vm}} from {{.image}}"
+
+[interrupted_vm]
+other = "interrupted: deleting {{.vm}}, which wasn't ready yet"
+
+[ssh_remote_hint]
+other = "origin is an SSH remote, but {{.vm}} has no SSH agent: git over SSH won't work in it"
+
+[setid_files]
+description = "files is a space-separated list of paths"
+other = "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+
+[git_protect_needs_macos_new]
+other = ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine"
+
+[git_commondir]
+other = "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"
+
+[git_worktree_stray]
+other = "WARNING: {{.wt}}/commondir doesn't lead back to this repo, so git in that linked worktree reads config and hooks from elsewhere: if you didn't change it, check it before running git there"
+
+[git_not_locked]
+other = "WARNING: {{.path}} is a symlink or under one, so devvm can't lock it: if you didn't make it, check it before running git here"
+
+[git_lock_raced]
+other = "{{.path}} moved while devvm locked it: not locked, and the lock undone where it landed; check .git"
+
+[git_hooks_path]
+other = "core.hooksPath is {{.path}}, inside the project folder: the VM can edit those hooks, and they run on this machine"
+
+[git_include_inside]
+other = "{{.config}} includes {{.path}}, inside the project folder: the VM can edit it, and host git reads it"
+
+[git_hook_link_inside]
+other = "{{.hook}} links to {{.target}}, inside the project folder: the VM can edit that hook, and it runs on this machine"
+
+[git_gitdir_outside]
+other = "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"

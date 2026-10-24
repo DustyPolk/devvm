@@ -61,9 +61,9 @@ CI runs `lint` and `test` on macOS and Linux.
 CLI tests are [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scripts in `testdata/script/*.txtar`, run by `internal/cli/script_test.go` against a freshly built `devvm`. Call it with `exec devvm …`:
 
 ```txtar
-# An unknown command fails.
-! exec devvm nope
-stderr 'unknown command "nope"'
+# An unknown flag fails.
+! exec devvm --nope
+stderr 'unknown flag: --nope'
 ```
 
 Run one script with `mise exec -- go test ./internal/cli -run TestScript/<name>`.
@@ -109,7 +109,9 @@ limactl list
 | `STUB_UNAME_M` | `uname -m` |
 | `STUB_SW_VERS` | `sw_vers -productVersion` |
 
-`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
+`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
+
+devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOME` or devvm's own folders, which it refuses as project folders.
 
 ## End-to-end tests
 
@@ -126,7 +128,12 @@ tests/e2e.sh --only images  # just these sections
 tests/e2e.sh --clean        # delete the sandbox's cached images first
 ```
 
-The sections so far: `images` (building base and fixture layers, rebuilds, a failed script and Ctrl+C during a build). base stays cached between runs; every other VM a run makes is deleted at its end. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
+The sections so far:
+
+- `images`: building base and fixture layers, rebuilds, a failed script and Ctrl+C during a build.
+- `project`: devvm in a new project folder (under `/tmp/devvm-go-e2e/p`) makes a VM from base and opens a shell there, which reads its commands from devvm's input. The folder is mounted read-write and nothing else is, there's no SSH agent, `.git` is locked (macOS) and git in the VM can still commit. `TestE2EExecQuoting` in `internal/backend/lima`, which runs only there (`DEVVM_E2E_VM` names the VM), checks that arguments with spaces, quotes, `$`, newlines and globs, a folder and input reach the guest as given.
+
+base stays cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
 
 ## Messages
 

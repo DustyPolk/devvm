@@ -34,6 +34,21 @@ devvm build foo+bar   # builds base, foo and foo+bar, unless they're built
 devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 ```
 
+## Which image a new VM gets
+
+`devvm IMAGE` names it. `devvm` alone looks at the folder's top level for the files that call for a toolchain, and names those, in this order:
+
+| Toolchain | Files |
+| --- | --- |
+| node | `package.json`, `bun.lock`, `bun.lockb` |
+| python | `pyproject.toml`, `requirements.txt`, `uv.lock`, `setup.py`, `Pipfile` |
+| rust | `Cargo.toml` |
+| go | `go.mod` |
+
+Toolchain images aren't available yet, so in a folder with these files, name the image (`devvm base`). In a folder with none of them, devvm doesn't guess: it lists the images there are.
+
+The image is built first if it isn't, and the VM is a copy of it. A VM keeps the image it was made from.
+
 ## Building
 
 Each image is built in a VM of its own, which then is the image:
@@ -102,6 +117,8 @@ Each run that runs a command has one log, `~/.local/share/devvm/logs/runs/<date>
 In a terminal, a status line shows the step, how long it has run, and the log's latest line. A step that takes more than a few seconds leaves a line with its time.
 
 Ctrl+C, or closing the terminal, stops the command running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.
+
+An interrupted new VM is deleted, with its state, until its first shell opens: nothing of yours is in it yet.
 
 An interrupted build deletes the image it was building. So does a build whose create or clone fails, once the end of the log is shown: there's nothing in it to look at.
 

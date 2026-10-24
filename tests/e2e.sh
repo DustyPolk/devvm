@@ -2,7 +2,8 @@
 # End-to-end tests with real VMs, in a sandbox. Hosted CI can't run nested VMs on macOS.
 #   tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]
 #     (default)  every section: minutes, more on a first run (base's build, and Ubuntu's cloud image
-#                to download)
+#                to download). images builds, rebuilds and interrupts images; project makes a VM
+#                from base in a project folder and checks its mounts, .git protection and shell
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images first (default: reuse them between runs)
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
@@ -10,7 +11,7 @@
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images"
+sections_all="images project"
 usage() { echo "usage: tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
 clean=false sel=$sections_all
 while (( $# )); do
@@ -48,6 +49,8 @@ cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$src/"
 D=$src/devvm
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
+vms=$XDG_DATA_HOME/devvm/vms         # the VMs' state, one per VM
+projects=$work/p                     # the project folders, this run's
 # m NAME [name=value...]: a message's text, from devvm, so checks never repeat its wording. Exported
 # for the checks' own shells.
 m() { "$D" _msg "$@"; }
@@ -58,10 +61,15 @@ cleanup() {
   local n
   for n in ${created[@]+"${created[@]}"}; do
     limactl delete -f "$n" >/dev/null 2>&1
-    rm -f "$images/${n#devvm-img-}"
+    rm -f "$images/${n#devvm-img-}" "$vms/$n"
   done
   rm -f "$layers"/e2e*.sh
   rm -rf "$src"
+  # The project folders' .git is locked (macOS): unlocked to go.
+  if [[ -d $projects ]]; then
+    [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
+    rm -rf "$projects"
+  fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
@@ -111,6 +119,21 @@ keys_of() { grep -lx "name=$1" "$images"/* 2>/dev/null | while read -r f; do bas
 owned() { local k; for k in $(keys_of "$1"); do created+=("devvm-img-$k"); done; }
 status_of() { limactl list --format '{{.Status}}' "$1" 2>/dev/null; }
 export -f keys_of status_of; export images
+# newproj NAME: a new, empty project folder, as devvm sees it (its physical path).
+newproj() {
+  [[ "$(uname -s)" != Darwin || ! -e "$projects/$1" ]] || chflags -R nouchg "$projects/$1"
+  rm -rf "${projects:?}/$1"; mkdir -p "$projects/$1"; (cd "$projects/$1" && pwd -P)
+}
+# vm_of DIR: the VM devvm made for that folder, from its state.
+vm_of() { grep -lx "dir=$1" "$vms"/* 2>/dev/null | head -1 | xargs basename 2>/dev/null; }
+# launch DIR INPUT ARGS...: devvm ARGS in DIR, with INPUT for the shell it opens (which then ends);
+# sets $vm and records it for cleanup. Its output is in $work/last.log.
+launch() {
+  local d=$1 in=$2; shift 2
+  (cd "$d" && printf '%s\n' "$in" | "$D" "$@" >"$work/last.log" 2>&1)
+  vm=$(vm_of "$d"); [[ -z $vm ]] || created+=("$vm")
+}
+in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
 
 if $clean; then
   section "cleaning cached images"
@@ -178,6 +201,37 @@ check "Ctrl+C during a build deletes the unfinished image, and exits 130" bash -
   [[ -n '$ks' && $rc -eq 130 ]] && grep -qx '==> interrupted_image vm=devvm-img-$ks' '$work/slow.log' &&
   [[ -z \$(status_of devvm-img-$ks) ]] && [[ ! -e '$images/$ks' ]] && [[ \$(status_of devvm-img-$kb) == Stopped ]]"
 rm -f "$fixture" "$layers/e2eslow.sh"
+fi
+
+if want project; then
+section "a base project"
+p=$(newproj web); git -C "$p" init -q
+# The shell devvm opens reads its commands from devvm's input: these, then it ends.
+launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy base
+check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
+  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
+  grep -qx image=base '$vms/$vm' && grep -qx net=off '$vms/$vm' && grep -qx 'dir=$p' '$vms/$vm'"
+check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
+# Only the project folder: the VM's own mounts list holds nothing else (in a nested Linux test
+# host, the guest's home has the host's path, so looking for files there proves nothing).
+check "nothing else from the host is mounted" bash -c "[[ \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$p ' ]]"
+check "SSH agent forwarding is off" bash -c "! limactl shell --workdir / $vm ssh-add -l </dev/null"
+check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
+  DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
+  grep -q -- '--- PASS: TestE2EExecQuoting'"
+
+section ".git protection"
+if [[ "$(uname -s)" != Darwin ]]; then
+  check "off on Linux (no chflags), and says so" bash -c "grep -qx git_protect=off '$vms/$vm' &&
+    grep -qF \"\$(m git_protect_needs_macos_new)\" '$work/last.log'"
+else
+  check "hooks and config are locked" bash -c "ls -lOd '$p/.git/config' | grep -q uchg && ls -lOd '$p/.git/hooks' | grep -q uchg &&
+    grep -qx git_protect=on '$vms/$vm'"
+  check "root in the VM can't add a hook" bash -c "! limactl shell --workdir / $vm sudo sh -c 'echo x > $p/.git/hooks/pre-commit' </dev/null && [[ ! -e '$p/.git/hooks/pre-commit' ]]"
+  check "root in the VM can't change the config" bash -c "! limactl shell --workdir / $vm sudo sh -c 'echo x >> $p/.git/config' </dev/null"
+  check "git in the VM can commit" in_vm "$vm" "cd $p && for i in 1 2 3 4 5 6 7 8 9 10; do git status >/dev/null 2>&1 && break; sleep 1; done &&
+    git add -A && git -c user.email=e@e -c user.name=e commit -qm vm"
+fi
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

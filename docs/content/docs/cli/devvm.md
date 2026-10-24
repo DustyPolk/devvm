@@ -3,16 +3,29 @@ title: devvm
 weight: 1
 ---
 
-One isolated VM per project folder
+Open a shell in this folder's VM, creating it first
+
+## Synopsis
+
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, or your layers joined with +), else the image the folder's files call for, built if it isn't. Only the folder is mounted, read-write, and its .git hooks and config are locked against changes from the VM (macOS).
 
 ```text
-devvm [flags]
+devvm [IMAGE] [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for devvm
+      --backend NAME        the NAME of the backend a new VM or image gets (default: the default backend file's, else lima)
+      --cpus N              the N CPUs a new VM gets (default: the size file's, else the image's)
+      --disk GiB            a new VM's disk in GiB, at least the image's (default: the size file's, else the image's)
+  -h, --help                help for devvm
+      --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
+      --network-policy      create the VM with network policy (not available yet: refused)
+      --no-git-protect      create the VM without .git protection
+      --no-network-policy   create the VM without network policy: it reaches anything this machine can
+      --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
+      --unsafe-folder       mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway
 ```
 
 ## See also
