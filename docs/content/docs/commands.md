@@ -99,6 +99,26 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 
 `--backend NAME` builds on that backend instead of the one new VMs get, and `--from IMAGE` builds on a base from that container image ([details](from.md)).
 
+## devvm itself
+
+| | |
+| --- | --- |
+| `devvm --version` | print devvm's version, alone (`devvm version` does too) |
+| `devvm help [COMMAND]` | print the help for devvm or a command, as `--help` and `-h` do |
+| `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
+
+A command's name is never an IMAGE: `devvm build` builds. For one of your layers named like a command, write it as `base+NAME`.
+
+### Shell completion
+
+The script completes commands, flags, image names (with `+`, after the parts already given), shared tools for `devvm remove`, and `--backend` and `--ports` values. Load it from your shell's startup file:
+
+| Shell | Line | In |
+| --- | --- | --- |
+| bash | `source <(devvm completion bash)` | `~/.bashrc`, with the bash-completion package installed |
+| zsh | `source <(devvm completion zsh)` | `~/.zshrc`, after `compinit` |
+| fish | `devvm completion fish \| source` | `~/.config/fish/config.fish` |
+
 ## Environment
 
 | | |

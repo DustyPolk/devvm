@@ -1,0 +1,56 @@
+# devvm completion prints a script for bash, zsh and fish, and nothing else.
+exec devvm completion bash
+stdout '__devvm'
+! stderr .
+exec devvm completion zsh
+stdout '^#compdef devvm$'
+exec devvm completion fish
+stdout 'complete -c devvm'
+! exec devvm completion powershell
+stderr '^devvm: invalid argument "powershell" for "devvm completion": see devvm --help$'
+! stdout .
+
+# The commands users run, not the hidden ones, with image names for IMAGE.
+exec devvm __complete ''
+stdout '^build\t'
+stdout '^completion\t'
+stdout '^base$'
+stdout '^claude$'
+! stdout '^_'
+! stdout '^version'
+stdout '^:4$'
+
+# Your layers are image names; the parts given are left out.
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+exec devvm __complete build node+
+stdout '^node\+foo$'
+stdout '^node\+claude$'
+! stdout '^node\+node$'
+exec devvm __complete node+c
+cmp stdout node-c.txt
+
+# remove takes shared tools only.
+exec devvm __complete remove ''
+stdout '^python$'
+! stdout '^foo$'
+! stdout '^base$'
+
+# Flags: backend names, the ports keywords; never file names.
+exec devvm __complete --backend ''
+stdout '^lima$'
+exec devvm __complete --ports ''
+stdout '^all$'
+stdout '^none$'
+exec devvm __complete rm ''
+stdout '^:4$'
+exec devvm __complete completion ''
+stdout '^fish$'
+! stub_calls
+
+-- foo.sh --
+#!/bin/bash
+-- node-c.txt --
+node+claude
+node+codex
+:4

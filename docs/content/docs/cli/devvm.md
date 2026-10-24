@@ -28,12 +28,14 @@ devvm [IMAGE] [flags]
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
       --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
       --unsafe-folder       mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway
+      --version             print devvm's version
 ```
 
 ## See also
 
 - [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
+- [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it

@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `secret`, hidden `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `secret`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line |
@@ -147,7 +147,7 @@ Bats files (pending cases, by task):
 | File | Pending |
 | --- | --- |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
-| `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), doctor (preflight, doctor), version, limactl |
+| `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), doctor (preflight, doctor), limactl |
 | `delete.bats` | gc (two, overlay half, `delete_image_key`), ls (VM named like an image), allowlist of a VM deleted outside devvm |
 | `guest.bats` | ssh/code (VS Code settings) |
 | `images.bats` | layer, gc (three), images (three, `images rm`) |
@@ -176,10 +176,12 @@ Deliberate changes from the bash:
 - `--from`: `from_lookup_failed`/`from_cached` are `from_unreachable`, `from_not_found` and `from_cached_*` (no nested message); a registry still failing (5xx, 429) after retries is unreachable; `building_image_from` replaces `building_image`'s `from=`; Lima sets the converted disk with `--set .images` on `base.yaml` (no `lima.yaml`) and the build VM's mounts with `--set .mounts`; `from_ignored` on restart, update and remove too; a missing `--from` value is cobra's `usage_error`.
 - `net_direct_route` doesn't name the Lima config. `DEVVM_SECRET_SERVICE` is checked for reads too. A failed tools resolve is `tools_need_resolve` with the log's end. e2e's sandbox and service differ from the bash's: its rebuilds delete every stale image in its Lima home.
 - Features: each runs as a `running_script` step (no `adding_feature`); none chosen is `base_features_none`; feature names that aren't layer-like are skipped in the listing and make `base-features` unreadable.
+- `help` is Cobra's (`devvm help COMMAND`, per-command help); `devvm completion bash|zsh|fish` is new; `--version` has no `-v`; the version is set at build time, else Go's build info (no `VERSION` file read).
 
 Pending in code:
 - deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend`/`*AgentKeys` (size, ports, setup, ssh-agent), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
 - `ssh_remote_hint` doesn't name `devvm ssh-agent`. `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`; `ls` shows `clone` in GIT for `mode=clone`; `checkAgent` runs only once `--ssh-agent` exists; ssh config entries forward devvm's agent with `devvm ssh-agent`. `devvm setup` brings `base_will_rebuild`, `gc_old_hint`, the features in `--help`, and `base_features` naming it. `image_from` (the `base (from node:24)` label) waits for `ls`/`images`. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
+- Release builds set the version with `-ldflags "-X github.com/w3cj/devvm/internal/cli.version=…"` (`.goreleaser.yaml` comes with releases); `doctor_ok` shows it.
 - Secret brings `secret_store`, `secret_delete`, `proxies_forget_values`, Keychain writes, and `devvm secret set` in `no_claude_token`/`no_github_token` (they name `CLAUDE_CODE_OAUTH_TOKEN`, or nothing, until then).
 
 Bash fixes copied: none yet.

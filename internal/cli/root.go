@@ -34,12 +34,14 @@ func NewRoot() *cobra.Command {
 			return up(cmd.Context(), g, u, args)
 		},
 	}
-	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(ui.Stdout())
 	addGlobals(root, g)
 	addUpFlags(root, u)
+	addVersion(root)
 	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(),
-		newRestartCmd(g), newRemoveCmd(g), newUpdateCmd(g), newAdoptCmd(), newRmCmd(), newQEMUCmd(), newProxyCmd(), newRefreshToolsCmd(), newSecretCmd())
+		newRestartCmd(g), newRemoveCmd(g), newUpdateCmd(g), newAdoptCmd(), newRmCmd(), newQEMUCmd(), newProxyCmd(), newRefreshToolsCmd(), newSecretCmd(),
+		newVersionCmd(), newCompletionCmd())
+	addCompletions(root)
 	return root
 }
 

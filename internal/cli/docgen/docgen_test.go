@@ -108,14 +108,14 @@ func TestHiddenCommandsAreLeftOut(t *testing.T) {
 	}
 	slices.Sort(names)
 	want := []string{
-		"_index.md", "devvm.md", "devvm_adopt.md", "devvm_build.md", "devvm_rebuild.md",
+		"_index.md", "devvm.md", "devvm_adopt.md", "devvm_build.md", "devvm_completion.md", "devvm_rebuild.md",
 		"devvm_remove.md", "devvm_restart.md", "devvm_rm.md", "devvm_update.md",
 	}
 	if !slices.Equal(names, want) {
 		t.Errorf("files = %v, want %v", names, want)
 	}
 	for n, data := range files {
-		for _, s := range []string{"_msg", "_qemu", "devvm help", "Auto generated"} {
+		for _, s := range []string{"_msg", "_qemu", "devvm help", "devvm version", "__complete", "Auto generated"} {
 			if bytes.Contains(data, []byte(s)) {
 				t.Errorf("%s has %q", n, s)
 			}

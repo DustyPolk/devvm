@@ -1,0 +1,18 @@
+# devvm --version prints the version alone, and devvm version the same.
+exec devvm --version
+stdout '^(\(devel\)|[0-9]\S*)$'
+! stdout '\n.'
+! stderr .
+cp stdout version.txt
+exec devvm version
+cmp stdout version.txt
+! stderr .
+
+# Neither reaches up, whatever else is given.
+exec devvm --version node
+cmp stdout version.txt
+! stub_calls
+
+# There's no -v.
+! exec devvm -v
+stderr 'unknown shorthand flag: ''v'''

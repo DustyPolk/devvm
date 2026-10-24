@@ -3,6 +3,18 @@ exec devvm --help
 stdout '^Usage:'
 stdout 'devvm \[IMAGE\] \[flags\]'
 ! stderr .
+cp stdout help.txt
+
+# So do devvm help and -h; devvm help COMMAND prints the command's.
+exec devvm help
+cmp stdout help.txt
+exec devvm -h
+cmp stdout help.txt
+exec devvm help build
+stdout 'devvm build IMAGE \[flags\]'
+exec devvm build --help
+stdout 'devvm build IMAGE \[flags\]'
+! stub_calls
 
 # An unknown flag fails in one line on stderr, like every error.
 ! exec devvm --nope
