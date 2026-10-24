@@ -12,7 +12,8 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/msg/` | messages: `messages_gen.go` (one function per message, generated), `M` (text in the user's language, names mode, doc links, `FromArgs` for `_msg`), the go-i18n bundle, `docs.go` (the doc links: message ID → `"page#anchor"`). `gen/` is the generator (`go generate ./internal/msg`); the tests check the generated file is current, every message renders, every one is called and every doc link is a message, page and heading |
 | `locales/` | `en.toml`, every message in go-i18n's TOML format (other languages join as `<lang>.toml`), embedded by `locales.go` and loaded with go-i18n's `LoadMessageFileFS` |
 | `internal/paths/` | names every folder and file devvm uses: the folder holding the binary (after following links), and `Dirs` (XDG data and config folders, devvm's Lima home, `DEVVM_LIMA_HOME`) with a method per state folder and config file |
-| `internal/state/` | reads and writes state files atomically, with `CorruptError` for unreadable ones: VM state (key=value, `backend=` included), image records and `--from` digests, and the config files (`size`, `ports`, `base-features`, `agent-keys`). Its errors aren't messages yet |
+| `internal/state/` | reads and writes state files atomically, with `CorruptError` for unreadable ones: VM state (key=value, `backend=` included), image records and `--from` digests, and the config files (`size`, `ports`, `backend`, `base-features`, `agent-keys`). Its errors aren't messages yet |
+| `internal/backend/` | the `Backend` interface and its spec types (`ImageSpec`, `VMSpec`, `Confinement` with its `Net`, `Instance`, `Command`), `Caps` (each `Feature`: `Native`, `Emulated(reviewed)` or `None`), `Require` (the refusals, `backend_lacks`/`backend_unreviewed`) and each spec's `Features()`, and the `Registry` with `For` (the backend for a VM: its recorded one, else `--backend`, the default file, `lima`). `backendtest/` is the fake backend for tests: it records calls and answers from preset fields |
 | `internal/image/` | image keys, pure: `Inputs` (the backend, devvm's files and the user's layers, features and rebuild counters as `fs.FS`, the chosen features, `--from` and its digest) with `Key` and `Chain`, `Parent`, tool image names (`ToolFile`, `ParseToolFile`) and `SHA256File`. Inputs are hashed as length-prefixed tag/value fields; its tests use the fixtures in its `testdata/` |
 | `testdata/script/*.txtar` | CLI tests (testscript) |
 | `testdata/stubs/` | stand-ins for host commands, first on `PATH` in tests; they log calls to `$STUB_LOG`. So far `uname` and `sw_vers` |
@@ -23,7 +24,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `.github/workflows/` | `ci.yml` (lint and test on macOS and Linux), `docs.yml` (the site on GitHub Pages) |
 | `.agents/skills/security-audit/`, `skills-lock.json` | the security-audit skill, used by the backend reviews |
 
-Not there yet, and where it goes when its task arrives: `internal/{project,tools,gitprotect,netpolicy,secrets,vm}`, `internal/backend/` (interface, `Caps`, registry; `lima/`, `smolvm/`, `docker/`), `internal/proxy` (stdlib only), `internal/platform` (build-tagged OS code). The in-VM scripts (`base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/`) sit next to the binary; `tests/e2e.sh` drives real VMs; `install.sh`, `scripts/` and `packaging/` handle releases.
+Not there yet, and where it goes when its task arrives: `internal/{project,tools,gitprotect,netpolicy,secrets,vm}`, the backends (`internal/backend/lima/`, `smolvm/`, `docker/`), the `--backend` flag (with up and setup), `internal/proxy` (stdlib only), `internal/platform` (build-tagged OS code). The in-VM scripts (`base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/`) sit next to the binary; `tests/e2e.sh` drives real VMs; `install.sh`, `scripts/` and `packaging/` handle releases.
 
 ## Tasks
 
@@ -64,8 +65,8 @@ Not there yet, and where it goes when its task arrives: `internal/{project,tools
 
 ## Backends
 
-- Every backend implements one interface and declares its capabilities (`Caps`) per feature: native, emulated (reviewed) or none. Each backend's column is in `docs/content/docs/backends.md`.
-- **A feature a backend lacks fails** in one line naming the VM and what to do. Never fall back silently to something weaker.
+- Every backend implements `backend.Backend` and declares its capabilities (`Caps`) per feature: native, emulated (reviewed) or none. Each backend's column is in `docs/content/docs/backends.md`; a new `Feature` goes in `backend.Features` and that table.
+- **A feature a backend lacks fails** in one line naming the VM and what to do. Never fall back silently to something weaker. Callers check with `backend.Require(b, vm, spec.Features()...)` before asking the backend; backends don't decide what a VM needs.
 - **Every emulation is refused until its review passes:** a design note in `docs/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee. Then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package. What doesn't depend on the backend (`.git` protection with host `chflags`, the network policy proxy) stays out of it.
 

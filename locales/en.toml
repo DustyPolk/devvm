@@ -39,6 +39,23 @@ other = "the end of {{.file}}:"
 [run_log_failed]
 other = "can't write the run log in {{.dir}}: {{.reason}}"
 
+[backend_lacks]
+description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
+other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
+
+[backend_unreviewed]
+description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
+other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it, unreviewed: use a backend that has it"
+
+[backend_unknown]
+other = "there's no {{.name}} backend: choose one of {{.backends}}"
+
+[backend_unknown_default]
+other = "{{.file}} sets the backend to {{.name}}, which doesn't exist: change it to one of {{.backends}}"
+
+[backend_unknown_vm]
+other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have: use the devvm that made it"
+
 [tool_bad_version]
 description = "version is quoted, as the tools lock has it"
 other = "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"

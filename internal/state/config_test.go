@@ -58,6 +58,28 @@ func TestPorts(t *testing.T) {
 	wantCorrupt(t, err, d.Ports(), 2)
 }
 
+func TestBackend(t *testing.T) {
+	d := testDirs(t)
+	if got, err := ReadBackend(d); err != nil || got != "" {
+		t.Fatalf("no file: got %q, %v", got, err)
+	}
+	if err := WriteBackend(d, "smolvm"); err != nil {
+		t.Fatal(err)
+	}
+	if s := read(t, d.Backend()); s != "smolvm\n" {
+		t.Errorf("file: %q", s)
+	}
+	if got, err := ReadBackend(d); err != nil || got != "smolvm" {
+		t.Errorf("got %q, %v", got, err)
+	}
+	if err := WriteBackend(d, ""); err == nil {
+		t.Error("an empty name: want an error")
+	}
+	write(t, d.Backend(), "lima\ndocker\n")
+	_, err := ReadBackend(d)
+	wantCorrupt(t, err, d.Backend(), 2)
+}
+
 func TestBaseFeatures(t *testing.T) {
 	d := testDirs(t)
 	if _, err := ReadBaseFeatures(d); !errors.Is(err, fs.ErrNotExist) {

@@ -79,6 +79,13 @@ func ReadPorts(d paths.Dirs) (string, error) { return readValue(d.Ports()) }
 // WritePorts writes which ports new VMs forward by default.
 func WritePorts(d paths.Dirs, ports string) error { return writeValue(d.Ports(), ports) }
 
+// ReadBackend reads the default backend for new VMs, as written: callers
+// check it. A missing file is "".
+func ReadBackend(d paths.Dirs) (string, error) { return readValue(d.Backend()) }
+
+// WriteBackend writes the default backend for new VMs.
+func WriteBackend(d paths.Dirs, name string) error { return writeValue(d.Backend(), name) }
+
 var featureName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // ReadBaseFeatures reads the features chosen for the base image, one per

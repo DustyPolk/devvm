@@ -2,6 +2,31 @@
 
 package msg
 
+// BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
+func BackendLacks(backend string, feature string, vm string) M {
+	return M{id: "backend_lacks", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
+}
+
+// BackendUnknown is [backend_unknown]: "there's no {{.name}} backend: choose one of {{.backends}}"
+func BackendUnknown(backends string, name string) M {
+	return M{id: "backend_unknown", vals: []val{{"backends", backends}, {"name", name}}}
+}
+
+// BackendUnknownDefault is [backend_unknown_default]: "{{.file}} sets the backend to {{.name}}, which doesn't exist: change it to one of {{.backends}}"
+func BackendUnknownDefault(backends string, file string, name string) M {
+	return M{id: "backend_unknown_default", vals: []val{{"backends", backends}, {"file", file}, {"name", name}}}
+}
+
+// BackendUnknownVM is [backend_unknown_vm]: "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have: use the devvm that made it"
+func BackendUnknownVM(backend string, vm string) M {
+	return M{id: "backend_unknown_vm", vals: []val{{"backend", backend}, {"vm", vm}}}
+}
+
+// BackendUnreviewed is [backend_unreviewed]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it, unreviewed: use a backend that has it"
+func BackendUnreviewed(backend string, feature string, vm string) M {
+	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
+}
+
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path: set it to your home folder"
 func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
@@ -64,16 +89,21 @@ func UsageError(reason string) M {
 
 // specs describes every message, by ID.
 var specs = map[string]spec{
-	"home_not_absolute":    {},
-	"log_details":          {fields: []string{"file"}},
-	"log_end":              {fields: []string{"file"}},
-	"msg_bad_count":        {fields: []string{"value"}},
-	"msg_missing_value":    {fields: []string{"key", "name"}},
-	"msg_not_pair":         {fields: []string{"arg"}},
-	"msg_repeated_value":   {fields: []string{"key"}},
-	"msg_unexpected_value": {fields: []string{"key", "name"}},
-	"msg_unknown":          {fields: []string{"name"}},
-	"run_log_failed":       {fields: []string{"dir", "reason"}},
-	"tool_bad_version":     {fields: []string{"tool", "version"}},
-	"usage_error":          {fields: []string{"reason"}},
+	"backend_lacks":           {fields: []string{"backend", "feature", "vm"}},
+	"backend_unknown":         {fields: []string{"backends", "name"}},
+	"backend_unknown_default": {fields: []string{"backends", "file", "name"}},
+	"backend_unknown_vm":      {fields: []string{"backend", "vm"}},
+	"backend_unreviewed":      {fields: []string{"backend", "feature", "vm"}},
+	"home_not_absolute":       {},
+	"log_details":             {fields: []string{"file"}},
+	"log_end":                 {fields: []string{"file"}},
+	"msg_bad_count":           {fields: []string{"value"}},
+	"msg_missing_value":       {fields: []string{"key", "name"}},
+	"msg_not_pair":            {fields: []string{"arg"}},
+	"msg_repeated_value":      {fields: []string{"key"}},
+	"msg_unexpected_value":    {fields: []string{"key", "name"}},
+	"msg_unknown":             {fields: []string{"name"}},
+	"run_log_failed":          {fields: []string{"dir", "reason"}},
+	"tool_bad_version":        {fields: []string{"tool", "version"}},
+	"usage_error":             {fields: []string{"reason"}},
 }
