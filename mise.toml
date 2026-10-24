@@ -35,7 +35,9 @@ run = [
   "markdownlint-cli2 'docs/content/**/*.md'",
   "vale docs/content",
   "lychee --offline --no-progress --include-fragments 'docs/content/**/*.md'",
-  # Message links: the check on doc pages linked from locales/en.toml.
+  # Message links: every doc = "page#anchor" in locales/en.toml is a page
+  # and heading in docs/content/docs.
+  "go test ./internal/msg -run '^TestDocLinks$'",
 ]
 
 [tasks.test]

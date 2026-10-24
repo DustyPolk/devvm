@@ -1,10 +1,11 @@
 package paths
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // Dirs holds the folders devvm keeps its state in. Every file devvm writes
@@ -30,7 +31,7 @@ func FromEnv() (Dirs, error) {
 func fromEnv(getenv func(string) string) (Dirs, error) {
 	home := getenv("HOME")
 	if !filepath.IsAbs(home) {
-		return Dirs{}, errors.New("HOME is not set to an absolute path")
+		return Dirs{}, msg.HomeNotAbsolute()
 	}
 	d := Dirs{
 		Data:   filepath.Join(xdg(getenv, "XDG_DATA_HOME", home, ".local", "share"), "devvm"),

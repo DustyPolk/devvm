@@ -43,7 +43,7 @@ Run the tasks with `mise run <task>`:
 | Task | Does |
 | --- | --- |
 | `fmt` | formats Go code |
-| `lint` | runs golangci-lint, shellcheck and the docs linters |
+| `lint` | runs golangci-lint, shellcheck, the docs linters and the message link check |
 | `test` | runs the tests with the race detector and coverage |
 | `vuln` | runs govulncheck |
 | `docs` | serves the docs site |
@@ -101,6 +101,57 @@ limactl list
 | `STUB_UNAME_S` | `uname -s` |
 | `STUB_UNAME_M` | `uname -m` |
 | `STUB_SW_VERS` | `sw_vers -productVersion` |
+
+## Messages
+
+Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; `internal/ui` does.
+
+```toml
+[no_vm]
+other = "no VM for {{.dir}}: run devvm there to create one"
+doc = "images#where-state-lives"
+
+[vm_count]
+one = "{{.count}} VM in {{.dir}}"
+other = "{{.count}} VMs in {{.dir}}"
+```
+
+- **The ID** is the table's name, in snake_case.
+- **`other`** is the text: a Go template whose fields are snake_case (`{{.vm_name}}`). Only plain fields are allowed, no logic.
+- **`one`** is the text for a count of 1, when the wording changes with the count. Both texts then take `{{.count}}`.
+- **`doc`** links a page in `docs/content/docs` and a heading on it (`page#anchor`). devvm prints its address on the docs site on the line after the text.
+- **Style:** succinct and direct. Say what is being done, or what failed and what to do; link a page when more is needed. An error is one line.
+
+After editing `en.toml`, run:
+
+```sh
+mise exec -- go generate ./internal/msg
+```
+
+It writes `internal/msg/messages_gen.go`, with one function per message. The parameters are the template's fields in sorted order, in camelCase, and `count int` for plural messages: `[no_vm]` becomes `msg.NoVM(dir string) msg.M`, and a value that's missing or extra is a compile error. `msg.M` is also an `error`.
+
+The tests fail when:
+
+- `messages_gen.go` is stale;
+- a message doesn't render with sample values, or shows `<no value>`;
+- a generated function is never called outside the generated file and the tests;
+- a `doc` page or heading doesn't exist. `mise run lint` runs this check too.
+
+### Names mode
+
+With `DEVVM_MESSAGES=names`, a message prints as its ID and its values in sorted key order, so tests check which message devvm printed and with what, never its wording or language:
+
+```txtar
+env DEVVM_MESSAGES=names
+! exec devvm _msg nope
+stderr 'msg_unknown name=nope$'
+```
+
+`devvm _msg NAME key=value…` prints a message's text (never its names), for end-to-end tests that look for it in a VM's output. It's hidden from the help.
+
+### Translations
+
+A translation is `locales/<language>.toml` (`de.toml`) with the same tables, `one` and `other` translated. Its `doc` is ignored: the docs site is English. devvm picks the language from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set (`de_DE.UTF-8` is German); `C` and `POSIX` are English. A message missing from a translation is shown in English.
 
 ## Writing docs
 

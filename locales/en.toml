@@ -1,0 +1,26 @@
+# Every message devvm prints. Each table is one message: its ID is the
+# table's name, "other" is its text (a Go template with snake_case fields,
+# {{.vm_name}}), "one" is the text for a count of 1 when the wording changes
+# (both then take {{.count}}), and "doc" links a docs page ("page#anchor").
+# Run go generate ./internal/msg after editing.
+
+[home_not_absolute]
+other = "HOME isn't an absolute path: set it to your home folder"
+
+[msg_unknown]
+other = "no message {{.name}}"
+
+[msg_not_pair]
+other = "{{.arg}} is not name=value"
+
+[msg_missing_value]
+other = "{{.name}} needs {{.key}}="
+
+[msg_unexpected_value]
+other = "{{.name}} takes no {{.key}}="
+
+[msg_repeated_value]
+other = "{{.key}}= is given twice"
+
+[msg_bad_count]
+other = "count must be a whole number, not {{.value}}"

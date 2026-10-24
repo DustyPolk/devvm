@@ -1,8 +1,11 @@
 package paths
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 func TestFromEnv(t *testing.T) {
@@ -56,13 +59,14 @@ func TestFromEnv(t *testing.T) {
 
 func TestFromEnvNeedsHome(t *testing.T) {
 	for _, home := range []string{"", "rel"} {
-		if _, err := fromEnv(func(k string) string {
+		_, err := fromEnv(func(k string) string {
 			if k == "HOME" {
 				return home
 			}
 			return ""
-		}); err == nil {
-			t.Errorf("HOME=%q: want an error", home)
+		})
+		if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != "home_not_absolute" {
+			t.Errorf("HOME=%q: got %v, want home_not_absolute", home, err)
 		}
 	}
 }

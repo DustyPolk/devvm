@@ -1,0 +1,189 @@
+package msg
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// root is the repo's root, from this package's folder.
+const root = "../.."
+
+// generatedFuncs returns the functions in messages_gen.go.
+func generatedFuncs(t *testing.T) map[string]bool {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "messages_gen.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	funcs := map[string]bool{}
+	for _, d := range f.Decls {
+		if fd, ok := d.(*ast.FuncDecl); ok {
+			funcs[fd.Name.Name] = true
+		}
+	}
+	return funcs
+}
+
+// Every message is called somewhere other than the generated file and the
+// tests.
+func TestEveryMessageIsUsed(t *testing.T) {
+	unused := generatedFuncs(t)
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if name := d.Name(); path != root && (strings.HasPrefix(name, ".") || name == "testdata" || name == "docs") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || d.Name() == "messages_gen.go" {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		inMsg := filepath.Dir(path) == filepath.Join(root, "internal", "msg")
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.SelectorExpr:
+				if x, ok := n.X.(*ast.Ident); ok && x.Name == "msg" {
+					delete(unused, n.Sel.Name)
+				}
+			case *ast.Ident:
+				if inMsg {
+					delete(unused, n.Name)
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name := range unused {
+		t.Errorf("msg.%s is never used: call it, or delete its message from locales/en.toml", name)
+	}
+}
+
+// TestDocLinks checks that every doc link in locales/en.toml names a page
+// in docs/content/docs, and an anchor on it. mise run lint runs it.
+func TestDocLinks(t *testing.T) {
+	content := filepath.Join(root, "docs", "content", "docs")
+	for id, s := range specs {
+		if s.doc == "" {
+			continue
+		}
+		if err := checkDoc(content, s.doc); err != nil {
+			t.Errorf("[%s] doc = %q: %v", id, s.doc, err)
+		}
+	}
+}
+
+// checkDoc reports whether doc ("page#anchor") is a page in dir with that
+// anchor.
+func checkDoc(dir, doc string) error {
+	page, anchor, _ := strings.Cut(doc, "#")
+	anchors, err := pageAnchors(filepath.Join(dir, filepath.FromSlash(page)+".md"))
+	if err != nil {
+		return err
+	}
+	if anchor != "" && !anchors[anchor] {
+		return fmt.Errorf("%s has no heading #%s", page, anchor)
+	}
+	return nil
+}
+
+var (
+	headingRe  = regexp.MustCompile(`^#{1,6}\s+(.*?)\s*$`)
+	customIDRe = regexp.MustCompile(`\s*\{#([^}]+)\}$`)
+	notIDRe    = regexp.MustCompile(`[^\p{L}\p{N}_ -]`)
+)
+
+// pageAnchors returns the IDs Hugo gives a Markdown page's headings:
+// {#custom} when given, else the text lowercased, punctuation dropped and
+// spaces as hyphens. Headings in fenced code don't count.
+func pageAnchors(path string) (map[string]bool, error) {
+	f, err := os.Open(path) //nolint:gosec // a docs page from en.toml
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("no page %s", path)
+		}
+		return nil, err
+	}
+	defer f.Close()
+	anchors := map[string]bool{}
+	fence := ""
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := s.Text()
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			switch {
+			case fence == "":
+				fence = t[:3]
+			case strings.HasPrefix(t, fence):
+				fence = ""
+			}
+			continue
+		}
+		m := headingRe.FindStringSubmatch(line)
+		if fence != "" || m == nil {
+			continue
+		}
+		text := m[1]
+		if c := customIDRe.FindStringSubmatch(text); c != nil {
+			anchors[c[1]] = true
+			continue
+		}
+		text = notIDRe.ReplaceAllString(strings.ToLower(text), "")
+		anchors[strings.ReplaceAll(text, " ", "-")] = true
+	}
+	return anchors, s.Err()
+}
+
+func TestCheckDoc(t *testing.T) {
+	dir := t.TempDir()
+	page := "---\ntitle: T\n---\n\n## Where state lives\n\n### Sizes, ports & more\n\n## Custom {#short}\n\n" +
+		"```sh\n# Not a heading\n```\n"
+	if err := os.MkdirAll(filepath.Join(dir, "cli"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"images.md", "cli/devvm.md"} {
+		if err := os.WriteFile(filepath.Join(dir, p), []byte(page), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct {
+		doc string
+		ok  bool
+	}{
+		{"images", true},
+		{"images#where-state-lives", true},
+		{"images#sizes-ports--more", true},
+		{"images#short", true},
+		{"cli/devvm#where-state-lives", true},
+		{"images#custom", false},
+		{"images#not-a-heading", false},
+		{"images#nope", false},
+		{"nope", false},
+		{"nope#where-state-lives", false},
+	} {
+		if err := checkDoc(dir, tt.doc); (err == nil) != tt.ok {
+			t.Errorf("checkDoc(%q) = %v, want ok %t", tt.doc, err, tt.ok)
+		}
+	}
+}
