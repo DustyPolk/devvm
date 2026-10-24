@@ -32,7 +32,9 @@ run = [
     xargs -0 grep -lIE '^#!.*[/ ](ba|da)?sh( |$)' |
     xargs -r shellcheck --external-sources
   ''',
-  # docs/: markdownlint-cli2, vale, lychee --offline.
+  "markdownlint-cli2 'docs/content/**/*.md'",
+  "vale docs/content",
+  "lychee --offline --no-progress --include-fragments 'docs/content/**/*.md'",
   # Message links: the check on doc pages linked from locales/en.toml.
 ]
 

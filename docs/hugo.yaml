@@ -1,0 +1,58 @@
+baseURL: https://w3cj.github.io/devvm/
+title: devvm
+locale: en
+
+enableRobotsTXT: true
+enableGitInfo: true
+
+module:
+  hugoVersion:
+    extended: true
+    min: "0.146.0"
+  imports:
+    - path: github.com/imfing/hextra
+
+markup:
+  highlight:
+    noClasses: false
+  goldmark:
+    renderer:
+      unsafe: true
+
+menu:
+  main:
+    - name: Docs
+      pageRef: /docs
+      weight: 1
+    - name: Search
+      weight: 2
+      params:
+        type: search
+    - name: GitHub
+      weight: 3
+      url: https://github.com/w3cj/devvm
+      params:
+        icon: github
+
+params:
+  description: An isolated VM in any project folder, with everything needed to start coding.
+  navbar:
+    displayTitle: true
+    displayLogo: false
+  theme:
+    default: system
+    displayToggle: true
+  footer:
+    displayCopyright: false
+    displayPoweredBy: false
+  displayUpdatedDate: true
+  search:
+    enable: true
+    type: flexsearch
+  editURL:
+    enable: true
+    base: https://github.com/w3cj/devvm/edit/main/docs/content
+  highlight:
+    copy:
+      enable: true
+      display: hover

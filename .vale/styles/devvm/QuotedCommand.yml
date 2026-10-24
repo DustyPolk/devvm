@@ -1,0 +1,6 @@
+extends: existence
+message: "Write the command as devvm x or in backticks, not in quotes: '%s'."
+level: error
+nonword: true
+tokens:
+  - '["“'']devvm(?: [^"”''\n]*)?["”'']'

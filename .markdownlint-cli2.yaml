@@ -1,0 +1,5 @@
+config:
+  # Line length: one paragraph per line.
+  MD013: false
+  # Lists may follow a paragraph directly.
+  MD032: false
