@@ -7,8 +7,8 @@ devvm treats everything in a VM as untrusted, a coding agent with root included:
 
 | | |
 | --- | --- |
-| The project folder | read and write |
-| `.git` hooks and config | locked (macOS); what a lock can't stop is reported, not prevented ([details](git-protection.md)) |
+| The project folder | read and write; with `--clone`, not mounted: the VM has its own clone ([details](clone.md)) |
+| `.git` hooks and config | locked (macOS); what a lock can't stop is reported, not prevented ([details](git-protection.md)); with `--clone`, out of reach |
 | Your agents' config (skills, settings, logins) | its folders read-only, its files copied; never its history ([details](coding-agents.md)) |
 | The rest of your home folder, other projects | not mounted |
 | Your SSH keys | not reachable: VMs have no SSH agent ([details](ssh.md#agent-forwarding)) |
@@ -20,14 +20,14 @@ devvm treats everything in a VM as untrusted, a coding agent with root included:
 
 ### Only the project folder
 
-A VM mounts its project folder, read-write, at the same path, and nothing else from the host but the shared tools and its [agents' config folders](coding-agents.md#mounts), read-only: not your home folder, which Lima's own templates mount.
+A VM mounts its project folder, read-write, at the same path, and nothing else from the host but the shared tools and its [agents' config folders](coding-agents.md#mounts), read-only: not your home folder, which Lima's own templates mount. A [`--clone`](clone.md) VM doesn't mount the project folder either: it has its own clone, and its work reaches the repo only when you fetch it.
 
 devvm refuses a project folder that would hand the VM more than the project:
 
 - one that is or holds your home folder, devvm's settings (`~/.config/devvm`), its state (`~/.local/share/devvm`, with its binaries and other VMs' disks) or its Lima home;
 - one inside devvm's own folders: a VM in `~/.config/devvm/layers` could rewrite the scripts every image build runs, one in its data folder the files devvm runs on the host.
 
-`--unsafe-folder` mounts such a folder anyway, saying so.
+`--unsafe-folder` mounts such a folder anyway, saying so. `--clone` mounts nothing, so it isn't refused.
 
 ### One VM per folder
 
@@ -53,7 +53,7 @@ The proxy's CA (`~/.local/share/devvm/ca`) is how it reads traffic to the hosts 
 
 ## What it doesn't protect
 
-- **Files the VM writes into the project folder.** Review changes before you run project code on the host (`npm install`, `make`, editor tasks, hooks in the working tree).
+- **Files the VM writes into the project folder.** Review changes before you run project code on the host (`npm install`, `make`, editor tasks, hooks in the working tree). `--clone` keeps them out until you fetch and merge them; review those commits the same way.
 - **VMs without network policy**, where you answered no or passed `--no-network-policy`: they reach anything this machine can, its services on `localhost` (other VMs' ports, dev servers, databases) and your local network included.
 - **A VM started outside devvm** (`limactl start`) runs unconfined, and reaches anything this machine can ([the self-check](network.md#the-self-check)).
 - **What allowed hosts and tokens permit.** The VM can push with a GitHub token it may use, spend Claude quota, or upload to any host on its allowlist. Use fine-grained tokens and keep allowlists short.

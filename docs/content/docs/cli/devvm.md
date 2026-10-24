@@ -7,7 +7,7 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS). A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking.
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking.
 
 ```text
 devvm [IMAGE] [flags]
@@ -17,6 +17,7 @@ devvm [IMAGE] [flags]
 
 ```text
       --backend NAME        the NAME of the backend a new VM or image gets (default: the default backend file's, else lima)
+      --clone               create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from
       --cpus N              the N CPUs a new VM gets (default: the size file's, else the image's)
       --disk GiB            a new VM's disk in GiB, at least the image's (default: the size file's, else the image's)
   -h, --help                help for devvm

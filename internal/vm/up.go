@@ -50,6 +50,7 @@ type Options struct {
 	Ports           string // --ports as given
 	UnsafeFolder    bool   // --unsafe-folder
 	NoGitProtect    bool   // --no-git-protect
+	Clone           bool   // --clone
 }
 
 // Env is what up runs with. FromEnv sets every field; tests change them.
@@ -107,7 +108,8 @@ func execShell(cmd backend.Command) error {
 
 // Up opens a shell in the folder's VM, making it first: checked, from
 // its image (built if it isn't), with only the folder mounted, .git
-// protected, started. A VM that exists is opened as it is, with what's
+// protected, started; with --clone, nothing mounted but its own clone of
+// the repo (seedClone). A VM that exists is opened as it is, with what's
 // changed since checked (open). On success it doesn't return: the shell
 // takes devvm's place.
 func (e *Env) Up(ctx context.Context, o Options) error {
@@ -218,7 +220,11 @@ func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
 // create makes the folder's VM and opens a shell in it.
 func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) error {
 	vm := f.Name
-	if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
+	if o.Clone {
+		if err := checkCloneRepo(ctx, f.Dir); err != nil {
+			return err
+		}
+	} else if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
 		return err
 	}
 	// Defaults are checked again: the files may be edited by hand. All
@@ -261,6 +267,10 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		Name: vm, Project: f.Dir, AgentDirs: AgentMounts(e.Home, img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
 		Size: size.Backend(), Ports: PortsBackend(ports),
 	}
+	mode := ""
+	if o.Clone {
+		spec.Project, mode = "", ModeClone
+	}
 	conf := backend.Confinement{Net: backend.NetDirect}
 	if net {
 		conf.Net = backend.NetProxy
@@ -300,7 +310,8 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	ui.Info(msg.CreatingFrom(img, vm))
 	ui.LogNote()
 	// Until its first shell nothing of anyone's is in it: an interrupt
-	// deletes it and its state, and takes off .git's locks.
+	// deletes it and its state, and takes off .git's locks, or removes
+	// the repo's remote for its clone.
 	var locking atomic.Bool
 	done := ui.AddCleanup(func(ctx context.Context) {
 		if !ui.Interrupted() {
@@ -312,6 +323,9 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		}
 		if locking.Load() {
 			e.Protector(f.Dir).Unlock(ctx)
+		}
+		if st, err := state.ReadVM(e.Dirs, vm); err == nil && isClone(st) {
+			removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
 		}
 		_ = e.sshConfig().ForgetHostKeys(vm)
 		_ = e.Proxy.Forget(vm)
@@ -336,6 +350,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	}
 	for _, kv := range [][2]string{
 		{KeyNet, netState},
+		{KeyMode, mode},
 		{KeyLibc, libc},
 		{KeyTools, strings.Join(files, " ")},
 		{KeyCPUs, size.CPUs},
@@ -359,15 +374,18 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 			}
 		}
 	}
-	locking.Store(!o.NoGitProtect)
-	if err := e.Protector(f.Dir).NewVM(ctx, st, o.NoGitProtect); err != nil {
-		return err
+	// A clone has no .git of the host's to protect, and no origin.
+	if !o.Clone {
+		locking.Store(!o.NoGitProtect)
+		if err := e.Protector(f.Dir).NewVM(ctx, st, o.NoGitProtect); err != nil {
+			return err
+		}
+		if project.SSHRemote(ctx, f.Dir) {
+			ui.Warn(msg.SSHRemoteHint(vm))
+		}
+		// Files an earlier VM of this folder made are named too.
+		e.checkSetID(f.Dir)
 	}
-	if project.SSHRemote(ctx, f.Dir) {
-		ui.Warn(msg.SSHRemoteHint(vm))
-	}
-	// Files an earlier VM of this folder made are named too.
-	e.checkSetID(f.Dir)
 	if spec.AgentForwarding {
 		e.checkAgent(ctx)
 	}
@@ -395,14 +413,20 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 }
 
 // setUp sets up a running VM, started with conf, for a shell in the
-// folder: its setup sent, and ssh and editors reaching it by name. It
-// returns the shell's command.
+// folder: its setup sent, ssh and editors reaching it by name, and a
+// --clone VM's clone made if it isn't yet. It returns the shell's
+// command.
 func (e *Env) setUp(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) (backend.Command, error) {
 	if err := e.sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
 		return backend.Command{}, err
 	}
 	if err := e.sshConfig().Write(ctx); err != nil {
 		return backend.Command{}, err
+	}
+	if isClone(st) && st.Get(KeySeeded) == "" {
+		if err := e.seedClone(ctx, b, st, f); err != nil {
+			return backend.Command{}, err
+		}
 	}
 	return b.Shell(ctx, st.Name(), f.Dir)
 }

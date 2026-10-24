@@ -20,7 +20,8 @@ import (
 // named adds what the VM lacks of it, in place, after asking. Flags for
 // new VMs are ignored, with a warning. On the way it warns about images
 // and tools newer than the VM's, matches its agent folder mounts to the
-// host's, checks .git (and on Linux, set-id files), and makes a stopped
+// host's, checks .git (and on Linux, set-id files) unless it's a --clone
+// VM (--clone on one that mounts the folder is refused), and makes a stopped
 // VM's backend config match the size and ports its state asks for; then
 // it starts the VM if it's stopped, checks its network policy, sets it
 // up and opens the shell, as for a new VM.
@@ -28,6 +29,9 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	if !st.Exists() || st.Get(KeyNet) == "" {
 		return msg.VMUnfinished(vm)
+	}
+	if o.Clone && !isClone(st) {
+		return msg.CloneNeedsNewVM(vm)
 	}
 	if t.flagIgnored {
 		ui.Warn(msg.BackendFlagIgnored(b.Name(), vm))
@@ -56,10 +60,13 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 		return err
 	}
 	running := in.Status == backend.StatusRunning
-	if err := e.Protector(t.f.Dir).Check(ctx, st, running); err != nil {
-		return err
+	// A clone mounts nothing of the folder's.
+	if !isClone(st) {
+		if err := e.Protector(t.f.Dir).Check(ctx, st, running); err != nil {
+			return err
+		}
+		e.checkSetID(t.f.Dir)
 	}
-	e.checkSetID(t.f.Dir)
 	if err := applySize(ctx, b, st, in); err != nil {
 		return err
 	}

@@ -38,10 +38,12 @@ func addGlobals(root *cobra.Command, g *globals) {
 type upFlags struct {
 	unsafeFolder bool
 	noGitProtect bool
+	clone        bool
 }
 
 func addUpFlags(cmd *cobra.Command, u *upFlags) {
 	f := cmd.Flags()
+	f.BoolVar(&u.clone, "clone", false, "create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from")
 	f.BoolVar(&u.unsafeFolder, "unsafe-folder", false, "mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway")
 	f.BoolVar(&u.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
 }
@@ -56,7 +58,7 @@ func (g *globals) options() vm.Options {
 // up opens a shell in this folder's VM, making it first.
 func up(ctx context.Context, g *globals, u *upFlags, args []string) error {
 	o := g.options()
-	o.UnsafeFolder, o.NoGitProtect = u.unsafeFolder, u.noGitProtect
+	o.UnsafeFolder, o.NoGitProtect, o.Clone = u.unsafeFolder, u.noGitProtect, u.clone
 	if len(args) > 0 {
 		o.Image = args[0]
 	}

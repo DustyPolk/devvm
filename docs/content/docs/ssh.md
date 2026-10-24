@@ -13,7 +13,7 @@ devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches
 Include ~/.config/devvm/ssh_config
 ```
 
-Or point ssh at the file: `ssh -F ~/.config/devvm/ssh_config devvm-website`.
+Or point ssh at the file: `ssh -F ~/.config/devvm/ssh_config devvm-website`. A new [`--clone`](clone.md) VM offers to add the line, as its repo's remote needs it.
 
 - **Only running VMs are listed.** A stopped VM's port is free for any program on the host to take, so an entry for it could hand your connection to that program. Start the VM with `devvm` before connecting from an editor.
 - **Each entry checks the VM's own host keys,** kept in `~/.config/devvm/known_hosts`. devvm reads them from the VM through Lima once it runs, and again after each start: a VM whose Lima config changed gets new host keys when it boots. A VM whose keys can't be read gets no entry. A host key that doesn't match is refused.

@@ -134,9 +134,10 @@ func (e *Env) Adopt(ctx context.Context) error {
 }
 
 // Rm deletes the folder's VM, exporting its agents' history first unless
-// force: an export that fails keeps it. A VM made for an earlier folder at
-// this path is deleted only after asking, without an export (its folder
-// is gone), force or not.
+// force: an export that fails keeps it. A --clone VM's branches the repo
+// lacks and uncommitted changes are checked first (cloneRmCheck), unless
+// force. A VM made for an earlier folder at this path is deleted only
+// after asking, without either (its folder is gone), force or not.
 func (e *Env) Rm(ctx context.Context, force bool) error {
 	t, err := e.findExisting(ctx, "")
 	if err != nil {
@@ -153,7 +154,13 @@ func (e *Env) Rm(ctx context.Context, force bool) error {
 		}
 		force = true
 	}
-	// A VM whose creation didn't finish never ran: no history.
+	// A VM whose creation didn't finish never ran: no history, no work.
+	if !force && st.Get(KeyNet) != "" && isClone(st) {
+		keep, err := e.cloneRmCheck(ctx, t)
+		if err != nil || keep {
+			return err
+		}
+	}
 	if !force && st.Get(KeyNet) != "" && len(agentsOf(st.Get(state.KeyImage))) > 0 {
 		if err := e.export(ctx, t); err != nil {
 			return err
@@ -162,27 +169,32 @@ func (e *Env) Rm(ctx context.Context, force bool) error {
 	return e.delete(ctx, t)
 }
 
+// ensureRunning starts the VM if it's stopped, confined as its state says.
+func (e *Env) ensureRunning(ctx context.Context, t *found) error {
+	vm, b := t.f.Name, t.b
+	in, err := b.Inspect(ctx, vm)
+	if err != nil || in.Status == backend.StatusRunning {
+		return err
+	}
+	conf := backend.Confinement{Net: backend.NetDirect}
+	if netpolicy.On(t.st) {
+		conf.Net = backend.NetProxy
+	}
+	if err := backend.Require(b, vm, conf.Features()...); err != nil {
+		return err
+	}
+	ui.Info(msg.Starting(vm))
+	_, err = e.start(ctx, b, t.st, conf)
+	return err
+}
+
 // export saves the VM's agents' history (transcripts, sessions) to a
 // tarball in the exports folder, starting the VM if it's stopped. Their
 // logins aren't in it.
 func (e *Env) export(ctx context.Context, t *found) error {
 	vm, b := t.f.Name, t.b
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
+	if err := e.ensureRunning(ctx, t); err != nil {
 		return err
-	}
-	if in.Status != backend.StatusRunning {
-		conf := backend.Confinement{Net: backend.NetDirect}
-		if netpolicy.On(t.st) {
-			conf.Net = backend.NetProxy
-		}
-		if err := backend.Require(b, vm, conf.Features()...); err != nil {
-			return err
-		}
-		ui.Info(msg.Starting(vm))
-		if _, err := e.start(ctx, b, t.st, conf); err != nil {
-			return err
-		}
 	}
 	if err := os.MkdirAll(e.Dirs.Exports(), 0o700); err != nil {
 		return err
@@ -213,9 +225,10 @@ func (e *Env) export(ctx context.Context, t *found) error {
 }
 
 // delete deletes the VM and what devvm keeps for it: its state, its proxy
-// and its rules, run files and logs, .git's locks, its host keys and its
-// ssh config entry. A delete that failed but left no VM (it was half gone
-// already) goes on like one that worked.
+// and its rules, run files and logs, .git's locks or the repo's remote
+// for its clone, its host keys and its ssh config entry. A delete that
+// failed but left no VM (it was half gone already) goes on like one that
+// worked.
 func (e *Env) delete(ctx context.Context, t *found) error {
 	vm := t.f.Name
 	if err := t.b.Delete(ctx, vm); err != nil {
@@ -224,7 +237,9 @@ func (e *Env) delete(ctx context.Context, t *found) error {
 		}
 	}
 	ui.Info(msg.Deleted(vm))
-	if t.st.Get(gitprotect.KeyGitProtect) == "on" {
+	if isClone(t.st) {
+		removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
+	} else if t.st.Get(gitprotect.KeyGitProtect) == "on" {
 		e.Protector(t.f.Dir).Unlock(ctx)
 	}
 	if err := e.Proxy.Forget(vm); err != nil {

@@ -48,7 +48,7 @@ chflags -R uchg .git/hooks .git/config
 
 ## What a lock can't stop
 
-The VM can rename `.git` and put a new one in its place, add `.git/commondir` to point git at another config, or do the same with a linked worktree's folder in `.git/worktrees`. When it creates the VM, and on each launch ([above](#on-each-launch)), devvm reports a `commondir` that's there, linked worktrees whose `commondir` leads somewhere else, and paths it couldn't lock because they're symlinks. It doesn't repair anything: check what it names before you run git in the folder.
+The VM can rename `.git` and put a new one in its place, add `.git/commondir` to point git at another config, or do the same with a linked worktree's folder in `.git/worktrees`. When it creates the VM, and on each launch ([above](#on-each-launch)), devvm reports a `commondir` that's there, linked worktrees whose `commondir` leads somewhere else, and paths it couldn't lock because they're symlinks. It doesn't repair anything: check what it names before you run git in the folder. When you don't trust what runs in the VM, use [`--clone`](clone.md), which mounts no `.git` at all.
 
 The VM writes `.git/index` (it has to, to commit), so it can also add a submodule with its own config, which host `git status` reads: a submodule's `core.fsmonitor` runs on the host too. devvm names a new one on the next launch, but host git run before that reads it.
 
@@ -60,4 +60,4 @@ The VM writes `.git/index` (it has to, to commit), so it can also add a submodul
 
 ## Linux hosts
 
-Linux has no immutable flag a user can set, so VMs on Linux hosts have no `.git` protection: the VM can change `.git` hooks and config, which run on the host. devvm says so when it creates a VM for a folder with a `.git`.
+Linux has no immutable flag a user can set, so VMs on Linux hosts have no `.git` protection: the VM can change `.git` hooks and config, which run on the host. devvm says so when it creates a VM for a folder with a `.git`. [`--clone`](clone.md) keeps the VM out of `.git` instead.

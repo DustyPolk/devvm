@@ -5,7 +5,9 @@
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then opening it again,
-#                restart and rm, and an agent VM's folders and exported history; tools makes a node
+#                restart and rm, and an agent VM's folders and exported history; clone makes a --clone
+#                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
+#                for unfetched commits and uncommitted changes; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, its token stays on the
 #                host, and the self-check, on relaunch too
@@ -17,7 +19,7 @@
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project tools network"
+sections_all="images project clone tools network"
 usage() { echo "usage: tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
 clean=false sel=$sections_all
 while (( $# )); do
@@ -78,7 +80,7 @@ cleanup() {
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
-  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/claude-before.json" "$work/codex-before.json" \
+  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$XDG_DATA_HOME/devvm/exports"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
@@ -338,6 +340,39 @@ in_vm "$vm" 'mkdir -p ~/.claude/projects/e2e && echo e2e-transcript > ~/.claude/
 check "rm exports its agents' history, without their logins, then deletes it" bash -c "cd '$a' && HOME='$ah' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && f=\$(ls '$XDG_DATA_HOME'/devvm/exports/$vm-*.tar.gz) && tar -tzf \"\$f\" > '$work/export.list' &&
   grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list'"
+fi
+
+if want clone; then
+section "--clone"
+# A home of its own: no ~/.ssh/config, so nothing of yours is read or offered the Include line. A
+# throwaway repo, with a branch besides main.
+ch=$work/clone-home; rm -rf "$ch"; mkdir -p "$ch"
+export GIT_CONFIG_GLOBAL=$ch/.gitconfig GIT_CONFIG_NOSYSTEM=1   # host git: none of your settings
+c=$(newproj cloned)
+git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$c" -c user.email=e@e -c user.name=e commit -qm one &&
+  git -C "$c" branch other
+(cd "$c" && printf 'pwd; git branch --show-current\n' | HOME=$ch "$D" --clone --no-network-policy base >"$work/last.log" 2>&1)
+vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
+cgit="GIT_SSH_COMMAND='ssh -F $XDG_CONFIG_HOME/devvm/ssh_config' git -C '$c'"
+check "the VM has its own clone, with every branch, only the shared tools mounted, and the shell opens in it" bash -c "
+  [[ -n '$vm' && \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$share ' ]] &&
+  [[ \$(limactl shell --workdir / $vm git -C '$c' branch --format='%(refname:short)' </dev/null | tr '\n' ' ') == 'main other ' ]] &&
+  limactl shell --workdir / $vm git -C '$c' log --oneline </dev/null | grep -q one &&
+  grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' && grep -qx mode=clone '$vms/$vm'"
+check "the repo has a devvm remote, by the VM's name" bash -c "[[ \$(git -C '$c' remote get-url devvm) == '$vm:$c' ]]"
+check "nothing of .git is locked or watched" bash -c "! grep -q '^git_protect=' '$vms/$vm' &&
+  { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$c/.git/config' | grep -q uchg; }"
+in_vm "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
+check "rm without a terminal refuses with unfetched commits, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m no_terminal_fetch remote=devvm | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
+check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgit fetch -q devvm && git -C '$c' log --oneline devvm/main | grep -q from-vm"
+in_vm "$vm" "cd '$c' && echo c > c" >/dev/null 2>&1
+check "then rm refuses with uncommitted changes in the clone, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && grep -qx '?? c' '$work/last.log' && limactl list -q | grep -qx $vm"
+check "rm -f deletes it and the remote; the fetched branches stay" bash -c "cd '$c' && HOME='$ch' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
+  git -C '$c' log --oneline devvm/main | grep -q from-vm && [[ ! -e '$ch/.ssh/config' ]]"
+unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 fi
 
 if want tools; then

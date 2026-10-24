@@ -318,7 +318,7 @@ other = "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm
 other = "deleted {{.vm}}"
 
 [unsafe_folder]
-other = "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, or --unsafe-folder if you mean it"
+other = "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, --clone, or --unsafe-folder if you mean it"
 
 [unsafe_folder_inside]
 other = "{{.dir}} is inside {{.inside}}, devvm's own, which the VM would get read-write: keep the project elsewhere, or --unsafe-folder if you mean it"
@@ -420,12 +420,83 @@ other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\
 [load_key_with]
 other = "load it with: {{.cmd}}"
 
+[clone_needs_git]
+other = "--clone needs git on this machine"
+
+[clone_not_top]
+other = "--clone needs the top folder of a git repo; {{.dir}} isn't one"
+
+[clone_no_commits]
+other = "--clone: the repo has no commits yet"
+
+[clone_detached]
+other = "--clone: HEAD is detached; check out a branch first"
+
+[clone_needs_new_vm]
+other = "{{.vm}} mounts this folder; --clone needs a new VM: save any work in it, then devvm rm and devvm --clone"
+
+[copying_branches]
+other = "copying the repo's branches into the VM"
+
+[clone_seed_failed]
+other = "couldn't copy the repo's branches into {{.vm}}: run devvm again to retry"
+
+[remotes_taken]
+other = "git remotes devvm, devvm-{{.slug}} and {{.vm}} are all taken: remove one and run devvm again"
+
+[remote_add_failed]
+other = "couldn't add git remote {{.remote}}: run devvm again to retry"
+
+[fetch_until]
+description = "file is devvm's ssh config"
+other = "until then, fetch with: GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}"
+
+[uncommitted_not_copied]
+other = "uncommitted changes in {{.dir}} weren't copied: commit them, then git push {{.remote}} {{.branch}}"
+
+[clone_ready]
+other = "the VM has its own clone of {{.branch}} and your other branches, without untracked or ignored files. Get its work with git fetch {{.remote}}, review it (git log -p {{.branch}}..{{.remote}}/{{.branch}}), then merge"
+
+[unfetched_commits]
+description = "refs is a space-separated list of branches"
+other = "The VM has commits this repo hasn't fetched, on: {{.refs}}"
+
+[no_terminal_fetch]
+other = "not a terminal: run git fetch {{.remote}} first, or devvm rm -f to delete anyway"
+
+[fetch_before_delete]
+other = "Fetch them into {{.remote}}/* before deleting?"
+
+[fetching]
+other = "fetching the VM's branches into {{.remote}}/*"
+
+[fetch_failed]
+other = "couldn't fetch the branches in {{.vm}}; it's kept"
+
+[clone_check_failed]
+other = "couldn't read the clone in {{.vm}}; it's kept: devvm rm -f deletes it anyway"
+
+[clone_dirty]
+other = "The VM's clone has uncommitted changes, which will be lost:"
+
+[no_terminal_delete]
+other = "not a terminal, so can't confirm: devvm rm -f deletes anyway"
+
+[delete_anyway]
+other = "Delete anyway?"
+
+[kept]
+other = "kept {{.vm}}"
+
+[removed_remote]
+other = "removed git remote {{.remote}}; branches fetched from it stay, as {{.remote}}/*"
+
 [setid_files]
 description = "files is a space-separated list of paths"
 other = "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
 
 [git_protect_needs_macos_new]
-other = ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine"
+other = ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine. --clone keeps a VM out of .git"
 
 [git_commondir]
 other = "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"

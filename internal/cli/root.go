@@ -23,7 +23,8 @@ func NewRoot() *cobra.Command {
 			"gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), " +
 			"else the toolchains the folder's files call for, with any agents IMAGE names on top, built " +
 			"if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and " +
-			"its .git hooks and config are locked against changes from the VM (macOS). A VM that exists " +
+			"its .git hooks and config are locked against changes from the VM (macOS); with --clone, " +
+			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A VM that exists " +
 			"is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that " +
 			"in place, after asking.",
 		SilenceUsage:  true,

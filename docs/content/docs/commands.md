@@ -16,7 +16,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm rm [-f]` | delete this folder's VM, exporting its agents' history first ([details](#deleting-a-vm)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
 
-A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
+A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)); with `--clone`, the folder isn't mounted and the VM gets its own clone of the repo ([working on a clone](clone.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
 Options for a new VM:
 
@@ -24,6 +24,7 @@ Options for a new VM:
 | --- | --- |
 | `--network-policy` | create the VM with [network policy](network.md): it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here |
 | `--no-network-policy` | create the VM without network policy, so it reaches anything this machine can |
+| `--clone` | create the VM with its own clone of the repo instead of mounting the folder ([details](clone.md)) |
 | `--no-git-protect` | create the VM without `.git` protection |
 | `--unsafe-folder` | mount a folder devvm refuses (one that is or holds your home folder or devvm's own, or is inside devvm's own) anyway ([details](security.md#only-the-project-folder)) |
 | `--cpus N`, `--memory GiB`, `--disk GiB` | the VM's size ([details](#size-and-ports)) |
@@ -57,11 +58,11 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
 4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy, `.git` protection, size, ports and backend.
-5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder.
+5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size and ports its state asks for; a running one gets them when it next starts, and devvm says so.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)).
 8. The [self-check](network.md#the-self-check) runs: a VM whose network policy doesn't hold is stopped.
-9. It sets the VM up and opens the shell, as for a new VM.
+9. It sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first.
 
 A VM whose creation didn't finish (devvm was stopped after making it, before it recorded the network choice) is never started: it would start without network policy. `devvm rm` deletes it.
 
@@ -79,7 +80,7 @@ The VM's image is then its old one with them. `devvm remove TOOLS` takes shared 
 
 `devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Nothing else: other VMs, images and the project folder stay.
 
-When the VM's image has an agent, devvm first exports the agents' history from it, started if it's stopped ([history](coding-agents.md#history)). An export that fails keeps the VM. `devvm rm -f` deletes it without one.
+When the VM's image has an agent, devvm first exports the agents' history from it, started if it's stopped ([history](coding-agents.md#history)). An export that fails keeps the VM. A `--clone` VM's clone is checked before that, for commits this repo hasn't fetched and uncommitted changes, and the repo's remote for it goes with it ([deleting the VM](clone.md#deleting-the-vm)). `devvm rm -f` deletes it without an export or those checks.
 
 ### A folder made again
 

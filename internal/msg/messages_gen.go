@@ -127,6 +127,51 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
+// CloneCheckFailed is [clone_check_failed]: "couldn't read the clone in {{.vm}}; it's kept: devvm rm -f deletes it anyway"
+func CloneCheckFailed(vm string) M {
+	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
+}
+
+// CloneDetached is [clone_detached]: "--clone: HEAD is detached; check out a branch first"
+func CloneDetached() M {
+	return M{id: "clone_detached"}
+}
+
+// CloneDirty is [clone_dirty]: "The VM's clone has uncommitted changes, which will be lost:"
+func CloneDirty() M {
+	return M{id: "clone_dirty"}
+}
+
+// CloneNeedsGit is [clone_needs_git]: "--clone needs git on this machine"
+func CloneNeedsGit() M {
+	return M{id: "clone_needs_git"}
+}
+
+// CloneNeedsNewVM is [clone_needs_new_vm]: "{{.vm}} mounts this folder; --clone needs a new VM: save any work in it, then devvm rm and devvm --clone"
+func CloneNeedsNewVM(vm string) M {
+	return M{id: "clone_needs_new_vm", vals: []val{{"vm", vm}}}
+}
+
+// CloneNoCommits is [clone_no_commits]: "--clone: the repo has no commits yet"
+func CloneNoCommits() M {
+	return M{id: "clone_no_commits"}
+}
+
+// CloneNotTop is [clone_not_top]: "--clone needs the top folder of a git repo; {{.dir}} isn't one"
+func CloneNotTop(dir string) M {
+	return M{id: "clone_not_top", vals: []val{{"dir", dir}}}
+}
+
+// CloneReady is [clone_ready]: "the VM has its own clone of {{.branch}} and your other branches, without untracked or ignored files. Get its work with git fetch {{.remote}}, review it (git log -p {{.branch}}..{{.remote}}/{{.branch}}), then merge"
+func CloneReady(branch string, remote string) M {
+	return M{id: "clone_ready", vals: []val{{"branch", branch}, {"remote", remote}}}
+}
+
+// CloneSeedFailed is [clone_seed_failed]: "couldn't copy the repo's branches into {{.vm}}: run devvm again to retry"
+func CloneSeedFailed(vm string) M {
+	return M{id: "clone_seed_failed", vals: []val{{"vm", vm}}}
+}
+
 // CloningImage is [cloning_image]: "cloning {{.parent}}'s image"
 func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
@@ -157,6 +202,11 @@ func Continue() M {
 	return M{id: "continue"}
 }
 
+// CopyingBranches is [copying_branches]: "copying the repo's branches into the VM"
+func CopyingBranches() M {
+	return M{id: "copying_branches"}
+}
+
 // CpusNotNumber is [cpus_not_number]: "--cpus takes a whole number, not {{.value}}"
 func CpusNotNumber(value string) M {
 	return M{id: "cpus_not_number", vals: []val{{"value", value}}}
@@ -180,6 +230,11 @@ func CreatingFromUbuntu(vm string) M {
 // CustomLayerRemove is [custom_layer_remove]: "{{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again"
 func CustomLayerRemove(layer string, vm string) M {
 	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
+}
+
+// DeleteAnyway is [delete_anyway]: "Delete anyway?"
+func DeleteAnyway() M {
+	return M{id: "delete_anyway"}
 }
 
 // DeleteFailed is [delete_failed]: "couldn't delete {{.vm}}"
@@ -237,6 +292,26 @@ func Exported(file string, vm string) M {
 	return M{id: "exported", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
+// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into {{.remote}}/* before deleting?"
+func FetchBeforeDelete(remote string) M {
+	return M{id: "fetch_before_delete", vals: []val{{"remote", remote}}}
+}
+
+// FetchFailed is [fetch_failed]: "couldn't fetch the branches in {{.vm}}; it's kept"
+func FetchFailed(vm string) M {
+	return M{id: "fetch_failed", vals: []val{{"vm", vm}}}
+}
+
+// FetchUntil is [fetch_until]: "until then, fetch with: GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}"
+func FetchUntil(file string, remote string) M {
+	return M{id: "fetch_until", vals: []val{{"file", file}, {"remote", remote}}}
+}
+
+// Fetching is [fetching]: "fetching the VM's branches into {{.remote}}/*"
+func Fetching(remote string) M {
+	return M{id: "fetching", vals: []val{{"remote", remote}}}
+}
+
 // GitAppeared is [git_appeared]: "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
 func GitAppeared() M {
 	return M{id: "git_appeared"}
@@ -292,7 +367,7 @@ func GitProtectFlagIgnored() M {
 	return M{id: "git_protect_flag_ignored"}
 }
 
-// GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine"
+// GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine. --clone keeps a VM out of .git"
 func GitProtectNeedsMacosNew() M {
 	return M{id: "git_protect_needs_macos_new"}
 }
@@ -345,6 +420,11 @@ func InterruptedVM(vm string) M {
 // Keeping is [keeping]: "keeping {{.image}}"
 func Keeping(image string) M {
 	return M{id: "keeping", vals: []val{{"image", image}}}
+}
+
+// Kept is [kept]: "kept {{.vm}}"
+func Kept(vm string) M {
+	return M{id: "kept", vals: []val{{"vm", vm}}}
 }
 
 // KeyLoaded is [key_loaded]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
@@ -542,6 +622,16 @@ func NoTerminalConfirm(vm string, want string) M {
 	return M{id: "no_terminal_confirm", vals: []val{{"vm", vm}, {"want", want}}}
 }
 
+// NoTerminalDelete is [no_terminal_delete]: "not a terminal, so can't confirm: devvm rm -f deletes anyway"
+func NoTerminalDelete() M {
+	return M{id: "no_terminal_delete"}
+}
+
+// NoTerminalFetch is [no_terminal_fetch]: "not a terminal: run git fetch {{.remote}} first, or devvm rm -f to delete anyway"
+func NoTerminalFetch(remote string) M {
+	return M{id: "no_terminal_fetch", vals: []val{{"remote", remote}}}
+}
+
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
 func NoUbuntuImage(url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
@@ -615,6 +705,21 @@ func QEMURefused() M {
 // RebuildReplaces is [rebuild_replaces]: "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
 func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
+}
+
+// RemoteAddFailed is [remote_add_failed]: "couldn't add git remote {{.remote}}: run devvm again to retry"
+func RemoteAddFailed(remote string) M {
+	return M{id: "remote_add_failed", vals: []val{{"remote", remote}}}
+}
+
+// RemotesTaken is [remotes_taken]: "git remotes devvm, devvm-{{.slug}} and {{.vm}} are all taken: remove one and run devvm again"
+func RemotesTaken(slug string, vm string) M {
+	return M{id: "remotes_taken", vals: []val{{"slug", slug}, {"vm", vm}}}
+}
+
+// RemovedRemote is [removed_remote]: "removed git remote {{.remote}}; branches fetched from it stay, as {{.remote}}/*"
+func RemovedRemote(remote string) M {
+	return M{id: "removed_remote", vals: []val{{"remote", remote}}}
 }
 
 // ResolvingTools is [resolving_tools]: "resolving the shared tools' versions"
@@ -837,6 +942,16 @@ func UbuntuUnsigned() M {
 	return M{id: "ubuntu_unsigned"}
 }
 
+// UncommittedNotCopied is [uncommitted_not_copied]: "uncommitted changes in {{.dir}} weren't copied: commit them, then git push {{.remote}} {{.branch}}"
+func UncommittedNotCopied(branch string, dir string, remote string) M {
+	return M{id: "uncommitted_not_copied", vals: []val{{"branch", branch}, {"dir", dir}, {"remote", remote}}}
+}
+
+// UnfetchedCommits is [unfetched_commits]: "The VM has commits this repo hasn't fetched, on: {{.refs}}"
+func UnfetchedCommits(refs string) M {
+	return M{id: "unfetched_commits", vals: []val{{"refs", refs}}}
+}
+
 // UnfinishedImage is [unfinished_image]: "deleting the unfinished image {{.vm}}"
 func UnfinishedImage(vm string) M {
 	return M{id: "unfinished_image", vals: []val{{"vm", vm}}}
@@ -847,7 +962,7 @@ func UnknownLayer(agents string, envs string, layer string) M {
 	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
 }
 
-// UnsafeFolder is [unsafe_folder]: "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, or --unsafe-folder if you mean it"
+// UnsafeFolder is [unsafe_folder]: "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, --clone, or --unsafe-folder if you mean it"
 func UnsafeFolder(dir string, holds string) M {
 	return M{id: "unsafe_folder", vals: []val{{"dir", dir}, {"holds", holds}}}
 }
@@ -974,17 +1089,28 @@ var specs = map[string]spec{
 	"checking_tools":              {},
 	"claude_mcp_secrets_copied":   {fields: []string{"servers", "vm"}},
 	"claude_token_invalid":        {},
+	"clone_check_failed":          {fields: []string{"vm"}},
+	"clone_detached":              {},
+	"clone_dirty":                 {},
+	"clone_needs_git":             {},
+	"clone_needs_new_vm":          {fields: []string{"vm"}},
+	"clone_no_commits":            {},
+	"clone_not_top":               {fields: []string{"dir"}},
+	"clone_ready":                 {fields: []string{"branch", "remote"}},
+	"clone_seed_failed":           {fields: []string{"vm"}},
 	"cloning_image":               {fields: []string{"parent"}},
 	"codex_login_kept":            {fields: []string{"keys"}},
 	"config_not_copied":           {fields: []string{"file", "vm"}},
 	"config_redacted":             {fields: []string{"file", "keys", "vm"}},
 	"configuring":                 {fields: []string{"vm"}},
 	"continue":                    {},
+	"copying_branches":            {},
 	"cpus_not_number":             {fields: []string{"value"}},
 	"creating":                    {fields: []string{"vm"}},
 	"creating_from":               {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":        {fields: []string{"vm"}},
 	"custom_layer_remove":         {fields: []string{"layer", "vm"}},
+	"delete_anyway":               {},
 	"delete_failed":               {fields: []string{"vm"}},
 	"delete_other_folder_vm":      {fields: []string{"vm", "was"}},
 	"deleted":                     {fields: []string{"vm"}},
@@ -996,6 +1122,10 @@ var specs = map[string]spec{
 	"downloading_mise":            {fields: []string{"version"}},
 	"export_failed":               {fields: []string{"vm"}},
 	"exported":                    {fields: []string{"file", "vm"}},
+	"fetch_before_delete":         {fields: []string{"remote"}},
+	"fetch_failed":                {fields: []string{"vm"}},
+	"fetch_until":                 {fields: []string{"file", "remote"}},
+	"fetching":                    {fields: []string{"remote"}},
 	"git_appeared":                {},
 	"git_commondir":               {fields: []string{"git", "target"}},
 	"git_embedded_new":            {fields: []string{"git"}},
@@ -1018,6 +1148,7 @@ var specs = map[string]spec{
 	"interrupted_image":           {fields: []string{"vm"}},
 	"interrupted_vm":              {fields: []string{"vm"}},
 	"keeping":                     {fields: []string{"image"}},
+	"kept":                        {fields: []string{"vm"}},
 	"key_loaded":                  {},
 	"key_loaded_keychain":         {},
 	"lima_broken":                 {},
@@ -1057,6 +1188,8 @@ var specs = map[string]spec{
 	"no_secret":                   {fields: []string{"secret"}},
 	"no_ssh_agent":                {},
 	"no_terminal_confirm":         {fields: []string{"vm", "want"}},
+	"no_terminal_delete":          {},
+	"no_terminal_fetch":           {fields: []string{"remote"}},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"no_vm":                       {fields: []string{"dir"}},
 	"not_an_image":                {fields: []string{"name"}},
@@ -1072,6 +1205,9 @@ var specs = map[string]spec{
 	"qemu_missing":                {fields: []string{"program"}},
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
+	"remote_add_failed":           {fields: []string{"remote"}},
+	"remotes_taken":               {fields: []string{"slug", "vm"}},
+	"removed_remote":              {fields: []string{"remote"}},
 	"resolving_tools":             {},
 	"restart_for_mounts":          {},
 	"rm_failed":                   {fields: []string{"reason"}},
@@ -1116,6 +1252,8 @@ var specs = map[string]spec{
 	"tools_switch":                {fields: []string{"vm"}},
 	"ubuntu_bad_signature":        {fields: []string{"release", "url"}},
 	"ubuntu_unsigned":             {},
+	"uncommitted_not_copied":      {fields: []string{"branch", "dir", "remote"}},
+	"unfetched_commits":           {fields: []string{"refs"}},
 	"unfinished_image":            {fields: []string{"vm"}},
 	"unknown_layer":               {fields: []string{"agents", "envs", "layer"}},
 	"unsafe_folder":               {fields: []string{"dir", "holds"}},
