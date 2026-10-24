@@ -3,6 +3,8 @@ title: Contributing
 weight: 100
 ---
 
+The rules for working in the repo, for people and coding agents alike, are in [AGENTS.md](https://github.com/w3cj/devvm/blob/main/AGENTS.md).
+
 ## Building from source
 
 devvm is built with Go, pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
