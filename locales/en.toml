@@ -222,6 +222,14 @@ other = "{{.changed}} changed since this VM was made: it keeps the image it has"
 description = "reason is an error from the system, in English"
 other = "couldn't open this folder's VM: {{.reason}}"
 
+[rm_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't delete this folder's VM: {{.reason}}"
+
+[adopt_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't adopt this folder's VM: {{.reason}}"
+
 [bad_path]
 description = "dir is quoted like a Go string when it holds control characters"
 other = "can't mount {{.dir}} into a VM: its path has a comma or a control character"
@@ -231,10 +239,83 @@ description = "max is a number of characters"
 other = "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
 
 [vm_other_folder]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm won't use it for this one"
+other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm rm deletes it, devvm adopt uses it here"
 
-[vm_exists]
-other = "{{.vm}} already exists, and devvm can't open an existing VM yet"
+[vm_other_folder_rm]
+other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm rm in a terminal to confirm"
+
+[vm_other_folder_adopt]
+other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm adopt in a terminal to confirm"
+
+[delete_other_folder_vm]
+other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since, and may hold that project's work. Delete it?"
+
+[adopt_vm]
+other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since.\nUsing it here gives this folder that VM's files, tokens and allowlist. Use it here?"
+
+[vm_adopted]
+other = "{{.vm}} now belongs to {{.dir}}"
+
+[vm_already_here]
+other = "{{.vm}} already belongs to this folder"
+
+[no_vm]
+other = "no VM for {{.dir}}: devvm makes one"
+
+[vm_unfinished]
+other = "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes it again"
+
+[backend_flag_ignored]
+other = "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
+
+[net_flag_ignored]
+other = "--network-policy and --no-network-policy only apply to new VMs"
+
+[git_protect_flag_ignored]
+other = "--no-git-protect only applies to new VMs"
+
+[size_flags_ignored]
+other = "--cpus, --memory and --disk only apply to new VMs"
+
+[ports_flag_ignored]
+other = "--ports only applies to new VMs"
+
+[size_next_start]
+other = "{{.vm}}'s new size applies when it next starts: devvm restart"
+
+[ports_next_start]
+other = "{{.vm}}'s new ports apply when it next starts: devvm restart"
+
+[add_in_place]
+description = "missing is a space-separated list of layers and tools"
+other = "{{.vm}} was made from {{.image}}. Add {{.missing}} to it in place?"
+
+[restart_for_mounts]
+other = "This restarts the VM to mount their config from this machine; anything running in it stops."
+
+[no_terminal_confirm]
+other = "not a terminal, so devvm can't ask before adding to {{.vm}}: run devvm {{.want}} in a terminal"
+
+[keeping]
+other = "keeping {{.image}}"
+
+[adding]
+other = "adding {{.layer}}"
+
+[add_layer_failed]
+other = "adding {{.layer}} to {{.vm}} failed; it's otherwise unchanged"
+
+[vm_is_now]
+other = "{{.vm}} is now {{.image}}"
+
+[exported]
+other = "exported {{.vm}}'s agent history to {{.file}}"
+
+[export_failed]
+other = "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
+
+[deleted]
+other = "deleted {{.vm}}"
 
 [unsafe_folder]
 other = "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, or --unsafe-folder if you mean it"
@@ -281,7 +362,7 @@ other = "Turn on network policy for {{.vm}}?"
 other = "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
 
 [net_unenforced_stop]
-other = "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it"
+other = "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it; devvm starts it again confined"
 
 [net_unenforced_restart]
 other = "{{.vm}} was started outside devvm, so its network policy isn't enforced. Restart it confined?"
@@ -366,6 +447,18 @@ other = "{{.config}} includes {{.path}}, inside the project folder: the VM can e
 
 [git_hook_link_inside]
 other = "{{.hook}} links to {{.target}}, inside the project folder: the VM can edit that hook, and it runs on this machine"
+
+[git_replaced]
+other = "WARNING: {{.git}} was replaced since devvm locked it, maybe from inside the VM, and its config and hooks run on this machine: check them before running git here (and look for the old .git, renamed)"
+
+[git_appeared]
+other = "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
+
+[git_embedded_new]
+other = "WARNING: a submodule with its git folder in the project appeared: {{.git}}. Host git status runs code its config names: if you didn't add it, check its config and hooks before running git here"
+
+[git_hooks_unlocked]
+other = "WARNING: {{.hooks}} has hooks but wasn't locked, so they appeared since devvm last ran, and host git runs them: if you didn't add them, check them before running git here"
 
 [git_gitdir_outside]
 other = "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"

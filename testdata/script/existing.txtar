@@ -1,0 +1,167 @@
+# A VM that exists: devvm opens it as it is, starting it if it's stopped,
+# and sets it up again; flags for new VMs are ignored with a warning, and
+# what its state asks of a stopped VM's size and ports is applied.
+# restart stops it first.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env KNOWN=$XDG_CONFIG_HOME/devvm/known_hosts
+mkdir $WORK/web
+cd $WORK/web
+exec git init -q
+exec devvm --no-network-policy base
+
+# Running: opened without a start, its host keys kept, set up again.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+! stdout 'starting|creating'
+! stderr .
+stub_calls
+! stdout 'limactl (start|stop|clone|create|edit|delete)'
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*tar -xf - '
+stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+exec grep -c '^devvm-web-' $KNOWN
+stdout '^1$'
+
+# Flags for new VMs: ignored, with a warning each; --backend names the
+# backend it stays on.
+exec devvm --network-policy --cpus 2 --ports none --backend lima
+stderr '^devvm: net_flag_ignored$'
+stderr '^devvm: size_flags_ignored$'
+stderr '^devvm: ports_flag_ignored$'
+! stderr backend_flag_ignored
+exec devvm --no-git-protect
+stderr '^devvm: git_protect_flag_ignored$'
+exec sh -c 'grep -c "^net=off$" "$VMS"/devvm-web-*'
+stdout '^1$'
+
+# A size or ports its state asks for: a running VM's wait for its next
+# start; a stopped one's are applied once.
+exec sh -c 'f=$(ls "$VMS"/devvm-web-*); printf "cpus=6\nports=5173\n" >> "$f"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: ports_next_start vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl edit'
+
+# Stopped: started, its host keys read again.
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+! stderr 'next_start'
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 6$'
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\}'
+stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
+stdout 'sh -c .*/etc/ssh/ssh_host_'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^ports_set=5173$'
+# (The stub's VM gets the size its edit asked for.)
+exec sh -c 'echo "6 8589934592 107374182400" > "$STUB_DIR/size-$(basename "$VMS"/devvm-web-*)"'
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stub_calls
+! stdout 'limactl edit'
+
+# restart: stopped, then opened.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm restart
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
+stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+! exec devvm restart base
+stderr usage_error
+
+# An image naming what it lacks adds it in place, after asking: without
+# a terminal, nothing changes.
+! exec devvm go
+stderr '^devvm: no_terminal_confirm vm=devvm-web-[0-9a-f]{14} want=go$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^image=base$'
+# Naming what it has adds nothing.
+exec devvm base
+! stderr no_terminal_confirm
+
+# A VM without a network choice didn't finish being made: never started
+# (it would start without network policy); rm deletes it.
+exec sh -c 'f=$(ls "$VMS"/devvm-web-*); grep -v "^net=" "$f" > "$f.new" && mv "$f.new" "$f"'
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm
+stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm restart
+stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (start|stop)'
+
+# rm: base has no agents, so nothing is exported; only this VM is
+# deleted, with its state, logs, host keys and ssh config entry, and .git's
+# locks taken off.
+mkdir $WORK/api
+cd $WORK/api
+exec devvm --no-network-policy base
+cd $WORK/web
+exec sh -c 'touch "$XDG_DATA_HOME/devvm/logs/$(basename "$VMS"/devvm-web-*).jsonl"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm rm
+stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
+! stdout exported
+stub_calls
+stdout '^limactl delete -f devvm-web-[0-9a-f]{14}$'
+! stdout 'delete -f devvm-api'
+! stdout 'limactl (start|shell)'
+[darwin] stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
+exec sh -c 'ls "$VMS"'
+! stdout devvm-web
+stdout devvm-api
+exec sh -c 'ls "$XDG_DATA_HOME/devvm/logs"'
+! stdout devvm-web
+exec cat $KNOWN
+! stdout devvm-web
+stdout devvm-api
+exec cat $XDG_CONFIG_HOME/devvm/ssh_config
+! stdout devvm-web
+stdout devvm-api
+! exec devvm rm
+stderr '^devvm: no_vm dir=/\S*/web$'
+! exec devvm restart
+stderr '^devvm: no_vm dir=/\S*/web$'
+! exec devvm update
+stderr '^devvm: no_vm dir=/\S*/web$'
+! exec devvm adopt
+stderr '^devvm: no_vm dir=/\S*/web$'
+
+# A delete that fails but leaves no VM cleans up like one that worked.
+cd $WORK/api
+exec sh -c ': > "$STUB_DIR/delete-fails"'
+exec devvm rm -f
+stdout '^==> deleted vm=devvm-api-[0-9a-f]{14}$'
+exec sh -c 'ls "$VMS"'
+! stdout devvm-api
+rm $STUB_DIR/delete-fails
+
+# A folder made again at the same path: rm and adopt ask first, so
+# without a terminal neither deletes nor takes the VM over.
+mkdir $WORK/site
+cd $WORK/site
+exec devvm --no-network-policy base
+cd $WORK
+rm site
+mkdir site
+cd site
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm
+stderr '^devvm: vm_other_folder vm=devvm-site-[0-9a-f]{14} was=/\S*/site$'
+! exec devvm rm -f
+stderr '^devvm: vm_other_folder_rm vm=devvm-site-[0-9a-f]{14} was=/\S*/site$'
+! exec devvm adopt
+stderr '^devvm: vm_other_folder_adopt vm=devvm-site-[0-9a-f]{14} was=/\S*/site$'
+! exec devvm restart
+stderr '^devvm: vm_other_folder '
+stub_calls
+! stdout 'limactl (delete|stop|start)'
+exec sh -c 'ls "$VMS"'
+stdout devvm-site

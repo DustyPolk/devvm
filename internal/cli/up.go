@@ -46,34 +46,46 @@ func addUpFlags(cmd *cobra.Command, u *upFlags) {
 	f.BoolVar(&u.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
 }
 
+// options are what the global flags ask of up.
+func (g *globals) options() vm.Options {
+	return vm.Options{
+		Backend: g.backend, NetworkPolicy: g.networkPolicy, NoNetworkPolicy: g.noNetworkPolicy, Size: g.size, Ports: g.ports,
+	}
+}
+
 // up opens a shell in this folder's VM, making it first.
 func up(ctx context.Context, g *globals, u *upFlags, args []string) error {
-	o := vm.Options{
-		Backend: g.backend, NetworkPolicy: g.networkPolicy, NoNetworkPolicy: g.noNetworkPolicy, Size: g.size, Ports: g.ports,
-		UnsafeFolder: u.unsafeFolder, NoGitProtect: u.noGitProtect,
-	}
+	o := g.options()
+	o.UnsafeFolder, o.NoGitProtect = u.unsafeFolder, u.noGitProtect
 	if len(args) > 0 {
 		o.Image = args[0]
 	}
-	dirs, err := paths.FromEnv()
-	if err == nil {
-		var self string
-		if self, err = paths.Self(); err == nil {
-			err = runUp(ctx, dirs, self, o)
-		}
-	}
-	fail(err, msg.UpFailed)
+	withEnv(func(env *vm.Env) error { return env.Up(ctx, o) }, msg.UpFailed)
 	return nil
 }
 
-func runUp(ctx context.Context, dirs paths.Dirs, self string, o vm.Options) error {
+// withEnv runs do in this folder's environment, failing with what's
+// message for an error that isn't one.
+func withEnv(do func(*vm.Env) error, what func(reason string) msg.M) {
+	env, err := newEnv()
+	if err == nil {
+		err = do(env)
+	}
+	fail(err, what)
+}
+
+func newEnv() (*vm.Env, error) {
+	dirs, err := paths.FromEnv()
+	if err != nil {
+		return nil, err
+	}
+	self, err := paths.Self()
+	if err != nil {
+		return nil, err
+	}
 	reg, err := backends.Registry(dirs)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	env, err := vm.NewEnv(dirs, filepath.Dir(self), self, reg)
-	if err != nil {
-		return err
-	}
-	return env.Up(ctx, o)
+	return vm.NewEnv(dirs, filepath.Dir(self), self, reg)
 }

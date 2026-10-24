@@ -55,12 +55,13 @@ func (b *Builder) Layers() []string {
 	return names
 }
 
-func (b *Builder) layerScript(layer string) string {
+// LayerScript is the script of one of the user's layers.
+func (b *Builder) LayerScript(layer string) string {
 	return filepath.Join(b.Dirs.Layers(), layer+".sh")
 }
 
 func (b *Builder) isLayer(layer string) bool {
-	fi, err := os.Stat(b.layerScript(layer))
+	fi, err := os.Stat(b.LayerScript(layer))
 	return err == nil && fi.Mode().IsRegular()
 }
 
@@ -158,7 +159,7 @@ func (b *Builder) build(ctx context.Context, name string) error {
 		}
 		libc = rec.Libc
 		layer := name[strings.LastIndex(name, "+")+1:]
-		script = backend.Script{Name: layer + ".sh", Path: b.layerScript(layer)}
+		script = backend.Script{Name: layer + ".sh", Path: b.LayerScript(layer)}
 	}
 	spec.Scripts = []backend.Script{script}
 

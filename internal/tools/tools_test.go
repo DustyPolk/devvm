@@ -783,9 +783,10 @@ func TestUpdate(t *testing.T) {
 	newer := regexp.MustCompile(`(?m)(\[\[tools\.go\]\]\n)version = ".*"`).ReplaceAll(fixture(t), []byte(`${1}version = "9.9.9"`))
 	e.stubLocks(t, newer, newer, "")
 	f := fake()
+	build := func(ctx context.Context, files []string) error { return e.Build(ctx, f, baseKey, "gnu", files) }
 	vm := "devvm-p-abc123abc123ab"
 	before := e.files(t, "go")
-	files, changed, err := e.Update(t.Context(), f, baseKey, vm, "go", before, "gnu")
+	files, changed, err := e.Update(t.Context(), build, vm, "go", before, "gnu")
 	if err != nil {
 		t.Fatal(names(err))
 	}
@@ -796,7 +797,7 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("said %q", *e.said)
 	}
 	*e.said = nil
-	if again, changed, err := e.Update(t.Context(), f, baseKey, vm, "go", files, "gnu"); err != nil || changed || !slices.Equal(again, files) {
+	if again, changed, err := e.Update(t.Context(), build, vm, "go", files, "gnu"); err != nil || changed || !slices.Equal(again, files) {
 		t.Errorf("Update again = %q, %v, %v", again, changed, err)
 	}
 	if !slices.Contains(*e.said, "==> tools_newest vm="+vm) {
@@ -804,7 +805,7 @@ func TestUpdate(t *testing.T) {
 	}
 	t.Setenv("MISE_STUB_FAIL", "1")
 	*e.said = nil
-	if _, changed, err := e.Update(t.Context(), f, baseKey, vm, "go", before, "gnu"); err != nil || !changed {
+	if _, changed, err := e.Update(t.Context(), build, vm, "go", before, "gnu"); err != nil || !changed {
 		t.Errorf("Update offline = %v, %v", changed, err)
 	}
 	if !slices.Contains(*e.said, "devvm: tools_check_failed") {

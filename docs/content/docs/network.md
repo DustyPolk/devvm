@@ -85,9 +85,9 @@ The VM's setup, on every launch:
 
 ## The self-check
 
-Network policy holds only while the VM runs on the Lima process devvm started confined: a process can't leave its sandbox, but `limactl start` starts a new one, unconfined. So after each start devvm checks, on the host, that the VM still runs on the process it started, then that a direct connection from the VM to the internet fails. The VM answers the second check, so it only catches the honest case; the first is the one the VM can't fake. The result is in the VM's state: `net_check=ok` or `net_check=unenforced`.
+Network policy holds only while the VM runs on the Lima process devvm started confined: a process can't leave its sandbox, but `limactl start` starts a new one, unconfined. So on every launch, whether devvm started the VM or found it running, devvm checks, on the host, that the VM still runs on the process it started, then that a direct connection from the VM to the internet fails. The VM answers the second check, so it only catches the honest case; the first is the one the VM can't fake. The result is in the VM's state: `net_check=ok` or `net_check=unenforced`.
 
-- **Started outside devvm:** in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell.
+- **Started outside devvm:** in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
 - **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
 
 ## Secrets

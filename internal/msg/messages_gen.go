@@ -2,9 +2,34 @@
 
 package msg
 
+// AddInPlace is [add_in_place]: "{{.vm}} was made from {{.image}}. Add {{.missing}} to it in place?"
+func AddInPlace(image string, missing string, vm string) M {
+	return M{id: "add_in_place", vals: []val{{"image", image}, {"missing", missing}, {"vm", vm}}}
+}
+
 // AddItNow is [add_it_now]: "Add it now?"
 func AddItNow() M {
 	return M{id: "add_it_now"}
+}
+
+// AddLayerFailed is [add_layer_failed]: "adding {{.layer}} to {{.vm}} failed; it's otherwise unchanged"
+func AddLayerFailed(layer string, vm string) M {
+	return M{id: "add_layer_failed", vals: []val{{"layer", layer}, {"vm", vm}}}
+}
+
+// Adding is [adding]: "adding {{.layer}}"
+func Adding(layer string) M {
+	return M{id: "adding", vals: []val{{"layer", layer}}}
+}
+
+// AdoptFailed is [adopt_failed]: "couldn't adopt this folder's VM: {{.reason}}"
+func AdoptFailed(reason string) M {
+	return M{id: "adopt_failed", vals: []val{{"reason", reason}}}
+}
+
+// AdoptVM is [adopt_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since.\nUsing it here gives this folder that VM's files, tokens and allowlist. Use it here?"
+func AdoptVM(vm string, was string) M {
+	return M{id: "adopt_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
 // AgentDirComma is [agent_dir_comma]: "not mounting {{.path}}: Lima can't mount paths with a comma"
@@ -20,6 +45,11 @@ func AgentDirsAdded(dirs string, vm string) M {
 // AgentDirsRemoved is [agent_dirs_removed]: "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
 func AgentDirsRemoved(dirs string, vm string) M {
 	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
+}
+
+// BackendFlagIgnored is [backend_flag_ignored]: "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
+func BackendFlagIgnored(backend string, vm string) M {
+	return M{id: "backend_flag_ignored", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
 // BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
@@ -157,6 +187,16 @@ func DeleteFailed(vm string) M {
 	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
 }
 
+// DeleteOtherFolderVM is [delete_other_folder_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since, and may hold that project's work. Delete it?"
+func DeleteOtherFolderVM(vm string, was string) M {
+	return M{id: "delete_other_folder_vm", vals: []val{{"vm", vm}, {"was", was}}}
+}
+
+// Deleted is [deleted]: "deleted {{.vm}}"
+func Deleted(vm string) M {
+	return M{id: "deleted", vals: []val{{"vm", vm}}}
+}
+
 // DeletedOldImage is [deleted_old_image]: "deleted the old image {{.image}} ({{.key}})"
 func DeletedOldImage(image string, key string) M {
 	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
@@ -187,9 +227,29 @@ func DownloadingMise(version string) M {
 	return M{id: "downloading_mise", vals: []val{{"version", version}}}
 }
 
+// ExportFailed is [export_failed]: "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
+func ExportFailed(vm string) M {
+	return M{id: "export_failed", vals: []val{{"vm", vm}}}
+}
+
+// Exported is [exported]: "exported {{.vm}}'s agent history to {{.file}}"
+func Exported(file string, vm string) M {
+	return M{id: "exported", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// GitAppeared is [git_appeared]: "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
+func GitAppeared() M {
+	return M{id: "git_appeared"}
+}
+
 // GitCommondir is [git_commondir]: "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"
 func GitCommondir(git string, target string) M {
 	return M{id: "git_commondir", vals: []val{{"git", git}, {"target", target}}}
+}
+
+// GitEmbeddedNew is [git_embedded_new]: "WARNING: a submodule with its git folder in the project appeared: {{.git}}. Host git status runs code its config names: if you didn't add it, check its config and hooks before running git here"
+func GitEmbeddedNew(git string) M {
+	return M{id: "git_embedded_new", vals: []val{{"git", git}}}
 }
 
 // GitGitdirOutside is [git_gitdir_outside]: "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"
@@ -207,6 +267,11 @@ func GitHooksPath(path string) M {
 	return M{id: "git_hooks_path", vals: []val{{"path", path}}}
 }
 
+// GitHooksUnlocked is [git_hooks_unlocked]: "WARNING: {{.hooks}} has hooks but wasn't locked, so they appeared since devvm last ran, and host git runs them: if you didn't add them, check them before running git here"
+func GitHooksUnlocked(hooks string) M {
+	return M{id: "git_hooks_unlocked", vals: []val{{"hooks", hooks}}}
+}
+
 // GitIncludeInside is [git_include_inside]: "{{.config}} includes {{.path}}, inside the project folder: the VM can edit it, and host git reads it"
 func GitIncludeInside(config string, path string) M {
 	return M{id: "git_include_inside", vals: []val{{"config", config}, {"path", path}}}
@@ -222,9 +287,19 @@ func GitNotLocked(path string) M {
 	return M{id: "git_not_locked", vals: []val{{"path", path}}}
 }
 
+// GitProtectFlagIgnored is [git_protect_flag_ignored]: "--no-git-protect only applies to new VMs"
+func GitProtectFlagIgnored() M {
+	return M{id: "git_protect_flag_ignored"}
+}
+
 // GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine"
 func GitProtectNeedsMacosNew() M {
 	return M{id: "git_protect_needs_macos_new"}
+}
+
+// GitReplaced is [git_replaced]: "WARNING: {{.git}} was replaced since devvm locked it, maybe from inside the VM, and its config and hooks run on this machine: check them before running git here (and look for the old .git, renamed)"
+func GitReplaced(git string) M {
+	return M{id: "git_replaced", vals: []val{{"git", git}}}
 }
 
 // GitWorktreeStray is [git_worktree_stray]: "WARNING: {{.wt}}/commondir doesn't lead back to this repo, so git in that linked worktree reads config and hooks from elsewhere: if you didn't change it, check it before running git there"
@@ -265,6 +340,11 @@ func InterruptedImage(vm string) M {
 // InterruptedVM is [interrupted_vm]: "interrupted: deleting {{.vm}}, which wasn't ready yet"
 func InterruptedVM(vm string) M {
 	return M{id: "interrupted_vm", vals: []val{{"vm", vm}}}
+}
+
+// Keeping is [keeping]: "keeping {{.image}}"
+func Keeping(image string) M {
+	return M{id: "keeping", vals: []val{{"image", image}}}
 }
 
 // KeyLoaded is [key_loaded]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
@@ -407,6 +487,11 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
+// NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs"
+func NetFlagIgnored() M {
+	return M{id: "net_flag_ignored"}
+}
+
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
 func NetUnenforced(vm string) M {
 	return M{id: "net_unenforced", vals: []val{{"vm", vm}}}
@@ -417,7 +502,7 @@ func NetUnenforcedRestart(vm string) M {
 	return M{id: "net_unenforced_restart", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedStop is [net_unenforced_stop]: "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it"
+// NetUnenforcedStop is [net_unenforced_stop]: "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it; devvm starts it again confined"
 func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
@@ -452,9 +537,19 @@ func NoSSHAgent() M {
 	return M{id: "no_ssh_agent"}
 }
 
+// NoTerminalConfirm is [no_terminal_confirm]: "not a terminal, so devvm can't ask before adding to {{.vm}}: run devvm {{.want}} in a terminal"
+func NoTerminalConfirm(vm string, want string) M {
+	return M{id: "no_terminal_confirm", vals: []val{{"vm", vm}, {"want", want}}}
+}
+
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
 func NoUbuntuImage(url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
+}
+
+// NoVM is [no_vm]: "no VM for {{.dir}}: devvm makes one"
+func NoVM(dir string) M {
+	return M{id: "no_vm", vals: []val{{"dir", dir}}}
 }
 
 // NotAnImage is [not_an_image]: "refusing to delete {{.name}}: it's not an image"
@@ -475,6 +570,16 @@ func OpencodeLoginKept(providers string) M {
 // PortInvalid is [port_invalid]: "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
 func PortInvalid(value string) M {
 	return M{id: "port_invalid", vals: []val{{"value", value}}}
+}
+
+// PortsFlagIgnored is [ports_flag_ignored]: "--ports only applies to new VMs"
+func PortsFlagIgnored() M {
+	return M{id: "ports_flag_ignored"}
+}
+
+// PortsNextStart is [ports_next_start]: "{{.vm}}'s new ports apply when it next starts: devvm restart"
+func PortsNextStart(vm string) M {
+	return M{id: "ports_next_start", vals: []val{{"vm", vm}}}
 }
 
 // ProxyCAFailed is [proxy_ca_failed]: "couldn't create the network policy proxy's CA in {{.dir}}"
@@ -517,6 +622,16 @@ func ResolvingTools() M {
 	return M{id: "resolving_tools"}
 }
 
+// RestartForMounts is [restart_for_mounts]: "This restarts the VM to mount their config from this machine; anything running in it stops."
+func RestartForMounts() M {
+	return M{id: "restart_for_mounts"}
+}
+
+// RmFailed is [rm_failed]: "couldn't delete this folder's VM: {{.reason}}"
+func RmFailed(reason string) M {
+	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
+}
+
 // RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
 func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
@@ -555,6 +670,16 @@ func ShareLockHeld(dir string) M {
 // ShareWaiting is [share_waiting]: "waiting for another devvm to finish with {{.dir}}"
 func ShareWaiting(dir string) M {
 	return M{id: "share_waiting", vals: []val{{"dir", dir}}}
+}
+
+// SizeFlagsIgnored is [size_flags_ignored]: "--cpus, --memory and --disk only apply to new VMs"
+func SizeFlagsIgnored() M {
+	return M{id: "size_flags_ignored"}
+}
+
+// SizeNextStart is [size_next_start]: "{{.vm}}'s new size applies when it next starts: devvm restart"
+func SizeNextStart(vm string) M {
+	return M{id: "size_next_start", vals: []val{{"vm", vm}}}
 }
 
 // SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
@@ -752,19 +877,29 @@ func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
 }
 
+// VMAdopted is [vm_adopted]: "{{.vm}} now belongs to {{.dir}}"
+func VMAdopted(dir string, vm string) M {
+	return M{id: "vm_adopted", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// VMAlreadyHere is [vm_already_here]: "{{.vm}} already belongs to this folder"
+func VMAlreadyHere(vm string) M {
+	return M{id: "vm_already_here", vals: []val{{"vm", vm}}}
+}
+
 // VMCreateFailed is [vm_create_failed]: "couldn't create {{.vm}}"
 func VMCreateFailed(vm string) M {
 	return M{id: "vm_create_failed", vals: []val{{"vm", vm}}}
 }
 
-// VMExists is [vm_exists]: "{{.vm}} already exists, and devvm can't open an existing VM yet"
-func VMExists(vm string) M {
-	return M{id: "vm_exists", vals: []val{{"vm", vm}}}
-}
-
 // VMHasNetworks is [vm_has_networks]: "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
 func VMHasNetworks(file string, vm string) M {
 	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// VMIsNow is [vm_is_now]: "{{.vm}} is now {{.image}}"
+func VMIsNow(image string, vm string) M {
+	return M{id: "vm_is_now", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
 // VMLacks is [vm_lacks]: "{{.vm}} doesn't have {{.layer}}: it has {{.has}}"
@@ -787,9 +922,19 @@ func VMNotStopped(vm string) M {
 	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
 }
 
-// VMOtherFolder is [vm_other_folder]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm won't use it for this one"
+// VMOtherFolder is [vm_other_folder]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm rm deletes it, devvm adopt uses it here"
 func VMOtherFolder(vm string, was string) M {
 	return M{id: "vm_other_folder", vals: []val{{"vm", vm}, {"was", was}}}
+}
+
+// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm adopt in a terminal to confirm"
+func VMOtherFolderAdopt(vm string, was string) M {
+	return M{id: "vm_other_folder_adopt", vals: []val{{"vm", vm}, {"was", was}}}
+}
+
+// VMOtherFolderRm is [vm_other_folder_rm]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm rm in a terminal to confirm"
+func VMOtherFolderRm(vm string, was string) M {
+	return M{id: "vm_other_folder_rm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
 // VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made: it keeps the image it has"
@@ -797,12 +942,23 @@ func VMOutdated(changed string) M {
 	return M{id: "vm_outdated", vals: []val{{"changed", changed}}}
 }
 
+// VMUnfinished is [vm_unfinished]: "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes it again"
+func VMUnfinished(vm string) M {
+	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
+}
+
 // specs describes every message, by ID.
 var specs = map[string]spec{
+	"add_in_place":                {fields: []string{"image", "missing", "vm"}},
 	"add_it_now":                  {},
+	"add_layer_failed":            {fields: []string{"layer", "vm"}},
+	"adding":                      {fields: []string{"layer"}},
+	"adopt_failed":                {fields: []string{"reason"}},
+	"adopt_vm":                    {fields: []string{"vm", "was"}},
 	"agent_dir_comma":             {fields: []string{"path"}},
 	"agent_dirs_added":            {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":          {fields: []string{"dirs", "vm"}},
+	"backend_flag_ignored":        {fields: []string{"backend", "vm"}},
 	"backend_lacks":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unknown":             {fields: []string{"backends", "name"}},
 	"backend_unknown_default":     {fields: []string{"backends", "file", "name"}},
@@ -830,20 +986,29 @@ var specs = map[string]spec{
 	"creating_from_ubuntu":        {fields: []string{"vm"}},
 	"custom_layer_remove":         {fields: []string{"layer", "vm"}},
 	"delete_failed":               {fields: []string{"vm"}},
+	"delete_other_folder_vm":      {fields: []string{"vm", "was"}},
+	"deleted":                     {fields: []string{"vm"}},
 	"deleted_old_image":           {fields: []string{"image", "key"}},
 	"deleted_unfinished_build":    {fields: []string{"key"}},
 	"deleting":                    {fields: []string{"vm"}},
 	"detected":                    {fields: []string{"found"}},
 	"disk_shrink":                 {fields: []string{"have", "vm", "want"}},
 	"downloading_mise":            {fields: []string{"version"}},
+	"export_failed":               {fields: []string{"vm"}},
+	"exported":                    {fields: []string{"file", "vm"}},
+	"git_appeared":                {},
 	"git_commondir":               {fields: []string{"git", "target"}},
+	"git_embedded_new":            {fields: []string{"git"}},
 	"git_gitdir_outside":          {fields: []string{"git", "sub"}},
 	"git_hook_link_inside":        {fields: []string{"hook", "target"}},
 	"git_hooks_path":              {fields: []string{"path"}},
+	"git_hooks_unlocked":          {fields: []string{"hooks"}},
 	"git_include_inside":          {fields: []string{"config", "path"}},
 	"git_lock_raced":              {fields: []string{"path"}},
 	"git_not_locked":              {fields: []string{"path"}},
+	"git_protect_flag_ignored":    {},
 	"git_protect_needs_macos_new": {},
+	"git_replaced":                {fields: []string{"git"}},
 	"git_worktree_stray":          {fields: []string{"wt"}},
 	"home_not_absolute":           {},
 	"image_in_use":                {fields: []string{"key", "vms"}},
@@ -852,6 +1017,7 @@ var specs = map[string]spec{
 	"image_ready":                 {fields: []string{"image"}},
 	"interrupted_image":           {fields: []string{"vm"}},
 	"interrupted_vm":              {fields: []string{"vm"}},
+	"keeping":                     {fields: []string{"image"}},
 	"key_loaded":                  {},
 	"key_loaded_keychain":         {},
 	"lima_broken":                 {},
@@ -880,6 +1046,7 @@ var specs = map[string]spec{
 	"net_about":                   {fields: []string{"vm"}},
 	"net_ask":                     {fields: []string{"vm"}},
 	"net_direct_route":            {fields: []string{"vm"}},
+	"net_flag_ignored":            {},
 	"net_unenforced":              {fields: []string{"vm"}},
 	"net_unenforced_restart":      {fields: []string{"vm"}},
 	"net_unenforced_stop":         {fields: []string{"vm"}},
@@ -889,11 +1056,15 @@ var specs = map[string]spec{
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
 	"no_secret":                   {fields: []string{"secret"}},
 	"no_ssh_agent":                {},
+	"no_terminal_confirm":         {fields: []string{"vm", "want"}},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
+	"no_vm":                       {fields: []string{"dir"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
 	"port_invalid":                {fields: []string{"value"}},
+	"ports_flag_ignored":          {},
+	"ports_next_start":            {fields: []string{"vm"}},
 	"proxy_ca_failed":             {fields: []string{"dir"}},
 	"proxy_failed":                {fields: []string{"reason"}},
 	"proxy_port_taken":            {fields: []string{"port", "vm"}},
@@ -902,6 +1073,8 @@ var specs = map[string]spec{
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
 	"resolving_tools":             {},
+	"restart_for_mounts":          {},
+	"rm_failed":                   {fields: []string{"reason"}},
 	"run_log_failed":              {fields: []string{"dir", "reason"}},
 	"running_script":              {fields: []string{"script", "vm"}},
 	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
@@ -910,6 +1083,8 @@ var specs = map[string]spec{
 	"setid_files":                 {fields: []string{"files"}},
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},
+	"size_flags_ignored":          {},
+	"size_next_start":             {fields: []string{"vm"}},
 	"size_not_gib":                {fields: []string{"flag", "value"}},
 	"ssh_agent_empty":             {},
 	"ssh_include_added":           {},
@@ -949,13 +1124,18 @@ var specs = map[string]spec{
 	"up_failed":                   {fields: []string{"reason"}},
 	"update_mounts":               {fields: []string{"vm"}},
 	"usage_error":                 {fields: []string{"reason"}},
+	"vm_adopted":                  {fields: []string{"dir", "vm"}},
+	"vm_already_here":             {fields: []string{"vm"}},
 	"vm_create_failed":            {fields: []string{"vm"}},
-	"vm_exists":                   {fields: []string{"vm"}},
 	"vm_has_networks":             {fields: []string{"file", "vm"}},
+	"vm_is_now":                   {fields: []string{"image", "vm"}},
 	"vm_lacks":                    {fields: []string{"has", "layer", "vm"}},
 	"vm_name_no_room":             {fields: []string{"backend", "max"}},
 	"vm_not_running":              {fields: []string{"vm"}},
 	"vm_not_stopped":              {fields: []string{"vm"}},
 	"vm_other_folder":             {fields: []string{"vm", "was"}},
+	"vm_other_folder_adopt":       {fields: []string{"vm", "was"}},
+	"vm_other_folder_rm":          {fields: []string{"vm", "was"}},
 	"vm_outdated":                 {fields: []string{"changed"}},
+	"vm_unfinished":               {fields: []string{"vm"}},
 }

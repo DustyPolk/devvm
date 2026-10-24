@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
@@ -77,10 +76,9 @@ func (t *Tools) WarnNewer(ctx context.Context, imageName string, have []string, 
 
 // Update moves a VM to the newest shared tools for its image name: it
 // checks upstream first (unless there's no lock yet: resolving it is
-// checking), builds what the share lacks on b from base's image (key
-// base), and returns the VM's new tool files. changed is false when they
-// were the newest already.
-func (t *Tools) Update(ctx context.Context, b backend.Backend, base, vm, imageName string, have []string, libc string) (files []string, changed bool, err error) {
+// checking), has build build what the share lacks of them, and returns the
+// VM's new tool files. changed is false when they were the newest already.
+func (t *Tools) Update(ctx context.Context, build func(context.Context, []string) error, vm, imageName string, have []string, libc string) (files []string, changed bool, err error) {
 	if _, err := os.Stat(t.Dirs.ToolLock()); err == nil {
 		t.Check(ctx)
 	}
@@ -91,7 +89,7 @@ func (t *Tools) Update(ctx context.Context, b backend.Backend, base, vm, imageNa
 		t.Info(msg.ToolsNewest(vm))
 		return files, false, nil
 	}
-	if err := t.Build(ctx, b, base, libc, files); err != nil {
+	if err := build(ctx, files); err != nil {
 		return nil, false, err
 	}
 	t.Info(msg.ToolsSwitch(vm))

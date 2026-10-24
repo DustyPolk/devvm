@@ -7,7 +7,7 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS).
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS). A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking.
 
 ```text
 devvm [IMAGE] [flags]
@@ -30,5 +30,10 @@ devvm [IMAGE] [flags]
 
 ## See also
 
+- [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
+- [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
+- [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
+- [devvm rm](devvm_rm.md): Delete this folder's VM
+- [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

@@ -13,7 +13,8 @@
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
 # start), and with $STUB_DIR/start-hangs it hangs (touching
 # $STUB_DIR/hanging first). clone fails with $STUB_DIR/clone-fails,
-# leaving its instance (a partial clone). shell fails with $STUB_DIR/shell-fails and hangs with
+# leaving its instance (a partial clone), and delete with
+# $STUB_DIR/delete-fails, after deleting it. shell fails with $STUB_DIR/shell-fails and hangs with
 # $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first), and a direct
 # connection (curl --noproxy) fails unless $STUB_DIR/net-direct exists; a script fed
 # to shell's bash -s has its second line appended to $STUB_DIR/scripts, and
@@ -72,10 +73,12 @@ case ${1:-} in
       "${names[0]}" "$LIMA_HOME" "$LIMA_HOME/${names[0]}" > "$cfg"
     [[ ! -e $STUB_DIR/start-fails ]] || exit 1 ;;
   stop) set_status "${names[0]}" Stopped ;;
-  delete) for n in "${names[@]}"; do set_status "$n"; done ;;
+  delete)
+    for n in "${names[@]}"; do set_status "$n"; done
+    [[ ! -e $STUB_DIR/delete-fails ]] || exit 1 ;;
   shell)
     # A script fed to bash -s: its first line after the shebang.
-    if [[ ${*: -2} == "bash -s" ]]; then sed -n 2p >> "$STUB_DIR/scripts"; fi
+    if [[ ${*: -2} == "bash -s" || "$*" == *"exec 'bash' '-s'" ]]; then sed -n 2p >> "$STUB_DIR/scripts"; fi
     # A VM's setup: what it was sent.
     if [[ "$*" == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; fi
     # A direct connection from the VM, past its proxy: it fails, as a

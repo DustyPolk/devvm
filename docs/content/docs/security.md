@@ -31,7 +31,7 @@ devvm refuses a project folder that would hand the VM more than the project:
 
 ### One VM per folder
 
-A VM belongs to the folder it was made for: its path, and the folder itself (its device and inode, and on Linux its birth time). A folder deleted and made again at the same path, another repo cloned where an old one was, never quietly gets the old folder's VM and what's in its disk: devvm refuses it.
+A VM belongs to the folder it was made for: its path, and the folder itself (its device and inode, and on Linux its birth time). A folder deleted and made again at the same path, another repo cloned where an old one was, never quietly gets the old folder's VM and what's in its disk: devvm refuses it. `devvm rm` deletes it and `devvm adopt` gives it to the new folder, each only after you confirm ([a folder made again](commands.md#a-folder-made-again)).
 
 ### Read-only and confined builds
 

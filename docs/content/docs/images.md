@@ -72,7 +72,11 @@ Shared tools aren't images, so `devvm rebuild` refuses them: their versions come
 
 ### Adding and removing tools
 
-A new VM gets the tools its image names. Adding tools to an existing VM, taking them out and moving it to newer versions aren't available yet.
+A new VM gets the tools its image names, and keeps those versions. On each launch devvm warns when the lock has newer ones. None of these change the VM's disk: its tools are mounted from the share, so they take effect on the launch.
+
+- `devvm update` checks upstream for newer versions, builds what the share lacks, and moves the VM to them.
+- `devvm IMAGE` with tools the VM lacks adds them, after asking ([adding to a VM](commands.md#adding-to-a-vm)).
+- `devvm remove TOOLS` takes tools out (`devvm remove python+claude`). What the VM installed itself, other versions or global packages, stays.
 
 ## Which image a new VM gets
 
@@ -131,7 +135,7 @@ When images are built on it, devvm lists them first, and in a terminal asks befo
 
 ### Outdated VMs
 
-A VM keeps the image it was made from, and its chain. When a key in the chain changes (an edited script, a rebuild), devvm warns that the VM is outdated, and leaves it as it is. Shared tool images have keys of their own: see [Building tools](#building-tools).
+A VM keeps the image it was made from, and its chain. When a key in the chain changes (an edited script, a rebuild), devvm warns on each launch that the VM is outdated, and leaves it as it is: `devvm rm` and a new VM gets the new image. Shared tool images have keys of their own: see [Building tools](#building-tools).
 
 A key is the first 12 hex digits of a SHA-256. Each input goes in with its length, so different inputs never hash the same bytes. An image's record keeps its chain: the key of each image it's built on, from `base` up.
 

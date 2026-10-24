@@ -31,6 +31,16 @@ var (
 	}
 )
 
+// The agents' history in a VM, relative to its home: what devvm rm
+// exports, without their logins.
+var (
+	historyPaths    = []string{".claude", ".claude.json", ".codex", ".local/share/opencode", ".local/state/opencode"}
+	historyExcludes = []string{
+		".claude/.credentials.json", ".codex/auth.json",
+		".local/share/opencode/auth.json", ".local/share/opencode/account.json", ".local/share/opencode/bin",
+	}
+)
+
 // opencodeDir is opencode's config folder, whose subfolders are mounted
 // and whose files are copied.
 const opencodeDir = ".config/opencode"
@@ -152,13 +162,14 @@ func shownList(paths []string) string {
 	return strings.Join(shown, ", ")
 }
 
-// What agent folder changes print and ask, and whether they can ask; tests
-// swap them.
+// What the package prints and asks, and whether it can ask; tests swap
+// them.
 var (
 	warn     = ui.Warn
 	info     = ui.Info
 	terminal = ui.StdinIsTerminal
 	confirm  = func(m msg.M) bool { return ui.Confirm(m) }
+	ask      = ui.Ask
 )
 
 // missing returns what of a isn't in b.

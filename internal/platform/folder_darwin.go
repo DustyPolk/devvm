@@ -24,3 +24,10 @@ func FolderID(path string) (string, error) {
 func Chflags(ctx context.Context, flags, path string) error {
 	return exec.CommandContext(ctx, "chflags", "-R", "-P", flags, path).Run() //nolint:gosec // devvm's own arguments
 }
+
+// Immutable reports whether path itself (not what a symlink points to) has
+// the user-immutable flag (uchg).
+func Immutable(path string) bool {
+	var st unix.Stat_t
+	return unix.Lstat(path, &st) == nil && st.Flags&unix.UF_IMMUTABLE != 0
+}

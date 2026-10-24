@@ -4,9 +4,11 @@
 #     (default)  every section: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
-#                name with pinned host keys, .git protection and shell; tools makes a node VM and checks its shared tools; network
-#                makes a claude VM with network policy and checks it reaches only its allowlist,
-#                its token stays on the host, and the self-check
+#                name with pinned host keys, .git protection and shell, then opening it again,
+#                restart and rm, and an agent VM's folders and exported history; tools makes a node
+#                VM and checks its shared tools, update and remove; network makes a claude VM with
+#                network policy and checks it reaches only its allowlist, its token stays on the
+#                host, and the self-check, on relaunch too
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
@@ -76,7 +78,8 @@ cleanup() {
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
-  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/claude-before.json" "$work/codex-before.json"
+  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/claude-before.json" "$work/codex-before.json" \
+    "$work/export.list" "$XDG_DATA_HOME/devvm/exports"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -277,6 +280,29 @@ else
     git add -A && git -c user.email=e@e -c user.name=e commit -qm vm"
 fi
 
+section "an existing VM"
+check "stopped, devvm starts it again" bash -c "limactl stop $vm >/dev/null 2>&1 && [[ \$(status_of $vm) == Stopped ]] &&
+  cd '$p' && printf 'echo e2e-again\n' | '$D' >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] && grep -qx e2e-again '$work/last.log'"
+check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
+check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
+  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
+if [[ "$(uname -s)" == Darwin ]]; then
+  check "a swapped .git is reported" bash -c "limactl shell --workdir / $vm bash -c 'cd $p && mv .git .git-old && git init -q' </dev/null;
+    cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_replaced git=$p/.git | head -1)\""
+  rm -rf "$p/.git"; mv "$p/.git-old" "$p/.git"
+  # (virtiofs shows the VM the restored .git after a moment.) Locks are set while it's stopped.
+  check "a submodule git folder the VM adds is reported, and locked" bash -c "limactl shell --workdir / $vm bash -c 'cd $p &&
+      for i in 1 2 3 4 5 6 7 8 9 10; do git rev-parse >/dev/null 2>&1 && break; sleep 1; done && git init -q vmsub &&
+      git -C vmsub -c user.email=e@e -c user.name=e commit -q --allow-empty -m s &&
+      git update-index --add --cacheinfo 160000,\$(git -C vmsub rev-parse HEAD),vmsub' </dev/null &&
+    limactl stop $vm >/dev/null 2>&1 && cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_embedded_new git=$p/vmsub/.git | head -1)\" &&
+    ls -lOd '$p/vmsub/.git/config' | grep -q uchg"
+fi
+check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm </dev/null >'$work/last.log' 2>&1 &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
+  ! grep -q '^$vm ' '$kh' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$p/.git/config' | grep -q uchg; } &&
+  [[ -z \$(ls '$XDG_DATA_HOME/devvm/exports' 2>/dev/null) ]]"
+
 section "agent folders and the VM's setup"
 # A home of its own: a fake agent config, history and git identity, and a fake token; nothing of
 # yours is read.
@@ -299,6 +325,19 @@ check "the VM gets the host's git identity, timezone and its hostname" in_vm "$v
   "[[ \$(git config --global user.name) == 'E2E User' && \$(git config --global user.email) == e2e@example.com &&
      \$(timedatectl show -p Timezone --value) == Europe/Paris && \$(hostname) == agents ]]"
 check "without network policy, the Claude token itself" in_vm "$vm" '[[ $CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-e2efake-plain ]]'
+mkdir -p "$ah/.claude/agents"
+check "a new agent folder is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
+  grep -qF \"\$(m mounts_next_start vm=$vm | head -1)\""
+check "restart mounts it" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
+  limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -qF '$ah/.claude/agents ' &&
+  limactl shell --workdir / $vm ls '$ah/.claude/agents' </dev/null"
+rm -rf "$ah/.claude/skills"
+check "a removed one is unmounted, and the VM starts" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
+  ! limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -q skills && [[ \$(status_of $vm) == Running ]]"
+in_vm "$vm" 'mkdir -p ~/.claude/projects/e2e && echo e2e-transcript > ~/.claude/projects/e2e/t.jsonl && echo secret > ~/.claude/.credentials.json'
+check "rm exports its agents' history, without their logins, then deletes it" bash -c "cd '$a' && HOME='$ah' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
+  ! limactl list -q | grep -qx $vm && f=\$(ls '$XDG_DATA_HOME'/devvm/exports/$vm-*.tar.gz) && tar -tzf \"\$f\" > '$work/export.list' &&
+  grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list'"
 fi
 
 if want tools; then
@@ -330,6 +369,15 @@ launch "$t2" 'node -v' --no-network-policy --no-git-protect
 check "a second node VM uses the same tool images: none built" bash -c "
   [[ -n '$vm' ]] && (( \$(find '$share' -name '*.erofs' | wc -l) == $files_before )) && grep -qx v$(lockv node) '$work/last.log'"
 check "the tools build left no VM behind" bash -c "[[ -z \$(status_of devvm-tools-build) ]]"
+# Upstream can publish mid-run (node's musl builds come days after a release): with the lock
+# unchanged, the tools are the newest; changed, the VM may move (if one of its tools did).
+check "devvm update: checks upstream; the newest unless the lock changed" bash -c "cd '$t2' &&
+  before=\$(cksum < '$lock'); out=\$(printf 'exit\n' | '$D' update 2>&1)
+  grep -qF \"\$(m tools_newest vm=$vm | head -1)\" <<<\"\$out\" ||
+    { [[ \$(cksum < '$lock') != \"\$before\" ]] && grep -qF \"\$(m tools_switch vm=$vm | head -1)\" <<<\"\$out\"; }"
+check "devvm remove takes node out of the VM" bash -c "cd '$t2' && printf 'exit\n' | '$D' remove node >'$work/last.log' 2>&1 &&
+  grep -qx image=base '$vms/$vm' && ! grep -q '^tools=.*node' '$vms/$vm' &&
+  limactl shell --workdir / $vm bash -lc '! command -v node' </dev/null"
 fi
 
 if want network; then
@@ -415,6 +463,14 @@ check "a VM started outside devvm is unenforced, and the self-check stops it" ba
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$root' &&
   DEVVM_E2E_VM=$vm DEVVM_E2E_WANT='net_unenforced_stop vm=$vm' CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
   grep -q -- '--- PASS: TestE2ESelfCheck' && [[ \$(status_of '$vm') == Stopped ]] && grep -qx net_check=unenforced '$vms/$vm'"
+check "devvm starts it again confined, and the self-check passes" bash -c "cd '$n' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+  [[ \$(status_of '$vm') == Running ]] && grep -qx net_check=ok '$vms/$vm'"
+check "started outside devvm again: without a terminal, devvm stops it and opens nothing" bash -c "
+  limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
+  ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
+  ! grep -q e2e-opened '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
+check "rm -f deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '_proxy -listen .* -vm $vm ' >/dev/null"
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

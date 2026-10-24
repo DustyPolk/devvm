@@ -1,6 +1,6 @@
 ---
 title: devvm build
-weight: 2
+weight: 3
 ---
 
 Build an image and the images under it, unless they're built

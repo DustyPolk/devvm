@@ -52,10 +52,7 @@ stdout '^libc=gnu$'
 exec cat $STUB_DIR/limactl-env
 stdout '^cwd=/\S*/data/devvm '
 
-# Once it exists, devvm doesn't open it yet. A folder made again at the
-# same path never gets the old one's VM.
-! exec devvm --no-network-policy base
-stderr '^devvm: vm_exists vm=devvm-web-[0-9a-f]{14}$'
+# A folder made again at the same path never gets the old one's VM.
 cd $WORK
 rm web
 mkdir web

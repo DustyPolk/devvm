@@ -24,7 +24,9 @@ type fixture struct {
 	p     *Protector
 	vm    *state.VM
 	flags []string // "uchg PATH" per chflags call
-	warns []string // names mode
+	// immutable is what has the flag now, as the calls left it.
+	immutable map[string]bool
+	warns     []string // names mode
 }
 
 func newFixture(t *testing.T, name string) *fixture {
@@ -34,15 +36,17 @@ func newFixture(t *testing.T, name string) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{t: t, root: root, dir: filepath.Join(root, name)}
+	f := &fixture{t: t, root: root, dir: filepath.Join(root, name), immutable: map[string]bool{}}
 	mkdirs(t, f.dir)
 	f.p = &Protector{
 		Dir: f.dir, Home: filepath.Join(root, "home"), OS: "darwin",
 		Chflags: func(_ context.Context, flags, path string) error {
 			f.flags = append(f.flags, flags+" "+path)
+			f.immutable[path] = flags == "uchg"
 			return nil
 		},
-		Warn: func(m msg.M) { f.warns = append(f.warns, m.Names()) },
+		Locked: func(path string) bool { return f.immutable[path] },
+		Warn:   func(m msg.M) { f.warns = append(f.warns, m.Names()) },
 	}
 	f.vm, err = state.CreateVM(paths.Dirs{Data: filepath.Join(root, "data")}, "devvm-p-0123456789abcd", state.NewVM{Image: "base"})
 	if err != nil {
@@ -508,5 +512,173 @@ func TestRealLocks(t *testing.T) {
 	}
 	if len(f.warns) > 0 {
 		t.Errorf("warnings %q", f.warns)
+	}
+	if locked := New(f.dir).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
+		t.Error("Locked doesn't see the flag")
+	}
+}
+
+// checked runs Check on a stopped VM, with the warnings and locks it
+// made from now.
+func (f *fixture) checked(running bool) {
+	f.t.Helper()
+	f.warns, f.flags = nil, nil
+	if err := f.p.Check(f.t.Context(), f.vm, running); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// A .git replaced since it was locked is reported, and nothing else is
+// done; one that appeared since the VM was made is locked, and said.
+func TestCheckReplacedAndAppeared(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	f.git(f.dir, "init", "-q")
+	f.checked(false)
+	if !slices.Equal(f.warns, []string{"git_appeared"}) || !f.locked(f.path(".git/config")) {
+		t.Errorf("appeared: warnings %q, locks %q", f.warns, f.flags)
+	}
+	f.checked(false)
+	if len(f.warns) > 0 {
+		t.Errorf("again: warnings %q", f.warns)
+	}
+	if err := os.Rename(f.path(".git"), f.path(".git-old")); err != nil {
+		t.Fatal(err)
+	}
+	f.git(f.dir, "init", "-q")
+	f.checked(false)
+	if !slices.Equal(f.warns, []string{"git_replaced git=" + f.path(".git")}) || len(f.flags) > 0 {
+		t.Errorf("replaced: warnings %q, locks %q", f.warns, f.flags)
+	}
+}
+
+// Hooks in a hooks folder that wasn't locked are reported on a check, and
+// it's locked; a running VM is checked, but nothing is locked.
+func TestCheckHooksUnlocked(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.root, "init", "-q", "--template=", f.dir)
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(f.path(".git/hooks")); err != nil {
+		t.Fatal(err)
+	}
+	mkdirs(t, f.path(".git/hooks"))
+	write(t, f.path(".git/hooks/pre-commit"), "#!/bin/sh\n")
+	write(t, f.path(".git/hooks/pre-push.sample"), "#!/bin/sh\n")
+	f.immutable[f.path(".git/hooks")] = false // the folder made again isn't locked
+	f.checked(true)
+	if !slices.Equal(f.warns, []string{"git_hooks_unlocked hooks=" + f.path(".git/hooks")}) || len(f.flags) > 0 {
+		t.Errorf("running: warnings %q, locks %q", f.warns, f.flags)
+	}
+	f.checked(false)
+	if !f.locked(f.path(".git/hooks")) {
+		t.Errorf("stopped: locks %q", f.flags)
+	}
+	f.checked(false)
+	if len(f.warns) > 0 {
+		t.Errorf("locked: warnings %q", f.warns)
+	}
+}
+
+// A submodule git dir that appeared in the working tree, or under
+// .git/modules, is reported once and locked; under .git/modules, not the
+// first time there's a record to compare with.
+func TestCheckSubmodules(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.dir, "init", "-q")
+	f.git(f.dir, "commit", "-q", "--allow-empty", "-m", "x")
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	embeddedRepo(f)
+	f.checked(false)
+	for _, want := range []string{"git_embedded_new git=" + f.path("sub/.git"), "git_embedded_new git=" + f.path(".gitdirs/rel")} {
+		if !f.warned(want) {
+			t.Errorf("warnings %q lack %s", f.warns, want)
+		}
+	}
+	if !f.locked(f.path("sub/.git/config")) {
+		t.Errorf("locks %q", f.flags)
+	}
+	f.checked(false)
+	if f.warned("git_embedded_new") {
+		t.Errorf("again: warnings %q", f.warns)
+	}
+	cp := func(to string) {
+		t.Helper()
+		if out, err := exec.CommandContext(t.Context(), "cp", "-R", f.path("sub/.git"), f.path(to)).CombinedOutput(); err != nil { //nolint:gosec // the test's own
+			t.Fatalf("cp: %v %s", err, out)
+		}
+	}
+	mkdirs(t, f.path(".git/modules"))
+	cp(".git/modules/old")
+	if err := f.vm.Set(KeyGitModules, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.checked(false)
+	if f.warned("git_embedded_new") {
+		t.Errorf("first record: warnings %q", f.warns)
+	}
+	cp(".git/modules/new")
+	f.checked(false)
+	if !slices.Equal(f.warns, []string{"git_embedded_new git=" + f.path(".git/modules/new")}) || !f.locked(f.path(".git/modules/new/config")) {
+		t.Errorf("modules: warnings %q, locks %q", f.warns, f.flags)
+	}
+}
+
+// Includes and hook links into the project folder are reported again only
+// when they change; commondir on every check.
+func TestCheckDelegationsAndCommondir(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.dir, "init", "-q")
+	cfg := f.path(".git/config")
+	f.git(f.dir, "config", "--file", cfg, "include.path", "../shared.gitconfig")
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	f.checked(false)
+	if len(f.warns) > 0 {
+		t.Errorf("unchanged: warnings %q", f.warns)
+	}
+	f.git(f.dir, "config", "--file", cfg, "--add", "include.path", "sub.gitconfig")
+	f.checked(false)
+	if !f.warned("path=sub.gitconfig") || !f.warned("path=../shared.gitconfig") {
+		t.Errorf("changed: warnings %q", f.warns)
+	}
+	write(t, f.path(".git/commondir"), "../x\n")
+	f.checked(false)
+	f.checked(false)
+	if !slices.Equal(f.warns, []string{"git_commondir git=" + f.path(".git") + " target=../x"}) {
+		t.Errorf("commondir: warnings %q", f.warns)
+	}
+}
+
+// Off, or on a host without locks: nothing. Never set up (its creation
+// stopped short): set up as new, unless it runs.
+func TestCheckOffAndUnset(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.dir, "init", "-q")
+	f.checked(true)
+	if f.vm.Get(KeyGitProtect) != "" || len(f.flags) > 0 {
+		t.Errorf("unset, running: %s, locks %q", f.vm.Get(KeyGitProtect), f.flags)
+	}
+	f.checked(false)
+	if f.vm.Get(KeyGitProtect) != "on" || !f.locked(f.path(".git/config")) {
+		t.Errorf("unset: %s, locks %q", f.vm.Get(KeyGitProtect), f.flags)
+	}
+	if err := f.vm.Set(KeyGitProtect, "off"); err != nil {
+		t.Fatal(err)
+	}
+	f.checked(false)
+	if len(f.flags)+len(f.warns) > 0 {
+		t.Errorf("off: locks %q, warnings %q", f.flags, f.warns)
 	}
 }

@@ -26,3 +26,7 @@ func FolderID(path string) (string, error) {
 
 // Chflags sets file flags: Linux has no unprivileged immutable flag.
 func Chflags(context.Context, string, string) error { return errors.ErrUnsupported }
+
+// Immutable reports whether a path has the user-immutable flag: Linux has
+// none.
+func Immutable(string) bool { return false }

@@ -15,6 +15,8 @@ When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config f
 
 The folders that exist when devvm creates the VM are mounted read-only, at the same path as on this machine, so absolute paths in them (Claude Code's plugin paths) still work, and linked from the VM's home. This machine enforces read-only: even root in the VM can't write to them. A folder whose path has a comma isn't mounted, with a warning ([Lima's limits](lima.md#limits)).
 
+One of these folders made or deleted on this machine later is noticed on the VM's next launch, and devvm names it. A backend changes mounts only while a VM is stopped: a stopped VM's mounts change at once; for a running one, devvm asks in a terminal to restart it now (anything running in it stops), else they change when it next starts (`devvm restart`).
+
 ## Copies
 
 Files are copied into the VM's home on every launch, over the VM's own. With [network policy](network.md#agents-logins-and-settings), the logins and settings files are copies with your keys and tokens taken out.
@@ -34,6 +36,10 @@ On each launch the VM's `~/.claude.json` gets this machine's settings and MCP se
 ### Keys in settings files
 
 With network policy, the VM's copies of `~/.claude/settings.json`, `~/.codex/config.toml` and opencode's `.json`, `.jsonc` and `.toml` files have every value under a key that looks like a secret's (`*key*`, `*token*`, `*secret*`, `*password*`, `Authorization`) replaced with `devvm-redacted`, and devvm names what it replaced. Values that only point at a secret stay: an environment variable's name (`env_key = "OPENAI_API_KEY"`), `{env:X}`, `${X}`, a path. A file devvm can't read that way (a TOML multi-line string) isn't copied. An MCP server or provider that needs one of those keys in the VM has to get it another way.
+
+## History
+
+Each VM's transcripts and sessions stay in that VM. `devvm rm` saves them before deleting a VM whose image has an agent: a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, in `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. The agents' logins aren't in it: `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. A stopped VM is started for it. If the export fails, devvm keeps the VM; `devvm rm -f` deletes it without exporting.
 
 ## The VM's setup
 

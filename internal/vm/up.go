@@ -107,8 +107,9 @@ func execShell(cmd backend.Command) error {
 
 // Up opens a shell in the folder's VM, making it first: checked, from
 // its image (built if it isn't), with only the folder mounted, .git
-// protected, started. On success it doesn't return: the shell takes
-// devvm's place.
+// protected, started. A VM that exists is opened as it is, with what's
+// changed since checked (open). On success it doesn't return: the shell
+// takes devvm's place.
 func (e *Env) Up(ctx context.Context, o Options) error {
 	size, err := o.Size.Parse()
 	if err != nil {
@@ -120,59 +121,98 @@ func (e *Env) Up(ctx context.Context, o Options) error {
 			return err
 		}
 	}
-	// The VM's name fits a new VM's backend; a VM that exists keeps the
-	// backend its state records.
-	first, err := e.Registry.For(e.Dirs, new(state.VM), o.Backend)
+	t, err := e.find(ctx, o.Backend)
 	if err != nil {
 		return err
+	}
+	if !t.exists {
+		return e.create(ctx, o, t.f, t.b, size, ports)
+	}
+	if err := e.checkFolder(t.f, t.st); err != nil {
+		return err
+	}
+	return e.open(ctx, o, t)
+}
+
+// found is the folder's VM as devvm finds it.
+type found struct {
+	f      project.Folder
+	st     *state.VM       // its state; one that doesn't exist for a new VM
+	b      backend.Backend // its backend: the one its state records, else a new VM's
+	exists bool            // the backend has it
+	// flagIgnored is set when --backend named another backend than the
+	// VM's.
+	flagIgnored bool
+}
+
+// find finds the folder's VM, which needn't exist, with the backend that
+// has it or would make it (flag is --backend). The VM's name fits a new
+// VM's backend; a VM that exists keeps the backend its state records.
+func (e *Env) find(ctx context.Context, flag string) (*found, error) {
+	first, err := e.Registry.For(e.Dirs, new(state.VM), flag)
+	if err != nil {
+		return nil, err
 	}
 	f, err := project.New(e.Dir, first.Backend.NameMax())
 	if bad, ok := errors.AsType[*project.BadPathError](err); ok {
-		return msg.BadPath(msg.Shown(bad.Dir))
+		return nil, msg.BadPath(msg.Shown(bad.Dir))
 	} else if errors.Is(err, project.ErrNoRoom) {
-		return msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(first.Backend.NameMax()))
+		return nil, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(first.Backend.NameMax()))
 	} else if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := state.ReadVM(e.Dirs, f.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	choice, err := e.Registry.For(e.Dirs, st, o.Backend)
+	choice, err := e.Registry.For(e.Dirs, st, flag)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	b := choice.Backend
 	if err := b.Check(ctx); err != nil {
-		return err
+		return nil, err
 	}
+	t := &found{f: f, st: st, b: b, flagIgnored: choice.FlagIgnored}
 	switch _, err := b.Inspect(ctx, f.Name); {
 	case err == nil:
-		if err := e.checkFolder(f, st); err != nil {
-			return err
-		}
-		return msg.VMExists(f.Name)
+		t.exists = true
 	case !errors.Is(err, backend.ErrNotFound):
-		return err
+		return nil, err
 	}
-	return e.create(ctx, o, f, b, size, ports)
+	return t, nil
+}
+
+// findExisting finds the folder's VM, which must exist.
+func (e *Env) findExisting(ctx context.Context, flag string) (*found, error) {
+	t, err := e.find(ctx, flag)
+	if err != nil {
+		return nil, err
+	}
+	if !t.exists {
+		return nil, msg.NoVM(t.f.Dir)
+	}
+	return t, nil
 }
 
 // checkFolder refuses a VM made for another folder at the same path: one
 // deleted and made again (another repo cloned there) never quietly gets
 // the old one's disk.
 func (e *Env) checkFolder(f project.Folder, st *state.VM) error {
-	if !st.Exists() {
-		return nil
-	}
-	id, err := platform.FolderID(f.Dir)
-	if err != nil {
-		return err
-	}
-	if st.Get(state.KeyDir) != f.Dir || st.Get(state.KeyFolder) != id {
+	if !e.sameFolder(f, st) {
 		return msg.VMOtherFolder(f.Name, st.Get(state.KeyDir))
 	}
 	return nil
+}
+
+// sameFolder reports whether the VM was made for this folder: its path,
+// and the folder itself. A VM without state has no folder to differ.
+func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
+	if !st.Exists() {
+		return true
+	}
+	id, err := platform.FolderID(f.Dir)
+	return err == nil && st.Get(state.KeyDir) == f.Dir && st.Get(state.KeyFolder) == id
 }
 
 // create makes the folder's VM and opens a shell in it.
@@ -326,17 +366,8 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if project.SSHRemote(ctx, f.Dir) {
 		ui.Warn(msg.SSHRemoteHint(vm))
 	}
-	// On Linux hosts set-id bits reach the host (macOS's virtiofs drops
-	// them): files an earlier VM of this folder made are named too.
-	if e.OS == "linux" {
-		if files := project.SetIDFiles(f.Dir); len(files) > 0 {
-			var shown []string
-			for _, p := range files {
-				shown = append(shown, msg.Shown(p))
-			}
-			ui.Warn(msg.SetidFiles(strings.Join(shown, " ")))
-		}
-	}
+	// Files an earlier VM of this folder made are named too.
+	e.checkSetID(f.Dir)
 	if spec.AgentForwarding {
 		e.checkAgent(ctx)
 	}
@@ -355,14 +386,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err := netpolicy.SelfCheck(ctx, b, st, start); err != nil {
 		return err
 	}
-	if err := e.sync(ctx, b, st, f.Slug(), files, started); err != nil {
-		return err
-	}
-	// ssh and editors reach it by name.
-	if err := e.sshConfig().Write(ctx); err != nil {
-		return err
-	}
-	cmd, err := b.Shell(ctx, vm, f.Dir)
+	cmd, err := e.setUp(ctx, b, st, f, started)
 	if err != nil {
 		return err
 	}
@@ -370,17 +394,37 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	return e.Exec(cmd)
 }
 
+// setUp sets up a running VM, started with conf, for a shell in the
+// folder: its setup sent, and ssh and editors reaching it by name. It
+// returns the shell's command.
+func (e *Env) setUp(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) (backend.Command, error) {
+	if err := e.sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
+		return backend.Command{}, err
+	}
+	if err := e.sshConfig().Write(ctx); err != nil {
+		return backend.Command{}, err
+	}
+	return b.Shell(ctx, st.Name(), f.Dir)
+}
+
 // start starts a stopped VM confined as conf says, and returns the
 // confinement it got. With network policy its proxy starts first, and the
 // backend gets the proxy's confinement; a start that fails stops the proxy
-// again. Its host keys are read again once it runs: a VM whose backend
-// config changed can get new ones when it boots.
+// again. Without it, a proxy left from when it had it stops. Its host keys
+// are read again once it runs: a VM whose backend config changed can get
+// new ones when it boots. A VM without a network choice never starts: its
+// creation didn't finish, and it would start without network policy.
 func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
 	vm := st.Name()
+	if st.Get(KeyNet) == "" {
+		return conf, msg.VMUnfinished(vm)
+	}
 	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
 		return conf, err
 	}
-	if conf.Net == backend.NetProxy {
+	if conf.Net != backend.NetProxy {
+		e.Proxy.Stop(vm)
+	} else {
 		var err error
 		if conf, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), false); err != nil {
 			return conf, err

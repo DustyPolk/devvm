@@ -1,0 +1,107 @@
+# Existing VMs with network policy, shared tools and agents: a running
+# VM keeps its proxy, the self-check runs on every launch, update and
+# remove change its tools, and rm exports its agents' history first.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env VMS=$XDG_DATA_HOME/devvm/vms
+env RUN=$XDG_DATA_HOME/devvm/run
+
+# Network policy: a running VM isn't started again, and the self-check
+# runs again. (Its hostagent here: the test's runner, which runs on, in
+# place of the stub's.)
+mkdir $WORK/net
+cd $WORK/net
+exec devvm --network-policy --no-git-protect base
+exec sh -c 'n=$(basename "$VMS"/devvm-net-*); echo $PPID > "$LIMA_HOME/$n/ha.pid"; echo "$PPID 1" > "$RUN/$n.started"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+! stdout starting
+stub_calls
+! stdout 'limactl (start|stop|edit)'
+stdout 'exec ''curl'' ''--noproxy'''
+# Started outside devvm: unenforced, so without a terminal to ask in,
+# devvm stops it. devvm starts it again confined.
+exec sh -c 'n=$(basename "$VMS"/devvm-net-*); limactl stop "$n" && limactl start --tty=false "$n"'
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm
+stderr '^devvm: net_unenforced_stop vm=devvm-net-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-net-[0-9a-f]{14}$'
+! stdout 'tar -xf'
+exec sh -c 'cat "$VMS"/devvm-net-*'
+stdout '^net_check=unenforced$'
+exec devvm
+stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-net-*'
+stdout '^net_check=ok$'
+
+# update: with the lock as it is, the tools are the newest; with a newer
+# go upstream, it's built and the VM moves to it.
+mkdir $WORK/api
+cd $WORK/api
+exec devvm --no-network-policy --no-git-protect go
+exec devvm update
+stdout '^==> checking_tools$'
+stdout '^==> tools_newest vm=devvm-api-[0-9a-f]{14}$'
+exec sh -c 'sed "/^\[\[tools.go\]\]/,/^version/ s/^version = .*/version = \"9.9.9\"/" "$MISE_STUB_LOCK" > "$WORK/newer.lock"'
+env MISE_STUB_LOCK=$WORK/newer.lock
+exec devvm update
+stdout '^==> building_tools tools=go 9\.9\.9$'
+stdout '^==> tools_switch vm=devvm-api-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-api-*'
+stdout '^tools=go-9\.9\.9-[0-9a-f]{12}\.erofs$'
+exec tar -xOf $STUB_DIR/sync.tar tools
+stdout '^go-9\.9\.9-[0-9a-f]{12}\.erofs go 9\.9\.9$'
+# A VM whose tools are older than the lock's is told on launch.
+exec sh -c 'f=$(ls "$VMS"/devvm-api-*); sed "s/^tools=.*/tools=go-1.0.0-0123456789ab.erofs/" "$f" > "$f.new" && mv "$f.new" "$f"'
+exec devvm
+stderr '^devvm: newer_tools tools=go 9\.9\.9$'
+
+# remove: the tools leave its name and list, the rest stays; what it
+# lacks is refused, and so is a layer.
+mkdir $WORK/web
+cd $WORK/web
+cp $WORK/package.json package.json
+exec devvm --no-network-policy --no-git-protect claude
+exec devvm remove claude
+stdout '^==> vm_is_now image=node vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^image=node$'
+stdout '^tools=node-\S+ pnpm-\S+ bun-\S+$'
+exec tar -xOf $STUB_DIR/sync.tar tools
+! stdout claude
+! exec devvm remove python
+stderr '^devvm: vm_lacks has=node layer=python vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm remove
+stderr usage_error
+
+# rm: an image with an agent has its history exported first, from the
+# VM, started if it's stopped; a failed export keeps the VM, and -f
+# deletes it without one.
+mkdir $WORK/agent
+cd $WORK/agent
+exec devvm --no-network-policy --no-git-protect base+claude
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-agent-*)"'
+exec sh -c ': > "$STUB_DIR/shell-fails"'
+! exec devvm rm
+stdout '^==> starting vm=devvm-agent-[0-9a-f]{14}$'
+stderr '^devvm: export_failed vm=devvm-agent-[0-9a-f]{14}$'
+exec sh -c 'ls "$VMS"'
+stdout devvm-agent
+exec sh -c 'ls "$DATA/exports" | wc -l'
+stdout '^ *0$'
+rm $STUB_DIR/shell-fails
+exec sh -c ': > "$STUB_LOG"'
+exec devvm rm
+stdout '^==> exported file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+stdout '^==> deleted vm=devvm-agent-[0-9a-f]{14}$'
+stub_calls
+stdout 'exec ''bash'' ''-c'' ''cd ~ && ls -d \.claude \.claude\.json .* --exclude=\.claude/\.credentials\.json .* -T -'''
+exec sh -c 'ls "$VMS"'
+! stdout devvm-agent
+cd $WORK/net
+exec devvm rm -f
+! stdout exported
+
+-- package.json --
+{}

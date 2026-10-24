@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -53,13 +54,19 @@ type Protector struct {
 	// Chflags sets file flags on a path and everything under it, following
 	// no symlink (platform.Chflags).
 	Chflags func(ctx context.Context, flags, path string) error
+	// Locked reports whether a path has the user-immutable flag, not
+	// following a symlink (platform.Immutable).
+	Locked func(path string) bool
 	// Warn prints a warning (ui.Warn).
 	Warn func(msg.M)
 }
 
 // New returns the protector for the project folder dir.
 func New(dir string) *Protector {
-	return &Protector{Dir: dir, Home: os.Getenv("HOME"), OS: runtime.GOOS, Chflags: platform.Chflags, Warn: ui.Warn}
+	return &Protector{
+		Dir: dir, Home: os.Getenv("HOME"), OS: runtime.GOOS,
+		Chflags: platform.Chflags, Locked: platform.Immutable, Warn: ui.Warn,
+	}
 }
 
 // NewVM sets up protection for a VM just made for the folder, stopped:
@@ -113,6 +120,11 @@ func (p *Protector) NewVM(ctx context.Context, vm *state.VM, off bool) error {
 		p.Warn(msg.GitHooksPath(msg.Shown(hp)))
 	}
 	ds := p.delegations(ctx, emb)
+	p.warnDelegations(ds)
+	return vm.Set(KeyGitDelegations, delegationsSum(ds))
+}
+
+func (p *Protector) warnDelegations(ds []delegation) {
 	for _, d := range ds {
 		switch d.kind {
 		case "include":
@@ -123,7 +135,121 @@ func (p *Protector) NewVM(ctx context.Context, vm *state.VM, off bool) error {
 			p.Warn(msg.GitGitdirOutside(msg.Shown(d.target), msg.Shown(d.where)))
 		}
 	}
-	return vm.Set(KeyGitDelegations, delegationsSum(ds))
+}
+
+// Check runs on every launch of an existing VM: it locks again what's new
+// (a submodule, a repo made since), and reports what a lock can't stop,
+// once each: a .git replaced since it was locked (then nothing else), a
+// repo that appeared, submodule git dirs that appeared, hooks in a hooks
+// folder that wasn't locked, and includes or hook links into the project
+// folder when they change. Locks are set only while the VM is stopped
+// (running), so nothing in it can race them; a running VM gets them at
+// its next start. A VM whose protection was never set up (its creation
+// stopped short) gets it as a new VM does.
+func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error {
+	switch vm.Get(KeyGitProtect) {
+	case "":
+		if running {
+			return nil
+		}
+		return p.NewVM(ctx, vm, false)
+	case "on":
+	default:
+		return nil
+	}
+	if p.OS != "darwin" {
+		return nil
+	}
+	g := p.git()
+	if !exists(g) {
+		return nil
+	}
+	was := vm.Get(KeyGitInode)
+	if was != "" && was != inode(g) {
+		p.Warn(msg.GitReplaced(msg.Shown(g)))
+		return nil
+	}
+	if isDir(g) && exists(filepath.Join(g, "commondir")) {
+		target, _ := os.ReadFile(filepath.Join(g, "commondir")) //nolint:gosec // the project's own
+		p.Warn(msg.GitCommondir(msg.Shown(g), msg.Shown(strings.TrimSpace(string(target)))))
+	}
+	for _, w := range p.worktreeStrays() {
+		p.Warn(msg.GitWorktreeStray(msg.Shown(w)))
+	}
+	if was == "" {
+		p.Warn(msg.GitAppeared())
+	}
+	emb := p.embedded(ctx)
+	seen, _ := p.list(vm.Get(KeyGitEmbedded))
+	for _, d := range emb.inside {
+		if !slices.Contains(seen, d) {
+			p.Warn(msg.GitEmbeddedNew(msg.Shown(d)))
+		}
+	}
+	if err := vm.Set(KeyGitEmbedded, p.relList(emb.inside)); err != nil {
+		return err
+	}
+	// Nothing recorded yet: nothing to compare with.
+	seen, recorded := p.list(vm.Get(KeyGitModules))
+	var mods []string
+	for _, d := range p.gitDirs() {
+		if d == g {
+			continue
+		}
+		mods = append(mods, d)
+		if recorded && !slices.Contains(seen, d) {
+			p.Warn(msg.GitEmbeddedNew(msg.Shown(d)))
+		}
+	}
+	if err := vm.Set(KeyGitModules, p.relList(mods)); err != nil {
+		return err
+	}
+	// Hooks in a hooks folder that isn't locked appeared since the last
+	// lock (there was no folder to lock, or it's a new submodule's), so the
+	// VM may have made them.
+	for _, path := range p.paths(ctx, emb) {
+		if filepath.Base(path) == "hooks" && isDir(path) && !isLink(path) && !p.Locked(path) && hasHooks(path) {
+			p.Warn(msg.GitHooksUnlocked(msg.Shown(path)))
+		}
+	}
+	if !running {
+		if err := p.lock(ctx, vm, emb); err != nil {
+			return err
+		}
+	}
+	ds := p.delegations(ctx, emb)
+	sum := delegationsSum(ds)
+	if sum != vm.Get(KeyGitDelegations) {
+		p.warnDelegations(ds)
+	}
+	return vm.Set(KeyGitDelegations, sum)
+}
+
+// list reads a state value relList wrote, as absolute paths; ok is false
+// when there's none.
+func (p *Protector) list(v string) (paths []string, ok bool) {
+	var rel []string
+	if v == "" || json.Unmarshal([]byte(v), &rel) != nil {
+		return nil, false
+	}
+	for _, r := range rel {
+		paths = append(paths, filepath.Join(p.Dir, r))
+	}
+	return paths, true
+}
+
+// hasHooks reports whether a hooks folder has a file that isn't one of
+// git's samples.
+func hasHooks(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(_ string, e fs.DirEntry, err error) error {
+		if err == nil && e.Type().IsRegular() && !strings.HasSuffix(e.Name(), ".sample") {
+			found = true
+			return fs.SkipAll
+		}
+		return nil //nolint:nilerr // unreadable: skipped, like find
+	})
+	return found
 }
 
 // Unlock takes the locks off, for a VM that's being deleted. Like

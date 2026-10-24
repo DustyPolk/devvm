@@ -1,0 +1,37 @@
+---
+title: devvm rm
+weight: 7
+---
+
+Delete this folder's VM
+
+## Synopsis
+
+Delete this folder's VM, with what devvm keeps for it: its state, its own allowlist, its network log, its .git locks and its ssh config entry. When its image has an agent, its agents' history is exported first, and a failed export keeps the VM. A VM made for an earlier folder at this path is deleted only after you confirm, even with -f.
+
+```text
+devvm rm [flags]
+```
+
+## Options
+
+```text
+  -f, --force   delete without exporting the agents' history
+  -h, --help    help for rm
+```
+
+## Options inherited from parent commands
+
+```text
+      --backend NAME        the NAME of the backend a new VM or image gets (default: the default backend file's, else lima)
+      --cpus N              the N CPUs a new VM gets (default: the size file's, else the image's)
+      --disk GiB            a new VM's disk in GiB, at least the image's (default: the size file's, else the image's)
+      --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
+      --network-policy      create the VM with network policy: it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here (default: ask in a terminal, else off)
+      --no-network-policy   create the VM without network policy: it reaches anything this machine can
+      --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
+```
+
+## See also
+
+- [devvm](devvm.md): Open a shell in this folder's VM, creating it first

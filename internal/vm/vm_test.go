@@ -289,9 +289,16 @@ func TestUp(t *testing.T) {
 			t.Errorf("state %s = %q, want %q", k, got, v)
 		}
 	}
-	// It exists now: not opened yet.
-	if err := e.Up(t.Context(), Options{NoNetworkPolicy: true}); names(err) != "vm_exists vm="+spec.Name {
-		t.Errorf("Up again = %v", names(err))
+	// It exists now, and runs: opened as it is, set up again.
+	before := len(f.Calls())
+	if err := e.Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+		t.Fatal(names(err))
+	}
+	if ms := f.Methods()[before:]; slices.Contains(ms, "Start") || slices.Contains(ms, "CreateVM") || !slices.Contains(ms, "Exec") {
+		t.Errorf("calls again = %q", ms)
+	}
+	if len(*execs) != 2 {
+		t.Errorf("exec = %+v", *execs)
 	}
 }
 
