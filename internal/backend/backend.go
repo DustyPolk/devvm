@@ -40,6 +40,11 @@ type Backend interface {
 	Images(ctx context.Context) ([]string, error)
 	// DeleteImage deletes an image. A missing one is not an error.
 	DeleteImage(ctx context.Context, key string) error
+	// BuildTools runs the shared tools' build script in a throwaway VM
+	// made from base's image, with spec.Out mounted writable, and deletes
+	// the VM: at once, or after a failure once the run ends (a ui
+	// cleanup), so the run log ends with what failed.
+	BuildTools(ctx context.Context, spec ToolsSpec) error
 
 	// CreateVM makes a VM from an image, stopped.
 	CreateVM(ctx context.Context, image string, spec VMSpec) error
@@ -115,6 +120,17 @@ type From struct {
 type Script struct {
 	Name string // for status lines and errors: base.sh
 	Path string // on the host
+}
+
+// ToolsSpec is a shared tools build: Script, fed to bash with Args, in a
+// VM made from base's image, which mounts nothing from the host but Out.
+type ToolsSpec struct {
+	Base   string // base's image key
+	Out    string // a host folder of the build's own, writable in the VM at OutAt
+	OutAt  string
+	Script Script
+	Args   []string
+	Net    Net // the network the build gets: NetInternet or NetNone
 }
 
 // Built is what a build reports, for the image's record.

@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -26,6 +27,7 @@ type Builder struct {
 	Dirs    paths.Dirs
 	Root    string // devvm's own files: base.yaml, layers/ (paths.Root)
 	Backend backend.Backend
+	Tools   *tools.Tools // the shared tools image names hold
 }
 
 // Inputs returns what the backend's image keys hash, read from disk.
@@ -38,24 +40,8 @@ func (b *Builder) Inputs() image.Inputs {
 	}
 }
 
-// Normalize returns an image's canonical name: its layers bottom-up,
-// without base, which every image is built on; base alone when there are
-// none.
-func Normalize(name string) string {
-	var parts []string
-	for p := range strings.SplitSeq(name, "+") {
-		if p != image.Base {
-			parts = append(parts, p)
-		}
-	}
-	if len(parts) == 0 {
-		return image.Base
-	}
-	return strings.Join(parts, "+")
-}
-
 // Layers returns base and the user's layers, sorted: the scripts in the
-// layers folder with names a layer can have.
+// layers folder with names a layer can have (not a shared tool's).
 func (b *Builder) Layers() []string {
 	names := []string{image.Base}
 	entries, _ := os.ReadDir(b.Dirs.Layers()) // no folder: no layers
@@ -78,24 +64,72 @@ func (b *Builder) isLayer(layer string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// CheckLayers refuses an image name with a layer that isn't base or one
-// of the user's. Names become file names: nothing else gets past it.
+// Environments returns what an image can be made of besides the agents:
+// base, the toolchains and the user's layers.
+func (b *Builder) Environments() []string {
+	layers := b.Layers()
+	return slices.Concat(layers[:1], image.Toolchains, layers[1:])
+}
+
+// CheckLayers refuses an image name with a part that isn't base, a shared
+// tool or one of the user's layers. Names become file names: nothing else
+// gets past it.
 func (b *Builder) CheckLayers(name string) error {
 	for p := range strings.SplitSeq(name, "+") {
-		if p != image.Base && (!image.LayerName(p) || !b.isLayer(p)) {
-			return msg.UnknownLayer(p, strings.Join(b.Layers(), " "))
+		if p != image.Base && !image.IsTool(p) && (!image.LayerName(p) || !b.isLayer(p)) {
+			return msg.UnknownLayer(strings.Join(image.Agents, " "), strings.Join(b.Environments(), " "), p)
 		}
 	}
 	return nil
 }
 
-// Build builds an image, and the images under it, unless they're built.
+// BaseLibc is the C library of base as it is now: its record's, gnu when
+// it isn't built. The shared tools are built for it.
+func (b *Builder) BaseLibc() (string, error) {
+	key, err := b.Inputs().Key(image.Base)
+	if err != nil {
+		return "", err
+	}
+	rec, err := state.ReadImage(b.Dirs, key)
+	if _, corrupt := errors.AsType[*state.CorruptError](err); corrupt || errors.Is(err, fs.ErrNotExist) {
+		return "gnu", nil
+	} else if err != nil {
+		return "", err
+	}
+	if rec.Libc == "" {
+		return "gnu", nil
+	}
+	return rec.Libc, nil
+}
+
+// Build builds an image name's image, and the images under it, unless
+// they're built; then the shared tool images it names that the share
+// lacks.
 func (b *Builder) Build(ctx context.Context, name string) error {
-	name = Normalize(name)
+	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
 		return err
 	}
-	return b.build(ctx, name)
+	if err := b.build(ctx, image.WithoutTools(name)); err != nil {
+		return err
+	}
+	groups := image.ToolsOf(name)
+	if len(groups) == 0 {
+		return nil
+	}
+	libc, err := b.BaseLibc()
+	if err != nil {
+		return err
+	}
+	files, err := b.Tools.Files(ctx, groups, libc)
+	if err != nil {
+		return err
+	}
+	base, err := b.Inputs().Key(image.Base)
+	if err != nil {
+		return err
+	}
+	return b.Tools.Build(ctx, b.Backend, base, libc, files)
 }
 
 func (b *Builder) build(ctx context.Context, name string) error {
@@ -225,9 +259,13 @@ func (b *Builder) List(ctx context.Context) ([]Image, error) {
 // (the old one and those built on it among them) that no VM uses. When
 // images are built on it, it asks first in a terminal.
 func (b *Builder) Rebuild(ctx context.Context, name string) error {
-	name = Normalize(name)
+	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
 		return err
+	}
+	// The tools lock versions the shared tools: they aren't rebuilt.
+	if t := image.ToolsOf(name); len(t) > 0 {
+		return msg.ToolsNotImages(strings.Join(t, " "))
 	}
 	old, err := b.Inputs().Key(name)
 	if err != nil {

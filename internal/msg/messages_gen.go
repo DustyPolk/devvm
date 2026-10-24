@@ -47,6 +47,21 @@ func BuildingImage(image string, key string) M {
 	return M{id: "building_image", vals: []val{{"image", image}, {"key", key}}}
 }
 
+// BuildingTools is [building_tools]: "building shared tools: {{.tools}}"
+func BuildingTools(tools string) M {
+	return M{id: "building_tools", vals: []val{{"tools", tools}}}
+}
+
+// BuildingToolsIn is [building_tools_in]: "building the shared tools in {{.vm}}"
+func BuildingToolsIn(vm string) M {
+	return M{id: "building_tools_in", vals: []val{{"vm", vm}}}
+}
+
+// CheckingTools is [checking_tools]: "checking for newer shared tools"
+func CheckingTools() M {
+	return M{id: "checking_tools"}
+}
+
 // CloningImage is [cloning_image]: "cloning {{.parent}}'s image"
 func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
@@ -82,6 +97,11 @@ func CreatingFromUbuntu(vm string) M {
 	return M{id: "creating_from_ubuntu", vals: []val{{"vm", vm}}}
 }
 
+// CustomLayerRemove is [custom_layer_remove]: "{{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again"
+func CustomLayerRemove(layer string, vm string) M {
+	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
+}
+
 // DeleteFailed is [delete_failed]: "couldn't delete {{.vm}}"
 func DeleteFailed(vm string) M {
 	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
@@ -110,6 +130,11 @@ func Detected(found string) M {
 // DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
 func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
+}
+
+// DownloadingMise is [downloading_mise]: "downloading mise {{.version}}"
+func DownloadingMise(version string) M {
+	return M{id: "downloading_mise", vals: []val{{"version", version}}}
 }
 
 // GitCommondir is [git_commondir]: "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"
@@ -237,6 +262,16 @@ func LogEnd(file string) M {
 	return M{id: "log_end", vals: []val{{"file", file}}}
 }
 
+// MiseChecksum is [mise_checksum]: "the mise {{.version}} download doesn't match its checksum: not using it"
+func MiseChecksum(version string) M {
+	return M{id: "mise_checksum", vals: []val{{"version", version}}}
+}
+
+// MiseDownloadFailed is [mise_download_failed]: "couldn't download mise {{.version}}, which resolves the shared tools' versions: check you're online"
+func MiseDownloadFailed(version string) M {
+	return M{id: "mise_download_failed", vals: []val{{"version", version}}}
+}
+
 // MountComma is [mount_comma]: "Lima can't mount {{.path}}: its path has a comma"
 func MountComma(path string) M {
 	return M{id: "mount_comma", vals: []val{{"path", path}}}
@@ -277,9 +312,14 @@ func NetworkPolicyUnavailable(vm string) M {
 	return M{id: "network_policy_unavailable", vals: []val{{"vm", vm}}}
 }
 
-// NoImageFor is [no_image_for]: "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.layers}} (joined with +)"
-func NoImageFor(dir string, layers string) M {
-	return M{id: "no_image_for", vals: []val{{"dir", dir}, {"layers", layers}}}
+// NewerTools is [newer_tools]: "newer shared tools: {{.tools}}; devvm update moves this VM to them"
+func NewerTools(tools string) M {
+	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
+}
+
+// NoImageFor is [no_image_for]: "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
+func NoImageFor(agents string, dir string, envs string) M {
+	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
 }
 
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
@@ -317,6 +357,11 @@ func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
 }
 
+// ResolvingTools is [resolving_tools]: "resolving the shared tools' versions"
+func ResolvingTools() M {
+	return M{id: "resolving_tools"}
+}
+
 // RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
 func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
@@ -335,6 +380,16 @@ func ScriptFailed(limaHome string, script string, vm string) M {
 // SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
 func SetidFiles(files string) M {
 	return M{id: "setid_files", vals: []val{{"files", files}}}
+}
+
+// ShareLockHeld is [share_lock_held]: "{{.dir}}/.lock is held: if no other devvm is running, remove it"
+func ShareLockHeld(dir string) M {
+	return M{id: "share_lock_held", vals: []val{{"dir", dir}}}
+}
+
+// ShareWaiting is [share_waiting]: "waiting for another devvm to finish with {{.dir}}"
+func ShareWaiting(dir string) M {
+	return M{id: "share_waiting", vals: []val{{"dir", dir}}}
 }
 
 // SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
@@ -377,6 +432,11 @@ func Stopping(vm string) M {
 	return M{id: "stopping", vals: []val{{"vm", vm}}}
 }
 
+// SyncFailed is [sync_failed]: "couldn't set up {{.vm}}'s shared tools"
+func SyncFailed(vm string) M {
+	return M{id: "sync_failed", vals: []val{{"vm", vm}}}
+}
+
 // TooManyCpus is [too_many_cpus]: "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
 func TooManyCpus(have string, want string) M {
 	return M{id: "too_many_cpus", vals: []val{{"have", have}, {"want", want}}}
@@ -387,9 +447,74 @@ func TooMuchMemory(have string, want string) M {
 	return M{id: "too_much_memory", vals: []val{{"have", have}, {"want", want}}}
 }
 
+// ToolBadOutput is [tool_bad_output]: "the shared tools' build wrote {{.file}} as something other than a plain file: not using it"
+func ToolBadOutput(file string) M {
+	return M{id: "tool_bad_output", vals: []val{{"file", file}}}
+}
+
 // ToolBadVersion is [tool_bad_version]: "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
 func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
+}
+
+// ToolNoDownload is [tool_no_download]: "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it"
+func ToolNoDownload(tool string, version string) M {
+	return M{id: "tool_no_download", vals: []val{{"tool", tool}, {"version", version}}}
+}
+
+// ToolNotLocked is [tool_not_locked]: "the shared tools' lock {{.lock}} has no {{.tool}}"
+func ToolNotLocked(lock string, tool string) M {
+	return M{id: "tool_not_locked", vals: []val{{"lock", lock}, {"tool", tool}}}
+}
+
+// ToolSteppedBack is [tool_stepped_back]: "using {{.tool}} {{.older}}: {{.tool}} {{.version}} isn't published for every platform yet"
+func ToolSteppedBack(older string, tool string, version string) M {
+	return M{id: "tool_stepped_back", vals: []val{{"older", older}, {"tool", tool}, {"version", version}}}
+}
+
+// ToolUnbuilt is [tool_unbuilt]: "{{.tool}} {{.version}} has no download for this VM's platform yet (a new release): try again tomorrow"
+func ToolUnbuilt(tool string, version string) M {
+	return M{id: "tool_unbuilt", vals: []val{{"tool", tool}, {"version", version}}}
+}
+
+// ToolsBuildFailed is [tools_build_failed]: "building the shared tools failed"
+func ToolsBuildFailed() M {
+	return M{id: "tools_build_failed"}
+}
+
+// ToolsChanged is [tools_changed]: "the shared tools' versions changed while devvm waited: run it again"
+func ToolsChanged() M {
+	return M{id: "tools_changed"}
+}
+
+// ToolsCheckFailed is [tools_check_failed]: "couldn't check for newer shared tools: using the versions devvm last found"
+func ToolsCheckFailed() M {
+	return M{id: "tools_check_failed"}
+}
+
+// ToolsNeedResolve is [tools_need_resolve]: "the shared tools need their versions resolved once, online: try again when you're online"
+func ToolsNeedResolve() M {
+	return M{id: "tools_need_resolve"}
+}
+
+// ToolsNewest is [tools_newest]: "{{.vm}}'s shared tools are the newest"
+func ToolsNewest(vm string) M {
+	return M{id: "tools_newest", vals: []val{{"vm", vm}}}
+}
+
+// ToolsNotImages is [tools_not_images]: "{{.tools}}: shared tools aren't images, and their versions come from the tools lock; rebuild the image under them, devvm rebuild base"
+func ToolsNotImages(tools string) M {
+	return M{id: "tools_not_images", vals: []val{{"tools", tools}}}
+}
+
+// ToolsResolveFailed is [tools_resolve_failed]: "couldn't resolve the shared tools' versions (offline?)"
+func ToolsResolveFailed() M {
+	return M{id: "tools_resolve_failed"}
+}
+
+// ToolsSwitch is [tools_switch]: "{{.vm}} moves to them on this launch"
+func ToolsSwitch(vm string) M {
+	return M{id: "tools_switch", vals: []val{{"vm", vm}}}
 }
 
 // UbuntuBadSignature is [ubuntu_bad_signature]: "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu's cloud image key: not using them"
@@ -407,9 +532,9 @@ func UnfinishedImage(vm string) M {
 	return M{id: "unfinished_image", vals: []val{{"vm", vm}}}
 }
 
-// UnknownLayer is [unknown_layer]: "there's no layer {{.layer}}: choose from {{.layers}}"
-func UnknownLayer(layer string, layers string) M {
-	return M{id: "unknown_layer", vals: []val{{"layer", layer}, {"layers", layers}}}
+// UnknownLayer is [unknown_layer]: "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
+func UnknownLayer(agents string, envs string, layer string) M {
+	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
 }
 
 // UnsafeFolder is [unsafe_folder]: "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, or --unsafe-folder if you mean it"
@@ -452,6 +577,11 @@ func VMHasNetworks(file string, vm string) M {
 	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
+// VMLacks is [vm_lacks]: "{{.vm}} doesn't have {{.layer}}: it has {{.has}}"
+func VMLacks(has string, layer string, vm string) M {
+	return M{id: "vm_lacks", vals: []val{{"has", has}, {"layer", layer}, {"vm", vm}}}
+}
+
 // VMNameNoRoom is [vm_name_no_room]: "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
 func VMNameNoRoom(backend string, max string) M {
 	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
@@ -488,6 +618,9 @@ var specs = map[string]spec{
 	"base_build_time":             {},
 	"build_failed":                {fields: []string{"image", "reason"}},
 	"building_image":              {fields: []string{"image", "key"}},
+	"building_tools":              {fields: []string{"tools"}},
+	"building_tools_in":           {fields: []string{"vm"}},
+	"checking_tools":              {},
 	"cloning_image":               {fields: []string{"parent"}},
 	"configuring":                 {fields: []string{"vm"}},
 	"continue":                    {},
@@ -495,12 +628,14 @@ var specs = map[string]spec{
 	"creating":                    {fields: []string{"vm"}},
 	"creating_from":               {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":        {fields: []string{"vm"}},
+	"custom_layer_remove":         {fields: []string{"layer", "vm"}},
 	"delete_failed":               {fields: []string{"vm"}},
 	"deleted_old_image":           {fields: []string{"image", "key"}},
 	"deleted_unfinished_build":    {fields: []string{"key"}},
 	"deleting":                    {fields: []string{"vm"}},
 	"detected":                    {fields: []string{"found"}},
 	"disk_shrink":                 {fields: []string{"have", "vm", "want"}},
+	"downloading_mise":            {fields: []string{"version"}},
 	"git_commondir":               {fields: []string{"git", "target"}},
 	"git_gitdir_outside":          {fields: []string{"git", "sub"}},
 	"git_hook_link_inside":        {fields: []string{"hook", "target"}},
@@ -526,6 +661,8 @@ var specs = map[string]spec{
 	"lima_old":                    {fields: []string{"version"}},
 	"log_details":                 {fields: []string{"file"}},
 	"log_end":                     {fields: []string{"file"}},
+	"mise_checksum":               {fields: []string{"version"}},
+	"mise_download_failed":        {fields: []string{"version"}},
 	"mount_comma":                 {fields: []string{"path"}},
 	"msg_bad_count":               {fields: []string{"value"}},
 	"msg_missing_value":           {fields: []string{"key", "name"}},
@@ -534,7 +671,8 @@ var specs = map[string]spec{
 	"msg_unexpected_value":        {fields: []string{"key", "name"}},
 	"msg_unknown":                 {fields: []string{"name"}},
 	"network_policy_unavailable":  {fields: []string{"vm"}},
-	"no_image_for":                {fields: []string{"dir", "layers"}},
+	"newer_tools":                 {fields: []string{"tools"}},
+	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
@@ -542,10 +680,13 @@ var specs = map[string]spec{
 	"qemu_missing":                {fields: []string{"program"}},
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
+	"resolving_tools":             {},
 	"run_log_failed":              {fields: []string{"dir", "reason"}},
 	"running_script":              {fields: []string{"script", "vm"}},
 	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
 	"setid_files":                 {fields: []string{"files"}},
+	"share_lock_held":             {fields: []string{"dir"}},
+	"share_waiting":               {fields: []string{"dir"}},
 	"size_not_gib":                {fields: []string{"flag", "value"}},
 	"ssh_remote_hint":             {fields: []string{"vm"}},
 	"start_failed":                {fields: []string{"vm"}},
@@ -554,13 +695,27 @@ var specs = map[string]spec{
 	"starting":                    {fields: []string{"vm"}},
 	"stop_failed":                 {fields: []string{"vm"}},
 	"stopping":                    {fields: []string{"vm"}},
+	"sync_failed":                 {fields: []string{"vm"}},
 	"too_many_cpus":               {fields: []string{"have", "want"}},
 	"too_much_memory":             {fields: []string{"have", "want"}},
+	"tool_bad_output":             {fields: []string{"file"}},
 	"tool_bad_version":            {fields: []string{"tool", "version"}},
+	"tool_no_download":            {fields: []string{"tool", "version"}},
+	"tool_not_locked":             {fields: []string{"lock", "tool"}},
+	"tool_stepped_back":           {fields: []string{"older", "tool", "version"}},
+	"tool_unbuilt":                {fields: []string{"tool", "version"}},
+	"tools_build_failed":          {},
+	"tools_changed":               {},
+	"tools_check_failed":          {},
+	"tools_need_resolve":          {},
+	"tools_newest":                {fields: []string{"vm"}},
+	"tools_not_images":            {fields: []string{"tools"}},
+	"tools_resolve_failed":        {},
+	"tools_switch":                {fields: []string{"vm"}},
 	"ubuntu_bad_signature":        {fields: []string{"release", "url"}},
 	"ubuntu_unsigned":             {},
 	"unfinished_image":            {fields: []string{"vm"}},
-	"unknown_layer":               {fields: []string{"layer", "layers"}},
+	"unknown_layer":               {fields: []string{"agents", "envs", "layer"}},
 	"unsafe_folder":               {fields: []string{"dir", "holds"}},
 	"unsafe_folder_inside":        {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":          {fields: []string{"dir", "holds"}},
@@ -569,6 +724,7 @@ var specs = map[string]spec{
 	"vm_create_failed":            {fields: []string{"vm"}},
 	"vm_exists":                   {fields: []string{"vm"}},
 	"vm_has_networks":             {fields: []string{"file", "vm"}},
+	"vm_lacks":                    {fields: []string{"has", "layer", "vm"}},
 	"vm_name_no_room":             {fields: []string{"backend", "max"}},
 	"vm_not_running":              {fields: []string{"vm"}},
 	"vm_not_stopped":              {fields: []string{"vm"}},

@@ -1,0 +1,18 @@
+# The shared tools (the docs' images page, "Shared tools"). devvm resolves each, per user, to upstream's newest
+# release matching its version here, into ~/.local/share/devvm/mise.lock with each download's checksum
+# per platform. A version here is a hold (node = "24"); nothing is pinned.
+[tools]
+node = "24"            # Node 25+ drops corepack
+pnpm = "latest"
+bun = "latest"
+python = "latest"
+uv = "latest"
+go = "latest"
+rust = "latest"        # installed with the rustup pinned in build.sh; rustup checks the toolchain
+claude = "latest"
+codex = "latest"
+opencode = "latest"
+
+[settings]
+experimental = true
+python.compile = false   # prebuilt python-build-standalone, no compiler

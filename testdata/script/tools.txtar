@@ -1,0 +1,114 @@
+# The shared tools: their versions resolved on first use (the stub mise
+# resolves the fixture lock), built in a throwaway VM from base, moved into
+# the share with their hashes, listed in a VM's state and sent to it.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env SHARE=$XDG_DATA_HOME/devvm/tools
+mkdir $WORK/web
+cd $WORK/web
+cp $WORK/package.json package.json
+
+# An agent named in a node project goes on top of node.
+exec devvm --no-network-policy --no-git-protect claude
+stdout '^==> detected found=node$'
+stdout '^==> resolving_tools$'
+stdout '^==> building_tools tools=node 24\.21\.0, pnpm 12\.10\.1, bun 1\.4\.2, claude 2\.1\.295$'
+stdout '^==> creating_from image=node\+claude vm=devvm-web-[0-9a-f]{14}$'
+cmp $DATA/mise.lock $MISE_STUB_LOCK
+exists $DATA/mise.lock.toml
+exists $DATA/mise.lock.checked
+stub_calls
+stdout '^mise lock --platform linux-(arm64|x64),linux-(arm64|x64)-musl$'
+# The build VM is a clone of base whose only mount is a folder of its own,
+# never the share; it gets the tools and versions, and goes.
+stdout '^limactl clone --tty=false --mount-none --set \.mounts = \[\{"location":"\S*/data/devvm/tools-build\.[0-9]+","mountPoint":"/mnt/devvm-tools","writable":true\}\] devvm-img-[0-9a-f]{12} devvm-tools-build$'
+! stdout '"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":true'
+stdout '^limactl shell --workdir / devvm-tools-build bash -s -- node 24\.21\.0 node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm \S+ pnpm-\S+\.erofs bun 1\.4\.2 bun-1\.4\.2-[0-9a-f]{12}\.erofs claude 2\.1\.295 claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
+stdout '^limactl delete -f devvm-tools-build$'
+# The VM is made from base's image, with the share read-only.
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
+exec sh -c 'cat "$DATA"/vms/devvm-web-*'
+stdout '^image=node\+claude$'
+stdout '^libc=gnu$'
+stdout '^tools=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
+# Each image in the share with its hash; nothing left of the build.
+exec sh -c 'cd "$SHARE" && for f in *.erofs; do [ "$(cat "$f.sha256")" = "$(shasum -a 256 < "$f" 2>/dev/null | cut -c1-64 || sha256sum < "$f" | cut -c1-64)" ] || echo "bad $f"; done; ls | wc -l'
+! stdout bad
+stdout '^ *8$'
+! exists $SHARE/.lock
+exec sh -c 'ls -d "$DATA"/tools-build.* 2>/dev/null || true'
+! stdout .
+# What the VM was sent: guest/sync.sh, guest/tools.sh and its tool list.
+exec tar -xOf $STUB_DIR/sync.tar tools
+stdout '^node-24\.21\.0-[0-9a-f]{12}\.erofs node 24\.21\.0$'
+stdout '^claude-2\.1\.295-[0-9a-f]{12}\.erofs claude 2\.1\.295$'
+stdout -count=4 '\.erofs '
+exec tar -tf $STUB_DIR/sync.tar
+stdout '^sync\.sh$'
+stdout '^tools\.sh$'
+# The build's steps are numbered: clone, configure, start, build.sh, delete.
+exec sh -c 'cat "$DATA"/logs/runs/*.log'
+stdout '^# \[4/5\] building_tools_in vm=devvm-tools-build$'
+stdout '^# \[5/5\] deleting vm=devvm-tools-build$'
+
+# Built: nothing to build, nothing to resolve.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm build node+claude
+! stdout 'building_tools|resolving_tools'
+stub_calls
+! stdout 'devvm-tools-build|mise'
+
+# The daily check: a new VM with tools checks first when it's due.
+exec touch -t 202001010000 $DATA/mise.lock.checked
+mkdir $WORK/api
+cd $WORK/api
+exec devvm --no-network-policy --no-git-protect go
+stdout '^==> checking_tools$'
+stdout '^==> building_tools tools=go 1\.27\.2$'
+# Not again today.
+mkdir $WORK/cli
+cd $WORK/cli
+exec devvm --no-network-policy --no-git-protect go+claude
+! stdout 'checking_tools|building_tools'
+
+# The shared tools aren't images: rebuild refuses them.
+! exec devvm rebuild node+claude
+stderr '^devvm: tools_not_images tools=node claude$'
+
+# The daily check's job, run by hand: a failure leaves the lock.
+env MISE_STUB_FAIL=1
+! exec devvm _refresh-tools
+stderr 'failed to fetch versions: offline'
+stderr '^devvm: tools_resolve_failed$'
+cmp $DATA/mise.lock $MISE_STUB_LOCK
+env MISE_STUB_FAIL=
+exec devvm _refresh-tools
+exec devvm --help
+! stdout _refresh-tools
+
+# Offline with no lock yet: what's needed, and mise's error from the log.
+rm $DATA/mise.lock
+env MISE_STUB_FAIL=1
+! exec devvm build python
+stdout '^==> resolving_tools$'
+stderr 'failed to fetch versions: offline'
+stderr '^devvm: tools_need_resolve$'
+! exists $DATA/mise.lock
+env MISE_STUB_FAIL=
+
+# A build that leaves a symlink instead of an image is refused; one that
+# plants FILE.sha256 as a symlink can't make devvm write through it.
+exec sh -c 'echo victim > "$STUB_DIR/tools-symlink"'
+! exec devvm build python
+stderr '^devvm: tool_bad_output file=python-\S+\.erofs$'
+exec sh -c 'ls "$SHARE"'
+! stdout python
+exec sh -c 'rm "$STUB_DIR/tools-symlink" && echo victim > "$STUB_DIR/tools-hash-symlink"'
+exec devvm build python
+exec cat $STUB_DIR/tools-hash-symlink
+stdout '^victim$'
+exec sh -c 'cd "$SHARE" && for f in python-*.erofs uv-*.erofs; do [ -L "$f.sha256" ] && echo link; done; true'
+! stdout link
+
+-- package.json --
+{}

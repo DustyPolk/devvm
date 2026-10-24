@@ -80,7 +80,9 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `STUB_LOG` | `stub/calls`, the stubs' call log |
 | `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
 | `DEVVM_UBUNTU_URL` | `ubuntu/`, with one dated release |
-| `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml` and `layers/` next to it |
+| `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
+| `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
+| `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml`, `layers/`, `tools/` and `guest/` next to it |
 
 `$WORK`, the script's own folder, is the current folder.
 
@@ -109,13 +111,13 @@ limactl list
 | `STUB_UNAME_M` | `uname -m` |
 | `STUB_SW_VERS` | `sw_vers -productVersion` |
 
-`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
+`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. In the shared tools' build VM, its `shell` writes the images `build.sh` is asked for into the build's folder (or, on request, a symlink instead), and it keeps what a VM's setup is sent as `$STUB_DIR/sync.tar`. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
 
 devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOME` or devvm's own folders, which it refuses as project folders.
 
 ## End-to-end tests
 
-`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with `base.yaml` and `layers/` next to it, and runs every check through that binary:
+`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with `base.yaml`, `layers/`, `tools/` and `guest/` next to it, and runs every check through that binary:
 
 | | |
 | --- | --- |
@@ -125,15 +127,16 @@ devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOM
 ```sh
 tests/e2e.sh                # every section
 tests/e2e.sh --only images  # just these sections
-tests/e2e.sh --clean        # delete the sandbox's cached images first
+tests/e2e.sh --clean        # delete the sandbox's cached images and tool images first
 ```
 
 The sections so far:
 
 - `images`: building base and fixture layers, rebuilds, a failed script and Ctrl+C during a build.
-- `project`: devvm in a new project folder (under `/tmp/devvm-go-e2e/p`) makes a VM from base and opens a shell there, which reads its commands from devvm's input. The folder is mounted read-write and nothing else is, there's no SSH agent, `.git` is locked (macOS) and git in the VM can still commit. `TestE2EExecQuoting` in `internal/backend/lima`, which runs only there (`DEVVM_E2E_VM` names the VM), checks that arguments with spaces, quotes, `$`, newlines and globs, a folder and input reach the guest as given.
+- `project`: devvm in a new project folder (under `/tmp/devvm-go-e2e/p`) makes a VM from base and opens a shell there, which reads its commands from devvm's input. The folder and the shared tools are mounted and nothing else is, there's no SSH agent, `.git` is locked (macOS) and git in the VM can still commit. `TestE2EExecQuoting` in `internal/backend/lima`, which runs only there (`DEVVM_E2E_VM` names the VM), checks that arguments with spaces, quotes, `$`, newlines and globs, a folder and input reach the guest as given.
+- `tools`: first, the shared tools resolve to upstream's newest versions, with devvm's pinned mise (downloaded once), each download with its checksum; the rest of the run doesn't check again (`DEVVM_NO_TOOL_CHECK`). Then a node project's VM: node, npm, pnpm, bun and yarn at the locked versions, each a read-only EROFS image, the share read-only even for root, `npm i -g` into the VM's home, a non-login shell over SSH, an `.nvmrc`'s own version, the tools mounted at boot without devvm, and a second node VM that builds nothing.
 
-base stays cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
+base and the shared tool images stay cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
 
 ## Messages
 

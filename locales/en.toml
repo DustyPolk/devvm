@@ -160,8 +160,8 @@ other = "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu
 other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
 
 [unknown_layer]
-description = "layers is a space-separated list of layer names"
-other = "there's no layer {{.layer}}: choose from {{.layers}}"
+description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
+other = "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
 
 [build_failed]
 description = "reason is an error from the system, in English"
@@ -268,8 +268,8 @@ other = "{{.value}} isn't a port list: use all, none, or ports and ranges like 5
 other = "detected a {{.found}} project"
 
 [no_image_for]
-description = "layers is a space-separated list of layer names"
-other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.layers}} (joined with +)"
+description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
+other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
 
 [network_policy_unavailable]
 other = "network policy isn't available yet: pass --no-network-policy to create {{.vm}} without it, reaching anything this machine can"
@@ -313,3 +313,85 @@ other = "{{.hook}} links to {{.target}}, inside the project folder: the VM can e
 
 [git_gitdir_outside]
 other = "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"
+
+[tools_not_images]
+description = "tools is a space-separated list of shared tools (node claude)"
+other = "{{.tools}}: shared tools aren't images, and their versions come from the tools lock; rebuild the image under them, devvm rebuild base"
+
+[downloading_mise]
+other = "downloading mise {{.version}}"
+
+[mise_download_failed]
+other = "couldn't download mise {{.version}}, which resolves the shared tools' versions: check you're online"
+
+[mise_checksum]
+other = "the mise {{.version}} download doesn't match its checksum: not using it"
+
+[resolving_tools]
+other = "resolving the shared tools' versions"
+
+[tools_resolve_failed]
+other = "couldn't resolve the shared tools' versions (offline?)"
+
+[tools_need_resolve]
+other = "the shared tools need their versions resolved once, online: try again when you're online"
+
+[tool_not_locked]
+other = "the shared tools' lock {{.lock}} has no {{.tool}}"
+
+[tool_stepped_back]
+other = "using {{.tool}} {{.older}}: {{.tool}} {{.version}} isn't published for every platform yet"
+
+[tool_no_download]
+other = "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it"
+
+[checking_tools]
+other = "checking for newer shared tools"
+
+[tools_check_failed]
+other = "couldn't check for newer shared tools: using the versions devvm last found"
+
+[share_lock_held]
+other = "{{.dir}}/.lock is held: if no other devvm is running, remove it"
+
+[share_waiting]
+other = "waiting for another devvm to finish with {{.dir}}"
+
+[tools_changed]
+other = "the shared tools' versions changed while devvm waited: run it again"
+
+[tool_unbuilt]
+other = "{{.tool}} {{.version}} has no download for this VM's platform yet (a new release): try again tomorrow"
+
+[building_tools]
+description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
+other = "building shared tools: {{.tools}}"
+
+[building_tools_in]
+other = "building the shared tools in {{.vm}}"
+
+[tools_build_failed]
+other = "building the shared tools failed"
+
+[tool_bad_output]
+other = "the shared tools' build wrote {{.file}} as something other than a plain file: not using it"
+
+[newer_tools]
+description = "tools lists tools and versions: claude 2.1.295, codex 0.162.0"
+other = "newer shared tools: {{.tools}}; devvm update moves this VM to them"
+
+[vm_lacks]
+description = "has is a space-separated list of the VM's layers and tools"
+other = "{{.vm}} doesn't have {{.layer}}: it has {{.has}}"
+
+[custom_layer_remove]
+other = "{{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again"
+
+[tools_newest]
+other = "{{.vm}}'s shared tools are the newest"
+
+[tools_switch]
+other = "{{.vm}} moves to them on this launch"
+
+[sync_failed]
+other = "couldn't set up {{.vm}}'s shared tools"

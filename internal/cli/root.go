@@ -20,9 +20,10 @@ func NewRoot() *cobra.Command {
 		Use:   "devvm [IMAGE]",
 		Short: "Open a shell in this folder's VM, creating it first",
 		Long: "Open a shell in this folder's VM, at the same path, creating the VM first. A new VM " +
-			"gets IMAGE (base, or your layers joined with +), else the image the folder's files call " +
-			"for, built if it isn't. Only the folder is mounted, read-write, and its .git hooks and " +
-			"config are locked against changes from the VM (macOS).",
+			"gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), " +
+			"else the toolchains the folder's files call for, with any agents IMAGE names on top, built " +
+			"if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and " +
+			"its .git hooks and config are locked against changes from the VM (macOS).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.MaximumNArgs(1),
@@ -34,7 +35,7 @@ func NewRoot() *cobra.Command {
 	root.SetOut(ui.Stdout())
 	addGlobals(root, g)
 	addUpFlags(root, u)
-	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(), newQEMUCmd())
+	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(), newQEMUCmd(), newRefreshToolsCmd())
 	return root
 }
 

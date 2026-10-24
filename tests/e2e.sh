@@ -1,17 +1,19 @@
 #!/bin/bash
 # End-to-end tests with real VMs, in a sandbox. Hosted CI can't run nested VMs on macOS.
 #   tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]
-#     (default)  every section: minutes, more on a first run (base's build, and Ubuntu's cloud image
-#                to download). images builds, rebuilds and interrupts images; project makes a VM
-#                from base in a project folder and checks its mounts, .git protection and shell
+#     (default)  every section: minutes, more on a first run (base's and the tools' builds, and
+#                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
+#                project makes a VM from base in a project folder and checks its mounts, .git
+#                protection and shell; tools makes a node VM and checks its shared tools
 #     --only     just these sections; SECTIONS below
-#     --clean    delete the sandbox's cached images first (default: reuse them between runs)
+#     --clean    delete the sandbox's cached images and tool images first (default: reuse them
+#                between runs)
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project"
+sections_all="images project tools"
 usage() { echo "usage: tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
 clean=false sel=$sections_all
 while (( $# )); do
@@ -31,7 +33,7 @@ export LIMA_HOME=$DEVVM_LIMA_HOME
 work=/tmp/devvm-go-e2e
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE=devvm-e2e
-unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL CLAUDE_CODE_OAUTH_TOKEN
+unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN
 mkdir -p "$LIMA_HOME"
 for real in "$HOME/.lima" "$HOME/.local/share/devvm/lima"; do
   real=$(cd "$real" 2>/dev/null && pwd -P || echo "$real")
@@ -44,13 +46,18 @@ src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$src/"
+cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/tools" "$root/guest" "$src/"
 : > "$XDG_CONFIG_HOME/devvm/base-features"
 D=$src/devvm
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
 vms=$XDG_DATA_HOME/devvm/vms         # the VMs' state, one per VM
 projects=$work/p                     # the project folders, this run's
+share=$XDG_DATA_HOME/devvm/tools     # the shared tool images
+lock=$XDG_DATA_HOME/devvm/mise.lock  # the shared tools' versions, resolved at the start of each run
+export DEVVM_NO_TOOL_CHECK=1         # and not again mid-run
+# lockv TOOL: its version in the lock.
+lockv() { awk -v t="[[tools.$1]]" '$0 == t { f = 1; next } f && /^version = / { gsub(/"/, "", $3); print $3; exit }' "$lock"; }
 # m NAME [name=value...]: a message's text, from devvm, so checks never repeat its wording. Exported
 # for the checks' own shells.
 m() { "$D" _msg "$@"; }
@@ -138,7 +145,18 @@ in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
 if $clean; then
   section "cleaning cached images"
   for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
-  rm -rf "$images"
+  rm -rf "$images" "$share"
+fi
+
+if want tools; then
+# What a user gets: upstream's newest versions, each download with its checksum (rust: rustup checks),
+# resolved by devvm's pinned mise, downloaded and checked on the first run.
+section "shared tool versions"
+march=arm64; [[ "$(uname -m)" != x86_64 ]] || march=x64   # the lock's platform: mise's name for the arch
+ntools=$(awk -F' *= *' '/^\[tools\]/ { s = 1; next } /^\[/ { s = 0 } s && NF == 2' "$src/tools/mise.toml" | wc -l)
+check "the shared tools resolve to upstream's newest, with checksums" bash -c "'$D' _refresh-tools </dev/null >'$work/last.log' 2>&1 &&
+  (( \$(grep -c '^\[\[tools\.' '$lock') == $ntools )) &&
+  (( \$(grep -A1 '\"platforms.linux-$march\"\]' '$lock' | grep -c '^checksum = \"sha256:') == $ntools - 1 ))"
 fi
 
 if want images; then
@@ -212,9 +230,10 @@ check "devvm creates the VM from base, and opens a shell in the folder" bash -c 
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
   grep -qx image=base '$vms/$vm' && grep -qx net=off '$vms/$vm' && grep -qx 'dir=$p' '$vms/$vm'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
-# Only the project folder: the VM's own mounts list holds nothing else (in a nested Linux test
-# host, the guest's home has the host's path, so looking for files there proves nothing).
-check "nothing else from the host is mounted" bash -c "[[ \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$p ' ]]"
+# Only the project folder and the shared tools: the VM's own mounts list holds nothing else (in a
+# nested Linux test host, the guest's home has the host's path, so looking for files there proves
+# nothing).
+check "nothing else from the host is mounted" bash -c "[[ \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$p $share ' ]]"
 check "SSH agent forwarding is off" bash -c "! limactl shell --workdir / $vm ssh-add -l </dev/null"
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
@@ -232,6 +251,37 @@ else
   check "git in the VM can commit" in_vm "$vm" "cd $p && for i in 1 2 3 4 5 6 7 8 9 10; do git status >/dev/null 2>&1 && break; sleep 1; done &&
     git add -A && git -c user.email=e@e -c user.name=e commit -qm vm"
 fi
+fi
+
+if want tools; then
+section "shared tools"
+t=$(newproj tools); echo '{}' > "$t/package.json"
+# A package.json: node, detected. Its tool images stay cached in the share between runs (--clean
+# deletes them), as base does.
+launch "$t" exit --no-network-policy --no-git-protect
+check "a node VM, with node's shared tools in its state and the share" bash -c "
+  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx image=node '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
+  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f && -f '$share'/\$f.sha256 ]] || exit 1; done &&
+  grep -q '^tools=node-$(lockv node)-.* pnpm-$(lockv pnpm)-.* bun-$(lockv bun)-' '$vms/$vm'"
+check "node, npm, pnpm, bun and yarn work, node at the locked version" in_vm "$vm" \
+  "[[ \$(node -v) == v$(lockv node) ]] && npm -v && pnpm -v && bun -v && yarn -v"
+check "each tool is a read-only image from the share" in_vm "$vm" \
+  "[[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]] && ! touch /opt/devvm/tools/node/$(lockv node)/x 2>/dev/null"
+check "the share is read-only even for root" bash -c "limactl shell --workdir / $vm sudo touch /mnt/devvm-tools/x </dev/null 2>&1 | grep -q 'Read-only file system'"
+check "npm i -g installs into the VM's home" in_vm "$vm" "npm i -g cowsay@1.6.0 >/dev/null 2>&1 && [[ \$(command -v cowsay) == \$HOME/.npm-global/bin/cowsay ]]"
+# ssh with a command runs a non-login, non-interactive shell, as editors and agents' tools do.
+check "a non-login shell finds the tools too" bash -c "ssh -F '$LIMA_HOME/$vm/ssh.config' lima-$vm 'node -v' </dev/null"
+check "an .nvmrc picks its own version, installed into the VM" in_vm "$vm" "cd $t && echo 22.20.0 > .nvmrc && [[ \$(node -v) == v22.20.0 ]]; r=\$?; rm .nvmrc; exit \$r"
+# Started without devvm (so no setup): the boot itself mounts them.
+check "the tools are mounted at boot" bash -c "limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
+  limactl shell --workdir / $vm bash -lc 'node -v' </dev/null | grep -qx v$(lockv node)"
+limactl stop "$vm" >/dev/null 2>&1   # two VMs at once starve a nested Linux host
+files_before=$(find "$share" -name '*.erofs' | wc -l)
+t2=$(newproj tools2); echo '{}' > "$t2/package.json"
+launch "$t2" 'node -v' --no-network-policy --no-git-protect
+check "a second node VM uses the same tool images: none built" bash -c "
+  [[ -n '$vm' ]] && (( \$(find '$share' -name '*.erofs' | wc -l) == $files_before )) && grep -qx v$(lockv node) '$work/last.log'"
+check "the tools build left no VM behind" bash -c "[[ -z \$(status_of devvm-tools-build) ]]"
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

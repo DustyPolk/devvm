@@ -25,14 +25,54 @@ The Ubuntu image isn't part of base's key: a newer one doesn't make base stale. 
 
 ## Layers
 
-An image is base and your layers on it, bottom first, joined with `+`: `foo+bar` is `bar` on `foo` on `base`. `base` itself can be left out, so `base+foo` is `foo`.
+An image is base and your layers on it, bottom first, joined with `+`: `foo+bar` is `bar` on `foo` on `base`. `base` itself can be left out, so `base+foo` is `foo`. An image name can also hold [shared tools](#shared-tools), which aren't layers.
 
-A layer is a script of yours, `~/.config/devvm/layers/<name>.sh`, run with bash in the image's VM as its user, who has sudo. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and isn't `base`. devvm refuses any other name in an image, and a layer without its script.
+A layer is a script of yours, `~/.config/devvm/layers/<name>.sh`, run with bash in the image's VM as its user, who has sudo. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and is neither `base` nor a shared tool's. devvm refuses any other name in an image, and a layer without its script.
 
 ```sh
 devvm build foo+bar   # builds base, foo and foo+bar, unless they're built
 devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 ```
+
+## Shared tools
+
+The toolchains and coding agents aren't image layers: they're shared tools, which any image can have, in any mix (`node+python+claude`, `go+foo+codex`).
+
+| Name | Brings |
+| --- | --- |
+| node | Node 24, npm, pnpm, yarn (corepack), bun |
+| python | CPython, uv |
+| rust | rustup, cargo, the stable toolchain with `rust-src` and `rust-analyzer` |
+| go | Go |
+| claude, codex, opencode | the coding agents |
+
+Each tool version is built once into a compressed read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it (`<image>.sha256`). Every VM has that folder mounted read-only at `/mnt/devvm-tools`, and mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. Any mix works without building anything new, and ten VMs with node share one copy. [mise](https://mise.jdx.dev) runs them:
+
+- **They work as usual:** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`), `cargo`, from any shell, including `bash -c` from agents and editors over SSH.
+- **A project's own version files win:** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and `go.mod`'s `toolchain` line pick their version, which installs into the VM the first time it's used.
+- **Read-only:** a VM can't change the shared images, even as root. The tools can't update themselves, and `rustup component add` can't change the shared toolchain.
+
+### Versions
+
+devvm doesn't pin the tools' versions: agents like Claude Code release several times a week. `tools/mise.toml` says which releases to follow: the latest of each, and Node 24. The first time a tool is needed, devvm resolves it to upstream's newest releases, with each download's checksum for every platform VMs run (Linux, glibc and musl), into the tools lock, `~/.local/share/devvm/mise.lock`. Builds install exactly the lock's versions, checked against those checksums. Resolving needs to be online once; until then, devvm says so.
+
+The resolving runs on this machine, with a mise of devvm's own: a pinned release, downloaded once into `~/.local/share/devvm/mise/<version>` and checked against its SHA-256 before it runs. It never uses the mise you have installed, and nothing it does reaches your own mise config.
+
+A tool whose newest version isn't published for every platform yet (a release still uploading, a tag with no release, Node's musl builds for a few days) gets the newest of its next five older versions that is, and devvm says so. The next check tries the newest again.
+
+A new VM gets the lock's versions, checked again first when the last check was more than a day ago. A changed `tools/mise.toml` (a devvm upgrade) is resolved again. A VM lists its tool images in its state, so a newer version never changes a VM that has one. `DEVVM_NO_TOOL_CHECK=1` turns off the daily check.
+
+### Building tools
+
+The tool images an image name needs are built with it (`devvm build node+claude`), unless the share has them. They build in a throwaway VM made from base, confined like an image build, which never sees the share: it writes into a folder of its own, `~/.local/share/devvm/tools-build.<random>`, and is deleted once it's done. devvm then checks each image is a plain file (not a link), moves it into the share and records its hash. Go builds in a VM of its own, never with other tools. One build at a time writes to the share: another devvm waits for it, and gives up after ten minutes.
+
+Each tool image is named `<tool>-<version>-<key>.erofs`, and its key hashes the tool's entry in the tools lock (its version, downloads and their checksums), `tools/build.sh` and the C library it's built for. A new version, a new download or an edited build script builds it again, and a base with a different C library (Alpine's musl) gets its own. A tool the lock has no download of for the VM's platform isn't built: devvm says to try again later.
+
+Shared tools aren't images, so `devvm rebuild` refuses them: their versions come from the lock.
+
+### Adding and removing tools
+
+A new VM gets the tools its image names. Adding tools to an existing VM, taking them out and moving it to newer versions aren't available yet.
 
 ## Which image a new VM gets
 
@@ -45,9 +85,13 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 | rust | `Cargo.toml` |
 | go | `go.mod` |
 
-Toolchain images aren't available yet, so in a folder with these files, name the image (`devvm base`). In a folder with none of them, devvm doesn't guess: it lists the images there are.
+If more than one matches, they all go in, in that order (`package.json` and `pyproject.toml` give `node+python`). In a folder with none of them, devvm doesn't guess: it lists what there is to choose from.
 
-The image is built first if it isn't, and the VM is a copy of it. A VM keeps the image it was made from.
+Agents go on top of the folder's toolchains: `devvm claude` in a folder with `package.json` makes a `node+claude` VM, and a `claude` one (base and Claude) when nothing is detected. Naming a toolchain or a layer skips detection (`devvm python+claude`), and so does `devvm base`.
+
+Image names are put in one order: the toolchains (node, python, rust, go), then your layers as given, then the agents. So `claude+node` and `node+claude` are the same.
+
+The image (base and your layers) is built first if it isn't, with the shared tools the name has, and the VM is a copy of the image. A VM keeps the image and tools it was made from.
 
 ## Building
 
@@ -87,9 +131,7 @@ When images are built on it, devvm lists them first, and in a terminal asks befo
 
 ### Outdated VMs
 
-A VM keeps the image it was made from, and its chain. When a key in the chain changes (an edited script, a rebuild), devvm warns that the VM is outdated, and leaves it as it is.
-
-Each shared tool image is named `<tool>-<version>-<key>.erofs`, and its key hashes the tool's entry in the tools lock (its version, downloads and their checksums), `tools/build.sh` and the C library it's built for. A new version, a new download or an edited build script builds it again, and a base with a different C library (Alpine's musl) gets its own.
+A VM keeps the image it was made from, and its chain. When a key in the chain changes (an edited script, a rebuild), devvm warns that the VM is outdated, and leaves it as it is. Shared tool images have keys of their own: see [Building tools](#building-tools).
 
 A key is the first 12 hex digits of a SHA-256. Each input goes in with its length, so different inputs never hash the same bytes. An image's record keeps its chain: the key of each image it's built on, from `base` up.
 

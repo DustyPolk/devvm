@@ -1,0 +1,6 @@
+# node: npm, yarn, pnpm and bun registries, and Node downloads (fnm)
+registry.npmjs.org
+registry.yarnpkg.com
+repo.yarnpkg.com
+nodejs.org
+bun.sh

@@ -11,7 +11,9 @@
 # $STUB_DIR/hanging first). clone fails with $STUB_DIR/clone-fails,
 # leaving its instance (a partial clone). shell fails with $STUB_DIR/shell-fails and hangs with
 # $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first); a script fed
-# to shell's bash -s has its second line appended to $STUB_DIR/scripts.
+# to shell's bash -s has its second line appended to $STUB_DIR/scripts, and
+# the tar stream a VM's setup is sent is kept as $STUB_DIR/sync.tar. The
+# tools build VM writes the images its build.sh is asked for (below).
 # Everything else succeeds.
 set -euo pipefail
 echo "limactl $*" >> "$STUB_LOG"
@@ -35,6 +37,21 @@ for a in "${@:2}"; do
     *) names+=("$a") ;;
   esac
 done
+# The tools build VM: remember the folder it mounts, and its build.sh writes the images there
+# ($STUB_DIR/tools-symlink: a hostile build leaves a symlink instead; tools-hash-symlink: it plants
+# FILE.sha256 as a symlink to that file).
+if [[ ${1:-} == clone && " $* " == *" devvm-tools-build "* ]]; then
+  sed -n 's/.*"location": *"\([^"]*\)".*/\1/p' <<<"$*" > "$STUB_DIR/tools-out"
+fi
+if [[ ${1:-} == shell && " $* " == *" devvm-tools-build bash -s -- "* ]]; then
+  args=("$@"); out=$(cat "$STUB_DIR/tools-out")
+  for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} == -- ]] && break; done
+  for ((i = i + 3; i < ${#args[@]}; i += 3)); do
+    if [[ -f $STUB_DIR/tools-symlink ]]; then ln -s "$STUB_DIR/tools-symlink" "$out/${args[i]}"
+    else echo "image ${args[i]}" > "$out/${args[i]}"; fi
+    [[ ! -f $STUB_DIR/tools-hash-symlink ]] || ln -s "$STUB_DIR/tools-hash-symlink" "$out/${args[i]}.sha256"
+  done
+fi
 case ${1:-} in
   create) for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done ;;
   clone)
@@ -51,6 +68,8 @@ case ${1:-} in
   shell)
     # A script fed to bash -s: its first line after the shebang.
     if [[ ${*: -2} == "bash -s" ]]; then sed -n 2p >> "$STUB_DIR/scripts"; fi
+    # A VM's setup: what it was sent.
+    if [[ "$*" == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; fi
     [[ ! -e $STUB_DIR/shell-fails ]] || exit 1
     [[ ! -e $STUB_DIR/shell-hangs ]] || { : > "$STUB_DIR/hanging"; exec sleep 30; } ;;
 esac

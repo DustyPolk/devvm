@@ -1,7 +1,10 @@
 package vm
 
 import (
+	"archive/tar"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 func names(err error) string {
@@ -145,7 +149,22 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The run log goes in the sandbox too.
+	t.Setenv("XDG_DATA_HOME", root)
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The shared tools' versions come from the stub mise: the fixture lock.
+	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
+	tl := tools.New(d, repo)
+	tl.Getenv = func(k string) string {
+		if k == "DEVVM_HOST_MISE" {
+			return filepath.Join(repo, "testdata", "stubs", "mise")
+		}
+		return os.Getenv(k)
+	}
 	dir := filepath.Join(root, "web")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -161,7 +180,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	}
 	var execs []backend.Command
 	e := &Env{
-		Dirs: d, Root: filepath.Join("..", ".."), Registry: reg, Dir: dir, Home: filepath.Join(root, "home"), OS: "darwin",
+		Dirs: d, Root: repo, Registry: reg, Tools: tl, Dir: dir, Home: filepath.Join(root, "home"), OS: "darwin",
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
 			p := gitprotect.New(dir)
@@ -189,22 +208,21 @@ func TestUp(t *testing.T) {
 		t.Fatal(names(err))
 	}
 	ms := f.Methods()
-	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Shell"}
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Exec", "Shell"}
 	if !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
-	var create, start backendtest.Call
-	for _, c := range f.Calls() {
-		switch c.Method {
-		case "CreateVM":
-			create = c
-		case "Start":
-			start = c
-		}
-	}
+	create, start := call(f, "CreateVM"), call(f, "Start")
 	spec, _ := create.Args[1].(backend.VMSpec)
 	if spec.Project != e.Dir || spec.Size.CPUs != 2 || !reflect.DeepEqual(spec.Ports, backend.Ports{}) || !strings.HasPrefix(spec.Name, "devvm-web-") {
 		t.Errorf("CreateVM spec = %+v", spec)
+	}
+	// Every VM has the share, read-only, even with no tools of its own.
+	if spec.Tools != e.Dirs.Tools() || spec.ToolsAt != tools.ShareAt {
+		t.Errorf("CreateVM's tools share = %q at %q", spec.Tools, spec.ToolsAt)
+	}
+	if got := staged(t, f); got["tools"] != "" || !strings.HasPrefix(got["sync.sh"], "#!/bin/bash") || got["tools.sh"] == "" {
+		t.Errorf("staged = %q", got)
 	}
 	if c, _ := start.Args[1].(backend.Confinement); c.Net != backend.NetDirect {
 		t.Errorf("Start confinement = %+v", c)
@@ -227,6 +245,103 @@ func TestUp(t *testing.T) {
 	// It exists now: not opened yet.
 	if err := e.Up(t.Context(), Options{NoNetworkPolicy: true}); names(err) != "vm_exists vm="+spec.Name {
 		t.Errorf("Up again = %v", names(err))
+	}
+}
+
+// call returns the fake's last call of a method.
+func call(f *backendtest.Fake, method string) backendtest.Call {
+	var last backendtest.Call
+	for _, c := range f.Calls() {
+		if c.Method == method {
+			last = c
+		}
+	}
+	return last
+}
+
+// staged returns the files the VM's setup was sent (Exec's input).
+func staged(t *testing.T, f *backendtest.Fake) map[string]string {
+	t.Helper()
+	c := call(f, "Exec")
+	if argv, _ := c.Args[1].([]string); !slices.Equal(argv, []string{"bash", "-c", syncCmd}) {
+		t.Fatalf("Exec argv = %q", argv)
+	}
+	o, _ := c.Args[2].(backend.ExecOpts)
+	files := map[string]string{}
+	r := tar.NewReader(o.Stdin)
+	for {
+		h, err := r.Next()
+		if errors.Is(err, io.EOF) {
+			return files
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[h.Name] = string(data)
+	}
+}
+
+// Agents go on top of the folder's toolchains; the shared tools are built
+// from base, listed in the VM's state with base's libc, and sent to the VM
+// to mount.
+func TestUpTools(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	if err := os.WriteFile(filepath.Join(e.Dir, "package.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Up(t.Context(), Options{Image: "claude", NoNetworkPolicy: true}); err != nil {
+		t.Fatal(names(err))
+	}
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "BuildTools", "CreateVM", "Start", "Exec", "Shell"}) {
+		t.Errorf("calls = %q", ms)
+	}
+	lock, err := os.ReadFile(e.Dirs.ToolLock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	for _, tool := range []string{"node", "pnpm", "bun", "claude"} {
+		file, err := e.Tools.File(tools.Lock(lock), tool, "gnu")
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, file)
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	st, err := state.ReadVM(e.Dirs, spec.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Get(state.KeyImage) != "node+claude" || st.Get(KeyLibc) != "gnu" || st.Get(KeyTools) != strings.Join(files, " ") {
+		t.Errorf("state image=%q libc=%q tools=%q", st.Get(state.KeyImage), st.Get(KeyLibc), st.Get(KeyTools))
+	}
+	// Made from base's image: the tools aren't layers.
+	if img, _ := call(f, "CreateVM").Args[0].(string); img != call(f, "BuildImage").Args[0].(backend.ImageSpec).Key {
+		t.Errorf("CreateVM from %q, not base's image", img)
+	}
+	if got := staged(t, f)["tools"]; got != string(tools.Mounts(files)) || !strings.HasPrefix(got, files[0]+" node 24.21.0\n") {
+		t.Errorf("staged tools = %q", got)
+	}
+	for _, file := range files {
+		if !e.Tools.Built(file) {
+			t.Errorf("%s isn't in the share", file)
+		}
+	}
+}
+
+// Only agents, or nothing, need the folder's toolchains under them; a
+// toolchain, a layer or base is a choice of its own.
+func TestNeedsDetection(t *testing.T) {
+	for in, want := range map[string]bool{
+		"": true, "claude": true, "claude+codex": true,
+		"node+claude": false, "python+claude": false, "base": false, "base+claude": false, "foo": false,
+	} {
+		if got := needsDetection(in); got != want {
+			t.Errorf("needsDetection(%q) = %v", in, got)
+		}
 	}
 }
 

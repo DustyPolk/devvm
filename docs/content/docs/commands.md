@@ -11,7 +11,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | --- | --- |
 | `devvm [IMAGE]` | open a shell in this folder's VM, at the same path, creating the VM first: from IMAGE, else the image the folder's files call for ([details](images.md#which-image-a-new-vm-gets)) |
 
-A new VM is made from its image (built first if it isn't), with only the project folder mounted, read-write, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)). Then devvm starts it and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
+A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)). Then devvm starts it, mounts its tools and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
 devvm doesn't open a VM that already exists yet.
 
@@ -47,8 +47,8 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 
 | | |
 | --- | --- |
-| `devvm build IMAGE` | build an image and the images under it, unless they're built (`devvm build foo+bar`) |
-| `devvm rebuild IMAGE` | build an image again, from its parent as it is, and delete the stale images no VM uses, the old one and those built on it among them ([details](images.md#rebuilding)) |
+| `devvm build IMAGE` | build an image and the images under it, unless they're built, and the shared tool images it names (`devvm build foo+bar`, `devvm build node+claude`) |
+| `devvm rebuild IMAGE` | build an image again, from its parent as it is, and delete the stale images no VM uses, the old one and those built on it among them ([details](images.md#rebuilding)); shared tools follow the tools lock instead |
 
 `--backend NAME` builds on that backend instead of the one new VMs get.
 
@@ -58,3 +58,4 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 | --- | --- |
 | `DEVVM_VERBOSE=1` | print the output of the commands devvm runs, instead of logging it ([details](images.md#build-logs-and-interrupts)) |
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](lima.md#a-lima-home-of-its-own)) |
+| `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#versions)) |

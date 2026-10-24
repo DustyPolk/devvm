@@ -7,7 +7,7 @@ Build an image again, and delete the old one
 
 ## Synopsis
 
-Build an image again, from its parent as it is, and delete the stale images no VM uses, the old one and those built on it among them.
+Build an image again, from its parent as it is, and delete the stale images no VM uses, the old one and those built on it among them. Shared tools aren't images: their versions come from the tools lock.
 
 ```text
 devvm rebuild IMAGE [flags]

@@ -7,7 +7,7 @@ Build an image and the images under it, unless they're built
 
 ## Synopsis
 
-Build an image and the images under it, unless they're built. IMAGE is base, or your layers joined with +, bottom first (foo+bar is bar on foo on base).
+Build an image and the images under it, unless they're built, and the shared tool images it names that aren't. IMAGE is base, or your layers joined with +, bottom first (foo+bar is bar on foo on base), with any shared tools (node+foo+claude).
 
 ```text
 devvm build IMAGE [flags]

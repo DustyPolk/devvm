@@ -19,18 +19,21 @@ stub_calls
 ! exec devvm --network-policy --no-network-policy base
 stderr 'usage_error'
 
-# A new VM: base built, then cloned with only the folder, read-write, no
-# agent forwarding, every port; started, and devvm's last act is the shell,
-# in the folder.
+# A new VM: base built, then cloned with only the folder, read-write, and
+# the shared tools, read-only; no agent forwarding, every port; started and
+# set up, and devvm's last act is the shell, in the folder.
 exec devvm --no-network-policy base
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=0 --set \.portForwards = \[\]$'
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=0 --set \.portForwards = \[\]$'
 ! stdout 'limactl edit --tty=false devvm-web'
+! stdout 'devvm-tools-build'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
-stdout 'limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\nlimactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+exists $XDG_DATA_HOME/devvm/tools
+! exists $XDG_DATA_HOME/devvm/mise.lock
 # .git's hooks and config locked (macOS); elsewhere, a warning.
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/hooks$'
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
@@ -44,6 +47,8 @@ stdout '^folder=[0-9]+:[0-9]+'
 stdout '^chain=base=[0-9a-f]{12}$'
 stdout '^backend=lima$'
 stdout '^net=off$'
+stdout '^libc=gnu$'
+! stdout '^tools='
 [darwin] stdout '^git_protect=on$'
 [darwin] stdout '^git_inode=[0-9]+$'
 [linux] stdout '^git_protect=off$'

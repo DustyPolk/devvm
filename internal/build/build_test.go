@@ -13,6 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 func write(t *testing.T, path, data string) {
@@ -20,7 +21,7 @@ func write(t *testing.T, path, data string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil { //nolint:gosec // the test's own folder
 		t.Fatal(err)
 	}
 }
@@ -42,26 +43,34 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 	}
 	f := backendtest.New("fake", caps)
 	f.Built = backend.Built{Origin: "https://example.com/ubuntu.img sha256:1111", Libc: "gnu"}
-	return &Builder{Dirs: d, Root: root, Backend: f}, f
+	// The shared tools: the repo's tools/, the stub mise resolving the
+	// fixture lock.
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mise.toml", "build.sh"} {
+		data, err := os.ReadFile(filepath.Join(repo, "tools", name)) //nolint:gosec // the repo's own files
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(root, "tools", name), string(data))
+	}
+	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "xdg")) // the run log
+	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
+	tl := tools.New(d, root)
+	tl.Getenv = func(k string) string {
+		if k == "DEVVM_HOST_MISE" {
+			return filepath.Join(repo, "testdata", "stubs", "mise")
+		}
+		return ""
+	}
+	return &Builder{Dirs: d, Root: root, Backend: f, Tools: tl}, f
 }
 
 func isMsg(err error, id string) bool {
 	m, ok := errors.AsType[msg.M](err)
 	return ok && m.ID() == id
-}
-
-func TestNormalize(t *testing.T) {
-	for in, want := range map[string]string{
-		"base":         "base",
-		"base+foo":     "foo",
-		"foo+base+bar": "foo+bar",
-		"foo+bar":      "foo+bar",
-		"":             "", // CheckLayers refuses it
-	} {
-		if got := Normalize(in); got != want {
-			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
-		}
-	}
 }
 
 // Layers are the user's scripts with names image names can hold; nothing
@@ -74,10 +83,18 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(b.Dirs.Layers(), "dir.sh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	// A layer with a shared tool's name isn't one.
+	write(t, filepath.Join(b.Dirs.Layers(), "node.sh"), "")
 	if got, want := b.Layers(), []string{"base", "bar", "foo"}; !slices.Equal(got, want) {
 		t.Errorf("Layers() = %q, want %q", got, want)
 	}
-	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo"} {
+	if got, want := b.Environments(), []string{"base", "node", "python", "rust", "go", "bar", "foo"}; !slices.Equal(got, want) {
+		t.Errorf("Environments() = %q, want %q", got, want)
+	}
+	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("claude codex opencode", "base node python rust go bar foo", "stray").Error() {
+		t.Errorf("CheckLayers(stray) = %v", err)
+	}
+	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "node+foo+claude", "go"} {
 		if err := b.CheckLayers(ok); err != nil {
 			t.Errorf("CheckLayers(%q): %v", ok, err)
 		}
@@ -86,6 +103,70 @@ func TestLayersAndCheckLayers(t *testing.T) {
 		if err := b.CheckLayers(bad); !isMsg(err, "unknown_layer") {
 			t.Errorf("CheckLayers(%q) = %v, want unknown_layer", bad, err)
 		}
+	}
+}
+
+// A name with tools builds its image (base and its layers, not the tools)
+// and the missing tool images, from base's image, for base's libc.
+func TestBuildTools(t *testing.T) {
+	b, f := testBuilder(t)
+	f.Built.Libc = "musl"
+	if err := b.Build(t.Context(), "claude+foo+node"); err != nil {
+		t.Fatal(err)
+	}
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images", "BuildImage", "BuildImage", "BuildTools"}) {
+		t.Fatalf("calls = %q", ms)
+	}
+	chain, err := b.Inputs().Chain("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tools backend.ToolsSpec
+	for _, c := range f.Calls() {
+		if c.Method == "BuildTools" {
+			tools, _ = c.Args[0].(backend.ToolsSpec)
+		}
+	}
+	if tools.Base != chain[0].Key || len(tools.Args) != 12 || tools.Args[0] != "node" || tools.Args[9] != "claude" {
+		t.Errorf("tools spec = %+v", tools)
+	}
+	if libc, err := b.BaseLibc(); libc != "musl" || err != nil {
+		t.Errorf("BaseLibc = %q, %v", libc, err)
+	}
+	files, err := b.Tools.Files(t.Context(), []string{"node", "claude"}, "musl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if !b.Tools.Built(file) || !slices.Contains(tools.Args, file) {
+			t.Errorf("%s: not built for musl", file)
+		}
+	}
+	// Built: nothing to do.
+	n := len(f.Calls())
+	if err := b.Build(t.Context(), "node+foo+claude"); err != nil || slices.Contains(f.Methods()[n:], "BuildTools") {
+		t.Errorf("built again: %v %q", err, f.Methods()[n:])
+	}
+}
+
+// The shared tools aren't images: the lock versions them, so they aren't
+// rebuilt.
+func TestRebuildRefusesTools(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	b, f := testBuilder(t)
+	if err := b.Rebuild(t.Context(), "node+claude"); err == nil || err.Error() != "tools_not_images tools=node claude" {
+		t.Errorf("Rebuild = %v", err)
+	}
+	if len(f.Calls()) > 0 {
+		t.Errorf("calls = %q", f.Methods())
+	}
+}
+
+// Before base is built, its libc is gnu.
+func TestBaseLibcUnbuilt(t *testing.T) {
+	b, _ := testBuilder(t)
+	if libc, err := b.BaseLibc(); libc != "gnu" || err != nil {
+		t.Errorf("BaseLibc = %q, %v", libc, err)
 	}
 }
 

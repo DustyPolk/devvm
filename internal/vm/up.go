@@ -15,17 +15,21 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Keys of a VM's state that up writes, besides state's own.
 const (
 	KeyNet      = "net"       // network policy: off (on comes with the proxy)
+	KeyLibc     = "libc"      // the C library its base had, which its tools are built for
+	KeyTools    = "tools"     // its shared tool images, space-separated
 	KeyCPUs     = "cpus"      // the size asked for; unset for the image's
 	KeyMemory   = "memory"    // GiB
 	KeyDisk     = "disk"      // GiB
@@ -49,6 +53,7 @@ type Env struct {
 	Dirs     paths.Dirs
 	Root     string // devvm's own files (paths.Root)
 	Registry *backend.Registry
+	Tools    *tools.Tools
 	Dir      string // the folder devvm runs in, a physical path
 	Home     string
 	OS       string // the host's, as Go names it
@@ -69,7 +74,7 @@ func NewEnv(d paths.Dirs, root string, reg *backend.Registry) (*Env, error) {
 		return nil, err
 	}
 	return &Env{
-		Dirs: d, Root: root, Registry: reg, Dir: wd, Home: os.Getenv("HOME"), OS: runtime.GOOS,
+		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root), Dir: wd, Home: os.Getenv("HOME"), OS: runtime.GOOS,
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell,
 	}, nil
 }
@@ -187,7 +192,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 			}
 		}
 	}
-	builder := &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: b}
+	builder := &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools}
 	img, err := e.resolveImage(o.Image, f.Dir, builder)
 	if err != nil {
 		return err
@@ -195,16 +200,38 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if !o.NoNetworkPolicy {
 		return msg.NetworkPolicyUnavailable(vm)
 	}
-	spec := backend.VMSpec{Name: vm, Project: f.Dir, Size: size.Backend(), Ports: PortsBackend(ports)}
+	// Every VM has the share, read-only: a tool added later is mounted
+	// from it.
+	spec := backend.VMSpec{
+		Name: vm, Project: f.Dir, Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
+		Size: size.Backend(), Ports: PortsBackend(ports),
+	}
 	conf := backend.Confinement{Net: backend.NetDirect}
 	if err := backend.Require(b, vm, append(spec.Features(), conf.Features()...)...); err != nil {
 		return err
 	}
+	// A new VM gets the newest tools: check now when the daily check is
+	// due.
+	groups := image.ToolsOf(img)
+	if len(groups) > 0 && e.Tools.CheckDue() {
+		e.Tools.Check(ctx)
+	}
 	if err := builder.Build(ctx, img); err != nil {
 		return err
 	}
-	chain, err := builder.Inputs().Chain(img)
+	chain, err := builder.Inputs().Chain(image.WithoutTools(img))
 	if err != nil {
+		return err
+	}
+	libc, err := builder.BaseLibc()
+	if err != nil {
+		return err
+	}
+	files, err := e.Tools.Files(ctx, groups, libc)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(e.Dirs.Tools(), 0o700); err != nil {
 		return err
 	}
 	id, err := platform.FolderID(f.Dir)
@@ -239,7 +266,12 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		return err
 	}
 	for _, kv := range [][2]string{
-		{KeyNet, "off"}, {KeyCPUs, size.CPUs}, {KeyMemory, size.Memory}, {KeyDisk, size.Disk},
+		{KeyNet, "off"},
+		{KeyLibc, libc},
+		{KeyTools, strings.Join(files, " ")},
+		{KeyCPUs, size.CPUs},
+		{KeyMemory, size.Memory},
+		{KeyDisk, size.Disk},
 	} {
 		if kv[1] == "" {
 			continue
@@ -280,6 +312,9 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err := b.Start(ctx, vm, conf); err != nil {
 		return err
 	}
+	if err := e.sync(ctx, b, vm, files); err != nil {
+		return err
+	}
 	cmd, err := b.Shell(ctx, vm, f.Dir)
 	if err != nil {
 		return err
@@ -309,16 +344,37 @@ func (e *Env) checkUnsafe(dir string, unsafe bool) error {
 }
 
 // resolveImage returns the image a new VM gets, in canonical order: the
-// one named, or the folder's toolchains when none is.
+// one named, or with nothing but agents named, the folder's toolchains
+// and the agents on top (devvm claude in a node project is node+claude).
+// base is a choice of its own: nothing is detected over it.
 func (e *Env) resolveImage(want, dir string, b *build.Builder) (string, error) {
-	if want == "" {
+	if needsDetection(want) {
 		found := project.Detect(dir)
-		if len(found) == 0 {
-			return "", msg.NoImageFor(dir, strings.Join(b.Layers(), " "))
+		switch {
+		case len(found) > 0:
+			ui.Info(msg.Detected(strings.Join(found, "+")))
+			if want != "" {
+				found = append(found, want)
+			}
+			want = strings.Join(found, "+")
+		case want == "":
+			return "", msg.NoImageFor(strings.Join(image.Agents, " "), dir, strings.Join(b.Environments(), " "))
 		}
-		want = strings.Join(found, "+")
-		ui.Info(msg.Detected(want))
 	}
-	img := build.Normalize(want)
+	img := image.Normalize(want)
 	return img, b.CheckLayers(img)
+}
+
+// needsDetection reports whether an image name names only agents, or
+// nothing: the folder's toolchains then go under them.
+func needsDetection(want string) bool {
+	if want == "" {
+		return true
+	}
+	for p := range strings.SplitSeq(want, "+") {
+		if !image.IsAgent(p) {
+			return false
+		}
+	}
+	return true
 }

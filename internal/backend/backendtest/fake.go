@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -33,6 +35,9 @@ type Fake struct {
 	ShellCmd     backend.Command   // Shell's answer
 	Unconfined   bool              // Confined answers false
 	Errs         map[string]error  // by method name: returned in place of its answer, changing nothing
+	// ToolsBuild, when set, is what BuildTools does after recording the
+	// call, in place of writing the images.
+	ToolsBuild func(backend.ToolsSpec) error
 
 	mu    sync.Mutex
 	calls []Call
@@ -126,6 +131,27 @@ func (f *Fake) DeleteImage(_ context.Context, key string) error {
 		return err
 	}
 	f.ImageKeys = slices.DeleteFunc(f.ImageKeys, func(k string) bool { return k == key })
+	return nil
+}
+
+// BuildTools records the call, then runs ToolsBuild on the spec, or
+// writes each image its script would (every third argument, from the
+// third) into spec.Out as "image FILE".
+func (f *Fake) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.record("BuildTools", spec); err != nil {
+		return err
+	}
+	if f.ToolsBuild != nil {
+		return f.ToolsBuild(spec)
+	}
+	for i := 2; i < len(spec.Args); i += 3 {
+		file := spec.Args[i]
+		if err := os.WriteFile(filepath.Join(spec.Out, file), []byte("image "+file+"\n"), 0o600); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

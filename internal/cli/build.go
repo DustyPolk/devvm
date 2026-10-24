@@ -9,9 +9,11 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backends"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -20,8 +22,9 @@ func newBuildCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
-		Long: "Build an image and the images under it, unless they're built. IMAGE is base, " +
-			"or your layers joined with +, bottom first (foo+bar is bar on foo on base).",
+		Long: "Build an image and the images under it, unless they're built, and the shared tool " +
+			"images it names that aren't. IMAGE is base, or your layers joined with +, bottom first " +
+			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), g, args[0], (*build.Builder).Build)
@@ -35,7 +38,8 @@ func newRebuildCmd(g *globals) *cobra.Command {
 		Use:   "rebuild IMAGE",
 		Short: "Build an image again, and delete the old one",
 		Long: "Build an image again, from its parent as it is, and delete the stale images " +
-			"no VM uses, the old one and those built on it among them.",
+			"no VM uses, the old one and those built on it among them. Shared tools aren't images: " +
+			"their versions come from the tools lock.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), g, args[0], (*build.Builder).Rebuild)
@@ -48,7 +52,7 @@ func newRebuildCmd(g *globals) *cobra.Command {
 func imageCmd(ctx context.Context, g *globals, name string, do func(*build.Builder, context.Context, string) error) error {
 	b, err := builder(g.backend)
 	if err == nil {
-		err = b.CheckLayers(build.Normalize(name))
+		err = b.CheckLayers(image.Normalize(name))
 	}
 	if err == nil {
 		err = b.Backend.Check(ctx)
@@ -79,7 +83,7 @@ func builder(flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &build.Builder{Dirs: dirs, Root: root, Backend: c.Backend}, nil
+	return &build.Builder{Dirs: dirs, Root: root, Backend: c.Backend, Tools: tools.New(dirs, root)}, nil
 }
 
 // fail ends the run on an error: with the run log's end when its details

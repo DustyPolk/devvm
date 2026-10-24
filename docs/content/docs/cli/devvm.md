@@ -7,7 +7,7 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, or your layers joined with +), else the image the folder's files call for, built if it isn't. Only the folder is mounted, read-write, and its .git hooks and config are locked against changes from the VM (macOS).
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS).
 
 ```text
 devvm [IMAGE] [flags]

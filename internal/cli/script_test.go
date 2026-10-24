@@ -47,8 +47,10 @@ func buildDevvm(t *testing.T) string {
 	if err == nil {
 		err = os.WriteFile(filepath.Join(dir, "base.yaml"), data, 0o600) //nolint:gosec // the test's own folder
 	}
-	if err == nil {
-		err = os.CopyFS(filepath.Join(dir, "layers"), os.DirFS(filepath.Join(repo, "layers")))
+	for _, d := range []string{"layers", "tools", "guest"} {
+		if err == nil {
+			err = os.CopyFS(filepath.Join(dir, d), os.DirFS(filepath.Join(repo, d)))
+		}
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +104,10 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	}
 	env.Setenv("DEVVM_UBUNTU_URL", "file://"+filepath.Join(root, "ubuntu"))
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
+	// The shared tools' versions: the stub mise, which resolves the
+	// fixture lock.
+	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
+	env.Setenv("MISE_STUB_LOCK", filepath.Join(filepath.Dir(stubs), "mise.lock"))
 	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -126,5 +127,50 @@ func TestSHA256File(t *testing.T) {
 	}
 	if _, err := SHA256File(filepath.Join(t.TempDir(), "missing")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("missing file: %v", err)
+	}
+}
+
+// Toolchains in their fixed order, then layers as given, then agents;
+// base dropped, and base alone for nothing else.
+func TestNormalize(t *testing.T) {
+	for in, want := range map[string]string{
+		"base":                      "base",
+		"base+foo":                  "foo",
+		"foo+base+bar":              "foo+bar",
+		"foo+bar":                   "foo+bar",
+		"claude+python+node":        "node+python+claude",
+		"opencode+mytool+go+claude": "go+mytool+claude+opencode",
+		"base+claude":               "claude",
+		"":                          "", // CheckLayers refuses it
+	} {
+		if got := Normalize(in); got != want {
+			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// An image name's two halves: its image (base and layers) and its shared
+// tools; and the tools behind each tool name.
+func TestWithoutToolsAndToolsOf(t *testing.T) {
+	for in, want := range map[string][2]string{
+		"node+claude":         {"base", "node claude"},
+		"node+foo+bar+claude": {"foo+bar", "node claude"},
+		"base":                {"base", ""},
+		"foo":                 {"foo", ""},
+	} {
+		if got := WithoutTools(in); got != want[0] {
+			t.Errorf("WithoutTools(%q) = %q, want %q", in, got, want[0])
+		}
+		if got := strings.Join(ToolsOf(in), " "); got != want[1] {
+			t.Errorf("ToolsOf(%q) = %q, want %q", in, got, want[1])
+		}
+	}
+	for name, want := range map[string]string{"node": "node pnpm bun", "python": "python uv", "go": "go", "claude": "claude"} {
+		if got := strings.Join(GroupTools(name), " "); got != want {
+			t.Errorf("GroupTools(%q) = %q, want %q", name, got, want)
+		}
+	}
+	if !IsTool("rust") || !IsTool("codex") || IsTool("pnpm") || IsTool("base") || !IsAgent("opencode") || IsAgent("node") {
+		t.Error("IsTool or IsAgent is wrong")
 	}
 }

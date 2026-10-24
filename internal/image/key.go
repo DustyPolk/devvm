@@ -103,9 +103,11 @@ func (in Inputs) Outdated(chain Chain) ([]string, error) {
 }
 
 // LayerName reports whether a layer can have that name: lowercase letters,
-// digits and dashes, starting with a letter or digit. Image names join
-// layers with +.
-func LayerName(name string) bool { return name != Base && layerName.MatchString(name) }
+// digits and dashes, starting with a letter or digit, and neither base nor
+// a shared tool's name. Image names join layers with +.
+func LayerName(name string) bool {
+	return name != Base && !IsTool(name) && layerName.MatchString(name)
+}
 
 var layerName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
@@ -129,7 +131,7 @@ func layers(name string) ([]string, error) {
 	}
 	parts := strings.Split(name, "+")
 	for _, p := range parts {
-		if p == Base || !layerName.MatchString(p) {
+		if !LayerName(p) {
 			return nil, fmt.Errorf("invalid image name %q", name)
 		}
 	}

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,6 +112,16 @@ func LogNote() {
 	if !noted {
 		write(stdout, "    "+msg.LogDetails(path).String()+"\n")
 	}
+}
+
+// LogWriter is where to send the output of a command run some other way
+// than Logged (a backend's Exec, say): the run log, or with DEVVM_VERBOSE
+// the terminal.
+func LogWriter() io.Writer {
+	if verbose() {
+		return lockedWriter{stderr}
+	}
+	return openLog()
 }
 
 // proxyKey is a VM's proxy key in a proxy URL, which lets a process act as

@@ -314,6 +314,8 @@ func TestLayerName(t *testing.T) {
 	for name, want := range map[string]bool{
 		"foo": true, "my-layer2": true, "0x": true,
 		"base": false, "": false, "-x": false, "Foo": false, "a_b": false, "a+b": false, "../x": false,
+		// Shared tools' names aren't layers'.
+		"node": false, "go": false, "claude": false, "pnpm": true,
 	} {
 		if got := LayerName(name); got != want {
 			t.Errorf("LayerName(%q) = %v", name, got)

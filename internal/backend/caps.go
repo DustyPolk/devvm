@@ -102,6 +102,11 @@ func (s ImageSpec) Features() []Feature {
 	return append(fs, s.Net.Features()...)
 }
 
+// Features returns what the tools build needs.
+func (s ToolsSpec) Features() []Feature {
+	return append([]Feature{FeatureBuildImage}, s.Net.Features()...)
+}
+
 // Features returns what creating the VM needs.
 func (s VMSpec) Features() []Feature {
 	fs := []Feature{FeatureClone}

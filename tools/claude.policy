@@ -1,0 +1,7 @@
+# claude: the API, login and updates. Telemetry hosts (e.g. Datadog) are left out: blocking them
+# costs nothing.
+api.anthropic.com
+claude.ai
+downloads.claude.ai
+platform.claude.com
+mcp-proxy.anthropic.com
