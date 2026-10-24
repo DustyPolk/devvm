@@ -25,6 +25,7 @@ type Call struct {
 type Fake struct {
 	BackendName  string
 	Capabilities backend.Caps
+	NameLimit    int                         // NameMax's answer
 	Instances    map[string]backend.Instance // by name
 	ImageKeys    []string
 	Built        backend.Built     // BuildImage's answer
@@ -83,6 +84,9 @@ func (f *Fake) Name() string { return f.BackendName }
 
 // Caps returns Capabilities.
 func (f *Fake) Caps() backend.Caps { return f.Capabilities }
+
+// NameMax returns NameLimit.
+func (f *Fake) NameMax() int { return f.NameLimit }
 
 // Check records the call.
 func (f *Fake) Check(context.Context) error {

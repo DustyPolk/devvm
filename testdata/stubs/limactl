@@ -1,0 +1,56 @@
+#!/bin/bash
+# Stand-in for limactl in tests. Logs every call to $STUB_LOG, and the folder
+# and Lima home of the last one to $STUB_DIR/limactl-env. Answers list --json
+# from $STUB_DIR/instances ("name [status]" per line, status defaults to
+# Stopped), which create, clone, start, stop and delete keep up to date. A
+# VM's config is $STUB_DIR/config-<name>.json, else {}; its size
+# ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
+# and 100 GiB. start writes the VM's ha.pid (devvm's pid, which runs), and
+# with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
+# start). shell fails with $STUB_DIR/shell-fails and hangs with
+# $STUB_DIR/shell-hangs. Everything else succeeds.
+set -euo pipefail
+echo "limactl $*" >> "$STUB_LOG"
+echo "cwd=$(pwd -P) LIMA_HOME=${LIMA_HOME:-}" > "$STUB_DIR/limactl-env"
+inst="$STUB_DIR/instances"
+[[ -f $inst ]] || : > "$inst"
+# set_status NAME [STATUS]: no status removes it.
+set_status() {
+  { grep -v "^$1\( \|$\)" "$inst" || true; [[ -z ${2:-} ]] || echo "$1 $2"; } > "$inst.new"
+  mv "$inst.new" "$inst"
+}
+# The VM names among the arguments (not options, nor their values).
+names=()
+skip=""
+for a in "${@:2}"; do
+  if [[ -n $skip ]]; then skip=""; continue; fi
+  case $a in
+    --set|--mount-only|--name|--workdir|--cpus|--memory|--disk) skip=1 ;;
+    --name=*) names+=("${a#--name=}") ;;
+    -*) ;;
+    *) names+=("$a") ;;
+  esac
+done
+case ${1:-} in
+  create) for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done ;;
+  clone) set_status "${names[1]}" Stopped ;;
+  start)
+    set_status "${names[0]}" Running
+    mkdir -p "$LIMA_HOME/${names[0]}"
+    echo "$PPID" > "$LIMA_HOME/${names[0]}/ha.pid"
+    [[ ! -e $STUB_DIR/start-fails ]] || exit 1 ;;
+  stop) set_status "${names[0]}" Stopped ;;
+  delete) for n in "${names[@]}"; do set_status "$n"; done ;;
+  shell)
+    [[ ! -e $STUB_DIR/shell-fails ]] || exit 1
+    [[ ! -e $STUB_DIR/shell-hangs ]] || exec sleep 30 ;;
+esac
+
+[[ ${1:-} != --version ]] || { echo "limactl version 2.2.1"; exit 0; }
+[[ ${1:-} == list && ${2:-} == --json ]] || exit 0
+while read -r n st; do
+  read -r cpus mem disk < <(cat "$STUB_DIR/size-$n" 2>/dev/null || echo "4 8589934592 107374182400")
+  cfg=$(cat "$STUB_DIR/config-$n.json" 2>/dev/null || echo '{}')
+  printf '{"name":"%s","status":"%s","dir":"%s","cpus":%s,"memory":%s,"disk":%s,"config":%s}\n' \
+    "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$cfg"
+done < "$inst"

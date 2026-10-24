@@ -25,7 +25,7 @@ func NewRoot() *cobra.Command {
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(ui.Stdout())
-	root.AddCommand(newMsgCmd())
+	root.AddCommand(newMsgCmd(), newQEMUCmd())
 	return root
 }
 

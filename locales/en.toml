@@ -59,3 +59,92 @@ other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have
 [tool_bad_version]
 description = "version is quoted, as the tools lock has it"
 other = "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
+
+[lima_missing]
+other = "Lima isn't installed: install Lima 2.0 or newer"
+
+[lima_broken]
+other = "limactl --version failed: reinstall Lima"
+
+[lima_old]
+other = "Lima {{.version}} is too old: upgrade to Lima 2.0 or newer"
+
+[lima_host_unsupported]
+description = "os is Go's name for the host's system (windows)"
+other = "the lima backend doesn't run on {{.os}}: use macOS or Linux"
+
+[qemu_missing]
+other = "{{.program}} isn't installed: install QEMU"
+
+[lima_global_config]
+description = "files is a space-separated list of paths"
+other = "Lima would add {{.files}} to every VM devvm starts: move them out of devvm's Lima home"
+
+[vm_has_networks]
+other = "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
+
+[lima_home_too_long]
+other = "devvm's Lima home {{.home}} is too long for {{.vm}}'s name: set DEVVM_LIMA_HOME to a shorter folder"
+
+[mount_comma]
+other = "Lima can't mount {{.path}}: its path has a comma"
+
+[image_missing]
+other = "there's no image {{.key}} in devvm's Lima home: build it again"
+
+[image_in_use]
+description = "vms is a space-separated list of VM names"
+other = "can't delete image {{.key}}: {{.vms}} use its disk"
+
+[not_an_image]
+other = "refusing to delete {{.name}}: it's not an image"
+
+[vm_not_stopped]
+other = "{{.vm}} is running: stop it first"
+
+[vm_not_running]
+other = "{{.vm}} isn't running: start it first"
+
+[disk_shrink]
+description = "have and want are sizes in GiB"
+other = "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
+
+[starting]
+other = "starting {{.vm}}"
+
+[stopping]
+other = "stopping {{.vm}}"
+
+[deleting]
+other = "deleting {{.vm}}"
+
+[creating]
+other = "creating {{.vm}}"
+
+[configuring]
+other = "configuring {{.vm}}"
+
+[start_failed]
+other = "couldn't start {{.vm}}"
+
+[start_no_ssh]
+description = "console is a glob of the VM's console logs"
+other = "couldn't start {{.vm}}: it doesn't answer over ssh (its console: {{.console}})"
+
+[started_with_warnings]
+other = "{{.vm}} started with warnings; continuing"
+
+[stop_failed]
+other = "couldn't stop {{.vm}}"
+
+[delete_failed]
+other = "couldn't delete {{.vm}}"
+
+[vm_create_failed]
+other = "couldn't create {{.vm}}"
+
+[lima_edit_failed]
+other = "couldn't change {{.vm}}'s Lima settings"
+
+[qemu_refused]
+other = "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"

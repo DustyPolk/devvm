@@ -27,9 +27,79 @@ func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
+// Configuring is [configuring]: "configuring {{.vm}}"
+func Configuring(vm string) M {
+	return M{id: "configuring", vals: []val{{"vm", vm}}}
+}
+
+// Creating is [creating]: "creating {{.vm}}"
+func Creating(vm string) M {
+	return M{id: "creating", vals: []val{{"vm", vm}}}
+}
+
+// DeleteFailed is [delete_failed]: "couldn't delete {{.vm}}"
+func DeleteFailed(vm string) M {
+	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
+}
+
+// Deleting is [deleting]: "deleting {{.vm}}"
+func Deleting(vm string) M {
+	return M{id: "deleting", vals: []val{{"vm", vm}}}
+}
+
+// DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
+func DiskShrink(have string, vm string, want string) M {
+	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
+}
+
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path: set it to your home folder"
 func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
+}
+
+// ImageInUse is [image_in_use]: "can't delete image {{.key}}: {{.vms}} use its disk"
+func ImageInUse(key string, vms string) M {
+	return M{id: "image_in_use", vals: []val{{"key", key}, {"vms", vms}}}
+}
+
+// ImageMissing is [image_missing]: "there's no image {{.key}} in devvm's Lima home: build it again"
+func ImageMissing(key string) M {
+	return M{id: "image_missing", vals: []val{{"key", key}}}
+}
+
+// LimaBroken is [lima_broken]: "limactl --version failed: reinstall Lima"
+func LimaBroken() M {
+	return M{id: "lima_broken"}
+}
+
+// LimaEditFailed is [lima_edit_failed]: "couldn't change {{.vm}}'s Lima settings"
+func LimaEditFailed(vm string) M {
+	return M{id: "lima_edit_failed", vals: []val{{"vm", vm}}}
+}
+
+// LimaGlobalConfig is [lima_global_config]: "Lima would add {{.files}} to every VM devvm starts: move them out of devvm's Lima home"
+func LimaGlobalConfig(files string) M {
+	return M{id: "lima_global_config", vals: []val{{"files", files}}}
+}
+
+// LimaHomeTooLong is [lima_home_too_long]: "devvm's Lima home {{.home}} is too long for {{.vm}}'s name: set DEVVM_LIMA_HOME to a shorter folder"
+func LimaHomeTooLong(home string, vm string) M {
+	return M{id: "lima_home_too_long", vals: []val{{"home", home}, {"vm", vm}}}
+}
+
+// LimaHostUnsupported is [lima_host_unsupported]: "the lima backend doesn't run on {{.os}}: use macOS or Linux"
+func LimaHostUnsupported(os string) M {
+	return M{id: "lima_host_unsupported", vals: []val{{"os", os}}}
+}
+
+// LimaMissing is [lima_missing]: "Lima isn't installed: install Lima 2.0 or newer"
+func LimaMissing() M {
+	return M{id: "lima_missing"}
+}
+
+// LimaOld is [lima_old]: "Lima {{.version}} is too old: upgrade to Lima 2.0 or newer"
+func LimaOld(version string) M {
+	return M{id: "lima_old", vals: []val{{"version", version}}}
 }
 
 // LogDetails is [log_details]: "(details: {{.file}})"
@@ -40,6 +110,11 @@ func LogDetails(file string) M {
 // LogEnd is [log_end]: "the end of {{.file}}:"
 func LogEnd(file string) M {
 	return M{id: "log_end", vals: []val{{"file", file}}}
+}
+
+// MountComma is [mount_comma]: "Lima can't mount {{.path}}: its path has a comma"
+func MountComma(path string) M {
+	return M{id: "mount_comma", vals: []val{{"path", path}}}
 }
 
 // MsgBadCount is [msg_bad_count]: "count must be a whole number, not {{.value}}"
@@ -72,9 +147,54 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
+// NotAnImage is [not_an_image]: "refusing to delete {{.name}}: it's not an image"
+func NotAnImage(name string) M {
+	return M{id: "not_an_image", vals: []val{{"name", name}}}
+}
+
+// QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
+func QEMUMissing(program string) M {
+	return M{id: "qemu_missing", vals: []val{{"program", program}}}
+}
+
+// QEMURefused is [qemu_refused]: "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"
+func QEMURefused() M {
+	return M{id: "qemu_refused"}
+}
+
 // RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
 func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
+}
+
+// StartFailed is [start_failed]: "couldn't start {{.vm}}"
+func StartFailed(vm string) M {
+	return M{id: "start_failed", vals: []val{{"vm", vm}}}
+}
+
+// StartNoSSH is [start_no_ssh]: "couldn't start {{.vm}}: it doesn't answer over ssh (its console: {{.console}})"
+func StartNoSSH(console string, vm string) M {
+	return M{id: "start_no_ssh", vals: []val{{"console", console}, {"vm", vm}}}
+}
+
+// StartedWithWarnings is [started_with_warnings]: "{{.vm}} started with warnings; continuing"
+func StartedWithWarnings(vm string) M {
+	return M{id: "started_with_warnings", vals: []val{{"vm", vm}}}
+}
+
+// Starting is [starting]: "starting {{.vm}}"
+func Starting(vm string) M {
+	return M{id: "starting", vals: []val{{"vm", vm}}}
+}
+
+// StopFailed is [stop_failed]: "couldn't stop {{.vm}}"
+func StopFailed(vm string) M {
+	return M{id: "stop_failed", vals: []val{{"vm", vm}}}
+}
+
+// Stopping is [stopping]: "stopping {{.vm}}"
+func Stopping(vm string) M {
+	return M{id: "stopping", vals: []val{{"vm", vm}}}
 }
 
 // ToolBadVersion is [tool_bad_version]: "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
@@ -87,6 +207,26 @@ func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
 }
 
+// VMCreateFailed is [vm_create_failed]: "couldn't create {{.vm}}"
+func VMCreateFailed(vm string) M {
+	return M{id: "vm_create_failed", vals: []val{{"vm", vm}}}
+}
+
+// VMHasNetworks is [vm_has_networks]: "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
+func VMHasNetworks(file string, vm string) M {
+	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// VMNotRunning is [vm_not_running]: "{{.vm}} isn't running: start it first"
+func VMNotRunning(vm string) M {
+	return M{id: "vm_not_running", vals: []val{{"vm", vm}}}
+}
+
+// VMNotStopped is [vm_not_stopped]: "{{.vm}} is running: stop it first"
+func VMNotStopped(vm string) M {
+	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
+}
+
 // specs describes every message, by ID.
 var specs = map[string]spec{
 	"backend_lacks":           {fields: []string{"backend", "feature", "vm"}},
@@ -94,16 +234,44 @@ var specs = map[string]spec{
 	"backend_unknown_default": {fields: []string{"backends", "file", "name"}},
 	"backend_unknown_vm":      {fields: []string{"backend", "vm"}},
 	"backend_unreviewed":      {fields: []string{"backend", "feature", "vm"}},
+	"configuring":             {fields: []string{"vm"}},
+	"creating":                {fields: []string{"vm"}},
+	"delete_failed":           {fields: []string{"vm"}},
+	"deleting":                {fields: []string{"vm"}},
+	"disk_shrink":             {fields: []string{"have", "vm", "want"}},
 	"home_not_absolute":       {},
+	"image_in_use":            {fields: []string{"key", "vms"}},
+	"image_missing":           {fields: []string{"key"}},
+	"lima_broken":             {},
+	"lima_edit_failed":        {fields: []string{"vm"}},
+	"lima_global_config":      {fields: []string{"files"}},
+	"lima_home_too_long":      {fields: []string{"home", "vm"}},
+	"lima_host_unsupported":   {fields: []string{"os"}},
+	"lima_missing":            {},
+	"lima_old":                {fields: []string{"version"}},
 	"log_details":             {fields: []string{"file"}},
 	"log_end":                 {fields: []string{"file"}},
+	"mount_comma":             {fields: []string{"path"}},
 	"msg_bad_count":           {fields: []string{"value"}},
 	"msg_missing_value":       {fields: []string{"key", "name"}},
 	"msg_not_pair":            {fields: []string{"arg"}},
 	"msg_repeated_value":      {fields: []string{"key"}},
 	"msg_unexpected_value":    {fields: []string{"key", "name"}},
 	"msg_unknown":             {fields: []string{"name"}},
+	"not_an_image":            {fields: []string{"name"}},
+	"qemu_missing":            {fields: []string{"program"}},
+	"qemu_refused":            {},
 	"run_log_failed":          {fields: []string{"dir", "reason"}},
+	"start_failed":            {fields: []string{"vm"}},
+	"start_no_ssh":            {fields: []string{"console", "vm"}},
+	"started_with_warnings":   {fields: []string{"vm"}},
+	"starting":                {fields: []string{"vm"}},
+	"stop_failed":             {fields: []string{"vm"}},
+	"stopping":                {fields: []string{"vm"}},
 	"tool_bad_version":        {fields: []string{"tool", "version"}},
 	"usage_error":             {fields: []string{"reason"}},
+	"vm_create_failed":        {fields: []string{"vm"}},
+	"vm_has_networks":         {fields: []string{"file", "vm"}},
+	"vm_not_running":          {fields: []string{"vm"}},
+	"vm_not_stopped":          {fields: []string{"vm"}},
 }

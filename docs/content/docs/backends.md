@@ -3,7 +3,7 @@ title: Backends
 weight: 30
 ---
 
-A backend is what runs devvm's VMs and builds their images. devvm decides what goes into a VM (its image, its folders, its size, its network policy) and the backend runs it. Lima is the backend today. smolvm and Docker are planned.
+A backend is what runs devvm's VMs and builds their images. devvm decides what goes into a VM (its image, its folders, its size, its network policy) and the backend runs it. [Lima](lima.md) is the backend today. smolvm and Docker are planned.
 
 Each backend has its own images: an image's key includes its backend, so one backend never uses another's.
 
@@ -18,19 +18,19 @@ Each backend declares how it has each feature:
 | Feature | What it is | Lima | smolvm (planned) | Docker (planned) |
 | --- | --- | --- | --- | --- |
 | `build-image` | build images from the layer and feature scripts | native | native | native |
-| `build-confinement` | builds reach the internet but not the host's loopback, or nothing | native: Seatbelt (macOS), QEMU `restrict=on` (Linux) | to be decided | to be decided |
+| `build-confinement` | builds reach the internet but not the host's loopback, or nothing | native: Seatbelt (macOS); on Linux QEMU `restrict=on` for no network, while a build with the internet reaches the host's loopback ([details](lima.md#confinement)) | to be decided | to be decided |
 | `from` | `base` from a container image (`--from`) | native: converted to a disk | native | native |
-| `clone` | a project VM from an image | native: APFS copy-on-write (macOS), qcow2 overlay (Linux) | native | native |
+| `clone` | a project VM from an image | native: APFS copy-on-write (macOS), qcow2 overlay (Linux) ([details](lima.md#clones-and-overlays)) | native | native |
 | `project-mount` | the project folder, read-write | native: virtiofs (macOS), 9p (Linux) | native | native |
-| `agent-folders` | agents' host folders, read-only | native | native | native |
-| `tools-share` | the shared tools, read-only | native | native | native |
-| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` (Linux) | emulated | emulated |
-| `ssh` | ssh for editors | native | emulated | emulated |
-| `ports` | the VM's ports forwarded to the host's loopback | native | native (its config's ports) or emulated | native (recreating the container) or emulated |
+| `agent-folders` | agents' host folders, read-only | native: read-only mounts, enforced by the host | native | native |
+| `tools-share` | the shared tools, read-only | native: a read-only mount, enforced by the host | native | native |
+| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` and a `guestfwd` to the proxy (Linux) ([details](lima.md#confinement)) | emulated | emulated |
+| `ssh` | ssh for editors | native: Lima's ssh forward and config | emulated | emulated |
+| `ports` | the VM's ports forwarded to the host's loopback | native: port forward rules ([details](lima.md#ports)) | native (its config's ports) or emulated | native (recreating the container) or emulated |
 | `agent-forwarding` | ssh-agent forwarding | native | emulated | native |
 | `cpus` | a VM's CPUs | native | native | native |
 | `memory` | a VM's memory | native | native | native |
-| `disk` | a VM's disk size | native | none | none |
+| `disk` | a VM's disk size | native: grows, never shrinks | none | none |
 
 Isolation differs too. Lima runs a full VM per project. smolvm runs a microVM. Docker runs containers, which share a kernel: on macOS, one VM runs all of them.
 

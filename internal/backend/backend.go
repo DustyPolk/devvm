@@ -13,6 +13,8 @@ import (
 	"context"
 	"errors"
 	"io"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // Backend runs VMs and builds their images. Methods that change a VM's
@@ -27,6 +29,9 @@ type Backend interface {
 	// Check reports whether the backend can run here: installed, a
 	// version devvm supports, a host it supports.
 	Check(ctx context.Context) error
+	// NameMax is the longest VM name the backend takes; 0 for no limit.
+	// Callers shorten the names they make to fit.
+	NameMax() int
 
 	// BuildImage builds an image from its parent (or, for base, from the
 	// backend's own Ubuntu or spec.From) by running its scripts in order.
@@ -74,6 +79,19 @@ type Backend interface {
 
 // ErrNotFound is the error, or wraps it, for a VM the backend doesn't have.
 var ErrNotFound = errors.New("no such VM")
+
+// LoggedError is a failure whose details are in the run log, from a
+// command run with ui.Logged: callers end with ui.DieLogged(e.Msg), which
+// shows the log's end, rather than ui.Die.
+type LoggedError struct{ Msg msg.M }
+
+// Logged returns m as a LoggedError.
+func Logged(m msg.M) error { return &LoggedError{Msg: m} }
+
+func (e *LoggedError) Error() string { return e.Msg.Error() }
+
+// Unwrap returns the message, so errors.As finds it.
+func (e *LoggedError) Unwrap() error { return e.Msg }
 
 // ImageSpec is an image to build.
 type ImageSpec struct {

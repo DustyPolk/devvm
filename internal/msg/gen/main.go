@@ -181,7 +181,7 @@ var taken = map[string]bool{
 var initialisms = map[string]bool{
 	"api": true, "ca": true, "cli": true, "cpu": true, "dns": true, "gc": true, "http": true,
 	"https": true, "id": true, "ip": true, "json": true, "oci": true, "os": true, "pid": true,
-	"sha": true, "ssh": true, "tcp": true, "tls": true, "tty": true, "ui": true, "uid": true,
+	"qemu": true, "sha": true, "ssh": true, "tcp": true, "tls": true, "tty": true, "ui": true, "uid": true,
 	"url": true, "vm": true, "vms": true, "xdg": true,
 }
 

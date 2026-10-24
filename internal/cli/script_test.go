@@ -73,6 +73,7 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	}
 	env.Setenv("STUB_LOG", log)
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
+	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil
 }

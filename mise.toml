@@ -26,9 +26,10 @@ run = "golangci-lint fmt"
 description = "Run every linter"
 run = [
   "golangci-lint run",
-  # Shell scripts, found by their shebang.
+  # Shell scripts, found by their shebang (not the testscript archives,
+  # which hold small scripts among other files).
   '''
-  git ls-files --cached --others --exclude-standard -z -- . ':!:.agents' |
+  git ls-files --cached --others --exclude-standard -z -- . ':!:.agents' ':!:testdata/script' |
     xargs -0 grep -lIE '^#!.*[/ ](ba|da)?sh( |$)' |
     xargs -r shellcheck --external-sources
   ''',

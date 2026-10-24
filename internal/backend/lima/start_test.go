@@ -1,0 +1,355 @@
+package lima
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+)
+
+// envOf returns the value the call's environment gives key, and whether
+// it's set.
+func envOf(c call, key string) (string, bool) {
+	for _, e := range slices.Backward(c.env) {
+		if v, ok := strings.CutPrefix(e, key+"="); ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// startCall returns the call that started the VM.
+func startCall(t *testing.T, f *fakeRunner) call {
+	t.Helper()
+	for _, c := range f.calls {
+		if slices.Contains(c.argv, "start") {
+			return c
+		}
+	}
+	t.Fatalf("no start in %q", f.lines())
+	return call{}
+}
+
+const stoppedVM = `{"name":"v","status":"Stopped","config":{"ssh":{"forwardAgent":true}}}`
+
+func TestStartConfined(t *testing.T) {
+	proxy := backend.Confinement{
+		Net: backend.NetProxy, ProxyPort: 23456, ProxyUser: "devvm", ProxyPassword: "0123456789abcdef0123456789abcdef",
+		SSHPort: 2222, Env: map[string]string{"NO_PROXY": "localhost"},
+	}
+	for _, tc := range []struct {
+		name, os string
+		c        backend.Confinement
+		edits    []string // the --set values
+		wrapped  bool     // under sandbox-exec
+		qemu     bool     // through the QEMU wrapper
+		guestfwd string   // DEVVM_GUESTFWD; "" for unset
+	}{
+		{
+			name: "macOS, the proxy", os: "darwin", c: proxy, wrapped: true,
+			edits: []string{
+				".ssh.localPort=2222",
+				`.env = {"HTTPS_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456","HTTP_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456","NO_PROXY":"localhost","http_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456","https_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456"}`,
+				".propagateProxyEnv=false",
+			},
+		},
+		{
+			name: "Linux, the proxy", os: "linux", c: proxy, qemu: true,
+			guestfwd: `'/opt/my devvm/devvm' _qemu connect 127.0.0.1:23456`,
+			edits: []string{
+				".ssh.localPort=2222",
+				`.env = {"HTTPS_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128","HTTP_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128","NO_PROXY":"localhost","http_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128","https_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128"}`,
+				".propagateProxyEnv=false", ".hostResolver.enabled=false", `.dns=["127.0.0.1"]`,
+			},
+		},
+		{
+			name: "macOS, a build with no network", os: "darwin", c: backend.Confinement{Net: backend.NetNone, SSHPort: 2223}, wrapped: true,
+			edits: []string{".ssh.localPort=2223", portsSet(backend.Ports{})},
+		},
+		{
+			name: "Linux, a build with no network", os: "linux", c: backend.Confinement{Net: backend.NetNone}, qemu: true,
+			edits: []string{portsSet(backend.Ports{})},
+		},
+		{
+			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet},
+			edits: []string{portsSet(backend.Ports{})},
+		},
+		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, f, _ := testLima(t, tc.os)
+			t.Setenv(GuestFwdEnv, "left over")
+			f.out["limactl list --json"] = stoppedVM
+			if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(l.haPIDFile("v"), []byte("12345\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := l.Start(t.Context(), "v", tc.c); err != nil {
+				t.Fatal(err)
+			}
+			var edits []string
+			for _, c := range f.calls {
+				if c.argv[1] == "edit" {
+					for i, a := range c.argv {
+						if a == "--set" {
+							edits = append(edits, c.argv[i+1])
+						}
+					}
+				}
+			}
+			if !slices.Equal(edits, tc.edits) {
+				t.Errorf("edits\n%s\nwant\n%s", strings.Join(edits, "\n"), strings.Join(tc.edits, "\n"))
+			}
+			s := startCall(t, f)
+			args := s.argv[slices.Index(s.argv, "start"):]
+			if !slices.Equal(args, []string{"start", "--tty=false", "v"}) {
+				t.Errorf("start's arguments: %q", args)
+			}
+			if wrapped := s.argv[0] == "sandbox-exec"; wrapped != tc.wrapped {
+				t.Errorf("under sandbox-exec: %q", s.argv)
+			} else if wrapped {
+				lc := s.argv[3]
+				if !slices.Equal(s.argv[1:3], []string{"-f", l.profileFile("v")}) || !filepath.IsAbs(lc) || filepath.Base(lc) != "limactl" {
+					t.Errorf("sandbox-exec's arguments: %q", s.argv)
+				}
+			}
+			w, ok := envOf(s, "QEMU_SYSTEM_AARCH64")
+			if ok != tc.qemu || ok && w != filepath.Join(l.Dirs.Run(), "qemu", "qemu-system-aarch64") {
+				t.Errorf("QEMU_SYSTEM_AARCH64=%q (%v)", w, ok)
+			}
+			if fwd, _ := envOf(s, GuestFwdEnv); tc.qemu && fwd != tc.guestfwd {
+				t.Errorf("%s=%q, want %q", GuestFwdEnv, fwd, tc.guestfwd)
+			}
+			if s.dir != l.Dirs.Data {
+				t.Errorf("ran in %s", s.dir)
+			}
+			if ok, err := l.Confined(t.Context(), "v"); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Error("Confined with a hostagent that doesn't run")
+			}
+		})
+	}
+}
+
+// A VM whose config already matches gets no edit: an edit means new ssh host
+// keys at its next boot.
+func TestStartEditsOnlyWhatDiffers(t *testing.T) {
+	l, f, _ := testLima(t, "linux")
+	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 23456, SSHPort: 2222}
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"localPort":2222},"propagateProxyEnv":false,` +
+		`"hostResolver":{"enabled":false},"dns":["127.0.0.1"],"env":{"HTTPS_PROXY":"http://192.168.5.4:3128","HTTP_PROXY":"http://192.168.5.4:3128",` +
+		`"http_proxy":"http://192.168.5.4:3128","https_proxy":"http://192.168.5.4:3128"}}}`
+	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Start(t.Context(), "v", c); err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(f.lines(), func(l string) bool { return strings.HasPrefix(l, "limactl edit") }) {
+		t.Errorf("edited: %q", f.lines())
+	}
+	// Started without the proxy, the proxy's settings go.
+	f.calls = nil
+	if err := l.Start(t.Context(), "v", backend.Confinement{SSHPort: 2222}); err != nil {
+		t.Fatal(err)
+	}
+	want := "limactl edit --tty=false v --set del(.env) --set .propagateProxyEnv=true --set del(.hostResolver) --set del(.dns)"
+	if got := f.lines(); len(got) == 0 || got[0] != want {
+		t.Errorf("ran %q, want %q first", got, want)
+	}
+}
+
+// A running VM is left as it is.
+func TestStartLeavesARunningVM(t *testing.T) {
+	l, f, _ := testLima(t, "darwin")
+	f.out["limactl list --json"] = `{"name":"v","status":"Running"}`
+	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lines(); len(got) > 0 {
+		t.Errorf("ran %q", got)
+	}
+}
+
+// The profile lets the hostagent reach unix sockets only in the VM's Lima
+// folder and the ssh agent, with links resolved, and loopback only at the
+// VM's ssh port and its proxy.
+func TestProfile(t *testing.T) {
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"real/agent", "real/lima/vm1"} {
+		if err := os.MkdirAll(filepath.Join(tmp, d), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(tmp, "real"), filepath.Join(tmp, "link")); err != nil {
+		t.Fatal(err)
+	}
+	p := profile{LimaDir: filepath.Join(tmp, "link", "lima", "vm1"), AgentSocket: filepath.Join(tmp, "link", "agent", "s"), SSHPort: 2222, ProxyPort: 3128}
+	got := strings.Split(p.render(), "\n")
+	for _, line := range []string{
+		"(deny network-outbound)",
+		`(allow network-outbound (remote unix-socket (subpath "` + tmp + `/real/lima/vm1")))`,
+		`(allow network-outbound (remote unix-socket (path-literal "` + tmp + `/real/agent/s")))`,
+		`(allow network-outbound (remote ip "localhost:2222"))`,
+		`(allow network-outbound (remote ip "localhost:3128"))`,
+		`(deny mach-lookup (global-name "com.apple.dnssd.service"))`,
+	} {
+		if !slices.Contains(got, line) {
+			t.Errorf("no %s in\n%s", line, p.render())
+		}
+	}
+	if slices.Contains(got, "(allow network-outbound (remote unix-socket))") {
+		t.Error("every unix socket allowed")
+	}
+	p.AgentSocket, p.ProxyPort = "", 0
+	if n := strings.Count(p.render(), "unix-socket"); n != 1 {
+		t.Errorf("%d unix-socket rules without an agent", n)
+	}
+	if strings.Contains(p.render(), "3128") {
+		t.Error("a proxy port without a proxy")
+	}
+	// A build with the internet: everything but host loopback.
+	p = profile{Internet: true, LimaDir: "/l/vm", SSHPort: 2224}
+	want := "(version 1)\n(allow default)\n(deny network-outbound (remote ip \"localhost:*\"))\n(allow network-outbound (remote ip \"localhost:2224\"))\n"
+	if got := p.render(); got != want {
+		t.Errorf("internet profile:\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A VM using devvm's own agent may reach that agent, not the user's; one
+// without forwarding, neither.
+func TestProfileAgent(t *testing.T) {
+	for _, tc := range []struct {
+		forwarding bool
+		socket     string
+		want       string
+	}{
+		{true, "/d/agent.sock", "/d/agent.sock"},
+		{true, "", "/user/agent"},
+		{false, "/d/agent.sock", ""},
+	} {
+		l, f, _ := testLima(t, "darwin")
+		t.Setenv("SSH_AUTH_SOCK", "/user/agent")
+		l.Getenv = func(k string) string {
+			if k == "SSH_AUTH_SOCK" {
+				return "/user/agent"
+			}
+			return ""
+		}
+		f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"forwardAgent":` + map[bool]string{true: "true", false: "false"}[tc.forwarding] + `}}}`
+		if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, SSHPort: 2, AgentSocket: tc.socket}); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(l.profileFile("v"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lits := regexp.MustCompile(`path-literal "([^"]*)"`).FindAllStringSubmatch(string(b), -1)
+		got := ""
+		if len(lits) > 0 {
+			got = lits[0][1]
+		}
+		if got != tc.want || len(lits) > 1 {
+			t.Errorf("forwarding %v, socket %q: agent %q in\n%s", tc.forwarding, tc.socket, got, b)
+		}
+		wantSock := tc.socket
+		if wantSock == "" {
+			wantSock = "/user/agent" // the user's, as it is
+		}
+		if v, _ := envOf(startCall(t, f), "SSH_AUTH_SOCK"); v != wantSock {
+			t.Errorf("socket %q: SSH_AUTH_SOCK=%q, want %q", tc.socket, v, wantSock)
+		}
+		if fi, err := os.Stat(l.Dirs.Run()); err != nil || fi.Mode().Perm() != 0o700 {
+			t.Errorf("run folder: %v, %v", fi.Mode(), err)
+		}
+	}
+}
+
+func TestSBString(t *testing.T) {
+	if got, want := sbString(`/a "b" \c`), `"/a \"b\" \\c"`; got != want {
+		t.Errorf("sbString = %s, want %s", got, want)
+	}
+}
+
+// Lima can report a failed start for a VM that's running: carry on with a
+// warning, unless it doesn't answer over ssh; then it's stopped.
+func TestDegradedStart(t *testing.T) {
+	l, warned := stubLima(t)
+	vm := "devvm-img-0123456789ab"
+	writeStub(t, "instances", vm+" Stopped\n")
+	writeStub(t, "start-fails", "")
+	if err := l.Start(t.Context(), vm, backend.Confinement{}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"started_with_warnings vm=" + vm}; !slices.Equal(*warned, want) {
+		t.Errorf("warned %q, want %q", *warned, want)
+	}
+	writeStub(t, "instances", vm+" Stopped\n")
+	writeStub(t, "shell-hangs", "")
+	l.SSHTimeout = 200 * time.Millisecond
+	err := l.Start(t.Context(), vm, backend.Confinement{})
+	le, ok := errors.AsType[*backend.LoggedError](err)
+	if !ok || le.Msg.Names() != "start_no_ssh console="+filepath.Join(l.Dirs.LimaVM(vm), "serial*.log")+" vm="+vm {
+		t.Errorf("no ssh: %v", err)
+	}
+	if !slices.Contains(stubCalls(t), "limactl stop --force "+vm) {
+		t.Errorf("not stopped: %q", stubCalls(t))
+	}
+	// Not running after a failed start: it failed.
+	f := &fakeRunner{out: map[string]string{"limactl list --json": `{"name":"v","status":"Stopped"}`}, fail: []string{"limactl start"}}
+	l.Runner = f
+	err = l.Start(t.Context(), "v", backend.Confinement{})
+	if le, ok := errors.AsType[*backend.LoggedError](err); !ok || le.Msg.ID() != "start_failed" {
+		t.Errorf("a failed start: %v", err)
+	}
+}
+
+// Confined: the VM still runs on the hostagent Start started, which runs.
+func TestConfined(t *testing.T) {
+	l, f, _ := testLima(t, "darwin")
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped"}`
+	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
+		t.Errorf("never started: %v, %v", ok, err)
+	}
+	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.haPIDFile("v"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, SSHPort: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := l.Confined(t.Context(), "v"); !ok || err != nil {
+		t.Errorf("after Start: %v, %v", ok, err)
+	}
+	// Started again some other way: a new hostagent.
+	if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
+		t.Errorf("another hostagent: %v, %v", ok, err)
+	}
+}

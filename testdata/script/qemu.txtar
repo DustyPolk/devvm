@@ -1,0 +1,54 @@
+# devvm _qemu exec: the QEMU wrapper runs the real QEMU (here one that prints
+# its arguments, one per line) with Lima's network restricted. The wrapper's
+# own folder is first on PATH, so it must skip itself; a relative entry names
+# the folder Lima runs in, which holds a planted QEMU.
+chmod 0755 wrap/qemu-system-aarch64
+chmod 0755 real/qemu-system-aarch64
+chmod 0755 qemu-system-aarch64
+env PATH=$WORK/wrap${:}.${:}${:}$WORK/real${:}$PATH
+
+env DEVVM_GUESTFWD='/x/devvm _qemu connect 127.0.0.1:5'
+exec wrap/qemu-system-aarch64 -m 4G -netdev user,id=net0,net=192.168.5.0/24,hostfwd=tcp:127.0.0.1:41083-:22 -device virtio-net-pci,netdev=net0
+cmp stdout restricted
+! stdout planted
+
+# Lima's probes pass through as they are.
+exec wrap/qemu-system-aarch64 -M none -netdev help
+cmp stdout probe
+
+# Never unrestricted: a second network is refused, and QEMU doesn't run.
+! exec wrap/qemu-system-aarch64 -netdev user,id=net0,x=1 -netdev socket,id=net1,listen=:1234
+stderr '^devvm: refusing to start QEMU'
+! stdout .
+
+# No real QEMU on PATH: the planted one isn't used either.
+env PATH=$WORK/wrap${:}.${:}$DEVVM_BIN${:}/usr/bin${:}/bin
+env DEVVM_MESSAGES=names
+! exec $WORK/wrap/qemu-system-aarch64 -accel help
+stderr '^devvm: qemu_missing program=qemu-system-aarch64$'
+
+# Its usage.
+! exec devvm _qemu nope
+stderr 'usage: devvm _qemu'
+
+-- wrap/qemu-system-aarch64 --
+#!/bin/sh
+exec devvm _qemu exec "$0" "$@"
+-- real/qemu-system-aarch64 --
+#!/bin/sh
+printf '%s\n' "$@"
+-- qemu-system-aarch64 --
+#!/bin/sh
+echo planted
+-- restricted --
+-m
+4G
+-netdev
+user,id=net0,net=192.168.5.0/24,hostfwd=tcp:127.0.0.1:41083-:22,restrict=on,guestfwd=tcp:192.168.5.4:3128-cmd:/x/devvm _qemu connect 127.0.0.1:5
+-device
+virtio-net-pci,netdev=net0
+-- probe --
+-M
+none
+-netdev
+help
