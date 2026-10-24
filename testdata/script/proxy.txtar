@@ -1,0 +1,49 @@
+# devvm _proxy: the network policy proxy, hidden. --help lists its flags.
+exec devvm _proxy --help
+stdout '-auth-file'
+stdout '-listen'
+! stderr .
+exec devvm --help
+! stdout _proxy
+
+# The proxy refuses to run without the VM's password, or with an empty one.
+env DEVVM_MESSAGES=names
+! exec devvm _proxy -listen 127.0.0.1:0
+stderr '^devvm: proxy_failed reason=-auth-file is required$'
+! exec devvm _proxy --auth-file empty
+stderr '^devvm: proxy_failed reason=empty is empty$'
+! exec devvm _proxy -nope
+stderr '^devvm: proxy_failed reason=flag provided but not defined: -nope$'
+
+# -init-ca writes the CA and keeps it on the next run.
+exec devvm _proxy -init-ca ca
+exists ca/ca.pem ca/ca.key
+grep 'BEGIN CERTIFICATE' ca/ca.pem
+cp ca/ca.pem first.pem
+exec devvm _proxy -init-ca ca
+cmp ca/ca.pem first.pem
+
+# -redact: secret-named values replaced, their paths on stderr.
+stdin settings.json
+exec devvm _proxy -redact json
+stdout '"apiKey": "devvm-redacted"'
+stdout '"baseURL": "https://x"'
+! stdout dummy-key
+stderr '^provider.options.apiKey$'
+
+# -login -login-vm: the VM's copy holds placeholders, and what it copies as
+# it is is warned about.
+exec devvm _proxy -login codex -login-file auth.json -login-vm
+stdout '"OPENAI_API_KEY": "sk-devvm-proxy-managed-codex"'
+stdout '"extra": "x"'
+! stdout sk-real
+stderr '^devvm: codex_login_kept keys=extra$'
+exec devvm _proxy -login codex -login-file auth.json -login-bindings -login-hosts
+stdout '^api.openai.com:443$'
+
+-- empty --
+
+-- settings.json --
+{"provider": {"options": {"apiKey": "dummy-key", "baseURL": "https://x"}}}
+-- auth.json --
+{"OPENAI_API_KEY": "sk-real", "extra": "x"}

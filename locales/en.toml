@@ -395,3 +395,15 @@ other = "{{.vm}} moves to them on this launch"
 
 [sync_failed]
 other = "couldn't set up {{.vm}}'s shared tools"
+
+[proxy_failed]
+description = "reason is an error from the system or the flag parser, in English"
+other = "network policy proxy: {{.reason}}"
+
+[codex_login_kept]
+description = "keys lists auth.json's top-level keys, comma-separated"
+other = "Codex's auth.json {{.keys}} is copied into the VM as it is"
+
+[opencode_login_kept]
+description = "providers lists opencode's login providers, comma-separated"
+other = "opencode's {{.providers}} login is copied into the VM as it is"

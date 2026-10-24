@@ -180,3 +180,11 @@ func TestStdoutIsForData(t *testing.T) {
 		t.Errorf("got %q", out)
 	}
 }
+
+func TestStderrIsForLogLines(t *testing.T) {
+	out, errOut := sandbox(t, "")
+	_, _ = Stderr().Write([]byte("a log line\n"))
+	if errOut.String() != "a log line\n" || out.Len() != 0 {
+		t.Errorf("got %q, stdout %q", errOut, out)
+	}
+}

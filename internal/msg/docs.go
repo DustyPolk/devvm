@@ -42,6 +42,8 @@ var docs = map[string]string{
 	"port_invalid":                "commands#size-and-ports",
 	"no_image_for":                "images#which-image-a-new-vm-gets",
 	"network_policy_unavailable":  "security#what-it-doesnt-protect",
+	"codex_login_kept":            "network#agents-logins-and-settings",
+	"opencode_login_kept":         "network#agents-logins-and-settings",
 	"setid_files":                 "security#what-it-doesnt-protect",
 	"git_protect_needs_macos_new": "git-protection#linux-hosts",
 	"git_commondir":               "git-protection#what-a-lock-cant-stop",

@@ -67,6 +67,11 @@ func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
 }
 
+// CodexLoginKept is [codex_login_kept]: "Codex's auth.json {{.keys}} is copied into the VM as it is"
+func CodexLoginKept(keys string) M {
+	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
+}
+
 // Configuring is [configuring]: "configuring {{.vm}}"
 func Configuring(vm string) M {
 	return M{id: "configuring", vals: []val{{"vm", vm}}}
@@ -337,9 +342,19 @@ func NothingChanged() M {
 	return M{id: "nothing_changed"}
 }
 
+// OpencodeLoginKept is [opencode_login_kept]: "opencode's {{.providers}} login is copied into the VM as it is"
+func OpencodeLoginKept(providers string) M {
+	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
+}
+
 // PortInvalid is [port_invalid]: "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
 func PortInvalid(value string) M {
 	return M{id: "port_invalid", vals: []val{{"value", value}}}
+}
+
+// ProxyFailed is [proxy_failed]: "network policy proxy: {{.reason}}"
+func ProxyFailed(reason string) M {
+	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
 
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
@@ -622,6 +637,7 @@ var specs = map[string]spec{
 	"building_tools_in":           {fields: []string{"vm"}},
 	"checking_tools":              {},
 	"cloning_image":               {fields: []string{"parent"}},
+	"codex_login_kept":            {fields: []string{"keys"}},
 	"configuring":                 {fields: []string{"vm"}},
 	"continue":                    {},
 	"cpus_not_number":             {fields: []string{"value"}},
@@ -676,7 +692,9 @@ var specs = map[string]spec{
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
+	"opencode_login_kept":         {fields: []string{"providers"}},
 	"port_invalid":                {fields: []string{"value"}},
+	"proxy_failed":                {fields: []string{"reason"}},
 	"qemu_missing":                {fields: []string{"program"}},
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},

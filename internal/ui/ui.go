@@ -48,6 +48,10 @@ func StdinIsTerminal() bool { return stdinTTY() }
 // go through Say and the rest.
 func Stdout() io.Writer { return lockedWriter{stdout} }
 
+// Stderr is where output that isn't a message goes on stderr: the log lines
+// of a process devvm runs as itself in the background (devvm _proxy).
+func Stderr() io.Writer { return lockedWriter{stderr} }
+
 type lockedWriter struct{ w io.Writer }
 
 func (l lockedWriter) Write(p []byte) (int, error) {
