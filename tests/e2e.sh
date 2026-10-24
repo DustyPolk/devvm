@@ -556,6 +556,22 @@ check "started outside devvm again: without a terminal, devvm stops it and opens
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
   ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
   ! grep -q e2e-opened '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
+# Stopped by the self-check, it's still unenforced: its last self-check failed.
+check "devvm network off: its next start is direct, without a proxy" bash -c "cd '$n' &&
+  [[ \$('$D' network) == unenforced ]] && '$D' network off </dev/null >/dev/null &&
+  printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network) == off ]] &&
+  [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
+check "devvm network on while it runs: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
+  '$D' network on </dev/null >/dev/null 2>&1 && [[ \$('$D' network) == unenforced ]] &&
+  printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network) == on ]] &&
+  grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
+check "devvm network off while it runs confined: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
+  '$D' network off </dev/null >/dev/null && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m net_off_next_start vm=$vm | head -1)\" '$work/last.log' &&
+  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "rm -f deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 fi

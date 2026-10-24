@@ -101,5 +101,37 @@ stdout '"name":"codex-key","hosts":\["api\.openai\.com"\]'
 exec sh -c 'cat "$RUN"/devvm-codex-*.secrets.policy'
 stdout '^api\.openai\.com:443$'
 
+# devvm network: on, off or unenforced, as devvm ls shows it. on and off
+# change the VM's state, applied when it next starts.
+mkdir $WORK/none
+cd $WORK/none
+! exec devvm network
+stderr '^devvm: no_vm dir=\S*/none$'
+! exec devvm network sideways
+stderr '^devvm: usage_error reason='
+cd $WORK/off
+exec devvm network
+stdout '^off$'
+exec devvm network on
+stdout '^==> net_set_running state=on vm=devvm-off-[0-9a-f]{14}$'
+stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-off-*'
+stdout '^net=on$'
+exec devvm network on
+stdout '^==> net_already state=on vm=devvm-off-[0-9a-f]{14}$'
+! stderr .
+# Running, but not started confined: unenforced until devvm restart.
+exec devvm network
+stdout '^unenforced$'
+exec devvm network off
+stdout '^==> net_set_running state=off vm=devvm-off-[0-9a-f]{14}$'
+! stderr .
+# Stopped, it changes at its next start.
+exec sh -c 'limactl stop "$(cd "$VMS" && ls devvm-off-* | grep -v "\.")"'
+exec devvm network on
+stdout '^==> net_set_stopped state=on vm=devvm-off-[0-9a-f]{14}$'
+exec devvm network
+stdout '^on$'
+
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

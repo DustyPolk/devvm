@@ -34,7 +34,7 @@ type Fake struct {
 	Built        backend.Built     // BuildImage's answer
 	Target       backend.SSHTarget // SSH's answer
 	ShellCmd     backend.Command   // Shell's answer
-	Unconfined   bool              // Confined answers false
+	Unconfined   bool              // Confined answers false (else: true, or for a VM Start started, whether with NetProxy)
 	LifelineFile string            // Lifeline's answer
 	Missing      []backend.Problem // Problems' answer
 	// ExecFunc, when set, is what Exec returns after recording the call
@@ -47,6 +47,7 @@ type Fake struct {
 
 	mu    sync.Mutex
 	calls []Call
+	nets  map[string]backend.Net // by name: the network Start last started it with
 }
 
 var _ backend.Backend = (*Fake)(nil)
@@ -196,15 +197,27 @@ func (f *Fake) Start(_ context.Context, vm string, c backend.Confinement) error 
 	if err := f.record("Start", vm, c); err != nil {
 		return err
 	}
-	return f.change(vm, func(in *backend.Instance) { in.Status = backend.StatusRunning })
+	if err := f.change(vm, func(in *backend.Instance) { in.Status = backend.StatusRunning }); err != nil {
+		return err
+	}
+	if f.nets == nil {
+		f.nets = map[string]backend.Net{}
+	}
+	f.nets[vm] = c.Net
+	return nil
 }
 
-// Confined records the call and answers !Unconfined.
+// Confined records the call and answers false with Unconfined; else, for
+// a VM Start started, whether it started it with NetProxy, and true for
+// one preset running.
 func (f *Fake) Confined(_ context.Context, vm string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Confined", vm); err != nil {
 		return false, err
+	}
+	if n, ok := f.nets[vm]; ok && !f.Unconfined {
+		return n == backend.NetProxy, nil
 	}
 	return !f.Unconfined, nil
 }

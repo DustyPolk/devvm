@@ -59,10 +59,10 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy, `.git` protection, size, ports, backend and `--from`.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size, ports, backend and `--from`.
 5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size and ports its state asks for; a running one gets them when it next starts, and devvm says so.
-7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)).
+7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.
 8. The [self-check](network.md#the-self-check) runs: a VM whose network policy doesn't hold is stopped.
 9. It sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first.
 
@@ -111,6 +111,7 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 
 | | |
 | --- | --- |
+| `devvm network [on\|off]` | show this folder's VM's network policy (`on`, `off` or `unenforced`), or change it from its next start: `devvm restart` ([details](network.md#turning-it-on-or-off)) |
 | `devvm policy` | show the allowlist of this folder's VM, file by file ([details](network.md#changing-rules)) |
 | `devvm policy allow\|deny\|rm RULE... [-g]` | add rules to this folder's VM's own, as allows or denies, or remove them; `-g`: yours for every VM. Changes apply at once |
 | `devvm log [-f] [-n N] [--blocked]` | show what this folder's VM connected to and what its [network policy](network.md) blocked: the last 50 unless `-n`; `-f` follows; `--blocked` lists the blocks by host, with the command that allows each ([details](network.md#logs)) |

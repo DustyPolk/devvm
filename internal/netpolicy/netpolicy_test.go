@@ -473,7 +473,7 @@ func TestSelfCheck(t *testing.T) {
 			err = SelfCheck(t.Context(), f, st, func(context.Context) error {
 				restarted = true
 				f.Unconfined = !tc.fixed
-				return f.Start(t.Context(), "V", backend.Confinement{})
+				return f.Start(t.Context(), "V", backend.Confinement{Net: backend.NetProxy})
 			})
 			if names(err) != tc.want {
 				t.Errorf("SelfCheck = %v, want %q", names(err), tc.want)

@@ -388,7 +388,7 @@ other = "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes 
 other = "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
 
 [net_flag_ignored]
-other = "--network-policy and --no-network-policy only apply to new VMs"
+other = "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
 
 [git_protect_flag_ignored]
 other = "--no-git-protect only applies to new VMs"
@@ -481,22 +481,40 @@ other = "Turn on network policy for {{.vm}}?"
 other = "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
 
 [net_unenforced_stop]
-other = "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it; devvm starts it again confined"
+other = "network policy isn't enforced for {{.vm}}: it wasn't started confined, so devvm stopped it; devvm starts it again confined"
 
 [net_unenforced_restart]
-other = "{{.vm}} was started outside devvm, so its network policy isn't enforced. Restart it confined?"
+other = "{{.vm}} wasn't started confined, so its network policy isn't enforced. Restart it confined?"
 
 [net_unenforced]
-other = "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
+other = "WARNING: {{.vm}} reaches the network directly: it wasn't started confined, so its network policy isn't enforced until devvm starts it again"
+
+[net_off_next_start]
+other = "{{.vm}} stays on its proxy until it next starts, when network policy turns off: devvm restart"
+
+[net_already]
+description = "state is on or off"
+other = "network policy is already {{.state}} for {{.vm}}"
+
+[net_set_running]
+description = "state is on or off"
+other = "turned network policy {{.state}} for {{.vm}}; it applies on devvm restart"
+
+[net_set_stopped]
+description = "state is on or off"
+other = "turned network policy {{.state}} for {{.vm}}; it applies when the VM next starts"
+
+[net_on_old_tokens]
+other = "tokens copied into {{.vm}} while network policy was off still work wherever it kept them: rotate them if that matters"
 
 [net_off_log]
-other = "network policy is off for {{.vm}}, so nothing new is logged"
+other = "network policy is off for {{.vm}}, so nothing new is logged: devvm network on"
 
 [log_empty]
 other = "nothing logged for {{.vm}} yet"
 
 [net_off_policy]
-other = "network policy is off for {{.vm}}, so its rules don't apply"
+other = "network policy is off for {{.vm}}, so its rules don't apply: devvm network on"
 
 [no_vm_policy]
 other = "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
@@ -527,6 +545,10 @@ other = "{{.rule}} isn't in {{.file}}"
 [policy_failed]
 description = "reason is an error from the system, in English"
 other = "couldn't read or change the network policy rules: {{.reason}}"
+
+[network_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't read or change this folder's VM's network policy: {{.reason}}"
 
 [log_failed]
 description = "reason is an error from the system, in English"

@@ -98,6 +98,85 @@ func TestOpenNetworkPolicy(t *testing.T) {
 	}
 }
 
+// devvm network: shown as devvm ls shows it; on and off change the state
+// only, applied when the VM next starts. A running VM turned on isn't
+// confined, so its next launch offers the restart; one turned off stays
+// on its proxy until it starts again.
+func TestNetwork(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
+	f.ExecFunc = noDirect
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	vm := st.Name()
+	shown := func(want string) {
+		t.Helper()
+		var b strings.Builder
+		if err := e.Network(t.Context(), &b); err != nil || b.String() != want+"\n" {
+			t.Errorf("Network = %q, %v; want %s", b.String(), names(err), want)
+		}
+	}
+	shown("off")
+	for range 2 { // the second time it's already on
+		if err := e.SetNetwork(t.Context(), true); err != nil {
+			t.Fatal(names(err))
+		}
+	}
+	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(KeyNet) != "on" || slices.Contains(f.Methods(), "Stop") {
+		t.Errorf("net=%q, calls %q", st.Get(KeyNet), f.Methods())
+	}
+	shown(netpolicy.CheckUnenforced)
+	// Its next launch, without a terminal to offer the restart in, stops
+	// it; the one after starts it confined.
+	if err := e.Up(t.Context(), Options{}); names(err) != "net_unenforced_stop vm="+vm {
+		t.Fatalf("Up = %v", names(err))
+	}
+	if err := e.Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetProxy {
+		t.Errorf("started %+v", c)
+	}
+	shown("on")
+	// Off while it runs confined: it keeps its proxy until it starts again.
+	if err := e.SetNetwork(t.Context(), false); err != nil {
+		t.Fatal(names(err))
+	}
+	pid, ok := e.Proxy.PID(vm)
+	before := len(f.Calls())
+	if err := e.Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if again, _ := e.Proxy.PID(vm); !ok || again != pid || slices.Contains(f.Methods()[before:], "Start") {
+		t.Errorf("proxy %d, was %d; calls %q", again, pid, f.Methods()[before:])
+	}
+	shown("off")
+	if err := e.Restart(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetDirect {
+		t.Errorf("restarted %+v", c)
+	}
+	if _, ok := e.Proxy.PID(vm); ok {
+		t.Error("its proxy still runs")
+	}
+}
+
+// A backend that can't confine a VM to its proxy refuses devvm network
+// on, changing nothing.
+func TestNetworkRequiresEgressProxy(t *testing.T) {
+	caps := allNative()
+	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
+	e, _, _ := upEnv(t, caps)
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	err := e.SetNetwork(t.Context(), true)
+	if got := names(err); got != "backend_unreviewed backend=fake feature=egress-proxy vm="+st.Name() {
+		t.Errorf("Network on = %v", got)
+	}
+	if st, _ := state.ReadVM(e.Dirs, st.Name()); st.Get(KeyNet) != "off" {
+		t.Errorf("net=%q", st.Get(KeyNet))
+	}
+}
+
 // An image naming what the VM lacks adds it in place, after asking: the
 // tools join its list, a layer's script runs in it, and new agents'
 // folders are mounted, which stops it first. Declined, nothing changes.

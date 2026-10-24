@@ -27,7 +27,8 @@ var directArgv = []string{"curl", "--noproxy", "*", "-sS", "-m", "3", "-o", "/de
 //
 // A VM devvm started confined that still gets out has another way out (a
 // network devvm didn't set up), which a restart wouldn't change. One
-// started some other way is offered a restart, confined (restart starts
+// started some other way, or before its network policy was turned on, is
+// offered a restart, confined (restart starts
 // it again); without a terminal, or if it's still unenforced after the
 // restart, devvm stops. Either way the VM is stopped first, so it isn't
 // left reaching the internet. A restart declined is warned about, and the

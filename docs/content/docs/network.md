@@ -5,9 +5,19 @@ weight: 24
 
 A VM with network policy reaches only an allowlist of hosts, through a proxy devvm runs on the host, and never holds your tokens. Without it, a VM reaches anything this machine can, its own services on `localhost` included.
 
-## Turning it on
+## Turning it on or off
 
-When devvm creates a VM it asks whether to turn network policy on; the answer defaults to no. `--network-policy` or `--no-network-policy` answer up front, and without a terminal to ask in it's off. A VM keeps its choice: it's in its state, `net=on` or `net=off`.
+When devvm creates a VM it asks whether to turn network policy on; the answer defaults to no. `--network-policy` or `--no-network-policy` answer up front, and without a terminal to ask in it's off. A VM keeps its choice: it's in its state, `net=on` or `net=off`. On an existing VM the flags are ignored, with a warning.
+
+| | |
+| --- | --- |
+| `devvm network` | print this folder's VM's network policy, as `devvm ls` shows it: `on`, `off`, or `unenforced` ([the self-check](#the-self-check)) |
+| `devvm network on\|off` | change it, from the VM's next start: `devvm restart` |
+
+`devvm network on` is refused for a backend that can't confine the VM to its proxy. Tokens and logins the VM got while it was off still work wherever it kept them: rotate them if that matters. Until the VM starts again:
+
+- **Turned on while running:** it isn't confined, so `devvm ls` shows it `unenforced`, and its next launch offers to restart it confined, as for [a VM started outside devvm](#the-self-check).
+- **Turned off while running confined:** its launches keep it on its proxy, with your tokens still out of it, and warn that it turns off when it next starts.
 
 For a VM with network policy, devvm:
 
@@ -102,10 +112,10 @@ The VM's setup, on every launch:
 
 Network policy holds only while the VM runs on the Lima process devvm started confined: a process can't leave its sandbox, but `limactl start` starts a new one, unconfined. So on every launch, whether devvm started the VM or found it running, devvm checks, on the host, that the VM still runs on the process it started, then that a direct connection from the VM to the internet fails. The VM answers the second check, so it only catches the honest case; the first is the one the VM can't fake. The result is in the VM's state: `net_check=ok` or `net_check=unenforced`.
 
-- **Started outside devvm:** in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
+- **Not started confined** (started outside devvm, or running since before `devvm network on`): in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
 - **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
 
-`devvm ls` shows such a VM's network policy as `unenforced`: one whose last self-check failed, or one running that isn't on the process devvm started (checked on the host each time).
+`devvm ls` shows such a VM's network policy as `unenforced`: one whose last self-check failed, or one running that isn't on the process devvm started confined (checked on the host each time). So does `devvm network`.
 
 ## Secrets
 

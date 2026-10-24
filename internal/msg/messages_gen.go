@@ -727,6 +727,11 @@ func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }
 
+// NetAlready is [net_already]: "network policy is already {{.state}} for {{.vm}}"
+func NetAlready(state string, vm string) M {
+	return M{id: "net_already", vals: []val{{"state", state}, {"vm", vm}}}
+}
+
 // NetAsk is [net_ask]: "Turn on network policy for {{.vm}}?"
 func NetAsk(vm string) M {
 	return M{id: "net_ask", vals: []val{{"vm", vm}}}
@@ -737,34 +742,59 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
-// NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs"
+// NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
 func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
 }
 
-// NetOffLog is [net_off_log]: "network policy is off for {{.vm}}, so nothing new is logged"
+// NetOffLog is [net_off_log]: "network policy is off for {{.vm}}, so nothing new is logged: devvm network on"
 func NetOffLog(vm string) M {
 	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
 }
 
-// NetOffPolicy is [net_off_policy]: "network policy is off for {{.vm}}, so its rules don't apply"
+// NetOffNextStart is [net_off_next_start]: "{{.vm}} stays on its proxy until it next starts, when network policy turns off: devvm restart"
+func NetOffNextStart(vm string) M {
+	return M{id: "net_off_next_start", vals: []val{{"vm", vm}}}
+}
+
+// NetOffPolicy is [net_off_policy]: "network policy is off for {{.vm}}, so its rules don't apply: devvm network on"
 func NetOffPolicy(vm string) M {
 	return M{id: "net_off_policy", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
+// NetOnOldTokens is [net_on_old_tokens]: "tokens copied into {{.vm}} while network policy was off still work wherever it kept them: rotate them if that matters"
+func NetOnOldTokens(vm string) M {
+	return M{id: "net_on_old_tokens", vals: []val{{"vm", vm}}}
+}
+
+// NetSetRunning is [net_set_running]: "turned network policy {{.state}} for {{.vm}}; it applies on devvm restart"
+func NetSetRunning(state string, vm string) M {
+	return M{id: "net_set_running", vals: []val{{"state", state}, {"vm", vm}}}
+}
+
+// NetSetStopped is [net_set_stopped]: "turned network policy {{.state}} for {{.vm}}; it applies when the VM next starts"
+func NetSetStopped(state string, vm string) M {
+	return M{id: "net_set_stopped", vals: []val{{"state", state}, {"vm", vm}}}
+}
+
+// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it wasn't started confined, so its network policy isn't enforced until devvm starts it again"
 func NetUnenforced(vm string) M {
 	return M{id: "net_unenforced", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} was started outside devvm, so its network policy isn't enforced. Restart it confined?"
+// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} wasn't started confined, so its network policy isn't enforced. Restart it confined?"
 func NetUnenforcedRestart(vm string) M {
 	return M{id: "net_unenforced_restart", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedStop is [net_unenforced_stop]: "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it; devvm starts it again confined"
+// NetUnenforcedStop is [net_unenforced_stop]: "network policy isn't enforced for {{.vm}}: it wasn't started confined, so devvm stopped it; devvm starts it again confined"
 func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
+}
+
+// NetworkFailed is [network_failed]: "couldn't read or change this folder's VM's network policy: {{.reason}}"
+func NetworkFailed(reason string) M {
+	return M{id: "network_failed", vals: []val{{"reason", reason}}}
 }
 
 // NewerTools is [newer_tools]: "newer shared tools: {{.tools}}; devvm update moves this VM to them"
@@ -1474,14 +1504,20 @@ var specs = map[string]spec{
 	"msg_unexpected_value":        {fields: []string{"key", "name"}},
 	"msg_unknown":                 {fields: []string{"name"}},
 	"net_about":                   {fields: []string{"vm"}},
+	"net_already":                 {fields: []string{"state", "vm"}},
 	"net_ask":                     {fields: []string{"vm"}},
 	"net_direct_route":            {fields: []string{"vm"}},
 	"net_flag_ignored":            {},
 	"net_off_log":                 {fields: []string{"vm"}},
+	"net_off_next_start":          {fields: []string{"vm"}},
 	"net_off_policy":              {fields: []string{"vm"}},
+	"net_on_old_tokens":           {fields: []string{"vm"}},
+	"net_set_running":             {fields: []string{"state", "vm"}},
+	"net_set_stopped":             {fields: []string{"state", "vm"}},
 	"net_unenforced":              {fields: []string{"vm"}},
 	"net_unenforced_restart":      {fields: []string{"vm"}},
 	"net_unenforced_stop":         {fields: []string{"vm"}},
+	"network_failed":              {fields: []string{"reason"}},
 	"newer_tools":                 {fields: []string{"tools"}},
 	"no_claude_token":             {fields: []string{"vm"}},
 	"no_digest":                   {fields: []string{"from"}},

@@ -356,4 +356,14 @@ func TestConfined(t *testing.T) {
 	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
 		t.Errorf("another hostagent: %v, %v", ok, err)
 	}
+	// Started by Start, but without its proxy (network policy off then).
+	if err := os.WriteFile(l.haPIDFile("v"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetDirect}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
+		t.Errorf("started direct: %v, %v", ok, err)
+	}
 }

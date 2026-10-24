@@ -121,7 +121,8 @@ func (e *Env) checkSetID(dir string) {
 // run starts the VM if it's stopped, confined as its state says, then
 // checks that its network policy holds (netpolicy.SelfCheck, which stops
 // it if not). It returns the confinement the VM runs with. A running VM's
-// proxy is kept, unless it needs starting again (Prepare).
+// proxy is kept, unless it needs starting again (Prepare); one whose
+// network policy was turned off keeps it until it starts again.
 func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
 	vm := st.Name()
 	if st.Get(KeyNet) == "" {
@@ -153,6 +154,20 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 	case conf.Net == backend.NetProxy:
 		if started, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), true); err != nil {
 			return conf, err
+		}
+	default:
+		// Network policy turned off while it ran confined: it stays
+		// on its proxy, tokens out of it, until it starts again.
+		confined, err := b.Confined(ctx, vm)
+		if err != nil {
+			return conf, err
+		}
+		if confined {
+			ui.Warn(msg.NetOffNextStart(vm))
+			if started, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), true); err != nil {
+				return conf, err
+			}
+			return started, nil
 		}
 	}
 	if err := netpolicy.SelfCheck(ctx, b, st, start); err != nil {

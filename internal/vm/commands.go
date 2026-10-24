@@ -263,6 +263,66 @@ func (e *Env) delete(ctx context.Context, t *found) error {
 	return e.sshConfig().Write(ctx)
 }
 
+// Network writes the folder's VM's network policy to w, as devvm ls
+// shows it: on, off or unenforced.
+func (e *Env) Network(ctx context.Context, w io.Writer) error {
+	t, err := e.existing(ctx, "")
+	if err != nil {
+		return err
+	}
+	in, err := t.b.Inspect(ctx, t.f.Name)
+	if err != nil {
+		return err
+	}
+	shown, err := netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, shown+"\n")
+	return err
+}
+
+// SetNetwork turns the folder's VM's network policy on or off, from its
+// next start. Turning it on, its backend must be able to confine the VM
+// to its proxy, and tokens the VM got before stay valid.
+func (e *Env) SetNetwork(ctx context.Context, on bool) error {
+	t, err := e.existing(ctx, "")
+	if err != nil {
+		return err
+	}
+	vm, st, b := t.f.Name, t.st, t.b
+	to := "off"
+	if on {
+		to = "on"
+	}
+	if st.Get(KeyNet) == to {
+		ui.Info(msg.NetAlready(to, vm))
+		return nil
+	}
+	in, err := b.Inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	running := in.Status == backend.StatusRunning
+	if on {
+		if err := backend.Require(b, vm, backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
+			return err
+		}
+	}
+	if err := st.Set(KeyNet, to); err != nil {
+		return err
+	}
+	if running {
+		ui.Info(msg.NetSetRunning(to, vm))
+	} else {
+		ui.Info(msg.NetSetStopped(to, vm))
+	}
+	if on {
+		ui.Note(msg.NetOnOldTokens(vm))
+	}
+	return nil
+}
+
 // LogOptions are what devvm log shows of the network log.
 type LogOptions struct {
 	Lines   int  // the last events shown

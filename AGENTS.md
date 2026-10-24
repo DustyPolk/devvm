@@ -153,7 +153,7 @@ Bats files (pending cases, by task):
 | `guest.bats` | ssh/code (VS Code settings) |
 | `images.bats` | layer, gc (three), images (three, `images rm`) |
 | `install.bats` | all (install.sh) |
-| `network.bats` | network (what it prints), secret (`unuse`), ssh/code (direct route) |
+| `network.bats` | secret (`unuse`), ssh/code (direct route) |
 | `ports.bats` | ports (five) |
 | `project.bats` | git-protect (strict) |
 | `size.bats` | size (three) |
@@ -182,9 +182,10 @@ Deliberate changes from the bash:
 - Features: each runs as a `running_script` step (no `adding_feature`); none chosen is `base_features_none`; feature names that aren't layer-like are skipped in the listing and make `base-features` unreadable.
 - `help` is Cobra's (`devvm help COMMAND`, per-command help); `devvm completion bash|zsh|fish` is new; `--version` has no `-v`; the version is set at build time, else Go's build info (no `VERSION` file read).
 - Host checks are each backend's `Problems`: a command stops at the first (none listed under it); `doctor` checks the new VMs' backend (`--backend`), adds a features table, Lima's global configs (`lima-config`) and `qemu-img`, `*_fix` messages carry the fix, `doctor_ok` names the backend.
+- `network`: no argument prints `ls`'s value (`unenforced` too); an unchanged one is `net_already`; `on` needs the backend's egress proxy first; a running VM turned off stays on its proxy until it next starts (`net_off_next_start`); `Confined` means started with the proxy, and `net_unenforced*` say "wasn't started confined"; a bad argument is cobra's `usage_error`.
 
 Pending in code:
-- deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend`/`*AgentKeys` (size, ports, setup, ssh-agent), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings and `net_off_log` name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
+- deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend`/`*AgentKeys` (size, ports, setup, ssh-agent), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The other `*_flag_ignored` warnings name `devvm git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
 - `ssh_remote_hint` doesn't name `devvm ssh-agent`. `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`; `checkAgent` runs only once `--ssh-agent` exists; ssh config entries forward devvm's agent with `devvm ssh-agent`. `devvm setup` brings `base_will_rebuild`, `gc_old_hint`, the features in `--help`, and `base_features` naming it. `devvm images` labels images with `image_from` too. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
 - Release builds set the version with `-ldflags "-X github.com/w3cj/devvm/internal/cli.version=…"` (`.goreleaser.yaml` comes with releases); `doctor_ok` shows it.
 - Secret brings `secret_store`, `secret_delete`, `proxies_forget_values`, Keychain writes, and `devvm secret set` in `no_claude_token`/`no_github_token` (they name `CLAUDE_CODE_OAUTH_TOKEN`, or nothing, until then).

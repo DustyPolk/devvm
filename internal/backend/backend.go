@@ -56,8 +56,9 @@ type Backend interface {
 	// A running VM is left running; its confinement is checked with
 	// Confined.
 	Start(ctx context.Context, vm string, c Confinement) error
-	// Confined reports whether a running VM still runs under the
-	// confinement Start gave it (not started some other way since).
+	// Confined reports whether a running VM still runs confined to
+	// devvm's proxy: started by Start with NetProxy, not some other way
+	// since.
 	Confined(ctx context.Context, vm string) (bool, error)
 	// Lifeline is the pid file of the host process that runs the VM once
 	// it starts, which the VM's proxy follows: it exits when that process

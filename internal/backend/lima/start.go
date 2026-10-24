@@ -276,8 +276,9 @@ func (l *Lima) recordStart(vm string, n backend.Net) error {
 	return writeFile(l.startedFile(vm), fmt.Appendf(nil, "%s %d\n", strings.TrimSpace(string(pid)), n), 0o600)
 }
 
-// Confined reports whether the VM runs on the hostagent Start started:
-// anything else (limactl start) is a new hostagent, unconfined.
+// Confined reports whether the VM runs on the hostagent Start started
+// with NetProxy: anything else (limactl start) is a new hostagent,
+// unconfined.
 func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 	rec, err := os.ReadFile(l.startedFile(vm))
 	if errors.Is(err, os.ErrNotExist) {
@@ -291,9 +292,9 @@ func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
-	want, _, _ := strings.Cut(strings.TrimSpace(string(rec)), " ")
+	want, n, _ := strings.Cut(strings.TrimSpace(string(rec)), " ")
 	pid, err := strconv.Atoi(strings.TrimSpace(string(ha)))
-	if err != nil || strconv.Itoa(pid) != want {
+	if err != nil || strconv.Itoa(pid) != want || n != strconv.Itoa(int(backend.NetProxy)) {
 		return false, nil //nolint:nilerr // an unreadable pid is no hostagent of devvm's
 	}
 	return alive(pid), nil
