@@ -39,6 +39,7 @@ devvm [IMAGE] [flags]
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
 - [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked
 - [devvm ls](devvm_ls.md): List the project VMs
+- [devvm policy](devvm_policy.md): Show the network policy allowlist of this folder's VM
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it

@@ -86,7 +86,7 @@ Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
 - **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
 - **Linux hosts:** `LIMA_HOME=~/.lt-linux-go`, VM `linuxhost` (nested virtualization, the repo read-only, copied to `~/devvm`), set up as [testing.md](docs/content/docs/testing.md) says; never `~/.lt-linux`, which is the user's.
-- **e2e to come:** `--backend`; `size gc from`; network: `policy allow` at once, git over SSH, `secret use github`, opencode's login; project: SSH agent, `devvm stop`, `git-protect`; tools: python, uv, claude, codex, rust, go, adding in place, gc.
+- **e2e to come:** `--backend`; `size gc from`; network: git over SSH, `secret use github`, opencode's login; project: SSH agent, `devvm stop`, `git-protect`; tools: python, uv, claude, codex, rust, go, adding in place, gc.
 - **Delete test VMs and temp files afterwards.** Long builds run in the background. Tests that `chflags` real files unlock them (`chflags -R nouchg`), only in their own temp folders.
 - **The testscript runner stops the sandbox's proxies** (`pkill -f` on `-lifeline`): the stub hostagent is gone before they look, so they'd wait 15 minutes.
 - **`limactl shell` reads stdin:** give it none unless the input is meant for it.
@@ -149,11 +149,11 @@ Bats files (pending cases, by task):
 | --- | --- |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
 | `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), limactl |
-| `delete.bats` | gc (two, overlay half, `delete_image_key`), allowlist of a VM deleted outside devvm |
+| `delete.bats` | gc (two, overlay half, `delete_image_key`) |
 | `guest.bats` | ssh/code (VS Code settings) |
 | `images.bats` | layer, gc (three), images (three, `images rm`) |
 | `install.bats` | all (install.sh) |
-| `network.bats` | policy/network (five), secret (`unuse`), ssh/code (direct route) |
+| `network.bats` | network (what it prints), secret (`unuse`), ssh/code (direct route) |
 | `ports.bats` | ports (five) |
 | `project.bats` | git-protect (strict) |
 | `size.bats` | size (three) |
@@ -177,6 +177,7 @@ Deliberate changes from the bash:
 - `--from`: `from_lookup_failed`/`from_cached` are `from_unreachable`, `from_not_found` and `from_cached_*` (no nested message); a registry still failing (5xx, 429) after retries is unreachable; `building_image_from` replaces `building_image`'s `from=`; Lima sets the converted disk with `--set .images` on `base.yaml` (no `lima.yaml`) and the build VM's mounts with `--set .mounts`; `from_ignored` on restart, update and remove too; a missing `--from` value is cobra's `usage_error`.
 - `ls`: a BACKEND column, VMs from every backend sorted by name, `-` for what a VM's state lacks (an unset GIT isn't `on`), a tab-aligned table; a backend that can't list fails it (`ls_failed`, or its check's message) only when a VM's state names it.
 - `log`: `--follow`/`--lines` long names; `--blocked` refuses `-f`/`-n` (not ignored); `net_off_log` on stderr; an empty log is `log_empty` too (`-f` waits on it); lines that aren't events are skipped; `--blocked` is a tab-aligned table, `-` for refused requests, IPv6 hosts bracketed.
+- `policy`: `allow`/`deny`/`rm` subcommands with `-g`/`--global`; rules are the proxy's own syntax (`proxy.ValidRule`), all checked before any is added, `allow !RULE` refused; duplicates and `rm` match in any case, comments aside; files rewritten whole, through a link; `rule_added*`/`rule_removed*`/`rule_present` replace `policy_changed`/`removed`; `rm` on a missing file warns per rule (no `no_rules`); `net_off_policy` on edits too; `state.VMNames` skips `<vm>.policy`.
 - `net_direct_route` doesn't name the Lima config. `DEVVM_SECRET_SERVICE` is checked for reads too. A failed tools resolve is `tools_need_resolve` with the log's end. e2e's sandbox and service differ from the bash's: its rebuilds delete every stale image in its Lima home.
 - Features: each runs as a `running_script` step (no `adding_feature`); none chosen is `base_features_none`; feature names that aren't layer-like are skipped in the listing and make `base-features` unreadable.
 - `help` is Cobra's (`devvm help COMMAND`, per-command help); `devvm completion bash|zsh|fish` is new; `--version` has no `-v`; the version is set at build time, else Go's build info (no `VERSION` file read).

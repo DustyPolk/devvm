@@ -203,6 +203,7 @@ func TestVMNames(t *testing.T) {
 	write(t, d.VMState("devvm-b-00000000000000"), "net=off\n")
 	write(t, d.VMState("devvm-a-00000000000000"), "net=off\n")
 	write(t, d.VMState(".devvm-c-00000000000000.tmp-1"), "")
+	write(t, d.VMState("devvm-a-00000000000000.policy"), "example.com\n")
 	if err := os.MkdirAll(filepath.Join(d.VMs(), "folder"), 0o700); err != nil {
 		t.Fatal(err)
 	}

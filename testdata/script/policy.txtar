@@ -1,0 +1,96 @@
+# policy: the allowlist of this folder's VM, file by file; allow, deny
+# and rm change the VM's own rules, or with -g every VM's.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env GLOBAL=$XDG_CONFIG_HOME/devvm/policy
+
+# No VM: nothing to show or change, except every VM's rules.
+mkdir $WORK/net
+cd $WORK/net
+! exec devvm policy
+stderr '^devvm: no_vm dir=\S*/net$'
+! exec devvm policy allow example.com
+stderr '^devvm: no_vm_policy dir=\S*/net$'
+exec devvm policy allow -g '*.corp.test'
+stdout '^==> rule_added_global rule=\*\.corp\.test$'
+cmp $GLOBAL $WORK/global.policy
+
+# allow, deny (a deny gets its !, once) and rm edit the VM's own file;
+# a rule already there isn't added again, in any case.
+exec devvm --network-policy --no-git-protect base
+exec devvm policy allow example.com api.example.com:8443
+stdout '^==> rule_added rule=example\.com vm=devvm-net-[0-9a-f]{14}$'
+stdout '^==> rule_added rule=api\.example\.com:8443 vm=devvm-net-[0-9a-f]{14}$'
+exec devvm policy deny bad.example.com '!worse.example.com'
+stdout '^==> rule_added rule=!bad\.example\.com vm=devvm-net-[0-9a-f]{14}$'
+stdout '^==> rule_added rule=!worse\.example\.com vm=devvm-net-[0-9a-f]{14}$'
+exec devvm policy allow Example.com
+stdout '^==> rule_present file=\S*/vms/devvm-net-[0-9a-f]{14}\.policy rule=Example\.com$'
+exec devvm policy rm api.example.com:8443 '!worse.example.com'
+stdout '^==> rule_removed rule=api\.example\.com:8443 vm=devvm-net-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-net-*.policy'
+cmp stdout $WORK/vm.policy
+
+# IPv6 rules, with a port in brackets.
+exec devvm policy allow '[fd00::1]:22' fd00::/8
+exec devvm policy deny '[::1]:8080'
+exec devvm policy rm '[fd00::1]:22' fd00::/8 '![::1]:8080'
+exec sh -c 'cat "$VMS"/devvm-net-*.policy'
+cmp stdout $WORK/vm.policy
+
+# What isn't a rule is refused, and nothing is added; allow doesn't take
+# a deny.
+! exec devvm policy allow ok.example.com 'a b'
+stderr '^devvm: not_a_rule rule=a b$'
+! exec devvm policy allow 'x;rm'
+stderr '^devvm: not_a_rule rule=x;rm$'
+! exec devvm policy allow '!bad.example.com'
+stderr '^devvm: not_a_rule rule=!bad\.example\.com$'
+! exec devvm policy deny 'example.com # c'
+stderr '^devvm: not_a_rule rule='
+! exec devvm policy allow
+stderr '^devvm: usage_error reason='
+! exec devvm policy sideways
+stderr '^devvm: usage_error reason='
+exec sh -c 'cat "$VMS"/devvm-net-*.policy'
+cmp stdout $WORK/vm.policy
+
+# A rule that isn't there: a warning; the others still go.
+exec devvm policy rm nothere.test example.com
+stderr '^devvm: rule_missing file=\S*/vms/devvm-net-[0-9a-f]{14}\.policy rule=nothere\.test$'
+stdout '^==> rule_removed rule=example\.com vm=devvm-net-[0-9a-f]{14}$'
+exec devvm policy allow example.com
+exec devvm policy rm -g '*.corp.test'
+stdout '^==> rule_removed_global rule=\*\.corp\.test$'
+exec devvm policy allow --global '*.corp.test'
+
+# The rules in effect, file by file, comments left out.
+exec sh -c 'echo "# mine" >> "$GLOBAL"'
+exec devvm policy
+stdout '^# \S*/layers/base\.policy$'
+stdout '^  github\.com$'
+stdout '^# \S*/config/devvm/policy\n  \*\.corp\.test\n# \S*/vms/devvm-net-[0-9a-f]{14}\.policy\n  !bad\.example\.com\n  example\.com\n'
+! stdout mine
+! stderr .
+
+# A VM without network policy: its rules don't apply, and devvm says so.
+mkdir $WORK/off
+cd $WORK/off
+exec devvm --no-network-policy --no-git-protect base
+exec devvm policy
+stderr '^net_off_policy vm=devvm-off-[0-9a-f]{14}$'
+exec devvm policy allow example.com
+stderr '^net_off_policy vm=devvm-off-[0-9a-f]{14}$'
+
+# A new VM doesn't get the rules of one by its name deleted outside devvm.
+exec sh -c 'limactl delete "$(basename "$VMS"/devvm-off-*[0-9a-f])"'
+exec devvm --no-network-policy --no-git-protect base
+stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
+exec sh -c 'ls "$VMS"'
+! stdout 'devvm-off-.*\.policy'
+
+-- global.policy --
+*.corp.test
+-- vm.policy --
+example.com
+!bad.example.com

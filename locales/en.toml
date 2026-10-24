@@ -495,6 +495,39 @@ other = "network policy is off for {{.vm}}, so nothing new is logged"
 [log_empty]
 other = "nothing logged for {{.vm}} yet"
 
+[net_off_policy]
+other = "network policy is off for {{.vm}}, so its rules don't apply"
+
+[no_vm_policy]
+other = "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
+
+[not_a_rule]
+description = "rule is what was typed, quoted"
+other = "not a rule: {{.rule}}"
+
+[rule_added]
+other = "added {{.rule}} for {{.vm}}"
+
+[rule_added_global]
+other = "added {{.rule}} for every VM"
+
+[rule_present]
+other = "{{.rule}} is already in {{.file}}"
+
+[rule_removed]
+other = "removed {{.rule}} for {{.vm}}"
+
+[rule_removed_global]
+other = "removed {{.rule}} for every VM"
+
+[rule_missing]
+description = "rule is what was typed, quoted"
+other = "{{.rule}} isn't in {{.file}}"
+
+[policy_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't read or change the network policy rules: {{.reason}}"
+
 [log_failed]
 description = "reason is an error from the system, in English"
 other = "couldn't read this folder's VM's network log: {{.reason}}"

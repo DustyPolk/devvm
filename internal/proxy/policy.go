@@ -63,6 +63,27 @@ func parseRule(line string) (rule, bool) {
 	return r, true
 }
 
+// ValidRule reports whether s is one rule, as devvm policy writes it: a
+// host name, *.name, ** or an address or CIDR (no zone), optionally with a
+// port and a leading !, and no spaces or comment. AllowRule's rules are
+// valid.
+func ValidRule(s string) bool {
+	if s == "" || strings.ContainsAny(s, "# \t\r\n%") {
+		return false
+	}
+	r, ok := parseRule(s)
+	switch {
+	case !ok:
+		return false
+	case r.prefix.IsValid():
+		return true
+	case r.host == "**":
+		return true
+	}
+	h := strings.TrimPrefix(r.host, "*.")
+	return !strings.ContainsAny(h, "[]") && hostOK(h)
+}
+
 func (r rule) portOK(port int) bool {
 	if r.port == 0 {
 		return port == 443 || port == 80

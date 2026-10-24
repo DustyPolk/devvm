@@ -4,11 +4,13 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strings"
 
 	"github.com/w3cj/devvm/internal/paths"
 )
 
-// VMNames returns the names of the VMs that have state, sorted.
+// VMNames returns the names of the VMs that have state, sorted. A VM's
+// own network policy rules, <vm>.policy beside its state, aren't VMs.
 func VMNames(d paths.Dirs) ([]string, error) {
 	es, err := os.ReadDir(d.VMs())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -18,7 +20,7 @@ func VMNames(d paths.Dirs) ([]string, error) {
 	}
 	var names []string
 	for _, e := range es {
-		if e.Type().IsRegular() && checkName("VM name", e.Name()) == nil {
+		if e.Type().IsRegular() && checkName("VM name", e.Name()) == nil && !strings.HasSuffix(e.Name(), ".policy") {
 			names = append(names, e.Name())
 		}
 	}

@@ -747,6 +747,11 @@ func NetOffLog(vm string) M {
 	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
 }
 
+// NetOffPolicy is [net_off_policy]: "network policy is off for {{.vm}}, so its rules don't apply"
+func NetOffPolicy(vm string) M {
+	return M{id: "net_off_policy", vals: []val{{"vm", vm}}}
+}
+
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
 func NetUnenforced(vm string) M {
 	return M{id: "net_unenforced", vals: []val{{"vm", vm}}}
@@ -827,6 +832,16 @@ func NoVM(dir string) M {
 	return M{id: "no_vm", vals: []val{{"dir", dir}}}
 }
 
+// NoVMPolicy is [no_vm_policy]: "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
+func NoVMPolicy(dir string) M {
+	return M{id: "no_vm_policy", vals: []val{{"dir", dir}}}
+}
+
+// NotARule is [not_a_rule]: "not a rule: {{.rule}}"
+func NotARule(rule string) M {
+	return M{id: "not_a_rule", vals: []val{{"rule", rule}}}
+}
+
 // NotAnImage is [not_an_image]: "refusing to delete {{.name}}: it's not an image"
 func NotAnImage(name string) M {
 	return M{id: "not_an_image", vals: []val{{"name", name}}}
@@ -845,6 +860,11 @@ func OCIWaiting() M {
 // OpencodeLoginKept is [opencode_login_kept]: "opencode's {{.providers}} login is copied into the VM as it is"
 func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
+}
+
+// PolicyFailed is [policy_failed]: "couldn't read or change the network policy rules: {{.reason}}"
+func PolicyFailed(reason string) M {
+	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
 }
 
 // PortInvalid is [port_invalid]: "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
@@ -935,6 +955,36 @@ func RestartForMounts() M {
 // RmFailed is [rm_failed]: "couldn't delete this folder's VM: {{.reason}}"
 func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
+}
+
+// RuleAdded is [rule_added]: "added {{.rule}} for {{.vm}}"
+func RuleAdded(rule string, vm string) M {
+	return M{id: "rule_added", vals: []val{{"rule", rule}, {"vm", vm}}}
+}
+
+// RuleAddedGlobal is [rule_added_global]: "added {{.rule}} for every VM"
+func RuleAddedGlobal(rule string) M {
+	return M{id: "rule_added_global", vals: []val{{"rule", rule}}}
+}
+
+// RuleMissing is [rule_missing]: "{{.rule}} isn't in {{.file}}"
+func RuleMissing(file string, rule string) M {
+	return M{id: "rule_missing", vals: []val{{"file", file}, {"rule", rule}}}
+}
+
+// RulePresent is [rule_present]: "{{.rule}} is already in {{.file}}"
+func RulePresent(file string, rule string) M {
+	return M{id: "rule_present", vals: []val{{"file", file}, {"rule", rule}}}
+}
+
+// RuleRemoved is [rule_removed]: "removed {{.rule}} for {{.vm}}"
+func RuleRemoved(rule string, vm string) M {
+	return M{id: "rule_removed", vals: []val{{"rule", rule}, {"vm", vm}}}
+}
+
+// RuleRemovedGlobal is [rule_removed_global]: "removed {{.rule}} for every VM"
+func RuleRemovedGlobal(rule string) M {
+	return M{id: "rule_removed_global", vals: []val{{"rule", rule}}}
 }
 
 // RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
@@ -1428,6 +1478,7 @@ var specs = map[string]spec{
 	"net_direct_route":            {fields: []string{"vm"}},
 	"net_flag_ignored":            {},
 	"net_off_log":                 {fields: []string{"vm"}},
+	"net_off_policy":              {fields: []string{"vm"}},
 	"net_unenforced":              {fields: []string{"vm"}},
 	"net_unenforced_restart":      {fields: []string{"vm"}},
 	"net_unenforced_stop":         {fields: []string{"vm"}},
@@ -1444,10 +1495,13 @@ var specs = map[string]spec{
 	"no_terminal_fetch":           {fields: []string{"remote"}},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"no_vm":                       {fields: []string{"dir"}},
+	"no_vm_policy":                {fields: []string{"dir"}},
+	"not_a_rule":                  {fields: []string{"rule"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
 	"oci_waiting":                 {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
+	"policy_failed":               {fields: []string{"reason"}},
 	"port_invalid":                {fields: []string{"value"}},
 	"ports_flag_ignored":          {},
 	"ports_next_start":            {fields: []string{"vm"}},
@@ -1466,6 +1520,12 @@ var specs = map[string]spec{
 	"resolving_tools":             {},
 	"restart_for_mounts":          {},
 	"rm_failed":                   {fields: []string{"reason"}},
+	"rule_added":                  {fields: []string{"rule", "vm"}},
+	"rule_added_global":           {fields: []string{"rule"}},
+	"rule_missing":                {fields: []string{"file", "rule"}},
+	"rule_present":                {fields: []string{"file", "rule"}},
+	"rule_removed":                {fields: []string{"rule", "vm"}},
+	"rule_removed_global":         {fields: []string{"rule"}},
 	"run_log_failed":              {fields: []string{"dir", "reason"}},
 	"running_script":              {fields: []string{"script", "vm"}},
 	"saved_branches":              {fields: []string{"branches"}},

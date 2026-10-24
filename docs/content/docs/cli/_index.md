@@ -12,6 +12,10 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
 - [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked
 - [devvm ls](devvm_ls.md): List the project VMs
+- [devvm policy](devvm_policy.md): Show the network policy allowlist of this folder's VM
+- [devvm policy allow](devvm_policy_allow.md): Allow hosts for this folder's VM
+- [devvm policy deny](devvm_policy_deny.md): Deny hosts for this folder's VM
+- [devvm policy rm](devvm_policy_rm.md): Remove rules from this folder's VM
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it

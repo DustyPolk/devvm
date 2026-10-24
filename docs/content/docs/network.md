@@ -44,8 +44,8 @@ A VM's proxy reads these policy files, in order, as one list:
 | `layers/base.policy` (next to devvm) | every VM: OS packages, mise's version lists, GitHub, container registries |
 | `tools/<name>.policy` (next to devvm) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
-| `~/.config/devvm/policy` | every VM: your own rules |
-| `~/.local/share/devvm/vms/<vm>.policy` | that VM only |
+| `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
+| `~/.local/share/devvm/vms/<vm>.policy` | that VM only ([`devvm policy`](#changing-rules)) |
 | `~/.local/share/devvm/run/<vm>.secrets.policy` | the hosts of the VM's secrets and logins, on port 443 (devvm writes it) |
 
 Storage and paste-like hosts are left out of the defaults on purpose: they're easy ways to send data out. Rules never come from the project folder, which the VM can write. The proxy reads each file again when it changes, so an edit applies at once, to the next connection.
@@ -64,6 +64,21 @@ Policy files hold one rule per line; `#` starts a comment, and matching ignores 
 | `!RULE` | deny: a deny beats any allow |
 
 A denied address is never dialed, even for an allowed name that resolves to it, or to its NAT64 form. A missing file has no rules; one that changed but can't be read keeps its last rules, so a deny never lapses.
+
+### Changing rules
+
+`devvm policy` shows this folder's VM's allowlist: each of its policy files that has rules, its path after `#`, then its rules, comments left out. For a VM without network policy devvm notes that they don't apply.
+
+| | |
+| --- | --- |
+| `devvm policy allow RULE...` | add the rules to the VM's own file |
+| `devvm policy deny RULE...` | add them as denies (`!` added when missing) |
+| `devvm policy rm RULE...` | remove the lines with these rules (a deny with its `!`); one that isn't there gets a warning |
+| `-g`, `--global` | change `~/.config/devvm/policy`, for every VM, instead; no VM needed |
+
+A rule is what [Rules](#rules) lists, without spaces or a comment: anything else is refused before any is added, and so is `allow !RULE`. A rule already in the file, in any case, isn't added again. Each change rewrites the file whole (through a link if it is one), so a proxy never reads half of it, and applies at once, to the next connection. The `devvm policy allow` commands that `devvm log --blocked` and the VM's blocked requests suggest are rules it takes.
+
+A new VM never gets the rules of an old one by its name that was deleted outside devvm.
 
 ## Inside the VM
 

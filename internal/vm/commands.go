@@ -293,3 +293,84 @@ func (e *Env) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	}
 	return netpolicy.WriteLog(ctx, w, path, o.Lines, o.Follow)
 }
+
+// policyVM finds the folder's VM for devvm policy, which must exist and
+// be made for this folder; noVM is the error when it doesn't exist.
+func (e *Env) policyVM(ctx context.Context, noVM func(dir string) msg.M) (*found, error) {
+	t, err := e.find(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	if !t.exists {
+		return nil, noVM(t.f.Dir)
+	}
+	if err := e.checkFolder(t.f, t.st); err != nil {
+		return nil, err
+	}
+	if !netpolicy.On(t.st) {
+		ui.Note(msg.NetOffPolicy(t.f.Name))
+	}
+	return t, nil
+}
+
+// Policy writes the folder's VM's allowlist to w: each policy file its
+// proxy reads that has rules, in order.
+func (e *Env) Policy(ctx context.Context, w io.Writer) error {
+	t, err := e.policyVM(ctx, msg.NoVM)
+	if err != nil {
+		return err
+	}
+	return netpolicy.WriteRules(w, netpolicy.PolicyFiles(e.Dirs, e.Root, t.f.Name, t.st.Get(state.KeyImage)))
+}
+
+// PolicyChange adds rules to the folder's VM's own policy file (deny: as
+// denies), or with remove takes them out; with global, the user's file
+// for every VM instead. Its proxy reads the file again at its next
+// connection, so a change applies at once.
+func (e *Env) PolicyChange(ctx context.Context, rules []string, deny, remove, global bool) error {
+	file, vm := e.Dirs.Policy(), ""
+	if !global {
+		t, err := e.policyVM(ctx, msg.NoVMPolicy)
+		if err != nil {
+			return err
+		}
+		vm = t.f.Name
+		file = netpolicy.VMPolicyFile(e.Dirs, vm)
+	}
+	if remove {
+		for _, r := range rules {
+			switch ok, err := netpolicy.RemoveRule(file, r); {
+			case err != nil:
+				return err
+			case !ok:
+				ui.Warn(msg.RuleMissing(file, msg.Shown(r)))
+			case global:
+				ui.Info(msg.RuleRemovedGlobal(r))
+			default:
+				ui.Info(msg.RuleRemoved(r, vm))
+			}
+		}
+		return nil
+	}
+	// Every rule is checked before any is added.
+	checked := make([]string, len(rules))
+	for i, r := range rules {
+		var err error
+		if checked[i], err = netpolicy.Rule(r, deny); err != nil {
+			return err
+		}
+	}
+	for _, r := range checked {
+		switch ok, err := netpolicy.AddRule(file, r); {
+		case err != nil:
+			return err
+		case !ok:
+			ui.Info(msg.RulePresent(file, r))
+		case global:
+			ui.Info(msg.RuleAddedGlobal(r))
+		default:
+			ui.Info(msg.RuleAdded(r, vm))
+		}
+	}
+	return nil
+}

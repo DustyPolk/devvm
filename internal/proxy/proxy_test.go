@@ -279,6 +279,49 @@ func TestAllowRule(t *testing.T) {
 	}
 }
 
+func TestValidRule(t *testing.T) {
+	for _, c := range []struct {
+		rule string
+		ok   bool
+	}{
+		{"example.com", true},
+		{"Example.COM", true},
+		{"*.example.com", true},
+		{"**", true},
+		{"**:22", true},
+		{"api.example.com:8443", true},
+		{"!bad.example.com", true},
+		{"10.0.0.5", true},
+		{"10.0.0.0/8:8080", true},
+		{"fd00::/8", true},
+		{"[fd00::1]:22", true},
+		{"![::1]:8080", true},
+		{"fd00::1", true},
+		{"", false},
+		{"!", false},
+		{"a b", false},
+		{"x;rm", false},
+		{"example.com # c", false},
+		{"#", false},
+		{"*", false},
+		{"*.", false},
+		{"**.example.com", false},
+		{"a*.example.com", false},
+		{"!!example.com", false},
+		{"example.com:0", false},
+		{"example.com:65536", false},
+		{"example.com:x", false},
+		{"[::1]", false},
+		{"fe80::1%eth0", false},
+		{"x/y", false},
+		{"a\nb", false},
+	} {
+		if got := ValidRule(c.rule); got != c.ok {
+			t.Errorf("ValidRule(%q) = %v; want %v", c.rule, got, c.ok)
+		}
+	}
+}
+
 // roundTrip sends a raw request to the proxy at addr and returns the response's status and body.
 func roundTrip(t *testing.T, addr, req string) (int, string) {
 	t.Helper()
@@ -482,6 +525,9 @@ func FuzzParseRule(f *testing.F) {
 	f.Fuzz(func(t *testing.T, line string) {
 		r, ok := parseRule(line)
 		if !ok {
+			if ValidRule(line) {
+				t.Fatalf("%q: valid, yet not a rule", line)
+			}
 			return
 		}
 		again, ok := parseRule(r.text)
@@ -539,6 +585,9 @@ func FuzzRequest(f *testing.F) {
 		}
 		if port < 1 || port > 65535 {
 			return // never allowed: no rule names such a port
+		}
+		if !ValidRule(ruleFor(host, port)) {
+			t.Fatalf("%q: devvm policy allow refuses %q", raw, ruleFor(host, port))
 		}
 		n++
 		file := filepath.Join(dir, strconv.Itoa(n))

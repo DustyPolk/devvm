@@ -18,7 +18,7 @@ It returns when the VM's hostagent is gone.
 | File | What |
 |---|---|
 | `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
-| `policy.go` | the rule syntax and matching; policy files are re-read when they change |
+| `policy.go` | the rule syntax and matching (`ValidRule`: `devvm policy` takes only these); policy files are re-read when they change |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |

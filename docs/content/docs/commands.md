@@ -111,6 +111,8 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 
 | | |
 | --- | --- |
+| `devvm policy` | show the allowlist of this folder's VM, file by file ([details](network.md#changing-rules)) |
+| `devvm policy allow\|deny\|rm RULE... [-g]` | add rules to this folder's VM's own, as allows or denies, or remove them; `-g`: yours for every VM. Changes apply at once |
 | `devvm log [-f] [-n N] [--blocked]` | show what this folder's VM connected to and what its [network policy](network.md) blocked: the last 50 unless `-n`; `-f` follows; `--blocked` lists the blocks by host, with the command that allows each ([details](network.md#logs)) |
 
 ## Images
