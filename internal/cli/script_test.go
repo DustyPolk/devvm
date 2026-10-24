@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +67,12 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	if err != nil {
 		return err
 	}
-	env.Defer(func() { _ = os.RemoveAll(root) })
+	env.Defer(func() {
+		// VMs' proxies follow a stub hostagent that's gone before they
+		// look: stop them with the sandbox.
+		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_proxy -listen .* -lifeline "+root+"/").Run() //nolint:gosec // the test's own folder
+		_ = os.RemoveAll(root)
+	})
 
 	dirs := map[string]string{
 		"HOME":            "home",

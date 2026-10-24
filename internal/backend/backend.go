@@ -55,6 +55,10 @@ type Backend interface {
 	// Confined reports whether a running VM still runs under the
 	// confinement Start gave it (not started some other way since).
 	Confined(ctx context.Context, vm string) (bool, error)
+	// Lifeline is the pid file of the host process that runs the VM once
+	// it starts, which the VM's proxy follows: it exits when that process
+	// does. Not a VM's own file: the VM can't write it.
+	Lifeline(vm string) string
 	// Stop stops a VM. A stopped one is left as it is.
 	Stop(ctx context.Context, vm string) error
 	// Delete deletes a VM, stopping it first.

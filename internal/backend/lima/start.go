@@ -299,6 +299,10 @@ func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 	return alive(pid), nil
 }
 
+// Lifeline is the VM's hostagent's pid file: the process that runs the VM
+// and its network.
+func (l *Lima) Lifeline(vm string) string { return l.haPIDFile(vm) }
+
 // alive reports whether a process runs with that pid.
 func alive(pid int) bool {
 	p, err := os.FindProcess(pid)

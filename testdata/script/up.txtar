@@ -7,17 +7,12 @@ mkdir $WORK/web
 cd $WORK/web
 exec git init -q
 
-# Network policy isn't there yet: without --no-network-policy (or with
-# --network-policy), nothing is built or created.
-! exec devvm base
-stderr '^devvm: network_policy_unavailable vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm --network-policy base
-stderr '^devvm: network_policy_unavailable vm=devvm-web-[0-9a-f]{14}$'
+# Network policy on and off at once: nothing is built or created.
+! exec devvm --network-policy --no-network-policy base
+stderr 'usage_error'
 stub_calls
 ! stdout 'create|clone|start'
 ! exists $VMS
-! exec devvm --network-policy --no-network-policy base
-stderr 'usage_error'
 
 # A new VM: base built, then cloned with only the folder, read-write, and
 # the shared tools, read-only; no agent forwarding, every port; started and

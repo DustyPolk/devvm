@@ -27,9 +27,9 @@ stub_calls
 # A project in the home folder is fine; --unsafe-folder mounts it anyway.
 mkdir $HOME/proj
 cd $HOME/proj
-! exec devvm base
+exec devvm --no-network-policy base
 ! stderr unsafe_folder
-stderr network_policy_unavailable
+stdout '^==> creating_from image=base vm=devvm-proj-[0-9a-f]{14}$'
 cd $XDG_CONFIG_HOME/devvm/layers
 exec devvm --unsafe-folder --no-network-policy base
 stderr '^devvm: unsafe_folder_used dir=/\S*/config/devvm/layers holds=\S*/config/devvm$'
@@ -50,16 +50,16 @@ stderr '^devvm: bad_path dir=".*/t\\tab"$'
 # most 20 of them, then the hash of its path.
 mkdir $WORK/My_App.v2
 cd $WORK/My_App.v2
-! exec devvm base
-stderr '^devvm: network_policy_unavailable vm=devvm-my-app-v2-[0-9a-f]{14}$'
+exec devvm --no-network-policy base
+stdout '^==> creating_from image=base vm=devvm-my-app-v2-[0-9a-f]{14}$'
 mkdir '$WORK/My App'
 cd '$WORK/My App'
-! exec devvm base
-stderr '^devvm: network_policy_unavailable vm=devvm-my-app-[0-9a-f]{14}$'
+exec devvm --no-network-policy base
+stdout '^==> creating_from image=base vm=devvm-my-app-[0-9a-f]{14}$'
 mkdir $WORK/a-very-long-folder-name-for-a-project
 cd $WORK/a-very-long-folder-name-for-a-project
-! exec devvm base
-stderr '^devvm: network_policy_unavailable vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
+exec devvm --no-network-policy base
+stdout '^==> creating_from image=base vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
 # A Lima home too long for any folder's name is refused.
 env DEVVM_LIMA_HOME=/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ! exec devvm base

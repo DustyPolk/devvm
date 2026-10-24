@@ -25,6 +25,7 @@ var (
 	stdin            = bufio.NewReader(os.Stdin)
 
 	stdinTTY  = func() bool { return isTerminal(os.Stdin) }
+	stdoutTTY = func() bool { return isTerminal(os.Stdout) }
 	stderrTTY = func() bool { return isTerminal(os.Stderr) }
 	// termWidth is the terminal's width in columns, 0 when unknown.
 	termWidth = func() int {
@@ -43,6 +44,10 @@ func isTerminal(f *os.File) bool { return term.IsTerminal(fd(f)) }
 // StdinIsTerminal reports whether devvm's input is a terminal, so a question
 // can be asked.
 func StdinIsTerminal() bool { return stdinTTY() }
+
+// StdoutIsTerminal reports whether data output goes to a terminal, where
+// someone could see it.
+func StdoutIsTerminal() bool { return stdoutTTY() }
 
 // Stdout is where data output goes: tables, values, help. Not messages: they
 // go through Say and the rest.

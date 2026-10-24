@@ -4,7 +4,9 @@
 #     (default)  every section: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, .git
-#                protection and shell; tools makes a node VM and checks its shared tools
+#                protection and shell; tools makes a node VM and checks its shared tools; network
+#                makes a claude VM with network policy and checks it reaches only its allowlist,
+#                its token stays on the host, and the self-check
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
@@ -13,7 +15,7 @@
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project tools"
+sections_all="images project tools network"
 usage() { echo "usage: tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
 clean=false sel=$sections_all
 while (( $# )); do
@@ -32,7 +34,7 @@ export DEVVM_LIMA_HOME=${DEVVM_E2E_LIMA_HOME:-$HOME/.lt-e2e-go}
 export LIMA_HOME=$DEVVM_LIMA_HOME
 work=/tmp/devvm-go-e2e
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
-export DEVVM_SECRET_SERVICE=devvm-e2e
+export DEVVM_SECRET_SERVICE=devvm-go-e2e   # its Keychain items: fake tokens only, deleted at the end
 unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN
 mkdir -p "$LIMA_HOME"
 for real in "$HOME/.lima" "$HOME/.local/share/devvm/lima"; do
@@ -71,7 +73,9 @@ cleanup() {
     rm -f "$images/${n#devvm-img-}" "$vms/$n"
   done
   rm -f "$layers"/e2e*.sh
-  rm -rf "$src"
+  [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
+  [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
+  rm -rf "$src" "$work/net-home"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -282,6 +286,80 @@ launch "$t2" 'node -v' --no-network-policy --no-git-protect
 check "a second node VM uses the same tool images: none built" bash -c "
   [[ -n '$vm' ]] && (( \$(find '$share' -name '*.erofs' | wc -l) == $files_before )) && grep -qx v$(lockv node) '$work/last.log'"
 check "the tools build left no VM behind" bash -c "[[ -z \$(status_of devvm-tools-build) ]]"
+fi
+
+if want network; then
+section "network policy"
+# A claude VM, so the claude token is bound to it: a fake one in devvm's environment (its proxy
+# inherits it), and a fake ~/.claude.json with an MCP server's header, in a home of its own: no real
+# token or login is read.
+nh=$work/net-home; rm -rf "$nh"; mkdir -p "$nh"
+printf '%s\n' '{"mcpServers":{"e2e":{"type":"http","url":"https://api.github.com/devvm-e2e-mcp","headers":{"X-Devvm-E2e":"e2efake-mcp"}}}}' > "$nh/.claude.json"
+n=$(newproj net)
+(cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" --network-policy --no-git-protect claude >"$work/last.log" 2>&1)
+vm=$(vm_of "$n"); [[ -z $vm ]] || created+=("$vm")
+pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
+salt=$(sed -n 's/^proxy_salt=//p' "$vms/$vm" 2>/dev/null)
+events=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
+check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
+  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  pgrep -f -- '_proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
+check "direct connections fail, even as root: an address, other ports" bash -c "
+  ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
+  ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1 </dev/null &&
+  ! limactl shell --workdir / $vm sudo timeout 5 bash -c 'exec 3<>/dev/tcp/1.1.1.1/53' </dev/null &&
+  ! limactl shell --workdir / $vm sudo timeout 5 bash -c 'exec 3<>/dev/tcp/140.82.112.3/22' </dev/null"
+check "an allowed host works, through the proxy" in_vm "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"
+check "another host is blocked by the proxy, and so is another port of an allowed one" bash -c "
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://example.com' </dev/null 2>&1 | grep -q 403 &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
+  ! limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://github.com:8443' </dev/null"
+check "DNS fails at once, not after a timeout" in_vm "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
+# A service on the host's own loopback (a devvm _proxy, which answers anything with 407): unreachable
+# directly, and refused by the VM's proxy (internal addresses need a rule naming them).
+echo listener-key > "$work/listener.auth"
+"$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
+listener=$!
+sleep 1
+check "the host's loopback services are unreachable, directly or through the proxy" bash -c "
+  [[ \$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/) == 407 ]] &&
+  ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null http://192.168.5.2:18765/ </dev/null &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://192.168.5.2:18765/' </dev/null) == 403 ]] &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} --noproxy \"\" -x \"\$HTTP_PROXY\" http://127.0.0.1:18765/' </dev/null) == 403 ]]"
+kill "$listener" 2>/dev/null; listener=""
+check "the proxy refuses anything on the host without the VM's password" bash -c "
+  [[ \$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:$pp http://devvm.proxy/blocked) == 407 ]]"
+check "the token never reaches the VM" bash -c "
+  ! limactl shell --workdir / $vm sudo grep -rqs -e e2efake /etc /home /root </dev/null &&
+  ! limactl shell --workdir / $vm bash -lc 'env' </dev/null | grep -q e2efake"
+# The VM's placeholders, as its setup will give them (the CA it'll trust too: -k until then).
+ph=sk-ant-oat01-devvm-proxy-managed-$salt
+check "the proxy puts the token in for its host" bash -c "
+  limactl shell --workdir / $vm bash -lc 'curl -k -sS -m 20 -o /dev/null https://api.anthropic.com/v1/models -H \"Authorization: Bearer $ph\"' </dev/null;
+  grep '\"path\":\"/v1/models\"' '$events' | grep -q '\"secrets\":\[\"claude\"\]'"
+check "but not for another VM's placeholder" bash -c "
+  limactl shell --workdir / $vm bash -lc 'curl -k -sS -m 20 -o /dev/null https://api.anthropic.com/devvm-e2e-other -H \"Authorization: Bearer sk-ant-oat01-devvm-proxy-managed-$(printf '0%.0s' {1..32})\"' </dev/null;
+  grep -q '/devvm-e2e-other' '$events' && ! grep '/devvm-e2e-other' '$events' | grep -q secrets"
+mph=$(HOME=$nh "$D" _proxy -login claude -login-file "$nh/.claude.json" -login-vm -login-salt "$salt" 2>/dev/null |
+  sed -n 's/.*"X-Devvm-E2e": *"\([^"]*\)".*/\1/p')
+check "and an MCP server's header for its host, from the login on the host" bash -c "
+  [[ -n '$mph' && '$mph' != e2efake-mcp ]] &&
+  limactl shell --workdir / $vm bash -lc 'curl -k -sS -m 20 -o /dev/null https://api.github.com/devvm-e2e-mcp -H \"X-Devvm-E2e: $mph\"' </dev/null;
+  grep '/devvm-e2e-mcp' '$events' | grep -q '\"secrets\":\[\"claude-mcp-'"
+if [[ "$(uname -s)" == Darwin ]]; then
+  # The Keychain itself, under this run's service (a fake token, deleted at the end).
+  security add-generic-password -U -s "$DEVVM_SECRET_SERVICE" -a github -w ghp_E2EFAKE >/dev/null 2>&1
+  check "devvm reads a token from the Keychain, never to a terminal" bash -c "
+    [[ \$('$D' secret get github | cat) == ghp_E2EFAKE ]]"
+  security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
+fi
+check "the self-check passes on the VM devvm started confined" bash -c "cd '$root' &&
+  DEVVM_E2E_VM=$vm DEVVM_E2E_WANT= CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
+  grep -q -- '--- PASS: TestE2ESelfCheck'"
+check "a VM started outside devvm is unenforced, and the self-check stops it" bash -c "
+  limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$root' &&
+  DEVVM_E2E_VM=$vm DEVVM_E2E_WANT='net_unenforced_stop vm=$vm' CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
+  grep -q -- '--- PASS: TestE2ESelfCheck' && [[ \$(status_of '$vm') == Stopped ]] && grep -qx net_check=unenforced '$vms/$vm'"
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

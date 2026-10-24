@@ -19,12 +19,15 @@ Options for a new VM:
 
 | | |
 | --- | --- |
-| `--no-network-policy` | create the VM without network policy, so it reaches anything this machine can. Network policy isn't available yet: until it is, devvm refuses to create a VM without this flag, and with `--network-policy` |
+| `--network-policy` | create the VM with [network policy](network.md): it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here |
+| `--no-network-policy` | create the VM without network policy, so it reaches anything this machine can |
 | `--no-git-protect` | create the VM without `.git` protection |
 | `--unsafe-folder` | mount a folder devvm refuses (one that is or holds your home folder or devvm's own, or is inside devvm's own) anyway ([details](security.md#only-the-project-folder)) |
 | `--cpus N`, `--memory GiB`, `--disk GiB` | the VM's size ([details](#size-and-ports)) |
 | `--ports all\|none\|LIST` | which ports the VM forwards ([details](#size-and-ports)) |
 | `--backend NAME` | the [backend](backends.md#choosing-a-backend) that runs it |
+
+Without either network policy flag devvm asks in a terminal, no by default; without a terminal the VM gets no network policy.
 
 Options that take a value also work as `--cpus=N` and so on.
 
@@ -59,3 +62,5 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 | `DEVVM_VERBOSE=1` | print the output of the commands devvm runs, instead of logging it ([details](images.md#build-logs-and-interrupts)) |
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](lima.md#a-lima-home-of-its-own)) |
 | `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#versions)) |
+| `DEVVM_SECRET_SERVICE` | the Keychain service devvm reads tokens from, instead of `devvm` ([details](network.md#secrets)) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | the Claude token VMs' proxies put in, over a saved one ([details](network.md#secrets)) |

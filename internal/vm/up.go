@@ -17,9 +17,11 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -27,20 +29,21 @@ import (
 
 // Keys of a VM's state that up writes, besides state's own.
 const (
-	KeyNet      = "net"       // network policy: off (on comes with the proxy)
-	KeyLibc     = "libc"      // the C library its base had, which its tools are built for
-	KeyTools    = "tools"     // its shared tool images, space-separated
-	KeyCPUs     = "cpus"      // the size asked for; unset for the image's
-	KeyMemory   = "memory"    // GiB
-	KeyDisk     = "disk"      // GiB
-	KeyPorts    = "ports"     // which ports it forwards (ParsePorts); unset for all
-	KeyPortsSet = "ports_set" // what its backend config forwards; unset for all
+	KeyNet      = netpolicy.KeyNet // network policy: on or off
+	KeyLibc     = "libc"           // the C library its base had, which its tools are built for
+	KeyTools    = "tools"          // its shared tool images, space-separated
+	KeyCPUs     = "cpus"           // the size asked for; unset for the image's
+	KeyMemory   = "memory"         // GiB
+	KeyDisk     = "disk"           // GiB
+	KeyPorts    = "ports"          // which ports it forwards (ParsePorts); unset for all
+	KeyPortsSet = "ports_set"      // what its backend config forwards; unset for all
 )
 
 // Options is what up was asked for.
 type Options struct {
 	Image           string // the image a new VM gets, as given; "" to detect it
 	Backend         string // --backend: a new VM's backend
+	NetworkPolicy   bool   // --network-policy
 	NoNetworkPolicy bool   // --no-network-policy
 	Size            Size   // --cpus, --memory, --disk as given
 	Ports           string // --ports as given
@@ -54,7 +57,8 @@ type Env struct {
 	Root     string // devvm's own files (paths.Root)
 	Registry *backend.Registry
 	Tools    *tools.Tools
-	Dir      string // the folder devvm runs in, a physical path
+	Proxy    *netpolicy.Proxy // VMs' network policy proxies
+	Dir      string           // the folder devvm runs in, a physical path
 	Home     string
 	OS       string // the host's, as Go names it
 	Host     func() (Host, error)
@@ -64,8 +68,8 @@ type Env struct {
 	Exec func(backend.Command) error
 }
 
-// NewEnv returns the environment up runs in here.
-func NewEnv(d paths.Dirs, root string, reg *backend.Registry) (*Env, error) {
+// NewEnv returns the environment up runs in here, devvm being self.
+func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -73,8 +77,11 @@ func NewEnv(d paths.Dirs, root string, reg *backend.Registry) (*Env, error) {
 	if wd, err = filepath.EvalSymlinks(wd); err != nil {
 		return nil, err
 	}
+	home := os.Getenv("HOME")
 	return &Env{
-		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root), Dir: wd, Home: os.Getenv("HOME"), OS: runtime.GOOS,
+		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root),
+		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home)),
+		Dir:   wd, Home: home, OS: runtime.GOOS,
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell,
 	}, nil
 }
@@ -197,9 +204,8 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err != nil {
 		return err
 	}
-	if !o.NoNetworkPolicy {
-		return msg.NetworkPolicyUnavailable(vm)
-	}
+	// Asked before the build, which can take minutes.
+	net := netpolicy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
 	// Every VM has the share, read-only: a tool added later is mounted
 	// from it.
 	spec := backend.VMSpec{
@@ -207,6 +213,9 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		Size: size.Backend(), Ports: PortsBackend(ports),
 	}
 	conf := backend.Confinement{Net: backend.NetDirect}
+	if net {
+		conf.Net = backend.NetProxy
+	}
 	if err := backend.Require(b, vm, append(spec.Features(), conf.Features()...)...); err != nil {
 		return err
 	}
@@ -255,18 +264,28 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		if locking.Load() {
 			e.Protector(f.Dir).Unlock(ctx)
 		}
+		_ = e.Proxy.Forget(vm)
 		_ = os.Remove(e.Dirs.VMState(vm))
 	})
-	// The state first, with no network policy said: if a later step
-	// fails, the VM never starts without it.
+	// The state first, with the network choice: if a later step fails,
+	// the VM never starts without it.
 	st, err := state.CreateVM(e.Dirs, vm, state.NewVM{
 		Image: img, Dir: f.Dir, Folder: id, Chain: chain.String(), Backend: b.Name(),
 	})
 	if err != nil {
 		return err
 	}
+	// What a VM by this name deleted some other way left: its proxy, its
+	// own rules, its run files.
+	if err := e.Proxy.Forget(vm); err != nil {
+		return err
+	}
+	netState := "off"
+	if net {
+		netState = "on"
+	}
 	for _, kv := range [][2]string{
-		{KeyNet, "off"},
+		{KeyNet, netState},
 		{KeyLibc, libc},
 		{KeyTools, strings.Join(files, " ")},
 		{KeyCPUs, size.CPUs},
@@ -309,7 +328,12 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		}
 	}
 	ui.Info(msg.Starting(vm))
-	if err := b.Start(ctx, vm, conf); err != nil {
+	start := func(ctx context.Context) error { return e.start(ctx, b, st, conf) }
+	if err := start(ctx); err != nil {
+		return err
+	}
+	// Before the setup and the shell.
+	if err := netpolicy.SelfCheck(ctx, b, st, start); err != nil {
 		return err
 	}
 	if err := e.sync(ctx, b, vm, files); err != nil {
@@ -321,6 +345,26 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	}
 	done()
 	return e.Exec(cmd)
+}
+
+// start starts a stopped VM confined as conf says. With network policy its
+// proxy starts first, and the backend gets the proxy's confinement; a start
+// that fails stops the proxy again.
+func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) error {
+	vm := st.Name()
+	if conf.Net == backend.NetProxy {
+		var err error
+		if conf, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), false); err != nil {
+			return err
+		}
+	}
+	if err := b.Start(ctx, vm, conf); err != nil {
+		if conf.Net == backend.NetProxy {
+			e.Proxy.Stop(vm)
+		}
+		return err
+	}
+	return nil
 }
 
 // checkUnsafe refuses a folder that is or holds the home folder or

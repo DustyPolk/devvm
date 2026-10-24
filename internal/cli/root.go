@@ -35,7 +35,7 @@ func NewRoot() *cobra.Command {
 	root.SetOut(ui.Stdout())
 	addGlobals(root, g)
 	addUpFlags(root, u)
-	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(), newQEMUCmd(), newProxyCmd(), newRefreshToolsCmd())
+	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(), newQEMUCmd(), newProxyCmd(), newRefreshToolsCmd(), newSecretCmd())
 	return root
 }
 

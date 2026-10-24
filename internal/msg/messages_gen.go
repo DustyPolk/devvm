@@ -32,6 +32,11 @@ func BadPath(dir string) M {
 	return M{id: "bad_path", vals: []val{{"dir", dir}}}
 }
 
+// BadSecretService is [bad_secret_service]: "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"
+func BadSecretService() M {
+	return M{id: "bad_secret_service"}
+}
+
 // BaseBuildTime is [base_build_time]: "    a few minutes, and Ubuntu's cloud image to download the first time"
 func BaseBuildTime() M {
 	return M{id: "base_build_time"}
@@ -312,9 +317,34 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
-// NetworkPolicyUnavailable is [network_policy_unavailable]: "network policy isn't available yet: pass --no-network-policy to create {{.vm}} without it, reaching anything this machine can"
-func NetworkPolicyUnavailable(vm string) M {
-	return M{id: "network_policy_unavailable", vals: []val{{"vm", vm}}}
+// NetAbout is [net_about]: "With network policy, {{.vm}} reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here.\nWithout it, {{.vm}} reaches anything this machine can."
+func NetAbout(vm string) M {
+	return M{id: "net_about", vals: []val{{"vm", vm}}}
+}
+
+// NetAsk is [net_ask]: "Turn on network policy for {{.vm}}?"
+func NetAsk(vm string) M {
+	return M{id: "net_ask", vals: []val{{"vm", vm}}}
+}
+
+// NetDirectRoute is [net_direct_route]: "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
+func NetDirectRoute(vm string) M {
+	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
+}
+
+// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
+func NetUnenforced(vm string) M {
+	return M{id: "net_unenforced", vals: []val{{"vm", vm}}}
+}
+
+// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} was started outside devvm, so its network policy isn't enforced. Restart it confined?"
+func NetUnenforcedRestart(vm string) M {
+	return M{id: "net_unenforced_restart", vals: []val{{"vm", vm}}}
+}
+
+// NetUnenforcedStop is [net_unenforced_stop]: "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it"
+func NetUnenforcedStop(vm string) M {
+	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
 
 // NewerTools is [newer_tools]: "newer shared tools: {{.tools}}; devvm update moves this VM to them"
@@ -325,6 +355,11 @@ func NewerTools(tools string) M {
 // NoImageFor is [no_image_for]: "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
 func NoImageFor(agents string, dir string, envs string) M {
 	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
+}
+
+// NoSecret is [no_secret]: "no secret {{.secret}}"
+func NoSecret(secret string) M {
+	return M{id: "no_secret", vals: []val{{"secret", secret}}}
 }
 
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
@@ -352,9 +387,24 @@ func PortInvalid(value string) M {
 	return M{id: "port_invalid", vals: []val{{"value", value}}}
 }
 
+// ProxyCAFailed is [proxy_ca_failed]: "couldn't create the network policy proxy's CA in {{.dir}}"
+func ProxyCAFailed(dir string) M {
+	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
+}
+
 // ProxyFailed is [proxy_failed]: "network policy proxy: {{.reason}}"
 func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
+}
+
+// ProxyPortTaken is [proxy_port_taken]: "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: stop {{.vm}}, and devvm picks another port when it starts it"
+func ProxyPortTaken(port string, vm string) M {
+	return M{id: "proxy_port_taken", vals: []val{{"port", port}, {"vm", vm}}}
+}
+
+// ProxyStartFailed is [proxy_start_failed]: "the network policy proxy didn't start for {{.vm}}: see {{.log}}"
+func ProxyStartFailed(log string, vm string) M {
+	return M{id: "proxy_start_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
 
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
@@ -390,6 +440,16 @@ func RunningScript(script string, vm string) M {
 // ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build deletes it"
 func ScriptFailed(limaHome string, script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"lima_home", limaHome}, {"script", script}, {"vm", vm}}}
+}
+
+// SecretReadFailed is [secret_read_failed]: "couldn't read {{.secret}}: {{.reason}}"
+func SecretReadFailed(reason string, secret string) M {
+	return M{id: "secret_read_failed", vals: []val{{"reason", reason}, {"secret", secret}}}
+}
+
+// SecretToTerminal is [secret_to_terminal]: "refusing to print a secret to a terminal: --force to do it anyway"
+func SecretToTerminal() M {
+	return M{id: "secret_to_terminal"}
 }
 
 // SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
@@ -630,6 +690,7 @@ var specs = map[string]spec{
 	"backend_unknown_vm":          {fields: []string{"backend", "vm"}},
 	"backend_unreviewed":          {fields: []string{"backend", "feature", "vm"}},
 	"bad_path":                    {fields: []string{"dir"}},
+	"bad_secret_service":          {},
 	"base_build_time":             {},
 	"build_failed":                {fields: []string{"image", "reason"}},
 	"building_image":              {fields: []string{"image", "key"}},
@@ -686,15 +747,24 @@ var specs = map[string]spec{
 	"msg_repeated_value":          {fields: []string{"key"}},
 	"msg_unexpected_value":        {fields: []string{"key", "name"}},
 	"msg_unknown":                 {fields: []string{"name"}},
-	"network_policy_unavailable":  {fields: []string{"vm"}},
+	"net_about":                   {fields: []string{"vm"}},
+	"net_ask":                     {fields: []string{"vm"}},
+	"net_direct_route":            {fields: []string{"vm"}},
+	"net_unenforced":              {fields: []string{"vm"}},
+	"net_unenforced_restart":      {fields: []string{"vm"}},
+	"net_unenforced_stop":         {fields: []string{"vm"}},
 	"newer_tools":                 {fields: []string{"tools"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
+	"no_secret":                   {fields: []string{"secret"}},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
 	"port_invalid":                {fields: []string{"value"}},
+	"proxy_ca_failed":             {fields: []string{"dir"}},
 	"proxy_failed":                {fields: []string{"reason"}},
+	"proxy_port_taken":            {fields: []string{"port", "vm"}},
+	"proxy_start_failed":          {fields: []string{"log", "vm"}},
 	"qemu_missing":                {fields: []string{"program"}},
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
@@ -702,6 +772,8 @@ var specs = map[string]spec{
 	"run_log_failed":              {fields: []string{"dir", "reason"}},
 	"running_script":              {fields: []string{"script", "vm"}},
 	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
+	"secret_read_failed":          {fields: []string{"reason", "secret"}},
+	"secret_to_terminal":          {},
 	"setid_files":                 {fields: []string{"files"}},
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},

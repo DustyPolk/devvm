@@ -1,0 +1,16 @@
+#!/bin/bash
+# Stand-in for macOS security in tests, so they never touch the real
+# Keychain: logs the call to $STUB_LOG; find-generic-password -a NAME … -w
+# prints $STUB_DIR/keychain/NAME, or fails as security does for an item
+# that isn't there (44).
+set -euo pipefail
+echo "security $*" >> "$STUB_LOG"
+account=""
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} != -a ]] || account=${args[i + 1]:-}; done
+case ${1:-} in
+  find-generic-password)
+    [[ -n $account && -f $STUB_DIR/keychain/$account ]] || exit 44
+    cat "$STUB_DIR/keychain/$account" ;;
+  *) exit 1 ;;
+esac

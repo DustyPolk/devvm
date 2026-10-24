@@ -11,17 +11,34 @@ import (
 // Root returns the folder devvm's files are in: the one holding the
 // running binary, after following links.
 func Root() (string, error) {
+	self, err := Self()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(self), nil
+}
+
+// Self returns the running binary's path, after following links.
+func Self() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("finding devvm's binary: %w", err)
 	}
-	return rootOf(exe)
+	return resolve(exe)
 }
 
 func rootOf(exe string) (string, error) {
+	resolved, err := resolve(exe)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(resolved), nil
+}
+
+func resolve(exe string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(exe)
 	if err != nil {
 		return "", fmt.Errorf("following links from %s: %w", exe, err)
 	}
-	return filepath.Dir(resolved), nil
+	return resolved, nil
 }

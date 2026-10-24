@@ -1,0 +1,12 @@
+#!/bin/bash
+# Stand-in for macOS tmutil in tests: never changes the real Time Machine
+# settings.
+#   isexcluded PATH    "[Excluded]" when $STUB_DIR/tm-excluded holds PATH, else "[Included]"
+#   addexclusion PATH  logs the call to $STUB_LOG and records PATH as excluded
+case ${1:-} in
+  isexcluded)
+    if grep -Fxq -- "$2" "$STUB_DIR/tm-excluded" 2>/dev/null; then echo "[Excluded]    $2"; else echo "[Included]    $2"; fi ;;
+  addexclusion)
+    echo "tmutil $*" >> "$STUB_LOG"
+    echo "$2" >> "$STUB_DIR/tm-excluded" ;;
+esac

@@ -1,0 +1,105 @@
+# Network policy for a new VM: the choice, the VM's proxy (devvm _proxy,
+# started before the VM), the confined start, the self-check, and the
+# VM's secrets as the proxy sees them.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env VMS=$XDG_DATA_HOME/devvm/vms
+env RUN=$XDG_DATA_HOME/devvm/run
+
+# Without a flag, and without a terminal to ask in: off.
+mkdir $WORK/off
+cd $WORK/off
+exec devvm --no-git-protect base
+stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-off-*'
+stdout '^net=off$'
+! stdout 'proxy_|net_check'
+stub_calls
+! stdout curl
+! exists $DATA/ca
+
+# --network-policy: devvm's CA (kept out of Time Machine on macOS), the
+# VM's proxy, then the VM started confined, its environment pointing at
+# the proxy with the VM's key, then the self-check, the setup and the
+# shell.
+mkdir $WORK/net
+cd $WORK/net
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --network-policy --no-git-protect base
+stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
+exists $DATA/ca/ca.pem $DATA/ca/ca.key
+exec sh -c 'cat "$VMS"/devvm-net-*'
+stdout '^net=on$'
+stdout '^net_check=ok$'
+stdout '^proxy_key=[0-9a-f]{32}$'
+stdout '^proxy_salt=[0-9a-f]{32}$'
+stdout '^ssh_port=[0-9]+$'
+stdout '^proxy_port=[0-9]+$'
+stub_calls
+[darwin] stdout '^tmutil addexclusion \S*/data/devvm/ca$'
+[darwin] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.ssh\.localPort=[0-9]+ --set \.env = \{"HTTPS_PROXY":"http://devvm:[0-9a-f]{32}@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/usr/local/share/ca-certificates/devvm-proxy\.crt",.*"NO_PROXY":"localhost,127\.0\.0\.1,::1",.*\} --set \.propagateProxyEnv=false$'
+[linux] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.ssh\.localPort=[0-9]+ --set \.env = \{"HTTPS_PROXY":"http://devvm:[0-9a-f]{32}@192\.168\.5\.4:3128",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
+stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\nlimactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c cd ''/'' && exec ''curl'' ''--noproxy'' ''\*'' ''-sS'' ''-m'' ''3'' ''-o'' ''/dev/null'' ''https://1\.1\.1\.1''\n'
+stdout '^limactl shell --workdir /\S*/net devvm-net-[0-9a-f]{14}\n\z'
+# macOS: the hostagent's profile lets it reach the proxy's port.
+[darwin] exec sh -c 'grep -F "localhost:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*)" "$RUN"/devvm-net-*.sb'
+# The proxy said it listens on that port, for that VM; its password is in
+# a file, never in its arguments.
+exec sh -c 'grep -F "listening on 127.0.0.1:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*) for devvm-net-" "$DATA"/logs/devvm-net-*.proxy.log'
+exec sh -c 'cat "$RUN"/devvm-net-*.proxy.auth'
+stdout '^[0-9a-f]{32}$'
+exec sh -c 'cat "$RUN"/devvm-net-*.secrets.json'
+stdout '^\[\]$'
+# The run log never holds the key.
+exec sh -c 'cat "$DATA"/logs/runs/*.log'
+stdout 'devvm:<key>@'
+! stdout 'devvm:[0-9a-f]{32}@'
+
+# A VM devvm started confined that still reaches the internet directly:
+# stopped, no setup, no shell.
+mkdir $WORK/leak
+cd $WORK/leak
+exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/net-direct"'
+! exec devvm --network-policy --no-git-protect base
+stderr '^devvm: net_direct_route vm=devvm-leak-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-leak-[0-9a-f]{14}$'
+! stdout 'tar -xf'
+! stdout 'limactl shell --workdir /\S*/leak'
+exec sh -c 'cat "$VMS"/devvm-leak-*'
+stdout '^net_check=unenforced$'
+rm $STUB_DIR/net-direct
+
+# Secrets: claude comes with the image. The proxy gets its binding, with
+# the VM's own placeholder and never the token, and its host on 443.
+mkdir $WORK/agent
+cd $WORK/agent
+env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
+exec devvm --network-policy --no-git-protect claude
+exec sh -c 'cat "$RUN"/devvm-agent-*.secrets.json'
+stdout '^\[\{"name":"claude","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]$'
+! stdout testfake
+exec sh -c 'grep -F "$(sed -n "s/^proxy_salt=//p" "$VMS"/devvm-agent-*)" "$RUN"/devvm-agent-*.secrets.json'
+exec sh -c 'cat "$RUN"/devvm-agent-*.secrets.policy'
+stdout '^api\.anthropic\.com:443$'
+# Its proxy's policy files: base's, claude's, the user's, the VM's own and
+# its secrets' hosts.
+exec sh -c 'cat "$RUN"/devvm-agent-*.proxy.policy'
+stdout '/layers/base\.policy,\S*/tools/claude\.policy,\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy$'
+env CLAUDE_CODE_OAUTH_TOKEN=
+
+# A Codex login on the host: its bindings and hosts, with the VM's
+# placeholders.
+mkdir $HOME/.codex
+cp $WORK/codex.json $HOME/.codex/auth.json
+mkdir $WORK/codex
+cd $WORK/codex
+exec devvm --network-policy --no-git-protect codex
+exec sh -c 'cat "$RUN"/devvm-codex-*.secrets.json'
+stdout '"name":"codex-key","hosts":\["api\.openai\.com"\]'
+! stdout sk-testfake
+exec sh -c 'cat "$RUN"/devvm-codex-*.secrets.policy'
+stdout '^api\.openai\.com:443$'
+
+-- codex.json --
+{"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

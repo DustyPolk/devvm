@@ -15,7 +15,7 @@ devvm runs on macOS and Linux, with [Lima](https://lima-vm.io) 2.0 or newer.
 
 ```console
 $ cd ~/some-project
-$ devvm --no-network-policy base
+$ devvm --network-policy base
 ==> building image base (e9f517dddef1)
     a few minutes, and Ubuntu's cloud image to download the first time
     (details: ~/.local/share/devvm/logs/runs/20261024-090616-83541.log)
@@ -24,7 +24,7 @@ $ devvm --no-network-policy base
 ==> starting devvm-some-project-71a99b1076d92c
 ```
 
-Then you're in a shell in the VM, in `~/some-project`. The first VM builds the base image. Later VMs are copies of it and start in seconds. Network policy isn't there yet, so devvm creates a VM only with `--no-network-policy`, and that VM reaches anything your machine can.
+Then you're in a shell in the VM, in `~/some-project`. The first VM builds the base image. Later VMs are copies of it and start in seconds. With `--network-policy` the VM reaches only an allowlist of hosts, through a proxy on your machine ([network policy](https://w3cj.github.io/devvm/docs/network/)); without a flag devvm asks.
 
 ## Docs
 

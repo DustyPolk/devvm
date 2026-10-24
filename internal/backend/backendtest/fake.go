@@ -34,7 +34,11 @@ type Fake struct {
 	Target       backend.SSHTarget // SSH's answer
 	ShellCmd     backend.Command   // Shell's answer
 	Unconfined   bool              // Confined answers false
-	Errs         map[string]error  // by method name: returned in place of its answer, changing nothing
+	LifelineFile string            // Lifeline's answer
+	// ExecFunc, when set, is what Exec returns after recording the call
+	// (Errs aside).
+	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
+	Errs     map[string]error // by method name: returned in place of its answer, changing nothing
 	// ToolsBuild, when set, is what BuildTools does after recording the
 	// call, in place of writing the images.
 	ToolsBuild func(backend.ToolsSpec) error
@@ -248,8 +252,14 @@ func (f *Fake) Inspect(_ context.Context, vm string) (backend.Instance, error) {
 func (f *Fake) Exec(_ context.Context, vm string, argv []string, o backend.ExecOpts) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.record("Exec", vm, slices.Clone(argv), o)
+	if err := f.record("Exec", vm, slices.Clone(argv), o); err != nil || f.ExecFunc == nil {
+		return err
+	}
+	return f.ExecFunc(vm, argv, o)
 }
+
+// Lifeline returns LifelineFile.
+func (f *Fake) Lifeline(string) string { return f.LifelineFile }
 
 // Shell records the call and returns ShellCmd.
 func (f *Fake) Shell(_ context.Context, vm, dir string) (backend.Command, error) {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -24,7 +25,7 @@ type globals struct {
 func addGlobals(root *cobra.Command, g *globals) {
 	f := root.PersistentFlags()
 	f.StringVar(&g.backend, "backend", "", "the `NAME` of the backend a new VM or image gets (default: the default backend file's, else lima)")
-	f.BoolVar(&g.networkPolicy, "network-policy", false, "create the VM with network policy (not available yet: refused)")
+	f.BoolVar(&g.networkPolicy, "network-policy", false, "create the VM with network policy: it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here (default: ask in a terminal, else off)")
 	f.BoolVar(&g.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy: it reaches anything this machine can")
 	root.MarkFlagsMutuallyExclusive("network-policy", "no-network-policy")
 	f.StringVar(&g.size.CPUs, "cpus", "", "the `N` CPUs a new VM gets (default: the size file's, else the image's)")
@@ -48,7 +49,7 @@ func addUpFlags(cmd *cobra.Command, u *upFlags) {
 // up opens a shell in this folder's VM, making it first.
 func up(ctx context.Context, g *globals, u *upFlags, args []string) error {
 	o := vm.Options{
-		Backend: g.backend, NoNetworkPolicy: g.noNetworkPolicy, Size: g.size, Ports: g.ports,
+		Backend: g.backend, NetworkPolicy: g.networkPolicy, NoNetworkPolicy: g.noNetworkPolicy, Size: g.size, Ports: g.ports,
 		UnsafeFolder: u.unsafeFolder, NoGitProtect: u.noGitProtect,
 	}
 	if len(args) > 0 {
@@ -56,21 +57,21 @@ func up(ctx context.Context, g *globals, u *upFlags, args []string) error {
 	}
 	dirs, err := paths.FromEnv()
 	if err == nil {
-		var root string
-		if root, err = paths.Root(); err == nil {
-			err = runUp(ctx, dirs, root, o)
+		var self string
+		if self, err = paths.Self(); err == nil {
+			err = runUp(ctx, dirs, self, o)
 		}
 	}
 	fail(err, msg.UpFailed)
 	return nil
 }
 
-func runUp(ctx context.Context, dirs paths.Dirs, root string, o vm.Options) error {
+func runUp(ctx context.Context, dirs paths.Dirs, self string, o vm.Options) error {
 	reg, err := backends.Registry(dirs)
 	if err != nil {
 		return err
 	}
-	env, err := vm.NewEnv(dirs, root, reg)
+	env, err := vm.NewEnv(dirs, filepath.Dir(self), self, reg)
 	if err != nil {
 		return err
 	}

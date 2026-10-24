@@ -1,0 +1,110 @@
+// Package netpolicy runs network policy for VMs: the choice for a new VM,
+// the VM's allowlist files, its proxy on the host (devvm _proxy), the
+// confinement its backend starts it with, and the self-check after each
+// start that it can't reach around the proxy.
+package netpolicy
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"path/filepath"
+	"strings"
+
+	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ui"
+)
+
+// Keys of a VM's state.
+const (
+	KeyNet       = "net"        // network policy: on or off
+	KeyCheck     = "net_check"  // the last self-check's result: ok or unenforced
+	KeyProxyKey  = "proxy_key"  // the VM's proxy password
+	KeyProxySalt = "proxy_salt" // what ends the VM's placeholders
+	KeySSHPort   = "ssh_port"   // the host port of the VM's ssh, fixed while confined
+	KeyProxyPort = "proxy_port" // the host loopback port its proxy listens on
+)
+
+// ProxyUser is the user in a VM's proxy URL; the VM's key is the password.
+const ProxyUser = "devvm"
+
+// On reports whether a VM has network policy.
+func On(st *state.VM) bool { return st.Get(KeyNet) == "on" }
+
+// The questions devvm asks, and whether it can; tests swap them.
+var (
+	terminal = ui.StdinIsTerminal
+	ask      = ui.Ask
+	confirm  = func(m msg.M) bool { return ui.Confirm(m) }
+)
+
+// Choose returns whether a new VM gets network policy: what the flags say,
+// else the answer in a terminal (no by default), else off.
+func Choose(on, off bool, vm string) bool {
+	switch {
+	case on:
+		return true
+	case off, !terminal():
+		return false
+	}
+	ui.Note(msg.NetAbout(vm))
+	return ask(msg.NetAsk(vm))
+}
+
+// Key returns the VM's own random key, made the first time it's needed. It's
+// the password for the VM's proxy, so other VMs and programs on the host
+// that reach its port can't use it.
+func Key(st *state.VM) (string, error) { return random(st, KeyProxyKey) }
+
+// Salt returns what ends the VM's placeholders: random, like the key, and
+// not the key itself, so a placeholder the VM sends elsewhere doesn't give
+// its proxy's password away.
+func Salt(st *state.VM) (string, error) { return random(st, KeyProxySalt) }
+
+func random(st *state.VM, key string) (string, error) {
+	if v := st.Get(key); v != "" {
+		return v, nil
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	v := hex.EncodeToString(b)
+	return v, st.Set(key, v)
+}
+
+// PolicyFiles returns a VM's policy files, in order: base's and each of its
+// image's parts' (a shared tool's from devvm's tools/, a layer's from the
+// user's layers), the user's own for every VM, the VM's own, and the hosts
+// its secrets imply. A missing file has no rules.
+func PolicyFiles(d paths.Dirs, root, vm, img string) []string {
+	files := []string{filepath.Join(root, "layers", "base.policy")}
+	for p := range strings.SplitSeq(img, "+") {
+		switch {
+		case p == "" || p == "base":
+		case image.IsTool(p):
+			files = append(files, filepath.Join(root, "tools", p+".policy"))
+		default:
+			files = append(files, filepath.Join(d.Layers(), p+".policy"))
+		}
+	}
+	return append(files, d.Policy(), VMPolicyFile(d, vm), secrets.PolicyFile(d, vm))
+}
+
+// VMPolicyFile holds the rules of one VM's own.
+func VMPolicyFile(d paths.Dirs, vm string) string { return d.VMState(vm) + ".policy" }
+
+// Env is the guest environment a VM with network policy gets besides the
+// proxy's address: no proxy for the VM itself, Node told to use the proxy
+// variables, and the CA for tools that don't read the system's store.
+var Env = map[string]string{
+	"NO_PROXY":            "localhost,127.0.0.1,::1",
+	"no_proxy":            "localhost,127.0.0.1,::1",
+	"NODE_USE_ENV_PROXY":  "1",
+	"NODE_EXTRA_CA_CERTS": "/usr/local/share/ca-certificates/devvm-proxy.crt",
+	"REQUESTS_CA_BUNDLE":  "/etc/ssl/certs/ca-certificates.crt",
+	"UV_SYSTEM_CERTS":     "1",
+}

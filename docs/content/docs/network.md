@@ -3,11 +3,25 @@ title: Network policy
 weight: 24
 ---
 
-A VM with network policy reaches only an allowlist of hosts, through a proxy devvm runs on the host, and never holds your tokens. Network policy isn't available for VMs yet: devvm creates them only with `--no-network-policy` ([commands](commands.md)). The proxy itself is in place, and [Lima's confinement](lima.md#confinement) is what makes it a VM's only way out. This page describes the proxy.
+A VM with network policy reaches only an allowlist of hosts, through a proxy devvm runs on the host, and never holds your tokens. Without it, a VM reaches anything this machine can, its own services on `localhost` included.
+
+## Turning it on
+
+When devvm creates a VM it asks whether to turn network policy on; the answer defaults to no. `--network-policy` or `--no-network-policy` answer up front, and without a terminal to ask in it's off. A VM keeps its choice: it's in its state, `net=on` or `net=off`.
+
+For a VM with network policy, devvm:
+
+1. makes its CA, if it has none with over a week left, and keeps it out of Time Machine (macOS);
+2. writes the VM's [secrets](#secrets) as its proxy sees them;
+3. starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for it to say it's listening;
+4. starts the VM [confined](lima.md#confinement), its proxy settings pointing at the proxy;
+5. runs [the self-check](#the-self-check), before the VM's setup and its shell.
+
+A backend that can't confine a VM to its proxy is refused before anything is built: devvm never starts a VM that asked for network policy with an open network.
 
 ## The proxy
 
-One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`, a hidden command. The VM reaches nothing else, so every connection it makes goes through the proxy. Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`), or gets `407`. The proxy refuses to start without one. For each connection it:
+One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`, a hidden command. The VM reaches nothing else, so every connection it makes goes through the proxy. Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`), or gets `407`. Each VM has its own random password, in its proxy settings; the proxy reads it from a file only you can read, never from its arguments, which other users can see. The proxy refuses to start without one. For each connection it:
 
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
 - takes only host names (letters, digits, `-`, `_`, `.`) and addresses: anything else gets `400` before the policy or the log sees it;
@@ -16,9 +30,26 @@ One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`
 - for hosts with a bound secret, swaps the placeholder in one header for the real value ([Secrets](#secrets)); everything else passes unread;
 - logs every decision.
 
-It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file), or 15 minutes after starting if the hostagent never appears.
+It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file), or 15 minutes after starting if the hostagent never appears. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
 
-## Rules
+devvm counts a proxy as started only once it says it's listening on the VM's port and still runs: a program that took the port first would otherwise get the VM's traffic. If it doesn't, devvm stops and names the proxy's log.
+
+## Allowlists
+
+A VM's proxy reads these policy files, in order, as one list:
+
+| File | Rules for |
+| --- | --- |
+| `layers/base.policy` (next to devvm) | every VM: OS packages, mise's version lists, GitHub, container registries |
+| `tools/<name>.policy` (next to devvm) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
+| `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
+| `~/.config/devvm/policy` | every VM: your own rules |
+| `~/.local/share/devvm/vms/<vm>.policy` | that VM only |
+| `~/.local/share/devvm/run/<vm>.secrets.policy` | the hosts of the VM's secrets and logins, on port 443 (devvm writes it) |
+
+Storage and paste-like hosts are left out of the defaults on purpose: they're easy ways to send data out. Rules never come from the project folder, which the VM can write. The proxy reads each file again when it changes, so an edit applies at once, to the next connection.
+
+### Rules
 
 Policy files hold one rule per line; `#` starts a comment, and matching ignores case.
 
@@ -31,9 +62,11 @@ Policy files hold one rule per line; `#` starts a comment, and matching ignores 
 | `RULE:22`, `[fd00::1]:22`, `10.0.0.0/8:8080` | only that port; without a port, 443 and 80 |
 | `!RULE` | deny: a deny beats any allow |
 
-A denied address is never dialed, even for an allowed name that resolves to it, or to its NAT64 form. The proxy reads several policy files (`-policy`, comma-separated) as one list, and reads each again when it changes. A missing file has no rules; one that changed but can't be read keeps its last rules, so a deny never lapses.
+A denied address is never dialed, even for an allowed name that resolves to it, or to its NAT64 form. A missing file has no rules; one that changed but can't be read keeps its last rules, so a deny never lapses.
 
 ## Inside the VM
+
+The proxy settings are in the VM's environment, for every login (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, `NODE_USE_ENV_PROXY`), with the CA files for tools that don't read the system's store. A direct connection fails at once, even as root, and so does DNS: names resolve in the proxy.
 
 A blocked request gets `403`, naming the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
@@ -41,23 +74,41 @@ A blocked request gets `403`, naming the host, the reason and the rule that woul
 - `/blocked/new?after=N`: the number of blocks so far, then those after the Nth, each rule once (for a shell prompt to show what a command hit);
 - `/ca.pem`: devvm's CA certificate, never its key.
 
+The VM's setup doesn't install devvm's CA or its placeholders yet, so requests to a host with a bound secret fail TLS verification in the VM.
+
+## The self-check
+
+Network policy holds only while the VM runs on the Lima process devvm started confined: a process can't leave its sandbox, but `limactl start` starts a new one, unconfined. So after each start devvm checks, on the host, that the VM still runs on the process it started, then that a direct connection from the VM to the internet fails. The VM answers the second check, so it only catches the honest case; the first is the one the VM can't fake. The result is in the VM's state: `net_check=ok` or `net_check=unenforced`.
+
+- **Started outside devvm:** in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell.
+- **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
+
 ## Secrets
 
-For hosts with a bound secret (`-secrets`, a JSON list of bindings: a name, host patterns, a header and the placeholder the VM sends; no values), the proxy intercepts `:443` tunnels instead of passing them through. It terminates TLS with a certificate from devvm's own CA (`-ca`, `-cakey`; ECDSA P-256, valid 30 days, no host name in it), replaces the placeholder in the binding's header (inside `Basic` credentials too) with the real value, and forwards the request over a new TLS connection. Absolute-form `https://` requests get the same. Each request must name the bound host: one that names another gets `421`. The bindings are read again for every request, so removing one applies to tunnels already open.
+Tokens stay on the host. A VM gets a placeholder of its own instead, ending in a random value of its own (its salt, not its password), and its proxy puts the real value into requests for that token's hosts, in one header:
 
-Values come from `PROGRAM secret get NAME` (`-secret-cmd`), are cached for 5 minutes (30 seconds for agents' logins) and are never logged. GitHub API calls that would make a credential of their own with the token (an account or deploy key, a runner registration, a webhook) are refused with `403`.
+| Secret | Hosts | Header | Used by |
+| --- | --- | --- | --- |
+| `claude` | `api.anthropic.com` | `Authorization` | every VM whose image has `claude` |
+| `github` | `api.github.com`, `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | `Authorization` | VMs it's bound to |
+
+devvm reads a token from the macOS Keychain (service `devvm`, account `claude` or `github`; `DEVVM_SECRET_SERVICE` names another service, letters, digits, `.`, `_` and `-` only), or elsewhere from `~/.config/devvm/secrets/<name>`, a file only you can read. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one. A token's hosts join the VM's allowlist on port 443 whether a value is saved or not.
+
+devvm writes the VM's bindings (`~/.local/share/devvm/run/<vm>.secrets.json`: each secret's name, hosts, header and placeholder, never its value) for those with a value. For a bound host the proxy intercepts `:443` tunnels instead of passing them through. It terminates TLS with a certificate from devvm's own CA (`~/.local/share/devvm/ca`; ECDSA P-256, valid 30 days, no host name in it), replaces the placeholder in the binding's header (inside `Basic` credentials too) with the real value, and forwards the request over a new TLS connection. Absolute-form `https://` requests get the same. Each request must name the bound host: one that names another gets `421`. The bindings are read again for every request, so removing one applies to tunnels already open.
+
+The proxy gets a value by running `devvm secret get NAME`, which prints it, never to a terminal. Values are cached for 5 minutes (30 seconds for agents' logins) and never logged. GitHub API calls that would make a credential of their own with the token (an account or deploy key, a runner registration, a webhook) are refused with `403`.
 
 ## Agents' logins and settings
 
-The proxy also prepares the VM's copies of agents' files on the host, so the VM holds placeholders instead of keys:
+Agents' login files stay on the host too. For a VM whose image has the agent, and a login file on the host, the login's bindings join the VM's and their hosts its allowlist, on port 443:
 
-- **Codex** (`~/.codex/auth.json`) **and opencode** (its `auth.json`): the VM's copy holds placeholders (shaped like a JWT where the tools read claims), and the bindings put the host's API key or access token into requests for the provider's hosts: OpenAI (`api.openai.com`, `chatgpt.com` for a ChatGPT login), and for opencode Anthropic, OpenAI and OpenRouter keys and OpenAI and GitHub Copilot logins (not Copilot Enterprise). OAuth tokens are refreshed on the host, one lookup at a time, and written back to the host's file, so a VM never holds a refresh token. Logins devvm doesn't know are copied as they are, with a warning.
+- **Codex** (`~/.codex/auth.json`) **and opencode** (`~/.local/share/opencode/auth.json`): the VM's copy holds placeholders (shaped like a JWT where the tools read claims), and the bindings put the host's API key or access token into requests for the provider's hosts: OpenAI (`api.openai.com`, `chatgpt.com` for a ChatGPT login), and for opencode Anthropic, OpenAI and OpenRouter keys and OpenAI and GitHub Copilot logins (not Copilot Enterprise). OAuth tokens are refreshed on the host, one lookup at a time, and written back to the host's file, so a VM never holds a refresh token. Logins devvm doesn't know are copied as they are, with a warning.
 - **Claude Code's MCP servers** (`~/.claude.json`): an HTTPS server's headers become bindings for its host (a DNS name on port 443 only); env values, plain-HTTP servers' headers, user info and secret-looking values in URLs, and secret-named or key-shaped arguments become `devvm-redacted`. The copy keeps only settings, onboarding and account state, and MCP servers; per-project entries never go.
 - **Settings files** (JSON, JSONC or Codex's TOML): values under secret-looking keys become `devvm-redacted`, except values that name where a secret is (an environment variable's name, `{env:X}`, `${X}`, a path). TOML multi-line strings are refused rather than copied unread.
 
 ## Logs
 
-Every decision (`tunnel`, `intercept`, `forward`, `blocked`) is a JSON line with the time, the VM, the host and port, the method and path when seen, the rule or reason, and the names of secrets put in, never their values (`-log`, or standard output). The proxy's own lines (what it loaded, what failed upstream) go to standard error: an upstream error stays there, since it can name addresses the VM shouldn't learn.
+Every decision (`tunnel`, `intercept`, `forward`, `blocked`) is a JSON line in `~/.local/share/devvm/logs/<vm>.jsonl`, with the time, the VM, the host and port, the method and path when seen, the rule or reason, and the names of secrets put in, never their values. The proxy's own lines (what it loaded, what failed upstream) go to `<vm>.proxy.log` next to it: an upstream error stays there, since it can name addresses the VM shouldn't learn. Both folders are yours alone, and devvm's run logs never hold a VM's password.
 
 ## devvm _proxy
 
@@ -70,7 +121,7 @@ devvm runs the proxy as itself. Flags take one dash or two; errors end in one li
 | `-policy` | the policy files, comma-separated |
 | `-log` | the JSON-lines event log (default: standard output) |
 | `-lifeline` | the hostagent's pid file: exit when that process is gone |
-| `-auth-file` | a file holding the VM's password (in a file because a process's arguments are visible to other users); required |
+| `-auth-file` | a file holding the VM's password; required |
 | `-ca`, `-cakey` | devvm's CA, for interception |
 | `-secrets` | the VM's secret bindings, read again when they change |
 | `-secret-cmd` | the program run as `PROGRAM secret get NAME` for a value |

@@ -271,8 +271,32 @@ other = "detected a {{.found}} project"
 description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
 other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
 
-[network_policy_unavailable]
-other = "network policy isn't available yet: pass --no-network-policy to create {{.vm}} without it, reaching anything this machine can"
+[net_about]
+other = "With network policy, {{.vm}} reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here.\nWithout it, {{.vm}} reaches anything this machine can."
+
+[net_ask]
+other = "Turn on network policy for {{.vm}}?"
+
+[net_direct_route]
+other = "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
+
+[net_unenforced_stop]
+other = "network policy isn't enforced for {{.vm}}: it was started outside devvm, so devvm stopped it"
+
+[net_unenforced_restart]
+other = "{{.vm}} was started outside devvm, so its network policy isn't enforced. Restart it confined?"
+
+[net_unenforced]
+other = "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
+
+[proxy_ca_failed]
+other = "couldn't create the network policy proxy's CA in {{.dir}}"
+
+[proxy_port_taken]
+other = "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: stop {{.vm}}, and devvm picks another port when it starts it"
+
+[proxy_start_failed]
+other = "the network policy proxy didn't start for {{.vm}}: see {{.log}}"
 
 [creating_from]
 other = "creating {{.vm}} from {{.image}}"
@@ -399,6 +423,20 @@ other = "couldn't set up {{.vm}}'s shared tools"
 [proxy_failed]
 description = "reason is an error from the system or the flag parser, in English"
 other = "network policy proxy: {{.reason}}"
+
+[bad_secret_service]
+other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"
+
+[no_secret]
+description = "secret is the name asked for, quoted when it holds a control character"
+other = "no secret {{.secret}}"
+
+[secret_read_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't read {{.secret}}: {{.reason}}"
+
+[secret_to_terminal]
+other = "refusing to print a secret to a terminal: --force to do it anyway"
 
 [codex_login_kept]
 description = "keys lists auth.json's top-level keys, comma-separated"

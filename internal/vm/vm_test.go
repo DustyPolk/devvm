@@ -4,19 +4,26 @@ import (
 	"archive/tar"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -179,8 +186,9 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		t.Fatal(err)
 	}
 	var execs []backend.Command
+	home := filepath.Join(root, "home")
 	e := &Env{
-		Dirs: d, Root: repo, Registry: reg, Tools: tl, Dir: dir, Home: filepath.Join(root, "home"), OS: "darwin",
+		Dirs: d, Root: repo, Registry: reg, Tools: tl, Proxy: testProxy(t, d, repo, home), Dir: dir, Home: home, OS: "darwin",
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
 			p := gitprotect.New(dir)
@@ -190,6 +198,40 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Exec: func(c backend.Command) error { execs = append(execs, c); return nil },
 	}
 	return e, f, &execs
+}
+
+// testProxy runs each VM's "proxy" as a sleep that says it listens, with
+// no Keychain and no backups.
+func testProxy(t *testing.T, d paths.Dirs, root, home string) *netpolicy.Proxy {
+	t.Helper()
+	store := secrets.NewStore(d, home)
+	store.Keychain, store.Getenv = false, func(string) string { return "" }
+	p := netpolicy.NewProxy(d, root, "/devvm", store)
+	var mu sync.Mutex
+	args := map[int][]string{}
+	p.Start = func(path string, a []string, out *os.File) (int, error) {
+		cmd := exec.CommandContext(context.Background(), "sleep", "30")
+		if err := cmd.Start(); err != nil {
+			return 0, err
+		}
+		done := make(chan struct{})
+		go func() { _ = cmd.Wait(); close(done) }()
+		t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
+		mu.Lock()
+		defer mu.Unlock()
+		args[cmd.Process.Pid] = append([]string{path}, a...)
+		_, err := fmt.Fprintf(out, "devvm proxy: listening on %s for %s\n", a[2], a[4])
+		return cmd.Process.Pid, err
+	}
+	p.Args = func(pid int) ([]string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return args[pid], nil
+	}
+	p.Listening = func(int) bool { return false }
+	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
+	p.Tick = time.Millisecond
+	return p
 }
 
 func allNative() backend.Caps {
@@ -245,6 +287,105 @@ func TestUp(t *testing.T) {
 	// It exists now: not opened yet.
 	if err := e.Up(t.Context(), Options{NoNetworkPolicy: true}); names(err) != "vm_exists vm="+spec.Name {
 		t.Errorf("Up again = %v", names(err))
+	}
+}
+
+// noDirect makes the fake VM's direct connections fail, as confined.
+func noDirect(_ string, argv []string, _ backend.ExecOpts) error {
+	if argv[0] == "curl" {
+		return errors.New("curl: (7) Failed to connect")
+	}
+	return nil
+}
+
+// With network policy: its proxy runs before the VM starts confined, with
+// the VM's key as the proxy's password, and the self-check passes before
+// the setup and the shell.
+func TestUpNetworkPolicy(t *testing.T) {
+	e, f, execs := upEnv(t, allNative())
+	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
+	f.ExecFunc = noDirect
+	if err := e.Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
+		t.Fatal(names(err))
+	}
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Exec", "Shell"}
+	if ms := f.Methods(); !slices.Equal(ms, want) {
+		t.Errorf("calls = %q, want %q", ms, want)
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	st, err := state.ReadVM(e.Dirs, spec.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := call(f, "Start").Args[1].(backend.Confinement)
+	if c.Net != backend.NetProxy || c.ProxyUser != "devvm" || c.ProxyPassword != st.Get(netpolicy.KeyProxyKey) ||
+		strconv.Itoa(c.ProxyPort) != st.Get(netpolicy.KeyProxyPort) || strconv.Itoa(c.SSHPort) != st.Get(netpolicy.KeySSHPort) {
+		t.Errorf("Start confinement = %+v", c)
+	}
+	if st.Get(KeyNet) != "on" || st.Get(netpolicy.KeyCheck) != "ok" {
+		t.Errorf("state net=%q net_check=%q", st.Get(KeyNet), st.Get(netpolicy.KeyCheck))
+	}
+	if _, ok := e.Proxy.PID(spec.Name); !ok {
+		t.Error("its proxy doesn't run")
+	}
+	if len(*execs) != 1 {
+		t.Errorf("exec = %+v", *execs)
+	}
+}
+
+// A VM devvm started confined that still reaches the internet directly is
+// stopped: no setup, no shell.
+func TestUpNetworkPolicyFailsClosed(t *testing.T) {
+	e, f, execs := upEnv(t, allNative())
+	err := e.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	if names(err) != "net_direct_route vm="+spec.Name {
+		t.Fatalf("Up = %v", names(err))
+	}
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Confined", "Stop"}
+	if ms := f.Methods(); !slices.Equal(ms, want) || len(*execs) > 0 {
+		t.Errorf("calls = %q, want %q; execs %+v", ms, want, *execs)
+	}
+	if f.Instances[spec.Name].Status != backend.StatusStopped {
+		t.Error("left running")
+	}
+	st, _ := state.ReadVM(e.Dirs, spec.Name)
+	if st.Get(netpolicy.KeyCheck) != "unenforced" {
+		t.Errorf("net_check = %q", st.Get(netpolicy.KeyCheck))
+	}
+}
+
+// The network choice is in the state before the VM is made: one whose
+// creation fails later keeps it.
+func TestUpKeepsTheNetworkChoice(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	f.Errs = map[string]error{"CreateVM": errors.New("clone failed")}
+	if err := e.Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err == nil {
+		t.Fatal("Up succeeded")
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	st, _ := state.ReadVM(e.Dirs, spec.Name)
+	if st.Get(KeyNet) != "on" || slices.Contains(f.Methods(), "Start") {
+		t.Errorf("net=%q, calls %q", st.Get(KeyNet), f.Methods())
+	}
+}
+
+// A backend that can't confine a VM to its proxy is refused before
+// anything is built, never started open.
+func TestUpRequiresEgressProxy(t *testing.T) {
+	caps := allNative()
+	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
+	e, f, _ := upEnv(t, caps)
+	err := e.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	if got := names(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-web-") {
+		t.Errorf("Up = %v", got)
+	}
+	if slices.Contains(f.Methods(), "BuildImage") {
+		t.Errorf("calls = %q", f.Methods())
+	}
+	// Without network policy it doesn't need it.
+	if err := e.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+		t.Errorf("Up without network policy = %v", names(err))
 	}
 }
 
