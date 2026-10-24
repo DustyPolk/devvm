@@ -242,9 +242,9 @@ func RunningScript(script string, vm string) M {
 	return M{id: "running_script", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}"
-func ScriptFailed(script string, vm string) M {
-	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
+// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build deletes it"
+func ScriptFailed(limaHome string, script string, vm string) M {
+	return M{id: "script_failed", vals: []val{{"lima_home", limaHome}, {"script", script}, {"vm", vm}}}
 }
 
 // StartFailed is [start_failed]: "couldn't start {{.vm}}"
@@ -382,7 +382,7 @@ var specs = map[string]spec{
 	"rebuild_replaces":         {fields: []string{"above", "image"}},
 	"run_log_failed":           {fields: []string{"dir", "reason"}},
 	"running_script":           {fields: []string{"script", "vm"}},
-	"script_failed":            {fields: []string{"script", "vm"}},
+	"script_failed":            {fields: []string{"lima_home", "script", "vm"}},
 	"start_failed":             {fields: []string{"vm"}},
 	"start_no_ssh":             {fields: []string{"console", "vm"}},
 	"started_with_warnings":    {fields: []string{"vm"}},

@@ -103,4 +103,14 @@ In a terminal, a status line shows the step, how long it has run, and the log's 
 
 Ctrl+C, or closing the terminal, stops the command running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.
 
-A build that fails or is interrupted deletes the image it was building, once the end of the log is shown. The images under it, already built, stay. An image found without its record, from a build devvm couldn't clean up after (a crash, a power cut), is deleted and built again.
+An interrupted build deletes the image it was building. So does a build whose create or clone fails, once the end of the log is shown: there's nothing in it to look at.
+
+A build that fails later, in its script or as it starts or stops, keeps the image's VM, stopped and without a record, so you can look inside. devvm's error names it and how to open a shell in it, with Lima pointed at devvm's Lima home:
+
+```sh
+LIMA_HOME=~/.local/share/devvm/lima limactl shell --start devvm-img-<key>
+```
+
+`--start` starts it first, outside the build's confinement. The next build of that image deletes it and starts over.
+
+Either way, the images under it, already built, stay. Any image found without its record (a failed build's, or one devvm couldn't clean up after, such as after a crash or a power cut) is deleted and built again.

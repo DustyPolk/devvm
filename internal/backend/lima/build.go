@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
@@ -23,9 +24,10 @@ var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
 // anything from the host. It starts confined as spec.Net asks (no port
 // forwards, and on macOS a sandbox), runs the scripts in order, and stops.
 //
-// Until it's built, the instance is deleted when the run ends, whether
-// the build failed or the run was interrupted: a cleanup on the ui stack,
-// which runs after the caller has shown the run log's end.
+// Until it's built, an interrupted run deletes the instance, and so does a
+// failed create or clone: a cleanup on the ui stack, which runs after the
+// caller has shown the run log's end. Once it exists, a failure keeps it,
+// stopped, for inspection; the next build deletes it (it has no record).
 func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.Built, error) {
 	if spec.From != nil {
 		return backend.Built{}, errors.New("lima: building base from a container image isn't supported")
@@ -60,7 +62,12 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		}
 	}
 
-	remove := ui.AddCleanup(func(ctx context.Context) { l.unfinished(ctx, inst) })
+	var created atomic.Bool // an interrupt's cleanups may run while this goes on
+	remove := ui.AddCleanup(func(ctx context.Context) {
+		if !created.Load() || ui.Interrupted() {
+			l.unfinished(ctx, inst)
+		}
+	})
 	// Its steps: create or clone, configure and start (Start's edit is
 	// always there for a build: its ports, and on macOS its ssh port),
 	// each script, stop.
@@ -88,18 +95,28 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		l.limactl(ctx, "clone", "--tty=false", "--mount-none", parent, inst)); err != nil {
 		return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 	}
+	created.Store(true)
+	// A failed start leaves it stopped, with its console logs.
 	if err := l.Start(ctx, inst, backend.Confinement{Net: spec.Net}); err != nil {
+		return backend.Built{}, err
+	}
+	// Once it's running, a failure stops it (unless the run was
+	// interrupted: then it's deleted).
+	failed := func(err error) (backend.Built, error) {
+		if ctx.Err() == nil {
+			_ = l.stop(ctx, inst)
+		}
 		return backend.Built{}, err
 	}
 	for _, s := range spec.Scripts {
 		if err := l.runScript(ctx, inst, s); err != nil {
-			return backend.Built{}, err
+			return failed(err)
 		}
 	}
 	// Flushed first: a guest that ignores Lima's stop request is stopped
 	// hard.
 	if err := l.Runner.Run(ctx, msg.M{}, l.limactl(ctx, "shell", "--workdir", "/", inst, "sync")); err != nil {
-		return backend.Built{}, backend.Logged(msg.StopFailed(inst))
+		return failed(backend.Logged(msg.StopFailed(inst)))
 	}
 	if err := l.stop(ctx, inst); err != nil {
 		return backend.Built{}, err
@@ -145,12 +162,13 @@ func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script) error
 	cmd := l.limactl(ctx, "shell", vm, "bash", "-s")
 	cmd.Stdin = f
 	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
-		return backend.Logged(msg.ScriptFailed(s.Name, vm))
+		return backend.Logged(msg.ScriptFailed(shq(l.Dirs.Lima), s.Name, vm))
 	}
 	return nil
 }
 
-// unfinished deletes an image's instance whose build didn't finish.
+// unfinished deletes an image's instance whose build didn't finish: on an
+// interrupt, or when its create or clone failed.
 func (l *Lima) unfinished(ctx context.Context, inst string) {
 	if _, err := l.inspect(ctx, inst); err != nil {
 		return // never created, or Lima can't say: nothing devvm can delete

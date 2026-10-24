@@ -140,20 +140,30 @@ func TestBuildImageLayer(t *testing.T) {
 	}
 }
 
-// A failed script is a logged failure naming it.
+// A failed script is a logged failure naming it, with devvm's Lima home
+// to look inside; the VM is stopped and kept, and nothing else runs.
 func TestBuildImageScriptFails(t *testing.T) {
 	l, f := buildLima(t, "darwin", "")
-	f.fail = []string{"limactl shell devvm-img-" + baseKey + " bash -s"}
+	inst := "devvm-img-" + baseKey
+	f.fail = []string{"limactl shell " + inst + " bash -s"}
 	_, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: baseKey, Net: backend.NetInternet,
 		Scripts: []backend.Script{{Name: "base.sh", Path: filepath.Join(l.Root, "layers", "base.sh")}},
 	})
-	if e, ok := errors.AsType[*backend.LoggedError](err); !ok || e.Msg.ID() != "script_failed" {
-		t.Errorf("BuildImage = %v, want a logged script_failed", err)
+	e, ok := errors.AsType[*backend.LoggedError](err)
+	if !ok || e.Msg.ID() != "script_failed" {
+		t.Fatalf("BuildImage = %v, want a logged script_failed", err)
 	}
-	for _, line := range f.lines() {
-		if strings.HasPrefix(line, "limactl stop") {
-			t.Error("carried on after the script failed")
+	if want := msg.ScriptFailed(shq(l.Dirs.Lima), "base.sh", inst).Names(); e.Msg.Names() != want {
+		t.Errorf("BuildImage = %s, want %s", e.Msg.Names(), want)
+	}
+	lines := f.lines()
+	if last := lines[len(lines)-1]; last != "limactl stop "+inst {
+		t.Errorf("last call %q, want the VM stopped", last)
+	}
+	for _, line := range lines {
+		if strings.Contains(line, "sync") || strings.Contains(line, "delete") {
+			t.Errorf("carried on after the script failed: %s", line)
 		}
 	}
 }

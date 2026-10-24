@@ -189,7 +189,8 @@ other = "cloning {{.parent}}'s image"
 other = "running {{.script}} in {{.vm}}"
 
 [script_failed]
-other = "{{.script}} failed in {{.vm}}"
+description = "lima_home is devvm's Lima home, quoted for a shell"
+other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build deletes it"
 
 [interrupted_image]
 other = "interrupted: deleting the unfinished image {{.vm}}"

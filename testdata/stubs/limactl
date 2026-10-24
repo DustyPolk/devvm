@@ -7,7 +7,8 @@
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
 # and 100 GiB. start writes the VM's ha.pid (devvm's pid, which runs), and
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
-# start). shell fails with $STUB_DIR/shell-fails and hangs with
+# start). clone fails with $STUB_DIR/clone-fails, leaving its instance (a
+# partial clone). shell fails with $STUB_DIR/shell-fails and hangs with
 # $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first); a script fed
 # to shell's bash -s has its second line appended to $STUB_DIR/scripts.
 # Everything else succeeds.
@@ -35,7 +36,9 @@ for a in "${@:2}"; do
 done
 case ${1:-} in
   create) for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done ;;
-  clone) set_status "${names[1]}" Stopped ;;
+  clone)
+    set_status "${names[1]}" Stopped
+    [[ ! -e $STUB_DIR/clone-fails ]] || exit 1 ;;
   start)
     set_status "${names[0]}" Running
     mkdir -p "$LIMA_HOME/${names[0]}"

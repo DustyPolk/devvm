@@ -150,6 +150,16 @@ check "rebuild makes a new one and deletes the stale ones, not base" bash -c "'$
   [[ \$(status_of devvm-img-$kb) == Stopped ]]"
 owned e2efix
 
+# A failed script keeps its image's VM, stopped and without a record, for inspection.
+printf '#!/bin/bash\nexit 3\n' > "$layers/e2efail.sh"
+DEVVM_MESSAGES=names "$D" build e2efail </dev/null >"$work/fail.log" 2>&1; rc=$?
+kx=$(sed -n 's/^==> building_image image=e2efail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
+[[ -z $kx ]] || created+=("devvm-img-$kx")
+check "a failed script keeps its VM, stopped, and says how to look inside" bash -c "
+  [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: script_failed lima_home=.* script=e2efail\.sh vm=devvm-img-$kx$' '$work/fail.log' &&
+  [[ \$(status_of devvm-img-$kx) == Stopped ]] && [[ ! -e '$images/$kx' ]]"
+rm -f "$layers/e2efail.sh"
+
 # Ctrl+C during a build: the run's names (DEVVM_MESSAGES) say which image it builds, its run log,
 # and (in that log) when its script runs.
 printf '#!/bin/bash\nsleep 600\n' > "$layers/e2eslow.sh"

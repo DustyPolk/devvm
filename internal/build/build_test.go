@@ -173,7 +173,7 @@ func TestBuildRequires(t *testing.T) {
 // A failed build writes no record, so the next build starts over.
 func TestFailedBuildHasNoRecord(t *testing.T) {
 	b, f := testBuilder(t)
-	f.Errs = map[string]error{"BuildImage": backend.Logged(msg.ScriptFailed("base.sh", "x"))}
+	f.Errs = map[string]error{"BuildImage": backend.Logged(msg.ScriptFailed("/l", "base.sh", "x"))}
 	if err := b.Build(t.Context(), "base"); err == nil {
 		t.Fatal("Build succeeded")
 	}

@@ -125,7 +125,7 @@ tests/e2e.sh --only images  # just these sections
 tests/e2e.sh --clean        # delete the sandbox's cached images first
 ```
 
-The sections so far: `images` (building base and fixture layers, rebuilds, and Ctrl+C during a build). base stays cached between runs; every other VM a run makes is deleted at its end. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
+The sections so far: `images` (building base and fixture layers, rebuilds, a failed script and Ctrl+C during a build). base stays cached between runs; every other VM a run makes is deleted at its end. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
 
 ## Messages
 
