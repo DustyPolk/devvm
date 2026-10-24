@@ -25,3 +25,16 @@ other = "{{.key}}= is given twice"
 
 [msg_bad_count]
 other = "count must be a whole number, not {{.value}}"
+
+[usage_error]
+description = "reason is the command-line parser's own error, in English"
+other = "{{.reason}}: see devvm --help"
+
+[log_details]
+other = "(details: {{.file}})"
+
+[log_end]
+other = "the end of {{.file}}:"
+
+[run_log_failed]
+other = "can't write the run log in {{.dir}}: {{.reason}}"

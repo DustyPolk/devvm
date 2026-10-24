@@ -7,6 +7,16 @@ func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
 }
 
+// LogDetails is [log_details]: "(details: {{.file}})"
+func LogDetails(file string) M {
+	return M{id: "log_details", vals: []val{{"file", file}}}
+}
+
+// LogEnd is [log_end]: "the end of {{.file}}:"
+func LogEnd(file string) M {
+	return M{id: "log_end", vals: []val{{"file", file}}}
+}
+
 // MsgBadCount is [msg_bad_count]: "count must be a whole number, not {{.value}}"
 func MsgBadCount(value string) M {
 	return M{id: "msg_bad_count", vals: []val{{"value", value}}}
@@ -37,13 +47,27 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
+// RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
+func RunLogFailed(dir string, reason string) M {
+	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
+}
+
+// UsageError is [usage_error]: "{{.reason}}: see devvm --help"
+func UsageError(reason string) M {
+	return M{id: "usage_error", vals: []val{{"reason", reason}}}
+}
+
 // specs describes every message, by ID.
 var specs = map[string]spec{
 	"home_not_absolute":    {},
+	"log_details":          {fields: []string{"file"}},
+	"log_end":              {fields: []string{"file"}},
 	"msg_bad_count":        {fields: []string{"value"}},
 	"msg_missing_value":    {fields: []string{"key", "name"}},
 	"msg_not_pair":         {fields: []string{"arg"}},
 	"msg_repeated_value":   {fields: []string{"key"}},
 	"msg_unexpected_value": {fields: []string{"key", "name"}},
 	"msg_unknown":          {fields: []string{"name"}},
+	"run_log_failed":       {fields: []string{"dir", "reason"}},
+	"usage_error":          {fields: []string{"reason"}},
 }

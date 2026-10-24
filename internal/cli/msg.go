@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // newMsgCmd is devvm _msg NAME key=value...: a message's text, for the
@@ -17,12 +18,13 @@ func newMsgCmd() *cobra.Command {
 		Hidden:             true,
 		DisableFlagParsing: true,
 		Args:               cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			m, err := msg.FromArgs(args[0], args[1:])
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), m.Text())
+			// The text whatever DEVVM_MESSAGES says: it's data here.
+			_, err = fmt.Fprintln(ui.Stdout(), m.Text())
 			return err
 		},
 	}

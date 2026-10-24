@@ -4,11 +4,22 @@ stdout '^Usage:'
 stdout 'devvm \[flags\]'
 ! stderr .
 
-# An unknown command fails.
+# An unknown command fails in one line on stderr, like every error.
 ! exec devvm nope
-stderr 'unknown command "nope"'
+cmp stderr nope.txt
 ! stdout .
 
-# An unknown flag fails.
+# So does an unknown flag.
 ! exec devvm --nope
-stderr 'unknown flag: --nope'
+cmp stderr nope-flag.txt
+! stdout .
+
+# In names mode, the parser's error is the message's value.
+env DEVVM_MESSAGES=names
+! exec devvm nope
+stderr '^devvm: usage_error reason=unknown command "nope" for "devvm"$'
+
+-- nope.txt --
+devvm: unknown command "nope" for "devvm": see devvm --help
+-- nope-flag.txt --
+devvm: unknown flag: --nope: see devvm --help

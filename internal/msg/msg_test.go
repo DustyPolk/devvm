@@ -82,6 +82,9 @@ func TestNames(t *testing.T) {
 	if got, want := m.String(), m.Names(); got != want {
 		t.Errorf("String in names mode: got %q, want %q", got, want)
 	}
+	if got, want := m.Line(), m.Names(); got != want {
+		t.Errorf("Line in names mode: got %q, want %q", got, want)
+	}
 	if got, want := m.Error(), m.Names(); got != want {
 		t.Errorf("Error in names mode: got %q, want %q", got, want)
 	}
@@ -98,6 +101,9 @@ func TestStringAddsDocLink(t *testing.T) {
 	want := m.Text() + "\nhttps://w3cj.github.io/devvm/docs/images/#where-state-lives"
 	if got := m.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := m.Line(); got != m.Text() {
+		t.Errorf("Line: got %q, want the text without the link", got)
 	}
 }
 

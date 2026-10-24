@@ -12,7 +12,7 @@ func TestExecuteExitCodes(t *testing.T) {
 		{[]string{"nope"}, 1},
 		{[]string{"--nope"}, 1},
 	} {
-		if got := Execute(tc.args); got != tc.want {
+		if got := Execute(t.Context(), tc.args); got != tc.want {
 			t.Errorf("Execute(%q) = %d, want %d", tc.args, got, tc.want)
 		}
 	}

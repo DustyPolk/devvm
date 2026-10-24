@@ -15,7 +15,7 @@ stdout '^no message x$'
 # Its errors are messages too: an unknown message, a missing, unexpected or
 # repeated value, an argument that isn't name=value.
 ! exec devvm _msg nope
-stderr 'msg_unknown name=nope$'
+stderr '^devvm: msg_unknown name=nope$'
 ! stdout .
 ! exec devvm _msg msg_unknown
 stderr 'msg_missing_value key=name name=msg_unknown$'
@@ -26,12 +26,12 @@ stderr 'msg_repeated_value key=name$'
 ! exec devvm _msg msg_unknown x
 stderr 'msg_not_pair arg=x$'
 ! exec devvm _msg
-stderr 'requires at least 1 arg'
+stderr '^devvm: usage_error reason=requires at least 1 arg\(s\), only received 0$'
 
 # Without names mode, errors are the text.
 env DEVVM_MESSAGES=
 ! exec devvm _msg nope
-stderr 'no message nope$'
+stderr '^devvm: no message nope$'
 
 # _msg isn't in the help.
 exec devvm --help

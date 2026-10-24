@@ -60,6 +60,15 @@ func (m M) String() string {
 	return m.Text()
 }
 
+// Line returns the message on one line, without its doc link: its text, or
+// its names with DEVVM_MESSAGES=names. For status lines and run logs.
+func (m M) Line() string {
+	if namesMode() {
+		return m.Names()
+	}
+	return m.Text()
+}
+
 // Error makes a message usable as an error. It's the same as String.
 func (m M) Error() string { return m.String() }
 
