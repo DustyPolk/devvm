@@ -38,7 +38,8 @@ linters:
             - github.com/spf13/cobra
             - github.com/spf13/pflag
             - github.com/nicksnyder/go-i18n/v2
-            # go-i18n's own TOML parser, for locales/*.toml.
+            # The TOML parser go-i18n's docs register for locales/*.toml
+            # (approved; the generator reads en.toml with it too).
             - github.com/BurntSushi/toml
             - golang.org/x/text
             - golang.org/x/term

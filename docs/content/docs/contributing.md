@@ -106,12 +106,14 @@ limactl list
 
 Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; `internal/ui` does.
 
+The locale files are in [go-i18n](https://github.com/nicksnyder/go-i18n)'s TOML format, with only go-i18n's own message fields, so go-i18n's loader reads them as they are and its `goi18n` tools work on them:
+
 ```toml
 [no_vm]
 other = "no VM for {{.dir}}: run devvm there to create one"
-doc = "images#where-state-lives"
 
 [vm_count]
+description = "how many VMs a folder has"
 one = "{{.count}} VM in {{.dir}}"
 other = "{{.count}} VMs in {{.dir}}"
 ```
@@ -119,8 +121,21 @@ other = "{{.count}} VMs in {{.dir}}"
 - **The ID** is the table's name, in snake_case.
 - **`other`** is the text: a Go template whose fields are snake_case (`{{.vm_name}}`). Only plain fields are allowed, no logic.
 - **`one`** is the text for a count of 1, when the wording changes with the count. Both texts then take `{{.count}}`.
-- **`doc`** links a page in `docs/content/docs` and a heading on it (`page#anchor`). devvm prints its address on the docs site on the line after the text.
+- **`description`** is an optional note for translators.
+- **Nothing else:** the generator refuses keys go-i18n doesn't know, nested tables, plural forms English doesn't use (`zero`, `two`, `few`, `many`) and `leftDelim`/`rightDelim`.
 - **Style:** succinct and direct. Say what is being done, or what failed and what to do; link a page when more is needed. An error is one line.
+
+### Doc links
+
+A message links a docs page through the `docs` map in `internal/msg/docs.go`, from message ID to a page in `docs/content/docs` and a heading on it:
+
+```go
+var docs = map[string]string{
+    "no_vm": "images#where-state-lives",
+}
+```
+
+devvm prints the page's address on the docs site on the line after the text.
 
 After editing `en.toml`, run:
 
@@ -135,7 +150,7 @@ The tests fail when:
 - `messages_gen.go` is stale;
 - a message doesn't render with sample values, or shows `<no value>`;
 - a generated function is never called outside the generated file and the tests;
-- a `doc` page or heading doesn't exist. `mise run lint` runs this check too.
+- a doc link names a message that isn't in `en.toml`, or a page or heading that doesn't exist. `mise run lint` runs this check too.
 
 ### Names mode
 
@@ -151,7 +166,7 @@ stderr 'msg_unknown name=nope$'
 
 ### Translations
 
-A translation is `locales/<language>.toml` (`de.toml`) with the same tables, `one` and `other` translated. Its `doc` is ignored: the docs site is English. devvm picks the language from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set (`de_DE.UTF-8` is German); `C` and `POSIX` are English. A message missing from a translation is shown in English.
+A translation is `locales/<language>.toml` (`de.toml`) with the same tables, `one` and `other` translated (and the language's other plural forms, such as `few`), loaded by go-i18n the same way. Doc links are the same in every language: the docs site is English. devvm picks the language from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set (`de_DE.UTF-8` is German); `C` and `POSIX` are English. A message missing from a translation is shown in English.
 
 ## Writing docs
 

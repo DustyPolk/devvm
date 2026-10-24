@@ -8,9 +8,11 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -80,18 +82,37 @@ func TestEveryMessageIsUsed(t *testing.T) {
 	}
 }
 
-// TestDocLinks checks that every doc link in locales/en.toml names a page
-// in docs/content/docs, and an anchor on it. mise run lint runs it.
+// TestDocLinks checks every doc link in docs.go: its key is a message in
+// locales/en.toml, and its page and anchor exist in docs/content/docs.
+// mise run lint runs it.
 func TestDocLinks(t *testing.T) {
-	content := filepath.Join(root, "docs", "content", "docs")
-	for id, s := range specs {
-		if s.doc == "" {
-			continue
+	for _, err := range checkDocLinks(docs, specs, filepath.Join(root, "docs", "content", "docs")) {
+		t.Error(err)
+	}
+}
+
+var docRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_/-]*(#[a-z0-9][a-z0-9_-]*)?$`)
+
+// checkDocLinks checks links (message ID to "page#anchor") against the
+// messages in ids and the pages in dir.
+func checkDocLinks(links map[string]string, ids map[string]spec, dir string) []error {
+	var errs []error
+	for _, id := range slices.Sorted(maps.Keys(links)) {
+		doc := links[id]
+		var err error
+		switch _, ok := ids[id]; {
+		case !ok:
+			err = errors.New("no such message in locales/en.toml")
+		case !docRe.MatchString(doc):
+			err = errors.New("not page#anchor")
+		default:
+			err = checkDoc(dir, doc)
 		}
-		if err := checkDoc(content, s.doc); err != nil {
-			t.Errorf("[%s] doc = %q: %v", id, s.doc, err)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("docs[%q] = %q: %w", id, doc, err))
 		}
 	}
+	return errs
 }
 
 // checkDoc reports whether doc ("page#anchor") is a page in dir with that
@@ -118,7 +139,7 @@ var (
 // {#custom} when given, else the text lowercased, punctuation dropped and
 // spaces as hyphens. Headings in fenced code don't count.
 func pageAnchors(path string) (map[string]bool, error) {
-	f, err := os.Open(path) //nolint:gosec // a docs page from en.toml
+	f, err := os.Open(path) //nolint:gosec // a docs page named in docs.go
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("no page %s", path)
@@ -185,5 +206,32 @@ func TestCheckDoc(t *testing.T) {
 		if err := checkDoc(dir, tt.doc); (err == nil) != tt.ok {
 			t.Errorf("checkDoc(%q) = %v, want ok %t", tt.doc, err, tt.ok)
 		}
+	}
+}
+
+func TestCheckDocLinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "images.md"), []byte("## Where state lives\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]spec{"no_vm": {}, "ready": {}, "gone": {}, "url": {}}
+	links := map[string]string{
+		"no_vm":   "images#where-state-lives",
+		"ready":   "images",
+		"gone":    "images#nope",
+		"url":     "https://example.com",
+		"missing": "images",
+	}
+	var got []string
+	for _, err := range checkDocLinks(links, ids, dir) {
+		got = append(got, err.Error())
+	}
+	want := []string{
+		`docs["gone"] = "images#nope": images has no heading #nope`,
+		`docs["missing"] = "images": no such message in locales/en.toml`,
+		`docs["url"] = "https://example.com": not page#anchor`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

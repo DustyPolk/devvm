@@ -40,12 +40,26 @@ func main() {
 	}
 }
 
+// table is one message in go-i18n's TOML format: the fields of
+// i18n.Message, which go-i18n's loader and tools read.
+type table struct {
+	Description string `toml:"description"`
+	Hash        string `toml:"hash"`
+	LeftDelim   string `toml:"leftDelim"`
+	RightDelim  string `toml:"rightDelim"`
+	Zero        string `toml:"zero"`
+	One         string `toml:"one"`
+	Two         string `toml:"two"`
+	Few         string `toml:"few"`
+	Many        string `toml:"many"`
+	Other       string `toml:"other"`
+}
+
 // message is one table of the message file.
 type message struct {
 	id     string
 	other  string
 	one    string
-	doc    string
 	fields []string // the template's fields, sorted; "count" when plural
 }
 
@@ -54,14 +68,19 @@ func (m message) plural() bool { return m.one != "" }
 var (
 	idRe    = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 	fieldRe = idRe
-	docRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9_/-]*(#[a-z0-9][a-z0-9_-]*)?$`)
 )
 
-// parseMessages reads and checks the message file.
+// parseMessages reads and checks the message file. Each table is a
+// message; a key go-i18n doesn't know, or a nested table, is refused.
 func parseMessages(src []byte) ([]message, error) {
-	var raw map[string]map[string]string
-	if err := toml.Unmarshal(src, &raw); err != nil {
+	var raw map[string]table
+	md, err := toml.Decode(string(src), &raw)
+	if err != nil {
 		return nil, err
+	}
+	if keys := md.Undecoded(); len(keys) > 0 {
+		k := keys[0]
+		return nil, fmt.Errorf("[%s]: unknown key %q (go-i18n's message fields only)", k[0], strings.Join(k[1:], "."))
 	}
 	var msgs []message
 	for id, t := range raw {
@@ -75,28 +94,19 @@ func parseMessages(src []byte) ([]message, error) {
 	return msgs, nil
 }
 
-func parseMessage(id string, t map[string]string) (message, error) {
+func parseMessage(id string, t table) (message, error) {
 	if !idRe.MatchString(id) {
 		return message{}, errors.New("the ID must be snake_case")
 	}
-	m := message{id: id}
-	for k, v := range t {
-		switch k {
-		case "other":
-			m.other = v
-		case "one":
-			m.one = v
-		case "doc":
-			m.doc = v
-		default:
-			return message{}, fmt.Errorf("unknown key %q (want other, one or doc)", k)
-		}
+	if t.Zero != "" || t.Two != "" || t.Few != "" || t.Many != "" {
+		return message{}, errors.New("plurals in English are one and other only")
 	}
+	if t.LeftDelim != "" || t.RightDelim != "" {
+		return message{}, errors.New("templates use {{ }}: no leftDelim or rightDelim")
+	}
+	m := message{id: id, other: t.Other, one: t.One}
 	if m.other == "" {
 		return message{}, errors.New("no other text")
-	}
-	if m.doc != "" && !docRe.MatchString(m.doc) {
-		return message{}, fmt.Errorf("doc %q is not page#anchor", m.doc)
 	}
 	fields := map[string]bool{}
 	for _, text := range []string{m.other, m.one} {
@@ -220,9 +230,6 @@ func generate(src []byte) ([]byte, error) {
 	b.WriteString("// specs describes every message, by ID.\nvar specs = map[string]spec{\n")
 	for _, m := range msgs {
 		var s []string
-		if m.doc != "" {
-			s = append(s, fmt.Sprintf("doc: %q", m.doc))
-		}
 		if m.plural() {
 			s = append(s, "plural: true")
 		}
@@ -250,9 +257,6 @@ func writeFunc(b *bytes.Buffer, m message) {
 	fmt.Fprintf(b, "// %s is [%s]: %q\n", goName(m.id, true), m.id, m.other)
 	fmt.Fprintf(b, "func %s(%s) M {\n", goName(m.id, true), strings.Join(params, ", "))
 	fmt.Fprintf(b, "\treturn M{id: %q", m.id)
-	if m.doc != "" {
-		fmt.Fprintf(b, ", doc: %q", m.doc)
-	}
 	if m.plural() {
 		b.WriteString(", plural: true, count: count")
 	}

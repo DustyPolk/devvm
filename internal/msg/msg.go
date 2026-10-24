@@ -32,7 +32,6 @@ const DocsBase = "https://w3cj.github.io/devvm/docs/"
 // M is a message with its values, made by the generated functions.
 type M struct {
 	id     string
-	doc    string
 	plural bool
 	count  int
 	vals   []val // in sorted key order
@@ -42,7 +41,6 @@ type val struct{ key, value string }
 
 // spec is what the generated table says about a message.
 type spec struct {
-	doc    string
 	plural bool
 	fields []string // sorted; "count" when plural
 }
@@ -99,9 +97,9 @@ func (m M) textIn(b *i18n.Bundle, lang string) string {
 	return text
 }
 
-// DocURL returns the address of the message's doc page, or "" when it has
-// none.
-func (m M) DocURL() string { return docURL(m.doc) }
+// DocURL returns the address of the message's doc page (from docs), or ""
+// when it has none.
+func (m M) DocURL() string { return docURL(docs[m.id]) }
 
 // docURL turns "page#anchor" into the page's address on the docs site.
 func docURL(doc string) string {
@@ -147,42 +145,23 @@ var loadBundle = sync.OnceValue(func() *i18n.Bundle {
 	return b
 })
 
-// localeTable is one message in a locale file. doc is read from the
-// generated table, so a translation's is ignored.
-type localeTable struct {
-	One   string `toml:"one"`
-	Other string `toml:"other"`
-	Doc   string `toml:"doc"`
-}
-
-// newBundle loads every *.toml file in fsys, named by language (en.toml).
-// go-i18n's own parser refuses a table that mixes its keys with others
-// (doc), so the files are read here.
+// newBundle loads every *.toml file in fsys, named by language (en.toml),
+// with go-i18n's own loader.
 func newBundle(fsys fs.FS) (*i18n.Bundle, error) {
 	b := i18n.NewBundle(language.English)
+	b.RegisterUnmarshalFunc("toml", toml.Unmarshal)
 	files, err := fs.Glob(fsys, "*.toml")
 	if err != nil {
 		return nil, err
 	}
 	for _, file := range files {
-		tag, err := language.Parse(strings.TrimSuffix(path.Base(file), ".toml"))
-		if err != nil {
-			return nil, err
+		// go-i18n files a name that isn't a language under "und" without
+		// an error, so the name is checked here.
+		if _, err := language.Parse(strings.TrimSuffix(path.Base(file), ".toml")); err != nil {
+			return nil, &fs.PathError{Op: "load", Path: file, Err: err}
 		}
-		data, err := fs.ReadFile(fsys, file)
-		if err != nil {
-			return nil, err
-		}
-		var tables map[string]localeTable
-		if err := toml.Unmarshal(data, &tables); err != nil {
-			return nil, &fs.PathError{Op: "parse", Path: file, Err: err}
-		}
-		msgs := make([]*i18n.Message, 0, len(tables))
-		for id, t := range tables {
-			msgs = append(msgs, &i18n.Message{ID: id, One: t.One, Other: t.Other})
-		}
-		if err := b.AddMessages(tag, msgs...); err != nil {
-			return nil, err
+		if _, err := b.LoadMessageFileFS(fsys, file); err != nil {
+			return nil, &fs.PathError{Op: "load", Path: file, Err: err}
 		}
 	}
 	return b, nil
@@ -207,7 +186,7 @@ func FromArgs(id string, args []string) (M, error) {
 		}
 		given[k] = v
 	}
-	m := M{id: id, doc: s.doc, plural: s.plural}
+	m := M{id: id, plural: s.plural}
 	for _, f := range s.fields {
 		v, ok := given[f]
 		if !ok {

@@ -8,8 +8,8 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | --- | --- |
 | `cmd/devvm/main.go` | the entry point: runs the root command and exits with its code. The only place that calls `os.Exit` |
 | `internal/cli/` | Cobra commands, one file each (the empty root and the hidden `_msg` so far), and `script_test.go`, the testscript runner |
-| `internal/msg/` | messages: `messages_gen.go` (one function per message, generated), `M` (text in the user's language, names mode, doc links, `FromArgs` for `_msg`), the go-i18n bundle. `gen/` is the generator (`go generate ./internal/msg`); the tests check the generated file is current, every message renders, every one is called and every doc link exists |
-| `locales/` | `en.toml`, every message (other languages join as `<lang>.toml`), embedded by `locales.go` |
+| `internal/msg/` | messages: `messages_gen.go` (one function per message, generated), `M` (text in the user's language, names mode, doc links, `FromArgs` for `_msg`), the go-i18n bundle, `docs.go` (the doc links: message ID → `"page#anchor"`). `gen/` is the generator (`go generate ./internal/msg`); the tests check the generated file is current, every message renders, every one is called and every doc link is a message, page and heading |
+| `locales/` | `en.toml`, every message in go-i18n's TOML format (other languages join as `<lang>.toml`), embedded by `locales.go` and loaded with go-i18n's `LoadMessageFileFS` |
 | `internal/paths/` | names every folder and file devvm uses: the folder holding the binary (after following links), and `Dirs` (XDG data and config folders, devvm's Lima home, `DEVVM_LIMA_HOME`) with a method per state folder and config file |
 | `internal/state/` | reads and writes state files atomically, with `CorruptError` for unreadable ones: VM state (key=value, `backend=` included), image records and `--from` digests, and the config files (`size`, `ports`, `base-features`, `agent-keys`). Its errors aren't messages yet |
 | `testdata/script/*.txtar` | CLI tests (testscript) |
@@ -27,7 +27,7 @@ Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/
 
 `mise run <task>`:
 - `fmt`: gofumpt and goimports, through golangci-lint.
-- `lint`: golangci-lint, shellcheck on every shell script, then markdownlint-cli2, Vale and `lychee --offline` on `docs/content`, then the message-link check (`TestDocLinks` in `internal/msg`: every `doc =` in `locales/en.toml` is a page and heading).
+- `lint`: golangci-lint, shellcheck on every shell script, then markdownlint-cli2, Vale and `lychee --offline` on `docs/content`, then the message-link check (`TestDocLinks` in `internal/msg`: every entry in `internal/msg/docs.go` is a message in `locales/en.toml` and a page and heading).
 - `test`: `gotestsum -- -race -cover ./...`, including the testscript suites. Needs a C compiler for `-race`.
 - `vuln`: govulncheck.
 - `docs`: serves the site (`http://localhost:1313/devvm/`). Regenerating the CLI reference joins it once commands exist.
@@ -56,7 +56,7 @@ Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/
 - **Only `internal/ui` prints.** forbidigo bans `fmt.Print*` and `os.Stdout`/`os.Stderr` elsewhere, and `os.Exit` outside `cmd/devvm`.
 - **Fail with `ui.Die(msg.X(...))`:** it panics with an exit error; `main` recovers it, runs the cleanup stack and exits 1. Ctrl+C (INT/TERM/HUP) cancels the root context and runs the same cleanups. Anything that leaves something behind on failure (a build VM, a temp file) registers its cleanup.
 - **OS-specific code goes behind build tags** in `internal/platform` (`*_darwin.go`, `*_linux.go`, `*_other.go`), so Windows can follow.
-- **Dependencies:** the depguard allowlist in `.golangci.yml` (cobra, pflag, go-i18n and its TOML parser BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests). `internal/proxy` is stdlib only. Adding one is a decision: ask.
+- **Dependencies:** the depguard allowlist in `.golangci.yml` (cobra, pflag, go-i18n, BurntSushi/toml (approved: the TOML parser go-i18n's docs register, also used by the generator), x/text, x/term, x/sys; go-internal in tests). `internal/proxy` is stdlib only. Adding one is a decision: ask.
 - **External tools are called as commands, never linked** (`limactl`, `smolvm`, `docker`, `security`, `git`, `chflags`, `sandbox-exec`, `qemu-img`, `ssh-keygen`). Prefer the standard library to shelling out (`net/http`, `crypto/sha256`, `encoding/json`, `text/template`, `net.Dial`). Strings sent into a backend's shell are quoted with `shq()`.
 - **A command exists only once it's ported.** Cobra's docs generator writes `docs/content/docs/cli/`; a test fails when it's stale.
 - `CGO_ENABLED=0` for builds.
@@ -71,7 +71,7 @@ Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/
 ## Messages
 
 - **Succinct and direct.** Say what is being done, or what failed and what to do. No explanations; link a docs page when more is needed.
-- **Every message lives in `locales/en.toml`** and is called through its generated function (`msg.NoVM(dir)`, parameters in sorted field order); run `go generate ./internal/msg` after editing it. Template fields are snake_case plain fields (`{{.vm_name}}`, no logic); `one` next to `other` makes it plural (`count int`); a `doc = "page#anchor"` adds the link. A message with no caller fails the tests: add it with its first caller. `msg.M` is an `error`, so a function can return one. Never build prose with `fmt` outside `msg`.
+- **Every message lives in `locales/en.toml`** and is called through its generated function (`msg.NoVM(dir)`, parameters in sorted field order); run `go generate ./internal/msg` after editing it. Locale files are standard go-i18n TOML: only go-i18n's message fields (`other`, `one`, `description`), so go-i18n's tools work on them. Template fields are snake_case plain fields (`{{.vm_name}}`, no logic); `one` next to `other` makes it plural (`count int`). A doc link is an entry in the `docs` map in `internal/msg/docs.go` (`"no_vm": "images#where-state-lives"`), never a key in the TOML. A message with no caller fails the tests: add it with its first caller. `msg.M` is an `error`, so a function can return one. Never build prose with `fmt` outside `msg`.
 - An error is one line. Explain why only when the user has to decide something; a prompt gets at most two lines of context. Status steps are a few words, lowercase. Commands are written as devvm x, not quoted. No "please", "note that" or "simply".
 - Not messages: data output (tables, files devvm writes) and text in scripts that run elsewhere.
 - **Tests check which message was printed and with what, never its wording:** `DEVVM_MESSAGES=names` prints `no_vm dir=/x`, and `devvm _msg NAME k=v…` gives e2e the text.

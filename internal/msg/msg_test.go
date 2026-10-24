@@ -93,7 +93,8 @@ func TestStringAddsDocLink(t *testing.T) {
 	if got := m.String(); got != m.Text() {
 		t.Errorf("no doc: got %q, want the text", got)
 	}
-	m.doc = "images#where-state-lives"
+	docs["msg_unknown"] = "images#where-state-lives"
+	defer delete(docs, "msg_unknown")
 	want := m.Text() + "\nhttps://w3cj.github.io/devvm/docs/images/#where-state-lives"
 	if got := m.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -178,6 +179,7 @@ func TestBundleErrors(t *testing.T) {
 	for name, fsys := range map[string]fstest.MapFS{
 		"bad TOML":      {"en.toml": {Data: []byte("[x\n")}},
 		"bad file name": {"not a tag.toml": {Data: []byte("")}},
+		"unknown key":   {"en.toml": {Data: []byte("[x]\nother = \"x\"\ndoc = \"images\"\n")}},
 	} {
 		if _, err := newBundle(fsys); err == nil {
 			t.Errorf("%s: want an error", name)
