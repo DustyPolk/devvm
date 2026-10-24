@@ -57,7 +57,7 @@ Lima forwards every port a VM listens on to the same port on the host's `localho
 ## Limits
 
 - **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has at most 104 characters. A long Lima home leaves less room for the name: set `DEVVM_LIMA_HOME` to a shorter folder if devvm says it's too long.
-- **Paths can't contain commas.** Lima and QEMU split mount options on commas, so devvm refuses to mount a folder with one.
+- **Paths can't contain commas.** Lima and QEMU split mount options on commas, so devvm refuses to mount a project folder with one, and leaves out an agent's folder with one, with a warning.
 - **Disks can grow but not shrink.**
 - **Mounts on Linux are 9p.** A 9p share mounts once per guest.
 - **A start Lima reports as failed** for a VM that's running but degraded (one of Lima's boot scripts failed) carries on with a warning. A VM that doesn't answer over ssh within a minute is stopped instead: its console log is in its Lima folder (`serial*.log`).

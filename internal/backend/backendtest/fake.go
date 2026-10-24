@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"sync"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -260,6 +261,15 @@ func (f *Fake) Exec(_ context.Context, vm string, argv []string, o backend.ExecO
 
 // Lifeline returns LifelineFile.
 func (f *Fake) Lifeline(string) string { return f.LifelineFile }
+
+// ProxyURL returns the proxy at proxy.test on c's port, with its user and
+// password.
+func (f *Fake) ProxyURL(c backend.Confinement) string {
+	if c.Net != backend.NetProxy {
+		return ""
+	}
+	return "http://" + c.ProxyUser + ":" + c.ProxyPassword + "@proxy.test:" + strconv.Itoa(c.ProxyPort)
+}
 
 // Shell records the call and returns ShellCmd.
 func (f *Fake) Shell(_ context.Context, vm, dir string) (backend.Command, error) {

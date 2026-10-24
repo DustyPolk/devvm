@@ -11,7 +11,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | --- | --- |
 | `devvm [IMAGE]` | open a shell in this folder's VM, at the same path, creating the VM first: from IMAGE, else the image the folder's files call for ([details](images.md#which-image-a-new-vm-gets)) |
 
-A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)). Then devvm starts it, mounts its tools and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
+A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
 devvm doesn't open a VM that already exists yet.
 

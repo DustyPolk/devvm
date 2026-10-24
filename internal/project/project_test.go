@@ -34,6 +34,9 @@ func TestNew(t *testing.T) {
 	if err != nil || !name.MatchString(f.Name) || f.Dir != "/w/My_App.v2" {
 		t.Errorf("New = %+v, %v", f, err)
 	}
+	if f.Slug() != "my-app-v2" {
+		t.Errorf("Slug = %q", f.Slug())
+	}
 	// Another folder with the same name gets another VM.
 	if g, _ := New("/x/My_App.v2", 0); g.Name == f.Name {
 		t.Errorf("two folders share %s", f.Name)

@@ -66,6 +66,11 @@ type Env struct {
 	Protector func(dir string) *gitprotect.Protector
 	// Exec runs the shell in devvm's place; it returns only on failure.
 	Exec func(backend.Command) error
+	// What a VM's setup sends of the host's settings: the environment
+	// (TZ, LANG, LC_ALL), the timezone, and git's settings in a folder.
+	Getenv    func(string) string
+	HostTZ    func() string
+	GitConfig func(ctx context.Context, dir, key string) string
 }
 
 // NewEnv returns the environment up runs in here, devvm being self.
@@ -83,6 +88,7 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home)),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell,
+		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 	}, nil
 }
 
@@ -207,9 +213,9 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	// Asked before the build, which can take minutes.
 	net := netpolicy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
 	// Every VM has the share, read-only: a tool added later is mounted
-	// from it.
+	// from it. Its agents' folders on the host are mounted read-only.
 	spec := backend.VMSpec{
-		Name: vm, Project: f.Dir, Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
+		Name: vm, Project: f.Dir, AgentDirs: AgentMounts(e.Home, img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
 		Size: size.Backend(), Ports: PortsBackend(ports),
 	}
 	conf := backend.Confinement{Net: backend.NetDirect}
@@ -328,7 +334,13 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		}
 	}
 	ui.Info(msg.Starting(vm))
-	start := func(ctx context.Context) error { return e.start(ctx, b, st, conf) }
+	// The confinement the VM last started with, its proxy's address in it.
+	var started backend.Confinement
+	start := func(ctx context.Context) error {
+		var err error
+		started, err = e.start(ctx, b, st, conf)
+		return err
+	}
 	if err := start(ctx); err != nil {
 		return err
 	}
@@ -336,7 +348,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err := netpolicy.SelfCheck(ctx, b, st, start); err != nil {
 		return err
 	}
-	if err := e.sync(ctx, b, vm, files); err != nil {
+	if err := e.sync(ctx, b, st, f.Slug(), files, started); err != nil {
 		return err
 	}
 	cmd, err := b.Shell(ctx, vm, f.Dir)
@@ -347,24 +359,25 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	return e.Exec(cmd)
 }
 
-// start starts a stopped VM confined as conf says. With network policy its
-// proxy starts first, and the backend gets the proxy's confinement; a start
-// that fails stops the proxy again.
-func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) error {
+// start starts a stopped VM confined as conf says, and returns the
+// confinement it got. With network policy its proxy starts first, and the
+// backend gets the proxy's confinement; a start that fails stops the proxy
+// again.
+func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
 	vm := st.Name()
 	if conf.Net == backend.NetProxy {
 		var err error
 		if conf, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), false); err != nil {
-			return err
+			return conf, err
 		}
 	}
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)
 		}
-		return err
+		return conf, err
 	}
-	return nil
+	return conf, nil
 }
 
 // checkUnsafe refuses a folder that is or holds the home folder or

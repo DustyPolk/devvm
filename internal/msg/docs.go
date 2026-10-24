@@ -4,7 +4,7 @@ package msg
 // "page#anchor", a page in docs/content/docs and a heading on it. devvm
 // prints the page's address on the line after the message's text.
 // TestDocLinks checks every entry.
-var docs = map[string]string{
+var docs = map[string]string{ //nolint:gosec // message IDs and pages, not credentials
 	"backend_lacks":               "backends#missing-and-unreviewed-features",
 	"backend_unreviewed":          "backends#missing-and-unreviewed-features",
 	"backend_unknown":             "backends#choosing-a-backend",
@@ -70,4 +70,14 @@ var docs = map[string]string{
 	"share_lock_held":             "images#building-tools",
 	"tools_not_images":            "images#building-tools",
 	"custom_layer_remove":         "images#adding-and-removing-tools",
+	"agent_dir_comma":             "lima#limits",
+	"agent_dirs_added":            "coding-agents#mounts",
+	"agent_dirs_removed":          "coding-agents#mounts",
+	"no_claude_token":             "coding-agents#claude-code-login",
+	"claude_token_invalid":        "coding-agents#claude-code-login",
+	"no_github_token":             "network#secrets",
+	"login_copy_failed":           "network#agents-logins-and-settings",
+	"config_redacted":             "coding-agents#keys-in-settings-files",
+	"config_not_copied":           "coding-agents#keys-in-settings-files",
+	"claude_mcp_secrets_copied":   "coding-agents#mcp-servers",
 }

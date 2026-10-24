@@ -44,6 +44,16 @@ type Folder struct {
 	Name string // its VM's name: devvm-<folder>-<hash of Dir>
 }
 
+// Slug is the folder's part of its VM's name, which is also the VM's
+// hostname.
+func (f Folder) Slug() string {
+	s := strings.TrimPrefix(f.Name, Prefix)
+	if i := strings.LastIndexByte(s, '-'); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
+
 // BadPathError is a folder whose path Lima can't mount: it has a comma
 // (Lima splits mount options on commas) or a control character.
 type BadPathError struct{ Dir string }

@@ -418,7 +418,51 @@ other = "{{.vm}}'s shared tools are the newest"
 other = "{{.vm}} moves to them on this launch"
 
 [sync_failed]
-other = "couldn't set up {{.vm}}'s shared tools"
+other = "couldn't set up {{.vm}}"
+
+[agent_dir_comma]
+other = "not mounting {{.path}}: Lima can't mount paths with a comma"
+
+[agent_dirs_added]
+description = "dirs is a comma-separated list of folders"
+other = "new agent folders on this machine for {{.vm}}: {{.dirs}}"
+
+[agent_dirs_removed]
+description = "dirs is a comma-separated list of folders"
+other = "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
+
+[update_mounts]
+other = "Update {{.vm}}'s mounts now? It restarts, and anything running in it stops."
+
+[mounts_next_start]
+other = "{{.vm}}'s agent folder mounts change when it next starts"
+
+[mounts_updated]
+other = "updated {{.vm}}'s agent folder mounts"
+
+[no_claude_token]
+other = "no Claude token for {{.vm}}: run claude setup-token, then devvm with CLAUDE_CODE_OAUTH_TOKEN set to the token"
+
+[claude_token_invalid]
+other = "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token for one"
+
+[no_github_token]
+other = "{{.vm}} uses github, but no GitHub token is saved"
+
+[login_copy_failed]
+description = "reason is an error from the login helper, in English"
+other = "couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}"
+
+[config_redacted]
+description = "keys is a space-separated list of key paths"
+other = "{{.vm}}'s copy of {{.file}} has {{.keys}} redacted: network policy keeps keys on the host"
+
+[config_not_copied]
+other = "couldn't read {{.file}} to take its keys out, so {{.vm}} doesn't get it"
+
+[claude_mcp_secrets_copied]
+description = "servers is a space-separated list of MCP server names"
+other = "{{.vm}} has no network policy, so Claude Code's MCP servers' env values and headers ({{.servers}}) are copied into it as they are"
 
 [proxy_failed]
 description = "reason is an error from the system or the flag parser, in English"

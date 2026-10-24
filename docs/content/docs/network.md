@@ -15,7 +15,8 @@ For a VM with network policy, devvm:
 2. writes the VM's [secrets](#secrets) as its proxy sees them;
 3. starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for it to say it's listening;
 4. starts the VM [confined](lima.md#confinement), its proxy settings pointing at the proxy;
-5. runs [the self-check](#the-self-check), before the VM's setup and its shell.
+5. runs [the self-check](#the-self-check), before the VM's setup and its shell;
+6. sets the VM up: devvm's CA, the proxy for the tools that don't read the environment, the VM's placeholders and its [agents' logins and settings](#agents-logins-and-settings) with your keys taken out.
 
 A backend that can't confine a VM to its proxy is refused before anything is built: devvm never starts a VM that asked for network policy with an open network.
 
@@ -74,7 +75,13 @@ A blocked request gets `403`, naming the host, the reason and the rule that woul
 - `/blocked/new?after=N`: the number of blocks so far, then those after the Nth, each rule once (for a shell prompt to show what a command hit);
 - `/ca.pem`: devvm's CA certificate, never its key.
 
-The VM's setup doesn't install devvm's CA or its placeholders yet, so requests to a host with a bound secret fail TLS verification in the VM.
+The VM's setup, on every launch:
+
+- installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only;
+- points what ignores those variables at the proxy: apt, sudo (which keeps them), every ssh connection (a `ProxyCommand` that tunnels through the proxy, which checks the host and port against the allowlist), and Docker's daemon and containers;
+- puts the VM's placeholders in `~/.config/devvm/env`, which login shells read (`CLAUDE_CODE_OAUTH_TOKEN`, `GH_TOKEN`), and git's credential helper for GitHub over HTTPS when `github` is bound;
+- adds `devvm-why`, which prints what the proxy blocked lately, and a note before each prompt when something new was blocked;
+- tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
 
 ## The self-check
 
@@ -105,6 +112,8 @@ Agents' login files stay on the host too. For a VM whose image has the agent, an
 - **Codex** (`~/.codex/auth.json`) **and opencode** (`~/.local/share/opencode/auth.json`): the VM's copy holds placeholders (shaped like a JWT where the tools read claims), and the bindings put the host's API key or access token into requests for the provider's hosts: OpenAI (`api.openai.com`, `chatgpt.com` for a ChatGPT login), and for opencode Anthropic, OpenAI and OpenRouter keys and OpenAI and GitHub Copilot logins (not Copilot Enterprise). OAuth tokens are refreshed on the host, one lookup at a time, and written back to the host's file, so a VM never holds a refresh token. Logins devvm doesn't know are copied as they are, with a warning.
 - **Claude Code's MCP servers** (`~/.claude.json`): an HTTPS server's headers become bindings for its host (a DNS name on port 443 only); env values, plain-HTTP servers' headers, user info and secret-looking values in URLs, and secret-named or key-shaped arguments become `devvm-redacted`. The copy keeps only settings, onboarding and account state, and MCP servers; per-project entries never go.
 - **Settings files** (JSON, JSONC or Codex's TOML): values under secret-looking keys become `devvm-redacted`, except values that name where a secret is (an environment variable's name, `{env:X}`, `${X}`, a path). TOML multi-line strings are refused rather than copied unread.
+
+Which files each agent shares: [Coding agents](coding-agents.md).
 
 ## Logs
 

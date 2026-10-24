@@ -303,6 +303,14 @@ func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 // and its network.
 func (l *Lima) Lifeline(vm string) string { return l.haPIDFile(vm) }
 
+// ProxyURL is devvm's proxy as a VM started with c reaches it.
+func (l *Lima) ProxyURL(c backend.Confinement) string {
+	if c.Net != backend.NetProxy {
+		return ""
+	}
+	return l.proxyURL(c)
+}
+
 // alive reports whether a process runs with that pid.
 func alive(pid int) bool {
 	p, err := os.FindProcess(pid)

@@ -109,6 +109,10 @@ func TestStartConfined(t *testing.T) {
 			if !slices.Equal(edits, tc.edits) {
 				t.Errorf("edits\n%s\nwant\n%s", strings.Join(edits, "\n"), strings.Join(tc.edits, "\n"))
 			}
+			// The setup gets the proxy's address as the guest's environment has it.
+			if u := l.ProxyURL(tc.c); tc.c.Net == backend.NetProxy && !strings.Contains(tc.edits[1], `"HTTP_PROXY":"`+u+`"`) || tc.c.Net != backend.NetProxy && u != "" {
+				t.Errorf("ProxyURL = %q", u)
+			}
 			s := startCall(t, f)
 			args := s.argv[slices.Index(s.argv, "start"):]
 			if !slices.Equal(args, []string{"start", "--tty=false", "v"}) {

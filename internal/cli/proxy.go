@@ -1,12 +1,11 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -26,7 +25,7 @@ func newProxyCmd() *cobra.Command {
 				Stdin:  cmd.InOrStdin(),
 				Stdout: ui.Stdout(),
 				Stderr: ui.Stderr(),
-				Kept:   loginKept,
+				Kept:   secrets.LoginKept,
 			})
 			if err != nil {
 				ui.Die(msg.ProxyFailed(err.Error()))
@@ -34,15 +33,4 @@ func newProxyCmd() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-// loginKept warns about what of an agent's login file goes into the VM's
-// copy as it is.
-func loginKept(agent string, names []string) {
-	list := strings.Join(names, ", ")
-	if agent == "codex" {
-		ui.Warn(msg.CodexLoginKept(list))
-		return
-	}
-	ui.Warn(msg.OpencodeLoginKept(list))
 }

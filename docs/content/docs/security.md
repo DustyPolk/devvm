@@ -9,6 +9,7 @@ devvm treats everything in a VM as untrusted, a coding agent with root included:
 | --- | --- |
 | The project folder | read and write |
 | `.git` hooks and config | locked (macOS); what a lock can't stop is reported, not prevented ([details](git-protection.md)) |
+| Your agents' config (skills, settings, logins) | its folders read-only, its files copied; never its history ([details](coding-agents.md)) |
 | The rest of your home folder, other projects | not mounted |
 | Your SSH keys | not reachable: VMs have no SSH agent |
 | The network, with network policy | allowlisted hosts only, through a proxy on this machine ([details](network.md)) |
@@ -19,7 +20,7 @@ devvm treats everything in a VM as untrusted, a coding agent with root included:
 
 ### Only the project folder
 
-A VM mounts its project folder, read-write, at the same path, and nothing else from the host: not your home folder, which Lima's own templates mount.
+A VM mounts its project folder, read-write, at the same path, and nothing else from the host but the shared tools and its [agents' config folders](coding-agents.md#mounts), read-only: not your home folder, which Lima's own templates mount.
 
 devvm refuses a project folder that would hand the VM more than the project:
 

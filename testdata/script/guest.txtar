@@ -1,0 +1,74 @@
+# What guest/sync.sh sets up in a VM, its pieces run here: the prompt,
+# what the proxy blocked, and the merge of Claude Code's settings.
+exec bash snippets.sh $DEVVM_BIN/guest/sync.sh
+
+# The prompt starts with (devvm), after a theme that rebuilds PS1 before
+# each prompt; with no theme, once.
+exec bash prompt-test.sh
+cmp stdout prompt.want
+
+# Before each prompt: what the proxy blocked since the last one, and how
+# to allow it. A new shell asks with no count and prints nothing; then the
+# new block; then nothing new; then the proxy can't be reached (curl
+# fails): nothing, and the count stays.
+exec bash blocked-test.sh
+cmp stdout blocked.want
+
+# The VM's MCP servers follow the host's: removed ones go, copies are
+# replaced whole (no real header of an older copy survives), the VM's own
+# stay; the host's settings win but the VM keeps its per-folder state.
+exec bash merge-test.sh
+cmp stdout merge.want
+
+-- snippets.sh --
+# Each piece of sync.sh ($1) into a file of its own.
+awk '/^cat > ~\/.bashrc.d\/devvm-prompt.sh/ { on = 1; next } on && /^EOF$/ { exit } on' "$1" > prompt.sh
+awk '/^_devvm_blocked\(\) \{/ { on = 1 } on && /^EOF$/ { exit } on' "$1" > blocked.sh
+awk '/^merge_claude_json\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$1" > merge.sh
+for f in prompt.sh blocked.sh merge.sh; do [[ -s $f ]] || { echo "no $f in $1" >&2; exit 1; }; done
+-- prompt-test.sh --
+# Two prompts, the way bash runs PROMPT_COMMAND (an array of commands on
+# bash 5.1+, else a string).
+prompts='for i in 1 2; do for c in "${PROMPT_COMMAND[@]}"; do eval "$c"; done; done; printf "[%s]\n" "$PS1"'
+bash -c 'theme() { PS1="03:26:21 cj@vm \$ "; }; PROMPT_COMMAND=theme; . "$1"; '"$prompts" _ prompt.sh
+bash -c 'PS1="\u@\h:\w\$ "; unset PROMPT_COMMAND; . "$1"; '"$prompts" _ prompt.sh
+-- prompt.want --
+[(devvm) 03:26:21 cj@vm $ ]
+[(devvm) \u@\h:\w$ ]
+-- blocked-test.sh --
+# The proxy: each call answers with the next reply, and says which
+# "after" it was asked for.
+replies=("3" $'5\ndevvm: blocked registry.example.com:443 (not in the allowlist)\nTo allow, run this on the host:\ndevvm policy allow registry.example.com' "5")
+i=0
+curl() { local url=${!#}; echo "after=${url##*after=}" >&2; [[ $i -lt ${#replies[@]} ]] || return 7; printf "%s\n" "${replies[i]}"; }
+. blocked.sh
+for c in 1 2 3 4; do _devvm_blocked 2>&1; i=$((i + 1)); done
+-- blocked.want --
+after=
+after=3
+devvm: blocked registry.example.com:443 (not in the allowlist)
+To allow, run this on the host:
+devvm policy allow registry.example.com
+after=5
+after=5
+-- merge-test.sh --
+. merge.sh
+v=vm.json h=host.json c=state/copied.json
+# An earlier copy (network policy off then): a real header; plus a server
+# added in the VM.
+echo '{"theme":"light","projects":{"/p":{"trust":true}},"mcpServers":{
+  "gh":{"url":"https://x","headers":{"Authorization":"REAL","X-Old":"REAL2"}},
+  "gone":{"command":"old"},"mine":{"command":"vm-only"}}}' > "$v"
+mkdir -p state; echo '["gh","gone"]' > "$c"
+echo '{"theme":"dark","projects":{"/h":{}},"mcpServers":{"gh":{"url":"https://x","headers":{"Authorization":"PLACEHOLDER"}},"new":{"command":"n"}}}' > "$h"
+merge_claude_json "$v" "$h" "$c"
+jq -c '{theme, projects, mcpServers}' "$v"
+jq -c . "$c"
+# The first time: no list yet, no VM file.
+rm -f "$v" "$c"
+merge_claude_json "$v" "$h" "$c"
+jq -c '.mcpServers | keys' "$v"
+-- merge.want --
+{"theme":"dark","projects":{"/p":{"trust":true}},"mcpServers":{"mine":{"command":"vm-only"},"gh":{"url":"https://x","headers":{"Authorization":"PLACEHOLDER"}},"new":{"command":"n"}}}
+["gh","new"]
+["gh","new"]

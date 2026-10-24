@@ -59,6 +59,9 @@ type Backend interface {
 	// it starts, which the VM's proxy follows: it exits when that process
 	// does. Not a VM's own file: the VM can't write it.
 	Lifeline(vm string) string
+	// ProxyURL is devvm's proxy as a VM started with c reaches it, its
+	// user and password included; "" unless c.Net is NetProxy.
+	ProxyURL(c Confinement) string
 	// Stop stops a VM. A stopped one is left as it is.
 	Stop(ctx context.Context, vm string) error
 	// Delete deletes a VM, stopping it first.

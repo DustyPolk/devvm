@@ -1,0 +1,118 @@
+# A VM's setup on every launch: the host's settings, its agents' config
+# (never their history), their folders mounted read-only, and tokens: as
+# they are without network policy, placeholders with it.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env TZ=Europe/Paris
+env LANG=en_US.UTF-8
+exec git config --global user.name 'Test User'
+exec git config --global user.email test@example.com
+
+# The host's agent config, and their history.
+mkdir $HOME/.claude/skills $HOME/.claude/projects/p $HOME/.codex/prompts
+cp $WORK/settings.json $HOME/.claude/settings.json
+cp $WORK/claude.json $HOME/.claude.json
+cp $WORK/codex.json $HOME/.codex/auth.json
+cp $WORK/config.toml $HOME/.codex/config.toml
+cp $WORK/history.jsonl $HOME/.claude/projects/p/history.jsonl
+cp $WORK/history.jsonl $HOME/.codex/history.jsonl
+
+# Without network policy: the agents' folders mounted read-only, their
+# files and tokens copied as they are, with a warning naming the MCP
+# servers whose secrets go too.
+mkdir $WORK/plain
+cd $WORK/plain
+env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
+exec devvm --no-network-policy --no-git-protect claude+codex
+stderr '^devvm: claude_mcp_secrets_copied servers=srv vm=devvm-plain-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true\},\{"location":"\S*/home/\.claude/skills","writable":false\},\{"location":"\S*/home/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
+exec tar -tf $STUB_DIR/sync.tar
+stdout '^home/\.claude/settings\.json$'
+stdout '^home/\.codex/auth\.json$'
+stdout '^home/\.codex/config\.toml$'
+stdout '^claude\.json$'
+! stdout 'history|projects|ca\.pem'
+exec tar -xOf $STUB_DIR/sync.tar home/.claude/settings.json
+stdout testfake-settings
+exec tar -xOf $STUB_DIR/sync.tar claude.json
+stdout testfake-mcp
+exec tar -xOf $STUB_DIR/sync.tar links
+stdout '^\.claude/skills\n\.claude/agents\n\.claude/commands\n\.claude/output-styles\n\.claude/plugins\n\.codex/prompts\n\.codex/skills\n\z'
+exec tar -xOf $STUB_DIR/sync.tar host_home
+stdout '/home$'
+exec tar -xOf $STUB_DIR/sync.tar vm
+cmp stdout $WORK/vm-plain
+exec tar -xOf $STUB_DIR/sync.tar env
+stdout '^export LANG=''en_US\.UTF-8''\nexport CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-testfake''\n\z'
+
+# A Claude token that isn't a setup-token token isn't sent; no token at
+# all is named too.
+mkdir $WORK/badtoken
+cd $WORK/badtoken
+env CLAUDE_CODE_OAUTH_TOKEN=not-a-setup-token
+exec devvm --no-network-policy --no-git-protect claude
+stderr '^devvm: claude_token_invalid$'
+exec tar -xOf $STUB_DIR/sync.tar env
+! stdout CLAUDE_CODE_OAUTH_TOKEN
+mkdir $WORK/notoken
+cd $WORK/notoken
+env CLAUDE_CODE_OAUTH_TOKEN=
+exec devvm --no-network-policy --no-git-protect claude
+stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
+
+# With network policy: devvm's CA, the VM's own placeholders, the logins'
+# copies with placeholders (the host's files unchanged), and the
+# settings files with their keys taken out; one devvm can't read that way
+# isn't sent.
+mkdir $WORK/net
+cd $WORK/net
+env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
+exec devvm --network-policy --no-git-protect claude+codex
+stderr '^config_redacted file=\S*/home/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'
+stderr '^devvm: config_not_copied file=\S*/home/\.codex/config\.toml vm=devvm-net-[0-9a-f]{14}$'
+! stderr claude_mcp_secrets_copied
+exec tar -tf $STUB_DIR/sync.tar
+! stdout '^home/\.codex/config\.toml$'
+exec tar -xOf $STUB_DIR/sync.tar ca.pem
+cmp stdout $DATA/ca/ca.pem
+exec sh -c 'tar -xOf "$STUB_DIR/sync.tar" home/.claude/settings.json home/.codex/auth.json claude.json env'
+! stdout testfake
+stdout devvm-redacted
+stdout '"OPENAI_API_KEY": *"sk-devvm-proxy-managed'
+! stdout projects
+exec sh -c 'salt=$(sed -n "s/^proxy_salt=//p" "$DATA"/vms/devvm-net-*); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$DATA"/vms/devvm-net-*); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
+cmp $HOME/.codex/auth.json $WORK/codex.json
+cmp $HOME/.claude.json $WORK/claude.json
+
+# A setup that fails says so, and leaves nothing of what it was sent.
+mkdir $WORK/tmp $WORK/fails
+cd $WORK/fails
+env TMPDIR=$WORK/tmp
+exec sh -c ': > "$STUB_DIR/shell-fails"'
+! exec devvm --no-network-policy --no-git-protect claude
+stderr '^devvm: sync_failed vm=devvm-fails-[0-9a-f]{14}$'
+exec sh -c 'ls -A "$TMPDIR"'
+! stdout .
+rm $STUB_DIR/shell-fails
+
+-- settings.json --
+{"env":{"ANTHROPIC_API_KEY":"testfake-settings"},"theme":"dark"}
+-- claude.json --
+{"theme":"dark","mcpServers":{"srv":{"command":"x","env":{"API_KEY":"testfake-mcp"}}},"projects":{"/p":{"history":["testfake-history"]}}}
+-- codex.json --
+{"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}
+-- config.toml --
+note = """
+testfake-multiline
+"""
+-- history.jsonl --
+{"prompt":"testfake-history"}
+-- vm-plain --
+DEVVM_HOSTNAME='plain'
+DEVVM_TZ='Europe/Paris'
+DEVVM_LANG='en_US.UTF-8'
+DEVVM_GIT_NAME='Test User'
+DEVVM_GIT_EMAIL='test@example.com'
+DEVVM_PROXY=''

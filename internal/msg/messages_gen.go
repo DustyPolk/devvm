@@ -2,6 +2,21 @@
 
 package msg
 
+// AgentDirComma is [agent_dir_comma]: "not mounting {{.path}}: Lima can't mount paths with a comma"
+func AgentDirComma(path string) M {
+	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
+}
+
+// AgentDirsAdded is [agent_dirs_added]: "new agent folders on this machine for {{.vm}}: {{.dirs}}"
+func AgentDirsAdded(dirs string, vm string) M {
+	return M{id: "agent_dirs_added", vals: []val{{"dirs", dirs}, {"vm", vm}}}
+}
+
+// AgentDirsRemoved is [agent_dirs_removed]: "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
+func AgentDirsRemoved(dirs string, vm string) M {
+	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
+}
+
 // BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
 func BackendLacks(backend string, feature string, vm string) M {
 	return M{id: "backend_lacks", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
@@ -67,6 +82,16 @@ func CheckingTools() M {
 	return M{id: "checking_tools"}
 }
 
+// ClaudeMcpSecretsCopied is [claude_mcp_secrets_copied]: "{{.vm}} has no network policy, so Claude Code's MCP servers' env values and headers ({{.servers}}) are copied into it as they are"
+func ClaudeMcpSecretsCopied(servers string, vm string) M {
+	return M{id: "claude_mcp_secrets_copied", vals: []val{{"servers", servers}, {"vm", vm}}}
+}
+
+// ClaudeTokenInvalid is [claude_token_invalid]: "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token for one"
+func ClaudeTokenInvalid() M {
+	return M{id: "claude_token_invalid"}
+}
+
 // CloningImage is [cloning_image]: "cloning {{.parent}}'s image"
 func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
@@ -75,6 +100,16 @@ func CloningImage(parent string) M {
 // CodexLoginKept is [codex_login_kept]: "Codex's auth.json {{.keys}} is copied into the VM as it is"
 func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
+}
+
+// ConfigNotCopied is [config_not_copied]: "couldn't read {{.file}} to take its keys out, so {{.vm}} doesn't get it"
+func ConfigNotCopied(file string, vm string) M {
+	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// ConfigRedacted is [config_redacted]: "{{.vm}}'s copy of {{.file}} has {{.keys}} redacted: network policy keeps keys on the host"
+func ConfigRedacted(file string, keys string, vm string) M {
+	return M{id: "config_redacted", vals: []val{{"file", file}, {"keys", keys}, {"vm", vm}}}
 }
 
 // Configuring is [configuring]: "configuring {{.vm}}"
@@ -272,6 +307,11 @@ func LogEnd(file string) M {
 	return M{id: "log_end", vals: []val{{"file", file}}}
 }
 
+// LoginCopyFailed is [login_copy_failed]: "couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}"
+func LoginCopyFailed(agent string, reason string, vm string) M {
+	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
+}
+
 // MiseChecksum is [mise_checksum]: "the mise {{.version}} download doesn't match its checksum: not using it"
 func MiseChecksum(version string) M {
 	return M{id: "mise_checksum", vals: []val{{"version", version}}}
@@ -285,6 +325,16 @@ func MiseDownloadFailed(version string) M {
 // MountComma is [mount_comma]: "Lima can't mount {{.path}}: its path has a comma"
 func MountComma(path string) M {
 	return M{id: "mount_comma", vals: []val{{"path", path}}}
+}
+
+// MountsNextStart is [mounts_next_start]: "{{.vm}}'s agent folder mounts change when it next starts"
+func MountsNextStart(vm string) M {
+	return M{id: "mounts_next_start", vals: []val{{"vm", vm}}}
+}
+
+// MountsUpdated is [mounts_updated]: "updated {{.vm}}'s agent folder mounts"
+func MountsUpdated(vm string) M {
+	return M{id: "mounts_updated", vals: []val{{"vm", vm}}}
 }
 
 // MsgBadCount is [msg_bad_count]: "count must be a whole number, not {{.value}}"
@@ -350,6 +400,16 @@ func NetUnenforcedStop(vm string) M {
 // NewerTools is [newer_tools]: "newer shared tools: {{.tools}}; devvm update moves this VM to them"
 func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
+}
+
+// NoClaudeToken is [no_claude_token]: "no Claude token for {{.vm}}: run claude setup-token, then devvm with CLAUDE_CODE_OAUTH_TOKEN set to the token"
+func NoClaudeToken(vm string) M {
+	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
+}
+
+// NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved"
+func NoGithubToken(vm string) M {
+	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
 }
 
 // NoImageFor is [no_image_for]: "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
@@ -507,7 +567,7 @@ func Stopping(vm string) M {
 	return M{id: "stopping", vals: []val{{"vm", vm}}}
 }
 
-// SyncFailed is [sync_failed]: "couldn't set up {{.vm}}'s shared tools"
+// SyncFailed is [sync_failed]: "couldn't set up {{.vm}}"
 func SyncFailed(vm string) M {
 	return M{id: "sync_failed", vals: []val{{"vm", vm}}}
 }
@@ -632,6 +692,11 @@ func UpFailed(reason string) M {
 	return M{id: "up_failed", vals: []val{{"reason", reason}}}
 }
 
+// UpdateMounts is [update_mounts]: "Update {{.vm}}'s mounts now? It restarts, and anything running in it stops."
+func UpdateMounts(vm string) M {
+	return M{id: "update_mounts", vals: []val{{"vm", vm}}}
+}
+
 // UsageError is [usage_error]: "{{.reason}}: see devvm --help"
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
@@ -684,6 +749,9 @@ func VMOutdated(changed string) M {
 
 // specs describes every message, by ID.
 var specs = map[string]spec{
+	"agent_dir_comma":             {fields: []string{"path"}},
+	"agent_dirs_added":            {fields: []string{"dirs", "vm"}},
+	"agent_dirs_removed":          {fields: []string{"dirs", "vm"}},
 	"backend_lacks":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unknown":             {fields: []string{"backends", "name"}},
 	"backend_unknown_default":     {fields: []string{"backends", "file", "name"}},
@@ -697,8 +765,12 @@ var specs = map[string]spec{
 	"building_tools":              {fields: []string{"tools"}},
 	"building_tools_in":           {fields: []string{"vm"}},
 	"checking_tools":              {},
+	"claude_mcp_secrets_copied":   {fields: []string{"servers", "vm"}},
+	"claude_token_invalid":        {},
 	"cloning_image":               {fields: []string{"parent"}},
 	"codex_login_kept":            {fields: []string{"keys"}},
+	"config_not_copied":           {fields: []string{"file", "vm"}},
+	"config_redacted":             {fields: []string{"file", "keys", "vm"}},
 	"configuring":                 {fields: []string{"vm"}},
 	"continue":                    {},
 	"cpus_not_number":             {fields: []string{"value"}},
@@ -738,9 +810,12 @@ var specs = map[string]spec{
 	"lima_old":                    {fields: []string{"version"}},
 	"log_details":                 {fields: []string{"file"}},
 	"log_end":                     {fields: []string{"file"}},
+	"login_copy_failed":           {fields: []string{"agent", "reason", "vm"}},
 	"mise_checksum":               {fields: []string{"version"}},
 	"mise_download_failed":        {fields: []string{"version"}},
 	"mount_comma":                 {fields: []string{"path"}},
+	"mounts_next_start":           {fields: []string{"vm"}},
+	"mounts_updated":              {fields: []string{"vm"}},
 	"msg_bad_count":               {fields: []string{"value"}},
 	"msg_missing_value":           {fields: []string{"key", "name"}},
 	"msg_not_pair":                {fields: []string{"arg"}},
@@ -754,6 +829,8 @@ var specs = map[string]spec{
 	"net_unenforced_restart":      {fields: []string{"vm"}},
 	"net_unenforced_stop":         {fields: []string{"vm"}},
 	"newer_tools":                 {fields: []string{"tools"}},
+	"no_claude_token":             {fields: []string{"vm"}},
+	"no_github_token":             {fields: []string{"vm"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
 	"no_secret":                   {fields: []string{"secret"}},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
@@ -810,6 +887,7 @@ var specs = map[string]spec{
 	"unsafe_folder_inside":        {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":          {fields: []string{"dir", "holds"}},
 	"up_failed":                   {fields: []string{"reason"}},
+	"update_mounts":               {fields: []string{"vm"}},
 	"usage_error":                 {fields: []string{"reason"}},
 	"vm_create_failed":            {fields: []string{"vm"}},
 	"vm_exists":                   {fields: []string{"vm"}},

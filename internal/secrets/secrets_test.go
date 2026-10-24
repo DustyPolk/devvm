@@ -232,3 +232,40 @@ func TestWriteFiles(t *testing.T) {
 		t.Errorf("no bindings = %q", data)
 	}
 }
+
+// The VM's copies: a login's with placeholders ending in its salt, the MCP
+// servers whose secrets a plain copy would carry, and settings files with
+// secret-looking values taken out.
+func TestVMCopies(t *testing.T) {
+	s, _ := testStore(t, false, nil)
+	write := func(kind, data string) {
+		t.Helper()
+		f := LoginFile(s.Home, kind)
+		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := s.MCPSecrets(); got != nil {
+		t.Errorf("MCPSecrets without ~/.claude.json = %q", got)
+	}
+	write("claude", `{"mcpServers":{"plain":{"command":"x"},"a b":{"command":"y","env":{"K":"v"}}}}`)
+	if got := s.MCPSecrets(); !slices.Equal(got, []string{"a b"}) {
+		t.Errorf("MCPSecrets = %q", got)
+	}
+	write("codex", `{"OPENAI_API_KEY":"sk-codex-secret"}`)
+	salt := strings.Repeat("cd", 16)
+	data, err := s.VMLogin("codex", salt)
+	if err != nil || strings.Contains(string(data), "sk-codex-secret") || !strings.Contains(string(data), salt) {
+		t.Errorf("VMLogin = %s, %v", data, err)
+	}
+	out, keys, err := Redact("json", []byte(`{"env":{"API_TOKEN":"tok-secret","NAME":"x"}}`))
+	if err != nil || strings.Contains(string(out), "tok-secret") || !slices.Equal(keys, []string{"env.API_TOKEN"}) {
+		t.Errorf("Redact = %s, %q, %v", out, keys, err)
+	}
+	if _, _, err := Redact("toml", []byte("x = \"\"\"\nmulti\n\"\"\"\n")); err == nil {
+		t.Error("Redact took a multi-line TOML string")
+	}
+}

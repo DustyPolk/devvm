@@ -75,7 +75,7 @@ cleanup() {
   rm -f "$layers"/e2e*.sh
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
-  rm -rf "$src" "$work/net-home"
+  rm -rf "$src" "$work/net-home" "$work/agent-home" "$work/claude-before.json" "$work/codex-before.json"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -255,6 +255,29 @@ else
   check "git in the VM can commit" in_vm "$vm" "cd $p && for i in 1 2 3 4 5 6 7 8 9 10; do git status >/dev/null 2>&1 && break; sleep 1; done &&
     git add -A && git -c user.email=e@e -c user.name=e commit -qm vm"
 fi
+
+section "agent folders and the VM's setup"
+# A home of its own: a fake agent config, history and git identity, and a fake token; nothing of
+# yours is read.
+ah=$work/agent-home; rm -rf "$ah"; mkdir -p "$ah/.claude/skills/e2e" "$ah/.claude/projects/p"; ah=$(cd "$ah" && pwd -P)
+echo '# e2e skill' > "$ah/.claude/skills/e2e/SKILL.md"
+echo '{"theme":"e2e-settings"}' > "$ah/.claude/settings.json"
+echo '{"prompt":"e2e-history"}' > "$ah/.claude/projects/p/h.jsonl"
+printf '[user]\n\tname = E2E User\n\temail = e2e@example.com\n' > "$ah/.gitconfig"
+a=$(newproj agents)
+(cd "$a" && HOME=$ah TZ=Europe/Paris CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake-plain quiet "$D" --no-network-policy --no-git-protect claude)
+vm=$(vm_of "$a"); [[ -z $vm ]] || created+=("$vm")
+check "an agent folder is mounted read-only at its host path, and linked into the VM's home" bash -c "
+  limactl list --format '{{range .Config.Mounts}}{{.Location}}|{{.Writable}} {{end}}' $vm | grep -qF '$ah/.claude/skills|false ' &&
+  ! limactl shell --workdir / $vm sudo touch '$ah/.claude/skills/x' </dev/null &&
+  limactl shell --workdir / $vm bash -c 'grep -q e2e ~/.claude/skills/e2e/SKILL.md' </dev/null"
+check "its settings are copied in, its history never" bash -c "
+  limactl shell --workdir / $vm bash -c 'grep -q e2e-settings ~/.claude/settings.json && [[ ! -e ~/.claude/projects/p ]]' </dev/null &&
+  ! limactl shell --workdir / $vm sudo grep -rqs e2e-history /home /root /etc </dev/null"
+check "the VM gets the host's git identity, timezone and its hostname" in_vm "$vm" \
+  "[[ \$(git config --global user.name) == 'E2E User' && \$(git config --global user.email) == e2e@example.com &&
+     \$(timedatectl show -p Timezone --value) == Europe/Paris && \$(hostname) == agents ]]"
+check "without network policy, the Claude token itself" in_vm "$vm" '[[ $CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-e2efake-plain ]]'
 fi
 
 if want tools; then
@@ -290,13 +313,15 @@ fi
 
 if want network; then
 section "network policy"
-# A claude VM, so the claude token is bound to it: a fake one in devvm's environment (its proxy
-# inherits it), and a fake ~/.claude.json with an MCP server's header, in a home of its own: no real
-# token or login is read.
-nh=$work/net-home; rm -rf "$nh"; mkdir -p "$nh"
+# A claude+codex VM, so the claude token is bound to it: a fake one in devvm's environment (its
+# proxy inherits it), a fake ~/.claude.json with an MCP server's header and a fake Codex login, in a
+# home of its own: no real token or login is read.
+nh=$work/net-home; rm -rf "$nh"; mkdir -p "$nh/.codex"
 printf '%s\n' '{"mcpServers":{"e2e":{"type":"http","url":"https://api.github.com/devvm-e2e-mcp","headers":{"X-Devvm-E2e":"e2efake-mcp"}}}}' > "$nh/.claude.json"
+echo '{"OPENAI_API_KEY":"sk-e2efake-codex","last_refresh":null}' > "$nh/.codex/auth.json"
+cp "$nh/.claude.json" "$work/claude-before.json"; cp "$nh/.codex/auth.json" "$work/codex-before.json"
 n=$(newproj net)
-(cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" --network-policy --no-git-protect claude >"$work/last.log" 2>&1)
+(cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" --network-policy --no-git-protect claude+codex >"$work/last.log" 2>&1)
 vm=$(vm_of "$n"); [[ -z $vm ]] || created+=("$vm")
 pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
 salt=$(sed -n 's/^proxy_salt=//p' "$vms/$vm" 2>/dev/null)
@@ -332,20 +357,26 @@ check "the proxy refuses anything on the host without the VM's password" bash -c
 check "the token never reaches the VM" bash -c "
   ! limactl shell --workdir / $vm sudo grep -rqs -e e2efake /etc /home /root </dev/null &&
   ! limactl shell --workdir / $vm bash -lc 'env' </dev/null | grep -q e2efake"
-# The VM's placeholders, as its setup will give them (the CA it'll trust too: -k until then).
-ph=sk-ant-oat01-devvm-proxy-managed-$salt
+check "devvm's CA is installed in the VM" bash -c "
+  limactl shell --workdir / $vm cat /usr/local/share/ca-certificates/devvm-proxy.crt </dev/null | cmp -s - '$XDG_DATA_HOME/devvm/ca/ca.pem'"
+check "the VM gets its own placeholder, not the token" in_vm "$vm" "[[ \$CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-devvm-proxy-managed-$salt ]]"
+check "the VM's Codex and Claude Code (MCP) logins hold only placeholders" bash -c "
+  ! limactl shell --workdir / $vm bash -c 'cat ~/.codex/auth.json ~/.claude.json' </dev/null | grep -e e2efake &&
+  limactl shell --workdir / $vm bash -c 'cat ~/.codex/auth.json' </dev/null | grep -q devvm-proxy-managed"
+# Requests verify the proxy's certificates: no -k.
 check "the proxy puts the token in for its host" bash -c "
-  limactl shell --workdir / $vm bash -lc 'curl -k -sS -m 20 -o /dev/null https://api.anthropic.com/v1/models -H \"Authorization: Bearer $ph\"' </dev/null;
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.anthropic.com/v1/models -H \"Authorization: Bearer \$CLAUDE_CODE_OAUTH_TOKEN\"' </dev/null &&
   grep '\"path\":\"/v1/models\"' '$events' | grep -q '\"secrets\":\[\"claude\"\]'"
 check "but not for another VM's placeholder" bash -c "
-  limactl shell --workdir / $vm bash -lc 'curl -k -sS -m 20 -o /dev/null https://api.anthropic.com/devvm-e2e-other -H \"Authorization: Bearer sk-ant-oat01-devvm-proxy-managed-$(printf '0%.0s' {1..32})\"' </dev/null;
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.anthropic.com/devvm-e2e-other -H \"Authorization: Bearer sk-ant-oat01-devvm-proxy-managed-$(printf '0%.0s' {1..32})\"' </dev/null &&
   grep -q '/devvm-e2e-other' '$events' && ! grep '/devvm-e2e-other' '$events' | grep -q secrets"
-mph=$(HOME=$nh "$D" _proxy -login claude -login-file "$nh/.claude.json" -login-vm -login-salt "$salt" 2>/dev/null |
-  sed -n 's/.*"X-Devvm-E2e": *"\([^"]*\)".*/\1/p')
-check "and an MCP server's header for its host, from the login on the host" bash -c "
-  [[ -n '$mph' && '$mph' != e2efake-mcp ]] &&
-  limactl shell --workdir / $vm bash -lc 'curl -k -sS -m 20 -o /dev/null https://api.github.com/devvm-e2e-mcp -H \"X-Devvm-E2e: $mph\"' </dev/null;
+check "and an MCP server's header for its host, from the VM's copy of the login" bash -c "
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.github.com/devvm-e2e-mcp -H \"X-Devvm-E2e: \$(jq -r .mcpServers.e2e.headers[\\\"X-Devvm-E2e\\\"] ~/.claude.json)\"' </dev/null &&
   grep '/devvm-e2e-mcp' '$events' | grep -q '\"secrets\":\[\"claude-mcp-'"
+check "and Codex's API key, from the VM's copy of its login" bash -c "
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.openai.com/v1/models -H \"Authorization: Bearer \$(jq -r .OPENAI_API_KEY ~/.codex/auth.json)\"' </dev/null &&
+  grep '\"path\":\"/v1/models\"' '$events' | grep -q '\"secrets\":\[\"codex-key\"\]'"
+check "the host's login files are unchanged" bash -c "cmp -s '$nh/.codex/auth.json' '$work/codex-before.json' && cmp -s '$nh/.claude.json' '$work/claude-before.json'"
 if [[ "$(uname -s)" == Darwin ]]; then
   # The Keychain itself, under this run's service (a fake token, deleted at the end).
   security add-generic-password -U -s "$DEVVM_SECRET_SERVICE" -a github -w ghp_E2EFAKE >/dev/null 2>&1

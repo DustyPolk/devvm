@@ -195,7 +195,12 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 			p.Chflags = func(context.Context, string, string) error { return nil }
 			return p
 		},
-		Exec: func(c backend.Command) error { execs = append(execs, c); return nil },
+		Exec:   func(c backend.Command) error { execs = append(execs, c); return nil },
+		Getenv: func(string) string { return "" },
+		HostTZ: func() string { return "Europe/Paris" },
+		GitConfig: func(_ context.Context, _, key string) string {
+			return map[string]string{"user.name": "A User", "user.email": "a@example.com"}[key]
+		},
 	}
 	return e, f, &execs
 }

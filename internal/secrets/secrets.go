@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // KeySecrets is the VM state key listing the secrets bound to it,
@@ -99,9 +100,60 @@ func NewStore(d paths.Dirs, home string) *Store {
 	return &Store{
 		Dirs: d, Home: home, Keychain: platform.HasKeychain, KeychainGet: platform.KeychainGet, Getenv: os.Getenv,
 		Login: func(args []string, out io.Writer) error {
-			return proxy.Main(args, proxy.IO{Stdin: strings.NewReader(""), Stdout: out, Stderr: io.Discard})
+			return proxy.Main(args, proxy.IO{Stdin: strings.NewReader(""), Stdout: out, Stderr: io.Discard, Kept: LoginKept})
 		},
 	}
+}
+
+// LoginKept warns about what of an agent's login file goes into the VM's
+// copy as it is.
+func LoginKept(agent string, names []string) {
+	list := strings.Join(names, ", ")
+	if agent == "codex" {
+		ui.Warn(msg.CodexLoginKept(list))
+		return
+	}
+	ui.Warn(msg.OpencodeLoginKept(list))
+}
+
+// VMLogin returns the VM's copy of an agent's login file: placeholders
+// ending in salt in place of its keys and tokens.
+func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
+	var out bytes.Buffer
+	err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-vm", "-login-salt", salt}, &out)
+	return out.Bytes(), err
+}
+
+// MCPSecrets returns the MCP servers in ~/.claude.json whose settings hold
+// secrets; none when it can't be read.
+func (s *Store) MCPSecrets() []string {
+	var out bytes.Buffer
+	if s.Login([]string{"-login", "claude", "-login-file", LoginFile(s.Home, "claude"), "-login-secrets"}, &out) != nil {
+		return nil
+	}
+	return lines(out.String())
+}
+
+// Redact returns an agent's settings file (format json, for JSONC too, or
+// toml) with the values under secret-looking keys replaced, and those
+// keys' paths. A file it can't read that way is an error.
+func Redact(format string, data []byte) ([]byte, []string, error) {
+	var out, paths bytes.Buffer
+	if err := proxy.Main([]string{"-redact", format}, proxy.IO{Stdin: bytes.NewReader(data), Stdout: &out, Stderr: &paths}); err != nil {
+		return nil, nil, err
+	}
+	return out.Bytes(), lines(paths.String()), nil
+}
+
+// lines returns s's lines that aren't blank, trimmed.
+func lines(s string) []string {
+	var ls []string
+	for l := range strings.Lines(s) {
+		if l = strings.TrimSpace(l); l != "" {
+			ls = append(ls, l)
+		}
+	}
+	return ls
 }
 
 var serviceName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
