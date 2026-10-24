@@ -346,8 +346,16 @@ func (l *Lima) Shell(ctx context.Context, vm, dir string) (backend.Command, erro
 	return backend.Command{Path: cmd.Path, Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir}, nil
 }
 
-// SSH returns how ssh reaches a running VM: the address, port and user in
-// the ssh config Lima keeps for it, which has its key.
+// sshLogin is the options of Lima's ssh config, lowercase, that say how
+// to log in. Anything else Lima (or a later version) writes there stays
+// out: it turns host key checks off and shares one connection.
+var sshLogin = []string{
+	"identityfile", "identitiesonly", "preferredauthentications", "batchmode",
+	"compression", "gssapiauthentication", "ciphers",
+}
+
+// SSH returns how ssh reaches a running VM: the address, port, user and
+// login options in the ssh config Lima keeps for it, which has its key.
 func (l *Lima) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
 	in, err := l.inspect(ctx, vm)
 	if err != nil {
@@ -367,17 +375,20 @@ func (l *Lima) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
 	defer func() { _ = f.Close() }()
 	s := bufio.NewScanner(f)
 	for s.Scan() {
-		k, v, _ := strings.Cut(strings.TrimSpace(s.Text()), " ")
-		v = strings.Trim(strings.TrimSpace(v), `"`)
-		switch strings.ToLower(k) {
-		case "hostname":
+		k, raw, _ := strings.Cut(strings.TrimSpace(s.Text()), " ")
+		raw = strings.TrimSpace(raw)
+		v := strings.Trim(raw, `"`)
+		switch lk := strings.ToLower(k); {
+		case lk == "hostname":
 			t.Host = v
-		case "port":
+		case lk == "port":
 			if p, err := strconv.Atoi(v); err == nil {
 				t.Port = p
 			}
-		case "user":
+		case lk == "user":
 			t.User = v
+		case slices.Contains(sshLogin, lk) && raw != "":
+			t.Options = append(t.Options, backend.SSHOption{Key: k, Value: raw})
 		}
 	}
 	return t, s.Err()

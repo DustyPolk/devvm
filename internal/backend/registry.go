@@ -53,6 +53,15 @@ func (r *Registry) Lookup(name string) (Backend, bool) {
 // Names returns every backend's name, sorted.
 func (r *Registry) Names() []string { return slices.Sorted(maps.Keys(r.byName)) }
 
+// All returns every backend, sorted by name.
+func (r *Registry) All() []Backend {
+	var bs []Backend
+	for _, n := range r.Names() {
+		bs = append(bs, r.byName[n])
+	}
+	return bs
+}
+
 // Choice is the backend a VM runs on.
 type Choice struct {
 	Backend Backend

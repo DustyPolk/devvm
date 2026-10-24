@@ -110,6 +110,10 @@ func checkPair(key, val string, validKey func(string) bool) error {
 	return nil
 }
 
+// WriteFile replaces path with data atomically, readable only by the
+// user, creating its folder (0700) when it's missing.
+func WriteFile(path string, data []byte) error { return writeFile(path, data) }
+
 // writeFile replaces path with data atomically, creating its folder (0700)
 // when it's missing.
 func writeFile(path string, data []byte) error {

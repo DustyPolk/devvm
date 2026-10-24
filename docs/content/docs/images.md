@@ -142,7 +142,7 @@ Nothing is written into the project folder. devvm keeps everything in two folder
 | Folder | Holds |
 | --- | --- |
 | `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`) and rebuild counters (`images/rebuilds/`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
-| `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](backends.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, and the keys in devvm's SSH agent (`agent-keys`) |
+| `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](backends.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, the keys in devvm's SSH agent (`agent-keys`), and the [ssh config](ssh.md) for VMs and their host keys (`ssh_config`, `known_hosts`) |
 
 A VM's state file records the image it came from, its project folder, its backend and its settings, one `key=value` per line. It lasts as long as the VM: `devvm rm` deletes it too, so the next devvm in that folder starts fresh.
 

@@ -2,6 +2,11 @@
 
 package msg
 
+// AddItNow is [add_it_now]: "Add it now?"
+func AddItNow() M {
+	return M{id: "add_it_now"}
+}
+
 // AgentDirComma is [agent_dir_comma]: "not mounting {{.path}}: Lima can't mount paths with a comma"
 func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
@@ -262,6 +267,16 @@ func InterruptedVM(vm string) M {
 	return M{id: "interrupted_vm", vals: []val{{"vm", vm}}}
 }
 
+// KeyLoaded is [key_loaded]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
+func KeyLoaded() M {
+	return M{id: "key_loaded"}
+}
+
+// KeyLoadedKeychain is [key_loaded_keychain]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
+func KeyLoadedKeychain() M {
+	return M{id: "key_loaded_keychain"}
+}
+
 // LimaBroken is [lima_broken]: "limactl --version failed: reinstall Lima"
 func LimaBroken() M {
 	return M{id: "lima_broken"}
@@ -295,6 +310,16 @@ func LimaMissing() M {
 // LimaOld is [lima_old]: "Lima {{.version}} is too old: upgrade to Lima 2.0 or newer"
 func LimaOld(version string) M {
 	return M{id: "lima_old", vals: []val{{"version", version}}}
+}
+
+// LoadKey is [load_key]: "Load {{.key}} into the agent now ({{.cmd}})?"
+func LoadKey(cmd string, key string) M {
+	return M{id: "load_key", vals: []val{{"cmd", cmd}, {"key", key}}}
+}
+
+// LoadKeyWith is [load_key_with]: "load it with: {{.cmd}}"
+func LoadKeyWith(cmd string) M {
+	return M{id: "load_key_with", vals: []val{{"cmd", cmd}}}
 }
 
 // LogDetails is [log_details]: "(details: {{.file}})"
@@ -422,6 +447,11 @@ func NoSecret(secret string) M {
 	return M{id: "no_secret", vals: []val{{"secret", secret}}}
 }
 
+// NoSSHAgent is [no_ssh_agent]: "no SSH agent is running, so git over SSH won't work in the VM"
+func NoSSHAgent() M {
+	return M{id: "no_ssh_agent"}
+}
+
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
 func NoUbuntuImage(url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
@@ -530,6 +560,26 @@ func ShareWaiting(dir string) M {
 // SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
 func SizeNotGib(flag string, value string) M {
 	return M{id: "size_not_gib", vals: []val{{"flag", flag}, {"value", value}}}
+}
+
+// SSHAgentEmpty is [ssh_agent_empty]: "your SSH agent has no keys, so git over SSH won't work in the VM"
+func SSHAgentEmpty() M {
+	return M{id: "ssh_agent_empty"}
+}
+
+// SSHIncludeAdded is [ssh_include_added]: "added to ~/.ssh/config"
+func SSHIncludeAdded() M {
+	return M{id: "ssh_include_added"}
+}
+
+// SSHIncludeNeeded is [ssh_include_needed]: "To reach VMs by name (ssh, VS Code Remote-SSH), ~/.ssh/config needs this line at the top:\n  {{.line}}"
+func SSHIncludeNeeded(line string) M {
+	return M{id: "ssh_include_needed", vals: []val{{"line", line}}}
+}
+
+// SSHIncludeYourself is [ssh_include_yourself]: "not a terminal, so not added: add it yourself"
+func SSHIncludeYourself() M {
+	return M{id: "ssh_include_yourself"}
 }
 
 // SSHRemoteHint is [ssh_remote_hint]: "origin is an SSH remote, but {{.vm}} has no SSH agent: git over SSH won't work in it"
@@ -749,6 +799,7 @@ func VMOutdated(changed string) M {
 
 // specs describes every message, by ID.
 var specs = map[string]spec{
+	"add_it_now":                  {},
 	"agent_dir_comma":             {fields: []string{"path"}},
 	"agent_dirs_added":            {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":          {fields: []string{"dirs", "vm"}},
@@ -801,6 +852,8 @@ var specs = map[string]spec{
 	"image_ready":                 {fields: []string{"image"}},
 	"interrupted_image":           {fields: []string{"vm"}},
 	"interrupted_vm":              {fields: []string{"vm"}},
+	"key_loaded":                  {},
+	"key_loaded_keychain":         {},
 	"lima_broken":                 {},
 	"lima_edit_failed":            {fields: []string{"vm"}},
 	"lima_global_config":          {fields: []string{"files"}},
@@ -808,6 +861,8 @@ var specs = map[string]spec{
 	"lima_host_unsupported":       {fields: []string{"os"}},
 	"lima_missing":                {},
 	"lima_old":                    {fields: []string{"version"}},
+	"load_key":                    {fields: []string{"cmd", "key"}},
+	"load_key_with":               {fields: []string{"cmd"}},
 	"log_details":                 {fields: []string{"file"}},
 	"log_end":                     {fields: []string{"file"}},
 	"login_copy_failed":           {fields: []string{"agent", "reason", "vm"}},
@@ -833,6 +888,7 @@ var specs = map[string]spec{
 	"no_github_token":             {fields: []string{"vm"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
 	"no_secret":                   {fields: []string{"secret"}},
+	"no_ssh_agent":                {},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"nothing_changed":             {},
@@ -855,6 +911,10 @@ var specs = map[string]spec{
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},
 	"size_not_gib":                {fields: []string{"flag", "value"}},
+	"ssh_agent_empty":             {},
+	"ssh_include_added":           {},
+	"ssh_include_needed":          {fields: []string{"line"}},
+	"ssh_include_yourself":        {},
 	"ssh_remote_hint":             {fields: []string{"vm"}},
 	"start_failed":                {fields: []string{"vm"}},
 	"start_no_ssh":                {fields: []string{"console", "vm"}},

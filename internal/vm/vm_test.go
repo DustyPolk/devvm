@@ -255,7 +255,7 @@ func TestUp(t *testing.T) {
 		t.Fatal(names(err))
 	}
 	ms := f.Methods()
-	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Exec", "Shell"}
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}
 	if !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
@@ -313,7 +313,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 	if err := e.Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
 		t.Fatal(names(err))
 	}
-	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Exec", "Shell"}
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Exec", "List", "SSH", "Shell"}
 	if ms := f.Methods(); !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
@@ -441,7 +441,7 @@ func TestUpTools(t *testing.T) {
 	if err := e.Up(t.Context(), Options{Image: "claude", NoNetworkPolicy: true}); err != nil {
 		t.Fatal(names(err))
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "BuildTools", "CreateVM", "Start", "Exec", "Shell"}) {
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "BuildTools", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	lock, err := os.ReadFile(e.Dirs.ToolLock())

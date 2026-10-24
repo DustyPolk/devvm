@@ -307,6 +307,38 @@ other = "interrupted: deleting {{.vm}}, which wasn't ready yet"
 [ssh_remote_hint]
 other = "origin is an SSH remote, but {{.vm}} has no SSH agent: git over SSH won't work in it"
 
+[ssh_include_needed]
+description = "line is the Include line for ~/.ssh/config"
+other = "To reach VMs by name (ssh, VS Code Remote-SSH), ~/.ssh/config needs this line at the top:\n  {{.line}}"
+
+[ssh_include_yourself]
+other = "not a terminal, so not added: add it yourself"
+
+[add_it_now]
+other = "Add it now?"
+
+[ssh_include_added]
+other = "added to ~/.ssh/config"
+
+[no_ssh_agent]
+other = "no SSH agent is running, so git over SSH won't work in the VM"
+
+[ssh_agent_empty]
+other = "your SSH agent has no keys, so git over SSH won't work in the VM"
+
+[load_key]
+description = "cmd is the ssh-add command that loads key"
+other = "Load {{.key}} into the agent now ({{.cmd}})?"
+
+[key_loaded]
+other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
+
+[key_loaded_keychain]
+other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
+
+[load_key_with]
+other = "load it with: {{.cmd}}"
+
 [setid_files]
 description = "files is a space-separated list of paths"
 other = "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"

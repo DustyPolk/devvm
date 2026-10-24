@@ -41,6 +41,9 @@ func TestRegistry(t *testing.T) {
 	if got := r.Names(); len(got) != 2 || got[0] != "lima" || got[1] != "smolvm" {
 		t.Errorf("Names: %q", got)
 	}
+	if all := r.All(); len(all) != 2 || all[0].Name() != "lima" || all[1].Name() != "smolvm" {
+		t.Errorf("All: %v", all)
+	}
 	if b, ok := r.Lookup("smolvm"); !ok || b.Name() != "smolvm" {
 		t.Errorf("Lookup(smolvm): %v, %v", b, ok)
 	}

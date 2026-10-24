@@ -3,8 +3,8 @@
 #   tests/e2e.sh [--clean] [--only SECTION[,SECTION...]]
 #     (default)  every section: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
-#                project makes a VM from base in a project folder and checks its mounts, .git
-#                protection and shell; tools makes a node VM and checks its shared tools; network
+#                project makes a VM from base in a project folder and checks its mounts, ssh by
+#                name with pinned host keys, .git protection and shell; tools makes a node VM and checks its shared tools; network
 #                makes a claude VM with network policy and checks it reaches only its allowlist,
 #                its token stays on the host, and the self-check
 #     --only     just these sections; SECTIONS below
@@ -75,7 +75,8 @@ cleanup() {
   rm -f "$layers"/e2e*.sh
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
-  rm -rf "$src" "$work/net-home" "$work/agent-home" "$work/claude-before.json" "$work/codex-before.json"
+  [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
+  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/claude-before.json" "$work/codex-before.json"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -239,9 +240,29 @@ check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm 
 # nothing).
 check "nothing else from the host is mounted" bash -c "[[ \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$p $share ' ]]"
 check "SSH agent forwarding is off" bash -c "! limactl shell --workdir / $vm ssh-add -l </dev/null"
+check "hostname is the folder" bash -c "[[ \$(limactl shell --workdir / $vm hostname </dev/null) == web ]]"
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
   grep -q -- '--- PASS: TestE2EExecQuoting'"
+
+section "ssh by name"
+# An ~/.ssh/config of its own, set up as the docs say, with a Host * that forwards the agent: yours
+# is never read or changed. ssh gets no agent but a throwaway one.
+sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc"
+printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$XDG_CONFIG_HOME/devvm/ssh_config" > "$sc/config"
+kh=$XDG_CONFIG_HOME/devvm/known_hosts
+agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+check "the ssh config lists it by the folder's name" grep -q "^Host devvm-web $vm\$" "$XDG_CONFIG_HOME/devvm/ssh_config"
+check "its host keys are pinned, as the VM has them" bash -c "
+  [[ \$(grep -c '^$vm ' '$kh') -gt 0 && \$(grep -c '^$vm ' '$kh') == \$(limactl shell --workdir / $vm sh -c 'cat /etc/ssh/ssh_host_*_key.pub' </dev/null | wc -l | tr -d ' ') ]]"
+check "ssh devvm-web reaches it" bash -c "[[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
+check "agent forwarding stays off, whatever Host * says" bash -c "
+  SSH_AUTH_SOCK='$sc/agent.sock' ssh -F '$sc/config' devvm-web 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
+check "a changed host key is refused" bash -c "
+  cp '$kh' '$sc/kh' && ssh-keygen -q -t ed25519 -N '' -f '$sc/other' &&
+  { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/other.pub')\"; } > '$kh' &&
+  { env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web true </dev/null 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } &&
+  (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
 
 section ".git protection"
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -329,6 +350,9 @@ events=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
 check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
   pgrep -f -- '_proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
+check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
+  grep -q '^Host devvm-net $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
+  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
 check "direct connections fail, even as root: an address, other ports" bash -c "
   ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
   ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1 </dev/null &&

@@ -28,6 +28,21 @@ func TestSlug(t *testing.T) {
 	}
 }
 
+func TestIsVM(t *testing.T) {
+	for name, want := range map[string]bool{
+		"devvm-web-12345612345612":     true,
+		"devvm-img-foo-abc123abc123ab": true, // a folder named img-foo
+		"devvm-img-0123456789ab":       false,
+		"devvm-tools-build":            false,
+		"devvm-web-123456":             false,
+		"other-web-12345612345612":     false,
+	} {
+		if got := IsVM(name); got != want {
+			t.Errorf("IsVM(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestNew(t *testing.T) {
 	name := regexp.MustCompile(`^devvm-my-app-v2-[0-9a-f]{14}$`)
 	f, err := New("/w/My_App.v2", 0)

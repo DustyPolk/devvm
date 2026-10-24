@@ -5,7 +5,11 @@
 # Stopped), which create, clone, start, stop and delete keep up to date. A
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
-# and 100 GiB. start writes the VM's ha.pid (devvm's pid, which runs), and
+# and 100 GiB. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# writes it (Lima's own options, host keys unchecked) unless it exists; its
+# host keys, read with a shell, are one made-up key per VM, unless
+# $STUB_DIR/hostkeys-fail exists.
+# start writes the VM's ha.pid (devvm's pid, which runs), and
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
 # start), and with $STUB_DIR/start-hangs it hangs (touching
 # $STUB_DIR/hanging first). clone fails with $STUB_DIR/clone-fails,
@@ -63,6 +67,9 @@ case ${1:-} in
     set_status "${names[0]}" Running
     mkdir -p "$LIMA_HOME/${names[0]}"
     echo "$PPID" > "$LIMA_HOME/${names[0]}/ha.pid"
+    cfg="$LIMA_HOME/${names[0]}/ssh.config"
+    [[ -f $cfg ]] || printf 'Host lima-%s\n  IdentityFile "%s/_config/user"\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  NoHostAuthenticationForLocalhost yes\n  PreferredAuthentications publickey\n  BatchMode yes\n  IdentitiesOnly yes\n  User stub\n  ControlMaster auto\n  ControlPath "%s/ssh.sock"\n  ControlPersist yes\n  PermitLocalCommand yes\n  LocalCommand touch /x/ran\n  Hostname 127.0.0.1\n  Port 60022\n' \
+      "${names[0]}" "$LIMA_HOME" "$LIMA_HOME/${names[0]}" > "$cfg"
     [[ ! -e $STUB_DIR/start-fails ]] || exit 1 ;;
   stop) set_status "${names[0]}" Stopped ;;
   delete) for n in "${names[@]}"; do set_status "$n"; done ;;
@@ -74,6 +81,13 @@ case ${1:-} in
     # A direct connection from the VM, past its proxy: it fails, as a
     # confined VM's does, unless $STUB_DIR/net-direct exists.
     if [[ "$*" == *"'curl' '--noproxy'"* ]]; then [[ -e $STUB_DIR/net-direct ]] || exit 7; fi
+    # The VM's ssh host keys.
+    if [[ "$*" == *"/etc/ssh/ssh_host_"* ]]; then
+      [[ ! -e $STUB_DIR/hostkeys-fail ]] || exit 1
+      echo "ssh-ed25519 AAAAstubkey${names[0]//-/} root@${names[0]}"
+      echo "not a key"
+      exit 0
+    fi
     [[ ! -e $STUB_DIR/shell-fails ]] || exit 1
     [[ ! -e $STUB_DIR/shell-hangs ]] || { : > "$STUB_DIR/hanging"; exec sleep 30; } ;;
 esac
@@ -83,6 +97,6 @@ esac
 while read -r n st; do
   read -r cpus mem disk < <(cat "$STUB_DIR/size-$n" 2>/dev/null || echo "4 8589934592 107374182400")
   cfg=$(cat "$STUB_DIR/config-$n.json" 2>/dev/null || echo '{}')
-  printf '{"name":"%s","status":"%s","dir":"%s","cpus":%s,"memory":%s,"disk":%s,"config":%s}\n' \
-    "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$cfg"
+  printf '{"name":"%s","status":"%s","dir":"%s","cpus":%s,"memory":%s,"disk":%s,"sshLocalPort":60022,"sshConfigFile":"%s","config":%s}\n' \
+    "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$LIMA_HOME/$n/ssh.config" "$cfg"
 done < "$inst"

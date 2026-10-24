@@ -22,6 +22,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -71,6 +72,8 @@ type Env struct {
 	Getenv    func(string) string
 	HostTZ    func() string
 	GitConfig func(ctx context.Context, dir, key string) string
+	// SSHAdd runs ssh-add with args and returns its exit code.
+	SSHAdd func(ctx context.Context, args ...string) int
 }
 
 // NewEnv returns the environment up runs in here, devvm being self.
@@ -88,7 +91,7 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home)),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell,
-		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
+		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig, SSHAdd: sshAdd,
 	}, nil
 }
 
@@ -270,6 +273,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		if locking.Load() {
 			e.Protector(f.Dir).Unlock(ctx)
 		}
+		_ = e.sshConfig().ForgetHostKeys(vm)
 		_ = e.Proxy.Forget(vm)
 		_ = os.Remove(e.Dirs.VMState(vm))
 	})
@@ -333,6 +337,9 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 			ui.Warn(msg.SetidFiles(strings.Join(shown, " ")))
 		}
 	}
+	if spec.AgentForwarding {
+		e.checkAgent(ctx)
+	}
 	ui.Info(msg.Starting(vm))
 	// The confinement the VM last started with, its proxy's address in it.
 	var started backend.Confinement
@@ -351,6 +358,10 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err := e.sync(ctx, b, st, f.Slug(), files, started); err != nil {
 		return err
 	}
+	// ssh and editors reach it by name.
+	if err := e.sshConfig().Write(ctx); err != nil {
+		return err
+	}
 	cmd, err := b.Shell(ctx, vm, f.Dir)
 	if err != nil {
 		return err
@@ -362,9 +373,13 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 // start starts a stopped VM confined as conf says, and returns the
 // confinement it got. With network policy its proxy starts first, and the
 // backend gets the proxy's confinement; a start that fails stops the proxy
-// again.
+// again. Its host keys are read again once it runs: a VM whose backend
+// config changed can get new ones when it boots.
 func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
 	vm := st.Name()
+	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
+		return conf, err
+	}
 	if conf.Net == backend.NetProxy {
 		var err error
 		if conf, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), false); err != nil {
@@ -379,6 +394,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	}
 	return conf, nil
 }
+
+// sshConfig is the ssh config for every backend's VMs.
+func (e *Env) sshConfig() *sshconfig.Config { return sshconfig.New(e.Dirs, e.Registry) }
 
 // checkUnsafe refuses a folder that is or holds the home folder or
 // devvm's state, or is inside devvm's own folders, unless the user means

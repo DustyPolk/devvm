@@ -59,6 +59,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"git_include_inside":          "git-protection#not-covered",
 	"git_hook_link_inside":        "git-protection#not-covered",
 	"git_gitdir_outside":          "git-protection#not-covered",
+	"ssh_remote_hint":             "ssh#agent-forwarding",
+	"ssh_include_yourself":        "ssh#ssh-access-by-name",
 	"tools_need_resolve":          "images#versions",
 	"mise_checksum":               "images#versions",
 	"tool_stepped_back":           "images#versions",

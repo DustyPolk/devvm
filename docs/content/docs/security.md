@@ -11,7 +11,7 @@ devvm treats everything in a VM as untrusted, a coding agent with root included:
 | `.git` hooks and config | locked (macOS); what a lock can't stop is reported, not prevented ([details](git-protection.md)) |
 | Your agents' config (skills, settings, logins) | its folders read-only, its files copied; never its history ([details](coding-agents.md)) |
 | The rest of your home folder, other projects | not mounted |
-| Your SSH keys | not reachable: VMs have no SSH agent |
+| Your SSH keys | not reachable: VMs have no SSH agent ([details](ssh.md#agent-forwarding)) |
 | The network, with network policy | allowlisted hosts only, through a proxy on this machine ([details](network.md)) |
 | Claude and GitHub tokens, Codex and opencode logins, Claude Code's MCP secrets, with network policy | kept on this machine; the proxy puts them into requests ([details](network.md#secrets)) |
 | The network, without network policy | everything this machine reaches, its own services on `localhost` included |

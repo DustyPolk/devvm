@@ -13,11 +13,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 
 	"github.com/w3cj/devvm/internal/platform"
 )
+
+// vmName matches a project VM's name.
+var vmName = regexp.MustCompile(`^devvm-.+-[0-9a-f]{14}$`)
+
+// IsVM reports whether name is a project VM's: devvm-<folder>-<hash>.
+// Images and build VMs aren't.
+func IsVM(name string) bool { return vmName.MatchString(name) }
 
 // Prefix starts every project VM's name: devvm-<folder>-<hash>.
 const Prefix = "devvm-"

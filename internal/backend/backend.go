@@ -254,7 +254,14 @@ type SSHTarget struct {
 	Host string
 	Port int
 	User string
+	// Options are the other ssh options that log in (IdentityFile,
+	// IdentitiesOnly…), in order, values as an ssh config has them.
+	// Nothing that turns off host key checks or changes what ssh runs.
+	Options []SSHOption
 	// ConfigFile is an ssh config the backend keeps for the VM, with its
 	// identity; "" when it has none.
 	ConfigFile string
 }
+
+// SSHOption is an ssh config option: IdentityFile "/path".
+type SSHOption struct{ Key, Value string }
