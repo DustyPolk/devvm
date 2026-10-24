@@ -1,0 +1,45 @@
+# devvm rebuild: a new key for the image (its rebuild counter), built from
+# its parent as it is; then the stale images go, the old one and those
+# built on it among them, and nothing else.
+env DEVVM_MESSAGES=names
+env IMAGES=$XDG_DATA_HOME/devvm/images
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+cp bar.sh $XDG_CONFIG_HOME/devvm/layers/bar.sh
+exec devvm build foo+bar
+exec sh -c 'echo devvm-web-12345612345612 >> "$STUB_DIR/instances"'
+exec sh -c 'for i in base foo foo+bar; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
+exec sh -c ': > "$STUB_LOG"'
+
+# Not a terminal: it says what goes, and goes ahead.
+exec devvm rebuild base+foo
+stdout '^rebuild_replaces above=foo\+bar image=foo$'
+stdout '^==> building_image image=foo key=[0-9a-f]{12}$'
+! stdout 'image=base'
+stdout -count=2 '^==> deleted_old_image image=foo(\+bar)? key=[0-9a-f]{12}$'
+exists $IMAGES/rebuilds/foo
+stub_calls
+stdout '^limactl clone --tty=false --mount-none devvm-img-[0-9a-f]{12} devvm-img-[0-9a-f]{12}$'
+exec sh -c 'echo "limactl delete -f devvm-img-$(cat foo.key)"; echo "limactl delete -f devvm-img-$(cat foo+bar.key)"'
+cp stdout want-deleted
+exec sh -c 'grep "^limactl delete" "$STUB_LOG"'
+cmp stdout want-deleted
+
+# What's left: base, the new foo and the project VM. foo+bar builds again
+# when it's next needed.
+exec sh -c 'grep -c . "$STUB_DIR/instances"'
+stdout '^3$'
+exec sh -c 'grep -q "^devvm-img-$(cat base.key) " "$STUB_DIR/instances" && grep -q "^devvm-web-12345612345612" "$STUB_DIR/instances"'
+exec sh -c 'test -f "$IMAGES/$(cat base.key)" && ! test -e "$IMAGES/$(cat foo.key)" && ! test -e "$IMAGES/$(cat foo+bar.key)"'
+
+# Nothing built on it: nothing to ask.
+exec devvm rebuild foo
+! stdout rebuild_replaces
+stdout -count=1 '^==> deleted_old_image image=foo key=[0-9a-f]{12}$'
+
+-- foo.sh --
+#!/bin/bash
+echo foo
+-- bar.sh --
+#!/bin/bash
+echo bar

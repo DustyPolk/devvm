@@ -1,9 +1,12 @@
 package state
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/paths"
 )
@@ -73,6 +76,21 @@ func RemoveImage(d paths.Dirs, key string) error {
 		return err
 	}
 	return removeFile(d.ImageState(key))
+}
+
+// BumpRebuild changes an image's rebuild counter, which its key hashes, so
+// its next build is a new image. from is what its base starts from, ""
+// for the default.
+func BumpRebuild(d paths.Dirs, image, from string) error {
+	if err := checkName("image name", paths.RebuildName(image, from)); err != nil {
+		return err
+	}
+	var r [4]byte
+	if _, err := rand.Read(r[:]); err != nil {
+		return err
+	}
+	v := time.Now().UTC().Format("20060102150405") + "-" + hex.EncodeToString(r[:]) + "\n"
+	return writeFile(d.RebuildFile(image, from), []byte(v))
 }
 
 // isRef accepts an image reference as a key: no spaces, no '='.

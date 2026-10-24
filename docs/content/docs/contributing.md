@@ -78,10 +78,14 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `STUB_DIR` | `stub/`, for stubs' state |
 | `STUB_LOG` | `stub/calls`, the stubs' call log |
 | `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
+| `DEVVM_UBUNTU_URL` | `ubuntu/`, with one dated release |
+| `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml` and `layers/` next to it |
 
 `$WORK`, the script's own folder, is the current folder.
 
 Tests never touch the network. Downloads are served from a test server (`net/http/httptest`) or read from a `file://` folder. `DEVVM_UBUNTU_URL` replaces `https://cloud-images.ubuntu.com/releases/resolute`, where devvm lists Ubuntu's dated releases: point it at a folder of `release-YYYYMMDD/` folders, each with its `SHA256SUMS` and `SHA256SUMS.gpg`, as `file:///path/to/folder`.
+
+A command left running in the background (`exec devvm … &name&`) can be interrupted with `kill -INT name`. `wait_file FILE` waits up to 10 seconds for a file to appear, such as one a stub writes when it gets somewhere.
 
 ### Stubs
 
@@ -103,6 +107,25 @@ limactl list
 | `STUB_UNAME_S` | `uname -s` |
 | `STUB_UNAME_M` | `uname -m` |
 | `STUB_SW_VERS` | `sw_vers -productVersion` |
+
+`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
+
+## End-to-end tests
+
+`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with `base.yaml` and `layers/` next to it, and runs every check through that binary:
+
+| | |
+| --- | --- |
+| Lima home | `~/.lt-e2e-go` (or `$DEVVM_E2E_LIMA_HOME`); it refuses `~/.lima` and devvm's own |
+| State | `/tmp/devvm-go-e2e` (`XDG_DATA_HOME`, `XDG_CONFIG_HOME`) |
+
+```sh
+tests/e2e.sh                # every section
+tests/e2e.sh --only images  # just these sections
+tests/e2e.sh --clean        # delete the sandbox's cached images first
+```
+
+The sections so far: `images` (building base and fixture layers, rebuilds, and Ctrl+C during a build). base stays cached between runs; every other VM a run makes is deleted at its end. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
 
 ## Messages
 

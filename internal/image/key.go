@@ -74,6 +74,39 @@ func (c Chain) Key() string {
 	return c[len(c)-1].Key
 }
 
+// ParseChain reads a chain as String writes it. Pairs that aren't
+// name=key are skipped.
+func ParseChain(s string) Chain {
+	var c Chain
+	for _, p := range strings.Fields(s) {
+		if name, key, ok := strings.Cut(p, "="); ok && name != "" && key != "" {
+			c = append(c, Link{name, key})
+		}
+	}
+	return c
+}
+
+// Outdated returns the images in chain, base first, whose key has changed
+// since it was made: an edited script, other features, a rebuild.
+func (in Inputs) Outdated(chain Chain) ([]string, error) {
+	var changed []string
+	for _, l := range chain {
+		key, err := in.Key(l.Name)
+		if err != nil {
+			return nil, err
+		}
+		if key != l.Key {
+			changed = append(changed, l.Name)
+		}
+	}
+	return changed, nil
+}
+
+// LayerName reports whether a layer can have that name: lowercase letters,
+// digits and dashes, starting with a letter or digit. Image names join
+// layers with +.
+func LayerName(name string) bool { return name != Base && layerName.MatchString(name) }
+
 var layerName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // Parent is the image an image is built on: foo+bar's is foo, foo's is

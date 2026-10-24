@@ -1,0 +1,89 @@
+# Functions in base.sh, run on their own with stand-ins for what they call
+# in the VM (fn.sh, below).
+
+# apt_update: the snapshot on the first update is enough.
+cp get-snapshot $STUB_DIR/apt.1
+exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
+exec grep -c 'apt-get update' $STUB_LOG
+stdout '^1$'
+! stderr 'aren''t pinned'
+
+# Empty lists (--from) take a second update to reach the snapshot.
+exec sh -c ': > "$STUB_LOG"'
+cp get-ports $STUB_DIR/apt.1
+cp get-snapshot $STUB_DIR/apt.2
+exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
+exec grep -c 'apt-get update' $STUB_LOG
+stdout '^2$'
+! stderr 'aren''t pinned'
+
+# No snapshot after two updates says so.
+exec sh -c ': > "$STUB_LOG"'
+cp hit-debian $STUB_DIR/apt.1
+cp hit-debian $STUB_DIR/apt.2
+exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
+stderr 'aren''t pinned'
+exec grep -c 'apt-get update' $STUB_LOG
+stdout '^2$'
+
+# A failed snapshot is tried twice more, after 15 and 30 s, then stops the
+# build.
+exec sh -c ': > "$STUB_LOG"'
+cp failed $STUB_DIR/apt.1
+cp failed $STUB_DIR/apt.2
+cp failed $STUB_DIR/apt.3
+! exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
+stderr 'couldn''t fetch the package snapshot 20260101T000000Z'
+exec grep -c 'apt-get update' $STUB_LOG
+stdout '^3$'
+exec cat $STUB_DIR/sleeps
+cmp stdout sleeps
+
+# A 503 that clears on the next try.
+exec sh -c ': > "$STUB_LOG"; rm "$STUB_DIR/sleeps"'
+cp get-snapshot $STUB_DIR/apt.2
+exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
+exec grep -c 'apt-get update' $STUB_LOG
+stdout '^2$'
+
+# installed: only the packages that are installed, and no failure for
+# unknown ones.
+exec bash -c 'set -eo pipefail; source fn.sh; layer_fn base installed; dpkg_stub; installed snapd fwupd rsyslog nope'
+cmp stdout installed
+
+-- fn.sh --
+# layer_fn SCRIPT NAME: define NAME from layers/SCRIPT.sh (the scripts run
+# top to bottom when sourced).
+layer_fn() { eval "$(awk -v f="$2() " 'index($0, f) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$DEVVM_BIN/layers/$1.sh")"; }
+# apt-get update prints the next of $STUB_DIR/apt.1, apt.2, ... and logs the
+# call; sleep only logs.
+apt_stub() {
+  apt_snapshot=20260101T000000Z
+  sudo() { "$@"; }
+  apt-get() {
+    local n; n=$(( $(grep -c . "$STUB_LOG") + 1 ))
+    echo "apt-get $*" >> "$STUB_LOG"
+    cat "$STUB_DIR/apt.$n"
+  }
+  sleep() { echo "sleep $*" >> "$STUB_DIR/sleeps"; }
+}
+# dpkg-query lists what it knows and fails for the rest, like the real one.
+dpkg_stub() {
+  dpkg-query() {
+    printf 'installed snapd\nnot-installed fwupd\nconfig-files rsyslog\n'
+    echo "dpkg-query: no packages found matching nope" >&2; return 1
+  }
+}
+-- get-snapshot --
+Get:1 https://snapshot.ubuntu.com/ubuntu/20260101T000000Z resolute InRelease
+-- get-ports --
+Get:1 http://ports.ubuntu.com/ubuntu-ports resolute InRelease
+-- hit-debian --
+Hit:1 http://deb.debian.org/debian bookworm InRelease
+-- failed --
+W: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20260101T000000Z/dists/resolute/InRelease  503
+-- sleeps --
+sleep 15
+sleep 30
+-- installed --
+snapd

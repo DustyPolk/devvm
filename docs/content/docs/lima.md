@@ -45,10 +45,10 @@ Builds are confined too: they run code devvm didn't write. On macOS a build's Li
 
 ## Clones and overlays
 
-A project VM is a clone of its image's VM, made with the image stopped.
+An image is a stopped VM in devvm's Lima home, `devvm-img-<key>`. base's is made from Ubuntu's cloud image with `base.yaml` and `--mount-none`, and a layer's is a clone of its parent's, made with `--mount-none` too, so a build mounts nothing from the host. A project VM is a clone of its image's VM, made with the image stopped.
 
 - **macOS:** the clone's disk is an APFS copy-on-write copy: it shares the image's blocks until written, so `du` overcounts it.
-- **Linux:** Lima's disks are qcow2 files, and a clone would be a full copy. A project VM's disk is a qcow2 overlay of its image's instead, readable only by you: the image's blocks are shared and the VM's disk holds only its changes. An image whose disk VMs are overlays of can't be deleted.
+- **Linux:** Lima's disks are qcow2 files, and a clone would be a full copy. A project VM's disk is a qcow2 overlay of its image's instead, readable only by you: the image's blocks are shared and the VM's disk holds only its changes. An image's disk is read-only once it's built, and an image whose disk VMs are overlays of can't be deleted.
 
 ## Ports
 

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stand-in for QEMU in tests, so Linux hosts pass devvm's check for it:
+# logs its arguments to $STUB_LOG.
+echo "qemu-system-x86_64 $*" >> "$STUB_LOG"

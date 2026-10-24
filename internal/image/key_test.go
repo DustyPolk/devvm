@@ -276,3 +276,47 @@ func TestKeyOfTheRealFiles(t *testing.T) {
 		t.Errorf("key %q", key)
 	}
 }
+
+func TestParseChain(t *testing.T) {
+	c := Chain{{"base", "0123456789ab"}, {"foo", "ba9876543210"}}
+	if got := ParseChain(c.String()); !slices.Equal(got, c) {
+		t.Errorf("ParseChain(%q) = %v", c.String(), got)
+	}
+	if got := ParseChain("  base=0123456789ab junk =x y= foo=ba9876543210 "); !slices.Equal(got, c) {
+		t.Errorf("ParseChain skipping junk = %v", got)
+	}
+	if got := ParseChain(""); got != nil {
+		t.Errorf("ParseChain(\"\") = %v", got)
+	}
+}
+
+// A VM's chain is outdated where a key changed: that image and every one
+// above it, never those below.
+func TestOutdated(t *testing.T) {
+	e := newEnv(t, "")
+	chain, err := e.in.Chain("foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := e.in.Outdated(chain); err != nil || got != nil {
+		t.Errorf("Outdated before a change = %q, %v", got, err)
+	}
+	e.edit("layers/foo.sh")
+	if got, err := e.in.Outdated(chain); err != nil || !slices.Equal(got, []string{"foo", "foo+bar"}) {
+		t.Errorf("Outdated after editing foo = %q, %v", got, err)
+	}
+	if _, err := e.in.Outdated(Chain{{"Bad", "x"}}); err == nil {
+		t.Error("Outdated took an invalid name")
+	}
+}
+
+func TestLayerName(t *testing.T) {
+	for name, want := range map[string]bool{
+		"foo": true, "my-layer2": true, "0x": true,
+		"base": false, "": false, "-x": false, "Foo": false, "a_b": false, "a+b": false, "../x": false,
+	} {
+		if got := LayerName(name); got != want {
+			t.Errorf("LayerName(%q) = %v", name, got)
+		}
+	}
+}

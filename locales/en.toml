@@ -158,3 +158,61 @@ other = "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu
 
 [ubuntu_unsigned]
 other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
+
+[unknown_layer]
+description = "layers is a space-separated list of layer names"
+other = "there's no layer {{.layer}}: choose from {{.layers}}"
+
+[build_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't build {{.image}}: {{.reason}}"
+
+[image_leftover]
+other = "image {{.key}} is left over from a failed build of {{.image}}: building it again"
+
+[building_image]
+other = "building image {{.image}} ({{.key}})"
+
+[base_build_time]
+other = "    a few minutes, and Ubuntu's cloud image to download the first time"
+
+[image_ready]
+other = "image {{.image}} ready"
+
+[creating_from_ubuntu]
+other = "creating {{.vm}} from Ubuntu's cloud image"
+
+[cloning_image]
+other = "cloning {{.parent}}'s image"
+
+[running_script]
+other = "running {{.script}} in {{.vm}}"
+
+[script_failed]
+other = "{{.script}} failed in {{.vm}}"
+
+[interrupted_image]
+other = "interrupted: deleting the unfinished image {{.vm}}"
+
+[unfinished_image]
+other = "deleting the unfinished image {{.vm}}"
+
+[rebuild_replaces]
+description = "above is a space-separated list of image names"
+other = "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
+
+[continue]
+other = "continue?"
+
+[nothing_changed]
+other = "nothing changed"
+
+[deleted_old_image]
+other = "deleted the old image {{.image}} ({{.key}})"
+
+[deleted_unfinished_build]
+other = "deleted {{.key}}, left over from a failed build"
+
+[vm_outdated]
+description = "changed is a comma-separated list of image names"
+other = "{{.changed}} changed since this VM was made: it keeps the image it has"

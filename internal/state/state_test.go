@@ -273,6 +273,30 @@ func TestImageBad(t *testing.T) {
 	}
 }
 
+// Each bump writes a new counter, apart for each --from.
+func TestBumpRebuild(t *testing.T) {
+	d := testDirs(t)
+	if err := BumpRebuild(d, "foo", ""); err != nil {
+		t.Fatal(err)
+	}
+	first := read(t, d.RebuildFile("foo", ""))
+	if err := BumpRebuild(d, "foo", ""); err != nil {
+		t.Fatal(err)
+	}
+	if second := read(t, d.RebuildFile("foo", "")); second == first || second == "" {
+		t.Errorf("counter %q, then %q", first, second)
+	}
+	if err := BumpRebuild(d, "foo", "node:24"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(d.RebuildFile("foo", "node:24")); err != nil {
+		t.Error(err)
+	}
+	if err := BumpRebuild(d, "../x", ""); err == nil {
+		t.Error("BumpRebuild(../x): want an error")
+	}
+}
+
 func TestFromDigests(t *testing.T) {
 	d := testDirs(t)
 	get := func(ref string) string {

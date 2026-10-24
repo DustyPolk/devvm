@@ -8,7 +8,9 @@
 # and 100 GiB. start writes the VM's ha.pid (devvm's pid, which runs), and
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
 # start). shell fails with $STUB_DIR/shell-fails and hangs with
-# $STUB_DIR/shell-hangs. Everything else succeeds.
+# $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first); a script fed
+# to shell's bash -s has its second line appended to $STUB_DIR/scripts.
+# Everything else succeeds.
 set -euo pipefail
 echo "limactl $*" >> "$STUB_LOG"
 echo "cwd=$(pwd -P) LIMA_HOME=${LIMA_HOME:-}" > "$STUB_DIR/limactl-env"
@@ -42,8 +44,10 @@ case ${1:-} in
   stop) set_status "${names[0]}" Stopped ;;
   delete) for n in "${names[@]}"; do set_status "$n"; done ;;
   shell)
+    # A script fed to bash -s: its first line after the shebang.
+    if [[ ${*: -2} == "bash -s" ]]; then sed -n 2p >> "$STUB_DIR/scripts"; fi
     [[ ! -e $STUB_DIR/shell-fails ]] || exit 1
-    [[ ! -e $STUB_DIR/shell-hangs ]] || exec sleep 30 ;;
+    [[ ! -e $STUB_DIR/shell-hangs ]] || { : > "$STUB_DIR/hanging"; exec sleep 30; } ;;
 esac
 
 [[ ${1:-} != --version ]] || { echo "limactl version 2.2.1"; exit 0; }

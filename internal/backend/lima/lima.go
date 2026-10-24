@@ -23,6 +23,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ubuntu"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -45,10 +47,18 @@ type Lima struct {
 	OS, Arch string
 	// Self is devvm's binary, which the QEMU wrapper runs.
 	Self string
+	// Root holds devvm's own files: base.yaml, layers/.
+	Root string
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
+	// Ubuntu finds Ubuntu's cloud image for base.
+	Ubuntu func(ctx context.Context) (ubuntu.Image, error)
+	// Memory returns the host's memory in bytes.
+	Memory func() (uint64, error)
+	// Info prints what the backend is doing (ui.Info).
+	Info func(msg.M)
 	// Warn prints a warning, and where the run log has more.
 	Warn func(msg.M)
 }
@@ -68,9 +78,12 @@ func New(d paths.Dirs) *Lima {
 			self = r
 		}
 	}
+	root := filepath.Dir(self)
 	return &Lima{
 		Dirs: d, Runner: uiRunner{}, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Self: self, SSHTimeout: sshTimeout, Getenv: os.Getenv, Warn: warn,
+		Self: self, Root: root, SSHTimeout: sshTimeout, Getenv: os.Getenv,
+		Ubuntu: ubuntu.New(root, os.Getenv).Image, Memory: platform.Memory,
+		Info: ui.Info, Warn: warn,
 	}
 }
 
@@ -131,12 +144,6 @@ func (l *Lima) Check(ctx context.Context) error {
 		}
 	}
 	return l.checkGlobalConfigs()
-}
-
-// BuildImage isn't there yet: building images from base.yaml and the
-// layer scripts comes with the image build.
-func (l *Lima) BuildImage(context.Context, backend.ImageSpec) (backend.Built, error) {
-	return backend.Built{}, errors.New("lima: building images isn't supported yet")
 }
 
 // projectVM matches a project VM's name: devvm-<folder>-<14 hex>. A folder

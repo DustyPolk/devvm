@@ -1,0 +1,262 @@
+package build
+
+import (
+	"errors"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+func write(t *testing.T, path, data string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// testBuilder returns a builder on a fake backend with every feature, in a
+// temporary folder with devvm's files and the user's layers foo and bar.
+func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
+	t.Helper()
+	dir := t.TempDir()
+	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
+	root := filepath.Join(dir, "root")
+	write(t, filepath.Join(root, "base.yaml"), "cpus: 4\n")
+	write(t, filepath.Join(root, "layers", "base.sh"), "#!/bin/bash\n")
+	write(t, filepath.Join(d.Layers(), "foo.sh"), "#!/bin/bash\necho foo\n")
+	write(t, filepath.Join(d.Layers(), "bar.sh"), "#!/bin/bash\necho bar\n")
+	caps := backend.Caps{}
+	for _, f := range backend.Features {
+		caps[f] = backend.Native
+	}
+	f := backendtest.New("fake", caps)
+	f.Built = backend.Built{Origin: "https://example.com/ubuntu.img sha256:1111", Libc: "gnu"}
+	return &Builder{Dirs: d, Root: root, Backend: f}, f
+}
+
+func isMsg(err error, id string) bool {
+	m, ok := errors.AsType[msg.M](err)
+	return ok && m.ID() == id
+}
+
+func TestNormalize(t *testing.T) {
+	for in, want := range map[string]string{
+		"base":         "base",
+		"base+foo":     "foo",
+		"foo+base+bar": "foo+bar",
+		"foo+bar":      "foo+bar",
+		"":             "", // CheckLayers refuses it
+	} {
+		if got := Normalize(in); got != want {
+			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Layers are the user's scripts with names image names can hold; nothing
+// else gets past CheckLayers.
+func TestLayersAndCheckLayers(t *testing.T) {
+	b, _ := testBuilder(t)
+	write(t, filepath.Join(b.Dirs.Layers(), "Bad_Name.sh"), "")
+	write(t, filepath.Join(b.Dirs.Layers(), "base.sh"), "")
+	write(t, filepath.Join(b.Root, "layers", "stray.sh"), "") // devvm's own folder holds only base
+	if err := os.Mkdir(filepath.Join(b.Dirs.Layers(), "dir.sh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := b.Layers(), []string{"base", "bar", "foo"}; !slices.Equal(got, want) {
+		t.Errorf("Layers() = %q, want %q", got, want)
+	}
+	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo"} {
+		if err := b.CheckLayers(ok); err != nil {
+			t.Errorf("CheckLayers(%q): %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "stray", "Bad_Name", "dir", "foo+", "../../x", "foo+nope", "-x"} {
+		if err := b.CheckLayers(bad); !isMsg(err, "unknown_layer") {
+			t.Errorf("CheckLayers(%q) = %v, want unknown_layer", bad, err)
+		}
+	}
+}
+
+func TestBuild(t *testing.T) {
+	b, f := testBuilder(t)
+	ctx := t.Context()
+	if err := b.Build(ctx, "foo+bar"); err != nil {
+		t.Fatal(err)
+	}
+	chain, err := b.Inputs().Chain("foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var specs []backend.ImageSpec
+	for _, c := range f.Calls() {
+		if c.Method == "BuildImage" {
+			specs = append(specs, c.Args[0].(backend.ImageSpec))
+		}
+	}
+	if len(specs) != 3 {
+		t.Fatalf("built %d images, want 3: %+v", len(specs), specs)
+	}
+	for i, want := range []backend.ImageSpec{
+		{Image: "base", Key: chain[0].Key, Scripts: []backend.Script{{Name: "base.sh", Path: filepath.Join(b.Root, "layers", "base.sh")}}},
+		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Scripts: []backend.Script{{Name: "foo.sh", Path: filepath.Join(b.Dirs.Layers(), "foo.sh")}}},
+		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Scripts: []backend.Script{{Name: "bar.sh", Path: filepath.Join(b.Dirs.Layers(), "bar.sh")}}},
+	} {
+		want.Net = backend.NetInternet
+		got := specs[i]
+		if got.Image != want.Image || got.Key != want.Key || got.Parent != want.Parent || got.Net != want.Net ||
+			got.From != nil || got.MemoryGiB != 0 || !slices.Equal(got.Scripts, want.Scripts) {
+			t.Errorf("build %d: %+v, want %+v", i, got, want)
+		}
+	}
+	base, err := state.ReadImage(b.Dirs, chain[0].Key)
+	if err != nil || base != (state.Image{Name: "base", Chain: chain[:1].String(), Digest: f.Built.Origin, Libc: "gnu"}) {
+		t.Errorf("base's record: %+v, %v", base, err)
+	}
+	top, err := state.ReadImage(b.Dirs, chain[2].Key)
+	if err != nil || top != (state.Image{Name: "foo+bar", Chain: chain.String(), Libc: "gnu"}) {
+		t.Errorf("foo+bar's record: %+v, %v", top, err)
+	}
+
+	// Built: nothing to do.
+	n := len(f.Calls())
+	if err := b.Build(ctx, "base+foo+bar"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range f.Calls()[n:] {
+		if c.Method != "Images" {
+			t.Errorf("a built image called %s", c.Method)
+		}
+	}
+}
+
+// An image above base keeps its parent's C library.
+func TestBuildKeepsTheLibc(t *testing.T) {
+	b, f := testBuilder(t)
+	f.Built.Libc = "musl"
+	if err := b.Build(t.Context(), "foo"); err != nil {
+		t.Fatal(err)
+	}
+	key, err := b.Inputs().Key("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec, err := state.ReadImage(b.Dirs, key); err != nil || rec.Libc != "musl" || rec.Digest != "" {
+		t.Errorf("foo's record: %+v, %v", rec, err)
+	}
+}
+
+// A backend that can't build, or not confined, is refused before anything
+// is built.
+func TestBuildRequires(t *testing.T) {
+	b, f := testBuilder(t)
+	delete(f.Capabilities, backend.FeatureBuildConfinement)
+	if err := b.Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
+		t.Errorf("Build = %v, want backend_lacks", err)
+	}
+	if slices.Contains(f.Methods(), "BuildImage") {
+		t.Error("built anyway")
+	}
+}
+
+// A failed build writes no record, so the next build starts over.
+func TestFailedBuildHasNoRecord(t *testing.T) {
+	b, f := testBuilder(t)
+	f.Errs = map[string]error{"BuildImage": backend.Logged(msg.ScriptFailed("base.sh", "x"))}
+	if err := b.Build(t.Context(), "base"); err == nil {
+		t.Fatal("Build succeeded")
+	}
+	if entries, _ := os.ReadDir(b.Dirs.Images()); len(entries) != 0 {
+		t.Errorf("records after a failed build: %v", entries)
+	}
+}
+
+func TestList(t *testing.T) {
+	b, f := testBuilder(t)
+	ctx := t.Context()
+	if err := b.Build(ctx, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	f.ImageKeys = append(f.ImageKeys, "0123456789ab") // no record: unfinished
+	write(t, filepath.Join(b.Dirs.Layers(), "foo.sh"), "#!/bin/bash\necho edited\n")
+	imgs, err := b.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, img := range imgs {
+		got[img.Name] = img.Current
+	}
+	if want := map[string]bool{"base": true, "foo": false, "": false}; !maps.Equal(got, want) {
+		t.Errorf("List: %v, want %v", got, want)
+	}
+}
+
+// Rebuild gives the image a new key, and deletes the old one and those on
+// it, never the others.
+func TestRebuild(t *testing.T) {
+	b, f := testBuilder(t)
+	ctx := t.Context()
+	if err := b.Build(ctx, "foo+bar"); err != nil {
+		t.Fatal(err)
+	}
+	old, err := b.Inputs().Chain("foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Rebuild(ctx, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	newFoo, err := b.Inputs().Key("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newFoo == old[1].Key {
+		t.Error("foo kept its key")
+	}
+	var deleted []string
+	for _, c := range f.Calls() {
+		if c.Method == "DeleteImage" {
+			deleted = append(deleted, c.Args[0].(string))
+		}
+	}
+	if want := []string{old[1].Key, old[2].Key}; !slices.Equal(deleted, want) {
+		t.Errorf("deleted %q, want %q", deleted, want)
+	}
+	if want := []string{old[0].Key, newFoo}; !slices.Equal(f.ImageKeys, want) {
+		t.Errorf("images left %q, want %q", f.ImageKeys, want)
+	}
+	for _, k := range []string{old[1].Key, old[2].Key} {
+		if _, err := state.ReadImage(b.Dirs, k); err == nil {
+			t.Errorf("%s kept its record", k)
+		}
+	}
+}
+
+// An old image the backend won't delete (a VM uses it) stays.
+func TestRebuildKeepsImagesInUse(t *testing.T) {
+	b, f := testBuilder(t)
+	ctx := t.Context()
+	if err := b.Build(ctx, "base"); err != nil {
+		t.Fatal(err)
+	}
+	old := f.ImageKeys[0]
+	f.Errs = map[string]error{"DeleteImage": msg.ImageInUse(old, "devvm-p-0123456789abcd")}
+	if err := b.Rebuild(ctx, "base"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := state.ReadImage(b.Dirs, old); err != nil {
+		t.Errorf("the image in use lost its record: %v", err)
+	}
+}

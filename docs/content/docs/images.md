@@ -21,7 +21,29 @@ The image is checked before it's used:
 - When `gpgv` is installed (`brew install gnupg`, or `apt install gpgv`), `SHA256SUMS` must be signed by Ubuntu's cloud image key, pinned in `layers/ubuntu-cloud.gpg` (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`). No other key counts. When the signature is missing or doesn't match, devvm refuses the image.
 - Without `gpgv`, devvm says so, and only the HTTPS download vouches for the checksums.
 
-The Ubuntu image isn't part of base's key: a newer one doesn't make base stale.
+The Ubuntu image isn't part of base's key: a newer one doesn't make base stale. base's record keeps the one it was built from (its address and SHA-256), and `devvm rebuild base` takes the newest.
+
+## Layers
+
+An image is base and your layers on it, bottom first, joined with `+`: `foo+bar` is `bar` on `foo` on `base`. `base` itself can be left out, so `base+foo` is `foo`.
+
+A layer is a script of yours, `~/.config/devvm/layers/<name>.sh`, run with bash in the image's VM as its user, who has sudo. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and isn't `base`. devvm refuses any other name in an image, and a layer without its script.
+
+```sh
+devvm build foo+bar   # builds base, foo and foo+bar, unless they're built
+devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
+```
+
+## Building
+
+Each image is built in a VM of its own, which then is the image:
+
+1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings. A layer's VM is a copy of its parent image.
+2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement).
+3. The script runs: `layers/base.sh` for base, yours for a layer.
+4. The VM stops. Its record is written last, with its chain, what base started from, and its C library.
+
+Nothing from the host is mounted into a build: layer scripts run third-party installers, which mustn't see your files. base gets `base.yaml`'s memory, or half the host's when that would leave the host less than 2 GiB. The images built on it, and their VMs, keep that.
 
 ## Caching
 
@@ -42,6 +64,16 @@ So:
 
 An image whose key no longer matches its inputs is stale. It stays until it's deleted, and the next use builds a new one.
 
+### Rebuilding
+
+`devvm rebuild <image>` builds an image again from its parent as it is: for the newest packages a script installs without a pin, or for base, Ubuntu's newest cloud image. It changes the image's rebuild counter (`~/.local/share/devvm/images/rebuilds/<image>`), which its key hashes, so the image gets a new key, and so does every image on it.
+
+When images are built on it, devvm lists them first, and in a terminal asks before going on. After the build, it deletes every stale image no VM uses: the old one and those built on it among them. They're built again, on the new one, the next time they're needed. On Linux hosts, an image whose disk VMs are overlays of stays, and devvm says which VMs use it.
+
+### Outdated VMs
+
+A VM keeps the image it was made from, and its chain. When a key in the chain changes (an edited script, a rebuild), devvm warns that the VM is outdated, and leaves it as it is.
+
 Each shared tool image is named `<tool>-<version>-<key>.erofs`, and its key hashes the tool's entry in the tools lock (its version, downloads and their checksums), `tools/build.sh` and the C library it's built for. A new version, a new download or an edited build script builds it again, and a base with a different C library (Alpine's musl) gets its own.
 
 A key is the first 12 hex digits of a SHA-256. Each input goes in with its length, so different inputs never hash the same bytes. An image's record keeps its chain: the key of each image it's built on, from `base` up.
@@ -52,7 +84,7 @@ Nothing is written into the project folder. devvm keeps everything in two folder
 
 | Folder | Holds |
 | --- | --- |
-| `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
+| `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`) and rebuild counters (`images/rebuilds/`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
 | `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](backends.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, and the keys in devvm's SSH agent (`agent-keys`) |
 
 A VM's state file records the image it came from, its project folder, its backend and its settings, one `key=value` per line. It lasts as long as the VM: `devvm rm` deletes it too, so the next devvm in that folder starts fresh.
@@ -70,3 +102,5 @@ Each run that runs a command has one log, `~/.local/share/devvm/logs/runs/<date>
 In a terminal, a status line shows the step, how long it has run, and the log's latest line. A step that takes more than a few seconds leaves a line with its time.
 
 Ctrl+C, or closing the terminal, stops the command running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.
+
+A build that fails or is interrupted deletes the image it was building, once the end of the log is shown. The images under it, already built, stay. An image found without its record, from a build devvm couldn't clean up after (a crash, a power cut), is deleted and built again.

@@ -26,4 +26,8 @@ var docs = map[string]string{
 	"no_ubuntu_image":         "images#ubuntus-cloud-image",
 	"ubuntu_bad_signature":    "images#ubuntus-cloud-image",
 	"ubuntu_unsigned":         "images#ubuntus-cloud-image",
+	"unknown_layer":           "images#layers",
+	"script_failed":           "images#build-logs-and-interrupts",
+	"rebuild_replaces":        "images#rebuilding",
+	"vm_outdated":             "images#outdated-vms",
 }

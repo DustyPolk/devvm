@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rogpeppe/go-internal/testscript"
 )
@@ -26,11 +27,13 @@ func TestScript(t *testing.T) {
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
 			"stub_calls": stubCalls,
+			"wait_file":  waitFile,
 		},
 	})
 }
 
-// buildDevvm builds cmd/devvm into a temporary folder and returns that folder.
+// buildDevvm builds cmd/devvm into a temporary folder, with copies of the
+// files devvm reads next to itself, and returns that folder.
 func buildDevvm(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -38,6 +41,17 @@ func buildDevvm(t *testing.T) string {
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOBIN="+dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)
+	}
+	repo := filepath.Join("..", "..")
+	data, err := os.ReadFile(filepath.Join(repo, "base.yaml")) //nolint:gosec // the repo's own file
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "base.yaml"), data, 0o600) //nolint:gosec // the test's own folder
+	}
+	if err == nil {
+		err = os.CopyFS(filepath.Join(dir, "layers"), os.DirFS(filepath.Join(repo, "layers")))
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	return dir
 }
@@ -72,10 +86,40 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		return err
 	}
 	env.Setenv("STUB_LOG", log)
+	// Ubuntu's cloud images: one dated release in a folder, never the
+	// network.
+	rel := filepath.Join(root, "ubuntu", "release-20260101")
+	if err := os.MkdirAll(rel, 0o750); err != nil {
+		return err
+	}
+	sums := strings.Repeat("1", 64) + " *ubuntu-26.04-server-cloudimg-arm64.img\n" +
+		strings.Repeat("2", 64) + " *ubuntu-26.04-server-cloudimg-amd64.img\n"
+	if err := os.WriteFile(filepath.Join(rel, "SHA256SUMS"), []byte(sums), 0o600); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(rel, "SHA256SUMS.gpg"), []byte("signature\n"), 0o600); err != nil {
+		return err
+	}
+	env.Setenv("DEVVM_UBUNTU_URL", "file://"+filepath.Join(root, "ubuntu"))
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
 	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil
+}
+
+// waitFile waits up to 10 seconds for a file to exist, for a background
+// command to get somewhere.
+func waitFile(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: wait_file FILE")
+	}
+	for range 200 {
+		if _, err := os.Stat(ts.MkAbs(args[0])); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	ts.Fatalf("%s didn't appear", args[0])
 }
 
 // stubCalls writes the calls the stubs logged to stdout, one per line.

@@ -1,0 +1,112 @@
+# devvm build: base from Ubuntu's cloud image, a layer as a clone of its
+# parent's image, each built once and recorded; what a failed or
+# interrupted build leaves behind (nothing).
+env DEVVM_MESSAGES=names
+env IMAGES=$XDG_DATA_HOME/devvm/images
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+cp bar.sh $XDG_CONFIG_HOME/devvm/layers/bar.sh
+
+# base: Ubuntu's newest dated release, checked against its signed checksums,
+# without host mounts, confined; its record says which image it came from.
+exec devvm build base
+stdout '^==> building_image image=base key=[0-9a-f]{12}$'
+stdout '^base_build_time$'
+stdout '^==> image_ready image=base$'
+stub_calls
+stdout '^gpgv --keyring .*/layers/ubuntu-cloud\.gpg '
+stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"file://.*/release-20260101/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:(1{64}|2{64})"\}\] --memory=[0-9.]+ .*/base\.yaml$'
+stdout '^limactl edit --tty=false devvm-img-[0-9a-f]{12} .*--set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
+stdout '^limactl start --tty=false devvm-img-[0-9a-f]{12}$'
+stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
+stdout '^limactl shell --workdir / devvm-img-[0-9a-f]{12} sync$'
+stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
+grep 'Essentials, Docker, and mise' $STUB_DIR/scripts
+exec sh -c 'cat "$IMAGES"/*'
+stdout '^name=base$'
+stdout '^chain=base=[0-9a-f]{12}$'
+stdout '^digest=file://.*/release-20260101/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img sha256:(1{64}|2{64})$'
+stdout '^libc=gnu$'
+
+# Each step is numbered in the run log, and the count is what ran.
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
+stdout '^# \[1/5\] creating_from_ubuntu vm=devvm-img-'
+stdout '^# \[2/5\] configuring vm=devvm-img-'
+stdout '^# \[3/5\] starting vm=devvm-img-'
+stdout '^# \[4/5\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[5/5\] stopping vm=devvm-img-'
+! stdout '\[6/5\]'
+
+# Built and recorded: reused.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm build base
+! stdout building_image
+stub_calls
+! stdout 'create|clone|start'
+
+# An image without a record is a failed build: deleted and built again.
+exec sh -c 'rm "$IMAGES"/*'
+exec devvm build base
+stdout '^==> image_leftover image=base key=[0-9a-f]{12}$'
+stub_calls
+stdout '^limactl delete -f devvm-img-[0-9a-f]{12}$'
+exec sh -c 'cat "$IMAGES"/*'
+stdout '^name=base$'
+
+# A layer is a clone of its parent's image, without host mounts, running
+# the user's script; its record has its whole chain.
+exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/scripts"'
+exec devvm build base+foo
+stdout '^==> building_image image=foo key=[0-9a-f]{12}$'
+! stdout 'image=base'
+stub_calls
+stdout '^limactl clone --tty=false --mount-none devvm-img-[0-9a-f]{12} devvm-img-[0-9a-f]{12}$'
+! stdout 'limactl create'
+grep '^echo foo$' $STUB_DIR/scripts
+exec sh -c 'cat "$IMAGES"/*'
+stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
+stdout -count=2 '^libc=gnu$'
+
+# Names that aren't base or a layer are refused, before anything runs.
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm build foo+stray
+stderr '^devvm: unknown_layer layer=stray layers=base bar foo$'
+! exec devvm rebuild ../../x
+stderr '^devvm: unknown_layer layer=\.\./\.\./x layers=base bar foo$'
+! exec devvm build
+stderr 'usage_error'
+! stub_calls
+
+# A failed script: the end of the run log, and the unfinished image deleted.
+exec sh -c ': > "$STUB_DIR/shell-fails"'
+! exec devvm build foo+bar
+stderr '^--- log_end file=.*\.log$'
+stderr '^\+ limactl shell devvm-img-[0-9a-f]{12} bash -s$'
+stderr '^devvm: script_failed script=bar\.sh vm=devvm-img-[0-9a-f]{12}$'
+stdout '^==> unfinished_image vm=devvm-img-[0-9a-f]{12}$'
+stub_calls
+stdout '^limactl delete -f devvm-img-[0-9a-f]{12}$'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES" | grep -c .'
+stdout '^2\n2\n$'
+rm $STUB_DIR/shell-fails
+
+# Ctrl+C during a build deletes the unfinished image, never a finished one.
+exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/shell-hangs"'
+! exec devvm build foo+bar &b&
+wait_file $STUB_DIR/hanging
+kill -INT b
+wait b
+stdout '^==> interrupted_image vm=devvm-img-[0-9a-f]{12}$'
+! stderr script_failed
+stub_calls
+stdout -count=1 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES" | grep -c .'
+stdout '^2\n2\n$'
+rm $STUB_DIR/shell-hangs
+
+-- foo.sh --
+#!/bin/bash
+echo foo
+-- bar.sh --
+#!/bin/bash
+echo bar

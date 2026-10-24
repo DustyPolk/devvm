@@ -27,9 +27,34 @@ func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
+// BaseBuildTime is [base_build_time]: "    a few minutes, and Ubuntu's cloud image to download the first time"
+func BaseBuildTime() M {
+	return M{id: "base_build_time"}
+}
+
+// BuildFailed is [build_failed]: "couldn't build {{.image}}: {{.reason}}"
+func BuildFailed(image string, reason string) M {
+	return M{id: "build_failed", vals: []val{{"image", image}, {"reason", reason}}}
+}
+
+// BuildingImage is [building_image]: "building image {{.image}} ({{.key}})"
+func BuildingImage(image string, key string) M {
+	return M{id: "building_image", vals: []val{{"image", image}, {"key", key}}}
+}
+
+// CloningImage is [cloning_image]: "cloning {{.parent}}'s image"
+func CloningImage(parent string) M {
+	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
+}
+
 // Configuring is [configuring]: "configuring {{.vm}}"
 func Configuring(vm string) M {
 	return M{id: "configuring", vals: []val{{"vm", vm}}}
+}
+
+// Continue is [continue]: "continue?"
+func Continue() M {
+	return M{id: "continue"}
 }
 
 // Creating is [creating]: "creating {{.vm}}"
@@ -37,9 +62,24 @@ func Creating(vm string) M {
 	return M{id: "creating", vals: []val{{"vm", vm}}}
 }
 
+// CreatingFromUbuntu is [creating_from_ubuntu]: "creating {{.vm}} from Ubuntu's cloud image"
+func CreatingFromUbuntu(vm string) M {
+	return M{id: "creating_from_ubuntu", vals: []val{{"vm", vm}}}
+}
+
 // DeleteFailed is [delete_failed]: "couldn't delete {{.vm}}"
 func DeleteFailed(vm string) M {
 	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
+}
+
+// DeletedOldImage is [deleted_old_image]: "deleted the old image {{.image}} ({{.key}})"
+func DeletedOldImage(image string, key string) M {
+	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
+}
+
+// DeletedUnfinishedBuild is [deleted_unfinished_build]: "deleted {{.key}}, left over from a failed build"
+func DeletedUnfinishedBuild(key string) M {
+	return M{id: "deleted_unfinished_build", vals: []val{{"key", key}}}
 }
 
 // Deleting is [deleting]: "deleting {{.vm}}"
@@ -62,9 +102,24 @@ func ImageInUse(key string, vms string) M {
 	return M{id: "image_in_use", vals: []val{{"key", key}, {"vms", vms}}}
 }
 
+// ImageLeftover is [image_leftover]: "image {{.key}} is left over from a failed build of {{.image}}: building it again"
+func ImageLeftover(image string, key string) M {
+	return M{id: "image_leftover", vals: []val{{"image", image}, {"key", key}}}
+}
+
 // ImageMissing is [image_missing]: "there's no image {{.key}} in devvm's Lima home: build it again"
 func ImageMissing(key string) M {
 	return M{id: "image_missing", vals: []val{{"key", key}}}
+}
+
+// ImageReady is [image_ready]: "image {{.image}} ready"
+func ImageReady(image string) M {
+	return M{id: "image_ready", vals: []val{{"image", image}}}
+}
+
+// InterruptedImage is [interrupted_image]: "interrupted: deleting the unfinished image {{.vm}}"
+func InterruptedImage(vm string) M {
+	return M{id: "interrupted_image", vals: []val{{"vm", vm}}}
 }
 
 // LimaBroken is [lima_broken]: "limactl --version failed: reinstall Lima"
@@ -157,6 +212,11 @@ func NotAnImage(name string) M {
 	return M{id: "not_an_image", vals: []val{{"name", name}}}
 }
 
+// NothingChanged is [nothing_changed]: "nothing changed"
+func NothingChanged() M {
+	return M{id: "nothing_changed"}
+}
+
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
 func QEMUMissing(program string) M {
 	return M{id: "qemu_missing", vals: []val{{"program", program}}}
@@ -167,9 +227,24 @@ func QEMURefused() M {
 	return M{id: "qemu_refused"}
 }
 
+// RebuildReplaces is [rebuild_replaces]: "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
+func RebuildReplaces(above string, image string) M {
+	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
+}
+
 // RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
 func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
+}
+
+// RunningScript is [running_script]: "running {{.script}} in {{.vm}}"
+func RunningScript(script string, vm string) M {
+	return M{id: "running_script", vals: []val{{"script", script}, {"vm", vm}}}
+}
+
+// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}"
+func ScriptFailed(script string, vm string) M {
+	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
 // StartFailed is [start_failed]: "couldn't start {{.vm}}"
@@ -217,6 +292,16 @@ func UbuntuUnsigned() M {
 	return M{id: "ubuntu_unsigned"}
 }
 
+// UnfinishedImage is [unfinished_image]: "deleting the unfinished image {{.vm}}"
+func UnfinishedImage(vm string) M {
+	return M{id: "unfinished_image", vals: []val{{"vm", vm}}}
+}
+
+// UnknownLayer is [unknown_layer]: "there's no layer {{.layer}}: choose from {{.layers}}"
+func UnknownLayer(layer string, layers string) M {
+	return M{id: "unknown_layer", vals: []val{{"layer", layer}, {"layers", layers}}}
+}
+
 // UsageError is [usage_error]: "{{.reason}}: see devvm --help"
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
@@ -242,54 +327,77 @@ func VMNotStopped(vm string) M {
 	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
 }
 
+// VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made: it keeps the image it has"
+func VMOutdated(changed string) M {
+	return M{id: "vm_outdated", vals: []val{{"changed", changed}}}
+}
+
 // specs describes every message, by ID.
 var specs = map[string]spec{
-	"backend_lacks":           {fields: []string{"backend", "feature", "vm"}},
-	"backend_unknown":         {fields: []string{"backends", "name"}},
-	"backend_unknown_default": {fields: []string{"backends", "file", "name"}},
-	"backend_unknown_vm":      {fields: []string{"backend", "vm"}},
-	"backend_unreviewed":      {fields: []string{"backend", "feature", "vm"}},
-	"configuring":             {fields: []string{"vm"}},
-	"creating":                {fields: []string{"vm"}},
-	"delete_failed":           {fields: []string{"vm"}},
-	"deleting":                {fields: []string{"vm"}},
-	"disk_shrink":             {fields: []string{"have", "vm", "want"}},
-	"home_not_absolute":       {},
-	"image_in_use":            {fields: []string{"key", "vms"}},
-	"image_missing":           {fields: []string{"key"}},
-	"lima_broken":             {},
-	"lima_edit_failed":        {fields: []string{"vm"}},
-	"lima_global_config":      {fields: []string{"files"}},
-	"lima_home_too_long":      {fields: []string{"home", "vm"}},
-	"lima_host_unsupported":   {fields: []string{"os"}},
-	"lima_missing":            {},
-	"lima_old":                {fields: []string{"version"}},
-	"log_details":             {fields: []string{"file"}},
-	"log_end":                 {fields: []string{"file"}},
-	"mount_comma":             {fields: []string{"path"}},
-	"msg_bad_count":           {fields: []string{"value"}},
-	"msg_missing_value":       {fields: []string{"key", "name"}},
-	"msg_not_pair":            {fields: []string{"arg"}},
-	"msg_repeated_value":      {fields: []string{"key"}},
-	"msg_unexpected_value":    {fields: []string{"key", "name"}},
-	"msg_unknown":             {fields: []string{"name"}},
-	"no_ubuntu_image":         {fields: []string{"url", "version"}},
-	"not_an_image":            {fields: []string{"name"}},
-	"qemu_missing":            {fields: []string{"program"}},
-	"qemu_refused":            {},
-	"run_log_failed":          {fields: []string{"dir", "reason"}},
-	"start_failed":            {fields: []string{"vm"}},
-	"start_no_ssh":            {fields: []string{"console", "vm"}},
-	"started_with_warnings":   {fields: []string{"vm"}},
-	"starting":                {fields: []string{"vm"}},
-	"stop_failed":             {fields: []string{"vm"}},
-	"stopping":                {fields: []string{"vm"}},
-	"tool_bad_version":        {fields: []string{"tool", "version"}},
-	"ubuntu_bad_signature":    {fields: []string{"release", "url"}},
-	"ubuntu_unsigned":         {},
-	"usage_error":             {fields: []string{"reason"}},
-	"vm_create_failed":        {fields: []string{"vm"}},
-	"vm_has_networks":         {fields: []string{"file", "vm"}},
-	"vm_not_running":          {fields: []string{"vm"}},
-	"vm_not_stopped":          {fields: []string{"vm"}},
+	"backend_lacks":            {fields: []string{"backend", "feature", "vm"}},
+	"backend_unknown":          {fields: []string{"backends", "name"}},
+	"backend_unknown_default":  {fields: []string{"backends", "file", "name"}},
+	"backend_unknown_vm":       {fields: []string{"backend", "vm"}},
+	"backend_unreviewed":       {fields: []string{"backend", "feature", "vm"}},
+	"base_build_time":          {},
+	"build_failed":             {fields: []string{"image", "reason"}},
+	"building_image":           {fields: []string{"image", "key"}},
+	"cloning_image":            {fields: []string{"parent"}},
+	"configuring":              {fields: []string{"vm"}},
+	"continue":                 {},
+	"creating":                 {fields: []string{"vm"}},
+	"creating_from_ubuntu":     {fields: []string{"vm"}},
+	"delete_failed":            {fields: []string{"vm"}},
+	"deleted_old_image":        {fields: []string{"image", "key"}},
+	"deleted_unfinished_build": {fields: []string{"key"}},
+	"deleting":                 {fields: []string{"vm"}},
+	"disk_shrink":              {fields: []string{"have", "vm", "want"}},
+	"home_not_absolute":        {},
+	"image_in_use":             {fields: []string{"key", "vms"}},
+	"image_leftover":           {fields: []string{"image", "key"}},
+	"image_missing":            {fields: []string{"key"}},
+	"image_ready":              {fields: []string{"image"}},
+	"interrupted_image":        {fields: []string{"vm"}},
+	"lima_broken":              {},
+	"lima_edit_failed":         {fields: []string{"vm"}},
+	"lima_global_config":       {fields: []string{"files"}},
+	"lima_home_too_long":       {fields: []string{"home", "vm"}},
+	"lima_host_unsupported":    {fields: []string{"os"}},
+	"lima_missing":             {},
+	"lima_old":                 {fields: []string{"version"}},
+	"log_details":              {fields: []string{"file"}},
+	"log_end":                  {fields: []string{"file"}},
+	"mount_comma":              {fields: []string{"path"}},
+	"msg_bad_count":            {fields: []string{"value"}},
+	"msg_missing_value":        {fields: []string{"key", "name"}},
+	"msg_not_pair":             {fields: []string{"arg"}},
+	"msg_repeated_value":       {fields: []string{"key"}},
+	"msg_unexpected_value":     {fields: []string{"key", "name"}},
+	"msg_unknown":              {fields: []string{"name"}},
+	"no_ubuntu_image":          {fields: []string{"url", "version"}},
+	"not_an_image":             {fields: []string{"name"}},
+	"nothing_changed":          {},
+	"qemu_missing":             {fields: []string{"program"}},
+	"qemu_refused":             {},
+	"rebuild_replaces":         {fields: []string{"above", "image"}},
+	"run_log_failed":           {fields: []string{"dir", "reason"}},
+	"running_script":           {fields: []string{"script", "vm"}},
+	"script_failed":            {fields: []string{"script", "vm"}},
+	"start_failed":             {fields: []string{"vm"}},
+	"start_no_ssh":             {fields: []string{"console", "vm"}},
+	"started_with_warnings":    {fields: []string{"vm"}},
+	"starting":                 {fields: []string{"vm"}},
+	"stop_failed":              {fields: []string{"vm"}},
+	"stopping":                 {fields: []string{"vm"}},
+	"tool_bad_version":         {fields: []string{"tool", "version"}},
+	"ubuntu_bad_signature":     {fields: []string{"release", "url"}},
+	"ubuntu_unsigned":          {},
+	"unfinished_image":         {fields: []string{"vm"}},
+	"unknown_layer":            {fields: []string{"layer", "layers"}},
+	"usage_error":              {fields: []string{"reason"}},
+	"vm_create_failed":         {fields: []string{"vm"}},
+	"vm_has_networks":          {fields: []string{"file", "vm"}},
+	"vm_not_running":           {fields: []string{"vm"}},
+	"vm_not_stopped":           {fields: []string{"vm"}},
+	"vm_outdated":              {fields: []string{"changed"}},
 }
