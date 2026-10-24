@@ -489,6 +489,16 @@ other = "{{.vm}} was started outside devvm, so its network policy isn't enforced
 [net_unenforced]
 other = "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
 
+[net_off_log]
+other = "network policy is off for {{.vm}}, so nothing new is logged"
+
+[log_empty]
+other = "nothing logged for {{.vm}} yet"
+
+[log_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't read this folder's VM's network log: {{.reason}}"
+
 [proxy_ca_failed]
 other = "couldn't create the network policy proxy's CA in {{.dir}}"
 

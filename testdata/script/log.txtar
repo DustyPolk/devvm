@@ -1,0 +1,89 @@
+# log: what this folder's VM's proxy allowed and blocked, the last N, or
+# the blocks by host with the command that allows each.
+env DEVVM_MESSAGES=names
+env LOGS=$XDG_DATA_HOME/devvm/logs
+
+# No VM: nothing to show.
+mkdir $WORK/net
+cd $WORK/net
+! exec devvm log
+stderr '^devvm: no_vm dir=\S*/net$'
+
+# A VM with network policy that logged nothing yet.
+exec devvm --network-policy --no-git-protect base
+exec devvm log
+stdout '^==> log_empty vm=devvm-net-[0-9a-f]{14}$'
+! stderr .
+
+# Allowed and blocked connections and requests, oldest first, the last 50
+# or the last N.
+exec sh -c 'cp "$WORK/events.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
+exec devvm log
+cmp stdout $WORK/log.txt
+! stderr .
+exec devvm log -n 2
+stdout '\A2026-10-09T10:01:00Z  BLOCKED  a.test:443  not on the allowlist\n2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist\n\z'
+exec devvm log --lines 0
+! stdout .
+! exec devvm log -n x
+stderr '^devvm: usage_error reason='
+! exec devvm log -n -1
+stderr '^devvm: usage_error reason='
+
+# The blocks by host and port, by when last blocked, with the command
+# that allows each: only for a host name or address, and never for a
+# request refused whatever the allowlist says.
+exec devvm log --blocked
+cmp stdout $WORK/blocked.txt
+! exec devvm log --blocked -f
+stderr '^devvm: usage_error reason='
+
+# A host and reason from the VM with control characters: dropped.
+exec sh -c 'cp "$WORK/evil.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
+exec devvm log --blocked
+cmp stdout $WORK/evil-blocked.txt
+exec devvm log
+cmp stdout $WORK/evil.txt
+
+# A VM without network policy logs nothing new, and devvm says so.
+mkdir $WORK/off
+cd $WORK/off
+exec devvm --no-network-policy --no-git-protect base
+exec devvm log
+stdout '^==> log_empty vm=devvm-off-[0-9a-f]{14}$'
+stderr '^net_off_log vm=devvm-off-[0-9a-f]{14}$'
+
+-- events.jsonl --
+{"time":"2026-10-09T10:00:00Z","vm":"x","event":"blocked","host":"a.test","port":443,"method":"CONNECT","reason":"not on the allowlist"}
+{"time":"2026-10-09T10:00:05Z","vm":"x","event":"tunnel","host":"ok.test","port":443,"method":"CONNECT","rule":"ok.test"}
+{"time":"2026-10-09T10:00:06Z","vm":"x","event":"intercept","host":"api.github.com","port":443,"method":"CONNECT","rule":"*.github.com"}
+{"time":"2026-10-09T10:00:06Z","vm":"x","event":"forward","host":"api.github.com","port":443,"method":"GET","path":"/user","secrets":["github"]}
+{"time":"2026-10-09T10:00:07Z","vm":"x","event":"blocked","host":"api.github.com","port":443,"method":"POST","path":"/user/keys","reason":"makes an account key","refused":true}
+not an event
+{"time":"2026-10-09T10:00:08Z","vm":"x","event":"tunnel","host":"fd00::1","port":22,"method":"CONNECT","rule":"[fd00::1]:22"}
+{"time":"2026-10-09T10:01:00Z","vm":"x","event":"blocked","host":"a.test","port":443,"method":"CONNECT","reason":"not on the allowlist"}
+{"time":"2026-10-09T10:02:00Z","vm":"x","event":"blocked","host":"db.test","port":5432,"method":"CONNECT","reason":"not on the allowlist"}
+-- log.txt --
+2026-10-09T10:00:00Z  BLOCKED  a.test:443  not on the allowlist
+2026-10-09T10:00:05Z  allowed  ok.test:443  rule ok.test
+2026-10-09T10:00:06Z  allowed  api.github.com:443  rule *.github.com, decrypted
+2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, token: github
+2026-10-09T10:00:07Z  BLOCKED  api.github.com:443  makes an account key
+2026-10-09T10:00:08Z  allowed  [fd00::1]:22  rule [fd00::1]:22
+2026-10-09T10:01:00Z  BLOCKED  a.test:443  not on the allowlist
+2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist
+-- blocked.txt --
+LAST                  COUNT  HOST                ALLOW WITH
+2026-10-09T10:00:07Z  1      api.github.com:443  -
+2026-10-09T10:01:00Z  2      a.test:443          devvm policy allow a.test
+2026-10-09T10:02:00Z  1      db.test:5432        devvm policy allow db.test:5432
+-- evil.jsonl --
+{"time":"2026-10-09T10:00:00Z","vm":"x","event":"blocked","host":"x;sh*","port":443,"method":"CONNECT","reason":"not on the allowlist"}
+{"time":"2026-10-09T10:00:01Z","vm":"x","event":"blocked","host":"e\u001b]0;x\u0007vil.test","port":443,"method":"CONNECT","reason":"r\u009bm\nfake"}
+-- evil-blocked.txt --
+LAST                  COUNT  HOST               ALLOW WITH
+2026-10-09T10:00:00Z  1      x;sh*:443          -
+2026-10-09T10:00:01Z  1      e]0;xvil.test:443  -
+-- evil.txt --
+2026-10-09T10:00:00Z  BLOCKED  x;sh*:443  not on the allowlist
+2026-10-09T10:00:01Z  BLOCKED  e]0;xvil.test:443  rmfake

@@ -67,6 +67,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"net_direct_route":            "network#the-self-check",
 	"net_unenforced_stop":         "network#the-self-check",
 	"net_unenforced":              "network#the-self-check",
+	"net_off_log":                 "network#turning-it-on",
 	"proxy_start_failed":          "network#the-proxy",
 	"proxy_port_taken":            "network#the-proxy",
 	"no_secret":                   "network#secrets",

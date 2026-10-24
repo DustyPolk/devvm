@@ -107,6 +107,12 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 
 A value the VM's state doesn't have is `-`: a VM whose creation didn't finish has only its name, status and backend. A backend that can't list its VMs (Lima not installed, say) fails `devvm ls` only when a VM's state names it.
 
+## Network policy
+
+| | |
+| --- | --- |
+| `devvm log [-f] [-n N] [--blocked]` | show what this folder's VM connected to and what its [network policy](network.md) blocked: the last 50 unless `-n`; `-f` follows; `--blocked` lists the blocks by host, with the command that allows each ([details](network.md#logs)) |
+
 ## Images
 
 | | |

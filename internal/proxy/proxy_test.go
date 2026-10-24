@@ -33,10 +33,10 @@ func writePolicy(t *testing.T, rules string) *policy {
 
 func TestNewBlocks(t *testing.T) {
 	rs := []numbered{
-		{1, event{Host: "old.test", Port: 443, Reason: "not in the allowlist"}},
-		{2, event{Host: "registry.example.com", Port: 443, Reason: "not in the allowlist"}},
-		{3, event{Host: "registry.example.com", Port: 443, Reason: "not in the allowlist"}},
-		{4, event{Host: "db.test", Port: 5432, Reason: "not in the allowlist"}},
+		{1, Event{Host: "old.test", Port: 443, Reason: "not in the allowlist"}},
+		{2, Event{Host: "registry.example.com", Port: 443, Reason: "not in the allowlist"}},
+		{3, Event{Host: "registry.example.com", Port: 443, Reason: "not in the allowlist"}},
+		{4, Event{Host: "db.test", Port: 5432, Reason: "not in the allowlist"}},
 	}
 	newer := "4\n" +
 		"devvm: blocked registry.example.com:443 (not in the allowlist)\n" +
@@ -62,7 +62,7 @@ func TestNewBlocks(t *testing.T) {
 		}
 	}
 	// A refused request has no rule to allow it.
-	rs = append(rs, numbered{5, event{Host: "api.github.com", Port: 443, Method: "POST", Path: "/user/keys", Reason: "makes a key", Refused: true}})
+	rs = append(rs, numbered{5, Event{Host: "api.github.com", Port: 443, Method: "POST", Path: "/user/keys", Reason: "makes a key", Refused: true}})
 	if got, want := newBlocks(rs, 5, "4"), "5\ndevvm: refused POST api.github.com/user/keys (makes a key)\n"; got != want {
 		t.Errorf("refused:\n%s\nwant:\n%s", got, want)
 	}
@@ -253,6 +253,28 @@ func TestOddHostsRefused(t *testing.T) {
 	for _, ok := range []string{"example.com", "a-b.c_d.test", "10.0.0.1", "[fd00::1]", "localhost"} {
 		if !hostOK(ok) {
 			t.Errorf("hostOK(%q) = false", ok)
+		}
+	}
+}
+
+func TestAllowRule(t *testing.T) {
+	for _, c := range []struct {
+		host string
+		port int
+		want string
+	}{
+		{"a.test", 443, "a.test"},
+		{"a.test", 80, "a.test"},
+		{"db.test", 5432, "db.test:5432"},
+		{"fd00::1", 22, "[fd00::1]:22"},
+		{"x;sh*", 443, ""},
+		{"A.test", 443, ""},
+		{"a.test", 0, ""},
+		{"a.test", 65536, ""},
+	} {
+		got, ok := AllowRule(c.host, c.port)
+		if got != c.want || ok != (c.want != "") {
+			t.Errorf("AllowRule(%q, %d) = %q, %v; want %q", c.host, c.port, got, ok, c.want)
 		}
 	}
 }

@@ -637,9 +637,19 @@ func LogDetails(file string) M {
 	return M{id: "log_details", vals: []val{{"file", file}}}
 }
 
+// LogEmpty is [log_empty]: "nothing logged for {{.vm}} yet"
+func LogEmpty(vm string) M {
+	return M{id: "log_empty", vals: []val{{"vm", vm}}}
+}
+
 // LogEnd is [log_end]: "the end of {{.file}}:"
 func LogEnd(file string) M {
 	return M{id: "log_end", vals: []val{{"file", file}}}
+}
+
+// LogFailed is [log_failed]: "couldn't read this folder's VM's network log: {{.reason}}"
+func LogFailed(reason string) M {
+	return M{id: "log_failed", vals: []val{{"reason", reason}}}
 }
 
 // LoginCopyFailed is [login_copy_failed]: "couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}"
@@ -730,6 +740,11 @@ func NetDirectRoute(vm string) M {
 // NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs"
 func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
+}
+
+// NetOffLog is [net_off_log]: "network policy is off for {{.vm}}, so nothing new is logged"
+func NetOffLog(vm string) M {
+	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it was started outside devvm, so its network policy isn't enforced until devvm starts it again"
@@ -1391,7 +1406,9 @@ var specs = map[string]spec{
 	"load_key":                    {fields: []string{"cmd", "key"}},
 	"load_key_with":               {fields: []string{"cmd"}},
 	"log_details":                 {fields: []string{"file"}},
+	"log_empty":                   {fields: []string{"vm"}},
 	"log_end":                     {fields: []string{"file"}},
+	"log_failed":                  {fields: []string{"reason"}},
 	"login_copy_failed":           {fields: []string{"agent", "reason", "vm"}},
 	"ls_failed":                   {fields: []string{"reason"}},
 	"macos_old":                   {fields: []string{"version"}},
@@ -1410,6 +1427,7 @@ var specs = map[string]spec{
 	"net_ask":                     {fields: []string{"vm"}},
 	"net_direct_route":            {fields: []string{"vm"}},
 	"net_flag_ignored":            {},
+	"net_off_log":                 {fields: []string{"vm"}},
 	"net_unenforced":              {fields: []string{"vm"}},
 	"net_unenforced_restart":      {fields: []string{"vm"}},
 	"net_unenforced_stop":         {fields: []string{"vm"}},

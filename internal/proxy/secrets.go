@@ -340,7 +340,7 @@ func leafFor(host string) (*tls.Certificate, error) {
 // certificate on the client side, HTTP/1.1 or HTTP/2 inside, and each request forwarded upstream
 // over a new TLS connection with the secrets put in. Each request must be for host itself: the
 // secrets are bound to it, so another Host (a site on the same CDN, say) gets 421.
-func intercept(client net.Conn, host string, port int, e event) {
+func intercept(client net.Conn, host string, port int, e Event) {
 	tconn := tls.Server(client, &tls.Config{
 		NextProtos: []string{"h2", "http/1.1"},
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -364,7 +364,7 @@ func intercept(client net.Conn, host string, port int, e event) {
 				return
 			}
 			if what := mintsCredential(host, r.Method, r.URL.Path); what != "" {
-				record(event{
+				record(Event{
 					Event: "blocked", Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Refused: true,
 					Reason: "makes " + what + " with your token, which would outlast the VM; do it on the host",
 				})
@@ -433,7 +433,7 @@ func forwarder(scheme, target, host string, port int) http.Handler {
 			}
 			pr.Out.Header.Del("Proxy-Authorization")
 			pr.Out.Header.Del("Proxy-Connection")
-			e := event{Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent()}
+			e := Event{Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent()}
 			if scheme == "https" && interceptPorts[port] { // secrets only ever go over TLS, to :443
 				if bs := bindingsFor(host); len(bs) > 0 {
 					e.Secrets = inject(pr.Out.Header, bs)

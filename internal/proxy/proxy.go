@@ -113,7 +113,9 @@ var pol *policy
 
 // --- events ---
 
-type event struct {
+// Event is one line of the event log, as JSON: a decision about a
+// connection or a request. devvm log reads them.
+type Event struct {
 	Time    string   `json:"time"`
 	VM      string   `json:"vm"`
 	Event   string   `json:"event"` // tunnel, intercept, forward, blocked
@@ -131,7 +133,7 @@ type event struct {
 // A block and its number (the first is 1), for /blocked/new.
 type numbered struct {
 	n int
-	e event
+	e Event
 }
 
 var (
@@ -141,7 +143,7 @@ var (
 	blocks int                     // blocks so far
 )
 
-func record(e event) {
+func record(e Event) {
 	e.Time, e.VM = time.Now().UTC().Format(time.RFC3339), vmName
 	b, _ := json.Marshal(e)
 	logMu.Lock()
@@ -352,7 +354,7 @@ func splitHostPort(hp string, def int) (string, int) {
 	return norm(h), n
 }
 
-func block(w http.ResponseWriter, e event) {
+func block(w http.ResponseWriter, e Event) {
 	e.Event = "blocked"
 	record(e)
 	w.Header().Set("X-Devvm-Blocked", e.Host)
@@ -367,6 +369,16 @@ func ruleFor(host string, port int) string {
 		return host
 	}
 	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+// AllowRule is the rule that allows host:port, for a devvm policy allow
+// command; false for a host the policy doesn't take, which a logged event
+// can't have, or a log that was edited.
+func AllowRule(host string, port int) (string, bool) {
+	if !hostOK(host) || port < 1 || port > 65535 {
+		return "", false
+	}
+	return ruleFor(host, port), true
 }
 
 // check runs the policy and the floor; on success it returns the rule that allowed host:port.
@@ -390,7 +402,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
-	e := event{Host: host, Port: port, Method: "CONNECT"}
+	e := Event{Host: host, Port: port, Method: "CONNECT"}
 	rule, why := check(r.Context(), host, port)
 	if why != "" {
 		e.Reason = why
@@ -495,7 +507,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		serveReserved(w, r)
 		return
 	}
-	e := event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
+	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
 	if _, why := check(r.Context(), host, port); why != "" {
 		e.Reason = why
 		block(w, e)

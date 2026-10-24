@@ -154,7 +154,7 @@ func statusText(label string, secs int, logLine string, cols int) string {
 	if i := strings.LastIndexByte(logLine, '\r'); i >= 0 {
 		logLine = logLine[i+1:]
 	}
-	logLine = strings.NewReplacer("\t", "", "\n", "").Replace(printable(logLine))
+	logLine = OneLine(logLine)
 	room := cols - utf8.RuneCountInString(text) - 9
 	if room >= 10 && logLine != "" {
 		text += "  " + truncate(logLine, room)
@@ -183,6 +183,12 @@ func clearLine(drawn, cols int) string {
 		up = (drawn - 1) / cols
 	}
 	return "\r\033[K" + strings.Repeat("\033[A\033[K", up)
+}
+
+// OneLine drops every control character from s, newlines and tabs too: a
+// value a VM made, for one line of data output.
+func OneLine(s string) string {
+	return strings.NewReplacer("\t", "", "\n", "").Replace(printable(s))
 }
 
 // printable drops control characters (C0 but newline and tab, DEL, and C1

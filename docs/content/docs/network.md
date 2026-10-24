@@ -121,6 +121,22 @@ Which files each agent shares: [Coding agents](coding-agents.md).
 
 Every decision (`tunnel`, `intercept`, `forward`, `blocked`) is a JSON line in `~/.local/share/devvm/logs/<vm>.jsonl`, with the time, the VM, the host and port, the method and path when seen, the rule or reason, and the names of secrets put in, never their values. The proxy's own lines (what it loaded, what failed upstream) go to `<vm>.proxy.log` next to it: an upstream error stays there, since it can name addresses the VM shouldn't learn. Both folders are yours alone, and devvm's run logs never hold a VM's password.
 
+`devvm log` shows this folder's VM's decisions, oldest first, one line each: the time, `allowed` or `BLOCKED`, the host and port, then the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the tokens put in (`, token: github`), or why it was blocked:
+
+```text
+2026-10-09T10:00:00Z  BLOCKED  example.com:443  not on the allowlist
+2026-10-09T10:00:05Z  allowed  github.com:443  rule github.com
+2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, token: github
+```
+
+| | |
+| --- | --- |
+| `-n N`, `--lines N` | the last N (default 50) |
+| `-f`, `--follow` | then each new one as it happens, until Ctrl+C |
+| `--blocked` | the blocks instead, one row per host and port, by when last blocked: `LAST`, `COUNT`, `HOST` and `ALLOW WITH`, the `devvm policy allow` command that allows it |
+
+The VM chose the hosts and paths, so control characters in them are dropped. `ALLOW WITH` is `-` for a request refused whatever the allowlist says (a GitHub call that makes a credential) and for a host that isn't a host name or address. A VM without network policy logs nothing new, and `devvm log` says so. `devvm rm` deletes the VM's logs.
+
 ## devvm _proxy
 
 devvm runs the proxy as itself. Flags take one dash or two; errors end in one line, `network policy proxy: …`.

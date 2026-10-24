@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -260,4 +261,35 @@ func (e *Env) delete(ctx context.Context, t *found) error {
 		return err
 	}
 	return e.sshConfig().Write(ctx)
+}
+
+// LogOptions are what devvm log shows of the network log.
+type LogOptions struct {
+	Lines   int  // the last events shown
+	Follow  bool // then each new one, until ctx ends
+	Blocked bool // the blocks grouped by host instead
+}
+
+// Log writes the folder's VM's network log to w: what its proxy allowed
+// and blocked. A VM without network policy logs nothing new, and devvm
+// says so.
+func (e *Env) Log(ctx context.Context, w io.Writer, o LogOptions) error {
+	t, err := e.findExisting(ctx, "")
+	if err != nil {
+		return err
+	}
+	vm := t.f.Name
+	if !netpolicy.On(t.st) {
+		ui.Note(msg.NetOffLog(vm))
+	}
+	path := netpolicy.EventLog(e.Dirs, vm)
+	// Its proxy makes the log as it starts: following an empty one waits.
+	if fi, err := os.Stat(path); errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow {
+		ui.Info(msg.LogEmpty(vm))
+		return nil
+	}
+	if o.Blocked {
+		return netpolicy.WriteBlocked(w, path)
+	}
+	return netpolicy.WriteLog(ctx, w, path, o.Lines, o.Follow)
 }

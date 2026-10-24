@@ -9,8 +9,8 @@
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
-#                network policy and checks it reaches only its allowlist, its token stays on the
-#                host, and the self-check, on relaunch too
+#                network policy and checks it reaches only its allowlist, devvm log, its token stays
+#                on the host, and the self-check, on relaunch too
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python and claude) and alpine:3 (musl tools,
 #                Docker on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
@@ -479,6 +479,10 @@ check "another host is blocked by the proxy, and so is another port of an allowe
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://example.com' </dev/null 2>&1 | grep -q 403 &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
   ! limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://github.com:8443' </dev/null"
+check "devvm log shows the block and the allowed connection" bash -c "cd '$n' &&
+  '$D' log | grep -q '  BLOCKED  example.com:443  ' && '$D' log | grep -q '  allowed  github.com:443  rule '"
+check "devvm log --blocked groups it, with the command that allows it" bash -c "cd '$n' &&
+  '$D' log --blocked | grep -Eq '^[0-9TZ:-]+ +[0-9]+ +example\.com:443 +devvm policy allow example\.com\$'"
 check "DNS fails at once, not after a timeout" in_vm "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
 # A service on the host's own loopback (a devvm _proxy, which answers anything with 407): unreachable
 # directly, and refused by the VM's proxy (internal addresses need a rule naming them).
