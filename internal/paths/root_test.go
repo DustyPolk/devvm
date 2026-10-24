@@ -14,12 +14,12 @@ func TestRootOfFollowsLinks(t *testing.T) {
 	install := filepath.Join(tmp, "share", "devvm")
 	bin := filepath.Join(tmp, "bin")
 	for _, d := range []string{install, bin} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := os.MkdirAll(d, 0o750); err != nil {
 			t.Fatal(err)
 		}
 	}
 	exe := filepath.Join(install, "devvm")
-	if err := os.WriteFile(exe, nil, 0o755); err != nil {
+	if err := os.WriteFile(exe, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(bin, "devvm")

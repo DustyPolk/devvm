@@ -6,3 +6,50 @@ CGO_ENABLED = "0"
 
 [tools]
 go = "1.27.3"
+golangci-lint = "2.15.0"
+gotestsum = "1.13.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+goreleaser = "2.19.0"
+hugo-extended = "0.168.0"
+vale = "3.25.1"
+lychee = "0.24.2"
+node = "24.22.1"
+markdownlint-cli2 = "0.24.0"
+shellcheck = "0.11.0"
+minisign = "0.12"
+
+[tasks.fmt]
+description = "Format Go code"
+run = "golangci-lint fmt"
+
+[tasks.lint]
+description = "Run every linter"
+run = [
+  "golangci-lint run",
+  # Shell scripts, found by their shebang.
+  '''
+  git ls-files --cached --others --exclude-standard -z -- . ':!:.agents' |
+    xargs -0 grep -lIE '^#!.*[/ ](ba|da)?sh( |$)' |
+    xargs -r shellcheck --external-sources
+  ''',
+  # docs/: markdownlint-cli2, vale, lychee --offline.
+  # Message links: the check on doc pages linked from locales/en.toml.
+]
+
+[tasks.test]
+description = "Run the unit and CLI tests"
+env = { CGO_ENABLED = "1" }
+run = "gotestsum -- -race -cover ./..."
+
+[tasks.vuln]
+description = "Check dependencies for known vulnerabilities"
+run = "govulncheck ./..."
+
+[tasks.docs]
+description = "Serve the docs site"
+# The CLI reference regeneration runs first.
+run = "hugo server -s docs"
+
+[tasks.e2e]
+description = "Run the end-to-end tests against real VMs"
+run = "tests/e2e.sh"

@@ -1,0 +1,91 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - depguard
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - usestdlibvars
+  settings:
+    depguard:
+      rules:
+        proxy:
+          list-mode: strict
+          files:
+            - "**/internal/proxy/**"
+          allow:
+            - $gostd
+            - github.com/w3cj/devvm/internal/proxy
+        main:
+          list-mode: strict
+          files:
+            - $all
+            - "!$test"
+            - "!**/internal/proxy/**"
+          allow:
+            - $gostd
+            - github.com/w3cj/devvm
+            - github.com/spf13/cobra
+            - github.com/spf13/pflag
+            - github.com/nicksnyder/go-i18n/v2
+            - golang.org/x/text
+            - golang.org/x/term
+            - golang.org/x/sys
+        tests:
+          list-mode: strict
+          files:
+            - $test
+            - "!**/internal/proxy/**"
+          allow:
+            - $gostd
+            - github.com/w3cj/devvm
+            - github.com/spf13/cobra
+            - github.com/spf13/pflag
+            - github.com/nicksnyder/go-i18n/v2
+            - golang.org/x/text
+            - golang.org/x/term
+            - golang.org/x/sys
+            - github.com/rogpeppe/go-internal
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^os\.Exit$
+          msg: return an error; only cmd/devvm exits.
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: print through internal/ui.
+        - pattern: ^os\.(Stdout|Stderr)$
+          msg: print through internal/ui.
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: ^cmd/devvm/
+        linters: [forbidigo]
+        text: os\.Exit
+      - path: ^internal/ui/
+        linters: [forbidigo]
+        text: fmt\.Print|os\.(Stdout|Stderr)
+    paths:
+      - ^\.agents/
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/w3cj/devvm
+  exclusions:
+    paths:
+      - ^\.agents/
