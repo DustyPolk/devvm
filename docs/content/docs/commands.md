@@ -80,7 +80,7 @@ The VM's image is then its old one with them. `devvm remove TOOLS` takes shared 
 
 `devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Nothing else: other VMs, images and the project folder stay.
 
-When the VM's image has an agent, devvm first exports the agents' history from it, started if it's stopped ([history](coding-agents.md#history)). An export that fails keeps the VM. A `--clone` VM's clone is checked before that, for commits this repo hasn't fetched and uncommitted changes, and the repo's remote for it goes with it ([deleting the VM](clone.md#deleting-the-vm)). `devvm rm -f` deletes it without an export or those checks.
+When the VM's image has an agent, devvm first exports the agents' history from it, started if it's stopped ([history](coding-agents.md#history)). An export that fails keeps the VM. A `--clone` VM's clone is checked before that, for commits this repo hasn't fetched and uncommitted changes, and the repo's remote for it goes with it, its fetched work kept as local branches ([deleting the VM](clone.md#deleting-the-vm)). `devvm rm -f` deletes it without an export or those checks.
 
 ### A folder made again
 

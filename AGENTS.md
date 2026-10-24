@@ -166,7 +166,7 @@ Deliberate changes from the bash:
 - Sync stages in memory (no temp folder). Agent folder changes are `agent_dirs_added`/`_removed`; `mounts_next_start` replaces `mounts_on_restart`. Placeholders, tokens and host settings go in single-quoted, not `%q`.
 - Host keys are kept only as a key type and base64; a linked `~/.ssh/config` is written through its link. A VM whose host keys are read is shown at most 64 KiB, for 30 s.
 - An existing VM without state or `net=` is `vm_unfinished` before anything; rm deletes it without an export. `--backend` on one warns. `size_next_start`/`ports_next_start` replace `*_on_restart`. A VM whose `.git` protection was never set up gets it as new. `adopt` clears `git_inode`, so the next launch locks `.git` as appeared.
-- `--clone`: host git pushes and fetches through devvm's ssh config (pinned host keys), not Lima's; rm removes the remote's config only, so fetched branches stay; a failed copy is retried on the next launch (`clone_seed_failed`); `fetch_failed`, `clone_check_failed`, `remote_add_failed` keep the VM.
+- `--clone`: host git pushes and fetches through devvm's ssh config (pinned host keys), not Lima's; rm fetches unfetched branches into new local `saved/<remote>[-N]/*` branches, keeps the remote's fetched-only work there too, then `git remote remove`s it; a failed copy is retried on the next launch (`clone_seed_failed`); `fetch_failed`, `clone_check_failed`, `remote_add_failed` keep the VM.
 - `net_direct_route` doesn't name the Lima config. `DEVVM_SECRET_SERVICE` is checked for reads too. A failed tools resolve is `tools_need_resolve` with the log's end. e2e's sandbox and service differ from the bash's: its rebuilds delete every stale image in its Lima home.
 
 Pending in code:

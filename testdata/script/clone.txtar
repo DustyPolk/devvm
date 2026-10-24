@@ -2,7 +2,8 @@
 # mounted. The host's branches are pushed into it over devvm's ssh config,
 # the repo gets a devvm remote, and nothing of .git is locked. rm checks
 # the clone for commits the repo hasn't fetched and uncommitted changes,
-# and removes the remote. (The stubs keep the VM's files in
+# keeps fetched work as local branches and removes the remote. (The stubs
+# keep the VM's files in
 # $STUB_DIR/vmfs.)
 env DEVVM_MESSAGES=names
 env VMS=$XDG_DATA_HOME/devvm/vms
@@ -87,7 +88,7 @@ exec git remote get-url devvm
 stdout '^https://example.com/other.git$'
 exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm'
 ! exec devvm rm
-stdout '^unfetched_commits refs=main$'
+stdout '^unfetched_commits refs="main"$'
 stderr '^devvm: no_terminal_fetch remote=devvm-web$'
 exec sh -c 'ls "$VMS"'
 stdout devvm-web-
@@ -126,8 +127,20 @@ stderr '^devvm: clone_seed_failed vm=devvm-web-[0-9a-f]{14}$'
 rm $STUB_DIR/ssh-fails
 exec devvm
 stdout '^==> clone_ready branch=main remote=devvm$'
+
+# rm -f: the VM's work fetched only into devvm/* is kept as new local
+# branches under saved/devvm, then the remote goes with its
+# remote-tracking branches.
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm-2'
+exec git fetch -q devvm
 exec devvm rm -f
+stdout '^==> saved_branches branches="saved/devvm/main"$'
 stdout '^==> removed_remote remote=devvm$'
+exec git log --format=%s -1 saved/devvm/main
+stdout '^from-vm-2$'
+exec git for-each-ref refs/remotes
+! stdout .
+exec git branch -D saved/devvm/main
 
 # A VM that mounts the folder: --clone on it is refused.
 exec devvm --no-network-policy --no-git-protect base

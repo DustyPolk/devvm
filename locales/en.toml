@@ -458,17 +458,31 @@ other = "uncommitted changes in {{.dir}} weren't copied: commit them, then git p
 other = "the VM has its own clone of {{.branch}} and your other branches, without untracked or ignored files. Get its work with git fetch {{.remote}}, review it (git log -p {{.branch}}..{{.remote}}/{{.branch}}), then merge"
 
 [unfetched_commits]
-description = "refs is a space-separated list of branches"
+description = "refs is a space-separated list of quoted branch names"
 other = "The VM has commits this repo hasn't fetched, on: {{.refs}}"
 
 [no_terminal_fetch]
 other = "not a terminal: run git fetch {{.remote}} first, or devvm rm -f to delete anyway"
 
+[branch_names_invalid]
+description = "refs is a space-separated list of quoted branch names"
+other = "skipping the VM's branches with names git refuses: {{.refs}}"
+
+[saved_names_taken]
+other = "no free branch names saved/{{.remote}}/* to saved/{{.remote}}-99/* in this repo; {{.vm}} is kept"
+
 [fetch_before_delete]
-other = "Fetch them into {{.remote}}/* before deleting?"
+other = "Fetch them into local branches {{.prefix}}/* before deleting?"
 
 [fetching]
-other = "fetching the VM's branches into {{.remote}}/*"
+other = "fetching the VM's branches into {{.prefix}}/*"
+
+[saved_branches]
+description = "branches is a space-separated list of quoted branch names"
+other = "kept the VM's branches as local branches {{.branches}}"
+
+[remote_kept]
+other = "couldn't keep the branches fetched from git remote {{.remote}} as local branches, so the remote stays"
 
 [fetch_failed]
 other = "couldn't fetch the branches in {{.vm}}; it's kept"
@@ -489,7 +503,7 @@ other = "Delete anyway?"
 other = "kept {{.vm}}"
 
 [removed_remote]
-other = "removed git remote {{.remote}}; branches fetched from it stay, as {{.remote}}/*"
+other = "removed git remote {{.remote}}"
 
 [setid_files]
 description = "files is a space-separated list of paths"

@@ -28,18 +28,20 @@ The repo gets a git remote for the VM, named `devvm`, or `devvm-<folder>` when `
 
 ## Fetching the VM's work
 
-Fetching runs nothing from the VM on this machine: git only receives objects and updates `devvm/*`. The commits themselves are untrusted, so review them before you merge them, check them out or run anything they change, as you would a contributor's branch.
+Fetching runs nothing from the VM on this machine: git only receives objects and updates `devvm/*` (rm's fetch: new `saved/devvm/*` branches). The commits themselves are untrusted, so review them before you merge them, check them out or run anything they change, as you would a contributor's branch.
 
 ## Deleting the VM
 
 `devvm rm` checks the clone first, starting the VM if it's stopped:
 
-1. When it has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into `devvm/*`.
+1. When it has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches, `saved/devvm/<branch>`.
 2. When it has uncommitted changes, devvm lists them (the first 20) and asks before deleting them with the VM.
 
-Without a terminal to ask in, either one refuses, and the VM stays. Then devvm deletes the VM and removes the remote if it still points at the VM. Branches fetched from it stay, as `devvm/*`, until you delete them (`git branch -rd devvm/main`).
+Without a terminal to ask in, either one refuses, and the VM stays. Then devvm deletes the VM and, if the remote still points at the VM, removes it fully (`git remote remove`: its `devvm/*` branches and upstream settings go too). First, any `devvm/*` branch with commits no other branch has, fetched by you or otherwise, is kept as a new local branch under `saved/devvm/` too. devvm names the branches it makes. They're yours to review, merge or delete (`git branch -D saved/devvm/main`).
 
-`devvm rm -f` skips the checks.
+The local branches are named `saved/<remote>/<branch>`, after the remote's name. devvm never overwrites a branch: if any branch is, is in or holds `saved/<remote>`, it uses `saved/<remote>-2`, then `-3`, up to `-99`. With none free (a branch named `saved`, say), rm refuses before fetching and the VM stays; at deletion, the remote stays, with its branches. Branch names come from the VM, so devvm shows them quoted and skips any that git refuses as branch names.
+
+`devvm rm -f` skips the checks; it still keeps fetched branches.
 
 ## Requirements
 

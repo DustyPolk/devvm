@@ -92,6 +92,11 @@ func BaseBuildTime() M {
 	return M{id: "base_build_time"}
 }
 
+// BranchNamesInvalid is [branch_names_invalid]: "skipping the VM's branches with names git refuses: {{.refs}}"
+func BranchNamesInvalid(refs string) M {
+	return M{id: "branch_names_invalid", vals: []val{{"refs", refs}}}
+}
+
 // BuildFailed is [build_failed]: "couldn't build {{.image}}: {{.reason}}"
 func BuildFailed(image string, reason string) M {
 	return M{id: "build_failed", vals: []val{{"image", image}, {"reason", reason}}}
@@ -292,9 +297,9 @@ func Exported(file string, vm string) M {
 	return M{id: "exported", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into {{.remote}}/* before deleting?"
-func FetchBeforeDelete(remote string) M {
-	return M{id: "fetch_before_delete", vals: []val{{"remote", remote}}}
+// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before deleting?"
+func FetchBeforeDelete(prefix string) M {
+	return M{id: "fetch_before_delete", vals: []val{{"prefix", prefix}}}
 }
 
 // FetchFailed is [fetch_failed]: "couldn't fetch the branches in {{.vm}}; it's kept"
@@ -307,9 +312,9 @@ func FetchUntil(file string, remote string) M {
 	return M{id: "fetch_until", vals: []val{{"file", file}, {"remote", remote}}}
 }
 
-// Fetching is [fetching]: "fetching the VM's branches into {{.remote}}/*"
-func Fetching(remote string) M {
-	return M{id: "fetching", vals: []val{{"remote", remote}}}
+// Fetching is [fetching]: "fetching the VM's branches into {{.prefix}}/*"
+func Fetching(prefix string) M {
+	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
 }
 
 // GitAppeared is [git_appeared]: "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
@@ -712,12 +717,17 @@ func RemoteAddFailed(remote string) M {
 	return M{id: "remote_add_failed", vals: []val{{"remote", remote}}}
 }
 
+// RemoteKept is [remote_kept]: "couldn't keep the branches fetched from git remote {{.remote}} as local branches, so the remote stays"
+func RemoteKept(remote string) M {
+	return M{id: "remote_kept", vals: []val{{"remote", remote}}}
+}
+
 // RemotesTaken is [remotes_taken]: "git remotes devvm, devvm-{{.slug}} and {{.vm}} are all taken: remove one and run devvm again"
 func RemotesTaken(slug string, vm string) M {
 	return M{id: "remotes_taken", vals: []val{{"slug", slug}, {"vm", vm}}}
 }
 
-// RemovedRemote is [removed_remote]: "removed git remote {{.remote}}; branches fetched from it stay, as {{.remote}}/*"
+// RemovedRemote is [removed_remote]: "removed git remote {{.remote}}"
 func RemovedRemote(remote string) M {
 	return M{id: "removed_remote", vals: []val{{"remote", remote}}}
 }
@@ -745,6 +755,16 @@ func RunLogFailed(dir string, reason string) M {
 // RunningScript is [running_script]: "running {{.script}} in {{.vm}}"
 func RunningScript(script string, vm string) M {
 	return M{id: "running_script", vals: []val{{"script", script}, {"vm", vm}}}
+}
+
+// SavedBranches is [saved_branches]: "kept the VM's branches as local branches {{.branches}}"
+func SavedBranches(branches string) M {
+	return M{id: "saved_branches", vals: []val{{"branches", branches}}}
+}
+
+// SavedNamesTaken is [saved_names_taken]: "no free branch names saved/{{.remote}}/* to saved/{{.remote}}-99/* in this repo; {{.vm}} is kept"
+func SavedNamesTaken(remote string, vm string) M {
+	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
 }
 
 // ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build deletes it"
@@ -1082,6 +1102,7 @@ var specs = map[string]spec{
 	"bad_path":                    {fields: []string{"dir"}},
 	"bad_secret_service":          {},
 	"base_build_time":             {},
+	"branch_names_invalid":        {fields: []string{"refs"}},
 	"build_failed":                {fields: []string{"image", "reason"}},
 	"building_image":              {fields: []string{"image", "key"}},
 	"building_tools":              {fields: []string{"tools"}},
@@ -1122,10 +1143,10 @@ var specs = map[string]spec{
 	"downloading_mise":            {fields: []string{"version"}},
 	"export_failed":               {fields: []string{"vm"}},
 	"exported":                    {fields: []string{"file", "vm"}},
-	"fetch_before_delete":         {fields: []string{"remote"}},
+	"fetch_before_delete":         {fields: []string{"prefix"}},
 	"fetch_failed":                {fields: []string{"vm"}},
 	"fetch_until":                 {fields: []string{"file", "remote"}},
-	"fetching":                    {fields: []string{"remote"}},
+	"fetching":                    {fields: []string{"prefix"}},
 	"git_appeared":                {},
 	"git_commondir":               {fields: []string{"git", "target"}},
 	"git_embedded_new":            {fields: []string{"git"}},
@@ -1206,6 +1227,7 @@ var specs = map[string]spec{
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
 	"remote_add_failed":           {fields: []string{"remote"}},
+	"remote_kept":                 {fields: []string{"remote"}},
 	"remotes_taken":               {fields: []string{"slug", "vm"}},
 	"removed_remote":              {fields: []string{"remote"}},
 	"resolving_tools":             {},
@@ -1213,6 +1235,8 @@ var specs = map[string]spec{
 	"rm_failed":                   {fields: []string{"reason"}},
 	"run_log_failed":              {fields: []string{"dir", "reason"}},
 	"running_script":              {fields: []string{"script", "vm"}},
+	"saved_branches":              {fields: []string{"branches"}},
+	"saved_names_taken":           {fields: []string{"remote", "vm"}},
 	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
 	"secret_read_failed":          {fields: []string{"reason", "secret"}},
 	"secret_to_terminal":          {},

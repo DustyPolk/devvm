@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -172,26 +174,17 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return false, err
 	}
-	refs, err := e.cloneGit(ctx, b, vm, dir, "for-each-ref", "--format=%(objectname) %(refname:short)", "refs/heads")
+	refs, err := e.cloneGit(ctx, b, vm, dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads")
 	if err != nil {
 		return false, err
 	}
 	if unfetched := unfetchedRefs(ctx, dir, refs); len(unfetched) > 0 {
-		ui.Say(msg.UnfetchedCommits(strings.Join(unfetched, " ")))
+		ui.Say(msg.UnfetchedCommits(quoted(unfetched)))
 		if !terminal() {
 			return false, msg.NoTerminalFetch(remote)
 		}
-		if confirm(msg.FetchBeforeDelete(remote)) {
-			if err := e.sshConfig().Write(ctx); err != nil {
-				return false, err
-			}
-			fetch := e.gitSSH(ctx, dir, "fetch", cloneURL(vm, dir), "+refs/heads/*:refs/remotes/"+remote+"/*")
-			if err := ui.LoggedCmd(ctx, msg.Fetching(remote), fetch); err != nil {
-				if ctx.Err() != nil {
-					return false, ctx.Err()
-				}
-				return false, backend.Logged(msg.FetchFailed(vm))
-			}
+		if err := e.fetchUnfetched(ctx, vm, dir, remote, unfetched); err != nil {
+			return false, err
 		}
 	}
 	dirty, err := e.cloneGit(ctx, b, vm, dir, "status", "--porcelain")
@@ -232,8 +225,10 @@ func (e *Env) cloneGit(ctx context.Context, b backend.Backend, vm, dir string, a
 	return out.Bytes(), nil
 }
 
-// unfetchedRefs returns, from the VM's for-each-ref lines ("SHA REF"),
-// the branches whose commits dir's repo lacks, as they can be shown.
+// unfetchedRefs returns, from the VM's for-each-ref lines ("SHA
+// refs/heads/BRANCH"), the branches with commits no ref in dir's repo
+// has, as the VM named them: untrusted, so checked (validBranch) before
+// use and quoted when shown.
 func unfetchedRefs(ctx context.Context, dir string, refs []byte) []string {
 	var out []string
 	s := bufio.NewScanner(bytes.NewReader(refs))
@@ -243,18 +238,111 @@ func unfetchedRefs(ctx context.Context, dir string, refs []byte) []string {
 			continue
 		}
 		if objectName.MatchString(sha) {
-			if _, err := hostGit(ctx, dir, "cat-file", "-e", sha+"^{commit}"); err == nil {
+			if got, err := hostGit(ctx, dir, "rev-list", "-n1", sha, "--not", "--all"); err == nil && got == "" {
 				continue
 			}
 		}
-		out = append(out, msg.Shown(ref))
+		out = append(out, strings.TrimPrefix(ref, "refs/heads/"))
 	}
 	return out
 }
 
+// fetchUnfetched offers to fetch the VM's unfetched branches into new
+// local branches, saved/<remote>/<branch> (savedPrefix), never over one
+// that exists. Branches whose names git refuses are skipped.
+func (e *Env) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetched []string) error {
+	var good, bad []string
+	for _, br := range unfetched {
+		if validBranch(ctx, dir, br) {
+			good = append(good, br)
+		} else {
+			bad = append(bad, br)
+		}
+	}
+	if len(bad) > 0 {
+		warn(msg.BranchNamesInvalid(quoted(bad)))
+	}
+	if len(good) == 0 {
+		return nil
+	}
+	prefix, ok := savedPrefix(ctx, dir, remote)
+	if !ok {
+		return msg.SavedNamesTaken(remote, vm)
+	}
+	if !confirm(msg.FetchBeforeDelete(prefix)) {
+		return nil
+	}
+	if err := e.sshConfig().Write(ctx); err != nil {
+		return err
+	}
+	args := []string{"fetch", "--no-tags", cloneURL(vm, dir)}
+	saved := make([]string, len(good))
+	for i, br := range good {
+		saved[i] = prefix + "/" + br
+		args = append(args, "refs/heads/"+br+":refs/heads/"+saved[i])
+	}
+	if err := ui.LoggedCmd(ctx, msg.Fetching(prefix), e.gitSSH(ctx, dir, args...)); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return backend.Logged(msg.FetchFailed(vm))
+	}
+	info(msg.SavedBranches(quoted(saved)))
+	return nil
+}
+
+// validBranch reports whether git takes name as a branch name.
+func validBranch(ctx context.Context, dir, name string) bool {
+	_, err := hostGit(ctx, dir, "check-ref-format", "refs/heads/"+name)
+	return err == nil
+}
+
+// savedPrefixMax is how many names savedPrefix tries.
+const savedPrefixMax = 99
+
+// savedPrefix is where a deleted VM's branches are kept, as local
+// branches: saved/<remote>, else saved/<remote>-2 and on to -99, the first
+// that no local branch is, is in or holds. A remote devvm picks starts
+// with devvm, so these never look like a later VM's remote-tracking
+// branches.
+func savedPrefix(ctx context.Context, dir, remote string) (string, bool) {
+	out, err := hostGit(ctx, dir, "for-each-ref", "--format=%(refname)", "refs/heads")
+	if err != nil {
+		return "", false
+	}
+	heads := strings.Fields(out)
+	for n := 1; n <= savedPrefixMax; n++ {
+		p := "refs/heads/saved/" + remote
+		if n > 1 {
+			p += "-" + strconv.Itoa(n)
+		}
+		free := true
+		for _, h := range heads {
+			if h == p || strings.HasPrefix(h, p+"/") || strings.HasPrefix(p, h+"/") {
+				free = false
+				break
+			}
+		}
+		if free {
+			return strings.TrimPrefix(p, "refs/heads/"), true
+		}
+	}
+	return "", false
+}
+
+// quoted is names, each quoted, space-separated.
+func quoted(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = strconv.Quote(n)
+	}
+	return strings.Join(q, " ")
+}
+
 // removeRemote removes the repo's remote for the deleted VM, if it still
-// is the VM's. The branches fetched from it stay (git remote remove would
-// delete them, rm's fetch included).
+// is the VM's, with its remote-tracking branches and upstream settings.
+// Fetched branches holding commits no other ref has are kept as local
+// branches first (saveFetched); if that fails, the remote stays.
 func removeRemote(ctx context.Context, dir, vm, remote string) {
 	if remote == "" {
 		return
@@ -262,9 +350,55 @@ func removeRemote(ctx context.Context, dir, vm, remote string) {
 	if url, ok := remoteURL(ctx, dir, remote); !ok || url != cloneURL(vm, dir) {
 		return
 	}
-	if _, err := hostGit(ctx, dir, "config", "--remove-section", "remote."+remote); err == nil {
+	if err := saveFetched(ctx, dir, remote); err != nil {
+		warn(msg.RemoteKept(remote))
+		return
+	}
+	if _, err := hostGit(ctx, dir, "remote", "remove", remote); err == nil {
 		info(msg.RemovedRemote(remote))
 	}
+}
+
+// saveFetched makes a new local branch, under savedPrefix, of each of
+// remote's remote-tracking branches with commits no other ref has, all at
+// once and never over a branch that exists.
+func saveFetched(ctx context.Context, dir, remote string) error {
+	tracking := "refs/remotes/" + remote + "/"
+	out, err := hostGit(ctx, dir, "for-each-ref", "--format=%(objectname) %(refname)", tracking)
+	if err != nil {
+		return err
+	}
+	var input strings.Builder
+	var saved []string
+	prefix := ""
+	for line := range strings.Lines(out) {
+		sha, ref, _ := strings.Cut(strings.TrimSpace(line), " ")
+		br := strings.TrimPrefix(ref, tracking)
+		if sha == "" || br == "HEAD" || !validBranch(ctx, dir, br) {
+			continue
+		}
+		if only, err := hostGit(ctx, dir, "rev-list", "-n1", sha, "--not", "--exclude="+tracking+"*", "--all"); err != nil || only == "" {
+			continue
+		}
+		if prefix == "" {
+			var ok bool
+			if prefix, ok = savedPrefix(ctx, dir, remote); !ok {
+				return errors.New("no free saved/ branch names")
+			}
+		}
+		saved = append(saved, prefix+"/"+br)
+		input.WriteString("create refs/heads/" + prefix + "/" + br + " " + sha + "\n")
+	}
+	if len(saved) == 0 {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "update-ref", "--stdin") //nolint:gosec // devvm's own arguments
+	cmd.Stdin = strings.NewReader(input.String())
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	info(msg.SavedBranches(quoted(saved)))
+	return nil
 }
 
 // capped keeps the first max bytes written to it, and takes the rest

@@ -7,7 +7,7 @@
 #                name with pinned host keys, .git protection and shell, then opening it again,
 #                restart and rm, and an agent VM's folders and exported history; clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
-#                for unfetched commits and uncommitted changes; tools makes a node
+#                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, its token stays on the
 #                host, and the self-check, on relaunch too
@@ -369,9 +369,10 @@ check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgi
 in_vm "$vm" "cd '$c' && echo c > c" >/dev/null 2>&1
 check "then rm refuses with uncommitted changes in the clone, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && grep -qx '?? c' '$work/last.log' && limactl list -q | grep -qx $vm"
-check "rm -f deletes it and the remote; the fetched branches stay" bash -c "cd '$c' && HOME='$ch' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+check "rm -f deletes it and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
-  git -C '$c' log --oneline devvm/main | grep -q from-vm && [[ ! -e '$ch/.ssh/config' ]]"
+  [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&
+  grep -qF \"\$(m saved_branches 'branches=\"saved/devvm/main\"' | head -1)\" '$work/last.log' && [[ ! -e '$ch/.ssh/config' ]]"
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 fi
 

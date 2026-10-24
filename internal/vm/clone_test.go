@@ -128,11 +128,11 @@ func TestCloneRm(t *testing.T) {
 	if err := e.Rm(t.Context(), false); err != nil {
 		t.Fatal(names(err))
 	}
-	want := []string{"fetch_before_delete remote=devvm", "delete_anyway"}
+	want := []string{"fetch_before_delete prefix=saved/devvm", "delete_anyway"}
 	if _, ok := f.Instances[vm]; !ok || !slices.Equal(*asked, want) {
 		t.Fatalf("declined: asked %q", *asked)
 	}
-	if _, err := hostGit(t.Context(), e.Dir, "rev-parse", "-q", "--verify", "refs/remotes/devvm/main"); err == nil {
+	if _, err := hostGit(t.Context(), e.Dir, "rev-parse", "-q", "--verify", "refs/heads/saved/devvm/main"); err == nil {
 		t.Error("fetched without a yes")
 	}
 
@@ -150,18 +150,72 @@ func TestCloneRm(t *testing.T) {
 	if _, ok := f.Instances[vm]; ok || !slices.Equal(*asked, want[:1]) {
 		t.Errorf("confirmed: deleted %v, asked %q", !ok, *asked)
 	}
-	if got := gitIn(t, e.Dir, "log", "--format=%s", "-1", "refs/remotes/devvm/main"); got != "from-vm" {
+	if got := gitIn(t, e.Dir, "log", "--format=%s", "-1", "refs/heads/saved/devvm/main"); got != "from-vm" {
 		t.Errorf("fetched %q", got)
 	}
 	if out, err := hostGit(t.Context(), e.Dir, "remote"); err != nil || strings.Contains(out, "devvm") {
 		t.Errorf("remotes %q", out)
 	}
+	if out := gitIn(t, e.Dir, "for-each-ref", "--format=%(refname)", "refs/remotes"); out != "" {
+		t.Errorf("remote-tracking branches %q", out)
+	}
 
-	refs := []byte("0123456789abcdef0123456789abcdef01234567 known\n$(touch-x) evil\nnot-hex\n\n" +
-		gitIn(t, e.Dir, "rev-parse", "HEAD") + " main\n")
+	// Known commits on any ref are fetched; unknown, dangling or not
+	// object names aren't.
+	dangling := gitIn(t, e.Dir, "commit-tree", "-m", "dangling", gitIn(t, e.Dir, "rev-parse", "HEAD^{tree}"))
+	refs := []byte("0123456789abcdef0123456789abcdef01234567 refs/heads/known\n$(touch-x) refs/heads/evil\nnot-hex\n\n" +
+		gitIn(t, e.Dir, "rev-parse", "HEAD") + " refs/heads/main\n" + dangling + " refs/heads/dangling\n")
 	got := unfetchedRefs(t.Context(), e.Dir, refs)
-	if !slices.Equal(got, []string{"known", "evil", ""}) {
+	if !slices.Equal(got, []string{"known", "evil", "", "dangling"}) {
 		t.Errorf("unfetched %q", got)
+	}
+}
+
+// Branch names git refuses are skipped, and never asked about.
+func TestFetchUnfetchedInvalid(t *testing.T) {
+	e, _, _ := cloneEnv(t)
+	got := printed(t, true)
+	if err := e.fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
+		t.Fatal(names(err))
+	}
+	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
+	if !slices.Equal(*got, want) {
+		t.Errorf("printed %q", *got)
+	}
+	gitIn(t, e.Dir, "branch", "saved")
+	*got = nil
+	err := e.fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
+	if names(err) != "saved_names_taken remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
+		t.Errorf("no free names: %s, printed %q", names(err), *got)
+	}
+}
+
+// A deleted VM's branches go under saved/<remote>, else saved/<remote>-N,
+// the first no branch is, is in or holds.
+func TestSavedPrefix(t *testing.T) {
+	gitEnv(t)
+	dir := t.TempDir()
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", "one")
+	for _, c := range []struct{ add, want string }{
+		{"", "saved/devvm"},
+		{"saved/devvm/main", "saved/devvm-2"},
+		{"saved/devvm-2", "saved/devvm-3"},
+		{"saved/devvm-30/x", "saved/devvm-3"},
+		{"saved/devvm-3/a/b", "saved/devvm-4"},
+		{"saved", ""},
+	} {
+		if c.add != "" {
+			if c.add == "saved" {
+				for _, b := range strings.Fields(gitIn(t, dir, "for-each-ref", "--format=%(refname)", "refs/heads/saved")) {
+					gitIn(t, dir, "update-ref", "-d", b)
+				}
+			}
+			gitIn(t, dir, "branch", c.add)
+		}
+		if got, _ := savedPrefix(t.Context(), dir, "devvm"); got != c.want {
+			t.Errorf("after %s: %q, want %q", c.add, got, c.want)
+		}
 	}
 }
 
@@ -230,18 +284,61 @@ func TestFreeRemote(t *testing.T) {
 	}
 }
 
-// The remote goes only while it's still the VM's.
+// The remote goes only while it's still the VM's, with its upstream
+// settings and remote-tracking branches; those with commits no other ref
+// has are kept as new local branches first, never over existing ones.
 func TestRemoveRemote(t *testing.T) {
 	gitEnv(t)
+	got := printed(t, false)
 	dir := t.TempDir()
-	gitIn(t, dir, "init", "-q")
+	vm := "devvm-web-0123456789abcd"
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", "one")
 	gitIn(t, dir, "remote", "add", "devvm", "https://example.com/mine")
-	removeRemote(t.Context(), dir, "devvm-web-0123456789abcd", "devvm")
+	removeRemote(t.Context(), dir, vm, "devvm")
 	gitIn(t, dir, "remote", "get-url", "devvm")
-	gitIn(t, dir, "remote", "set-url", "devvm", cloneURL("devvm-web-0123456789abcd", dir))
-	removeRemote(t.Context(), dir, "devvm-web-0123456789abcd", "devvm")
+	gitIn(t, dir, "remote", "set-url", "devvm", cloneURL(vm, dir))
+
+	// Fetched: main as the host has it, feature/x and only/y with their
+	// own commits, y's under x's. saved/devvm is taken.
+	one := gitIn(t, dir, "rev-parse", "HEAD")
+	tree := gitIn(t, dir, "rev-parse", "HEAD^{tree}")
+	x := gitIn(t, dir, "commit-tree", "-p", one, "-m", "x", tree)
+	y := gitIn(t, dir, "commit-tree", "-p", x, "-m", "y", tree)
+	gitIn(t, dir, "update-ref", "refs/remotes/devvm/main", one)
+	gitIn(t, dir, "update-ref", "refs/remotes/devvm/feature/x", x)
+	gitIn(t, dir, "update-ref", "refs/remotes/devvm/only/y", y)
+	gitIn(t, dir, "symbolic-ref", "refs/remotes/devvm/HEAD", "refs/remotes/devvm/main")
+	gitIn(t, dir, "config", "branch.main.remote", "devvm")
+	gitIn(t, dir, "config", "branch.main.merge", "refs/heads/main")
+	gitIn(t, dir, "branch", "saved/devvm/old")
+	removeRemote(t.Context(), dir, vm, "devvm")
 	if out := gitIn(t, dir, "remote"); out != "" {
 		t.Errorf("remotes %q", out)
 	}
-	removeRemote(t.Context(), dir, "devvm-web-0123456789abcd", "")
+	if out := gitIn(t, dir, "for-each-ref", "--format=%(objectname) %(refname)"); out != one+" refs/heads/main\n"+
+		x+" refs/heads/saved/devvm-2/feature/x\n"+y+" refs/heads/saved/devvm-2/only/y\n"+one+" refs/heads/saved/devvm/old" {
+		t.Errorf("refs:\n%s", out)
+	}
+	if out, err := hostGit(t.Context(), dir, "config", "--get-regexp", "^branch\\.main\\.remote"); err == nil {
+		t.Errorf("upstream %q", out)
+	}
+	want := []string{`saved_branches branches="saved/devvm-2/feature/x" "saved/devvm-2/only/y"`, "removed_remote remote=devvm"}
+	if !slices.Equal(*got, want) {
+		t.Errorf("printed %q", *got)
+	}
+
+	// No free names: the remote and its branches stay.
+	*got = nil
+	gitIn(t, dir, "remote", "add", "devvm", cloneURL(vm, dir))
+	gitIn(t, dir, "update-ref", "refs/remotes/devvm/z", gitIn(t, dir, "commit-tree", "-p", one, "-m", "z", tree))
+	gitIn(t, dir, "branch", "-D", "saved/devvm/old", "saved/devvm-2/feature/x", "saved/devvm-2/only/y")
+	gitIn(t, dir, "branch", "saved")
+	removeRemote(t.Context(), dir, vm, "devvm")
+	gitIn(t, dir, "remote", "get-url", "devvm")
+	gitIn(t, dir, "rev-parse", "--verify", "refs/remotes/devvm/z")
+	if !slices.Equal(*got, []string{"remote_kept remote=devvm"}) {
+		t.Errorf("printed %q", *got)
+	}
+	removeRemote(t.Context(), dir, vm, "")
 }
