@@ -180,7 +180,7 @@ var taken = map[string]bool{
 // no_vm is NoVM.
 var initialisms = map[string]bool{
 	"api": true, "ca": true, "cli": true, "cpu": true, "dns": true, "gc": true, "http": true,
-	"https": true, "id": true, "ip": true, "json": true, "oci": true, "os": true, "pid": true,
+	"https": true, "id": true, "ip": true, "json": true, "kvm": true, "oci": true, "ok": true, "os": true, "pid": true,
 	"qemu": true, "sha": true, "ssh": true, "tcp": true, "tls": true, "tty": true, "ui": true, "uid": true,
 	"url": true, "vm": true, "vms": true, "xdg": true,
 }

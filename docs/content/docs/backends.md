@@ -15,6 +15,8 @@ Each backend declares how it has each feature:
 - **emulated**: devvm builds it from other parts of the backend. An emulation is used only once its review has passed: a design note, a threat check and end-to-end checks proving the guarantee. Until then it's refused.
 - **none**: the backend can't do it.
 
+`devvm doctor` lists them for every backend devvm has, an emulation whose review hasn't passed as `unreviewed`.
+
 | Feature | What it is | Lima | smolvm (planned) | Docker (planned) |
 | --- | --- | --- | --- | --- |
 | `build-image` | build images from the layer and feature scripts | native | native | native |

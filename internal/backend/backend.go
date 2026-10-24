@@ -27,8 +27,12 @@ type Backend interface {
 	// Caps says which features the backend has, and how.
 	Caps() Caps
 	// Check reports whether the backend can run here: installed, a
-	// version devvm supports, a host it supports.
+	// version devvm supports, a host it supports. Its error is the first
+	// of Problems.
 	Check(ctx context.Context) error
+	// Problems lists everything the backend needs that this host lacks;
+	// none when it can run here.
+	Problems(ctx context.Context) []Problem
 	// NameMax is the longest VM name the backend takes; 0 for no limit.
 	// Callers shorten the names they make to fit.
 	NameMax() int
@@ -87,6 +91,19 @@ type Backend interface {
 	SetAgentDirs(ctx context.Context, vm string, dirs []string) error
 	// SetAgentForwarding turns a stopped VM's ssh-agent forwarding on or off.
 	SetAgentForwarding(ctx context.Context, vm string, on bool) error
+}
+
+// Problem is something a backend needs that the host lacks, as devvm
+// doctor reports it.
+type Problem struct {
+	// Key says what it is, for scripts that offer fixes: lima, qemu,
+	// kvm, kvm-access…
+	Key string
+	// Fix is the command that fixes it, its words separated by spaces
+	// (no shell syntax); "" when there's none to run.
+	Fix string
+	// Msg says what's missing and what to do.
+	Msg msg.M
 }
 
 // ErrNotFound is the error, or wraps it, for a VM the backend doesn't have.

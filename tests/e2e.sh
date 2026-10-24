@@ -186,6 +186,8 @@ fi
 
 if want images; then
 section "images"
+check "devvm doctor finds everything it needs on this host" bash -c "'$D' doctor </dev/null >'$work/last.log' 2>&1 &&
+  [[ -z \$('$D' doctor --fixes </dev/null) ]]"
 # base stays cached between runs (--clean deletes it); the fixture layers' images are this run's.
 check "build base" quiet env DEVVM_MESSAGES=names "$D" build base
 # Its key: the build's, else the newest base from Ubuntu's image (from's bases are cached too).

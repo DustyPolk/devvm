@@ -121,13 +121,18 @@ func sandbox(t *testing.T) paths.Dirs {
 
 // testLima returns the backend on a sandbox, as on host os, with the fake
 // runner; warnings go to warned.
-func testLima(t *testing.T, os string) (*Lima, *fakeRunner, *[]string) {
+func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
 	t.Helper()
 	l := New(sandbox(t))
 	f := &fakeRunner{out: map[string]string{}}
 	var warned []string
-	l.Runner, l.OS, l.Arch, l.Self = f, os, "arm64", "/opt/my devvm/devvm"
+	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"
 	l.Getenv = func(string) string { return "" }
+	l.MacOS = func() string { return "26.0" }
+	l.KVM = filepath.Join(t.TempDir(), "kvm")
+	if err := os.WriteFile(l.KVM, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	l.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
 	return l, f, &warned
 }
@@ -217,35 +222,6 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 	}
 	if got := f.lines(); len(got) > 0 {
 		t.Errorf("ran %q", got)
-	}
-}
-
-func TestCheck(t *testing.T) {
-	for _, tc := range []struct {
-		os, version string
-		fails       bool
-		want        string
-	}{
-		{"darwin", "limactl version 2.2.1\n", false, ""},
-		{"darwin", "limactl version 1.2.0\n", false, "lima_old version=1.2.0"},
-		{"darwin", "", false, "lima_broken"},
-		{"darwin", "", true, "lima_broken"},
-		{"windows", "", false, "lima_host_unsupported os=windows"},
-	} {
-		l, f, _ := testLima(t, tc.os)
-		f.out["limactl --version"] = tc.version
-		if tc.fails {
-			f.fail = []string{"limactl --version"}
-		}
-		err := l.Check(t.Context())
-		if got := ""; err != nil {
-			got = err.Error()
-			if got != tc.want {
-				t.Errorf("%s %q: %s, want %s", tc.os, tc.version, got, tc.want)
-			}
-		} else if tc.want != "" {
-			t.Errorf("%s %q: no error, want %s", tc.os, tc.version, tc.want)
-		}
 	}
 }
 

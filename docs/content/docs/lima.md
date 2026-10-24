@@ -7,9 +7,12 @@ weight: 31
 
 ## Requirements
 
-- Lima 2.0 or newer (`limactl` on `PATH`). See [Lima's install guide](https://lima-vm.io/docs/installation/).
+- Lima 2.0 or newer (`limactl` on `PATH`). See [Lima's install guide](https://lima-vm.io/docs/installation/), or with Homebrew `brew install lima`.
+- macOS 13 or newer, or Linux, on arm64 or x86_64.
 - On Linux, QEMU: `qemu-system-aarch64` (or `qemu-system-x86_64`) and `qemu-img`, from your package manager.
-- macOS or Linux, on arm64 or x86_64.
+- On Linux, `/dev/kvm`, which you can read and write: virtualization turned on in the firmware (or nested virtualization, in a VM), and your user in the `kvm` group.
+
+Every command that needs Lima checks these first and stops at the first one missing. `devvm doctor` lists them all, with the command that installs each one where there's one to run: Homebrew's for Lima when you have Homebrew, your package manager's for QEMU (apt, dnf, pacman or zypper), `sudo usermod -aG kvm $USER` for `/dev/kvm` (then log in again). devvm never runs them itself ([details](install.md#checking-what-devvm-needs)).
 
 ## A Lima home of its own
 

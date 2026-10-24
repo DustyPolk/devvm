@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `secret`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `doctor`, `secret`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line |
@@ -141,13 +141,14 @@ Docs (page ← bash page, all rewritten, partly):
 - `customizing.md` ← `customizing.md` (base image features; custom layers wait for `devvm layer`)
 - `testing.md` ← same name (with the platform table, the Linux host as verified, manual checks)
 - README "Quickstart" ← README usage
+- `install.md` ← same name (requirements and checking them; installing waits for `install.sh`)
 
 Bats files (pending cases, by task):
 
 | File | Pending |
 | --- | --- |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
-| `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), doctor (preflight, doctor), limactl |
+| `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), limactl |
 | `delete.bats` | gc (two, overlay half, `delete_image_key`), allowlist of a VM deleted outside devvm |
 | `guest.bats` | ssh/code (VS Code settings) |
 | `images.bats` | layer, gc (three), images (three, `images rm`) |
@@ -178,6 +179,7 @@ Deliberate changes from the bash:
 - `net_direct_route` doesn't name the Lima config. `DEVVM_SECRET_SERVICE` is checked for reads too. A failed tools resolve is `tools_need_resolve` with the log's end. e2e's sandbox and service differ from the bash's: its rebuilds delete every stale image in its Lima home.
 - Features: each runs as a `running_script` step (no `adding_feature`); none chosen is `base_features_none`; feature names that aren't layer-like are skipped in the listing and make `base-features` unreadable.
 - `help` is Cobra's (`devvm help COMMAND`, per-command help); `devvm completion bash|zsh|fish` is new; `--version` has no `-v`; the version is set at build time, else Go's build info (no `VERSION` file read).
+- Host checks are each backend's `Problems`: a command stops at the first (none listed under it); `doctor` checks the new VMs' backend (`--backend`), adds a features table, Lima's global configs (`lima-config`) and `qemu-img`, `*_fix` messages carry the fix, `doctor_ok` names the backend.
 
 Pending in code:
 - deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend`/`*AgentKeys` (size, ports, setup, ssh-agent), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.

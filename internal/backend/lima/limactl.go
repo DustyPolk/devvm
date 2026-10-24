@@ -159,6 +159,15 @@ func (l *Lima) inspect(ctx context.Context, name string) (instance, error) {
 // Lima merges them into every VM, so a setting meant for other VMs (a
 // network, a mount) would reach devvm's.
 func (l *Lima) checkGlobalConfigs() error {
+	if m, ok := l.globalConfigs(); ok {
+		return m
+	}
+	return nil
+}
+
+// globalConfigs returns lima_global_config when devvm's Lima home has
+// any of Lima's global configs.
+func (l *Lima) globalConfigs() (msg.M, bool) {
 	var found []string
 	for _, f := range []string{"default.yaml", "override.yaml"} {
 		p := filepath.Join(l.Dirs.Lima, "_config", f)
@@ -167,9 +176,9 @@ func (l *Lima) checkGlobalConfigs() error {
 		}
 	}
 	if len(found) > 0 {
-		return msg.LimaGlobalConfig(strings.Join(found, " "))
+		return msg.LimaGlobalConfig(strings.Join(found, " ")), true
 	}
-	return nil
+	return msg.M{}, false
 }
 
 // yqJSON is v as a yq value for limactl's --set: JSON, which yq reads,

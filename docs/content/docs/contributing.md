@@ -81,6 +81,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `STUB_LOG` | `stub/calls`, the stubs' call log |
 | `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
 | `DEVVM_UBUNTU_URL` | `ubuntu/`, with one dated release |
+| `DEVVM_KVM` | `stub/kvm`, a file standing in for Linux's `/dev/kvm` |
 | `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
 | `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
 | `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml`, `layers/`, `tools/`, `guest/` and `oci/` next to it |

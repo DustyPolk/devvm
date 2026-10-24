@@ -29,15 +29,19 @@ func TestSupport(t *testing.T) {
 		name                         string
 		s                            backend.Support
 		native, emulated, ok, review bool
+		shown                        string
 	}{
-		{"native", backend.Native, true, false, true, false},
-		{"none", backend.None, false, false, false, false},
-		{"emulated, reviewed", backend.Emulated(true), false, true, true, true},
-		{"emulated, unreviewed", backend.Emulated(false), false, true, false, false},
+		{"native", backend.Native, true, false, true, false, "native"},
+		{"none", backend.None, false, false, false, false, "none"},
+		{"emulated, reviewed", backend.Emulated(true), false, true, true, true, "emulated"},
+		{"emulated, unreviewed", backend.Emulated(false), false, true, false, false, "unreviewed"},
 	} {
 		s := tc.s
 		if s.IsNative() != tc.native || s.IsEmulated() != tc.emulated || s.Usable() != tc.ok || s.Reviewed() != tc.review {
 			t.Errorf("%s: native %v, emulated %v, usable %v, reviewed %v", tc.name, s.IsNative(), s.IsEmulated(), s.Usable(), s.Reviewed())
+		}
+		if s.String() != tc.shown {
+			t.Errorf("%s: shown as %q, want %q", tc.name, s.String(), tc.shown)
 		}
 	}
 }

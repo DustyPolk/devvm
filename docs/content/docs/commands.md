@@ -120,6 +120,7 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 
 | | |
 | --- | --- |
+| `devvm doctor` | check what devvm needs on this machine and say how to get what's missing, then list each backend's features ([details](install.md#checking-what-devvm-needs)) |
 | `devvm --version` | print devvm's version, alone (`devvm version` does too) |
 | `devvm help [COMMAND]` | print the help for devvm or a command, as `--help` and `-h` do |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |

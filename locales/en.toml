@@ -76,6 +76,49 @@ other = "the lima backend doesn't run on {{.os}}: use macOS or Linux"
 [qemu_missing]
 other = "{{.program}} isn't installed: install QEMU"
 
+[lima_missing_fix]
+description = "fix is a command, such as brew install lima"
+other = "Lima isn't installed: run {{.fix}}"
+
+[lima_broken_fix]
+description = "fix is a command, such as brew reinstall lima"
+other = "limactl --version failed: run {{.fix}}"
+
+[lima_old_fix]
+description = "fix is a command, such as brew upgrade lima"
+other = "Lima {{.version}} is too old: run {{.fix}}"
+
+[qemu_missing_fix]
+description = "fix is a package manager's command"
+other = "{{.program}} isn't installed: run {{.fix}}"
+
+[lima_arch_unsupported]
+description = "arch is Go's name for the host's processor (riscv64)"
+other = "the lima backend doesn't run on {{.arch}}: use an arm64 or x86_64 host"
+
+[macos_old]
+other = "macOS {{.version}} is too old for the lima backend: upgrade to macOS 13 or newer"
+
+[no_kvm]
+other = "/dev/kvm doesn't exist: turn on virtualization in the firmware, or nested virtualization for a VM"
+
+[kvm_access]
+description = "fix is a command, such as sudo usermod -aG kvm alice"
+other = "can't open /dev/kvm: run {{.fix}}, then log in again"
+
+[docker_found]
+other = "Docker: found, for --from with images only Docker has"
+
+[docker_missing]
+other = "Docker: not found (optional: only --from with images only Docker has needs it)"
+
+[doctor_ok]
+other = "devvm {{.version}}: the {{.backend}} backend has everything it needs"
+
+[doctor_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't check what devvm needs: {{.reason}}"
+
 [lima_global_config]
 description = "files is a space-separated list of paths"
 other = "Lima would add {{.files}} to every VM devvm starts: move them out of devvm's Lima home"

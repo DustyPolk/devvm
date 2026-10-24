@@ -1,0 +1,79 @@
+# doctor: what the backend new VMs get needs on this machine and how to
+# get what's missing, each backend's features, and whether Docker is
+# there. --fixes prints only what's missing, for scripts.
+env DEVVM_MESSAGES=names
+env ALL=$PATH
+chmod 0755 brew/brew
+chmod 0755 broken/limactl
+
+# Everything there: only limactl --version runs.
+exec devvm doctor
+stdout '^FEATURE +LIMA\n'
+stdout '^build-image +native\n'
+stdout '^egress-proxy +native\n'
+stdout '^disk +native\n'
+stdout '^docker_found\n'
+stdout '^doctor_ok backend=lima version=\S+\n\z'
+! stderr .
+stub_calls
+stdout '^limactl --version\n\z'
+exec devvm doctor --fixes
+! stdout .
+! stderr .
+
+# Another backend, or one devvm doesn't have.
+! exec devvm doctor --backend nope
+stderr '^devvm: backend_unknown backends=lima name=nope$'
+! stdout .
+
+# No Lima, no Homebrew, no Docker: what to install, and it fails.
+env PATH=$DEVVM_BIN
+! exec devvm doctor
+stdout '^FEATURE +LIMA\n'
+stdout '^docker_missing\n'
+! stdout doctor_ok
+stderr '^devvm: lima_missing$'
+exec devvm doctor --fixes
+stdout '^lima\t\tlima_missing\n'
+! stderr .
+
+# Every command that needs the backend stops at the first problem.
+! exec devvm build base
+stderr '^devvm: lima_missing$'
+mkdir p
+cd p
+! exec devvm --no-network-policy base
+stderr '^devvm: lima_missing$'
+cd ..
+
+# With Homebrew, its command.
+env PATH=$WORK/brew${:}$DEVVM_BIN
+exec devvm doctor --fixes
+stdout '^lima\tbrew install lima\tlima_missing_fix fix=brew install lima\n'
+
+# A limactl that doesn't run, as one built for another processor.
+env PATH=$WORK/broken${:}$WORK/brew${:}$DEVVM_BIN
+exec devvm doctor --fixes
+stdout '^lima\tbrew reinstall lima\tlima_broken_fix fix=brew reinstall lima\n'
+! exec devvm doctor
+stderr '^devvm: lima_broken_fix fix=brew reinstall lima$'
+
+# One of Lima's global configs in devvm's Lima home, listed after the
+# rest.
+mkdir $DEVVM_LIMA_HOME/_config
+cp default.yaml $DEVVM_LIMA_HOME/_config/default.yaml
+! exec devvm doctor
+stderr '^devvm: lima_broken_fix fix=brew reinstall lima\ndevvm: lima_global_config files=\S+/_config/default.yaml\n\z'
+env PATH=$ALL
+! exec devvm doctor
+stderr '^devvm: lima_global_config files=\S+/_config/default.yaml$'
+exec devvm doctor --fixes
+stdout '^lima-config\t\tlima_global_config files=\S+/_config/default.yaml\n\z'
+
+-- brew/brew --
+#!/bin/sh
+-- broken/limactl --
+#!/bin/sh
+exit 126
+-- default.yaml --
+networks: [{vzNAT: true}]

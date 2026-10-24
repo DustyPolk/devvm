@@ -116,6 +116,13 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		return err
 	}
 	env.Setenv("DEVVM_UBUNTU_URL", "file://"+filepath.Join(root, "ubuntu"))
+	// Linux's /dev/kvm: a file anyone can open, so the host's doesn't
+	// matter.
+	kvm := filepath.Join(root, "stub", "kvm")
+	if err := os.WriteFile(kvm, nil, 0o600); err != nil {
+		return err
+	}
+	env.Setenv("DEVVM_KVM", kvm)
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
 	// The shared tools' versions: the stub mise, which resolves the
 	// fixture lock.

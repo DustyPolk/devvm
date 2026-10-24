@@ -327,14 +327,34 @@ func DockerExportFailed(from string) M {
 	return M{id: "docker_export_failed", vals: []val{{"from", from}}}
 }
 
+// DockerFound is [docker_found]: "Docker: found, for --from with images only Docker has"
+func DockerFound() M {
+	return M{id: "docker_found"}
+}
+
 // DockerImageChanged is [docker_image_changed]: "{{.from}} changed in Docker while devvm built from it (a rebuild?): run devvm again"
 func DockerImageChanged(from string) M {
 	return M{id: "docker_image_changed", vals: []val{{"from", from}}}
 }
 
+// DockerMissing is [docker_missing]: "Docker: not found (optional: only --from with images only Docker has needs it)"
+func DockerMissing() M {
+	return M{id: "docker_missing"}
+}
+
 // DockerOnly is [docker_only]: "{{.from}} is an image only Docker has (built and never pushed, or private): start Docker and try again"
 func DockerOnly(from string) M {
 	return M{id: "docker_only", vals: []val{{"from", from}}}
+}
+
+// DoctorFailed is [doctor_failed]: "couldn't check what devvm needs: {{.reason}}"
+func DoctorFailed(reason string) M {
+	return M{id: "doctor_failed", vals: []val{{"reason", reason}}}
+}
+
+// DoctorOK is [doctor_ok]: "devvm {{.version}}: the {{.backend}} backend has everything it needs"
+func DoctorOK(backend string, version string) M {
+	return M{id: "doctor_ok", vals: []val{{"backend", backend}, {"version", version}}}
 }
 
 // DownloadingMise is [downloading_mise]: "downloading mise {{.version}}"
@@ -542,9 +562,24 @@ func KeyLoadedKeychain() M {
 	return M{id: "key_loaded_keychain"}
 }
 
+// KVMAccess is [kvm_access]: "can't open /dev/kvm: run {{.fix}}, then log in again"
+func KVMAccess(fix string) M {
+	return M{id: "kvm_access", vals: []val{{"fix", fix}}}
+}
+
+// LimaArchUnsupported is [lima_arch_unsupported]: "the lima backend doesn't run on {{.arch}}: use an arm64 or x86_64 host"
+func LimaArchUnsupported(arch string) M {
+	return M{id: "lima_arch_unsupported", vals: []val{{"arch", arch}}}
+}
+
 // LimaBroken is [lima_broken]: "limactl --version failed: reinstall Lima"
 func LimaBroken() M {
 	return M{id: "lima_broken"}
+}
+
+// LimaBrokenFix is [lima_broken_fix]: "limactl --version failed: run {{.fix}}"
+func LimaBrokenFix(fix string) M {
+	return M{id: "lima_broken_fix", vals: []val{{"fix", fix}}}
 }
 
 // LimaEditFailed is [lima_edit_failed]: "couldn't change {{.vm}}'s Lima settings"
@@ -572,9 +607,19 @@ func LimaMissing() M {
 	return M{id: "lima_missing"}
 }
 
+// LimaMissingFix is [lima_missing_fix]: "Lima isn't installed: run {{.fix}}"
+func LimaMissingFix(fix string) M {
+	return M{id: "lima_missing_fix", vals: []val{{"fix", fix}}}
+}
+
 // LimaOld is [lima_old]: "Lima {{.version}} is too old: upgrade to Lima 2.0 or newer"
 func LimaOld(version string) M {
 	return M{id: "lima_old", vals: []val{{"version", version}}}
+}
+
+// LimaOldFix is [lima_old_fix]: "Lima {{.version}} is too old: run {{.fix}}"
+func LimaOldFix(fix string, version string) M {
+	return M{id: "lima_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
 // LoadKey is [load_key]: "Load {{.key}} into the agent now ({{.cmd}})?"
@@ -605,6 +650,11 @@ func LoginCopyFailed(agent string, reason string, vm string) M {
 // LsFailed is [ls_failed]: "couldn't list the VMs: {{.reason}}"
 func LsFailed(reason string) M {
 	return M{id: "ls_failed", vals: []val{{"reason", reason}}}
+}
+
+// MacosOld is [macos_old]: "macOS {{.version}} is too old for the lima backend: upgrade to macOS 13 or newer"
+func MacosOld(version string) M {
+	return M{id: "macos_old", vals: []val{{"version", version}}}
 }
 
 // MiseChecksum is [mise_checksum]: "the mise {{.version}} download doesn't match its checksum: not using it"
@@ -722,6 +772,11 @@ func NoImageFor(agents string, dir string, envs string) M {
 	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
 }
 
+// NoKVM is [no_kvm]: "/dev/kvm doesn't exist: turn on virtualization in the firmware, or nested virtualization for a VM"
+func NoKVM() M {
+	return M{id: "no_kvm"}
+}
+
 // NoSecret is [no_secret]: "no secret {{.secret}}"
 func NoSecret(secret string) M {
 	return M{id: "no_secret", vals: []val{{"secret", secret}}}
@@ -815,6 +870,11 @@ func ProxyStartFailed(log string, vm string) M {
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
 func QEMUMissing(program string) M {
 	return M{id: "qemu_missing", vals: []val{{"program", program}}}
+}
+
+// QEMUMissingFix is [qemu_missing_fix]: "{{.program}} isn't installed: run {{.fix}}"
+func QEMUMissingFix(fix string, program string) M {
+	return M{id: "qemu_missing_fix", vals: []val{{"fix", fix}, {"program", program}}}
 }
 
 // QEMURefused is [qemu_refused]: "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"
@@ -1269,8 +1329,12 @@ var specs = map[string]spec{
 	"detected":                    {fields: []string{"found"}},
 	"disk_shrink":                 {fields: []string{"have", "vm", "want"}},
 	"docker_export_failed":        {fields: []string{"from"}},
+	"docker_found":                {},
 	"docker_image_changed":        {fields: []string{"from"}},
+	"docker_missing":              {},
 	"docker_only":                 {fields: []string{"from"}},
+	"doctor_failed":               {fields: []string{"reason"}},
+	"doctor_ok":                   {fields: []string{"backend", "version"}},
 	"downloading_mise":            {fields: []string{"version"}},
 	"export_failed":               {fields: []string{"vm"}},
 	"exported":                    {fields: []string{"file", "vm"}},
@@ -1312,19 +1376,25 @@ var specs = map[string]spec{
 	"kept":                        {fields: []string{"vm"}},
 	"key_loaded":                  {},
 	"key_loaded_keychain":         {},
+	"kvm_access":                  {fields: []string{"fix"}},
+	"lima_arch_unsupported":       {fields: []string{"arch"}},
 	"lima_broken":                 {},
+	"lima_broken_fix":             {fields: []string{"fix"}},
 	"lima_edit_failed":            {fields: []string{"vm"}},
 	"lima_global_config":          {fields: []string{"files"}},
 	"lima_home_too_long":          {fields: []string{"home", "vm"}},
 	"lima_host_unsupported":       {fields: []string{"os"}},
 	"lima_missing":                {},
+	"lima_missing_fix":            {fields: []string{"fix"}},
 	"lima_old":                    {fields: []string{"version"}},
+	"lima_old_fix":                {fields: []string{"fix", "version"}},
 	"load_key":                    {fields: []string{"cmd", "key"}},
 	"load_key_with":               {fields: []string{"cmd"}},
 	"log_details":                 {fields: []string{"file"}},
 	"log_end":                     {fields: []string{"file"}},
 	"login_copy_failed":           {fields: []string{"agent", "reason", "vm"}},
 	"ls_failed":                   {fields: []string{"reason"}},
+	"macos_old":                   {fields: []string{"version"}},
 	"mise_checksum":               {fields: []string{"version"}},
 	"mise_download_failed":        {fields: []string{"version"}},
 	"mount_comma":                 {fields: []string{"path"}},
@@ -1348,6 +1418,7 @@ var specs = map[string]spec{
 	"no_digest":                   {fields: []string{"from"}},
 	"no_github_token":             {fields: []string{"vm"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
+	"no_kvm":                      {},
 	"no_secret":                   {fields: []string{"secret"}},
 	"no_ssh_agent":                {},
 	"no_terminal_confirm":         {fields: []string{"vm", "want"}},
@@ -1367,6 +1438,7 @@ var specs = map[string]spec{
 	"proxy_port_taken":            {fields: []string{"port", "vm"}},
 	"proxy_start_failed":          {fields: []string{"log", "vm"}},
 	"qemu_missing":                {fields: []string{"program"}},
+	"qemu_missing_fix":            {fields: []string{"fix", "program"}},
 	"qemu_refused":                {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
 	"remote_add_failed":           {fields: []string{"remote"}},

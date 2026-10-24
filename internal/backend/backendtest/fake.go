@@ -36,6 +36,7 @@ type Fake struct {
 	ShellCmd     backend.Command   // Shell's answer
 	Unconfined   bool              // Confined answers false
 	LifelineFile string            // Lifeline's answer
+	Missing      []backend.Problem // Problems' answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -103,6 +104,14 @@ func (f *Fake) Check(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.record("Check")
+}
+
+// Problems records the call and returns Missing.
+func (f *Fake) Problems(context.Context) []backend.Problem {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_ = f.record("Problems")
+	return slices.Clone(f.Missing)
 }
 
 // BuildImage records the call, adds the key to ImageKeys and returns Built.

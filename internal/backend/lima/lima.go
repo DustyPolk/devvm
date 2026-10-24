@@ -6,6 +6,7 @@ package lima
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -58,6 +59,10 @@ type Lima struct {
 	Ubuntu func(ctx context.Context) (ubuntu.Image, error)
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
+	// MacOS returns macOS's version, "" when unknown.
+	MacOS func() string
+	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
+	KVM string
 	// DockerRunning reports whether Docker runs, for --from images only
 	// it has.
 	DockerRunning func(ctx context.Context) bool
@@ -87,6 +92,7 @@ func New(d paths.Dirs) *Lima {
 		Dirs: d, Runner: uiRunner{}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Root: root, SSHTimeout: sshTimeout, Getenv: os.Getenv,
 		Ubuntu: ubuntu.New(root, os.Getenv).Image, Memory: platform.Memory,
+		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
 		DockerRunning: from.DockerRunning, Info: ui.Info, Warn: warn,
 	}
 }
@@ -114,40 +120,6 @@ const (
 // the VM's folder (<Lima home>/<vm>/ssh.sock).
 func (l *Lima) NameMax() int {
 	return max(0, socketMax-sshSocketExtra-len(l.Dirs.Lima)-len("/")-len("/ssh.sock"))
-}
-
-// Check reports whether Lima can run VMs here: a supported host, Lima 2 or
-// newer, QEMU on Linux, and none of Lima's global configs in devvm's home.
-func (l *Lima) Check(ctx context.Context) error {
-	if l.OS != "darwin" && l.OS != "linux" {
-		return msg.LimaHostUnsupported(l.OS)
-	}
-	if _, err := exec.LookPath("limactl"); err != nil {
-		return msg.LimaMissing()
-	}
-	out, err := l.Runner.Output(l.limactl(ctx, "--version"))
-	if err != nil {
-		return msg.LimaBroken()
-	}
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return msg.LimaBroken()
-	}
-	ver := fields[len(fields)-1]
-	major, _, _ := strings.Cut(strings.TrimPrefix(ver, "v"), ".")
-	if n, err := strconv.Atoi(major); err != nil {
-		return msg.LimaBroken()
-	} else if n < 2 {
-		return msg.LimaOld(ver)
-	}
-	if l.OS == "linux" {
-		for _, p := range []string{qemuProgram(l.Arch), "qemu-img"} {
-			if _, err := exec.LookPath(p); err != nil {
-				return msg.QEMUMissing(p)
-			}
-		}
-	}
-	return l.checkGlobalConfigs()
 }
 
 // projectVM matches a project VM's name: devvm-<folder>-<14 hex>. A folder

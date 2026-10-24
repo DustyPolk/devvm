@@ -71,6 +71,20 @@ func (s Support) Reviewed() bool { return s.reviewed }
 // reviewed.
 func (s Support) Usable() bool { return s.kind == native || s.kind == emulated && s.reviewed }
 
+// String is the support as devvm doctor lists it: native, emulated,
+// unreviewed (emulated, refused until its review passes) or none.
+func (s Support) String() string {
+	switch {
+	case s.IsNative():
+		return "native"
+	case s.Usable():
+		return "emulated"
+	case s.IsEmulated():
+		return "unreviewed"
+	}
+	return "none"
+}
+
 // Caps is how a backend has each feature. A feature it doesn't list is None.
 type Caps map[Feature]Support
 
