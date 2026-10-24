@@ -50,9 +50,13 @@ run = "gotestsum -- -race -cover ./..."
 description = "Check dependencies for known vulnerabilities"
 run = "govulncheck ./..."
 
+[tasks.cli-docs]
+description = "Generate the CLI reference (docs/content/docs/cli)"
+run = "go run ./internal/cli/docgen docs/content/docs/cli"
+
 [tasks.docs]
 description = "Serve the docs site"
-# The CLI reference regeneration runs first.
+depends = ["cli-docs"]
 run = "hugo server -s docs"
 
 [tasks.e2e]

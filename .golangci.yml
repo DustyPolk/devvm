@@ -37,6 +37,8 @@ linters:
             - github.com/w3cj/devvm
             - github.com/spf13/cobra
             - github.com/spf13/pflag
+            # The CLI reference generator (approved).
+            - github.com/spf13/cobra/doc
             - github.com/nicksnyder/go-i18n/v2
             # The TOML parser go-i18n's docs register for locales/*.toml
             # (approved; the generator reads en.toml with it too).

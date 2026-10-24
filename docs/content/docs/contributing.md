@@ -46,7 +46,8 @@ Run the tasks with `mise run <task>`:
 | `lint` | runs golangci-lint, shellcheck, the docs linters and the message link check |
 | `test` | runs the tests with the race detector and coverage |
 | `vuln` | runs govulncheck |
-| `docs` | serves the docs site |
+| `cli-docs` | generates the CLI reference |
+| `docs` | generates the CLI reference, then serves the docs site |
 | `e2e` | runs the end-to-end tests against real VMs |
 
 `mise run test` needs a C compiler for the race detector: Xcode Command Line Tools on macOS, gcc on Linux.
@@ -209,5 +210,19 @@ The site is [Hugo](https://gohugo.io) with the [Hextra](https://imfing.github.io
 | markdownlint-cli2 | Markdown | `.markdownlint-cli2.yaml` |
 | Vale | the style rules | `.vale.ini`, `.vale/styles/devvm/` |
 | lychee (`--offline`) | links to pages and files | |
+
+### The CLI reference
+
+The [CLI reference](cli/_index.md) in `docs/content/docs/cli/` is generated from devvm's commands with Cobra's docs generator, and checked in. Don't edit it: change the command's `Use`, `Short`, `Long` or flags, then run:
+
+```sh
+mise run cli-docs
+```
+
+It runs `internal/cli/docgen`, which replaces every page in that folder: `_index.md`, listing the commands, and a page per command named after its path (`devvm_build.md`), with `title` and `weight` front matter and links to the other pages as files. Hidden commands (`_msg`, `_qemu`) and Cobra's help command are left out. The pages carry no dates, so the same commands give the same files.
+
+The tests fail when the checked-in pages are stale: `TestReferenceIsCurrent` in `internal/cli/docgen` generates the reference into a temporary folder and compares it with `docs/content/docs/cli/`. `mise run docs` regenerates it before serving the site.
+
+### Building the site
 
 `mise run docs` serves the site at `http://localhost:1313/devvm/` and reloads on every change. `mise exec -- hugo -s docs --minify` builds it into `docs/public/`, as the Pages workflow does on every push to `main`.
