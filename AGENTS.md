@@ -8,7 +8,8 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | --- | --- |
 | `cmd/devvm/main.go` | the entry point: runs the root command and exits with its code. The only place that calls `os.Exit` |
 | `internal/cli/` | Cobra commands, one file each (only the empty root so far), and `script_test.go`, the testscript runner |
-| `internal/paths/` | finds devvm's own files: the folder holding the binary, after following links |
+| `internal/paths/` | names every folder and file devvm uses: the folder holding the binary (after following links), and `Dirs` (XDG data and config folders, devvm's Lima home, `DEVVM_LIMA_HOME`) with a method per state folder and config file |
+| `internal/state/` | reads and writes state files atomically, with `CorruptError` for unreadable ones: VM state (key=value, `backend=` included), image records and `--from` digests, and the config files (`size`, `ports`, `base-features`, `agent-keys`) |
 | `testdata/script/*.txtar` | CLI tests (testscript) |
 | `testdata/stubs/` | stand-ins for host commands, first on `PATH` in tests; they log calls to `$STUB_LOG`. So far `uname` and `sw_vers` |
 | `docs/` | the docs site (Hugo + Hextra): `hugo.yaml`, `content/_index.md`, `content/docs/*.md`. Pages arrive with the behavior they describe |
@@ -18,7 +19,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `.github/workflows/` | `ci.yml` (lint and test on macOS and Linux), `docs.yml` (the site on GitHub Pages) |
 | `.agents/skills/security-audit/`, `skills-lock.json` | the security-audit skill, used by the backend reviews |
 
-Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/note/warn/die/ask/confirm, tty, spinner, run logs, interrupts, the cleanup stack), `internal/msg` (generated message functions, the go-i18n bundle, doc links) with `locales/en.toml`, `internal/{state,project,image,tools,gitprotect,netpolicy,secrets,vm}`, `internal/backend/` (interface, `Caps`, registry; `lima/`, `smolvm/`, `docker/`), `internal/proxy` (stdlib only), `internal/platform` (build-tagged OS code). The in-VM scripts (`base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/`) sit next to the binary; `tests/e2e.sh` drives real VMs; `install.sh`, `scripts/` and `packaging/` handle releases.
+Not there yet, and where it goes when its task arrives: `internal/ui` (say/info/note/warn/die/ask/confirm, tty, spinner, run logs, interrupts, the cleanup stack), `internal/msg` (generated message functions, the go-i18n bundle, doc links) with `locales/en.toml`, `internal/{project,image,tools,gitprotect,netpolicy,secrets,vm}`, `internal/backend/` (interface, `Caps`, registry; `lima/`, `smolvm/`, `docker/`), `internal/proxy` (stdlib only), `internal/platform` (build-tagged OS code). The in-VM scripts (`base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/`) sit next to the binary; `tests/e2e.sh` drives real VMs; `install.sh`, `scripts/` and `packaging/` handle releases.
 
 ## Tasks
 
@@ -113,5 +114,9 @@ The only place in the repo that mentions the bash devvm. It lives at `/Users/me/
 Copied:
 - `LICENSE`
 - `.agents/skills/security-audit/` and `skills-lock.json`: not from `5efc65f`; they were untracked files in the bash repo's working tree.
+- `docs/images.md` → `docs/content/docs/images.md`, partly: "Where state lives", rewritten.
+
+Ported from `devvm` (rewritten in Go, not copied):
+- paths and state (`internal/paths`, `internal/state`): the `*_dir`/`*_file` definitions, XDG and `DEVVM_LIMA_HOME`, `vm_get`/`vm_set`/`new_vm_state`, image records, `from-digests`, and reading and writing the `size`, `ports`, `base-features` and `agent-keys` files. Go's own formats; their callers come with their tasks. Bats cases converted to Go table tests: `cli.bats` "vm_set/vm_get: keys replace, values may contain '='" and the Lima home half of "devvm's own Lima home" (the `devvm limactl` half goes with that command); the file side of `from.bats` "refresh_from_digest records the registry's digest per tag" and of `build.bats`'s libc record. `images.bats` "the chosen features move from the old features file" is dropped: no migration from the bash files.
 
 Bash fixes copied: none yet.

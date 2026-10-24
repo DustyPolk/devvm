@@ -1,4 +1,5 @@
-// Package paths finds devvm's own files and the folders it keeps state in.
+// Package paths names every folder and file devvm uses: its own files next
+// to the binary, and the folders it keeps state in.
 package paths
 
 import (
