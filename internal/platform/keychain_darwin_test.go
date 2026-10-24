@@ -44,6 +44,35 @@ func TestKeychainGet(t *testing.T) {
 	}
 }
 
+// A value is saved through security -i's stdin, never in its arguments;
+// one that would end that command line is refused. Deleting a missing
+// item is ErrNoSecret.
+func TestKeychainSetDelete(t *testing.T) {
+	_, log := stubs(t)
+	ctx := t.Context()
+	if err := KeychainSet(ctx, "devvm-test", "github", "devvm github", "ghp_testfake"); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := KeychainGet(ctx, "devvm-test", "github"); v != "ghp_testfake" || err != nil {
+		t.Errorf("KeychainGet = %q, %v", v, err)
+	}
+	for _, bad := range []string{`x" -A "`, `x\`, "x\ny"} {
+		if err := KeychainSet(ctx, "devvm-test", "github", "devvm github", bad); err == nil {
+			t.Errorf("KeychainSet(%q) took it", bad)
+		}
+	}
+	if err := KeychainDelete(ctx, "devvm-test", "github"); err != nil {
+		t.Errorf("KeychainDelete: %v", err)
+	}
+	if err := KeychainDelete(ctx, "devvm-test", "github"); !errors.Is(err, ErrNoSecret) {
+		t.Errorf("KeychainDelete again: %v", err)
+	}
+	calls, _ := os.ReadFile(log) //nolint:gosec // the test's own folder
+	if strings.Contains(string(calls), "ghp_testfake") || !strings.HasPrefix(string(calls), "security -i\n") {
+		t.Errorf("calls = %q", calls)
+	}
+}
+
 // The CA folder is kept out of Time Machine, also one made before devvm
 // did that: only when it isn't already.
 func TestExcludeFromBackup(t *testing.T) {

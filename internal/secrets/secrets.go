@@ -87,9 +87,11 @@ type Store struct {
 	Dirs paths.Dirs
 	Home string
 	// Keychain: values are in the Keychain (KeychainGet), else in files.
-	Keychain    bool
-	KeychainGet func(ctx context.Context, service, account string) (string, error)
-	Getenv      func(string) string
+	Keychain       bool
+	KeychainGet    func(ctx context.Context, service, account string) (string, error)
+	KeychainSet    func(ctx context.Context, service, account, label, value string) error
+	KeychainDelete func(ctx context.Context, service, account string) error
+	Getenv         func(string) string
 	// Login runs the proxy's login helper (devvm _proxy -login …) with
 	// args, its output to out.
 	Login func(args []string, out io.Writer) error
@@ -98,7 +100,8 @@ type Store struct {
 // NewStore returns the store for devvm's folders and the user's home.
 func NewStore(d paths.Dirs, home string) *Store {
 	return &Store{
-		Dirs: d, Home: home, Keychain: platform.HasKeychain, KeychainGet: platform.KeychainGet, Getenv: os.Getenv,
+		Dirs: d, Home: home, Keychain: platform.HasKeychain, Getenv: os.Getenv,
+		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
 		Login: func(args []string, out io.Writer) error {
 			return proxy.Main(args, proxy.IO{Stdin: strings.NewReader(""), Stdout: out, Stderr: io.Discard, Kept: LoginKept})
 		},
@@ -212,6 +215,74 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 	return v, nil
 }
 
+// Token returns a token as given for the secret (pasted, or a line on
+// stdin) without its whitespace. It refuses an empty one, one with a quote,
+// a backslash or a control character (they'd end the Keychain's command
+// line, or a request's header), and for claude anything but a setup-token
+// token.
+func Token(name, given string) (string, error) {
+	v := strings.Join(strings.Fields(given), "")
+	switch {
+	case v == "":
+		return "", msg.NoToken()
+	case strings.ContainsFunc(v, func(r rune) bool { return r == '"' || r == '\\' || r < 0x20 || r == 0x7f }):
+		return "", msg.TokenQuotes()
+	case name == "claude" && !strings.HasPrefix(v, "sk-ant-oat01-"):
+		return "", msg.NotSetupToken()
+	}
+	return v, nil
+}
+
+// Save saves a known secret's value (one Token returned): in the Keychain,
+// else in a file only the user can read.
+func (s *Store) Save(ctx context.Context, name, value string) error {
+	if _, ok := Lookup(name); !ok {
+		return msg.NoSecret(msg.Shown(name))
+	}
+	if !s.Keychain {
+		if err := os.MkdirAll(s.Dirs.Secrets(), 0o700); err != nil {
+			return err
+		}
+		if err := os.Chmod(s.Dirs.Secrets(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+			return err
+		}
+		return writeFile(s.File(name), []byte(value+"\n"))
+	}
+	svc, err := s.Service()
+	if err != nil {
+		return err
+	}
+	if s.KeychainSet(ctx, svc, name, "devvm "+name, value) != nil {
+		return msg.KeychainSaveFailed(name)
+	}
+	return nil
+}
+
+// Delete deletes a known secret's saved value: ErrNone when there's none.
+func (s *Store) Delete(ctx context.Context, name string) error {
+	if _, ok := Lookup(name); !ok {
+		return ErrNone
+	}
+	if !s.Keychain {
+		if err := os.Remove(s.File(name)); errors.Is(err, os.ErrNotExist) {
+			return ErrNone
+		} else if err != nil {
+			return err
+		}
+		return nil
+	}
+	svc, err := s.Service()
+	if err != nil {
+		return err
+	}
+	if err := s.KeychainDelete(ctx, svc, name); errors.Is(err, platform.ErrNoSecret) {
+		return ErrNone
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
 // loginOf returns the login kind a value's name belongs to: codex and
 // codex-key are Codex's, opencode-* opencode's, claude-mcp-* Claude Code's
 // MCP servers'.
@@ -249,10 +320,26 @@ func (s *Store) Get(ctx context.Context, name string) (string, error) {
 // its image has claude.
 func Names(st *state.VM) []string {
 	names := strings.Fields(st.Get(KeySecrets))
-	if slices.Contains(agents(st.Get(state.KeyImage)), "claude") && !slices.Contains(names, "claude") {
+	if FromImage(st, "claude") && !slices.Contains(names, "claude") {
 		names = append(names, "claude")
 	}
 	return names
+}
+
+// FromImage reports whether a VM uses the secret because of its image:
+// claude, when the image has claude.
+func FromImage(st *state.VM, name string) bool {
+	return name == "claude" && slices.Contains(agents(st.Get(state.KeyImage)), "claude")
+}
+
+// Bind binds a secret to a VM (use), or unbinds it: claude stays with a
+// VM whose image has claude.
+func Bind(st *state.VM, name string, use bool) error {
+	names := slices.DeleteFunc(strings.Fields(st.Get(KeySecrets)), func(n string) bool { return n == name })
+	if use {
+		names = append(names, name)
+	}
+	return st.Set(KeySecrets, strings.Join(names, " "))
 }
 
 // agents returns the agents an image name holds.
@@ -306,6 +393,60 @@ type binding struct {
 // all imply, on 443 only (where the proxy puts values in). The proxy reads
 // both again when they change.
 func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error {
+	var logins []json.RawMessage
+	var hosts []string
+	// A login the helper can't read has no bindings.
+	for _, kind := range s.Logins(st.Get(state.KeyImage)) {
+		args := []string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-bindings", "-login-salt", salt}
+		var out bytes.Buffer
+		var bs []json.RawMessage
+		if s.Login(args, &out) == nil && json.Unmarshal(out.Bytes(), &bs) == nil {
+			logins = append(logins, bs...)
+		}
+		out.Reset()
+		if s.Login(append(args, "-login-hosts"), &out) == nil {
+			hosts = append(hosts, strings.Fields(out.String())...)
+		}
+	}
+	return s.writeFiles(ctx, st, salt, logins, hosts)
+}
+
+// RefreshFiles writes a VM's secret files again for its secrets as they
+// are now, keeping its logins' bindings as WriteFiles last wrote them:
+// they come from the login files in the home of the devvm that started
+// its proxy.
+func (s *Store) RefreshFiles(ctx context.Context, st *state.VM, salt string) error {
+	data, err := os.ReadFile(BindingsFile(s.Dirs, st.Name()))
+	if err != nil {
+		return err
+	}
+	var all []json.RawMessage
+	if err := json.Unmarshal(data, &all); err != nil {
+		return err
+	}
+	var logins []json.RawMessage
+	var hosts []string
+	for _, raw := range all {
+		var b binding
+		if json.Unmarshal(raw, &b) != nil {
+			continue
+		}
+		if _, known := Lookup(b.Name); known {
+			continue
+		}
+		logins = append(logins, raw)
+		for _, h := range b.Hosts {
+			if l := h + ":443"; !slices.Contains(hosts, l) {
+				hosts = append(hosts, l)
+			}
+		}
+	}
+	return s.writeFiles(ctx, st, salt, logins, hosts)
+}
+
+// writeFiles writes the VM's secret files: the bindings of its secrets
+// with a value saved, then its logins', and their hosts.
+func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, logins []json.RawMessage, loginHosts []string) error {
 	var list []json.RawMessage
 	var hosts []string
 	for _, name := range Names(st) {
@@ -327,19 +468,7 @@ func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error
 		}
 		list = append(list, b)
 	}
-	// A login the helper can't read has no bindings.
-	for _, kind := range s.Logins(st.Get(state.KeyImage)) {
-		args := []string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-bindings", "-login-salt", salt}
-		var out bytes.Buffer
-		var bs []json.RawMessage
-		if s.Login(args, &out) == nil && json.Unmarshal(out.Bytes(), &bs) == nil {
-			list = append(list, bs...)
-		}
-		out.Reset()
-		if s.Login(append(args, "-login-hosts"), &out) == nil {
-			hosts = append(hosts, strings.Fields(out.String())...)
-		}
-	}
+	list, hosts = append(list, logins...), append(hosts, loginHosts...)
 	if list == nil {
 		list = []json.RawMessage{}
 	}

@@ -188,3 +188,25 @@ func TestStderrIsForLogLines(t *testing.T) {
 		t.Errorf("got %q, stdout %q", errOut, out)
 	}
 }
+
+// A secret is read without echo at a terminal, after the prompt; else as a
+// line, with no prompt.
+func TestSecret(t *testing.T) {
+	out, errOut := sandbox(t, "ghp_x\r\nrest")
+	if v := Secret(msg.TokenPrompt()); v != "ghp_x" || errOut.Len() != 0 {
+		t.Errorf("piped: %q, stderr %q", v, errOut)
+	}
+	if v := Line(); v != "rest" {
+		t.Errorf("the end of input: %q", v)
+	}
+	if v := Line(); v != "" {
+		t.Errorf("after it: %q", v)
+	}
+	old := readPassword
+	t.Cleanup(func() { readPassword = old })
+	readPassword = func() (string, error) { return "ghp_y", nil }
+	stdinTTY = func() bool { return true }
+	if v := Secret(msg.TokenPrompt()); v != "ghp_y" || errOut.String() != "token_prompt \n" || out.Len() != 0 {
+		t.Errorf("terminal: %q, stderr %q", v, errOut)
+	}
+}

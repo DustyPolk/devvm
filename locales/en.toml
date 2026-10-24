@@ -835,13 +835,13 @@ other = "{{.vm}}'s agent folder mounts change when it next starts"
 other = "updated {{.vm}}'s agent folder mounts"
 
 [no_claude_token]
-other = "no Claude token for {{.vm}}: run claude setup-token, then devvm with CLAUDE_CODE_OAUTH_TOKEN set to the token"
+other = "no Claude token for {{.vm}}: run claude setup-token, then devvm auth claude"
 
 [claude_token_invalid]
-other = "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token for one"
+other = "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token, then devvm auth claude"
 
 [no_github_token]
-other = "{{.vm}} uses github, but no GitHub token is saved"
+other = "{{.vm}} uses github, but no GitHub token is saved: devvm secret set github"
 
 [login_copy_failed]
 description = "reason is an error from the login helper, in English"
@@ -875,6 +875,52 @@ other = "couldn't read {{.secret}}: {{.reason}}"
 
 [secret_to_terminal]
 other = "refusing to print a secret to a terminal: --force to do it anyway"
+
+[secret_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't read or change the saved tokens: {{.reason}}"
+
+[claude_token_howto]
+other = "Run claude setup-token on this machine and approve in the browser.\nPaste the token it prints (sk-ant-oat01-…), not the code the browser shows."
+
+[github_token_howto]
+other = "Paste a GitHub token: a fine-grained one, scoped to the repos VMs need."
+
+[token_prompt]
+other = "Token:"
+
+[no_token]
+other = "no token given: nothing saved"
+
+[token_quotes]
+other = "the token has a quote, backslash or control character: nothing saved"
+
+[not_setup_token]
+other = "that isn't a setup-token token (sk-ant-oat01-…): nothing saved; claude setup-token prints one"
+
+[keychain_save_failed]
+other = "couldn't save {{.secret}} in the Keychain"
+
+[secret_saved_keychain]
+other = "saved {{.secret}} in the Keychain"
+
+[secret_saved]
+other = "saved {{.secret}} in {{.file}}"
+
+[secret_removed]
+other = "removed {{.secret}}"
+
+[secret_used]
+other = "{{.vm}} uses {{.secret}} from its next launch"
+
+[secret_unused]
+other = "{{.vm}} no longer uses {{.secret}}"
+
+[secret_with_image]
+other = "{{.vm}}'s image has claude, so it always uses the Claude token"
+
+[secret_unuse_copied]
+other = "network policy is off for {{.vm}}, so it got the real {{.secret}} token, which still works wherever it kept it: rotate it if that matters"
 
 [codex_login_kept]
 description = "keys lists auth.json's top-level keys, comma-separated"

@@ -6,6 +6,7 @@ package ui
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -128,6 +129,43 @@ func Confirm(q ...msg.M) bool {
 	}
 	a := answer(prompt)
 	return !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N")
+}
+
+// readPassword reads a line from the terminal without echoing it. A
+// cleanup puts the terminal back if the run ends meanwhile. Swapped by the
+// tests.
+var readPassword = func() (string, error) {
+	f := fd(os.Stdin)
+	old, err := term.GetState(f)
+	if err != nil {
+		return "", err
+	}
+	remove := AddCleanup(func(context.Context) { _ = term.Restore(f, old) })
+	defer remove()
+	b, err := term.ReadPassword(f)
+	return string(b), err
+}
+
+// Secret reads a value such as a token: in a terminal after the prompt on
+// stderr, without echoing it; else a line of input, as Line does.
+func Secret(prompt msg.M) string {
+	if !stdinTTY() {
+		return Line()
+	}
+	write(stderr, prompt.String()+" ")
+	v, err := readPassword()
+	write(stderr, "\n")
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+// Line reads a line of input, without its line ending; at the end of the
+// input, what's left of it.
+func Line() string {
+	line, _ := stdin.ReadString('\n')
+	return strings.TrimRight(line, "\r\n")
 }
 
 // answer prints the prompt to stderr when the input is a terminal, and

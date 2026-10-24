@@ -9,8 +9,8 @@
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
-#                network policy and checks it reaches only its allowlist, devvm log and policy, its token stays
-#                on the host, and the self-check, on relaunch too
+#                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
+#                stay on the host (devvm secret too), and the self-check, on relaunch too
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python and claude) and alpine:3 (musl tools,
 #                Docker on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
@@ -86,6 +86,7 @@ cleanup() {
   done
   rm -f "$layers"/e2e*.sh
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
+  rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
@@ -532,13 +533,26 @@ check "and Codex's API key, from the VM's copy of its login" bash -c "
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.openai.com/v1/models -H \"Authorization: Bearer \$(jq -r .OPENAI_API_KEY ~/.codex/auth.json)\"' </dev/null &&
   grep '\"path\":\"/v1/models\"' '$events' | grep -q '\"secrets\":\[\"codex-key\"\]'"
 check "the host's login files are unchanged" bash -c "cmp -s '$nh/.codex/auth.json' '$work/codex-before.json' && cmp -s '$nh/.claude.json' '$work/claude-before.json'"
-if [[ "$(uname -s)" == Darwin ]]; then
-  # The Keychain itself, under this run's service (a fake token, deleted at the end).
-  security add-generic-password -U -s "$DEVVM_SECRET_SERVICE" -a github -w ghp_E2EFAKE >/dev/null 2>&1
-  check "devvm reads a token from the Keychain, never to a terminal" bash -c "
-    [[ \$('$D' secret get github | cat) == ghp_E2EFAKE ]]"
-  security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
-fi
+# devvm secret with a fake GitHub token: in the Keychain under this run's service on macOS, else in
+# the sandbox's config folder; deleted at the end. macOS finds the Keychain through HOME, so the
+# VM's home links the Keychains folder (the link alone goes at the end).
+if [[ "$(uname -s)" == Darwin ]]; then mkdir -p "$nh/Library" && ln -s "$HOME/Library/Keychains" "$nh/Library/Keychains"; fi
+check "devvm secret set saves a token, and devvm reads it back, never to a terminal" bash -c "
+  echo ghp_E2EFAKE | HOME='$nh' '$D' secret set github --stdin >/dev/null && [[ \$(HOME='$nh' '$D' secret get github | cat) == ghp_E2EFAKE ]] &&
+  { [[ \$(uname -s) != Darwin ]] || [[ \$(security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github -w) == ghp_E2EFAKE ]]; }"
+check "secret use github: its proxy gets the binding at once, the VM its own placeholder on its next launch" bash -c "cd '$n' &&
+  HOME='$nh' '$D' secret use github >/dev/null && grep -q '\"name\":\"github\"' '$XDG_DATA_HOME/devvm/run/$vm.secrets.json' &&
+  printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'echo \$GH_TOKEN' </dev/null) == devvm-proxy-managed-github-$salt ]] &&
+  ! limactl shell --workdir / $vm bash -lc 'env; cat ~/.config/devvm/env' </dev/null | grep -q ghp_E2EFAKE &&
+  HOME='$nh' '$D' secret ls | grep -Eq '^github +yes +$vm\$'"
+check "the proxy puts the GitHub token in for its host" bash -c "
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.github.com/user -H \"Authorization: token \$GH_TOKEN\"' </dev/null &&
+  grep '\"path\":\"/user\"' '$events' | grep -q '\"secrets\":\[\"github\"\]'"
+check "secret unuse and rm take the binding and the token away at once" bash -c "cd '$n' &&
+  HOME='$nh' '$D' secret unuse github >/dev/null && ! grep -q '\"name\":\"github\"' '$XDG_DATA_HOME/devvm/run/$vm.secrets.json' &&
+  HOME='$nh' '$D' secret rm github >/dev/null && ! HOME='$nh' '$D' secret get github >/dev/null 2>&1 &&
+  { [[ \$(uname -s) != Darwin ]] || ! security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github >/dev/null 2>&1; }"
 check "the self-check passes on the VM devvm started confined" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm DEVVM_E2E_WANT= CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
   grep -q -- '--- PASS: TestE2ESelfCheck'"

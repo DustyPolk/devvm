@@ -220,6 +220,36 @@ func (p *Proxy) Prepare(ctx context.Context, st *state.VM, lifeline string, runn
 	return conf, p.start(st, key, files, bin, caSum, lifeline, pp)
 }
 
+// RefreshSecrets writes again the secret files of the VMs named (none:
+// every VM) whose proxy has them, so a token saved, deleted, bound or
+// unbound applies at once: a proxy reads its files again when they change,
+// and looks its values up afresh. Its logins' bindings stay as its start
+// wrote them.
+func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
+	if len(vms) == 0 {
+		files, err := filepath.Glob(secrets.BindingsFile(p.Dirs, "*"))
+		if err != nil {
+			return err
+		}
+		for _, f := range files {
+			vms = append(vms, strings.TrimSuffix(filepath.Base(f), ".secrets.json"))
+		}
+	}
+	for _, vm := range vms {
+		if _, err := os.Stat(secrets.BindingsFile(p.Dirs, vm)); err != nil {
+			continue
+		}
+		st, err := state.ReadVM(p.Dirs, vm)
+		if err != nil || !st.Exists() || st.Get(KeyProxySalt) == "" {
+			continue // not a VM devvm still has
+		}
+		if err := p.Secrets.RefreshFiles(ctx, st, st.Get(KeyProxySalt)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // start starts the VM's proxy on port pp and waits for it to listen.
 func (p *Proxy) start(st *state.VM, key, files, bin, caSum, lifeline string, pp int) error {
 	vm := st.Name()

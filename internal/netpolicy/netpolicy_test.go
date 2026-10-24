@@ -432,6 +432,51 @@ func TestForget(t *testing.T) {
 	}
 }
 
+// RefreshSecrets writes the secret files again only of VMs whose proxy has
+// them, so a token saved since gets its binding at once.
+func TestRefreshSecrets(t *testing.T) {
+	d, st := sandbox(t, "node")
+	p, _ := testProxy(t, d)
+	ctx := t.Context()
+	if err := st.Set(secrets.KeySecrets, "github"); err != nil {
+		t.Fatal(err)
+	}
+	other, err := state.CreateVM(d, "devvm-other-0123456789abcd", state.NewVM{Image: "node", Dir: "/o", Backend: "fake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Set(secrets.KeySecrets, "github"); err != nil {
+		t.Fatal(err)
+	}
+	salt, _ := Salt(st)
+	if err := p.Secrets.WriteFiles(ctx, st, salt); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Secrets.Save(ctx, "github", "ghp_testfake"); err != nil {
+		t.Fatal(err)
+	}
+	// A bindings file whose VM devvm no longer has is left alone.
+	if err := os.WriteFile(secrets.BindingsFile(d, "devvm-gone-0123456789abcd"), []byte("[]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.RefreshSecrets(ctx); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(secrets.BindingsFile(d, st.Name()))
+	if !strings.Contains(string(data), `"devvm-proxy-managed-github-`+salt+`"`) || strings.Contains(string(data), "ghp_testfake") {
+		t.Errorf("bindings = %s", data)
+	}
+	if _, err := os.Stat(secrets.BindingsFile(d, other.Name())); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a VM without a proxy got files: %v", err)
+	}
+	if data, _ := os.ReadFile(secrets.BindingsFile(d, "devvm-gone-0123456789abcd")); string(data) != "[]\n" {
+		t.Errorf("a gone VM's = %s", data)
+	}
+	if err := p.RefreshSecrets(ctx, other.Name()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // After a start: enforced is ok; a direct route, or a VM started outside
 // devvm without a terminal (or still after a restart), stops the VM.
 func TestSelfCheck(t *testing.T) {

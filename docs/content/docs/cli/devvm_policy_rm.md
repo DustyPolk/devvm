@@ -1,6 +1,6 @@
 ---
 title: devvm policy rm
-weight: 12
+weight: 13
 ---
 
 Remove rules from this folder's VM

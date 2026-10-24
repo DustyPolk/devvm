@@ -115,6 +115,9 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm policy` | show the allowlist of this folder's VM, file by file ([details](network.md#changing-rules)) |
 | `devvm policy allow\|deny\|rm RULE... [-g]` | add rules to this folder's VM's own, as allows or denies, or remove them; `-g`: yours for every VM. Changes apply at once |
 | `devvm log [-f] [-n N] [--blocked]` | show what this folder's VM connected to and what its [network policy](network.md) blocked: the last 50 unless `-n`; `-f` follows; `--blocked` lists the blocks by host, with the command that allows each ([details](network.md#logs)) |
+| `devvm secret set claude\|github [--stdin]`, `devvm auth claude` | save a token on this machine; with network policy, VMs get a placeholder and their proxy puts the token in ([details](network.md#saving-and-binding-tokens)) |
+| `devvm secret use\|unuse NAME` | let this folder's VM use a token, or stop it (`claude`: automatic for an image with `claude`) |
+| `devvm secret ls`, `devvm secret rm NAME` | list the tokens, whether each is saved and the VMs using it; delete a saved one |
 
 ## Images
 
@@ -154,5 +157,5 @@ The script completes commands, flags, image names (with `+`, after the parts alr
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](lima.md#a-lima-home-of-its-own)) |
 | `DEVVM_FROM` | the container image new VMs' and builds' base starts from when there's no `--from` ([details](from.md)) |
 | `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#versions)) |
-| `DEVVM_SECRET_SERVICE` | the Keychain service devvm reads tokens from, instead of `devvm` ([details](network.md#secrets)) |
+| `DEVVM_SECRET_SERVICE` | the Keychain service devvm saves and reads tokens in, instead of `devvm` ([details](network.md#saving-and-binding-tokens)) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | the Claude token VMs' proxies put in, over a saved one ([details](network.md#secrets)) |

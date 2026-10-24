@@ -14,5 +14,11 @@ const HasKeychain = false
 // KeychainGet is unsupported here.
 func KeychainGet(context.Context, string, string) (string, error) { return "", errors.ErrUnsupported }
 
+// KeychainSet is unsupported here.
+func KeychainSet(context.Context, string, string, string, string) error { return errors.ErrUnsupported }
+
+// KeychainDelete is unsupported here.
+func KeychainDelete(context.Context, string, string) error { return errors.ErrUnsupported }
+
 // ExcludeFromBackup does nothing here: there's no backup devvm knows of.
 func ExcludeFromBackup(context.Context, string) error { return nil }

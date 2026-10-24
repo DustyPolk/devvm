@@ -44,8 +44,121 @@ func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[
 		}
 		return v, nil
 	}
+	s.KeychainSet = func(_ context.Context, service, account, label, value string) error {
+		if label != "devvm "+account {
+			t.Errorf("label %q for %s", label, account)
+		}
+		kc[service+"/"+account] = value
+		return nil
+	}
+	s.KeychainDelete = func(_ context.Context, service, account string) error {
+		if _, ok := kc[service+"/"+account]; !ok {
+			return platform.ErrNoSecret
+		}
+		delete(kc, service+"/"+account)
+		return nil
+	}
 	s.Getenv = func(k string) string { return env[k] }
 	return s, kc
+}
+
+// A token is kept without whitespace; one that's empty, would end the
+// Keychain's command line or a header, or for claude isn't a setup-token
+// token, is refused.
+func TestToken(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	for _, tc := range []struct{ name, given, want, err string }{
+		{"github", " ghp_x \n", "ghp_x", ""},
+		{"github", "ghp_ x\t", "ghp_x", ""},
+		{"claude", "sk-ant-oat01-abc\r\n", "sk-ant-oat01-abc", ""},
+		{"github", "  \n", "", "no_token"},
+		{"github", `ghp_x" -A -T "`, "", "token_quotes"},
+		{"github", `ghp_x\`, "", "token_quotes"},
+		{"github", "ghp_\x00x", "", "token_quotes"},
+		{"github", "ghp_\x7fx", "", "token_quotes"},
+		{"claude", "some-browser-code", "", "not_setup_token"},
+	} {
+		v, err := Token(tc.name, tc.given)
+		if v != tc.want || names(err) != tc.err {
+			t.Errorf("Token(%s, %q) = %q, %v", tc.name, tc.given, v, names(err))
+		}
+	}
+}
+
+// Save and Delete: the Keychain under devvm's service, else a file only
+// the user reads in a folder only the user opens; only devvm's names.
+func TestSaveDelete(t *testing.T) {
+	ctx := t.Context()
+	s, kc := testStore(t, true, map[string]string{"DEVVM_SECRET_SERVICE": "devvm-test"}) //nolint:gosec // a service name
+	if err := s.Save(ctx, "github", "ghp_x"); err != nil || kc["devvm-test/github"] != "ghp_x" {
+		t.Errorf("Save: %v, %q", err, kc)
+	}
+	if v, _ := s.Value(ctx, "github"); v != "ghp_x" {
+		t.Errorf("Value after Save = %q", v)
+	}
+	if err := s.Delete(ctx, "github"); err != nil || len(kc) != 0 {
+		t.Errorf("Delete: %v, %q", err, kc)
+	}
+	if err := s.Delete(ctx, "github"); !errors.Is(err, ErrNone) {
+		t.Errorf("Delete again: %v", err)
+	}
+	s.KeychainSet = func(context.Context, string, string, string, string) error { return errors.New("denied") }
+	if err := s.Save(ctx, "claude", "sk-ant-oat01-x"); names(err) != "keychain_save_failed secret=claude" {
+		t.Errorf("a failed save: %v", names(err))
+	}
+	for _, name := range []string{"../../x", "nope"} {
+		if err := s.Save(ctx, name, "v"); names(err) != "no_secret secret="+msg.Shown(name) {
+			t.Errorf("Save(%s): %v", name, names(err))
+		}
+		if err := s.Delete(ctx, name); !errors.Is(err, ErrNone) {
+			t.Errorf("Delete(%s): %v", name, err)
+		}
+	}
+
+	f, _ := testStore(t, false, nil)
+	// One made too open is made the user's alone.
+	if err := os.MkdirAll(f.Dirs.Secrets(), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Save(ctx, "github", "ghp_file"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := f.Value(ctx, "github"); v != "ghp_file" {
+		t.Errorf("file Value = %q", v)
+	}
+	for path, want := range map[string]os.FileMode{f.Dirs.Secrets(): 0o700, f.File("github"): 0o600} {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, %v", path, fi.Mode(), err)
+		}
+	}
+	if err := f.Delete(ctx, "github"); err != nil {
+		t.Errorf("file Delete: %v", err)
+	}
+	if err := f.Delete(ctx, "github"); !errors.Is(err, ErrNone) {
+		t.Errorf("file Delete again: %v", err)
+	}
+}
+
+// Bind adds a secret to a VM's own list once, and takes it out; claude
+// stays with an image that has it.
+func TestBind(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "node+claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		name string
+		use  bool
+		want string
+	}{{"github", true, "github"}, {"github", true, "github"}, {"claude", true, "github claude"}, {"github", false, "claude"}, {"claude", false, ""}} {
+		if err := Bind(st, step.name, step.use); err != nil || st.Get(KeySecrets) != step.want {
+			t.Errorf("Bind(%s, %v): %q, %v", step.name, step.use, st.Get(KeySecrets), err)
+		}
+	}
+	if !slices.Equal(Names(st), []string{"claude"}) || !FromImage(st, "claude") || FromImage(st, "github") {
+		t.Errorf("Names = %q", Names(st))
+	}
 }
 
 func TestValue(t *testing.T) {
@@ -219,6 +332,21 @@ func TestWriteFiles(t *testing.T) {
 		if fi, err := os.Stat(f); err != nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("%s: %v %v", f, fi.Mode(), err)
 		}
+	}
+	// A refresh keeps the logins' bindings and hosts as written, without
+	// reading any login file, and follows the secrets: unbound, github's
+	// binding and hosts go.
+	s.Login = func([]string, io.Writer) error { t.Error("a refresh read a login"); return errors.New("no") }
+	_ = st.Set(KeySecrets, "")
+	if err := s.RefreshFiles(t.Context(), st, salt); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(BindingsFile(d, "vm1"))
+	if strings.Contains(string(data), `"github"`) || !strings.Contains(string(data), `"codex-key"`) {
+		t.Errorf("refreshed bindings = %s", data)
+	}
+	if pol, _ := os.ReadFile(PolicyFile(d, "vm1")); string(pol) != "api.anthropic.com:443\napi.openai.com:443\n" {
+		t.Errorf("refreshed policy = %q", pol)
 	}
 	// No secrets at all: an empty list.
 	none, err := state.CreateVM(d, "vm2", state.NewVM{Image: "node"})

@@ -34,6 +34,7 @@ devvm [IMAGE] [flags]
 ## See also
 
 - [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
+- [devvm auth](devvm_auth.md): Save the Claude token: devvm secret set claude
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
@@ -45,4 +46,5 @@ devvm [IMAGE] [flags]
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm rm](devvm_rm.md): Delete this folder's VM
+- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

@@ -7,6 +7,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 
 - [devvm](devvm.md): Open a shell in this folder's VM, creating it first
 - [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
+- [devvm auth](devvm_auth.md): Save the Claude token: devvm secret set claude
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
@@ -21,4 +22,10 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm rm](devvm_rm.md): Delete this folder's VM
+- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm secret ls](devvm_secret_ls.md): List the tokens, whether each is saved, and the VMs using it
+- [devvm secret rm](devvm_secret_rm.md): Delete a saved token
+- [devvm secret set](devvm_secret_set.md): Save a token on this machine
+- [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a token
+- [devvm secret use](devvm_secret_use.md): Let this folder's VM use a token
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

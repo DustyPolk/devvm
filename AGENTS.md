@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line |
@@ -86,7 +86,7 @@ Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
 - **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
 - **Linux hosts:** `LIMA_HOME=~/.lt-linux-go`, VM `linuxhost` (nested virtualization, the repo read-only, copied to `~/devvm`), set up as [testing.md](docs/content/docs/testing.md) says; never `~/.lt-linux`, which is the user's.
-- **e2e to come:** `--backend`; `size gc from`; network: git over SSH, `secret use github`, opencode's login; project: SSH agent, `devvm stop`, `git-protect`; tools: python, uv, claude, codex, rust, go, adding in place, gc.
+- **e2e to come:** `--backend`; `size gc from`; network: git over SSH, opencode's login; project: SSH agent, `devvm stop`, `git-protect`; tools: python, uv, claude, codex, rust, go, adding in place, gc.
 - **Delete test VMs and temp files afterwards.** Long builds run in the background. Tests that `chflags` real files unlock them (`chflags -R nouchg`), only in their own temp folders.
 - **The testscript runner stops the sandbox's proxies** (`pkill -f` on `-lifeline`): the stub hostagent is gone before they look, so they'd wait 15 minutes.
 - **`limactl shell` reads stdin:** give it none unless the input is meant for it.
@@ -148,18 +148,18 @@ Bats files (pending cases, by task):
 | File | Pending |
 | --- | --- |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
-| `cli.bats` | secret/auth (auth, set/rm/ls, use, quoted values, `json_str`), ssh-agent (five), limactl |
+| `cli.bats` | ssh-agent (five), limactl |
 | `delete.bats` | gc (two, overlay half, `delete_image_key`) |
 | `guest.bats` | ssh/code (VS Code settings) |
 | `images.bats` | layer, gc (three), images (three, `images rm`) |
 | `install.bats` | all (install.sh) |
-| `network.bats` | secret (`unuse`), ssh/code (direct route) |
+| `network.bats` | ssh/code (direct route) |
 | `ports.bats` | ports (five) |
 | `project.bats` | git-protect (strict) |
 | `size.bats` | size (three) |
 | `build`, `from`, `layers`, `lint`, `messages`, `oci`, `tools` | none |
 
-Dropped: `build_proxy` (two), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
+Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
 Deliberate changes from the bash:
 - A failed network self-check stops the VM, existing VMs included; a failed start stops the proxy it started.
@@ -183,11 +183,11 @@ Deliberate changes from the bash:
 - `help` is Cobra's (`devvm help COMMAND`, per-command help); `devvm completion bash|zsh|fish` is new; `--version` has no `-v`; the version is set at build time, else Go's build info (no `VERSION` file read).
 - Host checks are each backend's `Problems`: a command stops at the first (none listed under it); `doctor` checks the new VMs' backend (`--backend`), adds a features table, Lima's global configs (`lima-config`) and `qemu-img`, `*_fix` messages carry the fix, `doctor_ok` names the backend.
 - `network`: no argument prints `ls`'s value (`unenforced` too); an unchanged one is `net_already`; `on` needs the backend's egress proxy first; a running VM turned off stays on its proxy until it next starts (`net_off_next_start`); `Confined` means started with the proxy, and `net_unenforced*` say "wasn't started confined"; a bad argument is cobra's `usage_error`.
+- `secret`: `ls` (and `devvm secret`) is a table of every secret, SAVED and USED BY; set, rm, use and unuse rewrite running proxies' bindings (no touch); `secret_saved`/`_keychain`, `secret_removed`, `secret_used`/`_unused` replace `secret_saved keychain=`, `removed`, `secret_bound`; `unuse claude` on an image with claude is `secret_with_image`; control characters are refused too; `use` warns when no token is saved; bad names are cobra's `usage_error`.
 
 Pending in code:
 - deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend`/`*AgentKeys` (size, ports, setup, ssh-agent), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The other `*_flag_ignored` warnings name `devvm git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
 - `ssh_remote_hint` doesn't name `devvm ssh-agent`. `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`; `checkAgent` runs only once `--ssh-agent` exists; ssh config entries forward devvm's agent with `devvm ssh-agent`. `devvm setup` brings `base_will_rebuild`, `gc_old_hint`, the features in `--help`, and `base_features` naming it. `devvm images` labels images with `image_from` too. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
 - Release builds set the version with `-ldflags "-X github.com/w3cj/devvm/internal/cli.version=…"` (`.goreleaser.yaml` comes with releases); `doctor_ok` shows it.
-- Secret brings `secret_store`, `secret_delete`, `proxies_forget_values`, Keychain writes, and `devvm secret set` in `no_claude_token`/`no_github_token` (they name `CLAUDE_CODE_OAUTH_TOKEN`, or nothing, until then).
 
 Bash fixes copied: none yet.

@@ -126,7 +126,24 @@ Tokens stay on the host. A VM gets a placeholder of its own instead, ending in a
 | `claude` | `api.anthropic.com` | `Authorization` | every VM whose image has `claude` |
 | `github` | `api.github.com`, `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | `Authorization` | VMs it's bound to |
 
-devvm reads a token from the macOS Keychain (service `devvm`, account `claude` or `github`; `DEVVM_SECRET_SERVICE` names another service, letters, digits, `.`, `_` and `-` only), or elsewhere from `~/.config/devvm/secrets/<name>`, a file only you can read. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one. A token's hosts join the VM's allowlist on port 443 whether a value is saved or not.
+### Saving and binding tokens
+
+| Command | What it does |
+| --- | --- |
+| `devvm secret set claude` or `github` | asks for the token without showing it (`--stdin` reads a line instead) and saves it |
+| `devvm auth claude` | the same as `devvm secret set claude` |
+| `devvm secret rm NAME` | deletes a saved token |
+| `devvm secret ls` (or `devvm secret`) | lists the secrets, whether each is saved, and the VMs using each |
+| `devvm secret use NAME` | lets this folder's VM use the token |
+| `devvm secret unuse NAME` | stops this folder's VM using it; a VM whose image has `claude` always uses `claude` |
+
+A token is saved in the macOS Keychain (service `devvm`, account `claude` or `github`, through `security -i` on its input, so the token is in no process's arguments; `DEVVM_SECRET_SERVICE` names another service, letters, digits, `.`, `_` and `-` only), or elsewhere in `~/.config/devvm/secrets/<name>`, a file only you can read. Whitespace in a token is dropped. A token with a quote, a backslash or a control character is refused, and so is a `claude` token that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
+
+Saving, deleting, binding and unbinding apply at once to the proxies running: devvm writes their bindings again. The VM gets the placeholder (without network policy, the token itself) in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`, from its next launch. `devvm secret unuse` and `devvm secret rm` take nothing back from a VM without network policy: the token it got still works wherever it kept it, and devvm says so on `unuse`. Neither revokes what a VM made with the token ([what devvm doesn't protect](security.md#what-it-doesnt-protect)): rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos VMs need.
+
+### How the proxy puts them in
+
+A token's hosts join the VM's allowlist on port 443 whether a value is saved or not.
 
 devvm writes the VM's bindings (`~/.local/share/devvm/run/<vm>.secrets.json`: each secret's name, hosts, header and placeholder, never its value) for those with a value. For a bound host the proxy intercepts `:443` tunnels instead of passing them through. It terminates TLS with a certificate from devvm's own CA (`~/.local/share/devvm/ca`; ECDSA P-256, valid 30 days, no host name in it), replaces the placeholder in the binding's header (inside `Basic` credentials too) with the real value, and forwards the request over a new TLS connection. Absolute-form `https://` requests get the same. Each request must name the bound host: one that names another gets `421`. The bindings are read again for every request, so removing one applies to tunnels already open.
 

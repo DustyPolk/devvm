@@ -147,7 +147,12 @@ func ClaudeMcpSecretsCopied(servers string, vm string) M {
 	return M{id: "claude_mcp_secrets_copied", vals: []val{{"servers", servers}, {"vm", vm}}}
 }
 
-// ClaudeTokenInvalid is [claude_token_invalid]: "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token for one"
+// ClaudeTokenHowto is [claude_token_howto]: "Run claude setup-token on this machine and approve in the browser.\nPaste the token it prints (sk-ant-oat01-…), not the code the browser shows."
+func ClaudeTokenHowto() M {
+	return M{id: "claude_token_howto"}
+}
+
+// ClaudeTokenInvalid is [claude_token_invalid]: "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token, then devvm auth claude"
 func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
@@ -502,6 +507,11 @@ func GitWorktreeStray(wt string) M {
 	return M{id: "git_worktree_stray", vals: []val{{"wt", wt}}}
 }
 
+// GithubTokenHowto is [github_token_howto]: "Paste a GitHub token: a fine-grained one, scoped to the repos VMs need."
+func GithubTokenHowto() M {
+	return M{id: "github_token_howto"}
+}
+
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path: set it to your home folder"
 func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
@@ -560,6 +570,11 @@ func KeyLoaded() M {
 // KeyLoadedKeychain is [key_loaded_keychain]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
 func KeyLoadedKeychain() M {
 	return M{id: "key_loaded_keychain"}
+}
+
+// KeychainSaveFailed is [keychain_save_failed]: "couldn't save {{.secret}} in the Keychain"
+func KeychainSaveFailed(secret string) M {
+	return M{id: "keychain_save_failed", vals: []val{{"secret", secret}}}
 }
 
 // KVMAccess is [kvm_access]: "can't open /dev/kvm: run {{.fix}}, then log in again"
@@ -802,7 +817,7 @@ func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
 }
 
-// NoClaudeToken is [no_claude_token]: "no Claude token for {{.vm}}: run claude setup-token, then devvm with CLAUDE_CODE_OAUTH_TOKEN set to the token"
+// NoClaudeToken is [no_claude_token]: "no Claude token for {{.vm}}: run claude setup-token, then devvm auth claude"
 func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
 }
@@ -812,7 +827,7 @@ func NoDigest(from string) M {
 	return M{id: "no_digest", vals: []val{{"from", from}}}
 }
 
-// NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved"
+// NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved: devvm secret set github"
 func NoGithubToken(vm string) M {
 	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
 }
@@ -852,6 +867,11 @@ func NoTerminalFetch(remote string) M {
 	return M{id: "no_terminal_fetch", vals: []val{{"remote", remote}}}
 }
 
+// NoToken is [no_token]: "no token given: nothing saved"
+func NoToken() M {
+	return M{id: "no_token"}
+}
+
 // NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
 func NoUbuntuImage(url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
@@ -875,6 +895,11 @@ func NotARule(rule string) M {
 // NotAnImage is [not_an_image]: "refusing to delete {{.name}}: it's not an image"
 func NotAnImage(name string) M {
 	return M{id: "not_an_image", vals: []val{{"name", name}}}
+}
+
+// NotSetupToken is [not_setup_token]: "that isn't a setup-token token (sk-ant-oat01-…): nothing saved; claude setup-token prints one"
+func NotSetupToken() M {
+	return M{id: "not_setup_token"}
 }
 
 // NothingChanged is [nothing_changed]: "nothing changed"
@@ -1042,14 +1067,54 @@ func ScriptFailed(limaHome string, script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"lima_home", limaHome}, {"script", script}, {"vm", vm}}}
 }
 
+// SecretFailed is [secret_failed]: "couldn't read or change the saved tokens: {{.reason}}"
+func SecretFailed(reason string) M {
+	return M{id: "secret_failed", vals: []val{{"reason", reason}}}
+}
+
 // SecretReadFailed is [secret_read_failed]: "couldn't read {{.secret}}: {{.reason}}"
 func SecretReadFailed(reason string, secret string) M {
 	return M{id: "secret_read_failed", vals: []val{{"reason", reason}, {"secret", secret}}}
 }
 
+// SecretRemoved is [secret_removed]: "removed {{.secret}}"
+func SecretRemoved(secret string) M {
+	return M{id: "secret_removed", vals: []val{{"secret", secret}}}
+}
+
+// SecretSaved is [secret_saved]: "saved {{.secret}} in {{.file}}"
+func SecretSaved(file string, secret string) M {
+	return M{id: "secret_saved", vals: []val{{"file", file}, {"secret", secret}}}
+}
+
+// SecretSavedKeychain is [secret_saved_keychain]: "saved {{.secret}} in the Keychain"
+func SecretSavedKeychain(secret string) M {
+	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
+}
+
 // SecretToTerminal is [secret_to_terminal]: "refusing to print a secret to a terminal: --force to do it anyway"
 func SecretToTerminal() M {
 	return M{id: "secret_to_terminal"}
+}
+
+// SecretUnuseCopied is [secret_unuse_copied]: "network policy is off for {{.vm}}, so it got the real {{.secret}} token, which still works wherever it kept it: rotate it if that matters"
+func SecretUnuseCopied(secret string, vm string) M {
+	return M{id: "secret_unuse_copied", vals: []val{{"secret", secret}, {"vm", vm}}}
+}
+
+// SecretUnused is [secret_unused]: "{{.vm}} no longer uses {{.secret}}"
+func SecretUnused(secret string, vm string) M {
+	return M{id: "secret_unused", vals: []val{{"secret", secret}, {"vm", vm}}}
+}
+
+// SecretUsed is [secret_used]: "{{.vm}} uses {{.secret}} from its next launch"
+func SecretUsed(secret string, vm string) M {
+	return M{id: "secret_used", vals: []val{{"secret", secret}, {"vm", vm}}}
+}
+
+// SecretWithImage is [secret_with_image]: "{{.vm}}'s image has claude, so it always uses the Claude token"
+func SecretWithImage(vm string) M {
+	return M{id: "secret_with_image", vals: []val{{"vm", vm}}}
 }
 
 // SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
@@ -1140,6 +1205,16 @@ func Stopping(vm string) M {
 // SyncFailed is [sync_failed]: "couldn't set up {{.vm}}"
 func SyncFailed(vm string) M {
 	return M{id: "sync_failed", vals: []val{{"vm", vm}}}
+}
+
+// TokenPrompt is [token_prompt]: "Token:"
+func TokenPrompt() M {
+	return M{id: "token_prompt"}
+}
+
+// TokenQuotes is [token_quotes]: "the token has a quote, backslash or control character: nothing saved"
+func TokenQuotes() M {
+	return M{id: "token_quotes"}
 }
 
 // TooManyCpus is [too_many_cpus]: "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
@@ -1388,6 +1463,7 @@ var specs = map[string]spec{
 	"building_tools_in":           {fields: []string{"vm"}},
 	"checking_tools":              {},
 	"claude_mcp_secrets_copied":   {fields: []string{"servers", "vm"}},
+	"claude_token_howto":          {},
 	"claude_token_invalid":        {},
 	"clone_check_failed":          {fields: []string{"vm"}},
 	"clone_detached":              {},
@@ -1459,6 +1535,7 @@ var specs = map[string]spec{
 	"git_protect_needs_macos_new": {},
 	"git_replaced":                {fields: []string{"git"}},
 	"git_worktree_stray":          {fields: []string{"wt"}},
+	"github_token_howto":          {},
 	"home_not_absolute":           {},
 	"image_from":                  {fields: []string{"from", "image"}},
 	"image_in_use":                {fields: []string{"key", "vms"}},
@@ -1471,6 +1548,7 @@ var specs = map[string]spec{
 	"kept":                        {fields: []string{"vm"}},
 	"key_loaded":                  {},
 	"key_loaded_keychain":         {},
+	"keychain_save_failed":        {fields: []string{"secret"}},
 	"kvm_access":                  {fields: []string{"fix"}},
 	"lima_arch_unsupported":       {fields: []string{"arch"}},
 	"lima_broken":                 {},
@@ -1529,11 +1607,13 @@ var specs = map[string]spec{
 	"no_terminal_confirm":         {fields: []string{"vm", "want"}},
 	"no_terminal_delete":          {},
 	"no_terminal_fetch":           {fields: []string{"remote"}},
+	"no_token":                    {},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"no_vm":                       {fields: []string{"dir"}},
 	"no_vm_policy":                {fields: []string{"dir"}},
 	"not_a_rule":                  {fields: []string{"rule"}},
 	"not_an_image":                {fields: []string{"name"}},
+	"not_setup_token":             {},
 	"nothing_changed":             {},
 	"oci_waiting":                 {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
@@ -1567,8 +1647,16 @@ var specs = map[string]spec{
 	"saved_branches":              {fields: []string{"branches"}},
 	"saved_names_taken":           {fields: []string{"remote", "vm"}},
 	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
+	"secret_failed":               {fields: []string{"reason"}},
 	"secret_read_failed":          {fields: []string{"reason", "secret"}},
+	"secret_removed":              {fields: []string{"secret"}},
+	"secret_saved":                {fields: []string{"file", "secret"}},
+	"secret_saved_keychain":       {fields: []string{"secret"}},
 	"secret_to_terminal":          {},
+	"secret_unuse_copied":         {fields: []string{"secret", "vm"}},
+	"secret_unused":               {fields: []string{"secret", "vm"}},
+	"secret_used":                 {fields: []string{"secret", "vm"}},
+	"secret_with_image":           {fields: []string{"vm"}},
 	"setid_files":                 {fields: []string{"files"}},
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},
@@ -1587,6 +1675,8 @@ var specs = map[string]spec{
 	"stop_failed":                 {fields: []string{"vm"}},
 	"stopping":                    {fields: []string{"vm"}},
 	"sync_failed":                 {fields: []string{"vm"}},
+	"token_prompt":                {},
+	"token_quotes":                {},
 	"too_many_cpus":               {fields: []string{"have", "want"}},
 	"too_much_memory":             {fields: []string{"have", "want"}},
 	"tool_bad_output":             {fields: []string{"file"}},

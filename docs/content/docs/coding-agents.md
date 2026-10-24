@@ -23,7 +23,7 @@ Files are copied into the VM's home on every launch, over the VM's own. With [ne
 
 ### Claude Code login
 
-Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use a long-lived token instead: run `claude setup-token`, and devvm puts it in the VM's environment as `CLAUDE_CODE_OAUTH_TOKEN`. devvm reads it from its own environment (`CLAUDE_CODE_OAUTH_TOKEN`), else from where it keeps [secrets](network.md#secrets). A token that isn't a setup token (`sk-ant-oat01-…`) isn't sent. With network policy the VM gets a placeholder of its own, and its proxy puts the token into requests; without it, the token itself. A `~/.claude/.credentials.json` is never copied.
+Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use a long-lived token instead: run `claude setup-token` on this machine, approve in the browser, then `devvm auth claude` and paste the token it printed (`sk-ant-oat01-…`, not the code the browser shows). devvm saves it with the other [secrets](network.md#saving-and-binding-tokens), and puts it in the environment of every VM whose image has `claude`, as `CLAUDE_CODE_OAUTH_TOKEN`, from its next launch. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment wins over the saved one. A token that isn't a setup token isn't saved, nor sent. With network policy the VM gets a placeholder of its own, and its proxy puts the token into requests; without it, the token itself. A `~/.claude/.credentials.json` is never copied.
 
 ### Codex and opencode logins
 
