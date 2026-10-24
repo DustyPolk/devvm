@@ -46,6 +46,7 @@ Run the tasks with `mise run <task>`:
 | `lint` | runs golangci-lint, shellcheck, the docs linters and the message link check |
 | `test` | runs the tests with the race detector and coverage |
 | `vuln` | runs govulncheck |
+| `deadcode` | lists functions nothing calls outside the tests |
 | `cli-docs` | generates the CLI reference |
 | `docs` | generates the CLI reference, then serves the docs site |
 | `e2e` | runs the end-to-end tests against real VMs |
@@ -140,7 +141,9 @@ The sections so far:
 - `network`: a claude+codex VM with `--network-policy`, a fake token in devvm's environment and a fake `~/.claude.json` and Codex login in a home of its own. Its proxy runs and the self-check passed; `ssh devvm-net` reaches it; direct connections fail, even as root, to an address and to other ports; an allowed host works and others, or other ports, are blocked; DNS fails at once; the host's loopback services are out of reach, directly or through the proxy; the proxy refuses requests without the VM's password; the token is nowhere in the VM, which has devvm's CA, its own placeholder and logins' copies with placeholders only; the proxy puts the token in for its host (for the VM's own placeholder only), an MCP server's header and Codex's key for theirs, over TLS the VM verifies; the host's login files are unchanged. On macOS, devvm reads a token from the Keychain. `TestE2ESelfCheck` in `internal/netpolicy` runs the self-check on the VM: it passes, then, once the VM is started outside devvm, it fails and stops the VM.
 - `from`: run with a `docker` that isn't running, so nothing comes from Docker. A node+python+claude VM from `node:24` (Debian 12, in a home of its own) boots, with its base keyed by the registry's digest, and its node, python and claude at the locked versions; an `alpine:3` VM runs node and pnpm from musl tool images and Docker on OpenRC, with no crashed services; base builds from `ubuntu:26.04`; and the build VM and its temporary folders are gone.
 
-base, the `--from` bases and the shared tool images stay cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. Checks look for devvm's messages with `devvm _msg`, never by their wording.
+base, the `--from` bases and the shared tool images stay cached between runs; every other VM a run makes is deleted at its end, and its project folders are unlocked and deleted. Each check prints `[n/N]`, how long it took and the time left as the last complete run measured it, and a heartbeat every minute shows the latest output. A check a run has nothing for is counted as `SKIP`: base's features, with base cached. A run with fewer checks than the last complete one fails, as a section ended early. Checks look for devvm's messages with `devvm _msg`, never by their wording.
+
+[Testing on other hosts](testing.md) covers Linux hosts, x86_64 and the checks to run by hand.
 
 ## Messages
 

@@ -52,6 +52,19 @@ func write(t *testing.T, path string, data []byte) {
 
 func fixture(t *testing.T) []byte { return read(t, repo(t, "testdata", "mise.lock")) }
 
+// lockTools returns the tools a lock has entries for, in its order.
+func lockTools(l Lock) []string {
+	var out []string
+	for _, line := range lines(l) {
+		if t, ok := strings.CutPrefix(line, "[[tools."); ok {
+			if t, ok = strings.CutSuffix(t, "]]"); ok {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
 // env is a sandbox: devvm's folders, a copy of tools/, the stub mise
 // resolving the fixture lock, and what the tools printed.
 type env struct {
@@ -349,8 +362,8 @@ func TestRefreshStepsBack(t *testing.T) {
 	if !bytes.Equal(lock.Entry("bun"), Lock(newer).Entry("bun")) {
 		t.Error("bun didn't move on")
 	}
-	if !slices.Equal(lock.Tools(), Lock(newer).Tools()) {
-		t.Errorf("tools = %q", lock.Tools())
+	if !slices.Equal(lockTools(lock), lockTools(newer)) {
+		t.Errorf("tools = %q", lockTools(lock))
 	}
 	if c := e.calls(t); !strings.Contains(c, "mise ls-remote core:node 24\n") {
 		t.Errorf("not from the backend: %q", c)
@@ -893,7 +906,7 @@ func TestAll(t *testing.T) {
 	if want := []string{"node", "pnpm", "bun", "python", "uv", "go", "rust", "claude", "codex", "opencode"}; !slices.Equal(got, want) {
 		t.Errorf("All = %q, want %q", got, want)
 	}
-	if locked := Lock(fixture(t)).Tools(); !slices.Equal(slices.Sorted(slices.Values(got)), locked) {
+	if locked := lockTools(fixture(t)); !slices.Equal(slices.Sorted(slices.Values(got)), locked) {
 		t.Errorf("the fixture lock has %q", locked)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,11 @@ import (
 
 	"github.com/w3cj/devvm/internal/msg"
 )
+
+// logged runs argv through LoggedCmd.
+func logged(ctx context.Context, step msg.M, argv ...string) error {
+	return LoggedCmd(ctx, step, exec.CommandContext(ctx, argv[0], argv[1:]...)) //nolint:gosec // the tests' own commands
+}
 
 func writeFile(t *testing.T, path, s string) {
 	t.Helper()
@@ -31,7 +37,7 @@ func readFile(t *testing.T, path string) string {
 func TestLoggedGoesToTheLog(t *testing.T) {
 	out, errOut := sandbox(t, "")
 	noisy := []string{"sh", "-c", `echo "lots of output"; echo "the error" >&2; exit "$0"`}
-	if err := Logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
+	if err := logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
 		t.Fatal(err)
 	}
 	if out.Len()+errOut.Len() != 0 {
@@ -47,7 +53,7 @@ func TestLoggedGoesToTheLog(t *testing.T) {
 		t.Errorf("log in %s", logPath())
 	}
 	// One log for the run.
-	if err := Logged(t.Context(), msg.M{}, append(noisy, "1")...); err == nil {
+	if err := logged(t.Context(), msg.M{}, append(noisy, "1")...); err == nil {
 		t.Error("a failing command: no error")
 	}
 	if logs, _ := filepath.Glob(filepath.Join(filepath.Dir(logPath()), "*.log")); len(logs) != 1 {
@@ -64,7 +70,7 @@ func TestLoggedGoesToTheLog(t *testing.T) {
 	// DEVVM_VERBOSE prints it all instead.
 	out.Reset()
 	t.Setenv("DEVVM_VERBOSE", "1")
-	if err := Logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
+	if err := logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
 		t.Fatal(err)
 	}
 	LogNote()
@@ -75,7 +81,7 @@ func TestLoggedGoesToTheLog(t *testing.T) {
 
 func TestDieLoggedShowsTheLogsEnd(t *testing.T) {
 	_, errOut := sandbox(t, "")
-	_ = Logged(t.Context(), msg.M{}, "sh", "-c", `printf 'guest\033]0;title\007 \302\233line\n'; exit 1`)
+	_ = logged(t.Context(), msg.M{}, "sh", "-c", `printf 'guest\033]0;title\007 \302\233line\n'; exit 1`)
 	if code := exitCode(func() { DieLogged(msg.MsgUnknown("x")) }); code != 1 {
 		t.Errorf("exit code %d, want 1", code)
 	}
@@ -94,7 +100,7 @@ func TestDieLoggedShowsTheLogsEnd(t *testing.T) {
 func TestProxyKeysStayOutOfTheLog(t *testing.T) {
 	sandbox(t, "")
 	key := strings.Repeat("0123456789abcdef", 2)
-	if err := Logged(t.Context(), msg.M{}, "true", "--set", `.env.HTTP_PROXY="http://devvm:`+key+`@host.lima.internal:3128"`); err != nil {
+	if err := logged(t.Context(), msg.M{}, "true", "--set", `.env.HTTP_PROXY="http://devvm:`+key+`@host.lima.internal:3128"`); err != nil {
 		t.Fatal(err)
 	}
 	log := readFile(t, logPath())
@@ -117,19 +123,19 @@ func TestStepCounts(t *testing.T) {
 	sandbox(t, "")
 	ctx := WithSteps(t.Context(), 2)
 	for _, s := range []string{"a", "b", "c"} {
-		if err := Logged(ctx, msg.MsgUnknown(s), "true"); err != nil {
+		if err := logged(ctx, msg.MsgUnknown(s), "true"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// A phase inside another keeps its own count; an unlabelled step and one
 	// outside a phase aren't counted.
-	if err := Logged(WithSteps(ctx, 1), msg.MsgUnknown("inner"), "true"); err != nil {
+	if err := logged(WithSteps(ctx, 1), msg.MsgUnknown("inner"), "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := Logged(ctx, msg.M{}, "true"); err != nil {
+	if err := logged(ctx, msg.M{}, "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := Logged(t.Context(), msg.MsgUnknown("outside"), "true"); err != nil {
+	if err := logged(t.Context(), msg.MsgUnknown("outside"), "true"); err != nil {
 		t.Fatal(err)
 	}
 	want := "# [1/2] msg_unknown name=a\n+ true\n# [2/2] msg_unknown name=b\n+ true\n# [3/2] msg_unknown name=c\n+ true\n" +

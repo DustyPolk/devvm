@@ -45,7 +45,11 @@ func helper(mode string) int {
 			}
 		})
 		Say(msg.MsgUnknown("ready"))
-		if err := Logged(ctx, msg.MsgUnknown("sleeping"), "sleep", "30"); err != nil {
+		argv := []string{"sleep", "30"}
+		if mode == "command interrupts" { // as Ctrl+C reaches both, the command ending first
+			argv = []string{"sh", "-c", "kill -INT $PPID; exit 130"}
+		}
+		if err := logged(ctx, msg.MsgUnknown("sleeping"), argv...); err != nil {
 			DieLogged(msg.MsgUnknown("sleep failed"))
 		}
 		record("not interrupted")
@@ -171,6 +175,35 @@ func TestSignalsRunTheCleanups(t *testing.T) {
 				t.Errorf("stderr %q, want a newline only", got)
 			}
 		})
+	}
+}
+
+// A command that ends at the same Ctrl+C as devvm, before devvm notices it:
+// its failure prints nothing either.
+func TestACommandEndedByTheSameSignalPrintsNothing(t *testing.T) {
+	for range 20 {
+		cmd, record, stderr := startHelper(t, "command interrupts")
+		if code := exitStatus(t, cmd.Wait()); code != InterruptedCode {
+			t.Fatalf("exit code %d, want %d; stderr %q", code, InterruptedCode, stderr)
+		}
+		if got := stderr.String(); got != "\n" {
+			t.Fatalf("stderr %q, want a newline only", got)
+		}
+		if got, want := readFile(t, record), "cleanup interrupted=yes\n"; got != want {
+			t.Fatalf("record %q, want %q", got, want)
+		}
+	}
+}
+
+func TestKilled(t *testing.T) {
+	for _, c := range []struct {
+		script string
+		want   bool
+	}{{"exit 0", false}, {"exit 1", false}, {"exit 127", false}, {"exit 130", true}, {"kill -TERM $$", true}} {
+		err := exec.CommandContext(t.Context(), "sh", "-c", c.script).Run() //nolint:gosec // the test's own scripts
+		if got := killed(err); got != c.want {
+			t.Errorf("%s: killed = %v, want %v", c.script, got, c.want)
+		}
 	}
 }
 

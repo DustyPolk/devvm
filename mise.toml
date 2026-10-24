@@ -16,7 +16,8 @@ lychee = "0.24.2"
 node = "24.22.1"
 markdownlint-cli2 = "0.24.0"
 shellcheck = "0.11.0"
-minisign = "0.12"
+# Only for signing releases; it has no linux/arm64 build.
+minisign = { version = "0.12", os = ["macos/arm64", "linux/x64", "windows"] }
 
 [tasks.fmt]
 description = "Format Go code"
@@ -57,6 +58,10 @@ HOME="$home" XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" 
 [tasks.vuln]
 description = "Check dependencies for known vulnerabilities"
 run = "govulncheck ./..."
+
+[tasks.deadcode]
+description = "List functions nothing calls"
+run = "go run golang.org/x/tools/cmd/deadcode@v0.52.0 ./..."
 
 [tasks.cli-docs]
 description = "Generate the CLI reference (docs/content/docs/cli)"

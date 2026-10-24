@@ -136,6 +136,13 @@ check() {
   echo "  $r  [$ncheck/$total] $label ($(mins "$dur"); $(mins $((SECONDS - started))) in${left:+, about $(mins "$left") left})"
   [[ $r == PASS ]] || tail -5 "$work/check.log" | sed 's/^/        /'
 }
+# skip LABEL WHY: a check this run has nothing for (counted, so runs compare their counts).
+skip() {
+  ncheck=$((ncheck + 1)) skipped=$((skipped + 1))
+  printf '%s\t0\n' "$1" >> "$timings.new"
+  echo "  SKIP  [$ncheck/$total] $1 ($2)"
+}
+skipped=0
 section() { echo; echo "== $*"; }
 quiet() { "$@" </dev/null >"$work/last.log" 2>&1; }
 # keys_of IMAGE: the keys of the images recorded under that name, one per line.
@@ -188,23 +195,25 @@ if [[ -n $kb ]] && want from; then
   runlog=$(sed -n 's/^ *log_details file=//p' "$work/last.log")
   check "base ran base.sh, then every feature" bash -c "
     for f in base $features; do grep -q \"^# \\[[0-9]*/[0-9]*\\] running_script script=\$f.sh vm=devvm-img-$kb\$\" '$runlog' || exit 1; done"
+elif want from; then
+  skip "base ran base.sh, then every feature" "base is cached; from checks the features"
 fi
-# shellcheck disable=SC2012  # key-named files
-[[ -n $kb ]] || kb=$(grep -lx name=base "$images"/* 2>/dev/null | xargs grep -lx 'from=' 2>/dev/null | xargs ls -t 2>/dev/null | head -1 | xargs basename 2>/dev/null)
-check "base is a stopped image, recorded with Ubuntu's image and its C library" bash -c "
-  [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
-  grep -qx 'chain=base=$kb' '$images/$kb' && grep -qx 'libc=gnu' '$images/$kb' &&
-  grep -qE '^digest=https://cloud-images\.ubuntu\.com/.*/release-[0-9]{8}/.*\.img sha256:[0-9a-f]{64}$' '$images/$kb'"
-check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
-check "building base again reuses it" bash -c "out=\$('$D' build base </dev/null 2>&1) &&
-  ! grep -qF \"\$(m building_image image=base key=$kb)\" <<<\"\$out\""
-
 fixture=$layers/e2efix.sh
 token=e2e-fixture-ran-$$-$(date +%s)   # this run's: the run logs keep earlier runs'
 printf '#!/bin/bash\nset -eu\necho %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" > "$fixture"
 check "build the fixture layer on base" quiet "$D" build e2efix
 owned e2efix
 kf=$(keys_of e2efix | head -1)
+# A cached base's key: the one the fixture was built on (other selections' bases, with other
+# features, are cached too, and may be newer).
+[[ -n $kb ]] || kb=$(sed -n 's/^chain=base=\([0-9a-f]*\) e2efix=.*$/\1/p' "$images/$kf" 2>/dev/null)
+check "base is a stopped image, recorded with Ubuntu's image and its C library" bash -c "
+  [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
+  grep -qx 'chain=base=$kb' '$images/$kb' && grep -qx 'libc=gnu' '$images/$kb' && grep -qx 'from=' '$images/$kb' &&
+  grep -qE '^digest=https://cloud-images\.ubuntu\.com/.*/release-[0-9]{8}/.*\.img sha256:[0-9a-f]{64}$' '$images/$kb'"
+check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
+check "building base again reuses it" bash -c "out=\$('$D' build base </dev/null 2>&1) &&
+  ! grep -qF \"\$(m building_image image=base key=$kb)\" <<<\"\$out\""
 check "its script ran in its image, cloned from base's" bash -c "
   [[ -n '$kf' && \$(status_of devvm-img-$kf) == Stopped ]] &&
   grep -qx 'chain=base=$kb e2efix=$kf' '$images/$kf' &&
@@ -448,9 +457,11 @@ vm=$(vm_of "$n"); [[ -z $vm ]] || created+=("$vm")
 pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
 salt=$(sed -n 's/^proxy_salt=//p' "$vms/$vm" 2>/dev/null)
 events=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
+# pgrep -f looks for [_]proxy: Linux's pgrep also matches the check's own shell, whose command line
+# holds the pattern.
 check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
-  pgrep -f -- '_proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
+  pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
 check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
   grep -q '^Host devvm-net $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
@@ -523,7 +534,7 @@ check "started outside devvm again: without a terminal, devvm stops it and opens
   ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
   ! grep -q e2e-opened '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
 check "rm -f deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '_proxy -listen .* -vm $vm ' >/dev/null"
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 fi
 
 if want from; then
@@ -583,6 +594,6 @@ else
   mv "$timings.new" "$timings"   # a complete run: the next one estimates from it
 fi
 echo
-echo "e2e: $pass passed, $fail failed in $(mins $((SECONDS - started)))${failed[*]+: ${failed[*]}}"
+echo "e2e: $pass passed, $fail failed$( (( skipped == 0 )) || echo ", $skipped skipped") in $(mins $((SECONDS - started)))${failed[*]+: ${failed[*]}}"
 [[ -z $short ]] || echo "e2e: FAILED: $short"
 (( fail == 0 )) && [[ -z $short ]]

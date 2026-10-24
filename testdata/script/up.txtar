@@ -21,6 +21,9 @@ exec devvm --no-network-policy base
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+# .git unprotected off macOS, and devvm says so.
+[darwin] ! stderr git_protect_needs_macos_new
+[linux] stderr '^devvm: git_protect_needs_macos_new$'
 stub_calls
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=0 --set \.portForwards = \[\]$'
 ! stdout 'limactl edit --tty=false devvm-web'
@@ -29,12 +32,10 @@ stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
 stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\nlimactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exists $XDG_DATA_HOME/devvm/tools
 ! exists $XDG_DATA_HOME/devvm/mise.lock
-# .git's hooks and config locked (macOS); elsewhere, a warning.
+# .git's hooks and config locked (macOS); elsewhere, not.
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/hooks$'
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
-[darwin] ! stderr git_protect_needs_macos_new
 [linux] ! stdout chflags
-[linux] stderr '^devvm: git_protect_needs_macos_new$'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^image=base$'
 stdout '^dir=/\S*/web$'

@@ -165,17 +165,11 @@ func count(ctx context.Context, step string) (label, logLine string) {
 	return label, "# " + n + " " + step + "\n"
 }
 
-// Logged runs argv into the run log, with a status line in a terminal
+// LoggedCmd runs cmd into the run log, with a status line in a terminal
 // showing step. A step may be the zero msg.M: the status line then shows
-// the command and its first argument. The command gets no input. It returns
-// the command's error; the caller dies with what failed (DieLogged).
-func Logged(ctx context.Context, step msg.M, argv ...string) error {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // devvm's own commands
-	return LoggedCmd(ctx, step, cmd)
-}
-
-// LoggedCmd is Logged for a command that needs more than its arguments: its
-// input, environment or folder. ctx carries the phase's step count.
+// the command and its first argument. ctx carries the phase's step count.
+// It returns the command's error; the caller dies with what failed
+// (DieLogged).
 func LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 	if verbose() {
 		cmd.Stdout, cmd.Stderr = Stdout(), lockedWriter{stderr}
@@ -208,5 +202,29 @@ func LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 func run(cmd *exec.Cmd) error {
 	commands.RLock()
 	defer commands.RUnlock()
-	return cmd.Run()
+	err := cmd.Run()
+	if killed(err) {
+		awaitInterrupt(interruptGrace)
+	}
+	return err
+}
+
+// interruptGrace is how long a command a signal ended waits for devvm's own
+// interrupt to be noticed.
+var interruptGrace = time.Second
+
+// killed reports whether a command ended by a signal, or with the code a
+// shell gives that (128 and over).
+func killed(err error) bool {
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	return ok && (exitErr.ExitCode() == -1 || exitErr.ExitCode() >= 128)
+}
+
+// awaitInterrupt waits up to d for an interrupt. Ctrl+C reaches devvm and
+// its command at once, and the command can end first: its failure isn't
+// devvm's to report.
+func awaitInterrupt(d time.Duration) {
+	for deadline := time.Now().Add(d); !Interrupted() && time.Now().Before(deadline); {
+		time.Sleep(5 * time.Millisecond)
+	}
 }

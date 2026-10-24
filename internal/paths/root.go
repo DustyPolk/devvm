@@ -27,14 +27,6 @@ func Self() (string, error) {
 	return resolve(exe)
 }
 
-func rootOf(exe string) (string, error) {
-	resolved, err := resolve(exe)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(resolved), nil
-}
-
 func resolve(exe string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(exe)
 	if err != nil {

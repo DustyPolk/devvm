@@ -56,15 +56,15 @@ stdout '^ports_set=5173,8000-8010$'
 # sets. A default of every port stores nothing.
 mkdir $WORK/defaults
 cd $WORK/defaults
-exec sh -c 'echo memory=16 > "$XDG_CONFIG_HOME/devvm/size" && echo none > "$XDG_CONFIG_HOME/devvm/ports"'
+exec sh -c 'echo memory=5 > "$XDG_CONFIG_HOME/devvm/size" && echo none > "$XDG_CONFIG_HOME/devvm/ports"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm --no-network-policy --cpus 2 base
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
-stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 16$'
+stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 5$'
 exec sh -c 'cat "$VMS"/devvm-defaults-*'
 stdout '^cpus=2$'
-stdout '^memory=16$'
+stdout '^memory=5$'
 ! stdout 'disk='
 stdout '^ports=none$'
 mkdir $WORK/all

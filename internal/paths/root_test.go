@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestRootOfFollowsLinks(t *testing.T) {
+func TestResolveFollowsLinks(t *testing.T) {
 	tmp, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -28,18 +28,18 @@ func TestRootOfFollowsLinks(t *testing.T) {
 	}
 
 	for _, path := range []string{exe, link} {
-		got, err := rootOf(path)
+		got, err := resolve(path)
 		if err != nil {
-			t.Fatalf("rootOf(%s): %v", path, err)
+			t.Fatalf("resolve(%s): %v", path, err)
 		}
-		if got != install {
-			t.Errorf("rootOf(%s) = %s, want %s", path, got, install)
+		if got != exe {
+			t.Errorf("resolve(%s) = %s, want %s", path, got, exe)
 		}
 	}
 }
 
-func TestRootOfMissing(t *testing.T) {
-	if _, err := rootOf(filepath.Join(t.TempDir(), "gone")); err == nil {
-		t.Error("rootOf a missing file: want an error")
+func TestResolveMissing(t *testing.T) {
+	if _, err := resolve(filepath.Join(t.TempDir(), "gone")); err == nil {
+		t.Error("resolve a missing file: want an error")
 	}
 }

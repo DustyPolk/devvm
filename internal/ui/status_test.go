@@ -96,7 +96,7 @@ func TestStatusLineInATerminal(t *testing.T) {
 	stderrTTY = func() bool { return true }
 	termWidth = func() int { return 40 }
 	t.Setenv("LC_ALL", "C")
-	if err := Logged(t.Context(), msg.MsgUnknown("x"), "sh", "-c", "echo progress"); err != nil {
+	if err := logged(t.Context(), msg.MsgUnknown("x"), "sh", "-c", "echo progress"); err != nil {
 		t.Fatal(err)
 	}
 	got := errOut.String()

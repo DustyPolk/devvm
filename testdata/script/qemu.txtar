@@ -21,8 +21,9 @@ cmp stdout probe
 stderr '^devvm: refusing to start QEMU'
 ! stdout .
 
-# No real QEMU on PATH: the planted one isn't used either.
-env PATH=$WORK/wrap${:}.${:}$DEVVM_BIN${:}/usr/bin${:}/bin
+# No real QEMU on PATH (only the wrapper's and devvm's folders, as a host
+# with QEMU installed has it in /usr/bin): the planted one isn't used either.
+env PATH=$WORK/wrap${:}.${:}$DEVVM_BIN
 env DEVVM_MESSAGES=names
 ! exec $WORK/wrap/qemu-system-aarch64 -accel help
 stderr '^devvm: qemu_missing program=qemu-system-aarch64$'

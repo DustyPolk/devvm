@@ -32,7 +32,7 @@ Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/
 
 ## Tasks
 
-`mise run <task>`: `fmt`; `lint` (Go, shellcheck, docs, `TestDocLinks`); `test` (`-race`, in a throwaway `HOME`; needs a C compiler); `vuln`; `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/devvm/`); `e2e`.
+`mise run <task>`: `fmt`; `lint` (Go, shellcheck, docs, `TestDocLinks`); `test` (`-race`, in a throwaway `HOME`; needs a C compiler); `vuln`; `deadcode` (what it lists waits for a caller in Pending, or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/devvm/`); `e2e`.
 
 ## Rules
 
@@ -53,9 +53,9 @@ Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/
 ## Go conventions
 
 - **Only `internal/ui` prints.** forbidigo bans `fmt.Print*`, `os.Stdout`/`os.Stderr` elsewhere and `os.Exit` outside `cmd/devvm`. Data goes to `ui.Stdout()`, non-message log lines to `ui.Stderr()`.
-- **Fail with `ui.Die(msg.X(...))`:** it prints and panics; `ui.Main` recovers, runs the cleanups, returns 1. Commands end with `fail` (`ui.DieLogged` for a `LoggedError`). INT/TERM/HUP cancel the root context, wait for the logged command, run the cleanups and return 130; a second signal is ignored; after one, `Die` prints nothing.
+- **Fail with `ui.Die(msg.X(...))`:** it prints and panics; `ui.Main` recovers, runs the cleanups, returns 1. Commands end with `fail` (`ui.DieLogged` for a `LoggedError`). INT/TERM/HUP cancel the root context, wait for the logged command, run the cleanups and return 130; a second signal is ignored; after one, `Die` prints nothing. A logged command a signal ended (or 128+) waits up to 1 s for devvm's own interrupt, as Ctrl+C can end it first.
 - **Cleanups:** whatever a failure would leave (a build VM, a temp file) registers `ui.AddCleanup` and is removed once done; one only for interrupts checks `ui.Interrupted()`. Cleanups get a fresh context.
-- **External commands run with `ui.Logged(ctx, step, argv...)`** (`LoggedCmd` for input, env or folder): output to the run log, failure via `ui.DieLogged`. `ui.WithSteps(ctx, n)` numbers steps.
+- **External commands run with `ui.LoggedCmd(ctx, step, cmd)`:** output to the run log, failure via `ui.DieLogged`. `ui.WithSteps(ctx, n)` numbers steps.
 - **OS-specific code goes behind build tags** in `internal/platform` (`*_darwin.go`, `*_linux.go`, `*_other.go`).
 - **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
@@ -85,6 +85,7 @@ Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/
 - **Unit tests** are Go table tests next to the code; **CLI tests** are testscript against the built binary in a `/tmp` sandbox, stubs first on `PATH` (`stub_calls`). New logic needs a test. Neither touches the Keychain, real VMs or the user's folders; state-writing tests point the XDG folders at `t.TempDir()`. Go tests never run up: scripts do.
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
 - **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
+- **Linux hosts:** `LIMA_HOME=~/.lt-linux-go`, VM `linuxhost` (nested virtualization, the repo read-only, copied to `~/devvm`), set up as [testing.md](docs/content/docs/testing.md) says; never `~/.lt-linux`, which is the user's.
 - **e2e to come:** `--backend`; `size gc from`; network: `policy allow` at once, `log`, git over SSH, `secret use github`, `unenforced` in `ls`, opencode's login; project: SSH agent, `devvm stop`, `git-protect`; tools: python, uv, claude, codex, rust, go, adding in place, gc.
 - **Delete test VMs and temp files afterwards.** Long builds run in the background. Tests that `chflags` real files unlock them (`chflags -R nouchg`), only in their own temp folders.
 - **The testscript runner stops the sandbox's proxies** (`pkill -f` on `-lifeline`): the stub hostagent is gone before they look, so they'd wait 15 minutes.
@@ -100,6 +101,7 @@ Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/
 - **The ssh socket path limit (104 characters)** bounds VM names (`NameMax`).
 - **Linux hosts (QEMU):** mounts are 9p, and a 9p share mounts once per guest. Docker writes bind-mounted files as root, so containers that write host files `chown` them back. Ubuntu's `docker.io` has no BuildKit (`RUN --mount` needs `docker-buildx`). Debian's tmpfs `/tmp` hides anything mounted below it during boot. Project VMs' qcow2 disks are overlays of their image's, so never start an image VM or write its disk after it's built.
 - **Shared tools:** mise rewrites `latest`/`24`/`lts` links in a tool's folder after any install, so those folders are local in the VM; only version folders are mounted.
+- **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 
 ## Commits and tasks
@@ -137,6 +139,7 @@ Docs (page ← bash page, all rewritten, partly):
 - `lima.md` ← `network.md`, `security.md`, `design.md`, `limits.md`
 - `network.md` ← `network.md`, `devvm-proxy/README.md`
 - `customizing.md` ← `customizing.md` (base image features; custom layers wait for `devvm layer`)
+- `testing.md` ← same name (with the platform table, the Linux host as verified, manual checks)
 - README "Quickstart" ← README usage
 
 Bats files (pending cases, by task):
@@ -175,7 +178,7 @@ Deliberate changes from the bash:
 - Features: each runs as a `running_script` step (no `adding_feature`); none chosen is `base_features_none`; feature names that aren't layer-like are skipped in the listing and make `base-features` unreadable.
 
 Pending in code:
-- `tools.Garbage` waits for gc. `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
+- deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend`/`*AgentKeys` (size, ports, setup, ssh-agent), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). `--ssh-agent` brings `ssh_agent_flag_ignored` and `apply_agent_forwarding`/`check_ssh_agent` on relaunch. The `*_flag_ignored` warnings name `devvm network`, `git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
 - `ssh_remote_hint` doesn't name `devvm ssh-agent`. `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`; `ls` shows `clone` in GIT for `mode=clone`; `checkAgent` runs only once `--ssh-agent` exists; ssh config entries forward devvm's agent with `devvm ssh-agent`. `devvm setup` brings `base_will_rebuild`, `gc_old_hint`, the features in `--help`, and `base_features` naming it. `image_from` (the `base (from node:24)` label) waits for `ls`/`images`. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
 - Secret brings `secret_store`, `secret_delete`, `proxies_forget_values`, Keychain writes, and `devvm secret set` in `no_claude_token`/`no_github_token` (they name `CLAUDE_CODE_OAUTH_TOKEN`, or nothing, until then).
 

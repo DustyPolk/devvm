@@ -44,19 +44,6 @@ func (l Lock) Entry(tool string) []byte {
 	return b.Bytes()
 }
 
-// Tools returns the tools the lock has entries for, in its order.
-func (l Lock) Tools() []string {
-	var out []string
-	for _, line := range lines(l) {
-		if t, ok := strings.CutPrefix(line, "[[tools."); ok {
-			if t, ok = strings.CutSuffix(t, "]]"); ok {
-				out = append(out, t)
-			}
-		}
-	}
-	return out
-}
-
 // field returns the first value of a key = "value" line in an entry,
 // without its quotes.
 func field(entry []byte, key string) string {
