@@ -148,3 +148,13 @@ other = "couldn't change {{.vm}}'s Lima settings"
 
 [qemu_refused]
 other = "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"
+
+[no_ubuntu_image]
+other = "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
+
+[ubuntu_bad_signature]
+description = "release is a dated release's folder name (release-20260101)"
+other = "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu's cloud image key: not using them"
+
+[ubuntu_unsigned]
+other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"

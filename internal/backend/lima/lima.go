@@ -133,8 +133,8 @@ func (l *Lima) Check(ctx context.Context) error {
 	return l.checkGlobalConfigs()
 }
 
-// BuildImage isn't there yet: images are built from base.yaml and the
-// layer scripts, which come with the image build.
+// BuildImage isn't there yet: building images from base.yaml and the
+// layer scripts comes with the image build.
 func (l *Lima) BuildImage(context.Context, backend.ImageSpec) (backend.Built, error) {
 	return backend.Built{}, errors.New("lima: building images isn't supported yet")
 }

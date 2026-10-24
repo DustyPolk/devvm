@@ -1,0 +1,35 @@
+# Hosts every VM with network policy can reach. One rule per line; see `devvm policy` in the README.
+# Generic object storage and paste-like hosts are left out on purpose (easy ways to send data out);
+# allow them per VM when a project needs them.
+
+# Ubuntu and Debian packages (apt uses :80 and :443)
+ports.ubuntu.com
+archive.ubuntu.com
+security.ubuntu.com
+esm.ubuntu.com
+deb.debian.org
+security.debian.org
+
+# mise's version lists, for versions a project's version files ask for (the downloads themselves are
+# in each tool's policy)
+mise-versions.jdx.dev
+
+# GitHub: code, releases, tarballs, git over SSH
+github.com
+github.com:22
+api.github.com
+codeload.github.com
+raw.githubusercontent.com
+objects.githubusercontent.com
+release-assets.githubusercontent.com
+lfs.github.com
+
+# Containers
+registry-1.docker.io
+auth.docker.io
+production.cloudflare.docker.com
+production.cloudfront.docker.com
+download.docker.com
+ghcr.io
+pkg-containers.githubusercontent.com
+dl-cdn.alpinelinux.org

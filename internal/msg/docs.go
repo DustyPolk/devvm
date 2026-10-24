@@ -23,4 +23,7 @@ var docs = map[string]string{
 	"image_in_use":            "lima#clones-and-overlays",
 	"qemu_refused":            "lima#confinement",
 	"start_no_ssh":            "lima#limits",
+	"no_ubuntu_image":         "images#ubuntus-cloud-image",
+	"ubuntu_bad_signature":    "images#ubuntus-cloud-image",
+	"ubuntu_unsigned":         "images#ubuntus-cloud-image",
 }

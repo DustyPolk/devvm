@@ -264,3 +264,15 @@ func TestKeyWithoutUserFolders(t *testing.T) {
 		t.Error("a missing layer and an empty one have the same key")
 	}
 }
+
+// devvm's own files, at the top of the repo, give base a key.
+func TestKeyOfTheRealFiles(t *testing.T) {
+	in := Inputs{Backend: "lima", Root: os.DirFS(filepath.Join("..", ".."))}
+	key, err := in.Key(Base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(key) {
+		t.Errorf("key %q", key)
+	}
+}

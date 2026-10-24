@@ -1,0 +1,15 @@
+# Lima template for the devvm base image. Tooling is installed by layers/base.sh,
+# not `provision:`, because Lima re-runs provision scripts on every boot.
+# No images here: devvm sets Ubuntu's newest dated cloud image when it creates base,
+# not `base: template:ubuntu-lts`, so a Lima upgrade doesn't change base, and the template's home
+# mount never applies. devvm still passes --mount-none/--mount-only when creating VMs.
+# From Lima's ubuntu-26.04 template: the first-boot NIC rename fails on 26.04 (LP: #2136392), so
+# don't make systemd-networkd-wait-online wait for it.
+param:
+  internal_netplanOptional: "true"
+cpus: 4
+memory: 8GiB
+disk: 100GiB
+containerd:
+  system: false
+  user: false

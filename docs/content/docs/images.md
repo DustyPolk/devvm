@@ -3,6 +3,26 @@ title: Images and VMs
 weight: 20
 ---
 
+## Base
+
+`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `layers/base.sh` installs it.
+
+It drops the server extras Ubuntu's cloud image comes with: snapd, multipath, ModemManager, udisks, firmware updates, crash reporting, tracing tools, kernel headers, and apt's background updates and upgrades. That saves 0.9 GB of disk and 100 MB of memory per VM. The everyday tools stay (htop, tmux, lsof, strace, tcpdump, rsync, nano and so on).
+
+Each download in `layers/base.sh` is pinned to a version and SHA-256 at the top of the script, and the build fails if a checksum doesn't match. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and Docker's packages are pinned by version. Project VMs use the live archive, so `apt upgrade` gets current updates.
+
+### Ubuntu's cloud image
+
+Ubuntu removes its dated cloud images after a few months, so base doesn't pin one. Building base takes the newest dated release of Ubuntu 26.04 (`release-YYYYMMDD` on cloud-images.ubuntu.com) that has an image for the host, arm64 or amd64. A newer release whose files aren't there yet is skipped.
+
+The image is checked before it's used:
+
+- Its SHA-256 comes from that release's `SHA256SUMS`, and the download must match it. A checksum that isn't 64 hex digits is ignored.
+- When `gpgv` is installed (`brew install gnupg`, or `apt install gpgv`), `SHA256SUMS` must be signed by Ubuntu's cloud image key, pinned in `layers/ubuntu-cloud.gpg` (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`). No other key counts. When the signature is missing or doesn't match, devvm refuses the image.
+- Without `gpgv`, devvm says so, and only the HTTPS download vouches for the checksums.
+
+The Ubuntu image isn't part of base's key: a newer one doesn't make base stale.
+
 ## Caching
 
 Images are built in layers and cached, like Docker's. `base` comes first, and each custom layer is built on its parent: `foo+bar` is `bar` on `foo` on `base`. A layer starts from its parent, runs its script inside, and is stored under a key, a hash of everything that goes into it. When an image with the key already exists, devvm uses it; otherwise it builds one.

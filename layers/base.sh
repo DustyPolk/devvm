@@ -1,0 +1,220 @@
+#!/bin/bash
+# Essentials, Docker, and mise for the shared tools (tools/).
+# shellcheck disable=SC2034  # the checksums are read through sha()
+set -euxo pipefail
+# Pinned downloads (scripts/bump.sh updates them).
+mise_version=2026.10.7
+mise_sha256_arm64=c7108d85a32ba17e4747d31d4a42f39f0c134f16211e204e8ef0a49d4f518fe1
+mise_sha256_amd64=6eb1b890e90818417ca34c90dbbd47881917d5cd199f31b63b062ea9c6b18d85
+mise_sha256_arm64_musl=e036eb7bd3ca63e8565497e597967484330a74ff24e9c4c9f2ac41824cbf4090
+mise_sha256_amd64_musl=fc5137a3147494e039c3d5fc3d84de354170d7d8dafdb0b5f0b6f3f19d1dd922
+# apt_snapshot: the distribution's packages come from its archive as it was then (snapshot.ubuntu.com,
+# snapshot.debian.org), so the same image key means the same packages. Docker's repository has no
+# snapshots: its packages are pinned by version.
+apt_snapshot=20261009T000000Z
+docker_version=29.9.0
+containerd_version=2.4.1
+buildx_version=0.38.0
+compose_version=5.6.0
+model_version=1.2.6
+docker_gpg_sha256=1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+
+export DEBIAN_FRONTEND=noninteractive
+# Alpine (--from alpine): apk, OpenRC and musl. Its packages come from the release's repositories,
+# which have no snapshots, and Docker is Alpine's own package: neither is pinned.
+if command -v apk >/dev/null; then
+  # GNU tar: devvm's launch sends files with it (busybox's lacks options it uses).
+  sudo apk add --no-cache git curl wget ca-certificates build-base unzip jq ripgrep bash coreutils tar \
+    util-linux util-linux-misc losetup findmnt erofs-utils docker docker-cli-buildx docker-cli-compose
+  echo "devvm: Alpine's packages, Docker included, aren't pinned" >&2
+  sudo rc-update add docker default
+  sudo addgroup "$USER" docker
+  musl=_musl
+else
+musl=""
+# The snapshot holds for the whole build (features install packages too); guest/sync.sh removes it in
+# project VMs, so they get current updates.
+echo "APT::Snapshot \"$apt_snapshot\";" | sudo tee /etc/apt/apt.conf.d/50devvm-snapshot >/dev/null
+# The snapshot servers answer 502 or 503 now and then, and a connection can stall without closing:
+# each download is tried again (with a growing delay), and one that sends nothing for 30 s fails.
+printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' |
+  sudo tee /etc/apt/apt.conf.d/50devvm-retries >/dev/null
+# apt carries on with the live archive when a snapshot can't be fetched: fail instead. Distributions
+# whose apt has no snapshots (Debian 12, Ubuntu's ports archive before 26.04) say so and stay unpinned.
+# On empty package lists (a Docker image's, with --from), apt 3.2's first update only learns that the
+# archive has snapshots and leaves lists nothing installs from; the second uses the snapshot.
+# The snapshot servers answer 503 now and then: try again twice, after 15 and 30 s.
+apt_update() {
+  local live=0 failed=0
+  while :; do
+    sudo apt-get update 2>&1 | tee /tmp/apt-update.log
+    if grep -E '^(Err:|W: Failed to fetch).*snapshot' /tmp/apt-update.log >&2; then
+      failed=$((failed + 1))
+      (( failed < 3 )) || { echo "devvm: couldn't fetch the package snapshot $apt_snapshot (above)" >&2; exit 1; }
+      echo "devvm: couldn't fetch the package snapshot; trying again in $((failed * 15)) s" >&2
+      sleep $((failed * 15)); continue
+    fi
+    grep -E '^(Get|Hit):[0-9]+ https://snapshot\.' /tmp/apt-update.log >/dev/null && break
+    live=$((live + 1))
+    if (( live == 2 )); then
+      echo "devvm: this distribution's apt doesn't use snapshots; its packages aren't pinned" >&2; break
+    fi
+  done
+  rm -f /tmp/apt-update.log
+}
+apt_update
+# erofs-utils: the shared tools' builds make their images with it, in a VM cloned from base.
+sudo apt-get install -y git curl wget ca-certificates build-essential unzip jq ripgrep erofs-utils
+fi
+
+# devvm-fetch URL SHA256 OUT: every layer downloads through this, so an image only ever contains
+# files whose checksums are pinned in devvm's scripts.
+sudo tee /usr/local/bin/devvm-fetch >/dev/null <<'SH'
+#!/bin/sh
+set -eu
+url=$1 want=$2 out=$3
+curl -fsSL --retry 3 -o "$out" "$url"
+got=$(sha256sum "$out" | cut -d' ' -f1)
+if [ "$got" != "$want" ]; then
+  rm -f "$out"
+  printf 'devvm-fetch: checksum mismatch for %s\n  expected %s\n  got      %s\n' "$url" "$want" "$got" >&2
+  exit 1
+fi
+SH
+sudo chmod 755 /usr/local/bin/devvm-fetch
+
+# Docker from its signed apt repository (the key's checksum pinned), each package at the repository's
+# build of the pinned version for this distribution.
+if [[ -z $musl ]]; then
+# shellcheck source=/dev/null
+. /etc/os-release
+case " $ID ${ID_LIKE:-} " in
+  *" ubuntu "*) dist=ubuntu codename=${UBUNTU_CODENAME:-$VERSION_CODENAME} ;;
+  *)            dist=debian codename=$VERSION_CODENAME ;;
+esac
+devvm-fetch "https://download.docker.com/linux/$dist/gpg" "$docker_gpg_sha256" /tmp/docker.asc
+sudo install -D -m 644 /tmp/docker.asc /etc/apt/keyrings/docker.asc
+rm /tmp/docker.asc
+printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nSigned-By: /etc/apt/keyrings/docker.asc\n' \
+  "$dist" "$codename" | sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null
+apt_update
+pkgver() {   # pkgver PACKAGE VERSION: the repository's full version for it (epoch and build suffix)
+  local v
+  v=$(apt-cache madison "$1" | awk -v want="$2" '{ v = $3; sub(/^[0-9]+:/, "", v) } index(v, want "-") == 1 { print $3; exit }')
+  [[ -n $v ]] || { echo "devvm: Docker's repository has no $1 $2 for $dist $codename" >&2; exit 1; }
+  echo "$1=$v"
+}
+sudo apt-get install -y \
+  "$(pkgver docker-ce "$docker_version")" "$(pkgver docker-ce-cli "$docker_version")" \
+  "$(pkgver docker-ce-rootless-extras "$docker_version")" "$(pkgver containerd.io "$containerd_version")" \
+  "$(pkgver docker-buildx-plugin "$buildx_version")" "$(pkgver docker-compose-plugin "$compose_version")" \
+  "$(pkgver docker-model-plugin "$model_version")"
+sudo usermod -aG docker "$USER"
+
+# Ubuntu's cloud image is a server's: drop what a dev VM doesn't use (snapd, multipath, modem and disk
+# managers, firmware updates, crash reporting, tracing tools, kernel headers), and apt's background
+# updates, which hold apt's lock and, under network policy, show up as blocks. Measured: 0.9 GB less
+# disk, 100 MB less memory, 7 fewer services and 9 fewer timers. The everyday tools the server
+# metapackages brought stay. Only what's installed is touched (--from images have none of it).
+keep="bc file htop lsof nano rsync screen strace tcpdump time tmux mtr-tiny pciutils usbutils
+  inetutils-telnet dmidecode lshw linux-image-virtual"
+drop="ubuntu-server ubuntu-standard snapd multipath-tools modemmanager udisks2 unattended-upgrades
+  fwupd rsyslog networkd-dispatcher bpftrace bpfcc-tools linux-tools-common sysstat python3-boto3
+  linux-headers-generic linux-headers-virtual apport landscape-common lxd-installer lxd-agent-loader
+  open-iscsi plymouth needrestart update-notifier-common open-vm-tools"
+installed() {   # installed PACKAGE...: the ones that are
+  { dpkg-query -Wf '${db:Status-Status} ${Package}\n' "$@" 2>/dev/null || true; } | awk '$1 == "installed" { print $2 }'
+}
+# shellcheck disable=SC2086  # package lists
+{
+  k=$(installed $keep); [[ -z $k ]] || sudo apt-mark manual $k >/dev/null
+  d=$(installed $drop); [[ -z $d ]] || sudo apt-get purge -y --autoremove $d
+}
+sudo systemctl mask apt-daily.timer apt-daily-upgrade.timer
+fi
+
+# Interactive shell snippets from features go in ~/.bashrc.d.
+mkdir -p ~/.bashrc.d
+grep -qs bashrc.d ~/.bashrc || echo 'for f in ~/.bashrc.d/*.sh; do [ -r "$f" ] && . "$f"; done' >> ~/.bashrc
+
+# mise runs the shared tools (node, python, go, rust, agents), read-only images mounted at
+# /opt/devvm/tools by devvm-tools (guest/tools.sh). Each VM's tools and versions are in
+# /etc/mise/config.toml (written by guest/sync.sh); the user's own mise config and a project's version
+# files (.nvmrc, .python-version, ...) come first, and versions that aren't shared install into the VM.
+case $(uname -m) in aarch64) a=arm64 m=arm64 ;; x86_64) a=amd64 m=x64 ;; esac
+sha() { local v="${1}_sha256_$a$musl"; echo "${!v}"; }
+devvm-fetch "https://github.com/jdx/mise/releases/download/v$mise_version/mise-v$mise_version-linux-$m${musl:+-musl}" "$(sha mise)" /tmp/mise
+sudo install -m 755 /tmp/mise /usr/local/bin/mise
+rm /tmp/mise
+# Every shell finds the tools: login shells through profile.d, interactive ones through mise activate
+# (it follows `cd` into projects with other versions), and the rest (`bash -c` from agents, editors
+# over SSH) through BASH_ENV and mise's shims. Read-only installs can't take global packages or update
+# themselves: npm installs globals into ~/.npm-global, and Claude Code's auto-update is off.
+sudo tee /etc/profile.d/devvm-tools.sh >/dev/null <<'SH'
+case ":$PATH:" in *":$HOME/.local/share/mise/shims:"*) ;; *)
+  export PATH="$HOME/.npm-global/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" ;;
+esac
+export NPM_CONFIG_PREFIX="$HOME/.npm-global"
+export DISABLE_AUTOUPDATER=1
+SH
+grep -qs devvm-tools /etc/environment || echo 'BASH_ENV=/etc/profile.d/devvm-tools.sh' | sudo tee -a /etc/environment >/dev/null
+echo 'eval "$(mise activate bash)"' > ~/.bashrc.d/mise.sh
+# Mounted at boot, once the share is: devvm-tools reads the VM's list (/etc/devvm/tools).
+if [[ -n $musl ]]; then
+  sudo tee /etc/init.d/devvm-tools >/dev/null <<'RC'
+#!/sbin/openrc-run
+description="Mount devvm's shared tools"
+depend() { need localmount; after netmount; }
+start() { [ -x /usr/local/sbin/devvm-tools ] || return 0; /usr/local/sbin/devvm-tools; }
+RC
+  sudo chmod 755 /etc/init.d/devvm-tools
+  sudo rc-update add devvm-tools default
+else
+sudo tee /etc/systemd/system/devvm-tools.service >/dev/null <<'UNIT'
+[Unit]
+Description=Mount devvm's shared tools
+RequiresMountsFor=/mnt/devvm-tools
+ConditionPathExists=/usr/local/sbin/devvm-tools
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/devvm-tools
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl enable devvm-tools.service
+fi
+
+# No browser in the VM: tools that open one (xdg-open, $BROWSER) print the URL instead of crashing.
+# Ports are forwarded, so the URL works on the host as-is.
+sudo tee /usr/local/bin/xdg-open >/dev/null <<'SH'
+#!/bin/sh
+echo "devvm: no browser in the VM; open on your host: $*" >&2
+SH
+sudo chmod 755 /usr/local/bin/xdg-open
+echo 'export BROWSER=xdg-open' | sudo tee /etc/profile.d/devvm-browser.sh >/dev/null
+
+# Telemetry off for every tool that has a switch (installed by devvm or commonly by projects).
+sudo tee /etc/profile.d/devvm-telemetry.sh >/dev/null <<'SH'
+export DO_NOT_TRACK=1                 # generic opt-out (bun and others)
+export DISABLE_TELEMETRY=1            # Claude Code
+export DISABLE_ERROR_REPORTING=1      # Claude Code
+export NEXT_TELEMETRY_DISABLED=1
+export TURBO_TELEMETRY_DISABLED=1
+export ASTRO_TELEMETRY_DISABLED=1
+export NUXT_TELEMETRY_DISABLED=1
+export GATSBY_TELEMETRY_DISABLED=1
+export STORYBOOK_DISABLE_TELEMETRY=1
+export YARN_ENABLE_TELEMETRY=0
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+SH
+# Ubuntu: no news fetched for the login banner or apt output.
+sudo sed -i 's/^ENABLED=1/ENABLED=0/' /etc/default/motd-news 2>/dev/null || true
+sudo pro config set apt_news=false >/dev/null 2>&1 || true
+
+# GitHub's SSH host keys (from https://api.github.com/meta), so the first git-over-SSH doesn't prompt.
+sudo tee -a /etc/ssh/ssh_known_hosts >/dev/null <<'KEYS'
+github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+KEYS

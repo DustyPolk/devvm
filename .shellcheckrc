@@ -1,0 +1,2 @@
+# Scripts often write literal shell code (PATH lines, eval snippets) for the VM to run later.
+disable=SC2016

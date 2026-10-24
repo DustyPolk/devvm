@@ -147,6 +147,11 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
+// NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
+func NoUbuntuImage(url string, version string) M {
+	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
+}
+
 // NotAnImage is [not_an_image]: "refusing to delete {{.name}}: it's not an image"
 func NotAnImage(name string) M {
 	return M{id: "not_an_image", vals: []val{{"name", name}}}
@@ -200,6 +205,16 @@ func Stopping(vm string) M {
 // ToolBadVersion is [tool_bad_version]: "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
 func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
+}
+
+// UbuntuBadSignature is [ubuntu_bad_signature]: "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu's cloud image key: not using them"
+func UbuntuBadSignature(release string, url string) M {
+	return M{id: "ubuntu_bad_signature", vals: []val{{"release", release}, {"url", url}}}
+}
+
+// UbuntuUnsigned is [ubuntu_unsigned]: "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
+func UbuntuUnsigned() M {
+	return M{id: "ubuntu_unsigned"}
 }
 
 // UsageError is [usage_error]: "{{.reason}}: see devvm --help"
@@ -258,6 +273,7 @@ var specs = map[string]spec{
 	"msg_repeated_value":      {fields: []string{"key"}},
 	"msg_unexpected_value":    {fields: []string{"key", "name"}},
 	"msg_unknown":             {fields: []string{"name"}},
+	"no_ubuntu_image":         {fields: []string{"url", "version"}},
 	"not_an_image":            {fields: []string{"name"}},
 	"qemu_missing":            {fields: []string{"program"}},
 	"qemu_refused":            {},
@@ -269,6 +285,8 @@ var specs = map[string]spec{
 	"stop_failed":             {fields: []string{"vm"}},
 	"stopping":                {fields: []string{"vm"}},
 	"tool_bad_version":        {fields: []string{"tool", "version"}},
+	"ubuntu_bad_signature":    {fields: []string{"release", "url"}},
+	"ubuntu_unsigned":         {},
 	"usage_error":             {fields: []string{"reason"}},
 	"vm_create_failed":        {fields: []string{"vm"}},
 	"vm_has_networks":         {fields: []string{"file", "vm"}},
