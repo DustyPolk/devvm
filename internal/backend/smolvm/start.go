@@ -47,7 +47,9 @@ const (
 // differ: NetDirect and NetInternet are smolvm's own network, which reaches
 // the internet but not the host's loopback; NetNone is none; NetProxy is
 // devvm's proxy alone, through its decider (c.Decider), with the proxy's
-// address in HTTP_PROXY and HTTPS_PROXY (and lowercase). A machine that
+// address in HTTP_PROXY and HTTPS_PROXY (and lowercase), which devvm's
+// execs get from the machine's proxy file (proxyFile), so the password is
+// in no process's arguments. A machine that
 // forwards an SSH agent forwards c.AgentSocket, or the user's
 // (SSH_AUTH_SOCK).
 func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) error {
@@ -91,13 +93,8 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 		}
 	}
 	env := maps.Clone(c.Env)
-	if proxy {
-		if env == nil {
-			env = map[string]string{}
-		}
-		for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
-			env[k] = s.ProxyURL(c)
-		}
+	for _, k := range proxyVars {
+		delete(env, k) // the proxy file's
 	}
 	if err := s.update(ctx, vm, opts...); err != nil {
 		return err
@@ -112,10 +109,13 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 		for _, kv := range sortedEnv(env) {
 			eopts = append(eopts, "-e", kv)
 		}
-		if err := s.updateQuiet(ctx, vm, eopts...); err != nil {
+		if err := s.update(ctx, vm, eopts...); err != nil {
 			return err
 		}
 		r.Env = env
+	}
+	if err := s.setProxyFile(vm, s.ProxyURL(c)); err != nil {
+		return err
 	}
 	// Recorded before the start: a start that fails leaves it unconfined.
 	r.Mediated, r.Confined = r.Mediated || proxy, ""

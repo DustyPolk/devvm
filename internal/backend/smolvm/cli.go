@@ -184,17 +184,6 @@ func (s *Smolvm) update(ctx context.Context, vm string, opts ...string) error {
 	return nil
 }
 
-// updateQuiet is update for the machine's environment, its output kept out
-// of the run log: smolvm prints the values it sets, the proxy's password
-// among them.
-func (s *Smolvm) updateQuiet(ctx context.Context, vm string, opts ...string) error {
-	args := append([]string{"machine", "update", "--name", vm}, opts...)
-	if _, err := s.Runner.Output(s.smolvm(ctx, args...)); err != nil {
-		return msg.SmolvmUpdateFailed(vm)
-	}
-	return nil
-}
-
 // stop stops a machine.
 func (s *Smolvm) stop(ctx context.Context, vm string) error {
 	if err := s.Runner.Run(ctx, msg.Stopping(vm), s.smolvm(ctx, "machine", "stop", "--name", vm)); err != nil {
@@ -208,8 +197,10 @@ func (s *Smolvm) remove(ctx context.Context, vm string) error {
 	if err := s.Runner.Run(ctx, msg.Deleting(vm), s.smolvm(ctx, "machine", "delete", "--name", vm, "-f")); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
 	}
-	if err := os.Remove(s.Dirs.SmolvmVM(vm)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	for _, f := range []string{s.Dirs.SmolvmVM(vm), s.proxyFile(vm)} {
+		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }
@@ -227,5 +218,6 @@ func (s *Smolvm) removeIfThere(ctx context.Context, vm string) error {
 // asRoot is a command run as root in a running machine, its input fed to
 // sh: devvm's own scripts.
 func (s *Smolvm) asRoot(ctx context.Context, vm string, args ...string) *exec.Cmd {
-	return s.smolvm(ctx, append([]string{"machine", "exec", "--name", vm, "-i", "--", "sh", "-s", "--"}, args...)...)
+	a := append(append([]string{"machine", "exec", "--name", vm}, s.proxyArgs(vm)...), "-i", "--", "sh", "-s", "--")
+	return s.smolvm(ctx, append(a, args...)...)
 }

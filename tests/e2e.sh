@@ -105,13 +105,22 @@ smol_others() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 != wan
 smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
 export -f smol_json smol_ls smol_status
 created=()   # VMs this run made; the only ones it deletes
+# ps_watch: every host process's command line, sampled every 0.1 s into $work/ps.log until
+# ps_unwatch, for checking a secret was in none while devvm ran.
+watcher=""
+ps_watch() {
+  : > "$work/ps.log"
+  (while :; do ps -axww -o command= >> "$work/ps.log" 2>/dev/null; sleep 0.1; done) &
+  watcher=$!
+}
+ps_unwatch() { [[ -z $watcher ]] || { kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null; watcher=""; }; }
 cleanup() {
   local n
   for n in ${created[@]+"${created[@]}"}; do
     if [[ $backend == smolvm ]]; then
       # Only a machine with the sandbox's label, and the image's pack.
       [[ -z $(smol_status "$n") ]] || SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1
-      rm -f "$XDG_DATA_HOME/devvm/smolvm/vms/$n.json"
+      rm -f "$XDG_DATA_HOME/devvm/smolvm/vms/$n.json" "$XDG_DATA_HOME/devvm/smolvm/vms/$n.proxy"
       [[ $n != devvm-img-* ]] || rm -rf "$XDG_DATA_HOME/devvm/smolvm/images/${n#devvm-img-}"
     else
       limactl delete -f "$n" >/dev/null 2>&1
@@ -122,6 +131,7 @@ cleanup() {
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
+  ps_unwatch
   [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null
   [[ -z ${fake:-} ]] || kill "$fake" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
@@ -129,7 +139,7 @@ cleanup() {
   pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth"
+    "$work/dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -644,7 +654,9 @@ printf '%s\n' '{"mcpServers":{"e2e":{"type":"http","url":"https://api.github.com
 echo '{"OPENAI_API_KEY":"sk-e2efake-codex","last_refresh":null}' > "$nh/.codex/auth.json"
 cp "$nh/.claude.json" "$work/claude-before.json"; cp "$nh/.codex/auth.json" "$work/codex-before.json"
 n=$(newproj net)
+ps_watch
 (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" --network-policy --no-git-protect claude+codex >"$work/last.log" 2>&1)
+ps_unwatch
 vm=$(vm_of "$n"); [[ -z $vm ]] || created+=("$vm")
 pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
 salt=$(sed -n 's/^proxy_salt=//p' "$vms/$vm" 2>/dev/null)
@@ -654,6 +666,13 @@ events=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
 check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
   pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
+# The control: the launch set the VM's environment (limactl edit, the password's stand-in in the
+# run log), and the guest has the password.
+check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
+  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && [[ \${#key} -eq 32 ]] && [[ -s '$work/ps.log' ]] &&
+  ! grep -qFf <(echo \"\$key\") '$work/ps.log' && ! ps -axww -o command= | grep -qFf <(echo \"\$key\") &&
+  grep -l 'limactl edit .*devvm:devvm-proxy-password@' '$XDG_DATA_HOME'/devvm/logs/runs/*.log >/dev/null &&
+  limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\""
 check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
   grep -q '^Host devvm-net $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
@@ -1150,7 +1169,9 @@ echo listener-key > "$work/listener.auth"
 "$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
 listener=$!
 np=$(newproj smolnet)
+ps_watch
 (cd "$np" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --ports none --no-git-protect base >"$work/last.log" 2>&1)
+ps_unwatch
 vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
 pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
 dp=$(sed -n 's/^decider_port=//p' "$vms/$vm" 2>/dev/null)
@@ -1158,6 +1179,17 @@ check "--network-policy: the VM runs behind its proxy, which decides for it, and
   [[ -n '$vm' && -n '$dp' && \$(smol_status '$vm') == running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
   ! grep -q backend_unreviewed '$work/last.log' &&
   pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm .* -decider 127.0.0.1:$dp -decider-to 100.96.0.1:$pp ' >/dev/null"
+# The control: the guest has the password, from the VM's proxy file, in a login and in Docker's
+# daemon, which devvm's services exec started with no login.
+check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
+  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && { [[ \${#key} -eq 32 ]] || { echo no key; false; }; } &&
+  { [[ -s '$work/ps.log' ]] || { echo nothing sampled; false; }; } &&
+  { ! grep -qFf <(echo \"\$key\") '$work/ps.log' || { echo in a process while devvm launched it; false; }; } &&
+  { ! ps -axww -o command= | grep -qFf <(echo \"\$key\") || { echo in a process now; false; }; } &&
+  { grep -qF \":\$key@\" '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.proxy' || { echo no proxy file; false; }; } &&
+  { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\" || { echo not in a login; false; }; } &&
+  { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'tr \"\\\\0\" \"\\\\n\" < /proc/\$(cat /run/docker.pid)/environ' </dev/null |
+    grep -qF \"https_proxy=http://devvm:\$key@\" || { echo not in the daemon devvm started; false; }; }"
 check "its allow list is the host's gateway alone, and its DNS a name that doesn't exist" smolnet_lists "$vm"
 check "an allowed host works, through the proxy" in_smol "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"
 check "another host is blocked by the proxy, and so is another port of an allowed one" bash -c "

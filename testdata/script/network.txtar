@@ -37,10 +37,14 @@ stdout '^ssh_port=[0-9]+$'
 stdout '^proxy_port=[0-9]+$'
 stub_calls
 [darwin] stdout '^tmutil addexclusion \S*/data/devvm/ca$'
-[darwin] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.ssh\.localPort=[0-9]+ --set \.env = \{"HTTPS_PROXY":"http://devvm:[0-9a-f]{32}@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/usr/local/share/ca-certificates/devvm-proxy\.crt",.*"NO_PROXY":"localhost,127\.0\.0\.1,::1",.*\} --set \.propagateProxyEnv=false$'
-[linux] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.ssh\.localPort=[0-9]+ --set \.env = \{"HTTPS_PROXY":"http://devvm:[0-9a-f]{32}@192\.168\.5\.4:3128",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
+[darwin] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.ssh\.localPort=[0-9]+ --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/usr/local/share/ca-certificates/devvm-proxy\.crt",.*"NO_PROXY":"localhost,127\.0\.0\.1,::1",.*\} --set \.propagateProxyEnv=false$'
+[linux] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.ssh\.localPort=[0-9]+ --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.4:3128",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
 stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\nlimactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c cd ''/'' && exec ''curl'' ''--noproxy'' ''\*'' ''-sS'' ''-m'' ''3'' ''-o'' ''/dev/null'' ''https://1\.1\.1\.1''\n'
 stdout '^limactl shell --workdir /\S*/net devvm-net-[0-9a-f]{14}\n\z'
+# The password is in no command's arguments: devvm wrote it into lima.yaml,
+# the user's alone.
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-net-*); ! grep -qF "$key" "$STUB_LOG" && grep -qF "\"HTTPS_PROXY\":\"http://devvm:$key@" "$LIMA_HOME"/devvm-net-*/lima.yaml && ! grep -q devvm-proxy-password "$LIMA_HOME"/devvm-net-*/lima.yaml && ls -l "$LIMA_HOME"/devvm-net-*/lima.yaml'
+stdout '^-rw-------\S* '
 # macOS: the hostagent's profile lets it reach the proxy's port.
 [darwin] exec sh -c 'grep -F "localhost:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*)" "$RUN"/devvm-net-*.sb'
 # The proxy said it listens on that port, for that VM; its password is in
@@ -52,7 +56,7 @@ exec sh -c 'cat "$RUN"/devvm-net-*.secrets.json'
 stdout '^\[\]$'
 # The run log never holds the key.
 exec sh -c 'cat "$DATA"/logs/runs/*.log'
-stdout 'devvm:<key>@'
+stdout 'devvm:devvm-proxy-password@'
 ! stdout 'devvm:[0-9a-f]{32}@'
 
 # A VM devvm started confined that still reaches the internet directly:

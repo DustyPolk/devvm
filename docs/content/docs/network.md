@@ -32,7 +32,7 @@ A backend that can't confine a VM to its proxy is refused before anything is bui
 
 ## The proxy
 
-One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`, a hidden command. The VM reaches nothing else, so every connection it makes goes through the proxy. Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`), or gets `407`. Each VM has its own random password, in its proxy settings; the proxy reads it from a file only you can read, never from its arguments, which other users can see. The proxy refuses to start without one. For each connection it:
+One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`, a hidden command. The VM reaches nothing else, so every connection it makes goes through the proxy. Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`), or gets `407`. Each VM has its own random password, in its proxy settings; the proxy reads it from a file only you can read, never from its arguments, which other users can see, and the VM's settings get it through files too ([Lima](lima.md#a-lima-home-of-its-own), [smolvm](smolvm.md#what-devvm-sets-on-a-vm)). The proxy refuses to start without one. For each connection it:
 
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
 - takes only host names (letters, digits, `-`, `_`, `.`) and addresses: anything else gets `400` before the policy or the log sees it;

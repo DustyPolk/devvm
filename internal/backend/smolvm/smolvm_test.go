@@ -367,19 +367,37 @@ func TestStartConfined(t *testing.T) {
 			t.Errorf("%+v: started", bad)
 		}
 	}
+	// Made by an older devvm: the proxy's variables in its environment go.
+	if err := s.writeRecord(vm, record{Env: map[string]string{"HTTPS_PROXY": "http://devvm:old@100.96.0.1:1"}}); err != nil { //nolint:gosec // the test's own password
+		t.Fatal(err)
+	}
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
-	u := "http://devvm:pw@100.96.0.1:3128" //nolint:gosec // the test's own password
+	f := s.proxyFile(vm)
+	secrets := " --secret-file HTTP_PROXY=" + f + " --secret-file HTTPS_PROXY=" + f + " --secret-file http_proxy=" + f + " --secret-file https_proxy=" + f
 	want := []string{
 		"smolvm machine update --name " + vm + " --reset-allow-list --allow-cidr 100.96.0.1/32 --allow-host-pattern devvm.invalid",
-		// Kept out of the run log: smolvm prints what it sets.
-		"smolvm machine update --name " + vm + " -e HTTPS_PROXY=" + u + " -e HTTP_PROXY=" + u + " -e NO_PROXY=localhost -e http_proxy=" + u + " -e https_proxy=" + u,
+		"smolvm machine update --name " + vm + " --remove-env HTTPS_PROXY -e NO_PROXY=localhost",
 		"smolvm machine start --name " + vm + " --mediated-egress --egress-interceptor 127.0.0.1:4000",
-		"smolvm machine exec --name " + vm + " -i -- sh -s --",
+		"smolvm machine exec --name " + vm + secrets + " -i -- sh -s --",
 	}
 	if got := s.calls(t); !slices.Equal(got, want) {
 		t.Errorf("calls:\n%q\nwant\n%q", got, want)
+	}
+	// The proxy's URL, password and all, is in its file alone (mode 600),
+	// which each exec names.
+	if b, err := os.ReadFile(f); err != nil || string(b) != "http://devvm:pw@100.96.0.1:3128" { //nolint:gosec // the test's own password
+		t.Errorf("proxy file: %q, %v", b, err)
+	}
+	if fi, err := os.Stat(f); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("proxy file: %v, %v", fi, err)
+	}
+	if args, err := s.userArgs(vm, "/", false, false, []string{"true"}); err != nil || !strings.Contains(strings.Join(args, " "), secrets[1:]+" -u u ") {
+		t.Errorf("exec: %q, %v", args, err)
+	}
+	if strings.Contains(strings.Join(s.calls(t), " "), ":pw@") {
+		t.Error("the password is in smolvm's arguments")
 	}
 	if b, _ := os.ReadFile(filepath.Join(s.stub, "smolvm-decider-"+vm)); strings.TrimSpace(string(b)) != "127.0.0.1:4000 "+tok {
 		t.Errorf("decider: %q", b)
@@ -443,12 +461,15 @@ func TestStartConfined(t *testing.T) {
 	}
 	want = []string{
 		"smolvm machine update --name " + vm + " --net --reset-allow-list --no-egress-interceptor",
-		"smolvm machine update --name " + vm + " --remove-env HTTPS_PROXY --remove-env HTTP_PROXY --remove-env NO_PROXY --remove-env http_proxy --remove-env https_proxy",
+		"smolvm machine update --name " + vm + " --remove-env NO_PROXY",
 		"smolvm machine start --name " + vm,
 		"smolvm machine exec --name " + vm + " -i -- sh -s --",
 	}
 	if got := s.calls(t); !slices.Equal(got, want) {
 		t.Errorf("calls:\n%q\nwant\n%q", got, want)
+	}
+	if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("proxy file: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(s.stub, "smolvm-decider-"+vm)); strings.TrimSpace(string(b)) != "none unset" {
 		t.Errorf("decider: %q", b)

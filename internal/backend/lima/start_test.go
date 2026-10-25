@@ -56,7 +56,7 @@ func TestStartConfined(t *testing.T) {
 			name: "macOS, the proxy", os: "darwin", c: proxy, wrapped: true,
 			edits: []string{
 				".ssh.localPort=2222",
-				`.env = {"HTTPS_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456","HTTP_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456","NO_PROXY":"localhost","http_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456","https_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.2:23456"}`,
+				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","NO_PROXY":"localhost","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456"}`,
 				".propagateProxyEnv=false",
 			},
 		},
@@ -65,7 +65,7 @@ func TestStartConfined(t *testing.T) {
 			guestfwd: `'/opt/my devvm/devvm' _qemu connect 127.0.0.1:23456`,
 			edits: []string{
 				".ssh.localPort=2222",
-				`.env = {"HTTPS_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128","HTTP_PROXY":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128","NO_PROXY":"localhost","http_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128","https_proxy":"http://devvm:0123456789abcdef0123456789abcdef@192.168.5.4:3128"}`,
+				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.4:3128","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.4:3128","NO_PROXY":"localhost","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.4:3128","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.4:3128"}`,
 				".propagateProxyEnv=false", ".hostResolver.enabled=false", `.dns=["127.0.0.1"]`,
 			},
 		},
@@ -93,6 +93,18 @@ func TestStartConfined(t *testing.T) {
 			if err := os.WriteFile(l.haPIDFile("v"), []byte("12345\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
+			// limactl edit writes the environment it's given into lima.yaml.
+			yaml := filepath.Join(l.Dirs.LimaVM("v"), "lima.yaml")
+			if err := os.WriteFile(yaml, []byte("cpus: 4\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
+				t.Fatal(err)
+			}
+			f.do = func(c call) {
+				if i := slices.IndexFunc(c.argv, func(a string) bool { return strings.HasPrefix(a, ".env = ") }); i >= 0 && c.argv[1] == "edit" {
+					if err := os.WriteFile(yaml, []byte("cpus: 4\nenv: "+strings.TrimPrefix(c.argv[i], ".env = ")+"\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
+						t.Error(err)
+					}
+				}
+			}
 			if err := l.Start(t.Context(), "v", tc.c); err != nil {
 				t.Fatal(err)
 			}
@@ -109,9 +121,28 @@ func TestStartConfined(t *testing.T) {
 			if !slices.Equal(edits, tc.edits) {
 				t.Errorf("edits\n%s\nwant\n%s", strings.Join(edits, "\n"), strings.Join(tc.edits, "\n"))
 			}
-			// The setup gets the proxy's address as the guest's environment has it.
-			if u := l.ProxyURL(tc.c); tc.c.Net == backend.NetProxy && !strings.Contains(tc.edits[1], `"HTTP_PROXY":"`+u+`"`) || tc.c.Net != backend.NetProxy && u != "" {
-				t.Errorf("ProxyURL = %q", u)
+			// The password is in no command's arguments: devvm writes it into
+			// lima.yaml, which the setup's proxy address matches.
+			for _, c := range f.calls {
+				if strings.Contains(c.line(), proxy.ProxyPassword) {
+					t.Errorf("the password is in %q", c.line())
+				}
+			}
+			data, err := os.ReadFile(yaml) //nolint:gosec // the test's own file
+			if err != nil {
+				t.Fatal(err)
+			}
+			u := l.ProxyURL(tc.c)
+			if tc.c.Net == backend.NetProxy {
+				fi, err := os.Stat(yaml)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(data), `"HTTP_PROXY":"`+u+`"`) || strings.Contains(string(data), passwordStandIn) || fi.Mode().Perm() != 0o600 {
+					t.Errorf("lima.yaml (%v):\n%s", fi.Mode(), data)
+				}
+			} else if u != "" || string(data) != "cpus: 4\n" {
+				t.Errorf("ProxyURL = %q, lima.yaml:\n%s", u, data)
 			}
 			s := startCall(t, f)
 			args := s.argv[slices.Index(s.argv, "start"):]
@@ -142,6 +173,32 @@ func TestStartConfined(t *testing.T) {
 				t.Error("Confined with a hostagent that doesn't run")
 			}
 		})
+	}
+}
+
+// fillPassword fails, changing nothing, when lima.yaml lacks the stand-in or
+// the URL isn't plain YAML.
+func TestFillPassword(t *testing.T) {
+	l, _, _ := testLima(t, "darwin")
+	yaml := filepath.Join(l.Dirs.LimaVM("v"), "lima.yaml")
+	if err := os.MkdirAll(filepath.Dir(yaml), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyUser: "devvm", ProxyPassword: "pw"}
+	for _, tc := range []struct{ name, yaml, password string }{
+		{"no stand-in", "env: {}\n", "pw"},
+		{"an anchor", "env: {HTTP_PROXY: http://devvm:devvm-proxy-password@192.168.5.2:1}\n", "p&w"},
+	} {
+		if err := os.WriteFile(yaml, []byte(tc.yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c.ProxyPassword = tc.password
+		if err := l.fillPassword("v", c); err == nil {
+			t.Errorf("%s: filled", tc.name)
+		}
+		if b, _ := os.ReadFile(yaml); string(b) != tc.yaml { //nolint:gosec // the test's own file
+			t.Errorf("%s: changed to %q", tc.name, b)
+		}
 	}
 }
 

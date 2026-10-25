@@ -43,6 +43,7 @@ devvm's own scripts for this (`prepare.sh`, `shims.sh`) are in `base`'s key, wit
 - **Size:** what you ask for, or base's; the disk only grows.
 - **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 64 ports. Only servers listening on all addresses (`0.0.0.0`) are reached. `all`, the default, is refused: pass `--ports` or set `devvm ports -g`.
 - **SSH agent forwarding:** chosen when the VM is made (`--ssh-agent`), and fixed then. At each start smolvm forwards the agent `SSH_AUTH_SOCK` names (devvm's own with `devvm ssh-agent devvm`); with none, the start stops (`smolvm_no_agent`).
+- **Environment:** the proxy's settings with network policy, as on Lima. The proxy variables come from the VM's proxy file, `~/.local/share/devvm/smolvm/vms/<vm>.proxy` (mode 600), which devvm writes at each start with network policy (and removes without): each of devvm's commands in the VM names it (`smolvm machine exec --secret-file`), and smolvm reads it, so the proxy's password is in no process's arguments. A `smolvm machine exec` of your own gets the variables only in a login shell. (`machine create --secret-file` would last, but smolvm ignores it for a VM made from a pack.)
 
 ## Network policy
 

@@ -186,6 +186,44 @@ type record struct {
 	Confined string `json:"confined,omitempty"`
 }
 
+// proxyVars are the guest's proxy variables, which each exec of devvm's
+// gets from the machine's proxy file.
+var proxyVars = []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"}
+
+// proxyFile holds the proxy URL, password and all, of a machine started
+// with network policy: Start writes it (mode 600), or removes it without.
+// devvm's execs name it (machine exec --secret-file), so smolvm reads it
+// and only its path is in smolvm's arguments. Not create's --secret-file:
+// smolvm ignores that for a machine made from a pack.
+func (s *Smolvm) proxyFile(vm string) string {
+	return filepath.Join(filepath.Dir(s.Dirs.SmolvmVM(vm)), vm+".proxy")
+}
+
+// setProxyFile writes the machine's proxy URL, or removes its file for "".
+func (s *Smolvm) setProxyFile(vm, u string) error {
+	if u == "" {
+		if err := os.Remove(s.proxyFile(vm)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	return state.WriteFile(s.proxyFile(vm), []byte(u))
+}
+
+// proxyArgs are machine exec's options that give the command the proxy
+// variables, none when the machine has no proxy file.
+func (s *Smolvm) proxyArgs(vm string) []string {
+	f := s.proxyFile(vm)
+	if fi, err := os.Stat(f); err != nil || fi.Size() == 0 {
+		return nil
+	}
+	var args []string
+	for _, k := range proxyVars {
+		args = append(args, "--secret-file", k+"="+f)
+	}
+	return args
+}
+
 func (s *Smolvm) readRecord(vm string) (record, error) {
 	var r record
 	b, err := os.ReadFile(s.Dirs.SmolvmVM(vm))
@@ -322,7 +360,7 @@ func (s *Smolvm) userArgs(vm, dir string, input, tty bool, argv []string) ([]str
 	if dir == "" {
 		dir = "/"
 	}
-	args := []string{"machine", "exec", "--name", vm}
+	args := append([]string{"machine", "exec", "--name", vm}, s.proxyArgs(vm)...)
 	if input {
 		args = append(args, "-i")
 	}

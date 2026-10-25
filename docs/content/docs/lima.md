@@ -29,7 +29,7 @@ What devvm sets in each VM's Lima config:
 - **ssh:** agent forwarding on or off; the host port Lima picks, or a fixed one for confined starts.
 - **Ports:** which guest ports Lima forwards to the host's loopback (below).
 - **Size:** CPUs, memory and disk.
-- **Guest environment** (Lima's `env:`, written to `/etc/environment` at every boot): with network policy, the proxy's address and its settings; otherwise nothing. Lima doesn't pass the host's proxy settings in with network policy.
+- **Guest environment** (Lima's `env:`, written to `/etc/environment` at every boot): with network policy, the proxy's address and its settings; otherwise nothing. Lima doesn't pass the host's proxy settings in with network policy. `limactl edit` sets the proxy's URL with a stand-in for the password (`devvm-proxy-password`), which devvm then replaces in the VM's `lima.yaml`, rewritten mode 600: the password is in no process's arguments.
 
 Lima only changes a stopped VM's config. A change made while the VM runs applies at its next start.
 

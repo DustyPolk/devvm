@@ -1,6 +1,7 @@
 package lima
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // proxyHostDarwin is host loopback as a guest sees it on macOS: Lima's
@@ -35,7 +37,8 @@ func (l *Lima) haPIDFile(vm string) string { return filepath.Join(l.Dirs.LimaVM(
 //
 // The VM's guest environment (Lima's env:, written to /etc/environment on
 // every boot) is c.Env, plus, for NetProxy, the proxy's address in
-// HTTP_PROXY and HTTPS_PROXY (and lowercase). Build networks (NetInternet,
+// HTTP_PROXY and HTTPS_PROXY (and lowercase), its password written into
+// lima.yaml by devvm, never in limactl's arguments. Build networks (NetInternet,
 // NetNone) forward no ports.
 func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) error {
 	if err := l.checkGlobalConfigs(); err != nil {
@@ -60,9 +63,14 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 			return err
 		}
 	}
-	if sets := l.startSets(in.Config, c, sshPort); len(sets) > 0 {
+	if sets, fill := l.startSets(in.Config, c, sshPort); len(sets) > 0 {
 		if err := l.edit(ctx, vm, sets...); err != nil {
 			return err
+		}
+		if fill {
+			if err := l.fillPassword(vm, c); err != nil {
+				return err
+			}
 		}
 	}
 	// Its profile, wrapper and records: the user's alone.
@@ -175,30 +183,29 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 	return nil, nil, msg.LimaHostUnsupported(l.OS)
 }
 
+// passwordStandIn stands for the proxy's password in the edit that sets
+// the VM's environment: limactl's arguments are visible to other users, so
+// devvm writes the password into the VM's lima.yaml itself (fillPassword).
+const passwordStandIn = "devvm-proxy-password" //nolint:gosec // a stand-in, no password
+
 // startSets returns the --set edits that make a VM's config match how it
 // starts, none when it already does: an edit gives the VM new ssh host keys
-// at its next boot (cloud-init sees a new instance).
-func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) []string {
+// at its next boot (cloud-init sees a new instance). fill reports that the
+// edits hold passwordStandIn for fillPassword to replace.
+func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts []string, fill bool) {
 	var sets []string
 	if sshPort != 0 && cfg.SSH.LocalPort != sshPort {
 		sets = append(sets, ".ssh.localPort="+strconv.Itoa(sshPort))
 	}
-	env := maps.Clone(c.Env)
-	if env == nil {
-		env = map[string]string{}
-	}
 	proxy := c.Net == backend.NetProxy
-	if proxy {
-		u := l.proxyURL(c)
-		for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
-			env[k] = u
-		}
-	}
-	if !maps.Equal(env, cfg.Env) && (len(env) > 0 || len(cfg.Env) > 0) {
+	if env := l.guestEnv(c); !maps.Equal(env, cfg.Env) && (len(env) > 0 || len(cfg.Env) > 0) {
 		if len(env) == 0 {
 			sets = append(sets, "del(.env)")
 		} else {
-			sets = append(sets, ".env = "+yqJSON(env))
+			stand := c
+			stand.ProxyPassword = passwordStandIn
+			sets = append(sets, ".env = "+yqJSON(l.guestEnv(stand)))
+			fill = proxy && c.ProxyUser != ""
 		}
 	}
 	// Not the host's own proxy settings.
@@ -230,11 +237,49 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) []stri
 		// program trusts.
 		sets = append(sets, portsSet(backend.Ports{}))
 	}
-	var opts []string
 	for _, s := range sets {
 		opts = append(opts, "--set", s)
 	}
-	return opts
+	return opts, fill
+}
+
+// guestEnv is the VM's guest environment as c has it: c.Env, and for
+// NetProxy the proxy's address.
+func (l *Lima) guestEnv(c backend.Confinement) map[string]string {
+	env := maps.Clone(c.Env)
+	if env == nil {
+		env = map[string]string{}
+	}
+	if c.Net == backend.NetProxy {
+		u := l.proxyURL(c)
+		for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+			env[k] = u
+		}
+	}
+	return env
+}
+
+// fillPassword replaces the proxy URL with passwordStandIn in the VM's
+// lima.yaml, as limactl edit wrote it, with the real one: the file, unlike
+// a process's arguments, is the user's alone (devvm writes it 0600).
+func (l *Lima) fillPassword(vm string, c backend.Confinement) error {
+	path := filepath.Join(l.Dirs.LimaVM(vm), "lima.yaml")
+	data, err := os.ReadFile(path) //nolint:gosec // the VM's own config, in devvm's Lima home
+	if err != nil {
+		return err
+	}
+	stand := c
+	stand.ProxyPassword = passwordStandIn
+	from, to := l.proxyURL(stand), l.proxyURL(c)
+	// The URL goes into YAML as it is: only characters no YAML scalar
+	// treats specially.
+	if strings.Trim(to, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~%:/@") != "" {
+		return fmt.Errorf("lima: %s: the proxy's URL can't go into lima.yaml", vm)
+	}
+	if !bytes.Contains(data, []byte(from)) {
+		return fmt.Errorf("lima: %s: lima.yaml has no proxy settings to fill in", vm)
+	}
+	return state.WriteFile(path, bytes.ReplaceAll(data, []byte(from), []byte(to)))
 }
 
 // proxyURL is devvm's proxy as the guest reaches it, with the VM's user and

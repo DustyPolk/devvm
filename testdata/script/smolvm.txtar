@@ -105,10 +105,14 @@ stdout '^decider_port=[0-9]+$'
 stdout '^decider_token=[0-9a-f]{64}$'
 stub_calls
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --reset-allow-list --allow-cidr 100\.96\.0\.1/32 --allow-host-pattern devvm\.invalid$'
-stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} -e HTTPS_PROXY=http://devvm:[0-9a-f]{32}@100\.96\.0\.1:[0-9]+ '
+! stdout ' -e HTTPS?_PROXY='
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --mediated-egress --egress-interceptor 127\.0\.0\.1:[0-9]+$'
-stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} .* curl --noproxy \* -sS -m 3 -o /dev/null https://1\.1\.1\.1$'
-# smolvm prints the values it sets: the password is in no run log.
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --secret-file HTTP_PROXY=\S+/smolvm/vms/devvm-pol-[0-9a-f]{14}\.proxy .* curl --noproxy \* -sS -m 3 -o /dev/null https://1\.1\.1\.1$'
+# The proxy's URL is in the machine's proxy file (mode 600), which each exec
+# names: never in smolvm's arguments.
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-pol-*); f=$(ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-pol-*.proxy); grep -qE "^http://devvm:$key@100\.96\.0\.1:[0-9]+$" "$f" && ! grep -qF "$key" "$STUB_LOG" && ls -l "$f"'
+stdout '^-rw-------\S* '
+# The password is in no run log.
 exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-pol-*); ! grep -rqF "$key" "$XDG_DATA_HOME"/devvm/logs/runs'
 exec sh -c 'grep -F "deciding on 127.0.0.1:$(sed -n "s/^decider_port=//p" "$VMS"/devvm-pol-*) for devvm-pol-" "$XDG_DATA_HOME"/devvm/logs/devvm-pol-*.proxy.log'
 exec sh -c 'cat "$STUB_DIR"/smolvm-decider-devvm-pol-*'

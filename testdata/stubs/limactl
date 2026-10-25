@@ -5,7 +5,8 @@
 # Stopped), which create, clone, start, stop and delete keep up to date. A
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
-# and 100 GiB, which edit's --cpus, --memory and --disk change. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# and 100 GiB, which edit's --cpus, --memory and --disk change; edit's
+# --set .env goes into $LIMA_HOME/<name>/lima.yaml. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
@@ -120,6 +121,15 @@ case ${1:-} in
         --cpus) cpus=$v ;;
         --memory) mem=$(awk -v g="$v" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
         --disk) disk=$(awk -v g="$v" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
+        --set)
+          # The environment goes into the VM's lima.yaml, an env: line of its own.
+          if [[ $v == ".env = "* || $v == "del(.env)" ]]; then
+            y="$LIMA_HOME/${names[0]}/lima.yaml"
+            mkdir -p "$(dirname "$y")"
+            { [[ ! -f $y ]] || grep -v '^env:' "$y" || true
+              [[ $v == "del(.env)" ]] || echo "env: ${v#.env = }"; } > "$y.new"
+            mv "$y.new" "$y"
+          fi ;;
       esac
     done
     echo "$cpus $mem $disk" > "$STUB_DIR/size-${names[0]}" ;;

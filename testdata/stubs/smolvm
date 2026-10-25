@@ -13,7 +13,8 @@
 # A machine's allow lists and whether it needs a decider are in $STUB_DIR/smolvm-egress/NAME
 # ("cidrs …", "hosts =…", "mediated true|false"), which update's --allow-cidr,
 # --allow-host-pattern, --reset-allow-list and --no-egress-interceptor change, and machine ls shows;
-# update prints the environment it sets (-e), values and all, as smolvm does.
+# update prints the environment it sets (-e), values and all, as smolvm does. exec fails, as
+# smolvm's does, when a --secret-file's file can't be read.
 # start --mediated-egress records "INTERCEPTOR TOKEN" to $STUB_DIR/smolvm-decider-NAME (a start
 # without it, "none ${SMOLVM_INTERCEPTOR_TOKEN-unset}"), and a mediated machine started without one
 # fails.
@@ -26,10 +27,11 @@ cmd="${1:-} ${2:-}"
 shift 2 || true
 # Options before --, and the arguments after it.
 name="" label="" cpus="" mem="" storage="" net="" out="" vols=() after=()
-cidrs=() hosts=() reset=false nointer=false mediated=false inter="" envs=()
+cidrs=() hosts=() reset=false nointer=false mediated=false inter="" envs=() secrets=()
 while (( $# )); do
   case $1 in
     -e) envs+=("$2"); shift ;;
+    --secret-file) secrets+=("$2"); shift ;;
     --allow-cidr) cidrs+=("$2"); shift ;;
     --allow-host-pattern) hosts+=("=$2"); shift ;;
     --reset-allow-list) reset=true ;;
@@ -117,6 +119,9 @@ case $cmd in
   "machine data-dir") echo "$STUB_DIR/smolvm-data/$name" ;;
   "machine exec")
     [[ ! -e $STUB_DIR/exec-fails ]] || exit 1
+    for ref in ${secrets[@]+"${secrets[@]}"}; do
+      [[ -r ${ref#*=} ]] || { echo "resolve secret '${ref%%=*}': file_read_failed" >&2; exit 1; }
+    done
     line="${after[*]}"
     if [[ $line == *"curl --noproxy"* ]]; then [[ -e $STUB_DIR/net-direct ]] || exit 7; fi
     if [[ $line == *"command -v apk"* ]]; then cat "$STUB_DIR/build-libc" 2>/dev/null || echo gnu; exit 0; fi
