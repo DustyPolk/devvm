@@ -17,7 +17,7 @@ The same code and tests run on macOS and Linux; what differs is behind build tag
 | Network policy | the VM's Lima process under a macOS sandbox | QEMU's `restrict=on` and a `guestfwd` to the proxy |
 | `.git` protection | locked with `chflags` | none: devvm says so ([details](git-protection.md#linux-hosts)) |
 | Set-id files | dropped by virtiofs | reach the host: new VMs check for them |
-| Tokens | the Keychain | not yet |
+| Tokens | the Keychain | files only you can read, in `~/.config/devvm/secrets/` |
 | The CA | kept out of Time Machine | no backup to keep it out of |
 
 `tests/e2e.sh` checks each side where it runs: on Linux, the `.git` protection checks become one that it's off and devvm says so, and the Keychain check is left out.

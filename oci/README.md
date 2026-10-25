@@ -11,7 +11,7 @@ Turns a Docker image into a disk Lima boots directly, for `--from` ([Starting fr
 
 Like every image script, downloads are pinned at the top of `build.sh` (version and checksum), checked with `sha256sum` since the build VM has no `devvm-fetch`.
 
-The image's own code runs as root in the build VM, so devvm treats everything it writes as hostile: the build VM gets only a `vm/` subfolder of devvm's temp folder, devvm writes `lima.yaml` outside it, and it refuses outputs that aren't regular files (a symlink could point Lima at a host file), a libc other than `gnu` or `musl`, or a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
+The image's own code runs as root in the build VM, so devvm treats everything it writes as hostile: the build VM gets only a `vm/` subfolder of devvm's temp folder (and `oci/`, read-only), devvm checks what it wrote only once the build VM is deleted, and it refuses outputs that aren't regular files (a symlink could point Lima at a host file), a libc other than `gnu` or `musl`, or a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
 
 ## Gotchas
 

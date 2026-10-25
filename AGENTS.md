@@ -69,7 +69,7 @@ Still to come: smolvm and docker backends; the release keys (`packaging/minisign
 
 - Every backend implements `backend.Backend` and declares `Caps` per feature: native, emulated (reviewed) or none. A new `Feature` goes in `backend.Features` and the table in `docs/content/docs/backends.md`.
 - **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check `backend.Require(b, vm, spec.Features()...)` first; backends don't decide what a VM needs.
-- **Every emulation is refused until reviewed:** a design note in `docs/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
+- **Every emulation is refused until reviewed:** a design note in `docs/content/docs/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package; what isn't (`.git` protection, the proxy) stays out.
 - **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. Warnings go through a `Warn` field. Set calls on a running VM get `vm_not_stopped`; restart warnings are the callers'.
 - **Lima edits only what differs:** any `limactl edit` gives the VM new ssh host keys at its next boot, so `Start` compares first. `Start` owns `env:`, `propagateProxyEnv`, `dns` and `hostResolver`.
@@ -137,6 +137,7 @@ Copied (here ← there):
 - `features/*` ← same paths
 - `VERSION`, `scripts/release.sh` ← same, adapted: GoReleaser in a clone of the commit; `scripts/bump.sh` ← same, adapted: the host mise in `internal/tools/mise.go`; `packaging/homebrew/devvm.rb` ← same, adapted: builds with Go
 - `install.sh` ← same, adapted: the host's archive, older versions in use kept
+- `SECURITY.md` ← same, adapted: docs site links, `--ignore-missing`
 
 Docs (page ← bash page, all rewritten, partly):
 - `images.md`, `commands.md`, `security.md`, `git-protection.md`, `coding-agents.md`, `ssh.md`, `clone.md`, `from.md` ← same names
@@ -147,6 +148,9 @@ Docs (page ← bash page, all rewritten, partly):
 - README "Quickstart" ← README usage
 - `install.md` ← same name (with requirements and checking them)
 - `maintaining.md` ← same name
+- `design.md` ← same name (with emulation design notes; dropped: the per-tool layers it replaced, fixes along the way, platform test history, the Go-only build)
+- `limits.md` ← same name (a summary linking each page; dropped: mise's shared installs as experimental, no longer)
+- `_index.md` ← `docs/README.md`
 
 Bats files (pending cases, by task):
 

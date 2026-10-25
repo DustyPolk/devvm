@@ -35,7 +35,7 @@ A VM belongs to the folder it was made for: its path, and the folder itself (its
 
 ### Read-only and confined builds
 
-Images are built with nothing from the host mounted, and their builds are confined: they reach the internet but not your machine's own services ([details](lima.md#confinement)). Credentials never go into them. devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them, and devvm refuses a VM with a network it didn't give it, which would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
+Images are built with nothing from the host mounted, and their builds are confined: they reach the internet but not your machine's own services ([details](lima.md#confinement)). Credentials never go into them. A tool build writes into a folder of its own, never the shared tools: devvm checks each image, moves it in and records its hash ([details](images.md#building-tools)). devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them, and devvm refuses a VM with a network it didn't give it, which would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
 
 ### `.git` protection
 
@@ -55,6 +55,7 @@ The proxy's CA (`~/.local/share/devvm/ca`) is how it reads traffic to the hosts 
 
 - **Files the VM writes into the project folder.** Review changes before you run project code on the host (`npm install`, `make`, editor tasks, hooks in the working tree). `--clone` keeps them out until you fetch and merge them; review those commits the same way.
 - **VMs without network policy**, where you answered no or passed `--no-network-policy`: they reach anything this machine can, its services on `localhost` (other VMs' ports, dev servers, databases) and your local network included. They get the tokens they use themselves, which still work wherever they kept them after `devvm secret unuse`, `devvm secret rm` or `devvm network on`: rotate them if that matters.
+- **Codex and opencode logins, and Claude Code's MCP secrets, without network policy.** The VM gets `auth.json` as it is, and `~/.claude.json`'s MCP servers with their env values and headers; devvm names the servers that have them ([details](coding-agents.md#copies)).
 - **A VM started outside devvm** (`limactl start`), or running since before `devvm network on`, runs unconfined, and reaches anything this machine can ([the self-check](network.md#the-self-check)).
 - **What allowed hosts and tokens permit.** The VM can push with a GitHub token it may use, spend Claude quota, or upload to any host on its allowlist. Use fine-grained tokens and keep allowlists short.
 - **What a VM made with a token.** The proxy puts the token into any request to that service, so a VM can use it to make credentials of its own. The proxy refuses GitHub REST calls that add a key to your account, a deploy key, a self-hosted runner or a webhook (`403`), but not everything: GitHub's GraphQL API, an OAuth app grant, other services. If a VM may have done that, rotate the token and check the service's keys, tokens and runners.
@@ -63,3 +64,5 @@ The proxy's CA (`~/.local/share/devvm/ca`) is how it reads traffic to the hosts 
 - **What VS Code relays** over Remote-SSH (`devvm code`): ports its programs in the VM listen on, and your GitHub sign-in for git's prompts. devvm turns both off in the VM's VS Code settings each time it sets the VM up, but the VM can turn them back on: set them in your own VS Code settings too ([VS Code](ssh.md#vs-code)).
 - **Set-id bits on Linux hosts.** Root in a VM can set the set-user-id and set-group-id bits on files in the project folder. On macOS they don't reach the host (virtiofs drops them). On Linux they do, and the files are yours, so a set-user-id one runs as you for anyone else on the machine who runs it. devvm names such files when it creates a VM for the folder (`chmod u-s,g-s FILE` clears them). Don't run programs from the project folder as another user.
 - **Escapes from the VM itself**: bugs in Lima, Apple's Virtualization framework or QEMU.
+
+Found a way out of a VM? See [SECURITY.md](https://github.com/w3cj/devvm/blob/main/SECURITY.md).

@@ -12,7 +12,7 @@ Each backend has its own images: an image's key includes its backend, so one bac
 Each backend declares how it has each feature:
 
 - **native**: the backend does it itself.
-- **emulated**: devvm builds it from other parts of the backend. An emulation is used only once its review has passed: a design note, a threat check and end-to-end checks proving the guarantee. Until then it's refused.
+- **emulated**: devvm builds it from other parts of the backend. An emulation is used only once its review has passed: a [design note](design.md#emulated-features), a threat check and end-to-end checks proving the guarantee. Until then it's refused.
 - **none**: the backend can't do it.
 
 `devvm doctor` lists them for every backend devvm has, an emulation whose review hasn't passed as `unreviewed`.
