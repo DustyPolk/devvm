@@ -1,6 +1,6 @@
 ---
 title: devvm size
-weight: 35
+weight: 36
 ---
 
 Show or change this folder's VM's size

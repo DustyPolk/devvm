@@ -1,6 +1,6 @@
 ---
 title: devvm completion
-weight: 5
+weight: 6
 ---
 
 Print the shell completion script for bash, zsh or fish

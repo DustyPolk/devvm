@@ -110,6 +110,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"agent_lifetime_invalid":      "ssh#devvms-own-agent",
 	"agent_confirm_needs_askpass": "ssh#devvms-own-agent",
 	"ssh_include_yourself":        "ssh#ssh-access-by-name",
+	"no_code_command":             "ssh#devvm-ssh-and-devvm-code",
 	"clone_not_top":               "clone#requirements",
 	"clone_no_commits":            "clone#requirements",
 	"clone_detached":              "clone#requirements",

@@ -743,6 +743,21 @@ other = "Add it now?"
 [ssh_include_added]
 other = "added to ~/.ssh/config"
 
+[ssh_host_info]
+description = "host is the name ssh reaches the VM by; dir is its folder there"
+other = "Connect with ssh {{.host}}, or VS Code's Remote-SSH: Connect to Host.\nThe folder in the VM: {{.dir}}"
+
+[no_code_command]
+other = "VS Code's code command isn't on PATH: connect to {{.host}} with Remote-SSH"
+
+[ssh_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't get this folder's VM ready for ssh: {{.reason}}"
+
+[code_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't open this folder's VM in VS Code: {{.reason}}"
+
 [no_ssh_agent]
 other = "no SSH agent is running, so git over SSH won't work in the VM"
 

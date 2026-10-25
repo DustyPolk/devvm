@@ -23,8 +23,8 @@ A copy that fails (the VM can't be reached, say) is tried again the next time yo
 
 The repo gets a git remote for the VM, named `devvm`, or `devvm-<folder>` when `devvm` is taken, then the VM's full name. Its URL is the VM's full name and the clone's path, so it goes through devvm's ssh config:
 
-- **It needs the `Include` line** in `~/.ssh/config` ([SSH access by name](ssh.md#ssh-access-by-name)). devvm offers to add it when it makes the clone; without a terminal, or until you add it, fetch with `GIT_SSH_COMMAND='ssh -F ~/.config/devvm/ssh_config' git fetch devvm`.
-- **It needs the VM running.** A stopped VM has no SSH entry, so `git fetch` says it can't resolve the name. Run `devvm` in the folder first.
+- **It needs the `Include` line** in `~/.ssh/config` ([SSH access by name](ssh.md#ssh-access-by-name)). devvm offers to add it when it makes the clone, and on `devvm ssh` or `devvm code`; without a terminal, or until you add it, fetch with `GIT_SSH_COMMAND='ssh -F ~/.config/devvm/ssh_config' git fetch devvm`.
+- **It needs the VM running.** A stopped VM has no SSH entry, so `git fetch` says it can't resolve the name. Run `devvm` or `devvm ssh` in the folder first.
 
 ## Fetching the VM's work
 

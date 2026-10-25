@@ -37,6 +37,7 @@ devvm [IMAGE] [flags]
 - [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
 - [devvm auth](devvm_auth.md): Save the Claude token: devvm secret set claude
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
+- [devvm code](devvm_code.md): Open this folder's VM in VS Code over Remote-SSH
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
 - [devvm export](devvm_export.md): Save this folder's VM's agent history to a .tar.gz
@@ -56,6 +57,7 @@ devvm [IMAGE] [flags]
 - [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
 - [devvm setup](devvm_setup.md): Choose base's features and the default backend
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
+- [devvm ssh](devvm_ssh.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm stop](devvm_stop.md): Stop this folder's VM
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

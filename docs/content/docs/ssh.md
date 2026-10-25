@@ -13,11 +13,28 @@ devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches
 Include ~/.config/devvm/ssh_config
 ```
 
-Or point ssh at the file: `ssh -F ~/.config/devvm/ssh_config devvm-website`. A new [`--clone`](clone.md) VM offers to add the line, as its repo's remote needs it.
+Or point ssh at the file: `ssh -F ~/.config/devvm/ssh_config devvm-website`. `devvm ssh`, `devvm code` and a new [`--clone`](clone.md) VM offer to add the line in a terminal; without one, they show it.
 
-- **Only running VMs are listed.** A stopped VM's port is free for any program on the host to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm` before connecting from an editor.
+- **Only running VMs are listed.** A stopped VM's port is free for any program on the host to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm ssh` (or `devvm`) before connecting from an editor.
 - **Each entry checks the VM's own host keys,** kept in `~/.config/devvm/known_hosts`. devvm reads them from the VM through Lima once it runs, and again after each start: a VM whose Lima config changed gets new host keys when it boots. A VM whose keys can't be read gets no entry. A host key that doesn't match is refused.
 - **Each connection is its own:** entries set `ControlMaster no`, so a session never rides on a connection another program opened. Of Lima's own ssh settings for the VM, only the address, port, user and login key are copied; Lima's turn host key checks off.
+
+## devvm ssh and devvm code
+
+`devvm ssh` gets this folder's VM ready for ssh and editors, then shows its name (`devvm-website`) and its folder in the VM. It does what [a launch of an existing VM](commands.md#an-existing-vm) does, without opening a shell: it checks `.git`, applies the size, ports and agent forwarding a stopped VM's state asks for, starts the VM if it's stopped, runs the [self-check](network.md#the-self-check), sets the VM up and writes the ssh config. A VM whose network policy doesn't hold is stopped, and gets no name.
+
+`devvm code` does the same, then opens the folder in VS Code over Remote-SSH with VS Code's `code` command: `code --remote ssh-remote+devvm-website ~/website`. VS Code gets the SSH agent devvm was started with, not the one devvm's own connections to the VM carry. Without `code` on `PATH`, devvm names the host to connect to with *Remote-SSH: Connect to Host*.
+
+### VS Code
+
+Over Remote-SSH, VS Code reaches further than ssh:
+
+- **Ports.** It forwards ports that programs it starts in the VM (its terminals, tasks, an agent) listen on to this machine's `localhost`, whatever `devvm ports` says.
+- **Git sign-in.** It answers git's credential prompts in the VM with your GitHub sign-in in VS Code.
+
+devvm turns both off in VS Code's settings for the VM, `~/.vscode-server/data/Machine/settings.json` in the VM: `remote.autoForwardPorts`, `git.terminalAuthentication` and `github.gitAuthentication` are set to `false` each time devvm sets the VM up, and its other settings are kept. A file with comments isn't plain JSON, so devvm leaves it as it is and says so in the run log.
+
+The VM can change that file back. For a VM you don't trust, set the three in your own VS Code settings on this machine too. Programs in the VM can also open URLs in this machine's browser (`$BROWSER`).
 
 ## Agent forwarding
 

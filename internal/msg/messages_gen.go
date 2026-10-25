@@ -314,6 +314,11 @@ func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
 }
 
+// CodeFailed is [code_failed]: "couldn't open this folder's VM in VS Code: {{.reason}}"
+func CodeFailed(reason string) M {
+	return M{id: "code_failed", vals: []val{{"reason", reason}}}
+}
+
 // CodexLoginKept is [codex_login_kept]: "Codex's auth.json {{.keys}} is copied into the VM as it is"
 func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
@@ -1074,6 +1079,11 @@ func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
 }
 
+// NoCodeCommand is [no_code_command]: "VS Code's code command isn't on PATH: connect to {{.host}} with Remote-SSH"
+func NoCodeCommand(host string) M {
+	return M{id: "no_code_command", vals: []val{{"host", host}}}
+}
+
 // NoDigest is [no_digest]: "devvm has no digest for {{.from}}"
 func NoDigest(from string) M {
 	return M{id: "no_digest", vals: []val{{"from", from}}}
@@ -1529,6 +1539,16 @@ func SSHAgentFlagIgnored() M {
 	return M{id: "ssh_agent_flag_ignored"}
 }
 
+// SSHFailed is [ssh_failed]: "couldn't get this folder's VM ready for ssh: {{.reason}}"
+func SSHFailed(reason string) M {
+	return M{id: "ssh_failed", vals: []val{{"reason", reason}}}
+}
+
+// SSHHostInfo is [ssh_host_info]: "Connect with ssh {{.host}}, or VS Code's Remote-SSH: Connect to Host.\nThe folder in the VM: {{.dir}}"
+func SSHHostInfo(dir string, host string) M {
+	return M{id: "ssh_host_info", vals: []val{{"dir", dir}, {"host", host}}}
+}
+
 // SSHIncludeAdded is [ssh_include_added]: "added to ~/.ssh/config"
 func SSHIncludeAdded() M {
 	return M{id: "ssh_include_added"}
@@ -1893,6 +1913,7 @@ var specs = map[string]spec{
 	"clone_ready":                 {fields: []string{"branch", "remote"}},
 	"clone_seed_failed":           {fields: []string{"vm"}},
 	"cloning_image":               {fields: []string{"parent"}},
+	"code_failed":                 {fields: []string{"reason"}},
 	"codex_login_kept":            {fields: []string{"keys"}},
 	"config_not_copied":           {fields: []string{"file", "vm"}},
 	"config_redacted":             {fields: []string{"file", "keys", "vm"}},
@@ -2045,6 +2066,7 @@ var specs = map[string]spec{
 	"network_failed":              {fields: []string{"reason"}},
 	"newer_tools":                 {fields: []string{"tools"}},
 	"no_claude_token":             {fields: []string{"vm"}},
+	"no_code_command":             {fields: []string{"host"}},
 	"no_digest":                   {fields: []string{"from"}},
 	"no_feature":                  {fields: []string{"feature", "features"}},
 	"no_github_token":             {fields: []string{"vm"}},
@@ -2136,6 +2158,8 @@ var specs = map[string]spec{
 	"ssh_agent_empty":             {},
 	"ssh_agent_failed":            {fields: []string{"reason"}},
 	"ssh_agent_flag_ignored":      {},
+	"ssh_failed":                  {fields: []string{"reason"}},
+	"ssh_host_info":               {fields: []string{"dir", "host"}},
 	"ssh_include_added":           {},
 	"ssh_include_needed":          {fields: []string{"line"}},
 	"ssh_include_yourself":        {},

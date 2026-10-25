@@ -140,6 +140,8 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm ssh-agent [on\|devvm\|off]` | show this folder's VM's SSH agent forwarding (`off`, `on`: yours, `devvm`: devvm's own), or change it from its next start: `devvm restart` ([details](ssh.md#agent-forwarding)) |
 | `devvm ssh-agent add KEY_FILE [--confirm] [--lifetime DURATION]` | load a key into devvm's own agent, and record it, so it's loaded again when a VM needs it ([details](ssh.md#devvms-own-agent)) |
 | `devvm ssh-agent keys` | list the keys devvm's own agent holds, then those added to it |
+| `devvm ssh` | get this folder's VM ready for ssh and editors, started if it's stopped, and show the name they reach it by: `devvm-website` ([details](ssh.md#devvm-ssh-and-devvm-code)) |
+| `devvm code` | the same, then open its folder in VS Code over Remote-SSH ([VS Code](ssh.md#vs-code)) |
 
 ## Images
 

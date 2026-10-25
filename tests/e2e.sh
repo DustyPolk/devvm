@@ -344,6 +344,27 @@ check "devvm stop stops it and drops its ssh config entry" bash -c "cd '$p' && '
 check "stopped, devvm starts it again" bash -c "[[ \$(status_of $vm) == Stopped ]] &&
   cd '$p' && printf 'echo e2e-again\n' | '$D' >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] && grep -qx e2e-again '$work/last.log'"
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
+# devvm ssh and code with a home of their own, so the Include line is offered for an empty one (and,
+# without a terminal, not added), and a stub code first on PATH: never your editor.
+mkdir -p "$sc/home" "$sc/bin"
+printf '#!/bin/sh\necho "$*" > %s/code-args\necho "${SSH_AUTH_SOCK-unset}" > %s/code-agent\n' "$sc" "$sc" > "$sc/bin/code"
+chmod +x "$sc/bin/code"
+check "devvm ssh starts a stopped VM and names it, without a shell; ssh reaches it" bash -c "cd '$p' &&
+  HOME='$sc/home' '$D' stop </dev/null >/dev/null 2>&1 && [[ \$(status_of $vm) == Stopped ]] &&
+  HOME='$sc/home' '$D' ssh </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
+  grep -qF \"\$(m ssh_host_info dir=$p host=devvm-web | head -1)\" '$work/last.log' &&
+  grep -qF \"\$(m ssh_host_info dir=$p host=devvm-web | tail -1)\" '$work/last.log' &&
+  grep -qF \"\$(m ssh_include_yourself | head -1)\" '$work/last.log' && [[ ! -e '$sc/home/.ssh' ]] &&
+  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
+check "VS Code's settings in the VM: no port forwarding, no git sign-in relay" in_vm "$vm" \
+  '[[ $(jq -c . ~/.vscode-server/data/Machine/settings.json) == "{\"remote.autoForwardPorts\":false,\"git.terminalAuthentication\":false,\"github.gitAuthentication\":false}" ]]'
+in_vm "$vm" 'echo "{\"editor.fontSize\": 14, \"remote.autoForwardPorts\": true}" > ~/.vscode-server/data/Machine/settings.json' >/dev/null 2>&1
+(cd "$p" && HOME=$sc/home "$D" ssh </dev/null >"$work/last.log" 2>&1)
+check "changed back in the VM, devvm ssh turns them off again and keeps the others" in_vm "$vm" \
+  'jq -e ".[\"editor.fontSize\"] == 14 and .[\"remote.autoForwardPorts\"] == false and .[\"github.gitAuthentication\"] == false" ~/.vscode-server/data/Machine/settings.json >/dev/null'
+check "devvm code opens the folder over Remote-SSH (a stub code), with the agent devvm started with" bash -c "cd '$p' &&
+  HOME='$sc/home' PATH='$sc/bin':\$PATH SSH_AUTH_SOCK='$sc/agent.sock' '$D' code </dev/null >'$work/last.log' 2>&1 &&
+  [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-web $p' && \$(cat '$sc/code-agent') == '$sc/agent.sock' ]]"
 check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
 check "a running VM's new ports wait for its next start" bash -c "cd '$p' &&
@@ -593,6 +614,9 @@ check "--network-policy: the VM runs behind its proxy, and the self-check passed
 check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
   grep -q '^Host devvm-net $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
+check "devvm ssh runs the self-check, which passes, and names it" bash -c "cd '$n' &&
+  HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' ssh </dev/null >'$work/last.log' 2>&1 && grep -qx net_check=ok '$vms/$vm' &&
+  grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log'"
 check "direct connections fail, even as root: an address, other ports" bash -c "
   ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
   ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1 </dev/null &&
@@ -698,6 +722,10 @@ check "started outside devvm again: without a terminal, devvm stops it and opens
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
   ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
   ! grep -q e2e-opened '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
+check "so does devvm ssh, which names nothing" bash -c "
+  limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
+  ! HOME='$nh' '$D' ssh </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
+  ! grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
 # Stopped by the self-check, it's still unenforced: its last self-check failed.
 check "devvm network off: its next start is direct, without a proxy" bash -c "cd '$n' &&
   [[ \$('$D' network) == unenforced ]] && '$D' network off </dev/null >/dev/null &&

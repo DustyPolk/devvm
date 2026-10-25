@@ -1,5 +1,6 @@
 # What guest/sync.sh sets up in a VM, its pieces run here: the prompt,
-# what the proxy blocked, and the merge of Claude Code's settings.
+# what the proxy blocked, the merge of Claude Code's settings, and VS
+# Code's settings.
 exec bash snippets.sh $DEVVM_BIN/guest/sync.sh
 
 # The prompt starts with (devvm), after a theme that rebuilds PS1 before
@@ -20,12 +21,29 @@ cmp stdout blocked.want
 exec bash merge-test.sh
 cmp stdout merge.want
 
+# VS Code's settings in the VM: no port forwarding to the host, no git
+# sign-in relay; its other settings kept. A file that isn't plain JSON is
+# left as it is, and said.
+env HOME=$WORK/vmhome
+exec bash vsc.sh
+exec jq -c . $HOME/.vscode-server/data/Machine/settings.json
+stdout '^\{"remote\.autoForwardPorts":false,"git\.terminalAuthentication":false,"github\.gitAuthentication":false\}$'
+cp vsc-mine.json $HOME/.vscode-server/data/Machine/settings.json
+exec bash vsc.sh
+exec jq -c . $HOME/.vscode-server/data/Machine/settings.json
+stdout '^\{"editor\.fontSize":14,"remote\.autoForwardPorts":false,"git\.terminalAuthentication":false,"github\.gitAuthentication":false\}$'
+cp vsc-comments.json $HOME/.vscode-server/data/Machine/settings.json
+exec bash vsc.sh
+stderr 'isn''t plain JSON'
+cmp $HOME/.vscode-server/data/Machine/settings.json vsc-comments.json
+
 -- snippets.sh --
 # Each piece of sync.sh ($1) into a file of its own.
 awk '/^cat > ~\/.bashrc.d\/devvm-prompt.sh/ { on = 1; next } on && /^EOF$/ { exit } on' "$1" > prompt.sh
 awk '/^_devvm_blocked\(\) \{/ { on = 1 } on && /^EOF$/ { exit } on' "$1" > blocked.sh
 awk '/^merge_claude_json\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$1" > merge.sh
-for f in prompt.sh blocked.sh merge.sh; do [[ -s $f ]] || { echo "no $f in $1" >&2; exit 1; }; done
+awk '/^vsc=~\/.vscode-server/ { on = 1 } on && /^# Codex has no env-var/ { exit } on' "$1" > vsc.sh
+for f in prompt.sh blocked.sh merge.sh vsc.sh; do [[ -s $f ]] || { echo "no $f in $1" >&2; exit 1; }; done
 -- prompt-test.sh --
 # Two prompts, the way bash runs PROMPT_COMMAND (an array of commands on
 # bash 5.1+, else a string).
@@ -72,3 +90,9 @@ jq -c '.mcpServers | keys' "$v"
 {"theme":"dark","projects":{"/p":{"trust":true}},"mcpServers":{"mine":{"command":"vm-only"},"gh":{"url":"https://x","headers":{"Authorization":"PLACEHOLDER"}},"new":{"command":"n"}}}
 ["gh","new"]
 ["gh","new"]
+-- vsc-mine.json --
+{"editor.fontSize": 14, "remote.autoForwardPorts": true}
+-- vsc-comments.json --
+{
+  // a comment
+}

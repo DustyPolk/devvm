@@ -73,6 +73,9 @@ type Env struct {
 	Protector func(dir string) *gitprotect.Protector
 	// Exec runs the shell in devvm's place; it returns only on failure.
 	Exec func(backend.Command) error
+	// Environ is the environment devvm started with, the SSH agent
+	// included: the editor's, which devvm's own connections don't change.
+	Environ []string
 	// What a VM's setup sends of the host's settings: the environment
 	// (TZ, LANG, LC_ALL), the timezone, and git's settings in a folder.
 	Getenv    func(string) string
@@ -99,7 +102,7 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root),
 		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home)),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
-		Host: ThisHost, Protector: gitprotect.New, Exec: execShell,
+		Host: ThisHost, Protector: gitprotect.New, Exec: execShell, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig, SSHAdd: sshAdd,
 	}
 	e.Agent = sshagent.New(d, e.mounts)
@@ -431,22 +434,28 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 }
 
 // setUp sets up a running VM, started with conf, for a shell in the
-// folder: its setup sent, ssh and editors reaching it by name, and a
-// --clone VM's clone made if it isn't yet. It returns the shell's
-// command.
+// folder (setUpVM), and returns the shell's command.
 func (e *Env) setUp(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) (backend.Command, error) {
-	if err := e.sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
+	if err := e.setUpVM(ctx, b, st, f, conf); err != nil {
 		return backend.Command{}, err
-	}
-	if err := e.sshConfig().Write(ctx); err != nil {
-		return backend.Command{}, err
-	}
-	if isClone(st) && st.Get(KeySeeded) == "" {
-		if err := e.seedClone(ctx, b, st, f); err != nil {
-			return backend.Command{}, err
-		}
 	}
 	return b.Shell(ctx, st.Name(), f.Dir)
+}
+
+// setUpVM sets up a running VM, started with conf: its setup sent, ssh
+// and editors reaching it by name, and a --clone VM's clone made if it
+// isn't yet.
+func (e *Env) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) error {
+	if err := e.sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
+		return err
+	}
+	if err := e.sshConfig().Write(ctx); err != nil {
+		return err
+	}
+	if isClone(st) && st.Get(KeySeeded) == "" {
+		return e.seedClone(ctx, b, st, f)
+	}
+	return nil
 }
 
 // start starts a stopped VM confined as conf says, and returns the

@@ -21,11 +21,9 @@ import (
 // named adds what the VM lacks of it, in place, after asking. Flags for
 // new VMs are ignored, with a warning. On the way it warns about images
 // and tools newer than the VM's, matches its agent folder mounts to the
-// host's, checks .git (and on Linux, set-id files) unless it's a --clone
-// VM (--clone on one that mounts the folder is refused), and makes a stopped
-// VM's backend config match the size and ports its state asks for; then
-// it starts the VM if it's stopped, checks its network policy, sets it
-// up and opens the shell, as for a new VM.
+// host's (--clone on a VM that mounts the folder is refused); then it
+// launches the VM (launch), sets it up and opens the shell, as for a new
+// VM.
 func (e *Env) open(ctx context.Context, o Options, t *found) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	if !st.Exists() || st.Get(KeyNet) == "" {
@@ -59,31 +57,7 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 		return err
 	}
 	warnIgnored(o)
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
-	running := in.Status == backend.StatusRunning
-	// A clone mounts nothing of the folder's.
-	if !isClone(st) {
-		if err := e.Protector(t.f.Dir).Check(ctx, st, running); err != nil {
-			return err
-		}
-		e.checkSetID(t.f.Dir)
-	}
-	if err := applySize(ctx, b, st, in); err != nil {
-		return err
-	}
-	if err := applyPorts(ctx, b, st, running); err != nil {
-		return err
-	}
-	if err := applyAgent(ctx, b, st, in); err != nil {
-		return err
-	}
-	if sshagent.Mode(st) == sshagent.On {
-		e.checkAgent(ctx)
-	}
-	conf, err := e.run(ctx, b, st)
+	conf, err := e.launch(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -92,6 +66,42 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 		return err
 	}
 	return e.Exec(cmd)
+}
+
+// launch takes a VM that exists, made for this folder, through what each
+// launch of it does before its setup: .git checked (and on Linux, set-id
+// files) unless it's a --clone VM, which mounts neither; a stopped VM's
+// size, ports and SSH agent forwarding made what its state asks for; the
+// user's agent checked for keys when the VM forwards it; then it's
+// started if it's stopped and its network policy checked (run). It
+// returns the confinement the VM runs with.
+func (e *Env) launch(ctx context.Context, t *found) (backend.Confinement, error) {
+	vm, st, b := t.f.Name, t.st, t.b
+	in, err := b.Inspect(ctx, vm)
+	if err != nil {
+		return backend.Confinement{}, err
+	}
+	running := in.Status == backend.StatusRunning
+	// A clone mounts nothing of the folder's.
+	if !isClone(st) {
+		if err := e.Protector(t.f.Dir).Check(ctx, st, running); err != nil {
+			return backend.Confinement{}, err
+		}
+		e.checkSetID(t.f.Dir)
+	}
+	if err := applySize(ctx, b, st, in); err != nil {
+		return backend.Confinement{}, err
+	}
+	if err := applyPorts(ctx, b, st, running); err != nil {
+		return backend.Confinement{}, err
+	}
+	if err := applyAgent(ctx, b, st, in); err != nil {
+		return backend.Confinement{}, err
+	}
+	if sshagent.Mode(st) == sshagent.On {
+		e.checkAgent(ctx)
+	}
+	return e.run(ctx, b, st)
 }
 
 // warnIgnored warns about the flags only new VMs take.

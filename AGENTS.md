@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/`, `internal/sshagent/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line; each VM's SSH agent choice, devvm's own agent and its keys |
@@ -149,10 +149,8 @@ Bats files (pending cases, by task):
 | --- | --- |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
 | `cli.bats` | limactl |
-| `guest.bats` | ssh/code (VS Code settings) |
 | `install.bats` | all (install.sh) |
-| `network.bats` | ssh/code (direct route) |
-| `build`, `delete`, `from`, `images`, `layers`, `lint`, `messages`, `oci`, `ports`, `project`, `size`, `tools` | none |
+| `build`, `delete`, `from`, `guest`, `images`, `layers`, `lint`, `messages`, `network`, `oci`, `ports`, `project`, `size`, `tools` | none |
 
 Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
@@ -189,10 +187,11 @@ Deliberate changes from the bash:
 - `setup`: `--features LIST` chooses without asking (in the features' run order; an unknown name is `no_feature`, nothing saved) and `--backend NAME` saves the default backend (`default_backend`; alone, features untouched); the picker starts from the current choice, an unreadable `base-features` is `setup_failed`; `base_will_rebuild` compares the chosen lists, only in setup (not a first build's choice); `gc_old_hint` when any image record exists.
 - `export`: needs a finished VM made for this folder (`vm_unfinished`, `vm_other_folder`); the tarball is written beside its file (mode 600) and renamed in once complete, so a failure leaves none and replaces nothing; `history_not_exported`/`export_failed` for export, `rm_export_failed` for rm's.
 - `stop`: needs a finished VM made for this folder (`no_vm`, `vm_other_folder`, `vm_unfinished`); stops its proxy at once; `stopped`, or `already_stopped` (checked all the same, not an error); a `--clone` VM's folder isn't checked; `git_protect_running` names it.
+- `ssh`/`code`: a launch without its shell (`launch`, then setup: a stopped VM's pending size and ports applied, the user's agent checked, `sync` run so VS Code's Machine settings are set again, a `--clone` VM's clone made); they need a finished VM made for this folder and the backend's `ssh`; `code` gets the environment devvm started with (its `SSH_AUTH_SOCK`); `ssh_host_info` is two lines naming the host and folder; `ssh_failed`/`code_failed`.
 
 Pending in code:
 - deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend).
-- `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`, which load devvm's agent's keys and apply forwarding too. `devvm setup` asks for the default backend once there's a second one. `log_ref`, `see_log`/`see_output` come with their callers.
+- `devvm setup` asks for the default backend once there's a second one. `log_ref`, `see_log`/`see_output` come with their callers.
 - Release builds set the version with `-ldflags "-X github.com/w3cj/devvm/internal/cli.version=…"` (`.goreleaser.yaml` comes with releases); `doctor_ok` shows it.
 
 Bash fixes copied: none yet.

@@ -1,6 +1,6 @@
 ---
 title: devvm secret
-weight: 28
+weight: 29
 ---
 
 Tokens kept on this machine, for VMs to use

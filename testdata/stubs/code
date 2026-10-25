@@ -1,0 +1,7 @@
+#!/bin/bash
+# Stand-in for VS Code's code command in tests: never the real editor.
+# Logs every call to $STUB_LOG, and the SSH agent it was given
+# ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/code-agent.
+set -euo pipefail
+echo "code $*" >> "$STUB_LOG"
+echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/code-agent"

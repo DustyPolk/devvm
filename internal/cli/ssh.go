@@ -1,0 +1,25 @@
+package cli
+
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/vm"
+)
+
+// newSSHCmd is devvm ssh.
+func newSSHCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ssh",
+		Short: "Get this folder's VM ready for ssh and editors, and show its host name",
+		Long: "Get this folder's VM ready for ssh and editors as devvm does before opening a shell: checked, " +
+			"started if it's stopped, its network policy checked, set up and in devvm's ssh config. Then show " +
+			"the name ssh and VS Code's Remote-SSH reach it by (devvm-website, for a folder named website). Without the Include line in " +
+			"~/.ssh/config, devvm offers to add it.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			withEnv(func(env *vm.Env) error { return env.SSH(cmd.Context()) }, msg.SSHFailed)
+			return nil
+		},
+	}
+}

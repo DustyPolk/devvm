@@ -68,18 +68,15 @@ type running struct {
 	in backend.Instance
 }
 
-// Write rewrites the ssh config with every running project VM, each by
-// its alias and its full name (which never changes), checked against its
-// own host keys. A VM whose host keys can't be read gets no entry: a
-// stopped VM's port is free for anything on the host to take, so ssh
-// must check it reaches the VM.
-func (c *Config) Write(ctx context.Context) error {
+// projectVMs returns every backend's project VMs: their names, and those
+// running. A backend that can't list runs nothing to reach.
+func (c *Config) projectVMs(ctx context.Context) ([]string, []running) {
 	var all []string
 	var up []running
 	for _, b := range c.Backends {
 		ins, err := b.List(ctx)
 		if err != nil {
-			continue // a backend that can't list runs nothing to reach
+			continue
 		}
 		for _, in := range ins {
 			if !project.IsVM(in.Name) {
@@ -91,6 +88,23 @@ func (c *Config) Write(ctx context.Context) error {
 			}
 		}
 	}
+	return all, up
+}
+
+// Host is the name ssh and editors reach vm by: its Alias among every
+// backend's project VMs.
+func (c *Config) Host(ctx context.Context, vm string) string {
+	all, _ := c.projectVMs(ctx)
+	return Alias(vm, all)
+}
+
+// Write rewrites the ssh config with every running project VM, each by
+// its alias and its full name (which never changes), checked against its
+// own host keys. A VM whose host keys can't be read gets no entry: a
+// stopped VM's port is free for anything on the host to take, so ssh
+// must check it reaches the VM.
+func (c *Config) Write(ctx context.Context) error {
+	all, up := c.projectVMs(ctx)
 	slices.SortFunc(up, func(a, b running) int { return strings.Compare(a.in.Name, b.in.Name) })
 	var buf strings.Builder
 	buf.WriteString(header)

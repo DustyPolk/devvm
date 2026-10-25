@@ -1,0 +1,98 @@
+# devvm ssh and devvm code: the folder's VM launched as devvm does without
+# its shell (checked, started, self-checked, set up, in devvm's ssh
+# config), then its host name shown, or its folder opened in VS Code (a
+# stub code) with the SSH agent devvm started with. The Include line is
+# offered for the sandbox's own ~/.ssh/config only.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env CFG=$XDG_CONFIG_HOME/devvm
+
+# No VM.
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm ssh
+stderr '^devvm: no_vm dir=\S*/web$'
+! exec devvm code
+stderr '^devvm: no_vm dir=\S*/web$'
+! exec devvm ssh now
+stderr '^devvm: usage_error '
+! exec devvm code .
+stderr '^devvm: usage_error '
+
+# A stopped VM: started and set up, no shell. Without a terminal, the
+# Include line is shown, not added.
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ssh
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+stdout '^ssh_include_needed line=Include /\S*/config/devvm/ssh_config$'
+stderr '^devvm: ssh_include_yourself$'
+stdout '^ssh_host_info dir=/\S*/web host=devvm-web$'
+stub_calls
+stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
+stdout 'tar -xf'
+! stdout 'limactl shell --workdir /\S*/web devvm-web'
+exec sh -c 'cat "$CFG/ssh_config"'
+stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
+! exists $HOME/.ssh
+
+# With the line there: nothing asked. A size its state asks for waits for
+# the running VM's next start, as on a launch.
+exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $CFG/ssh_config" > "$HOME/.ssh/config"'
+exec sh -c 'f=$(ls "$VMS"/devvm-web-*); echo cpus=6 >> "$f"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ssh
+! stdout 'starting|ssh_include'
+stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stdout '^ssh_host_info dir=/\S*/web host=devvm-web$'
+stub_calls
+! stdout 'limactl (start|edit)'
+
+# devvm code: the folder in VS Code over Remote-SSH, with the SSH agent
+# devvm started with, though this VM's own connections carry none.
+env SSH_AUTH_SOCK=$WORK/user-agent.sock
+exec sh -c ': > "$STUB_LOG"'
+exec devvm code
+stub_calls
+stdout '^code --remote ssh-remote\+devvm-web /\S*/web$'
+exec sh -c 'cat "$STUB_DIR/code-agent"'
+stdout '^\S*/user-agent\.sock$'
+env SSH_AUTH_SOCK=
+
+# Two folders named web: the VM by its full name.
+mkdir $WORK/other/web
+cd $WORK/other/web
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c ': > "$STUB_LOG"'
+exec devvm code
+stub_calls
+stdout '^code --remote ssh-remote\+devvm-web-[0-9a-f]{14} /\S*/other/web$'
+
+# No code command on PATH: said, with the host to connect to.
+exec sh -c 'mkdir "$WORK/nocode" && for f in "$(dirname "$DEVVM_HOST_MISE")"/*; do [ "${f##*/}" = code ] || ln -s "$f" "$WORK/nocode/"; done'
+env SAVED_PATH=$PATH
+env PATH=$DEVVM_BIN:$WORK/nocode:/usr/bin:/bin:/usr/sbin:/sbin
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm code
+stderr '^devvm: no_code_command host=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout '^code '
+env PATH=$SAVED_PATH
+
+# Network policy: a VM devvm started confined that still reaches the
+# internet directly is stopped, as on a launch; no host name. (Its
+# hostagent here: the test's runner, which runs on, in place of the
+# stub's.)
+mkdir $WORK/leak
+cd $WORK/leak
+exec devvm --network-policy --no-git-protect base
+exec sh -c 'n=$(basename "$VMS"/devvm-leak-*); echo $PPID > "$LIMA_HOME/$n/ha.pid"; echo "$PPID 1" > "$XDG_DATA_HOME/devvm/run/$n.started"'
+exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/net-direct"'
+! exec devvm ssh
+stderr '^devvm: net_direct_route vm=devvm-leak-[0-9a-f]{14}$'
+! stdout ssh_host_info
+stub_calls
+stdout '^limactl stop devvm-leak-[0-9a-f]{14}$'
+! stdout 'tar -xf'
+rm $STUB_DIR/net-direct
