@@ -17,7 +17,7 @@ func newStopCmd(u *ui.UI) *cobra.Command {
 			"again and checked, as on a launch that finds it stopped, and its ssh config entry goes.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Stop(cmd.Context()) }, msg.StopVMFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Stop(cmd.Context()) }, msg.StopVMFailed)
 			return nil
 		},
 	}

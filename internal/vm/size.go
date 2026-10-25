@@ -172,10 +172,24 @@ func (e *Env) defaultSize() (Size, error) {
 	return Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}.Parse()
 }
 
+// applySize makes a stopped VM's size what its state asks for, where it
+// differs (disks only grow). A running VM's waits for its next start.
+func (e *Env) applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
+	edit := pendingSize(st, in.Size)
+	if edit == (backend.Size{}) {
+		return nil
+	}
+	if in.Status == backend.StatusRunning {
+		e.Warn(msg.SizeNextStart(st.Name()))
+		return nil
+	}
+	return b.SetSize(ctx, st.Name(), edit)
+}
+
 // ShowSize writes to w the size of the folder's VM (cpus=4 memory=8GiB
 // disk=100GiB), saying what changes at its next start; with global, the
 // size new VMs get, a key=value line each, empty for the image's.
-func (e *Env) ShowSize(ctx context.Context, w io.Writer, global bool) error {
+func (e Settings) ShowSize(ctx context.Context, w io.Writer, global bool) error {
 	if global {
 		def, err := e.defaultSize()
 		if err != nil {
@@ -208,7 +222,7 @@ func (e *Env) ShowSize(ctx context.Context, w io.Writer, global bool) error {
 // SetSize changes the folder's VM's size to what s sets: at once when it's
 // stopped, from its next start when it runs. A disk only grows. With
 // global, it changes the size new VMs get instead.
-func (e *Env) SetSize(ctx context.Context, s Size, global bool) error {
+func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	s, err := s.Parse()
 	if err != nil {
 		return err

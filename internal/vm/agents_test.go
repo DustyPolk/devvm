@@ -50,16 +50,16 @@ func TestAgentMounts(t *testing.T) {
 	want := []string{
 		filepath.Join(home, ".claude/skills"), filepath.Join(home, ".claude/agents"), filepath.Join(home, ".config/opencode/my agents"),
 	}
-	if ms := e.AgentMounts("node+claude+opencode"); !slices.Equal(ms, want) {
+	if ms := (Launch{e}).AgentMounts("node+claude+opencode"); !slices.Equal(ms, want) {
 		t.Errorf("AgentMounts = %q, want %q", ms, want)
 	}
-	if ms := e.AgentMounts("node"); ms != nil {
+	if ms := (Launch{e}).AgentMounts("node"); ms != nil {
 		t.Errorf("AgentMounts without agents = %q", ms)
 	}
 	comma := filepath.Join(t.TempDir(), "a,b")
 	mkdirs(t, comma, ".codex/prompts")
 	e.Home = comma
-	if ms := e.AgentMounts("codex"); ms != nil {
+	if ms := (Launch{e}).AgentMounts("codex"); ms != nil {
 		t.Errorf("AgentMounts with a comma = %q", ms)
 	}
 	if !slices.Equal(*got, []string{"agent_dir_comma path=" + filepath.Join(comma, ".codex/prompts")}) {
@@ -128,7 +128,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 				mkdirs(t, home, ".claude/agents")
 			}
 			f, st := agentVM(t, tc.img, tc.status, tc.have...)
-			if err := e.UpdateAgentDirs(t.Context(), f, st); err != nil {
+			if err := (Launch{e}).UpdateAgentDirs(t.Context(), f, st); err != nil {
 				t.Fatal(names(err))
 			}
 			if ms := f.Methods(); !slices.Equal(ms, tc.methods) {

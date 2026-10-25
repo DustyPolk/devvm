@@ -29,7 +29,7 @@ func newExportCmd(u *ui.UI) *cobra.Command {
 					}
 					file = abs
 				}
-				return env.Export(cmd.Context(), file)
+				return vm.Lifecycle{Env: env}.Export(cmd.Context(), file)
 			}, msg.ExportFailed)
 			return nil
 		},

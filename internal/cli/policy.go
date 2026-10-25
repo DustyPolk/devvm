@@ -19,7 +19,7 @@ func newPolicyCmd(u *ui.UI) *cobra.Command {
 			"with -g yours for every VM; a change applies at once, to the next connection.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Policy(cmd.Context(), u.Stdout()) }, msg.PolicyFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.Policy(cmd.Context(), u.Stdout()) }, msg.PolicyFailed)
 			return nil
 		},
 	}
@@ -32,7 +32,7 @@ func newPolicyCmd(u *ui.UI) *cobra.Command {
 			Args:  cobra.MinimumNArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				withEnv(u, func(env *vm.Env) error {
-					return env.PolicyChange(cmd.Context(), args, deny, remove, global)
+					return vm.Net{Env: env}.PolicyChange(cmd.Context(), args, deny, remove, global)
 				}, msg.PolicyFailed)
 				return nil
 			},

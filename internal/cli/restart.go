@@ -17,7 +17,7 @@ func newRestartCmd(u *ui.UI, g *globals) *cobra.Command {
 			"only when it starts (agent folder mounts, size, ports) applies.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Restart(cmd.Context(), g.options()) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), g.options()) }, msg.UpFailed)
 			return nil
 		},
 	}

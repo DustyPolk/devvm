@@ -19,7 +19,7 @@ func newSSHCmd(u *ui.UI) *cobra.Command {
 			"~/.ssh/config, devvm offers to add it.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.SSH(cmd.Context()) }, msg.SSHFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.SSH(cmd.Context()) }, msg.SSHFailed)
 			return nil
 		},
 	}

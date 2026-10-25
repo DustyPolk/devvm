@@ -18,7 +18,7 @@ func newAdoptCmd(u *ui.UI) *cobra.Command {
 			"adopt gives it to this folder, with its files, tokens and allowlist, after asking.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Adopt(cmd.Context()) }, msg.AdoptFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Adopt(cmd.Context()) }, msg.AdoptFailed)
 			return nil
 		},
 	}

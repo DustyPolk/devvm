@@ -18,7 +18,7 @@ func newUpdateCmd(u *ui.UI, g *globals) *cobra.Command {
 			"changes: its tools are mounted from the share.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Update(cmd.Context(), g.options()) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Update(cmd.Context(), g.options()) }, msg.UpFailed)
 			return nil
 		},
 	}

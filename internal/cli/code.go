@@ -18,7 +18,7 @@ func newCodeCmd(u *ui.UI) *cobra.Command {
 			"machine and answering git's sign-in prompts with your GitHub sign-in.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Code(cmd.Context()) }, msg.CodeFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Code(cmd.Context()) }, msg.CodeFailed)
 			return nil
 		},
 	}

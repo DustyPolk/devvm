@@ -24,13 +24,16 @@ import (
 // runs its sync.sh, and removes it.
 const syncCmd = `d=$(mktemp -d); tar -xf - -C "$d" --warning=no-unknown-keyword --warning=no-timestamp && bash "$d/sync.sh"; rc=$?; rm -rf "$d"; exit $rc`
 
+// syncer sends a running VM its setup.
+type syncer struct{ *Env }
+
 // sync sets up a running VM on every launch: guest/sync.sh runs in it,
 // with what it needs sent over as a tar stream, staged in memory (it holds
 // credentials): the host's settings, the agents' config, the VM's tokens
 // or their placeholders, and its shared tools. With network policy its
 // proxy's address, devvm's CA, the logins' copies with placeholders, and
 // the agents' settings files with their keys taken out.
-func (e *Env) sync(ctx context.Context, b backend.Backend, st *state.VM, slug string, files []string, conf backend.Confinement) error {
+func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug string, files []string, conf backend.Confinement) error {
 	vm := st.Name()
 	s, err := e.stage(ctx, st, slug, files, b.ProxyURL(conf))
 	if err != nil {
@@ -52,7 +55,7 @@ func (e *Env) sync(ctx context.Context, b backend.Backend, st *state.VM, slug st
 }
 
 // stage returns what sync sends; see guest/sync.sh for each file.
-func (e *Env) stage(ctx context.Context, st *state.VM, slug string, files []string, proxyURL string) (*stage, error) {
+func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []string, proxyURL string) (*stage, error) {
 	vm, img, net := st.Name(), st.Get(state.KeyImage), netpolicy.On(st)
 	store := e.Proxy.Secrets
 	s := &stage{}
@@ -175,7 +178,7 @@ func (e *Env) stage(ctx context.Context, st *state.VM, slug string, files []stri
 // logins' copies with placeholders ending in its salt, and its agents'
 // settings files with the values under secret-looking keys taken out (one
 // that can't be read that way isn't sent).
-func (e *Env) stageNet(s *stage, store *secrets.Store, vm, img, salt string) error {
+func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) error {
 	ca, err := os.ReadFile(filepath.Join(e.Dirs.CA(), "ca.pem")) //nolint:gosec // devvm's own CA
 	if err != nil {
 		return err

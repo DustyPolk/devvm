@@ -20,10 +20,11 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 		ValidArgs: []string{"on", "off"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {
+				n := vm.Net{Env: env}
 				if len(args) == 0 {
-					return env.Network(cmd.Context(), u.Stdout())
+					return n.Network(cmd.Context(), u.Stdout())
 				}
-				return env.SetNetwork(cmd.Context(), args[0] == "on")
+				return n.SetNetwork(cmd.Context(), args[0] == "on")
 			}, msg.NetworkFailed)
 			return nil
 		},

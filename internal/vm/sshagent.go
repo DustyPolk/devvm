@@ -9,16 +9,94 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/sshagent"
 )
 
 // defaultKeys are the keys in ~/.ssh offered for loading, in order.
 var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 
+// agentVM finds the folder's VM for devvm ssh-agent.
+func (e Settings) agentVM(ctx context.Context) (*found, error) {
+	return e.folderVM(ctx, msg.NoVMSSHAgent)
+}
+
+// SSHAgent writes the folder's VM's SSH agent forwarding to w: off, on
+// (the user's agent) or devvm (devvm's own).
+func (e Settings) SSHAgent(ctx context.Context, w io.Writer) error {
+	t, err := e.agentVM(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, sshagent.Mode(t.st)+"\n")
+	return err
+}
+
+// SetSSHAgent changes the folder's VM's SSH agent forwarding, from its
+// next start: off, on (the user's agent) or devvm (devvm's own, started
+// with its keys loaded now).
+func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
+	t, err := e.agentVM(ctx)
+	if err != nil {
+		return err
+	}
+	vm, st, b := t.f.Name, t.st, t.b
+	if sshagent.Mode(st) == mode {
+		e.Info(msg.AgentAlready(mode, vm))
+		return nil
+	}
+	if sshagent.Forwards(mode) {
+		if err := e.Registry.Require(b, vm, backend.FeatureAgentForwarding); err != nil {
+			return err
+		}
+	}
+	if mode == sshagent.Devvm {
+		if err := e.Agent.Ensure(ctx); err != nil {
+			return err
+		}
+	}
+	in, err := b.Inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if sshagent.Forwards(mode) != in.AgentForwarding {
+		if err := e.Registry.Require(b, vm, backend.FeatureAgentToggle); err != nil {
+			return err
+		}
+	}
+	if err := st.Set(sshagent.Key, mode); err != nil {
+		return err
+	}
+	switch mode {
+	case sshagent.On:
+		e.Warn(msg.AgentOnRisk(vm))
+	case sshagent.Devvm:
+		e.Warn(msg.AgentDevvmRisk(vm))
+	}
+	if in.Status == backend.StatusRunning {
+		e.Info(msg.AgentSetRunning(mode, vm))
+	} else {
+		e.Info(msg.AgentSetStopped(mode, vm))
+	}
+	return nil
+}
+
+// AgentAdd loads a key into devvm's own SSH agent, and records it.
+func (e Settings) AgentAdd(ctx context.Context, file string, o sshagent.AddOptions) error {
+	return e.Agent.Add(ctx, file, o)
+}
+
+// AgentKeys writes to w the keys devvm's own SSH agent holds, then those
+// added to it.
+func (e Settings) AgentKeys(ctx context.Context, w io.Writer) error {
+	return e.Agent.Keys(ctx, w)
+}
+
 // checkAgent is for a VM that forwards the user's SSH agent: forwarding
 // an empty one does nothing, so when the agent has no keys and ~/.ssh
 // has one, it offers to load it.
-func (e *Env) checkAgent(ctx context.Context) {
+func (e Launch) checkAgent(ctx context.Context) {
 	rc := e.SSHAdd(ctx, "-l")
 	if rc == 0 {
 		return

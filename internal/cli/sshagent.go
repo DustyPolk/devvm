@@ -23,10 +23,11 @@ func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {
+				s := vm.Settings{Env: env}
 				if len(args) == 0 {
-					return env.SSHAgent(cmd.Context(), u.Stdout())
+					return s.SSHAgent(cmd.Context(), u.Stdout())
 				}
-				return env.SetSSHAgent(cmd.Context(), args[0])
+				return s.SetSSHAgent(cmd.Context(), args[0])
 			}, msg.SSHAgentFailed)
 			return nil
 		},
@@ -49,7 +50,7 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}
@@ -67,7 +68,7 @@ func newSSHAgentKeysCmd(u *ui.UI) *cobra.Command {
 			"then each key added to it: its file, its fingerprint and how it's loaded.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}

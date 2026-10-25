@@ -45,6 +45,10 @@ const cloneOutMax = 1 << 20
 // up when it's one.
 var objectName = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
 
+// clones makes a --clone VM's clone, and checks and removes what the repo
+// has of it when the VM goes.
+type clones struct{ *Env }
+
 // isClone reports whether the VM has its own clone of the repo.
 func isClone(st *state.VM) bool { return st.Get(KeyMode) == ModeClone }
 
@@ -78,7 +82,7 @@ func checkCloneRepo(ctx context.Context, dir string) error {
 
 // gitSSH is host git run in dir with ssh reading devvm's ssh config only,
 // whose entries check each VM's own host keys.
-func (e *Env) gitSSH(ctx context.Context, dir string, args ...string) *exec.Cmd {
+func (e clones) gitSSH(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...) //nolint:gosec // devvm's own arguments
 	cmd.Env = append(os.Environ(), "GIT_SSH_COMMAND=ssh -F "+shellQuote(e.Dirs.SSHConfig()))
 	return cmd
@@ -90,7 +94,7 @@ func (e *Env) gitSSH(ctx context.Context, dir string, args ...string) *exec.Cmd 
 // the host's repo. Then it offers the ~/.ssh/config line that remote
 // needs, and warns about uncommitted changes, which aren't copied. It
 // needs the VM's ssh config entry.
-func (e *Env) seedClone(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder) error {
+func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder) error {
 	vm, dir := st.Name(), f.Dir
 	branch, err := hostGit(ctx, dir, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
@@ -164,7 +168,7 @@ func remoteURL(ctx context.Context, dir, name string) (string, bool) {
 // before uncommitted changes in the clone are lost, starting the VM if
 // it's stopped. Without a terminal, either refuses. It reports whether to
 // keep the VM. A VM never seeded has nothing of its own.
-func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
+func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	vm, st, b, dir := t.f.Name, t.st, t.b, t.f.Dir
 	if st.Get(KeySeeded) == "" {
 		return false, nil
@@ -212,7 +216,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 
 // cloneGit runs git on the VM's clone and returns what it printed, at
 // most cloneOutMax bytes.
-func (e *Env) cloneGit(ctx context.Context, b backend.Backend, vm, dir string, args ...string) ([]byte, error) {
+func (e clones) cloneGit(ctx context.Context, b backend.Backend, vm, dir string, args ...string) ([]byte, error) {
 	out := &capped{max: cloneOutMax}
 	argv := append([]string{"git", "-C", dir}, args...)
 	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()}); err != nil {
@@ -249,7 +253,7 @@ func unfetchedRefs(ctx context.Context, dir string, refs []byte) []string {
 // fetchUnfetched offers to fetch the VM's unfetched branches into new
 // local branches, saved/<remote>/<branch> (savedPrefix), never over one
 // that exists. Branches whose names git refuses are skipped.
-func (e *Env) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetched []string) error {
+func (e clones) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetched []string) error {
 	var good, bad []string
 	for _, br := range unfetched {
 		if validBranch(ctx, dir, br) {
@@ -342,7 +346,7 @@ func quoted(names []string) string {
 // is the VM's, with its remote-tracking branches and upstream settings.
 // Fetched branches holding commits no other ref has are kept as local
 // branches first (saveFetched); if that fails, the remote stays.
-func (e *Env) removeRemote(ctx context.Context, dir, vm, remote string) {
+func (e clones) removeRemote(ctx context.Context, dir, vm, remote string) {
 	if remote == "" {
 		return
 	}
@@ -361,7 +365,7 @@ func (e *Env) removeRemote(ctx context.Context, dir, vm, remote string) {
 // saveFetched makes a new local branch, under savedPrefix, of each of
 // remote's remote-tracking branches with commits no other ref has, all at
 // once and never over a branch that exists.
-func (e *Env) saveFetched(ctx context.Context, dir, remote string) error {
+func (e clones) saveFetched(ctx context.Context, dir, remote string) error {
 	tracking := "refs/remotes/" + remote + "/"
 	out, err := hostGit(ctx, dir, "for-each-ref", "--format=%(objectname) %(refname)", tracking)
 	if err != nil {

@@ -79,7 +79,7 @@ func saveSecret(cmd *cobra.Command, u *ui.UI, name string, stdin bool) {
 		}
 		given = u.Secret(msg.TokenPrompt())
 	}
-	withEnv(u, func(env *vm.Env) error { return env.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
+	withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
 }
 
 func newSecretRmCmd(u *ui.UI) *cobra.Command {
@@ -88,7 +88,7 @@ func newSecretRmCmd(u *ui.UI) *cobra.Command {
 		Short: "Delete a saved token",
 		Long:  "Delete a saved token. Proxies running stop putting it in at once; what a VM did with it stays done.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
 			return nil
 		},
 	}
@@ -106,7 +106,7 @@ func newSecretLsCmd(u *ui.UI) *cobra.Command {
 }
 
 func listSecrets(cmd *cobra.Command, u *ui.UI) error {
-	withEnv(u, func(env *vm.Env) error { return env.Secrets(cmd.Context(), u.Stdout()) }, msg.SecretFailed)
+	withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.Secrets(cmd.Context(), u.Stdout()) }, msg.SecretFailed)
 	return nil
 }
 
@@ -125,7 +125,7 @@ func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
 		Short: short,
 		Long:  long,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
 			return nil
 		},
 	}

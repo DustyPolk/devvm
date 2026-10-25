@@ -97,7 +97,7 @@ func agentsOf(img string) []string {
 // agents' folders that exist under the home folder. One with a comma in
 // its path is left out, with a warning: Lima splits mount options on
 // commas.
-func (e *Env) AgentMounts(img string) []string {
+func (e Launch) AgentMounts(img string) []string {
 	var dirs []string
 	for _, a := range agentsOf(img) {
 		for _, rel := range agentDirs(e.Home, a) {
@@ -120,7 +120,7 @@ func (e *Env) AgentMounts(img string) []string {
 // changes mounts only while a VM is stopped: a stopped VM is changed at
 // once, a running one after the user agrees to a restart (devvm stops it,
 // and the caller starts it again), else at its next start.
-func (e *Env) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM) error {
+func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM) error {
 	vm := st.Name()
 	in, err := b.Inspect(ctx, vm)
 	if err != nil {

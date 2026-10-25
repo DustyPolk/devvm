@@ -16,7 +16,7 @@ import (
 
 // SecretSave saves a token for a known secret, given as pasted or on
 // stdin. Proxies running put the new value in at once.
-func (e *Env) SecretSave(ctx context.Context, name, given string) error {
+func (e Net) SecretSave(ctx context.Context, name, given string) error {
 	v, err := secrets.Token(name, given)
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func (e *Env) SecretSave(ctx context.Context, name, given string) error {
 
 // SecretRm deletes a known secret's saved value. Proxies running stop
 // putting it in at once.
-func (e *Env) SecretRm(ctx context.Context, name string) error {
+func (e Net) SecretRm(ctx context.Context, name string) error {
 	if err := e.Proxy.Secrets.Delete(ctx, name); errors.Is(err, secrets.ErrNone) {
 		return msg.NoSecret(msg.Shown(name))
 	} else if err != nil {
@@ -53,7 +53,7 @@ func (e *Env) SecretRm(ctx context.Context, name string) error {
 
 // Secrets writes the known secrets to w as a table: whether a value is
 // saved (or, for claude, in devvm's environment), and the VMs using each.
-func (e *Env) Secrets(ctx context.Context, w io.Writer) error {
+func (e Net) Secrets(ctx context.Context, w io.Writer) error {
 	names, err := state.VMNames(e.Dirs)
 	if err != nil {
 		return err
@@ -90,7 +90,7 @@ func (e *Env) Secrets(ctx context.Context, w io.Writer) error {
 // Its proxy, if it has one, puts the token in or stops at once; the VM
 // gets its placeholder, or the token without network policy, from its next
 // launch. Without network policy, the token it got before still works.
-func (e *Env) SecretUse(ctx context.Context, name string, use bool) error {
+func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	if _, ok := secrets.Lookup(name); !ok {
 		return msg.NoSecret(msg.Shown(name))
 	}

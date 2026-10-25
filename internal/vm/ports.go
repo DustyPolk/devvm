@@ -141,13 +141,38 @@ func (e *Env) defaultPorts() (string, error) {
 	return ParsePorts(def)
 }
 
+// applyPorts makes a stopped VM forward the ports its state asks for, when
+// its backend config forwards others (KeyPortsSet). A running VM's wait
+// for its next start.
+func (e *Env) applyPorts(ctx context.Context, b backend.Backend, st *state.VM, running bool) error {
+	want, set := orAll(st.Get(KeyPorts)), orAll(st.Get(KeyPortsSet))
+	if want == set {
+		return nil
+	}
+	if running {
+		e.Warn(msg.PortsNextStart(st.Name()))
+		return nil
+	}
+	if err := b.SetPorts(ctx, st.Name(), PortsBackend(want)); err != nil {
+		return err
+	}
+	return st.Set(KeyPortsSet, want)
+}
+
+func orAll(ports string) string {
+	if ports == "" {
+		return PortsAll
+	}
+	return ports
+}
+
 // portsVM finds the folder's VM for devvm ports.
-func (e *Env) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
+func (e Settings) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
 
 // Ports writes to w which ports the folder's VM forwards (all, none or a
 // list), saying so when that changes at its next start; with global,
 // what new VMs forward.
-func (e *Env) Ports(ctx context.Context, w io.Writer, global bool) error {
+func (e Settings) Ports(ctx context.Context, w io.Writer, global bool) error {
 	if global {
 		def, err := e.defaultPorts()
 		if err != nil {
@@ -174,7 +199,7 @@ func (e *Env) Ports(ctx context.Context, w io.Writer, global bool) error {
 // it's stopped, from its next start when it runs and forwards others.
 // With c.Global, it
 // changes what new VMs forward instead.
-func (e *Env) SetPorts(ctx context.Context, c PortsChange) error {
+func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if c.Global {
 		old, err := e.defaultPorts()
 		if err != nil {

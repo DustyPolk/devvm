@@ -26,10 +26,11 @@ func newSizeCmd(u *ui.UI) *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error {
+				set := vm.Settings{Env: env}
 				if s == (vm.Size{}) {
-					return env.ShowSize(cmd.Context(), u.Stdout(), global)
+					return set.ShowSize(cmd.Context(), u.Stdout(), global)
 				}
-				return env.SetSize(cmd.Context(), s, global)
+				return set.SetSize(cmd.Context(), s, global)
 			}, msg.SizeFailed)
 			return nil
 		},

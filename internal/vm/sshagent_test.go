@@ -54,11 +54,11 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 	if err := st.Set(sshagent.Key, sshagent.Devvm); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Stop(t.Context()); err != nil {
+	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
 		t.Fatal(names(err))
 	}
 	before := len(f.Calls())
-	if err := e.Up(t.Context(), Options{}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(names(err))
 	}
 	calls := f.Calls()[before:]
@@ -88,7 +88,7 @@ func TestOpenAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := len(f.Calls())
-	if err := e.Up(t.Context(), Options{SSHAgent: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{SSHAgent: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	calls := f.Calls()[before:]
@@ -109,7 +109,7 @@ func TestOpenAgent(t *testing.T) {
 	// Running: its agent is checked again; a change waits.
 	agent.calls = nil
 	before = len(f.Calls())
-	if err := e.Up(t.Context(), Options{}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(names(err))
 	}
 	if !slices.Contains(agent.calls, "ssh-add -l") || slices.Contains(f.Methods()[before:], "Start") {
@@ -119,7 +119,7 @@ func TestOpenAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	before = len(f.Calls())
-	if err := e.Up(t.Context(), Options{}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(names(err))
 	}
 	if slices.Contains(f.Methods()[before:], "SetAgentForwarding") || !f.Instances[vm].AgentForwarding {
@@ -128,7 +128,7 @@ func TestOpenAgent(t *testing.T) {
 	if _, ok := os.LookupEnv("SSH_AUTH_SOCK"); ok {
 		t.Error("SSH_AUTH_SOCK is set for a VM without forwarding")
 	}
-	if err := e.Restart(t.Context(), Options{}); err != nil {
+	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
 		t.Fatal(names(err))
 	}
 	if f.Instances[vm].AgentForwarding {
@@ -143,21 +143,22 @@ func TestSetSSHAgent(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	agent := &agentCalls{}
 	e.Agent.Run = agent.run
+	s := Settings{e}
 	var b strings.Builder
-	if err := e.SSHAgent(t.Context(), &b); names(err) != "no_vm_ssh_agent dir="+e.Dir {
+	if err := s.SSHAgent(t.Context(), &b); names(err) != "no_vm_ssh_agent dir="+e.Dir {
 		t.Errorf("no VM: %s", names(err))
 	}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	shown := func(want string) {
 		t.Helper()
 		b.Reset()
-		if err := e.SSHAgent(t.Context(), &b); err != nil || b.String() != want+"\n" {
+		if err := s.SSHAgent(t.Context(), &b); err != nil || b.String() != want+"\n" {
 			t.Errorf("SSHAgent = %q, %v; want %s", b.String(), names(err), want)
 		}
 	}
 	shown("off")
 	before := len(f.Calls())
-	if err := e.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
+	if err := s.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
 		t.Fatal(names(err))
 	}
 	shown("devvm")
@@ -167,17 +168,17 @@ func TestSetSSHAgent(t *testing.T) {
 	if slices.Contains(f.Methods()[before:], "SetAgentForwarding") {
 		t.Errorf("calls = %q", f.Methods()[before:])
 	}
-	if err := e.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
+	if err := s.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
 		t.Fatal(names(err))
 	}
-	if err := e.SetSSHAgent(t.Context(), sshagent.Off); err != nil {
+	if err := s.SetSSHAgent(t.Context(), sshagent.Off); err != nil {
 		t.Fatal(names(err))
 	}
 	shown("off")
 	caps := allNative()
 	caps[backend.FeatureAgentForwarding] = backend.None
 	f.Capabilities = caps
-	if err := e.SetSSHAgent(t.Context(), sshagent.On); !strings.HasPrefix(names(err), "backend_lacks ") {
+	if err := s.SetSSHAgent(t.Context(), sshagent.On); !strings.HasPrefix(names(err), "backend_lacks ") {
 		t.Errorf("without the feature: %s", names(err))
 	}
 	if sshagent.Mode(st) != sshagent.Off {
@@ -221,7 +222,7 @@ func TestCheckAgent(t *testing.T) {
 			e.Warn = func(m msg.M) { said.WriteString("devvm: " + m.String() + "\n") }
 			e.Confirm = func(msg.M) bool { return false }
 			e.Terminal = func() bool { return true }
-			e.checkAgent(t.Context())
+			Launch{e}.checkAgent(t.Context())
 			out := said.String()
 			if !slices.Equal(calls, tc.calls) {
 				t.Errorf("ssh-add calls = %q, want %q", calls, tc.calls)

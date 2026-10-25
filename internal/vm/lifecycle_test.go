@@ -1,0 +1,169 @@
+package vm
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// rm exports an agent VM's history first; a failed export keeps the VM.
+// One made for an earlier folder at this path is deleted only after
+// asking, without an export.
+func TestRm(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	lc := Lifecycle{e}
+	st := existingVM(t, e, Options{Image: "claude", NoNetworkPolicy: true})
+	vm := st.Name()
+	f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
+		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
+			return errors.New("tar failed")
+		}
+		return nil
+	}
+	if err := lc.Rm(t.Context(), false); names(err) != "rm_export_failed vm="+vm {
+		t.Errorf("Rm = %v", names(err))
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Fatal("deleted after a failed export")
+	}
+	if es, _ := os.ReadDir(e.Dirs.Exports()); len(es) > 0 {
+		t.Errorf("exports %v", es)
+	}
+	var script string
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
+			script = argv[2]
+			_, err := o.Stdout.Write([]byte("tarball"))
+			return err
+		}
+		return nil
+	}
+	if err := lc.Rm(t.Context(), false); err != nil {
+		t.Fatal(names(err))
+	}
+	if !strings.Contains(script, "ls -d .claude .claude.json .codex") || !strings.Contains(script, "--exclude=.claude/.credentials.json") {
+		t.Errorf("export script %q", script)
+	}
+	es, _ := os.ReadDir(e.Dirs.Exports())
+	if len(es) != 1 || !strings.HasPrefix(es[0].Name(), vm+"-") {
+		t.Fatalf("exports %v", es)
+	}
+	if data, _ := os.ReadFile(filepath.Join(e.Dirs.Exports(), es[0].Name())); string(data) != "tarball" {
+		t.Errorf("export = %q", data)
+	}
+	if _, ok := f.Instances[vm]; ok {
+		t.Error("not deleted")
+	}
+	if _, err := os.Stat(e.Dirs.VMState(vm)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("state: %v", err)
+	}
+
+	// Another folder at the same path.
+	st = existingVM(t, e, Options{Image: "claude", NoNetworkPolicy: true})
+	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
+		t.Fatal(err)
+	}
+	asked := answers(t, e, false)
+	if err := lc.Rm(t.Context(), true); err != nil {
+		t.Fatal(names(err))
+	}
+	if _, ok := f.Instances[vm]; !ok || !slices.Equal(*asked, []string{"delete_other_folder_vm vm=" + vm + " was=" + e.Dir}) {
+		t.Fatalf("declined: asked %q", *asked)
+	}
+	answers(t, e, true)
+	script = ""
+	if err := lc.Rm(t.Context(), false); err != nil {
+		t.Fatal(names(err))
+	}
+	if _, ok := f.Instances[vm]; ok || script != "" {
+		t.Errorf("confirmed: deleted %v, export %q", !ok, script)
+	}
+}
+
+// export saves the history to the exports folder or a file of the user's,
+// which a failed export leaves as it was; the VM is kept either way.
+func TestExport(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	lc := Lifecycle{e}
+	vm := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true}).Name()
+	tarball := "tarball"
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
+			if tarball == "" {
+				_, _ = o.Stdout.Write([]byte("partial"))
+				return errors.New("tar failed")
+			}
+			_, err := o.Stdout.Write([]byte(tarball))
+			return err
+		}
+		return nil
+	}
+	if err := lc.Export(t.Context(), ""); err != nil {
+		t.Fatal(names(err))
+	}
+	es, _ := os.ReadDir(e.Dirs.Exports())
+	if len(es) != 1 || !strings.HasPrefix(es[0].Name(), vm+"-") || !strings.HasSuffix(es[0].Name(), ".tar.gz") {
+		t.Fatalf("exports %v", es)
+	}
+
+	dir := filepath.Join(t.TempDir(), "new")
+	file := filepath.Join(dir, "h.tar.gz")
+	read := func() string {
+		data, _ := os.ReadFile(file) //nolint:gosec // the test's own folder
+		return string(data)
+	}
+	if err := lc.Export(t.Context(), file); err != nil {
+		t.Fatal(names(err))
+	}
+	if data := read(); data != "tarball" {
+		t.Errorf("export = %q", data)
+	}
+	tarball = ""
+	err := lc.Export(t.Context(), file)
+	if le, ok := errors.AsType[*backend.LoggedError](err); !ok || names(le.Msg) != "history_not_exported vm="+vm {
+		t.Errorf("failed: %v", names(err))
+	}
+	if data := read(); data != "tarball" {
+		t.Errorf("after a failed export = %q", data)
+	}
+	if es, _ := os.ReadDir(dir); len(es) != 1 {
+		t.Errorf("left %v", es)
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Error("deleted")
+	}
+}
+
+// adopt gives the folder the VM made for an earlier one at its path,
+// after asking; it's then opened, its .git locked as new.
+func TestAdopt(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	lc, l := Lifecycle{e}, Launch{e}
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	if err := lc.Adopt(t.Context()); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Up(t.Context(), Options{}); names(err) != "vm_other_folder vm="+st.Name()+" was="+e.Dir {
+		t.Errorf("Up = %v", names(err))
+	}
+	asked := answers(t, e, false)
+	if err := lc.Adopt(t.Context()); err != nil || len(*asked) != 1 {
+		t.Fatalf("declined: %v, asked %q", names(err), *asked)
+	}
+	answers(t, e, true)
+	if err := lc.Adopt(t.Context()); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := l.Up(t.Context(), Options{}); err != nil {
+		t.Errorf("Up adopted = %v", names(err))
+	}
+}

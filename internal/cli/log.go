@@ -23,7 +23,7 @@ func newLogCmd(u *ui.UI) *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.Lines = int(min(lines, 1<<31-1)) //nolint:gosec // bounded
-			withEnv(u, func(env *vm.Env) error { return env.Log(cmd.Context(), u.Stdout(), o) }, msg.LogFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.Log(cmd.Context(), u.Stdout(), o) }, msg.LogFailed)
 			return nil
 		},
 	}

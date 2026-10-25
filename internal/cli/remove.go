@@ -18,7 +18,7 @@ func newRemoveCmd(u *ui.UI, g *globals) *cobra.Command {
 			"layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Remove(cmd.Context(), g.options(), args[0]) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Remove(cmd.Context(), g.options(), args[0]) }, msg.UpFailed)
 			return nil
 		},
 	}

@@ -15,11 +15,12 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 	// run shows the ports without a change, else makes it.
 	run := func(cmd *cobra.Command, c *vm.PortsChange) {
 		withEnv(u, func(env *vm.Env) error {
+			s := vm.Settings{Env: env}
 			if c == nil {
-				return env.Ports(cmd.Context(), u.Stdout(), global)
+				return s.Ports(cmd.Context(), u.Stdout(), global)
 			}
 			c.Global = global
-			return env.SetPorts(cmd.Context(), *c)
+			return s.SetPorts(cmd.Context(), *c)
 		}, msg.PortsFailed)
 	}
 	cmd := &cobra.Command{

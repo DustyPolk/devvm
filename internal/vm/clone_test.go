@@ -101,7 +101,7 @@ func TestUpClone(t *testing.T) {
 	if got := gitIn(t, clone, "symbolic-ref", "--short", "HEAD"); got != "main" {
 		t.Errorf("clone's HEAD %q", got)
 	}
-	if err := e.Up(t.Context(), Options{Clone: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Clone: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	calls, _ := os.ReadFile(os.Getenv("STUB_LOG")) //nolint:gosec // the test's own
@@ -125,7 +125,7 @@ func TestCloneRm(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(clone, "new"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Rm(t.Context(), false); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), false); err != nil {
 		t.Fatal(names(err))
 	}
 	want := []string{"fetch_before_delete prefix=saved/devvm", "delete_anyway"}
@@ -144,7 +144,7 @@ func TestCloneRm(t *testing.T) {
 		t.Fatal(err)
 	}
 	asked = answers(t, e, true)
-	if err := e.Rm(t.Context(), false); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), false); err != nil {
 		t.Fatal(names(err))
 	}
 	if _, ok := f.Instances[vm]; ok || !slices.Equal(*asked, want[:1]) {
@@ -175,7 +175,7 @@ func TestCloneRm(t *testing.T) {
 func TestFetchUnfetchedInvalid(t *testing.T) {
 	e, _, _ := cloneEnv(t)
 	got := printed(t, e, true)
-	if err := e.fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
+	if err := (clones{e}).fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
 		t.Fatal(names(err))
 	}
 	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
@@ -184,7 +184,7 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	}
 	gitIn(t, e.Dir, "branch", "saved")
 	*got = nil
-	err := e.fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
+	err := (clones{e}).fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
 	if names(err) != "saved_names_taken remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
 		t.Errorf("no free names: %s, printed %q", names(err), *got)
 	}
@@ -296,7 +296,7 @@ func TestRemoveRemote(t *testing.T) {
 	gitIn(t, dir, "init", "-q", "-b", "main")
 	gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", "one")
 	gitIn(t, dir, "remote", "add", "devvm", "https://example.com/mine")
-	e.removeRemote(t.Context(), dir, vm, "devvm")
+	clones{e}.removeRemote(t.Context(), dir, vm, "devvm")
 	gitIn(t, dir, "remote", "get-url", "devvm")
 	gitIn(t, dir, "remote", "set-url", "devvm", cloneURL(vm, dir))
 
@@ -313,7 +313,7 @@ func TestRemoveRemote(t *testing.T) {
 	gitIn(t, dir, "config", "branch.main.remote", "devvm")
 	gitIn(t, dir, "config", "branch.main.merge", "refs/heads/main")
 	gitIn(t, dir, "branch", "saved/devvm/old")
-	e.removeRemote(t.Context(), dir, vm, "devvm")
+	clones{e}.removeRemote(t.Context(), dir, vm, "devvm")
 	if out := gitIn(t, dir, "remote"); out != "" {
 		t.Errorf("remotes %q", out)
 	}
@@ -335,11 +335,11 @@ func TestRemoveRemote(t *testing.T) {
 	gitIn(t, dir, "update-ref", "refs/remotes/devvm/z", gitIn(t, dir, "commit-tree", "-p", one, "-m", "z", tree))
 	gitIn(t, dir, "branch", "-D", "saved/devvm/old", "saved/devvm-2/feature/x", "saved/devvm-2/only/y")
 	gitIn(t, dir, "branch", "saved")
-	e.removeRemote(t.Context(), dir, vm, "devvm")
+	clones{e}.removeRemote(t.Context(), dir, vm, "devvm")
 	gitIn(t, dir, "remote", "get-url", "devvm")
 	gitIn(t, dir, "rev-parse", "--verify", "refs/remotes/devvm/z")
 	if !slices.Equal(*got, []string{"remote_kept remote=devvm"}) {
 		t.Errorf("printed %q", *got)
 	}
-	e.removeRemote(t.Context(), dir, vm, "")
+	clones{e}.removeRemote(t.Context(), dir, vm, "")
 }

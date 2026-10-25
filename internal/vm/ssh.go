@@ -10,7 +10,7 @@ import (
 
 // SSH gets the folder's VM ready for ssh and editors (reach), then says
 // the name they reach it by and its folder.
-func (e *Env) SSH(ctx context.Context) error {
+func (e Launch) SSH(ctx context.Context) error {
 	host, t, err := e.reach(ctx)
 	if err != nil {
 		return err
@@ -23,7 +23,7 @@ func (e *Env) SSH(ctx context.Context) error {
 // its folder in VS Code over Remote-SSH, in devvm's place, with the
 // environment devvm started with: the SSH agent devvm's own connections
 // use isn't the editor's.
-func (e *Env) Code(ctx context.Context) error {
+func (e Launch) Code(ctx context.Context) error {
 	host, t, err := e.reach(ctx)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (e *Env) Code(ctx context.Context) error {
 // (launch), sets it up, checks its backend says how ssh reaches it, and
 // makes sure ~/.ssh/config includes devvm's ssh config, asking first. It
 // returns the name ssh reaches it by.
-func (e *Env) reach(ctx context.Context) (string, *found, error) {
+func (e Launch) reach(ctx context.Context) (string, *found, error) {
 	t, err := e.existing(ctx, "")
 	if err != nil {
 		return "", nil, err

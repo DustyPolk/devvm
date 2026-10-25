@@ -78,7 +78,7 @@ func up(ctx context.Context, u *ui.UI, g *globals, uf *upFlags, args []string) e
 	if len(args) > 0 {
 		o.Image = args[0]
 	}
-	withEnv(u, func(env *vm.Env) error { return env.Up(ctx, o) }, msg.UpFailed)
+	withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Up(ctx, o) }, msg.UpFailed)
 	return nil
 }
 

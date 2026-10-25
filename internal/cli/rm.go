@@ -22,7 +22,7 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 			"folder at this path is deleted only after you confirm, even with -f.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return env.Rm(cmd.Context(), force) }, msg.RmFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), force) }, msg.RmFailed)
 			return nil
 		},
 	}

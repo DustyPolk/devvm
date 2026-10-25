@@ -22,10 +22,11 @@ func newGitProtectCmd(u *ui.UI) *cobra.Command {
 		ValidArgs: gitprotect.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {
+				s := vm.Settings{Env: env}
 				if len(args) == 0 {
-					return env.GitProtect(cmd.Context(), u.Stdout())
+					return s.GitProtect(cmd.Context(), u.Stdout())
 				}
-				return env.SetGitProtect(cmd.Context(), args[0])
+				return s.SetGitProtect(cmd.Context(), args[0])
 			}, msg.GitProtectFailed)
 			return nil
 		},

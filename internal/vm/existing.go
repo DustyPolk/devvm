@@ -17,6 +17,70 @@ import (
 	"github.com/w3cj/devvm/internal/tools"
 )
 
+// Restart stops the folder's VM, then opens it as Up does: what changes
+// only when it starts (its mounts, size, ports) applies.
+func (e Launch) Restart(ctx context.Context, o Options) error {
+	t, err := e.existing(ctx, o.Backend)
+	if err != nil {
+		return err
+	}
+	if err := t.b.Stop(ctx, t.f.Name); err != nil {
+		return err
+	}
+	o.Image = ""
+	return e.open(ctx, o, t)
+}
+
+// Remove takes shared tools (names joined with +) out of the folder's VM,
+// then opens it: they leave its image name and its list, and aren't
+// mounted from its next launch (an agent's folders neither). What the VM
+// installed itself stays.
+func (e Launch) Remove(ctx context.Context, o Options, names string) error {
+	t, err := e.existing(ctx, o.Backend)
+	if err != nil {
+		return err
+	}
+	vm, st := t.f.Name, t.st
+	img, files, err := tools.Remove(vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), image.Normalize(names))
+	if err != nil {
+		return err
+	}
+	if err := st.Set(state.KeyImage, img); err != nil {
+		return err
+	}
+	if err := st.Set(KeyTools, strings.Join(files, " ")); err != nil {
+		return err
+	}
+	e.Info(msg.VMIsNow(img, vm))
+	o.Image = ""
+	return e.open(ctx, o, t)
+}
+
+// Update checks for newer shared tools and moves the folder's VM to them,
+// built first, then opens it. Nothing in its disk changes: its tools are
+// mounted from the share.
+func (e Launch) Update(ctx context.Context, o Options) error {
+	t, err := e.existing(ctx, o.Backend)
+	if err != nil {
+		return err
+	}
+	vm, st := t.f.Name, t.st
+	builder := e.builder(t.b, st.Get(state.KeyFrom))
+	tg := toolTarget(t.b, st)
+	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, tg, files) }
+	files, changed, err := e.Tools.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), tg)
+	if err != nil {
+		return err
+	}
+	if changed {
+		if err := st.Set(KeyTools, strings.Join(files, " ")); err != nil {
+			return err
+		}
+	}
+	o.Image = ""
+	return e.open(ctx, o, t)
+}
+
 // open opens a shell in a VM that exists, made for this folder. An image
 // named adds what the VM lacks of it, in place, after asking. Flags for
 // new VMs are ignored, with a warning. On the way it warns about images
@@ -24,7 +88,7 @@ import (
 // host's (--clone on a VM that mounts the folder is refused); then it
 // launches the VM (launch), sets it up and opens the shell, as for a new
 // VM.
-func (e *Env) open(ctx context.Context, o Options, t *found) error {
+func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	if !st.Exists() || st.Get(KeyNet) == "" {
 		return msg.VMUnfinished(vm)
@@ -75,7 +139,7 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 // user's agent checked for keys when the VM forwards it; then it's
 // started if it's stopped and its network policy checked (run). It
 // returns the confinement the VM runs with.
-func (e *Env) launch(ctx context.Context, t *found) (backend.Confinement, error) {
+func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, error) {
 	vm, st, b := t.f.Name, t.st, t.b
 	in, err := b.Inspect(ctx, vm)
 	if err != nil {
@@ -105,7 +169,7 @@ func (e *Env) launch(ctx context.Context, t *found) (backend.Confinement, error)
 }
 
 // warnIgnored warns about the flags only new VMs take.
-func (e *Env) warnIgnored(o Options) {
+func (e Launch) warnIgnored(o Options) {
 	if o.NetworkPolicy || o.NoNetworkPolicy {
 		e.Warn(msg.NetFlagIgnored())
 	}
@@ -126,7 +190,7 @@ func (e *Env) warnIgnored(o Options) {
 // applyAgent makes a stopped VM's backend forward an SSH agent when its
 // mode says it does, and not otherwise. A running VM's waits for its next
 // start.
-func (e *Env) applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
+func (e Launch) applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
 	want := sshagent.Forwards(sshagent.Mode(st))
 	if want {
 		if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
@@ -146,27 +210,12 @@ func (e *Env) applyAgent(ctx context.Context, b backend.Backend, st *state.VM, i
 	return b.SetAgentForwarding(ctx, st.Name(), want)
 }
 
-// checkSetID names set-id files in the folder on Linux hosts, where they
-// reach the host (macOS's virtiofs drops the bits).
-func (e *Env) checkSetID(dir string) {
-	if e.OS != "linux" {
-		return
-	}
-	if files := project.SetIDFiles(dir); len(files) > 0 {
-		var shown []string
-		for _, p := range files {
-			shown = append(shown, msg.Shown(p))
-		}
-		e.Warn(msg.SetidFiles(strings.Join(shown, " ")))
-	}
-}
-
 // run starts the VM if it's stopped, confined as its state says, then
 // checks that its network policy holds (netpolicy.SelfCheck, which stops
 // it if not). It returns the confinement the VM runs with. A running VM's
 // proxy is kept, unless it needs starting again (Prepare); one whose
 // network policy was turned off keeps it until it starts again.
-func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
+func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
 	vm := st.Name()
 	if st.Get(KeyNet) == "" {
 		return backend.Confinement{}, msg.VMUnfinished(vm)
@@ -227,51 +276,12 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 	return started, nil
 }
 
-// applySize makes a stopped VM's size what its state asks for, where it
-// differs (disks only grow). A running VM's waits for its next start.
-func (e *Env) applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
-	edit := pendingSize(st, in.Size)
-	if edit == (backend.Size{}) {
-		return nil
-	}
-	if in.Status == backend.StatusRunning {
-		e.Warn(msg.SizeNextStart(st.Name()))
-		return nil
-	}
-	return b.SetSize(ctx, st.Name(), edit)
-}
-
-// applyPorts makes a stopped VM forward the ports its state asks for, when
-// its backend config forwards others (KeyPortsSet). A running VM's wait
-// for its next start.
-func (e *Env) applyPorts(ctx context.Context, b backend.Backend, st *state.VM, running bool) error {
-	want, set := orAll(st.Get(KeyPorts)), orAll(st.Get(KeyPortsSet))
-	if want == set {
-		return nil
-	}
-	if running {
-		e.Warn(msg.PortsNextStart(st.Name()))
-		return nil
-	}
-	if err := b.SetPorts(ctx, st.Name(), PortsBackend(want)); err != nil {
-		return err
-	}
-	return st.Set(KeyPortsSet, want)
-}
-
-func orAll(ports string) string {
-	if ports == "" {
-		return PortsAll
-	}
-	return ports
-}
-
 // addLayers adds to the VM, in place and after asking, what it lacks of
 // the image want names (agents alone go on top of the folder's
 // toolchains, as for a new VM): shared tools join its list and are
 // mounted on launch; a layer's script runs in it. New agents' folders are
 // mounted, which restarts it.
-func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *build.Builder) error {
+func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *build.Builder) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	img := st.Get(state.KeyImage)
 	wanted, err := e.wantedImage(want, t.f.Dir, builder)
@@ -347,7 +357,7 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 
 // wantedImage is the image want names for this folder, as for a new VM,
 // without saying what it detected.
-func (e *Env) wantedImage(want, dir string, b *build.Builder) (string, error) {
+func (e Launch) wantedImage(want, dir string, b *build.Builder) (string, error) {
 	if needsDetection(want) {
 		if found := project.Detect(dir); len(found) > 0 {
 			want = strings.Join(append(found, want), "+")
@@ -358,7 +368,7 @@ func (e *Env) wantedImage(want, dir string, b *build.Builder) (string, error) {
 }
 
 // runScript runs a host script in the VM, fed to bash, its output logged.
-func (e *Env) runScript(ctx context.Context, b backend.Backend, vm, path string) error {
+func (e Launch) runScript(ctx context.Context, b backend.Backend, vm, path string) error {
 	f, err := os.Open(path) //nolint:gosec // the user's own layer
 	if err != nil {
 		return err
@@ -376,7 +386,7 @@ func toolTarget(b backend.Backend, st *state.VM) tools.Target {
 
 // buildTools builds the tool images the share lacks of files, from base's
 // image as it is now, built first if it isn't.
-func (e *Env) buildTools(ctx context.Context, builder *build.Builder, tg tools.Target, files []string) error {
+func (e Launch) buildTools(ctx context.Context, builder *build.Builder, tg tools.Target, files []string) error {
 	if !slices.ContainsFunc(files, func(f string) bool { return !e.Tools.Built(f) }) {
 		return nil
 	}
