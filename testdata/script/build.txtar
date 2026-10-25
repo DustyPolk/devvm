@@ -83,7 +83,7 @@ exec sh -c ': > "$STUB_DIR/shell-fails"'
 ! exec devvm build foo+bar
 stderr '^--- log_end file=.*\.log$'
 stderr '^\+ limactl shell devvm-img-[0-9a-f]{12} bash -s$'
-stderr '^devvm: script_failed lima_home=''[^ ]*/lima'' script=bar\.sh vm=devvm-img-[0-9a-f]{12}$'
+stderr '^devvm: script_failed script=bar\.sh vm=devvm-img-[0-9a-f]{12}$'
 ! stdout unfinished_image
 stub_calls
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'

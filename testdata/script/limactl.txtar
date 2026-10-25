@@ -1,0 +1,49 @@
+# devvm limactl: limactl in devvm's place, on devvm's own Lima home
+# (whatever LIMA_HOME says), run from devvm's data folder; its arguments,
+# flags included, its input and its exit code pass through.
+env DEVVM_MESSAGES=names
+env LIMA_HOME=/elsewhere
+
+exec devvm limactl list -q
+stub_calls
+cmp stdout calls
+exec sh -c 'cat "$STUB_DIR/limactl-env"'
+stdout '^cwd=\S*/data/devvm LIMA_HOME=\S*/lima$'
+! stdout elsewhere
+
+# A limactl that echoes what it got and exits 7.
+chmod 0755 $WORK/bin/limactl
+env PATH=$WORK/bin${:}$PATH
+stdin input
+! exec devvm limactl shell --start --workdir / devvm-web-x bash -s
+cmpenv stdout got
+exec sh -c 'devvm limactl --version </dev/null; echo "rc=$?"'
+stdout '^args=--version$'
+stdout '^rc=7$'
+! exec devvm limactl --help
+stdout '^args=--help$'
+
+# Without DEVVM_LIMA_HOME, devvm's Lima home is in its data folder.
+env DEVVM_LIMA_HOME=
+! exec devvm limactl list
+stdout '^home=\S*/data/devvm/lima$'
+
+# No Lima.
+env PATH=$DEVVM_BIN
+! exec devvm limactl list
+stderr '^devvm: lima_missing$'
+
+-- calls --
+limactl list -q
+-- input --
+echo hi
+-- got --
+args=shell --start --workdir / devvm-web-x bash -s
+home=$DEVVM_LIMA_HOME
+input=echo hi
+-- bin/limactl --
+#!/bin/sh
+echo "args=$*"
+echo "home=$LIMA_HOME"
+echo "input=$(cat)"
+exit 7

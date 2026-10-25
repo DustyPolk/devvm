@@ -1,6 +1,6 @@
 ---
 title: devvm remove
-weight: 26
+weight: 27
 ---
 
 Take shared tools out of this folder's VM, then open a shell in it

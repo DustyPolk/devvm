@@ -894,6 +894,11 @@ func LimaOldFix(fix string, version string) M {
 	return M{id: "lima_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
+// LimactlFailed is [limactl_failed]: "couldn't run limactl: {{.reason}}"
+func LimactlFailed(reason string) M {
+	return M{id: "limactl_failed", vals: []val{{"reason", reason}}}
+}
+
 // LoadKey is [load_key]: "Load {{.key}} into the agent now ({{.cmd}})?"
 func LoadKey(cmd string, key string) M {
 	return M{id: "load_key", vals: []val{{"cmd", cmd}, {"key", key}}}
@@ -1419,9 +1424,9 @@ func SavedNamesTaken(remote string, vm string) M {
 	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
 }
 
-// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
-func ScriptFailed(limaHome string, script string, vm string) M {
-	return M{id: "script_failed", vals: []val{{"lima_home", limaHome}, {"script", script}, {"vm", vm}}}
+// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with devvm limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
+func ScriptFailed(script string, vm string) M {
+	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
 // SecretFailed is [secret_failed]: "couldn't read or change the saved tokens: {{.reason}}"
@@ -2029,6 +2034,7 @@ var specs = map[string]spec{
 	"lima_missing_fix":            {fields: []string{"fix"}},
 	"lima_old":                    {fields: []string{"version"}},
 	"lima_old_fix":                {fields: []string{"fix", "version"}},
+	"limactl_failed":              {fields: []string{"reason"}},
 	"load_key":                    {fields: []string{"cmd", "key"}},
 	"load_key_with":               {fields: []string{"cmd"}},
 	"log_details":                 {fields: []string{"file"}},
@@ -2134,7 +2140,7 @@ var specs = map[string]spec{
 	"running_script":              {fields: []string{"script", "vm"}},
 	"saved_branches":              {fields: []string{"branches"}},
 	"saved_names_taken":           {fields: []string{"remote", "vm"}},
-	"script_failed":               {fields: []string{"lima_home", "script", "vm"}},
+	"script_failed":               {fields: []string{"script", "vm"}},
 	"secret_failed":               {fields: []string{"reason"}},
 	"secret_read_failed":          {fields: []string{"reason", "secret"}},
 	"secret_removed":              {fields: []string{"secret"}},

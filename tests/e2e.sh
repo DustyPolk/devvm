@@ -223,6 +223,9 @@ check "base is a stopped image, recorded with Ubuntu's image and its C library" 
   grep -qx 'chain=base=$kb' '$images/$kb' && grep -qx 'libc=gnu' '$images/$kb' && grep -qx 'from=' '$images/$kb' &&
   grep -qE '^digest=https://cloud-images\.ubuntu\.com/.*/release-[0-9]{8}/.*\.img sha256:[0-9a-f]{64}$' '$images/$kb'"
 check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
+check "devvm limactl runs Lima on devvm's Lima home, whatever LIMA_HOME says, with its exit code" bash -c "
+  [[ -n '$kb' ]] && LIMA_HOME='$work/no-lima' '$D' limactl list -q </dev/null | grep -qx devvm-img-$kb &&
+  ! '$D' limactl e2e-no-such-command </dev/null >/dev/null 2>&1"
 check "building base again reuses it" bash -c "out=\$('$D' build base </dev/null 2>&1) &&
   ! grep -qF \"\$(m building_image image=base key=$kb)\" <<<\"\$out\""
 check "its script ran in its image, cloned from base's" bash -c "
@@ -254,7 +257,7 @@ DEVVM_MESSAGES=names "$D" build e2efail </dev/null >"$work/fail.log" 2>&1; rc=$?
 kx=$(sed -n 's/^==> building_image image=e2efail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
 [[ -z $kx ]] || created+=("devvm-img-$kx")
 check "a failed script keeps its VM, stopped, and says how to look inside" bash -c "
-  [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: script_failed lima_home=.* script=e2efail\.sh vm=devvm-img-$kx$' '$work/fail.log' &&
+  [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: script_failed script=e2efail\.sh vm=devvm-img-$kx$' '$work/fail.log' &&
   [[ \$(status_of devvm-img-$kx) == Stopped ]] && [[ ! -e '$images/$kx' ]]"
 check "devvm images lists it as unfinished, and images rm deletes it by its key" bash -c "
   [[ -n '$kx' ]] && '$D' images </dev/null 2>/dev/null | grep -qE '^- +- +- +$kx +unfinished +' &&

@@ -222,7 +222,7 @@ func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script) error
 	cmd := l.limactl(ctx, "shell", vm, "bash", "-s")
 	cmd.Stdin = f
 	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
-		return backend.Logged(msg.ScriptFailed(shq(l.Dirs.Lima), s.Name, vm))
+		return backend.Logged(msg.ScriptFailed(s.Name, vm))
 	}
 	return nil
 }

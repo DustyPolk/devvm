@@ -20,7 +20,7 @@ Lima merges `_config/default.yaml` and `_config/override.yaml` of its home into 
 
 - It's `~/.local/share/devvm/lima` (under `$XDG_DATA_HOME` when that's set), whatever `LIMA_HOME` says. `DEVVM_LIMA_HOME` moves it, to a sandbox or a shorter path.
 - devvm refuses to start a VM while that home holds either file, and refuses a VM that has a network devvm didn't give it.
-- Plain `limactl list` doesn't show devvm's VMs: run Lima with `LIMA_HOME` set to devvm's home.
+- Plain `limactl list` doesn't show devvm's VMs: run `devvm limactl list` ([below](#running-limactl)).
 - devvm runs `limactl` from its own data folder. Lima writes `lima.REJECTED.yaml` into the folder it runs in when a config is invalid, and a project folder is the VM's to write.
 
 What devvm sets in each VM's Lima config:
@@ -32,6 +32,18 @@ What devvm sets in each VM's Lima config:
 - **Guest environment** (Lima's `env:`, written to `/etc/environment` at every boot): with network policy, the proxy's address and its settings; otherwise nothing. Lima doesn't pass the host's proxy settings in with network policy.
 
 Lima only changes a stopped VM's config. A change made while the VM runs applies at its next start.
+
+### Running limactl
+
+`devvm limactl ARGS...` runs `limactl` with ARGS on devvm's Lima home, in devvm's place: its input, output, terminal and exit code are `limactl`'s, and its options are passed on, `--help` included (`devvm help limactl` shows devvm's own help).
+
+```sh
+devvm limactl list
+devvm limactl shell --start devvm-img-<key>
+```
+
+- It runs from devvm's data folder, like devvm's own `limactl` commands: give files by absolute path.
+- A VM started this way (`devvm limactl start`, `shell --start`) runs unconfined, without its network policy, and `devvm ls` shows it `unenforced` ([confinement](#confinement)). Start project VMs with devvm.
 
 ## Confinement
 

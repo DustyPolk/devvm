@@ -337,8 +337,7 @@ other = "cloning {{.parent}}'s image"
 other = "running {{.script}} in {{.vm}}"
 
 [script_failed]
-description = "lima_home is devvm's Lima home, quoted for a shell"
-other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
+other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with devvm limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
 
 [interrupted_image]
 other = "interrupted: deleting the unfinished image {{.vm}}"
@@ -757,6 +756,10 @@ other = "couldn't get this folder's VM ready for ssh: {{.reason}}"
 [code_failed]
 description = "reason is an error from the system, in English"
 other = "couldn't open this folder's VM in VS Code: {{.reason}}"
+
+[limactl_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't run limactl: {{.reason}}"
 
 [no_ssh_agent]
 other = "no SSH agent is running, so git over SSH won't work in the VM"

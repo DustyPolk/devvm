@@ -154,7 +154,7 @@ func TestBuildImageScriptFails(t *testing.T) {
 	if !ok || e.Msg.ID() != "script_failed" {
 		t.Fatalf("BuildImage = %v, want a logged script_failed", err)
 	}
-	if want := msg.ScriptFailed(shq(l.Dirs.Lima), "base.sh", inst).Names(); e.Msg.Names() != want {
+	if want := msg.ScriptFailed("base.sh", inst).Names(); e.Msg.Names() != want {
 		t.Errorf("BuildImage = %s, want %s", e.Msg.Names(), want)
 	}
 	lines := f.lines()

@@ -15,6 +15,8 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -51,6 +53,25 @@ func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 		cmd.Err = err // the command then fails with it
 	}
 	return cmd
+}
+
+// Limactl is devvm limactl: limactl with args, on devvm's own Lima home,
+// in devvm's place, so its input, output, terminal and exit code are the
+// user's. It runs in devvm's data folder, as devvm's own limactl commands
+// do. It returns only when it can't run limactl.
+func Limactl(d paths.Dirs, args []string) error {
+	path, err := exec.LookPath("limactl")
+	if err != nil {
+		return msg.LimaMissing()
+	}
+	if err := os.MkdirAll(d.Data, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chdir(d.Data); err != nil {
+		return err
+	}
+	argv := append([]string{"limactl"}, args...)
+	return platform.Exec(path, argv, setEnv(os.Environ(), "LIMA_HOME="+d.Lima))
 }
 
 // setEnv returns env with each KEY=value in kvs replacing any value KEY

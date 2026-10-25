@@ -164,6 +164,7 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm --version` | print devvm's version, alone (`devvm version` does too) |
 | `devvm help [COMMAND]` | print the help for devvm or a command, as `--help` and `-h` do |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
+| `devvm limactl ARGS...` | run Lima's `limactl` on the lima backend's VMs and images, which live in devvm's own Lima home, not `~/.lima` ([details](lima.md#running-limactl)) |
 
 A command's name is never an IMAGE: `devvm build` builds. For one of your layers named like a command, write it as `base+NAME`.
 

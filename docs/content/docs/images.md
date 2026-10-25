@@ -253,10 +253,10 @@ An interrupted new VM is deleted, with its state, until its first shell opens: n
 
 An interrupted build deletes the image it was building. So does a build whose create or clone fails, once the end of the log is shown: there's nothing in it to look at.
 
-A build that fails later, in its script or as it starts or stops, keeps the image's VM, stopped and without a record, so you can look inside. devvm's error names it and how to open a shell in it, with Lima pointed at devvm's Lima home:
+A build that fails later, in its script or as it starts or stops, keeps the image's VM, stopped and without a record, so you can look inside. devvm's error names it and how to open a shell in it with [`devvm limactl`](lima.md#running-limactl):
 
 ```sh
-LIMA_HOME=~/.local/share/devvm/lima limactl shell --start devvm-img-<key>
+devvm limactl shell --start devvm-img-<key>
 ```
 
 `--start` starts it first, outside the build's confinement. The next build of that image deletes it and starts over, and `devvm gc` deletes it too.

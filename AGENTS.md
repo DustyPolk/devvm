@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `limactl`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/`, `internal/sshagent/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line; each VM's SSH agent choice, devvm's own agent and its keys |
@@ -148,15 +148,14 @@ Bats files (pending cases, by task):
 | File | Pending |
 | --- | --- |
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
-| `cli.bats` | limactl |
 | `install.bats` | all (install.sh) |
-| `build`, `delete`, `from`, `guest`, `images`, `layers`, `lint`, `messages`, `network`, `oci`, `ports`, `project`, `size`, `tools` | none |
+| `build`, `cli`, `delete`, `from`, `guest`, `images`, `layers`, `lint`, `messages`, `network`, `oci`, `ports`, `project`, `size`, `tools` | none |
 
 Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
 Deliberate changes from the bash:
 - A failed network self-check stops the VM, existing VMs included; a failed start stops the proxy it started.
-- A failed build keeps its stopped VM for inspection; a failed create or clone deletes the partial instance. `script_failed` suggests `LIMA_HOME=… limactl shell --start` (no `devvm limactl`).
+- A failed build keeps its stopped VM for inspection; a failed create or clone deletes the partial instance. `script_failed` suggests `devvm limactl shell --start` (no `lima_home=`).
 - Rebuild warns about and keeps an image in use (`image_in_use`). Build VMs are always confined (no `.confined`, `build_vm_unconfined`, `unconfine`).
 - The proxy is in the binary (no `build_proxy`, `tool_intact`); `devvm _qemu connect` replaces `-connect`; log prefix `devvm proxy: `; `dial` refuses ports outside 1–65535; placeholders keep `devvm-proxy-managed`; its password and the login salt are in no process's arguments.
 - New image keys, no parity: length-prefixed fields, the backend in base's key, a missing script hashed as missing.
@@ -188,6 +187,7 @@ Deliberate changes from the bash:
 - `export`: needs a finished VM made for this folder (`vm_unfinished`, `vm_other_folder`); the tarball is written beside its file (mode 600) and renamed in once complete, so a failure leaves none and replaces nothing; `history_not_exported`/`export_failed` for export, `rm_export_failed` for rm's.
 - `stop`: needs a finished VM made for this folder (`no_vm`, `vm_other_folder`, `vm_unfinished`); stops its proxy at once; `stopped`, or `already_stopped` (checked all the same, not an error); a `--clone` VM's folder isn't checked; `git_protect_running` names it.
 - `ssh`/`code`: a launch without its shell (`launch`, then setup: a stopped VM's pending size and ports applied, the user's agent checked, `sync` run so VS Code's Machine settings are set again, a `--clone` VM's clone made); they need a finished VM made for this folder and the backend's `ssh`; `code` gets the environment devvm started with (its `SSH_AUTH_SOCK`); `ssh_host_info` is two lines naming the host and folder; `ssh_failed`/`code_failed`.
+- `limactl`: runs in devvm's place (exec), every argument passed on (`devvm help limactl` is devvm's); no `limactl` is `lima_missing`, a failed exec `limactl_failed`.
 
 Pending in code:
 - deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend).
