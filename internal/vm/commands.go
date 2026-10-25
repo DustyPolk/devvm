@@ -240,7 +240,7 @@ func (e *Env) delete(ctx context.Context, t *found) error {
 	ui.Info(msg.Deleted(vm))
 	if isClone(t.st) {
 		removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
-	} else if t.st.Get(gitprotect.KeyGitProtect) == "on" {
+	} else if m := t.st.Get(gitprotect.KeyGitProtect); m == gitprotect.On || m == gitprotect.Strict {
 		e.Protector(t.f.Dir).Unlock(ctx)
 	}
 	if err := e.Proxy.Forget(vm); err != nil {
@@ -320,6 +320,60 @@ func (e *Env) SetNetwork(ctx context.Context, on bool) error {
 	}
 	if on {
 		ui.Note(msg.NetOnOldTokens(vm))
+	}
+	return nil
+}
+
+// GitProtect writes the folder's VM's .git protection to w: on, strict,
+// off, or clone for a --clone VM, which mounts no .git.
+func (e *Env) GitProtect(ctx context.Context, w io.Writer) error {
+	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
+	if err != nil {
+		return err
+	}
+	mode := ModeClone
+	if !isClone(t.st) {
+		mode = e.Protector(t.f.Dir).Mode(t.st)
+	}
+	_, err = io.WriteString(w, mode+"\n")
+	return err
+}
+
+// SetGitProtect turns the folder's VM's .git protection on, strict or
+// off. Locks change only while the VM is stopped, so nothing in it can
+// race them; on and strict lock .git as it is now.
+func (e *Env) SetGitProtect(ctx context.Context, mode string) error {
+	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
+	if err != nil {
+		return err
+	}
+	vm := t.f.Name
+	if isClone(t.st) {
+		return msg.GitProtectClone(vm)
+	}
+	p := e.Protector(t.f.Dir)
+	// Elsewhere there are no locks to race.
+	if p.OS == "darwin" {
+		in, err := t.b.Inspect(ctx, vm)
+		if err != nil {
+			return err
+		}
+		if in.Status == backend.StatusRunning {
+			return msg.GitProtectRunning(vm)
+		}
+	}
+	if err := p.Set(ctx, t.st, mode); err != nil {
+		return err
+	}
+	switch _, err := os.Lstat(filepath.Join(t.f.Dir, ".git")); {
+	case mode == gitprotect.Off:
+		ui.Info(msg.GitUnlocked(vm))
+	case err != nil:
+		ui.Info(msg.GitLockLater(vm))
+	case mode == gitprotect.Strict:
+		ui.Info(msg.GitLockedStrict(vm))
+	default:
+		ui.Info(msg.GitLocked(vm))
 	}
 	return nil
 }

@@ -5,7 +5,7 @@ weight: 26
 
 The project folder is read-write in the VM, so without protection anything in the VM could add a git hook, or set `core.fsmonitor`, `core.hooksPath` or `core.sshCommand` in `.git/config`, and your next git command on the host would run it. A read-only mount wouldn't hold: root in the VM can unmount it. So on macOS devvm locks those files with the user-immutable flag (`chflags uchg`), which even root in the VM can't clear.
 
-It's on for every new VM. `--no-git-protect` creates one without it.
+It's on for every new VM. `--no-git-protect` creates one without it, and [`devvm git-protect`](#turning-it-on-or-off) changes it later.
 
 ## What's locked
 
@@ -38,19 +38,35 @@ A running VM keeps the locks it had: new ones are set on the next launch that fi
 
 git in the VM can commit, branch, check out, stash, fetch and pull, and `git worktree add` works on the host. Commands that write `.git/config` fail with `Operation not permitted`, in the VM and on the host: `git config`, `git remote add`, `push -u` to a new branch, and hook installers like husky or pre-commit. So do `git worktree remove` and `prune` for the worktrees that were there when devvm locked.
 
-To change them, unlock on the host, with the VM stopped, and lock again after:
+To run them, unlock with the VM stopped, run them on the host, and lock again:
 
 ```sh
-chflags -R nouchg .git/hooks .git/config
+devvm git-protect off
 git config …
-chflags -R uchg .git/hooks .git/config
+devvm git-protect on
 ```
+
+## Turning it on or off
+
+`devvm git-protect` shows the VM's protection: `on`, `strict`, `off`, or `clone` for a [`--clone`](clone.md) VM, which mounts no `.git`. `devvm git-protect on`, `strict` or `off` changes it, only while the VM is stopped: a running VM could race the locks, the same reason launches lock only a stopped VM.
+
+- `on` locks `.git` as it is now, taking it as yours: a `.git` replaced since the last lock isn't reported, and the next launches compare with this one. It reports what [a lock can't stop](#what-a-lock-cant-stop) and what's [not covered](#not-covered), as when the VM was made. Without a `.git` yet, it's locked on the first launch after one appears.
+- `strict` is `on`, plus [strict](#strict).
+- `off` takes the locks off. The VM can then change `.git` hooks and config, which run on your machine.
+
+`--no-git-protect` on an existing VM is ignored, with a warning. A `--clone` VM's protection can't be changed.
+
+## Strict
+
+The VM can add a submodule at any time ([below](#what-a-lock-cant-stop)), and host `git status` and `git diff` read its config, so its `core.fsmonitor` would run on the host before the next launch locks it. `devvm git-protect strict` closes that: it sets `diff.ignoreSubmodules = all` in the locked `.git/config`, so host `git status` and `git diff` never look inside submodules, and no longer show their changes. `git submodule …` and `--recurse-submodules` still enter them: for a repo with submodules you don't trust, use [`--clone`](clone.md).
+
+`devvm git-protect on` and `off` take `diff.ignoreSubmodules` back out.
 
 ## What a lock can't stop
 
 The VM can rename `.git` and put a new one in its place, add `.git/commondir` to point git at another config, or do the same with a linked worktree's folder in `.git/worktrees`. When it creates the VM, and on each launch ([above](#on-each-launch)), devvm reports a `commondir` that's there, linked worktrees whose `commondir` leads somewhere else, and paths it couldn't lock because they're symlinks. It doesn't repair anything: check what it names before you run git in the folder. When you don't trust what runs in the VM, use [`--clone`](clone.md), which mounts no `.git` at all.
 
-The VM writes `.git/index` (it has to, to commit), so it can also add a submodule with its own config, which host `git status` reads: a submodule's `core.fsmonitor` runs on the host too. devvm names a new one on the next launch, but host git run before that reads it.
+The VM writes `.git/index` (it has to, to commit), so it can also add a submodule with its own config, which host `git status` reads: a submodule's `core.fsmonitor` runs on the host too. devvm names a new one on the next launch, but host git run before that reads it, unless the VM is [strict](#strict).
 
 ## Not covered
 
@@ -60,4 +76,4 @@ The VM writes `.git/index` (it has to, to commit), so it can also add a submodul
 
 ## Linux hosts
 
-Linux has no immutable flag a user can set, so VMs on Linux hosts have no `.git` protection: the VM can change `.git` hooks and config, which run on the host. devvm says so when it creates a VM for a folder with a `.git`. [`--clone`](clone.md) keeps the VM out of `.git` instead.
+Linux has no immutable flag a user can set, so VMs on Linux hosts have no `.git` protection: the VM can change `.git` hooks and config, which run on the host. devvm says so when it creates a VM for a folder with a `.git`, and refuses `devvm git-protect on` and `strict`. [`--clone`](clone.md) keeps the VM out of `.git` instead.

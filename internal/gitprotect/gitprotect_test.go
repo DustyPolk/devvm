@@ -682,3 +682,119 @@ func TestCheckOffAndUnset(t *testing.T) {
 		t.Errorf("off: locks %q, warnings %q", f.flags, f.warns)
 	}
 }
+
+func (f *fixture) set(mode string) {
+	f.t.Helper()
+	f.warns, f.flags = nil, nil
+	if err := f.p.Set(f.t.Context(), f.vm, mode); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func (f *fixture) ignoreSubmodules() string {
+	f.t.Helper()
+	out, _ := exec.CommandContext(f.t.Context(), "git", "config", "--file", f.path(".git/config"), "diff.ignoreSubmodules").Output() //nolint:gosec // the test's own
+	return strings.TrimSpace(string(out))
+}
+
+// Strict keeps host git out of submodules (diff.ignoreSubmodules=all, set
+// with the config unlocked, then locked again); on and off take it back
+// out. On locks .git as it is now, a replaced one included, and names
+// submodules that appeared, and what's handed over, as a new VM does.
+func TestSet(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.dir, "init", "-q")
+	f.git(f.dir, "config", "--file", f.path(".git/config"), "include.path", "../x.gitconfig")
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := f.path(".git/config")
+	f.set(Strict)
+	if f.ignoreSubmodules() != "all" || f.vm.Get(KeyGitProtect) != Strict || f.p.Mode(f.vm) != Strict {
+		t.Errorf("strict: diff.ignoreSubmodules=%q, mode %s", f.ignoreSubmodules(), f.p.Mode(f.vm))
+	}
+	if !slices.Equal(f.flags[:1], []string{"nouchg " + cfg}) || !f.locked(cfg) {
+		t.Errorf("strict: locks %q", f.flags)
+	}
+	if !f.warned("git_include_inside") {
+		t.Errorf("strict: warnings %q", f.warns)
+	}
+	f.set(On)
+	if f.ignoreSubmodules() != "" || f.vm.Get(KeyGitProtect) != On || !f.locked(cfg) {
+		t.Errorf("on: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), f.vm.Get(KeyGitProtect), f.flags)
+	}
+	f.set(Strict)
+	f.set(Off)
+	if f.ignoreSubmodules() != "" || f.vm.Get(KeyGitProtect) != Off || !slices.Contains(f.flags, "nouchg "+cfg) || f.locked(cfg) {
+		t.Errorf("off: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), f.vm.Get(KeyGitProtect), f.flags)
+	}
+	// Off again, and checks, lock nothing.
+	f.checked(false)
+	if len(f.flags) > 0 {
+		t.Errorf("off: locks %q", f.flags)
+	}
+
+	// A replaced .git is taken as it is, and a submodule that appeared
+	// is named.
+	if err := os.Rename(f.path(".git"), f.path(".git-old")); err != nil {
+		t.Fatal(err)
+	}
+	embeddedRepo(f)
+	f.set(On)
+	if f.warned("git_replaced") || f.warned("git_appeared") || !f.warned("git_embedded_new git="+f.path("sub/.git")) {
+		t.Errorf("replaced: warnings %q", f.warns)
+	}
+	if !f.locked(cfg) || !f.locked(f.path("sub/.git/config")) || f.vm.Get(KeyGitInode) != inode(f.path(".git")) {
+		t.Errorf("replaced: locks %q, inode %s", f.flags, f.vm.Get(KeyGitInode))
+	}
+	f.checked(false)
+	if len(f.warns) > 0 {
+		t.Errorf("after on: warnings %q", f.warns)
+	}
+}
+
+// Strict that can't set diff.ignoreSubmodules fails, with the config
+// locked again and the mode as it was.
+func TestSetStrictFails(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.dir, "init", "-q")
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := f.path(".git/config")
+	write(t, cfg, "[core\n")
+	f.flags = nil
+	err := f.p.Set(t.Context(), f.vm, Strict)
+	if err == nil || err.(msg.M).Names() != "git_config_failed config="+cfg { //nolint:errorlint,forcetypeassert // a message
+		t.Fatalf("err = %v", err)
+	}
+	if !slices.Equal(f.flags, []string{"nouchg " + cfg, "uchg " + cfg}) || f.vm.Get(KeyGitProtect) != On {
+		t.Errorf("locks %q, mode %s", f.flags, f.vm.Get(KeyGitProtect))
+	}
+}
+
+// On a host without locks, on and strict are refused; off is taken.
+// Without a .git, on is recorded for when one appears.
+func TestSetLinuxAndNoGit(t *testing.T) {
+	f := newFixture(t, "p")
+	f.p.OS = "linux"
+	if f.p.Mode(f.vm) != Off {
+		t.Errorf("unset on linux: %s", f.p.Mode(f.vm))
+	}
+	for _, m := range []string{On, Strict} {
+		if err := f.p.Set(t.Context(), f.vm, m); err == nil || err.(msg.M).Names() != "git_protect_on_needs_macos" { //nolint:errorlint,forcetypeassert // a message
+			t.Errorf("%s on linux: %v", m, err)
+		}
+	}
+	f.set(Off)
+	if f.vm.Get(KeyGitProtect) != Off || len(f.flags) > 0 {
+		t.Errorf("off on linux: %s, locks %q", f.vm.Get(KeyGitProtect), f.flags)
+	}
+	f.p.OS = "darwin"
+	f.set(Strict)
+	if f.vm.Get(KeyGitProtect) != Strict || len(f.flags)+len(f.warns) > 0 {
+		t.Errorf("no .git: %s, locks %q, warnings %q", f.vm.Get(KeyGitProtect), f.flags, f.warns)
+	}
+}

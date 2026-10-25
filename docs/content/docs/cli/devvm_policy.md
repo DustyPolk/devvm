@@ -1,6 +1,6 @@
 ---
 title: devvm policy
-weight: 10
+weight: 11
 ---
 
 Show the network policy allowlist of this folder's VM

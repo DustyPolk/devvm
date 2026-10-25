@@ -542,6 +542,11 @@ func GitCommondir(git string, target string) M {
 	return M{id: "git_commondir", vals: []val{{"git", git}, {"target", target}}}
 }
 
+// GitConfigFailed is [git_config_failed]: "couldn't set diff.ignoreSubmodules in {{.config}}"
+func GitConfigFailed(config string) M {
+	return M{id: "git_config_failed", vals: []val{{"config", config}}}
+}
+
 // GitEmbeddedNew is [git_embedded_new]: "WARNING: a submodule with its git folder in the project appeared: {{.git}}. Host git status runs code its config names: if you didn't add it, check its config and hooks before running git here"
 func GitEmbeddedNew(git string) M {
 	return M{id: "git_embedded_new", vals: []val{{"git", git}}}
@@ -572,9 +577,24 @@ func GitIncludeInside(config string, path string) M {
 	return M{id: "git_include_inside", vals: []val{{"config", config}, {"path", path}}}
 }
 
+// GitLockLater is [git_lock_later]: "no .git here yet: locked for {{.vm}} when one appears"
+func GitLockLater(vm string) M {
+	return M{id: "git_lock_later", vals: []val{{"vm", vm}}}
+}
+
 // GitLockRaced is [git_lock_raced]: "{{.path}} moved while devvm locked it: not locked, and the lock undone where it landed; check .git"
 func GitLockRaced(path string) M {
 	return M{id: "git_lock_raced", vals: []val{{"path", path}}}
+}
+
+// GitLocked is [git_locked]: ".git hooks and config locked for {{.vm}}"
+func GitLocked(vm string) M {
+	return M{id: "git_locked", vals: []val{{"vm", vm}}}
+}
+
+// GitLockedStrict is [git_locked_strict]: ".git hooks and config locked for {{.vm}}; host git status and diff no longer look inside submodules"
+func GitLockedStrict(vm string) M {
+	return M{id: "git_locked_strict", vals: []val{{"vm", vm}}}
 }
 
 // GitNotLocked is [git_not_locked]: "WARNING: {{.path}} is a symlink or under one, so devvm can't lock it: if you didn't make it, check it before running git here"
@@ -582,7 +602,17 @@ func GitNotLocked(path string) M {
 	return M{id: "git_not_locked", vals: []val{{"path", path}}}
 }
 
-// GitProtectFlagIgnored is [git_protect_flag_ignored]: "--no-git-protect only applies to new VMs"
+// GitProtectClone is [git_protect_clone]: "{{.vm}} is a --clone VM: it mounts no .git to protect"
+func GitProtectClone(vm string) M {
+	return M{id: "git_protect_clone", vals: []val{{"vm", vm}}}
+}
+
+// GitProtectFailed is [git_protect_failed]: "couldn't show or change .git protection: {{.reason}}"
+func GitProtectFailed(reason string) M {
+	return M{id: "git_protect_failed", vals: []val{{"reason", reason}}}
+}
+
+// GitProtectFlagIgnored is [git_protect_flag_ignored]: "--no-git-protect only applies to new VMs: devvm git-protect off"
 func GitProtectFlagIgnored() M {
 	return M{id: "git_protect_flag_ignored"}
 }
@@ -592,9 +622,24 @@ func GitProtectNeedsMacosNew() M {
 	return M{id: "git_protect_needs_macos_new"}
 }
 
+// GitProtectOnNeedsMacos is [git_protect_on_needs_macos]: ".git protection needs macOS: --clone keeps a VM out of .git"
+func GitProtectOnNeedsMacos() M {
+	return M{id: "git_protect_on_needs_macos"}
+}
+
+// GitProtectRunning is [git_protect_running]: "{{.vm}} is running, and changing its .git protection now could race it: stop it first"
+func GitProtectRunning(vm string) M {
+	return M{id: "git_protect_running", vals: []val{{"vm", vm}}}
+}
+
 // GitReplaced is [git_replaced]: "WARNING: {{.git}} was replaced since devvm locked it, maybe from inside the VM, and its config and hooks run on this machine: check them before running git here (and look for the old .git, renamed)"
 func GitReplaced(git string) M {
 	return M{id: "git_replaced", vals: []val{{"git", git}}}
+}
+
+// GitUnlocked is [git_unlocked]: ".git unlocked: {{.vm}} can change its hooks and config, which run on this machine; devvm git-protect on locks it again"
+func GitUnlocked(vm string) M {
+	return M{id: "git_unlocked", vals: []val{{"vm", vm}}}
 }
 
 // GitWorktreeStray is [git_worktree_stray]: "WARNING: {{.wt}}/commondir doesn't lead back to this repo, so git in that linked worktree reads config and hooks from elsewhere: if you didn't change it, check it before running git there"
@@ -975,6 +1020,11 @@ func NoUbuntuImage(url string, version string) M {
 // NoVM is [no_vm]: "no VM for {{.dir}}: devvm makes one"
 func NoVM(dir string) M {
 	return M{id: "no_vm", vals: []val{{"dir", dir}}}
+}
+
+// NoVMGitProtect is [no_vm_git_protect]: "no VM for {{.dir}}: devvm makes one, devvm --no-git-protect one without .git protection"
+func NoVMGitProtect(dir string) M {
+	return M{id: "no_vm_git_protect", vals: []val{{"dir", dir}}}
 }
 
 // NoVMPolicy is [no_vm_policy]: "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
@@ -1722,17 +1772,26 @@ var specs = map[string]spec{
 	"from_unreachable":            {fields: []string{"from", "host"}},
 	"git_appeared":                {},
 	"git_commondir":               {fields: []string{"git", "target"}},
+	"git_config_failed":           {fields: []string{"config"}},
 	"git_embedded_new":            {fields: []string{"git"}},
 	"git_gitdir_outside":          {fields: []string{"git", "sub"}},
 	"git_hook_link_inside":        {fields: []string{"hook", "target"}},
 	"git_hooks_path":              {fields: []string{"path"}},
 	"git_hooks_unlocked":          {fields: []string{"hooks"}},
 	"git_include_inside":          {fields: []string{"config", "path"}},
+	"git_lock_later":              {fields: []string{"vm"}},
 	"git_lock_raced":              {fields: []string{"path"}},
+	"git_locked":                  {fields: []string{"vm"}},
+	"git_locked_strict":           {fields: []string{"vm"}},
 	"git_not_locked":              {fields: []string{"path"}},
+	"git_protect_clone":           {fields: []string{"vm"}},
+	"git_protect_failed":          {fields: []string{"reason"}},
 	"git_protect_flag_ignored":    {},
 	"git_protect_needs_macos_new": {},
+	"git_protect_on_needs_macos":  {},
+	"git_protect_running":         {fields: []string{"vm"}},
 	"git_replaced":                {fields: []string{"git"}},
+	"git_unlocked":                {fields: []string{"vm"}},
 	"git_worktree_stray":          {fields: []string{"wt"}},
 	"github_token_howto":          {},
 	"home_not_absolute":           {},
@@ -1809,6 +1868,7 @@ var specs = map[string]spec{
 	"no_token":                    {},
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"no_vm":                       {fields: []string{"dir"}},
+	"no_vm_git_protect":           {fields: []string{"dir"}},
 	"no_vm_policy":                {fields: []string{"dir"}},
 	"no_vm_ports":                 {fields: []string{"dir"}},
 	"no_vm_size":                  {fields: []string{"dir"}},

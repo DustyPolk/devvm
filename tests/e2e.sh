@@ -5,7 +5,7 @@
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then opening it again,
-#                restart, devvm size, devvm ports and rm, an agent VM's folders and exported history, and SSH agent forwarding
+#                restart, devvm size, devvm ports, devvm git-protect and rm, an agent VM's folders and exported history, and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
@@ -355,6 +355,19 @@ if [[ "$(uname -s)" == Darwin ]]; then
       git update-index --add --cacheinfo 160000,\$(git -C vmsub rev-parse HEAD),vmsub' </dev/null &&
     limactl stop $vm >/dev/null 2>&1 && cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_embedded_new git=$p/vmsub/.git | head -1)\" &&
     ls -lOd '$p/vmsub/.git/config' | grep -q uchg"
+  # (grep -q above may have ended that launch before it started the VM.)
+  check "git-protect waits for the VM to stop" bash -c "cd '$p' && printf 'exit\n' | '$D' >/dev/null 2>&1 &&
+    [[ \$(status_of $vm) == Running ]] && '$D' git-protect off </dev/null 2>&1 |
+    grep -qF \"\$(m git_protect_running vm=$vm | head -1)\" && ls -lOd '$p/.git/config' | grep -q uchg"
+  check "git-protect strict keeps host git status out of submodules" bash -c "limactl stop $vm >/dev/null 2>&1 && cd '$p' &&
+    '$D' git-protect strict </dev/null >/dev/null 2>&1 && [[ \$(git config --file .git/config diff.ignoreSubmodules) == all &&
+    \$('$D' git-protect 2>/dev/null) == strict ]] && ls -lOd '$p/.git/config' | grep -q uchg"
+  check "git-protect off unlocks, and on locks again" bash -c "cd '$p' && '$D' git-protect off </dev/null >/dev/null 2>&1 &&
+    ! ls -lOd '$p/.git/config' | grep -q uchg && ! git config --file .git/config diff.ignoreSubmodules &&
+    '$D' git-protect on </dev/null >/dev/null 2>&1 && ls -lOd '$p/.git/config' | grep -q uchg && [[ \$('$D' git-protect 2>/dev/null) == on ]]"
+else
+  check "git-protect on is refused off macOS" bash -c "cd '$p' && '$D' git-protect on </dev/null 2>&1 |
+    grep -qF \"\$(m git_protect_on_needs_macos | head -1)\""
 fi
 check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config' &&

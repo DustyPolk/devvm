@@ -391,7 +391,7 @@ other = "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
 other = "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
 
 [git_protect_flag_ignored]
-other = "--no-git-protect only applies to new VMs"
+other = "--no-git-protect only applies to new VMs: devvm git-protect off"
 
 [size_flags_ignored]
 other = "--cpus, --memory and --disk only apply to new VMs: devvm size --cpus N"
@@ -815,6 +815,37 @@ other = "set-user-id or set-group-id files in the project folder, which run as y
 
 [git_protect_needs_macos_new]
 other = ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine. --clone keeps a VM out of .git"
+
+[no_vm_git_protect]
+other = "no VM for {{.dir}}: devvm makes one, devvm --no-git-protect one without .git protection"
+
+[git_protect_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't show or change .git protection: {{.reason}}"
+
+[git_protect_running]
+other = "{{.vm}} is running, and changing its .git protection now could race it: stop it first"
+
+[git_protect_on_needs_macos]
+other = ".git protection needs macOS: --clone keeps a VM out of .git"
+
+[git_protect_clone]
+other = "{{.vm}} is a --clone VM: it mounts no .git to protect"
+
+[git_config_failed]
+other = "couldn't set diff.ignoreSubmodules in {{.config}}"
+
+[git_locked]
+other = ".git hooks and config locked for {{.vm}}"
+
+[git_locked_strict]
+other = ".git hooks and config locked for {{.vm}}; host git status and diff no longer look inside submodules"
+
+[git_lock_later]
+other = "no .git here yet: locked for {{.vm}} when one appears"
+
+[git_unlocked]
+other = ".git unlocked: {{.vm}} can change its hooks and config, which run on this machine; devvm git-protect on locks it again"
 
 [git_commondir]
 other = "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"

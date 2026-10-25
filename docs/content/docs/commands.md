@@ -21,6 +21,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm ports -g ...` | the same for what new VMs forward |
 | `devvm size [--cpus N] [--memory GiB] [--disk GiB]` | show or change this folder's VM's CPUs, memory and disk: at once when it's stopped, from its next start when it runs; disks only grow ([details](images.md#size)) |
 | `devvm size -g ...` | the same for the size new VMs get |
+| `devvm git-protect [on\|strict\|off]` | show or change this folder's VM's `.git` protection, while it's stopped ([details](git-protection.md#turning-it-on-or-off)) |
 
 A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)); with `--clone`, the folder isn't mounted and the VM gets its own clone of the repo ([working on a clone](clone.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
@@ -66,7 +67,7 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size (`devvm size` changes it), ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection (`devvm git-protect` changes it), size (`devvm size` changes it), ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
 5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) its state asks for; a running one gets them when it next starts, and devvm says so. A VM that forwards your agent has it checked for keys; one that uses devvm's own gets the keys it lacks loaded.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.
@@ -107,7 +108,7 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 | `NAME` | the VM's name: `devvm-<folder>-<hash>` |
 | `STATUS` | as its backend reports it: `Running`, `Stopped`, or another state it has |
 | `IMAGE` | its image, with what it added in place; a base from a container image as `base (from node:24)` ([details](from.md)) |
-| `GIT` | its [`.git` protection](git-protection.md): `on` or `off`; `clone` for a [`--clone`](clone.md) VM |
+| `GIT` | its [`.git` protection](git-protection.md): `on`, `strict` or `off`; `clone` for a [`--clone`](clone.md) VM |
 | `NET` | its [network policy](network.md): `on`, `off`, or `unenforced` ([the self-check](network.md#the-self-check)) |
 | `BACKEND` | the [backend](backends.md) that runs it |
 | `FOLDER` | its project folder |

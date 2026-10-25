@@ -11,6 +11,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
+- [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
 - [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM

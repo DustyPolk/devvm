@@ -39,7 +39,7 @@ func NewRoot() *cobra.Command {
 	addUpFlags(root, u)
 	addVersion(root)
 	root.AddCommand(newBuildCmd(g), newRebuildCmd(g), newMsgCmd(),
-		newRestartCmd(g), newRemoveCmd(g), newUpdateCmd(g), newAdoptCmd(), newRmCmd(), newLsCmd(), newLogCmd(), newPolicyCmd(), newNetworkCmd(), newSSHAgentCmd(), newPortsCmd(), newSizeCmd(), newDoctorCmd(g), newQEMUCmd(), newProxyCmd(), newRefreshToolsCmd(), newSecretCmd(),
+		newRestartCmd(g), newRemoveCmd(g), newUpdateCmd(g), newAdoptCmd(), newRmCmd(), newLsCmd(), newLogCmd(), newPolicyCmd(), newNetworkCmd(), newSSHAgentCmd(), newGitProtectCmd(), newPortsCmd(), newSizeCmd(), newDoctorCmd(g), newQEMUCmd(), newProxyCmd(), newRefreshToolsCmd(), newSecretCmd(),
 		newAuthCmd(), newVersionCmd(), newCompletionCmd())
 	addCompletions(root)
 	return root

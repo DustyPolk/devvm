@@ -35,7 +35,7 @@ import (
 
 // Keys of a VM's state that git protection keeps.
 const (
-	KeyGitProtect     = "git_protect"     // on or off
+	KeyGitProtect     = "git_protect"     // on, strict or off
 	KeyGitInode       = "git_inode"       // .git's inode when it was last locked
 	KeyGitEmbedded    = "git_embedded"    // submodule git dirs in the working tree (JSON, relative paths)
 	KeyGitModules     = "git_modules"     // git dirs under .git/modules (JSON, relative paths)
@@ -76,9 +76,9 @@ func New(dir string) *Protector {
 func (p *Protector) NewVM(ctx context.Context, vm *state.VM, off bool) error {
 	switch {
 	case off:
-		return vm.Set(KeyGitProtect, "off")
+		return vm.Set(KeyGitProtect, Off)
 	case p.OS != "darwin":
-		if err := vm.Set(KeyGitProtect, "off"); err != nil {
+		if err := vm.Set(KeyGitProtect, Off); err != nil {
 			return err
 		}
 		if exists(p.git()) {
@@ -86,42 +86,96 @@ func (p *Protector) NewVM(ctx context.Context, vm *state.VM, off bool) error {
 		}
 		return nil
 	}
-	if err := vm.Set(KeyGitProtect, "on"); err != nil {
+	if err := vm.Set(KeyGitProtect, On); err != nil {
 		return err
 	}
-	g := p.git()
-	if !exists(g) {
-		return nil
+	return p.protect(ctx, vm, whyNew, false)
+}
+
+// Modes of .git protection, as devvm git-protect takes them. Strict is on,
+// with host git status and diff kept out of submodules.
+const (
+	On     = "on"
+	Strict = "strict"
+	Off    = "off"
+)
+
+// Modes are the modes devvm git-protect takes.
+var Modes = []string{On, Strict, Off}
+
+// Mode returns the VM's protection: on, strict or off. One never set up
+// gets it at its next launch, as a new VM does.
+func (p *Protector) Mode(vm *state.VM) string {
+	switch m := vm.Get(KeyGitProtect); {
+	case m != "":
+		return m
+	case p.OS == "darwin":
+		return On
+	default:
+		return Off
 	}
-	if isDir(g) && exists(filepath.Join(g, "commondir")) {
-		target, _ := os.ReadFile(filepath.Join(g, "commondir")) //nolint:gosec // the project's own
-		p.Warn(msg.GitCommondir(msg.Shown(g), msg.Shown(strings.TrimSpace(string(target)))))
+}
+
+// Set changes the protection of a stopped VM: on and strict lock .git as
+// it is now, as trusted, and report what a lock can't cover; strict also
+// sets diff.ignoreSubmodules=all in the locked .git/config, which on and
+// off take out again; off unlocks. On and strict need macOS.
+func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
+	was := vm.Get(KeyGitProtect)
+	if mode == Off {
+		p.Unlock(ctx)
+		if was == Strict {
+			if err := p.ignoreSubmodules(ctx, false); err != nil {
+				return err
+			}
+		}
+		return vm.Set(KeyGitProtect, Off)
 	}
-	for _, w := range p.worktreeStrays() {
-		p.Warn(msg.GitWorktreeStray(msg.Shown(w)))
+	if p.OS != "darwin" {
+		return msg.GitProtectOnNeedsMacos()
 	}
-	emb := p.embedded(ctx)
-	if err := vm.Set(KeyGitEmbedded, p.relList(emb.inside)); err != nil {
-		return err
-	}
-	var mods []string
-	for _, d := range p.gitDirs() {
-		if d != g {
-			mods = append(mods, d)
+	if mode == Strict || was == Strict {
+		if err := p.ignoreSubmodules(ctx, mode == Strict); err != nil {
+			// Locked as it was.
+			if cfg := filepath.Join(p.git(), "config"); was != Off && isFile(cfg) && p.realInDir(cfg) {
+				p.flag(ctx, "uchg", cfg)
+			}
+			return err
 		}
 	}
-	if err := vm.Set(KeyGitModules, p.relList(mods)); err != nil {
-		return err
+	for _, kv := range [][2]string{{KeyGitProtect, mode}, {KeyGitInode, ""}} {
+		if err := vm.Set(kv[0], kv[1]); err != nil {
+			return err
+		}
 	}
-	if err := p.lock(ctx, vm, emb); err != nil {
-		return err
+	return p.protect(ctx, vm, whyOn, false)
+}
+
+// ignoreSubmodules sets diff.ignoreSubmodules=all in .git/config, or takes
+// it out, unlocking the file for the moment (protect locks it again).
+func (p *Protector) ignoreSubmodules(ctx context.Context, on bool) error {
+	cfg := filepath.Join(p.git(), "config")
+	if !isFile(cfg) || !p.realInDir(cfg) {
+		if on && exists(p.git()) {
+			return msg.GitConfigFailed(msg.Shown(cfg))
+		}
+		return nil
 	}
-	if hp := gitConfig(ctx, filepath.Join(g, "config"), "core.hooksPath"); hp != "" && p.hooksPathInside(hp) {
-		p.Warn(msg.GitHooksPath(msg.Shown(hp)))
+	if !p.flag(ctx, "nouchg", cfg) {
+		if on {
+			return msg.GitConfigFailed(msg.Shown(cfg))
+		}
+		return nil
 	}
-	ds := p.delegations(ctx, emb)
-	p.warnDelegations(ds)
-	return vm.Set(KeyGitDelegations, delegationsSum(ds))
+	args := []string{"config", "--file", cfg, "--unset", "diff.ignoreSubmodules"}
+	if on {
+		args = []string{"config", "--file", cfg, "diff.ignoreSubmodules", "all"}
+	}
+	// --unset fails when there's nothing to take out.
+	if err := exec.CommandContext(ctx, "git", args...).Run(); err != nil && on { //nolint:gosec // devvm's own arguments
+		return msg.GitConfigFailed(msg.Shown(cfg))
+	}
+	return nil
 }
 
 func (p *Protector) warnDelegations(ds []delegation) {
@@ -153,19 +207,36 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 			return nil
 		}
 		return p.NewVM(ctx, vm, false)
-	case "on":
+	case On, Strict:
 	default:
 		return nil
 	}
 	if p.OS != "darwin" {
 		return nil
 	}
+	return p.protect(ctx, vm, whyCheck, running)
+}
+
+// why is what protect runs for.
+type why int
+
+const (
+	whyNew   why = iota // a VM just made
+	whyOn               // devvm git-protect on or strict
+	whyCheck            // a launch of an existing VM
+)
+
+// protect locks .git, unless running, and reports what a lock can't stop.
+// A new VM's submodules are recorded, not reported; a check reports what
+// changed since the last one, and the hooks path and delegations only
+// when they change.
+func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bool) error {
 	g := p.git()
 	if !exists(g) {
 		return nil
 	}
 	was := vm.Get(KeyGitInode)
-	if was != "" && was != inode(g) {
+	if w == whyCheck && was != "" && was != inode(g) {
 		p.Warn(msg.GitReplaced(msg.Shown(g)))
 		return nil
 	}
@@ -173,16 +244,16 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 		target, _ := os.ReadFile(filepath.Join(g, "commondir")) //nolint:gosec // the project's own
 		p.Warn(msg.GitCommondir(msg.Shown(g), msg.Shown(strings.TrimSpace(string(target)))))
 	}
-	for _, w := range p.worktreeStrays() {
-		p.Warn(msg.GitWorktreeStray(msg.Shown(w)))
+	for _, s := range p.worktreeStrays() {
+		p.Warn(msg.GitWorktreeStray(msg.Shown(s)))
 	}
-	if was == "" {
+	if was == "" && w == whyCheck {
 		p.Warn(msg.GitAppeared())
 	}
 	emb := p.embedded(ctx)
 	seen, _ := p.list(vm.Get(KeyGitEmbedded))
 	for _, d := range emb.inside {
-		if !slices.Contains(seen, d) {
+		if w != whyNew && !slices.Contains(seen, d) {
 			p.Warn(msg.GitEmbeddedNew(msg.Shown(d)))
 		}
 	}
@@ -197,7 +268,7 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 			continue
 		}
 		mods = append(mods, d)
-		if recorded && !slices.Contains(seen, d) {
+		if w != whyNew && recorded && !slices.Contains(seen, d) {
 			p.Warn(msg.GitEmbeddedNew(msg.Shown(d)))
 		}
 	}
@@ -207,9 +278,11 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 	// Hooks in a hooks folder that isn't locked appeared since the last
 	// lock (there was no folder to lock, or it's a new submodule's), so the
 	// VM may have made them.
-	for _, path := range p.paths(ctx, emb) {
-		if filepath.Base(path) == "hooks" && isDir(path) && !isLink(path) && !p.Locked(path) && hasHooks(path) {
-			p.Warn(msg.GitHooksUnlocked(msg.Shown(path)))
+	if w == whyCheck {
+		for _, path := range p.paths(ctx, emb) {
+			if filepath.Base(path) == "hooks" && isDir(path) && !isLink(path) && !p.Locked(path) && hasHooks(path) {
+				p.Warn(msg.GitHooksUnlocked(msg.Shown(path)))
+			}
 		}
 	}
 	if !running {
@@ -217,9 +290,14 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 			return err
 		}
 	}
+	if w != whyCheck {
+		if hp := gitConfig(ctx, filepath.Join(g, "config"), "core.hooksPath"); hp != "" && p.hooksPathInside(hp) {
+			p.Warn(msg.GitHooksPath(msg.Shown(hp)))
+		}
+	}
 	ds := p.delegations(ctx, emb)
 	sum := delegationsSum(ds)
-	if sum != vm.Get(KeyGitDelegations) {
+	if w != whyCheck || sum != vm.Get(KeyGitDelegations) {
 		p.warnDelegations(ds)
 	}
 	return vm.Set(KeyGitDelegations, sum)
@@ -252,8 +330,8 @@ func hasHooks(dir string) bool {
 	return found
 }
 
-// Unlock takes the locks off, for a VM that's being deleted. Like
-// locking, it never acts through a symlink.
+// Unlock takes the locks off, for a VM that's being deleted or turned
+// off. Like locking, it never acts through a symlink.
 func (p *Protector) Unlock(ctx context.Context) {
 	if p.OS != "darwin" {
 		return
