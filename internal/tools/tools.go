@@ -113,16 +113,6 @@ func (t *Tools) platform(libc string) string {
 
 func (t *Tools) configFile() string { return filepath.Join(t.Root, "tools", "mise.toml") }
 
-// All returns every tool in tools/mise.toml.
-func (t *Tools) All() ([]string, error) {
-	data, err := os.ReadFile(t.configFile())
-	if err != nil {
-		return nil, err
-	}
-	names, _ := configTools(data)
-	return names, nil
-}
-
 // lockConfig is the mise.toml the lock was resolved from.
 func (t *Tools) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
 

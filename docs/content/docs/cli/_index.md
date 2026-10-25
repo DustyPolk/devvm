@@ -11,6 +11,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
+- [devvm gc](devvm_gc.md): Delete stale images and unused tool images
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm images rm](devvm_images_rm.md): Delete images, by name or by key

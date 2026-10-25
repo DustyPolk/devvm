@@ -60,7 +60,7 @@ The resolving runs on this machine, with a mise of devvm's own: a pinned release
 
 A tool whose newest version isn't published for every platform yet (a release still uploading, a tag with no release, Node's musl builds for a few days) gets the newest of its next five older versions that is, and devvm says so. The next check tries the newest again.
 
-A new VM gets the lock's versions, checked again first when the last check was more than a day ago. A changed `tools/mise.toml` (a devvm upgrade) is resolved again. A VM lists its tool images in its state, so a newer version never changes a VM that has one. `DEVVM_NO_TOOL_CHECK=1` turns off the daily check.
+A new VM gets the lock's versions, checked again first when the last check was more than a day ago. A changed `tools/mise.toml` (a devvm upgrade) is resolved again. A VM lists its tool images in its state, so a newer version never changes a VM that has one. Older versions no VM has are unused, and `devvm gc` deletes them ([cleaning up](#cleaning-up)). `DEVVM_NO_TOOL_CHECK=1` turns off the daily check.
 
 ### Building tools
 
@@ -125,7 +125,7 @@ So:
 - A layer whose script is gone hashes as missing, so its images no longer match.
 - Nothing else counts: features you haven't chosen, and network policy files (`*.policy`, which the proxy reads at run time and never go into an image), change no key.
 
-An image whose key no longer matches its inputs is stale. It stays until it's deleted, and the next use builds a new one.
+An image whose key no longer matches its inputs is stale. It stays until it's deleted (`devvm gc`, [cleaning up](#cleaning-up)), and the next use builds a new one.
 
 ### Rebuilding
 
@@ -163,7 +163,7 @@ Then the [shared tool images](#shared-tools) in the share, by the name images ha
 | `VMS` | how many VMs have it in their state |
 | `STATE` | `current`: the tools lock's version, for the C library of the base new VMs get (`--from` changes it); `in use`: another version a VM has; `unused`: neither; `not built`: the lock's version of a tool the share has others of; `not installed`: nothing of the name's is in the share |
 
-Listing never resolves the tools lock: before there is one, no tool image is current, and those no VM has show no state.
+Listing never resolves the tools lock: before there is one, no tool image is current, and those no VM has show no state. After the tables, on stderr, devvm says how many images are stale or unfinished and how much disk the unused tool images take, when any are.
 
 ### Deleting images
 
@@ -172,6 +172,15 @@ Listing never resolves the tools lock: before there is one, no tool image is cur
 - A name is its image as it is now, on base from `--from` when it's given. A stale or unfinished image has only its key.
 - Each must be built, or nothing is deleted. Shared tools aren't images: a name with any (`node+foo`) is refused.
 - A deleted image is built again the next time it's needed. VMs made from it keep working: on macOS they're clones of its disk. On Linux hosts, an image whose disk VMs are overlays of is refused, naming them.
+
+### Cleaning up
+
+`devvm gc` deletes what `devvm images` lists as stale or unfinished, on every backend, with their records, and the shared tool images it lists as `unused`, with their hashes. It lists them first, and in a terminal asks; without one, it goes ahead.
+
+- VMs are never deleted, nor is a current image or a tool image any VM's state lists: a stopped VM's, or one deleted outside devvm whose state is left.
+- On Linux hosts, a stale image whose disk VMs are overlays of stays, and devvm says which VMs use it.
+- It holds the share's lock throughout, so no tool build or `devvm update` changes the share meanwhile.
+- A tool image is unused only against the tools lock: before there is one, gc deletes none. `current` is for the C library of the base new VMs get, so after an Alpine VM is gone, its musl tool images are unused unless gc is given that `--from`.
 
 ## Ports
 
@@ -250,6 +259,6 @@ A build that fails later, in its script or as it starts or stops, keeps the imag
 LIMA_HOME=~/.local/share/devvm/lima limactl shell --start devvm-img-<key>
 ```
 
-`--start` starts it first, outside the build's confinement. The next build of that image deletes it and starts over.
+`--start` starts it first, outside the build's confinement. The next build of that image deletes it and starts over, and `devvm gc` deletes it too.
 
 Either way, the images under it, already built, stay. Any image found without its record (a failed build's, or one devvm couldn't clean up after, such as after a crash or a power cut) is deleted and built again.

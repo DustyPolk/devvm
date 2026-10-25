@@ -3,10 +3,10 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -216,45 +216,35 @@ func (t *Tools) batch(ctx context.Context, b backend.Backend, base string, lock 
 	return nil
 }
 
-// Garbage returns the tool images in the share that are neither current
-// (the lock's versions, for a base with libc) nor in use (listed by a VM),
-// and with tmp the temporary files of interrupted builds too (only with
-// the share's lock held).
-func (t *Tools) Garbage(ctx context.Context, libc string, inUse []string, tmp bool) ([]string, error) {
-	entries, err := os.ReadDir(t.Dirs.Tools())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-	all, err := t.All()
-	if err != nil {
-		return nil, err
-	}
-	lock, err := t.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	live := map[string]bool{}
-	for _, tool := range all {
-		f, err := t.File(lock, tool, libc)
-		if err != nil {
-			return nil, err
-		}
-		live[f] = true
-	}
-	for _, f := range inUse {
-		live[f] = true
-	}
-	var out []string
-	for _, e := range entries {
-		n := e.Name()
-		if !e.Type().IsRegular() {
-			continue
-		}
-		if strings.HasSuffix(n, ".erofs") && !live[n] || tmp && strings.HasSuffix(n, ".tmp") {
-			out = append(out, filepath.Join(t.Dirs.Tools(), n))
+// Unused returns the tool images of a List that it calls unused: neither
+// the lock's version nor listed by a VM. Without a lock, none is. Callers
+// deleting them hold the share's lock from before the List, so no build
+// or lock swap changes the share meanwhile.
+func Unused(ls []Listed) []Listed {
+	var out []Listed
+	for _, l := range ls {
+		if l.State == StateUnused && l.File != "" {
+			out = append(out, l)
 		}
 	}
-	return out, nil
+	return out
+}
+
+// Delete deletes tool images from the share, with their hashes. Only
+// tool image names are taken, nothing else in the share.
+func (t *Tools) Delete(files []string) error {
+	for _, f := range files {
+		if _, _, ok := image.ParseToolFile(f); !ok || filepath.Base(f) != f {
+			return fmt.Errorf("not a tool image: %q", f)
+		}
+	}
+	for _, f := range files {
+		p := filepath.Join(t.Dirs.Tools(), f)
+		for _, name := range []string{p, p + ".sha256"} {
+			if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
 }

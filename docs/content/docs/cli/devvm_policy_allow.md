@@ -1,6 +1,6 @@
 ---
 title: devvm policy allow
-weight: 14
+weight: 15
 ---
 
 Allow hosts for this folder's VM

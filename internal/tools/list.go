@@ -28,9 +28,10 @@ type Listed struct {
 	Name    string // the name images have it by: node (for node, pnpm and bun), claude
 	Tool    string // "" when nothing of Name's is in the share
 	Version string
-	Built   bool  // the share has it; Size and VMs are its
-	Size    int64 // the disk space it takes
-	VMs     int   // how many VMs list it in their state
+	File    string // its image file in the share, when Built
+	Built   bool   // the share has it; Size and VMs are its
+	Size    int64  // the disk space it takes
+	VMs     int    // how many VMs list it in their state
 	// State is one of the State constants; "" for an image the VMs don't
 	// list when there's no lock to tell whether it's current.
 	State string
@@ -100,7 +101,7 @@ func (t *Tools) List(libc string, inUse map[string]int) ([]Listed, error) {
 				if err != nil {
 					return nil, err
 				}
-				l := Listed{Name: name, Tool: tool, Version: v, Built: true, Size: size, VMs: inUse[f]}
+				l := Listed{Name: name, Tool: tool, Version: v, File: f, Built: true, Size: size, VMs: inUse[f]}
 				switch {
 				case f == current:
 					l.State = StateCurrent

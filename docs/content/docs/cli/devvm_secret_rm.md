@@ -1,6 +1,6 @@
 ---
 title: devvm secret rm
-weight: 26
+weight: 27
 ---
 
 Delete a saved token

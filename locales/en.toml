@@ -305,7 +305,7 @@ other = "running {{.script}} in {{.vm}}"
 
 [script_failed]
 description = "lima_home is devvm's Lima home, quoted for a shell"
-other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build deletes it"
+other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
 
 [interrupted_image]
 other = "interrupted: deleting the unfinished image {{.vm}}"
@@ -350,7 +350,44 @@ other = "there's no image {{.image}}: devvm images lists them"
 other = "there's no image {{.image}} from {{.from}}: devvm images lists them"
 
 [tools_not_images_rm]
-other = "{{.image}} names shared tools, which aren't images: name the image under them"
+other = "{{.image}} names shared tools, which aren't images: name the image under them; devvm gc deletes unused tool images"
+
+[images_stale_note]
+one = "{{.count}} image is stale or unfinished: devvm gc deletes it"
+other = "{{.count}} images are stale or unfinished: devvm gc deletes them"
+
+[images_unused]
+other = "{{.size}} of tool images unused: devvm gc frees it"
+
+[gc_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't clean up: {{.reason}}"
+
+[nothing_to_clean]
+other = "nothing to clean up"
+
+[gc_images]
+other = "stale and unfinished images:"
+
+[gc_image]
+other = "  {{.image}} ({{.key}})"
+
+[gc_unfinished]
+other = "  {{.key}}, left over from a failed build"
+
+[gc_tools]
+one = "{{.count}} unused tool image ({{.size}})"
+other = "{{.count}} unused tool images ({{.size}})"
+
+[gc_confirm]
+other = "delete them? VMs aren't touched"
+
+[nothing_deleted]
+other = "nothing deleted"
+
+[deleted_tools]
+one = "deleted {{.count}} unused tool image"
+other = "deleted {{.count}} unused tool images"
 
 [vm_outdated]
 description = "changed is a comma-separated list of image names"

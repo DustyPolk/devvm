@@ -32,9 +32,24 @@ func newImagesCmd(g *globals) *cobra.Command {
 			"whether it's the tools lock's version, in use, unused, or the lock's and not built yet.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			imgs, ts, err := listImages(cmd.Context(), g)
+			b, err := builder(g.backend)
+			var imgs []listedImage
+			var ts []tools.Listed
+			if err == nil {
+				b.From = g.fromRef()
+				imgs, ts, err = listImages(cmd.Context(), b)
+			}
 			fail(err, msg.ImagesFailed)
-			return writeImages(imgs, ts)
+			if err := writeImages(imgs, ts); err != nil {
+				return err
+			}
+			if n := len(staleImages(imgs)); n > 0 {
+				ui.Note(msg.ImagesStaleNote(n))
+			}
+			if size := toolsSize(tools.Unused(ts)); size > 0 {
+				ui.Note(msg.ImagesUnused(humanSize(size)))
+			}
+			return nil
 		},
 	}
 	c.AddCommand(&cobra.Command{
@@ -72,22 +87,39 @@ func newImagesCmd(g *globals) *cobra.Command {
 	return c
 }
 
-// listedImage is an image and its backend's name.
+// listedImage is an image, its backend's name and a builder on it.
 type listedImage struct {
 	build.Listed
 	Backend string
+	builder *build.Builder
+}
+
+// staleImages returns the images that aren't current: stale, or
+// unfinished.
+func staleImages(imgs []listedImage) []listedImage {
+	var out []listedImage
+	for _, l := range imgs {
+		if l.State != build.StateCurrent {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// toolsSize is the disk the tool images take.
+func toolsSize(ts []tools.Listed) int64 {
+	var n int64
+	for _, t := range ts {
+		n += t.Size
+	}
+	return n
 }
 
 // listImages lists the images on every backend, and the shared tools for
-// the base new VMs get. A backend that can't list fails it only when a
-// VM's state names that backend.
-func listImages(ctx context.Context, g *globals) ([]listedImage, []tools.Listed, error) {
+// the base new VMs get on b (its backend and From). A backend that can't
+// list fails it only when a VM's state names that backend.
+func listImages(ctx context.Context, b *build.Builder) ([]listedImage, []tools.Listed, error) {
 	defer ui.Status(msg.ReadingImages())()
-	b, err := builder(g.backend)
-	if err != nil {
-		return nil, nil, err
-	}
-	b.From = g.fromRef()
 	if err := from.Check(b.From); err != nil {
 		return nil, nil, err
 	}
@@ -97,7 +129,8 @@ func listImages(ctx context.Context, g *globals) ([]listedImage, []tools.Listed,
 	}
 	var imgs []listedImage
 	for _, be := range reg.All() {
-		ls, err := (&build.Builder{Dirs: b.Dirs, Root: b.Root, Backend: be, Tools: b.Tools}).Listing(ctx)
+		bb := &build.Builder{Dirs: b.Dirs, Root: b.Root, Backend: be, Tools: b.Tools}
+		ls, err := bb.Listing(ctx)
 		if err != nil {
 			if used, uerr := vm.BackendUsed(b.Dirs, be.Name()); uerr != nil {
 				return nil, nil, uerr
@@ -110,7 +143,7 @@ func listImages(ctx context.Context, g *globals) ([]listedImage, []tools.Listed,
 			return nil, nil, err
 		}
 		for _, l := range ls {
-			imgs = append(imgs, listedImage{Listed: l, Backend: be.Name()})
+			imgs = append(imgs, listedImage{Listed: l, Backend: be.Name(), builder: bb})
 		}
 	}
 	libc, err := b.BaseLibc()

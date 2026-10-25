@@ -1,0 +1,80 @@
+# gc: deletes what devvm images lists as stale or unfinished, and the
+# tool images it lists as unused, after listing them; not a terminal, so
+# it doesn't ask. Never a project VM (one named like an image included),
+# a current image, or a tool image a VM's state lists.
+env DEVVM_MESSAGES=names
+env IMAGES=$XDG_DATA_HOME/devvm/images
+env SHARE=$XDG_DATA_HOME/devvm/tools
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# Nothing built.
+exec devvm gc
+stdout '^==> nothing_to_clean$'
+! stderr .
+
+# base, foo on it and claude's tools; then foo is edited (stale), and
+# there's a build that didn't finish, an image whose record is corrupt,
+# one without a key's shape, and project VMs, one from a folder named
+# img-foo.
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+exec devvm build foo
+exec devvm build claude
+exec sh -c 'for i in base foo; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
+exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
+exec sh -c 'printf "devvm-img-000000000000\ndevvm-img-111111111111\ndevvm-img-node\ndevvm-img-foo-12345612345612\ndevvm-web-12345612345612\n" >> "$STUB_DIR/instances"'
+exec sh -c 'echo "not a record" > "$IMAGES/111111111111"'
+
+# Tool images: claude's (current), an old go a VM lists, one a VM that's
+# gone outside devvm still lists in its state, and an old one nothing
+# lists, with its hash.
+exec sh -c 'cd "$SHARE" && for f in go-1.20.0 go-1.19.0 go-1.9.0; do echo x > $f-0123456789ab.erofs; echo x > $f-0123456789ab.erofs.sha256; done'
+mkdir $VMS
+exec sh -c 'printf "image=go\ndir=/p\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
+exec sh -c 'printf "image=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$VMS/devvm-gone-12345612345612"'
+
+# devvm images says how many images gc deletes, and what it frees.
+exec devvm images
+stdout '^foo .* stale '
+stderr '^images_stale_note count=4$'
+stderr '^images_unused size=\S+$'
+
+exec sh -c ': > "$STUB_LOG"'
+exec devvm gc
+stdout '^gc_images\n'
+stdout '^gc_image image=foo key=[0-9a-f]{12}$'
+stdout '^gc_unfinished key=000000000000$'
+stdout '^gc_unfinished key=111111111111$'
+stdout '^gc_unfinished key=node$'
+stdout '^gc_tools count=1 size=\S+$'
+stdout -count=1 '^==> deleted_image '
+stdout -count=3 '^==> deleted_unfinished_build '
+stdout '^==> deleted_tools count=1$'
+! stdout 'image=base'
+exec sh -c 'grep "^limactl delete" "$STUB_LOG" | sort'
+cp stdout deleted
+exec sh -c 'printf "limactl delete -f devvm-img-%s\n" 000000000000 111111111111 "$(cat foo.key)" node | sort'
+cmp stdout deleted
+
+# What's left: base, the project VMs and their records; the tool images
+# that are current or listed; nothing in the share is locked.
+exec sh -c 'grep -c . "$STUB_DIR/instances"'
+stdout '^3$'
+exec sh -c 'grep -q "^devvm-img-$(cat base.key) " "$STUB_DIR/instances" && grep -q "^devvm-img-foo-12345612345612" "$STUB_DIR/instances" && grep -q "^devvm-web-12345612345612" "$STUB_DIR/instances"'
+exec sh -c 'test -f "$IMAGES/$(cat base.key)" && ! test -e "$IMAGES/$(cat foo.key)" && ! test -e "$IMAGES/111111111111"'
+! exists $SHARE/go-1.9.0-0123456789ab.erofs
+! exists $SHARE/go-1.9.0-0123456789ab.erofs.sha256
+exists $SHARE/go-1.20.0-0123456789ab.erofs
+exists $SHARE/go-1.19.0-0123456789ab.erofs
+exec sh -c 'ls "$SHARE"/claude-*.erofs'
+! exists $SHARE/.lock
+
+# Again: nothing left, and devvm images has nothing to say.
+exec devvm gc
+stdout '^==> nothing_to_clean$'
+exec devvm images
+! stderr .
+
+-- foo.sh --
+#!/bin/bash
+echo foo

@@ -1,6 +1,6 @@
 ---
 title: devvm policy deny
-weight: 15
+weight: 16
 ---
 
 Deny hosts for this folder's VM

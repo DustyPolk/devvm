@@ -39,6 +39,7 @@ devvm [IMAGE] [flags]
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
+- [devvm gc](devvm_gc.md): Delete stale images and unused tool images
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked

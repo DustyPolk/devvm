@@ -723,26 +723,56 @@ func TestLockShare(t *testing.T) {
 	}
 }
 
-// gc's list: tool images neither current nor listed by a VM, and with tmp
-// the temporary files of interrupted builds.
-func TestGarbage(t *testing.T) {
+// gc's list: the tool images List calls unused, neither current nor
+// listed by a VM; none without a lock. Delete takes them and their
+// hashes, and nothing but tool images.
+func TestUnusedAndDelete(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	cur := e.files(t, "node")[0]
 	old, used := "node-24.1.0-0123456789ab.erofs", "node-24.2.0-0123456789ab.erofs"
-	for _, f := range []string{cur, old, used, "x.erofs.tmp", ".lock"} {
-		write(t, filepath.Join(e.Dirs.Tools(), f), nil)
+	for _, f := range []string{cur, old, old + ".sha256", used, "x.erofs.tmp", ".lock"} {
+		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
 	}
-	got, err := e.Garbage(t.Context(), "gnu", []string{used}, true)
-	if err != nil {
+	if err := os.Remove(e.Dirs.ToolLock()); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{filepath.Join(e.Dirs.Tools(), old), filepath.Join(e.Dirs.Tools(), "x.erofs.tmp")}
-	if !slices.Equal(got, want) {
-		t.Errorf("Garbage = %q, want %q", got, want)
+	unused := func() []string {
+		ls, err := e.List("gnu", map[string]int{used: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var files []string
+		for _, l := range Unused(ls) {
+			files = append(files, l.File)
+		}
+		return files
 	}
-	if got, _ := e.Garbage(t.Context(), "gnu", nil, false); len(got) != 2 || got[1] != filepath.Join(e.Dirs.Tools(), used) {
-		t.Errorf("Garbage without tmp = %q", got)
+	if got := unused(); len(got) != 0 {
+		t.Errorf("Unused without a lock = %q", got)
+	}
+	e.locked(t, fixture(t))
+	got := unused()
+	if want := []string{old}; !slices.Equal(got, want) {
+		t.Fatalf("Unused = %q, want %q", got, want)
+	}
+	if err := e.Delete(got); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{old, old + ".sha256"} {
+		if _, err := os.Stat(filepath.Join(e.Dirs.Tools(), f)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	for _, f := range []string{cur, used, "x.erofs.tmp", ".lock"} {
+		if _, err := os.Stat(filepath.Join(e.Dirs.Tools(), f)); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	for _, bad := range []string{".lock", "../" + cur, "x.erofs.tmp"} {
+		if err := e.Delete([]string{bad}); err == nil {
+			t.Errorf("Delete(%q) took it", bad)
+		}
 	}
 }
 
@@ -971,14 +1001,11 @@ func TestMounts(t *testing.T) {
 	}
 }
 
-func TestAll(t *testing.T) {
-	e := newEnv(t)
-	got, err := e.All()
-	if err != nil {
-		t.Fatal(err)
-	}
+// tools/mise.toml's tools, and the fixture lock has each.
+func TestConfigTools(t *testing.T) {
+	got, _ := configTools(read(t, repo(t, "tools", "mise.toml")))
 	if want := []string{"node", "pnpm", "bun", "python", "uv", "go", "rust", "claude", "codex", "opencode"}; !slices.Equal(got, want) {
-		t.Errorf("All = %q, want %q", got, want)
+		t.Errorf("configTools = %q, want %q", got, want)
 	}
 	if locked := lockTools(fixture(t)); !slices.Equal(slices.Sorted(slices.Values(got)), locked) {
 		t.Errorf("the fixture lock has %q", locked)

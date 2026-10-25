@@ -2,6 +2,8 @@
 
 package msg
 
+import "strconv"
+
 // AddInPlace is [add_in_place]: "{{.vm}} was made from {{.image}}. Add {{.missing}} to it in place?"
 func AddInPlace(image string, missing string, vm string) M {
 	return M{id: "add_in_place", vals: []val{{"image", image}, {"missing", missing}, {"vm", vm}}}
@@ -407,6 +409,11 @@ func DeletedOldImage(image string, key string) M {
 	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
 }
 
+// DeletedTools is [deleted_tools]: "deleted {{.count}} unused tool images"
+func DeletedTools(count int) M {
+	return M{id: "deleted_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // DeletedUnfinishedBuild is [deleted_unfinished_build]: "deleted {{.key}}, left over from a failed build"
 func DeletedUnfinishedBuild(key string) M {
 	return M{id: "deleted_unfinished_build", vals: []val{{"key", key}}}
@@ -535,6 +542,36 @@ func FromNotFound(from string, host string) M {
 // FromUnreachable is [from_unreachable]: "can't reach {{.host}} to look up {{.from}} (offline?)"
 func FromUnreachable(from string, host string) M {
 	return M{id: "from_unreachable", vals: []val{{"from", from}, {"host", host}}}
+}
+
+// GCConfirm is [gc_confirm]: "delete them? VMs aren't touched"
+func GCConfirm() M {
+	return M{id: "gc_confirm"}
+}
+
+// GCFailed is [gc_failed]: "couldn't clean up: {{.reason}}"
+func GCFailed(reason string) M {
+	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
+}
+
+// GCImage is [gc_image]: "  {{.image}} ({{.key}})"
+func GCImage(image string, key string) M {
+	return M{id: "gc_image", vals: []val{{"image", image}, {"key", key}}}
+}
+
+// GCImages is [gc_images]: "stale and unfinished images:"
+func GCImages() M {
+	return M{id: "gc_images"}
+}
+
+// GCTools is [gc_tools]: "{{.count}} unused tool images ({{.size}})"
+func GCTools(count int, size string) M {
+	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
+}
+
+// GCUnfinished is [gc_unfinished]: "  {{.key}}, left over from a failed build"
+func GCUnfinished(key string) M {
+	return M{id: "gc_unfinished", vals: []val{{"key", key}}}
 }
 
 // GitAppeared is [git_appeared]: "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
@@ -695,6 +732,16 @@ func ImagesFailed(reason string) M {
 // ImagesRmFailed is [images_rm_failed]: "couldn't delete the images: {{.reason}}"
 func ImagesRmFailed(reason string) M {
 	return M{id: "images_rm_failed", vals: []val{{"reason", reason}}}
+}
+
+// ImagesStaleNote is [images_stale_note]: "{{.count}} images are stale or unfinished: devvm gc deletes them"
+func ImagesStaleNote(count int) M {
+	return M{id: "images_stale_note", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// ImagesUnused is [images_unused]: "{{.size}} of tool images unused: devvm gc frees it"
+func ImagesUnused(size string) M {
+	return M{id: "images_unused", vals: []val{{"size", size}}}
 }
 
 // InterruptedImage is [interrupted_image]: "interrupted: deleting the unfinished image {{.vm}}"
@@ -1092,6 +1139,16 @@ func NothingChanged() M {
 	return M{id: "nothing_changed"}
 }
 
+// NothingDeleted is [nothing_deleted]: "nothing deleted"
+func NothingDeleted() M {
+	return M{id: "nothing_deleted"}
+}
+
+// NothingToClean is [nothing_to_clean]: "nothing to clean up"
+func NothingToClean() M {
+	return M{id: "nothing_to_clean"}
+}
+
 // OCIWaiting is [oci_waiting]: "waiting for another devvm's --from conversion to finish"
 func OCIWaiting() M {
 	return M{id: "oci_waiting"}
@@ -1292,7 +1349,7 @@ func SavedNamesTaken(remote string, vm string) M {
 	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
 }
 
-// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build deletes it"
+// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with LIMA_HOME={{.lima_home}} limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
 func ScriptFailed(limaHome string, script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"lima_home", limaHome}, {"script", script}, {"vm", vm}}}
 }
@@ -1542,7 +1599,7 @@ func ToolsNotImages(tools string) M {
 	return M{id: "tools_not_images", vals: []val{{"tools", tools}}}
 }
 
-// ToolsNotImagesRm is [tools_not_images_rm]: "{{.image}} names shared tools, which aren't images: name the image under them"
+// ToolsNotImagesRm is [tools_not_images_rm]: "{{.image}} names shared tools, which aren't images: name the image under them; devvm gc deletes unused tool images"
 func ToolsNotImagesRm(image string) M {
 	return M{id: "tools_not_images_rm", vals: []val{{"image", image}}}
 }
@@ -1780,6 +1837,7 @@ var specs = map[string]spec{
 	"deleted":                     {fields: []string{"vm"}},
 	"deleted_image":               {fields: []string{"image", "key"}},
 	"deleted_old_image":           {fields: []string{"image", "key"}},
+	"deleted_tools":               {plural: true, fields: []string{"count"}},
 	"deleted_unfinished_build":    {fields: []string{"key"}},
 	"deleting":                    {fields: []string{"vm"}},
 	"detected":                    {fields: []string{"found"}},
@@ -1806,6 +1864,12 @@ var specs = map[string]spec{
 	"from_ignored":                {fields: []string{"vm"}},
 	"from_not_found":              {fields: []string{"from", "host"}},
 	"from_unreachable":            {fields: []string{"from", "host"}},
+	"gc_confirm":                  {},
+	"gc_failed":                   {fields: []string{"reason"}},
+	"gc_image":                    {fields: []string{"image", "key"}},
+	"gc_images":                   {},
+	"gc_tools":                    {plural: true, fields: []string{"count", "size"}},
+	"gc_unfinished":               {fields: []string{"key"}},
 	"git_appeared":                {},
 	"git_commondir":               {fields: []string{"git", "target"}},
 	"git_config_failed":           {fields: []string{"config"}},
@@ -1838,6 +1902,8 @@ var specs = map[string]spec{
 	"image_ready":                 {fields: []string{"image"}},
 	"images_failed":               {fields: []string{"reason"}},
 	"images_rm_failed":            {fields: []string{"reason"}},
+	"images_stale_note":           {plural: true, fields: []string{"count"}},
+	"images_unused":               {fields: []string{"size"}},
 	"interrupted_image":           {fields: []string{"vm"}},
 	"interrupted_vm":              {fields: []string{"vm"}},
 	"keeping":                     {fields: []string{"image"}},
@@ -1917,6 +1983,8 @@ var specs = map[string]spec{
 	"not_an_image":                {fields: []string{"name"}},
 	"not_setup_token":             {},
 	"nothing_changed":             {},
+	"nothing_deleted":             {},
+	"nothing_to_clean":            {},
 	"oci_waiting":                 {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
 	"policy_failed":               {fields: []string{"reason"}},

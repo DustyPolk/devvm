@@ -8,7 +8,8 @@
 #                restart, devvm size, devvm ports, devvm git-protect and rm, an agent VM's folders and exported history, and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
-#                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
+#                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
+#                image and an unused tool image, keeping base and a VM named like an image; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
 #                stay on the host (devvm secret too), and the self-check, on relaunch too
@@ -24,9 +25,9 @@
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project clone tools network from"
+sections_all="images project clone gc tools network from"
 usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone tools network"
+clean=false sel="images project clone gc tools network"
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
@@ -487,6 +488,35 @@ check "rm -f deletes it and the remote fully; the fetched work stays as a local 
   [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&
   grep -qF \"\$(m saved_branches 'branches=\"saved/devvm/main\"' | head -1)\" '$work/last.log' && [[ ! -e '$ch/.ssh/config' ]]"
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+fi
+
+if want gc; then
+section "gc"
+# A folder named img-*: its VM is named like an image (devvm-img-keep-<hash>), and isn't one.
+g=$(newproj img-keep)
+launch "$g" exit --no-network-policy base
+kg=$(sed -n 's/^chain=base=\([0-9a-f]*\)$/\1/p' "$vms/$vm" 2>/dev/null)
+gfix=$layers/e2egc.sh
+printf '#!/bin/bash\necho gc\n' > "$gfix"
+check "a fixture layer, edited after its build, is stale" bash -c "'$D' build e2egc </dev/null >'$work/last.log' 2>&1 &&
+  echo '# edited' >> '$gfix' && '$D' images </dev/null 2>/dev/null | grep -qE '^e2egc .* stale '"
+owned e2egc
+ko=$(keys_of e2egc | head -1)
+# An old tool image no VM lists: unused only once there's a tools lock.
+old=node-0.0.1-000000000000.erofs
+[[ ! -f $lock ]] || { : > "$share/$old"; : > "$share/$old.sha256"; }
+check "gc deletes the stale image and its record; base and the img-* project VM stay" bash -c "
+  [[ -n '$vm' && -n '$kg' && -n '$ko' ]] && '$D' gc </dev/null >'$work/last.log' 2>&1 &&
+  [[ -z \$(status_of devvm-img-$ko) && ! -e '$images/$ko' ]] &&
+  [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg' ]] && [[ \$(status_of $vm) == Running ]]"
+if [[ -f $lock ]]; then
+  check "gc deletes a tool image no VM uses, with its hash" bash -c "[[ ! -e '$share/$old' && ! -e '$share/$old.sha256' ]]"
+else
+  skip "gc deletes a tool image no VM uses, with its hash" "no tools lock yet"
+fi
+check "gc again finds nothing to clean up" bash -c "'$D' gc </dev/null 2>&1 | grep -qxF \"==> \$(m nothing_to_clean)\""
+rm -f "$gfix" "$share/$old" "$share/$old.sha256"
+(cd "$g" && quiet "$D" rm -f)
 fi
 
 if want tools; then

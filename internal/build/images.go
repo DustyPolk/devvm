@@ -153,6 +153,13 @@ func (b *Builder) Delete(ctx context.Context, refs []string) error {
 	return nil
 }
 
+// DeleteKey deletes the image with this key, with its record. The backend
+// may refuse it as a message: on Linux hosts, one whose disk VMs use
+// (image_in_use).
+func (b *Builder) DeleteKey(ctx context.Context, key string) error {
+	return b.deleteImage(ctx, key)
+}
+
 // recordName is the name in an image's record, "" when it has none.
 func (b *Builder) recordName(key string) string {
 	rec, err := state.ReadImage(b.Dirs, key)
