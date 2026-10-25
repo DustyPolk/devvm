@@ -1,7 +1,7 @@
-# What guest/sync.sh sets up in a VM, its pieces run here: the prompt,
+# What assets/guest/sync.sh sets up in a VM, its pieces run here: the prompt,
 # what the proxy blocked, the merge of Claude Code's settings, and VS
 # Code's settings.
-exec bash snippets.sh $DEVVM_BIN/guest/sync.sh
+exec bash snippets.sh $DEVVM_BIN/assets/guest/sync.sh
 
 # The prompt starts with (devvm), after a theme that rebuilds PS1 before
 # each prompt; with no theme, once.

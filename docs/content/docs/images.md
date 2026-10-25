@@ -5,11 +5,11 @@ weight: 20
 
 ## Base
 
-`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `--from` starts it from a container image instead ([details](from.md)). `base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `layers/base.sh` installs it, then the optional [features](customizing.md) you chose.
+`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `--from` starts it from a container image instead ([details](from.md)). `assets/base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `assets/layers/base.sh` installs it, then the optional [features](customizing.md) you chose.
 
 It drops the server extras Ubuntu's cloud image comes with: snapd, multipath, ModemManager, udisks, firmware updates, crash reporting, tracing tools, kernel headers, and apt's background updates and upgrades. That saves 0.9 GB of disk and 100 MB of memory per VM. The everyday tools stay (htop, tmux, lsof, strace, tcpdump, rsync, nano and so on).
 
-Each download in `layers/base.sh` is pinned to a version and SHA-256 at the top of the script, and the build fails if a checksum doesn't match. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and Docker's packages are pinned by version. Project VMs use the live archive, so `apt upgrade` gets current updates.
+Each download in `assets/layers/base.sh` is pinned to a version and SHA-256 at the top of the script, and the build fails if a checksum doesn't match. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and Docker's packages are pinned by version. Project VMs use the live archive, so `apt upgrade` gets current updates.
 
 ### Ubuntu's cloud image
 
@@ -18,7 +18,7 @@ Ubuntu removes its dated cloud images after a few months, so base doesn't pin on
 The image is checked before it's used:
 
 - Its SHA-256 comes from that release's `SHA256SUMS`, and the download must match it. A checksum that isn't 64 hex digits is ignored.
-- When `gpgv` is installed (`brew install gnupg`, or `apt install gpgv`), `SHA256SUMS` must be signed by Ubuntu's cloud image key, pinned in `layers/ubuntu-cloud.gpg` (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`). No other key counts. When the signature is missing or doesn't match, devvm refuses the image.
+- When `gpgv` is installed (`brew install gnupg`, or `apt install gpgv`), `SHA256SUMS` must be signed by Ubuntu's cloud image key, pinned in `assets/layers/ubuntu-cloud.gpg` (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`). No other key counts. When the signature is missing or doesn't match, devvm refuses the image.
 - Without `gpgv`, devvm says so, and only the HTTPS download vouches for the checksums.
 
 The Ubuntu image isn't part of base's key: a newer one doesn't make base stale. base's record keeps the one it was built from (its address and SHA-256), and `devvm rebuild base` takes the newest.
@@ -54,19 +54,19 @@ Each tool version is built once into a compressed read-only image (EROFS) in `~/
 
 ### Versions
 
-devvm doesn't pin the tools' versions: agents like Claude Code release several times a week. `tools/mise.toml` says which releases to follow: the latest of each, and Node 24. The first time a tool is needed, devvm resolves it to upstream's newest releases, with each download's checksum for every platform VMs run (Linux, glibc and musl), into the tools lock, `~/.local/share/devvm/mise.lock`. Builds install exactly the lock's versions, checked against those checksums. Resolving needs to be online once; until then, devvm says so.
+devvm doesn't pin the tools' versions: agents like Claude Code release several times a week. `assets/shared-tools/mise.toml` says which releases to follow: the latest of each, and Node 24. The first time a tool is needed, devvm resolves it to upstream's newest releases, with each download's checksum for every platform VMs run (Linux, glibc and musl), into the tools lock, `~/.local/share/devvm/mise.lock`. Builds install exactly the lock's versions, checked against those checksums. Resolving needs to be online once; until then, devvm says so.
 
 The resolving runs on this machine, with a mise of devvm's own: a pinned release, downloaded once into `~/.local/share/devvm/mise/<version>` and checked against its SHA-256 before it runs. It never uses the mise you have installed, and nothing it does reaches your own mise config.
 
 A tool whose newest version isn't published for every platform yet (a release still uploading, a tag with no release, Node's musl builds for a few days) gets the newest of its next five older versions that is, and devvm says so. The next check tries the newest again.
 
-A new VM gets the lock's versions, checked again first when the last check was more than a day ago. A changed `tools/mise.toml` (a devvm upgrade) is resolved again. A VM lists its tool images in its state, so a newer version never changes a VM that has one. Older versions no VM has are unused, and `devvm gc` deletes them ([cleaning up](#cleaning-up)). `DEVVM_NO_TOOL_CHECK=1` turns off the daily check.
+A new VM gets the lock's versions, checked again first when the last check was more than a day ago. A changed `assets/shared-tools/mise.toml` (a devvm upgrade) is resolved again. A VM lists its tool images in its state, so a newer version never changes a VM that has one. Older versions no VM has are unused, and `devvm gc` deletes them ([cleaning up](#cleaning-up)). `DEVVM_NO_TOOL_CHECK=1` turns off the daily check.
 
 ### Building tools
 
 The tool images an image name needs are built with it (`devvm build node+claude`), unless the share has them. They build in a throwaway VM made from base, confined like an image build, which never sees the share: it writes into a folder of its own, `~/.local/share/devvm/tools-build.<random>`, and is deleted once it's done. devvm then checks each image is a plain file (not a link), moves it into the share and records its hash. Go builds in a VM of its own, never with other tools. One build at a time writes to the share: another devvm waits for it, and gives up after ten minutes.
 
-Each tool image is named `<tool>-<version>-<key>.erofs`, and its key hashes the tool's entry in the tools lock (its version, downloads and their checksums), `tools/build.sh` and the C library it's built for. A new version, a new download or an edited build script builds it again, and a base with a different C library (Alpine's musl) gets its own. A tool the lock has no download of for the VM's platform isn't built: devvm says to try again later.
+Each tool image is named `<tool>-<version>-<key>.erofs`, and its key hashes the tool's entry in the tools lock (its version, downloads and their checksums), `assets/shared-tools/build.sh` and the C library it's built for. A new version, a new download or an edited build script builds it again, and a base with a different C library (Alpine's musl) gets its own. A tool the lock has no download of for the VM's platform isn't built: devvm says to try again later.
 
 Shared tools aren't images, so `devvm rebuild` refuses them: their versions come from the lock.
 
@@ -103,7 +103,7 @@ Each image is built in a VM of its own, which then is the image:
 
 1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings, or with `--from`, from a container image [converted into a disk](from.md#how-its-converted). A layer's VM is a copy of its parent image.
 2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement).
-3. The script runs: `layers/base.sh` for base, then its chosen [features](customizing.md), yours for a layer.
+3. The script runs: `assets/layers/base.sh` for base, then its chosen [features](customizing.md), yours for a layer.
 4. The VM stops. Its record is written last, with its chain, what base started from, and its C library.
 
 Nothing from the host is mounted into a build: layer scripts run third-party installers, which mustn't see your files. base gets `base.yaml`'s memory, or half the host's when that would leave the host less than 2 GiB. The images built on it, and their VMs, keep that.
@@ -114,7 +114,7 @@ Images are built in layers and cached, like Docker's. `base` comes first, and ea
 
 | Image | Its key hashes |
 | --- | --- |
-| `base` | the backend, `base.yaml`, `layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it |
+| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it |
 | a custom layer | its parent's key, its name, its script (`~/.config/devvm/layers/<name>.sh`) and its rebuild counter |
 
 So:

@@ -83,8 +83,8 @@ type Smolvm struct {
 	Runner Runner
 	// OS and Arch are the host's, as Go names them.
 	OS, Arch string
-	// Root holds devvm's own files: base.yaml (base's CPUs, memory and
-	// disk).
+	// Root holds devvm's own files, its assets/: base.yaml (base's CPUs,
+	// memory and disk).
 	Root string
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
@@ -142,7 +142,7 @@ func New(d paths.Dirs, u UI) *Smolvm {
 		kvm = "/dev/kvm"
 	}
 	return &Smolvm{
-		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Root: filepath.Dir(self),
+		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Root: paths.RootOf(self),
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
 		Digest: from.NewRegistry().Digest, KVM: kvm,
 		Terminal: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },

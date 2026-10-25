@@ -50,18 +50,18 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 	}
 	f := backendtest.New("fake", caps)
 	f.Built = backend.Built{Origin: "https://example.com/ubuntu.img sha256:1111", Libc: "gnu"}
-	// The shared tools: the repo's tools/, the stub mise resolving the
+	// The shared tools: the repo's assets/shared-tools/, the stub mise resolving the
 	// fixture lock.
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"mise.toml", "build.sh"} {
-		data, err := os.ReadFile(filepath.Join(repo, "tools", name)) //nolint:gosec // the repo's own files
+		data, err := os.ReadFile(filepath.Join(repo, "assets", "shared-tools", name)) //nolint:gosec // the repo's own files
 		if err != nil {
 			t.Fatal(err)
 		}
-		write(t, filepath.Join(root, "tools", name), string(data))
+		write(t, filepath.Join(root, "shared-tools", name), string(data))
 	}
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	tl := tools.New(d, root, quietUI{})

@@ -26,7 +26,7 @@ func node() Tool {
 }
 
 func toolRoot(script string) fstest.MapFS {
-	return fstest.MapFS{"tools/build.sh": {Data: []byte(script)}}
+	return fstest.MapFS{"shared-tools/build.sh": {Data: []byte(script)}}
 }
 
 func toolFile(t *testing.T, root fstest.MapFS, tool Tool) string {
@@ -53,7 +53,7 @@ func TestToolFile(t *testing.T) {
 		change func(*Tool)
 	}{
 		{"the lock entry", root, func(t *Tool) { t.LockEntry = append(t.LockEntry, "# edit\n"...) }},
-		{"tools/build.sh", toolRoot("#!/bin/bash\n# edit\n"), func(*Tool) {}},
+		{"shared-tools/build.sh", toolRoot("#!/bin/bash\n# edit\n"), func(*Tool) {}},
 		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc = "musl" }},
 		{"the version", root, func(t *Tool) { t.Version = "24.22.0" }},
 		{"the format (smolvm's)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
@@ -89,7 +89,7 @@ func TestToolFileRefuses(t *testing.T) {
 		}
 	}
 	if _, err := ToolFile(fstest.MapFS{}, node()); err == nil {
-		t.Error("no tools/build.sh: no error")
+		t.Error("no shared-tools/build.sh: no error")
 	}
 }
 

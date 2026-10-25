@@ -84,7 +84,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `DEVVM_KVM` | `stub/kvm`, a file standing in for Linux's `/dev/kvm` |
 | `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
 | `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
-| `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml`, `layers/`, `tools/`, `guest/` and `oci/` next to it |
+| `DEVVM_BIN` | the folder of the built `devvm`, with a copy of `assets/` next to it |
 | `DEVVM_REPO` | the checkout, for the scripts in `scripts/`, which tests copy into a throwaway repo before running |
 
 `$WORK`, the script's own folder, is the current folder.
@@ -114,13 +114,13 @@ limactl list
 | `STUB_UNAME_M` | `uname -m` |
 | `STUB_SW_VERS` | `sw_vers -productVersion` |
 
-`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. In the shared tools' build VM, its `shell` writes the images `build.sh` is asked for into the build's folder (or, on request, a symlink instead), and it keeps what a VM's setup is sent as `$STUB_DIR/sync.tar`. In the `--from` build VM, its `shell` writes what `oci/build.sh` would (or, on request, a hostile disk, command line, C library or symlink), and a call naming `$STUB_DIR/interrupt-on`'s text interrupts devvm, as Ctrl+C would. `docker` has an image only when `$STUB_DIR/docker-image` holds its ID, and its `save` writes a tarball naming it (or `$STUB_DIR/docker-saved`'s, a tag that moved); it isn't running with `$STUB_DIR/docker-down`. A direct connection from a VM (the self-check's) fails, as a confined VM's does, unless `$STUB_DIR/net-direct` exists. A `--clone` VM's git runs on the host, on `$STUB_DIR/vmfs/<folder>`, and `ssh` pushes to and fetches from there (it fails with `$STUB_DIR/ssh-fails`). `security` stands in for the Keychain: an item is `$STUB_DIR/keychain/<account>`. `tmutil` records exclusions in `$STUB_DIR/tm-excluded`, never in Time Machine. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
+`limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. In the shared tools' build VM, its `shell` writes the images `build.sh` is asked for into the build's folder (or, on request, a symlink instead), and it keeps what a VM's setup is sent as `$STUB_DIR/sync.tar`. In the `--from` build VM, its `shell` writes what `assets/oci/build.sh` would (or, on request, a hostile disk, command line, C library or symlink), and a call naming `$STUB_DIR/interrupt-on`'s text interrupts devvm, as Ctrl+C would. `docker` has an image only when `$STUB_DIR/docker-image` holds its ID, and its `save` writes a tarball naming it (or `$STUB_DIR/docker-saved`'s, a tag that moved); it isn't running with `$STUB_DIR/docker-down`. A direct connection from a VM (the self-check's) fails, as a confined VM's does, unless `$STUB_DIR/net-direct` exists. A `--clone` VM's git runs on the host, on `$STUB_DIR/vmfs/<folder>`, and `ssh` pushes to and fetches from there (it fails with `$STUB_DIR/ssh-fails`). `security` stands in for the Keychain: an item is `$STUB_DIR/keychain/<account>`. `tmutil` records exclusions in `$STUB_DIR/tm-excluded`, never in Time Machine. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
 
 devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOME` or devvm's own folders, which it refuses as project folders.
 
 ## End-to-end tests
 
-`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with `base.yaml`, `layers/`, `tools/`, `guest/` and `oci/` next to it, and runs every check through that binary:
+`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, with a copy of `assets/` next to it, and runs every check through that binary:
 
 | | |
 | --- | --- |

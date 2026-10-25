@@ -77,7 +77,8 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	// The shared tools' versions come from the stub mise: the fixture lock.
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	tl := tools.New(d, repo, testUI{t})
+	assets := filepath.Join(repo, "assets")
+	tl := tools.New(d, assets, testUI{t})
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {
 			return filepath.Join(repo, "testdata", "stubs", "mise")
@@ -100,7 +101,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	var execs []backend.Command
 	home := filepath.Join(root, "home")
 	e := &Env{
-		Dirs: d, Root: repo, Registry: reg, Tools: tl, Proxy: testProxy(t, d, repo, home), Dir: dir, Home: home, OS: "darwin",
+		Dirs: d, Root: assets, Registry: reg, Tools: tl, Proxy: testProxy(t, d, assets, home), Dir: dir, Home: home, OS: "darwin",
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
 			p := gitprotect.New(dir, quiet)

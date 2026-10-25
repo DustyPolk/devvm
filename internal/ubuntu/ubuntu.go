@@ -2,7 +2,7 @@
 // release of the series with an image for the host, and the image's
 // checksum from that release's SHA256SUMS. When gpgv is installed,
 // SHA256SUMS must be signed by Ubuntu's cloud image key, pinned in devvm's
-// layers/ubuntu-cloud.gpg.
+// assets/layers/ubuntu-cloud.gpg.
 //
 // The image itself isn't downloaded here: the backend fetches it and checks
 // it against the digest.

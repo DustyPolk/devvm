@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run as root in base's build machine, before layers/base.sh: a container image has what Lima's
+# Run as root in base's build machine, before assets/layers/base.sh: a container image has what Lima's
 # cloud images bring (sudo, CA certificates, bash) and the VM's user, as the host's: its name and
 # uid (virtiofs shows the project folder as the host user's), home /home/NAME.guest. The user's
 # password is * (none matches), not locked: sshd without PAM refuses a locked account's keys too.

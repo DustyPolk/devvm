@@ -14,8 +14,8 @@ class Devvm < Formula
     ENV["CGO_ENABLED"] = "0"
     ldflags = "-s -w -X github.com/w3cj/devvm/internal/cli.version=#{version}"
     system "go", "build", *std_go_args(ldflags:, output: libexec/"devvm"), "./cmd/devvm"
-    # devvm finds its files next to itself, following the bin link.
-    libexec.install "base.yaml", "layers", "features", "tools", "guest", "oci"
+    # devvm finds its files in assets/ next to itself, following the bin link.
+    libexec.install "assets"
     bin.install_symlink libexec/"devvm"
   end
 

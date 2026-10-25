@@ -1,6 +1,6 @@
 #!/bin/bash
-# Update the versions and checksums pinned in layers/base.sh, features/*.sh, tools/build.sh, oci/build.sh
-# and internal/tools/mise.go (devvm's host mise).
+# Update the versions and checksums pinned in assets/ (layers/base.sh, features/*.sh,
+# shared-tools/build.sh, oci/build.sh) and internal/tools/mise.go (devvm's host mise).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
 # Tools: apt docker mise rustup crane omb eza tealdeer
@@ -85,7 +85,7 @@ pin3() {   # pin3 FILE PREFIX VERSION SHA_ARM64 SHA_AMD64
 
 # The package snapshot base builds from: today's (UTC).
 bump_apt() {
-  local f=layers/base.sh cur new
+  local f=assets/layers/base.sh cur new
   cur=$(get $f apt_snapshot); new=$(date -u +%Y%m%dT000000Z)
   report apt "$cur" "$new" || return 0
   set_var $f apt_snapshot "$new"
@@ -93,7 +93,7 @@ bump_apt() {
 
 # Docker's packages: the newest of each in its repository for base's Ubuntu release, and its signing key.
 bump_docker() {
-  local f=layers/base.sh idx p var new sha
+  local f=assets/layers/base.sh idx p var new sha
   idx=$(fetch https://download.docker.com/linux/ubuntu/dists/resolute/stable/binary-arm64/Packages)
   for p in docker-ce:docker containerd.io:containerd docker-buildx-plugin:buildx \
       docker-compose-plugin:compose docker-model-plugin:model; do
@@ -113,7 +113,7 @@ bump_docker() {
 # mise in base, and on the host (devvm's host mise, the same version: it writes the lock base's mise
 # installs from), from the release's published checksums.
 bump_mise() {
-  local f=layers/base.sh cur new sums
+  local f=assets/layers/base.sh cur new sums
   cur=$(get $f mise_version); new=$(gh_latest jdx/mise); new=${new#v}
   report mise "$cur" "$new" || return 0
   sums=$(fetch "https://github.com/jdx/mise/releases/download/v$new/SHASUMS256.txt")
@@ -131,7 +131,7 @@ bump_mise() {
 }
 
 bump_rustup() {
-  local f=tools/build.sh cur new u
+  local f=assets/shared-tools/build.sh cur new u
   cur=$(get $f rustup_version)
   new=$(fetch https://static.rust-lang.org/rustup/release-stable.toml | sed -n "s/^version = '\(.*\)'/\1/p")
   report rustup "$cur" "$new" || return 0
@@ -143,7 +143,7 @@ bump_rustup() {
 }
 
 bump_eza() {
-  local f=features/cli-tools.sh cur new u
+  local f=assets/features/cli-tools.sh cur new u
   cur=$(get $f eza_version); new=$(gh_latest eza-community/eza); new=${new#v}
   report eza "$cur" "$new" || return 0
   echo "            (checksums computed from the downloads)"
@@ -152,7 +152,7 @@ bump_eza() {
 }
 
 bump_tealdeer() {   # publishes a .sha256 next to each binary
-  local f=features/cli-tools.sh cur new u
+  local f=assets/features/cli-tools.sh cur new u
   cur=$(get $f tealdeer_version); new=$(gh_latest tealdeer-rs/tealdeer); new=${new#v}
   report tealdeer "$cur" "$new" || return 0
   u="https://github.com/tealdeer-rs/tealdeer/releases/download/v$new"
@@ -162,7 +162,7 @@ bump_tealdeer() {   # publishes a .sha256 next to each binary
 
 # crane (go-containerregistry), which --from pulls images with, from the release's checksums.txt.
 bump_crane() {
-  local f=oci/build.sh cur new sums
+  local f=assets/oci/build.sh cur new sums
   cur=$(get $f crane_version); new=$(gh_latest google/go-containerregistry); new=${new#v}
   report crane "$cur" "$new" || return 0
   sums=$(fetch "https://github.com/google/go-containerregistry/releases/download/v$new/checksums.txt")
@@ -171,7 +171,7 @@ bump_crane() {
 }
 
 bump_omb() {
-  local f=features/omb.sh cur new
+  local f=assets/features/omb.sh cur new
   cur=$(get $f omb_commit); new=$(gh_head ohmybash/oh-my-bash)
   report omb "${cur:0:12}" "${new:0:12}" || return 0
   set_var $f omb_commit "$new"

@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -105,7 +104,7 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	e, err := vm.NewEnv(dirs, filepath.Dir(self), self, reg, u)
+	e, err := vm.NewEnv(dirs, paths.RootOf(self), self, reg, u)
 	if err != nil {
 		return nil, err
 	}

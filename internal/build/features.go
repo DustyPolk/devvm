@@ -15,7 +15,7 @@ import (
 )
 
 // Features returns the base image features there are: devvm's own
-// (features/<name>.sh), sorted, then the user's (paths.Dirs.Features),
+// (assets/features/<name>.sh), sorted, then the user's (paths.Dirs.Features),
 // sorted. shadowed holds the user's scripts named like one of devvm's,
 // which are ignored.
 func (b *Builder) Features() (features, shadowed []string) {

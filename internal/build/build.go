@@ -25,7 +25,7 @@ import (
 // Builder builds images on one backend.
 type Builder struct {
 	Dirs    paths.Dirs
-	Root    string // devvm's own files: base.yaml, layers/, features/, oci/ (paths.Root)
+	Root    string // devvm's own files, its assets/: base.yaml, layers/, features/, oci/ (paths.Root)
 	Backend backend.Backend
 	Review  backend.Review // what Backend's features are checked against
 	Tools   *tools.Tools   // the shared tools image names hold

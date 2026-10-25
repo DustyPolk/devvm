@@ -43,7 +43,7 @@ type converted struct {
 
 // convert turns spec.From into a disk, kernel and initrd, without Docker
 // (unless only Docker has the image): a throwaway VM from Ubuntu's cloud
-// image runs oci/build.sh, where crane pulls exactly the recorded digest
+// image runs assets/oci/build.sh, where crane pulls exactly the recorded digest
 // and bootify.sh adds what a container lacks. The image's own code runs as
 // root in that VM, so everything it writes is untrusted: it gets only a
 // subfolder of devvm's temporary folder, and what comes out is checked

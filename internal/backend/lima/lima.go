@@ -48,7 +48,7 @@ type Lima struct {
 	OS, Arch string
 	// Self is devvm's binary, which the QEMU wrapper runs.
 	Self string
-	// Root holds devvm's own files: base.yaml, layers/, oci/.
+	// Root holds devvm's own files, its assets/: base.yaml, layers/, oci/.
 	Root string
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
@@ -102,7 +102,7 @@ func New(d paths.Dirs, u UI) *Lima {
 			self = r
 		}
 	}
-	root := filepath.Dir(self)
+	root := paths.RootOf(self)
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Root: root, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,

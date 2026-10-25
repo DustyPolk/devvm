@@ -3,11 +3,11 @@
 // is one read-only image in the share, built once in a throwaway VM and
 // mounted into every VM that uses it, where mise runs it.
 //
-// Which versions is per user: tools/mise.toml says which releases (node 24,
+// Which versions is per user: assets/shared-tools/mise.toml says which releases (node 24,
 // the latest claude), and the host's mise resolves it into the tools lock,
 // with each download's checksum per platform. Builds install exactly the
 // lock's versions, checked against those checksums. The lock is resolved
-// on first use and again when tools/mise.toml changes; once a day a
+// on first use and again when mise.toml changes; once a day a
 // launch resolves it again in the background, so VMs can move to newer
 // versions. A VM lists its tool images in its state, so a newer version
 // never changes a VM that has one.
@@ -44,7 +44,8 @@ const checkEvery = 24 * time.Hour
 // change them.
 type Tools struct {
 	Dirs paths.Dirs
-	// Root holds devvm's own files: tools/mise.toml and tools/build.sh.
+	// Root holds devvm's own files, its assets/: shared-tools/mise.toml
+	// and shared-tools/build.sh.
 	Root string
 	// Self is devvm's binary, which the daily check runs.
 	Self string
@@ -126,7 +127,7 @@ func (t *Tools) platform(libc string) string {
 	return p
 }
 
-func (t *Tools) configFile() string { return filepath.Join(t.Root, "tools", "mise.toml") }
+func (t *Tools) configFile() string { return filepath.Join(t.Root, "shared-tools", "mise.toml") }
 
 // lockConfig is the mise.toml the lock was resolved from.
 func (t *Tools) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
@@ -135,7 +136,7 @@ func (t *Tools) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
 func (t *Tools) checkedFile() string { return t.Dirs.ToolLock() + ".checked" }
 
 // Lock returns the tools lock, resolving it first when there's none yet or
-// tools/mise.toml changed since (a devvm upgrade).
+// shared-tools/mise.toml changed since (a devvm upgrade).
 func (t *Tools) Lock(ctx context.Context) (Lock, error) {
 	want, err := os.ReadFile(t.configFile())
 	if err != nil {
@@ -249,7 +250,7 @@ func (t *Tools) Check(ctx context.Context) {
 // and its backend's image format.
 type Target struct {
 	Libc   string // gnu or musl
-	Format string // the backend's ToolFormat: "" for tools/build.sh's own
+	Format string // the backend's ToolFormat: "" for shared-tools/build.sh's own
 }
 
 // File returns a tool's image file at the lock's version, for a VM of

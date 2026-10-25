@@ -11,7 +11,7 @@ devvm --from alpine:3 build base     # just the image
 DEVVM_FROM=node:24 devvm             # a default for every new VM and build
 ```
 
-Everything above `base` builds and runs as usual: `layers/base.sh`, your layers and the [shared tools](images.md#shared-tools). Images from different `--from` images are cached side by side, each `base` and the images on it apart from the others, and each image's record keeps the image its base came from and its digest.
+Everything above `base` builds and runs as usual: `assets/layers/base.sh`, your layers and the [shared tools](images.md#shared-tools). Images from different `--from` images are cached side by side, each `base` and the images on it apart from the others, and each image's record keeps the image its base came from and its digest.
 
 `--from` applies to new VMs and to `devvm build` and `devvm rebuild`. An existing VM keeps what it was made from: its state records it (`from=`), and adding to it, `devvm update` and `devvm remove` build on that `base`. Naming another `--from` for it is ignored, with a warning.
 
@@ -19,8 +19,8 @@ Everything above `base` builds and runs as usual: `layers/base.sh`, your layers 
 
 devvm turns the image into a disk in a throwaway VM, `devvm-oci-build`, made from Ubuntu's cloud image with `base.yaml`'s settings. No Docker is needed:
 
-1. [crane](https://github.com/google/go-containerregistry/tree/main/cmd/crane) downloads exactly the digest in `base`'s key, for this machine's architecture, and flattens its layers. crane is pinned like every download: its version and SHA-256 are at the top of `oci/build.sh`, checked with `sha256sum`.
-2. `oci/bootify.sh`, in a chroot of the image, adds what a container lacks to boot as a VM: a kernel and initramfs, an init system (systemd, or OpenRC on Alpine), cloud-init, sshd and sudo, and your user in the VM.
+1. [crane](https://github.com/google/go-containerregistry/tree/main/cmd/crane) downloads exactly the digest in `base`'s key, for this machine's architecture, and flattens its layers. crane is pinned like every download: its version and SHA-256 are at the top of `assets/oci/build.sh`, checked with `sha256sum`.
+2. `assets/oci/bootify.sh`, in a chroot of the image, adds what a container lacks to boot as a VM: a kernel and initramfs, an init system (systemd, or OpenRC on Alpine), cloud-init, sshd and sudo, and your user in the VM.
 3. `mke2fs` writes the image's files into a raw ext4 disk; `base` grows it to `base.yaml`'s size.
 
 devvm then deletes the build VM and creates `base` from the disk, booting its kernel and initrd directly. One conversion runs at a time: another devvm's waits for it, and takes over the turn of a devvm that ended without giving it up.
@@ -29,7 +29,7 @@ devvm then deletes the build VM and creates `base` from the disk, booting its ke
 
 The image's own code runs as root in the build VM, so devvm treats what it writes as hostile:
 
-- The build VM is [confined](lima.md#confinement) like any build: it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `oci/` folder, read-only, and a folder of devvm's own, writable: `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself but an [image only Docker has](#images-only-docker-has), before the VM starts.
+- The build VM is [confined](lima.md#confinement) like any build: it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `assets/oci/` folder, read-only, and a folder of devvm's own, writable: `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself but an [image only Docker has](#images-only-docker-has), before the VM starts.
 - What comes out is checked once the build VM is gone. Each file must be a regular file (a link could point Lima at a file on this machine), the kernel command line can hold only letters, digits, spaces and `=,./:_-` (it goes into Lima's config), the C library must be `gnu` or `musl`, and the disk must be raw ext4 (another format, such as qcow2, can name files on this machine as its backing file). Anything else is refused, and `base` isn't created.
 - The build VM and the temporary folder are deleted however the run ends, Ctrl+C included.
 

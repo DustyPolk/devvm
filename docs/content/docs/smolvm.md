@@ -29,7 +29,7 @@ Images aren't machines: each is a pack (`smolvm pack create --from-vm`) in `~/.l
 ## Building images
 
 - `base` starts from Ubuntu's container image (`ubuntu:26.04`), by the digest its registry has at the time, which its record keeps. With `--from`, from that image by its recorded digest; an image only Docker has is refused (`smolvm_from_registry_only`).
-- Before `layers/base.sh`, devvm adds what Ubuntu's cloud image has and a container lacks: `sudo`, CA certificates, `bash` and the VM's user, and after base's scripts `sshd` (without host keys: each VM makes its own). It's your user name and uid, as on Lima, with its home at `/home/<you>.guest`: the project folder shows as your uid's, and only that user can write it. It has no password that works (`*`).
+- Before `assets/layers/base.sh`, devvm adds what Ubuntu's cloud image has and a container lacks: `sudo`, CA certificates, `bash` and the VM's user, and after base's scripts `sshd` (without host keys: each VM makes its own). It's your user name and uid, as on Lima, with its home at `/home/<you>.guest`: the project folder shows as your uid's, and only that user can write it. It has no password that works (`*`).
 - The scripts run as that user, with stand-ins for `systemctl` and `rc-update` while they run: base's services are enabled the Lima way, and devvm starts them itself (below). The stand-ins are gone before the image is packed.
 - Builds use smolvm's default network: the internet, not the host's loopback. A pack keeps its build machine's network, CPUs and memory, so devvm sets all three on every VM it makes.
 - Base's CPUs, memory and disk are `base.yaml`'s: 4 CPUs, 8 GiB (half the host's memory on a small host), 100 GiB.

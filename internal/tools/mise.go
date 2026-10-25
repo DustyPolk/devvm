@@ -144,7 +144,7 @@ func miseCmd(ctx context.Context, mise, dir string, args ...string) (*exec.Cmd, 
 	return cmd, nil
 }
 
-// Resolve resolves tools/mise.toml to the newest matching releases, for
+// Resolve resolves shared-tools/mise.toml to the newest matching releases, for
 // every platform VMs run, into out (and out.toml, the mise.toml it's
 // from). Every tool, or nothing: offline, or with a tool mise can't
 // resolve, it writes nothing and returns tools_resolve_failed, with the

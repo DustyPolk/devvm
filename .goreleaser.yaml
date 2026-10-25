@@ -17,7 +17,7 @@ builds:
       - -s -w -X github.com/w3cj/devvm/internal/cli.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-# One archive per platform: the binary and the files it reads next to itself.
+# One archive per platform: the binary and the files it reads next to itself, in assets/.
 archives:
   - id: devvm
     ids: [devvm]
@@ -32,17 +32,9 @@ archives:
         info: *info
       - src: CHANGELOG.md
         info: *info
-      - src: base.yaml
+      - src: assets/base.yaml
         info: *info
-      - src: layers/*
-        info: *info
-      - src: features/*
-        info: *info
-      - src: tools/*
-        info: *info
-      - src: guest/*
-        info: *info
-      - src: oci/*
+      - src: assets/**/*
         info: *info
 
 # The source, for the Homebrew formula, which builds from it.

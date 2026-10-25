@@ -34,7 +34,7 @@ import (
 // (SelfCheck). NewProxy sets every field; tests change them.
 type Proxy struct {
 	Dirs    paths.Dirs
-	Root    string // devvm's own files: layers/, tools/
+	Root    string // devvm's own files, its assets/: layers/, shared-tools/
 	Self    string // devvm's binary, which runs as the proxy
 	OS      string // the host's, as Go names it
 	Secrets *secrets.Store

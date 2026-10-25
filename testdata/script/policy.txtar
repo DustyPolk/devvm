@@ -67,7 +67,7 @@ exec devvm policy allow --global '*.corp.test'
 # The rules in effect, file by file, comments left out.
 exec sh -c 'echo "# mine" >> "$GLOBAL"'
 exec devvm policy
-stdout '^# \S*/layers/base\.policy$'
+stdout '^# \S*/assets/layers/base\.policy$'
 stdout '^  github\.com$'
 stdout '^# \S*/config/devvm/policy\n  \*\.corp\.test\n# \S*/vms/devvm-net-[0-9a-f]{14}\.policy\n  !bad\.example\.com\n  example\.com\n'
 ! stdout mine

@@ -1,6 +1,6 @@
 # oci
 
-Turns a Docker image into a disk Lima boots directly, for `--from` ([Starting from a container image](../docs/content/docs/from.md)). devvm runs it in a throwaway VM booted from Ubuntu's cloud image; no Docker needed.
+Turns a Docker image into a disk Lima boots directly, for `--from` ([Starting from a container image](../../docs/content/docs/from.md)). devvm runs it in a throwaway VM booted from Ubuntu's cloud image; no Docker needed.
 
 | File | What |
 |---|---|

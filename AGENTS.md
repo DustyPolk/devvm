@@ -21,7 +21,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files (errors aren't messages yet) |
 | `internal/platform/`, `internal/ubuntu/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads) |
-| `base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/` | base's Lima template and scripts; base's optional features; shared tools (`mise.toml`, `build.sh`, `*.policy`); in-VM scripts sent on every launch; `--from`'s conversion (see its `README.md`) |
+| `assets/` | the files devvm ships, read from beside its binary (`paths.Root`): `base.yaml`, `layers/` (base's Lima template and scripts), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`) |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |
 | `scripts/`, `packaging/`, `.goreleaser.yaml`, `VERSION`, `CHANGELOG.md` | `bump.sh` (pins), `release.sh` (signed-tag checks around GoReleaser, then minisign); the Homebrew formula; `VERSION` is read by the scripts only |
@@ -43,10 +43,10 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **Credentials never go into images.** Host agent history never goes into VMs.
 - **Never auto-delete project VMs:** they may hold unsaved work. Warn instead.
 - **The startup check only reports.** Never install host software without asking.
-- **Image keys hash everything that goes into an image**, the backend included. A tool image's key is its lock entry, `tools/build.sh` and the libc.
-- **Pin every download** in `layers/`, `features/`, `tools/build.sh`, `oci/build.sh`: `<tool>_version` and `<tool>_sha256_arm64`/`_amd64` at the top, fetched with `devvm-fetch` (`oci/build.sh`: `sha256sum`). No `curl | sh`, no "latest". Upstream-checked exceptions: shared tools (`MISE_LOCKED=1`), Ubuntu's signed `SHA256SUMS`, Lima in `install.sh`. Go checks a download's SHA-256 before use.
-- **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `tools/build.sh`, or off.
-- **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`layers/`, `features/`, `tools/build.sh`, `guest/`, `oci/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.
+- **Image keys hash everything that goes into an image**, the backend included. A tool image's key is its lock entry, `assets/shared-tools/build.sh` and the libc.
+- **Pin every download** in `assets/`'s `layers/`, `features/`, `shared-tools/build.sh`, `oci/build.sh`: `<tool>_version` and `<tool>_sha256_arm64`/`_amd64` at the top, fetched with `devvm-fetch` (`oci/build.sh`: `sha256sum`). No `curl | sh`, no "latest". Upstream-checked exceptions: shared tools (`MISE_LOCKED=1`), Ubuntu's signed `SHA256SUMS`, Lima in `install.sh`. Go checks a download's SHA-256 before use.
+- **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `assets/shared-tools/build.sh`, or off.
+- **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`assets/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.
 - **Docs:** succinct and explicit. Every behavior change updates its page in `docs/content/docs/` in the same task; a page's parts not ported yet come with their tasks. The README stays high level.
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.
 - **Ask first** before anything outward-facing (publishing, releases, repos, pushing) and before deleting anything you didn't create.
@@ -87,7 +87,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 
 - **Unit tests** are Go table tests next to the code; **CLI tests** are testscript against the built binary in a `/tmp` sandbox, stubs first on `PATH` (`stub_calls`). New logic needs a test. Neither touches the Keychain, real VMs or the user's folders; state-writing tests point the XDG folders at `t.TempDir()`. Go tests never run up: scripts do.
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
-- **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `gc` (an `img-*` folder's VM, a stale fixture), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
+- **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `gc` (an `img-*` folder's VM, a stale fixture), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `assets/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
 - **Linux hosts:** `LIMA_HOME=~/.lt-linux-go`, VM `linuxhost` (nested virtualization, the repo read-only, copied to `~/devvm`), set up as [testing.md](docs/content/docs/testing.md) says; never `~/.lt-linux`, which is the user's.
 - **`tests/e2e.sh --backend smolvm`** runs only the `smolvm` section (after touching `internal/backend/smolvm` or shared code); it acts only on machines with its sandbox's label. Unreviewed emulations are checked through `DEVVM_UNREVIEWED=backend:feature`, which only test builds (e2e's, the CLI tests', by ldflags) read.
 - **e2e to come:** network: git over SSH, opencode's login; tools: python, uv, claude, codex, rust, go, adding in place, gc.
@@ -109,7 +109,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **smolvm runs an image as a container in an Alpine microVM:** no init system, `exec` enters the container as root with only `HOME` set (no `USER`, no `/etc/environment`), `/dev` has no loop nodes (`mknod`), its EROFS mounts only uncompressed images, Docker needs `-v /var/lib/docker` and installs `systemctl` (tell systemd by `/run/systemd/system`). virtiofs shows host files as the host's uid, so the VM's user has it.
 - **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine, and a pack machine whose pack (stub and `.smolmachine`) is gone. `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`. On macOS it shares the user's machines (kept under `HOME`: a devvm run with another `HOME` sees others): touch only those with devvm's label.
 - **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`, at most 64 per machine (one is devvm's sshd's).
-- **smolvm base's packages before `layers/base.sh`** come from Ubuntu's live archive, then base.sh pins a snapshot: anything pulling systemd libraries (openssh-server) goes after base's scripts (`sshd.sh`), or Docker's packages can't be installed. Under mediated egress a refused connection still opens in the guest, then resets (test with data, not a connect); TCP and UDP to any port 53 go to its resolver; `--dns` is create-only; a machine once started mediated won't start without a decider until `--no-egress-interceptor`.
+- **smolvm base's packages before `assets/layers/base.sh`** come from Ubuntu's live archive, then base.sh pins a snapshot: anything pulling systemd libraries (openssh-server) goes after base's scripts (`sshd.sh`), or Docker's packages can't be installed. Under mediated egress a refused connection still opens in the guest, then resets (test with data, not a connect); TCP and UDP to any port 53 go to its resolver; `--dns` is create-only; a machine once started mediated won't start without a decider until `--no-egress-interceptor`.
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 
 ## Commits and tasks
@@ -130,17 +130,17 @@ The only place in the repo that mentions the bash devvm. It lives at `/Users/me/
 - No migrations from the bash's files or older state.
 
 Copied (here ← there):
-- `LICENSE`, `.shellcheckrc`, `layers/*`, `tools/*.policy`, `guest/tools.sh` ← same paths; `layers/base.sh` edited: sshd's forwarding
-- `base.yaml`, `tools/mise.toml`, `tools/build.sh`, `guest/sync.sh` ← same; edited: comment
+- `LICENSE`, `.shellcheckrc` ← same paths; `assets/layers/*`, `assets/shared-tools/*.policy`, `assets/guest/tools.sh` ← `layers/*`, `tools/*.policy`, `guest/tools.sh`; `assets/layers/base.sh` edited: sshd's forwarding, comment
+- `assets/base.yaml`, `assets/shared-tools/mise.toml`, `assets/shared-tools/build.sh`, `assets/guest/sync.sh` ← `base.yaml`, `tools/mise.toml`, `tools/build.sh`, `guest/sync.sh`; edited: comment
 - `.agents/skills/security-audit/`, `skills-lock.json` ← the bash repo's untracked files
 - `testdata/mise.lock`, `testdata/stubs/tmutil` ← `tests/fixtures/`, `tests/stubs/`
 - `testdata/stubs/{gpgv,mise}` ← `tests/stubs/`; edited: comment
 - `testdata/stubs/{limactl,qemu-img,security}` ← `tests/stubs/`, adapted
 - `testdata/stubs/docker` ← `tests/stubs/`
-- `oci/{bootify,kernel,try}.sh` ← same; `oci/build.sh`, `oci/README.md` ← same, edited: comment, docs link
+- `assets/oci/{bootify,kernel,try}.sh` ← `oci/`; `assets/oci/build.sh`, `assets/oci/README.md` ← `oci/`, edited: comment, docs link
 - `internal/proxy/` ← `devvm-proxy/` (`main.go` → `proxy.go`), adapted: `Main(args, IO)`, no `-connect`
 - `tests/e2e.sh` ← same, adapted: framework, `images`, `project` (relaunch, restart, rm, `.git` reports, agent folders), `clone`, `tools` (node half, `update`, `remove`), `network` (self-check on relaunch), `from` (no image only Docker has: it would build one in the user's Docker)
-- `features/*` ← same paths
+- `assets/features/*` ← `features/*`
 - `VERSION`, `scripts/release.sh` ← same, adapted: GoReleaser in a clone of the commit; `scripts/bump.sh` ← same, adapted: the host mise in `internal/tools/mise.go`; `packaging/homebrew/devvm.rb` ← same, adapted: builds with Go
 - `install.sh` ← same, adapted: the host's archive, older versions in use kept
 - `SECURITY.md` ← same, adapted: docs site links, `--ignore-missing`

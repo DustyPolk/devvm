@@ -113,7 +113,7 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"oci scripts without --from", "", func(e *env) { e.edit("root/oci/build.sh") }, nil},
 		{"the digest without --from", "", func(e *env) { e.in.FromDigest = "x@sha256:bbbb" }, nil},
 		{"a rebuild counter for --from", "", func(e *env) { e.edit("rebuilds/foo@node-24") }, nil},
-		{"the tools' build script", "", func(e *env) { e.edit("root/tools/build.sh") }, nil},
+		{"the tools' build script", "", func(e *env) { e.edit("root/shared-tools/build.sh") }, nil},
 
 		{"the --from digest (a moved tag)", "node:24", func(e *env) { e.in.FromDigest = "node@sha256:bbbb" }, all},
 		{"another --from", "node:24", func(e *env) { e.in.From = "node:25" }, all},
@@ -267,9 +267,9 @@ func TestKeyWithoutUserFolders(t *testing.T) {
 	}
 }
 
-// devvm's own files, at the top of the repo, give base a key.
+// devvm's own files, the repo's assets/, give base a key.
 func TestKeyOfTheRealFiles(t *testing.T) {
-	in := Inputs{Backend: "lima", Root: os.DirFS(filepath.Join("..", ".."))}
+	in := Inputs{Backend: "lima", Root: os.DirFS(filepath.Join("..", "..", "assets"))}
 	key, err := in.Key(Base)
 	if err != nil {
 		t.Fatal(err)

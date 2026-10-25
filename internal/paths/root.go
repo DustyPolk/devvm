@@ -1,5 +1,5 @@
-// Package paths names every folder and file devvm uses: its own files next
-// to the binary, and the folders it keeps state in.
+// Package paths names every folder and file devvm uses: its own files in
+// assets/ next to the binary, and the folders it keeps state in.
 package paths
 
 import (
@@ -8,15 +8,19 @@ import (
 	"path/filepath"
 )
 
-// Root returns the folder devvm's files are in: the one holding the
-// running binary, after following links.
+// Root returns the folder devvm's files are in: RootOf the running binary,
+// after following links.
 func Root() (string, error) {
 	self, err := Self()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Dir(self), nil
+	return RootOf(self), nil
 }
+
+// RootOf returns the folder the files of devvm's binary at self are in:
+// assets/ beside it.
+func RootOf(self string) string { return filepath.Join(filepath.Dir(self), "assets") }
 
 // Self returns the running binary's path, after following links.
 func Self() (string, error) {

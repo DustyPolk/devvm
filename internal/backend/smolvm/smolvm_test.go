@@ -58,7 +58,7 @@ func newSandbox(t *testing.T) sandbox {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := os.ReadFile(filepath.Join("..", "..", "..", "base.yaml"))
+	base, err := os.ReadFile(filepath.Join("..", "..", "..", "assets", "base.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

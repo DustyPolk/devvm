@@ -52,9 +52,9 @@ exec bash -c 'set -eo pipefail; source fn.sh; layer_fn base installed; dpkg_stub
 cmp stdout installed
 
 -- fn.sh --
-# layer_fn SCRIPT NAME: define NAME from layers/SCRIPT.sh (the scripts run
+# layer_fn SCRIPT NAME: define NAME from assets/layers/SCRIPT.sh (the scripts run
 # top to bottom when sourced).
-layer_fn() { eval "$(awk -v f="$2() " 'index($0, f) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$DEVVM_BIN/layers/$1.sh")"; }
+layer_fn() { eval "$(awk -v f="$2() " 'index($0, f) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$DEVVM_BIN/assets/layers/$1.sh")"; }
 # apt-get update prints the next of $STUB_DIR/apt.1, apt.2, ... and logs the
 # call; sleep only logs.
 apt_stub() {

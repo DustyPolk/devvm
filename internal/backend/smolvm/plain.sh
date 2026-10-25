@@ -1,6 +1,6 @@
 #!/bin/sh
-# Run as root in the tools build machine after tools/build.sh: smolvm's kernel mounts only
-# uncompressed EROFS, so each image build.sh made is unpacked and made again without compression,
+# Run as root in the tools build machine after assets/shared-tools/build.sh: smolvm's kernel
+# mounts only uncompressed EROFS, so each image build.sh made is unpacked and made again without compression,
 # its owners all root as build.sh has them. Unpacked on the machine's own disk: the host folder
 # the images are in keeps no modes.
 #   plain.sh DIR FILE...

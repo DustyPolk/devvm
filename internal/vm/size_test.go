@@ -81,8 +81,8 @@ func TestSizeCheck(t *testing.T) {
 }
 
 func TestBaseDisk(t *testing.T) {
-	if got := BaseDisk(filepath.Join("..", "..")); got != 100 {
-		t.Errorf("BaseDisk(the repo) = %v, want base.yaml's 100", got)
+	if got := BaseDisk(filepath.Join("..", "..", "assets")); got != 100 {
+		t.Errorf("BaseDisk(the repo's assets) = %v, want base.yaml's 100", got)
 	}
 	if got := BaseDisk(t.TempDir()); got != 0 {
 		t.Errorf("BaseDisk(no base.yaml) = %v", got)

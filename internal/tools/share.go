@@ -161,7 +161,7 @@ func (t *Tools) batch(ctx context.Context, b backend.Backend, base, format strin
 	}
 	spec := backend.ToolsSpec{
 		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: format, Net: backend.NetInternet,
-		Script: backend.Script{Name: "build.sh", Path: filepath.Join(t.Root, "tools", "build.sh")},
+		Script: backend.Script{Name: "build.sh", Path: filepath.Join(t.Root, "shared-tools", "build.sh")},
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {
 		return err

@@ -33,8 +33,9 @@ type Inputs struct {
 	// BackendFiles are the backend's own files that go into base
 	// (backend.KeyFiles), by name. Nil for none.
 	BackendFiles map[string][]byte
-	// Root holds devvm's own files: base.yaml, layers/base.sh, features/
-	// and oci/ (paths.Root).
+	// Root holds devvm's own files, its assets/: base.yaml,
+	// layers/base.sh, features/ and oci/ (paths.Root). Files are hashed
+	// by their names in it.
 	Root fs.FS
 	// Layers holds the user's layers, <name>.sh (paths.Dirs.Layers). Nil
 	// when there are none.

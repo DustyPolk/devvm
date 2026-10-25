@@ -83,7 +83,7 @@ func lockTools(l Lock) []string {
 	return out
 }
 
-// env is a sandbox: devvm's folders, a copy of tools/, the stub mise
+// env is a sandbox: devvm's folders, a copy of shared-tools/, the stub mise
 // resolving the fixture lock, and what the tools printed.
 type env struct {
 	*Tools
@@ -106,7 +106,7 @@ func newEnv(t *testing.T) env {
 	t.Setenv("MISE_STUB_FAIL", "")
 	root := filepath.Join(dir, "root")
 	for _, f := range []string{"mise.toml", "build.sh"} {
-		write(t, filepath.Join(root, "tools", f), read(t, repo(t, "tools", f)))
+		write(t, filepath.Join(root, "shared-tools", f), read(t, repo(t, "assets", "shared-tools", f)))
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
@@ -174,7 +174,7 @@ func TestLockResolvesOnce(t *testing.T) {
 		t.Error("the lock isn't what mise wrote")
 	}
 	if !bytes.Equal(read(t, e.lockConfig()), read(t, e.configFile())) {
-		t.Error("the lock's mise.toml isn't tools/mise.toml")
+		t.Error("the lock's mise.toml isn't shared-tools/mise.toml")
 	}
 	if _, err := os.Stat(e.checkedFile()); err != nil {
 		t.Error("not marked checked")
@@ -194,7 +194,7 @@ func TestLockResolvesOnce(t *testing.T) {
 	}
 }
 
-// A changed tools/mise.toml (a devvm upgrade) resolves again: every tool,
+// A changed shared-tools/mise.toml (a devvm upgrade) resolves again: every tool,
 // or nothing.
 func TestLockResolvesAgainWhenConfigChanges(t *testing.T) {
 	e := newEnv(t)
@@ -587,7 +587,7 @@ func TestBuild(t *testing.T) {
 		"node", lock.Version("node"), all[0], "bun", lock.Version("bun"), all[2], "claude", lock.Version("claude"), all[3],
 	}
 	if spec.Base != baseKey || spec.OutAt != ShareAt || spec.Net != backend.NetInternet || !slices.Equal(spec.Args, wantArgs) ||
-		spec.Script.Path != filepath.Join(e.Root, "tools", "build.sh") {
+		spec.Script.Path != filepath.Join(e.Root, "shared-tools", "build.sh") {
 		t.Errorf("spec = %+v", spec)
 	}
 	if filepath.Dir(spec.Out) != e.Dirs.Data || !strings.HasPrefix(filepath.Base(spec.Out), "tools-build.") {
@@ -1018,9 +1018,9 @@ func TestMounts(t *testing.T) {
 	}
 }
 
-// tools/mise.toml's tools, and the fixture lock has each.
+// shared-tools/mise.toml's tools, and the fixture lock has each.
 func TestConfigTools(t *testing.T) {
-	got, _ := configTools(read(t, repo(t, "tools", "mise.toml")))
+	got, _ := configTools(read(t, repo(t, "assets", "shared-tools", "mise.toml")))
 	if want := []string{"node", "pnpm", "bun", "python", "uv", "go", "rust", "claude", "codex", "opencode"}; !slices.Equal(got, want) {
 		t.Errorf("configTools = %q, want %q", got, want)
 	}

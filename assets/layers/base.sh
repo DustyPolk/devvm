@@ -1,5 +1,5 @@
 #!/bin/bash
-# Essentials, Docker, and mise for the shared tools (tools/).
+# Essentials, Docker, and mise for the shared tools (shared-tools/).
 # shellcheck disable=SC2034  # the checksums are read through sha()
 set -euxo pipefail
 # Pinned downloads (scripts/bump.sh updates them).

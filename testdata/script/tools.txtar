@@ -38,7 +38,7 @@ stdout '^ *8$'
 ! exists $SHARE/.lock
 exec sh -c 'ls -d "$DATA"/tools-build.* 2>/dev/null || true'
 ! stdout .
-# What the VM was sent: guest/sync.sh, guest/tools.sh and its tool list.
+# What the VM was sent: assets/guest/'s sync.sh and tools.sh, and its tool list.
 exec tar -xOf $STUB_DIR/sync.tar tools
 stdout '^node-24\.21\.0-[0-9a-f]{12}\.erofs node 24\.21\.0$'
 stdout '^claude-2\.1\.295-[0-9a-f]{12}\.erofs claude 2\.1\.295$'

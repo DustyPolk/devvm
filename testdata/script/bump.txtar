@@ -9,12 +9,12 @@ exec bash repo.sh
 exec repo/scripts/bump.sh crane
 stdout '^  crane +0\.22\.1 +-> 9\.9\.9$'
 stdout '^- crane: 0\.22\.1 -> 9\.9\.9$'
-exec grep '^crane_' repo/oci/build.sh
+exec grep '^crane_' repo/assets/oci/build.sh
 cmp stdout crane.want
 
 # mise moves base's mise and devvm's host mise together.
 exec repo/scripts/bump.sh mise
-exec grep '^mise_' repo/layers/base.sh
+exec grep '^mise_' repo/assets/layers/base.sh
 cmp stdout mise-base.want
 exec grep -E 'miseVersion =|"(macos|linux)-' repo/internal/tools/mise.go
 cmp stdout mise-go.want
@@ -23,21 +23,21 @@ cmp stdout mise-go.want
 # nothing is edited: a command for a checksum, one in a version, and a
 # missing asset (an empty checksum).
 exec bash repo.sh
-cp repo/oci/build.sh before
+cp repo/assets/oci/build.sh before
 cp sums-hostile up/crane-sums
 ! exec repo/scripts/bump.sh crane
 stderr '^bump: upstream gave crane_sha256_arm64 an unexpected value: '
-cmp repo/oci/build.sh before
+cmp repo/assets/oci/build.sh before
 cp sums-good up/crane-sums
 cp latest-hostile up/crane-latest
 ! exec repo/scripts/bump.sh crane
 stderr '^bump: upstream gave crane_version an unexpected value: '
-cmp repo/oci/build.sh before
+cmp repo/assets/oci/build.sh before
 cp latest-good up/crane-latest
 cp sums-missing up/crane-sums
 ! exec repo/scripts/bump.sh crane
 stderr '^bump: upstream gave crane_sha256_arm64 an unexpected value: '''''
-cmp repo/oci/build.sh before
+cmp repo/assets/oci/build.sh before
 ! exists pwned
 
 # The same for the host mise's pins, in Go.
@@ -53,7 +53,7 @@ cp latest-escape up/crane-latest
 exec repo/scripts/bump.sh --check crane
 stdout ' -> 9\.9\.9\[2J$'
 ! stdout '\x1b'
-cmp repo/oci/build.sh before
+cmp repo/assets/oci/build.sh before
 
 # An unknown tool: refused.
 ! exec repo/scripts/bump.sh nope
@@ -63,10 +63,10 @@ stderr '^bump: unknown tool ''nope'''
 # A copy of the files bump.sh edits, and upstream's good answers.
 set -eu
 rm -rf repo up
-mkdir -p repo/scripts repo/oci repo/layers repo/internal/tools up
+mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools up
 cp "$DEVVM_REPO/scripts/bump.sh" repo/scripts/
-cp "$DEVVM_REPO/oci/build.sh" repo/oci/
-cp "$DEVVM_REPO/layers/base.sh" repo/layers/
+cp "$DEVVM_REPO/assets/oci/build.sh" repo/assets/oci/
+cp "$DEVVM_REPO/assets/layers/base.sh" repo/assets/layers/
 cp "$DEVVM_REPO/internal/tools/mise.go" repo/internal/tools/
 cp latest-good up/crane-latest
 cp sums-good up/crane-sums

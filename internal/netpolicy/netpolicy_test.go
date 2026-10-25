@@ -34,8 +34,9 @@ func names(err error) string {
 	return err.Error()
 }
 
-var repo = func() string {
-	r, err := filepath.Abs(filepath.Join("..", ".."))
+// assets is the repo's assets/, devvm's own files.
+var assets = func() string {
+	r, err := filepath.Abs(filepath.Join("..", "..", "assets"))
 	if err != nil {
 		panic(err)
 	}
@@ -61,7 +62,7 @@ func TestPolicyFiles(t *testing.T) {
 	d := paths.Dirs{Data: "/d", Config: "/c", Lima: "/l"}
 	got := PolicyFiles(d, "/r", "vm1", "node+claude")
 	want := []string{
-		"/r/layers/base.policy", "/r/tools/node.policy", "/r/tools/claude.policy",
+		"/r/layers/base.policy", "/r/shared-tools/node.policy", "/r/shared-tools/claude.policy",
 		"/c/policy", "/d/vms/vm1.policy", "/d/run/vm1.secrets.policy",
 	}
 	if !slices.Equal(got, want) {
@@ -81,7 +82,7 @@ func TestPolicyFiles(t *testing.T) {
 func TestEveryPartHasAPolicy(t *testing.T) {
 	for _, p := range append([]string{"base"}, append(image.Toolchains, image.Agents...)...) {
 		d := paths.Dirs{Data: "/d", Config: "/c"}
-		f := PolicyFiles(d, repo, "vm1", p)
+		f := PolicyFiles(d, assets, "vm1", p)
 		if p != "base" {
 			f = f[1:]
 		}
@@ -260,7 +261,7 @@ func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	store := secrets.NewStore(d, t.TempDir(), testUI{t}.Warn)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	f := &proxies{args: map[int][]string{}}
-	p := NewProxy(d, repo, "/bin/sh", store, testUI{t})
+	p := NewProxy(d, assets, "/bin/sh", store, testUI{t})
 	p.Start, p.Args, p.Tick = f.start(t), f.argsOf, time.Millisecond
 	p.Listening = func(int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
@@ -309,7 +310,7 @@ func TestPrepare(t *testing.T) {
 	}
 	args := strings.Join(f.args[pid], " ")
 	for _, want := range []string{
-		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() + " -policy " + repo + "/layers/base.policy,",
+		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() + " -policy " + assets + "/layers/base.policy,",
 		" -log " + d.Logs() + "/" + st.Name() + ".jsonl -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
 		" -secrets " + d.Run() + "/" + st.Name() + ".secrets.json -secret-cmd /bin/sh -auth-file " + d.Run() + "/" + st.Name() + ".proxy.auth",
 	} {

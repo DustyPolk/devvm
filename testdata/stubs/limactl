@@ -26,7 +26,7 @@
 # tools build VM writes the images its build.sh is asked for (below). A
 # --clone VM's git (git -C DIR, and the script that makes its clone) runs
 # here, on $STUB_DIR/vmfs/DIR: the VM's files, which the ssh stub pushes
-# to and fetches from. A shell running oci/build.sh writes what it would
+# to and fetches from. A shell running assets/oci/build.sh writes what it would
 # (below), or fails when $STUB_DIR/build-fails exists. A call whose
 # arguments contain $STUB_DIR/interrupt-on's text is Ctrl+C: it interrupts
 # devvm, once.
@@ -73,7 +73,7 @@ if [[ ${1:-} == shell && " $* " == *" devvm-tools-build bash -s -- "* ]]; then
     [[ ! -f $STUB_DIR/tools-hash-symlink ]] || ln -s "$STUB_DIR/tools-hash-symlink" "$out/${args[i]}.sha256"
   done
 fi
-# The --from build VM's oci/build.sh: it writes what it would in its OUT
+# The --from build VM's assets/oci/build.sh: it writes what it would in its OUT
 # folder (libc: $STUB_DIR/build-libc, else gnu; cmdline:
 # $STUB_DIR/build-cmdline). disk.raw has ext4's superblock magic (0xEF53 at
 # byte 1080), or is a qcow2 header with $STUB_DIR/build-qcow2. A hostile

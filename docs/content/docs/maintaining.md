@@ -8,10 +8,10 @@ For maintainers: version bumps and releases. Run the scripts with mise, which pu
 ## Updating pinned versions
 
 - `scripts/bump.sh --check` lists every pin against upstream; `scripts/bump.sh [tool...]` rewrites the pins (all tools by default) and prints a summary for the commit message. It writes a value only if it has the shape of a pin (a version, a 64-hex checksum, a commit), since some of the edited files run on the host, and edits nothing unless every value is good. It needs `curl` and `jq`.
-- The tools: `apt`, `docker`, `mise`, `rustup`, `crane`, `omb`, `eza`, `tealdeer`. `apt` moves `apt_snapshot` (base's packages) to today; `docker` moves Docker's packages, read from its repository for base's Ubuntu release, and its signing key. Packages added to `layers/base.sh` or `features/` need no pin of their own: the snapshot covers them.
-- `mise` moves base's mise (`layers/base.sh`) and devvm's host mise (`internal/tools/mise.go`) together: the host one writes the lock base's installs from.
-- The shared tools aren't pinned: holds go in `tools/mise.toml` (`node = "24"` stays on that major). `testdata/mise.lock` is a fixed lock for the tests.
-- `layers/ubuntu-cloud.gpg` is Ubuntu's cloud image signing key (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`), from keyserver.ubuntu.com. If Ubuntu changes it, base builds stop with `ubuntu_bad_signature`: fetch the new key, check its fingerprint against Ubuntu's announcement, and replace the file (`gpg --export FPR`).
+- The tools: `apt`, `docker`, `mise`, `rustup`, `crane`, `omb`, `eza`, `tealdeer`. `apt` moves `apt_snapshot` (base's packages) to today; `docker` moves Docker's packages, read from its repository for base's Ubuntu release, and its signing key. Packages added to `assets/layers/base.sh` or `assets/features/` need no pin of their own: the snapshot covers them.
+- `mise` moves base's mise (`assets/layers/base.sh`) and devvm's host mise (`internal/tools/mise.go`) together: the host one writes the lock base's installs from.
+- The shared tools aren't pinned: holds go in `assets/shared-tools/mise.toml` (`node = "24"` stays on that major). `testdata/mise.lock` is a fixed lock for the tests.
+- `assets/layers/ubuntu-cloud.gpg` is Ubuntu's cloud image signing key (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`), from keyserver.ubuntu.com. If Ubuntu changes it, base builds stop with `ubuntu_bad_signature`: fetch the new key, check its fingerprint against Ubuntu's announcement, and replace the file (`gpg --export FPR`).
 - Edited scripts change image keys, so the affected images rebuild on next use. Build them in a sandbox of their own (`LIMA_HOME`, `DEVVM_LIMA_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`) before committing (`devvm build node+python+…`), then `devvm gc`, and run the [end-to-end tests](contributing.md#end-to-end-tests).
 
 ## Releasing
@@ -23,7 +23,7 @@ For maintainers: version bumps and releases. Run the scripts with mise, which pu
 
   | File | What |
   | --- | --- |
-  | `devvm-<version>-<os>-<arch>.tar.gz` | the binary and the files it reads next to itself, for `darwin` and `linux`, `arm64` and `amd64` |
+  | `devvm-<version>-<os>-<arch>.tar.gz` | the binary and the files it reads next to itself (`assets/`), for `darwin` and `linux`, `arm64` and `amd64` |
   | `devvm-<version>.tar.gz` | the source, which the Homebrew formula builds from |
   | `SHA256SUMS`, `SHA256SUMS.minisig` | their checksums, and the signature |
   | `install.sh` | the install script, set to this release and to `packaging/minisign.pub`'s key |

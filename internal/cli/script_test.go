@@ -33,8 +33,8 @@ func TestScript(t *testing.T) {
 	})
 }
 
-// buildDevvm builds cmd/devvm into a temporary folder, with copies of the
-// files devvm reads next to itself, and returns that folder. It's a test
+// buildDevvm builds cmd/devvm into a temporary folder, with a copy of the
+// assets/ devvm reads next to itself, and returns that folder. It's a test
 // build: DEVVM_UNREVIEWED counts.
 func buildDevvm(t *testing.T) string {
 	t.Helper()
@@ -45,17 +45,7 @@ func buildDevvm(t *testing.T) string {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)
 	}
-	repo := filepath.Join("..", "..")
-	data, err := os.ReadFile(filepath.Join(repo, "base.yaml")) //nolint:gosec // the repo's own file
-	if err == nil {
-		err = os.WriteFile(filepath.Join(dir, "base.yaml"), data, 0o600) //nolint:gosec // the test's own folder
-	}
-	for _, d := range []string{"layers", "features", "tools", "guest", "oci"} {
-		if err == nil {
-			err = os.CopyFS(filepath.Join(dir, d), os.DirFS(filepath.Join(repo, d)))
-		}
-	}
-	if err != nil {
+	if err := os.CopyFS(filepath.Join(dir, "assets"), os.DirFS(filepath.Join("..", "..", "assets"))); err != nil {
 		t.Fatal(err)
 	}
 	return dir
