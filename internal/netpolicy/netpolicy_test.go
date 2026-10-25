@@ -170,6 +170,22 @@ func TestFreePort(t *testing.T) {
 	if err != nil || !used[23456] || !used[34567] || len(used) != 2 {
 		t.Errorf("usedPorts = %v, %v", used, err)
 	}
+	// And the ports VMs forward, wanted or set: all and none name none.
+	for k, v := range map[string]string{keyPorts: "5173,40000-40002", keyPortsSet: "41000, bad,9-1"} {
+		if err := st.Set(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	used, err = usedPorts(d)
+	if err != nil || len(used) != 7 || !used[5173] || !used[40000] || !used[40002] || !used[41000] {
+		t.Errorf("usedPorts with forwards = %v, %v", used, err)
+	}
+	if err := st.Set(keyPorts, "all"); err != nil {
+		t.Fatal(err)
+	}
+	if got := forwarded(st); len(got) != 1 || !got[41000] {
+		t.Errorf("forwarded with all = %v", got)
+	}
 	p := &Proxy{Dirs: d, Listening: func(port int) bool { return port%2 == 0 }}
 	for range 200 {
 		port, err := p.freePort()
@@ -319,6 +335,16 @@ func TestPrepare(t *testing.T) {
 	p.Stop(st.Name())
 	if _, err := p.Prepare(t.Context(), lima, st, false); err != nil || excluded != nil {
 		t.Errorf("Linux: %v, excluded %q", err, excluded)
+	}
+	// Its ssh port is one of its own forwards now: a new one, as its
+	// backend would refuse it.
+	p.Stop(st.Name())
+	if err := st.Set(keyPorts, st.Get(KeySSHPort)); err != nil {
+		t.Fatal(err)
+	}
+	conf, err = p.Prepare(t.Context(), lima, st, false)
+	if err != nil || conf.SSHPort == sp || st.Get(KeySSHPort) != strconv.Itoa(conf.SSHPort) {
+		t.Errorf("forwarded ssh port: %d (had %d), %v", conf.SSHPort, sp, err)
 	}
 }
 

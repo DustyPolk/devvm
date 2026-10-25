@@ -498,6 +498,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		p.AgentSocket = conf.AgentSocket
 		conf = p
 	}
+	// ssh for editors, where the backend has it (an emulation once it's
+	// reviewed): a VM without it starts all the same.
+	conf.SSH = backend.Require(b, vm, backend.FeatureSSH) == nil
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)

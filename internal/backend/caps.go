@@ -134,6 +134,13 @@ func Require(b Backend, vm string, features ...Feature) error {
 	return nil
 }
 
+// Allowed reports whether Require lets f through on b, without a warning:
+// for what uses a feature a VM already got (Require told then).
+func Allowed(b Backend, f Feature) bool {
+	s := b.Caps()[f]
+	return s.Usable() || s.IsEmulated() && Unreviewed[b.Name()+":"+string(f)]
+}
+
 // Features returns what building the image needs.
 func (s ImageSpec) Features() []Feature {
 	fs := []Feature{FeatureBuildImage}

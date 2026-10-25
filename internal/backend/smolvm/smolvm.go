@@ -8,9 +8,9 @@
 // or deletes a machine without it. On Linux smolvm's state is devvm's own
 // (--state-dir) as well.
 //
-// Network policy is emulated, reviewed (start.go). What smolvm lacks is
-// refused (Caps): ssh for editors, forwarding every port, and turning agent
-// forwarding on or off later.
+// Network policy is emulated, reviewed (start.go); ssh for editors is
+// emulated, reviewed (ssh.go). What smolvm lacks is refused (Caps):
+// forwarding every port, and turning agent forwarding on or off later.
 package smolvm
 
 import (
@@ -69,6 +69,8 @@ var (
 	prepareScript []byte
 	//go:embed shims.sh
 	shimsScript []byte
+	//go:embed sshd.sh
+	sshdScript []byte
 	//go:embed services.sh
 	servicesScript []byte
 	//go:embed plain.sh
@@ -98,6 +100,10 @@ type Smolvm struct {
 	// Terminal reports whether devvm's input is a terminal (a shell gets
 	// one then).
 	Terminal func() bool
+	// FreePort returns a port free on the host's loopback, and PortFree
+	// reports whether one is: for a VM's ssh forward.
+	FreePort func() (int, error)
+	PortFree func(int) bool
 	// Info prints what the backend is doing (ui.Info).
 	Info func(msg.M)
 	// Warn prints a warning.
@@ -123,20 +129,21 @@ func New(d paths.Dirs) *Smolvm {
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
 		Digest: from.NewRegistry().Digest, KVM: kvm,
 		Terminal: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
-		Info:     ui.Info, Warn: ui.Warn,
+		FreePort: freePort, PortFree: portFree,
+		Info: ui.Info, Warn: ui.Warn,
 	}
 }
 
 // Name returns smolvm.
 func (s *Smolvm) Name() string { return Name }
 
-// Caps is what smolvm has natively, and egress through devvm's proxy
-// emulated and reviewed (Start: an allow list of the host, and the proxy
-// deciding each connection). The rest waits for
-// emulations: ssh for editors, every port forwarded, and agent forwarding
-// turned on or off once a VM is made.
+// Caps is what smolvm has natively, egress through devvm's proxy emulated
+// and reviewed (Start: an allow list of the host, and the proxy deciding
+// each connection), and ssh for editors emulated and reviewed (an sshd of
+// devvm's, ssh.go). The rest waits for emulations: every port
+// forwarded, and agent forwarding turned on or off once a VM is made.
 func (s *Smolvm) Caps() backend.Caps {
-	caps := backend.Caps{backend.FeatureEgressProxy: backend.Emulated(true)}
+	caps := backend.Caps{backend.FeatureEgressProxy: backend.Emulated(true), backend.FeatureSSH: backend.Emulated(true)}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
 		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeaturePorts,
@@ -157,7 +164,7 @@ func (s *Smolvm) NameMax() int { return 0 }
 
 // KeyFiles are devvm's scripts for smolvm that go into base.
 func (s *Smolvm) KeyFiles() map[string][]byte {
-	return map[string][]byte{"smolvm/prepare.sh": prepareScript, "smolvm/shims.sh": shimsScript}
+	return map[string][]byte{"smolvm/prepare.sh": prepareScript, "smolvm/shims.sh": shimsScript, "smolvm/sshd.sh": sshdScript}
 }
 
 // ToolFormat is uncompressed EROFS (plain.sh), as smolvm's kernel mounts
@@ -184,6 +191,15 @@ type record struct {
 	// Confined is the lifeline (agent.pid: its pid and start time) of the
 	// machine's last start through devvm's decider; "" after any other.
 	Confined string `json:"confined,omitempty"`
+	// SSHPort is the host loopback port its sshd is forwarded from, set
+	// while it's started with it (Confinement.SSH); 0 otherwise.
+	SSHPort int `json:"ssh_port,omitempty"`
+	// SSHUp is set once this start's sshd runs (services.sh done), and
+	// cleared before each start.
+	SSHUp bool `json:"ssh_up,omitempty"`
+	// NoSSHD is set when its last start with ssh found no sshd in its
+	// image: it runs without.
+	NoSSHD bool `json:"no_sshd,omitempty"`
 }
 
 // proxyVars are the guest's proxy variables, which each exec of devvm's
@@ -399,11 +415,6 @@ func (s *Smolvm) Shell(ctx context.Context, vm, dir string) (backend.Command, er
 	return backend.Command{Path: cmd.Path, Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir}, nil
 }
 
-// SSH is refused: smolvm runs no sshd (its emulation is to come).
-func (s *Smolvm) SSH(_ context.Context, vm string) (backend.SSHTarget, error) {
-	return backend.SSHTarget{}, msg.BackendLacks(Name, string(backend.FeatureSSH), vm)
-}
-
 // stopped returns a machine that must be stopped to be changed, and its
 // record.
 func (s *Smolvm) stopped(ctx context.Context, vm string) (machine, record, error) {
@@ -458,8 +469,9 @@ func gibCeil(g float64) string {
 	return strconv.Itoa(n)
 }
 
-// portArgs are -p's values for p: each range to the same ports on the
-// host. All is refused (ports-all), and so is more than smolvm forwards.
+// portArgs are -p's values for a project VM's ports p: each range to the
+// same ports on the host. All is refused (ports-all), and so is more than
+// smolvm forwards besides the VM's ssh, or the guest port its sshd has.
 func portArgs(vm string, p backend.Ports) ([]string, error) {
 	if p.All {
 		return nil, msg.BackendLacks(Name, string(backend.FeaturePortsAll), vm)
@@ -467,6 +479,9 @@ func portArgs(vm string, p backend.Ports) ([]string, error) {
 	var out []string
 	n := 0
 	for _, r := range p.Ranges {
+		if r.From <= sshGuestPort && sshGuestPort <= r.To {
+			return nil, msg.SmolvmPortSSH(strconv.Itoa(sshGuestPort), vm)
+		}
 		n += r.To - r.From + 1
 		if r.From == r.To {
 			out = append(out, fmt.Sprintf("%d:%d", r.From, r.From))
@@ -474,8 +489,8 @@ func portArgs(vm string, p backend.Ports) ([]string, error) {
 			out = append(out, fmt.Sprintf("%d-%d:%d-%d", r.From, r.To, r.From, r.To))
 		}
 	}
-	if n > maxPorts {
-		return nil, msg.SmolvmTooManyPorts(strconv.Itoa(n), strconv.Itoa(maxPorts), vm)
+	if n > userPortsMax {
+		return nil, msg.SmolvmTooManyPorts(strconv.Itoa(n), strconv.Itoa(userPortsMax), vm)
 	}
 	return out, nil
 }

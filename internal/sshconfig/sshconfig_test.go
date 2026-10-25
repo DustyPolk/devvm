@@ -4,7 +4,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -43,12 +45,24 @@ func TestAlias(t *testing.T) {
 	}
 }
 
+// pinned is what every entry turns off, whatever a Host * says.
+const pinned = `  ForwardX11 no
+  ForwardX11Trusted no
+  Tunnel no
+  PermitRemoteOpen none
+  AddKeysToAgent no
+  ProxyJump none
+  ProxyCommand none
+  UpdateHostKeys no
+  HashKnownHosts no
+`
+
 // testConfig is a config on a fake backend whose VMs answer with a
 // made-up host key each, and an "other" key line.
 func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 	t.Helper()
 	root := t.TempDir()
-	f := backendtest.New("fake", nil)
+	f := backendtest.New("fake", backend.Caps{backend.FeatureSSH: backend.Native})
 	f.Target = backend.SSHTarget{Host: "127.0.0.1", Port: 60022, User: "u", Options: []backend.SSHOption{
 		{Key: "IdentityFile", Value: `"/x/key"`}, {Key: "IdentitiesOnly", Value: "yes"},
 	}}
@@ -108,7 +122,7 @@ func TestWriteAgent(t *testing.T) {
 		if !strings.Contains(got, tc.want) || strings.Count(got, "ForwardAgent") != 1 {
 			t.Errorf("mode %q:\n%s", tc.mode, got)
 		}
-		if has := strings.Contains(got, "  ControlPath none\n  IdentityAgent "+sock+"\n  Hostname "); has != tc.agent {
+		if has := strings.Contains(got, "  ControlPath none\n  IdentityAgent "+sock+"\n"+pinned+"  Hostname "); has != tc.agent {
 			t.Errorf("mode %q: IdentityAgent %v, want %v:\n%s", tc.mode, has, tc.agent, got)
 		}
 	}
@@ -137,7 +151,7 @@ Host devvm-img-foo ` + imgish + `
   ForwardAgent yes
   ControlMaster no
   ControlPath none
-  Hostname 127.0.0.1
+` + pinned + `  Hostname 127.0.0.1
   Port 60022
   User u
   IdentityFile "/x/key"
@@ -151,7 +165,7 @@ Host devvm-web ` + web + `
   ForwardAgent no
   ControlMaster no
   ControlPath none
-  Hostname 127.0.0.1
+` + pinned + `  Hostname 127.0.0.1
   Port 60022
   User u
   IdentityFile "/x/key"
@@ -253,6 +267,62 @@ func TestWriteUnchecked(t *testing.T) {
 	}
 	if got := read(t, c.Dirs.SSHConfig()); got != header {
 		t.Errorf("ssh config = %q", got)
+	}
+}
+
+// A backend whose ssh is an emulation not yet reviewed gets no entries,
+// unless a test build lets it through (DEVVM_UNREVIEWED); none whose
+// backend lacks it.
+func TestWriteUnreviewed(t *testing.T) {
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	t.Cleanup(func() { backend.Unreviewed = nil })
+	for _, tc := range []struct {
+		caps backend.Caps
+		let  map[string]bool
+		want bool
+	}{
+		{backend.Caps{backend.FeatureSSH: backend.Emulated(false)}, nil, false},
+		{backend.Caps{backend.FeatureSSH: backend.Emulated(false)}, map[string]bool{"fake:ssh": true}, true},
+		{backend.Caps{backend.FeatureSSH: backend.Emulated(true)}, nil, true},
+		{nil, map[string]bool{"fake:ssh": true}, false},
+	} {
+		f.Capabilities, backend.Unreviewed = tc.caps, tc.let
+		if err := c.Write(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(read(t, c.Dirs.SSHConfig()), "Host devvm-web "); got != tc.want {
+			t.Errorf("%v, let through %v: entry %v, want %v", tc.caps, tc.let, got, tc.want)
+		}
+	}
+}
+
+// The real ssh reads devvm's entries under a user's config whose Host *
+// has an IgnoreUnknown of its own (as macOS users' UseKeychain needs):
+// devvm's entries set no IgnoreUnknown, which would win and replace it.
+func TestEntriesWithRealSSH(t *testing.T) {
+	sshPath, err := exec.LookPath("ssh")
+	if err != nil {
+		t.Skip("no ssh")
+	}
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	if err := c.Write(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	user := filepath.Join(t.TempDir(), "config")
+	conf := "Include " + c.Dirs.SSHConfig() + "\nHost *\n  IgnoreUnknown FooBarOpt\n  FooBarOpt yes\n  ForwardX11 yes\n  AddKeysToAgent yes\n"
+	if err := os.WriteFile(user, []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.CommandContext(t.Context(), sshPath, "-G", "-F", user, "devvm-web").CombinedOutput() //nolint:gosec // the test's own config
+	if err != nil {
+		t.Fatalf("ssh -G: %v\n%s", err, out)
+	}
+	for _, want := range []string{"forwardx11 no", "addkeystoagent false", "permitremoteopen none", "port 60022", "hostkeyalias " + web} {
+		if !slices.Contains(strings.Split(string(out), "\n"), want) {
+			t.Errorf("ssh -G lacks %q:\n%s", want, out)
+		}
 	}
 }
 

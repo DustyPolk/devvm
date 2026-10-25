@@ -51,7 +51,8 @@ const (
 // execs get from the machine's proxy file (proxyFile), so the password is
 // in no process's arguments. A machine that
 // forwards an SSH agent forwards c.AgentSocket, or the user's
-// (SSH_AUTH_SOCK).
+// (SSH_AUTH_SOCK). With c.SSH its ssh is forwarded (sshForward) and
+// services.sh runs its sshd; without, the forward goes.
 func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) error {
 	proxy := c.Net == backend.NetProxy
 	if proxy {
@@ -96,6 +97,32 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	for _, k := range proxyVars {
 		delete(env, k) // the proxy file's
 	}
+	// The VM's ssh: forwarded while it's asked for, its sshd run then.
+	var sshd []string
+	if c.SSH {
+		port, err := s.sshForward(vm, c, r)
+		if err != nil {
+			return err
+		}
+		pub, err := s.ensureSSHKey(vm)
+		if err != nil {
+			return err
+		}
+		name, _, err := s.user()
+		if err != nil {
+			return err
+		}
+		if port != r.SSHPort {
+			if r.SSHPort > 0 {
+				opts = append(opts, "--remove-port", sshForwardSpec(r.SSHPort))
+			}
+			opts = append(opts, "-p", sshForwardSpec(port))
+		}
+		r.SSHPort, sshd = port, servicesArgs(name, pub, env, proxy)
+	} else if r.SSHPort > 0 {
+		opts = append(opts, "--remove-port", sshForwardSpec(r.SSHPort))
+		r.SSHPort = 0
+	}
 	if err := s.update(ctx, vm, opts...); err != nil {
 		return err
 	}
@@ -117,8 +144,10 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	if err := s.setProxyFile(vm, s.ProxyURL(c)); err != nil {
 		return err
 	}
-	// Recorded before the start: a start that fails leaves it unconfined.
+	// Recorded before the start: a start that fails leaves it unconfined,
+	// and without ssh until services.sh ran its sshd.
 	r.Mediated, r.Confined = r.Mediated || proxy, ""
+	r.SSHUp, r.NoSSHD = false, false
 	if err := s.writeRecord(vm, r); err != nil {
 		return err
 	}
@@ -156,7 +185,46 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 			return err
 		}
 	}
-	return s.services(ctx, vm)
+	noSSHD := false
+	if sshd != nil {
+		if noSSHD, err = s.lacksSSHD(ctx, vm); err != nil {
+			return err
+		}
+		if noSSHD {
+			s.Warn(msg.SmolvmNoSshd(vm))
+			sshd = nil
+		}
+	}
+	if err := s.services(ctx, vm, sshd); err != nil {
+		return err
+	}
+	if r.SSHPort == 0 {
+		return nil
+	}
+	r.SSHUp, r.NoSSHD = !noSSHD, noSSHD
+	return s.writeRecord(vm, r)
+}
+
+// sshdProbe answers "sshd" when the machine's image has sshd, else "none".
+const sshdProbe = `if [ -x /usr/sbin/sshd ] || command -v sshd >/dev/null 2>&1; then echo sshd; else echo none; fi`
+
+// lacksSSHD reports whether a running machine's image has no sshd (made
+// before devvm installed one), asked before services.sh runs, so no other
+// failure reads as it; one that can't say stops it.
+func (s *Smolvm) lacksSSHD(ctx context.Context, vm string) (bool, error) {
+	out, err := s.Runner.Output(s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "sh", "-c", sshdProbe))
+	switch strings.TrimSpace(string(out)) {
+	case "none":
+		return true, nil
+	case "sshd":
+		if err == nil {
+			return false, nil
+		}
+	}
+	if ctx.Err() == nil {
+		_ = s.stop(ctx, vm)
+	}
+	return false, backend.Logged(msg.StartFailed(vm))
 }
 
 // closed reports whether the machine's allow lists are network policy's:
@@ -177,9 +245,10 @@ func checkDecider(vm string, c backend.Confinement) error {
 	return nil
 }
 
-// services runs services.sh in a running machine; a failure stops it.
-func (s *Smolvm) services(ctx context.Context, vm string) error {
-	cmd := s.asRoot(ctx, vm)
+// services runs services.sh in a running machine, with args (servicesArgs
+// for its sshd); a failure stops it.
+func (s *Smolvm) services(ctx context.Context, vm string, args []string) error {
+	cmd := s.asRoot(ctx, vm, args...)
 	cmd.Stdin = bytes.NewReader(servicesScript)
 	if err := s.Runner.Run(ctx, msg.M{}, cmd); err != nil {
 		if ctx.Err() == nil {

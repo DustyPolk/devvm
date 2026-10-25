@@ -5,7 +5,7 @@ weight: 32
 
 [smolvm](https://github.com/smol-machines/smolvm) is an experimental backend: each project gets a microVM that runs its image as a container, with no init system. Choose it per VM with `--backend smolvm`, or for every new VM with `devvm setup --backend smolvm`.
 
-It lacks ssh for editors (`devvm ssh`, `devvm code`, `--clone`), forwarding every port, and turning SSH agent forwarding on or off once a VM is made. [Network policy](#network-policy) is emulated, and reviewed. devvm refuses each of those it lacks in one line naming the VM ([features](backends.md#features)); they come later, as reviewed emulations.
+It lacks forwarding every port, and turning SSH agent forwarding on or off once a VM is made. [Network policy](#network-policy) and [ssh for editors](#ssh-for-editors) (`devvm ssh`, `devvm code`, `--clone`) are emulated, and reviewed. devvm refuses what it lacks in one line naming the VM ([features](backends.md#features)); those come later, as reviewed emulations.
 
 ## Requirements
 
@@ -29,19 +29,19 @@ Images aren't machines: each is a pack (`smolvm pack create --from-vm`) in `~/.l
 ## Building images
 
 - `base` starts from Ubuntu's container image (`ubuntu:26.04`), by the digest its registry has at the time, which its record keeps. With `--from`, from that image by its recorded digest; an image only Docker has is refused (`smolvm_from_registry_only`).
-- Before `layers/base.sh`, devvm adds what Ubuntu's cloud image has and a container lacks: `sudo`, CA certificates, `bash`, and the VM's user. It's your user name and uid, as on Lima, with its home at `/home/<you>.guest`: the project folder shows as your uid's, and only that user can write it.
+- Before `layers/base.sh`, devvm adds what Ubuntu's cloud image has and a container lacks: `sudo`, CA certificates, `bash` and the VM's user, and after base's scripts `sshd` (without host keys: each VM makes its own). It's your user name and uid, as on Lima, with its home at `/home/<you>.guest`: the project folder shows as your uid's, and only that user can write it. It has no password that works (`*`).
 - The scripts run as that user, with stand-ins for `systemctl` and `rc-update` while they run: base's services are enabled the Lima way, and devvm starts them itself (below). The stand-ins are gone before the image is packed.
 - Builds use smolvm's default network: the internet, not the host's loopback. A pack keeps its build machine's network, CPUs and memory, so devvm sets all three on every VM it makes.
 - Base's CPUs, memory and disk are `base.yaml`'s: 4 CPUs, 8 GiB (half the host's memory on a small host), 100 GiB.
 
-devvm's own scripts for this (`prepare.sh`, `shims.sh`) are in `base`'s key, with the backend: smolvm's images are never Lima's.
+devvm's own scripts for this (`prepare.sh`, `shims.sh`, and `sshd.sh`, which installs sshd after base's scripts, from the Ubuntu snapshot they pin) are in `base`'s key, with the backend: smolvm's images are never Lima's.
 
 ## What devvm sets on a VM
 
 - **Mounts:** the project folder (read-write) and agents' folders (read-only) at their host paths, the shared tools at `/mnt/devvm-tools` (read-only), and `/var/lib/docker` on the machine's own disk, which Docker's storage needs. A path with a colon is refused: smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, mode 0600.
 - **Network:** smolvm's own, without network policy: the internet, not the host's loopback. With it, [below](#network-policy).
 - **Size:** what you ask for, or base's; the disk only grows.
-- **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 64 ports. Only servers listening on all addresses (`0.0.0.0`) are reached. `all`, the default, is refused: pass `--ports` or set `devvm ports -g`.
+- **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 63 ports: smolvm forwards 64, and one is the VM's [ssh](#ssh-for-editors). Port 22 is that ssh's, so listing it is refused (`smolvm_port_ssh`). Only servers listening on all addresses (`0.0.0.0`) are reached. `all`, the default, is refused: pass `--ports` or set `devvm ports -g`.
 - **SSH agent forwarding:** chosen when the VM is made (`--ssh-agent`), and fixed then. At each start smolvm forwards the agent `SSH_AUTH_SOCK` names (devvm's own with `devvm ssh-agent devvm`); with none, the start stops (`smolvm_no_agent`).
 - **Environment:** the proxy's settings with network policy, as on Lima. The proxy variables come from the VM's proxy file, `~/.local/share/devvm/smolvm/vms/<vm>.proxy` (mode 600), which devvm writes at each start with network policy (and removes without): each of devvm's commands in the VM names it (`smolvm machine exec --secret-file`), and smolvm reads it, so the proxy's password is in no process's arguments. A `smolvm machine exec` of your own gets the variables only in a login shell. (`machine create --secret-file` would last, but smolvm ignores it for a VM made from a pack.)
 
@@ -55,11 +55,26 @@ Emulated, and reviewed. A VM with [network policy](network.md) reaches nothing b
 
 It fails closed: with the proxy gone, nothing gets out, and once a VM started so, `smolvm machine start` refuses it without a decider. A VM someone started with a decider of their own, or whose allow list someone widened while it runs, isn't confined: devvm shows it `unenforced` and stops it ([the self-check](network.md#the-self-check)). A UDP allow someone adds (`smolvm machine update --allow-udp`) lets UDP past the decider, and smolvm doesn't show it: don't add one to devvm's machines. `devvm network off` takes it all away at the next start.
 
+## ssh for editors
+
+Emulated, and reviewed: `devvm ssh`, `devvm code`, `--clone` and the [ssh config entries](ssh.md#ssh-access-by-name) work as on Lima. How it works ([design](design.md#ssh-for-editors-on-smolvm)):
+
+- **An sshd of devvm's,** started after each start (below) on a config of devvm's own, `/etc/devvm/ssh/sshd_config` (root's alone), whatever the image's says.
+- **Host keys of the VM's own:** a new ed25519 key at each start, so no two VMs made from one image share one. devvm reads it through smolvm (`smolvm machine exec`), not over the network, and pins it in `~/.config/devvm/known_hosts`, as on Lima; a key that doesn't match is refused.
+- **Only the VM's own key logs in, as the VM's user:** `~/.local/share/devvm/smolvm/vms/<vm>.key` (mode 600), made at its first start with ssh, its public half that VM's only authorized key, so it logs in to no other VM. No passwords, no root, no other user. Entries offer only that key (`IdentitiesOnly yes`), not your agent's.
+- **Forwarded from the host's loopback alone:** port 22 in the VM, from a port on the host's `127.0.0.1` and `::1`, chosen at the start and kept while it stays free, never one of the VM's own ports; with network policy, the one devvm records for the VM. The ssh config names it, so connect by name. devvm answers for it only once that start's sshd runs.
+- **No way out through ssh, as long as your ssh doesn't ask for one:** an ssh session can carry the VM's connections out only through what your machine's ssh asks for (remote forwards, X11, a tunnel, your agent). devvm's entry turns X11, tunnels, remote SOCKS forwards and adding keys to an agent off, whatever a `Host *` of yours says, and asks for no remote forward. A `RemoteForward` of yours, or `ssh -R` you type, it can't turn off: don't forward into a VM you don't trust. The sshd also allows only local forwarding (`ssh -L`, `-W`, what VS Code uses: the VM connects, from its own network, so with network policy to the proxy alone), but that's a defence for an honest VM: root in the VM can change its sshd.
+- **Agent forwarding** is the entry's, as on Lima: `ForwardAgent` as the VM's [SSH agent](ssh.md#agent-forwarding) choice says, which on smolvm is fixed when the VM is made ([above](#what-devvm-sets-on-a-vm)).
+- **The same environment as devvm's own commands:** sessions get `/etc/environment` and, with network policy, the proxy's settings, a login's or not.
+
+A VM running since a start without ssh (from an older devvm) gets no entry, and `devvm ssh` says to restart it (`smolvm_no_ssh`). A VM whose image has no sshd (made before devvm installed one) starts and runs without ssh, warned (`smolvm_no_sshd`): a VM made after `devvm rebuild` has it.
+
 ## No init system
 
 A machine runs its image as a container, and nothing starts at boot. After each start devvm runs, as root:
 
 - the loop devices the shared tools are mounted with (`/dev` has none), then the tools' mounts;
+- the VM's [sshd](#ssh-for-editors), with new host keys; its log is `/var/log/devvm-sshd.log`;
 - Docker's daemon, in the background, logging to `/var/log/dockerd.log`.
 
 The shared tools are their own images on smolvm: uncompressed EROFS, as its kernel mounts no other. A tool image's key includes the format, so Lima's and smolvm's VMs each get theirs from the one share.

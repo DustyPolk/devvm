@@ -41,8 +41,9 @@ func (e *Env) Code(ctx context.Context) error {
 }
 
 // reach launches the folder's VM as devvm does without its shell
-// (launch), sets it up, and makes sure ~/.ssh/config includes devvm's
-// ssh config, asking first. It returns the name ssh reaches it by.
+// (launch), sets it up, checks its backend says how ssh reaches it, and
+// makes sure ~/.ssh/config includes devvm's ssh config, asking first. It
+// returns the name ssh reaches it by.
 func (e *Env) reach(ctx context.Context) (string, *found, error) {
 	t, err := e.existing(ctx, "")
 	if err != nil {
@@ -56,6 +57,11 @@ func (e *Env) reach(ctx context.Context) (string, *found, error) {
 		return "", nil, err
 	}
 	if err := e.setUpVM(ctx, t.b, t.st, t.f, conf); err != nil {
+		return "", nil, err
+	}
+	// A VM running since a start without its ssh (an emulation not yet
+	// let through then) has none to reach.
+	if _, err := t.b.SSH(ctx, t.f.Name); err != nil {
 		return "", nil, err
 	}
 	c := e.sshConfig()

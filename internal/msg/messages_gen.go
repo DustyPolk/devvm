@@ -1599,6 +1599,16 @@ func SmolvmNoAgent(vm string) M {
 	return M{id: "smolvm_no_agent", vals: []val{{"vm", vm}}}
 }
 
+// SmolvmNoSSH is [smolvm_no_ssh]: "{{.vm}} was started without ssh: devvm restart starts it with it"
+func SmolvmNoSSH(vm string) M {
+	return M{id: "smolvm_no_ssh", vals: []val{{"vm", vm}}}
+}
+
+// SmolvmNoSshd is [smolvm_no_sshd]: "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
+func SmolvmNoSshd(vm string) M {
+	return M{id: "smolvm_no_sshd", vals: []val{{"vm", vm}}}
+}
+
 // SmolvmOld is [smolvm_old]: "smolvm {{.version}} is too old: upgrade to smolvm 1.32 or newer"
 func SmolvmOld(version string) M {
 	return M{id: "smolvm_old", vals: []val{{"version", version}}}
@@ -1609,9 +1619,19 @@ func SmolvmOldFix(fix string, version string) M {
 	return M{id: "smolvm_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
+// SmolvmPortSSH is [smolvm_port_ssh]: "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
+func SmolvmPortSSH(port string, vm string) M {
+	return M{id: "smolvm_port_ssh", vals: []val{{"port", port}, {"vm", vm}}}
+}
+
 // SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
 func SmolvmScriptFailed(script string, vm string) M {
 	return M{id: "smolvm_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
+}
+
+// SmolvmSSHPortForwarded is [smolvm_ssh_port_forwarded]: "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave it out of devvm ports"
+func SmolvmSSHPortForwarded(port string, vm string) M {
+	return M{id: "smolvm_ssh_port_forwarded", vals: []val{{"port", port}, {"vm", vm}}}
 }
 
 // SmolvmTooManyPorts is [smolvm_too_many_ports]: "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}: forward fewer with devvm ports"
@@ -2270,9 +2290,13 @@ var specs = map[string]spec{
 	"smolvm_missing_fix":          {fields: []string{"fix"}},
 	"smolvm_mount_colon":          {fields: []string{"path"}},
 	"smolvm_no_agent":             {fields: []string{"vm"}},
+	"smolvm_no_ssh":               {fields: []string{"vm"}},
+	"smolvm_no_sshd":              {fields: []string{"vm"}},
 	"smolvm_old":                  {fields: []string{"version"}},
 	"smolvm_old_fix":              {fields: []string{"fix", "version"}},
+	"smolvm_port_ssh":             {fields: []string{"port", "vm"}},
 	"smolvm_script_failed":        {fields: []string{"script", "vm"}},
+	"smolvm_ssh_port_forwarded":   {fields: []string{"port", "vm"}},
 	"smolvm_too_many_ports":       {fields: []string{"asked", "max", "vm"}},
 	"smolvm_update_failed":        {fields: []string{"vm"}},
 	"ssh_agent_empty":             {},

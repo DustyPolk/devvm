@@ -7,6 +7,8 @@ weight: 10
 
 devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. Its VMs run on a [backend](backends.md): [Lima](lima.md#requirements), which needs Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm`.
 
+ssh and editors reach VMs through devvm's ssh config, which needs OpenSSH 8.7 or newer (`ssh -V`; macOS 13's and Ubuntu 22.04's have it): older versions refuse its `PermitRemoteOpen` ([details](ssh.md#ssh-access-by-name)).
+
 Docker is optional: only `--from` with an image only Docker has needs it ([details](from.md#images-only-docker-has)). Everything else (toolchains, agents, Docker for your projects) is installed inside the VMs.
 
 ## Installing devvm

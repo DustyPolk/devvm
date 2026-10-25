@@ -107,7 +107,8 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
 - **smolvm runs an image as a container in an Alpine microVM:** no init system, `exec` enters the container as root with only `HOME` set (no `USER`, no `/etc/environment`), `/dev` has no loop nodes (`mknod`), its EROFS mounts only uncompressed images, Docker needs `-v /var/lib/docker` and installs `systemctl` (tell systemd by `/run/systemd/system`). virtiofs shows host files as the host's uid, so the VM's user has it.
 - **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine, and a pack machine whose pack (stub and `.smolmachine`) is gone. `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`. On macOS it shares the user's machines (kept under `HOME`: a devvm run with another `HOME` sees others): touch only those with devvm's label.
-- **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`. Under mediated egress a refused connection still opens in the guest, then resets (test with data, not a connect); TCP and UDP to any port 53 go to its resolver; `--dns` is create-only; a machine once started mediated won't start without a decider until `--no-egress-interceptor`.
+- **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`, at most 64 per machine (one is devvm's sshd's).
+- **smolvm base's packages before `layers/base.sh`** come from Ubuntu's live archive, then base.sh pins a snapshot: anything pulling systemd libraries (openssh-server) goes after base's scripts (`sshd.sh`), or Docker's packages can't be installed. Under mediated egress a refused connection still opens in the guest, then resets (test with data, not a connect); TCP and UDP to any port 53 go to its resolver; `--dns` is create-only; a machine once started mediated won't start without a decider until `--no-egress-interceptor`.
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 
 ## Commits and tasks
@@ -128,7 +129,7 @@ The only place in the repo that mentions the bash devvm. It lives at `/Users/me/
 - No migrations from the bash's files or older state.
 
 Copied (here ← there):
-- `LICENSE`, `.shellcheckrc`, `layers/*`, `tools/*.policy`, `guest/tools.sh` ← same paths
+- `LICENSE`, `.shellcheckrc`, `layers/*`, `tools/*.policy`, `guest/tools.sh` ← same paths; `layers/base.sh` edited: sshd's forwarding
 - `base.yaml`, `tools/mise.toml`, `tools/build.sh`, `guest/sync.sh` ← same; edited: comment
 - `.agents/skills/security-audit/`, `skills-lock.json` ← the bash repo's untracked files
 - `testdata/mise.lock`, `testdata/stubs/tmutil` ← `tests/fixtures/`, `tests/stubs/`

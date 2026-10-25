@@ -180,6 +180,20 @@ other = "smolvm can't mount {{.path}}: its path has a colon"
 description = "max and asked are numbers of ports"
 other = "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}: forward fewer with devvm ports"
 
+[smolvm_port_ssh]
+description = "port is the guest port of the VM's sshd (22)"
+other = "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
+
+[smolvm_no_ssh]
+other = "{{.vm}} was started without ssh: devvm restart starts it with it"
+
+[smolvm_no_sshd]
+other = "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
+
+[smolvm_ssh_port_forwarded]
+description = "port is a host port"
+other = "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave it out of devvm ports"
+
 [smolvm_no_agent]
 other = "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
 

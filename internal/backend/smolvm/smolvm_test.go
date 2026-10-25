@@ -68,6 +68,7 @@ func newSandbox(t *testing.T) sandbox {
 			return "sha256:" + strings.Repeat("ab", 32), nil
 		},
 		KVM: "/dev/kvm", Terminal: func() bool { return false },
+		FreePort: func() (int, error) { return 61022, nil }, PortFree: func(int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
 	}
 	return sandbox{s, stub}
@@ -148,9 +149,12 @@ func TestCaps(t *testing.T) {
 		want := !slices.Contains([]backend.Feature{
 			backend.FeatureEgressProxy, backend.FeatureSSH, backend.FeaturePortsAll, backend.FeatureAgentToggle,
 		}, f)
-		none := "none"
-		if f == backend.FeatureEgressProxy {
-			none = "emulated" // reviewed
+		none := map[backend.Feature]string{
+			backend.FeatureEgressProxy: "emulated", // reviewed
+			backend.FeatureSSH:         "emulated", // reviewed
+		}[f]
+		if none == "" {
+			none = "none"
 		}
 		if caps[f].IsNative() != want || (!want && caps[f].String() != none) {
 			t.Errorf("%s: %s", f, caps[f])
@@ -159,7 +163,7 @@ func TestCaps(t *testing.T) {
 	if err := backend.Require(s, "devvm-x", backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
 		t.Errorf("network policy: %v", err)
 	}
-	if err := backend.Require(s, "devvm-x", backend.FeatureSSH); names(err) != "backend_lacks backend=smolvm feature=ssh vm=devvm-x" {
+	if err := backend.Require(s, "devvm-x", backend.FeatureSSH); err != nil {
 		t.Errorf("ssh: %v", err)
 	}
 	err := backend.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...)
@@ -169,14 +173,14 @@ func TestCaps(t *testing.T) {
 }
 
 // Tool images are uncompressed, named by plain.sh; base's key has
-// prepare.sh and shims.sh.
+// prepare.sh, shims.sh and sshd.sh.
 func TestFormatAndKeyFiles(t *testing.T) {
 	s := newSandbox(t)
 	if f := s.ToolFormat(); !strings.HasPrefix(f, "plain-") || len(f) != len("plain-")+12 {
 		t.Errorf("ToolFormat = %q", f)
 	}
 	kf := s.KeyFiles()
-	if len(kf) != 2 || len(kf["smolvm/prepare.sh"]) == 0 || len(kf["smolvm/shims.sh"]) == 0 {
+	if len(kf) != 3 || len(kf["smolvm/prepare.sh"]) == 0 || len(kf["smolvm/shims.sh"]) == 0 || len(kf["smolvm/sshd.sh"]) == 0 {
 		t.Errorf("KeyFiles = %v", slices.Collect(func(yield func(string) bool) {
 			for k := range kf {
 				if !yield(k) {
@@ -198,9 +202,19 @@ func TestPortArgs(t *testing.T) {
 	if _, err := portArgs("v", backend.Ports{All: true}); names(err) != "backend_lacks backend=smolvm feature=ports-all vm=v" {
 		t.Errorf("all: %v", err)
 	}
-	_, err = portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3060}, {From: 4000, To: 4003}}})
-	if names(err) != "smolvm_too_many_ports asked=65 max=64 vm=v" {
+	// One of smolvm's 64 is the VM's ssh.
+	if _, err := portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3062}}}); err != nil {
+		t.Errorf("63: %v", err)
+	}
+	_, err = portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3060}, {From: 4000, To: 4002}}})
+	if names(err) != "smolvm_too_many_ports asked=64 max=63 vm=v" {
 		t.Errorf("too many: %v", err)
+	}
+	// Its sshd's port is the VM's own.
+	for _, r := range []backend.PortRange{{From: 22, To: 22}, {From: 20, To: 30}} {
+		if _, err := portArgs("v", backend.Ports{Ranges: []backend.PortRange{r}}); names(err) != "smolvm_port_ssh port=22 vm=v" {
+			t.Errorf("%v: %v", r, err)
+		}
 	}
 	if _, err := volume("/a:b", "/a:b", true); names(err) != "smolvm_mount_colon path=/a:b" {
 		t.Errorf("colon: %v", err)
@@ -510,6 +524,7 @@ func TestBuildBase(t *testing.T) {
 		"smolvm machine exec --name " + inst + " -i -- sh -s -- on",
 		"smolvm machine exec --name " + inst + " -i -u u -w / -e USER=u -e LOGNAME=u -e HOME=/home/u.guest -e SHELL=/bin/bash -- sh -c " +
 			loginEnv + " sh bash -s",
+		"smolvm machine exec --name " + inst + " -i -- sh -s --",
 		"smolvm machine exec --name " + inst + " -i -- sh -s -- off",
 		"smolvm machine stop --name " + inst,
 		"smolvm pack create --from-vm " + inst + " -o " + s.Dirs.SmolvmImage("0123456789ab") + ".tmp/image",

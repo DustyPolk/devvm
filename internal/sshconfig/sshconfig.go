@@ -102,13 +102,17 @@ func (c *Config) Host(ctx context.Context, vm string) string {
 // its alias and its full name (which never changes), checked against its
 // own host keys. A VM whose host keys can't be read gets no entry: a
 // stopped VM's port is free for anything on the host to take, so ssh
-// must check it reaches the VM.
+// must check it reaches the VM. Nor does one whose backend's ssh isn't
+// usable (an emulation not yet reviewed).
 func (c *Config) Write(ctx context.Context) error {
 	all, up := c.projectVMs(ctx)
 	slices.SortFunc(up, func(a, b running) int { return strings.Compare(a.in.Name, b.in.Name) })
 	var buf strings.Builder
 	buf.WriteString(header)
 	for _, r := range up {
+		if !backend.Allowed(r.b, backend.FeatureSSH) {
+			continue
+		}
 		t, err := r.b.SSH(ctx, r.in.Name)
 		if err != nil || t.Host == "" || t.Port == 0 {
 			continue
@@ -168,6 +172,25 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 	if identity != "" {
 		lines = append(lines, identity)
 	}
+	lines = append(lines,
+		// Nothing else of the host's for the VM, whatever a Host * says:
+		// no X11 display, tunnel or remote SOCKS forward, none of its
+		// keys added to an agent, no hop through another host, and no
+		// host keys the VM offers later (devvm reads them itself). A
+		// RemoteForward can't be turned off here without refusing -R on
+		// the command line too. PermitRemoteOpen needs OpenSSH 8.7 or
+		// newer. No IgnoreUnknown: its first value wins, and would replace
+		// a Host * one of the user's.
+		"  ForwardX11 no",
+		"  ForwardX11Trusted no",
+		"  Tunnel no",
+		"  PermitRemoteOpen none",
+		"  AddKeysToAgent no",
+		"  ProxyJump none",
+		"  ProxyCommand none",
+		"  UpdateHostKeys no",
+		"  HashKnownHosts no",
+	)
 	lines = append(lines, "  Hostname "+t.Host, "  Port "+strconv.Itoa(t.Port))
 	if t.User != "" {
 		lines = append(lines, "  User "+t.User)

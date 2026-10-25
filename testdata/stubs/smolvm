@@ -5,9 +5,10 @@
 # with $STUB_DIR/smolvm-foreign-NAME has another label (someone else's). start fails with
 # $STUB_DIR/smolvm-start-fails, leaving it stopped, and records the SSH agent it was given
 # ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/smolvm-agent-NAME. exec answers the libc check
-# with gnu (musl with $STUB_DIR/build-libc saying so), keeps the tar stream a VM's setup is sent as
+# with gnu (musl with $STUB_DIR/build-libc saying so), the host keys' cat with a made-up
+# ed25519 key (AAAAstub), keeps the tar stream a VM's setup is sent as
 # $STUB_DIR/sync.tar, appends a script's second line to $STUB_DIR/scripts when one is fed to bash
-# -s or sh -s, fails a direct connection (curl --noproxy) unless $STUB_DIR/net-direct exists, and fails with $STUB_DIR/exec-fails (a script fed to bash -s: with $STUB_DIR/script-fails). The tools build machine's build.sh writes the
+# -s or sh -s, answers the sshd probe with none when $STUB_DIR/no-sshd exists, fails a direct connection (curl --noproxy) unless $STUB_DIR/net-direct exists, and fails with $STUB_DIR/exec-fails (a script fed to bash -s: with $STUB_DIR/script-fails). The tools build machine's build.sh writes the
 # images it's asked for into the folder it mounts. pack create writes its stub and .smolmachine.
 # --version is 1.32.2, or $STUB_DIR/smolvm-version.
 # A machine's allow lists and whether it needs a decider are in $STUB_DIR/smolvm-egress/NAME
@@ -125,6 +126,8 @@ case $cmd in
     line="${after[*]}"
     if [[ $line == *"curl --noproxy"* ]]; then [[ -e $STUB_DIR/net-direct ]] || exit 7; fi
     if [[ $line == *"command -v apk"* ]]; then cat "$STUB_DIR/build-libc" 2>/dev/null || echo gnu; exit 0; fi
+    if [[ $line == *"/etc/ssh/ssh_host_"* ]]; then echo "ssh-ed25519 AAAAstub root@stub"; exit 0; fi
+    if [[ $line == *"then echo sshd"* ]]; then if [[ -e $STUB_DIR/no-sshd ]]; then echo none; else echo sshd; fi; exit 0; fi
     if [[ $line == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; exit 0; fi
     if [[ $name == devvm-tools-build && $line == *" bash -s -- "* ]]; then
       tout=$(cat "$STUB_DIR/tools-out")

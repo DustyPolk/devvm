@@ -7,7 +7,7 @@ weight: 27
 
 Each running project VM can be reached as `devvm-<folder>`: `ssh devvm-website`, or VS Code's *Remote-SSH: Connect to Host*. The hash suffix is kept only when two folders share a name; the VM's full name (`devvm-website-<hash>`) always works too.
 
-devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches or stops a VM, because Lima picks a new SSH port each time a VM starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
+devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches or stops a VM, because a VM's SSH port can change each time it starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
 
 ```text
 Include ~/.config/devvm/ssh_config
@@ -16,8 +16,9 @@ Include ~/.config/devvm/ssh_config
 Or point ssh at the file: `ssh -F ~/.config/devvm/ssh_config devvm-website`. `devvm ssh`, `devvm code` and a new [`--clone`](clone.md) VM offer to add the line in a terminal; without one, they show it.
 
 - **Only running VMs are listed.** A stopped VM's port is free for any program on the host to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm ssh` (or `devvm`) before connecting from an editor.
-- **Each entry checks the VM's own host keys,** kept in `~/.config/devvm/known_hosts`. devvm reads them from the VM through Lima once it runs, and again after each start: a VM whose Lima config changed gets new host keys when it boots. A VM whose keys can't be read gets no entry. A host key that doesn't match is refused.
-- **Each connection is its own:** entries set `ControlMaster no`, so a session never rides on a connection another program opened. Of Lima's own ssh settings for the VM, only the address, port, user and login key are copied; Lima's turn host key checks off.
+- **Each entry checks the VM's own host keys,** kept in `~/.config/devvm/known_hosts`. devvm reads them from the VM through its backend once it runs, and again after each start: a VM whose Lima config changed gets new host keys when it boots, and a [smolvm](smolvm.md#ssh-for-editors) VM new ones at every start. A VM whose keys can't be read gets no entry. A host key that doesn't match is refused.
+- **Each connection is its own:** entries set `ControlMaster no`, so a session never rides on a connection another program opened. Of Lima's own ssh settings for the VM, only the address, port, user and login key are copied; Lima's turn host key checks off. On smolvm the login key is devvm's own, one per VM.
+- **Nothing else of this machine's for the VM:** entries set `ForwardX11 no`, `ForwardX11Trusted no`, `Tunnel no`, `PermitRemoteOpen none`, `AddKeysToAgent no`, `ProxyJump none`, `ProxyCommand none`, `UpdateHostKeys no` and `HashKnownHosts no`, whatever your `Host *` says. `PermitRemoteOpen` needs OpenSSH 8.7 or newer (`ssh -V`); an older ssh refuses the entries. A `RemoteForward` of yours still applies, as entries can't turn it off without refusing `ssh -R` too: keep remote forwards out of `Host *`. The VM's sshd allows only local forwarding (`-L`, `-D`, what VS Code uses), no remote forwarding, tunnels or X11, but root in the VM can change that: it's your ssh that decides.
 
 ## devvm ssh and devvm code
 

@@ -33,7 +33,8 @@ const dockerDir = "/var/lib/docker"
 
 // BuildImage builds an image's pack. Base is a machine made from Ubuntu's
 // container image (or spec.From's), by its digest, prepared as Lima's cloud
-// image comes (prepare.sh: sudo, CA certificates, the VM's user); a layer
+// image comes (prepare.sh: sudo, CA certificates, the VM's user; after its
+// scripts, sshd.sh: sshd, without host keys); a layer
 // a machine made from its parent's pack. Neither mounts anything from the
 // host. It starts with the network spec.Net asks for, runs the scripts in
 // order as the VM's user (while shims.sh's stand-ins for systemctl and
@@ -87,10 +88,11 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		}
 	})
 	// Its steps: create, start, the stand-ins, each script, the stand-ins
-	// gone, stop, pack, delete; base's preparation first.
+	// gone, stop, pack, delete; base's preparation first and its sshd
+	// after its scripts.
 	steps := 7 + len(spec.Scripts)
 	if spec.Parent == "" {
-		steps++
+		steps += 2
 	}
 	ctx = ui.WithSteps(ctx, steps)
 	built := backend.Built{}
@@ -149,6 +151,11 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	}
 	for _, sc := range spec.Scripts {
 		if err := s.runScript(ctx, inst, sc); err != nil {
+			return failed(err)
+		}
+	}
+	if spec.Parent == "" {
+		if err := s.rootScript(ctx, inst, "sshd.sh", sshdScript); err != nil {
 			return failed(err)
 		}
 	}

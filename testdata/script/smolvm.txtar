@@ -45,33 +45,24 @@ cd $WORK/web
 stderr '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-web-[0-9a-f]{14}$'
 ! exists $VMS
 
-# --clone copies and fetches over ssh, which smolvm lacks.
-mkdir $WORK/cl
-cd $WORK/cl
-exec git init -q
-exec git -c user.email=e@e -c user.name=e commit -q --allow-empty -m e
-! exec devvm --backend smolvm --from $PIN --clone --no-network-policy --ports none base
-stderr '^devvm: backend_lacks backend=smolvm feature=ssh vm=devvm-cl-[0-9a-f]{14}$'
-! exists $VMS
-cd $WORK/web
-
 # Listed ports: made from base's pack with everything set (a pack would
 # give it its build machine's), started, set up, then the shell.
 exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173,8000-8001 --cpus 2 base
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --from \S+/image\.smolmachine --cpus 2 --mem \d+ --storage 100 -v /var/lib/docker -v (\S+)/web:\S+/web -v \S+/data/devvm/tools:/mnt/devvm-tools:ro -p 5173:5173 -p 8000-8001:8000-8001$'
-stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --net$'
+stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --net -p [0-9]+:22$'
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-web-[0-9a-f]{14}$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i( -t)? -u \S+ -w \S+/web .* bash -l$'
+! stderr 'backend_unreviewed'
 exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
+grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 
-# What smolvm lacks, in one line naming the VM: ssh, every port, agent
+# What smolvm lacks, in one line naming the VM: every port, agent
 # forwarding changed.
-! exec devvm ssh
-stderr '^devvm: backend_lacks backend=smolvm feature=ssh vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm ports all
 stderr '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm ssh-agent on
@@ -104,7 +95,7 @@ stdout '^net_check=ok$'
 stdout '^decider_port=[0-9]+$'
 stdout '^decider_token=[0-9a-f]{64}$'
 stub_calls
-stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --reset-allow-list --allow-cidr 100\.96\.0\.1/32 --allow-host-pattern devvm\.invalid$'
+stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --reset-allow-list --allow-cidr 100\.96\.0\.1/32 --allow-host-pattern devvm\.invalid -p [0-9]+:22$'
 ! stdout ' -e HTTPS?_PROXY='
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --mediated-egress --egress-interceptor 127\.0\.0\.1:[0-9]+$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --secret-file HTTP_PROXY=\S+/smolvm/vms/devvm-pol-[0-9a-f]{14}\.proxy .* curl --noproxy \* -sS -m 3 -o /dev/null https://1\.1\.1\.1$'
@@ -131,3 +122,49 @@ stdout '^smolvm machine stop( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14}$'
 exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
 exec devvm rm -f
 stdout '^==> deleted vm=devvm-pol-[0-9a-f]{14}$'
+
+# ssh for editors (emulated, reviewed): each start forwards the VM's sshd
+# from a host loopback port and runs it with the VM's own key; the ssh
+# config reaches it by name with that key alone, its host keys read through
+# smolvm and pinned.
+mkdir $WORK/sshd
+cd $WORK/sshd
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173 base
+! stderr 'backend_unreviewed'
+stub_calls
+stdout '^smolvm machine update( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} --net -p [0-9]+:22$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+exec sh -c 'ls -l "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
+stdout '^-rw-------\S* '
+grep '^Host devvm-sshd devvm-sshd-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  Hostname 127\.0\.0\.1$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  Port [0-9]+$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  IdentityFile ".+/smolvm/vms/devvm-sshd-[0-9a-f]{14}\.key"$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  ForwardX11 no$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  AddKeysToAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  IdentitiesOnly yes$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  ForwardAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^devvm-sshd-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/known_hosts
+exec devvm ssh
+stdout '^ssh_host_info dir=\S+/sshd host=devvm-sshd$'
+# An image without sshd: the start runs the rest without it, warned; no
+# entry, and devvm ssh says so.
+exec sh -c 'touch "$STUB_DIR/no-sshd"; : > "$STUB_LOG"'
+exec devvm restart
+stderr '^devvm: smolvm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
+stub_calls
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s --$'
+! grep 'devvm-sshd' $XDG_CONFIG_HOME/devvm/ssh_config
+! exec devvm ssh
+stderr '^devvm: smolvm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
+rm $STUB_DIR/no-sshd
+exec devvm rm -f
+stdout '^==> deleted vm=devvm-sshd-[0-9a-f]{14}$'
+! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
+
+# Port 22 is the VM's ssh: refused in --ports.
+mkdir $WORK/p22
+cd $WORK/p22
+! exec devvm --backend smolvm --from $PIN --no-network-policy --ports 3000,22 base
+stderr '^devvm: smolvm_port_ssh port=22 vm=devvm-p22-[0-9a-f]{14}$'

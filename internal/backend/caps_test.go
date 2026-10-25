@@ -144,9 +144,16 @@ func TestUnreviewedLetThrough(t *testing.T) {
 	if got := names(t, backend.Require(b, "devvm-x", backend.FeatureSSH)); got != "backend_lacks backend=fake feature=ssh vm=devvm-x" {
 		t.Errorf("a feature it lacks: %s", got)
 	}
+	if backend.Allowed(b, backend.FeatureEgressProxy) || backend.Allowed(b, backend.FeatureSSH) {
+		t.Error("Allowed: not named, or lacking")
+	}
 	backend.Unreviewed = backend.ParseUnreviewed("fake:egress-proxy")
 	if err := backend.Require(b, "devvm-x", backend.FeatureEgressProxy); err != nil ||
 		!slices.Equal(warned, []string{"backend_unreviewed_used backend=fake feature=egress-proxy vm=devvm-x"}) {
 		t.Errorf("named: %v, warned %q", err, warned)
+	}
+	// Allowed says the same, without a warning.
+	if !backend.Allowed(b, backend.FeatureEgressProxy) || len(warned) != 1 {
+		t.Errorf("Allowed: warned %q", warned)
 	}
 }

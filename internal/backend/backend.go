@@ -266,6 +266,10 @@ type Confinement struct {
 	// SSHPort is the host port the VM's ssh listens on; 0 lets the
 	// backend choose.
 	SSHPort int
+	// SSH is whether the VM gets ssh for editors from this start
+	// (FeatureSSH usable): a backend that emulates it runs it only then,
+	// one with its own always has it.
+	SSH bool
 	// AgentSocket is the ssh-agent the VM's forwarding uses: "" for the
 	// user's own (SSH_AUTH_SOCK), or devvm's.
 	AgentSocket string

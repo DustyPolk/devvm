@@ -185,7 +185,8 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		p.Stop(vm)
 	}
 	sp, _ := strconv.Atoi(st.Get(KeySSHPort))
-	if sp == 0 || !running && p.Listening(sp) {
+	// Never one of the VM's own forwards: its backend would refuse it.
+	if sp == 0 || !running && (p.Listening(sp) || forwarded(st)[sp]) {
 		if sp, err = p.freePort(); err != nil {
 			return none, err
 		}
@@ -384,8 +385,42 @@ func usedPorts(d paths.Dirs) (map[int]bool, error) {
 				used[n] = true
 			}
 		}
+		for n := range forwarded(st) {
+			used[n] = true
+		}
 	}
 	return used, nil
+}
+
+// The keys of a VM's state that list the ports it forwards to the same
+// host port: wanted, and set in its backend (vm's KeyPorts and
+// KeyPortsSet).
+const (
+	keyPorts    = "ports"
+	keyPortsSet = "ports_set"
+)
+
+// forwarded returns the host ports a VM forwards, as its state lists them
+// (5173,8000-8010); none for all or none, which name no port.
+func forwarded(st *state.VM) map[int]bool {
+	out := map[int]bool{}
+	for _, k := range []string{keyPorts, keyPortsSet} {
+		for r := range strings.SplitSeq(st.Get(k), ",") {
+			from, to, ok := strings.Cut(strings.TrimSpace(r), "-")
+			if !ok {
+				to = from
+			}
+			a, err1 := strconv.Atoi(from)
+			b, err2 := strconv.Atoi(to)
+			if err1 != nil || err2 != nil || a < 1 || b > 65535 || a > b {
+				continue
+			}
+			for n := a; n <= b; n++ {
+				out[n] = true
+			}
+		}
+	}
+	return out
 }
 
 // listening reports whether something accepts connections on a host

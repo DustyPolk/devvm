@@ -24,10 +24,13 @@
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
 #                packs, a project VM's mounts, size, ports, Docker and agent forwarding, a node VM's
-#                shared tools, what it refuses (ssh, every port, agent toggling), network policy's
-#                emulation (nothing but the proxy, DNS kept on this machine, failing closed, the policy),
-#                and that no machine without the sandbox's label is touched. Its machines share your
-#                smolvm (macOS): it deletes only those it made, with the sandbox's label.
+#                shared tools, what it refuses (every port, agent toggling), ssh for editors'
+#                emulation (pinned host keys of each VM's own, its own key alone, no forwarding out
+#                even past a hostile sshd, devvm ssh and code, a --clone VM's push and fetch),
+#                network policy's emulation (nothing but the proxy, DNS kept on this machine, failing
+#                closed, the policy, ssh opening no way out), and that no machine without the
+#                sandbox's label is touched. Its machines share your smolvm (macOS): it deletes only
+#                those it made, with the sandbox's label.
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
@@ -376,6 +379,17 @@ check "a changed host key is refused" bash -c "
   { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/other.pub')\"; } > '$kh' &&
   { env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web true </dev/null 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } &&
   (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
+check "its sshd refuses remote forwarding (a port, a socket) and X11; a local forward works (the control)" bash -c "
+  ! env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-web true </dev/null &&
+  ! env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o ExitOnForwardFailure=yes -R /tmp/devvm-e2e-\$\$.sock:'$sc/agent.sock' devvm-web true </dev/null &&
+  limactl shell --workdir / $vm sudo sshd -T </dev/null | grep -qx 'x11forwarding no' &&
+  limactl shell --workdir / $vm sudo sshd -T </dev/null | grep -qx 'allowtcpforwarding local' &&
+  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' -W 127.0.0.1:22 devvm-web </dev/null | head -c 4) == SSH- ]]"
+check "the entry turns off X11, tunnels and adding keys to an agent, whatever Host * says" bash -c "
+  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n  Tunnel yes\n' '$XDG_CONFIG_HOME/devvm/ssh_config' > '$sc/hostile-config' &&
+  g=\$(ssh -G -F '$sc/hostile-config' devvm-web) &&
+  grep -qx 'forwardx11 no' <<<\"\$g\" && grep -qx 'forwardx11trusted no' <<<\"\$g\" && grep -qx 'addkeystoagent false' <<<\"\$g\" &&
+  grep -qx 'tunnel false' <<<\"\$g\" && grep -qx 'permitremoteopen none' <<<\"\$g\" && grep -qx 'updatehostkeys false' <<<\"\$g\""
 
 section ".git protection"
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -865,6 +879,30 @@ me=$(id -un)
 others_before=$(smol_others)
 # in_smol VM CMD: CMD in a login shell as the VM's user, as devvm's shell has it.
 in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" -- bash -lc "$2" </dev/null; }
+# smol_home DIR: a home of a check's own that still has your smolvm's machines: on macOS smolvm keeps
+# them under HOME, so its folders there are links to yours (rm -rf of DIR removes only the links).
+smol_home() { mkdir -p "$1/Library/Application Support" "$1/Library/Caches"
+  [[ "$(uname -s)" != Darwin ]] || for d in "Library/Application Support/smolvm" "Library/Caches/smolvm"; do
+    [[ -e "$1/$d" ]] || ln -s "$HOME/$d" "$1/$d"; done; }
+# smol_pid VM: the host process that runs it (the first line of its agent.pid).
+smol_pid() { head -1 "$(SMOLVM_USAGE=0 smolvm machine data-dir --name "$1")/agent.pid" 2>/dev/null; }
+export -f smol_pid
+# smol_nameserver VM: the resolver the VM's resolv.conf names. smolvm's own network without a port
+# forward is TSI, where the VM asks this machine's resolver itself; any forward, or an allow list, is
+# virtio-net, where it asks smolvm's (the gateway, 100.96.0.1). design.md's DNS detection rests on it.
+smol_nameserver() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf </dev/null; }
+# smol_tsi VM: it asks this machine's first resolver (not the gateway).
+smol_tsi() { local ns host; ns=$(smol_nameserver "$1"); host=$(awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf)
+  echo "VM's: ${ns:-none}, this machine's: ${host:-none}"; [[ -n $ns && $ns != 100.96.0.1 && $ns == "$host" ]]; }
+smol_vnet() { local ns; ns=$(smol_nameserver "$1"); echo "VM's: ${ns:-none}"; [[ $ns == 100.96.0.1 ]]; }
+# smol_listens_only VM PORT...: the host process that runs it listens on each PORT (the control:
+# what lsof sees), and on no other TCP port.
+smol_listens_only() { local vm=$1 pid l p re=""; shift
+  pid=$(smol_pid "$vm"); [[ $pid =~ ^[0-9]+$ ]] || { echo "no pid"; return 1; }
+  l=$(lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }' | sort -u)
+  echo "listening: ${l:-nothing}; want $*"
+  for p in "$@"; do [[ $p =~ ^[0-9]+$ ]] && grep -q ":$p\$" <<<"$l" || return 1; re+="${re:+|}:$p\$"; done
+  ! grep -qvE "$re" <<<"$l"; }
 section "smolvm: shared tool versions"
 check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
 
@@ -911,9 +949,6 @@ check "every port (the default), in one line naming the VM" bash -c "cd '$r' &&
   ! DEVVM_MESSAGES=names '$D' ${S[*]} --no-network-policy base </dev/null >'$work/last.log' 2>&1 &&
   grep -qE '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-smolrefused-[0-9a-f]{14}$' '$work/last.log' &&
   [[ -z \$(vm_of '$r') ]]"
-check "--clone (ssh)" bash -c "cd '$r' && git init -q && git -c user.email=e@e -c user.name=e commit -q --allow-empty -m e &&
-  ! DEVVM_MESSAGES=names '$D' ${S[*]} --clone --no-network-policy --ports none base </dev/null >'$work/last.log' 2>&1 &&
-  grep -qE '^devvm: backend_lacks backend=smolvm feature=ssh vm=' '$work/last.log'"
 
 section "smolvm: a base project"
 p=$(newproj smolweb); git -C "$p" init -q
@@ -939,11 +974,11 @@ SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e
   '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47180", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' \
   </dev/null >/dev/null 2>&1
 check "the listed port reaches this machine's loopback" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47180 && exit 0; sleep 1; done; exit 1'
-check "ssh, every port and turning agent forwarding on are refused in one line" bash -c "cd '$p' &&
-  ! DEVVM_MESSAGES=names '$D' ssh </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=ssh vm=$vm' '$work/e' &&
+check "every port and turning agent forwarding on are refused in one line" bash -c "cd '$p' &&
   ! DEVVM_MESSAGES=names '$D' ports all </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=ports-all vm=$vm' '$work/e' &&
   ! DEVVM_MESSAGES=names '$D' ssh-agent on </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e' &&
   grep -qx net=off '$vms/$vm'"
+check "its process listens on its listed port (the control) and its ssh forward's, nothing else" smol_listens_only "$vm" 47180 "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
 check "a running VM's new size and ports wait for its next start, and apply on restart" bash -c "cd '$p' &&
   '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
   printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
@@ -963,18 +998,211 @@ SSH_AUTH_SOCK=$work/smol-agent.sock ssh-add -q "$work/smol-key" 2>/dev/null
 (cd "$g" && printf 'ssh-add -l\n' | SSH_AUTH_SOCK=$work/smol-agent.sock "$D" "${S[@]}" --no-network-policy --ports none --ssh-agent base >"$work/last.log" 2>&1)
 vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
 check "--ssh-agent: the VM uses the agent it was started with" bash -c "[[ -n '$vm' ]] && grep -q e2e-smolvm '$work/last.log'"
+check "with its ssh forward, even with no ports of its own, smolvm's own network is virtio-net: the gateway's resolver" smol_vnet "$vm"
 check "turning it off is refused" bash -c "cd '$g' && ! DEVVM_MESSAGES=names '$D' ssh-agent off </dev/null 2>'$work/e' &&
   grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e'"
 (cd "$g" && quiet "$D" rm -f)
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-agent.sock"
 
+section "smolvm: ssh for editors"
+# The emulation's guarantee (reviewed): each VM's own host keys, pinned; the VM's own key the only
+# login, as the VM's user; no forwarding that carries the VM's connections out through this machine
+# that devvm's entry lets through; agent forwarding as the entry says.
+# An ~/.ssh/config of the section's own, set up as the docs say, with a Host * that forwards the agent:
+# yours is never read or changed; ssh gets no agent but a throwaway one; a stub code.
+UR=(env)   # an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here
+sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc/home" "$sc/bin"; smol_home "$sc/home"
+dsc=$XDG_CONFIG_HOME/devvm/ssh_config kh=$XDG_CONFIG_HOME/devvm/known_hosts
+printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$dsc" > "$sc/config"
+agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+printf '#!/bin/sh\necho "$*" > %s/code-args\n' "$sc" > "$sc/bin/code"; chmod +x "$sc/bin/code"
+# sshs ARGS...: ssh through the section's config, without an agent. smolssh_port VM: the port its
+# entry names. smolssh_key VM: its pinned host key.
+sshs() { env -u SSH_AUTH_SOCK ssh -F "$sc/config" "$@" </dev/null; }
+smolssh_port() { awk -v h="$1" '$1 == "Host" { on = 0; for (i = 2; i <= NF; i++) if ($i == h) on = 1 } on && $1 == "Port" { print $2; exit }' "$dsc"; }
+smolssh_key() { awk -v n="$1" '$1 == n { print $2, $3 }' "$kh"; }
+# smolssh_loopback PORT: something listens on it, on the host's loopback alone.
+smolssh_loopback() { local l; l=$(lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }' | sort -u)
+  echo "$l"; [[ -n $l ]] && ! grep -vxE "127\.0\.0\.1:$1|\[::1\]:$1" <<<"$l"; }
+# smolssh_pinned VM: the pinned key is the VM's own, its only one, ed25519.
+smolssh_pinned() { local vmk
+  vmk=$(in_smol "$1" 'cat /etc/ssh/ssh_host_*_key.pub' | awk '{ print $1, $2 }')
+  echo "the VM's: $vmk"; echo "pinned: $(smolssh_key "$1")"
+  [[ -n $vmk && $vmk == "$(smolssh_key "$1")" && $vmk == "ssh-ed25519 "* ]]; }
+# smolssh_sshd VM: sshd's settings as it runs them (sshd -T on its config), as decided.
+smolssh_sshd() { local t
+  t=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- /usr/sbin/sshd -T -f /etc/devvm/ssh/sshd_config </dev/null) || return 1
+  echo "$t" | grep -E '^(listenaddress|allowusers|permitrootlogin|authenticationmethods|passwordauthentication|kbdinteractiveauthentication|allowtcpforwarding|allowstreamlocalforwarding|permitlisten|gatewayports|x11forwarding|permittunnel|permituserenvironment|allowagentforwarding) '
+  for want in 'listenaddress 0.0.0.0:22' "allowusers $me" 'permitrootlogin no' 'authenticationmethods publickey' \
+    'passwordauthentication no' 'kbdinteractiveauthentication no' 'allowtcpforwarding local' 'allowstreamlocalforwarding local' \
+    'permitlisten none' 'gatewayports no' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
+    grep -qx "$want" <<<"$t" || { echo "not $want"; return 1; }
+  done
+  [[ $(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- stat -c '%U %a' /etc/devvm/ssh/sshd_config </dev/null) == 'root 600' ]]; }
+# smolssh_nopass HOST: password and keyboard-interactive logins are refused, publickey alone offered.
+smolssh_nopass() { local out r
+  out=$(env -u SSH_AUTH_SOCK ssh -v -F "$sc/config" -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive \
+    -o BatchMode=yes "$1" true </dev/null 2>&1); r=$?
+  grep -E 'Authentications that can continue|denied' <<<"$out"; echo "rc=$r"
+  (( r == 255 )) && grep -qE 'Authentications that can continue: publickey[[:space:]]*$' <<<"$out" &&
+  ! grep -qE 'Authentications that can continue: .*(password|keyboard)' <<<"$out"; }
+# smolssh_stopped VM DIR: devvm stop drops its entry, and nothing listens on its port after.
+smolssh_stopped() { local p
+  p=$(smolssh_port "$1"); [[ -n $p ]] || { echo "no port"; return 1; }
+  (cd "$2" && "$D" stop </dev/null >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
+  ! grep -q "$1" "$dsc" || { echo "still in the ssh config"; return 1; }
+  for _ in 1 2 3 4 5; do nc -z 127.0.0.1 "$p" 2>/dev/null || return 0; sleep 1; done
+  echo "port $p still listening"; return 1; }
+# smolssh_onlykey VM HOST: another key, root and another user are refused; devvm's logs in (the control).
+smolssh_onlykey() {
+  rm -f "$sc/other" "$sc/other.pub"; ssh-keygen -q -t ed25519 -N '' -f "$sc/other"
+  ! env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile="$kh" -o HostKeyAlias="$1" -o StrictHostKeyChecking=yes \
+    -o BatchMode=yes -o IdentitiesOnly=yes -i "$sc/other" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null &&
+  ! sshs -o BatchMode=yes -l root "$2" true && ! sshs -o BatchMode=yes -l nobody "$2" true && sshs -o BatchMode=yes "$2" true; }
+# smolssh_forwarding HOST: devvm's sshd refuses remote forwarding (a port, a socket); a local forward,
+# as editors use, works (the control).
+smolssh_forwarding() {
+  ! sshs -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 "$1" true &&
+  ! sshs -o ExitOnForwardFailure=yes -R "/tmp/devvm-e2e-$$.sock:$sc/agent.sock" "$1" true &&
+  [[ $(sshs -W 127.0.0.1:22 "$1" | head -c 4) == SSH- ]]; }
+# smolssh_hostile VM HOST: root in the VM rewrites its sshd's config to allow remote forwarding, X11
+# and tunnels (with xauth for X11), and restarts it. Through a config of the check's own whose Host *
+# asks for X11 and to add keys to the agent, the session gets no display and the agent no key; the
+# same asked on the command line gets both (the controls), and ssh -R now works (not covered: the
+# entry can't refuse it). Then the agent is emptied; the next start restores sshd.
+smolssh_hostile() { local hc=$sc/hostile-config d keys
+  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n' "$dsc" > "$hc"
+  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c 'apt-get update -q >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends xauth >/dev/null 2>&1 &&
+    c=/etc/devvm/ssh/sshd_config && sed -i -e "s/^AllowTcpForwarding .*/AllowTcpForwarding yes/" -e "s/^AllowStreamLocalForwarding .*/AllowStreamLocalForwarding yes/" \
+      -e "s/^X11Forwarding .*/X11Forwarding yes/" -e "s/^PermitTunnel .*/PermitTunnel yes/" -e "s/^PermitListen .*/PermitListen any/" "$c" &&
+    kill "$(cat /run/devvm-sshd.pid)" && sleep 1 && /usr/sbin/sshd -f "$c" -E /var/log/devvm-sshd.log' </dev/null || { echo "no hostile sshd"; return 1; }
+  sshh() { DISPLAY=:9 SSH_AUTH_SOCK=$sc/agent.sock ssh -F "$hc" -o BatchMode=yes "$@" </dev/null 2>/dev/null; }
+  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
+  d=$(sshh "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
+  echo "through Host *: display $d, agent ${keys:-empty}"
+  [[ $d == x=none && -z $keys ]] || return 1
+  d=$(sshh -Y -o AddKeysToAgent=yes "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
+  echo "asked on the command line: display $d, agent ${keys:-empty}"
+  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
+  [[ $d != x=none && -n $keys ]] || return 1
+  sshh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 "$2" true || { echo "ssh -R refused by the hostile sshd"; return 1; }; }
+# smolssh_squatted VM DIR HOST: its recorded port, taken by another program while it's stopped: its
+# next start forwards another, and ssh reaches it.
+smolssh_squatted() { local p n sq
+  p=$(smolssh_port "$1"); [[ -n $p ]] || { echo "no port"; return 1; }
+  (cd "$2" && "$D" stop </dev/null >/dev/null 2>&1) || return 1
+  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:" . shift, Listen => 5, ReuseAddr => 1) or die; sleep 120' "$p" &
+  sq=$!; sleep 0.5
+  (cd "$2" && printf 'exit\n' | "${UR[@]}" "$D" >"$work/last.log" 2>&1); n=$(smolssh_port "$1")
+  echo "squatted $p, now ${n:-none}"
+  sshs -o BatchMode=yes "$3" true; local r=$?
+  kill "$sq" 2>/dev/null; wait "$sq" 2>/dev/null
+  [[ -n $n && $n != "$p" ]] && (( r == 0 )); }
+# smolssh_nosshd VM DIR: root moves sshd away; devvm's next start warns smolvm_no_sshd, the VM runs
+# with no entry, and devvm ssh says so; sshd put back, a start has ssh again (the control).
+smolssh_nosshd() {
+  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null || return 1
+  (cd "$2" && printf 'exit\n' | "${UR[@]}" DEVVM_MESSAGES=names "$D" restart >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
+  if ! grep -qx "devvm: smolvm_no_sshd vm=$1" "$work/last.log" || [[ $(smol_status "$1") != running ]] || grep -q "$1" "$dsc"; then
+    cat "$work/last.log"; return 1
+  fi
+  if (cd "$2" && "${UR[@]}" DEVVM_MESSAGES=names "$D" ssh </dev/null 2>"$work/e") || ! grep -qx "devvm: smolvm_no_sshd vm=$1" "$work/e"; then
+    cat "$work/e"; return 1
+  fi
+  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd.away /usr/sbin/sshd </dev/null || return 1
+  (cd "$2" && printf 'exit\n' | "${UR[@]}" "$D" restart >"$work/last.log" 2>&1) && grep -q "$1" "$dsc"; }
+# smolssh_otherkey VM OTHER: OTHER's key doesn't log in to VM; VM's own does, the same way (the control).
+smolssh_otherkey() {
+  smolssh_with_key() { env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile="$kh" -o HostKeyAlias="$1" -o StrictHostKeyChecking=yes \
+      -o BatchMode=yes -o IdentitiesOnly=yes -i "$XDG_DATA_HOME/devvm/smolvm/vms/$2.key" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null 2>/dev/null; }
+  if smolssh_with_key "$1" "$2"; then echo "$2's key logged in to $1"; return 1; fi
+  smolssh_with_key "$1" "$1" || { echo "its own key didn't"; return 1; }; }
+q=$(newproj smolssh); git -C "$q" init -q
+(cd "$q" && printf 'exit\n' | HOME=$sc/home "${UR[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
+vm=$(vm_of "$q"); [[ -z $vm ]] || created+=("$vm")
+check "the ssh config lists it by the folder's name, its sshd forwarded from the host's loopback" bash -c "
+  [[ -n '$vm' ]] && ! grep -q 'backend_unreviewed' '$work/last.log' &&
+  grep -q '^Host devvm-smolssh $vm\$' '$dsc'"
+check "... on the host's loopback alone" smolssh_loopback "$(smolssh_port "$vm")"
+check "with its ssh forward, smolvm's own network is virtio-net: the VM asks the gateway's resolver" smol_vnet "$vm"
+check "its host key is pinned, as the VM has it: ed25519, its only one" smolssh_pinned "$vm"
+check "ssh devvm-smolssh reaches it, as the VM's user, with the environment devvm's commands get" bash -c "
+  out=\$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh 'id -un; hostname; echo \$BASH_ENV' </dev/null) &&
+  [[ \$out == '$me'\$'\n'smolssh\$'\n'/etc/profile.d/devvm-tools.sh ]] || { echo \"\$out\"; false; }"
+check "agent forwarding stays off, whatever Host * says" bash -c "
+  SSH_AUTH_SOCK='$sc/agent.sock' ssh -F '$sc/config' devvm-smolssh 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
+check "... while ssh -A forwards it (the control)" bash -c "
+  SSH_AUTH_SOCK='$sc/agent.sock' ssh -A -F '$sc/config' devvm-smolssh 'test -S \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
+check "a changed host key is refused" bash -c "
+  cp '$kh' '$sc/kh' && ssh-keygen -q -t ed25519 -N '' -f '$sc/changed' &&
+  { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/changed.pub')\"; } > '$kh' &&
+  { env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh true </dev/null 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } &&
+  (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
+check "password and keyboard-interactive logins are refused: publickey alone is offered" smolssh_nopass devvm-smolssh
+check "only devvm's key logs in, as the VM's user: another key, root and another user are refused" smolssh_onlykey "$vm" devvm-smolssh
+check "devvm's sshd refuses remote forwarding (a port, a socket); a local forward, as editors use, works" smolssh_forwarding devvm-smolssh
+check "sshd runs devvm's settings, and its config is root's alone" smolssh_sshd "$vm"
+check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" smolssh_hostile "$vm" devvm-smolssh
+check "devvm ssh names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
+  HOME='$sc/home' ${UR[*]} '$D' ssh </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m ssh_host_info dir=$q host=devvm-smolssh | head -1)\" '$work/last.log' &&
+  HOME='$sc/home' PATH='$sc/bin':\$PATH ${UR[*]} '$D' code </dev/null >'$work/last.log' 2>&1 &&
+  [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-smolssh $q' ]]"
+k1=$(smolssh_key "$vm")
+check "restart: new host keys, pinned again, and ssh reaches it" bash -c "cd '$q' &&
+  printf 'exit\n' | ${UR[*]} '$D' restart >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] &&
+  k=\$(awk -v n='$vm' '\$1 == n { print \$2, \$3 }' '$kh') && [[ -n \$k && \$k != '$k1' ]] &&
+  env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh true </dev/null"
+q2=$(newproj smolssh2)
+(cd "$q2" && printf 'exit\n' | "${UR[@]}" "$D" "${S[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
+vm2=$(vm_of "$q2"); [[ -z $vm2 ]] || created+=("$vm2")
+check "a VM made from the same image has host keys of its own, and a port of its own" bash -c "
+  [[ -n '$vm2' ]] && a=\$(awk -v n='$vm' '\$1 == n { print \$3 }' '$kh') && b=\$(awk -v n='$vm2' '\$1 == n { print \$3 }' '$kh') &&
+  [[ -n \$a && -n \$b && \$a != \$b ]] && env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh2 true </dev/null"
+check "... and a key of its own: its key doesn't log in to the other VM, the other's own does (the control)" smolssh_otherkey "$vm" "$vm2"
+check "an image without sshd (root removed it): the next start runs without ssh, warned, and the VM runs" smolssh_nosshd "$vm2" "$q2"
+(cd "$q2" && quiet "${UR[@]}" "$D" rm -f)
+check "its port taken while it's stopped: its next start forwards another, and ssh reaches it" smolssh_squatted "$vm" "$q" devvm-smolssh
+check "devvm stop drops its entry, and nothing listens on its port" smolssh_stopped "$vm" "$q"
+check "rm deletes it, its entry and its pinned keys" bash -c "cd '$q' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
+  [[ -z \$(smol_status '$vm') ]] && ! grep -q '$vm' '$dsc' && ! grep -q '^$vm ' '$kh'"
+kill "$agent_pid" 2>/dev/null; agent_pid=""
+
+section "smolvm: --clone"
+# A home of its own: no ~/.ssh/config, so nothing of yours is read or offered the Include line. A
+# throwaway repo, with a branch besides main and a file it doesn't track.
+ch=$work/clone-home; rm -rf "$ch"; mkdir -p "$ch"; smol_home "$ch"
+export GIT_CONFIG_GLOBAL=$ch/.gitconfig GIT_CONFIG_NOSYSTEM=1   # host git: none of your settings
+c=$(newproj smolcloned)
+git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$c" -c user.email=e@e -c user.name=e commit -qm one &&
+  git -C "$c" branch other && echo host-only > "$c/untracked"
+(cd "$c" && printf 'pwd; git branch --show-current\n' | HOME=$ch "${UR[@]}" "$D" "${S[@]}" --clone --no-network-policy --ports none base >"$work/last.log" 2>&1)
+vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
+cgit="GIT_SSH_COMMAND='ssh -F $dsc' git -C '$c'"
+# smolclone_seeded VM: its own clone, every branch pushed in over ssh, nothing of the folder mounted.
+smolclone_seeded() {
+  [[ -n $1 ]] && grep -qx mode=clone "$vms/$1" && grep -qx "$c" "$work/last.log" && grep -qx main "$work/last.log" &&
+  [[ $(in_smol "$1" "git -C '$c' branch --format='%(refname:short)'" | tr '\n' ' ') == 'main other ' ]] &&
+  in_smol "$1" "git -C '$c' log --oneline" | grep -q one && in_smol "$1" "[ ! -e '$c/untracked' ]"; }
+check "the VM has its own clone, every branch pushed in over ssh, nothing of the folder mounted, and the shell opens in it" smolclone_seeded "$vm"
+check "the repo has a devvm remote, by the VM's name" bash -c "[[ \$(git -C '$c' remote get-url devvm) == '$vm:$c' ]]"
+in_smol "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
+check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgit fetch -q devvm && git -C '$c' log --oneline devvm/main | grep -q from-vm"
+check "pushing a branch into it works too" bash -c "git -C '$c' branch pushed other && $cgit push -q devvm pushed &&
+  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- git -C '$c' rev-parse -q --verify refs/heads/pushed </dev/null >/dev/null"
+check "rm -f deletes it and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+  [[ -z \$(smol_status '$vm') && ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
+  git -C '$c' log --oneline saved/devvm/main | grep -q from-vm"
+unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+
 section "smolvm: network policy"
 # The emulation's guarantee (reviewed): a VM with network policy reaches nothing but its proxy,
 # through devvm's decider; DNS it's refused never leaves this machine; with the proxy gone nothing
 # gets out, and smolvm won't start it without a decider; its policy applies as on Lima. A base VM:
 # no agent, so no login is read. Your own HOME, as smolvm keeps its machines under it. U is what
-# devvm runs with (an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here).
+# devvm runs with (an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here). Its ssh
+# is checked to open no way out.
 U=(env)
 # smol_root VM CMD: CMD as root in the VM. smol_block VM: the VM's object in smolvm's JSON.
 smol_root() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- bash -c "$2" </dev/null; }
@@ -1064,6 +1292,19 @@ smolnet_no_leak() {
     grep '"action":"deny"' "$work/decisions" | grep -qF "\"destination\":\"$name\"" || { echo "not seen: $name"; return 1; }
   done
 }
+# smol_raw NAME OPTION...: a machine of the run's own from base's pack, with the sandbox's label and
+# those network options, started: no port forward, which every devvm VM has since its ssh. Deleted
+# at the end, or by smol_raw_rm.
+smol_raw() { local n=$1; shift; created+=("$n")
+  SMOLVM_USAGE=0 smolvm machine create --name "$n" --label "devvm.data=$XDG_DATA_HOME/devvm" --from "$packs/$kb/image.smolmachine" \
+    --cpus 1 --mem 1024 "$@" >/dev/null 2>&1 && SMOLVM_USAGE=0 smolvm machine start --name "$n" >/dev/null 2>&1; }
+smol_raw_rm() { SMOLVM_USAGE=0 smolvm machine delete --name "$1" -f >/dev/null 2>&1; }
+# smolnet_tsi_dns_seen: on smolvm's own network without a forward (TSI, smol_raw), the VM asks this
+# machine's resolver, and the DNS probe's queries are seen to leave: the nettop control.
+smolnet_tsi_dns_seen() { local n=devvm-e2e-tsi r
+  smol_raw "$n" --net || { echo "no machine"; return 1; }
+  smol_tsi "$n" && smolnet_dns_seen "$n"; r=$?
+  smol_raw_rm "$n"; return "$r"; }
 # smolnet_dns_seen VM: on smolvm's own network, the same probe's queries do leave (the control).
 smolnet_dns_seen() { local f; f=$(smolnet_probe "$1" "$work/dns-probe.sh" "devvm-e2e-$$-$RANDOM") || return 1
   echo "flows: ${f:-none}"; cat "$work/probe.log"; grep -q ':53$' <<<"$f"; }
@@ -1164,6 +1405,30 @@ smolnet_widened() {
 }
 # The proxy's lifeline-following process for VM, if it runs.
 smolnet_proxy() { pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " 2>/dev/null; }
+# sshn ARGS...: ssh through devvm's ssh config alone, without an agent. smolnet_via VM HOST:PORT: an
+# HTTP request through a local forward (ssh -W) from the VM to HOST:PORT, and the start of what comes
+# back, in 15 s at most.
+sshn() { env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$@"; }
+smolnet_via() { printf 'GET / HTTP/1.0\r\nHost: %s\r\n\r\n' "${2%:*}" |
+  perl -e 'alarm 15; exec @ARGV' env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -W "$2" "$1" 2>/dev/null | head -c 12; }
+smolnet_via_open() { local a; a=$(smolnet_via "$1" 1.1.1.1:80); echo "got: ${a:-nothing}"; [[ $a == HTTP/* ]]; }
+# smolnet_ssh VM: ssh reaches it on its network policy's port; its sessions, a login's or not, get the
+# proxy's settings, and an allowed host works through the proxy from one.
+smolnet_ssh() { local key out
+  key=$(sed -n 's/^proxy_key=//p' "$vms/$1")
+  [[ -n $(smolssh_port "$1") && $(smolssh_port "$1") == "$(sed -n 's/^ssh_port=//p' "$vms/$1")" ]] || { echo "not its ssh_port"; return 1; }
+  out=$(sshn "$1" 'printenv HTTPS_PROXY; printenv NO_PROXY; bash -lc "printenv https_proxy"' </dev/null)
+  [[ $out == "http://devvm:$key@100.96.0.1:"*$'\n'"localhost,127.0.0.1,::1"$'\n'"http://devvm:$key@100.96.0.1:"* ]] || { echo "sessions: ${out//$key/KEY}"; return 1; }
+  sshn "$1" 'curl -fsS -m 20 -o /dev/null https://github.com' </dev/null; }
+# smolnet_ssh_closed VM: ssh opens no way out: a local forward to an outside host or to a service on
+# the host's loopback (which answers 407) gets nothing back, remote forwarding is refused, and a
+# direct connection from a session fails.
+smolnet_ssh_closed() { local a b
+  a=$(smolnet_via "$1" 1.1.1.1:80) b=$(smolnet_via "$1" 100.96.0.1:18765)
+  echo "1.1.1.1:80: ${a:-nothing}; the host's loopback: ${b:-nothing}"
+  [[ $a != HTTP/* && $b != HTTP/* ]] &&
+  ! sshn -o ExitOnForwardFailure=yes -R 0:127.0.0.1:18765 "$1" true </dev/null &&
+  ! sshn "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1" </dev/null; }
 # A service on the host's own loopback (a devvm _proxy, which answers anything with 407).
 echo listener-key > "$work/listener.auth"
 "$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
@@ -1177,7 +1442,7 @@ pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
 dp=$(sed -n 's/^decider_port=//p' "$vms/$vm" 2>/dev/null)
 check "--network-policy: the VM runs behind its proxy, which decides for it, and the self-check passed" bash -c "
   [[ -n '$vm' && -n '$dp' && \$(smol_status '$vm') == running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
-  ! grep -q backend_unreviewed '$work/last.log' &&
+  ! grep -q 'backend_unreviewed' '$work/last.log' &&
   pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm .* -decider 127.0.0.1:$dp -decider-to 100.96.0.1:$pp ' >/dev/null"
 # The control: the guest has the password, from the VM's proxy file, in a login and in Docker's
 # daemon, which devvm's services exec started with no login.
@@ -1191,6 +1456,7 @@ check "the proxy's password was in no host process's arguments while devvm launc
   { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'tr \"\\\\0\" \"\\\\n\" < /proc/\$(cat /run/docker.pid)/environ' </dev/null |
     grep -qF \"https_proxy=http://devvm:\$key@\" || { echo not in the daemon devvm started; false; }; }"
 check "its allow list is the host's gateway alone, and its DNS a name that doesn't exist" smolnet_lists "$vm"
+check "... on virtio-net: it asks the gateway's resolver" smol_vnet "$vm"
 check "an allowed host works, through the proxy" in_smol "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"
 check "another host is blocked by the proxy, and so is another port of an allowed one" bash -c "
   in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc \"\$1\" </dev/null; }
@@ -1198,6 +1464,8 @@ check "another host is blocked by the proxy, and so is another port of an allowe
   in_smol 'curl -sS -m 20 -o /dev/null https://example.com' 2>&1 | grep -q 403 &&
   ! in_smol 'curl -fsS -m 20 -o /dev/null https://github.com:8443'"
 check "direct connections fail, even as root: an address, other ports, IPv6, the host's loopback" smolnet_direct "$vm"
+check "ssh reaches it on its port; its sessions, a login's or not, get the proxy's settings, and an allowed host works" smolnet_ssh "$vm"
+check "ssh opens no way out: a local forward to 1.1.1.1 or the host's loopback gets nothing, remote forwarding is refused" smolnet_ssh_closed "$vm"
 check "the host's loopback is refused through the proxy too (internal addresses need a rule)" bash -c "
   [[ \$(SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://100.96.0.1:18765/' </dev/null) == 403 ]]"
 check "DNS fails at once, not after a timeout" in_smol "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
@@ -1244,11 +1512,16 @@ check "devvm network off: its next start is smolvm's own network, without an all
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
 check "... with no allow list left" smolnet_open "$vm"
 check "... where the direct probes get out (their control): 1.1.1.1, github's ssh, IPv6" smolnet_direct_open "$vm"
+check "... and a local forward through ssh to 1.1.1.1 gets an answer (its control)" smolnet_via_open "$vm"
+check "... on virtio-net, as its ssh forward has it" smol_vnet "$vm"
+# A machine with a port forward (its ssh) is on virtio-net, where smolvm resolves through this
+# machine's system resolver, which nettop can't tie to it: the DNS control runs on a machine without
+# a forward (TSI), as the probe was checked before ssh.
 if [[ "$(uname -s)" == Darwin ]]; then
-  check "... and the DNS probe's queries leave (its control)" smolnet_dns_seen "$vm"
+  check "... and on TSI (a machine without a forward) the DNS probe's queries leave (its control)" smolnet_tsi_dns_seen
   check "... and the UDP probe's datagrams leave (its control)" smolnet_udp_seen "$vm"
 else
-  skip "... and the DNS probe's queries leave (its control)" "nettop is macOS's"
+  skip "... and on TSI (a machine without a forward) the DNS probe's queries leave (its control)" "nettop is macOS's"
   skip "... and the UDP probe's datagrams leave (its control)" "nettop is macOS's"
 fi
 check "devvm network on: devvm restart starts it confined again" bash -c "cd '$np' &&
