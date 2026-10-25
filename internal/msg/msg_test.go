@@ -1,7 +1,10 @@
 package msg
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"strconv"
 	"strings"
 	"testing"
@@ -103,6 +106,46 @@ func TestNames(t *testing.T) {
 	}
 	if got, want := m.Error(), m.Names(); got != want {
 		t.Errorf("Error in names mode: got %q, want %q", got, want)
+	}
+}
+
+// errors.Is and errors.As see through a message to its cause, which
+// changes nothing it shows.
+func TestBecause(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	notExist := &fs.PathError{Op: "open", Path: "/x", Err: fs.ErrNotExist}
+	plain := ProxyFailed("why")
+	for _, tt := range []struct {
+		name    string
+		err     error
+		is      error
+		isWant  bool
+		asPath  bool
+		asNames string // the message errors.As finds
+	}{
+		{"path error", plain.Because(notExist), fs.ErrNotExist, true, true, "proxy_failed reason=why"},
+		{"canceled", plain.Because(context.Canceled), context.Canceled, true, false, "proxy_failed reason=why"},
+		{"wrapped message", fmt.Errorf("x: %w", plain.Because(notExist)), fs.ErrNotExist, true, true, "proxy_failed reason=why"},
+		{"message in a message", NoSecret("s").Because(plain.Because(context.Canceled)), context.Canceled, true, false, "no_secret secret=s"},
+		{"no cause", plain, fs.ErrNotExist, false, false, "proxy_failed reason=why"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := errors.Is(tt.err, tt.is); got != tt.isWant {
+				t.Errorf("errors.Is(%v) = %v, want %v", tt.is, got, tt.isWant)
+			}
+			var pe *fs.PathError
+			if got := errors.As(tt.err, &pe); got != tt.asPath {
+				t.Errorf("errors.As *fs.PathError = %v, want %v", got, tt.asPath)
+			}
+			m, ok := errors.AsType[M](tt.err)
+			if !ok || m.Names() != tt.asNames {
+				t.Errorf("errors.As M = %q, %v, want %q", m.Names(), ok, tt.asNames)
+			}
+		})
+	}
+	t.Setenv("DEVVM_MESSAGES", "")
+	if m := plain.Because(notExist); m.Error() != plain.Error() || m.Line() != plain.Line() {
+		t.Errorf("with a cause: %q, want %q", m.Error(), plain.Error())
 	}
 }
 

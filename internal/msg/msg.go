@@ -30,12 +30,14 @@ import (
 // DocsBase is the docs site's address; doc links are under it.
 const DocsBase = "https://w3cj.github.io/devvm/docs/"
 
-// M is a message with its values, made by the generated functions.
+// M is a message with its values, made by the generated functions, and the
+// error it reports, if any (Because).
 type M struct {
 	id     string
 	plural bool
 	count  int
 	vals   []val // in sorted key order
+	cause  error
 }
 
 type val struct{ key, value string }
@@ -82,6 +84,16 @@ func (m M) Line() string {
 
 // Error makes a message usable as an error. It's the same as String.
 func (m M) Error() string { return m.String() }
+
+// Because returns the message carrying err, the error it reports, so
+// errors.Is and errors.As see through it. The text stays the message's own.
+func (m M) Because(err error) M {
+	m.cause = err
+	return m
+}
+
+// Unwrap returns the error the message reports, or nil.
+func (m M) Unwrap() error { return m.cause }
 
 // Names returns the message's ID and values: no_vm dir=/x.
 func (m M) Names() string {

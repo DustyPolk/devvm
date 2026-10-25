@@ -310,7 +310,7 @@ func (s *Store) Get(ctx context.Context, name string) (string, error) {
 	if kind, ok := loginOf(name); ok {
 		var out bytes.Buffer
 		if err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-get", name}, &out); err != nil {
-			return "", msg.ProxyFailed(err.Error())
+			return "", msg.ProxyFailed(err.Error()).Because(err)
 		}
 		return strings.TrimSpace(out.String()), nil
 	}

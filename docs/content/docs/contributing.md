@@ -191,7 +191,7 @@ After editing `en.toml`, run:
 mise exec -- go generate ./internal/msg
 ```
 
-It writes `internal/msg/messages_gen.go`, with one function per message. The parameters are the template's fields in sorted order, in camelCase, and `count int` for plural messages: `[no_vm]` becomes `msg.NoVM(dir string) msg.M`, and a value that's missing or extra is a compile error. `msg.M` is also an `error`.
+It writes `internal/msg/messages_gen.go`, with one function per message. The parameters are the template's fields in sorted order, in camelCase, and `count int` for plural messages: `[no_vm]` becomes `msg.NoVM(dir string) msg.M`, and a value that's missing or extra is a compile error. `msg.M` is also an `error`: one made from another error carries it with `.Because(err)`, so `errors.Is` and `errors.As` see through it, while the text stays the message's own.
 
 The tests fail when:
 

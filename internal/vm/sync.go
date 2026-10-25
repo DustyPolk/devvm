@@ -185,7 +185,7 @@ func (e *Env) stageNet(s *stage, store *secrets.Store, vm, img, salt string) err
 	for _, kind := range store.Logins(img) {
 		data, err := store.VMLogin(kind, salt)
 		if err != nil {
-			return msg.LoginCopyFailed(kind, err.Error(), vm)
+			return msg.LoginCopyFailed(kind, err.Error(), vm).Because(err)
 		}
 		name := "claude.json" // merged by sync.sh, not copied
 		if kind != "claude" {

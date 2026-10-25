@@ -54,12 +54,12 @@ func openLog() *os.File {
 		if m, ok := errors.AsType[msg.M](err); ok {
 			Die(m)
 		}
-		Die(msg.RunLogFailed("", err.Error()))
+		Die(msg.RunLogFailed("", err.Error()).Because(err))
 	}
 	dir := d.RunLogs()
 	f, err := createLog(dir, time.Now(), os.Getpid())
 	if err != nil {
-		Die(msg.RunLogFailed(dir, err.Error()))
+		Die(msg.RunLogFailed(dir, err.Error()).Because(err))
 	}
 	runLog.f, runLog.path = f, f.Name()
 	pruneLogs(dir, keepLogs)

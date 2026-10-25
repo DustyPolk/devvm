@@ -130,5 +130,5 @@ func fail(err error, what func(reason string) msg.M) {
 	if m, ok := errors.AsType[msg.M](err); ok {
 		ui.Die(m)
 	}
-	ui.Die(what(err.Error()))
+	ui.Die(what(err.Error()).Because(err))
 }
