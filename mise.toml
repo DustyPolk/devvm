@@ -27,11 +27,11 @@ run = "golangci-lint fmt"
 description = "Run every linter"
 run = [
   "golangci-lint run",
-  # Shell scripts, found by their shebang (not the testscript archives,
-  # which hold small scripts among other files).
+  # Shell scripts, found by a shebang on their first line (not the
+  # testscript archives, which hold small scripts among other files).
   '''
   git ls-files --cached --others --exclude-standard -z -- . ':!:.agents' ':!:testdata/script' |
-    xargs -0 grep -lIE '^#!.*[/ ](ba|da)?sh( |$)' |
+    LC_ALL=C xargs -0 awk 'FNR == 1 { if ($0 ~ /^#!.*[\/ ](ba|da)?sh( |$)/) print FILENAME; nextfile }' |
     xargs -r shellcheck --external-sources
   ''',
   "markdownlint-cli2 'docs/content/**/*.md'",
