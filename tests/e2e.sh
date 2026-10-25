@@ -5,7 +5,7 @@
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then opening it again,
-#                restart and rm, an agent VM's folders and exported history, and SSH agent forwarding
+#                restart, devvm ports and rm, an agent VM's folders and exported history, and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
@@ -323,6 +323,19 @@ check "stopped, devvm starts it again" bash -c "limactl stop $vm >/dev/null 2>&1
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
 check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
+check "a running VM's new ports wait for its next start" bash -c "cd '$p' &&
+  '$D' ports 47170-47173 2>&1 | grep -qF \"\$(m ports_next_start vm=$vm)\" && [[ \$('$D' ports 2>/dev/null) == all ]]"
+check "and apply on restart" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
+  [[ \$('$D' ports 2>&1) == 47170-47173 ]]"
+# Listeners on each kind of address Lima matches differently (loopback, every address; IPv4 and 6), on
+# listed ports (47170-47173) and unlisted ones (47174-47177). Their output goes nowhere, or the SSH
+# session waits for them.
+in_vm "$vm" 'p=47170; for r in 1 2; do for a in 127.0.0.1 ::1 0.0.0.0 ::; do
+  setsid -f python3 -m http.server -b $a $p </dev/null >/dev/null 2>&1; p=$((p + 1)); done; done' >/dev/null 2>&1
+check "only the listed ports reach this machine, whatever the address" bash -c \
+  'for i in $(seq 20); do nc -z 127.0.0.1 47173 && break; sleep 1; done; sleep 3
+  for p in 47170 47171 47172 47173; do nc -z 127.0.0.1 $p || exit 1; done
+  for p in 47174 47175 47176 47177; do ! nc -z 127.0.0.1 $p || exit 1; done'
 if [[ "$(uname -s)" == Darwin ]]; then
   check "a swapped .git is reported" bash -c "limactl shell --workdir / $vm bash -c 'cd $p && mv .git .git-old && git init -q' </dev/null;
     cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_replaced git=$p/.git | head -1)\""

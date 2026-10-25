@@ -1,6 +1,6 @@
 ---
 title: devvm secret ls
-weight: 19
+weight: 22
 ---
 
 List the tokens, whether each is saved, and the VMs using it

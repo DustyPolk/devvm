@@ -264,14 +264,8 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		return err
 	}
 	if ports == "" {
-		def, err := state.ReadPorts(e.Dirs)
-		if err != nil {
+		if ports, err = e.defaultPorts(); err != nil {
 			return err
-		}
-		if def != "" {
-			if ports, err = ParsePorts(def); err != nil {
-				return err
-			}
 		}
 	}
 	builder := e.builder(b, o.From)

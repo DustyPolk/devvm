@@ -63,6 +63,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"too_many_cpus":               "commands#size-and-ports",
 	"too_much_memory":             "commands#size-and-ports",
 	"port_invalid":                "commands#size-and-ports",
+	"ports_list_needed":           "images#ports",
+	"ports_rm_all":                "images#ports",
 	"no_image_for":                "images#which-image-a-new-vm-gets",
 	"net_direct_route":            "network#the-self-check",
 	"net_unenforced_stop":         "network#the-self-check",

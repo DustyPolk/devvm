@@ -18,6 +18,9 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm policy allow](devvm_policy_allow.md): Allow hosts for this folder's VM
 - [devvm policy deny](devvm_policy_deny.md): Deny hosts for this folder's VM
 - [devvm policy rm](devvm_policy_rm.md): Remove rules from this folder's VM
+- [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
+- [devvm ports add](devvm_ports_add.md): Forward more ports from this folder's VM
+- [devvm ports rm](devvm_ports_rm.md): Stop forwarding some ports from this folder's VM
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it

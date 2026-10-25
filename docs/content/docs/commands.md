@@ -16,6 +16,9 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm rm [-f]` | delete this folder's VM, exporting its agents' history first ([details](#deleting-a-vm)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
 | `devvm ls` | list the project VMs ([details](#listing-vms)) |
+| `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`: at once when it's stopped, from its next start when it runs ([details](images.md#ports)) |
+| `devvm ports add\|rm LIST` | forward more ports, or stop forwarding some |
+| `devvm ports -g ...` | the same for what new VMs forward |
 
 A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)); with `--clone`, the folder isn't mounted and the VM gets its own clone of the repo ([working on a clone](clone.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
@@ -49,7 +52,8 @@ A new VM gets its image's size (`base.yaml`'s: 4 CPUs, 8 GiB of memory and a 100
 Ports the VM listens on are forwarded to the same port on this machine's `localhost`: all of them, unless `--ports` says otherwise:
 
 - `all`, `none`, or ports and ranges like `5173,8000-8010`.
-- Without `--ports`, `~/.config/devvm/ports` holds the default, one line: `all`, `none` or a list.
+- Without `--ports`, `~/.config/devvm/ports` holds the default, one line: `all`, `none` or a list (`devvm ports -g` sets it).
+- `devvm ports` changes an existing VM's ([ports](images.md#ports)).
 
 A size or ports file that doesn't hold one is refused, like a bad flag.
 
@@ -60,7 +64,7 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size, ports, SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size, ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
 5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) its state asks for; a running one gets them when it next starts, and devvm says so. A VM that forwards your agent has it checked for keys; one that uses devvm's own gets the keys it lacks loaded.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.
@@ -150,7 +154,7 @@ A command's name is never an IMAGE: `devvm build` builds. For one of your layers
 
 ### Shell completion
 
-The script completes commands, flags, image names (with `+`, after the parts already given), shared tools for `devvm remove`, and `--backend` and `--ports` values. Load it from your shell's startup file:
+The script completes commands, flags, image names (with `+`, after the parts already given), shared tools for `devvm remove`, `--backend` values, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
 
 | Shell | Line | In |
 | --- | --- | --- |

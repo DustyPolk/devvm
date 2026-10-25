@@ -1,6 +1,6 @@
 ---
 title: devvm restart
-weight: 16
+weight: 19
 ---
 
 Restart this folder's VM and open a shell in it

@@ -43,6 +43,7 @@ devvm [IMAGE] [flags]
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
 - [devvm policy](devvm_policy.md): Show the network policy allowlist of this folder's VM
+- [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it

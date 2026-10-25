@@ -1,0 +1,106 @@
+# devvm ports: which ports a folder's VM forwards, changed at once for a
+# stopped VM, from its next start for a running one; with -g, what new
+# VMs forward (the ports file).
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env CFG=$XDG_CONFIG_HOME/devvm
+
+# No VM yet.
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm ports
+stderr '^devvm: no_vm_ports dir=\S*/web$'
+! exec devvm ports 5173 8080
+stderr '^devvm: usage_error '
+! exec devvm ports add
+stderr '^devvm: usage_error '
+
+# -g: what new VMs forward, all until it's set; add and rm change it.
+# No VM is looked at.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ports -g
+stdout '\Aall\n\z'
+exec devvm ports -g 3000-3999
+stdout '^==> ports_default ports=3000-3999$'
+exec devvm ports add -g 5173
+exec sh -c 'cat "$CFG/ports"'
+stdout '\A3000-3999,5173\n\z'
+exec devvm ports -g
+stdout '\A3000-3999,5173\n\z'
+! exec devvm ports -g add all
+stderr '^devvm: ports_list_needed value="all"$'
+! exec devvm ports -g rm none
+stderr '^devvm: ports_list_needed value="none"$'
+exec devvm ports -g rm 3000-3999,5173
+stdout '^==> ports_default ports=none$'
+exec devvm ports -g all
+! stub_calls
+
+# A new VM gets the default. Running: devvm ports shows what it forwards,
+# and a change waits for its next start.
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'cat "$VMS"/devvm-web-*'
+! stdout '^ports'
+exec devvm ports
+stdout '\Aall\n\z'
+! stderr .
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ports 5173
+stderr '^devvm: ports_next_start vm=devvm-web-[0-9a-f]{14}$'
+! stdout ports_now
+stub_calls
+! stdout 'limactl edit'
+exec devvm ports
+stdout '\Aall\n\z'
+stderr '^ports_pending ports=5173 vm=devvm-web-[0-9a-f]{14}$'
+# Back to what it forwards: nothing waits.
+exec devvm ports all
+stdout '^==> ports_now ports=all vm=devvm-web-[0-9a-f]{14}$'
+! stderr .
+exec devvm ports
+! stderr .
+exec devvm ports 5173
+
+# Stopped: changed at once, once.
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ports add 8000-8010
+stdout '^==> ports_now ports=5173,8000-8010 vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\},\{"guestPortRange":\[8000,8010\],"proto":"any"\},\{"guestIP":"127\.0\.0\.1",'
+exec grep -c 'limactl edit' $STUB_LOG
+stdout '^1$'
+exec devvm ports
+stdout '\A5173,8000-8010\n\z'
+! stderr .
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ports rm 5173
+stdout '^==> ports_now ports=8000-8010 vm=devvm-web-[0-9a-f]{14}$'
+exec devvm ports rm 8000-8010
+stdout '^==> ports_now ports=none vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^ports=none$'
+stdout '^ports_set=none$'
+! exec devvm ports rm 5173
+stderr '^devvm: port_not_listed port=5173 ports=none$'
+! exec devvm ports 0
+stderr '^devvm: port_invalid value="0"$'
+exec devvm ports all
+stdout '^==> ports_now ports=all vm=devvm-web-[0-9a-f]{14}$'
+exec devvm ports add 5173
+stderr '^devvm: ports_all_already$'
+! exec devvm ports rm 5173
+stderr '^devvm: ports_rm_all$'
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.portForwards = \[\]$'
+
+# --ports on it is ignored, with a warning naming devvm ports.
+exec devvm --ports none
+stderr '^devvm: ports_flag_ignored$'
+
+# Completion: the keywords and add and rm.
+exec devvm __complete ports ''
+stdout '^all$'
+stdout '^none$'
+stdout '^add\t'
+stdout '^rm\t'

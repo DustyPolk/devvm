@@ -139,6 +139,24 @@ A VM keeps the image it was made from, and its chain. When a key in the chain ch
 
 A key is the first 12 hex digits of a SHA-256. Each input goes in with its length, so different inputs never hash the same bytes. An image's record keeps its chain: the key of each image it's built on, from `base` up.
 
+## Ports
+
+A VM forwards every port it listens on (TCP and UDP) to the same port on this machine's `localhost`, so a server on `:5173` in the VM is at `localhost:5173` here. To forward only some:
+
+```sh
+devvm ports                 # what this folder's VM forwards: all, none or a list
+devvm ports 5173,8000-8010  # only these ports and ranges
+devvm ports add 5432        # one more
+devvm ports rm 5173         # one fewer, as listed; the last leaves none
+devvm ports none            # nothing; devvm ports all forwards every port again
+devvm ports -g none         # what new VMs forward (default: all)
+```
+
+- A new VM gets `--ports` (`devvm --ports 5173`), else what `devvm ports -g` set (`~/.config/devvm/ports`, one line: `all`, `none` or a list), else all.
+- A stopped VM changes at once. A running one keeps what it forwards until it next starts (`devvm restart`): until then, `devvm ports` shows what it forwards now and says what it will.
+- `add` and `rm` take ports and ranges, not `all` or `none`; `rm` on a VM that forwards every port is refused, as there's no list to remove from. `-g` works with them too.
+- Ports are forwarded with or without [network policy](network.md). Builds forward none.
+
 ## Where state lives
 
 Nothing is written into the project folder. devvm keeps everything in two folders:

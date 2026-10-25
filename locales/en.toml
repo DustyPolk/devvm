@@ -397,7 +397,7 @@ other = "--no-git-protect only applies to new VMs"
 other = "--cpus, --memory and --disk only apply to new VMs"
 
 [ports_flag_ignored]
-other = "--ports only applies to new VMs"
+other = "--ports only applies to new VMs: devvm ports LIST"
 
 [size_next_start]
 other = "{{.vm}}'s new size applies when it next starts: devvm restart"
@@ -463,6 +463,35 @@ other = "this machine has {{.have}} GiB of memory: --memory {{.want}} is more"
 [port_invalid]
 description = "value is quoted, as given"
 other = "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
+
+[ports_list_needed]
+description = "value is quoted, as given"
+other = "devvm ports add and rm take ports and ranges like 5173,8000-8010, not {{.value}}"
+
+[ports_rm_all]
+other = "every port is forwarded, so none can be removed: set the ones to keep instead, like devvm ports 5173,8000-8010"
+
+[port_not_listed]
+other = "{{.port}} isn't forwarded: the ports are {{.ports}}"
+
+[ports_all_already]
+other = "every port is already forwarded"
+
+[ports_now]
+other = "{{.vm}} forwards {{.ports}}"
+
+[ports_pending]
+other = "{{.vm}} forwards {{.ports}} from its next start: devvm restart"
+
+[ports_default]
+other = "new VMs forward {{.ports}}"
+
+[no_vm_ports]
+other = "no VM for {{.dir}}: devvm --ports LIST makes one that forwards only those, or -g sets what new VMs forward"
+
+[ports_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't show or change which ports are forwarded: {{.reason}}"
 
 [detected]
 other = "detected a {{.found}} project"

@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ports`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/`, `internal/sshagent/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line; each VM's SSH agent choice, devvm's own agent and its keys |
@@ -154,10 +154,9 @@ Bats files (pending cases, by task):
 | `images.bats` | layer, gc (three), images (three, `images rm`) |
 | `install.bats` | all (install.sh) |
 | `network.bats` | ssh/code (direct route) |
-| `ports.bats` | ports (five) |
 | `project.bats` | git-protect (strict) |
 | `size.bats` | size (three) |
-| `build`, `from`, `layers`, `lint`, `messages`, `oci`, `tools` | none |
+| `build`, `from`, `layers`, `lint`, `messages`, `oci`, `ports`, `tools` | none |
 
 Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
@@ -185,9 +184,10 @@ Deliberate changes from the bash:
 - `network`: no argument prints `ls`'s value (`unenforced` too); an unchanged one is `net_already`; `on` needs the backend's egress proxy first; a running VM turned off stays on its proxy until it next starts (`net_off_next_start`); `Confined` means started with the proxy, and `net_unenforced*` say "wasn't started confined"; a bad argument is cobra's `usage_error`.
 - `secret`: `ls` (and `devvm secret`) is a table of every secret, SAVED and USED BY; set, rm, use and unuse rewrite running proxies' bindings (no touch); `secret_saved`/`_keychain`, `secret_removed`, `secret_used`/`_unused` replace `secret_saved keychain=`, `removed`, `secret_bound`; `unuse claude` on an image with claude is `secret_with_image`; control characters are refused too; `use` warns when no token is saved; bad names are cobra's `usage_error`.
 - `ssh-agent`: an unchanged mode is `agent_already`; a stopped VM's forwarding changes at its next launch (`agent_set_*`, no `agent_off`), a running one's warns `agent_next_start` (was `agent_on_restart`); a new VM without forwarding carries no agent from the start; `agent_key_unpinned` names no older devvm; a missing key is `agent_key_not_found`, a bad lifetime `agent_lifetime_invalid` (no usage); `keys` shows the default lifetime beside other options.
+- `ports`: `add`/`rm` subcommands with `-g`/`--global` anywhere; a running VM's pending ports are `ports_pending` on stderr (no `next_start` on stdout); `add`/`rm` of all or none is `ports_list_needed`, other bad usage cobra's `usage_error` (no `usage_ports`); `-g` refuses a hand-edited ports file too; a change checks the backend's port forwarding first.
 
 Pending in code:
-- deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WritePorts`/`WriteBackend` (size, ports, setup), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). The other `*_flag_ignored` warnings name `devvm git-protect`, `size`, `ports` once those exist; `devvm export` reuses rm's export.
+- deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend), `state.WriteSize`/`WriteBackend` (size, setup), `Lock.Version` (images), `tools.Garbage` and `Tools.All` (gc). The other `*_flag_ignored` warnings name `devvm git-protect`, `size` once those exist; `devvm export` reuses rm's export.
 - `EnsureInclude` (asks, then adds the Include line) waits for `devvm ssh`/`code`, which load devvm's agent's keys and apply forwarding too. `devvm setup` brings `base_will_rebuild`, `gc_old_hint`, the features in `--help`, and `base_features` naming it. `devvm images` labels images with `image_from` too. `log_ref`, `see_log`/`see_output` come with their callers; `tools_not_images_rm` and the tools listing with `devvm images`.
 - Release builds set the version with `-ldflags "-X github.com/w3cj/devvm/internal/cli.version=…"` (`.goreleaser.yaml` comes with releases); `doctor_ok` shows it.
 

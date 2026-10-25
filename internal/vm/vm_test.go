@@ -135,6 +135,37 @@ func TestParsePorts(t *testing.T) {
 	}
 }
 
+func TestAddRemovePorts(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	for _, c := range []struct {
+		rm             bool
+		old, list, out string
+		err            string
+	}{
+		{old: "none", list: "5173", out: "5173"},
+		{old: "5173", list: "8080,5173", out: "5173,8080"},
+		{old: "all", list: "8080", out: "all"},
+		{old: "5173", list: "all", err: `ports_list_needed value="all"`},
+		{old: "5173", list: "0", err: `port_invalid value="0"`},
+		{rm: true, old: "5173,8000-8010", list: "5173", out: "8000-8010"},
+		{rm: true, old: "5173", list: " 5173 ", out: "none"},
+		{rm: true, old: "all", list: "5173", err: "ports_rm_all"},
+		{rm: true, old: "5173", list: "8080", err: "port_not_listed port=8080 ports=5173"},
+		{rm: true, old: "none", list: "5173", err: "port_not_listed port=5173 ports=none"},
+		{rm: true, old: "5173", list: "nope", err: `port_invalid value="nope"`},
+		{rm: true, old: "5173", list: "none", err: `ports_list_needed value="none"`},
+	} {
+		f, name := AddPorts, "AddPorts"
+		if c.rm {
+			f, name = RemovePorts, "RemovePorts"
+		}
+		got, err := f(c.old, c.list)
+		if got != c.out || names(err) != c.err {
+			t.Errorf("%s(%q, %q) = %q, %v; want %q, %s", name, c.old, c.list, got, names(err), c.out, c.err)
+		}
+	}
+}
+
 func TestPortsBackend(t *testing.T) {
 	for in, want := range map[string]backend.Ports{
 		"":               {All: true},

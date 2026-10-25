@@ -982,6 +982,11 @@ func NoVMPolicy(dir string) M {
 	return M{id: "no_vm_policy", vals: []val{{"dir", dir}}}
 }
 
+// NoVMPorts is [no_vm_ports]: "no VM for {{.dir}}: devvm --ports LIST makes one that forwards only those, or -g sets what new VMs forward"
+func NoVMPorts(dir string) M {
+	return M{id: "no_vm_ports", vals: []val{{"dir", dir}}}
+}
+
 // NoVMSSHAgent is [no_vm_ssh_agent]: "no VM for {{.dir}}: devvm makes one, devvm --ssh-agent one that forwards your SSH agent"
 func NoVMSSHAgent(dir string) M {
 	return M{id: "no_vm_ssh_agent", vals: []val{{"dir", dir}}}
@@ -1027,14 +1032,54 @@ func PortInvalid(value string) M {
 	return M{id: "port_invalid", vals: []val{{"value", value}}}
 }
 
-// PortsFlagIgnored is [ports_flag_ignored]: "--ports only applies to new VMs"
+// PortNotListed is [port_not_listed]: "{{.port}} isn't forwarded: the ports are {{.ports}}"
+func PortNotListed(port string, ports string) M {
+	return M{id: "port_not_listed", vals: []val{{"port", port}, {"ports", ports}}}
+}
+
+// PortsAllAlready is [ports_all_already]: "every port is already forwarded"
+func PortsAllAlready() M {
+	return M{id: "ports_all_already"}
+}
+
+// PortsDefault is [ports_default]: "new VMs forward {{.ports}}"
+func PortsDefault(ports string) M {
+	return M{id: "ports_default", vals: []val{{"ports", ports}}}
+}
+
+// PortsFailed is [ports_failed]: "couldn't show or change which ports are forwarded: {{.reason}}"
+func PortsFailed(reason string) M {
+	return M{id: "ports_failed", vals: []val{{"reason", reason}}}
+}
+
+// PortsFlagIgnored is [ports_flag_ignored]: "--ports only applies to new VMs: devvm ports LIST"
 func PortsFlagIgnored() M {
 	return M{id: "ports_flag_ignored"}
+}
+
+// PortsListNeeded is [ports_list_needed]: "devvm ports add and rm take ports and ranges like 5173,8000-8010, not {{.value}}"
+func PortsListNeeded(value string) M {
+	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
 }
 
 // PortsNextStart is [ports_next_start]: "{{.vm}}'s new ports apply when it next starts: devvm restart"
 func PortsNextStart(vm string) M {
 	return M{id: "ports_next_start", vals: []val{{"vm", vm}}}
+}
+
+// PortsNow is [ports_now]: "{{.vm}} forwards {{.ports}}"
+func PortsNow(ports string, vm string) M {
+	return M{id: "ports_now", vals: []val{{"ports", ports}, {"vm", vm}}}
+}
+
+// PortsPending is [ports_pending]: "{{.vm}} forwards {{.ports}} from its next start: devvm restart"
+func PortsPending(ports string, vm string) M {
+	return M{id: "ports_pending", vals: []val{{"ports", ports}, {"vm", vm}}}
+}
+
+// PortsRmAll is [ports_rm_all]: "every port is forwarded, so none can be removed: set the ones to keep instead, like devvm ports 5173,8000-8010"
+func PortsRmAll() M {
+	return M{id: "ports_rm_all"}
 }
 
 // ProxyCAFailed is [proxy_ca_failed]: "couldn't create the network policy proxy's CA in {{.dir}}"
@@ -1740,6 +1785,7 @@ var specs = map[string]spec{
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"no_vm":                       {fields: []string{"dir"}},
 	"no_vm_policy":                {fields: []string{"dir"}},
+	"no_vm_ports":                 {fields: []string{"dir"}},
 	"no_vm_ssh_agent":             {fields: []string{"dir"}},
 	"not_a_rule":                  {fields: []string{"rule"}},
 	"not_an_image":                {fields: []string{"name"}},
@@ -1749,8 +1795,16 @@ var specs = map[string]spec{
 	"opencode_login_kept":         {fields: []string{"providers"}},
 	"policy_failed":               {fields: []string{"reason"}},
 	"port_invalid":                {fields: []string{"value"}},
+	"port_not_listed":             {fields: []string{"port", "ports"}},
+	"ports_all_already":           {},
+	"ports_default":               {fields: []string{"ports"}},
+	"ports_failed":                {fields: []string{"reason"}},
 	"ports_flag_ignored":          {},
+	"ports_list_needed":           {fields: []string{"value"}},
 	"ports_next_start":            {fields: []string{"vm"}},
+	"ports_now":                   {fields: []string{"ports", "vm"}},
+	"ports_pending":               {fields: []string{"ports", "vm"}},
+	"ports_rm_all":                {},
 	"proxy_ca_failed":             {fields: []string{"dir"}},
 	"proxy_failed":                {fields: []string{"reason"}},
 	"proxy_port_taken":            {fields: []string{"port", "vm"}},
