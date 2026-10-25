@@ -13,12 +13,14 @@ import (
 // -ldflags "-X github.com/w3cj/devvm/internal/cli.version=0.1.0".
 var version string
 
-// devvmVersion is the release's version, else the one Go recorded for the
-// build (a checkout's pseudo-version), without the v; (devel) when there's
-// neither.
-func devvmVersion() string {
-	if version != "" {
-		return version
+// devvmVersion is devvm's version: versionOf the release's.
+func devvmVersion() string { return versionOf(version) }
+
+// versionOf is release, else the version Go recorded for the build (a
+// checkout's pseudo-version), without the v; (devel) when there's neither.
+func versionOf(release string) string {
+	if release != "" {
+		return release
 	}
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
 		return strings.TrimPrefix(bi.Main.Version, "v")

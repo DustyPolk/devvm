@@ -48,7 +48,7 @@ func (e *Env) reach(ctx context.Context) (string, *found, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	if err := backend.Require(t.b, t.f.Name, backend.FeatureSSH); err != nil {
+	if err := e.Registry.Require(t.b, t.f.Name, backend.FeatureSSH); err != nil {
 		return "", nil, err
 	}
 	conf, err := e.launch(ctx, t)

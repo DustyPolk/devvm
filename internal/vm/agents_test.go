@@ -19,9 +19,7 @@ func printed(t *testing.T, e *Env, tty bool) *[]string {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
 	var got []string
-	term := terminal
-	t.Cleanup(func() { terminal = term })
-	terminal = func() bool { return tty }
+	e.Terminal = func() bool { return tty }
 	e.Warn = func(m msg.M) { got = append(got, m.Names()) }
 	e.Info = e.Warn
 	e.Confirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }

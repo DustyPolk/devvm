@@ -16,19 +16,29 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
-// LogTick is how often a followed log is read for new events; tests
-// change it.
-var LogTick = 250 * time.Millisecond
+// Log is a VM's event log, as devvm log shows it. NewLog sets every
+// field; tests change them.
+type Log struct {
+	Path string
+	// Tick is how often a followed log is read for new events.
+	Tick time.Duration
+}
 
-// WriteLog writes the last n events of the event log at path to w, one
-// line each (FormatEvent). With follow it then writes each new one, until
-// ctx ends. Lines that aren't events are skipped.
-func WriteLog(ctx context.Context, w io.Writer, path string, n int, follow bool) error {
-	f, err := os.Open(path) //nolint:gosec // the VM's event log, in devvm's folder
+// NewLog returns vm's event log (EventLog).
+func NewLog(d paths.Dirs, vm string) *Log {
+	return &Log{Path: EventLog(d, vm), Tick: 250 * time.Millisecond}
+}
+
+// Write writes the log's last n events to w, one line each (FormatEvent).
+// With follow it then writes each new one, until ctx ends. Lines that
+// aren't events are skipped.
+func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error {
+	f, err := os.Open(l.Path) //nolint:gosec // the VM's event log, in devvm's folder
 	if err != nil {
 		return err
 	}
@@ -59,7 +69,7 @@ func WriteLog(ctx context.Context, w io.Writer, path string, n int, follow bool)
 	if !follow {
 		return nil
 	}
-	t := time.NewTicker(LogTick)
+	t := time.NewTicker(l.Tick)
 	defer t.Stop()
 	for {
 		select {
@@ -138,14 +148,13 @@ func hostPort(e proxy.Event) string {
 	return net.JoinHostPort(ui.OneLine(e.Host), strconv.Itoa(e.Port))
 }
 
-// WriteBlocked writes the blocks in the event log at path to w as a table,
-// one row per host and port, by when it was last blocked: the last time,
-// how many times, and the devvm policy allow command that allows it. A
-// request refused whatever the allowlist says, or a host the policy
-// doesn't take, gets - instead: the command is meant to be pasted into a
-// shell.
-func WriteBlocked(w io.Writer, path string) error {
-	f, err := os.Open(path) //nolint:gosec // the VM's event log, in devvm's folder
+// WriteBlocked writes the log's blocks to w as a table, one row per host
+// and port, by when it was last blocked: the last time, how many times,
+// and the devvm policy allow command that allows it. A request refused
+// whatever the allowlist says, or a host the policy doesn't take, gets -
+// instead: the command is meant to be pasted into a shell.
+func (l *Log) WriteBlocked(w io.Writer) error {
+	f, err := os.Open(l.Path) //nolint:gosec // the VM's event log, in devvm's folder
 	if err != nil {
 		return err
 	}

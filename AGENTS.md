@@ -62,14 +62,14 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **OS-specific code goes behind build tags** in `internal/platform` (`*_darwin.go`, `*_linux.go`, `*_other.go`).
 - **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
-- **Test seams are fields or package vars** tests swap (`Host`, `Exec`, `Runner`, `OS`, `Warn`…). The proxy's state is globals set by `Main`; tests set them.
+- **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars; the exceptions are `internal/proxy`'s globals (set by `Main`) and `internal/ui`'s process-wide terminal and run state.
 - **A command exists only once it's ported;** `TestReferenceIsCurrent` fails on a stale CLI reference.
 - `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
 
 ## Backends
 
 - Every backend implements `backend.Backend` and declares `Caps` per feature: native, emulated (reviewed) or none. A new `Feature` goes in `backend.Features` and the table in `docs/content/docs/backends.md`.
-- **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check `backend.Require(b, vm, spec.Features()...)` first; backends don't decide what a VM needs.
+- **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check the registry's `Review.Require(b, vm, spec.Features()...)` first; backends don't decide what a VM needs.
 - **Every emulation is refused until reviewed:** a design note in `docs/content/docs/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package; what isn't (`.git` protection, the proxy) stays out.
 - **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. Set calls on a running VM get `vm_not_stopped`; restart warnings are the callers'.

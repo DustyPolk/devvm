@@ -32,7 +32,7 @@ func newSetupCmd() *cobra.Command {
 			if cmd.Flags().Changed("features") {
 				list = &features
 			}
-			fail(setup(list, backendName), msg.SetupFailed)
+			fail(newSetup().run(list, backendName), msg.SetupFailed)
 			return nil
 		},
 	}
@@ -42,29 +42,38 @@ func newSetupCmd() *cobra.Command {
 	return cmd
 }
 
-// The terminal check and the backend picker, swapped by the tests.
-var (
-	setupTerminal = func() bool { return ui.StdinIsTerminal() && ui.StdoutIsTerminal() }
-	pickOne       = ui.PickOne
-)
+// setup is devvm setup's run: whether it's in a terminal, and how it asks
+// for the backend.
+type setup struct {
+	terminal func() bool
+	pickOne  func(msg.M, []ui.Choice) int
+}
 
-// setup saves the default backend, then base's features: features' (nil:
+// newSetup returns a setup on ui's terminal and picker.
+func newSetup() setup {
+	return setup{
+		terminal: func() bool { return ui.StdinIsTerminal() && ui.StdoutIsTerminal() },
+		pickOne:  ui.PickOne,
+	}
+}
+
+// run saves the default backend, then base's features: features' (nil:
 // ask, unless only the backend was given). With neither given, it asks for
 // both in a terminal. A change to the features says base rebuilds, and
 // that devvm gc deletes the old images.
-func setup(features *string, backendName string) error {
+func (s setup) run(features *string, backendName string) error {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return err
 	}
-	ask := backendName == "" && features == nil && setupTerminal()
+	ask := backendName == "" && features == nil && s.terminal()
 	if backendName != "" || ask {
 		reg, err := backends.Registry(dirs)
 		if err != nil {
 			return err
 		}
 		if backendName == "" {
-			if backendName, err = pickBackend(dirs, reg); err != nil {
+			if backendName, err = s.pickBackend(dirs, reg); err != nil {
 				return err
 			}
 		} else if _, ok := reg.Lookup(backendName); !ok {
@@ -82,7 +91,7 @@ func setup(features *string, backendName string) error {
 	if err != nil {
 		return err
 	}
-	b := newBuilder(dirs, root, nil, nil, "")
+	b := newBuilder(dirs, root, nil, backend.Review{}, nil, "")
 	var changed bool
 	if features == nil {
 		changed, err = b.PickFeatures()
@@ -104,7 +113,7 @@ func setup(features *string, backendName string) error {
 // pickBackend asks which backend new VMs get by default, starting from
 // the current default (backend.Default unless set, or set to one devvm
 // doesn't have), the experimental ones marked.
-func pickBackend(dirs paths.Dirs, reg *backend.Registry) (string, error) {
+func (s setup) pickBackend(dirs paths.Dirs, reg *backend.Registry) (string, error) {
 	current, err := state.ReadBackend(dirs)
 	if err != nil {
 		return "", err
@@ -120,7 +129,7 @@ func pickBackend(dirs paths.Dirs, reg *backend.Registry) (string, error) {
 			choices[i].Desc = msg.BackendExperimental().String()
 		}
 	}
-	return names[pickOne(msg.BackendHelp(), choices)], nil
+	return names[s.pickOne(msg.BackendHelp(), choices)], nil
 }
 
 // splitList splits a comma-separated list, dropping empty items.

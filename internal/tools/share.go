@@ -70,11 +70,12 @@ func (t *Tools) Built(file string) bool {
 }
 
 // Build builds the tool images these files name that the share lacks, in
-// a throwaway VM made from base's image (key base) on b, in tg's format.
-// The VM runs upstream installers, so it never sees the share: it writes
-// into a folder of its own, and each image is checked to be a plain file,
-// moved into the share and its hash recorded.
-func (t *Tools) Build(ctx context.Context, b backend.Backend, base string, tg Target, files []string) error {
+// a throwaway VM made from base's image (key base) on b, its features
+// checked against rv, in tg's format. The VM runs upstream installers, so
+// it never sees the share: it writes into a folder of its own, and each
+// image is checked to be a plain file, moved into the share and its hash
+// recorded.
+func (t *Tools) Build(ctx context.Context, rv backend.Review, b backend.Backend, base string, tg Target, files []string) error {
 	var todo []string
 	for _, f := range files {
 		if !t.Built(f) {
@@ -85,7 +86,7 @@ func (t *Tools) Build(ctx context.Context, b backend.Backend, base string, tg Ta
 		return nil
 	}
 	spec := backend.ToolsSpec{Net: backend.NetInternet}
-	if err := backend.Require(b, label(todo), spec.Features()...); err != nil {
+	if err := rv.Require(b, label(todo), spec.Features()...); err != nil {
 		return err
 	}
 	unlock, err := t.LockShare(ctx)

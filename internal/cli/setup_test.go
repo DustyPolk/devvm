@@ -21,10 +21,10 @@ type asked struct {
 }
 
 // setupSandbox points devvm's folders at a temporary HOME, with a feature
-// of the user's, and makes setup see a terminal (or not) and pick the
-// backend answer names. It returns the folders and what the picker was
+// of the user's, and returns a setup that sees a terminal (or not) and
+// picks the backend answer names, the folders, and what the picker was
 // shown: nil until it's asked.
-func setupSandbox(t *testing.T, terminal bool, answer string) (paths.Dirs, func() *asked) {
+func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs, func() *asked) {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
 	home := t.TempDir()
@@ -43,17 +43,17 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (paths.Dirs, func(
 		t.Fatal(err)
 	}
 	var a *asked
-	oldTerm, oldPick := setupTerminal, pickOne
-	setupTerminal = func() bool { return terminal }
-	pickOne = func(help msg.M, cs []ui.Choice) int {
-		if a != nil {
-			t.Error("asked for the backend twice")
-		}
-		a = &asked{help.String(), slices.Clone(cs)}
-		return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == answer })
+	s := setup{
+		terminal: func() bool { return terminal },
+		pickOne: func(help msg.M, cs []ui.Choice) int {
+			if a != nil {
+				t.Error("asked for the backend twice")
+			}
+			a = &asked{help.String(), slices.Clone(cs)}
+			return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == answer })
+		},
 	}
-	t.Cleanup(func() { setupTerminal, pickOne = oldTerm, oldPick })
-	return d, func() *asked { return a }
+	return s, d, func() *asked { return a }
 }
 
 // readBackend is the default backend file's name, "" without one.
@@ -90,13 +90,13 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 		{name: "--features", terminal: true, features: &none, current: "lima", want: "lima", chosen: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			d, shown := setupSandbox(t, tc.terminal, "smolvm")
+			s, d, shown := setupSandbox(t, tc.terminal, "smolvm")
 			if tc.current != "" {
 				if err := state.WriteBackend(d, tc.current); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if err := setup(tc.features, tc.flag); err != nil {
+			if err := s.run(tc.features, tc.flag); err != nil {
 				t.Fatal(err)
 			}
 			if a := shown(); (a != nil) != tc.ask {

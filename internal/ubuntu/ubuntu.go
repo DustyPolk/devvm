@@ -46,9 +46,6 @@ const (
 	retries = 3
 )
 
-// retryDelay is the wait before the first retry; it doubles after each.
-var retryDelay = time.Second
-
 // Image is Ubuntu's cloud image for the host.
 type Image struct {
 	URL    string // the image file's address
@@ -70,6 +67,8 @@ type Finder struct {
 	Arch string
 	// Client fetches the listing and the checksums.
 	Client *http.Client
+	// RetryDelay is the wait before the first retry; it doubles after each.
+	RetryDelay time.Duration
 	// GPGV is gpgv's path, "" when it isn't installed.
 	GPGV string
 	// Run runs gpgv into the run log (ui.LoggedCmd).
@@ -90,13 +89,14 @@ func New(root string, getenv func(string) string) *Finder {
 		gpgv = ""
 	}
 	return &Finder{
-		URL:     strings.TrimRight(u, "/"),
-		Keyring: filepath.Join(root, Keyring),
-		Arch:    runtime.GOARCH,
-		Client:  NewClient(),
-		GPGV:    gpgv,
-		Run:     func(ctx context.Context, cmd *exec.Cmd) error { return ui.LoggedCmd(ctx, msg.M{}, cmd) },
-		Note:    ui.Note,
+		URL:        strings.TrimRight(u, "/"),
+		Keyring:    filepath.Join(root, Keyring),
+		Arch:       runtime.GOARCH,
+		Client:     NewClient(),
+		RetryDelay: time.Second,
+		GPGV:       gpgv,
+		Run:        func(ctx context.Context, cmd *exec.Cmd) error { return ui.LoggedCmd(ctx, msg.M{}, cmd) },
+		Note:       ui.Note,
 	}
 }
 
@@ -258,7 +258,7 @@ func (f *Finder) verify(ctx context.Context, release string, sums []byte) error 
 // fetch returns what's at u, trying again after failures that may pass
 // (no answer, 408, 429, 5xx).
 func (f *Finder) fetch(ctx context.Context, u string) ([]byte, error) {
-	delay := retryDelay
+	delay := f.RetryDelay
 	for try := 0; ; try++ {
 		body, again, err := f.get(ctx, u)
 		if err == nil || !again || try == retries {

@@ -47,6 +47,7 @@ func TestSupport(t *testing.T) {
 }
 
 func TestRequire(t *testing.T) {
+	t.Parallel()
 	b := backendtest.New("fake", backend.Caps{
 		backend.FeatureClone:           backend.Native,
 		backend.FeatureSSH:             backend.Emulated(true),
@@ -67,7 +68,7 @@ func TestRequire(t *testing.T) {
 		{"not listed", []backend.Feature{backend.FeaturePorts}, "backend_lacks backend=fake feature=ports vm=devvm-x"},
 		{"the first refused", []backend.Feature{backend.FeatureClone, backend.FeaturePorts, backend.FeatureEgressProxy}, "backend_lacks backend=fake feature=ports vm=devvm-x"},
 	} {
-		if got := names(t, backend.Require(b, "devvm-x", tc.features...)); got != tc.want {
+		if got := names(t, backend.Review{}.Require(b, "devvm-x", tc.features...)); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
@@ -119,13 +120,14 @@ func TestFeaturesNeeded(t *testing.T) {
 // A backend that only emulates network policy, unreviewed, can't start a
 // VM with it, but can start one without.
 func TestUnreviewedEgressRefused(t *testing.T) {
+	t.Parallel()
 	b := backendtest.New("fake", backend.Caps{backend.FeatureEgressProxy: backend.Emulated(false)})
 	c := backend.Confinement{Net: backend.NetProxy}
 	want := "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-x"
-	if got := names(t, backend.Require(b, "devvm-x", c.Features()...)); got != want {
+	if got := names(t, backend.Review{}.Require(b, "devvm-x", c.Features()...)); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	if err := backend.Require(b, "devvm-x", backend.Confinement{}.Features()...); err != nil {
+	if err := (backend.Review{}).Require(b, "devvm-x", backend.Confinement{}.Features()...); err != nil {
 		t.Errorf("direct: %v", err)
 	}
 }
@@ -133,27 +135,29 @@ func TestUnreviewedEgressRefused(t *testing.T) {
 // DEVVM_UNREVIEWED lets through only the unreviewed emulations it names,
 // on their own backend, warning each time; never a feature a backend lacks.
 func TestUnreviewedLetThrough(t *testing.T) {
+	t.Parallel()
 	b := backendtest.New("fake", backend.Caps{backend.FeatureEgressProxy: backend.Emulated(false)})
 	var warned []string
-	backend.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
-	t.Cleanup(func() { backend.Unreviewed, backend.Warn = nil, func(msg.M) {} })
-	backend.Unreviewed = backend.ParseUnreviewed("lima:egress-proxy, fake:ssh")
-	if got := names(t, backend.Require(b, "devvm-x", backend.FeatureEgressProxy)); got != "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-x" {
+	r := backend.Review{
+		Unreviewed: backend.ParseUnreviewed("lima:egress-proxy, fake:ssh"),
+		Warn:       func(m msg.M) { warned = append(warned, m.Names()) },
+	}
+	if got := names(t, r.Require(b, "devvm-x", backend.FeatureEgressProxy)); got != "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-x" {
 		t.Errorf("another backend's: %s", got)
 	}
-	if got := names(t, backend.Require(b, "devvm-x", backend.FeatureSSH)); got != "backend_lacks backend=fake feature=ssh vm=devvm-x" {
+	if got := names(t, r.Require(b, "devvm-x", backend.FeatureSSH)); got != "backend_lacks backend=fake feature=ssh vm=devvm-x" {
 		t.Errorf("a feature it lacks: %s", got)
 	}
-	if backend.Allowed(b, backend.FeatureEgressProxy) || backend.Allowed(b, backend.FeatureSSH) {
+	if r.Allowed(b, backend.FeatureEgressProxy) || r.Allowed(b, backend.FeatureSSH) {
 		t.Error("Allowed: not named, or lacking")
 	}
-	backend.Unreviewed = backend.ParseUnreviewed("fake:egress-proxy")
-	if err := backend.Require(b, "devvm-x", backend.FeatureEgressProxy); err != nil ||
+	r.Unreviewed = backend.ParseUnreviewed("fake:egress-proxy")
+	if err := r.Require(b, "devvm-x", backend.FeatureEgressProxy); err != nil ||
 		!slices.Equal(warned, []string{"backend_unreviewed_used backend=fake feature=egress-proxy vm=devvm-x"}) {
 		t.Errorf("named: %v, warned %q", err, warned)
 	}
 	// Allowed says the same, without a warning.
-	if !backend.Allowed(b, backend.FeatureEgressProxy) || len(warned) != 1 {
+	if !r.Allowed(b, backend.FeatureEgressProxy) || len(warned) != 1 {
 		t.Errorf("Allowed: warned %q", warned)
 	}
 }

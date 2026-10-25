@@ -237,7 +237,7 @@ func (e *Env) SetSize(ctx context.Context, s Size, global bool) error {
 		return err
 	}
 	vm, st, b := t.f.Name, t.st, t.b
-	if err := backend.Require(b, vm, s.Backend().Features()...); err != nil {
+	if err := e.Registry.Require(b, vm, s.Backend().Features()...); err != nil {
 		return err
 	}
 	in, err := b.Inspect(ctx, vm)

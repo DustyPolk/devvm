@@ -40,16 +40,19 @@ const hostKeysMax = 64 << 10
 type Config struct {
 	Dirs     paths.Dirs
 	Backends []backend.Backend // every backend, for every VM
-	// What it prints (ui's), and asks: [Y/n].
+	Review   backend.Review    // what their ssh is checked against
+	// What it prints (ui's), and asks: [Y/n]; Terminal reports whether
+	// it can ask.
 	Info, Warn, Say func(msg.M)
 	Confirm         func(msg.M) bool
+	Terminal        func() bool
 }
 
 // New returns the ssh config for the VMs of every backend in reg.
 func New(d paths.Dirs, reg *backend.Registry) *Config {
 	return &Config{
-		Dirs: d, Backends: reg.All(), Info: ui.Info, Warn: ui.Warn, Say: ui.Say,
-		Confirm: func(m msg.M) bool { return ui.Confirm(m) },
+		Dirs: d, Backends: reg.All(), Review: reg.Review, Info: ui.Info, Warn: ui.Warn, Say: ui.Say,
+		Confirm: func(m msg.M) bool { return ui.Confirm(m) }, Terminal: ui.StdinIsTerminal,
 	}
 }
 
@@ -117,7 +120,7 @@ func (c *Config) Write(ctx context.Context) error {
 	var buf strings.Builder
 	buf.WriteString(header)
 	for _, r := range up {
-		if !backend.Allowed(r.b, backend.FeatureSSH) {
+		if !c.Review.Allowed(r.b, backend.FeatureSSH) {
 			continue
 		}
 		t, err := r.b.SSH(ctx, r.in.Name)
@@ -311,7 +314,7 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 		return true, nil
 	}
 	c.Say(msg.SSHIncludeNeeded(line))
-	if !ui.StdinIsTerminal() {
+	if !c.Terminal() {
 		c.Warn(msg.SSHIncludeYourself())
 		return false, nil
 	}

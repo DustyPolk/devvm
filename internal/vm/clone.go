@@ -180,7 +180,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	}
 	if unfetched := unfetchedRefs(ctx, dir, refs); len(unfetched) > 0 {
 		e.Say(msg.UnfetchedCommits(quoted(unfetched)))
-		if !terminal() {
+		if !e.Terminal() {
 			return false, msg.NoTerminalFetch(remote)
 		}
 		if err := e.fetchUnfetched(ctx, vm, dir, remote, unfetched); err != nil {
@@ -201,7 +201,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 		shown.WriteString(msg.Shown(s.Text()) + "\n")
 	}
 	_, _ = ui.Stdout().Write([]byte(shown.String()))
-	if !terminal() {
+	if !e.Terminal() {
 		return false, msg.NoTerminalDelete()
 	}
 	if !e.Ask(msg.DeleteAnyway()) {

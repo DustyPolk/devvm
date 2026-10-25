@@ -133,10 +133,8 @@ func TestKeyAndSalt(t *testing.T) {
 // the answer.
 func TestChoose(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	swapTerminal(t)
 	tty, answer, asked := false, false, 0
-	terminal = func() bool { return tty }
-	p := &Proxy{Note: func(msg.M) {}, Ask: func(msg.M) bool { asked++; return answer }}
+	p := &Proxy{Note: func(msg.M) {}, Ask: func(msg.M) bool { asked++; return answer }, Terminal: func() bool { return tty }}
 	if !p.Choose(true, false, "vm") || p.Choose(false, true, "vm") || p.Choose(false, false, "vm") || asked != 0 {
 		t.Error("without a terminal: not the flags, or off")
 	}
@@ -148,13 +146,6 @@ func TestChoose(t *testing.T) {
 	if !p.Choose(false, false, "vm") || !p.Choose(true, false, "vm") || asked != 2 {
 		t.Error("yes answered no, or a flag asked")
 	}
-}
-
-// swapTerminal puts the terminal check back after the test.
-func swapTerminal(t *testing.T) {
-	t.Helper()
-	tm := terminal
-	t.Cleanup(func() { terminal = tm })
 }
 
 // usedPorts lists the ports VMs have; freePort avoids them.
@@ -612,7 +603,6 @@ func (c *ctxStopper) Stop(ctx context.Context, vm string) error {
 // devvm without a terminal (or still after a restart), stops the VM.
 func TestSelfCheck(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	swapTerminal(t)
 	for _, tc := range []struct {
 		name                         string
 		unconfined, direct, tty, yes bool
@@ -643,8 +633,7 @@ func TestSelfCheck(t *testing.T) {
 				}
 				return errors.New("curl: (7) failed")
 			}
-			terminal = func() bool { return tc.tty }
-			p := &Proxy{Warn: func(msg.M) {}, Confirm: func(msg.M) bool { return tc.yes }}
+			p := &Proxy{Warn: func(msg.M) {}, Confirm: func(msg.M) bool { return tc.yes }, Terminal: func() bool { return tc.tty }}
 			restarted := false
 			err = p.SelfCheck(t.Context(), f, st, func(context.Context) error {
 				restarted = true

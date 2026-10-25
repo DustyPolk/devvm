@@ -16,8 +16,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-func init() { retryDelay = 0 }
-
 var (
 	sumArm64 = strings.Repeat("1", 64)
 	sumAmd64 = strings.Repeat("2", 64)
@@ -103,6 +101,7 @@ func wantMsg(t *testing.T, err error, id string, vals ...string) {
 // The newest dated release with an image for this host, and its checksum;
 // a newer release without files is skipped. No release: no_ubuntu_image.
 func TestImage(t *testing.T) {
+	t.Parallel()
 	served(t, func(t *testing.T, dir, url string) {
 		if err := os.Mkdir(filepath.Join(dir, "release-20260301"), 0o750); err != nil {
 			t.Fatal(err)
@@ -135,6 +134,7 @@ func TestImage(t *testing.T) {
 // A checksum that isn't 64 hex digits is skipped, never put in the
 // backend's config.
 func TestImageSkipsBadChecksums(t *testing.T) {
+	t.Parallel()
 	served(t, func(t *testing.T, dir, url string) {
 		bad := strings.Repeat("a", 64) + `"}]|.mounts=[{"location":"~","writable":true}]|.x=[{"y":"`
 		write(t, filepath.Join(dir, "release-20260101", "SHA256SUMS"), bad+" *ubuntu-"+Version+"-server-cloudimg-arm64.img\n")
@@ -147,6 +147,7 @@ func TestImageSkipsBadChecksums(t *testing.T) {
 // The checksums must be signed by Ubuntu's key, checked with gpgv in a
 // home of its own; without gpgv, a note.
 func TestImageSignature(t *testing.T) {
+	t.Parallel()
 	served(t, func(t *testing.T, dir, url string) {
 		var notes []msg.M
 		g := &fakeGPGV{}
@@ -195,6 +196,7 @@ func TestImageSignature(t *testing.T) {
 // Ubuntu's real key, with the real gpgv, checks a real release's signature,
 // and refuses its checksums once they're changed.
 func TestRealSignature(t *testing.T) {
+	t.Parallel()
 	gpgv, err := exec.LookPath("gpgv")
 	if err != nil {
 		t.Skip("gpgv isn't installed")
@@ -244,6 +246,7 @@ func TestRealSignature(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	f := New("/devvm", func(string) string { return "" })
 	if f.URL != DefaultURL || f.Keyring != "/devvm/layers/ubuntu-cloud.gpg" {
 		t.Errorf("default: %+v", f)
@@ -260,6 +263,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestReleases(t *testing.T) {
+	t.Parallel()
 	listing := `<a href="release-20260101/">release-20260101/</a>
 <a href="release-20260927/">release-20260927/</a>
 <a href="current/">current/</a> <a href="release-2026/">release-2026/</a>`
@@ -273,6 +277,7 @@ func TestReleases(t *testing.T) {
 }
 
 func TestReleaseDate(t *testing.T) {
+	t.Parallel()
 	for url, want := range map[string]string{
 		"https://cloud-images.ubuntu.com/releases/resolute/release-20261001/ubuntu-26.04-server-cloudimg-arm64.img sha256:ab": "20261001",
 		"https://example.com/release-2026/x.img": "",
@@ -285,6 +290,7 @@ func TestReleaseDate(t *testing.T) {
 }
 
 func TestChecksum(t *testing.T) {
+	t.Parallel()
 	hex := strings.Repeat("ab", 32)
 	tests := []struct {
 		name, sums, want string
@@ -308,6 +314,7 @@ func TestChecksum(t *testing.T) {
 // A redirect to another scheme is refused (so an HTTP server can't send
 // devvm to a file on disk); one on the same scheme is followed.
 func TestRedirects(t *testing.T) {
+	t.Parallel()
 	dir := mirror(t)
 	files := httptest.NewServer(http.FileServer(http.Dir(dir)))
 	t.Cleanup(files.Close)
@@ -331,6 +338,7 @@ func TestRedirects(t *testing.T) {
 
 // Failures that may pass are tried again; a missing file isn't.
 func TestRetries(t *testing.T) {
+	t.Parallel()
 	var n atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := n.Add(1)
@@ -357,6 +365,7 @@ func TestRetries(t *testing.T) {
 
 // A canceled lookup stops, with the context's error.
 func TestCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	var notes []msg.M

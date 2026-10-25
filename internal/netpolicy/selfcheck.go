@@ -55,7 +55,7 @@ func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, 
 	if confined {
 		return p.stop(ctx, b, vm, msg.NetDirectRoute(vm))
 	}
-	if !terminal() {
+	if !p.Terminal() {
 		return p.stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
 	}
 	if !p.Confirm(msg.NetUnenforcedRestart(vm)) {

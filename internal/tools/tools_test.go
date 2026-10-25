@@ -564,7 +564,7 @@ func TestBuild(t *testing.T) {
 	all := e.files(t, "node", "pnpm", "bun", "claude")
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]), []byte("built"))
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]+".sha256"), []byte("x\n"))
-	if err := e.Build(t.Context(), f, baseKey, gnuT, all); err != nil {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil {
 		t.Fatal(names(err))
 	}
 	if ms := f.Methods(); !slices.Equal(ms, []string{"BuildTools"}) {
@@ -589,7 +589,7 @@ func TestBuild(t *testing.T) {
 	e.checkHashes(t, []string{all[0], all[2], all[3]})
 	e.noLeftovers(t)
 	// Nothing to do when the share has them all.
-	if err := e.Build(t.Context(), f, baseKey, gnuT, all); err != nil || len(f.Calls()) != 1 {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil || len(f.Calls()) != 1 {
 		t.Errorf("built again: %v %q", err, f.Methods())
 	}
 }
@@ -609,7 +609,7 @@ func TestBuildFolder(t *testing.T) {
 		}
 		return nil
 	}
-	if err := e.Build(t.Context(), f, baseKey, gnuT, e.files(t, "uv")); names(err) != "tool_bad_output file="+e.files(t, "uv")[0] {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, e.files(t, "uv")); names(err) != "tool_bad_output file="+e.files(t, "uv")[0] {
 		t.Errorf("Build with no image written = %v", names(err))
 	}
 	e.noLeftovers(t)
@@ -621,7 +621,7 @@ func TestBuildOneBatch(t *testing.T) {
 	e.locked(t, fixture(t))
 	f := fake()
 	files := e.files(t, "node", "go", "bun")
-	if err := e.Build(t.Context(), f, baseKey, gnuT, files); err != nil {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, files); err != nil {
 		t.Fatal(names(err))
 	}
 	var batches [][]string
@@ -652,7 +652,7 @@ func TestBuildHostileOutput(t *testing.T) {
 	f := fake()
 	f.ToolsBuild = func(spec backend.ToolsSpec) error { return os.Symlink(victim, filepath.Join(spec.Out, spec.Args[2])) }
 	node := e.files(t, "node")
-	if err := e.Build(t.Context(), f, baseKey, gnuT, node); names(err) != "tool_bad_output file="+node[0] {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, node); names(err) != "tool_bad_output file="+node[0] {
 		t.Errorf("Build = %v", names(err))
 	}
 	if _, err := os.Lstat(filepath.Join(e.Dirs.Tools(), node[0])); !errors.Is(err, os.ErrNotExist) {
@@ -667,7 +667,7 @@ func TestBuildHostileOutput(t *testing.T) {
 		// whatever it planted.
 		return os.Symlink(victim, filepath.Join(e.Dirs.Tools(), file+".sha256"))
 	}
-	if err := e.Build(t.Context(), f, baseKey, gnuT, node); err != nil {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, node); err != nil {
 		t.Fatal(names(err))
 	}
 	if string(read(t, victim)) != "victim\n" {
@@ -687,10 +687,10 @@ func TestBuildRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Build(t.Context(), f, baseKey, muslT, []string{musl}); names(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); names(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
 		t.Errorf("Build = %v", names(err))
 	}
-	if err := e.Build(t.Context(), f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); names(err) != "tools_changed" {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); names(err) != "tools_changed" {
 		t.Errorf("Build of a version the lock moved on from = %v", names(err))
 	}
 	if len(f.Calls()) > 0 {
@@ -904,7 +904,9 @@ func TestUpdate(t *testing.T) {
 	newer := regexp.MustCompile(`(?m)(\[\[tools\.go\]\]\n)version = ".*"`).ReplaceAll(fixture(t), []byte(`${1}version = "9.9.9"`))
 	e.stubLocks(t, newer, newer, "")
 	f := fake()
-	build := func(ctx context.Context, files []string) error { return e.Build(ctx, f, baseKey, gnuT, files) }
+	build := func(ctx context.Context, files []string) error {
+		return e.Build(ctx, backend.Review{}, f, baseKey, gnuT, files)
+	}
 	vm := "devvm-p-abc123abc123ab"
 	before := e.files(t, "go")
 	files, changed, err := e.Update(t.Context(), build, vm, "go", before, gnuT)

@@ -42,9 +42,7 @@ func vmName(t *testing.T, e *Env) string {
 func answers(t *testing.T, e *Env, yes bool) *[]string {
 	t.Helper()
 	var asked []string
-	term := terminal
-	t.Cleanup(func() { terminal = term })
-	terminal = func() bool { return true }
+	e.Terminal = func() bool { return true }
 	e.Confirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
 	e.Ask = e.Confirm
 	return &asked

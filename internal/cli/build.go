@@ -88,14 +88,15 @@ func builder(flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newBuilder(dirs, root, c.Backend, tools.New(dirs, root), ""), nil
+	return newBuilder(dirs, root, c.Backend, reg.Review, tools.New(dirs, root), ""), nil
 }
 
-// newBuilder returns a builder of images on be whose base starts from
-// fromRef, printing and asking through ui.
-func newBuilder(dirs paths.Dirs, root string, be backend.Backend, t *tools.Tools, fromRef string) *build.Builder {
+// newBuilder returns a builder of images on be, its features checked
+// against rv, whose base starts from fromRef, printing and asking through
+// ui.
+func newBuilder(dirs paths.Dirs, root string, be backend.Backend, rv backend.Review, t *tools.Tools, fromRef string) *build.Builder {
 	return &build.Builder{
-		Dirs: dirs, Root: root, Backend: be, Tools: t, From: fromRef,
+		Dirs: dirs, Root: root, Backend: be, Review: rv, Tools: t, From: fromRef,
 		Info: ui.Info, Warn: ui.Warn, Say: ui.Say, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
 		Pick: pickFeatures,
 	}

@@ -22,12 +22,21 @@ var unreviewed = ""
 // build, the unreviewed emulations DEVVM_UNREVIEWED names are let through,
 // with a warning each time: for their end-to-end checks.
 func Registry(d paths.Dirs) (*backend.Registry, error) {
-	backend.Unreviewed = nil
-	if unreviewed == "allowed" {
-		backend.Unreviewed = backend.ParseUnreviewed(os.Getenv("DEVVM_UNREVIEWED"))
+	return registry(d, unreviewed, os.Getenv("DEVVM_UNREVIEWED"))
+}
+
+// registry is Registry for a build whose unreviewed is build, with
+// DEVVM_UNREVIEWED's value env.
+func registry(d paths.Dirs, build, env string) (*backend.Registry, error) {
+	r, err := backend.NewRegistry(lima.New(d), smolvm.New(d))
+	if err != nil {
+		return nil, err
 	}
-	backend.Warn = ui.Warn
-	return backend.NewRegistry(lima.New(d), smolvm.New(d))
+	if build == "allowed" {
+		r.Unreviewed = backend.ParseUnreviewed(env)
+	}
+	r.Warn = ui.Warn
+	return r, nil
 }
 
 // Experimental reports whether the backend by that name is experimental:

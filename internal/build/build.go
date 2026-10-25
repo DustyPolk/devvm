@@ -28,7 +28,8 @@ type Builder struct {
 	Dirs    paths.Dirs
 	Root    string // devvm's own files: base.yaml, layers/, features/, oci/ (paths.Root)
 	Backend backend.Backend
-	Tools   *tools.Tools // the shared tools image names hold
+	Review  backend.Review // what Backend's features are checked against
+	Tools   *tools.Tools   // the shared tools image names hold
 	// From is the container image base starts from (--from); "" for the
 	// backend's own Ubuntu. Its images are apart from other bases'.
 	From string
@@ -212,7 +213,7 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	return b.Tools.Build(ctx, b.Backend, base, tg, files)
+	return b.Tools.Build(ctx, b.Review, b.Backend, base, tg, files)
 }
 
 func (b *Builder) build(ctx context.Context, name string) error {
@@ -232,7 +233,7 @@ func (b *Builder) build(ctx context.Context, name string) error {
 	if name == image.Base && b.From != "" {
 		spec.From = &backend.From{Ref: b.From, Digest: digest}
 	}
-	if err := backend.Require(b.Backend, name, spec.Features()...); err != nil {
+	if err := b.Review.Require(b.Backend, name, spec.Features()...); err != nil {
 		return err
 	}
 	if done, err := b.built(ctx, name, key); err != nil || done {

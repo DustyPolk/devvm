@@ -123,8 +123,8 @@ func TestCheckConverted(t *testing.T) {
 // Conversions take turns: one waits while another devvm holds the lock,
 // and takes over a lock whose devvm is gone.
 func TestLockOCI(t *testing.T) {
-	ociWait = 10 * time.Millisecond
 	l, _, _ := testLima(t, "darwin")
+	l.OCIWait = 10 * time.Millisecond
 	var infos []string
 	l.Info = func(m msg.M) { infos = append(infos, m.ID()) }
 	dir := l.Dirs.OCIBuildLock()

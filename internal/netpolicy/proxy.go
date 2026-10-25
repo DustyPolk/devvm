@@ -52,9 +52,11 @@ type Proxy struct {
 	Listening func(port int) bool
 	// Tick is how often a start looks for the proxy to listen, ten times.
 	Tick time.Duration
-	// What it prints (ui's), and asks: [y/N] and [Y/n].
+	// What it prints (ui's), and asks: [y/N] and [Y/n]; Terminal reports
+	// whether it can ask.
 	Note, Warn   func(msg.M)
 	Ask, Confirm func(msg.M) bool
+	Terminal     func() bool
 }
 
 // NewProxy returns the proxies of devvm's folders, run by self (devvm's
@@ -68,6 +70,7 @@ func NewProxy(d paths.Dirs, root, self string, store *secrets.Store) *Proxy {
 		},
 		Listening: listening, Tick: 500 * time.Millisecond,
 		Note: ui.Note, Warn: ui.Warn, Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
+		Terminal: ui.StdinIsTerminal,
 	}
 }
 

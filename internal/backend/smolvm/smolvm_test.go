@@ -160,13 +160,14 @@ func TestCaps(t *testing.T) {
 			t.Errorf("%s: %s", f, caps[f])
 		}
 	}
-	if err := backend.Require(s, "devvm-x", backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
+	var r backend.Review
+	if err := r.Require(s, "devvm-x", backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
 		t.Errorf("network policy: %v", err)
 	}
-	if err := backend.Require(s, "devvm-x", backend.FeatureSSH); err != nil {
+	if err := r.Require(s, "devvm-x", backend.FeatureSSH); err != nil {
 		t.Errorf("ssh: %v", err)
 	}
-	err := backend.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...)
+	err := r.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...)
 	if got := names(err); got != "backend_lacks backend=smolvm feature=ports-all vm=devvm-x" {
 		t.Errorf("every port: %s", got)
 	}

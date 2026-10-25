@@ -240,6 +240,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Info:   quiet, Warn: quiet, Note: quiet, Say: quiet,
 		Ask: unasked(t), Confirm: unasked(t),
 		PickFeatures: func(fs []build.Feature) []build.Feature { return fs },
+		Terminal:     func() bool { return false },
 	}
 	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
 	// is put back.
@@ -279,6 +280,7 @@ func testProxy(t *testing.T, d paths.Dirs, root, home string) *netpolicy.Proxy {
 	store := secrets.NewStore(d, home)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	p := netpolicy.NewProxy(d, root, "/devvm", store)
+	p.Terminal = func() bool { return false }
 	var mu sync.Mutex
 	args := map[int][]string{}
 	p.Start = func(path string, a []string, out *os.File) (int, error) {

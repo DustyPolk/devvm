@@ -130,14 +130,14 @@ func (e *Env) warnIgnored(o Options) {
 func (e *Env) applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
 	want := sshagent.Forwards(sshagent.Mode(st))
 	if want {
-		if err := backend.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
+		if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
 			return err
 		}
 	}
 	if in.AgentForwarding == want {
 		return nil
 	}
-	if err := backend.Require(b, st.Name(), backend.FeatureAgentToggle); err != nil {
+	if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentToggle); err != nil {
 		return err
 	}
 	if in.Status == backend.StatusRunning {
@@ -176,7 +176,7 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 	if netpolicy.On(st) {
 		conf.Net = backend.NetProxy
 	}
-	if err := backend.Require(b, vm, conf.Features()...); err != nil {
+	if err := e.Registry.Require(b, vm, conf.Features()...); err != nil {
 		return conf, err
 	}
 	in, err := b.Inspect(ctx, vm)
@@ -291,7 +291,7 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 	}
 	added := strings.Join(missing, "+")
 	mounts := e.AgentMounts(added)
-	if !terminal() {
+	if !e.Terminal() {
 		return msg.NoTerminalConfirm(vm, want)
 	}
 	if len(mounts) > 0 {
@@ -388,5 +388,5 @@ func (e *Env) buildTools(ctx context.Context, builder *build.Builder, tg tools.T
 	if err != nil {
 		return err
 	}
-	return e.Tools.Build(ctx, builder.Backend, base, tg, files)
+	return e.Tools.Build(ctx, builder.Review, builder.Backend, base, tg, files)
 }

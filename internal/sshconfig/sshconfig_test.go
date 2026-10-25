@@ -16,7 +16,6 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 const (
@@ -78,7 +77,7 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 	quiet := func(msg.M) {}
 	return &Config{
 		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")}, Backends: []backend.Backend{f},
-		Info: quiet, Warn: quiet, Say: quiet,
+		Info: quiet, Warn: quiet, Say: quiet, Terminal: func() bool { return false },
 	}, f
 }
 
@@ -279,9 +278,9 @@ func TestWriteUnchecked(t *testing.T) {
 // unless a test build lets it through (DEVVM_UNREVIEWED); none whose
 // backend lacks it.
 func TestWriteUnreviewed(t *testing.T) {
+	t.Parallel()
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
-	t.Cleanup(func() { backend.Unreviewed = nil })
 	for _, tc := range []struct {
 		caps backend.Caps
 		let  map[string]bool
@@ -292,7 +291,7 @@ func TestWriteUnreviewed(t *testing.T) {
 		{backend.Caps{backend.FeatureSSH: backend.Emulated(true)}, nil, true},
 		{nil, map[string]bool{"fake:ssh": true}, false},
 	} {
-		f.Capabilities, backend.Unreviewed = tc.caps, tc.let
+		f.Capabilities, c.Review.Unreviewed = tc.caps, tc.let
 		if err := c.Write(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -346,9 +345,7 @@ func TestParseHostKeys(t *testing.T) {
 // Without a terminal, the Include line isn't added: it says to. Once
 // there, anywhere, nothing is asked.
 func TestEnsureInclude(t *testing.T) {
-	if ui.StdinIsTerminal() {
-		t.Skip("it would ask: run without a terminal on stdin")
-	}
+	t.Parallel()
 	c, _ := testConfig(t)
 	home := t.TempDir()
 	cfg := filepath.Join(home, ".ssh", "config")

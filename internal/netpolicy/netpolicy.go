@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Keys of a VM's state.
@@ -39,16 +38,13 @@ const ProxyUser = "devvm"
 // On reports whether a VM has network policy.
 func On(st *state.VM) bool { return st.Get(KeyNet) == "on" }
 
-// terminal reports whether devvm can ask; tests swap it.
-var terminal = ui.StdinIsTerminal
-
 // Choose returns whether a new VM gets network policy: what the flags say,
 // else the answer in a terminal (no by default), else off.
 func (p *Proxy) Choose(on, off bool, vm string) bool {
 	switch {
 	case on:
 		return true
-	case off, !terminal():
+	case off, !p.Terminal():
 		return false
 	}
 	p.Note(msg.NetAbout(vm))

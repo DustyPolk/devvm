@@ -199,7 +199,7 @@ func (e *Env) SetPorts(ctx context.Context, c PortsChange) error {
 	if err != nil {
 		return err
 	}
-	if err := backend.Require(b, vm, PortsBackend(ports).Features()...); err != nil {
+	if err := e.Registry.Require(b, vm, PortsBackend(ports).Features()...); err != nil {
 		return err
 	}
 	in, err := b.Inspect(ctx, vm)

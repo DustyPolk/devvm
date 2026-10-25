@@ -62,9 +62,6 @@ const (
 	retries  = 2
 )
 
-// retryDelay is the wait before the first retry; it doubles after each.
-var retryDelay = time.Second
-
 // The manifest kinds asked for: an index (every architecture's) first.
 const accept = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, " +
 	"application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
@@ -76,11 +73,13 @@ type Registry struct {
 	Client *http.Client
 	// Base is the address of the registry at host: https://host.
 	Base func(host string) string
+	// RetryDelay is the wait before the first retry; it doubles after each.
+	RetryDelay time.Duration
 }
 
 // NewRegistry returns a Registry on the internet.
 func NewRegistry() *Registry {
-	return &Registry{Client: NewClient(), Base: func(host string) string { return "https://" + host }}
+	return &Registry{Client: NewClient(), Base: func(host string) string { return "https://" + host }, RetryDelay: time.Second}
 }
 
 // NewClient returns the HTTP client a Registry uses: a timeout per
@@ -244,7 +243,7 @@ func transient(code int) bool {
 // retries times. A failure that never got an answer, or kept getting a
 // server error, is ErrUnreachable.
 func (r *Registry) retry(ctx context.Context, try func() (again bool, err error)) error {
-	delay := retryDelay
+	delay := r.RetryDelay
 	for n := 0; ; n++ {
 		again, err := try()
 		if err == nil {

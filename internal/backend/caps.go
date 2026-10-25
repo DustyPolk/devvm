@@ -95,14 +95,16 @@ func (s Support) String() string {
 // Caps is how a backend has each feature. A feature it doesn't list is None.
 type Caps map[Feature]Support
 
-// Unreviewed is the unreviewed emulations Require lets through anyway, as
-// backend:feature (smolvm:egress-proxy): for the end-to-end checks that an
-// emulation's review needs, which set DEVVM_UNREVIEWED. Warn is told each
-// time one is let through. Nothing else sets them.
-var (
+// Review checks backends' features against their review. Its zero value
+// refuses every unreviewed emulation.
+type Review struct {
+	// Unreviewed is the unreviewed emulations Require lets through anyway,
+	// as backend:feature (smolvm:egress-proxy): for the end-to-end checks
+	// that an emulation's review needs, which set DEVVM_UNREVIEWED.
 	Unreviewed map[string]bool
-	Warn       = func(msg.M) {}
-)
+	// Warn is told each time one is let through.
+	Warn func(msg.M)
+}
 
 // ParseUnreviewed reads DEVVM_UNREVIEWED's value: backend:feature pairs,
 // comma-separated.
@@ -116,15 +118,16 @@ func ParseUnreviewed(v string) map[string]bool {
 	return out
 }
 
-// Require returns nil when b has every feature usable, else the refusal
-// for the first one it lacks or only emulates unreviewed, naming vm.
-func Require(b Backend, vm string, features ...Feature) error {
+// Require returns nil when b has every feature usable or let through, else
+// the refusal for the first one it lacks or only emulates unreviewed,
+// naming vm.
+func (r Review) Require(b Backend, vm string, features ...Feature) error {
 	caps := b.Caps()
 	for _, f := range features {
 		switch s := caps[f]; {
 		case s.Usable():
-		case s.IsEmulated() && Unreviewed[b.Name()+":"+string(f)]:
-			Warn(msg.BackendUnreviewedUsed(b.Name(), string(f), vm))
+		case s.IsEmulated() && r.Unreviewed[b.Name()+":"+string(f)]:
+			r.Warn(msg.BackendUnreviewedUsed(b.Name(), string(f), vm))
 		case s.IsEmulated():
 			return msg.BackendUnreviewed(b.Name(), string(f), vm)
 		default:
@@ -136,9 +139,9 @@ func Require(b Backend, vm string, features ...Feature) error {
 
 // Allowed reports whether Require lets f through on b, without a warning:
 // for what uses a feature a VM already got (Require told then).
-func Allowed(b Backend, f Feature) bool {
+func (r Review) Allowed(b Backend, f Feature) bool {
 	s := b.Caps()[f]
-	return s.Usable() || s.IsEmulated() && Unreviewed[b.Name()+":"+string(f)]
+	return s.Usable() || s.IsEmulated() && r.Unreviewed[b.Name()+":"+string(f)]
 }
 
 // Features returns what building the image needs.

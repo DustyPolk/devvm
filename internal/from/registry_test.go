@@ -14,6 +14,7 @@ import (
 )
 
 func TestParseRef(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ in, host, repo, tag string }{
 		{"node:24", DockerHub, "library/node", "24"},
 		{"alpine", DockerHub, "library/alpine", "latest"},
@@ -54,6 +55,7 @@ func FuzzParseRef(f *testing.F) {
 }
 
 func TestName(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"node:24":              "node",
 		"node":                 "node",
@@ -142,6 +144,7 @@ func (f *fakeRegistry) set(repoTag, digest string) {
 func digestOf(c string) string { return "sha256:" + strings.Repeat(c, 64) }
 
 func TestDigestTokenThenManifest(t *testing.T) {
+	t.Parallel()
 	f := newFakeRegistry(t)
 	f.set("library/node:24", digestOf("a"))
 	d, err := f.registry().Digest(t.Context(), "node:24")
@@ -159,7 +162,7 @@ func TestDigestTokenThenManifest(t *testing.T) {
 }
 
 func TestDigestNotFoundAndUnreachable(t *testing.T) {
-	retryDelay = 0
+	t.Parallel()
 	f := newFakeRegistry(t)
 	if _, err := f.registry().Digest(t.Context(), "ghcr.io/someone/private:1"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a missing image: %v", err)
@@ -196,6 +199,7 @@ func TestDigestNotFoundAndUnreachable(t *testing.T) {
 // A registry can't point devvm's token request at a host file or a plain
 // http address: the realm must be https.
 func TestDigestRealmMustBeHTTPS(t *testing.T) {
+	t.Parallel()
 	secret := filepath.Join(t.TempDir(), "auth.json")
 	if err := os.WriteFile(secret, []byte(`{"access_token":"HOST-SECRET"}`), 0o600); err != nil {
 		t.Fatal(err)

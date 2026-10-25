@@ -262,10 +262,8 @@ func ext4(path string) bool {
 	return bytes.Equal(magic, []byte{0x53, 0xef})
 }
 
-// ociWait is how long a conversion waits between looks at the lock; it
-// says it's waiting after ociWaitNote looks.
-var ociWait = time.Second
-
+// ociWaitNote is how many looks at the lock a conversion takes before it
+// says it's waiting.
 const ociWaitNote = 3
 
 // lockOCI takes the conversion lock: a folder holding its devvm's pid. It
@@ -304,7 +302,7 @@ func (l *Lima) lockOCI(ctx context.Context) (unlock func(), err error) {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(ociWait):
+		case <-time.After(l.OCIWait):
 		}
 	}
 	me := os.Getpid()

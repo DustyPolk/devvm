@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // What each agent shares from the host, as paths relative to the home
@@ -140,7 +139,7 @@ func (e *Env) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.
 		e.Warn(msg.AgentDirsRemoved(shownList(removed), vm))
 	}
 	if in.Status == backend.StatusRunning {
-		if !terminal() || !e.Confirm(msg.UpdateMounts(vm)) {
+		if !e.Terminal() || !e.Confirm(msg.UpdateMounts(vm)) {
 			e.Warn(msg.MountsNextStart(vm))
 			return nil
 		}
@@ -162,9 +161,6 @@ func shownList(paths []string) string {
 	}
 	return strings.Join(shown, ", ")
 }
-
-// terminal reports whether devvm can ask; tests swap it.
-var terminal = ui.StdinIsTerminal
 
 // missing returns what of a isn't in b.
 func missing(a, b []string) []string {

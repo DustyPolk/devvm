@@ -15,6 +15,7 @@ import (
 )
 
 func TestValidAndCheck(t *testing.T) {
+	t.Parallel()
 	for _, s := range []string{"node:24", "ghcr.io/o/i@sha256:0123", "localhost:5000/a_b/c-d:1.2+x"} {
 		if !Valid(s) || Check(s) != nil {
 			t.Errorf("%q refused", s)
@@ -63,7 +64,6 @@ func newTestLookup(t *testing.T) *testLookup {
 // offline makes the registry unreachable.
 func (tl *testLookup) offline(t *testing.T) {
 	t.Helper()
-	retryDelay = 0
 	down := httptest.NewTLSServer(http.NotFoundHandler())
 	tl.Registry = &Registry{Client: down.Client(), Base: func(string) string { return down.URL }}
 	down.Close()
@@ -84,6 +84,7 @@ func isMsg(err error, id string) bool {
 }
 
 func TestRefreshRecordsTheRegistrysDigestPerTag(t *testing.T) {
+	t.Parallel()
 	tl := newTestLookup(t)
 	tl.reg.set("library/node:24", digestOf("a"))
 	if err := tl.Refresh(t.Context(), "node:24"); err != nil {
@@ -113,6 +114,7 @@ func TestRefreshRecordsTheRegistrysDigestPerTag(t *testing.T) {
 }
 
 func TestRefreshDockerOnlyImage(t *testing.T) {
+	t.Parallel()
 	tl := newTestLookup(t)
 	tl.docker["myapp:dev"] = digestOf("d")
 	if err := tl.Refresh(t.Context(), "myapp:dev"); err != nil {
@@ -134,6 +136,7 @@ func TestRefreshDockerOnlyImage(t *testing.T) {
 }
 
 func TestRefreshOffline(t *testing.T) {
+	t.Parallel()
 	tl := newTestLookup(t)
 	tl.reg.set("library/node:24", digestOf("a"))
 	if err := tl.Refresh(t.Context(), "node:24"); err != nil {
@@ -167,6 +170,7 @@ func TestRefreshOffline(t *testing.T) {
 }
 
 func TestRefreshNotFound(t *testing.T) {
+	t.Parallel()
 	tl := newTestLookup(t)
 	if err := tl.Refresh(t.Context(), "ghcr.io/someone/private"); !isMsg(err, "from_not_found") {
 		t.Errorf("nothing recorded: %v", err)
@@ -183,6 +187,7 @@ func TestRefreshNotFound(t *testing.T) {
 }
 
 func TestRefreshPinnedNeedsNoLookup(t *testing.T) {
+	t.Parallel()
 	tl := newTestLookup(t)
 	ref := "node:24@sha256:cccc"
 	if err := tl.Refresh(t.Context(), ref); err != nil {

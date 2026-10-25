@@ -146,7 +146,7 @@ func (e *Env) Adopt(ctx context.Context) error {
 		return nil
 	}
 	was := st.Get(state.KeyDir)
-	if !terminal() {
+	if !e.Terminal() {
 		return msg.VMOtherFolderAdopt(vm, was)
 	}
 	if !e.Ask(msg.AdoptVM(vm, was)) {
@@ -178,7 +178,7 @@ func (e *Env) Rm(ctx context.Context, force bool) error {
 	vm, st := t.f.Name, t.st
 	if !e.sameFolder(t.f, st) {
 		was := st.Get(state.KeyDir)
-		if !terminal() {
+		if !e.Terminal() {
 			return msg.VMOtherFolderRm(vm, was)
 		}
 		if !e.Ask(msg.DeleteOtherFolderVM(vm, was)) {
@@ -231,7 +231,7 @@ func (e *Env) ensureRunning(ctx context.Context, t *found) error {
 	if netpolicy.On(t.st) {
 		conf.Net = backend.NetProxy
 	}
-	if err := backend.Require(b, vm, conf.Features()...); err != nil {
+	if err := e.Registry.Require(b, vm, conf.Features()...); err != nil {
 		return err
 	}
 	e.Info(msg.Starting(vm))
@@ -365,7 +365,7 @@ func (e *Env) SetNetwork(ctx context.Context, on bool) error {
 	}
 	running := in.Status == backend.StatusRunning
 	if on {
-		if err := backend.Require(b, vm, backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
+		if err := e.Registry.Require(b, vm, backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
 			return err
 		}
 	}
@@ -485,7 +485,7 @@ func (e *Env) SetSSHAgent(ctx context.Context, mode string) error {
 		return nil
 	}
 	if sshagent.Forwards(mode) {
-		if err := backend.Require(b, vm, backend.FeatureAgentForwarding); err != nil {
+		if err := e.Registry.Require(b, vm, backend.FeatureAgentForwarding); err != nil {
 			return err
 		}
 	}
@@ -499,7 +499,7 @@ func (e *Env) SetSSHAgent(ctx context.Context, mode string) error {
 		return err
 	}
 	if sshagent.Forwards(mode) != in.AgentForwarding {
-		if err := backend.Require(b, vm, backend.FeatureAgentToggle); err != nil {
+		if err := e.Registry.Require(b, vm, backend.FeatureAgentToggle); err != nil {
 			return err
 		}
 	}
@@ -550,16 +550,16 @@ func (e *Env) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	if !netpolicy.On(t.st) {
 		e.Note(msg.NetOffLog(vm))
 	}
-	path := netpolicy.EventLog(e.Dirs, vm)
+	l := netpolicy.NewLog(e.Dirs, vm)
 	// Its proxy makes the log as it starts: following an empty one waits.
-	if fi, err := os.Stat(path); errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow {
+	if fi, err := os.Stat(l.Path); errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow {
 		e.Info(msg.LogEmpty(vm))
 		return nil
 	}
 	if o.Blocked {
-		return netpolicy.WriteBlocked(w, path)
+		return l.WriteBlocked(w)
 	}
-	return netpolicy.WriteLog(ctx, w, path, o.Lines, o.Follow)
+	return l.Write(ctx, w, o.Lines, o.Follow)
 }
 
 // policyVM finds the folder's VM for devvm policy, which must exist and

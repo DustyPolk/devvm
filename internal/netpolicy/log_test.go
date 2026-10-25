@@ -38,6 +38,7 @@ func event(n int) string {
 func shown(n int) string { return "T" + strconv.Itoa(n) + "  BLOCKED  a.test:443  r\n" }
 
 func TestWriteLog(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
 	// The last line is still being written, without its newline.
 	if err := os.WriteFile(path, []byte(event(1)+event(2)+"junk\n"+strings.TrimSuffix(event(3), "\n")), 0o600); err != nil {
@@ -52,13 +53,13 @@ func TestWriteLog(t *testing.T) {
 		{0, ""},
 	} {
 		var b bytes.Buffer
-		if err := WriteLog(context.Background(), &b, path, c.n, false); err != nil || b.String() != c.want {
+		if err := (&Log{Path: path}).Write(context.Background(), &b, c.n, false); err != nil || b.String() != c.want {
 			t.Errorf("n=%d: %q, %v; want %q", c.n, b.String(), err, c.want)
 		}
 	}
 }
 
-// syncBuffer is a bytes.Buffer safe to read while WriteLog writes it.
+// syncBuffer is a bytes.Buffer safe to read while Log.Write writes it.
 type syncBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -77,9 +78,7 @@ func (s *syncBuffer) String() string {
 }
 
 func TestWriteLogFollow(t *testing.T) {
-	old := LogTick
-	LogTick = 5 * time.Millisecond
-	t.Cleanup(func() { LogTick = old })
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
 	ev3 := event(3)
 	if err := os.WriteFile(path, []byte(event(1)+event(2)+ev3[:10]), 0o600); err != nil {
@@ -98,7 +97,8 @@ func TestWriteLogFollow(t *testing.T) {
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- WriteLog(ctx, &out, path, 1, true) }()
+	l := &Log{Path: path, Tick: 5 * time.Millisecond}
+	go func() { done <- l.Write(ctx, &out, 1, true) }()
 	wait := func(want string) {
 		t.Helper()
 		for deadline := time.Now().Add(5 * time.Second); out.String() != want; {
@@ -127,6 +127,7 @@ func TestWriteLogFollow(t *testing.T) {
 }
 
 func TestWriteBlocked(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
 	lines := `{"time":"T2","event":"blocked","host":"a.test","port":443,"reason":"r"}
 {"time":"T1","event":"tunnel","host":"ok.test","port":443,"rule":"ok.test"}
@@ -139,7 +140,7 @@ func TestWriteBlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	var b bytes.Buffer
-	if err := WriteBlocked(&b, path); err != nil {
+	if err := (&Log{Path: path}).WriteBlocked(&b); err != nil {
 		t.Fatal(err)
 	}
 	want := "LAST  COUNT  HOST                ALLOW WITH\n" +

@@ -15,8 +15,10 @@ import (
 // default backend file names one.
 const Default = "lima"
 
-// Registry is the backends devvm has, by name.
+// Registry is the backends devvm has, by name, and the review their
+// features are checked against.
 type Registry struct {
+	Review
 	byName map[string]Backend
 }
 

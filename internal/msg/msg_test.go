@@ -112,9 +112,11 @@ func TestStringAddsDocLink(t *testing.T) {
 	if got := m.String(); got != m.Text() {
 		t.Errorf("no doc: got %q, want the text", got)
 	}
-	docs["msg_unknown"] = "images#where-state-lives"
-	defer delete(docs, "msg_unknown")
-	want := m.Text() + "\nhttps://w3cj.github.io/devvm/docs/images/#where-state-lives"
+	m = BackendLacks("fake", "ssh", "devvm-x")
+	if m.DocURL() == "" {
+		t.Fatal("backend_lacks has no doc")
+	}
+	want := m.Text() + "\n" + m.DocURL()
 	if got := m.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -210,8 +212,7 @@ func TestBundleErrors(t *testing.T) {
 }
 
 func TestFromArgs(t *testing.T) {
-	specs["t_plural"] = spec{plural: true, fields: []string{"count", "dir"}}
-	defer delete(specs, "t_plural")
+	t.Parallel()
 	for _, tt := range []struct {
 		id   string
 		args []string
@@ -220,14 +221,14 @@ func TestFromArgs(t *testing.T) {
 		{"msg_unknown", []string{"name=a b=c"}, "msg_unknown name=a b=c"},
 		{"home_not_absolute", nil, "home_not_absolute"},
 		{"msg_missing_value", []string{"name=n", "key=k"}, "msg_missing_value key=k name=n"},
-		{"t_plural", []string{"dir=/x", "count=02"}, "t_plural count=2 dir=/x"},
+		{"gc_tools", []string{"size=1G", "count=02"}, "gc_tools count=2 size=1G"},
 		{"nope", nil, "msg_unknown name=nope"},
 		{"msg_unknown", nil, "msg_missing_value key=name name=msg_unknown"},
 		{"msg_unknown", []string{"name=a", "vm=b"}, "msg_unexpected_value key=vm name=msg_unknown"},
 		{"msg_unknown", []string{"name=a", "name=b"}, "msg_repeated_value key=name"},
 		{"msg_unknown", []string{"a"}, "msg_not_pair arg=a"},
 		{"msg_unknown", []string{"=a"}, "msg_not_pair arg==a"},
-		{"t_plural", []string{"dir=/x", "count=two"}, "msg_bad_count value=two"},
+		{"gc_tools", []string{"size=1G", "count=two"}, "msg_bad_count value=two"},
 	} {
 		m, err := FromArgs(tt.id, tt.args)
 		got := m.Names()

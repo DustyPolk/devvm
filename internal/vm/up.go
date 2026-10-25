@@ -87,10 +87,12 @@ type Env struct {
 	// Agent is devvm's own SSH agent.
 	Agent *sshagent.Agent
 	// What it prints and asks (ui's): Ask is [y/N], Confirm [Y/n];
-	// PickFeatures asks which features base gets (build.Builder.Pick).
+	// PickFeatures asks which features base gets (build.Builder.Pick);
+	// Terminal reports whether it can ask.
 	Info, Warn, Note, Say func(msg.M)
 	Ask, Confirm          func(msg.M) bool
 	PickFeatures          func([]build.Feature) []build.Feature
+	Terminal              func() bool
 }
 
 // NewEnv returns the environment up runs in here, devvm being self. Its
@@ -111,7 +113,7 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig, SSHAdd: sshAdd,
 		Info: ui.Info, Warn: ui.Warn, Note: ui.Note, Say: ui.Say,
-		Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
+		Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) }, Terminal: ui.StdinIsTerminal,
 	}
 	e.Agent = sshagent.New(d, e.mounts)
 	return e, nil
@@ -121,7 +123,7 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 // fromRef ("" for the backend's own).
 func (e *Env) builder(b backend.Backend, fromRef string) *build.Builder {
 	return &build.Builder{
-		Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools, From: fromRef,
+		Dirs: e.Dirs, Root: e.Root, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
 	}
 }
@@ -311,7 +313,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		// Its clone is copied in and fetched over ssh.
 		need = append(need, backend.FeatureSSH)
 	}
-	if err := backend.Require(b, vm, need...); err != nil {
+	if err := e.Registry.Require(b, vm, need...); err != nil {
 		return err
 	}
 	// A new VM gets the newest tools: check now when the daily check is
@@ -511,7 +513,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	}
 	// ssh for editors, where the backend has it (an emulation once it's
 	// reviewed): a VM without it starts all the same.
-	conf.SSH = backend.Require(b, vm, backend.FeatureSSH) == nil
+	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)
