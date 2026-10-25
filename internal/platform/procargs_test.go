@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"slices"
 	"testing"
+	"time"
 )
 
 // A process's arguments, as it was started with them.
@@ -23,7 +24,13 @@ func TestProcessArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
-	if got, err := ProcessArgs(cmd.Process.Pid); err != nil || !slices.Equal(got, []string{"sleep", "30", "a b", ""}) {
-		t.Errorf("ProcessArgs = %q, %v", got, err)
+	// Right after Start, the child may not have exec'd sleep yet: Linux
+	// shows the forked Go process's arguments until it does.
+	want := []string{"sleep", "30", "a b", ""}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if got, err = ProcessArgs(cmd.Process.Pid); err == nil && slices.Equal(got, want) {
+			return
+		}
 	}
+	t.Errorf("ProcessArgs = %q, %v", got, err)
 }
