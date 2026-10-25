@@ -1,0 +1,106 @@
+# scripts/release.sh --head: a test build from HEAD's commit, signed with a
+# test key, in a throwaway repo with a goreleaser that writes a small dist/.
+[!exec:git] skip
+[!exec:minisign] skip
+env GIT_CONFIG_NOSYSTEM=1
+env PATH=$WORK/bin:$PATH
+chmod 755 bin/goreleaser
+exec bash repo.sh
+
+# Unsigned without a test key: install.sh trusts no key.
+exec repo/scripts/release.sh --head
+stdout '^\(not signed: a test build without DEVVM_MINISIGN_KEY\)$'
+! exists repo/dist/SHA256SUMS.minisig
+grep '^release_version="1.2.3"$' repo/dist/install.sh
+grep '^minisign_key=""$' repo/dist/install.sh
+
+# With one: GoReleaser builds a snapshot with VERSION's version, SHA256SUMS
+# is signed and verifies, install.sh is set to the release and the key, and
+# the formula to the source tarball.
+rm log
+exec minisign -G -W -p keys/test.pub -s keys/test.key
+env DEVVM_MINISIGN_KEY=$WORK/keys/test.key DEVVM_MINISIGN_PUB=$WORK/keys/test.pub
+exec repo/scripts/release.sh --head
+! stdout 'not signed'
+cmp log log.want
+exec minisign -Vm repo/dist/SHA256SUMS -p keys/test.pub
+stdout 'Trusted comment: devvm 1.2.3'
+exec bash key.sh
+grep '^release_version="1.2.3"$' repo/dist/install.sh
+cmp stdout key.want
+exec bash formula.sh
+cmp stdout formula.want
+
+# Only what's committed goes in.
+exec tar -tzf repo/dist/devvm-1.2.3.tar.gz
+stdout '^devvm-1.2.3/VERSION$'
+! stdout uncommitted
+
+# A key that doesn't match the public key: refused.
+exec minisign -G -W -p keys/other.pub -s keys/other.key
+env DEVVM_MINISIGN_PUB=$WORK/keys/other.pub
+! exec repo/scripts/release.sh --head
+stderr '^release: SHA256SUMS.minisig doesn''t verify with packaging/minisign.pub$'
+env DEVVM_MINISIGN_PUB=$WORK/keys/test.pub
+
+# A binary that doesn't say the release's version: refused.
+env GR_VERSION=0.0.0
+! exec repo/scripts/release.sh --head
+stderr 'version says ''0.0.0'', not 1.2.3$'
+env GR_VERSION=
+
+# An install.sh without the lines to fill in: refused.
+exec bash -c 'printf ''#!/bin/sh\n'' > repo/install.sh && git -C repo commit -qam no-lines'
+! exec repo/scripts/release.sh --head
+stderr 'install.sh needs one release_version="" and one minisign_key="" line$'
+
+# A VERSION that isn't x.y.z: refused.
+exec bash -c 'echo 1.2 > repo/VERSION && git -C repo commit -qam bad-version'
+! exec repo/scripts/release.sh --head
+stderr '^release: VERSION isn''t x.y.z: ''1.2''$'
+
+-- repo.sh --
+# A repo with release.sh, the formula, an install.sh to fill in and
+# VERSION 1.2.3, and a file that isn't committed.
+set -eu
+mkdir -p repo/scripts repo/packaging/homebrew keys
+cp "$DEVVM_REPO/scripts/release.sh" repo/scripts/
+cp "$DEVVM_REPO/packaging/homebrew/devvm.rb" repo/packaging/homebrew/
+echo 1.2.3 > repo/VERSION
+printf '#!/bin/sh\nrelease_version=""\nminisign_key=""\n' > repo/install.sh
+git -C repo init -q
+git -C repo config user.email e@e
+git -C repo config user.name e
+git -C repo add -A
+git -C repo commit -qm r
+touch repo/uncommitted
+-- key.sh --
+# install.sh's key is the test key's.
+grep "^minisign_key=\"$(sed -n 2p keys/test.pub)\"$" repo/dist/install.sh >/dev/null && echo trusted
+-- key.want --
+trusted
+-- formula.sh --
+# The formula's URL and checksum, against the source tarball's.
+sha=$(shasum -a 256 repo/dist/devvm-1.2.3.tar.gz | cut -c1-64)
+grep -q "^  sha256 \"$sha\"$" repo/dist/devvm.rb && echo checksum
+grep '^  url ' repo/dist/devvm.rb
+! grep '@' repo/dist/devvm.rb
+-- formula.want --
+checksum
+  url "https://github.com/w3cj/devvm/releases/download/v1.2.3/devvm-1.2.3.tar.gz"
+-- log.want --
+release --clean --skip=publish --snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG=
+-- bin/goreleaser --
+#!/bin/bash
+# Logs its call and writes a dist/ like GoReleaser's: the source tarball,
+# SHA256SUMS and this host's binary, which prints $GR_VERSION, else
+# $DEVVM_VERSION.
+set -eu
+echo "$* DEVVM_VERSION=$DEVVM_VERSION GORELEASER_CURRENT_TAG=${GORELEASER_CURRENT_TAG:-}" >> "$WORK/log"
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+case $(uname -m) in arm64 | aarch64) arch=arm64 ;; *) arch=amd64 ;; esac
+mkdir -p "dist/devvm_${os}_$arch"
+git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
+(cd dist && shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz" > SHA256SUMS)
+printf '#!/bin/sh\necho %s\n' "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm_${os}_$arch/devvm"
+chmod 755 "dist/devvm_${os}_$arch/devvm"

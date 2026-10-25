@@ -31,7 +31,7 @@ mise installs every tool at the version pinned in `mise.toml`, checked against `
 | golangci-lint | Go linters and formatters (`.golangci.yml`) |
 | gotestsum | running the tests |
 | govulncheck | checking dependencies for known vulnerabilities |
-| goreleaser | release builds |
+| goreleaser | release builds ([Maintaining](maintaining.md#releasing)) |
 | hugo-extended | the docs site |
 | vale, markdownlint-cli2, lychee | linting the docs |
 | node | running markdownlint-cli2 |
@@ -85,6 +85,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
 | `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
 | `DEVVM_BIN` | the folder of the built `devvm`, with copies of `base.yaml`, `layers/`, `tools/`, `guest/` and `oci/` next to it |
+| `DEVVM_REPO` | the checkout, for the scripts in `scripts/`, which tests copy into a throwaway repo before running |
 
 `$WORK`, the script's own folder, is the current folder.
 

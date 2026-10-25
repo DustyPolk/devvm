@@ -1,0 +1,130 @@
+# scripts/bump.sh, on a scratch copy of the files it edits, with upstream
+# answered by a curl that reads $WORK/up/ (repo.sh).
+[!exec:jq] skip
+env PATH=$WORK/bin:$PATH
+chmod 755 bin/curl
+exec bash repo.sh
+
+# crane's version and checksums are written as they are.
+exec repo/scripts/bump.sh crane
+stdout '^  crane +0\.22\.1 +-> 9\.9\.9$'
+stdout '^- crane: 0\.22\.1 -> 9\.9\.9$'
+exec grep '^crane_' repo/oci/build.sh
+cmp stdout crane.want
+
+# mise moves base's mise and devvm's host mise together.
+exec repo/scripts/bump.sh mise
+exec grep '^mise_' repo/layers/base.sh
+cmp stdout mise-base.want
+exec grep -E 'miseVersion =|"(macos|linux)-' repo/internal/tools/mise.go
+cmp stdout mise-go.want
+
+# Upstream values that aren't a version or a checksum are refused, and
+# nothing is edited: a command for a checksum, one in a version, and a
+# missing asset (an empty checksum).
+exec bash repo.sh
+cp repo/oci/build.sh before
+cp sums-hostile up/crane-sums
+! exec repo/scripts/bump.sh crane
+stderr '^bump: upstream gave crane_sha256_arm64 an unexpected value: '
+cmp repo/oci/build.sh before
+cp sums-good up/crane-sums
+cp latest-hostile up/crane-latest
+! exec repo/scripts/bump.sh crane
+stderr '^bump: upstream gave crane_version an unexpected value: '
+cmp repo/oci/build.sh before
+cp latest-good up/crane-latest
+cp sums-missing up/crane-sums
+! exec repo/scripts/bump.sh crane
+stderr '^bump: upstream gave crane_sha256_arm64 an unexpected value: '''''
+cmp repo/oci/build.sh before
+! exists pwned
+
+# The same for the host mise's pins, in Go.
+cp repo/internal/tools/mise.go mise.go.before
+cp mise-sums-hostile up/mise-sums
+! exec repo/scripts/bump.sh mise
+stderr '^bump: upstream gave mise_sha256 an unexpected value: '
+cmp repo/internal/tools/mise.go mise.go.before
+! exists pwned
+
+# --check prints upstream's version without control characters.
+cp latest-escape up/crane-latest
+exec repo/scripts/bump.sh --check crane
+stdout ' -> 9\.9\.9\[2J$'
+! stdout '\x1b'
+cmp repo/oci/build.sh before
+
+# An unknown tool: refused.
+! exec repo/scripts/bump.sh nope
+stderr '^bump: unknown tool ''nope'''
+
+-- repo.sh --
+# A copy of the files bump.sh edits, and upstream's good answers.
+set -eu
+rm -rf repo up
+mkdir -p repo/scripts repo/oci repo/layers repo/internal/tools up
+cp "$DEVVM_REPO/scripts/bump.sh" repo/scripts/
+cp "$DEVVM_REPO/oci/build.sh" repo/oci/
+cp "$DEVVM_REPO/layers/base.sh" repo/layers/
+cp "$DEVVM_REPO/internal/tools/mise.go" repo/internal/tools/
+cp latest-good up/crane-latest
+cp sums-good up/crane-sums
+cp mise-latest up/mise-latest
+cp mise-sums up/mise-sums
+-- bin/curl --
+#!/bin/bash
+# Answers crane's and mise's releases from $WORK/up/; anything else fails.
+for a in "$@"; do case $a in
+  */go-containerregistry/releases/latest) cat "$WORK/up/crane-latest"; exit ;;
+  */go-containerregistry/*/checksums.txt) cat "$WORK/up/crane-sums"; exit ;;
+  */jdx/mise/releases/latest) cat "$WORK/up/mise-latest"; exit ;;
+  */jdx/mise/*/SHASUMS256.txt) cat "$WORK/up/mise-sums"; exit ;;
+esac; done
+exit 22
+-- latest-good --
+{"tag_name":"v9.9.9"}
+-- latest-hostile --
+{"tag_name":"v1$(id)"}
+-- latest-escape --
+{"tag_name":"v9.9.9\u001b[2J"}
+-- sums-good --
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  go-containerregistry_Linux_arm64.tar.gz
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  go-containerregistry_Linux_x86_64.tar.gz
+-- sums-hostile --
+$(touch${IFS}pwned)  go-containerregistry_Linux_arm64.tar.gz
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  go-containerregistry_Linux_x86_64.tar.gz
+-- sums-missing --
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  go-containerregistry_Linux_x86_64.tar.gz
+-- crane.want --
+crane_version=9.9.9
+crane_sha256_arm64=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+crane_sha256_amd64=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+-- mise-latest --
+{"tag_name":"v2099.1.1"}
+-- mise-sums --
+1111111111111111111111111111111111111111111111111111111111111111  mise-v2099.1.1-linux-arm64
+2222222222222222222222222222222222222222222222222222222222222222  mise-v2099.1.1-linux-x64
+3333333333333333333333333333333333333333333333333333333333333333  mise-v2099.1.1-linux-arm64-musl
+4444444444444444444444444444444444444444444444444444444444444444  mise-v2099.1.1-linux-x64-musl
+5555555555555555555555555555555555555555555555555555555555555555  mise-v2099.1.1-macos-arm64
+6666666666666666666666666666666666666666666666666666666666666666  mise-v2099.1.1-macos-x64
+-- mise-sums-hostile --
+1111111111111111111111111111111111111111111111111111111111111111  mise-v2099.1.1-linux-arm64
+2222222222222222222222222222222222222222222222222222222222222222  mise-v2099.1.1-linux-x64
+3333333333333333333333333333333333333333333333333333333333333333  mise-v2099.1.1-linux-arm64-musl
+4444444444444444444444444444444444444444444444444444444444444444  mise-v2099.1.1-linux-x64-musl
+"+touch${IFS}pwned+"  mise-v2099.1.1-macos-arm64
+6666666666666666666666666666666666666666666666666666666666666666  mise-v2099.1.1-macos-x64
+-- mise-base.want --
+mise_version=2099.1.1
+mise_sha256_arm64=1111111111111111111111111111111111111111111111111111111111111111
+mise_sha256_amd64=2222222222222222222222222222222222222222222222222222222222222222
+mise_sha256_arm64_musl=3333333333333333333333333333333333333333333333333333333333333333
+mise_sha256_amd64_musl=4444444444444444444444444444444444444444444444444444444444444444
+-- mise-go.want --
+const miseVersion = "2099.1.1"
+	"macos-arm64": "5555555555555555555555555555555555555555555555555555555555555555",
+	"macos-x64":   "6666666666666666666666666666666666666666666666666666666666666666",
+	"linux-arm64": "1111111111111111111111111111111111111111111111111111111111111111",
+	"linux-x64":   "2222222222222222222222222222222222222222222222222222222222222222",

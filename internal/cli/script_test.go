@@ -129,6 +129,11 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
 	env.Setenv("MISE_STUB_LOCK", filepath.Join(filepath.Dir(stubs), "mise.lock"))
 	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		return err
+	}
+	env.Setenv("DEVVM_REPO", repo) // for the repo's own scripts (scripts/)
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil
 }

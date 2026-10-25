@@ -1,0 +1,69 @@
+# Release builds, run by scripts/release.sh (never on its own: it checks the
+# tag and signs SHA256SUMS). Nothing is published from here.
+version: 2
+project_name: devvm
+
+builds:
+  - id: devvm
+    main: ./cmd/devvm
+    binary: devvm
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [arm64, amd64]
+    flags: [-trimpath]
+    # devvm reads its version from internal/cli, not main.
+    ldflags:
+      - -s -w -X github.com/w3cj/devvm/internal/cli.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# One archive per platform: the binary and the files it reads next to itself.
+archives:
+  - id: devvm
+    ids: [devvm]
+    formats: [tar.gz]
+    name_template: devvm-{{ .Version }}-{{ .Os }}-{{ .Arch }}
+    wrap_in_directory: true
+    files:
+      - src: LICENSE
+        info: &info
+          mtime: "{{ .CommitDate }}"
+      - src: README.md
+        info: *info
+      - src: CHANGELOG.md
+        info: *info
+      - src: base.yaml
+        info: *info
+      - src: layers/*
+        info: *info
+      - src: features/*
+        info: *info
+      - src: tools/*
+        info: *info
+      - src: guest/*
+        info: *info
+      - src: oci/*
+        info: *info
+
+# The source, for the Homebrew formula, which builds from it.
+source:
+  enabled: true
+  name_template: devvm-{{ .Version }}
+  format: tar.gz
+  prefix_template: devvm-{{ .Version }}/
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+# A build from HEAD (release.sh --head) gets VERSION's version too.
+snapshot:
+  version_template: "{{ .Env.DEVVM_VERSION }}"
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: w3cj
+    name: devvm

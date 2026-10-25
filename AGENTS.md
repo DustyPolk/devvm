@@ -24,11 +24,12 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/` | base's Lima template and scripts; base's optional features; shared tools (`mise.toml`, `build.sh`, `*.policy`); in-VM scripts sent on every launch; `--from`'s conversion (see its `README.md`) |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |
+| `scripts/`, `packaging/`, `.goreleaser.yaml`, `VERSION`, `CHANGELOG.md` | `bump.sh` (pins), `release.sh` (signed-tag checks around GoReleaser, then minisign); the Homebrew formula; `VERSION` is read by the scripts only |
 | `docs/` | the docs site (Hugo + Hextra); `content/docs/cli/` is generated, never edit it |
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
 
-Still to come: smolvm and docker backends; `install.sh`, `scripts/`, `packaging/`.
+Still to come: smolvm and docker backends; `install.sh`; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
 
 ## Tasks
 
@@ -133,6 +134,7 @@ Copied (here ← there):
 - `internal/proxy/` ← `devvm-proxy/` (`main.go` → `proxy.go`), adapted: `Main(args, IO)`, no `-connect`
 - `tests/e2e.sh` ← same, adapted: framework, `images`, `project` (relaunch, restart, rm, `.git` reports, agent folders), `clone`, `tools` (node half, `update`, `remove`), `network` (self-check on relaunch), `from` (no image only Docker has: it would build one in the user's Docker)
 - `features/*` ← same paths
+- `VERSION`, `scripts/release.sh` ← same, adapted: GoReleaser in a clone of the commit; `scripts/bump.sh` ← same, adapted: the host mise in `internal/tools/mise.go`; `packaging/homebrew/devvm.rb` ← same, adapted: builds with Go
 
 Docs (page ← bash page, all rewritten, partly):
 - `images.md`, `commands.md`, `security.md`, `git-protection.md`, `coding-agents.md`, `ssh.md`, `clone.md`, `from.md` ← same names
@@ -142,14 +144,14 @@ Docs (page ← bash page, all rewritten, partly):
 - `testing.md` ← same name (with the platform table, the Linux host as verified, manual checks)
 - README "Quickstart" ← README usage
 - `install.md` ← same name (requirements and checking them; installing waits for `install.sh`)
+- `maintaining.md` ← same name
 
 Bats files (pending cases, by task):
 
 | File | Pending |
 | --- | --- |
-| `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
 | `install.bats` | all (install.sh) |
-| `build`, `cli`, `delete`, `from`, `guest`, `images`, `layers`, `lint`, `messages`, `network`, `oci`, `ports`, `project`, `size`, `tools` | none |
+| `build`, `bump`, `cli`, `delete`, `from`, `guest`, `images`, `layers`, `lint`, `messages`, `network`, `oci`, `ports`, `project`, `release`, `size`, `tools` | none |
 
 Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
@@ -188,10 +190,11 @@ Deliberate changes from the bash:
 - `stop`: needs a finished VM made for this folder (`no_vm`, `vm_other_folder`, `vm_unfinished`); stops its proxy at once; `stopped`, or `already_stopped` (checked all the same, not an error); a `--clone` VM's folder isn't checked; `git_protect_running` names it.
 - `ssh`/`code`: a launch without its shell (`launch`, then setup: a stopped VM's pending size and ports applied, the user's agent checked, `sync` run so VS Code's Machine settings are set again, a `--clone` VM's clone made); they need a finished VM made for this folder and the backend's `ssh`; `code` gets the environment devvm started with (its `SSH_AUTH_SOCK`); `ssh_host_info` is two lines naming the host and folder; `ssh_failed`/`code_failed`.
 - `limactl`: runs in devvm's place (exec), every argument passed on (`devvm help limactl` is devvm's); no `limactl` is `lima_missing`, a failed exec `limactl_failed`.
+- Releases: per-platform archives (binary and data files) and a source tarball from GoReleaser; the formula builds from source; release.sh checks the host's binary prints the version; `--head` takes `DEVVM_MINISIGN_PUB` and skips a missing `install.sh`; the scripts' text isn't messages.
 
 Pending in code:
 - deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend).
 - `devvm setup` asks for the default backend once there's a second one. `log_ref`, `see_log`/`see_output` come with their callers.
-- Release builds set the version with `-ldflags "-X github.com/w3cj/devvm/internal/cli.version=…"` (`.goreleaser.yaml` comes with releases); `doctor_ok` shows it.
+- `install.sh` brings release.sh's `install.sh` checks on `--head` too (it's skipped when missing).
 
 Bash fixes copied: none yet.

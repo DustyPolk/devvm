@@ -1,0 +1,99 @@
+# scripts/release.sh: a release only from a tag the pinned signer signed.
+# Real git and SSH-signed tags, in a throwaway repo with keys made for the
+# test (repo.sh), and a goreleaser that writes a small dist/.
+# The system's commands, not the stubs (ssh-keygen's): git signs with
+# ssh-keygen.
+[!exec:git] skip
+env GIT_CONFIG_NOSYSTEM=1
+env PATH=$WORK/bin:/usr/bin:/bin
+chmod 755 bin/goreleaser
+exec bash repo.sh
+
+# An unsigned tag: refused.
+exec git -C repo tag -a v1.2.3 -m v1.2.3
+! exec repo/scripts/release.sh
+stderr '^release: tag v1.2.3 isn''t signed by a key git trusts'
+
+# Signed, but no pin: refused.
+exec bash tag.sh other
+! exec repo/scripts/release.sh
+stderr '^release: no packaging/release-signer'
+
+# Signed by another key git trusts: refused.
+exec bash pin.sh good
+! exec repo/scripts/release.sh
+stderr '^release: tag v1.2.3 is signed by SHA256:\S+, not a key in packaging/release-signer$'
+
+# Signed by the pinned key: past the check (it stops at the missing
+# minisign key).
+exec bash tag.sh good
+! exec repo/scripts/release.sh
+! stderr release-signer
+stderr '^release: no packaging/minisign.pub in v1.2.3'
+! exists log
+
+# The pin is this checkout's, not the tagged commit's: the tagged commit
+# pins the other key, this checkout the good one.
+exec bash pin.sh other
+exec git -C repo add -A
+exec git -C repo commit -qm pin
+exec bash tag.sh other
+exec bash pin.sh good
+! exec repo/scripts/release.sh
+stderr 'not a key in packaging/release-signer$'
+! exists log
+
+# A tag without install.sh: refused before anything is built.
+chmod 755 bin/minisign
+exec bash -c 'printf ''untrusted comment: test\nRWTEST\n'' > repo/packaging/minisign.pub && touch key && git -C repo rm -q install.sh && git -C repo add -A && git -C repo commit -qm no-install'
+exec bash tag.sh good
+env DEVVM_MINISIGN_KEY=$WORK/key
+! exec repo/scripts/release.sh
+stderr '^release: no install.sh in v1.2.3$'
+! exists log
+
+-- repo.sh --
+# A repo with release.sh, the formula, an install.sh to fill in and
+# VERSION 1.2.3, and two SSH keys git trusts (good, other).
+set -eu
+mkdir -p repo/scripts repo/packaging/homebrew keys
+cp "$DEVVM_REPO/scripts/release.sh" repo/scripts/
+cp "$DEVVM_REPO/packaging/homebrew/devvm.rb" repo/packaging/homebrew/
+echo 1.2.3 > repo/VERSION
+printf '#!/bin/sh\nrelease_version=""\nminisign_key=""\n' > repo/install.sh
+for n in good other; do ssh-keygen -q -t ed25519 -N '' -C "$n" -f "keys/$n"; done
+{ printf 'e@e %s\n' "$(cat keys/good.pub)"; printf 'e@e %s\n' "$(cat keys/other.pub)"; } > keys/allowed
+git -C repo init -q
+git -C repo config user.email e@e
+git -C repo config user.name e
+git -C repo config gpg.format ssh
+git -C repo config gpg.ssh.allowedSignersFile "$PWD/keys/allowed"
+git -C repo add -A
+git -C repo commit -qm r
+-- tag.sh --
+# Tag v1.2.3 (again), signed with key $1.
+set -eu
+git -C repo tag -d v1.2.3 >/dev/null 2>&1 || true
+git -C repo -c user.signingkey="$PWD/keys/$1" tag -s v1.2.3 -m v1.2.3
+-- pin.sh --
+# Pin key $1 in the checkout's packaging/release-signer.
+set -eu
+printf '# the release signer\n%s\n' "$(ssh-keygen -lf "keys/$1.pub" | awk '{ print $2 }')" > repo/packaging/release-signer
+-- bin/minisign --
+#!/bin/sh
+# Never reached: the checks stop first.
+exit 1
+-- bin/goreleaser --
+#!/bin/bash
+# Logs its call and writes a dist/ like GoReleaser's: the source tarball,
+# SHA256SUMS and this host's binary, which prints $GR_VERSION, else
+# $DEVVM_VERSION.
+set -eu
+echo "$* DEVVM_VERSION=$DEVVM_VERSION GORELEASER_CURRENT_TAG=${GORELEASER_CURRENT_TAG:-}" >> "$WORK/log"
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+case $(uname -m) in arm64 | aarch64) arch=arm64 ;; *) arch=amd64 ;; esac
+mkdir -p "dist/devvm_${os}_$arch"
+git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
+(cd dist && shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz" > SHA256SUMS)
+printf '#!/bin/sh\necho %s\n' "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm_${os}_$arch/devvm"
+chmod 755 "dist/devvm_${os}_$arch/devvm"
