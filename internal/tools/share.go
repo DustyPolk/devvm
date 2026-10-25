@@ -97,7 +97,7 @@ func (t *Tools) Build(ctx context.Context, b backend.Backend, base, libc string,
 	if err != nil {
 		return err
 	}
-	var rest, goes []string
+	var build []string
 	for _, f := range todo {
 		if t.Built(f) {
 			continue // another devvm built it while this one waited
@@ -116,29 +116,14 @@ func (t *Tools) Build(ctx context.Context, b backend.Backend, base, libc string,
 		if t.noDownload(lock, tool, libc) {
 			return msg.ToolUnbuilt(tool, v)
 		}
-		// Go builds alone: devvm's proxy, which runs on the host, is
-		// compiled with its image, so no other tool's installer may share
-		// its VM and folder before its hash is recorded.
-		if tool == "go" {
-			goes = append(goes, f)
-		} else {
-			rest = append(rest, f)
-		}
+		build = append(build, f)
 	}
-	if len(rest)+len(goes) == 0 {
+	if len(build) == 0 {
 		return nil
 	}
-	t.Info(msg.BuildingTools(label(append(rest, goes...))))
+	t.Info(msg.BuildingTools(label(build)))
 	ui.LogNote()
-	for _, batch := range [][]string{rest, goes} {
-		if len(batch) == 0 {
-			continue
-		}
-		if err := t.batch(ctx, b, base, lock, batch); err != nil {
-			return err
-		}
-	}
-	return nil
+	return t.batch(ctx, b, base, lock, build)
 }
 
 // batch builds these tool images in one throwaway VM with a folder of its

@@ -609,9 +609,8 @@ func TestBuildFolder(t *testing.T) {
 	e.noLeftovers(t)
 }
 
-// Go builds in a VM of its own, never with other tools: devvm's proxy is
-// compiled with it.
-func TestBuildGoAlone(t *testing.T) {
+// The tools build together, in one VM and folder.
+func TestBuildOneBatch(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	f := fake()
@@ -628,10 +627,9 @@ func TestBuildGoAlone(t *testing.T) {
 	}
 	lock := Lock(fixture(t))
 	want := [][]string{
-		{"node", lock.Version("node"), files[0], "bun", lock.Version("bun"), files[2]},
-		{"go", lock.Version("go"), files[1]},
+		{"node", lock.Version("node"), files[0], "go", lock.Version("go"), files[1], "bun", lock.Version("bun"), files[2]},
 	}
-	if !slices.EqualFunc(batches, want, slices.Equal) || len(outs) != 2 {
+	if !slices.EqualFunc(batches, want, slices.Equal) || len(outs) != 1 {
 		t.Errorf("batches = %q in %d folders", batches, len(outs))
 	}
 	e.checkHashes(t, files)
