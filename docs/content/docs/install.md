@@ -9,6 +9,32 @@ devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. Its VMs run on
 
 Docker is optional: only `--from` with an image only Docker has needs it ([details](from.md#images-only-docker-has)). Everything else (toolchains, agents, Docker for your projects) is installed inside the VMs.
 
+## Installing devvm
+
+With Homebrew, `brew install w3cj/tap/devvm`, which also installs Lima. The formula's checksum lives in a repository of its own, so a replaced GitHub release wouldn't match it.
+
+Or with the install script, which needs `curl` and `tar` and never needs sudo:
+
+```sh
+curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
+```
+
+It installs the release it comes with, or `--version`'s:
+
+1. It downloads the archive for this machine (`devvm-<version>-<os>-<arch>.tar.gz`: `darwin` or `linux`, `arm64` or `amd64`; Apple silicon's under Rosetta too) and the release's `SHA256SUMS`, over HTTPS only.
+2. It checks `SHA256SUMS`'s signature (`SHA256SUMS.minisig`, made with the maintainer's minisign key, whose public half is in the script and in `packaging/minisign.pub`), then the archive's checksum. A mismatch installs nothing. Without [minisign](https://jedisct1.github.io/minisign/) (`brew install minisign`), it says so, prints the command to check by hand, and checks only the checksum. A script that isn't from a release has no key, and checks only the checksum.
+3. It puts devvm and the files it reads (`base.yaml`, `layers/`, `features/`, `tools/`, `guest/`, `oci/`) in `~/.local/lib/devvm/<version>`, links `~/.local/bin/devvm` to it, and says how to add `~/.local/bin` to `PATH` when it's missing.
+4. It runs `devvm doctor --fixes` and offers each fix, asking first ([details](#checking-what-devvm-needs)): Lima with Homebrew when you have it, else Lima's latest release (checked against its `SHA256SUMS`) into `~/.local`; on Linux, QEMU with your package manager and access to `/dev/kvm` (joining the `kvm` group: log out and back in afterwards), which use sudo. Without a terminal or `--yes`, it installs none. Then it runs `devvm doctor`.
+
+The signature catches an archive or `SHA256SUMS` someone replaced, which the checksum alone can't. It can't catch a release replaced whole: `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't. You can also download `install.sh` and read it before you run it.
+
+Options go after `bash -s --`:
+
+- `--yes`: answer yes to every question.
+- `--version 0.1.0`: install that release (also `DEVVM_VERSION=0.1.0`).
+- `--no-deps`: install devvm only.
+- `DEVVM_PREFIX=/some/dir`: install under that folder instead of `~/.local`.
+
 ## Checking what devvm needs
 
 devvm never installs anything on the host itself. Every command that needs the backend checks it first, and stops at the first thing missing.
@@ -26,3 +52,18 @@ devvm never installs anything on the host itself. Every command that needs the b
 | `kvm` | `/dev/kvm`, on Linux | none: turn on virtualization |
 | `kvm-access` | access to `/dev/kvm` | `sudo usermod -aG kvm USER`, then log in again |
 | `lima-config` | no Lima global configs in devvm's Lima home ([details](lima.md#a-lima-home-of-its-own)) | none: move them out |
+
+## Upgrading
+
+Run the install script again, or `brew upgrade devvm`. Images and VMs stay: they live in `~/.local/share/devvm`, and your settings, layers and features in `~/.config/devvm`, not with devvm. Images whose inputs changed rebuild on next use; existing VMs keep working (`devvm update` moves one to the new shared tools).
+
+The script removes older versions in `~/.local/lib/devvm`, except one that a running VM's proxy (or QEMU, on Linux) still runs: a later install removes it once nothing does. A VM's proxy moves to the new version at its next launch (`devvm` in its folder), QEMU when the VM next starts.
+
+## Uninstalling
+
+1. Delete your VMs: `devvm ls`, then `devvm rm` in each folder. For a `--clone` VM, this also removes the `devvm` git remote from the repo.
+2. Delete the images: `devvm gc`, then `devvm images rm` with every name `devvm images` lists. Images built `--from` a container image need the same `--from`: `devvm --from node:24 images rm base`.
+3. Remove devvm: `rm -rf ~/.local/lib/devvm ~/.local/bin/devvm`, or `brew uninstall devvm`.
+4. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers and features (`~/.config/devvm/layers`, `~/.config/devvm/features`): copy them somewhere first to keep them.
+5. If you let devvm add it, remove the `Include ~/.config/devvm/ssh_config` line from `~/.ssh/config`.
+6. Saved tokens are in the macOS Keychain under the service `devvm` (on Linux, in `~/.config/devvm/secrets/`, removed in step 4).

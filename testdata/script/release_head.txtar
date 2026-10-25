@@ -59,6 +59,11 @@ exec bash -c 'echo 1.2 > repo/VERSION && git -C repo commit -qam bad-version'
 ! exec repo/scripts/release.sh --head
 stderr '^release: VERSION isn''t x.y.z: ''1.2''$'
 
+# A HEAD without install.sh: refused too.
+exec bash -c 'echo 1.2.3 > repo/VERSION && git -C repo rm -q install.sh && git -C repo commit -qam no-install'
+! exec repo/scripts/release.sh --head
+stderr '^release: no install.sh in HEAD$'
+
 -- repo.sh --
 # A repo with release.sh, the formula, an install.sh to fill in and
 # VERSION 1.2.3, and a file that isn't committed.

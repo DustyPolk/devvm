@@ -1,0 +1,382 @@
+# install.sh: the host and its archive, which release, the signature and
+# checksum, where it goes, older versions, Lima, and the dependency fixes.
+# Each case sources install.sh (lib.sh) and installs into $WORK/prefix from
+# file:// releases under $WORK/repo; no fix runs for real.
+env PATH=$WORK/bin:$PATH
+chmod 755 bin/minisign
+chmod 755 bin/brew
+chmod 755 bin/sudo
+
+# The host as archives name it: macOS or Linux, arm64 or x86_64; Apple
+# silicon under Rosetta is arm64.
+exec bash host.sh
+cmp stdout host.want
+env UN=Linux:riscv64
+! exec bash bad_host.sh
+stderr '^install: devvm runs on arm64 and x86_64 hosts, not riscv64$'
+env UN=FreeBSD:arm64
+! exec bash bad_host.sh
+stderr '^install: devvm runs on macOS and Linux$'
+env UN=
+
+# Which release: --version, else this script's own, else the latest. A
+# version goes into URLs and paths, so it has to look like one.
+exec bash version.sh
+cmp stdout version.want
+
+# Downloads and redirects are HTTPS only.
+exec bash fetch.sh
+stdout '^--proto =https --proto-redir =https -fsSL -o x https://example.com/a$'
+
+# A fix devvm suggests runs as words: no globs, no shell syntax.
+exec bash run_fix.sh
+stdout '^\* ;id$'
+
+# This host's archive, checked and unpacked, the binary and its files
+# linked, older versions dropped. No key in the script: no signature
+# checked.
+exec bash fresh.sh
+cmp stdout fresh.want
+stderr '^install: this install.sh has no release key \(not from a release\), so the signature isn''t checked$'
+
+# Reinstalling the same version swaps it in, leaving nothing behind.
+exec bash reinstall.sh
+cmp stdout reinstall.want
+
+# An older version a running process names (a VM's proxy) is kept.
+exec bash in_use.sh
+stdout '^==> keeping devvm 0.0.9: a running VM uses it$'
+stdout '^left: 0.0.9 0.1.0$'
+stdout '^ps: in use, not in use$'
+
+# A release's install.sh checks SHA256SUMS's signature.
+exec bash signed.sh 'good RWTESTKEY'
+stdout '^==> signature checked$'
+! exec bash signed.sh 'good RWOTHERKEY'
+stderr '^install: devvm''s SHA256SUMS isn''t signed with the release key: not installed$'
+! exists prefix/bin/devvm
+! exists prefix/lib/devvm/0.1.0
+
+# Without minisign it says how to check by hand, and installs.
+exec bash no_minisign.sh
+stderr '^install: minisign isn''t installed, so devvm''s signature isn''t checked, only its checksum$'
+stderr '^  to check it yourself: minisign -Vm SHA256SUMS -P RWTESTKEY$'
+stdout '^0.1.0$'
+
+# A release without a signature file isn't installed.
+! exec bash signed.sh ''
+stderr '^install: couldn''t download devvm 0.1.0''s signature \(SHA256SUMS.minisig\)$'
+! exists prefix/bin/devvm
+
+# An archive that doesn't match its checksum, or none for this host:
+# nothing installed.
+! exec bash bad_sum.sh
+stderr '^install: devvm-0.1.0-[a-z]+-[a-z0-9]+.tar.gz doesn''t match its checksum: not installed$'
+! exists prefix/bin/devvm
+! exists prefix/lib/devvm/0.1.0
+! exec bash no_archive.sh
+stderr '^install: couldn''t download devvm-0.1.0-[a-z]+-[a-z0-9]+.tar.gz$'
+! exists prefix/bin/devvm
+
+# Lima's latest release for this host, checked against its SHA256SUMS.
+exec bash lima.sh
+stdout '^==> installed Lima 2.3.0: \S+/prefix/bin/limactl$'
+stdout '^limactl says 2.3.0$'
+env UN=Linux:aarch64
+exec bash lima.sh Linux-aarch64
+stdout '^limactl says 2.3.0$'
+env UN=
+! exec bash lima.sh tampered
+stderr '^install: lima-2.3.0-\S+.tar.gz doesn''t match its checksum: not installed$'
+! exists prefix/bin/limactl
+
+# The PATH hint, only when the prefix's bin isn't on PATH.
+exec bash path_hint.sh
+stdout '^  export PATH="\S+/prefix/bin:\$PATH"$'
+stdout '^on PATH: $'
+
+# The fixes devvm suggests run once allowed; what it can't fix is shown.
+exec bash deps.sh yes 'qemu\tsudo apt-get install -y qemu-system-arm\tQEMU not found\nkvm\t\t/dev/kvm not found: turn on virtualization\nlima\tbrew install lima\tLima not found\n'
+stdout '^  /dev/kvm not found: turn on virtualization$'
+stdout '^checked$'
+cmp ran ran-fixes.want
+
+# After joining the kvm group: log in again, no check.
+exec bash deps.sh yes 'kvm-access\tsudo usermod -aG kvm me\tno access to /dev/kvm\n'
+stdout 'Log out and back in'
+! stdout '^checked$'
+cmp ran ran-kvm.want
+
+# Nothing runs without a yes.
+exec bash deps.sh no 'kvm-access\tsudo usermod -aG kvm me\tno access to /dev/kvm\n'
+stdout '^  skipped: sudo usermod -aG kvm me$'
+! exists ran
+
+# No Lima and no Homebrew: Lima's release, once allowed.
+exec bash deps.sh lima 'lima\t\tLima not found\n'
+stdout '^==> installed Lima 2.3.0: '
+exists prefix/bin/limactl
+
+# Nothing missing, nothing asked.
+exec bash deps.sh asked ''
+cmp stdout deps-none.want
+
+# The whole script: options, a release, the PATH hint.
+exec bash main.sh --no-deps --version v0.1.0
+stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
+stdout 'isn''t on your PATH'
+exec bash main.sh --help
+stdout '^usage: install.sh \[--yes\] \[--version VERSION\] \[--no-deps\]$'
+! exec bash main.sh --nope
+stderr '^install: unknown option: --nope \(see --help\)$'
+! exec bash main.sh --version
+stderr '^install: --version needs a version$'
+! exec bash main.sh --no-deps --version '1.2.3/../x'
+stderr '^install: not a devvm version: ''1.2.3/../x''$'
+
+# devvm itself, installed: it finds its files through the link, and its
+# own check (the sandbox's stubs) finds nothing missing.
+exec bash real.sh
+stdout '^fzf$'
+stdout '^==> everything devvm needs is installed$'
+
+-- lib.sh --
+# Sourced by each case: install.sh's functions, set to install into
+# $WORK/prefix from file:// releases under $WORK/repo.
+rm -rf "$WORK/prefix" "$WORK/repo" "$WORK/dl" "$WORK/build" "$WORK/ran"
+# shellcheck source=/dev/null
+DEVVM_INSTALL_TEST=1 source "$DEVVM_REPO/install.sh"
+prefix=$WORK/prefix repo_url=file://$WORK/repo protos="=https,file"
+mkdir -p "$WORK/dl"
+tmp=$(mktemp -d "$WORK/dl/t.XXXXXX")
+[[ $prefix == "$WORK/"* ]] || exit 1
+# $UN (OS:ARCH) stands in for uname when set.
+if [[ -n ${UN:-} ]]; then
+  uname() { case $1 in -s) echo "${UN%:*}" ;; -m) echo "${UN#*:}" ;; esac; }
+fi
+
+# release VERSION [CONTENT]: a release whose archive for this host holds a
+# devvm printing CONTENT (default: VERSION) and a base.yaml.
+release() {
+  local v=$1 d=$WORK/repo/releases/download/v$1 n
+  n=devvm-$v-$(platform)
+  mkdir -p "$d" "$WORK/build/$n"
+  printf '#!/bin/sh\necho %s\n' "${2:-$v}" > "$WORK/build/$n/devvm"
+  chmod 755 "$WORK/build/$n/devvm"
+  echo base > "$WORK/build/$n/base.yaml"
+  tar -czf "$d/$n.tar.gz" -C "$WORK/build" "$n"
+  echo "$(sha256 "$d/$n.tar.gz")  $n.tar.gz" > "$d/SHA256SUMS"
+}
+
+# lima_release VERSION [OS-ARCH]: a Lima release under $lima_url for this
+# host (or OS-ARCH), with its SHA256SUMS, and the latest.
+lima_release() {
+  local d=$WORK/lima/releases/download/v$1 w=$WORK/limabuild f
+  f=lima-$1-${2:-$(uname -s)-$(uname -m)}.tar.gz
+  rm -rf "$WORK/lima" "$w"
+  mkdir -p "$d" "$w/bin"
+  printf '#!/bin/sh\necho %s\n' "$1" > "$w/bin/limactl"
+  chmod 755 "$w/bin/limactl"
+  tar -czf "$d/$f" -C "$w" bin
+  { echo "0000000000000000000000000000000000000000000000000000000000000000  lima-other.tar.gz"
+    echo "$(sha256 "$d/$f")  $f"; } > "$d/SHA256SUMS"
+  lima_url=file://$WORK/lima
+  latest_lima=$1
+  latest_release() { [[ $1 == "$lima_url" ]] && echo "$latest_lima"; }
+}
+-- host.sh --
+. "$WORK/lib.sh"
+sysctl() { echo 0; }
+for UN in Darwin:arm64 Darwin:x86_64 Linux:aarch64 Linux:arm64 Linux:x86_64; do
+  uname() { case $1 in -s) echo "${UN%:*}" ;; -m) echo "${UN#*:}" ;; esac; }
+  echo "$UN $(platform)"
+done
+UN=Darwin:x86_64
+sysctl() { [[ $* == "-in hw.optional.arm64" ]] && echo 1; }
+echo "rosetta $(platform)"
+-- host.want --
+Darwin:arm64 darwin-arm64
+Darwin:x86_64 darwin-amd64
+Linux:aarch64 linux-arm64
+Linux:arm64 linux-arm64
+Linux:x86_64 linux-amd64
+rosetta darwin-arm64
+-- bad_host.sh --
+. "$WORK/lib.sh"
+check_host
+-- version.sh --
+. "$WORK/lib.sh"
+curl() { echo "https://github.com/w3cj/devvm/releases/tag/v0.3.0"; }
+version=v0.2.0 release_version=0.1.5
+resolve_version
+version=""
+resolve_version
+release_version=""
+resolve_version
+for v in 0.1.0 1.20.3 2.0.0-rc.1; do valid_version "$v" && echo "valid $v"; done
+for v in "" 1.2 "1.2.3/../x" "1.2.3 x" "1.2.3';id"; do valid_version "$v" || echo "invalid '$v'"; done
+curl() { echo "https://github.com/w3cj/devvm/releases/tag/v1.2.3%2F..%2Fx"; }
+(latest_release https://github.com/w3cj/devvm) 2>/dev/null || echo "odd latest refused"
+-- version.want --
+0.2.0
+0.1.5
+0.3.0
+valid 0.1.0
+valid 1.20.3
+valid 2.0.0-rc.1
+invalid ''
+invalid '1.2'
+invalid '1.2.3/../x'
+invalid '1.2.3 x'
+invalid '1.2.3';id'
+odd latest refused
+-- fetch.sh --
+. "$WORK/lib.sh"
+curl() { echo "$*"; }
+protos="=https"
+fetch -o x https://example.com/a
+-- run_fix.sh --
+. "$WORK/lib.sh"
+mkdir -p "$WORK/g"
+cd "$WORK/g"
+touch a b
+run_fix "echo * ;id"
+-- fresh.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+mkdir -p "$prefix/lib/devvm/0.0.9"
+install_devvm 0.1.0 >/dev/null
+[[ "$(readlink "$prefix/bin/devvm")" == "$prefix/lib/devvm/0.1.0/devvm" ]] && echo linked
+"$prefix/bin/devvm"
+cat "$prefix/lib/devvm/0.1.0/base.yaml"
+ls -A "$prefix/lib/devvm"
+-- fresh.want --
+linked
+0.1.0
+base
+0.1.0
+-- reinstall.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+install_devvm 0.1.0 >/dev/null 2>&1
+mkdir -p "$prefix/lib/devvm/.0.0.5.new.1" # left by an interrupted install
+release 0.1.0 again
+install_devvm 0.1.0 >/dev/null 2>&1
+[[ "$(readlink "$prefix/bin/devvm")" == "$prefix/lib/devvm/0.1.0/devvm" ]] && echo linked
+"$prefix/bin/devvm"
+ls -A "$prefix/lib/devvm"
+-- reinstall.want --
+linked
+again
+0.1.0
+-- in_use.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+mkdir -p "$prefix/lib/devvm/0.0.9" "$prefix/lib/devvm/0.0.8"
+ps() { echo "$prefix/lib/devvm/0.0.9/devvm _proxy -listen 127.0.0.1:1"; }
+install_devvm 0.1.0 2>/dev/null
+echo "left: $(cd "$prefix/lib/devvm" && echo *)"
+# The real ps sees a process naming a folder in its arguments.
+unset -f ps
+(exec -a "$prefix/lib/devvm/0.0.9/devvm" sleep 30) >/dev/null 2>&1 &
+sleep 0.2
+a=$(in_use "$prefix/lib/devvm/0.0.9" && echo "in use" || echo "not in use")
+b=$(in_use "$prefix/lib/devvm/0.0.8" && echo "in use" || echo "not in use")
+kill $!
+echo "ps: $a, $b"
+-- signed.sh --
+# signed.sh SIG: a release whose SHA256SUMS.minisig reads SIG (none if
+# empty), for a script that trusts RWTESTKEY.
+. "$WORK/lib.sh"
+release 0.1.0
+[[ -z $1 ]] || echo "$1" > "$WORK/repo/releases/download/v0.1.0/SHA256SUMS.minisig"
+minisign_key=RWTESTKEY
+install_devvm 0.1.0
+-- no_minisign.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+echo "good RWTESTKEY" > "$WORK/repo/releases/download/v0.1.0/SHA256SUMS.minisig"
+minisign_key=RWTESTKEY
+command() { [[ $1 == -v && $2 == minisign ]] && return 1; builtin command "$@"; }
+install_devvm 0.1.0 >/dev/null
+"$prefix/bin/devvm"
+-- bad_sum.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+f=$(cd "$WORK/repo/releases/download/v0.1.0" && echo devvm-*.tar.gz)
+echo "0000000000000000000000000000000000000000000000000000000000000000  $f" \
+  > "$WORK/repo/releases/download/v0.1.0/SHA256SUMS"
+install_devvm 0.1.0
+-- no_archive.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+rm "$WORK/repo/releases/download/v0.1.0/"devvm-*.tar.gz
+install_devvm 0.1.0
+-- lima.sh --
+# lima.sh [OS-ARCH|tampered]: Lima's release installed into the prefix.
+. "$WORK/lib.sh"
+case ${1:-} in
+  tampered)
+    lima_release 2.3.0
+    echo tampered >> "$WORK/lima/releases/download/v2.3.0/"lima-2.3.0-*.tar.gz ;;
+  *) lima_release 2.3.0 "${1:-}" ;;
+esac
+install_lima_tarball
+echo "limactl says $("$prefix/bin/limactl")"
+-- path_hint.sh --
+. "$WORK/lib.sh"
+path_hint
+echo "on PATH: $(PATH="$prefix/bin:$PATH" path_hint)"
+-- deps.sh --
+# deps.sh ANSWER LINES: install_deps with a devvm whose doctor --fixes
+# prints LINES (printf's format) and whose doctor prints "checked"; the
+# brew and sudo in bin/ log to $WORK/ran. ANSWER: yes (--yes), no (every
+# question answered no), lima (yes, with a Lima release to install), asked
+# (a question prints "asked").
+. "$WORK/lib.sh"
+mkdir -p "$WORK/fake"
+printf '#!/bin/sh\n[ "$2" = --fixes ] && printf "%s" || echo checked\n' "$2" > "$WORK/fake/devvm"
+chmod 755 "$WORK/fake/devvm"
+case $1 in
+  yes) yes=true ;;
+  no) ask() { return 1; } ;;
+  lima) yes=true; lima_release 2.3.0 ;;
+  asked) ask() { echo asked; } ;;
+esac
+install_deps "$WORK/fake/devvm"
+-- deps-none.want --
+==> everything devvm needs is installed
+-- ran-fixes.want --
+sudo apt-get install -y qemu-system-arm
+brew install lima
+-- ran-kvm.want --
+sudo usermod -aG kvm me
+-- main.sh --
+. "$WORK/lib.sh"
+release 0.1.0
+main "$@"
+-- real.sh --
+# The devvm the tests built, with its files, as a release.
+. "$WORK/lib.sh"
+n=devvm-1.2.3-$(platform)
+d=$WORK/repo/releases/download/v1.2.3
+mkdir -p "$d" "$WORK/build"
+cp -R "$DEVVM_BIN" "$WORK/build/$n"
+tar -czf "$d/$n.tar.gz" -C "$WORK/build" "$n"
+echo "$(sha256 "$d/$n.tar.gz")  $n.tar.gz" > "$d/SHA256SUMS"
+install_devvm 1.2.3 >/dev/null 2>&1
+cd "$WORK"
+"$prefix/bin/devvm" __complete setup --features ''
+install_deps "$prefix/lib/devvm/1.2.3/devvm"
+-- bin/minisign --
+#!/bin/bash
+# Stand-in for minisign: a signature file reading "good KEY" verifies
+# with -P KEY.
+while (($#)); do case $1 in -x) sig=$2; shift ;; -P) key=$2; shift ;; esac; shift; done
+[[ "$(cat "$sig")" == "good $key" ]]
+-- bin/brew --
+#!/bin/sh
+echo "brew $*" >> "$WORK/ran"
+-- bin/sudo --
+#!/bin/sh
+echo "sudo $*" >> "$WORK/ran"

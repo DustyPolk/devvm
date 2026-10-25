@@ -11,7 +11,7 @@ devvm detects the project's toolchain, creates a VM from a cached image, mounts 
 
 ## Quickstart
 
-devvm runs on macOS and Linux, with [Lima](https://lima-vm.io) 2.0 or newer. `devvm doctor` checks what's missing and how to get it.
+devvm runs on macOS and Linux, with [Lima](https://lima-vm.io) 2.0 or newer. Install it with Homebrew (`brew install w3cj/tap/devvm`) or the install script, which offers to install what's missing ([Installing](https://w3cj.github.io/devvm/docs/install/)). `devvm doctor` checks what's missing and how to get it.
 
 ```console
 $ cd ~/some-project

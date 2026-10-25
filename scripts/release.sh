@@ -58,7 +58,7 @@ else
   [[ -f $key ]] || die "no release key at $key (DEVVM_MINISIGN_KEY)"
   command -v minisign >/dev/null || die "needs minisign to sign the release (mise exec -- scripts/release.sh)"
 fi
-git cat-file -e "$commit:install.sh" 2>/dev/null || [[ $ref == HEAD ]] || die "no install.sh in $ref"
+git cat-file -e "$commit:install.sh" 2>/dev/null || die "no install.sh in $ref"
 command -v goreleaser >/dev/null || die "needs goreleaser (mise exec -- scripts/release.sh)"
 url=${DEVVM_RELEASE_URL:-https://github.com/w3cj/devvm/releases/download/v$v}
 
@@ -96,15 +96,13 @@ else
   pubkey=""   # an unsigned test build: its install.sh doesn't expect a signature
 fi
 
-if git cat-file -e "$commit:install.sh" 2>/dev/null; then
-  git show "$commit:install.sh" |
-    awk -v v="$v" -v k="$pubkey" '
-      /^release_version=""$/ { $0 = "release_version=\"" v "\""; n++ }
-      /^minisign_key=""$/ { $0 = "minisign_key=\"" k "\""; m++ }
-      { print } END { exit !(n == 1 && m == 1) }' \
-    > "$out/install.sh" || die "install.sh needs one release_version=\"\" and one minisign_key=\"\" line"
-  chmod 755 "$out/install.sh"
-fi
+git show "$commit:install.sh" |
+  awk -v v="$v" -v k="$pubkey" '
+    /^release_version=""$/ { $0 = "release_version=\"" v "\""; n++ }
+    /^minisign_key=""$/ { $0 = "minisign_key=\"" k "\""; m++ }
+    { print } END { exit !(n == 1 && m == 1) }' \
+  > "$out/install.sh" || die "install.sh needs one release_version=\"\" and one minisign_key=\"\" line"
+chmod 755 "$out/install.sh"
 git show "$commit:packaging/homebrew/devvm.rb" |
   awk -v u="$url/$tarball" -v s="$sha" '{ gsub("@URL@", u); gsub("@SHA256@", s); print }' \
   > "$out/devvm.rb"
@@ -112,5 +110,4 @@ git show "$commit:packaging/homebrew/devvm.rb" |
 echo "==> dist/ for devvm $v (from $ref):"
 (cd "$out" && ls -l devvm-*.tar.gz SHA256SUMS* install.sh devvm.rb 2>/dev/null) || true
 $sign || echo "(not signed: a test build without DEVVM_MINISIGN_KEY)"
-[[ -f $out/install.sh ]] || echo "(no install.sh: HEAD has none)"
 echo "Attach the archives, SHA256SUMS, SHA256SUMS.minisig and install.sh to the GitHub release v$v; devvm.rb goes in w3cj/homebrew-tap/Formula/."
