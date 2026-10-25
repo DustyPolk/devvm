@@ -9,7 +9,7 @@ It's on for every new VM. `--no-git-protect` creates one without it, and [`devvm
 
 ## What's locked
 
-devvm locks when it creates the VM, and again on each launch that finds it stopped, so nothing in the VM can race the locks:
+devvm locks when it creates the VM, and again on each launch that finds it stopped and on `devvm stop`, so nothing in the VM can race the locks:
 
 - `.git/hooks` and `.git/config`. A repo without a `hooks` folder gets an empty one, locked, so the VM can't make one.
 - The same for each submodule devvm finds: git folders under `.git/modules`, and those in the working tree (`sub/.git`, or the folder a `sub/.git` file points to), submodules of submodules included. devvm finds those from the index, read with `core.fsmonitor` off.
@@ -23,7 +23,7 @@ devvm never locks or creates anything through a symlink: the VM could plant one 
 
 ## On each launch
 
-Every launch of an existing VM checks `.git` again, and reports what a lock can't stop, each once:
+Every launch of an existing VM, and `devvm stop`, checks `.git` again, and reports what a lock can't stop, each once:
 
 - a `.git` replaced since devvm locked it (it then does nothing else: check the new one, and look for the old one, renamed);
 - a repo that appeared in the folder after the VM was made, which it then locks;
@@ -32,7 +32,7 @@ Every launch of an existing VM checks `.git` again, and reports what a lock can'
 - a `commondir`, and linked worktrees whose `commondir` leads elsewhere, on every launch;
 - includes and hook links into the project folder ([not covered](#not-covered)), again when they change.
 
-A running VM keeps the locks it had: new ones are set on the next launch that finds it stopped, such as `devvm restart`. When `devvm rm` deletes the VM, its locks are taken off.
+A running VM keeps the locks it had: new ones are set by `devvm stop`, or on the next launch that finds it stopped, such as `devvm restart`. When `devvm rm` deletes the VM, its locks are taken off.
 
 ## What still works
 

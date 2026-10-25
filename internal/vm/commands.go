@@ -51,6 +51,37 @@ func (e *Env) Restart(ctx context.Context, o Options) error {
 	return e.open(ctx, o, t)
 }
 
+// Stop stops the folder's VM and its proxy. Then, the VM being stopped,
+// .git is locked again and checked (on Linux, set-id files too) as on a
+// launch that finds it stopped, and its ssh config entry goes.
+func (e *Env) Stop(ctx context.Context) error {
+	t, err := e.folderVM(ctx, msg.NoVM)
+	if err != nil {
+		return err
+	}
+	vm := t.f.Name
+	in, err := t.b.Inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if in.Status == backend.StatusStopped {
+		ui.Info(msg.AlreadyStopped(vm))
+	} else {
+		if err := t.b.Stop(ctx, vm); err != nil {
+			return err
+		}
+		ui.Info(msg.Stopped(vm))
+	}
+	e.Proxy.Stop(vm)
+	if !isClone(t.st) {
+		if err := e.Protector(t.f.Dir).Check(ctx, t.st, false); err != nil {
+			return err
+		}
+		e.checkSetID(t.f.Dir)
+	}
+	return e.sshConfig().Write(ctx)
+}
+
 // Remove takes shared tools (names joined with +) out of the folder's VM,
 // then opens it: they leave its image name and its list, and aren't
 // mounted from its next launch (an agent's folders neither). What the VM

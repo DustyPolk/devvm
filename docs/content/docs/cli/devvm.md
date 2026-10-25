@@ -57,4 +57,5 @@ devvm [IMAGE] [flags]
 - [devvm setup](devvm_setup.md): Choose base's features and the default backend
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
+- [devvm stop](devvm_stop.md): Stop this folder's VM
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

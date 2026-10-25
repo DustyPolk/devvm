@@ -11,6 +11,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | --- | --- |
 | `devvm [IMAGE]` | open a shell in this folder's VM, at the same path, creating the VM first: from IMAGE, else the image the folder's files call for ([details](images.md#which-image-a-new-vm-gets)) |
 | `devvm restart` | stop this folder's VM, then start it and open a shell in it: for what applies only when it starts |
+| `devvm stop` | stop this folder's VM ([details](#stopping-a-vm)) |
 | `devvm update` | move this folder's VM to the newest shared tools, then open a shell in it ([details](images.md#adding-and-removing-tools)) |
 | `devvm remove TOOLS` | take shared tools out of this folder's VM (`devvm remove python+claude`), then open a shell in it |
 | `devvm export [FILE]` | save this folder's VM's agents' history to a `.tar.gz`: FILE, else a new file in `~/.local/share/devvm/exports` ([details](coding-agents.md#history)) |
@@ -86,6 +87,10 @@ A VM whose creation didn't finish (devvm was stopped after making it, before it 
 - A layer's script runs in the VM, as when it builds an image. A script that fails leaves the VM as it was otherwise.
 
 The VM's image is then its old one with them. `devvm remove TOOLS` takes shared tools out again; layers can't be, as their scripts changed the VM's disk: save your work outside the project folder, `devvm rm`, and make the VM again.
+
+### Stopping a VM
+
+`devvm stop` stops this folder's VM, then its [proxy](network.md#the-proxy). Once the VM is stopped, devvm checks `.git` as a launch that finds it stopped does, setting the locks a running VM was waiting for ([on each launch](git-protection.md#on-each-launch)), and on Linux names set-id files in the folder; not for a `--clone` VM. The VM's [ssh config entry](ssh.md) goes. A VM that's already stopped gets the same checks.
 
 ### Deleting a VM
 

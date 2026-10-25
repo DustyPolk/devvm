@@ -7,7 +7,7 @@ weight: 27
 
 Each running project VM can be reached as `devvm-<folder>`: `ssh devvm-website`, or VS Code's *Remote-SSH: Connect to Host*. The hash suffix is kept only when two folders share a name; the VM's full name (`devvm-website-<hash>`) always works too.
 
-devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches a VM, because Lima picks a new SSH port each time a VM starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
+devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches or stops a VM, because Lima picks a new SSH port each time a VM starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
 
 ```text
 Include ~/.config/devvm/ssh_config

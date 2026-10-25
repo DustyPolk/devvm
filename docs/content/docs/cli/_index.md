@@ -43,4 +43,5 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm ssh-agent add](devvm_ssh-agent_add.md): Load a key into devvm's own SSH agent
 - [devvm ssh-agent keys](devvm_ssh-agent_keys.md): List the keys in devvm's own SSH agent
+- [devvm stop](devvm_stop.md): Stop this folder's VM
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

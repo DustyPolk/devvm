@@ -144,6 +144,11 @@ func AgentStartFailed(sock string) M {
 	return M{id: "agent_start_failed", vals: []val{{"sock", sock}}}
 }
 
+// AlreadyStopped is [already_stopped]: "{{.vm}} is already stopped"
+func AlreadyStopped(vm string) M {
+	return M{id: "already_stopped", vals: []val{{"vm", vm}}}
+}
+
 // BackendFlagIgnored is [backend_flag_ignored]: "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
 func BackendFlagIgnored(backend string, vm string) M {
 	return M{id: "backend_flag_ignored", vals: []val{{"backend", backend}, {"vm", vm}}}
@@ -684,7 +689,7 @@ func GitProtectOnNeedsMacos() M {
 	return M{id: "git_protect_on_needs_macos"}
 }
 
-// GitProtectRunning is [git_protect_running]: "{{.vm}} is running, and changing its .git protection now could race it: stop it first"
+// GitProtectRunning is [git_protect_running]: "{{.vm}} is running, and changing its .git protection now could race it: run devvm stop first"
 func GitProtectRunning(vm string) M {
 	return M{id: "git_protect_running", vals: []val{{"vm", vm}}}
 }
@@ -1569,6 +1574,16 @@ func StopFailed(vm string) M {
 	return M{id: "stop_failed", vals: []val{{"vm", vm}}}
 }
 
+// StopVMFailed is [stop_vm_failed]: "couldn't stop this folder's VM: {{.reason}}"
+func StopVMFailed(reason string) M {
+	return M{id: "stop_vm_failed", vals: []val{{"reason", reason}}}
+}
+
+// Stopped is [stopped]: "stopped {{.vm}}"
+func Stopped(vm string) M {
+	return M{id: "stopped", vals: []val{{"vm", vm}}}
+}
+
 // Stopping is [stopping]: "stopping {{.vm}}"
 func Stopping(vm string) M {
 	return M{id: "stopping", vals: []val{{"vm", vm}}}
@@ -1844,6 +1859,7 @@ var specs = map[string]spec{
 	"agent_set_running":           {fields: []string{"mode", "vm"}},
 	"agent_set_stopped":           {fields: []string{"mode", "vm"}},
 	"agent_start_failed":          {fields: []string{"sock"}},
+	"already_stopped":             {fields: []string{"vm"}},
 	"backend_flag_ignored":        {fields: []string{"backend", "vm"}},
 	"backend_lacks":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unknown":             {fields: []string{"backends", "name"}},
@@ -2129,6 +2145,8 @@ var specs = map[string]spec{
 	"started_with_warnings":       {fields: []string{"vm"}},
 	"starting":                    {fields: []string{"vm"}},
 	"stop_failed":                 {fields: []string{"vm"}},
+	"stop_vm_failed":              {fields: []string{"reason"}},
+	"stopped":                     {fields: []string{"vm"}},
 	"stopping":                    {fields: []string{"vm"}},
 	"sync_failed":                 {fields: []string{"vm"}},
 	"token_prompt":                {},

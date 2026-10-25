@@ -41,7 +41,7 @@ One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`
 - for hosts with a bound secret, swaps the placeholder in one header for the real value ([Secrets](#secrets)); everything else passes unread;
 - logs every decision.
 
-It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file), or 15 minutes after starting if the hostagent never appears. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
+It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file), or 15 minutes after starting if the hostagent never appears; `devvm stop` stops it at once. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
 
 devvm counts a proxy as started only once it says it's listening on the VM's port and still runs: a program that took the port first would otherwise get the VM's traffic. If it doesn't, devvm stops and names the proxy's log.
 

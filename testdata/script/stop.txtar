@@ -1,0 +1,51 @@
+# devvm stop: stops the folder's VM and its proxy, then checks .git as a
+# launch that finds it stopped does (locking it again on macOS), and drops
+# the VM from devvm's ssh config.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env RUN=$XDG_DATA_HOME/devvm/run
+env CFG=$XDG_CONFIG_HOME/devvm
+
+# No VM.
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm stop
+stderr '^devvm: no_vm dir=\S*/web$'
+! exec devvm stop now
+stderr '^devvm: usage_error '
+
+# A running VM with network policy: it stops, then its proxy.
+exec git init -q
+exec devvm --network-policy base
+exec sh -c 'cat "$CFG/ssh_config"'
+stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$RUN"/devvm-web-*.proxy.pid > "$WORK/pid" && kill -0 "$(cat "$WORK/pid")"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm stop
+stdout '^==> stopped vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-web-[0-9a-f]{14}$'
+[darwin] stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*chflags -R -P uchg /\S*/web/\.git/hooks$'
+! stdout 'limactl (start|edit)'
+! exec sh -c 'kill -0 "$(cat "$WORK/pid")"'
+exec sh -c 'cat "$CFG/ssh_config"'
+! stdout devvm-web
+
+# Already stopped: said; .git is checked all the same.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm stop
+stdout '^==> already_stopped vm=devvm-web-[0-9a-f]{14}$'
+! stdout '==> stopped'
+stub_calls
+! stdout 'limactl stop'
+
+# A VM made for an earlier folder at this path isn't stopped.
+cd $WORK
+rm web
+mkdir web
+cd web
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm stop
+stderr '^devvm: vm_other_folder vm=devvm-web-[0-9a-f]{14} was=/\S*/web$'
+stub_calls
+! stdout 'limactl stop'

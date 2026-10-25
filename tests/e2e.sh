@@ -4,15 +4,16 @@
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
-#                name with pinned host keys, .git protection and shell, then opening it again,
-#                restart, devvm size, devvm ports, devvm git-protect and rm, an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
+#                name with pinned host keys, .git protection and shell, then devvm stop, opening it
+#                again, restart, devvm size, devvm ports, devvm git-protect and rm, an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
 #                image and an unused tool image, keeping base and a VM named like an image; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
-#                stay on the host (devvm secret too), and the self-check, on relaunch too
+#                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
+#                stops its proxy
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python and claude) and alpine:3 (musl tools,
 #                Docker on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
@@ -337,7 +338,10 @@ else
 fi
 
 section "an existing VM"
-check "stopped, devvm starts it again" bash -c "limactl stop $vm >/dev/null 2>&1 && [[ \$(status_of $vm) == Stopped ]] &&
+check "devvm stop stops it and drops its ssh config entry" bash -c "cd '$p' && '$D' stop </dev/null >'$work/last.log' 2>&1 &&
+  [[ \$(status_of $vm) == Stopped ]] && grep -qF \"\$(m stopped vm=$vm)\" '$work/last.log' &&
+  ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config'"
+check "stopped, devvm starts it again" bash -c "[[ \$(status_of $vm) == Stopped ]] &&
   cd '$p' && printf 'echo e2e-again\n' | '$D' >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] && grep -qx e2e-again '$work/last.log'"
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
 check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
@@ -364,14 +368,14 @@ if [[ "$(uname -s)" == Darwin ]]; then
   check "a swapped .git is reported" bash -c "limactl shell --workdir / $vm bash -c 'cd $p && mv .git .git-old && git init -q' </dev/null;
     cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_replaced git=$p/.git | head -1)\""
   rm -rf "$p/.git"; mv "$p/.git-old" "$p/.git"
-  # (virtiofs shows the VM the restored .git after a moment.) Locks are set while it's stopped.
-  check "a submodule git folder the VM adds is reported, and locked" bash -c "limactl shell --workdir / $vm bash -c 'cd $p &&
+  # (virtiofs shows the VM the restored .git after a moment.) Locks are set while it's stopped:
+  # devvm stop sets them.
+  check "a submodule git folder the VM adds is reported, and locked by devvm stop" bash -c "limactl shell --workdir / $vm bash -c 'cd $p &&
       for i in 1 2 3 4 5 6 7 8 9 10; do git rev-parse >/dev/null 2>&1 && break; sleep 1; done && git init -q vmsub &&
       git -C vmsub -c user.email=e@e -c user.name=e commit -q --allow-empty -m s &&
       git update-index --add --cacheinfo 160000,\$(git -C vmsub rev-parse HEAD),vmsub' </dev/null &&
-    limactl stop $vm >/dev/null 2>&1 && cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_embedded_new git=$p/vmsub/.git | head -1)\" &&
-    ls -lOd '$p/vmsub/.git/config' | grep -q uchg"
-  # (grep -q above may have ended that launch before it started the VM.)
+    cd '$p' && '$D' stop </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m git_embedded_new git=$p/vmsub/.git | head -1)\" '$work/last.log' &&
+    [[ \$(status_of $vm) == Stopped ]] && ls -lOd '$p/vmsub/.git/config' | grep -q uchg"
   check "git-protect waits for the VM to stop" bash -c "cd '$p' && printf 'exit\n' | '$D' >/dev/null 2>&1 &&
     [[ \$(status_of $vm) == Running ]] && '$D' git-protect off </dev/null 2>&1 |
     grep -qF \"\$(m git_protect_running vm=$vm | head -1)\" && ls -lOd '$p/.git/config' | grep -q uchg"
@@ -681,6 +685,11 @@ check "a VM started outside devvm is unenforced, and the self-check stops it" ba
   grep -q -- '--- PASS: TestE2ESelfCheck' && [[ \$(status_of '$vm') == Stopped ]] && grep -qx net_check=unenforced '$vms/$vm'"
 check "devvm starts it again confined, and the self-check passes" bash -c "cd '$n' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   [[ \$(status_of '$vm') == Running ]] && grep -qx net_check=ok '$vms/$vm'"
+check "devvm stop stops it and its proxy at once, and devvm starts both again" bash -c "cd '$n' &&
+  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 &&
+  [[ \$(status_of '$vm') == Stopped ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$(status_of '$vm') == Running ]] &&
+  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && grep -qx net_check=ok '$vms/$vm'"
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
   '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +on +lima ' &&
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
