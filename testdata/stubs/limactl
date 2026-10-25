@@ -9,7 +9,8 @@
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
-# start writes the VM's ha.pid (devvm's pid, which runs) and the SSH agent
+# start writes the VM's ha.pid (devvm's pid, which runs and is soon gone,
+# or $STUB_DIR/hostagent's, a pid that lasts) and the SSH agent
 # it was given ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/start-agent-<name>,
 # and shell its agent to $STUB_DIR/shell-agent; and
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
@@ -100,7 +101,9 @@ case ${1:-} in
     [[ ! -e $STUB_DIR/start-hangs ]] || { : > "$STUB_DIR/hanging"; exec sleep 30; }
     set_status "${names[0]}" Running
     mkdir -p "$LIMA_HOME/${names[0]}"
-    echo "$PPID" > "$LIMA_HOME/${names[0]}/ha.pid"
+    ha=$PPID
+    [[ ! -f $STUB_DIR/hostagent ]] || ha=$(cat "$STUB_DIR/hostagent")
+    echo "$ha" > "$LIMA_HOME/${names[0]}/ha.pid"
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/start-agent-${names[0]}"
     cfg="$LIMA_HOME/${names[0]}/ssh.config"
     [[ -f $cfg ]] || printf 'Host lima-%s\n  IdentityFile "%s/_config/user"\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  NoHostAuthenticationForLocalhost yes\n  PreferredAuthentications publickey\n  BatchMode yes\n  IdentitiesOnly yes\n  User stub\n  ControlMaster auto\n  ControlPath "%s/ssh.sock"\n  ControlPersist yes\n  PermitLocalCommand yes\n  LocalCommand touch /x/ran\n  Hostname 127.0.0.1\n  Port 60022\n' \

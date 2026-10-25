@@ -14,8 +14,11 @@ stderr '^devvm: no_vm dir=\S*/web$'
 ! exec devvm stop now
 stderr '^devvm: usage_error '
 
-# A running VM with network policy: it stops, then its proxy.
+# A running VM with network policy: it stops, then its proxy. (Its
+# hostagent here: the test's runner, which runs on, so the proxy runs until
+# stopped; the stub's would be gone after devvm.)
 exec git init -q
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 exec devvm --network-policy base
 exec sh -c 'cat "$CFG/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
