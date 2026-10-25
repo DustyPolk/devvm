@@ -15,6 +15,8 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm images rm](devvm_images_rm.md): Delete images, by name or by key
+- [devvm layer](devvm_layer.md): Your own image layers
+- [devvm layer new](devvm_layer_new.md): Start a layer of your own
 - [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM

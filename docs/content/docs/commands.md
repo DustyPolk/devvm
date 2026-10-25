@@ -141,6 +141,7 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | --- | --- |
 | `devvm build IMAGE` | build an image and the images under it, unless they're built, and the shared tool images it names (`devvm build foo+bar`, `devvm build node+claude`) |
 | `devvm rebuild IMAGE` | build an image again, from its parent as it is, and delete the stale images no VM uses, the old one and those built on it among them ([details](images.md#rebuilding)); shared tools follow the tools lock instead |
+| `devvm layer new NAME` | start a layer of your own: `~/.config/devvm/layers/NAME.sh`, a script to edit, and its allowlist, `NAME.policy` ([details](customizing.md#your-own-layers)) |
 | `devvm images` | list the images on every backend, with their state and size, then the shared tool images, with how many VMs use each ([details](images.md#listing-images)) |
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](images.md#deleting-images)) |
 | `devvm gc` | delete the stale and unfinished images on every backend, and the tool images no VM uses that aren't the tools lock's; it lists them first, and in a terminal asks. VMs are never deleted ([details](images.md#cleaning-up)) |

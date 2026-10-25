@@ -27,7 +27,7 @@ The Ubuntu image isn't part of base's key: a newer one doesn't make base stale. 
 
 An image is base and your layers on it, bottom first, joined with `+`: `foo+bar` is `bar` on `foo` on `base`. `base` itself can be left out, so `base+foo` is `foo`. An image name can also hold [shared tools](#shared-tools), which aren't layers.
 
-A layer is a script of yours, `~/.config/devvm/layers/<name>.sh`, run with bash in the image's VM as its user, who has sudo. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and is neither `base` nor a shared tool's. devvm refuses any other name in an image, and a layer without its script.
+A layer is a script of yours, `~/.config/devvm/layers/<name>.sh`, run with bash in the image's VM as its user, who has sudo. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and is neither `base` nor a shared tool's. devvm refuses any other name in an image, and a layer without its script. `devvm layer new NAME` starts one ([details](customizing.md#your-own-layers)).
 
 ```sh
 devvm build foo+bar   # builds base, foo and foo+bar, unless they're built

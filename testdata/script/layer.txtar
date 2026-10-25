@@ -1,0 +1,51 @@
+# devvm layer new NAME: a starter script and allowlist in the layers folder;
+# bad, taken and existing names are refused.
+env DEVVM_MESSAGES=names
+env LAYERS=$XDG_CONFIG_HOME/devvm/layers
+
+exec devvm layer new pg
+stdout '^==> layer_created layer=pg policy=\S*/devvm/layers/pg\.policy script=\S*/devvm/layers/pg\.sh$'
+exec bash -n $LAYERS/pg.sh
+grep '^set -euo pipefail$' $LAYERS/pg.sh
+grep '^# Hosts a VM with the pg layer can reach' $LAYERS/pg.policy
+
+# It's a layer at once: images complete it, and it's among the environments.
+exec devvm __complete build p
+stdout '^pg$'
+! exec devvm build nope
+stderr '^devvm: unknown_layer agents=.* envs=base node python rust go pg layer=nope$'
+
+# An existing script is kept; an existing allowlist is kept for a new script.
+! exec devvm layer new pg
+stderr '^devvm: layer_exists file=\S*/devvm/layers/pg\.sh$'
+cp mine.policy $LAYERS/db.policy
+exec devvm layer new db
+cmp $LAYERS/db.policy mine.policy
+
+! exec devvm layer new node
+stderr '^devvm: layer_name_reserved layer=node$'
+! exec devvm layer new claude
+stderr '^devvm: layer_name_reserved layer=claude$'
+! exec devvm layer new base
+stderr '^devvm: layer_name_reserved layer=base$'
+! exec devvm layer new My_DB
+stderr '^devvm: layer_name_invalid layer=My_DB$'
+! exec devvm layer new ../x
+stderr '^devvm: layer_name_invalid layer=\.\./x$'
+! exec devvm layer new -- -x
+stderr '^devvm: layer_name_invalid layer=-x$'
+! exec devvm layer new
+stderr '^devvm: usage_error '
+! exec devvm layer pg
+stderr '^devvm: usage_error '
+! exists $LAYERS/node.sh
+! exists $LAYERS/My_DB.sh
+
+# A layers folder that can't be written to fails it.
+rm $LAYERS
+exec sh -c 'printf x > "$LAYERS"'
+! exec devvm layer new web
+stderr '^devvm: layer_new_failed reason='
+
+-- mine.policy --
+db.example.com

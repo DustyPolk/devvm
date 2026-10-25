@@ -87,7 +87,7 @@ cleanup() {
     limactl delete -f "$n" >/dev/null 2>&1
     rm -f "$images/${n#devvm-img-}" "$vms/$n"
   done
-  rm -f "$layers"/e2e*.sh
+  rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
@@ -208,7 +208,9 @@ elif want from; then
 fi
 fixture=$layers/e2efix.sh
 token=e2e-fixture-ran-$$-$(date +%s)   # this run's: the run logs keep earlier runs'
-printf '#!/bin/bash\nset -eu\necho %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" > "$fixture"
+rm -f "$fixture" "${fixture%.sh}.policy"
+check "layer new writes a starter layer" quiet "$D" layer new e2efix
+printf 'echo %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" >> "$fixture"
 check "build the fixture layer on base" quiet "$D" build e2efix
 owned e2efix
 kf=$(keys_of e2efix | head -1)

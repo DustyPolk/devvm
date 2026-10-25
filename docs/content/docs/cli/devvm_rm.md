@@ -1,6 +1,6 @@
 ---
 title: devvm rm
-weight: 24
+weight: 26
 ---
 
 Delete this folder's VM

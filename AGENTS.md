@@ -138,7 +138,7 @@ Docs (page ← bash page, all rewritten, partly):
 - `images.md`, `commands.md`, `security.md`, `git-protection.md`, `coding-agents.md`, `ssh.md`, `clone.md`, `from.md` ← same names
 - `lima.md` ← `network.md`, `security.md`, `design.md`, `limits.md`
 - `network.md` ← `network.md`, `devvm-proxy/README.md`
-- `customizing.md` ← `customizing.md` (base image features; custom layers wait for `devvm layer`)
+- `customizing.md` ← `customizing.md`
 - `testing.md` ← same name (with the platform table, the Linux host as verified, manual checks)
 - README "Quickstart" ← README usage
 - `install.md` ← same name (requirements and checking them; installing waits for `install.sh`)
@@ -150,10 +150,9 @@ Bats files (pending cases, by task):
 | `bump.bats`, `release.bats` | all (release.sh, bump.sh) |
 | `cli.bats` | limactl |
 | `guest.bats` | ssh/code (VS Code settings) |
-| `images.bats` | layer |
 | `install.bats` | all (install.sh) |
 | `network.bats` | ssh/code (direct route) |
-| `build`, `delete`, `from`, `layers`, `lint`, `messages`, `oci`, `ports`, `project`, `size`, `tools` | none |
+| `build`, `delete`, `from`, `images`, `layers`, `lint`, `messages`, `oci`, `ports`, `project`, `size`, `tools` | none |
 
 Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
 
@@ -181,6 +180,7 @@ Deliberate changes from the bash:
 - `network`: no argument prints `ls`'s value (`unenforced` too); an unchanged one is `net_already`; `on` needs the backend's egress proxy first; a running VM turned off stays on its proxy until it next starts (`net_off_next_start`); `Confined` means started with the proxy, and `net_unenforced*` say "wasn't started confined"; a bad argument is cobra's `usage_error`.
 - `secret`: `ls` (and `devvm secret`) is a table of every secret, SAVED and USED BY; set, rm, use and unuse rewrite running proxies' bindings (no touch); `secret_saved`/`_keychain`, `secret_removed`, `secret_used`/`_unused` replace `secret_saved keychain=`, `removed`, `secret_bound`; `unuse claude` on an image with claude is `secret_with_image`; control characters are refused too; `use` warns when no token is saved; bad names are cobra's `usage_error`.
 - `ssh-agent`: an unchanged mode is `agent_already`; a stopped VM's forwarding changes at its next launch (`agent_set_*`, no `agent_off`), a running one's warns `agent_next_start` (was `agent_on_restart`); a new VM without forwarding carries no agent from the start; `agent_key_unpinned` names no older devvm; a missing key is `agent_key_not_found`, a bad lifetime `agent_lifetime_invalid` (no usage); `keys` shows the default lifetime beside other options.
+- `layer`: `devvm layer` alone is its help, a missing or extra NAME cobra's `usage_error` (no `usage_layer`); `layer_created` is one line; the script is linked into place whole, never over one that appeared.
 - `ports`: `add`/`rm` subcommands with `-g`/`--global` anywhere; a running VM's pending ports are `ports_pending` on stderr (no `next_start` on stdout); `add`/`rm` of all or none is `ports_list_needed`, other bad usage cobra's `usage_error` (no `usage_ports`); `-g` refuses a hand-edited ports file too; a change checks the backend's port forwarding first.
 - `size`: its own `--cpus`/`--memory`/`--disk` and `-g`/`--global`; a running VM's pending size is `size_pending` on stderr (no `next_start` on stdout); a running VM's unchanged size is `vm_size` too; `size_defaults` shows sizes as `vm_size` does; `-g` refuses a hand-edited size file too; a change checks the backend's features first; `no_vm_size`/`size_failed` (no `usage_size`, `usage_size_flag`, `size_change_failed`: cobra's `usage_error`, `lima_edit_failed`).
 - `git-protect`: a `--clone` VM shows `clone` and refuses changes (`git_protect_clone`); a never-set-up VM shows what its next launch sets; strict counts as on for launches and rm; strict that can't set `diff.ignoreSubmodules` fails (`git_config_failed`); `git_locked*`/`git_unlocked`/`git_lock_later` name the VM; a bad mode is cobra's `usage_error` (no `usage_git_protect`).

@@ -206,6 +206,22 @@ other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's c
 description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
 other = "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
 
+[layer_name_invalid]
+other = "{{.layer}} can't be a layer's name: use lowercase letters, digits and dashes, starting with a letter or digit"
+
+[layer_name_reserved]
+other = "{{.layer}} is a name devvm's own images use: choose another"
+
+[layer_exists]
+other = "{{.file}} already exists: edit it, or choose another name"
+
+[layer_created]
+other = "created {{.script}} and its allowlist {{.policy}}: edit them, then devvm build {{.layer}}, or devvm node+{{.layer}} for a VM"
+
+[layer_new_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't create the layer: {{.reason}}"
+
 [features_help]
 other = "Base image features (up/down to move, space to toggle, enter to confirm):"
 

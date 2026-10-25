@@ -784,6 +784,31 @@ func KVMAccess(fix string) M {
 	return M{id: "kvm_access", vals: []val{{"fix", fix}}}
 }
 
+// LayerCreated is [layer_created]: "created {{.script}} and its allowlist {{.policy}}: edit them, then devvm build {{.layer}}, or devvm node+{{.layer}} for a VM"
+func LayerCreated(layer string, policy string, script string) M {
+	return M{id: "layer_created", vals: []val{{"layer", layer}, {"policy", policy}, {"script", script}}}
+}
+
+// LayerExists is [layer_exists]: "{{.file}} already exists: edit it, or choose another name"
+func LayerExists(file string) M {
+	return M{id: "layer_exists", vals: []val{{"file", file}}}
+}
+
+// LayerNameInvalid is [layer_name_invalid]: "{{.layer}} can't be a layer's name: use lowercase letters, digits and dashes, starting with a letter or digit"
+func LayerNameInvalid(layer string) M {
+	return M{id: "layer_name_invalid", vals: []val{{"layer", layer}}}
+}
+
+// LayerNameReserved is [layer_name_reserved]: "{{.layer}} is a name devvm's own images use: choose another"
+func LayerNameReserved(layer string) M {
+	return M{id: "layer_name_reserved", vals: []val{{"layer", layer}}}
+}
+
+// LayerNewFailed is [layer_new_failed]: "couldn't create the layer: {{.reason}}"
+func LayerNewFailed(reason string) M {
+	return M{id: "layer_new_failed", vals: []val{{"reason", reason}}}
+}
+
 // LimaArchUnsupported is [lima_arch_unsupported]: "the lima backend doesn't run on {{.arch}}: use an arm64 or x86_64 host"
 func LimaArchUnsupported(arch string) M {
 	return M{id: "lima_arch_unsupported", vals: []val{{"arch", arch}}}
@@ -1912,6 +1937,11 @@ var specs = map[string]spec{
 	"key_loaded_keychain":         {},
 	"keychain_save_failed":        {fields: []string{"secret"}},
 	"kvm_access":                  {fields: []string{"fix"}},
+	"layer_created":               {fields: []string{"layer", "policy", "script"}},
+	"layer_exists":                {fields: []string{"file"}},
+	"layer_name_invalid":          {fields: []string{"layer"}},
+	"layer_name_reserved":         {fields: []string{"layer"}},
+	"layer_new_failed":            {fields: []string{"reason"}},
 	"lima_arch_unsupported":       {fields: []string{"arch"}},
 	"lima_broken":                 {},
 	"lima_broken_fix":             {fields: []string{"fix"}},

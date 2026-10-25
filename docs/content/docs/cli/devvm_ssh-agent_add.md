@@ -1,6 +1,6 @@
 ---
 title: devvm ssh-agent add
-weight: 33
+weight: 35
 ---
 
 Load a key into devvm's own SSH agent
