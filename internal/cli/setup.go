@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backends"
+	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -70,7 +70,7 @@ func (s setup) run(features *string, backendName string) error {
 	}
 	ask := backendName == "" && features == nil && s.terminal()
 	if backendName != "" || ask {
-		reg, err := backends.Registry(dirs, s.ui)
+		reg, err := registry.New(dirs, s.ui)
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (s setup) pickBackend(dirs paths.Dirs, reg *backend.Registry) (string, erro
 	choices := make([]ui.Choice, len(names))
 	for i, n := range names {
 		choices[i] = ui.Choice{Name: n, On: n == current}
-		if backends.Experimental(n) {
+		if registry.Experimental(n) {
 			choices[i].Desc = msg.BackendExperimental().String()
 		}
 	}

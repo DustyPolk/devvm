@@ -72,7 +72,7 @@ src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 # A test build: DEVVM_UNREVIEWED counts in it (never in a release).
-(cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -ldflags "-X github.com/w3cj/devvm/internal/backend/backends.unreviewed=allowed" \
+(cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed" \
   -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
 cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/features" "$root/tools" "$root/guest" "$root/oci" "$src/"
 # The features are in base's key, so only a run with from (which checks them) builds them; every

@@ -1,6 +1,6 @@
-// Package backends registers every backend devvm has. It's apart from
+// Package registry registers every backend devvm has. It's apart from
 // package backend, which the backends themselves import.
-package backends
+package registry
 
 import (
 	"os"
@@ -22,17 +22,17 @@ type UI interface {
 	smolvm.UI
 }
 
-// Registry returns the registry of devvm's backends, on devvm's folders
+// New returns the registry of devvm's backends, on devvm's folders
 // and u: lima, the default (backend.Default), and smolvm (experimental).
 // In a test build, the unreviewed emulations DEVVM_UNREVIEWED names are let
 // through, with a warning each time: for their end-to-end checks.
-func Registry(d paths.Dirs, u UI) (*backend.Registry, error) {
-	return registry(d, u, unreviewed, os.Getenv("DEVVM_UNREVIEWED"))
+func New(d paths.Dirs, u UI) (*backend.Registry, error) {
+	return newFor(d, u, unreviewed, os.Getenv("DEVVM_UNREVIEWED"))
 }
 
-// registry is Registry for a build whose unreviewed is build, with
+// newFor is New for a build whose unreviewed is build, with
 // DEVVM_UNREVIEWED's value env.
-func registry(d paths.Dirs, u UI, build, env string) (*backend.Registry, error) {
+func newFor(d paths.Dirs, u UI, build, env string) (*backend.Registry, error) {
 	r, err := backend.NewRegistry(lima.New(d, u), smolvm.New(d, u))
 	if err != nil {
 		return nil, err

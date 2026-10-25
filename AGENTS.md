@@ -16,7 +16,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
-| `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `backends/`, `lima/`, `smolvm/` (experimental; its in-VM scripts embedded) |
+| `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `registry/` (every backend's), `lima/`, `smolvm/` (experimental; its in-VM scripts embedded) |
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files (errors aren't messages yet) |

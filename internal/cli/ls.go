@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend/backends"
+	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
@@ -38,7 +38,7 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 }
 
 func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error) {
-	reg, err := backends.Registry(dirs, u)
+	reg, err := registry.New(dirs, u)
 	if err != nil {
 		return nil, err
 	}

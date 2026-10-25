@@ -71,7 +71,7 @@ These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`
 
 ## Unreviewed emulations
 
-devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a test build, `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A test build is one made with `-ldflags "-X github.com/w3cj/devvm/internal/backend/backends.unreviewed=allowed"`, as `tests/e2e.sh` and the CLI tests make theirs; releases (GoReleaser, the Homebrew formula) set only the version, so they ignore it:
+devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a test build, `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A test build is one made with `-ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed"`, as `tests/e2e.sh` and the CLI tests make theirs; releases (GoReleaser, the Homebrew formula) set only the version, so they ignore it:
 
 ```sh
 DEVVM_UNREVIEWED=smolvm:ssh devvm --backend smolvm --ports none base

@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend/backends"
+	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
@@ -124,7 +124,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage,
 	if err := from.Check(b.From); err != nil {
 		return nil, nil, err
 	}
-	reg, err := backends.Registry(b.Dirs, u)
+	reg, err := registry.New(b.Dirs, u)
 	if err != nil {
 		return nil, nil, err
 	}

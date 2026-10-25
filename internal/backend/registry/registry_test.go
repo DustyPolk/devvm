@@ -1,4 +1,4 @@
-package backends
+package registry
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 		build string
 		want  bool
 	}{{"", false}, {"yes", false}, {"allowed", true}} {
-		r, err := registry(d, quietUI{}, c.build, "smolvm:egress-proxy")
+		r, err := newFor(d, quietUI{}, c.build, "smolvm:egress-proxy")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +46,7 @@ func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 func TestLimaIsTheDefault(t *testing.T) {
 	t.Parallel()
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	r, err := Registry(d, quietUI{})
+	r, err := New(d, quietUI{})
 	if err != nil {
 		t.Fatal(err)
 	}

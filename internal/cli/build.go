@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backends"
+	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
@@ -80,7 +80,7 @@ func builder(u *ui.UI, flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := backends.Registry(dirs, u)
+	reg, err := registry.New(dirs, u)
 	if err != nil {
 		return nil, err
 	}

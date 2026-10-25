@@ -40,7 +40,7 @@ func buildDevvm(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	cmd := exec.CommandContext(t.Context(), "go", "install",
-		"-ldflags", "-X github.com/w3cj/devvm/internal/backend/backends.unreviewed=allowed", "github.com/w3cj/devvm/cmd/devvm")
+		"-ldflags", "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed", "github.com/w3cj/devvm/cmd/devvm")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOBIN="+dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)
