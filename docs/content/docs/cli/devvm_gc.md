@@ -1,6 +1,6 @@
 ---
 title: devvm gc
-weight: 7
+weight: 8
 ---
 
 Delete stale images and unused tool images

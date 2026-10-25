@@ -523,8 +523,15 @@ other = "{{.vm}} is now {{.image}}"
 [exported]
 other = "exported {{.vm}}'s agent history to {{.file}}"
 
-[export_failed]
+[rm_export_failed]
 other = "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
+
+[history_not_exported]
+other = "couldn't export {{.vm}}'s agent history"
+
+[export_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't export this folder's VM's agent history: {{.reason}}"
 
 [deleted]
 other = "deleted {{.vm}}"

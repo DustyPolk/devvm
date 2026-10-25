@@ -484,9 +484,9 @@ func DownloadingMise(version string) M {
 	return M{id: "downloading_mise", vals: []val{{"version", version}}}
 }
 
-// ExportFailed is [export_failed]: "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
-func ExportFailed(vm string) M {
-	return M{id: "export_failed", vals: []val{{"vm", vm}}}
+// ExportFailed is [export_failed]: "couldn't export this folder's VM's agent history: {{.reason}}"
+func ExportFailed(reason string) M {
+	return M{id: "export_failed", vals: []val{{"reason", reason}}}
 }
 
 // Exported is [exported]: "exported {{.vm}}'s agent history to {{.file}}"
@@ -707,6 +707,11 @@ func GitWorktreeStray(wt string) M {
 // GithubTokenHowto is [github_token_howto]: "Paste a GitHub token: a fine-grained one, scoped to the repos VMs need."
 func GithubTokenHowto() M {
 	return M{id: "github_token_howto"}
+}
+
+// HistoryNotExported is [history_not_exported]: "couldn't export {{.vm}}'s agent history"
+func HistoryNotExported(vm string) M {
+	return M{id: "history_not_exported", vals: []val{{"vm", vm}}}
 }
 
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path: set it to your home folder"
@@ -1339,6 +1344,11 @@ func RestartForMounts() M {
 	return M{id: "restart_for_mounts"}
 }
 
+// RmExportFailed is [rm_export_failed]: "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
+func RmExportFailed(vm string) M {
+	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
+}
+
 // RmFailed is [rm_failed]: "couldn't delete this folder's VM: {{.reason}}"
 func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
@@ -1902,7 +1912,7 @@ var specs = map[string]spec{
 	"doctor_failed":               {fields: []string{"reason"}},
 	"doctor_ok":                   {fields: []string{"backend", "version"}},
 	"downloading_mise":            {fields: []string{"version"}},
-	"export_failed":               {fields: []string{"vm"}},
+	"export_failed":               {fields: []string{"reason"}},
 	"exported":                    {fields: []string{"file", "vm"}},
 	"exporting_docker":            {fields: []string{"from"}},
 	"feature_shadowed":            {fields: []string{"feature", "file"}},
@@ -1947,6 +1957,7 @@ var specs = map[string]spec{
 	"git_unlocked":                {fields: []string{"vm"}},
 	"git_worktree_stray":          {fields: []string{"wt"}},
 	"github_token_howto":          {},
+	"history_not_exported":        {fields: []string{"vm"}},
 	"home_not_absolute":           {},
 	"image_from":                  {fields: []string{"from", "image"}},
 	"image_in_use":                {fields: []string{"key", "vms"}},
@@ -2073,6 +2084,7 @@ var specs = map[string]spec{
 	"removed_remote":              {fields: []string{"remote"}},
 	"resolving_tools":             {},
 	"restart_for_mounts":          {},
+	"rm_export_failed":            {fields: []string{"vm"}},
 	"rm_failed":                   {fields: []string{"reason"}},
 	"rule_added":                  {fields: []string{"rule", "vm"}},
 	"rule_added_global":           {fields: []string{"rule"}},

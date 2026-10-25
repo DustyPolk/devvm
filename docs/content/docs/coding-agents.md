@@ -39,7 +39,7 @@ With network policy, the VM's copies of `~/.claude/settings.json`, `~/.codex/con
 
 ## History
 
-Each VM's transcripts and sessions stay in that VM. `devvm rm` saves them before deleting a VM whose image has an agent: a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, in `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. The agents' logins aren't in it: `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. A stopped VM is started for it. If the export fails, devvm keeps the VM; `devvm rm -f` deletes it without exporting.
+Each VM's transcripts and sessions stay in that VM. `devvm export [FILE]` saves them, and `devvm rm` saves them before deleting a VM whose image has an agent: a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, in FILE or `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. The agents' logins aren't in it: `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. A stopped VM is started for it, and stays running. The file is written only once the export is complete, so a failed export leaves no file and an existing FILE as it was. If the export fails, `devvm rm` keeps the VM; `devvm rm -f` deletes it without exporting.
 
 ## The VM's setup
 

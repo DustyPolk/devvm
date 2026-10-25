@@ -163,11 +163,30 @@ func (e *Env) Rm(ctx context.Context, force bool) error {
 		}
 	}
 	if !force && st.Get(KeyNet) != "" && len(agentsOf(st.Get(state.KeyImage))) > 0 {
-		if err := e.export(ctx, t); err != nil {
+		if err := e.export(ctx, t, e.exportFile(vm), msg.RmExportFailed(vm)); err != nil {
 			return err
 		}
 	}
 	return e.delete(ctx, t)
+}
+
+// Export saves the folder's VM's agents' history to file (absolute), or
+// to the exports folder when it's empty, starting the VM if it's stopped.
+func (e *Env) Export(ctx context.Context, file string) error {
+	t, err := e.existing(ctx, "")
+	if err != nil {
+		return err
+	}
+	vm := t.f.Name
+	if file == "" {
+		file = e.exportFile(vm)
+	}
+	return e.export(ctx, t, file, backend.Logged(msg.HistoryNotExported(vm)))
+}
+
+// exportFile is a new export's file in the exports folder.
+func (e *Env) exportFile(vm string) string {
+	return filepath.Join(e.Dirs.Exports(), vm+"-"+time.Now().Format("20060102-150405")+".tar.gz")
 }
 
 // ensureRunning starts the VM if it's stopped, confined as its state says.
@@ -190,21 +209,28 @@ func (e *Env) ensureRunning(ctx context.Context, t *found) error {
 }
 
 // export saves the VM's agents' history (transcripts, sessions) to a
-// tarball in the exports folder, starting the VM if it's stopped. Their
-// logins aren't in it.
-func (e *Env) export(ctx context.Context, t *found) error {
+// tarball at file, starting the VM if it's stopped; failed is the error
+// when its tar fails. Their logins aren't in it. It's written next to
+// file and renamed into place once complete, so a failed export leaves
+// nothing and replaces nothing.
+func (e *Env) export(ctx context.Context, t *found, file string, failed error) error {
 	vm, b := t.f.Name, t.b
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(e.Dirs.Exports(), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 		return err
 	}
-	file := filepath.Join(e.Dirs.Exports(), vm+"-"+time.Now().Format("20060102-150405")+".tar.gz")
-	out, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // devvm's own folder
+	out, err := os.CreateTemp(filepath.Dir(file), ".devvm-export-*")
 	if err != nil {
 		return err
 	}
+	tmp := out.Name()
+	done := ui.AddCleanup(func(context.Context) { _ = os.Remove(tmp) })
+	defer func() {
+		_ = os.Remove(tmp)
+		done()
+	}()
 	excludes := make([]string, len(historyExcludes))
 	for i, p := range historyExcludes {
 		excludes[i] = "--exclude=" + p
@@ -215,11 +241,13 @@ func (e *Env) export(ctx context.Context, t *found) error {
 		err = cerr
 	}
 	if err != nil {
-		_ = os.Remove(file)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return msg.ExportFailed(vm)
+		return failed
+	}
+	if err := os.Rename(tmp, file); err != nil {
+		return err
 	}
 	ui.Info(msg.Exported(file, vm))
 	return nil

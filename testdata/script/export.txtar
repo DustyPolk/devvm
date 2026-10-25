@@ -1,0 +1,41 @@
+# export: the folder's VM's agent history, to the exports folder or a
+# file, from the VM, started if it's stopped. A failed export leaves the
+# file it would replace as it was.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm export
+stderr '^devvm: no_vm dir=\S*/web$'
+! exec devvm export a b
+stderr usage_error
+
+exec devvm --no-network-policy base
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm export
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> exported file=\S*/data/devvm/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'exec ''bash'' ''-c'' ''cd ~ && ls -d \.claude \.claude\.json .* --exclude=\.claude/\.credentials\.json .* -T -'''
+exec sh -c 'ls "$XDG_DATA_HOME/devvm/exports" | wc -l'
+stdout '^ *1$'
+
+# A file, relative to here, in a folder made for it.
+exec devvm export out/h.tar.gz
+stdout '^==> exported file=\S*/web/out/h\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'
+exists out/h.tar.gz
+! stdout starting
+
+# A failed export keeps the file as it was, and the VM.
+exec sh -c 'echo before > out/h.tar.gz'
+exec sh -c ': > "$STUB_DIR/shell-fails"'
+! exec devvm export out/h.tar.gz
+stderr '^devvm: history_not_exported vm=devvm-web-[0-9a-f]{14}$'
+rm $STUB_DIR/shell-fails
+exec cat out/h.tar.gz
+stdout '^before$'
+exec ls -A out
+stdout '^h\.tar\.gz\n\z'
+exec sh -c 'ls "$VMS"'
+stdout devvm-web

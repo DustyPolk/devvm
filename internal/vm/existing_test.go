@@ -264,7 +264,7 @@ func TestRm(t *testing.T) {
 		}
 		return nil
 	}
-	if err := e.Rm(t.Context(), false); names(err) != "export_failed vm="+vm {
+	if err := e.Rm(t.Context(), false); names(err) != "rm_export_failed vm="+vm {
 		t.Errorf("Rm = %v", names(err))
 	}
 	if _, ok := f.Instances[vm]; !ok {
@@ -321,6 +321,59 @@ func TestRm(t *testing.T) {
 	}
 	if _, ok := f.Instances[vm]; ok || script != "" {
 		t.Errorf("confirmed: deleted %v, export %q", !ok, script)
+	}
+}
+
+// export saves the history to the exports folder or a file of the user's,
+// which a failed export leaves as it was; the VM is kept either way.
+func TestExport(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	vm := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true}).Name()
+	tarball := "tarball"
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
+			if tarball == "" {
+				_, _ = o.Stdout.Write([]byte("partial"))
+				return errors.New("tar failed")
+			}
+			_, err := o.Stdout.Write([]byte(tarball))
+			return err
+		}
+		return nil
+	}
+	if err := e.Export(t.Context(), ""); err != nil {
+		t.Fatal(names(err))
+	}
+	es, _ := os.ReadDir(e.Dirs.Exports())
+	if len(es) != 1 || !strings.HasPrefix(es[0].Name(), vm+"-") || !strings.HasSuffix(es[0].Name(), ".tar.gz") {
+		t.Fatalf("exports %v", es)
+	}
+
+	dir := filepath.Join(t.TempDir(), "new")
+	file := filepath.Join(dir, "h.tar.gz")
+	read := func() string {
+		data, _ := os.ReadFile(file) //nolint:gosec // the test's own folder
+		return string(data)
+	}
+	if err := e.Export(t.Context(), file); err != nil {
+		t.Fatal(names(err))
+	}
+	if data := read(); data != "tarball" {
+		t.Errorf("export = %q", data)
+	}
+	tarball = ""
+	err := e.Export(t.Context(), file)
+	if le, ok := errors.AsType[*backend.LoggedError](err); !ok || names(le.Msg) != "history_not_exported vm="+vm {
+		t.Errorf("failed: %v", names(err))
+	}
+	if data := read(); data != "tarball" {
+		t.Errorf("after a failed export = %q", data)
+	}
+	if es, _ := os.ReadDir(dir); len(es) != 1 {
+		t.Errorf("left %v", es)
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Error("deleted")
 	}
 }
 

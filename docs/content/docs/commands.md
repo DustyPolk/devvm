@@ -13,6 +13,7 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm restart` | stop this folder's VM, then start it and open a shell in it: for what applies only when it starts |
 | `devvm update` | move this folder's VM to the newest shared tools, then open a shell in it ([details](images.md#adding-and-removing-tools)) |
 | `devvm remove TOOLS` | take shared tools out of this folder's VM (`devvm remove python+claude`), then open a shell in it |
+| `devvm export [FILE]` | save this folder's VM's agents' history to a `.tar.gz`: FILE, else a new file in `~/.local/share/devvm/exports` ([details](coding-agents.md#history)) |
 | `devvm rm [-f]` | delete this folder's VM, exporting its agents' history first ([details](#deleting-a-vm)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
 | `devvm ls` | list the project VMs ([details](#listing-vms)) |
