@@ -7,7 +7,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backends"
-	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -83,7 +82,7 @@ func setup(features *string, backendName string) error {
 	if err != nil {
 		return err
 	}
-	b := &build.Builder{Dirs: dirs, Root: root}
+	b := newBuilder(dirs, root, nil, nil, "")
 	var changed bool
 	if features == nil {
 		changed, err = b.PickFeatures()

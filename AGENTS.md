@@ -55,6 +55,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 ## Go conventions
 
 - **Only `internal/ui` prints.** forbidigo bans `fmt.Print*`, `os.Stdout`/`os.Stderr` elsewhere and `os.Exit` outside `cmd/devvm`. Data goes to `ui.Stdout()`, non-message log lines to `ui.Stderr()`.
+- **Only `internal/cli` calls ui's messages and prompts** (`ui.Info`, `Warn`, `Note`, `Say`, `Ask`, `Confirm`, `Pick`): other packages take fields (`Info`/`Warn func(msg.M)`, `Confirm func(msg.M) bool`…) their constructors or cli set to ui's, or cli asks first and passes the answer in.
 - **Fail with `ui.Die(msg.X(...))`:** it prints and panics; `ui.Main` recovers, runs the cleanups, returns 1. Commands end with `fail` (`ui.DieLogged` for a `LoggedError`). INT/TERM/HUP cancel the root context, wait for the logged command, run the cleanups and return 130; a second signal is ignored; after one, `Die` prints nothing. A logged command a signal ended (or 128+) waits up to 1 s for devvm's own interrupt, as Ctrl+C can end it first.
 - **Cleanups:** whatever a failure would leave (a build VM, a temp file) registers `ui.AddCleanup` and is removed once done; one only for interrupts checks `ui.Interrupted()`. Cleanups get a fresh context.
 - **External commands run with `ui.LoggedCmd(ctx, step, cmd)`:** output to the run log, failure via `ui.DieLogged`. `ui.WithSteps(ctx, n)` numbers steps.
@@ -71,7 +72,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check `backend.Require(b, vm, spec.Features()...)` first; backends don't decide what a VM needs.
 - **Every emulation is refused until reviewed:** a design note in `docs/content/docs/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package; what isn't (`.git` protection, the proxy) stays out.
-- **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. Warnings go through a `Warn` field. Set calls on a running VM get `vm_not_stopped`; restart warnings are the callers'.
+- **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. Set calls on a running VM get `vm_not_stopped`; restart warnings are the callers'.
 - **Lima edits only what differs:** any `limactl edit` gives the VM new ssh host keys at its next boot, so `Start` compares first. `Start` owns `env:`, `propagateProxyEnv`, `dns` and `hostResolver`.
 
 ## Messages

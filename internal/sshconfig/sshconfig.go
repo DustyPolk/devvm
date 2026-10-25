@@ -35,15 +35,22 @@ const hostKeyTimeout = 30 * time.Second
 // hostKeysMax is the most of a VM's answer read for its host keys.
 const hostKeysMax = 64 << 10
 
-// Config is devvm's ssh config and its VMs' host keys.
+// Config is devvm's ssh config and its VMs' host keys. New sets every
+// field; tests change them.
 type Config struct {
 	Dirs     paths.Dirs
 	Backends []backend.Backend // every backend, for every VM
+	// What it prints (ui's), and asks: [Y/n].
+	Info, Warn, Say func(msg.M)
+	Confirm         func(msg.M) bool
 }
 
 // New returns the ssh config for the VMs of every backend in reg.
 func New(d paths.Dirs, reg *backend.Registry) *Config {
-	return &Config{Dirs: d, Backends: reg.All()}
+	return &Config{
+		Dirs: d, Backends: reg.All(), Info: ui.Info, Warn: ui.Warn, Say: ui.Say,
+		Confirm: func(m msg.M) bool { return ui.Confirm(m) },
+	}
 }
 
 // Alias is the name ssh and editors reach vm by: devvm-<folder>, or the
@@ -303,12 +310,12 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 	if bytes.Contains(data, []byte(line)) {
 		return true, nil
 	}
-	ui.Say(msg.SSHIncludeNeeded(line))
+	c.Say(msg.SSHIncludeNeeded(line))
 	if !ui.StdinIsTerminal() {
-		ui.Warn(msg.SSHIncludeYourself())
+		c.Warn(msg.SSHIncludeYourself())
 		return false, nil
 	}
-	if !ui.Confirm(msg.AddItNow()) {
+	if !c.Confirm(msg.AddItNow()) {
 		return false, nil
 	}
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
@@ -324,7 +331,7 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 	if err := state.WriteFile(path, append([]byte(line+"\n"), data...)); err != nil {
 		return false, err
 	}
-	ui.Info(msg.SSHIncludeAdded())
+	c.Info(msg.SSHIncludeAdded())
 	return true, nil
 }
 

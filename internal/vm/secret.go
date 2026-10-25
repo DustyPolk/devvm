@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // SecretSave saves a token for a known secret, given as pasted or on
@@ -30,9 +29,9 @@ func (e *Env) SecretSave(ctx context.Context, name, given string) error {
 		return err
 	}
 	if store.Keychain {
-		ui.Info(msg.SecretSavedKeychain(name))
+		e.Info(msg.SecretSavedKeychain(name))
 	} else {
-		ui.Info(msg.SecretSaved(store.File(name), name))
+		e.Info(msg.SecretSaved(store.File(name), name))
 	}
 	return nil
 }
@@ -48,7 +47,7 @@ func (e *Env) SecretRm(ctx context.Context, name string) error {
 	if err := e.Proxy.RefreshSecrets(ctx); err != nil {
 		return err
 	}
-	ui.Info(msg.SecretRemoved(name))
+	e.Info(msg.SecretRemoved(name))
 	return nil
 }
 
@@ -110,18 +109,18 @@ func (e *Env) SecretUse(ctx context.Context, name string, use bool) error {
 		return err
 	}
 	if !use {
-		ui.Info(msg.SecretUnused(name, vm))
+		e.Info(msg.SecretUnused(name, vm))
 		if !netpolicy.On(st) {
-			ui.Note(msg.SecretUnuseCopied(name, vm))
+			e.Note(msg.SecretUnuseCopied(name, vm))
 		}
 		return nil
 	}
-	ui.Info(msg.SecretUsed(name, vm))
+	e.Info(msg.SecretUsed(name, vm))
 	if _, err := e.Proxy.Secrets.Value(ctx, name); errors.Is(err, secrets.ErrNone) {
 		if name == "claude" {
-			ui.Warn(msg.NoClaudeToken(vm))
+			e.Warn(msg.NoClaudeToken(vm))
 		} else {
-			ui.Warn(msg.NoGithubToken(vm))
+			e.Warn(msg.NoGithubToken(vm))
 		}
 	} else if err != nil {
 		return err

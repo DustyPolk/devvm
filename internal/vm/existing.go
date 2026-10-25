@@ -34,10 +34,10 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 		return msg.CloneNeedsNewVM(vm)
 	}
 	if t.flagIgnored {
-		ui.Warn(msg.BackendFlagIgnored(b.Name(), vm))
+		e.Warn(msg.BackendFlagIgnored(b.Name(), vm))
 	}
 	if o.From != "" && o.From != st.Get(state.KeyFrom) {
-		ui.Warn(msg.FromIgnored(vm))
+		e.Warn(msg.FromIgnored(vm))
 	}
 	builder := e.builder(b, st.Get(state.KeyFrom))
 	if o.Image != "" {
@@ -54,10 +54,10 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 	if err := e.Tools.RefreshDaily(); err != nil {
 		return err
 	}
-	if err := UpdateAgentDirs(ctx, b, st, e.Home); err != nil {
+	if err := e.UpdateAgentDirs(ctx, b, st); err != nil {
 		return err
 	}
-	warnIgnored(o)
+	e.warnIgnored(o)
 	conf, err := e.launch(ctx, t)
 	if err != nil {
 		return err
@@ -90,13 +90,13 @@ func (e *Env) launch(ctx context.Context, t *found) (backend.Confinement, error)
 		}
 		e.checkSetID(t.f.Dir)
 	}
-	if err := applySize(ctx, b, st, in); err != nil {
+	if err := e.applySize(ctx, b, st, in); err != nil {
 		return backend.Confinement{}, err
 	}
-	if err := applyPorts(ctx, b, st, running); err != nil {
+	if err := e.applyPorts(ctx, b, st, running); err != nil {
 		return backend.Confinement{}, err
 	}
-	if err := applyAgent(ctx, b, st, in); err != nil {
+	if err := e.applyAgent(ctx, b, st, in); err != nil {
 		return backend.Confinement{}, err
 	}
 	if sshagent.Mode(st) == sshagent.On {
@@ -106,28 +106,28 @@ func (e *Env) launch(ctx context.Context, t *found) (backend.Confinement, error)
 }
 
 // warnIgnored warns about the flags only new VMs take.
-func warnIgnored(o Options) {
+func (e *Env) warnIgnored(o Options) {
 	if o.NetworkPolicy || o.NoNetworkPolicy {
-		ui.Warn(msg.NetFlagIgnored())
+		e.Warn(msg.NetFlagIgnored())
 	}
 	if o.NoGitProtect {
-		ui.Warn(msg.GitProtectFlagIgnored())
+		e.Warn(msg.GitProtectFlagIgnored())
 	}
 	if o.Size != (Size{}) {
-		ui.Warn(msg.SizeFlagsIgnored())
+		e.Warn(msg.SizeFlagsIgnored())
 	}
 	if o.Ports != "" {
-		ui.Warn(msg.PortsFlagIgnored())
+		e.Warn(msg.PortsFlagIgnored())
 	}
 	if o.SSHAgent {
-		ui.Warn(msg.SSHAgentFlagIgnored())
+		e.Warn(msg.SSHAgentFlagIgnored())
 	}
 }
 
 // applyAgent makes a stopped VM's backend forward an SSH agent when its
 // mode says it does, and not otherwise. A running VM's waits for its next
 // start.
-func applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
+func (e *Env) applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
 	want := sshagent.Forwards(sshagent.Mode(st))
 	if want {
 		if err := backend.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
@@ -141,7 +141,7 @@ func applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend
 		return err
 	}
 	if in.Status == backend.StatusRunning {
-		ui.Warn(msg.AgentNextStart(st.Name()))
+		e.Warn(msg.AgentNextStart(st.Name()))
 		return nil
 	}
 	return b.SetAgentForwarding(ctx, st.Name(), want)
@@ -158,7 +158,7 @@ func (e *Env) checkSetID(dir string) {
 		for _, p := range files {
 			shown = append(shown, msg.Shown(p))
 		}
-		ui.Warn(msg.SetidFiles(strings.Join(shown, " ")))
+		e.Warn(msg.SetidFiles(strings.Join(shown, " ")))
 	}
 }
 
@@ -198,14 +198,14 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 	}
 	switch {
 	case in.Status != backend.StatusRunning:
-		ui.Info(msg.Starting(vm))
+		e.Info(msg.Starting(vm))
 		if err := start(ctx); err != nil {
 			return conf, err
 		}
 	case conf.Net == backend.NetProxy:
 		// A VM with network policy doesn't run on without its proxy.
 		if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
-			return conf, netpolicy.Unproxied(ctx, b, vm, err)
+			return conf, e.Proxy.Unproxied(ctx, b, vm, err)
 		}
 	default:
 		// Network policy turned off while it ran confined: it stays
@@ -215,14 +215,14 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 			return conf, err
 		}
 		if confined {
-			ui.Warn(msg.NetOffNextStart(vm))
+			e.Warn(msg.NetOffNextStart(vm))
 			if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
-				return conf, netpolicy.Unproxied(ctx, b, vm, err)
+				return conf, e.Proxy.Unproxied(ctx, b, vm, err)
 			}
 			return started, nil
 		}
 	}
-	if err := netpolicy.SelfCheck(ctx, b, st, start); err != nil {
+	if err := e.Proxy.SelfCheck(ctx, b, st, start); err != nil {
 		return conf, err
 	}
 	return started, nil
@@ -230,13 +230,13 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 
 // applySize makes a stopped VM's size what its state asks for, where it
 // differs (disks only grow). A running VM's waits for its next start.
-func applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
+func (e *Env) applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
 	edit := pendingSize(st, in.Size)
 	if edit == (backend.Size{}) {
 		return nil
 	}
 	if in.Status == backend.StatusRunning {
-		ui.Warn(msg.SizeNextStart(st.Name()))
+		e.Warn(msg.SizeNextStart(st.Name()))
 		return nil
 	}
 	return b.SetSize(ctx, st.Name(), edit)
@@ -245,13 +245,13 @@ func applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.
 // applyPorts makes a stopped VM forward the ports its state asks for, when
 // its backend config forwards others (KeyPortsSet). A running VM's wait
 // for its next start.
-func applyPorts(ctx context.Context, b backend.Backend, st *state.VM, running bool) error {
+func (e *Env) applyPorts(ctx context.Context, b backend.Backend, st *state.VM, running bool) error {
 	want, set := orAll(st.Get(KeyPorts)), orAll(st.Get(KeyPortsSet))
 	if want == set {
 		return nil
 	}
 	if running {
-		ui.Warn(msg.PortsNextStart(st.Name()))
+		e.Warn(msg.PortsNextStart(st.Name()))
 		return nil
 	}
 	if err := b.SetPorts(ctx, st.Name(), PortsBackend(want)); err != nil {
@@ -290,15 +290,15 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 		return nil
 	}
 	added := strings.Join(missing, "+")
-	mounts := AgentMounts(e.Home, added)
+	mounts := e.AgentMounts(added)
 	if !terminal() {
 		return msg.NoTerminalConfirm(vm, want)
 	}
 	if len(mounts) > 0 {
-		ui.Say(msg.RestartForMounts())
+		e.Say(msg.RestartForMounts())
 	}
-	if !confirm(msg.AddInPlace(img, strings.Join(missing, " "), vm)) {
-		ui.Info(msg.Keeping(img))
+	if !e.Confirm(msg.AddInPlace(img, strings.Join(missing, " "), vm)) {
+		e.Info(msg.Keeping(img))
 		return nil
 	}
 	tg := toolTarget(b, st)
@@ -314,7 +314,7 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 		if err := b.Stop(ctx, vm); err != nil {
 			return err
 		}
-		if err := b.SetAgentDirs(ctx, vm, AgentMounts(e.Home, newImg)); err != nil {
+		if err := b.SetAgentDirs(ctx, vm, e.AgentMounts(newImg)); err != nil {
 			return err
 		}
 	}
@@ -325,7 +325,7 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 		if image.IsTool(l) {
 			continue
 		}
-		ui.Info(msg.Adding(l))
+		e.Info(msg.Adding(l))
 		ui.LogNote()
 		if err := e.runScript(ctx, b, vm, builder.LayerScript(l)); err != nil {
 			if ctx.Err() != nil {
@@ -342,7 +342,7 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 	if err := st.Set(state.KeyImage, newImg); err != nil {
 		return err
 	}
-	ui.Info(msg.VMIsNow(newImg, vm))
+	e.Info(msg.VMIsNow(newImg, vm))
 	return nil
 }
 

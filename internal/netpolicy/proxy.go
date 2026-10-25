@@ -26,11 +26,13 @@ import (
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Proxy starts and stops VMs' proxies: devvm _proxy, one per VM, in the
-// background, following the host process that runs the VM. NewProxy sets
-// every field; tests change them.
+// background, following the host process that runs the VM. It also
+// chooses a new VM's network policy (Choose) and checks it holds
+// (SelfCheck). NewProxy sets every field; tests change them.
 type Proxy struct {
 	Dirs    paths.Dirs
 	Root    string // devvm's own files: layers/, tools/
@@ -50,6 +52,9 @@ type Proxy struct {
 	Listening func(port int) bool
 	// Tick is how often a start looks for the proxy to listen, ten times.
 	Tick time.Duration
+	// What it prints (ui's), and asks: [y/N] and [Y/n].
+	Note, Warn   func(msg.M)
+	Ask, Confirm func(msg.M) bool
 }
 
 // NewProxy returns the proxies of devvm's folders, run by self (devvm's
@@ -62,6 +67,7 @@ func NewProxy(d paths.Dirs, root, self string, store *secrets.Store) *Proxy {
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
 		},
 		Listening: listening, Tick: 500 * time.Millisecond,
+		Note: ui.Note, Warn: ui.Warn, Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
 	}
 }
 

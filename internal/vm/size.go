@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Size is a VM's size as devvm stores it: CPUs a whole number, memory and
@@ -201,7 +200,7 @@ func (e *Env) ShowSize(ctx context.Context, w io.Writer, global bool) error {
 		return err
 	}
 	if p := pendingSize(t.st, in.Size); p != (backend.Size{}) {
-		ui.Note(msg.SizePending(SizeText(p), t.f.Name))
+		e.Note(msg.SizePending(SizeText(p), t.f.Name))
 	}
 	return nil
 }
@@ -230,7 +229,7 @@ func (e *Env) SetSize(ctx context.Context, s Size, global bool) error {
 		if err := state.WriteSize(e.Dirs, state.Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}); err != nil {
 			return err
 		}
-		ui.Info(msg.SizeDefaults(SizeText(def.Backend())))
+		e.Info(msg.SizeDefaults(SizeText(def.Backend())))
 		return nil
 	}
 	t, err := e.folderVM(ctx, msg.NoVMSize)
@@ -256,7 +255,7 @@ func (e *Env) SetSize(ctx context.Context, s Size, global bool) error {
 			return err
 		}
 	}
-	if err := applySize(ctx, b, st, in); err != nil {
+	if err := e.applySize(ctx, b, st, in); err != nil {
 		return err
 	}
 	// Otherwise applySize said it waits for the next start.
@@ -264,7 +263,7 @@ func (e *Env) SetSize(ctx context.Context, s Size, global bool) error {
 		return err
 	}
 	if pendingSize(st, in.Size) == (backend.Size{}) {
-		ui.Info(msg.VMSize(SizeText(in.Size), vm))
+		e.Info(msg.VMSize(SizeText(in.Size), vm))
 	}
 	return nil
 }

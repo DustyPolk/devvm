@@ -65,12 +65,12 @@ func (e *Env) Stop(ctx context.Context) error {
 		return err
 	}
 	if in.Status == backend.StatusStopped {
-		ui.Info(msg.AlreadyStopped(vm))
+		e.Info(msg.AlreadyStopped(vm))
 	} else {
 		if err := t.b.Stop(ctx, vm); err != nil {
 			return err
 		}
-		ui.Info(msg.Stopped(vm))
+		e.Info(msg.Stopped(vm))
 	}
 	e.Proxy.Stop(vm)
 	if !isClone(t.st) {
@@ -102,7 +102,7 @@ func (e *Env) Remove(ctx context.Context, o Options, names string) error {
 	if err := st.Set(KeyTools, strings.Join(files, " ")); err != nil {
 		return err
 	}
-	ui.Info(msg.VMIsNow(img, vm))
+	e.Info(msg.VMIsNow(img, vm))
 	o.Image = ""
 	return e.open(ctx, o, t)
 }
@@ -142,14 +142,14 @@ func (e *Env) Adopt(ctx context.Context) error {
 	}
 	vm, st := t.f.Name, t.st
 	if e.sameFolder(t.f, st) {
-		ui.Info(msg.VMAlreadyHere(vm))
+		e.Info(msg.VMAlreadyHere(vm))
 		return nil
 	}
 	was := st.Get(state.KeyDir)
 	if !terminal() {
 		return msg.VMOtherFolderAdopt(vm, was)
 	}
-	if !ask(msg.AdoptVM(vm, was)) {
+	if !e.Ask(msg.AdoptVM(vm, was)) {
 		return nil
 	}
 	id, err := platform.FolderID(t.f.Dir)
@@ -161,7 +161,7 @@ func (e *Env) Adopt(ctx context.Context) error {
 			return err
 		}
 	}
-	ui.Info(msg.VMAdopted(t.f.Dir, vm))
+	e.Info(msg.VMAdopted(t.f.Dir, vm))
 	return nil
 }
 
@@ -181,7 +181,7 @@ func (e *Env) Rm(ctx context.Context, force bool) error {
 		if !terminal() {
 			return msg.VMOtherFolderRm(vm, was)
 		}
-		if !ask(msg.DeleteOtherFolderVM(vm, was)) {
+		if !e.Ask(msg.DeleteOtherFolderVM(vm, was)) {
 			return nil
 		}
 		force = true
@@ -234,7 +234,7 @@ func (e *Env) ensureRunning(ctx context.Context, t *found) error {
 	if err := backend.Require(b, vm, conf.Features()...); err != nil {
 		return err
 	}
-	ui.Info(msg.Starting(vm))
+	e.Info(msg.Starting(vm))
 	_, err = e.start(ctx, b, t.st, conf)
 	return err
 }
@@ -280,7 +280,7 @@ func (e *Env) export(ctx context.Context, t *found, file string, failed error) e
 	if err := os.Rename(tmp, file); err != nil {
 		return err
 	}
-	ui.Info(msg.Exported(file, vm))
+	e.Info(msg.Exported(file, vm))
 	return nil
 }
 
@@ -296,9 +296,9 @@ func (e *Env) delete(ctx context.Context, t *found) error {
 			return err
 		}
 	}
-	ui.Info(msg.Deleted(vm))
+	e.Info(msg.Deleted(vm))
 	if isClone(t.st) {
-		removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
+		e.removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
 	} else if m := t.st.Get(gitprotect.KeyGitProtect); m == gitprotect.On || m == gitprotect.Strict {
 		e.Protector(t.f.Dir).Unlock(ctx)
 	}
@@ -356,7 +356,7 @@ func (e *Env) SetNetwork(ctx context.Context, on bool) error {
 		to = "on"
 	}
 	if st.Get(KeyNet) == to {
-		ui.Info(msg.NetAlready(to, vm))
+		e.Info(msg.NetAlready(to, vm))
 		return nil
 	}
 	in, err := b.Inspect(ctx, vm)
@@ -373,12 +373,12 @@ func (e *Env) SetNetwork(ctx context.Context, on bool) error {
 		return err
 	}
 	if running {
-		ui.Info(msg.NetSetRunning(to, vm))
+		e.Info(msg.NetSetRunning(to, vm))
 	} else {
-		ui.Info(msg.NetSetStopped(to, vm))
+		e.Info(msg.NetSetStopped(to, vm))
 	}
 	if on {
-		ui.Note(msg.NetOnOldTokens(vm))
+		e.Note(msg.NetOnOldTokens(vm))
 	}
 	return nil
 }
@@ -426,13 +426,13 @@ func (e *Env) SetGitProtect(ctx context.Context, mode string) error {
 	}
 	switch _, err := os.Lstat(filepath.Join(t.f.Dir, ".git")); {
 	case mode == gitprotect.Off:
-		ui.Info(msg.GitUnlocked(vm))
+		e.Info(msg.GitUnlocked(vm))
 	case err != nil:
-		ui.Info(msg.GitLockLater(vm))
+		e.Info(msg.GitLockLater(vm))
 	case mode == gitprotect.Strict:
-		ui.Info(msg.GitLockedStrict(vm))
+		e.Info(msg.GitLockedStrict(vm))
 	default:
-		ui.Info(msg.GitLocked(vm))
+		e.Info(msg.GitLocked(vm))
 	}
 	return nil
 }
@@ -481,7 +481,7 @@ func (e *Env) SetSSHAgent(ctx context.Context, mode string) error {
 	}
 	vm, st, b := t.f.Name, t.st, t.b
 	if sshagent.Mode(st) == mode {
-		ui.Info(msg.AgentAlready(mode, vm))
+		e.Info(msg.AgentAlready(mode, vm))
 		return nil
 	}
 	if sshagent.Forwards(mode) {
@@ -508,14 +508,14 @@ func (e *Env) SetSSHAgent(ctx context.Context, mode string) error {
 	}
 	switch mode {
 	case sshagent.On:
-		ui.Warn(msg.AgentOnRisk(vm))
+		e.Warn(msg.AgentOnRisk(vm))
 	case sshagent.Devvm:
-		ui.Warn(msg.AgentDevvmRisk(vm))
+		e.Warn(msg.AgentDevvmRisk(vm))
 	}
 	if in.Status == backend.StatusRunning {
-		ui.Info(msg.AgentSetRunning(mode, vm))
+		e.Info(msg.AgentSetRunning(mode, vm))
 	} else {
-		ui.Info(msg.AgentSetStopped(mode, vm))
+		e.Info(msg.AgentSetStopped(mode, vm))
 	}
 	return nil
 }
@@ -548,12 +548,12 @@ func (e *Env) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	}
 	vm := t.f.Name
 	if !netpolicy.On(t.st) {
-		ui.Note(msg.NetOffLog(vm))
+		e.Note(msg.NetOffLog(vm))
 	}
 	path := netpolicy.EventLog(e.Dirs, vm)
 	// Its proxy makes the log as it starts: following an empty one waits.
 	if fi, err := os.Stat(path); errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow {
-		ui.Info(msg.LogEmpty(vm))
+		e.Info(msg.LogEmpty(vm))
 		return nil
 	}
 	if o.Blocked {
@@ -576,7 +576,7 @@ func (e *Env) policyVM(ctx context.Context, noVM func(dir string) msg.M) (*found
 		return nil, err
 	}
 	if !netpolicy.On(t.st) {
-		ui.Note(msg.NetOffPolicy(t.f.Name))
+		e.Note(msg.NetOffPolicy(t.f.Name))
 	}
 	return t, nil
 }
@@ -611,11 +611,11 @@ func (e *Env) PolicyChange(ctx context.Context, rules []string, deny, remove, gl
 			case err != nil:
 				return err
 			case !ok:
-				ui.Warn(msg.RuleMissing(file, msg.Shown(r)))
+				e.Warn(msg.RuleMissing(file, msg.Shown(r)))
 			case global:
-				ui.Info(msg.RuleRemovedGlobal(r))
+				e.Info(msg.RuleRemovedGlobal(r))
 			default:
-				ui.Info(msg.RuleRemoved(r, vm))
+				e.Info(msg.RuleRemoved(r, vm))
 			}
 		}
 		return nil
@@ -633,11 +633,11 @@ func (e *Env) PolicyChange(ctx context.Context, rules []string, deny, remove, gl
 		case err != nil:
 			return err
 		case !ok:
-			ui.Info(msg.RulePresent(file, r))
+			e.Info(msg.RulePresent(file, r))
 		case global:
-			ui.Info(msg.RuleAddedGlobal(r))
+			e.Info(msg.RuleAddedGlobal(r))
 		default:
-			ui.Info(msg.RuleAdded(r, vm))
+			e.Info(msg.RuleAdded(r, vm))
 		}
 	}
 	return nil

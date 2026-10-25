@@ -12,6 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
@@ -74,7 +75,11 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 			"garbage\nssh-rsa not;base64\n*-evil AAAA\n")
 		return err
 	}
-	return &Config{Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")}, Backends: []backend.Backend{f}}, f
+	quiet := func(msg.M) {}
+	return &Config{
+		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")}, Backends: []backend.Backend{f},
+		Info: quiet, Warn: quiet, Say: quiet,
+	}, f
 }
 
 func read(t *testing.T, path string) string {

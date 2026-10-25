@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Features returns the base image features there are: devvm's own
@@ -82,27 +81,33 @@ func (b *Builder) chooseFeatures() error {
 	return err
 }
 
-// PickFeatures asks which features base gets, starting from those chosen
-// (every one until they're chosen); without a terminal, that's the
-// choice. It saves and prints the choice, and reports whether it changed
-// base's features.
+// PickFeatures asks which features base gets (Pick), starting from those
+// chosen (every one until they're chosen). It saves and prints the choice,
+// and reports whether it changed base's features.
 func (b *Builder) PickFeatures() (changed bool, err error) {
 	before, err := b.chosenFeatures()
 	if err != nil {
 		return false, err
 	}
 	names := b.features()
-	choices := make([]ui.Choice, len(names))
+	features := make([]Feature, len(names))
 	for i, n := range names {
-		choices[i] = ui.Choice{Name: n, Desc: description(b.FeatureScript(n)), On: slices.Contains(before, n)}
+		features[i] = Feature{Name: n, Desc: description(b.FeatureScript(n)), On: slices.Contains(before, n)}
 	}
 	var chosen []string
-	for _, c := range ui.Pick(msg.FeaturesHelp(), choices) {
-		if c.On {
-			chosen = append(chosen, c.Name)
+	for _, f := range b.Pick(features) {
+		if f.On {
+			chosen = append(chosen, f.Name)
 		}
 	}
 	return b.saveFeatures(before, chosen)
+}
+
+// Feature is one of base's features as Pick shows it: its name, what its
+// script says it adds, and whether it's chosen.
+type Feature struct {
+	Name, Desc string
+	On         bool
 }
 
 // SetFeatures chooses these features for base, in the order features
@@ -132,7 +137,7 @@ func (b *Builder) SetFeatures(want []string) (changed bool, err error) {
 func (b *Builder) features() []string {
 	names, shadowed := b.Features()
 	for _, file := range shadowed {
-		ui.Warn(msg.FeatureShadowed(strings.TrimSuffix(filepath.Base(file), ".sh"), file))
+		b.Warn(msg.FeatureShadowed(strings.TrimSuffix(filepath.Base(file), ".sh"), file))
 	}
 	return names
 }
@@ -144,9 +149,9 @@ func (b *Builder) saveFeatures(before, chosen []string) (bool, error) {
 		return false, err
 	}
 	if len(chosen) == 0 {
-		ui.Info(msg.BaseFeaturesNone())
+		b.Info(msg.BaseFeaturesNone())
 	} else {
-		ui.Info(msg.BaseFeatures(strings.Join(chosen, " ")))
+		b.Info(msg.BaseFeatures(strings.Join(chosen, " ")))
 	}
 	return !slices.Equal(before, chosen), nil
 }
@@ -183,7 +188,7 @@ func (b *Builder) featureScripts() ([]string, error) {
 	for _, f := range chosen {
 		p := b.FeatureScript(f)
 		if !regular(p) {
-			ui.Warn(msg.UnknownFeature(f))
+			b.Warn(msg.UnknownFeature(f))
 			continue
 		}
 		paths = append(paths, p)

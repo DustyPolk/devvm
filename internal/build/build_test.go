@@ -71,7 +71,16 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 		}
 		return ""
 	}
-	return &Builder{Dirs: d, Root: root, Backend: f, Tools: tl}, f
+	return quiet(&Builder{Dirs: d, Root: root, Backend: f, Tools: tl}), f
+}
+
+// quiet makes b print nothing, keep the features chosen, and answer yes.
+func quiet(b *Builder) *Builder {
+	none := func(msg.M) {}
+	b.Info, b.Warn, b.Say = none, none, none
+	b.Confirm = func(msg.M) bool { return true }
+	b.Pick = func(fs []Feature) []Feature { return fs }
+	return b
 }
 
 func isMsg(err error, id string) bool {
@@ -419,7 +428,7 @@ func TestBuildFrom(t *testing.T) {
 
 	// The tag moved: the next build looks it up, and base and foo are new.
 	digest = "sha256:" + strings.Repeat("b", 64)
-	again := &Builder{Dirs: b.Dirs, Root: b.Root, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup}
+	again := quiet(&Builder{Dirs: b.Dirs, Root: b.Root, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup})
 	if err := again.Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}

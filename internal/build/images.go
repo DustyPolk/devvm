@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // The states of an image, as devvm images lists them.
@@ -145,9 +144,9 @@ func (b *Builder) Delete(ctx context.Context, refs []string) error {
 			return err
 		}
 		if labels[i] == "" {
-			ui.Info(msg.DeletedUnfinishedBuild(key))
+			b.Info(msg.DeletedUnfinishedBuild(key))
 		} else {
-			ui.Info(msg.DeletedImage(labels[i], key))
+			b.Info(msg.DeletedImage(labels[i], key))
 		}
 	}
 	return nil

@@ -13,19 +13,18 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// printed swaps the warnings and notes agent folder changes print for a
-// list of their names, and the question's answer for yes (no terminal
-// when tty is false).
-func printed(t *testing.T, tty bool) *[]string {
+// printed makes e's warnings and infos a list of their names, and its
+// questions' answer yes (no terminal when tty is false).
+func printed(t *testing.T, e *Env, tty bool) *[]string {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
 	var got []string
-	w, i, term, conf := warn, info, terminal, confirm
-	t.Cleanup(func() { warn, info, terminal, confirm = w, i, term, conf })
-	warn = func(m msg.M) { got = append(got, m.Names()) }
-	info = warn
+	term := terminal
+	t.Cleanup(func() { terminal = term })
 	terminal = func() bool { return tty }
-	confirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }
+	e.Warn = func(m msg.M) { got = append(got, m.Names()) }
+	e.Info = e.Warn
+	e.Confirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }
 	return &got
 }
 
@@ -43,8 +42,9 @@ func mkdirs(t *testing.T, home string, rels ...string) {
 // subfolders but node_modules. A path with a comma is left out, with a
 // warning.
 func TestAgentMounts(t *testing.T) {
-	got := printed(t, false)
 	home := t.TempDir()
+	e := &Env{Home: home}
+	got := printed(t, e, false)
 	mkdirs(t, home, ".config/opencode/my agents", ".config/opencode/node_modules", ".config/opencode/a\nb", ".claude/skills", ".codex/prompts", ".claude/agents")
 	if err := os.WriteFile(filepath.Join(home, ".claude", "commands"), nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -52,15 +52,16 @@ func TestAgentMounts(t *testing.T) {
 	want := []string{
 		filepath.Join(home, ".claude/skills"), filepath.Join(home, ".claude/agents"), filepath.Join(home, ".config/opencode/my agents"),
 	}
-	if ms := AgentMounts(home, "node+claude+opencode"); !slices.Equal(ms, want) {
+	if ms := e.AgentMounts("node+claude+opencode"); !slices.Equal(ms, want) {
 		t.Errorf("AgentMounts = %q, want %q", ms, want)
 	}
-	if ms := AgentMounts(home, "node"); ms != nil {
+	if ms := e.AgentMounts("node"); ms != nil {
 		t.Errorf("AgentMounts without agents = %q", ms)
 	}
 	comma := filepath.Join(t.TempDir(), "a,b")
 	mkdirs(t, comma, ".codex/prompts")
-	if ms := AgentMounts(comma, "codex"); ms != nil {
+	e.Home = comma
+	if ms := e.AgentMounts("codex"); ms != nil {
 		t.Errorf("AgentMounts with a comma = %q", ms)
 	}
 	if !slices.Equal(*got, []string{"agent_dir_comma path=" + filepath.Join(comma, ".codex/prompts")}) {
@@ -123,12 +124,13 @@ func TestUpdateAgentDirs(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := printed(t, tc.tty)
+			e := &Env{Home: home}
+			got := printed(t, e, tc.tty)
 			if tc.name != "nothing changed, nothing edited" {
 				mkdirs(t, home, ".claude/agents")
 			}
 			f, st := agentVM(t, tc.img, tc.status, tc.have...)
-			if err := UpdateAgentDirs(t.Context(), f, st, home); err != nil {
+			if err := e.UpdateAgentDirs(t.Context(), f, st); err != nil {
 				t.Fatal(names(err))
 			}
 			if ms := f.Methods(); !slices.Equal(ms, tc.methods) {

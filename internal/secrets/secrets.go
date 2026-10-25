@@ -95,28 +95,33 @@ type Store struct {
 	// Login runs the proxy's login helper (devvm _proxy -login …) with
 	// args, its output to out.
 	Login func(args []string, out io.Writer) error
+	// Warn prints a warning (ui.Warn).
+	Warn func(msg.M)
 }
 
 // NewStore returns the store for devvm's folders and the user's home.
 func NewStore(d paths.Dirs, home string) *Store {
-	return &Store{
+	s := &Store{
 		Dirs: d, Home: home, Keychain: platform.HasKeychain, Getenv: os.Getenv,
 		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
-		Login: func(args []string, out io.Writer) error {
-			return proxy.Main(args, proxy.IO{Stdin: strings.NewReader(""), Stdout: out, Stderr: io.Discard, Kept: LoginKept})
-		},
+		Warn: ui.Warn,
 	}
+	s.Login = func(args []string, out io.Writer) error {
+		kept := func(agent string, names []string) { LoginKept(s.Warn, agent, names) }
+		return proxy.Main(args, proxy.IO{Stdin: strings.NewReader(""), Stdout: out, Stderr: io.Discard, Kept: kept})
+	}
+	return s
 }
 
-// LoginKept warns about what of an agent's login file goes into the VM's
-// copy as it is.
-func LoginKept(agent string, names []string) {
+// LoginKept warns, through warn, about what of an agent's login file goes
+// into the VM's copy as it is.
+func LoginKept(warn func(msg.M), agent string, names []string) {
 	list := strings.Join(names, ", ")
 	if agent == "codex" {
-		ui.Warn(msg.CodexLoginKept(list))
+		warn(msg.CodexLoginKept(list))
 		return
 	}
-	ui.Warn(msg.OpencodeLoginKept(list))
+	warn(msg.OpencodeLoginKept(list))
 }
 
 // VMLogin returns the VM's copy of an agent's login file: placeholders

@@ -6,7 +6,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // SSH gets the folder's VM ready for ssh and editors (reach), then says
@@ -16,7 +15,7 @@ func (e *Env) SSH(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ui.Say(msg.SSHHostInfo(t.f.Dir, host))
+	e.Say(msg.SSHHostInfo(t.f.Dir, host))
 	return nil
 }
 

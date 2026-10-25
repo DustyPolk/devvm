@@ -133,28 +133,28 @@ func TestKeyAndSalt(t *testing.T) {
 // the answer.
 func TestChoose(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	swapQuestions(t)
+	swapTerminal(t)
 	tty, answer, asked := false, false, 0
 	terminal = func() bool { return tty }
-	ask = func(msg.M) bool { asked++; return answer }
-	if !Choose(true, false, "vm") || Choose(false, true, "vm") || Choose(false, false, "vm") || asked != 0 {
+	p := &Proxy{Note: func(msg.M) {}, Ask: func(msg.M) bool { asked++; return answer }}
+	if !p.Choose(true, false, "vm") || p.Choose(false, true, "vm") || p.Choose(false, false, "vm") || asked != 0 {
 		t.Error("without a terminal: not the flags, or off")
 	}
 	tty = true
-	if Choose(false, false, "vm") || asked != 1 {
+	if p.Choose(false, false, "vm") || asked != 1 {
 		t.Error("no answered yes")
 	}
 	answer = true
-	if !Choose(false, false, "vm") || !Choose(true, false, "vm") || asked != 2 {
+	if !p.Choose(false, false, "vm") || !p.Choose(true, false, "vm") || asked != 2 {
 		t.Error("yes answered no, or a flag asked")
 	}
 }
 
-// swapQuestions puts the terminal and the questions back after the test.
-func swapQuestions(t *testing.T) {
+// swapTerminal puts the terminal check back after the test.
+func swapTerminal(t *testing.T) {
 	t.Helper()
-	tm, a, c := terminal, ask, confirm
-	t.Cleanup(func() { terminal, ask, confirm = tm, a, c })
+	tm := terminal
+	t.Cleanup(func() { terminal = tm })
 }
 
 // usedPorts lists the ports VMs have; freePort avoids them.
@@ -570,23 +570,30 @@ func TestUnproxied(t *testing.T) {
 	why := msg.ProxyStartFailed("/log", "V")
 	f := backendtest.New("fake", nil)
 	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
-	if err := Unproxied(t.Context(), f, "V", why); names(err) != "proxy_start_failed log=/log vm=V" ||
+	var warned []string
+	p := &Proxy{Warn: func(m msg.M) { warned = append(warned, m.Names()) }}
+	if err := p.Unproxied(t.Context(), f, "V", why); names(err) != "proxy_start_failed log=/log vm=V" ||
 		f.Instances["V"].Status != backend.StatusStopped {
 		t.Errorf("Unproxied = %v, VM %s", names(err), f.Instances["V"].Status)
+	}
+	if !slices.Equal(warned, []string{"net_proxy_down_stopped vm=V"}) {
+		t.Errorf("warned %q", warned)
 	}
 	// Interrupted (its context cancelled), it still stops the VM.
 	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	cs := ctxStopper{Fake: f}
-	if err := Unproxied(ctx, &cs, "V", why); names(err) != "proxy_start_failed log=/log vm=V" || cs.err != nil ||
+	if err := p.Unproxied(ctx, &cs, "V", why); names(err) != "proxy_start_failed log=/log vm=V" || cs.err != nil ||
 		f.Instances["V"].Status != backend.StatusStopped {
 		t.Errorf("interrupted: %v, stop's context %v, VM %s", names(err), cs.err, f.Instances["V"].Status)
 	}
 	stopErr := errors.New("stop failed")
 	f.Errs = map[string]error{"Stop": stopErr}
-	if err := Unproxied(t.Context(), f, "V", why); !errors.Is(err, stopErr) {
-		t.Errorf("a failed stop: %v", err)
+	warned = nil
+	if err := p.Unproxied(t.Context(), f, "V", why); !errors.Is(err, stopErr) ||
+		!slices.Equal(warned, []string{"proxy_start_failed log=/log vm=V"}) {
+		t.Errorf("a failed stop: %v, warned %q", err, warned)
 	}
 }
 
@@ -605,7 +612,7 @@ func (c *ctxStopper) Stop(ctx context.Context, vm string) error {
 // devvm without a terminal (or still after a restart), stops the VM.
 func TestSelfCheck(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	swapQuestions(t)
+	swapTerminal(t)
 	for _, tc := range []struct {
 		name                         string
 		unconfined, direct, tty, yes bool
@@ -637,9 +644,9 @@ func TestSelfCheck(t *testing.T) {
 				return errors.New("curl: (7) failed")
 			}
 			terminal = func() bool { return tc.tty }
-			confirm = func(msg.M) bool { return tc.yes }
+			p := &Proxy{Warn: func(msg.M) {}, Confirm: func(msg.M) bool { return tc.yes }}
 			restarted := false
-			err = SelfCheck(t.Context(), f, st, func(context.Context) error {
+			err = p.SelfCheck(t.Context(), f, st, func(context.Context) error {
 				restarted = true
 				f.Unconfined = !tc.fixed
 				return f.Start(t.Context(), "V", backend.Confinement{Net: backend.NetProxy})
@@ -662,7 +669,7 @@ func TestSelfCheck(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
 	st, _ := state.CreateVM(d, "V", state.NewVM{Image: "base"})
 	f := backendtest.New("fake", nil)
-	if err := SelfCheck(t.Context(), f, st, nil); err != nil || len(f.Calls()) > 0 {
+	if err := (&Proxy{}).SelfCheck(t.Context(), f, st, nil); err != nil || len(f.Calls()) > 0 {
 		t.Errorf("no policy: %v, %q", err, f.Methods())
 	}
 }

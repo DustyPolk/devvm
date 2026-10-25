@@ -86,9 +86,15 @@ type Env struct {
 	SSHAdd func(ctx context.Context, args ...string) int
 	// Agent is devvm's own SSH agent.
 	Agent *sshagent.Agent
+	// What it prints and asks (ui's): Ask is [y/N], Confirm [Y/n];
+	// PickFeatures asks which features base gets (build.Builder.Pick).
+	Info, Warn, Note, Say func(msg.M)
+	Ask, Confirm          func(msg.M) bool
+	PickFeatures          func([]build.Feature) []build.Feature
 }
 
-// NewEnv returns the environment up runs in here, devvm being self.
+// NewEnv returns the environment up runs in here, devvm being self. Its
+// caller sets PickFeatures.
 func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -104,6 +110,8 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 		Dir:   wd, Home: home, OS: runtime.GOOS,
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig, SSHAdd: sshAdd,
+		Info: ui.Info, Warn: ui.Warn, Note: ui.Note, Say: ui.Say,
+		Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
 	}
 	e.Agent = sshagent.New(d, e.mounts)
 	return e, nil
@@ -112,7 +120,10 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 // builder returns the builder of images on b whose base starts from
 // fromRef ("" for the backend's own).
 func (e *Env) builder(b backend.Backend, fromRef string) *build.Builder {
-	return &build.Builder{Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools, From: fromRef}
+	return &build.Builder{
+		Dirs: e.Dirs, Root: e.Root, Backend: b, Tools: e.Tools, From: fromRef,
+		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
+	}
 }
 
 // execShell runs cmd in place of devvm, in its folder.
@@ -275,11 +286,11 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		return err
 	}
 	// Asked before the build, which can take minutes.
-	net := netpolicy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
+	net := e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
 	// Every VM has the share, read-only: a tool added later is mounted
 	// from it. Its agents' folders on the host are mounted read-only.
 	spec := backend.VMSpec{
-		Name: vm, Project: f.Dir, AgentDirs: AgentMounts(e.Home, img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
+		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
 		AgentForwarding: o.SSHAgent, Size: size.Backend(), Ports: PortsBackend(ports),
 	}
 	agent := sshagent.Off
@@ -333,7 +344,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		return err
 	}
 
-	ui.Info(msg.CreatingFrom(img, vm))
+	e.Info(msg.CreatingFrom(img, vm))
 	ui.LogNote()
 	// Until its first shell nothing of anyone's is in it: an interrupt
 	// deletes it and its state, and takes off .git's locks, or removes
@@ -343,15 +354,15 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		if !ui.Interrupted() {
 			return
 		}
-		ui.Info(msg.InterruptedVM(vm))
+		e.Info(msg.InterruptedVM(vm))
 		if err := b.Delete(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
-			ui.Warn(msg.DeleteFailed(vm))
+			e.Warn(msg.DeleteFailed(vm))
 		}
 		if locking.Load() {
 			e.Protector(f.Dir).Unlock(ctx)
 		}
 		if st, err := state.ReadVM(e.Dirs, vm); err == nil && isClone(st) {
-			removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
+			e.removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
 		}
 		_ = e.sshConfig().ForgetHostKeys(vm)
 		_ = e.Proxy.Forget(vm)
@@ -408,7 +419,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 			return err
 		}
 		if !o.SSHAgent && project.SSHRemote(ctx, f.Dir) {
-			ui.Warn(msg.SSHRemoteHint(vm))
+			e.Warn(msg.SSHRemoteHint(vm))
 		}
 		// Files an earlier VM of this folder made are named too.
 		e.checkSetID(f.Dir)
@@ -416,7 +427,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if spec.AgentForwarding {
 		e.checkAgent(ctx)
 	}
-	ui.Info(msg.Starting(vm))
+	e.Info(msg.Starting(vm))
 	// The confinement the VM last started with, its proxy's address in it.
 	var started backend.Confinement
 	start := func(ctx context.Context) error {
@@ -428,7 +439,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		return err
 	}
 	// Before the setup and the shell.
-	if err := netpolicy.SelfCheck(ctx, b, st, start); err != nil {
+	if err := e.Proxy.SelfCheck(ctx, b, st, start); err != nil {
 		return err
 	}
 	cmd, err := e.setUp(ctx, b, st, f, started)
@@ -553,7 +564,11 @@ func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
 }
 
 // sshConfig is the ssh config for every backend's VMs.
-func (e *Env) sshConfig() *sshconfig.Config { return sshconfig.New(e.Dirs, e.Registry) }
+func (e *Env) sshConfig() *sshconfig.Config {
+	c := sshconfig.New(e.Dirs, e.Registry)
+	c.Info, c.Warn, c.Say, c.Confirm = e.Info, e.Warn, e.Say, e.Confirm
+	return c
+}
 
 // checkUnsafe refuses a folder that is or holds the home folder or
 // devvm's state, or is inside devvm's own folders, unless the user means
@@ -564,13 +579,13 @@ func (e *Env) checkUnsafe(dir string, unsafe bool) error {
 		if !unsafe {
 			return msg.UnsafeFolder(dir, holds)
 		}
-		ui.Warn(msg.UnsafeFolderUsed(dir, holds))
+		e.Warn(msg.UnsafeFolderUsed(dir, holds))
 	}
 	if inside := u.Inside(dir); inside != "" {
 		if !unsafe {
 			return msg.UnsafeFolderInside(dir, inside)
 		}
-		ui.Warn(msg.UnsafeFolderUsed(dir, inside))
+		e.Warn(msg.UnsafeFolderUsed(dir, inside))
 	}
 	return nil
 }
@@ -584,7 +599,7 @@ func (e *Env) resolveImage(want, dir string, b *build.Builder) (string, error) {
 		found := project.Detect(dir)
 		switch {
 		case len(found) > 0:
-			ui.Info(msg.Detected(strings.Join(found, "+")))
+			e.Info(msg.Detected(strings.Join(found, "+")))
 			if want != "" {
 				found = append(found, want)
 			}

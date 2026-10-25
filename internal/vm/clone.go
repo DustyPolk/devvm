@@ -110,7 +110,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 		}
 		return backend.Logged(msg.CloneSeedFailed(vm))
 	}
-	ui.Info(msg.CopyingBranches())
+	e.Info(msg.CopyingBranches())
 	if err := ui.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, dir, "push", "-q", cloneURL(vm, dir), "--all")); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -132,12 +132,12 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 	if ok, err := e.sshConfig().EnsureInclude(e.Home); err != nil {
 		return err
 	} else if !ok {
-		warn(msg.FetchUntil(e.Dirs.SSHConfig(), remote))
+		e.Warn(msg.FetchUntil(e.Dirs.SSHConfig(), remote))
 	}
 	if dirty, _ := hostGit(ctx, dir, "status", "--porcelain", "--untracked-files=no"); dirty != "" {
-		warn(msg.UncommittedNotCopied(branch, dir, remote))
+		e.Warn(msg.UncommittedNotCopied(branch, dir, remote))
 	}
-	info(msg.CloneReady(branch, remote))
+	e.Info(msg.CloneReady(branch, remote))
 	return nil
 }
 
@@ -179,7 +179,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 		return false, err
 	}
 	if unfetched := unfetchedRefs(ctx, dir, refs); len(unfetched) > 0 {
-		ui.Say(msg.UnfetchedCommits(quoted(unfetched)))
+		e.Say(msg.UnfetchedCommits(quoted(unfetched)))
 		if !terminal() {
 			return false, msg.NoTerminalFetch(remote)
 		}
@@ -194,7 +194,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	if len(bytes.TrimSpace(dirty)) == 0 {
 		return false, nil
 	}
-	ui.Say(msg.CloneDirty())
+	e.Say(msg.CloneDirty())
 	var shown strings.Builder
 	s := bufio.NewScanner(bytes.NewReader(dirty))
 	for n := 0; n < cloneShown && s.Scan(); n++ {
@@ -204,8 +204,8 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	if !terminal() {
 		return false, msg.NoTerminalDelete()
 	}
-	if !ask(msg.DeleteAnyway()) {
-		info(msg.Kept(vm))
+	if !e.Ask(msg.DeleteAnyway()) {
+		e.Info(msg.Kept(vm))
 		return true, nil
 	}
 	return false, nil
@@ -260,7 +260,7 @@ func (e *Env) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetc
 		}
 	}
 	if len(bad) > 0 {
-		warn(msg.BranchNamesInvalid(quoted(bad)))
+		e.Warn(msg.BranchNamesInvalid(quoted(bad)))
 	}
 	if len(good) == 0 {
 		return nil
@@ -269,7 +269,7 @@ func (e *Env) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetc
 	if !ok {
 		return msg.SavedNamesTaken(remote, vm)
 	}
-	if !confirm(msg.FetchBeforeDelete(prefix)) {
+	if !e.Confirm(msg.FetchBeforeDelete(prefix)) {
 		return nil
 	}
 	if err := e.sshConfig().Write(ctx); err != nil {
@@ -287,7 +287,7 @@ func (e *Env) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetc
 		}
 		return backend.Logged(msg.FetchFailed(vm))
 	}
-	info(msg.SavedBranches(quoted(saved)))
+	e.Info(msg.SavedBranches(quoted(saved)))
 	return nil
 }
 
@@ -343,26 +343,26 @@ func quoted(names []string) string {
 // is the VM's, with its remote-tracking branches and upstream settings.
 // Fetched branches holding commits no other ref has are kept as local
 // branches first (saveFetched); if that fails, the remote stays.
-func removeRemote(ctx context.Context, dir, vm, remote string) {
+func (e *Env) removeRemote(ctx context.Context, dir, vm, remote string) {
 	if remote == "" {
 		return
 	}
 	if url, ok := remoteURL(ctx, dir, remote); !ok || url != cloneURL(vm, dir) {
 		return
 	}
-	if err := saveFetched(ctx, dir, remote); err != nil {
-		warn(msg.RemoteKept(remote))
+	if err := e.saveFetched(ctx, dir, remote); err != nil {
+		e.Warn(msg.RemoteKept(remote))
 		return
 	}
 	if _, err := hostGit(ctx, dir, "remote", "remove", remote); err == nil {
-		info(msg.RemovedRemote(remote))
+		e.Info(msg.RemovedRemote(remote))
 	}
 }
 
 // saveFetched makes a new local branch, under savedPrefix, of each of
 // remote's remote-tracking branches with commits no other ref has, all at
 // once and never over a branch that exists.
-func saveFetched(ctx context.Context, dir, remote string) error {
+func (e *Env) saveFetched(ctx context.Context, dir, remote string) error {
 	tracking := "refs/remotes/" + remote + "/"
 	out, err := hostGit(ctx, dir, "for-each-ref", "--format=%(objectname) %(refname)", tracking)
 	if err != nil {
@@ -397,7 +397,7 @@ func saveFetched(ctx context.Context, dir, remote string) error {
 	if err := cmd.Run(); err != nil {
 		return err
 	}
-	info(msg.SavedBranches(quoted(saved)))
+	e.Info(msg.SavedBranches(quoted(saved)))
 	return nil
 }
 

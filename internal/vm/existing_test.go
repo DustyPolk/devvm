@@ -38,15 +38,15 @@ func vmName(t *testing.T, e *Env) string {
 	return es[0].Name()
 }
 
-// answers swaps the package's questions: a terminal, and these answers.
-func answers(t *testing.T, yes bool) *[]string {
+// answers gives e's questions a terminal and these answers.
+func answers(t *testing.T, e *Env, yes bool) *[]string {
 	t.Helper()
 	var asked []string
-	term, conf, a := terminal, confirm, ask
-	t.Cleanup(func() { terminal, confirm, ask = term, conf, a })
+	term := terminal
+	t.Cleanup(func() { terminal = term })
 	terminal = func() bool { return true }
-	confirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
-	ask = confirm
+	e.Confirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
+	e.Ask = e.Confirm
 	return &asked
 }
 
@@ -194,7 +194,7 @@ func TestAddLayers(t *testing.T) {
 	if err := os.MkdirAll(skills, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	asked := answers(t, false)
+	asked := answers(t, e, false)
 	before := len(f.Calls())
 	if err := e.Up(t.Context(), Options{Image: "foo+claude"}); err != nil {
 		t.Fatal(names(err))
@@ -205,7 +205,7 @@ func TestAddLayers(t *testing.T) {
 		t.Errorf("declined: asked %q, image %s, calls %q", *asked, st.Get(state.KeyImage), f.Methods()[before:])
 	}
 
-	answers(t, true)
+	answers(t, e, true)
 	var scripts []string
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		if slices.Equal(argv, []string{"bash", "-s"}) {
@@ -307,14 +307,14 @@ func TestRm(t *testing.T) {
 	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
-	asked := answers(t, false)
+	asked := answers(t, e, false)
 	if err := e.Rm(t.Context(), true); err != nil {
 		t.Fatal(names(err))
 	}
 	if _, ok := f.Instances[vm]; !ok || !slices.Equal(*asked, []string{"delete_other_folder_vm vm=" + vm + " was=" + e.Dir}) {
 		t.Fatalf("declined: asked %q", *asked)
 	}
-	answers(t, true)
+	answers(t, e, true)
 	script = ""
 	if err := e.Rm(t.Context(), false); err != nil {
 		t.Fatal(names(err))
@@ -391,11 +391,11 @@ func TestAdopt(t *testing.T) {
 	if err := e.Up(t.Context(), Options{}); names(err) != "vm_other_folder vm="+st.Name()+" was="+e.Dir {
 		t.Errorf("Up = %v", names(err))
 	}
-	asked := answers(t, false)
+	asked := answers(t, e, false)
 	if err := e.Adopt(t.Context()); err != nil || len(*asked) != 1 {
 		t.Fatalf("declined: %v, asked %q", names(err), *asked)
 	}
-	answers(t, true)
+	answers(t, e, true)
 	if err := e.Adopt(t.Context()); err != nil {
 		t.Fatal(names(err))
 	}

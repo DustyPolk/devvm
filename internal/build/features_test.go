@@ -110,8 +110,8 @@ func TestChooseFeatures(t *testing.T) {
 	}
 }
 
-// PickFeatures starts from the current choice (without a terminal, it's
-// kept), dropping names without a script; every feature until there's one.
+// PickFeatures starts from the current choice (kept by the test's Pick),
+// dropping names without a script; every feature until there's one.
 func TestPickFeatures(t *testing.T) {
 	b := featureBuilder(t)
 	for _, tc := range []struct {

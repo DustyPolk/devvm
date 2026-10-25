@@ -35,6 +35,11 @@ type Builder struct {
 	// Lookup looks up From's digest when building; nil for the internet's
 	// (from.NewLookup).
 	Lookup *from.Lookup
+	// What it prints and asks, its caller's (ui's): Confirm is [Y/n];
+	// Pick asks which features base gets, each as chosen so far.
+	Info, Warn, Say func(msg.M)
+	Confirm         func(msg.M) bool
+	Pick            func([]Feature) []Feature
 
 	looked bool // From's digest was looked up in this run
 }
@@ -262,12 +267,12 @@ func (b *Builder) build(ctx context.Context, name string) error {
 
 	switch {
 	case b.From != "":
-		ui.Info(msg.BuildingImageFrom(b.From, name, key))
+		b.Info(msg.BuildingImageFrom(b.From, name, key))
 	case name == image.Base:
-		ui.Info(msg.BuildingImage(name, key))
-		ui.Say(msg.BaseBuildTime())
+		b.Info(msg.BuildingImage(name, key))
+		b.Say(msg.BaseBuildTime())
 	default:
-		ui.Info(msg.BuildingImage(name, key))
+		b.Info(msg.BuildingImage(name, key))
 	}
 	ui.LogNote()
 	out, err := b.Backend.BuildImage(ctx, spec)
@@ -289,7 +294,7 @@ func (b *Builder) build(ctx context.Context, name string) error {
 	if err := state.WriteImage(b.Dirs, key, rec); err != nil {
 		return err
 	}
-	ui.Info(msg.ImageReady(name))
+	b.Info(msg.ImageReady(name))
 	return nil
 }
 
@@ -308,7 +313,7 @@ func (b *Builder) built(ctx context.Context, name, key string) (bool, error) {
 	if _, corrupt := errors.AsType[*state.CorruptError](err); !corrupt && !errors.Is(err, fs.ErrNotExist) {
 		return false, err
 	}
-	ui.Info(msg.ImageLeftover(name, key))
+	b.Info(msg.ImageLeftover(name, key))
 	return false, b.deleteImage(ctx, key)
 }
 
@@ -395,9 +400,9 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 		}
 	}
 	if len(above) > 0 {
-		ui.Say(msg.RebuildReplaces(strings.Join(above, " "), name))
-		if ui.StdinIsTerminal() && !ui.Confirm(msg.Continue()) {
-			ui.Info(msg.NothingChanged())
+		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name))
+		if ui.StdinIsTerminal() && !b.Confirm(msg.Continue()) {
+			b.Info(msg.NothingChanged())
 			return nil
 		}
 	}
@@ -417,15 +422,15 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 		if err := b.deleteImage(ctx, img.Key); err != nil {
 			// One a VM uses stays, saying so.
 			if m, ok := errors.AsType[msg.M](err); ok {
-				ui.Warn(m)
+				b.Warn(m)
 				continue
 			}
 			return err
 		}
 		if img.Name == "" {
-			ui.Info(msg.DeletedUnfinishedBuild(img.Key))
+			b.Info(msg.DeletedUnfinishedBuild(img.Key))
 		} else {
-			ui.Info(msg.DeletedOldImage(img.Name, img.Key))
+			b.Info(msg.DeletedOldImage(img.Name, img.Key))
 		}
 	}
 	return nil
@@ -443,7 +448,7 @@ func (b *Builder) WarnIfOutdated(chain string) error {
 		return err
 	}
 	if len(changed) > 0 {
-		ui.Warn(msg.VMOutdated(strings.Join(changed, ", ")))
+		b.Warn(msg.VMOutdated(strings.Join(changed, ", ")))
 	}
 	return nil
 }

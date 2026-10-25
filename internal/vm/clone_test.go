@@ -121,7 +121,7 @@ func TestCloneRm(t *testing.T) {
 	gitIn(t, clone, "commit", "-q", "--allow-empty", "-m", "from-vm")
 
 	// Not fetched, then dirty and kept.
-	asked := answers(t, false)
+	asked := answers(t, e, false)
 	if err := os.WriteFile(filepath.Join(clone, "new"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestCloneRm(t *testing.T) {
 	if err := os.Remove(filepath.Join(clone, "new")); err != nil {
 		t.Fatal(err)
 	}
-	asked = answers(t, true)
+	asked = answers(t, e, true)
 	if err := e.Rm(t.Context(), false); err != nil {
 		t.Fatal(names(err))
 	}
@@ -174,7 +174,7 @@ func TestCloneRm(t *testing.T) {
 // Branch names git refuses are skipped, and never asked about.
 func TestFetchUnfetchedInvalid(t *testing.T) {
 	e, _, _ := cloneEnv(t)
-	got := printed(t, true)
+	got := printed(t, e, true)
 	if err := e.fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
 		t.Fatal(names(err))
 	}
@@ -289,13 +289,14 @@ func TestFreeRemote(t *testing.T) {
 // has are kept as new local branches first, never over existing ones.
 func TestRemoveRemote(t *testing.T) {
 	gitEnv(t)
-	got := printed(t, false)
+	e := &Env{}
+	got := printed(t, e, false)
 	dir := t.TempDir()
 	vm := "devvm-web-0123456789abcd"
 	gitIn(t, dir, "init", "-q", "-b", "main")
 	gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", "one")
 	gitIn(t, dir, "remote", "add", "devvm", "https://example.com/mine")
-	removeRemote(t.Context(), dir, vm, "devvm")
+	e.removeRemote(t.Context(), dir, vm, "devvm")
 	gitIn(t, dir, "remote", "get-url", "devvm")
 	gitIn(t, dir, "remote", "set-url", "devvm", cloneURL(vm, dir))
 
@@ -312,7 +313,7 @@ func TestRemoveRemote(t *testing.T) {
 	gitIn(t, dir, "config", "branch.main.remote", "devvm")
 	gitIn(t, dir, "config", "branch.main.merge", "refs/heads/main")
 	gitIn(t, dir, "branch", "saved/devvm/old")
-	removeRemote(t.Context(), dir, vm, "devvm")
+	e.removeRemote(t.Context(), dir, vm, "devvm")
 	if out := gitIn(t, dir, "remote"); out != "" {
 		t.Errorf("remotes %q", out)
 	}
@@ -334,11 +335,11 @@ func TestRemoveRemote(t *testing.T) {
 	gitIn(t, dir, "update-ref", "refs/remotes/devvm/z", gitIn(t, dir, "commit-tree", "-p", one, "-m", "z", tree))
 	gitIn(t, dir, "branch", "-D", "saved/devvm/old", "saved/devvm-2/feature/x", "saved/devvm-2/only/y")
 	gitIn(t, dir, "branch", "saved")
-	removeRemote(t.Context(), dir, vm, "devvm")
+	e.removeRemote(t.Context(), dir, vm, "devvm")
 	gitIn(t, dir, "remote", "get-url", "devvm")
 	gitIn(t, dir, "rev-parse", "--verify", "refs/remotes/devvm/z")
 	if !slices.Equal(*got, []string{"remote_kept remote=devvm"}) {
 		t.Errorf("printed %q", *got)
 	}
-	removeRemote(t.Context(), dir, vm, "")
+	e.removeRemote(t.Context(), dir, vm, "")
 }

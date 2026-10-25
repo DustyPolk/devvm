@@ -104,5 +104,10 @@ func newEnv() (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	return vm.NewEnv(dirs, filepath.Dir(self), self, reg)
+	e, err := vm.NewEnv(dirs, filepath.Dir(self), self, reg)
+	if err != nil {
+		return nil, err
+	}
+	e.PickFeatures = pickFeatures
+	return e, nil
 }

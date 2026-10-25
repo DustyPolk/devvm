@@ -19,6 +19,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -236,6 +237,9 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		},
 		// The user's own agent: one that holds keys.
 		SSHAdd: func(context.Context, ...string) int { return 0 },
+		Info:   quiet, Warn: quiet, Note: quiet, Say: quiet,
+		Ask: unasked(t), Confirm: unasked(t),
+		PickFeatures: func(fs []build.Feature) []build.Feature { return fs },
 	}
 	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
 	// is put back.
@@ -243,6 +247,18 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	e.Agent = sshagent.New(d, e.mounts)
 	e.Agent.Run = (&agentCalls{}).run
 	return e, f, &execs
+}
+
+// quiet prints nothing.
+func quiet(msg.M) {}
+
+// unasked fails the test on a question it doesn't answer itself
+// (answers).
+func unasked(t *testing.T) func(msg.M) bool {
+	return func(m msg.M) bool {
+		t.Errorf("asked %s", m.Names())
+		return false
+	}
 }
 
 // agentCalls stands in for devvm's own agent, which runs and holds a key.

@@ -113,7 +113,7 @@ func (e *Env) stage(ctx context.Context, st *state.VM, slug string, files []stri
 		// With network policy the copy holds placeholders (below).
 		if s.has("claude.json") && !net {
 			if servers := store.MCPSecrets(); len(servers) > 0 {
-				ui.Warn(msg.ClaudeMcpSecretsCopied(strings.Join(servers, " "), vm))
+				e.Warn(msg.ClaudeMcpSecretsCopied(strings.Join(servers, " "), vm))
 			}
 		}
 	}
@@ -136,16 +136,16 @@ func (e *Env) stage(ctx context.Context, st *state.VM, slug string, files []stri
 		if errors.Is(err, secrets.ErrNone) {
 			switch name {
 			case "claude":
-				ui.Warn(msg.NoClaudeToken(vm))
+				e.Warn(msg.NoClaudeToken(vm))
 			case "github":
-				ui.Warn(msg.NoGithubToken(vm))
+				e.Warn(msg.NoGithubToken(vm))
 			}
 			continue
 		} else if err != nil {
 			return nil, err
 		}
 		if name == "claude" && !strings.HasPrefix(v, "sk-ant-oat01-") {
-			ui.Warn(msg.ClaudeTokenInvalid())
+			e.Warn(msg.ClaudeTokenInvalid())
 			continue
 		}
 		if net {
@@ -210,13 +210,13 @@ func (e *Env) stageNet(s *stage, store *secrets.Store, vm, img, salt string) err
 		out, keys, err := secrets.Redact(format, f.data)
 		if err != nil {
 			s.drop(f.name)
-			ui.Warn(msg.ConfigNotCopied(shown, vm))
+			e.Warn(msg.ConfigNotCopied(shown, vm))
 			continue
 		}
 		f.data = out
 		s.add(f)
 		if len(keys) > 0 {
-			ui.Note(msg.ConfigRedacted(shown, strings.Join(keys, " "), vm))
+			e.Note(msg.ConfigRedacted(shown, strings.Join(keys, " "), vm))
 		}
 	}
 	return nil

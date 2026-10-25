@@ -95,18 +95,19 @@ func agentsOf(img string) []string {
 }
 
 // AgentMounts returns the host folders a VM with that image mounts: its
-// agents' folders that exist under home. One with a comma in its path is
-// left out, with a warning: Lima splits mount options on commas.
-func AgentMounts(home, img string) []string {
+// agents' folders that exist under the home folder. One with a comma in
+// its path is left out, with a warning: Lima splits mount options on
+// commas.
+func (e *Env) AgentMounts(img string) []string {
 	var dirs []string
 	for _, a := range agentsOf(img) {
-		for _, rel := range agentDirs(home, a) {
-			p := filepath.Join(home, rel)
+		for _, rel := range agentDirs(e.Home, a) {
+			p := filepath.Join(e.Home, rel)
 			if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 				continue
 			}
 			if strings.Contains(p, ",") {
-				warn(msg.AgentDirComma(msg.Shown(p)))
+				e.Warn(msg.AgentDirComma(msg.Shown(p)))
 				continue
 			}
 			dirs = append(dirs, p)
@@ -120,27 +121,27 @@ func AgentMounts(home, img string) []string {
 // changes mounts only while a VM is stopped: a stopped VM is changed at
 // once, a running one after the user agrees to a restart (devvm stops it,
 // and the caller starts it again), else at its next start.
-func UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM, home string) error {
+func (e *Env) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM) error {
 	vm := st.Name()
 	in, err := b.Inspect(ctx, vm)
 	if err != nil {
 		return err
 	}
-	want := AgentMounts(home, st.Get(state.KeyImage))
+	want := e.AgentMounts(st.Get(state.KeyImage))
 	added := missing(want, in.AgentDirs)
 	removed := missing(in.AgentDirs, want)
 	if len(added) == 0 && len(removed) == 0 {
 		return nil
 	}
 	if len(added) > 0 {
-		warn(msg.AgentDirsAdded(shownList(added), vm))
+		e.Warn(msg.AgentDirsAdded(shownList(added), vm))
 	}
 	if len(removed) > 0 {
-		warn(msg.AgentDirsRemoved(shownList(removed), vm))
+		e.Warn(msg.AgentDirsRemoved(shownList(removed), vm))
 	}
 	if in.Status == backend.StatusRunning {
-		if !terminal() || !confirm(msg.UpdateMounts(vm)) {
-			warn(msg.MountsNextStart(vm))
+		if !terminal() || !e.Confirm(msg.UpdateMounts(vm)) {
+			e.Warn(msg.MountsNextStart(vm))
 			return nil
 		}
 		if err := b.Stop(ctx, vm); err != nil {
@@ -150,7 +151,7 @@ func UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM, home 
 	if err := b.SetAgentDirs(ctx, vm, want); err != nil {
 		return err
 	}
-	info(msg.MountsUpdated(vm))
+	e.Info(msg.MountsUpdated(vm))
 	return nil
 }
 
@@ -162,15 +163,8 @@ func shownList(paths []string) string {
 	return strings.Join(shown, ", ")
 }
 
-// What the package prints and asks, and whether it can ask; tests swap
-// them.
-var (
-	warn     = ui.Warn
-	info     = ui.Info
-	terminal = ui.StdinIsTerminal
-	confirm  = func(m msg.M) bool { return ui.Confirm(m) }
-	ask      = ui.Ask
-)
+// terminal reports whether devvm can ask; tests swap it.
+var terminal = ui.StdinIsTerminal
 
 // missing returns what of a isn't in b.
 func missing(a, b []string) []string {

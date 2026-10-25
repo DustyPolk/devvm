@@ -7,7 +7,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Results of the self-check, in the VM's state.
@@ -34,7 +33,7 @@ var directArgv = []string{"curl", "--noproxy", "*", "-sS", "-m", "3", "-o", "/de
 // restart, devvm stops. Either way the VM is stopped first, so it isn't
 // left reaching the internet. A restart declined is warned about, and the
 // VM is used as it is.
-func SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, restart func(context.Context) error) error {
+func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, restart func(context.Context) error) error {
 	if !On(st) {
 		return nil
 	}
@@ -54,13 +53,13 @@ func SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, restart fun
 		return err
 	}
 	if confined {
-		return stop(ctx, b, vm, msg.NetDirectRoute(vm))
+		return p.stop(ctx, b, vm, msg.NetDirectRoute(vm))
 	}
 	if !terminal() {
-		return stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
+		return p.stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
 	}
-	if !confirm(msg.NetUnenforcedRestart(vm)) {
-		ui.Warn(msg.NetUnenforced(vm))
+	if !p.Confirm(msg.NetUnenforcedRestart(vm)) {
+		p.Warn(msg.NetUnenforced(vm))
 		return nil
 	}
 	if err := b.Stop(ctx, vm); err != nil {
@@ -72,7 +71,7 @@ func SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, restart fun
 	if ok, err := enforced(ctx, b, vm); err != nil {
 		return err
 	} else if !ok {
-		return stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
+		return p.stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
 	}
 	return st.Set(KeyCheck, CheckOK)
 }
@@ -124,23 +123,23 @@ func Direct(ctx context.Context, b backend.Backend, vm string) bool {
 // it and returns err; if the stop fails, the stop's failure, after warning
 // err. The stop isn't cancelled with ctx: an interrupt never leaves the VM
 // running.
-func Unproxied(ctx context.Context, b backend.Backend, vm string, err error) error {
+func (p *Proxy) Unproxied(ctx context.Context, b backend.Backend, vm string, err error) error {
 	if serr := b.Stop(context.WithoutCancel(ctx), vm); serr != nil {
 		var m msg.M
 		if errors.As(err, &m) {
-			ui.Warn(m)
+			p.Warn(m)
 		}
 		return serr
 	}
-	ui.Warn(msg.NetProxyDownStopped(vm))
+	p.Warn(msg.NetProxyDownStopped(vm))
 	return err
 }
 
 // stop stops the VM, which network policy doesn't hold, and returns why:
 // m, or the stop's failure after warning m.
-func stop(ctx context.Context, b backend.Backend, vm string, m msg.M) error {
+func (p *Proxy) stop(ctx context.Context, b backend.Backend, vm string, m msg.M) error {
 	if err := b.Stop(ctx, vm); err != nil {
-		ui.Warn(m)
+		p.Warn(m)
 		return err
 	}
 	return m

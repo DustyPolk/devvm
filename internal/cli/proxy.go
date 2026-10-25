@@ -25,7 +25,7 @@ func newProxyCmd() *cobra.Command {
 				Stdin:  cmd.InOrStdin(),
 				Stdout: ui.Stdout(),
 				Stderr: ui.Stderr(),
-				Kept:   secrets.LoginKept,
+				Kept:   func(agent string, names []string) { secrets.LoginKept(ui.Warn, agent, names) },
 			})
 			if err != nil {
 				ui.Die(msg.ProxyFailed(err.Error()))

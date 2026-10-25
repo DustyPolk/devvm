@@ -15,12 +15,6 @@ import (
 // defaultKeys are the keys in ~/.ssh offered for loading, in order.
 var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 
-// What checkAgent says; tests swap them.
-var (
-	agentWarn = ui.Warn
-	agentInfo = ui.Info
-)
-
 // checkAgent is for a VM that forwards the user's SSH agent: forwarding
 // an empty one does nothing, so when the agent has no keys and ~/.ssh
 // has one, it offers to load it.
@@ -42,7 +36,7 @@ func (e *Env) checkAgent(ctx context.Context) {
 	}
 	// ssh-add -l: 1 for no keys, 2 for no agent.
 	if rc == 2 {
-		agentWarn(msg.NoSSHAgent())
+		e.Warn(msg.NoSSHAgent())
 		return
 	}
 	args := []string{key}
@@ -50,16 +44,16 @@ func (e *Env) checkAgent(ctx context.Context) {
 		args = []string{"--apple-use-keychain", key}
 	}
 	cmd := "ssh-add " + strings.Join(args, " ")
-	agentWarn(msg.SSHAgentEmpty())
-	if ui.StdinIsTerminal() && ui.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
+	e.Warn(msg.SSHAgentEmpty())
+	if ui.StdinIsTerminal() && e.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
 		if e.OS == "darwin" {
-			agentInfo(msg.KeyLoadedKeychain())
+			e.Info(msg.KeyLoadedKeychain())
 		} else {
-			agentInfo(msg.KeyLoaded())
+			e.Info(msg.KeyLoaded())
 		}
 		return
 	}
-	agentWarn(msg.LoadKeyWith(cmd))
+	e.Warn(msg.LoadKeyWith(cmd))
 }
 
 // sshAdd runs ssh-add with args on the terminal, which it may ask a

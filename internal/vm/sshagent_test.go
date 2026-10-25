@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // --ssh-agent: the new VM forwards the user's agent, which is checked
@@ -219,8 +218,8 @@ func TestCheckAgent(t *testing.T) {
 				return tc.rc
 			}}
 			var said strings.Builder
-			agentWarn = func(m msg.M) { said.WriteString("devvm: " + m.String() + "\n") }
-			t.Cleanup(func() { agentWarn = ui.Warn })
+			e.Warn = func(m msg.M) { said.WriteString("devvm: " + m.String() + "\n") }
+			e.Confirm = func(msg.M) bool { return false }
 			e.checkAgent(t.Context())
 			out := said.String()
 			if !slices.Equal(calls, tc.calls) {

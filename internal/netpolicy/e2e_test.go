@@ -8,6 +8,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -22,7 +23,7 @@ func TestE2ESelfCheck(t *testing.T) {
 		t.Skip("tests/e2e.sh runs it, on a VM of its own")
 	}
 	t.Setenv("DEVVM_MESSAGES", "names")
-	swapQuestions(t)
+	swapTerminal(t)
 	terminal = func() bool { return false }
 	d, err := paths.FromEnv()
 	if err != nil {
@@ -34,7 +35,8 @@ func TestE2ESelfCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := os.Getenv("DEVVM_E2E_WANT")
-	err = SelfCheck(t.Context(), b, st, func(context.Context) error { return errors.New("restarted without a terminal") })
+	p := &Proxy{Warn: func(m msg.M) { t.Log(m.Names()) }}
+	err = p.SelfCheck(t.Context(), b, st, func(context.Context) error { return errors.New("restarted without a terminal") })
 	if names(err) != want {
 		t.Fatalf("SelfCheck = %v, want %q", names(err), want)
 	}

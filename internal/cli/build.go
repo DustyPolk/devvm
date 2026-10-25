@@ -88,7 +88,32 @@ func builder(flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &build.Builder{Dirs: dirs, Root: root, Backend: c.Backend, Tools: tools.New(dirs, root)}, nil
+	return newBuilder(dirs, root, c.Backend, tools.New(dirs, root), ""), nil
+}
+
+// newBuilder returns a builder of images on be whose base starts from
+// fromRef, printing and asking through ui.
+func newBuilder(dirs paths.Dirs, root string, be backend.Backend, t *tools.Tools, fromRef string) *build.Builder {
+	return &build.Builder{
+		Dirs: dirs, Root: root, Backend: be, Tools: t, From: fromRef,
+		Info: ui.Info, Warn: ui.Warn, Say: ui.Say, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
+		Pick: pickFeatures,
+	}
+}
+
+// pickFeatures asks which features base gets, in a terminal; without
+// one, they stay as they are.
+func pickFeatures(fs []build.Feature) []build.Feature {
+	choices := make([]ui.Choice, len(fs))
+	for i, f := range fs {
+		choices[i] = ui.Choice(f)
+	}
+	picked := ui.Pick(msg.FeaturesHelp(), choices)
+	out := make([]build.Feature, len(picked))
+	for i, c := range picked {
+		out[i] = build.Feature(c)
+	}
+	return out
 }
 
 // fail ends the run on an error: with the run log's end when its details

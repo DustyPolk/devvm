@@ -11,7 +11,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Ports values: every port the VM listens on is forwarded, or none.
@@ -117,11 +116,13 @@ type PortsChange struct {
 	Global   bool // what new VMs forward instead
 }
 
-func (c PortsChange) apply(old string) (string, error) {
+// apply returns old changed by c, warning through warn when it adds to
+// all.
+func (c PortsChange) apply(old string, warn func(msg.M)) (string, error) {
 	switch c.Op {
 	case "add":
 		if old == PortsAll {
-			ui.Warn(msg.PortsAllAlready())
+			warn(msg.PortsAllAlready())
 		}
 		return AddPorts(old, c.List)
 	case "rm":
@@ -164,7 +165,7 @@ func (e *Env) Ports(ctx context.Context, w io.Writer, global bool) error {
 		return err
 	}
 	if want != set {
-		ui.Note(msg.PortsPending(want, t.f.Name))
+		e.Note(msg.PortsPending(want, t.f.Name))
 	}
 	return nil
 }
@@ -179,14 +180,14 @@ func (e *Env) SetPorts(ctx context.Context, c PortsChange) error {
 		if err != nil {
 			return err
 		}
-		ports, err := c.apply(old)
+		ports, err := c.apply(old, e.Warn)
 		if err != nil {
 			return err
 		}
 		if err := state.WritePorts(e.Dirs, ports); err != nil {
 			return err
 		}
-		ui.Info(msg.PortsDefault(ports))
+		e.Info(msg.PortsDefault(ports))
 		return nil
 	}
 	t, err := e.portsVM(ctx)
@@ -194,7 +195,7 @@ func (e *Env) SetPorts(ctx context.Context, c PortsChange) error {
 		return err
 	}
 	vm, st, b := t.f.Name, t.st, t.b
-	ports, err := c.apply(orAll(st.Get(KeyPorts)))
+	ports, err := c.apply(orAll(st.Get(KeyPorts)), e.Warn)
 	if err != nil {
 		return err
 	}
@@ -209,12 +210,12 @@ func (e *Env) SetPorts(ctx context.Context, c PortsChange) error {
 		return err
 	}
 	running := in.Status == backend.StatusRunning
-	if err := applyPorts(ctx, b, st, running); err != nil {
+	if err := e.applyPorts(ctx, b, st, running); err != nil {
 		return err
 	}
 	// Otherwise applyPorts said it waits for the next start.
 	if orAll(st.Get(KeyPortsSet)) == ports {
-		ui.Info(msg.PortsNow(ports, vm))
+		e.Info(msg.PortsNow(ports, vm))
 	}
 	return nil
 }
