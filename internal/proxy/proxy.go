@@ -15,6 +15,9 @@
 //   - Every decision goes to a JSON-lines log, and http://devvm.proxy/blocked lists recent blocks
 //     (/blocked/new: those since the VM's last prompt; /ca.pem serves the CA).
 //
+// On a backend that asks the host about each connection a VM opens (smolvm), the proxy is also
+// that decider (-decider, decider.go): it takes over connections to itself and refuses the rest.
+//
 // It exits when the VM's hostagent does (-lifeline). Standard library only: it prints nothing
 // itself, but writes to the streams devvm hands Main.
 package proxy
@@ -83,6 +86,9 @@ func newFlags() *flag.FlagSet {
 	fs.BoolVar(&loginSecrets, "login-secrets", false, "with -login claude: print the MCP servers whose settings hold secrets")
 	fs.BoolVar(&loginHosts, "login-hosts", false, "with -login-bindings: print the bindings' hosts as allowlist lines (host:443) instead")
 	fs.StringVar(&authFile, "auth-file", "", "file holding the VM's password: requests need Proxy-Authorization for user devvm with it")
+	fs.StringVar(&deciderAddr, "decider", "", "also decide, on this loopback address, each connection the VM opens (decider.go)")
+	fs.StringVar(&deciderTo, "decider-to", "", "with -decider: the proxy's address in the VM, the only destination taken over")
+	fs.StringVar(&deciderTokenFile, "decider-token-file", "", "with -decider: file holding the token the backend proves itself with (64 hex digits)")
 	return fs
 }
 
@@ -678,12 +684,26 @@ func Main(args []string, std IO) error {
 	pol = newPolicy(files)
 	pol.all()
 	loadOwnAddrs()
-	ln, err := net.Listen("tcp", listen) //nolint:noctx // listens for the proxy's whole life
+	// The decider listens first: "listening on" means both are.
+	h, to, token, err := startDecider()
 	if err != nil {
 		return err
 	}
-	logf("listening on %s for %s", ln.Addr(), vmName)
+	ln, err := net.Listen("tcp", listen) //nolint:noctx // listens for the proxy's whole life
+	if err != nil {
+		if h != nil {
+			_ = h.Close()
+		}
+		return err
+	}
 	srv := &http.Server{Handler: http.HandlerFunc(handler), ReadHeaderTimeout: 30 * time.Second}
+	if h != nil {
+		defer func() { _ = h.Close() }()
+		logf("deciding on %s for %s, taking over %s", h.Addr(), vmName, to)
+		go serveDecider(h, token, to)
+		go func() { _ = srv.Serve(h) }()
+	}
+	logf("listening on %s for %s", ln.Addr(), vmName)
 	if lifeline != "" {
 		go func() {
 			watchLifeline(lifeline)

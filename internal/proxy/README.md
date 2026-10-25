@@ -2,7 +2,7 @@
 
 The network policy proxy: one process per VM with [network policy](../../docs/content/docs/network.md), on the host, run as `devvm _proxy`. Go, standard library only (depguard enforces it).
 
-The VM can reach nothing but this proxy (on macOS its Lima hostagent runs under a Seatbelt profile, on Linux QEMU's network is restricted). Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`; the VM's proxy URL has it), and the VM's placeholders end in a random value of its own (not the password), so no other VM's or program's placeholder gets a token. It refuses to start without `-auth-file`. For each connection it:
+The VM can reach nothing but this proxy (on macOS its Lima hostagent runs under a Seatbelt profile, on Linux QEMU's network is restricted, on smolvm the proxy decides each connection). Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`; the VM's proxy URL has it), and the VM's placeholders end in a random value of its own (not the password), so no other VM's or program's placeholder gets a token. It refuses to start without `-auth-file`. For each connection it:
 
 - answers `407` without the VM's password;
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
@@ -10,6 +10,8 @@ The VM can reach nothing but this proxy (on macOS its Lima hostagent runs under 
 - requires a TLS ClientHello in a tunnel to name the CONNECT host (SNI);
 - for hosts with a bound secret, swaps the placeholder in one header for the real value: it intercepts their `:443` tunnels, and does the same for absolute-form `https://` requests (everything else passes unread);
 - logs every decision as JSON lines.
+
+On smolvm, the VM's allow list is the host alone and smolvm asks the proxy about each connection before making it (mediated egress): with `-decider`, the proxy is that decider too, on a loopback port of its own. It takes over connections to its own address in the VM (`-decider-to`), which it then serves as any other, password and policy included, and refuses the rest, logged as `blocked`. A connection without the token smolvm was started with (`-decider-token-file`) gets no answer.
 
 It returns when the VM's hostagent is gone.
 
@@ -20,10 +22,11 @@ It returns when the VM's hostagent is gone.
 | `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
 | `policy.go` | the rule syntax and matching (`ValidRule`: `devvm policy` takes only these); policy files are re-read when they change |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
+| `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
 | `redact.go` | agents' settings files (`settings.json`, `config.toml`, opencode's config) for VMs with network policy: values under secret-looking keys replaced |
-| `*_test.go` | unit tests, and fuzz targets for policy rules (`FuzzParseRule`), request targets (`FuzzRequest`) and ClientHellos (`FuzzClientHello`) |
+| `*_test.go` | unit tests, and fuzz targets for policy rules (`FuzzParseRule`), request targets (`FuzzRequest`), ClientHellos (`FuzzClientHello`) and the decider's preludes (`FuzzPrelude`) |
 
 ## How devvm runs it
 
@@ -31,7 +34,8 @@ It returns when the VM's hostagent is gone.
 
 ```text
 devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -lifeline HA.pid \
-  -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY
+  -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY \
+  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN]
 ```
 
 Flags take one dash or two.
@@ -47,6 +51,9 @@ Flags take one dash or two.
 | `-secrets` | the VM's secret bindings (JSON, no values), re-read when they change |
 | `-secret-cmd` | the `devvm` binary, run as `devvm secret get NAME` for a value |
 | `-auth-file` | a file (mode 600) with the VM's key: requests need it as the proxy password, user `devvm` (in a file because a process's arguments are visible to other users) |
+| `-decider` | smolvm only: also decide each connection the VM opens, on this loopback address |
+| `-decider-to` | with `-decider`: the proxy's address in the VM, the only destination taken over |
+| `-decider-token-file` | with `-decider`: a file (mode 600) with the token smolvm proves itself with, 64 hex digits, new at each start |
 
 Other modes, each doing one thing and returning:
 

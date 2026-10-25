@@ -203,8 +203,9 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 			return conf, err
 		}
 	case conf.Net == backend.NetProxy:
-		if started, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), true); err != nil {
-			return conf, err
+		// A VM with network policy doesn't run on without its proxy.
+		if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
+			return conf, netpolicy.Unproxied(ctx, b, vm, err)
 		}
 	default:
 		// Network policy turned off while it ran confined: it stays
@@ -215,8 +216,8 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 		}
 		if confined {
 			ui.Warn(msg.NetOffNextStart(vm))
-			if started, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), true); err != nil {
-				return conf, err
+			if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
+				return conf, netpolicy.Unproxied(ctx, b, vm, err)
 			}
 			return started, nil
 		}

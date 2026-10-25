@@ -69,8 +69,20 @@ Gotchas of this setup:
 
 These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.
 
+## Unreviewed emulations
+
+devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a test build, `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A test build is one made with `-ldflags "-X github.com/w3cj/devvm/internal/backend/backends.unreviewed=allowed"`, as `tests/e2e.sh` and the CLI tests make theirs; releases (GoReleaser, the Homebrew formula) set only the version, so they ignore it:
+
+```sh
+DEVVM_UNREVIEWED=smolvm:egress-proxy devvm --backend smolvm --network-policy --ports none base
+```
+
+It's for tests only, of an emulation before its review: none needs it now (smolvm's network policy was checked this way, then reviewed). It never makes a feature a backend lacks usable, and `devvm doctor` still shows the feature `unreviewed`.
+
 ## Manual checks
 
-What `tests/e2e.sh` leaves out, as it would change something of yours:
+What `tests/e2e.sh` leaves out, as it would change something of yours or needs something it doesn't have:
+
+- **smolvm's DNS, from outside:** e2e watches smolvm's own decision log and this machine's flows, not the network. With a domain whose authoritative nameserver's queries you can watch (a canary zone), resolve a new name under it from a smolvm VM without network policy (`getent hosts <new>.canary.example`): the nameserver sees it. Then from one with network policy, through its resolver and straight to `1.1.1.1`, a new name under the zone, also as TXT: the nameserver sees none of them.
 
 - **`--from` an image only Docker has** (built locally, never pushed): it would build an image in your Docker. Build a small one (`docker build -t devvm-local-test .` from a `Dockerfile` with `FROM alpine:3`), run `devvm --from devvm-local-test` in a new folder, check the VM boots from it, then `devvm rm` and `docker image rm devvm-local-test`.

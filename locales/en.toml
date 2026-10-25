@@ -47,6 +47,10 @@ other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have i
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
 other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it, unreviewed: use a backend that has it"
 
+[backend_unreviewed_used]
+description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (smolvm)"
+other = "{{.vm}} uses the {{.backend}} backend's {{.feature}}, unreviewed, as DEVVM_UNREVIEWED asks: for testing only"
+
 [backend_unknown]
 other = "there's no {{.name}} backend: choose one of {{.backends}}"
 
@@ -771,7 +775,10 @@ other = "couldn't read this folder's VM's network log: {{.reason}}"
 other = "couldn't create the network policy proxy's CA in {{.dir}}"
 
 [proxy_port_taken]
-other = "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: stop {{.vm}}, and devvm picks another port when it starts it"
+other = "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: devvm picks another port when it next starts {{.vm}}"
+
+[net_proxy_down_stopped]
+other = "stopped {{.vm}}: its network policy proxy couldn't start, and it doesn't run without one; devvm starts both again"
 
 [proxy_start_failed]
 other = "the network policy proxy didn't start for {{.vm}}: see {{.log}}"

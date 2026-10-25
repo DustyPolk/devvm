@@ -40,6 +40,7 @@ type Fake struct {
 	LifelineFile string            // Lifeline's answer
 	Missing      []backend.Problem // Problems' answer
 	Format       string            // ToolFormat's answer
+	Decides      bool              // UsesDecider's answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -303,6 +304,9 @@ func (f *Fake) Exec(_ context.Context, vm string, argv []string, o backend.ExecO
 
 // Lifeline returns LifelineFile.
 func (f *Fake) Lifeline(string) string { return f.LifelineFile }
+
+// UsesDecider returns Decides.
+func (f *Fake) UsesDecider() bool { return f.Decides }
 
 // ProxyURL returns the proxy at proxy.test on c's port, with its user and
 // password.

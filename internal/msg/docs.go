@@ -7,6 +7,7 @@ package msg
 var docs = map[string]string{ //nolint:gosec // message IDs and pages, not credentials
 	"backend_lacks":             "backends#missing-and-unreviewed-features",
 	"backend_unreviewed":        "backends#missing-and-unreviewed-features",
+	"backend_unreviewed_used":   "testing#unreviewed-emulations",
 	"backend_unknown":           "backends#choosing-a-backend",
 	"backend_unknown_default":   "backends#choosing-a-backend",
 	"backend_unknown_vm":        "backends#choosing-a-backend",
@@ -93,6 +94,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"not_a_rule":                  "network#rules",
 	"proxy_start_failed":          "network#the-proxy",
 	"proxy_port_taken":            "network#the-proxy",
+	"net_proxy_down_stopped":      "network#the-proxy",
 	"no_secret":                   "network#secrets",
 	"codex_login_kept":            "network#agents-logins-and-settings",
 	"opencode_login_kept":         "network#agents-logins-and-settings",

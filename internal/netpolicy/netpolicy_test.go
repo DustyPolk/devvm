@@ -243,15 +243,24 @@ func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	return p, f
 }
 
+// lifelined is a backend whose VMs' lifeline is /ha.pid.
+func lifelined() *backendtest.Fake {
+	f := backendtest.New("fake", nil)
+	f.LifelineFile = "/ha.pid"
+	return f
+}
+
 // A VM about to start: the CA, its ports, the confinement its backend
 // gets, and its proxy, told the password in a file.
 func TestPrepare(t *testing.T) {
 	d, st := sandbox(t, "node+claude")
 	p, f := testProxy(t, d)
+	lima := backendtest.New("lima", nil)
+	lima.LifelineFile = "/lima/vm/ha.pid"
 	var excluded []string
 	p.OS = "darwin"
 	p.ExcludeFromBackup = func(_ context.Context, dir string) error { excluded = append(excluded, dir); return nil }
-	conf, err := p.Prepare(t.Context(), st, "/lima/vm/ha.pid", false)
+	conf, err := p.Prepare(t.Context(), lima, st, false)
 	if err != nil {
 		t.Fatal(names(err))
 	}
@@ -288,6 +297,10 @@ func TestPrepare(t *testing.T) {
 	if strings.Contains(args, key) || strings.Contains(args, st.Get(KeyProxySalt)) {
 		t.Errorf("the proxy's arguments hold its key or salt: %q", args)
 	}
+	// A backend without a decider gets none.
+	if conf.Decider != "" || conf.DeciderToken != "" || strings.Contains(args, "-decider") || st.Get(KeyDeciderPort) != "" {
+		t.Errorf("a decider without a backend that uses one: %+v, %q", conf, args)
+	}
 	auth := filepath.Join(d.Run(), st.Name()+".proxy.auth")
 	b, err := os.ReadFile(auth) //nolint:gosec // the test's own folder
 	if err != nil || strings.TrimSpace(string(b)) != key {
@@ -304,7 +317,7 @@ func TestPrepare(t *testing.T) {
 	// Not on Linux.
 	p.OS, excluded = "linux", nil
 	p.Stop(st.Name())
-	if _, err := p.Prepare(t.Context(), st, "/lima/vm/ha.pid", false); err != nil || excluded != nil {
+	if _, err := p.Prepare(t.Context(), lima, st, false); err != nil || excluded != nil {
 		t.Errorf("Linux: %v, excluded %q", err, excluded)
 	}
 }
@@ -315,9 +328,56 @@ func TestPrepareWaitsForTheProxy(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, f := testProxy(t, d)
 	f.quiet = true
-	_, err := p.Prepare(t.Context(), st, "/ha.pid", false)
+	_, err := p.Prepare(t.Context(), lifelined(), st, false)
 	if want := "proxy_start_failed log=" + ProxyLog(d, st.Name()) + " vm=" + st.Name(); names(err) != want {
 		t.Errorf("Prepare = %v, want %s", names(err), want)
+	}
+}
+
+// On a backend with a decider, the proxy decides too: on a port of its
+// own, taking over the proxy's address in the VM, with a token in a file
+// (never in its arguments) that's new at each start and kept while the VM
+// runs.
+func TestPrepareDecider(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, f := testProxy(t, d)
+	b := lifelined()
+	b.Decides = true
+	conf, err := p.Prepare(t.Context(), b, st, false)
+	if err != nil {
+		t.Fatal(names(err))
+	}
+	dp := st.Get(KeyDeciderPort)
+	tok := st.Get(KeyDeciderToken)
+	if dp == "" || dp == st.Get(KeyProxyPort) || conf.Decider != "127.0.0.1:"+dp ||
+		!regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(tok) || conf.DeciderToken != tok {
+		t.Fatalf("confinement = %+v, state port %s token %s", conf, dp, tok)
+	}
+	pid, _ := p.PID(st.Name())
+	args := strings.Join(f.args[pid], " ")
+	file := filepath.Join(d.Run(), st.Name()+".proxy.decider")
+	want := " -decider 127.0.0.1:" + dp + " -decider-to proxy.test:" + st.Get(KeyProxyPort) + " -decider-token-file " + file
+	if !strings.Contains(args, want) || strings.Contains(args, tok) {
+		t.Errorf("the proxy's arguments %q: want %q, and not the token", args, want)
+	}
+	if b, err := os.ReadFile(file); err != nil || strings.TrimSpace(string(b)) != tok { //nolint:gosec // the test's own folder
+		t.Errorf("token file = %q, %v", b, err)
+	} else if fi, _ := os.Stat(file); fi.Mode().Perm() != 0o600 {
+		t.Errorf("token file mode %v", fi.Mode().Perm())
+	}
+	// Running, it keeps its token (its backend holds it); started again,
+	// it gets a new one, on the same port.
+	if conf, err = p.Prepare(t.Context(), b, st, true); err != nil || conf.DeciderToken != tok {
+		t.Errorf("running: %v, token %s, want %s", err, conf.DeciderToken, tok)
+	}
+	if conf, err = p.Prepare(t.Context(), b, st, false); err != nil || conf.DeciderToken == tok || conf.Decider != "127.0.0.1:"+dp {
+		t.Errorf("started again: %v, %+v", err, conf)
+	}
+	// A running VM whose proxy is gone, with the decider's port taken.
+	p.Stop(st.Name())
+	p.Listening = func(port int) bool { return strconv.Itoa(port) == dp }
+	if _, err := p.Prepare(t.Context(), b, st, true); names(err) != "proxy_port_taken port="+dp+" vm="+st.Name() {
+		t.Errorf("decider port taken: %v", names(err))
 	}
 }
 
@@ -329,7 +389,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	p, f := testProxy(t, d)
 	prepare := func(running bool) {
 		t.Helper()
-		if _, err := p.Prepare(t.Context(), st, "/ha.pid", running); err != nil {
+		if _, err := p.Prepare(t.Context(), lifelined(), st, running); err != nil {
 			t.Fatal(names(err))
 		}
 	}
@@ -364,11 +424,11 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	// program.
 	p.Stop(st.Name())
 	p.Listening = func(port int) bool { return strconv.Itoa(port) == pp }
-	if _, err := p.Prepare(t.Context(), st, "/ha.pid", true); names(err) != "proxy_port_taken port="+pp+" vm="+st.Name() {
+	if _, err := p.Prepare(t.Context(), lifelined(), st, true); names(err) != "proxy_port_taken port="+pp+" vm="+st.Name() {
 		t.Errorf("port taken: %v", names(err))
 	}
 	// Stopped, it moves.
-	if _, err := p.Prepare(t.Context(), st, "/ha.pid", false); err != nil || st.Get(KeyProxyPort) == pp {
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil || st.Get(KeyProxyPort) == pp {
 		t.Errorf("stopped with its port taken: %v, port %s", err, st.Get(KeyProxyPort))
 	}
 }
@@ -377,7 +437,7 @@ func TestPrepareCAFails(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
 	p.InitCA = func(string) error { return errors.New("disk full") }
-	if _, err := p.Prepare(t.Context(), st, "/ha.pid", false); names(err) != "proxy_ca_failed dir="+d.CA() {
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); names(err) != "proxy_ca_failed dir="+d.CA() {
 		t.Errorf("Prepare = %v", names(err))
 	}
 }
@@ -386,7 +446,7 @@ func TestPrepareCAFails(t *testing.T) {
 func TestPID(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, f := testProxy(t, d)
-	if _, err := p.Prepare(t.Context(), st, "/ha.pid", false); err != nil {
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
 		t.Fatal(err)
 	}
 	pid, ok := p.PID(st.Name())
@@ -407,7 +467,7 @@ func TestPID(t *testing.T) {
 func TestForget(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
-	if _, err := p.Prepare(t.Context(), st, "/ha.pid", false); err != nil {
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
 		t.Fatal(err)
 	}
 	pid, _ := p.PID(st.Name())
@@ -475,6 +535,44 @@ func TestRefreshSecrets(t *testing.T) {
 	if err := p.RefreshSecrets(ctx, other.Name()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A running VM whose proxy couldn't start is stopped, and the reason
+// returned; a stop that fails is returned instead.
+func TestUnproxied(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	why := msg.ProxyStartFailed("/log", "V")
+	f := backendtest.New("fake", nil)
+	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
+	if err := Unproxied(t.Context(), f, "V", why); names(err) != "proxy_start_failed log=/log vm=V" ||
+		f.Instances["V"].Status != backend.StatusStopped {
+		t.Errorf("Unproxied = %v, VM %s", names(err), f.Instances["V"].Status)
+	}
+	// Interrupted (its context cancelled), it still stops the VM.
+	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	cs := ctxStopper{Fake: f}
+	if err := Unproxied(ctx, &cs, "V", why); names(err) != "proxy_start_failed log=/log vm=V" || cs.err != nil ||
+		f.Instances["V"].Status != backend.StatusStopped {
+		t.Errorf("interrupted: %v, stop's context %v, VM %s", names(err), cs.err, f.Instances["V"].Status)
+	}
+	stopErr := errors.New("stop failed")
+	f.Errs = map[string]error{"Stop": stopErr}
+	if err := Unproxied(t.Context(), f, "V", why); !errors.Is(err, stopErr) {
+		t.Errorf("a failed stop: %v", err)
+	}
+}
+
+// ctxStopper is a fake backend that notes whether Stop's context was done.
+type ctxStopper struct {
+	*backendtest.Fake
+	err error
+}
+
+func (c *ctxStopper) Stop(ctx context.Context, vm string) error {
+	c.err = ctx.Err()
+	return c.Fake.Stop(ctx, vm)
 }
 
 // After a start: enforced is ok; a direct route, or a VM started outside

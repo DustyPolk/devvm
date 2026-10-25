@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand/v2"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -137,13 +139,15 @@ func (p *Proxy) Forget(vm string) error {
 	return nil
 }
 
-// Prepare readies a VM with network policy to start, or a running one to
-// go on: devvm's CA, the VM's secret files, its ports, and its proxy
-// running. It returns the confinement its backend starts it with.
-// lifeline is the pid file of the host process that runs the VM, which the
-// proxy follows: a VM started again gets a new proxy.
-func (p *Proxy) Prepare(ctx context.Context, st *state.VM, lifeline string, running bool) (backend.Confinement, error) {
+// Prepare readies a VM with network policy to start on b, or a running one
+// to go on: devvm's CA, the VM's secret files, its ports, and its proxy
+// running. It returns the confinement its backend starts it with. The proxy
+// follows the host process that runs the VM (b's Lifeline): a VM started
+// again gets a new proxy. On a backend with a decider, the proxy is the
+// decider too, with a token new at each start.
+func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, running bool) (backend.Confinement, error) {
 	vm := st.Name()
+	lifeline := b.Lifeline(vm)
 	none := backend.Confinement{}
 	// The CA lasts 30 days: a new one is made when it has under a week left
 	// (VMs trust it from their next start). Kept out of backups: a copy of
@@ -189,21 +193,23 @@ func (p *Proxy) Prepare(ctx context.Context, st *state.VM, lifeline string, runn
 			return none, err
 		}
 	}
-	pp, _ := strconv.Atoi(st.Get(KeyProxyPort))
 	_, up := p.PID(vm)
-	if !up && (pp == 0 || p.Listening(pp)) {
-		if running && pp != 0 {
-			return none, msg.ProxyPortTaken(strconv.Itoa(pp), vm)
-		}
-		if pp, err = p.freePort(); err != nil {
-			return none, err
-		}
-		if err := st.Set(KeyProxyPort, strconv.Itoa(pp)); err != nil {
-			return none, err
-		}
+	pp, err := p.port(st, KeyProxyPort, up, running)
+	if err != nil {
+		return none, err
 	}
 	conf := backend.Confinement{
 		Net: backend.NetProxy, ProxyPort: pp, ProxyUser: ProxyUser, ProxyPassword: key, Env: Env, SSHPort: sp,
+	}
+	if backend.UsesDecider(b) {
+		dp, err := p.port(st, KeyDeciderPort, up, running)
+		if err != nil {
+			return none, err
+		}
+		if conf.DeciderToken, err = deciderToken(st, running); err != nil {
+			return none, err
+		}
+		conf.Decider = "127.0.0.1:" + strconv.Itoa(dp)
 	}
 	// The logs hold each VM's requests: the user's alone.
 	for _, d := range []string{p.Dirs.Run(), p.Dirs.Logs()} {
@@ -217,7 +223,25 @@ func (p *Proxy) Prepare(ctx context.Context, st *state.VM, lifeline string, runn
 	if up {
 		return conf, nil
 	}
-	return conf, p.start(st, key, files, bin, caSum, lifeline, pp)
+	return conf, p.start(st, b, conf, files, bin, caSum, lifeline)
+}
+
+// port returns the VM's port under key: a new free one when it has none,
+// or when its proxy doesn't run and another program took it, unless the VM
+// runs: its backend holds the port it started with.
+func (p *Proxy) port(st *state.VM, key string, up, running bool) (int, error) {
+	n, _ := strconv.Atoi(st.Get(key))
+	if up || n != 0 && !p.Listening(n) {
+		return n, nil
+	}
+	if running && n != 0 {
+		return 0, msg.ProxyPortTaken(strconv.Itoa(n), st.Name())
+	}
+	n, err := p.freePort()
+	if err != nil {
+		return 0, err
+	}
+	return n, st.Set(key, strconv.Itoa(n))
 }
 
 // RefreshSecrets writes again the secret files of the VMs named (none:
@@ -250,14 +274,26 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 	return nil
 }
 
-// start starts the VM's proxy on port pp and waits for it to listen.
-func (p *Proxy) start(st *state.VM, key, files, bin, caSum, lifeline string, pp int) error {
+// start starts the VM's proxy as conf has it, and waits for it to listen.
+func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement, files, bin, caSum, lifeline string) error {
 	vm := st.Name()
-	// The password goes in a file: a process's arguments are visible to
-	// other users.
+	// The password and the decider's token go in files: a process's
+	// arguments are visible to other users.
 	auth := p.run(vm, ".auth")
-	if err := writeFile(auth, []byte(key+"\n")); err != nil {
+	if err := writeFile(auth, []byte(conf.ProxyPassword+"\n")); err != nil {
 		return err
+	}
+	var decider []string
+	if conf.Decider != "" {
+		u, err := url.Parse(b.ProxyURL(conf))
+		if err != nil || u.Host == "" {
+			return fmt.Errorf("%s: no proxy address in the VM", vm)
+		}
+		tok := p.run(vm, ".decider")
+		if err := writeFile(tok, []byte(conf.DeciderToken+"\n")); err != nil {
+			return err
+		}
+		decider = []string{"-decider", conf.Decider, "-decider-to", u.Host, "-decider-token-file", tok}
 	}
 	logPath := ProxyLog(p.Dirs, vm)
 	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
@@ -271,12 +307,12 @@ func (p *Proxy) start(st *state.VM, key, files, bin, caSum, lifeline string, pp 
 	}
 	before := fi.Size()
 	ca := p.Dirs.CA()
-	addr := "127.0.0.1:" + strconv.Itoa(pp)
-	args := []string{
+	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
+	args := append([]string{
 		"_proxy", "-listen", addr, "-vm", vm, "-policy", files, "-log", EventLog(p.Dirs, vm), "-lifeline", lifeline,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
 		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth,
-	}
+	}, decider...)
 	pid, err := p.Start(p.Self, args, out)
 	if err != nil {
 		return err
@@ -326,7 +362,7 @@ func (p *Proxy) freePort() (int, error) {
 	return 0, errors.New("no free port on 127.0.0.1")
 }
 
-// usedPorts returns the ssh and proxy ports VMs have.
+// usedPorts returns the ssh, proxy and decider ports VMs have.
 func usedPorts(d paths.Dirs) (map[int]bool, error) {
 	ents, err := os.ReadDir(d.VMs())
 	if errors.Is(err, os.ErrNotExist) {
@@ -343,7 +379,7 @@ func usedPorts(d paths.Dirs) (map[int]bool, error) {
 		if err != nil {
 			continue // not a VM's state
 		}
-		for _, k := range []string{KeySSHPort, KeyProxyPort} {
+		for _, k := range []string{KeySSHPort, KeyProxyPort, KeyDeciderPort} {
 			if n, err := strconv.Atoi(st.Get(k)); err == nil {
 				used[n] = true
 			}

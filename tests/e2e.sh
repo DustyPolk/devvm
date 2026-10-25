@@ -24,8 +24,9 @@
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
 #                packs, a project VM's mounts, size, ports, Docker and agent forwarding, a node VM's
-#                shared tools, what it refuses (network policy, ssh, every port, agent toggling), and
-#                that no machine without the sandbox's label is touched. Its machines share your
+#                shared tools, what it refuses (ssh, every port, agent toggling), network policy's
+#                emulation (nothing but the proxy, DNS kept on this machine, failing closed, the policy),
+#                and that no machine without the sandbox's label is touched. Its machines share your
 #                smolvm (macOS): it deletes only those it made, with the sandbox's label.
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
@@ -67,7 +68,9 @@ done
 src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
-(cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
+# A test build: DEVVM_UNREVIEWED counts in it (never in a release).
+(cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -ldflags "-X github.com/w3cj/devvm/internal/backend/backends.unreviewed=allowed" \
+  -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
 cp "$root/base.yaml" "$src/"; cp -R "$root/layers" "$root/features" "$root/tools" "$root/guest" "$root/oci" "$src/"
 # The features are in base's key, so only a run with from (which checks them) builds them; every
 # other selection shares one smaller base.
@@ -119,11 +122,14 @@ cleanup() {
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
+  [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null
+  [[ -z ${fake:-} ]] || kill "$fake" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
   pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
-    "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home"
+    "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
+    "$work/dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -886,8 +892,6 @@ check "every port (the default), in one line naming the VM" bash -c "cd '$r' &&
   ! DEVVM_MESSAGES=names '$D' ${S[*]} --no-network-policy base </dev/null >'$work/last.log' 2>&1 &&
   grep -qE '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-smolrefused-[0-9a-f]{14}$' '$work/last.log' &&
   [[ -z \$(vm_of '$r') ]]"
-check "network policy" bash -c "cd '$r' && ! DEVVM_MESSAGES=names '$D' ${S[*]} --network-policy --ports none base </dev/null >'$work/last.log' 2>&1 &&
-  grep -qE '^devvm: backend_lacks backend=smolvm feature=egress-proxy vm=' '$work/last.log'"
 check "--clone (ssh)" bash -c "cd '$r' && git init -q && git -c user.email=e@e -c user.name=e commit -q --allow-empty -m e &&
   ! DEVVM_MESSAGES=names '$D' ${S[*]} --clone --no-network-policy --ports none base </dev/null >'$work/last.log' 2>&1 &&
   grep -qE '^devvm: backend_lacks backend=smolvm feature=ssh vm=' '$work/last.log'"
@@ -916,9 +920,8 @@ SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e
   '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47180", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' \
   </dev/null >/dev/null 2>&1
 check "the listed port reaches this machine's loopback" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47180 && exit 0; sleep 1; done; exit 1'
-check "ssh, network policy, every port and turning agent forwarding on are refused in one line" bash -c "cd '$p' &&
+check "ssh, every port and turning agent forwarding on are refused in one line" bash -c "cd '$p' &&
   ! DEVVM_MESSAGES=names '$D' ssh </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=ssh vm=$vm' '$work/e' &&
-  ! DEVVM_MESSAGES=names '$D' network on </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=egress-proxy vm=$vm' '$work/e' &&
   ! DEVVM_MESSAGES=names '$D' ports all </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=ports-all vm=$vm' '$work/e' &&
   ! DEVVM_MESSAGES=names '$D' ssh-agent on </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e' &&
   grep -qx net=off '$vms/$vm'"
@@ -946,6 +949,284 @@ check "turning it off is refused" bash -c "cd '$g' && ! DEVVM_MESSAGES=names '$D
 (cd "$g" && quiet "$D" rm -f)
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-agent.sock"
+
+section "smolvm: network policy"
+# The emulation's guarantee (reviewed): a VM with network policy reaches nothing but its proxy,
+# through devvm's decider; DNS it's refused never leaves this machine; with the proxy gone nothing
+# gets out, and smolvm won't start it without a decider; its policy applies as on Lima. A base VM:
+# no agent, so no login is read. Your own HOME, as smolvm keeps its machines under it. U is what
+# devvm runs with (an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here).
+U=(env)
+# smol_root VM CMD: CMD as root in the VM. smol_block VM: the VM's object in smolvm's JSON.
+smol_root() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- bash -c "$2" </dev/null; }
+smol_block() { SMOLVM_USAGE=0 smolvm machine ls --json 2>/dev/null | awk -v n="\"name\": \"$1\"" '
+  /^  \{/ { b = "" } { b = b $0 "\n" } /^  \}/ && index(b, n) { printf "%s", b }'; }
+# smolnet_lists VM: its allow list is the gateway alone, its DNS a name that doesn't exist.
+# smolnet_open VM: it has no allow list.
+smolnet_lists() { local b; b=$(smol_block "$1" | tr -d ' \n')
+  [[ $b == *'"allowed_cidrs":["100.96.0.1/32"]'* && $b == *'"allowed_hosts":["=devvm.invalid"]'* ]]; }
+smolnet_open() { [[ -n $(smol_block "$1") ]] && ! smol_block "$1" | grep -q '"allowed_'; }
+smolnet_closed() { smolnet_lists "$1" && smolnet_direct "$1"; }
+# smolnet_direct VM: every direct connection fails, even as root: an address, a port of an allowed
+# host, IPv6, and the host's loopback through the gateway (the listener, which answers 407).
+smolnet_direct() {
+  ! smol_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1" &&
+  ! smol_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1" &&
+  ! smol_root "$1" "curl -6 --noproxy '*' -sS -m 5 -o /dev/null https://[2606:4700:4700::1111]" &&
+  ! smol_root "$1" "timeout 5 bash -c 'exec 3<>/dev/tcp/140.82.112.3/22 && head -c 4 <&3' | grep -q SSH-" &&
+  [[ $(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/") != 407 ]]
+}
+# The DNS probe, run as root in the VM with a name prefix of this run's ($1): its resolver, and
+# queries straight to the gateway's resolver and 1.1.1.1 (UDP, and TCP to 1.1.1.1) for TXT, ANY,
+# AAAA, HTTPS, an EDNS0 A, a name under devvm.invalid and DEVVM.INVALID; last, devvm.invalid
+# itself, which smolvm sends to this machine's resolver: the detector's positive control.
+dns_probe='n=$1
+# pkt NAME QTYPE [edns]: a query, as printf escapes.
+pkt() { local q="" l t
+  for l in ${1//./ }; do q+=$(printf "\\\\x%02x" "${#l}")$l; done
+  t=$(printf "\\\\x%02x\\\\x%02x" $(($2 >> 8)) $(($2 & 255)))
+  if [[ -n ${3:-} ]]; then
+    printf "%s" "\\x12\\x34\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x01$q\\x00$t\\x00\\x01\\x00\\x00\\x29\\x10\\x00\\x00\\x00\\x00\\x00\\x00\\x00"
+  else
+    printf "%s" "\\x12\\x34\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00$q\\x00$t\\x00\\x01"
+  fi; }
+send() { local p len; p=$(pkt "$@")
+  printf "$p" > /dev/udp/100.96.0.1/53; printf "$p" > /dev/udp/1.1.1.1/53
+  len=$(printf "$p" | wc -c)
+  { printf "\\x00\\x$(printf %02x "$len")"; printf "$p"; } | timeout 3 bash -c "cat > /dev/tcp/1.1.1.1/53"; }
+getent hosts "$n-a.example.com" >/dev/null; echo "resolver rc=$?"
+send "$n-b.example.com" 16; send "$n-c.example.com" 255; send "$n-d.example.com" 28; send "$n-e.example.com" 65
+send "$n-f.example.com" 1 edns; send "x.$n.devvm.invalid" 1; send DEVVM.INVALID 16
+getent hosts "$n-g.example.org" >/dev/null; echo "resolver rc=$?"
+sleep 1; getent hosts devvm.invalid >/dev/null; echo "control rc=$?"'
+printf '%s\n' "$dns_probe" > "$work/dns-probe.sh"
+# The UDP and ICMP probe, as root: datagrams to the host's loopback listener through the gateway, to
+# 1.1.1.1 on 443 and 123, an NTP request to time.cloudflare.com (162.159.200.123) and its reply,
+# and a ping to 1.1.1.1.
+udp_probe='for t in 100.96.0.1/18766 1.1.1.1/443 1.1.1.1/123; do printf devvm-e2e-udp > /dev/udp/$t; done
+if exec 3<>/dev/udp/162.159.200.123/123; then
+  { printf "\\x1b"; head -c 47 /dev/zero; } >&3
+  echo "ntp bytes=$(timeout 3 head -c 48 <&3 | wc -c | tr -d " ")"
+else echo "ntp bytes=0"; fi
+perl -MNet::Ping -e "\$p = Net::Ping->new(q(icmp), 2); print \$p->ping(q(1.1.1.1)) ? qq(ping reply\n) : qq(ping none\n)"'
+printf '%s\n' "$udp_probe" > "$work/udp-probe.sh"
+# smolnet_probe VM SCRIPT ARG: SCRIPT as root in the VM, its output in $work/probe.log, while nettop
+# (macOS) watches the VM's smolvm process (the first line of its agent.pid) on this machine's
+# non-loopback interfaces; prints the flows it had, one per line (closed ones are listed for a while
+# too). smolvm's own record of its DNS decisions during the probe goes to $work/decisions.
+smolnet_probe() {
+  local pid csv=$work/nettop.csv np dec n0
+  dec="$(SMOLVM_USAGE=0 smolvm machine data-dir --name "$1")/egress-decisions.jsonl"
+  pid=$(head -1 "$(dirname "$dec")/agent.pid" 2>/dev/null)
+  [[ $pid =~ ^[0-9]+$ ]] || return 1
+  n0=$(cat "$dec" 2>/dev/null | wc -l)
+  nettop -t external -L 14 -s 1 -n -x -p "$pid" > "$csv" 2>/dev/null &
+  np=$!
+  sleep 2
+  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -i -- bash -s -- "$3" < "$2" > "$work/probe.log" 2>&1
+  wait "$np"
+  tail -n +$((n0 + 1)) "$dec" 2>/dev/null | grep '"transport":"dns"' > "$work/decisions"
+  # Rows: time,what,…: the process (smolvm-bin.PID), or a flow (udp4 LOCAL<->REMOTE).
+  awk -F, 'index($2, "<->") { print $2 }' "$csv" | sort -u
+}
+# smolnet_no_leak VM: refused DNS doesn't leave this machine. No flow beyond loopback, and smolvm
+# refused every probe name (each one seen) and let through only devvm.invalid: the control, which
+# shows the detector sees a query that does go to this machine's resolver (nettop doesn't: smolvm
+# asks it through the system's resolver).
+smolnet_no_leak() {
+  local f n=devvm-e2e-$$-$RANDOM name allowed
+  f=$(smolnet_probe "$1" "$work/dns-probe.sh" "$n") || return 1
+  echo "flows: ${f:-none}"; cat "$work/probe.log"; cat "$work/decisions"
+  [[ -z $f && $(grep -c '^resolver rc=2$' "$work/probe.log") == 2 ]] || return 1
+  allowed=$(grep '"action":"allow"' "$work/decisions" | sed 's/.*"destination":"\([^"]*\)".*/\1/' | tr '[:upper:]' '[:lower:]' | sort -u)
+  [[ $allowed == devvm.invalid ]] || { echo "allowed: $allowed"; return 1; }
+  for name in "$n-a.example.com" "$n-b.example.com" "$n-c.example.com" "$n-d.example.com" "$n-e.example.com" \
+    "$n-f.example.com" "x.$n.devvm.invalid" "$n-g.example.org"; do
+    grep '"action":"deny"' "$work/decisions" | grep -qF "\"destination\":\"$name\"" || { echo "not seen: $name"; return 1; }
+  done
+}
+# smolnet_dns_seen VM: on smolvm's own network, the same probe's queries do leave (the control).
+smolnet_dns_seen() { local f; f=$(smolnet_probe "$1" "$work/dns-probe.sh" "devvm-e2e-$$-$RANDOM") || return 1
+  echo "flows: ${f:-none}"; cat "$work/probe.log"; grep -q ':53$' <<<"$f"; }
+# A UDP listener on the host's loopback, 127.0.0.1:18766: each datagram it gets is a line in $work/udp.log.
+smolnet_udp_listen() { : > "$work/udp.log"
+  perl -MIO::Socket::INET -e '$| = 1; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:18766", Proto => "udp") or die;
+    while ($s->recv($d, 2048)) { print "got $d\n" }' >> "$work/udp.log" 2>&1 &
+  udp_listener=$!; sleep 0.5; }
+# smolnet_udp_closed VM: no datagram reaches the host's loopback, NTP gets no answer, nor a ping, and
+# the VM's process has no flow beyond loopback.
+smolnet_udp_closed() { local f
+  f=$(smolnet_probe "$1" "$work/udp-probe.sh" x) || return 1
+  echo "flows: ${f:-none}"; cat "$work/probe.log" "$work/udp.log"
+  [[ -z $f && ! -s $work/udp.log ]] && grep -qx 'ntp bytes=0' "$work/probe.log" && grep -qx 'ping none' "$work/probe.log"; }
+# smolnet_udp_allowed_seen VM: a UDP allow for the NTP server, added live, lets the probe's request
+# out and nettop sees it (the UDP probe's control under network policy); then it's taken away.
+smolnet_udp_allowed_seen() {
+  local f
+  SMOLVM_USAGE=0 smolvm machine update --name "$1" --allow-udp 162.159.200.123/32:123 >/dev/null 2>&1 || return 1
+  f=$(smolnet_probe "$1" "$work/udp-probe.sh" x)
+  SMOLVM_USAGE=0 smolvm machine update --name "$1" --remove-allow-udp 162.159.200.123/32:123 >/dev/null 2>&1 || return 1
+  echo "flows: ${f:-none}"; cat "$work/probe.log"
+  grep -q '<->162\.159\.200\.123:123$' <<<"$f"
+}
+# smolnet_udp_seen VM: on smolvm's own network, the probe's datagrams leave and nettop sees them
+# (the control). bash's /dev/udp reads no reply on that network, so replies aren't counted.
+smolnet_udp_seen() { local f
+  f=$(smolnet_probe "$1" "$work/udp-probe.sh" x) || return 1
+  echo "flows: ${f:-none}"; cat "$work/probe.log"
+  grep -q '<->162\.159\.200\.123:123$' <<<"$f" && grep -q '<->1\.1\.1\.1:443$' <<<"$f"; }
+# smolnet_direct_open VM: on smolvm's own network the direct probes do get out (their control):
+# 1.1.1.1, github's ssh banner, and IPv6 when this machine has it.
+smolnet_direct_open() {
+  smol_root "$1" "curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1" &&
+  smol_root "$1" "timeout 10 bash -c 'exec 3<>/dev/tcp/140.82.112.3/22 && head -c 4 <&3' | grep -q SSH-" || return 1
+  if curl -6 -s -m 5 -o /dev/null 'https://[2606:4700:4700::1111]'; then
+    smol_root "$1" "curl -6 --noproxy '*' -sS -m 10 -o /dev/null https://[2606:4700:4700::1111]"
+  else echo "this machine has no IPv6: not checked"; fi
+}
+# smolnet_fake_decider MODE: a decider of nobody's on the VM's decider port, which answers garbage
+# (garbage), closes without a verdict (silent), allows every connection direct (allow: verdict 0),
+# or takes every one over and answers it itself, 418 (take: verdict 2, the fail-closed probes'
+# positive control); its pid in $fake.
+smolnet_fake_decider() {
+  perl -MIO::Socket::INET -e '$m = shift; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:" . shift, Listen => 16, ReuseAddr => 1) or die;
+    while ($c = $s->accept) { sysread($c, $b, 4096); print $c "\x07garbage" if $m eq "garbage"; print $c "\x00" if $m eq "allow";
+      print $c "\x02HTTP/1.1 418 squatter\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" if $m eq "take"; close $c }' "$1" "$dp" >/dev/null 2>&1 &
+  fake=$!; sleep 0.5; }
+# smolnet_nothing_out VM: nothing gets out: not through the proxy, not directly, not to the host's
+# loopback listener through the gateway (which answers 407).
+smolnet_nothing_out() {
+  ! in_smol "$1" 'curl -fsS -m 10 -o /dev/null https://github.com' &&
+  ! smol_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1" &&
+  [[ $(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/") != 407 ]]
+}
+# smolnet_fake_allow_seen VM: a decider of nobody's that allows the connection direct (verdict 0)
+# still gets nothing to the host's loopback listener: smolvm refuses direct connections to the host
+# (direct_target_policy). One that takes the connection over (verdict 2) answers it: the probe sees
+# a fail-open when there is one (its positive control).
+smolnet_fake_allow_seen() {
+  local allow take
+  smolnet_fake_decider allow
+  allow=$(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/")
+  kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
+  smolnet_fake_decider take
+  take=$(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/")
+  kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
+  [[ $allow != 407 && $take == 418 ]] || { echo "with a decider that allows: $allow (want no 407), that takes over: $take (want 418)"; return 1; }
+}
+# smolnet_fail_closed VM: with its proxy gone nothing gets out, nor with a decider that answers
+# garbage or nothing; and smolvm won't start it without a decider.
+smolnet_fail_closed() {
+  local pid m
+  pid=$(smolnet_proxy "$1") && [[ -n $pid ]] && kill "$pid" && sleep 1 || return 1
+  if smolnet_proxy "$1" >/dev/null || ! smolnet_nothing_out "$1"; then echo "with the proxy gone"; return 1; fi
+  for m in garbage silent; do
+    smolnet_fake_decider "$m"
+    smolnet_nothing_out "$1"; local rc=$?
+    kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
+    (( rc == 0 )) || { echo "with a decider that answers $m"; return 1; }
+  done
+  # The control: a decider that allows everything lets the same probe through to the listener.
+  smolnet_fake_allow_seen "$1" || return 1
+  SMOLVM_USAGE=0 smolvm machine stop --name "$1" >/dev/null 2>&1 &&
+  ! env -u SMOLVM_INTERCEPTOR_TOKEN SMOLVM_USAGE=0 smolvm machine start --name "$1" >"$work/e" 2>&1 && [[ $(smol_status "$1") != running ]]
+}
+# smolnet_widened VM DIR: its allow list widened while it runs (smolvm machine update): devvm shows
+# it unenforced, and its next launch stops it; the one after starts it confined again.
+smolnet_widened() {
+  SMOLVM_USAGE=0 smolvm machine update --name "$1" --allow-cidr 1.1.1.1/32 >/dev/null 2>&1 || return 1
+  if ! "$D" ls | grep -Eq "^$1 +Running +\S+ +\S+ +unenforced +smolvm "; then "$D" ls; return 1; fi
+  if (cd "$2" && printf 'echo e2e-opened\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1) ||
+    ! grep -qx "devvm: net_unenforced_stop vm=$1" "$work/last.log" || [[ $(smol_status "$1") != stopped ]]; then
+    cat "$work/last.log"; return 1
+  fi
+  (cd "$2" && printf 'exit\n' | "${U[@]}" "$D" >"$work/last.log" 2>&1) && [[ $(smol_status "$1") == running ]] &&
+  grep -qx net_check=ok "$vms/$1" && smolnet_lists "$1"
+}
+# The proxy's lifeline-following process for VM, if it runs.
+smolnet_proxy() { pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " 2>/dev/null; }
+# A service on the host's own loopback (a devvm _proxy, which answers anything with 407).
+echo listener-key > "$work/listener.auth"
+"$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
+listener=$!
+np=$(newproj smolnet)
+(cd "$np" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --ports none --no-git-protect base >"$work/last.log" 2>&1)
+vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
+pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
+dp=$(sed -n 's/^decider_port=//p' "$vms/$vm" 2>/dev/null)
+check "--network-policy: the VM runs behind its proxy, which decides for it, and the self-check passed" bash -c "
+  [[ -n '$vm' && -n '$dp' && \$(smol_status '$vm') == running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  ! grep -q backend_unreviewed '$work/last.log' &&
+  pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm .* -decider 127.0.0.1:$dp -decider-to 100.96.0.1:$pp ' >/dev/null"
+check "its allow list is the host's gateway alone, and its DNS a name that doesn't exist" smolnet_lists "$vm"
+check "an allowed host works, through the proxy" in_smol "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"
+check "another host is blocked by the proxy, and so is another port of an allowed one" bash -c "
+  in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc \"\$1\" </dev/null; }
+  [[ \$(in_smol 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]] &&
+  in_smol 'curl -sS -m 20 -o /dev/null https://example.com' 2>&1 | grep -q 403 &&
+  ! in_smol 'curl -fsS -m 20 -o /dev/null https://github.com:8443'"
+check "direct connections fail, even as root: an address, other ports, IPv6, the host's loopback" smolnet_direct "$vm"
+check "the host's loopback is refused through the proxy too (internal addresses need a rule)" bash -c "
+  [[ \$(SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://100.96.0.1:18765/' </dev/null) == 403 ]]"
+check "DNS fails at once, not after a timeout" in_smol "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
+if [[ "$(uname -s)" == Darwin ]]; then
+  check "refused DNS doesn't leave this machine (TXT, ANY, AAAA, HTTPS, EDNS0, under devvm.invalid): smolvm refuses each, and only devvm.invalid, the control, goes to the resolver" smolnet_no_leak "$vm"
+  smolnet_udp_listen
+  check "UDP and ICMP don't get out: nothing reaches the host's loopback, NTP and ping get no answer" smolnet_udp_closed "$vm"
+  # The ping has no control: smolvm's own network doesn't forward ICMP either.
+  check "... while a UDP allow added live lets the probe's NTP request out (the control), until it's removed" smolnet_udp_allowed_seen "$vm"
+else
+  skip "refused DNS doesn't leave this machine (TXT, ANY, AAAA, HTTPS, EDNS0, under devvm.invalid): smolvm refuses each, and only devvm.invalid, the control, goes to the resolver" "nettop is macOS's"
+  skip "UDP and ICMP don't get out: nothing reaches the host's loopback, NTP and ping get no answer" "nettop is macOS's"
+  skip "... while a UDP allow added live lets the probe's NTP request out (the control), until it's removed" "nettop is macOS's"
+fi
+check "the decider's token is in no host process's arguments, and never reaches the VM" bash -c "
+  tok=\$(sed -n 's/^decider_token=//p' '$vms/$vm') && [[ \${#tok} -eq 64 ]] &&
+  ! ps -axww -o command= | grep -qFf <(echo \"\$tok\") &&
+  ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"grep -rqsF \$tok /etc /run /root /home /tmp /var/log\" </dev/null &&
+  ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"cat /proc/[0-9]*/environ 2>/dev/null | tr '\\\\0' '\\\\n' | grep -qF \$tok\" </dev/null"
+check "devvm log shows the proxy's block and the direct connection to the host the decider refused" bash -c "cd '$np' &&
+  '$D' log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' && grep -q '  BLOCKED  100.96.0.1:18765  ' '$work/e' ||
+  { cat '$work/e'; false; }"
+check "devvm policy allow applies at once to the running VM's proxy, and rm takes it back" bash -c "cd '$np' &&
+  in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc \"\$1\" </dev/null; }
+  pid=\$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') && [[ -n \$pid ]] &&
+  ${U[*]} '$D' policy allow example.com </dev/null >/dev/null && in_smol 'curl -fsS -m 20 -o /dev/null https://example.com' &&
+  ${U[*]} '$D' policy rm example.com </dev/null >/dev/null &&
+  [[ \$(in_smol 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]] &&
+  [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
+check "its allow list widened while it runs: devvm shows it unenforced, stops it, then starts it confined again" smolnet_widened "$vm" "$np"
+check "with its proxy gone nothing gets out (the host's loopback listener included), nor with a decider that answers garbage or nothing, while one that allows everything lets the probe through (the control); smolvm won't start it without a decider" \
+  smolnet_fail_closed "$vm"
+check "started outside devvm, with a decider of someone else's: devvm stops it and opens nothing" bash -c "
+  SMOLVM_INTERCEPTOR_TOKEN=\$(openssl rand -hex 32) SMOLVM_USAGE=0 smolvm machine start --name '$vm' --mediated-egress --egress-interceptor 127.0.0.1:9 >/dev/null 2>&1 &&
+  [[ \$(smol_status '$vm') == running ]] && cd '$np' &&
+  ! printf 'echo e2e-opened\n' | ${U[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
+  grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(smol_status '$vm') == stopped ]]"
+check "devvm starts it again confined, and the self-check passes" bash -c "cd '$np' &&
+  printf 'exit\n' | ${U[*]} '$D' >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] && grep -qx net_check=ok '$vms/$vm' &&
+  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && [[ \$('$D' network 2>/dev/null) == on ]]"
+check "devvm network off: its next start is smolvm's own network, without an allow list, a decider or a proxy" bash -c "cd '$np' &&
+  ${U[*]} '$D' network off </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
+  [[ \$('$D' network) == off && \$(smol_status '$vm') == running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
+check "... with no allow list left" smolnet_open "$vm"
+check "... where the direct probes get out (their control): 1.1.1.1, github's ssh, IPv6" smolnet_direct_open "$vm"
+if [[ "$(uname -s)" == Darwin ]]; then
+  check "... and the DNS probe's queries leave (its control)" smolnet_dns_seen "$vm"
+  check "... and the UDP probe's datagrams leave (its control)" smolnet_udp_seen "$vm"
+else
+  skip "... and the DNS probe's queries leave (its control)" "nettop is macOS's"
+  skip "... and the UDP probe's datagrams leave (its control)" "nettop is macOS's"
+fi
+check "devvm network on: devvm restart starts it confined again" bash -c "cd '$np' &&
+  ${U[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
+  [[ \$('$D' network) == on ]] && grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+check "... its allow list and DNS closed again, and direct connections fail" smolnet_closed "$vm"
+check "rm -f deletes it, its proxy and its state" bash -c "cd '$np' && ${U[*]} '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+  [[ -z \$(smol_status '$vm') && ! -e '$vms/$vm' ]] && sleep 4 && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+kill "$listener" 2>/dev/null; [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null; listener="" udp_listener=""
+rm -f "$work/listener.auth"
 
 section "smolvm: shared tools"
 t=$(newproj smoltools); echo '{}' > "$t/package.json"

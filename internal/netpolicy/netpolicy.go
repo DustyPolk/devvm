@@ -26,6 +26,11 @@ const (
 	KeyProxySalt = "proxy_salt" // what ends the VM's placeholders
 	KeySSHPort   = "ssh_port"   // the host port of the VM's ssh, fixed while confined
 	KeyProxyPort = "proxy_port" // the host loopback port its proxy listens on
+	// On a backend with a decider (backend.Decider): the host loopback port
+	// the proxy decides on, and the token its backend proves itself with,
+	// new at each start.
+	KeyDeciderPort  = "decider_port"
+	KeyDeciderToken = "decider_token"
 )
 
 // ProxyUser is the user in a VM's proxy URL; the VM's key is the password.
@@ -64,11 +69,26 @@ func Key(st *state.VM) (string, error) { return random(st, KeyProxyKey) }
 // its proxy's password away.
 func Salt(st *state.VM) (string, error) { return random(st, KeyProxySalt) }
 
+// deciderToken returns the token the VM's backend proves itself to its
+// proxy's decider with, a new one unless the VM runs (its backend holds the
+// one it started with): 32 random bytes, as 64 hex digits.
+func deciderToken(st *state.VM, running bool) (string, error) {
+	if v := st.Get(KeyDeciderToken); v != "" && running {
+		return v, nil
+	}
+	return newRandom(st, KeyDeciderToken, 32)
+}
+
 func random(st *state.VM, key string) (string, error) {
 	if v := st.Get(key); v != "" {
 		return v, nil
 	}
-	b := make([]byte, 16)
+	return newRandom(st, key, 16)
+}
+
+// newRandom sets key to n new random bytes, as hex.
+func newRandom(st *state.VM, key string, n int) (string, error) {
+	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}

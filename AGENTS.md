@@ -88,7 +88,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
 - **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `gc` (an `img-*` folder's VM, a stale fixture), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
 - **Linux hosts:** `LIMA_HOME=~/.lt-linux-go`, VM `linuxhost` (nested virtualization, the repo read-only, copied to `~/devvm`), set up as [testing.md](docs/content/docs/testing.md) says; never `~/.lt-linux`, which is the user's.
-- **`tests/e2e.sh --backend smolvm`** runs only the `smolvm` section (after touching `internal/backend/smolvm` or shared code); it acts only on machines with its sandbox's label.
+- **`tests/e2e.sh --backend smolvm`** runs only the `smolvm` section (after touching `internal/backend/smolvm` or shared code); it acts only on machines with its sandbox's label. Unreviewed emulations are checked through `DEVVM_UNREVIEWED=backend:feature`, which only test builds (e2e's, the CLI tests', by ldflags) read.
 - **e2e to come:** network: git over SSH, opencode's login; tools: python, uv, claude, codex, rust, go, adding in place, gc.
 - **Delete test VMs and temp files afterwards.** Long builds run in the background. Tests that `chflags` real files unlock them (`chflags -R nouchg`), only in their own temp folders.
 - **The testscript runner stops the sandbox's proxies** (`pkill -f` on `-lifeline`): the stub hostagent is gone before they look, so they'd wait 15 minutes.
@@ -106,8 +106,8 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **Shared tools:** mise rewrites `latest`/`24`/`lts` links in a tool's folder after any install, so those folders are local in the VM; only version folders are mounted.
 - **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
 - **smolvm runs an image as a container in an Alpine microVM:** no init system, `exec` enters the container as root with only `HOME` set (no `USER`, no `/etc/environment`), `/dev` has no loop nodes (`mknod`), its EROFS mounts only uncompressed images, Docker needs `-v /var/lib/docker` and installs `systemctl` (tell systemd by `/run/systemd/system`). virtiofs shows host files as the host's uid, so the VM's user has it.
-- **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine, and a pack machine whose pack (stub and `.smolmachine`) is gone. `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`. On macOS it shares the user's machines: touch only those with devvm's label.
-- **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`.
+- **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine, and a pack machine whose pack (stub and `.smolmachine`) is gone. `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`. On macOS it shares the user's machines (kept under `HOME`: a devvm run with another `HOME` sees others): touch only those with devvm's label.
+- **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`. Under mediated egress a refused connection still opens in the guest, then resets (test with data, not a connect); TCP and UDP to any port 53 go to its resolver; `--dns` is create-only; a machine once started mediated won't start without a decider until `--no-egress-interceptor`.
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 
 ## Commits and tasks
@@ -166,6 +166,7 @@ Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, fe
 
 Deliberate changes from the bash:
 - A failed network self-check stops the VM, existing VMs included; a failed start stops the proxy it started.
+- A running network-policy VM whose proxy can't start again (port taken, start failed) is stopped (`net_proxy_down_stopped`); `proxy_port_taken` no longer asks to stop it.
 - A failed build keeps its stopped VM for inspection; a failed create or clone deletes the partial instance. `script_failed` suggests `devvm limactl shell --start` (no `lima_home=`).
 - Rebuild warns about and keeps an image in use (`image_in_use`). Build VMs are always confined (no `.confined`, `build_vm_unconfined`, `unconfine`).
 - The proxy is in the binary (no `build_proxy`, `tool_intact`); `devvm _qemu connect` replaces `-connect`; log prefix `devvm proxy: `; `dial` refuses ports outside 1–65535; placeholders keep `devvm-proxy-managed`; its password and the login salt are in no process's arguments.
@@ -203,7 +204,7 @@ Deliberate changes from the bash:
 - `install.sh`: the host's archive (`devvm-<v>-<os>-<arch>`, Apple silicon's under Rosetta), the binary and its files; an older version a running process names (a VM's proxy, QEMU) is kept for a later install; commands in its text aren't quoted.
 
 Pending in code:
-- deadcode's list: `backendtest` (tests'), `backend.Emulated` (an emulating backend).
+- deadcode's list: `backendtest` (tests').
 - `devvm setup` asks for the default backend once there's a second one. `log_ref`, `see_log`/`see_output` come with their callers.
 
 Bash fixes copied: none yet.

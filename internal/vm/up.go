@@ -491,7 +491,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		e.Proxy.Stop(vm)
 	} else {
 		var err error
-		if conf, err = e.Proxy.Prepare(ctx, st, b.Lifeline(vm), false); err != nil {
+		if conf, err = e.Proxy.Prepare(ctx, b, st, false); err != nil {
 			return conf, err
 		}
 	}

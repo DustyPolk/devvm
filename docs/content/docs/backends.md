@@ -17,7 +17,7 @@ Each backend declares how it has each feature:
 
 `devvm doctor` lists them for every backend devvm has, an emulation whose review hasn't passed as `unreviewed`.
 
-The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Its emulations are planned: until each is reviewed, smolvm has none of those features.
+The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Network policy is emulated and reviewed; its other emulations are planned. Until each is reviewed, devvm refuses it.
 
 | Feature | What it is | Lima | smolvm (experimental) | Docker (planned) |
 | --- | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are 
 | `project-mount` | the project folder, read-write | native: virtiofs (macOS), 9p (Linux) | native: virtiofs; files the VM makes are the user's on the host, mode 0600 | native |
 | `agent-folders` | agents' host folders, read-only | native: read-only mounts, enforced by the host | native: read-only mounts, enforced by the host | native |
 | `tools-share` | the shared tools, read-only | native: a read-only mount, enforced by the host | native: a read-only mount, enforced by the host; tool images uncompressed, as its kernel's EROFS has no compression | native |
-| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` and a `guestfwd` to the proxy (Linux) ([details](lima.md#confinement)) | none; planned emulation: an allow list of the host, and devvm's proxy deciding each connection ([details](design.md#smolvm)) | emulated |
+| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` and a `guestfwd` to the proxy (Linux) ([details](lima.md#confinement)) | emulated (reviewed): an allow list of the host, DNS closed but for one name, and devvm's proxy deciding each connection ([details](smolvm.md#network-policy)) | emulated |
 | `ssh` | ssh for editors | native: Lima's ssh forward and config | none; planned emulation: sshd, started by devvm after each start, on a forwarded port | emulated |
 | `ports` | the listed ports forwarded to the host's loopback | native: port forward rules ([details](lima.md#ports)) | native for servers listening on all addresses, at most 64 ports ([details](smolvm.md#what-devvm-sets-on-a-vm)) | native (recreating the container) |
 | `ports-all` | every port forwarded, servers on the VM's loopback included | native | none; planned emulation | emulated |

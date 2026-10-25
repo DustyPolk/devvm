@@ -5,7 +5,7 @@ weight: 32
 
 [smolvm](https://github.com/smol-machines/smolvm) is an experimental backend: each project gets a microVM that runs its image as a container, with no init system. Choose it per VM with `--backend smolvm`, or for every new VM with `devvm setup --backend smolvm`.
 
-It lacks network policy, ssh for editors (`devvm ssh`, `devvm code`, `--clone`), forwarding every port, and turning SSH agent forwarding on or off once a VM is made. devvm refuses each of them in one line naming the VM ([features](backends.md#features)); they come later, as reviewed emulations.
+It lacks ssh for editors (`devvm ssh`, `devvm code`, `--clone`), forwarding every port, and turning SSH agent forwarding on or off once a VM is made. [Network policy](#network-policy) is emulated, and reviewed. devvm refuses each of those it lacks in one line naming the VM ([features](backends.md#features)); they come later, as reviewed emulations.
 
 ## Requirements
 
@@ -39,10 +39,20 @@ devvm's own scripts for this (`prepare.sh`, `shims.sh`) are in `base`'s key, wit
 ## What devvm sets on a VM
 
 - **Mounts:** the project folder (read-write) and agents' folders (read-only) at their host paths, the shared tools at `/mnt/devvm-tools` (read-only), and `/var/lib/docker` on the machine's own disk, which Docker's storage needs. A path with a colon is refused: smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, mode 0600.
-- **Network:** smolvm's own, without network policy: the internet, not the host's loopback.
+- **Network:** smolvm's own, without network policy: the internet, not the host's loopback. With it, [below](#network-policy).
 - **Size:** what you ask for, or base's; the disk only grows.
 - **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 64 ports. Only servers listening on all addresses (`0.0.0.0`) are reached. `all`, the default, is refused: pass `--ports` or set `devvm ports -g`.
 - **SSH agent forwarding:** chosen when the VM is made (`--ssh-agent`), and fixed then. At each start smolvm forwards the agent `SSH_AUTH_SOCK` names (devvm's own with `devvm ssh-agent devvm`); with none, the start stops (`smolvm_no_agent`).
+
+## Network policy
+
+Emulated, and reviewed. A VM with [network policy](network.md) reaches nothing but its proxy, as on Lima, from three parts devvm sets while it's stopped ([design](design.md#network-policy-on-smolvm)):
+
+- **An allow list of the host alone** (`100.96.0.1/32`, the gateway): smolvm refuses connections anywhere else, and UDP but DNS.
+- **DNS closed:** smolvm answers every query `NXDOMAIN` itself, without asking anyone; names resolve in the proxy. One name, `devvm.invalid`, which smolvm needs to filter on, is still asked of your resolver: a narrow way out, as the VM chooses when and how to ask ([details](design.md#network-policy-on-smolvm)).
+- **devvm's proxy deciding each connection** (smolvm's mediated egress): before smolvm connects anywhere, it asks the proxy, which takes over connections to itself and refuses the rest: other ports of the host's, which `devvm log` shows as `BLOCKED`, a direct connection. The proxy's address in the VM is `http://100.96.0.1:<port>`.
+
+It fails closed: with the proxy gone, nothing gets out, and once a VM started so, `smolvm machine start` refuses it without a decider. A VM someone started with a decider of their own, or whose allow list someone widened while it runs, isn't confined: devvm shows it `unenforced` and stops it ([the self-check](network.md#the-self-check)). A UDP allow someone adds (`smolvm machine update --allow-udp`) lets UDP past the decider, and smolvm doesn't show it: don't add one to devvm's machines. `devvm network off` takes it all away at the next start.
 
 ## No init system
 

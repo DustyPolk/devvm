@@ -79,6 +79,9 @@ type machine struct {
 	StorageGB *float64          `json:"storage_gb"`
 	Network   bool              `json:"network"`
 	Labels    map[string]string `json:"labels"`
+	// Its allow lists: none for smolvm's whole network.
+	AllowedCIDRs []string `json:"allowed_cidrs"`
+	AllowedHosts []string `json:"allowed_hosts"`
 }
 
 // defaultStorage is smolvm's disk size for a machine that doesn't say.
@@ -177,6 +180,17 @@ func (s *Smolvm) update(ctx context.Context, vm string, opts ...string) error {
 	args := append([]string{"machine", "update", "--name", vm}, opts...)
 	if err := s.Runner.Run(ctx, msg.Configuring(vm), s.smolvm(ctx, args...)); err != nil {
 		return backend.Logged(msg.SmolvmUpdateFailed(vm))
+	}
+	return nil
+}
+
+// updateQuiet is update for the machine's environment, its output kept out
+// of the run log: smolvm prints the values it sets, the proxy's password
+// among them.
+func (s *Smolvm) updateQuiet(ctx context.Context, vm string, opts ...string) error {
+	args := append([]string{"machine", "update", "--name", vm}, opts...)
+	if _, err := s.Runner.Output(s.smolvm(ctx, args...)); err != nil {
+		return msg.SmolvmUpdateFailed(vm)
 	}
 	return nil
 }

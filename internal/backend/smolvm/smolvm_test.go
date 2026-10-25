@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -147,15 +148,21 @@ func TestCaps(t *testing.T) {
 		want := !slices.Contains([]backend.Feature{
 			backend.FeatureEgressProxy, backend.FeatureSSH, backend.FeaturePortsAll, backend.FeatureAgentToggle,
 		}, f)
-		if caps[f].IsNative() != want || (!want && caps[f].String() != "none") {
+		none := "none"
+		if f == backend.FeatureEgressProxy {
+			none = "emulated" // reviewed
+		}
+		if caps[f].IsNative() != want || (!want && caps[f].String() != none) {
 			t.Errorf("%s: %s", f, caps[f])
 		}
 	}
-	err := backend.Require(s, "devvm-x", backend.Confinement{Net: backend.NetProxy}.Features()...)
-	if got := names(err); got != "backend_lacks backend=smolvm feature=egress-proxy vm=devvm-x" {
-		t.Errorf("network policy: %s", got)
+	if err := backend.Require(s, "devvm-x", backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
+		t.Errorf("network policy: %v", err)
 	}
-	err = backend.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...)
+	if err := backend.Require(s, "devvm-x", backend.FeatureSSH); names(err) != "backend_lacks backend=smolvm feature=ssh vm=devvm-x" {
+		t.Errorf("ssh: %v", err)
+	}
+	err := backend.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...)
 	if got := names(err); got != "backend_lacks backend=smolvm feature=ports-all vm=devvm-x" {
 		t.Errorf("every port: %s", got)
 	}
@@ -305,8 +312,8 @@ func TestStart(t *testing.T) {
 		s.calls(t)[0] != "smolvm machine update --name "+vm+" --no-net" {
 		t.Errorf("no network: %v, %q", err, s.calls(t))
 	}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); names(err) != "backend_lacks backend=smolvm feature=egress-proxy vm="+vm {
-		t.Errorf("network policy: %v", err)
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); err == nil || names(err) != "not a message: smolvm: "+vm+": no decider to start it through" {
+		t.Errorf("network policy without a decider: %v", err)
 	}
 
 	// Forwarding: the agent it's given, or none.
@@ -335,6 +342,119 @@ func TestStart(t *testing.T) {
 	}
 	if err := s.SetAgentForwarding(t.Context(), fw, true); err != nil {
 		t.Errorf("unchanged: %v", err)
+	}
+}
+
+// Network policy: an allow list of the gateway, DNS answering only a name
+// that doesn't exist, the proxy's address in the environment, and the start
+// through devvm's decider, its token in no arguments. Confined while it
+// runs on that start; a start without network policy takes it all away.
+func TestStartConfined(t *testing.T) {
+	s := newSandbox(t)
+	t.Setenv("SMOLVM_INTERCEPTOR_TOKEN", strings.Repeat("cd", 32)) // the user's own: never passed on
+	vm := "devvm-n-0123456789abcd"
+	s.machine(t, vm, "stopped 4 8192 20 false")
+	tok := strings.Repeat("ab", 32)
+	c := backend.Confinement{
+		Net: backend.NetProxy, ProxyPort: 3128, ProxyUser: "devvm", ProxyPassword: "pw", Env: map[string]string{"NO_PROXY": "localhost"},
+		Decider: "127.0.0.1:4000", DeciderToken: tok,
+	}
+	for _, bad := range []backend.Confinement{
+		{Net: backend.NetProxy, Decider: "10.0.0.1:4000", DeciderToken: tok},
+		{Net: backend.NetProxy, Decider: "127.0.0.1:4000", DeciderToken: "ab"},
+	} {
+		if err := s.Start(t.Context(), vm, bad); err == nil {
+			t.Errorf("%+v: started", bad)
+		}
+	}
+	if err := s.Start(t.Context(), vm, c); err != nil {
+		t.Fatal(err)
+	}
+	u := "http://devvm:pw@100.96.0.1:3128" //nolint:gosec // the test's own password
+	want := []string{
+		"smolvm machine update --name " + vm + " --reset-allow-list --allow-cidr 100.96.0.1/32 --allow-host-pattern devvm.invalid",
+		// Kept out of the run log: smolvm prints what it sets.
+		"smolvm machine update --name " + vm + " -e HTTPS_PROXY=" + u + " -e HTTP_PROXY=" + u + " -e NO_PROXY=localhost -e http_proxy=" + u + " -e https_proxy=" + u,
+		"smolvm machine start --name " + vm + " --mediated-egress --egress-interceptor 127.0.0.1:4000",
+		"smolvm machine exec --name " + vm + " -i -- sh -s --",
+	}
+	if got := s.calls(t); !slices.Equal(got, want) {
+		t.Errorf("calls:\n%q\nwant\n%q", got, want)
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.stub, "smolvm-decider-"+vm)); strings.TrimSpace(string(b)) != "127.0.0.1:4000 "+tok {
+		t.Errorf("decider: %q", b)
+	}
+	if strings.Contains(strings.Join(s.calls(t), " "), tok) {
+		t.Error("the token is in smolvm's arguments")
+	}
+	if ok, err := s.Confined(t.Context(), vm); !ok || err != nil {
+		t.Errorf("Confined = %v, %v", ok, err)
+	}
+	// Its allow list widened while it runs: no longer confined, and the next
+	// start sets it again.
+	if out, err := exec.CommandContext(t.Context(), "smolvm", "machine", "update", "--name", vm, "--allow-cidr", "1.1.1.1/32").CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if ok, err := s.Confined(t.Context(), vm); ok || err != nil {
+		t.Errorf("widened: Confined = %v, %v", ok, err)
+	}
+	if err := s.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	s.reset(t)
+	if err := s.Start(t.Context(), vm, c); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.calls(t); len(got) == 0 || got[0] != want[0] {
+		t.Errorf("widened, then started: %q", got)
+	}
+	if ok, err := s.Confined(t.Context(), vm); !ok || err != nil {
+		t.Errorf("started again: Confined = %v, %v", ok, err)
+	}
+	// Started again as it was: nothing to change.
+	if err := s.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.Confined(t.Context(), vm); ok {
+		t.Error("stopped, yet confined")
+	}
+	s.reset(t)
+	if err := s.Start(t.Context(), vm, c); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.calls(t); len(got) != 2 || !strings.HasPrefix(got[0], "smolvm machine start ") {
+		t.Errorf("started again: %q", got)
+	}
+	// Started some other way since: not confined.
+	pid := filepath.Join(s.stub, "smolvm-data", vm, "agent.pid")
+	if err := os.WriteFile(pid, []byte(strconv.Itoa(os.Getpid())+"\n1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.Confined(t.Context(), vm); ok || err != nil {
+		t.Errorf("another start: Confined = %v, %v", ok, err)
+	}
+	// Without network policy: smolvm's own network, nothing of the decider's.
+	if err := s.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	s.reset(t)
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); err != nil {
+		t.Fatal(err)
+	}
+	want = []string{
+		"smolvm machine update --name " + vm + " --net --reset-allow-list --no-egress-interceptor",
+		"smolvm machine update --name " + vm + " --remove-env HTTPS_PROXY --remove-env HTTP_PROXY --remove-env NO_PROXY --remove-env http_proxy --remove-env https_proxy",
+		"smolvm machine start --name " + vm,
+		"smolvm machine exec --name " + vm + " -i -- sh -s --",
+	}
+	if got := s.calls(t); !slices.Equal(got, want) {
+		t.Errorf("calls:\n%q\nwant\n%q", got, want)
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.stub, "smolvm-decider-"+vm)); strings.TrimSpace(string(b)) != "none unset" {
+		t.Errorf("decider: %q", b)
+	}
+	if ok, _ := s.Confined(t.Context(), vm); ok {
+		t.Error("confined without network policy")
 	}
 }
 

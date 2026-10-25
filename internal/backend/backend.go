@@ -112,6 +112,22 @@ type KeyFiles interface {
 	KeyFiles() map[string][]byte
 }
 
+// Decider is a backend that confines a VM with network policy by asking
+// devvm's proxy about each connection the VM opens (smolvm's mediated
+// egress): the proxy's decider takes over only those to the proxy's address
+// in the VM (ProxyURL's host and port) and refuses the rest. Start with
+// NetProxy then needs Confinement's Decider and DeciderToken. A backend that
+// confines VMs some other way doesn't implement it.
+type Decider interface {
+	UsesDecider() bool
+}
+
+// UsesDecider reports whether b confines VMs through devvm's decider.
+func UsesDecider(b Backend) bool {
+	d, ok := b.(Decider)
+	return ok && d.UsesDecider()
+}
+
 // Problem is something a backend needs that the host lacks, as devvm
 // doctor reports it.
 type Problem struct {
@@ -239,6 +255,11 @@ type Confinement struct {
 	ProxyPort     int
 	ProxyUser     string
 	ProxyPassword string
+	// NetProxy on a backend with a decider (Decider): the proxy's decider,
+	// on host loopback (127.0.0.1:PORT), and the token, 64 hex digits, the
+	// backend proves itself to it with. Never in the VM.
+	Decider      string
+	DeciderToken string
 	// Env is more guest environment, for every login (the proxy's CA
 	// files, NO_PROXY).
 	Env map[string]string

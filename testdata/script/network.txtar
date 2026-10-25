@@ -70,6 +70,19 @@ exec sh -c 'cat "$VMS"/devvm-leak-*'
 stdout '^net_check=unenforced$'
 rm $STUB_DIR/net-direct
 
+# A running VM whose proxy is gone and can't start again (another program
+# took its port) is stopped, never left running without it.
+cd $WORK/net
+exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$pp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm
+stderr '^devvm: net_proxy_down_stopped vm=devvm-net-[0-9a-f]{14}$'
+stderr '^devvm: proxy_port_taken port=[0-9]+ vm=devvm-net-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-net-[0-9a-f]{14}$'
+! stdout 'limactl shell --workdir /\S*/net'
+exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
+
 # Secrets: claude comes with the image. The proxy gets its binding, with
 # the VM's own placeholder and never the token, and its host on 443.
 mkdir $WORK/agent

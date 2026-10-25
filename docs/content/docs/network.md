@@ -24,7 +24,7 @@ For a VM with network policy, devvm:
 1. makes its CA, if it has none with over a week left, and keeps it out of Time Machine (macOS);
 2. writes the VM's [secrets](#secrets) as its proxy sees them;
 3. starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for it to say it's listening;
-4. starts the VM [confined](lima.md#confinement), its proxy settings pointing at the proxy;
+4. starts the VM [confined](lima.md#confinement) (on smolvm, [emulated](smolvm.md#network-policy)), its proxy settings pointing at the proxy;
 5. runs [the self-check](#the-self-check), before the VM's setup and its shell;
 6. sets the VM up: devvm's CA, the proxy for the tools that don't read the environment, the VM's placeholders and its [agents' logins and settings](#agents-logins-and-settings) with your keys taken out.
 
@@ -41,9 +41,11 @@ One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`
 - for hosts with a bound secret, swaps the placeholder in one header for the real value ([Secrets](#secrets)); everything else passes unread;
 - logs every decision.
 
-It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file), or 15 minutes after starting if the hostagent never appears; `devvm stop` stops it at once. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
+On smolvm it also decides, before smolvm makes it, each connection the VM opens: it takes over those to itself and refuses the rest ([details](smolvm.md#network-policy)).
 
-devvm counts a proxy as started only once it says it's listening on the VM's port and still runs: a program that took the port first would otherwise get the VM's traffic. If it doesn't, devvm stops and names the proxy's log.
+It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file; on smolvm, the machine's process), or 15 minutes after starting if the hostagent never appears; `devvm stop` stops it at once. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
+
+devvm counts a proxy as started only once it says it's listening on the VM's port and still runs: a program that took the port first would otherwise get the VM's traffic. If it doesn't, devvm stops and names the proxy's log. A VM already running whose proxy can't start again (gone, and another program took its port, or it fails to start) is stopped too (`net_proxy_down_stopped`): a VM with network policy never runs on without its proxy. The next `devvm` starts both.
 
 ## Allowlists
 
@@ -114,6 +116,8 @@ Network policy holds only while the VM runs on the Lima process devvm started co
 
 - **Not started confined** (started outside devvm, or running since before `devvm network on`): in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
 - **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
+
+On smolvm, the process devvm started is the machine's, through the proxy's decider; `smolvm machine start` refuses the VM without a decider, and one started with someone else's isn't confined.
 
 `devvm ls` shows such a VM's network policy as `unenforced`: one whose last self-check failed, or one running that isn't on the process devvm started confined (checked on the host each time). So does `devvm network`.
 
@@ -194,6 +198,9 @@ devvm runs the proxy as itself. Flags take one dash or two; errors end in one li
 | `-ca`, `-cakey` | devvm's CA, for interception |
 | `-secrets` | the VM's secret bindings, read again when they change |
 | `-secret-cmd` | the program run as `PROGRAM secret get NAME` for a value |
+| `-decider` | also decide each connection the VM opens, on this loopback address (smolvm's mediated egress) |
+| `-decider-to` | with `-decider`: the proxy's address in the VM, the only destination taken over |
+| `-decider-token-file` | with `-decider`: a file holding the token smolvm proves itself with (64 hex digits); required |
 
 Modes that do one thing and exit:
 

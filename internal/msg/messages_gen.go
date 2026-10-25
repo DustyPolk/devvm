@@ -179,6 +179,11 @@ func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
+// BackendUnreviewedUsed is [backend_unreviewed_used]: "{{.vm}} uses the {{.backend}} backend's {{.feature}}, unreviewed, as DEVVM_UNREVIEWED asks: for testing only"
+func BackendUnreviewedUsed(backend string, feature string, vm string) M {
+	return M{id: "backend_unreviewed_used", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
+}
+
 // BadFrom is [bad_from]: "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
 func BadFrom(from string) M {
 	return M{id: "bad_from", vals: []val{{"from", from}}}
@@ -1049,6 +1054,11 @@ func NetOnOldTokens(vm string) M {
 	return M{id: "net_on_old_tokens", vals: []val{{"vm", vm}}}
 }
 
+// NetProxyDownStopped is [net_proxy_down_stopped]: "stopped {{.vm}}: its network policy proxy couldn't start, and it doesn't run without one; devvm starts both again"
+func NetProxyDownStopped(vm string) M {
+	return M{id: "net_proxy_down_stopped", vals: []val{{"vm", vm}}}
+}
+
 // NetSetRunning is [net_set_running]: "turned network policy {{.state}} for {{.vm}}; it applies on devvm restart"
 func NetSetRunning(state string, vm string) M {
 	return M{id: "net_set_running", vals: []val{{"state", state}, {"vm", vm}}}
@@ -1314,7 +1324,7 @@ func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
 
-// ProxyPortTaken is [proxy_port_taken]: "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: stop {{.vm}}, and devvm picks another port when it starts it"
+// ProxyPortTaken is [proxy_port_taken]: "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: devvm picks another port when it next starts {{.vm}}"
 func ProxyPortTaken(port string, vm string) M {
 	return M{id: "proxy_port_taken", vals: []val{{"port", port}, {"vm", vm}}}
 }
@@ -1976,6 +1986,7 @@ var specs = map[string]spec{
 	"backend_unknown_default":     {fields: []string{"backends", "file", "name"}},
 	"backend_unknown_vm":          {fields: []string{"backend", "vm"}},
 	"backend_unreviewed":          {fields: []string{"backend", "feature", "vm"}},
+	"backend_unreviewed_used":     {fields: []string{"backend", "feature", "vm"}},
 	"bad_from":                    {fields: []string{"from"}},
 	"bad_path":                    {fields: []string{"dir"}},
 	"bad_secret_service":          {},
@@ -2150,6 +2161,7 @@ var specs = map[string]spec{
 	"net_off_next_start":          {fields: []string{"vm"}},
 	"net_off_policy":              {fields: []string{"vm"}},
 	"net_on_old_tokens":           {fields: []string{"vm"}},
+	"net_proxy_down_stopped":      {fields: []string{"vm"}},
 	"net_set_running":             {fields: []string{"state", "vm"}},
 	"net_set_stopped":             {fields: []string{"state", "vm"}},
 	"net_unenforced":              {fields: []string{"vm"}},

@@ -37,14 +37,12 @@ exec sh -c 'ls "$PACKS"/*/image.smolmachine'
 exec devvm images
 stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +smolvm$'
 
-# A new VM forwards every port by default, which smolvm can't: refused,
-# and so is network policy; nothing is made.
+# A new VM forwards every port by default, which smolvm can't: refused;
+# nothing is made.
 mkdir $WORK/web
 cd $WORK/web
 ! exec devvm --backend smolvm --from $PIN --no-network-policy base
 stderr '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm --backend smolvm --from $PIN --network-policy --ports none base
-stderr '^devvm: backend_lacks backend=smolvm feature=egress-proxy vm=devvm-web-[0-9a-f]{14}$'
 ! exists $VMS
 
 # --clone copies and fetches over ssh, which smolvm lacks.
@@ -70,12 +68,10 @@ exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
 
-# What smolvm lacks, in one line naming the VM: ssh, network policy,
-# every port, agent forwarding changed.
+# What smolvm lacks, in one line naming the VM: ssh, every port, agent
+# forwarding changed.
 ! exec devvm ssh
 stderr '^devvm: backend_lacks backend=smolvm feature=ssh vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm network on
-stderr '^devvm: backend_lacks backend=smolvm feature=egress-proxy vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm ports all
 stderr '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm ssh-agent on
@@ -91,3 +87,43 @@ stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.json'
 exec devvm ls
 ! stdout devvm-web
+
+# Network policy (emulated, reviewed). The proxy decides too, on a port of
+# its own, with a token in a file; the machine's allow list is the gateway,
+# its DNS a name that doesn't exist, its proxy settings the gateway's, and it
+# starts through the decider, the token in no arguments or logs; the
+# self-check passes.
+mkdir $WORK/pol
+cd $WORK/pol
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --backend smolvm --from $PIN --network-policy --ports none base
+! stderr 'backend_unreviewed'
+exec sh -c 'cat "$VMS"/devvm-pol-*'
+stdout '^net=on$'
+stdout '^net_check=ok$'
+stdout '^decider_port=[0-9]+$'
+stdout '^decider_token=[0-9a-f]{64}$'
+stub_calls
+stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --reset-allow-list --allow-cidr 100\.96\.0\.1/32 --allow-host-pattern devvm\.invalid$'
+stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} -e HTTPS_PROXY=http://devvm:[0-9a-f]{32}@100\.96\.0\.1:[0-9]+ '
+stdout '^smolvm machine start( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --mediated-egress --egress-interceptor 127\.0\.0\.1:[0-9]+$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} .* curl --noproxy \* -sS -m 3 -o /dev/null https://1\.1\.1\.1$'
+# smolvm prints the values it sets: the password is in no run log.
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-pol-*); ! grep -rqF "$key" "$XDG_DATA_HOME"/devvm/logs/runs'
+exec sh -c 'grep -F "deciding on 127.0.0.1:$(sed -n "s/^decider_port=//p" "$VMS"/devvm-pol-*) for devvm-pol-" "$XDG_DATA_HOME"/devvm/logs/devvm-pol-*.proxy.log'
+exec sh -c 'cat "$STUB_DIR"/smolvm-decider-devvm-pol-*'
+stdout '^127\.0\.0\.1:[0-9]+ [0-9a-f]{64}$'
+exec sh -c 'tok=$(sed -n "s/^decider_token=//p" "$VMS"/devvm-pol-*); [ "$(cat "$XDG_DATA_HOME"/devvm/run/devvm-pol-*.proxy.decider)" = "$tok" ] && ! grep -qF "$tok" "$STUB_LOG" && ! grep -rqF "$tok" "$XDG_DATA_HOME"/devvm/logs'
+# Running, with its proxy gone and the decider's port taken by another
+# program: stopped, never left running without it.
+exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-pol-*); dp=$(sed -n "s/^decider_port=//p" "$VMS"/devvm-pol-*); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$dp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm
+stderr '^devvm: net_proxy_down_stopped vm=devvm-pol-[0-9a-f]{14}$'
+stderr '^devvm: proxy_port_taken port=[0-9]+ vm=devvm-pol-[0-9a-f]{14}$'
+stub_calls
+stdout '^smolvm machine stop( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14}$'
+! stdout 'bash -l$'
+exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
+exec devvm rm -f
+stdout '^==> deleted vm=devvm-pol-[0-9a-f]{14}$'

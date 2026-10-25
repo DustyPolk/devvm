@@ -7,9 +7,16 @@
 # ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/smolvm-agent-NAME. exec answers the libc check
 # with gnu (musl with $STUB_DIR/build-libc saying so), keeps the tar stream a VM's setup is sent as
 # $STUB_DIR/sync.tar, appends a script's second line to $STUB_DIR/scripts when one is fed to bash
-# -s or sh -s, and fails with $STUB_DIR/exec-fails (a script fed to bash -s: with $STUB_DIR/script-fails). The tools build machine's build.sh writes the
+# -s or sh -s, fails a direct connection (curl --noproxy) unless $STUB_DIR/net-direct exists, and fails with $STUB_DIR/exec-fails (a script fed to bash -s: with $STUB_DIR/script-fails). The tools build machine's build.sh writes the
 # images it's asked for into the folder it mounts. pack create writes its stub and .smolmachine.
 # --version is 1.32.2, or $STUB_DIR/smolvm-version.
+# A machine's allow lists and whether it needs a decider are in $STUB_DIR/smolvm-egress/NAME
+# ("cidrs …", "hosts =…", "mediated true|false"), which update's --allow-cidr,
+# --allow-host-pattern, --reset-allow-list and --no-egress-interceptor change, and machine ls shows;
+# update prints the environment it sets (-e), values and all, as smolvm does.
+# start --mediated-egress records "INTERCEPTOR TOKEN" to $STUB_DIR/smolvm-decider-NAME (a start
+# without it, "none ${SMOLVM_INTERCEPTOR_TOKEN-unset}"), and a mediated machine started without one
+# fails.
 set -euo pipefail
 echo "smolvm $*" >> "$STUB_LOG"
 dir=$STUB_DIR/smolvm
@@ -19,8 +26,16 @@ cmd="${1:-} ${2:-}"
 shift 2 || true
 # Options before --, and the arguments after it.
 name="" label="" cpus="" mem="" storage="" net="" out="" vols=() after=()
+cidrs=() hosts=() reset=false nointer=false mediated=false inter="" envs=()
 while (( $# )); do
   case $1 in
+    -e) envs+=("$2"); shift ;;
+    --allow-cidr) cidrs+=("$2"); shift ;;
+    --allow-host-pattern) hosts+=("=$2"); shift ;;
+    --reset-allow-list) reset=true ;;
+    --no-egress-interceptor) nointer=true ;;
+    --mediated-egress) mediated=true ;;
+    --egress-interceptor) inter=$2; shift ;;
     --name|-n) name=$2; shift ;;
     --label) label=${2#*=}; shift ;;
     --cpus) cpus=$2; shift ;;
@@ -31,7 +46,7 @@ while (( $# )); do
     -o|--output) out=$2; shift ;;
     --from-vm) name=$2; shift ;;
     -v) vols+=("$2"); shift ;;
-    --state-dir|--image|--from|-p|--remove-port|--remove-volume|-e|--remove-env|-u|-w) shift ;;
+    --state-dir|--image|--from|-p|--remove-port|--remove-volume|--remove-env|-u|-w) shift ;;
     --) shift; after=("$@"); break ;;
   esac
   shift
@@ -39,6 +54,12 @@ done
 f=$dir/$name
 get() { read -r st c m s n l < "$f"; }
 put() { echo "$st $c $m $s $n $l" > "$f"; }
+eg=$STUB_DIR/smolvm-egress
+mkdir -p "$eg"
+# egress NAME KEY: a line of a machine's egress file, without its key.
+egress() { [[ ! -f $eg/$1 ]] || sed -n "s/^$2 *//p" "$eg/$1"; }
+# json_list WORDS…: a JSON list of strings.
+json_list() { local s="" w; for w in "$@"; do s+="${s:+,}\"$w\""; done; echo "[$s]"; }
 case $cmd in
   "machine ls")
     sep="" out="["
@@ -46,7 +67,12 @@ case $cmd in
       [[ -f $m ]] || continue
       read -r st c mm s n l < "$m"; nm=$(basename "$m")
       [[ ! -e $STUB_DIR/smolvm-foreign-$nm ]] || l=/elsewhere
-      out+="$sep{\"name\":\"$nm\",\"state\":\"$st\",\"cpus\":$c,\"memory_mib\":$mm,\"storage_gb\":$s,\"network\":$n,\"labels\":{\"devvm.data\":\"$l\"}}"
+      allow=""
+      # shellcheck disable=SC2046  # the lists are words
+      [[ -z $(egress "$nm" cidrs) ]] || allow+=",\"allowed_cidrs\":$(json_list $(egress "$nm" cidrs))"
+      # shellcheck disable=SC2046
+      [[ -z $(egress "$nm" hosts) ]] || allow+=",\"allowed_hosts\":$(json_list $(egress "$nm" hosts))"
+      out+="$sep{\"name\":\"$nm\",\"state\":\"$st\",\"cpus\":$c,\"memory_mib\":$mm,\"storage_gb\":$s,\"network\":$n,\"labels\":{\"devvm.data\":\"$l\"}$allow}"
       sep=,
     done
     echo "$out]" ;;
@@ -57,23 +83,42 @@ case $cmd in
   "machine start")
     get
     [[ ! -e $STUB_DIR/smolvm-start-fails ]] || exit 1
+    if $mediated; then
+      [[ -n $inter && ${SMOLVM_INTERCEPTOR_TOKEN:-} =~ ^[0-9a-f]{64}$ ]] || { echo "no interceptor" >&2; exit 1; }
+      echo "$inter $SMOLVM_INTERCEPTOR_TOKEN" > "$STUB_DIR/smolvm-decider-$name"
+      { echo "cidrs $(egress "$name" cidrs)"; echo "hosts $(egress "$name" hosts)"; echo "mediated true"; } > "$eg/$name.new"
+      mv "$eg/$name.new" "$eg/$name"
+    else
+      [[ $(egress "$name" mediated) != true ]] || { echo "requires an external interceptor" >&2; exit 1; }
+      echo "none ${SMOLVM_INTERCEPTOR_TOKEN-unset}" > "$STUB_DIR/smolvm-decider-$name"
+    fi
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/smolvm-agent-$name"
     mkdir -p "$STUB_DIR/smolvm-data/$name"
     printf '%s\n1792910265912021' "$PPID" > "$STUB_DIR/smolvm-data/$name/agent.pid"
     st=running; put ;;
   "machine stop") get; st=stopped; put ;;
-  "machine delete") rm -f "$f" ;;
+  "machine delete") rm -f "$f" "$eg/$name" ;;
   "machine update")
     get
     [[ -z $cpus ]] || c=$cpus
     [[ -z $mem ]] || m=$mem
     [[ -z $storage ]] || s=$storage
     [[ -z $net ]] || n=$net
+    oc=$(egress "$name" cidrs) oh=$(egress "$name" hosts) om=$(egress "$name" mediated)
+    ! $reset || oc="" oh=""
+    ! $nointer || om=false
+    nc="$oc ${cidrs[*]+"${cidrs[*]}"}" nh="$oh ${hosts[*]+"${hosts[*]}"}"
+    # shellcheck disable=SC2086  # the lists are words
+    { echo "cidrs" $nc; echo "hosts" $nh; echo "mediated ${om:-false}"; } > "$eg/$name"
+    [[ -z ${nc// /} ]] || n=true
+    # As smolvm does: what it set, values and all.
+    for e in ${envs[@]+"${envs[@]}"}; do echo "  env: $e"; done
     put ;;
   "machine data-dir") echo "$STUB_DIR/smolvm-data/$name" ;;
   "machine exec")
     [[ ! -e $STUB_DIR/exec-fails ]] || exit 1
     line="${after[*]}"
+    if [[ $line == *"curl --noproxy"* ]]; then [[ -e $STUB_DIR/net-direct ]] || exit 7; fi
     if [[ $line == *"command -v apk"* ]]; then cat "$STUB_DIR/build-libc" 2>/dev/null || echo gnu; exit 0; fi
     if [[ $line == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; exit 0; fi
     if [[ $name == devvm-tools-build && $line == *" bash -s -- "* ]]; then

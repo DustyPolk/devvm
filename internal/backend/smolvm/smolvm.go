@@ -8,8 +8,9 @@
 // or deletes a machine without it. On Linux smolvm's state is devvm's own
 // (--state-dir) as well.
 //
-// What smolvm lacks is refused (Caps): network policy, ssh for editors,
-// forwarding every port, and turning agent forwarding on or off later.
+// Network policy is emulated, reviewed (start.go). What smolvm lacks is
+// refused (Caps): ssh for editors, forwarding every port, and turning agent
+// forwarding on or off later.
 package smolvm
 
 import (
@@ -129,12 +130,13 @@ func New(d paths.Dirs) *Smolvm {
 // Name returns smolvm.
 func (s *Smolvm) Name() string { return Name }
 
-// Caps is what smolvm has natively. The rest waits for emulations, each
-// refused until its review passes: egress through devvm's proxy, ssh for
-// editors, every port forwarded, and agent forwarding turned on or off
-// once a VM is made.
+// Caps is what smolvm has natively, and egress through devvm's proxy
+// emulated and reviewed (Start: an allow list of the host, and the proxy
+// deciding each connection). The rest waits for
+// emulations: ssh for editors, every port forwarded, and agent forwarding
+// turned on or off once a VM is made.
 func (s *Smolvm) Caps() backend.Caps {
-	caps := backend.Caps{}
+	caps := backend.Caps{backend.FeatureEgressProxy: backend.Emulated(true)}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
 		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeaturePorts,
@@ -144,6 +146,10 @@ func (s *Smolvm) Caps() backend.Caps {
 	}
 	return caps
 }
+
+// UsesDecider is true: a machine with network policy reaches devvm's proxy
+// only through its decider (smolvm's mediated egress).
+func (s *Smolvm) UsesDecider() bool { return true }
 
 // NameMax is 0: smolvm keeps a machine's sockets in a folder named by a
 // hash, so names have no limit devvm meets.
@@ -172,6 +178,12 @@ type record struct {
 	Forwarding bool              `json:"forwarding,omitempty"`
 	Ports      []string          `json:"ports,omitempty"` // as -p has them: 5173:5173, 8000-8002:8000-8002
 	Env        map[string]string `json:"env,omitempty"`
+	// Mediated is set once the machine started through devvm's decider:
+	// smolvm then requires one at every start, until devvm removes that.
+	Mediated bool `json:"mediated,omitempty"`
+	// Confined is the lifeline (agent.pid: its pid and start time) of the
+	// machine's last start through devvm's decider; "" after any other.
+	Confined string `json:"confined,omitempty"`
 }
 
 func (s *Smolvm) readRecord(vm string) (record, error) {

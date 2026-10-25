@@ -1,6 +1,10 @@
 package backend
 
-import "github.com/w3cj/devvm/internal/msg"
+import (
+	"strings"
+
+	"github.com/w3cj/devvm/internal/msg"
+)
 
 // Feature is something a backend may have. Its name is the one the backends
 // page lists.
@@ -91,6 +95,27 @@ func (s Support) String() string {
 // Caps is how a backend has each feature. A feature it doesn't list is None.
 type Caps map[Feature]Support
 
+// Unreviewed is the unreviewed emulations Require lets through anyway, as
+// backend:feature (smolvm:egress-proxy): for the end-to-end checks that an
+// emulation's review needs, which set DEVVM_UNREVIEWED. Warn is told each
+// time one is let through. Nothing else sets them.
+var (
+	Unreviewed map[string]bool
+	Warn       = func(msg.M) {}
+)
+
+// ParseUnreviewed reads DEVVM_UNREVIEWED's value: backend:feature pairs,
+// comma-separated.
+func ParseUnreviewed(v string) map[string]bool {
+	out := map[string]bool{}
+	for p := range strings.SplitSeq(v, ",") {
+		if p = strings.TrimSpace(p); strings.Contains(p, ":") {
+			out[p] = true
+		}
+	}
+	return out
+}
+
 // Require returns nil when b has every feature usable, else the refusal
 // for the first one it lacks or only emulates unreviewed, naming vm.
 func Require(b Backend, vm string, features ...Feature) error {
@@ -98,6 +123,8 @@ func Require(b Backend, vm string, features ...Feature) error {
 	for _, f := range features {
 		switch s := caps[f]; {
 		case s.Usable():
+		case s.IsEmulated() && Unreviewed[b.Name()+":"+string(f)]:
+			Warn(msg.BackendUnreviewedUsed(b.Name(), string(f), vm))
 		case s.IsEmulated():
 			return msg.BackendUnreviewed(b.Name(), string(f), vm)
 		default:

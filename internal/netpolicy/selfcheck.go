@@ -2,6 +2,7 @@ package netpolicy
 
 import (
 	"context"
+	"errors"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -116,6 +117,23 @@ func enforced(ctx context.Context, b backend.Backend, vm string) (bool, error) {
 // shouldn't). A VM that doesn't answer doesn't.
 func Direct(ctx context.Context, b backend.Backend, vm string) bool {
 	return b.Exec(ctx, vm, directArgv, backend.ExecOpts{}) == nil
+}
+
+// Unproxied stops a running VM whose proxy couldn't start (err): a VM with
+// network policy never runs on without its proxy. It warns that it stopped
+// it and returns err; if the stop fails, the stop's failure, after warning
+// err. The stop isn't cancelled with ctx: an interrupt never leaves the VM
+// running.
+func Unproxied(ctx context.Context, b backend.Backend, vm string, err error) error {
+	if serr := b.Stop(context.WithoutCancel(ctx), vm); serr != nil {
+		var m msg.M
+		if errors.As(err, &m) {
+			ui.Warn(m)
+		}
+		return serr
+	}
+	ui.Warn(msg.NetProxyDownStopped(vm))
+	return err
 }
 
 // stop stops the VM, which network policy doesn't hold, and returns why:
