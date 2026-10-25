@@ -140,24 +140,8 @@ func (e *Env) defaultPorts() (string, error) {
 	return ParsePorts(def)
 }
 
-// portsVM finds the folder's VM for devvm ports, which must exist, be
-// made for this folder and have finished being made.
-func (e *Env) portsVM(ctx context.Context) (*found, error) {
-	t, err := e.find(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	if !t.exists {
-		return nil, msg.NoVMPorts(t.f.Dir)
-	}
-	if err := e.checkFolder(t.f, t.st); err != nil {
-		return nil, err
-	}
-	if !t.st.Exists() || t.st.Get(KeyNet) == "" {
-		return nil, msg.VMUnfinished(t.f.Name)
-	}
-	return t, nil
-}
+// portsVM finds the folder's VM for devvm ports.
+func (e *Env) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
 
 // Ports writes to w which ports the folder's VM forwards (all, none or a
 // list), saying so when that changes at its next start; with global,

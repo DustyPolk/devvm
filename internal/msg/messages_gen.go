@@ -987,6 +987,11 @@ func NoVMPorts(dir string) M {
 	return M{id: "no_vm_ports", vals: []val{{"dir", dir}}}
 }
 
+// NoVMSize is [no_vm_size]: "no VM for {{.dir}}: devvm --cpus N makes one with a size, or -g sets the size new VMs get"
+func NoVMSize(dir string) M {
+	return M{id: "no_vm_size", vals: []val{{"dir", dir}}}
+}
+
 // NoVMSSHAgent is [no_vm_ssh_agent]: "no VM for {{.dir}}: devvm makes one, devvm --ssh-agent one that forwards your SSH agent"
 func NoVMSSHAgent(dir string) M {
 	return M{id: "no_vm_ssh_agent", vals: []val{{"dir", dir}}}
@@ -1277,7 +1282,17 @@ func ShareWaiting(dir string) M {
 	return M{id: "share_waiting", vals: []val{{"dir", dir}}}
 }
 
-// SizeFlagsIgnored is [size_flags_ignored]: "--cpus, --memory and --disk only apply to new VMs"
+// SizeDefaults is [size_defaults]: "new VMs get {{.size}}"
+func SizeDefaults(size string) M {
+	return M{id: "size_defaults", vals: []val{{"size", size}}}
+}
+
+// SizeFailed is [size_failed]: "couldn't show or change the size: {{.reason}}"
+func SizeFailed(reason string) M {
+	return M{id: "size_failed", vals: []val{{"reason", reason}}}
+}
+
+// SizeFlagsIgnored is [size_flags_ignored]: "--cpus, --memory and --disk only apply to new VMs: devvm size --cpus N"
 func SizeFlagsIgnored() M {
 	return M{id: "size_flags_ignored"}
 }
@@ -1290,6 +1305,11 @@ func SizeNextStart(vm string) M {
 // SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
 func SizeNotGib(flag string, value string) M {
 	return M{id: "size_not_gib", vals: []val{{"flag", flag}, {"value", value}}}
+}
+
+// SizePending is [size_pending]: "{{.vm}} gets {{.size}} from its next start: devvm restart"
+func SizePending(size string, vm string) M {
+	return M{id: "size_pending", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
 // SSHAgentEmpty is [ssh_agent_empty]: "your SSH agent has no keys, so git over SSH won't work in the VM"
@@ -1582,6 +1602,11 @@ func VMOutdated(changed string) M {
 	return M{id: "vm_outdated", vals: []val{{"changed", changed}}}
 }
 
+// VMSize is [vm_size]: "{{.vm}} has {{.size}}"
+func VMSize(size string, vm string) M {
+	return M{id: "vm_size", vals: []val{{"size", size}, {"vm", vm}}}
+}
+
 // VMUnfinished is [vm_unfinished]: "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes it again"
 func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
@@ -1786,6 +1811,7 @@ var specs = map[string]spec{
 	"no_vm":                       {fields: []string{"dir"}},
 	"no_vm_policy":                {fields: []string{"dir"}},
 	"no_vm_ports":                 {fields: []string{"dir"}},
+	"no_vm_size":                  {fields: []string{"dir"}},
 	"no_vm_ssh_agent":             {fields: []string{"dir"}},
 	"not_a_rule":                  {fields: []string{"rule"}},
 	"not_an_image":                {fields: []string{"name"}},
@@ -1844,9 +1870,12 @@ var specs = map[string]spec{
 	"setid_files":                 {fields: []string{"files"}},
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},
+	"size_defaults":               {fields: []string{"size"}},
+	"size_failed":                 {fields: []string{"reason"}},
 	"size_flags_ignored":          {},
 	"size_next_start":             {fields: []string{"vm"}},
 	"size_not_gib":                {fields: []string{"flag", "value"}},
+	"size_pending":                {fields: []string{"size", "vm"}},
 	"ssh_agent_empty":             {},
 	"ssh_agent_failed":            {fields: []string{"reason"}},
 	"ssh_agent_flag_ignored":      {},
@@ -1905,5 +1934,6 @@ var specs = map[string]spec{
 	"vm_other_folder_adopt":       {fields: []string{"vm", "was"}},
 	"vm_other_folder_rm":          {fields: []string{"vm", "was"}},
 	"vm_outdated":                 {fields: []string{"changed"}},
+	"vm_size":                     {fields: []string{"size", "vm"}},
 	"vm_unfinished":               {fields: []string{"vm"}},
 }

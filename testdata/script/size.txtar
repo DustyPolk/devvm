@@ -1,0 +1,101 @@
+# devvm size: a folder's VM's CPUs, memory and disk, changed at once for a
+# stopped VM, from its next start for a running one; with -g, the size new
+# VMs get (the size file).
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env CFG=$XDG_CONFIG_HOME/devvm
+
+# No VM yet.
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm size
+stderr '^devvm: no_vm_size dir=\S*/web$'
+! exec devvm size big
+stderr '^devvm: usage_error '
+
+# -g: the size new VMs get, unset (the image's) until it's set; each change
+# keeps what it leaves unset. No VM is looked at.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm size -g
+cmp stdout $WORK/unset
+exec devvm size -g --cpus 2 --memory 3G
+stdout '^==> size_defaults size=cpus=2 memory=3GiB$'
+exec devvm size -g --memory=2.5GiB
+stdout '^==> size_defaults size=cpus=2 memory=2\.5GiB$'
+exec devvm size -g
+cmp stdout $WORK/set
+exec sh -c 'cat "$CFG/size"'
+stdout '^cpus=2$'
+stdout '^memory=2\.5$'
+! stdout disk
+! exec devvm size -g --cpus 9999
+stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
+! exec devvm size -g --memory 16M
+stderr '^devvm: size_not_gib flag=--memory value="16M"$'
+! stub_calls
+# A hand-edited size file is refused, to show or change.
+cp $WORK/bad-size $CFG/size
+! exec devvm size -g
+stderr '^devvm: size_not_gib flag=--memory value="1\$\(touch x\)"$'
+! exec devvm size -g --cpus 2
+stderr '^devvm: size_not_gib '
+rm $CFG/size
+
+# A new VM. Running: devvm size shows what it has, and a change waits for
+# its next start.
+exec devvm --no-network-policy --no-git-protect base
+exec devvm size
+stdout '\Acpus=4 memory=8GiB disk=100GiB\n\z'
+! stderr .
+exec sh -c ': > "$STUB_LOG"'
+exec devvm size --cpus 2 --memory 3
+stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+! stdout vm_size
+stub_calls
+! stdout 'limactl edit'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^cpus=2$'
+stdout '^memory=3$'
+exec devvm size
+stdout '\Acpus=4 memory=8GiB disk=100GiB\n\z'
+stderr '^size_pending size=cpus=2 memory=3GiB vm=devvm-web-[0-9a-f]{14}$'
+# Back to what it has: nothing waits.
+exec devvm size --cpus 4 --memory 8
+stdout '^==> vm_size size=cpus=4 memory=8GiB disk=100GiB vm=devvm-web-[0-9a-f]{14}$'
+! stderr .
+# A smaller disk is refused, running or not, and so is more than this
+# machine has.
+! exec devvm size --disk 50
+stderr '^devvm: disk_shrink have=100 vm=devvm-web-[0-9a-f]{14} want=50$'
+! exec devvm size --cpus 9999
+stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
+! exec devvm size --cpus 1.5
+stderr '^devvm: cpus_not_number value="1\.5"$'
+
+# Stopped: changed at once, only what differs.
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm size --cpus 2 --memory 8 --disk 120GiB
+stdout '^==> vm_size size=cpus=2 memory=8GiB disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 2 --disk 120$'
+exec devvm size
+stdout '\Acpus=2 memory=8GiB disk=120GiB\n\z'
+! stderr .
+! exec devvm size --disk 100
+stderr '^devvm: disk_shrink have=120 vm=devvm-web-[0-9a-f]{14} want=100$'
+
+# --cpus on devvm is ignored, with a warning naming devvm size.
+exec devvm --cpus 3
+stderr '^devvm: size_flags_ignored$'
+
+-- unset --
+cpus=
+memory=
+disk=
+-- set --
+cpus=2
+memory=2.5
+disk=
+-- bad-size --
+memory=1$(touch x)

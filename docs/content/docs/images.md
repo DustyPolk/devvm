@@ -157,6 +157,30 @@ devvm ports -g none         # what new VMs forward (default: all)
 - `add` and `rm` take ports and ranges, not `all` or `none`; `rm` on a VM that forwards every port is refused, as there's no list to remove from. `-g` works with them too.
 - Ports are forwarded with or without [network policy](network.md). Builds forward none.
 
+## Size
+
+A VM gets its image's size, `base.yaml`'s 4 CPUs, 8 GiB of memory and a 100 GiB disk, unless it's given another:
+
+```sh
+devvm size                         # what this folder's VM has: cpus=4 memory=8GiB disk=100GiB
+devvm size --cpus 6 --memory 16    # change it; what isn't given stays
+devvm size --disk 200              # a bigger disk; never a smaller one
+devvm size -g --memory 16          # the size new VMs get (default: the image's)
+devvm size -g                      # cpus=, memory= and disk= lines, empty for the image's
+```
+
+- A new VM gets `--cpus`, `--memory` and `--disk` (`devvm --cpus 6 base`), else what `devvm size -g` set (`~/.config/devvm/size`), else the image's ([details](commands.md#size-and-ports)).
+- `--cpus` takes a whole number, `--memory` and `--disk` a size in GiB: `16`, `16G` or `16GiB`, decimals allowed. More CPUs or memory than this machine has is refused.
+- A stopped VM changes at once. A running one keeps its size until it next starts (`devvm restart`): until then, `devvm size` shows what it has now and says what changes.
+- Disks grow but never shrink: a disk smaller than the VM's is refused.
+
+### Disk use
+
+A VM's disk size is how far it can grow, not what it takes. A project VM starts as a copy of its image's disk that shares its blocks, so a new VM takes almost nothing until it writes ([clones and overlays](lima.md#clones-and-overlays)):
+
+- **macOS:** an APFS clone. `du` counts the shared blocks as its own, so it overcounts.
+- **Linux:** a qcow2 overlay of the image's disk, holding only the VM's changes: about 12 MB for a new VM instead of 2 GB.
+
 ## Where state lives
 
 Nothing is written into the project folder. devvm keeps everything in two folders:

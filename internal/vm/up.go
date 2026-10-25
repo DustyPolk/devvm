@@ -249,13 +249,11 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	}
 	// Defaults are checked again: the files may be edited by hand. All
 	// before the build, which can take minutes.
-	def, err := state.ReadSize(e.Dirs)
+	def, err := e.defaultSize()
 	if err != nil {
 		return err
 	}
-	if size, err = size.Or(Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}).Parse(); err != nil {
-		return err
-	}
+	size = size.Or(def)
 	host, err := e.Host()
 	if err != nil {
 		return err

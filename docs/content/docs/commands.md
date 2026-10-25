@@ -19,6 +19,8 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`: at once when it's stopped, from its next start when it runs ([details](images.md#ports)) |
 | `devvm ports add\|rm LIST` | forward more ports, or stop forwarding some |
 | `devvm ports -g ...` | the same for what new VMs forward |
+| `devvm size [--cpus N] [--memory GiB] [--disk GiB]` | show or change this folder's VM's CPUs, memory and disk: at once when it's stopped, from its next start when it runs; disks only grow ([details](images.md#size)) |
+| `devvm size -g ...` | the same for the size new VMs get |
 
 A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)); with `--clone`, the folder isn't mounted and the VM gets its own clone of the repo ([working on a clone](clone.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
 
@@ -46,14 +48,14 @@ Options that take a value also work as `--cpus=N` and so on.
 A new VM gets its image's size (`base.yaml`'s: 4 CPUs, 8 GiB of memory and a 100 GiB disk) unless you set one:
 
 - `--cpus` takes a whole number, `--memory` and `--disk` a size in GiB: `16`, `16G` or `16GiB`, decimals allowed.
-- What the flags leave unset comes from `~/.config/devvm/size`, one `cpus=`, `memory=` or `disk=` line each, if it has one.
+- What the flags leave unset comes from `~/.config/devvm/size`, one `cpus=`, `memory=` or `disk=` line each, if it has one (`devvm size -g` sets it).
 - devvm refuses more CPUs or memory than this machine has, and a disk smaller than the image's (disks can't shrink), before it builds anything.
 
 Ports the VM listens on are forwarded to the same port on this machine's `localhost`: all of them, unless `--ports` says otherwise:
 
 - `all`, `none`, or ports and ranges like `5173,8000-8010`.
 - Without `--ports`, `~/.config/devvm/ports` holds the default, one line: `all`, `none` or a list (`devvm ports -g` sets it).
-- `devvm ports` changes an existing VM's ([ports](images.md#ports)).
+- `devvm ports` changes an existing VM's ([ports](images.md#ports)), and `devvm size` its size ([size](images.md#size)).
 
 A size or ports file that doesn't hold one is refused, like a bad flag.
 
@@ -64,7 +66,7 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size, ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size (`devvm size` changes it), ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
 5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) its state asks for; a running one gets them when it next starts, and devvm says so. A VM that forwards your agent has it checked for keys; one that uses devvm's own gets the keys it lacks loaded.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.

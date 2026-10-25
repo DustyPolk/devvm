@@ -324,15 +324,19 @@ func (e *Env) SetNetwork(ctx context.Context, on bool) error {
 	return nil
 }
 
-// agentVM finds the folder's VM for devvm ssh-agent, which must exist, be
-// made for this folder and have finished being made.
-func (e *Env) agentVM(ctx context.Context) (*found, error) {
+// agentVM finds the folder's VM for devvm ssh-agent.
+func (e *Env) agentVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMSSHAgent) }
+
+// folderVM finds the folder's VM for a command that shows or changes it,
+// which must exist (else noVM), be made for this folder and have finished
+// being made.
+func (e *Env) folderVM(ctx context.Context, noVM func(dir string) msg.M) (*found, error) {
 	t, err := e.find(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 	if !t.exists {
-		return nil, msg.NoVMSSHAgent(t.f.Dir)
+		return nil, noVM(t.f.Dir)
 	}
 	if err := e.checkFolder(t.f, t.st); err != nil {
 		return nil, err

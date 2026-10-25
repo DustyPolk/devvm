@@ -216,17 +216,7 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 // applySize makes a stopped VM's size what its state asks for, where it
 // differs (disks only grow). A running VM's waits for its next start.
 func applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
-	want := Size{CPUs: st.Get(KeyCPUs), Memory: st.Get(KeyMemory), Disk: st.Get(KeyDisk)}.Backend()
-	var edit backend.Size
-	if want.CPUs != 0 && want.CPUs != in.Size.CPUs {
-		edit.CPUs = want.CPUs
-	}
-	if want.MemoryGiB != 0 && want.MemoryGiB != in.Size.MemoryGiB {
-		edit.MemoryGiB = want.MemoryGiB
-	}
-	if want.DiskGiB > in.Size.DiskGiB {
-		edit.DiskGiB = want.DiskGiB
-	}
+	edit := pendingSize(st, in.Size)
 	if edit == (backend.Size{}) {
 		return nil
 	}

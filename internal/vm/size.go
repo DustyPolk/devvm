@@ -2,6 +2,8 @@ package vm
 
 import (
 	"bufio"
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,6 +14,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Size is a VM's size as devvm stores it: CPUs a whole number, memory and
@@ -118,6 +122,151 @@ func (s Size) Backend() backend.Size {
 	b.MemoryGiB, _ = strconv.ParseFloat(s.Memory, 64)
 	b.DiskGiB, _ = strconv.ParseFloat(s.Disk, 64)
 	return b
+}
+
+// pendingSize returns what of the size st asks for the VM, which has has,
+// lacks: zero where it matches. Disks only grow, so a smaller one asked
+// for is had.
+func pendingSize(st *state.VM, has backend.Size) backend.Size {
+	want := Size{CPUs: st.Get(KeyCPUs), Memory: st.Get(KeyMemory), Disk: st.Get(KeyDisk)}.Backend()
+	var p backend.Size
+	if want.CPUs != 0 && want.CPUs != has.CPUs {
+		p.CPUs = want.CPUs
+	}
+	if want.MemoryGiB != 0 && want.MemoryGiB != has.MemoryGiB {
+		p.MemoryGiB = want.MemoryGiB
+	}
+	if want.DiskGiB > has.DiskGiB {
+		p.DiskGiB = want.DiskGiB
+	}
+	return p
+}
+
+// SizeText returns a size as devvm size shows it, without what's unset:
+// cpus=4 memory=8GiB disk=100GiB.
+func SizeText(s backend.Size) string {
+	var f []string
+	if s.CPUs > 0 {
+		f = append(f, KeyCPUs+"="+strconv.Itoa(s.CPUs))
+	}
+	if s.MemoryGiB > 0 {
+		f = append(f, KeyMemory+"="+strconv.FormatFloat(s.MemoryGiB, 'g', -1, 64)+"GiB")
+	}
+	if s.DiskGiB > 0 {
+		f = append(f, KeyDisk+"="+strconv.FormatFloat(s.DiskGiB, 'g', -1, 64)+"GiB")
+	}
+	return strings.Join(f, " ")
+}
+
+// fields returns a size's keys and values, as the size file has them.
+func (s Size) fields() [][2]string {
+	return [][2]string{{KeyCPUs, s.CPUs}, {KeyMemory, s.Memory}, {KeyDisk, s.Disk}}
+}
+
+// defaultSize reads the size new VMs get, checked: the file may have
+// been edited by hand.
+func (e *Env) defaultSize() (Size, error) {
+	def, err := state.ReadSize(e.Dirs)
+	if err != nil {
+		return Size{}, err
+	}
+	return Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}.Parse()
+}
+
+// ShowSize writes to w the size of the folder's VM (cpus=4 memory=8GiB
+// disk=100GiB), saying what changes at its next start; with global, the
+// size new VMs get, a key=value line each, empty for the image's.
+func (e *Env) ShowSize(ctx context.Context, w io.Writer, global bool) error {
+	if global {
+		def, err := e.defaultSize()
+		if err != nil {
+			return err
+		}
+		var b strings.Builder
+		for _, kv := range def.fields() {
+			b.WriteString(kv[0] + "=" + kv[1] + "\n")
+		}
+		_, err = io.WriteString(w, b.String())
+		return err
+	}
+	t, err := e.folderVM(ctx, msg.NoVMSize)
+	if err != nil {
+		return err
+	}
+	in, err := t.b.Inspect(ctx, t.f.Name)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, SizeText(in.Size)+"\n"); err != nil {
+		return err
+	}
+	if p := pendingSize(t.st, in.Size); p != (backend.Size{}) {
+		ui.Note(msg.SizePending(SizeText(p), t.f.Name))
+	}
+	return nil
+}
+
+// SetSize changes the folder's VM's size to what s sets: at once when it's
+// stopped, from its next start when it runs. A disk only grows. With
+// global, it changes the size new VMs get instead.
+func (e *Env) SetSize(ctx context.Context, s Size, global bool) error {
+	s, err := s.Parse()
+	if err != nil {
+		return err
+	}
+	host, err := e.Host()
+	if err != nil {
+		return err
+	}
+	if global {
+		old, err := e.defaultSize()
+		if err != nil {
+			return err
+		}
+		if err := s.Check(host, 0, ""); err != nil {
+			return err
+		}
+		def := s.Or(old)
+		if err := state.WriteSize(e.Dirs, state.Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}); err != nil {
+			return err
+		}
+		ui.Info(msg.SizeDefaults(SizeText(def.Backend())))
+		return nil
+	}
+	t, err := e.folderVM(ctx, msg.NoVMSize)
+	if err != nil {
+		return err
+	}
+	vm, st, b := t.f.Name, t.st, t.b
+	if err := backend.Require(b, vm, s.Backend().Features()...); err != nil {
+		return err
+	}
+	in, err := b.Inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if err := s.Check(host, in.Size.DiskGiB, vm); err != nil {
+		return err
+	}
+	for _, kv := range s.fields() {
+		if kv[1] == "" {
+			continue
+		}
+		if err := st.Set(kv[0], kv[1]); err != nil {
+			return err
+		}
+	}
+	if err := applySize(ctx, b, st, in); err != nil {
+		return err
+	}
+	// Otherwise applySize said it waits for the next start.
+	if in, err = b.Inspect(ctx, vm); err != nil {
+		return err
+	}
+	if pendingSize(st, in.Size) == (backend.Size{}) {
+		ui.Info(msg.VMSize(SizeText(in.Size), vm))
+	}
+	return nil
 }
 
 // BaseDisk returns the disk size in GiB that base.yaml in root gives base,

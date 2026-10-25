@@ -394,7 +394,7 @@ other = "--network-policy and --no-network-policy only apply to new VMs: devvm n
 other = "--no-git-protect only applies to new VMs"
 
 [size_flags_ignored]
-other = "--cpus, --memory and --disk only apply to new VMs"
+other = "--cpus, --memory and --disk only apply to new VMs: devvm size --cpus N"
 
 [ports_flag_ignored]
 other = "--ports only applies to new VMs: devvm ports LIST"
@@ -459,6 +459,25 @@ other = "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
 [too_much_memory]
 description = "have and want are sizes in GiB"
 other = "this machine has {{.have}} GiB of memory: --memory {{.want}} is more"
+
+[vm_size]
+description = "size is what the VM has: cpus=4 memory=8GiB disk=100GiB"
+other = "{{.vm}} has {{.size}}"
+
+[size_pending]
+description = "size is what changes: cpus=6 memory=16GiB"
+other = "{{.vm}} gets {{.size}} from its next start: devvm restart"
+
+[size_defaults]
+description = "size is what's set: cpus=6 memory=16GiB"
+other = "new VMs get {{.size}}"
+
+[no_vm_size]
+other = "no VM for {{.dir}}: devvm --cpus N makes one with a size, or -g sets the size new VMs get"
+
+[size_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't show or change the size: {{.reason}}"
 
 [port_invalid]
 description = "value is quoted, as given"

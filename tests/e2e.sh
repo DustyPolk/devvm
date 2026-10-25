@@ -5,7 +5,7 @@
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then opening it again,
-#                restart, devvm ports and rm, an agent VM's folders and exported history, and SSH agent forwarding
+#                restart, devvm size, devvm ports and rm, an agent VM's folders and exported history, and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
@@ -268,10 +268,13 @@ if want project; then
 section "a base project"
 p=$(newproj web); git -C "$p" init -q
 # The shell devvm opens reads its commands from devvm's input: these, then it ends.
-launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy base
+launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy --cpus 2 --memory 3 --disk 120 base
 check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
   grep -qx image=base '$vms/$vm' && grep -qx net=off '$vms/$vm' && grep -qx 'dir=$p' '$vms/$vm'"
+check "it gets --cpus, --memory and --disk" in_vm "$vm" \
+  '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
+check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
   grep -Eq '^$vm +Running +base +(on|off) +off +lima +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
@@ -325,8 +328,13 @@ check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'ex
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
 check "a running VM's new ports wait for its next start" bash -c "cd '$p' &&
   '$D' ports 47170-47173 2>&1 | grep -qF \"\$(m ports_next_start vm=$vm)\" && [[ \$('$D' ports 2>/dev/null) == all ]]"
-check "and apply on restart" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
-  [[ \$('$D' ports 2>&1) == 47170-47173 ]]"
+check "so does its new size" bash -c "cd '$p' && '$D' size --cpus 3 2>&1 | grep -qF \"\$(m size_next_start vm=$vm)\" &&
+  '$D' size 2>&1 >/dev/null | grep -qF \"\$(m size_pending size=cpus=3 vm=$vm)\""
+check "and they apply on restart" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
+  [[ \$('$D' ports 2>&1) == 47170-47173 && \$(limactl shell --workdir / $vm nproc </dev/null) == 3 &&
+     \$('$D' size 2>&1) == 'cpus=3 memory=3GiB disk=120GiB' ]]"
+check "a smaller disk is refused" bash -c "cd '$p' && ! '$D' size --disk 100 </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m disk_shrink have=120 vm=$vm want=100)\" '$work/last.log'"
 # Listeners on each kind of address Lima matches differently (loopback, every address; IPv4 and 6), on
 # listed ports (47170-47173) and unlisted ones (47174-47177). Their output goes nowhere, or the SSH
 # session waits for them.

@@ -5,7 +5,7 @@
 # Stopped), which create, clone, start, stop and delete keep up to date. A
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
-# and 100 GiB. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# and 100 GiB, which edit's --cpus, --memory and --disk change. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
@@ -107,6 +107,19 @@ case ${1:-} in
       "${names[0]}" "$LIMA_HOME" "$LIMA_HOME/${names[0]}" > "$cfg"
     [[ ! -e $STUB_DIR/start-fails ]] || exit 1 ;;
   stop) set_status "${names[0]}" Stopped ;;
+  edit)
+    # --cpus N, --memory GiB and --disk GiB change the VM's size.
+    read -r cpus mem disk < <(cat "$STUB_DIR/size-${names[0]}" 2>/dev/null || echo "4 8589934592 107374182400")
+    args=("$@")
+    for ((i = 0; i < ${#args[@]} - 1; i++)); do
+      v=${args[i + 1]}
+      case ${args[i]} in
+        --cpus) cpus=$v ;;
+        --memory) mem=$(awk -v g="$v" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
+        --disk) disk=$(awk -v g="$v" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
+      esac
+    done
+    echo "$cpus $mem $disk" > "$STUB_DIR/size-${names[0]}" ;;
   delete)
     for n in "${names[@]}"; do set_status "$n"; done
     [[ ! -e $STUB_DIR/delete-fails ]] || exit 1 ;;
