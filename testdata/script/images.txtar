@@ -1,0 +1,80 @@
+# images: the images on every backend, by name, unfinished builds last,
+# each with what its base started from, its digest, key, state, size and
+# backend; then the shared tool images by the name images have them by.
+# Project VMs aren't images. Listing never resolves the tools lock.
+env DEVVM_MESSAGES=names
+env IMAGES=$XDG_DATA_HOME/devvm/images
+env SHARE=$XDG_DATA_HOME/devvm/tools
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# Nothing built: the headers, and every name not installed.
+exec devvm images
+stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\nNAME +TOOL +VERSION +SIZE +VMS +STATE\n'
+stdout '^node +- +- +- +- +not installed$'
+stdout '^opencode +- +- +- +- +not installed$'
+! stderr .
+stub_calls
+stdout '^limactl list --json\n\z'
+
+# base, foo on it, a build that didn't finish, and a project VM.
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+exec devvm build foo
+exec sh -c 'printf "devvm-img-000000000000\ndevvm-proj-12345612345612\n" >> "$STUB_DIR/instances"'
+exec sh -c 'for i in base foo; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
+exec devvm images
+stdout '^base +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+ +lima\nfoo +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+ +lima\n- +- +- +000000000000 +unfinished +- +lima\n\n'
+! stdout devvm-proj
+# An edited script: foo is stale.
+exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
+exec devvm images
+stdout '^foo +ubuntu .* +stale +'
+
+# Shared tools: each version newest first, how many VMs list it, and
+# whether it's the lock's; the lock's go, not built, and an older one no
+# VM uses.
+exec devvm build claude
+exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
+mkdir $VMS
+exec sh -c 'printf "image=claude\ndir=/p\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm images
+stdout '^go +go +1\.27\.2 +- +- +not built\ngo +go +1\.20\.0 +\S+ +1 +in use\ngo +go +1\.9\.0 +\S+ +0 +unused\n'
+stdout '^claude +claude +2\.1\.295 +\S+ +1 +current$'
+stdout '^node +- '
+stub_calls
+! stdout mise
+
+# images rm: by key (an unfinished build), or by name; nothing else.
+# A name is its image as it is now: foo is current again.
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+exec devvm images rm 000000000000 base+foo
+stdout '^==> deleted_unfinished_build key=000000000000$'
+stdout '^==> deleted_image image=foo key=[0-9a-f]{12}$'
+exec sh -c 'grep "^limactl delete" "$STUB_LOG"'
+stdout '^limactl delete -f devvm-img-000000000000$'
+! stdout 'devvm-proj'
+exec sh -c '! test -e "$IMAGES/$(cat foo.key)"'
+
+# A key no image has, a name no layer has, what isn't built and shared
+# tools: errors, and nothing is deleted.
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm images rm fedcba987654
+stderr '^devvm: unknown_layer '
+! exec devvm images rm base nope
+stderr '^devvm: unknown_layer .*layer=nope'
+! exec devvm images rm foo
+stderr '^devvm: no_image_named image=foo$'
+! exec devvm images rm node+foo
+stderr '^devvm: tools_not_images_rm image=node\+foo$'
+! exec devvm --from node:24 images rm base
+stderr '^devvm: no_image_named_from '
+! exec devvm images rm
+stderr usage_error
+exec sh -c 'grep -c "^limactl delete" "$STUB_LOG" || true'
+stdout '^0$'
+exec sh -c 'test -e "$IMAGES/$(cat base.key)"'
+
+-- foo.sh --
+#!/bin/bash
+echo foo

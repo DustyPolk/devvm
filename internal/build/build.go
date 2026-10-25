@@ -305,10 +305,11 @@ func (b *Builder) deleteImage(ctx context.Context, key string) error {
 
 // Image is a built image as List finds it.
 type Image struct {
-	Key   string
-	Name  string // "" for one without a record: a build that didn't finish
-	From  string
-	Chain image.Chain
+	Key    string
+	Name   string // "" for one without a record: a build that didn't finish
+	From   string
+	Digest string // what its base started from, as its record has it
+	Chain  image.Chain
 	// Current is whether its key is still what its inputs hash to. One
 	// that isn't is stale: nothing new is built on it.
 	Current bool
@@ -333,7 +334,7 @@ func (b *Builder) List(ctx context.Context) ([]Image, error) {
 		} else if err != nil {
 			return nil, err
 		}
-		img := Image{Key: key, Name: rec.Name, From: rec.From, Chain: image.ParseChain(rec.Chain)}
+		img := Image{Key: key, Name: rec.Name, From: rec.From, Digest: rec.Digest, Chain: image.ParseChain(rec.Chain)}
 		// Each against its own base's inputs, as last recorded.
 		in.From = rec.From
 		if in.FromDigest, err = from.Recorded(b.Dirs, rec.From); err != nil {

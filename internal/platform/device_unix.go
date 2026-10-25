@@ -15,6 +15,15 @@ func SameDevice(a, b fs.FileInfo) bool {
 	return oka && okb && sa.Dev == sb.Dev
 }
 
+// allocated is the disk space a file takes: its blocks, not its length,
+// so a sparse disk image counts what it holds.
+func allocated(fi fs.FileInfo) int64 {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return st.Blocks * 512
+	}
+	return fi.Size()
+}
+
 // DevIno returns a file's device and inode as "dev:ino", "" when fi has
 // none: what the file is, whatever its name.
 func DevIno(fi fs.FileInfo) string {

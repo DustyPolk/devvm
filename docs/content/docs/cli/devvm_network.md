@@ -1,6 +1,6 @@
 ---
 title: devvm network
-weight: 10
+weight: 12
 ---
 
 Show or change the network policy of this folder's VM

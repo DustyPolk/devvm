@@ -233,6 +233,16 @@ check "rebuild makes a new one and deletes the stale ones, not base" bash -c "'$
   [[ \$(keys_of e2efix | wc -l) -eq 1 ]] && [[ \$(keys_of e2efix) != $kf ]] && [[ -z \$(status_of devvm-img-$kf) ]] &&
   [[ \$(status_of devvm-img-$kb) == Stopped ]]"
 owned e2efix
+kf=$(keys_of e2efix | head -1)
+dg=$(sed -n 's/^digest=.* sha256:\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/p' "$images/$kb" 2>/dev/null)
+check "devvm images lists base and the fixture, current, with Ubuntu's release, digest and size" bash -c "
+  out=\$('$D' images </dev/null 2>/dev/null) &&
+  grep -qE '^base +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kb +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
+  grep -qE '^e2efix +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kf +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
+  grep -qE '^NAME +TOOL +VERSION +SIZE +VMS +STATE$' <<<\"\$out\""
+check "images rm deletes an image by name, with its record, not base" bash -c "
+  [[ -n '$kf' ]] && '$D' images rm e2efix </dev/null >/dev/null 2>&1 &&
+  [[ -z \$(status_of devvm-img-$kf) ]] && [[ ! -e '$images/$kf' ]] && [[ \$(status_of devvm-img-$kb) == Stopped ]]"
 
 # A failed script keeps its image's VM, stopped and without a record, for inspection.
 printf '#!/bin/bash\nexit 3\n' > "$layers/e2efail.sh"
@@ -242,6 +252,9 @@ kx=$(sed -n 's/^==> building_image image=e2efail key=\([0-9a-f]*\)$/\1/p' "$work
 check "a failed script keeps its VM, stopped, and says how to look inside" bash -c "
   [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: script_failed lima_home=.* script=e2efail\.sh vm=devvm-img-$kx$' '$work/fail.log' &&
   [[ \$(status_of devvm-img-$kx) == Stopped ]] && [[ ! -e '$images/$kx' ]]"
+check "devvm images lists it as unfinished, and images rm deletes it by its key" bash -c "
+  [[ -n '$kx' ]] && '$D' images </dev/null 2>/dev/null | grep -qE '^- +- +- +$kx +unfinished +' &&
+  '$D' images rm '$kx' </dev/null >/dev/null 2>&1 && [[ -z \$(status_of devvm-img-$kx) ]]"
 rm -f "$layers/e2efail.sh"
 
 # Ctrl+C during a build: the run's names (DEVVM_MESSAGES) say which image it builds, its run log,

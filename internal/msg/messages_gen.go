@@ -397,6 +397,11 @@ func Deleted(vm string) M {
 	return M{id: "deleted", vals: []val{{"vm", vm}}}
 }
 
+// DeletedImage is [deleted_image]: "deleted image {{.image}} ({{.key}})"
+func DeletedImage(image string, key string) M {
+	return M{id: "deleted_image", vals: []val{{"image", image}, {"key", key}}}
+}
+
 // DeletedOldImage is [deleted_old_image]: "deleted the old image {{.image}} ({{.key}})"
 func DeletedOldImage(image string, key string) M {
 	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
@@ -680,6 +685,16 @@ func ImageMissing(key string) M {
 // ImageReady is [image_ready]: "image {{.image}} ready"
 func ImageReady(image string) M {
 	return M{id: "image_ready", vals: []val{{"image", image}}}
+}
+
+// ImagesFailed is [images_failed]: "couldn't list the images: {{.reason}}"
+func ImagesFailed(reason string) M {
+	return M{id: "images_failed", vals: []val{{"reason", reason}}}
+}
+
+// ImagesRmFailed is [images_rm_failed]: "couldn't delete the images: {{.reason}}"
+func ImagesRmFailed(reason string) M {
+	return M{id: "images_rm_failed", vals: []val{{"reason", reason}}}
 }
 
 // InterruptedImage is [interrupted_image]: "interrupted: deleting the unfinished image {{.vm}}"
@@ -977,6 +992,16 @@ func NoImageFor(agents string, dir string, envs string) M {
 	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
 }
 
+// NoImageNamed is [no_image_named]: "there's no image {{.image}}: devvm images lists them"
+func NoImageNamed(image string) M {
+	return M{id: "no_image_named", vals: []val{{"image", image}}}
+}
+
+// NoImageNamedFrom is [no_image_named_from]: "there's no image {{.image}} from {{.from}}: devvm images lists them"
+func NoImageNamedFrom(from string, image string) M {
+	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
+}
+
 // NoKVM is [no_kvm]: "/dev/kvm doesn't exist: turn on virtualization in the firmware, or nested virtualization for a VM"
 func NoKVM() M {
 	return M{id: "no_kvm"}
@@ -1170,6 +1195,11 @@ func QEMUMissingFix(fix string, program string) M {
 // QEMURefused is [qemu_refused]: "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"
 func QEMURefused() M {
 	return M{id: "qemu_refused"}
+}
+
+// ReadingImages is [reading_images]: "reading images and shared tools"
+func ReadingImages() M {
+	return M{id: "reading_images"}
 }
 
 // RebuildReplaces is [rebuild_replaces]: "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
@@ -1512,6 +1542,11 @@ func ToolsNotImages(tools string) M {
 	return M{id: "tools_not_images", vals: []val{{"tools", tools}}}
 }
 
+// ToolsNotImagesRm is [tools_not_images_rm]: "{{.image}} names shared tools, which aren't images: name the image under them"
+func ToolsNotImagesRm(image string) M {
+	return M{id: "tools_not_images_rm", vals: []val{{"image", image}}}
+}
+
 // ToolsResolveFailed is [tools_resolve_failed]: "couldn't resolve the shared tools' versions (offline?)"
 func ToolsResolveFailed() M {
 	return M{id: "tools_resolve_failed"}
@@ -1743,6 +1778,7 @@ var specs = map[string]spec{
 	"delete_failed":               {fields: []string{"vm"}},
 	"delete_other_folder_vm":      {fields: []string{"vm", "was"}},
 	"deleted":                     {fields: []string{"vm"}},
+	"deleted_image":               {fields: []string{"image", "key"}},
 	"deleted_old_image":           {fields: []string{"image", "key"}},
 	"deleted_unfinished_build":    {fields: []string{"key"}},
 	"deleting":                    {fields: []string{"vm"}},
@@ -1800,6 +1836,8 @@ var specs = map[string]spec{
 	"image_leftover":              {fields: []string{"image", "key"}},
 	"image_missing":               {fields: []string{"key"}},
 	"image_ready":                 {fields: []string{"image"}},
+	"images_failed":               {fields: []string{"reason"}},
+	"images_rm_failed":            {fields: []string{"reason"}},
 	"interrupted_image":           {fields: []string{"vm"}},
 	"interrupted_vm":              {fields: []string{"vm"}},
 	"keeping":                     {fields: []string{"image"}},
@@ -1859,6 +1897,8 @@ var specs = map[string]spec{
 	"no_digest":                   {fields: []string{"from"}},
 	"no_github_token":             {fields: []string{"vm"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
+	"no_image_named":              {fields: []string{"image"}},
+	"no_image_named_from":         {fields: []string{"from", "image"}},
 	"no_kvm":                      {},
 	"no_secret":                   {fields: []string{"secret"}},
 	"no_ssh_agent":                {},
@@ -1898,6 +1938,7 @@ var specs = map[string]spec{
 	"qemu_missing":                {fields: []string{"program"}},
 	"qemu_missing_fix":            {fields: []string{"fix", "program"}},
 	"qemu_refused":                {},
+	"reading_images":              {},
 	"rebuild_replaces":            {fields: []string{"above", "image"}},
 	"remote_add_failed":           {fields: []string{"remote"}},
 	"remote_kept":                 {fields: []string{"remote"}},
@@ -1966,6 +2007,7 @@ var specs = map[string]spec{
 	"tools_need_resolve":          {},
 	"tools_newest":                {fields: []string{"vm"}},
 	"tools_not_images":            {fields: []string{"tools"}},
+	"tools_not_images_rm":         {fields: []string{"image"}},
 	"tools_resolve_failed":        {},
 	"tools_switch":                {fields: []string{"vm"}},
 	"ubuntu_bad_signature":        {fields: []string{"release", "url"}},

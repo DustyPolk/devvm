@@ -139,6 +139,40 @@ A VM keeps the image it was made from, and its chain. When a key in the chain ch
 
 A key is the first 12 hex digits of a SHA-256. Each input goes in with its length, so different inputs never hash the same bytes. An image's record keeps its chain: the key of each image it's built on, from `base` up.
 
+## Listing images
+
+`devvm images` prints two tables, each with a header; what a row lacks is `-`. First the images on every backend, by name, unfinished builds last:
+
+| Column | |
+| --- | --- |
+| `IMAGE` | its name: `base`, `foo+bar` |
+| `FROM` | what its base started from: the `--from` image, or Ubuntu's cloud image with its release's date, `ubuntu 26.04 (20261001)` |
+| `DIGEST` | the first 12 hex digits of that image's SHA-256 |
+| `KEY` | its key |
+| `STATE` | `current`; `stale`: its key no longer matches its inputs; `unfinished`: a build that didn't finish, with no record |
+| `SIZE` | the disk it takes, in powers of 1024 (`2.1G`). On macOS an image is a clone of its parent's disk, and the blocks they share count for both |
+| `BACKEND` | the [backend](backends.md) that has it |
+
+Then the [shared tool images](#shared-tools) in the share, by the name images have them by (`node` for node, pnpm and bun), the toolchains then the agents, each tool's versions newest first:
+
+| Column | |
+| --- | --- |
+| `NAME` | `node`, `python`, `rust`, `go`, `claude`, `codex` or `opencode` |
+| `TOOL`, `VERSION` | the tool and its version |
+| `SIZE` | the disk it takes |
+| `VMS` | how many VMs have it in their state |
+| `STATE` | `current`: the tools lock's version, for the C library of the base new VMs get (`--from` changes it); `in use`: another version a VM has; `unused`: neither; `not built`: the lock's version of a tool the share has others of; `not installed`: nothing of the name's is in the share |
+
+Listing never resolves the tools lock: before there is one, no tool image is current, and those no VM has show no state.
+
+### Deleting images
+
+`devvm images rm IMAGE|KEY...` deletes images with their records, each named by its name or by the key `devvm images` shows:
+
+- A name is its image as it is now, on base from `--from` when it's given. A stale or unfinished image has only its key.
+- Each must be built, or nothing is deleted. Shared tools aren't images: a name with any (`node+foo`) is refused.
+- A deleted image is built again the next time it's needed. VMs made from it keep working: on macOS they're clones of its disk. On Linux hosts, an image whose disk VMs are overlays of is refused, naming them.
+
 ## Ports
 
 A VM forwards every port it listens on (TCP and UDP) to the same port on this machine's `localhost`, so a server on `:5173` in the VM is at `localhost:5173` here. To forward only some:

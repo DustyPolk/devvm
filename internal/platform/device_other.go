@@ -8,5 +8,8 @@ import "io/fs"
 // this system, always yes.
 func SameDevice(fs.FileInfo, fs.FileInfo) bool { return true }
 
+// allocated is the disk space a file takes: on this system, its length.
+func allocated(fi fs.FileInfo) int64 { return fi.Size() }
+
 // DevIno returns a file's device and inode: none on this system.
 func DevIno(fs.FileInfo) string { return "" }

@@ -108,7 +108,7 @@ func TestHiddenCommandsAreLeftOut(t *testing.T) {
 	}
 	slices.Sort(names)
 	want := []string{
-		"_index.md", "devvm.md", "devvm_adopt.md", "devvm_auth.md", "devvm_build.md", "devvm_completion.md", "devvm_doctor.md", "devvm_git-protect.md", "devvm_log.md", "devvm_ls.md", "devvm_network.md",
+		"_index.md", "devvm.md", "devvm_adopt.md", "devvm_auth.md", "devvm_build.md", "devvm_completion.md", "devvm_doctor.md", "devvm_git-protect.md", "devvm_images.md", "devvm_images_rm.md", "devvm_log.md", "devvm_ls.md", "devvm_network.md",
 		"devvm_policy.md", "devvm_policy_allow.md", "devvm_policy_deny.md", "devvm_policy_rm.md",
 		"devvm_ports.md", "devvm_ports_add.md", "devvm_ports_rm.md", "devvm_rebuild.md",
 		"devvm_remove.md", "devvm_restart.md", "devvm_rm.md", "devvm_secret.md", "devvm_secret_ls.md", "devvm_secret_rm.md",

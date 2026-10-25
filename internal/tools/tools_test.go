@@ -746,6 +746,80 @@ func TestGarbage(t *testing.T) {
 	}
 }
 
+// List: by name, newest first, with how many VMs use each image and
+// whether it's current; the lock's version when the share lacks it; a
+// name with nothing in the share as not installed. It never resolves.
+func TestList(t *testing.T) {
+	e := newEnv(t)
+	e.locked(t, fixture(t))
+	goCur, claude := e.files(t, "go")[0], e.files(t, "claude")[0]
+	old, used := "go-1.9.0-0123456789ab.erofs", "go-1.20.0-0123456789ab.erofs"
+	for _, f := range []string{old, used, goCur, claude, "x.erofs.tmp"} {
+		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
+	}
+	ls, err := e.List("gnu", map[string]int{used: 2, claude: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, l := range ls {
+		got = append(got, fmt.Sprintf("%s %s %s %v %d %s", l.Name, l.Tool, l.Version, l.Built, l.VMs, l.State))
+		if l.Built && l.Size <= 0 {
+			t.Errorf("%s %s: size %d", l.Tool, l.Version, l.Size)
+		}
+	}
+	want := []string{
+		"node   false 0 not installed",
+		"python   false 0 not installed",
+		"rust   false 0 not installed",
+		"go go 1.27.2 true 0 current",
+		"go go 1.20.0 true 2 in use",
+		"go go 1.9.0 true 0 unused",
+		"claude claude 2.1.295 true 1 current",
+		"codex   false 0 not installed",
+		"opencode   false 0 not installed",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("List:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// The lock's newer go isn't built; without a lock, nothing is current
+	// or unused.
+	if err := os.Remove(filepath.Join(e.Dirs.Tools(), goCur)); err != nil {
+		t.Fatal(err)
+	}
+	ls, _ = e.List("gnu", nil)
+	if len(ls) < 4 || ls[3].State != StateNotBuilt || ls[3].Version != "1.27.2" || ls[3].Built || ls[4].State != StateUnused {
+		t.Errorf("List without the lock's go: %+v", ls)
+	}
+	if err := os.Remove(e.Dirs.ToolLock()); err != nil {
+		t.Fatal(err)
+	}
+	ls, _ = e.List("gnu", map[string]int{used: 1})
+	if len(ls) < 5 || ls[3].State != StateInUse || ls[4].State != "" {
+		t.Errorf("List without a lock: %+v", ls)
+	}
+	if c := e.calls(t); c != "" {
+		t.Errorf("List ran %s", c)
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want int
+	}{
+		{"1.10.0", "1.9.2", 1},
+		{"24.21.0", "24.21.0", 0},
+		{"1.2", "1.2.1", -1},
+		{"0.162.0", "0.99.9", 1},
+	} {
+		if got := compareVersions(c.a, c.b); got != c.want {
+			t.Errorf("compareVersions(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 // devvm remove: the tools leave the VM's name and list, the rest stays;
 // what it lacks, and custom layers, are refused.
 func TestRemove(t *testing.T) {

@@ -272,6 +272,18 @@ func TestReleases(t *testing.T) {
 	}
 }
 
+func TestReleaseDate(t *testing.T) {
+	for url, want := range map[string]string{
+		"https://cloud-images.ubuntu.com/releases/resolute/release-20261001/ubuntu-26.04-server-cloudimg-arm64.img sha256:ab": "20261001",
+		"https://example.com/release-2026/x.img": "",
+		"":                                       "",
+	} {
+		if got := ReleaseDate(url); got != want {
+			t.Errorf("ReleaseDate(%q) = %q, want %q", url, got, want)
+		}
+	}
+}
+
 func TestChecksum(t *testing.T) {
 	hex := strings.Repeat("ab", 32)
 	tests := []struct {

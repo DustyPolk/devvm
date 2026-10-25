@@ -329,6 +329,29 @@ other = "deleted the old image {{.image}} ({{.key}})"
 [deleted_unfinished_build]
 other = "deleted {{.key}}, left over from a failed build"
 
+[reading_images]
+other = "reading images and shared tools"
+
+[images_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't list the images: {{.reason}}"
+
+[images_rm_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't delete the images: {{.reason}}"
+
+[deleted_image]
+other = "deleted image {{.image}} ({{.key}})"
+
+[no_image_named]
+other = "there's no image {{.image}}: devvm images lists them"
+
+[no_image_named_from]
+other = "there's no image {{.image}} from {{.from}}: devvm images lists them"
+
+[tools_not_images_rm]
+other = "{{.image}} names shared tools, which aren't images: name the image under them"
+
 [vm_outdated]
 description = "changed is a comma-separated list of image names"
 other = "{{.changed}} changed since this VM was made: it keeps the image it has"

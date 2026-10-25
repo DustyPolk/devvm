@@ -3,6 +3,7 @@ package lima
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -306,6 +307,26 @@ func TestDeleteImage(t *testing.T) {
 	}
 	if got, want := f.lines(), []string{"limactl delete -f devvm-img-0123456789ab"}; !slices.Equal(got, want) {
 		t.Errorf("ran %q, want %q", got, want)
+	}
+}
+
+func TestImageSize(t *testing.T) {
+	l, _, _ := testLima(t, "darwin")
+	if _, err := l.ImageSize(t.Context(), "x-0123456789abcd"); !isMsg(err, "not_an_image") {
+		t.Errorf("a project VM: %v", err)
+	}
+	if _, err := l.ImageSize(t.Context(), "0123456789ab"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a missing image: %v", err)
+	}
+	d := l.Dirs.LimaVM("devvm-img-0123456789ab")
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.disk("devvm-img-0123456789ab"), make([]byte, 64<<10), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := l.ImageSize(t.Context(), "0123456789ab"); err != nil || n < 64<<10 {
+		t.Errorf("ImageSize = %d, %v; want at least its disk's 64 KiB", n, err)
 	}
 }
 

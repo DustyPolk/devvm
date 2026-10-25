@@ -165,6 +165,13 @@ func (f *Finder) Image(ctx context.Context) (Image, error) {
 
 var release = regexp.MustCompile(`release-[0-9]{8}`)
 
+// ReleaseDate is the date of the dated release an image's address names
+// (20260101 for …/release-20260101/…), "" when it names none.
+func ReleaseDate(url string) string {
+	r := release.FindString(url)
+	return strings.TrimPrefix(r, "release-")
+}
+
 // Releases returns the dated releases in the listing at URL, newest first.
 func (f *Finder) Releases(ctx context.Context) ([]string, error) {
 	page, err := f.fetch(ctx, f.URL+"/")

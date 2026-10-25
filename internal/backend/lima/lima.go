@@ -148,6 +148,17 @@ func (l *Lima) Images(ctx context.Context) ([]string, error) {
 	return keys, nil
 }
 
+// ImageSize is the disk space of the image's instance folder: its disk
+// and Lima's files. On macOS an image's disk is an APFS clone of its
+// parent's, so the blocks they share count for both.
+func (l *Lima) ImageSize(_ context.Context, key string) (int64, error) {
+	name := ImagePrefix + key
+	if _, ok := imageKey(name); !ok || strings.ContainsAny(key, "/\x00") {
+		return 0, msg.NotAnImage(name)
+	}
+	return platform.DiskUsage(l.Dirs.LimaVM(name))
+}
+
 // DeleteImage deletes an image. On Linux hosts, an image whose disk
 // project VMs are overlays of is refused.
 func (l *Lima) DeleteImage(ctx context.Context, key string) error {

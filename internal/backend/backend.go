@@ -42,6 +42,10 @@ type Backend interface {
 	BuildImage(ctx context.Context, spec ImageSpec) (Built, error)
 	// Images lists the keys of the images the backend holds.
 	Images(ctx context.Context) ([]string, error)
+	// ImageSize is the disk space an image takes on this machine, in
+	// bytes; blocks it shares with other images or VMs count too. A
+	// missing one is an error matching fs.ErrNotExist.
+	ImageSize(ctx context.Context, key string) (int64, error)
 	// DeleteImage deletes an image. A missing one is not an error.
 	DeleteImage(ctx context.Context, key string) error
 	// BuildTools runs the shared tools' build script in a throwaway VM

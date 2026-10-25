@@ -5,6 +5,7 @@ package backendtest
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ type Fake struct {
 	NameLimit    int                         // NameMax's answer
 	Instances    map[string]backend.Instance // by name
 	ImageKeys    []string
+	ImageSizes   map[string]int64  // ImageSize's answers, by key
 	Built        backend.Built     // BuildImage's answer
 	Target       backend.SSHTarget // SSH's answer
 	ShellCmd     backend.Command   // Shell's answer
@@ -136,6 +138,20 @@ func (f *Fake) Images(context.Context) ([]string, error) {
 		return nil, err
 	}
 	return slices.Clone(f.ImageKeys), nil
+}
+
+// ImageSize records the call and returns ImageSizes' size for the key, an
+// error matching fs.ErrNotExist for a key ImageKeys lacks.
+func (f *Fake) ImageSize(_ context.Context, key string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.record("ImageSize", key); err != nil {
+		return 0, err
+	}
+	if !slices.Contains(f.ImageKeys, key) {
+		return 0, fmt.Errorf("image %s: %w", key, fs.ErrNotExist)
+	}
+	return f.ImageSizes[key], nil
 }
 
 // DeleteImage records the call and drops the key from ImageKeys.

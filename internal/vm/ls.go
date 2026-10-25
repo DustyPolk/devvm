@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
@@ -34,7 +35,7 @@ func List(ctx context.Context, d paths.Dirs, reg *backend.Registry) ([]Listed, e
 	for _, b := range reg.All() {
 		ins, err := b.List(ctx)
 		if err != nil {
-			if used, uerr := backendUsed(d, b.Name()); uerr != nil {
+			if used, uerr := BackendUsed(d, b.Name()); uerr != nil {
 				return nil, uerr
 			} else if !used {
 				continue
@@ -81,8 +82,28 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	return l, err
 }
 
-// backendUsed reports whether any VM's state names the backend.
-func backendUsed(d paths.Dirs, name string) (bool, error) {
+// ToolsInUse counts the VMs that list each shared tool image in their
+// state.
+func ToolsInUse(d paths.Dirs) (map[string]int, error) {
+	vms, err := state.VMNames(d)
+	if err != nil {
+		return nil, err
+	}
+	n := map[string]int{}
+	for _, vm := range vms {
+		st, err := state.ReadVM(d, vm)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range strings.Fields(st.Get(KeyTools)) {
+			n[f]++
+		}
+	}
+	return n, nil
+}
+
+// BackendUsed reports whether any VM's state names the backend.
+func BackendUsed(d paths.Dirs, name string) (bool, error) {
 	vms, err := state.VMNames(d)
 	if err != nil {
 		return false, err
