@@ -22,20 +22,17 @@ func onOf(cs []Choice) []string {
 	return on
 }
 
-// pickTerminal makes Pick see terminals, with raw mode a no-op that
+// pickTerminal makes u's Pick see terminals, with raw mode a no-op that
 // counts its restores.
-func pickTerminal(t *testing.T) *int {
-	t.Helper()
-	oldIn, oldOut, oldRaw := stdinTTY, stdoutTTY, rawInput
+func pickTerminal(u *UI) *int {
 	restored := 0
-	stdinTTY = func() bool { return true }
-	stdoutTTY = func() bool { return true }
-	rawInput = func() (func(), error) { return func() { restored++ }, nil }
-	t.Cleanup(func() { stdinTTY, stdoutTTY, rawInput = oldIn, oldOut, oldRaw })
+	u.stdinTTY, u.stdoutTTY = true, true
+	u.rawInput = func() (func(), error) { return func() { restored++ }, nil }
 	return &restored
 }
 
 func TestPickKeys(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, keys string
 		want       []string
@@ -50,10 +47,11 @@ func TestPickKeys(t *testing.T) {
 		{"the end of input confirms", " ", []string{"b"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			out, _ := sandbox(t, tc.keys)
-			restored := pickTerminal(t)
+			t.Parallel()
+			u, out, _ := testUI(t, tc.keys)
+			restored := pickTerminal(u)
 			in := choices()
-			got := Pick(msg.MsgUnknown("x"), in)
+			got := u.Pick(msg.MsgUnknown("x"), in)
 			if !slices.Equal(onOf(got), tc.want) {
 				t.Errorf("chosen %q, want %q", onOf(got), tc.want)
 			}
@@ -75,6 +73,7 @@ func TestPickKeys(t *testing.T) {
 }
 
 func TestPickOneKeys(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, keys string
 		start      int // the choice on; -1 for none
@@ -90,13 +89,14 @@ func TestPickOneKeys(t *testing.T) {
 		{"the end of input confirms", "j", 1, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			out, _ := sandbox(t, tc.keys)
-			restored := pickTerminal(t)
+			t.Parallel()
+			u, out, _ := testUI(t, tc.keys)
+			restored := pickTerminal(u)
 			in := []Choice{{"a", "first", false}, {"b", "second", false}, {"c", "third", false}}
 			if tc.start >= 0 {
 				in[tc.start].On = true
 			}
-			if got := PickOne(msg.MsgUnknown("x"), in); got != tc.want {
+			if got := u.PickOne(msg.MsgUnknown("x"), in); got != tc.want {
 				t.Errorf("chosen %d, want %d", got, tc.want)
 			}
 			if *restored != 1 {
@@ -115,27 +115,30 @@ func TestPickOneKeys(t *testing.T) {
 }
 
 func TestPickOneWithoutTerminal(t *testing.T) {
-	out, _ := sandbox(t, "j\r")
-	if got := PickOne(msg.MsgUnknown("x"), choices()); got != 0 || out.Len() != 0 {
+	t.Parallel()
+	u, out, _ := testUI(t, "j\r")
+	if got := u.PickOne(msg.MsgUnknown("x"), choices()); got != 0 || out.Len() != 0 {
 		t.Errorf("chosen %d, printed %q: want the first on, nothing printed", got, out)
 	}
 }
 
 func TestPickWithoutTerminal(t *testing.T) {
-	out, _ := sandbox(t, " \r")
-	got := Pick(msg.MsgUnknown("x"), choices())
+	t.Parallel()
+	u, out, _ := testUI(t, " \r")
+	got := u.Pick(msg.MsgUnknown("x"), choices())
 	if !slices.Equal(onOf(got), []string{"a", "b"}) || out.Len() != 0 {
 		t.Errorf("chosen %q, printed %q: want the choices as given, nothing printed", onOf(got), out)
 	}
 }
 
 func TestPickCtrlC(t *testing.T) {
-	sandbox(t, "j\x03 \r")
-	restored := pickTerminal(t)
-	if code := exitCode(func() { Pick(msg.MsgUnknown("x"), choices()) }); code != InterruptedCode {
+	t.Parallel()
+	u, _, _ := testUI(t, "j\x03 \r")
+	restored := pickTerminal(u)
+	if code := exitCode(func() { u.Pick(msg.MsgUnknown("x"), choices()) }); code != InterruptedCode {
 		t.Errorf("exit code %d, want %d", code, InterruptedCode)
 	}
-	if !Interrupted() || *restored != 1 {
-		t.Errorf("interrupted %v, raw mode undone %d times", Interrupted(), *restored)
+	if !u.Interrupted() || *restored != 1 {
+		t.Errorf("interrupted %v, raw mode undone %d times", u.Interrupted(), *restored)
 	}
 }

@@ -21,6 +21,13 @@ var (
 	sumAmd64 = strings.Repeat("2", 64)
 )
 
+// testUI runs commands as they are, and logs notes.
+type testUI struct{ t *testing.T }
+
+func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+
+func (u testUI) Note(m msg.M) { u.t.Log(m.Names()) }
+
 // mirror makes a folder of releases: release-20260101 with a checksum for
 // each arch and a signature (which the fake gpgv checks).
 func mirror(t *testing.T) string {
@@ -209,9 +216,8 @@ func TestRealSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := New(root, func(string) string { return "file://" + src })
+	f := New(root, func(string) string { return "file://" + src }, testUI{t})
 	f.GPGV, f.Arch = gpgv, "arm64"
-	f.Run = func(_ context.Context, cmd *exec.Cmd) error { return cmd.Run() }
 	img, err := f.Image(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +253,7 @@ func TestRealSignature(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	f := New("/devvm", func(string) string { return "" })
+	f := New("/devvm", func(string) string { return "" }, testUI{t})
 	if f.URL != DefaultURL || f.Keyring != "/devvm/layers/ubuntu-cloud.gpg" {
 		t.Errorf("default: %+v", f)
 	}
@@ -256,7 +262,7 @@ func TestNew(t *testing.T) {
 			return "file:///tmp/ubuntu/"
 		}
 		return ""
-	})
+	}, testUI{t})
 	if f.URL != "file:///tmp/ubuntu" {
 		t.Errorf("%s: %s", URLEnv, f.URL)
 	}

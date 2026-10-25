@@ -18,7 +18,6 @@ import (
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // syncCmd unpacks what the host sends into a folder of its own in the VM,
@@ -41,7 +40,7 @@ func (e *Env) sync(ctx context.Context, b backend.Backend, st *state.VM, slug st
 	if err != nil {
 		return err
 	}
-	out := ui.LogWriter()
+	out := e.LogWriter()
 	err = b.Exec(ctx, vm, []string{"bash", "-c", syncCmd}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: out, Stderr: out})
 	if err != nil {
 		if ctx.Err() != nil {

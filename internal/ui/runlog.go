@@ -15,53 +15,45 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 )
 
 // keepLogs is how many run logs are kept, the newest.
 const keepLogs = 20
 
-// The output of the commands devvm runs (the backends', the build scripts')
-// goes to a log, one per devvm run that has any, not the terminal: devvm
-// prints its own steps, and the end of the log when a step fails.
-// DEVVM_VERBOSE=1 prints it all instead.
-var runLog struct {
-	sync.Mutex
-	path  string
-	f     *os.File
-	noted bool
-}
-
-func verbose() bool { return os.Getenv("DEVVM_VERBOSE") != "" }
+// verbose reports whether DEVVM_VERBOSE is set. The output of the commands
+// devvm runs (the backends', the build scripts') goes to a log, one per
+// devvm run that has any, not the terminal: devvm prints its own steps, and
+// the end of the log when a step fails. DEVVM_VERBOSE=1 prints it all
+// instead.
+func (u *UI) verbose() bool { return u.getenv("DEVVM_VERBOSE") != "" }
 
 // logPath is the run's log, "" before it's opened.
-func logPath() string {
-	runLog.Lock()
-	defer runLog.Unlock()
-	return runLog.path
+func (u *UI) logPath() string {
+	u.log.Lock()
+	defer u.log.Unlock()
+	return u.log.path
 }
 
 // openLog opens the run's log, the first time in a run, in the run logs
 // folder (owner-only), and deletes all but the newest logs there.
-func openLog() *os.File {
-	runLog.Lock()
-	defer runLog.Unlock()
-	if runLog.f != nil {
-		return runLog.f
+func (u *UI) openLog() *os.File {
+	u.log.Lock()
+	defer u.log.Unlock()
+	if u.log.f != nil {
+		return u.log.f
 	}
-	d, err := paths.FromEnv()
+	dir, err := u.runLogs()
 	if err != nil {
 		if m, ok := errors.AsType[msg.M](err); ok {
-			Die(m)
+			u.Die(m)
 		}
-		Die(msg.RunLogFailed("", err.Error()).Because(err))
+		u.Die(msg.RunLogFailed("", err.Error()).Because(err))
 	}
-	dir := d.RunLogs()
 	f, err := createLog(dir, time.Now(), os.Getpid())
 	if err != nil {
-		Die(msg.RunLogFailed(dir, err.Error()).Because(err))
+		u.Die(msg.RunLogFailed(dir, err.Error()).Because(err))
 	}
-	runLog.f, runLog.path = f, f.Name()
+	u.log.f, u.log.path = f, f.Name()
 	pruneLogs(dir, keepLogs)
 	return f
 }
@@ -100,28 +92,28 @@ func pruneLogs(dir string, keep int) {
 }
 
 // LogNote says where the details of slow steps go, once per run.
-func LogNote() {
-	if verbose() {
+func (u *UI) LogNote() {
+	if u.verbose() {
 		return
 	}
-	path := openLog().Name()
-	runLog.Lock()
-	noted := runLog.noted
-	runLog.noted = true
-	runLog.Unlock()
+	path := u.openLog().Name()
+	u.log.Lock()
+	noted := u.log.noted
+	u.log.noted = true
+	u.log.Unlock()
 	if !noted {
-		write(stdout, "    "+msg.LogDetails(path).String()+"\n")
+		u.write(u.stdout, "    "+msg.LogDetails(path).String()+"\n")
 	}
 }
 
 // LogWriter is where to send the output of a command run some other way
-// than Logged (a backend's Exec, say): the run log, or with DEVVM_VERBOSE
-// the terminal.
-func LogWriter() io.Writer {
-	if verbose() {
-		return lockedWriter{stderr}
+// than LoggedCmd (a backend's Exec, say): the run log, or with
+// DEVVM_VERBOSE the terminal.
+func (u *UI) LogWriter() io.Writer {
+	if u.verbose() {
+		return u.Stderr()
 	}
-	return openLog()
+	return u.openLog()
 }
 
 // proxyKey is a VM's proxy key in a proxy URL, which lets a process act as
@@ -138,11 +130,11 @@ type steps struct {
 
 type stepsKey struct{}
 
-// WithSteps starts a phase of total steps: each labelled Logged with the
+// WithSteps starts a phase of total steps: each labelled LoggedCmd with the
 // context returned is numbered on its status line ("[2/5] running base.sh")
 // and in the log ("# [2/5] running base.sh"). A phase inside another keeps
 // its own count.
-func WithSteps(ctx context.Context, total int) context.Context {
+func (u *UI) WithSteps(ctx context.Context, total int) context.Context {
 	return context.WithValue(ctx, stepsKey{}, &steps{total: total})
 }
 
@@ -170,12 +162,12 @@ func count(ctx context.Context, step string) (label, logLine string) {
 // the command and its first argument. ctx carries the phase's step count.
 // It returns the command's error; the caller dies with what failed
 // (DieLogged).
-func LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
-	if verbose() {
-		cmd.Stdout, cmd.Stderr = Stdout(), lockedWriter{stderr}
-		return run(cmd)
+func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
+	if u.verbose() {
+		cmd.Stdout, cmd.Stderr = u.Stdout(), u.Stderr()
+		return u.run(cmd)
 	}
-	f := openLog()
+	f := u.openLog()
 	label := strings.Join(cmd.Args[:min(2, len(cmd.Args))], " ")
 	logLine := ""
 	if step.ID() != "" {
@@ -185,33 +177,29 @@ func LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 	cmd.Stdout, cmd.Stderr = f, f
 
 	var s *statusLine
-	if stderrTTY() {
-		s = startStatus(label)
+	if u.stderrTTY {
+		s = u.startStatus(label)
 	}
 	start := time.Now()
-	err := run(cmd)
+	err := u.run(cmd)
 	if s != nil {
 		s.stop()
 		if took := time.Since(start); err == nil && took >= doneAfter {
-			write(stderr, doneLine(label, int(took.Seconds())))
+			u.write(u.stderr, u.doneLine(label, int(took.Seconds())))
 		}
 	}
 	return err
 }
 
-func run(cmd *exec.Cmd) error {
-	commands.RLock()
-	defer commands.RUnlock()
+func (u *UI) run(cmd *exec.Cmd) error {
+	u.commands.RLock()
+	defer u.commands.RUnlock()
 	err := cmd.Run()
 	if killed(err) {
-		awaitInterrupt(interruptGrace)
+		u.awaitInterrupt(u.interruptGrace)
 	}
 	return err
 }
-
-// interruptGrace is how long a command a signal ended waits for devvm's own
-// interrupt to be noticed.
-var interruptGrace = time.Second
 
 // killed reports whether a command ended by a signal, or with the code a
 // shell gives that (128 and over).
@@ -223,8 +211,8 @@ func killed(err error) bool {
 // awaitInterrupt waits up to d for an interrupt. Ctrl+C reaches devvm and
 // its command at once, and the command can end first: its failure isn't
 // devvm's to report.
-func awaitInterrupt(d time.Duration) {
-	for deadline := time.Now().Add(d); !Interrupted() && time.Now().Before(deadline); {
+func (u *UI) awaitInterrupt(d time.Duration) {
+	for deadline := time.Now().Add(d); !u.Interrupted() && time.Now().Before(deadline); {
 		time.Sleep(5 * time.Millisecond)
 	}
 }

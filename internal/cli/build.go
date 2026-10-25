@@ -19,7 +19,7 @@ import (
 )
 
 // newBuildCmd is devvm build IMAGE.
-func newBuildCmd(g *globals) *cobra.Command {
+func newBuildCmd(u *ui.UI, g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
@@ -28,13 +28,13 @@ func newBuildCmd(g *globals) *cobra.Command {
 			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), g, args[0], (*build.Builder).Build)
+			return imageCmd(cmd.Context(), u, g, args[0], (*build.Builder).Build)
 		},
 	}
 }
 
 // newRebuildCmd is devvm rebuild IMAGE.
-func newRebuildCmd(g *globals) *cobra.Command {
+func newRebuildCmd(u *ui.UI, g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rebuild IMAGE",
 		Short: "Build an image again, and delete the old one",
@@ -43,15 +43,15 @@ func newRebuildCmd(g *globals) *cobra.Command {
 			"their versions come from the tools lock.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), g, args[0], (*build.Builder).Rebuild)
+			return imageCmd(cmd.Context(), u, g, args[0], (*build.Builder).Rebuild)
 		},
 	}
 }
 
 // imageCmd runs do on the builder of the backend new VMs get, once the
 // name is one and the backend can run.
-func imageCmd(ctx context.Context, g *globals, name string, do func(*build.Builder, context.Context, string) error) error {
-	b, err := builder(g.backend)
+func imageCmd(ctx context.Context, u *ui.UI, g *globals, name string, do func(*build.Builder, context.Context, string) error) error {
+	b, err := builder(u, g.backend)
 	if err == nil {
 		b.From = g.fromRef()
 		err = from.Check(b.From)
@@ -65,13 +65,13 @@ func imageCmd(ctx context.Context, g *globals, name string, do func(*build.Build
 	if err == nil {
 		err = do(b, ctx, name)
 	}
-	fail(err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
+	fail(u, err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
 	return nil
 }
 
 // builder returns a builder on the backend new VMs get: flag's (--backend),
 // else the default.
-func builder(flag string) (*build.Builder, error) {
+func builder(u *ui.UI, flag string) (*build.Builder, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func builder(flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := backends.Registry(dirs)
+	reg, err := backends.Registry(dirs, u)
 	if err != nil {
 		return nil, err
 	}
@@ -88,47 +88,49 @@ func builder(flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newBuilder(dirs, root, c.Backend, reg.Review, tools.New(dirs, root), ""), nil
+	return newBuilder(u, dirs, root, c.Backend, reg.Review, tools.New(dirs, root, u), ""), nil
 }
 
 // newBuilder returns a builder of images on be, its features checked
 // against rv, whose base starts from fromRef, printing and asking through
-// ui.
-func newBuilder(dirs paths.Dirs, root string, be backend.Backend, rv backend.Review, t *tools.Tools, fromRef string) *build.Builder {
+// u.
+func newBuilder(u *ui.UI, dirs paths.Dirs, root string, be backend.Backend, rv backend.Review, t *tools.Tools, fromRef string) *build.Builder {
 	return &build.Builder{
 		Dirs: dirs, Root: root, Backend: be, Review: rv, Tools: t, From: fromRef,
-		Info: ui.Info, Warn: ui.Warn, Say: ui.Say, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
-		Pick: pickFeatures,
+		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
+		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote,
 	}
 }
 
-// pickFeatures asks which features base gets, in a terminal; without
-// one, they stay as they are.
-func pickFeatures(fs []build.Feature) []build.Feature {
-	choices := make([]ui.Choice, len(fs))
-	for i, f := range fs {
-		choices[i] = ui.Choice(f)
+// pickFeatures returns what asks which features base gets, in u's
+// terminal; without one, they stay as they are.
+func pickFeatures(u *ui.UI) func([]build.Feature) []build.Feature {
+	return func(fs []build.Feature) []build.Feature {
+		choices := make([]ui.Choice, len(fs))
+		for i, f := range fs {
+			choices[i] = ui.Choice(f)
+		}
+		picked := u.Pick(msg.FeaturesHelp(), choices)
+		out := make([]build.Feature, len(picked))
+		for i, c := range picked {
+			out[i] = build.Feature(c)
+		}
+		return out
 	}
-	picked := ui.Pick(msg.FeaturesHelp(), choices)
-	out := make([]build.Feature, len(picked))
-	for i, c := range picked {
-		out[i] = build.Feature(c)
-	}
-	return out
 }
 
-// fail ends the run on an error: with the run log's end when its details
-// are there, with what failed (an error that isn't a message, as what's
-// reason) otherwise, quietly once interrupted.
-func fail(err error, what func(reason string) msg.M) {
+// fail ends the run on an error, through u: with the run log's end when
+// its details are there, with what failed (an error that isn't a message,
+// as what's reason) otherwise, quietly once interrupted.
+func fail(u *ui.UI, err error, what func(reason string) msg.M) {
 	if err == nil {
 		return
 	}
 	if e, ok := errors.AsType[*backend.LoggedError](err); ok {
-		ui.DieLogged(e.Msg)
+		u.DieLogged(e.Msg)
 	}
 	if m, ok := errors.AsType[msg.M](err); ok {
-		ui.Die(m)
+		u.Die(m)
 	}
-	ui.Die(what(err.Error()).Because(err))
+	u.Die(what(err.Error()).Because(err))
 }

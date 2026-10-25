@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // shareTries is how many times the share's lock is tried, ShareWait apart,
@@ -51,7 +50,7 @@ func (t *Tools) LockShare(ctx context.Context) (unlock func(), err error) {
 		case <-time.After(t.ShareWait):
 		}
 	}
-	remove := ui.AddCleanup(func(context.Context) { _ = os.Remove(t.shareLock()) })
+	remove := t.AddCleanup(func(context.Context) { _ = os.Remove(t.shareLock()) })
 	return func() {
 		_ = os.Remove(t.shareLock())
 		remove()
@@ -123,7 +122,7 @@ func (t *Tools) Build(ctx context.Context, rv backend.Review, b backend.Backend,
 		return nil
 	}
 	t.Info(msg.BuildingTools(label(build)))
-	ui.LogNote()
+	t.LogNote()
 	return t.batch(ctx, b, base, tg.Format, lock, build)
 }
 
@@ -134,7 +133,7 @@ func (t *Tools) batch(ctx context.Context, b backend.Backend, base, format strin
 	if err != nil {
 		return err
 	}
-	remove := ui.AddCleanup(func(context.Context) { _ = os.RemoveAll(out) })
+	remove := t.AddCleanup(func(context.Context) { _ = os.RemoveAll(out) })
 	defer func() {
 		_ = os.RemoveAll(out)
 		remove()

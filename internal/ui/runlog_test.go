@@ -14,8 +14,8 @@ import (
 )
 
 // logged runs argv through LoggedCmd.
-func logged(ctx context.Context, step msg.M, argv ...string) error {
-	return LoggedCmd(ctx, step, exec.CommandContext(ctx, argv[0], argv[1:]...)) //nolint:gosec // the tests' own commands
+func (u *UI) logged(ctx context.Context, step msg.M, argv ...string) error {
+	return u.LoggedCmd(ctx, step, exec.CommandContext(ctx, argv[0], argv[1:]...)) //nolint:gosec // the tests' own commands
 }
 
 func writeFile(t *testing.T, path, s string) {
@@ -35,83 +35,96 @@ func readFile(t *testing.T, path string) string {
 }
 
 func TestLoggedGoesToTheLog(t *testing.T) {
-	out, errOut := sandbox(t, "")
+	t.Parallel()
+	u, out, errOut := testUI(t, "")
 	noisy := []string{"sh", "-c", `echo "lots of output"; echo "the error" >&2; exit "$0"`}
-	if err := logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
+	if err := u.logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
 		t.Fatal(err)
 	}
 	if out.Len()+errOut.Len() != 0 {
 		t.Errorf("printed %q, %q; want nothing", out, errOut)
 	}
-	log := readFile(t, logPath())
+	log := readFile(t, u.logPath())
 	for _, want := range []string{"+ sh -c ", "\nlots of output\n", "\nthe error\n"} {
 		if !strings.Contains(log, want) {
 			t.Errorf("log %q: no %q", log, want)
 		}
 	}
-	if !strings.HasPrefix(logPath(), filepath.Join(os.Getenv("XDG_DATA_HOME"), "devvm", "logs", "runs")+"/") {
-		t.Errorf("log in %s", logPath())
+	if logs, _ := u.runLogs(); filepath.Dir(u.logPath()) != logs {
+		t.Errorf("log in %s, want it in %s", u.logPath(), logs)
 	}
 	// One log for the run.
-	if err := logged(t.Context(), msg.M{}, append(noisy, "1")...); err == nil {
+	if err := u.logged(t.Context(), msg.M{}, append(noisy, "1")...); err == nil {
 		t.Error("a failing command: no error")
 	}
-	if logs, _ := filepath.Glob(filepath.Join(filepath.Dir(logPath()), "*.log")); len(logs) != 1 {
+	if logs, _ := filepath.Glob(filepath.Join(filepath.Dir(u.logPath()), "*.log")); len(logs) != 1 {
 		t.Errorf("logs: %q, want one", logs)
 	}
 
 	// LogNote says where it is, once.
-	LogNote()
-	LogNote()
-	if got, want := out.String(), "    log_details file="+logPath()+"\n"; got != want {
+	u.LogNote()
+	u.LogNote()
+	if got, want := out.String(), "    log_details file="+u.logPath()+"\n"; got != want {
 		t.Errorf("LogNote: %q, want %q", got, want)
 	}
 
 	// DEVVM_VERBOSE prints it all instead.
 	out.Reset()
-	t.Setenv("DEVVM_VERBOSE", "1")
-	if err := logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
+	u.getenv = env{"DEVVM_VERBOSE": "1"}.get
+	if err := u.logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
 		t.Fatal(err)
 	}
-	LogNote()
+	u.LogNote()
 	if out.String() != "lots of output\n" || errOut.String() != "the error\n" {
 		t.Errorf("verbose: stdout %q, stderr %q", out, errOut)
 	}
 }
 
+// The run logs are in devvm's data folder.
+func TestRunLogsFolder(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", data)
+	if dir, err := runLogs(); err != nil || dir != filepath.Join(data, "devvm", "logs", "runs") {
+		t.Errorf("runLogs = %q, %v", dir, err)
+	}
+}
+
 func TestDieLoggedShowsTheLogsEnd(t *testing.T) {
-	_, errOut := sandbox(t, "")
-	_ = logged(t.Context(), msg.M{}, "sh", "-c", `printf 'guest\033]0;title\007 \302\233line\n'; exit 1`)
-	if code := exitCode(func() { DieLogged(msg.MsgUnknown("x")) }); code != 1 {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	_ = u.logged(t.Context(), msg.M{}, "sh", "-c", `printf 'guest\033]0;title\007 \302\233line\n'; exit 1`)
+	if code := exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) }); code != 1 {
 		t.Errorf("exit code %d, want 1", code)
 	}
-	want := "--- log_end file=" + logPath() + "\n+ sh -c printf 'guest\\033]0;title\\007 \\302\\233line\\n'; exit 1\nguest]0;title line\n---\ndevvm: msg_unknown name=x\n"
+	want := "--- log_end file=" + u.logPath() + "\n+ sh -c printf 'guest\\033]0;title\\007 \\302\\233line\\n'; exit 1\nguest]0;title line\n---\ndevvm: msg_unknown name=x\n"
 	if got := errOut.String(); got != want {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
 	// Without a log, just the message.
-	_, errOut = sandbox(t, "")
-	exitCode(func() { DieLogged(msg.MsgUnknown("x")) })
+	u, _, errOut = testUI(t, "")
+	exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) })
 	if got, want := errOut.String(), "devvm: msg_unknown name=x\n"; got != want {
 		t.Errorf("no log: got %q, want %q", got, want)
 	}
 }
 
 func TestProxyKeysStayOutOfTheLog(t *testing.T) {
-	sandbox(t, "")
+	t.Parallel()
+	u, _, _ := testUI(t, "")
 	key := strings.Repeat("0123456789abcdef", 2)
-	if err := logged(t.Context(), msg.M{}, "true", "--set", `.env.HTTP_PROXY="http://devvm:`+key+`@host.lima.internal:3128"`); err != nil {
+	if err := u.logged(t.Context(), msg.M{}, "true", "--set", `.env.HTTP_PROXY="http://devvm:`+key+`@host.lima.internal:3128"`); err != nil {
 		t.Fatal(err)
 	}
-	log := readFile(t, logPath())
+	log := readFile(t, u.logPath())
 	if strings.Contains(log, key) || !strings.Contains(log, "http://devvm:<key>@host") {
 		t.Errorf("log: %q", log)
 	}
 	// Owner-only.
 	for path, want := range map[string]os.FileMode{
-		filepath.Dir(filepath.Dir(logPath())): 0o700,
-		filepath.Dir(logPath()):               0o700,
-		logPath():                             0o600,
+		filepath.Dir(filepath.Dir(u.logPath())): 0o700,
+		filepath.Dir(u.logPath()):               0o700,
+		u.logPath():                             0o600,
 	} {
 		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != want {
 			t.Errorf("%s: %v, want %v (%v)", path, fi.Mode().Perm(), want, err)
@@ -120,32 +133,33 @@ func TestProxyKeysStayOutOfTheLog(t *testing.T) {
 }
 
 func TestStepCounts(t *testing.T) {
-	sandbox(t, "")
-	ctx := WithSteps(t.Context(), 2)
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	ctx := u.WithSteps(t.Context(), 2)
 	for _, s := range []string{"a", "b", "c"} {
-		if err := logged(ctx, msg.MsgUnknown(s), "true"); err != nil {
+		if err := u.logged(ctx, msg.MsgUnknown(s), "true"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// A phase inside another keeps its own count; an unlabelled step and one
 	// outside a phase aren't counted.
-	if err := logged(WithSteps(ctx, 1), msg.MsgUnknown("inner"), "true"); err != nil {
+	if err := u.logged(u.WithSteps(ctx, 1), msg.MsgUnknown("inner"), "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := logged(ctx, msg.M{}, "true"); err != nil {
+	if err := u.logged(ctx, msg.M{}, "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := logged(t.Context(), msg.MsgUnknown("outside"), "true"); err != nil {
+	if err := u.logged(t.Context(), msg.MsgUnknown("outside"), "true"); err != nil {
 		t.Fatal(err)
 	}
 	want := "# [1/2] msg_unknown name=a\n+ true\n# [2/2] msg_unknown name=b\n+ true\n# [3/2] msg_unknown name=c\n+ true\n" +
 		"# [1/1] msg_unknown name=inner\n+ true\n+ true\n+ true\n"
-	if got := readFile(t, logPath()); got != want {
+	if got := readFile(t, u.logPath()); got != want {
 		t.Errorf("log:\n%s\nwant:\n%s", got, want)
 	}
 
 	// The status line's label: numbered while in the count.
-	ctx = WithSteps(context.Background(), 1)
+	ctx = u.WithSteps(context.Background(), 1)
 	for _, want := range []string{"[1/1] x", "x"} {
 		if got, _ := count(ctx, "x"); got != want {
 			t.Errorf("label %q, want %q", got, want)
@@ -154,9 +168,10 @@ func TestStepCounts(t *testing.T) {
 }
 
 func TestKeepsTheLast20Logs(t *testing.T) {
-	sandbox(t, "")
-	logs := filepath.Join(os.Getenv("XDG_DATA_HOME"), "devvm", "logs")
-	runs := filepath.Join(logs, "runs")
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	runs, _ := u.runLogs()
+	logs := filepath.Dir(runs)
 	if err := os.MkdirAll(runs, 0o700); err != nil { //nolint:gosec // the test's own folder
 		t.Fatal(err)
 	}
@@ -173,7 +188,7 @@ func TestKeepsTheLast20Logs(t *testing.T) {
 			}
 		}
 	}
-	LogNote()
+	u.LogNote()
 	kept, _ := filepath.Glob(filepath.Join(runs, "*.log"))
 	proxy, _ := filepath.Glob(filepath.Join(logs, "*.proxy.log"))
 	if len(kept) != 20 || len(proxy) != 25 {
@@ -184,21 +199,24 @@ func TestKeepsTheLast20Logs(t *testing.T) {
 			t.Errorf("kept an older log: %s", f)
 		}
 	}
-	if _, err := os.Stat(logPath()); err != nil {
+	if _, err := os.Stat(u.logPath()); err != nil {
 		t.Errorf("this run's log: %v", err)
 	}
 }
 
 func TestRunLogFailures(t *testing.T) {
-	_, errOut := sandbox(t, "")
-	t.Setenv("HOME", "relative")
-	if code := exitCode(LogNote); code != 1 || errOut.String() != "devvm: home_not_absolute\n" {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	u.runLogs = func() (string, error) { return "", msg.HomeNotAbsolute() }
+	if code := exitCode(u.LogNote); code != 1 || errOut.String() != "devvm: home_not_absolute\n" {
 		t.Errorf("exit code %d, stderr %q", code, errOut)
 	}
-	_, errOut = sandbox(t, "")
-	data := os.Getenv("XDG_DATA_HOME")
+	u, _, errOut = testUI(t, "")
+	data := t.TempDir()
 	writeFile(t, filepath.Join(data, "devvm"), "a file, not a folder")
-	if code := exitCode(LogNote); code != 1 || !strings.HasPrefix(errOut.String(), "devvm: run_log_failed dir="+filepath.Join(data, "devvm", "logs", "runs")+" reason=") {
+	runs := filepath.Join(data, "devvm", "logs", "runs")
+	u.runLogs = func() (string, error) { return runs, nil }
+	if code := exitCode(u.LogNote); code != 1 || !strings.HasPrefix(errOut.String(), "devvm: run_log_failed dir="+runs+" reason=") {
 		t.Errorf("exit code %d, stderr %q", code, errOut)
 	}
 }

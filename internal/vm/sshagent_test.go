@@ -220,6 +220,7 @@ func TestCheckAgent(t *testing.T) {
 			var said strings.Builder
 			e.Warn = func(m msg.M) { said.WriteString("devvm: " + m.String() + "\n") }
 			e.Confirm = func(msg.M) bool { return false }
+			e.Terminal = func() bool { return true }
 			e.checkAgent(t.Context())
 			out := said.String()
 			if !slices.Equal(calls, tc.calls) {

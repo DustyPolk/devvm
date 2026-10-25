@@ -21,7 +21,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Env is the environment variable that sets --from's default.
@@ -78,9 +77,10 @@ type Lookup struct {
 	Warn     func(msg.M)
 }
 
-// NewLookup returns a Lookup on the internet and this machine's Docker.
-func NewLookup(d paths.Dirs) *Lookup {
-	return &Lookup{Dirs: d, Registry: NewRegistry(), DockerID: DockerID, Warn: ui.Warn}
+// NewLookup returns a Lookup on the internet and this machine's Docker,
+// warning through warn.
+func NewLookup(d paths.Dirs, warn func(msg.M)) *Lookup {
+	return &Lookup{Dirs: d, Registry: NewRegistry(), DockerID: DockerID, Warn: warn}
 }
 
 // Refresh looks up ref's digest and records it: its registry's, else

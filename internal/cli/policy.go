@@ -9,7 +9,7 @@ import (
 )
 
 // newPolicyCmd is devvm policy, and allow, deny and rm RULE... [-g].
-func newPolicyCmd() *cobra.Command {
+func newPolicyCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "policy",
 		Short: "Show the network policy allowlist of this folder's VM",
@@ -19,7 +19,7 @@ func newPolicyCmd() *cobra.Command {
 			"with -g yours for every VM; a change applies at once, to the next connection.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error { return env.Policy(cmd.Context(), ui.Stdout()) }, msg.PolicyFailed)
+			withEnv(u, func(env *vm.Env) error { return env.Policy(cmd.Context(), u.Stdout()) }, msg.PolicyFailed)
 			return nil
 		},
 	}
@@ -31,7 +31,7 @@ func newPolicyCmd() *cobra.Command {
 			Long:  long,
 			Args:  cobra.MinimumNArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				withEnv(func(env *vm.Env) error {
+				withEnv(u, func(env *vm.Env) error {
 					return env.PolicyChange(cmd.Context(), args, deny, remove, global)
 				}, msg.PolicyFailed)
 				return nil

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -21,7 +22,7 @@ import (
 )
 
 // newImagesCmd is devvm images, and devvm images rm.
-func newImagesCmd(g *globals) *cobra.Command {
+func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "images",
 		Short: "List the images and the shared tools",
@@ -32,22 +33,22 @@ func newImagesCmd(g *globals) *cobra.Command {
 			"whether it's the tools lock's version, in use, unused, or the lock's and not built yet.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			b, err := builder(g.backend)
+			b, err := builder(u, g.backend)
 			var imgs []listedImage
 			var ts []tools.Listed
 			if err == nil {
 				b.From = g.fromRef()
-				imgs, ts, err = listImages(cmd.Context(), b)
+				imgs, ts, err = listImages(cmd.Context(), u, b)
 			}
-			fail(err, msg.ImagesFailed)
-			if err := writeImages(imgs, ts); err != nil {
+			fail(u, err, msg.ImagesFailed)
+			if err := writeImages(u.Stdout(), imgs, ts); err != nil {
 				return err
 			}
 			if n := len(staleImages(imgs)); n > 0 {
-				ui.Note(msg.ImagesStaleNote(n))
+				u.Note(msg.ImagesStaleNote(n))
 			}
 			if size := toolsSize(tools.Unused(ts)); size > 0 {
-				ui.Note(msg.ImagesUnused(humanSize(size)))
+				u.Note(msg.ImagesUnused(humanSize(size)))
 			}
 			return nil
 		},
@@ -69,7 +70,7 @@ func newImagesCmd(g *globals) *cobra.Command {
 			return joined(toComplete, (&build.Builder{Dirs: dirs}).Layers()), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := builder(g.backend)
+			b, err := builder(u, g.backend)
 			if err == nil {
 				b.From = g.fromRef()
 				err = from.Check(b.From)
@@ -80,7 +81,7 @@ func newImagesCmd(g *globals) *cobra.Command {
 			if err == nil {
 				err = b.Delete(cmd.Context(), args)
 			}
-			fail(err, msg.ImagesRmFailed)
+			fail(u, err, msg.ImagesRmFailed)
 			return nil
 		},
 	})
@@ -118,18 +119,18 @@ func toolsSize(ts []tools.Listed) int64 {
 // listImages lists the images on every backend, and the shared tools for
 // the base new VMs get on b (its backend and From). A backend that can't
 // list fails it only when a VM's state names that backend.
-func listImages(ctx context.Context, b *build.Builder) ([]listedImage, []tools.Listed, error) {
-	defer ui.Status(msg.ReadingImages())()
+func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage, []tools.Listed, error) {
+	defer u.Status(msg.ReadingImages())()
 	if err := from.Check(b.From); err != nil {
 		return nil, nil, err
 	}
-	reg, err := backends.Registry(b.Dirs)
+	reg, err := backends.Registry(b.Dirs, u)
 	if err != nil {
 		return nil, nil, err
 	}
 	var imgs []listedImage
 	for _, be := range reg.All() {
-		bb := newBuilder(b.Dirs, b.Root, be, reg.Review, b.Tools, "")
+		bb := newBuilder(u, b.Dirs, b.Root, be, reg.Review, b.Tools, "")
 		ls, err := bb.Listing(ctx)
 		if err != nil {
 			if used, uerr := vm.BackendUsed(b.Dirs, be.Name()); uerr != nil {
@@ -153,7 +154,7 @@ func listImages(ctx context.Context, b *build.Builder) ([]listedImage, []tools.L
 	}
 	tgs := []tools.Target{tg}
 	for _, be := range reg.All() {
-		t, err := newBuilder(b.Dirs, b.Root, be, reg.Review, b.Tools, b.From).ToolTarget()
+		t, err := newBuilder(u, b.Dirs, b.Root, be, reg.Review, b.Tools, b.From).ToolTarget()
 		if err != nil {
 			return nil, nil, err
 		}
@@ -167,10 +168,10 @@ func listImages(ctx context.Context, b *build.Builder) ([]listedImage, []tools.L
 	return imgs, ts, err
 }
 
-// writeImages prints the images, then the shared tools, as tables, each
-// with a header; a value one lacks is -.
-func writeImages(imgs []listedImage, ts []tools.Listed) error {
-	w := tabwriter.NewWriter(ui.Stdout(), 0, 0, 2, ' ', 0)
+// writeImages writes the images, then the shared tools, to out as tables,
+// each with a header; a value one lacks is -.
+func writeImages(out io.Writer, imgs []listedImage, ts []tools.Listed) error {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	row := func(vals ...string) {
 		for i, v := range vals {
 			vals[i] = cmp.Or(v, "-")
@@ -188,7 +189,7 @@ func writeImages(imgs []listedImage, ts []tools.Listed) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(ui.Stdout())
+	_, _ = fmt.Fprintln(out)
 	row("NAME", "TOOL", "VERSION", "SIZE", "VMS", "STATE")
 	for _, t := range ts {
 		size, vms := "", ""

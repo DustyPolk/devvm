@@ -6,12 +6,13 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // newRefreshToolsCmd is devvm _refresh-tools: the daily check for newer
 // shared tools, which devvm starts in the background (tools.RefreshDaily).
 // Hidden: it's not for users.
-func newRefreshToolsCmd() *cobra.Command {
+func newRefreshToolsCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:    "_refresh-tools",
 		Short:  "Resolve the shared tools' versions again",
@@ -22,10 +23,10 @@ func newRefreshToolsCmd() *cobra.Command {
 			if err == nil {
 				var root string
 				if root, err = paths.Root(); err == nil {
-					err = tools.New(dirs, root).Refresh(cmd.Context())
+					err = tools.New(dirs, root, u).Refresh(cmd.Context())
 				}
 			}
-			fail(err, func(string) msg.M { return msg.ToolsCheckFailed() })
+			fail(u, err, func(string) msg.M { return msg.ToolsCheckFailed() })
 			return nil
 		},
 	}

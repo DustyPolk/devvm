@@ -10,7 +10,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // ToolsVM is the throwaway machine shared tools are built in.
@@ -54,9 +53,9 @@ func (s *Smolvm) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	}
 	// A failure leaves it to the cleanup, which runs once the caller has
 	// shown the run log's end.
-	done := ui.AddCleanup(func(ctx context.Context) { _ = s.removeIfThere(ctx, ToolsVM) })
+	done := s.AddCleanup(func(ctx context.Context) { _ = s.removeIfThere(ctx, ToolsVM) })
 	// Its steps: create, start, the script, plain.sh, delete.
-	ctx = ui.WithSteps(ctx, 5)
+	ctx = s.WithSteps(ctx, 5)
 	if err := s.Runner.Run(ctx, msg.CloningImage("base"), s.smolvm(ctx, "machine", "create", "--name", ToolsVM,
 		"--label", LabelKey+"="+s.Dirs.Data, "--from", s.packFile(spec.Base),
 		"--cpus", strconv.Itoa(cpus), "--mem", mib(mem), "--storage", gibCeil(disk), "-v", out)); err != nil {

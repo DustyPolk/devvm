@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -27,6 +28,17 @@ var (
 	gnuT  = Target{Libc: "gnu"}
 	muslT = Target{Libc: "musl"}
 )
+
+// quietUI prints nothing, runs commands as they are, their output
+// dropped, and keeps no cleanups.
+type quietUI struct{}
+
+func (quietUI) Info(msg.M)                                                {}
+func (quietUI) Warn(msg.M)                                                {}
+func (quietUI) LogNote()                                                  {}
+func (quietUI) Status(msg.M) func()                                       { return func() {} }
+func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
+func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
 
 func repo(t *testing.T, parts ...string) string {
 	t.Helper()
@@ -87,7 +99,6 @@ func newEnv(t *testing.T) env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "xdg")) // the run log
 	log := filepath.Join(dir, "calls")
 	write(t, log, nil)
 	t.Setenv("STUB_LOG", log)
@@ -99,7 +110,7 @@ func newEnv(t *testing.T) env {
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
-	tl := New(d, root)
+	tl := New(d, root, quietUI{})
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
 	tl.Getenv = func(k string) string {

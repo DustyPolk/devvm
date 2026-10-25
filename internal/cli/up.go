@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -54,12 +55,12 @@ type upFlags struct {
 	sshAgent     bool
 }
 
-func addUpFlags(cmd *cobra.Command, u *upFlags) {
+func addUpFlags(cmd *cobra.Command, uf *upFlags) {
 	f := cmd.Flags()
-	f.BoolVar(&u.clone, "clone", false, "create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from")
-	f.BoolVar(&u.unsafeFolder, "unsafe-folder", false, "mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway")
-	f.BoolVar(&u.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
-	f.BoolVar(&u.sshAgent, "ssh-agent", false, "create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)")
+	f.BoolVar(&uf.clone, "clone", false, "create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from")
+	f.BoolVar(&uf.unsafeFolder, "unsafe-folder", false, "mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway")
+	f.BoolVar(&uf.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
+	f.BoolVar(&uf.sshAgent, "ssh-agent", false, "create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)")
 }
 
 // options are what the global flags ask of up.
@@ -71,27 +72,27 @@ func (g *globals) options() vm.Options {
 }
 
 // up opens a shell in this folder's VM, making it first.
-func up(ctx context.Context, g *globals, u *upFlags, args []string) error {
+func up(ctx context.Context, u *ui.UI, g *globals, uf *upFlags, args []string) error {
 	o := g.options()
-	o.UnsafeFolder, o.NoGitProtect, o.Clone, o.SSHAgent = u.unsafeFolder, u.noGitProtect, u.clone, u.sshAgent
+	o.UnsafeFolder, o.NoGitProtect, o.Clone, o.SSHAgent = uf.unsafeFolder, uf.noGitProtect, uf.clone, uf.sshAgent
 	if len(args) > 0 {
 		o.Image = args[0]
 	}
-	withEnv(func(env *vm.Env) error { return env.Up(ctx, o) }, msg.UpFailed)
+	withEnv(u, func(env *vm.Env) error { return env.Up(ctx, o) }, msg.UpFailed)
 	return nil
 }
 
-// withEnv runs do in this folder's environment, failing with what's
+// withEnv runs do in this folder's environment on u, failing with what's
 // message for an error that isn't one.
-func withEnv(do func(*vm.Env) error, what func(reason string) msg.M) {
-	env, err := newEnv()
+func withEnv(u *ui.UI, do func(*vm.Env) error, what func(reason string) msg.M) {
+	env, err := newEnv(u)
 	if err == nil {
 		err = do(env)
 	}
-	fail(err, what)
+	fail(u, err, what)
 }
 
-func newEnv() (*vm.Env, error) {
+func newEnv(u *ui.UI) (*vm.Env, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return nil, err
@@ -100,14 +101,14 @@ func newEnv() (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := backends.Registry(dirs)
+	reg, err := backends.Registry(dirs, u)
 	if err != nil {
 		return nil, err
 	}
-	e, err := vm.NewEnv(dirs, filepath.Dir(self), self, reg)
+	e, err := vm.NewEnv(dirs, filepath.Dir(self), self, reg, u)
 	if err != nil {
 		return nil, err
 	}
-	e.PickFeatures = pickFeatures
+	e.PickFeatures = pickFeatures(u)
 	return e, nil
 }

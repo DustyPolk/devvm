@@ -3,13 +3,13 @@ package vm
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // defaultKeys are the keys in ~/.ssh offered for loading, in order.
@@ -45,7 +45,7 @@ func (e *Env) checkAgent(ctx context.Context) {
 	}
 	cmd := "ssh-add " + strings.Join(args, " ")
 	e.Warn(msg.SSHAgentEmpty())
-	if ui.StdinIsTerminal() && e.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
+	if e.Terminal() && e.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
 		if e.OS == "darwin" {
 			e.Info(msg.KeyLoadedKeychain())
 		} else {
@@ -57,10 +57,11 @@ func (e *Env) checkAgent(ctx context.Context) {
 }
 
 // sshAdd runs ssh-add with args on the terminal, which it may ask a
-// passphrase on, and returns its exit code: 127 when it can't run.
-func sshAdd(ctx context.Context, args ...string) int {
+// passphrase on, its output to out, and returns its exit code: 127 when
+// it can't run.
+func sshAdd(ctx context.Context, out io.Writer, args ...string) int {
 	cmd := exec.CommandContext(ctx, "ssh-add", args...) //nolint:gosec // ssh-add with -l or a key's path
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, ui.Stderr(), ui.Stderr()
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, out, out
 	if args[0] == "-l" {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	}

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 const (
@@ -71,32 +70,38 @@ type Finder struct {
 	RetryDelay time.Duration
 	// GPGV is gpgv's path, "" when it isn't installed.
 	GPGV string
-	// Run runs gpgv into the run log (ui.LoggedCmd).
+	// Run runs gpgv into the run log.
 	Run func(ctx context.Context, cmd *exec.Cmd) error
-	// Note prints a note (ui.Note).
+	// Note prints a note.
 	Note func(msg.M)
 }
 
+// UI is the run log gpgv runs into, and where a Finder prints.
+type UI interface {
+	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
+	Note(msg.M)
+}
+
 // New returns a Finder for devvm's files in root, with the URL from
-// DEVVM_UBUNTU_URL when it's set.
-func New(root string, getenv func(string) string) *Finder {
-	u := DefaultURL
+// DEVVM_UBUNTU_URL when it's set, running gpgv and printing through u.
+func New(root string, getenv func(string) string, u UI) *Finder {
+	url := DefaultURL
 	if v := getenv(URLEnv); v != "" {
-		u = v
+		url = v
 	}
 	gpgv, err := exec.LookPath("gpgv")
 	if err != nil {
 		gpgv = ""
 	}
 	return &Finder{
-		URL:        strings.TrimRight(u, "/"),
+		URL:        strings.TrimRight(url, "/"),
 		Keyring:    filepath.Join(root, Keyring),
 		Arch:       runtime.GOARCH,
 		Client:     NewClient(),
 		RetryDelay: time.Second,
 		GPGV:       gpgv,
-		Run:        func(ctx context.Context, cmd *exec.Cmd) error { return ui.LoggedCmd(ctx, msg.M{}, cmd) },
-		Note:       ui.Note,
+		Run:        func(ctx context.Context, cmd *exec.Cmd) error { return u.LoggedCmd(ctx, msg.M{}, cmd) },
+		Note:       u.Note,
 	}
 }
 

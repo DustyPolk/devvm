@@ -145,8 +145,8 @@ type Problem struct {
 var ErrNotFound = errors.New("no such VM")
 
 // LoggedError is a failure whose details are in the run log, from a
-// command run with ui.Logged: callers end with ui.DieLogged(e.Msg), which
-// shows the log's end, rather than ui.Die.
+// command run into it: the CLI ends with the UI's DieLogged(e.Msg), which
+// shows the log's end, rather than Die.
 type LoggedError struct{ Msg msg.M }
 
 // Logged returns m as a LoggedError.

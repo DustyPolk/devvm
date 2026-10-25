@@ -62,6 +62,15 @@ linters:
             - golang.org/x/term
             - golang.org/x/sys
             - github.com/rogpeppe/go-internal
+        ui:
+          files:
+            - $all
+            - "!**/cmd/devvm/**"
+            - "!**/internal/cli/**"
+            - "!**/internal/ui/**"
+          deny:
+            - pkg: github.com/w3cj/devvm/internal/ui
+              desc: only cmd/devvm and internal/cli hold the UI; take what you need as fields.
     forbidigo:
       analyze-types: true
       forbid:

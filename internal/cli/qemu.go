@@ -16,7 +16,7 @@ import (
 //     place, its network restricted.
 //   - _qemu connect ADDRESS: join standard input and output to ADDRESS
 //     (QEMU's guestfwd runs it for each connection to the proxy).
-func newQEMUCmd() *cobra.Command {
+func newQEMUCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:                "_qemu exec WRAPPER [ARGS...] | _qemu connect ADDRESS",
 		Short:              "Run QEMU with devvm's network restrictions",
@@ -27,7 +27,7 @@ func newQEMUCmd() *cobra.Command {
 			case len(args) >= 2 && args[0] == "exec":
 				return lima.RunQEMU(args[1], args[2:])
 			case len(args) == 2 && args[0] == "connect":
-				return lima.Connect(args[1], cmd.InOrStdin(), ui.Stdout())
+				return lima.Connect(args[1], cmd.InOrStdin(), u.Stdout())
 			}
 			return errors.New("usage: devvm " + cmd.Use)
 		},

@@ -30,7 +30,7 @@ It returns when the VM's hostagent is gone.
 
 ## How devvm runs it
 
-`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with devvm's streams (`IO`: the event log and data on `ui.Stdout`, the proxy's own log lines on `ui.Stderr`), warns through `ui` about logins copied as they are (`IO.Kept`, `secrets.LoginKept`), and ends an error with `ui.Die`. The package itself prints nothing.
+`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and data on its `Stdout`, the proxy's own log lines on its `Stderr`), warns through it about logins copied as they are (`IO.Kept`, `secrets.LoginKept`), and ends an error with its `Die`. The package itself prints nothing.
 
 ```text
 devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -lifeline HA.pid \

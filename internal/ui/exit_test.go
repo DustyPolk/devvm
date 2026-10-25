@@ -16,10 +16,14 @@ import (
 )
 
 // TestMain makes the test binary a stand-in for devvm when UI_TEST_HELPER is
-// set, for the tests that send it signals.
+// set, for the tests that send it signals. Otherwise messages print as
+// their names.
 func TestMain(m *testing.M) {
 	if h := os.Getenv("UI_TEST_HELPER"); h != "" {
 		os.Exit(helper(h)) //nolint:forbidigo // the test binary as a helper process
+	}
+	if err := os.Setenv("DEVVM_MESSAGES", "names"); err != nil {
+		panic(err)
 	}
 	os.Exit(m.Run()) //nolint:forbidigo // the test binary
 }
@@ -36,21 +40,21 @@ func helper(mode string) int {
 			_ = f.Close()
 		}
 	}
-	return Main(func(ctx context.Context) int {
-		AddCleanup(func(context.Context) {
-			record("cleanup interrupted=" + map[bool]string{true: "yes", false: "no"}[Interrupted()])
+	return Main(func(ctx context.Context, u *UI) int {
+		u.AddCleanup(func(context.Context) {
+			record("cleanup interrupted=" + map[bool]string{true: "yes", false: "no"}[u.Interrupted()])
 			if mode == "slow cleanup" {
 				time.Sleep(500 * time.Millisecond)
 				record("cleanup done")
 			}
 		})
-		Say(msg.MsgUnknown("ready"))
+		u.Say(msg.MsgUnknown("ready"))
 		argv := []string{"sleep", "30"}
 		if mode == "command interrupts" { // as Ctrl+C reaches both, the command ending first
 			argv = []string{"sh", "-c", "kill -INT $PPID; exit 130"}
 		}
-		if err := logged(ctx, msg.MsgUnknown("sleeping"), argv...); err != nil {
-			DieLogged(msg.MsgUnknown("sleep failed"))
+		if err := u.logged(ctx, msg.MsgUnknown("sleeping"), argv...); err != nil {
+			u.DieLogged(msg.MsgUnknown("sleep failed"))
 		}
 		record("not interrupted")
 		return 0
@@ -58,20 +62,21 @@ func helper(mode string) int {
 }
 
 func TestCleanupsRunLastFirst(t *testing.T) {
-	_, errOut := sandbox(t, "")
-	code := Main(func(context.Context) int {
-		AddCleanup(func(context.Context) { Note(msg.MsgUnknown("first")) })
-		AddCleanup(func(context.Context) { Die(msg.MsgUnknown("dying cleanup")) })
-		remove := AddCleanup(func(context.Context) { Note(msg.MsgUnknown("removed")) })
-		AddCleanup(func(ctx context.Context) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	code := u.main(func(context.Context) int {
+		u.AddCleanup(func(context.Context) { u.Note(msg.MsgUnknown("first")) })
+		u.AddCleanup(func(context.Context) { u.Die(msg.MsgUnknown("dying cleanup")) })
+		remove := u.AddCleanup(func(context.Context) { u.Note(msg.MsgUnknown("removed")) })
+		u.AddCleanup(func(ctx context.Context) {
 			if ctx.Err() != nil {
-				Note(msg.MsgUnknown("canceled context"))
+				u.Note(msg.MsgUnknown("canceled context"))
 			}
-			Note(msg.MsgUnknown("last"))
+			u.Note(msg.MsgUnknown("last"))
 		})
 		remove()
 		remove()
-		Die(msg.MsgUnknown("failed"))
+		u.Die(msg.MsgUnknown("failed"))
 		return 0
 	})
 	if code != 1 {
@@ -86,22 +91,24 @@ func TestCleanupsRunLastFirst(t *testing.T) {
 }
 
 func TestMainReturnsTheCode(t *testing.T) {
+	t.Parallel()
 	ran := 0
-	sandbox(t, "")
-	if code := Main(func(context.Context) int {
-		AddCleanup(func(context.Context) { ran++ })
+	u, _, _ := testUI(t, "")
+	if code := u.main(func(context.Context) int {
+		u.AddCleanup(func(context.Context) { ran++ })
 		return 3
 	}); code != 3 || ran != 1 {
 		t.Errorf("exit code %d, cleanups run %d; want 3 and 1", code, ran)
 	}
 	// Answering nothing exits 1 too.
-	if code := Main(func(context.Context) int { Ask(msg.MsgUnknown("x")); return 0 }); code != 1 {
+	if code := u.main(func(context.Context) int { u.Ask(msg.MsgUnknown("x")); return 0 }); code != 1 {
 		t.Errorf("no answer: exit code %d, want 1", code)
 	}
 }
 
 func TestOtherPanicsRunTheCleanupsAndPanic(t *testing.T) {
-	sandbox(t, "")
+	t.Parallel()
+	u, _, _ := testUI(t, "")
 	ran := false
 	defer func() {
 		p, _ := recover().(string)
@@ -109,8 +116,8 @@ func TestOtherPanicsRunTheCleanupsAndPanic(t *testing.T) {
 			t.Errorf("panic %q, cleanup ran %v", p, ran)
 		}
 	}()
-	Main(func(context.Context) int {
-		AddCleanup(func(context.Context) { ran = true })
+	u.main(func(context.Context) int {
+		u.AddCleanup(func(context.Context) { ran = true })
 		panic("boom")
 	})
 }
@@ -196,6 +203,7 @@ func TestACommandEndedByTheSameSignalPrintsNothing(t *testing.T) {
 }
 
 func TestKilled(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		script string
 		want   bool

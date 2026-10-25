@@ -18,7 +18,6 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // existing finds the folder's VM, which must exist, be made for this
@@ -257,7 +256,7 @@ func (e *Env) export(ctx context.Context, t *found, file string, failed error) e
 		return err
 	}
 	tmp := out.Name()
-	done := ui.AddCleanup(func(context.Context) { _ = os.Remove(tmp) })
+	done := e.AddCleanup(func(context.Context) { _ = os.Remove(tmp) })
 	defer func() {
 		_ = os.Remove(tmp)
 		done()
@@ -267,7 +266,7 @@ func (e *Env) export(ctx context.Context, t *found, file string, failed error) e
 		excludes[i] = "--exclude=" + p
 	}
 	script := "cd ~ && ls -d " + strings.Join(historyPaths, " ") + " 2>/dev/null | tar -czf - " + strings.Join(excludes, " ") + " -T -"
-	err = b.Exec(ctx, vm, []string{"bash", "-c", script}, backend.ExecOpts{Stdout: out, Stderr: ui.LogWriter()})
+	err = b.Exec(ctx, vm, []string{"bash", "-c", script}, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()})
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}

@@ -4,11 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newStopCmd is devvm stop.
-func newStopCmd() *cobra.Command {
+func newStopCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
 		Short: "Stop this folder's VM",
@@ -16,7 +17,7 @@ func newStopCmd() *cobra.Command {
 			"again and checked, as on a launch that finds it stopped, and its ssh config entry goes.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error { return env.Stop(cmd.Context()) }, msg.StopVMFailed)
+			withEnv(u, func(env *vm.Env) error { return env.Stop(cmd.Context()) }, msg.StopVMFailed)
 			return nil
 		},
 	}

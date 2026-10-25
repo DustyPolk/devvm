@@ -4,11 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newSSHCmd is devvm ssh.
-func newSSHCmd() *cobra.Command {
+func newSSHCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ssh",
 		Short: "Get this folder's VM ready for ssh and editors, and show its host name",
@@ -18,7 +19,7 @@ func newSSHCmd() *cobra.Command {
 			"~/.ssh/config, devvm offers to add it.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error { return env.SSH(cmd.Context()) }, msg.SSHFailed)
+			withEnv(u, func(env *vm.Env) error { return env.SSH(cmd.Context()) }, msg.SSHFailed)
 			return nil
 		},
 	}

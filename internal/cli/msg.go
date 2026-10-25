@@ -11,7 +11,7 @@ import (
 
 // newMsgCmd is devvm _msg NAME key=value...: a message's text, for the
 // end-to-end tests to look for. Hidden: it's not for users.
-func newMsgCmd() *cobra.Command {
+func newMsgCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:                "_msg NAME [key=value...]",
 		Short:              "Print a message's text",
@@ -24,7 +24,7 @@ func newMsgCmd() *cobra.Command {
 				return err
 			}
 			// The text whatever DEVVM_MESSAGES says: it's data here.
-			_, err = fmt.Fprintln(ui.Stdout(), m.Text())
+			_, err = fmt.Fprintln(u.Stdout(), m.Text())
 			return err
 		},
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 // newGCCmd is devvm gc.
-func newGCCmd(g *globals) *cobra.Command {
+func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "gc",
 		Short: "Delete stale images and unused tool images",
@@ -21,7 +21,7 @@ func newGCCmd(g *globals) *cobra.Command {
 			"terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fail(gc(cmd.Context(), g), msg.GCFailed)
+			fail(u, gc(cmd.Context(), u, g), msg.GCFailed)
 			return nil
 		},
 	}
@@ -30,8 +30,8 @@ func newGCCmd(g *globals) *cobra.Command {
 // gc lists what's stale or unused, asks in a terminal, and deletes it. It
 // holds the share's lock throughout, so no build moves a tool image in and
 // no update swaps the lock meanwhile.
-func gc(ctx context.Context, g *globals) error {
-	b, err := builder(g.backend)
+func gc(ctx context.Context, u *ui.UI, g *globals) error {
+	b, err := builder(u, g.backend)
 	if err != nil {
 		return err
 	}
@@ -41,33 +41,33 @@ func gc(ctx context.Context, g *globals) error {
 		return err
 	}
 	defer unlock()
-	imgs, ts, err := listImages(ctx, b)
+	imgs, ts, err := listImages(ctx, u, b)
 	if err != nil {
 		return err
 	}
 	stale, unused := staleImages(imgs), tools.Unused(ts)
 	if len(stale)+len(unused) == 0 {
-		ui.Info(msg.NothingToClean())
+		u.Info(msg.NothingToClean())
 		return nil
 	}
 	if len(stale) > 0 {
-		ui.Say(msg.GCImages())
+		u.Say(msg.GCImages())
 		for _, l := range stale {
 			if l.Name == "" {
-				ui.Say(msg.GCUnfinished(l.Key))
+				u.Say(msg.GCUnfinished(l.Key))
 			} else {
-				ui.Say(msg.GCImage(l.Name, l.Key))
+				u.Say(msg.GCImage(l.Name, l.Key))
 			}
 		}
 	}
 	if len(unused) > 0 {
-		ui.Say(msg.GCTools(len(unused), humanSize(toolsSize(unused))))
+		u.Say(msg.GCTools(len(unused), humanSize(toolsSize(unused))))
 	}
-	if ui.StdinIsTerminal() && !ui.Confirm(msg.GCConfirm()) {
-		ui.Info(msg.NothingDeleted())
+	if u.StdinIsTerminal() && !u.Confirm(msg.GCConfirm()) {
+		u.Info(msg.NothingDeleted())
 		return nil
 	}
-	if err := deleteStale(ctx, stale); err != nil {
+	if err := deleteStale(ctx, u, stale); err != nil {
 		return err
 	}
 	if len(unused) == 0 {
@@ -80,26 +80,26 @@ func gc(ctx context.Context, g *globals) error {
 	if err := b.Tools.Delete(files); err != nil {
 		return err
 	}
-	ui.Info(msg.DeletedTools(len(files)))
+	u.Info(msg.DeletedTools(len(files)))
 	return nil
 }
 
 // deleteStale deletes these images, each on its backend. One the backend
 // refuses with a message (on Linux hosts, an image whose disk VMs use)
 // stays, saying so.
-func deleteStale(ctx context.Context, imgs []listedImage) error {
+func deleteStale(ctx context.Context, u *ui.UI, imgs []listedImage) error {
 	for _, l := range imgs {
 		if err := l.builder.DeleteKey(ctx, l.Key); err != nil {
 			if m, ok := errors.AsType[msg.M](err); ok {
-				ui.Warn(m)
+				u.Warn(m)
 				continue
 			}
 			return err
 		}
 		if l.Name == "" {
-			ui.Info(msg.DeletedUnfinishedBuild(l.Key))
+			u.Info(msg.DeletedUnfinishedBuild(l.Key))
 		} else {
-			ui.Info(msg.DeletedImage(l.Name, l.Key))
+			u.Info(msg.DeletedImage(l.Name, l.Key))
 		}
 	}
 	return nil

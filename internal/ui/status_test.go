@@ -8,6 +8,7 @@ import (
 )
 
 func TestDuration(t *testing.T) {
+	t.Parallel()
 	for secs, want := range map[int]string{0: "0s", 5: "5s", 59: "59s", 60: "1m00s", 125: "2m05s"} {
 		if got := duration(secs); got != want {
 			t.Errorf("duration(%d) = %q, want %q", secs, got, want)
@@ -16,6 +17,7 @@ func TestDuration(t *testing.T) {
 }
 
 func TestStatusText(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		label   string
 		secs    int
@@ -40,6 +42,7 @@ func TestStatusText(t *testing.T) {
 }
 
 func TestClearLine(t *testing.T) {
+	t.Parallel()
 	// After the terminal narrows, clearing covers the rows the last line now
 	// wraps onto.
 	for _, tc := range []struct {
@@ -58,6 +61,7 @@ func TestClearLine(t *testing.T) {
 }
 
 func TestPrintable(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"guest\033]0;title\007 \302\233line\n": "guest]0;title line\n",
 		"tab\tand\nnewline":                    "tab\tand\nnewline",
@@ -71,6 +75,7 @@ func TestPrintable(t *testing.T) {
 }
 
 func TestGlyphs(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		env  map[string]string
 		done string
@@ -85,18 +90,20 @@ func TestGlyphs(t *testing.T) {
 			t.Errorf("glyphs with %v = %q, want %q first, then frames", tc.env, g, tc.done)
 		}
 	}
-	t.Setenv("LC_ALL", "C")
-	if got, want := doneLine("[1/2] starting x", 75), "    ok [1/2] starting x (1m15s)\n"; got != want {
+	u, _, _ := testUI(t, "")
+	u.getenv = env{"LC_ALL": "C"}.get
+	if got, want := u.doneLine("[1/2] starting x", 75), "    ok [1/2] starting x (1m15s)\n"; got != want {
 		t.Errorf("doneLine: got %q, want %q", got, want)
 	}
 }
 
 func TestStatusLineInATerminal(t *testing.T) {
-	_, errOut := sandbox(t, "")
-	stderrTTY = func() bool { return true }
-	termWidth = func() int { return 40 }
-	t.Setenv("LC_ALL", "C")
-	if err := logged(t.Context(), msg.MsgUnknown("x"), "sh", "-c", "echo progress"); err != nil {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	u.stderrTTY = true
+	u.termWidth = func() int { return 40 }
+	u.getenv = env{"LC_ALL": "C"}.get
+	if err := u.logged(t.Context(), msg.MsgUnknown("x"), "sh", "-c", "echo progress"); err != nil {
 		t.Fatal(err)
 	}
 	got := errOut.String()
@@ -114,7 +121,7 @@ func TestStatusLineInATerminal(t *testing.T) {
 
 	// Status, around work that isn't one command.
 	errOut.Reset()
-	stop := Status(msg.MsgUnknown("y"))
+	stop := u.Status(msg.MsgUnknown("y"))
 	stop()
 	stop()
 	if got := errOut.String(); !strings.Contains(got, "msg_unknown name=y 0s") || !strings.HasSuffix(got, "\r\033[K") {
@@ -122,17 +129,18 @@ func TestStatusLineInATerminal(t *testing.T) {
 	}
 	// Not in a terminal, or verbose: none.
 	errOut.Reset()
-	stderrTTY = func() bool { return false }
-	Status(msg.MsgUnknown("y"))()
-	stderrTTY = func() bool { return true }
-	t.Setenv("DEVVM_VERBOSE", "1")
-	Status(msg.MsgUnknown("y"))()
+	u.stderrTTY = false
+	u.Status(msg.MsgUnknown("y"))()
+	u.stderrTTY = true
+	u.getenv = env{"LC_ALL": "C", "DEVVM_VERBOSE": "1"}.get
+	u.Status(msg.MsgUnknown("y"))()
 	if errOut.Len() != 0 {
 		t.Errorf("status line outside a terminal: %q", errOut)
 	}
 }
 
 func TestTailLines(t *testing.T) {
+	t.Parallel()
 	path := t.TempDir() + "/log"
 	var b strings.Builder
 	for i := range 30 {

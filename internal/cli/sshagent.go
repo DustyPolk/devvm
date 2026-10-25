@@ -11,7 +11,7 @@ import (
 
 // newSSHAgentCmd is devvm ssh-agent [on|devvm|off], and devvm's own
 // agent's add and keys.
-func newSSHAgentCmd() *cobra.Command {
+func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ssh-agent [on|devvm|off]",
 		Short: "Show or change SSH agent forwarding for this folder's VM",
@@ -22,20 +22,20 @@ func newSSHAgentCmd() *cobra.Command {
 		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error {
+			withEnv(u, func(env *vm.Env) error {
 				if len(args) == 0 {
-					return env.SSHAgent(cmd.Context(), ui.Stdout())
+					return env.SSHAgent(cmd.Context(), u.Stdout())
 				}
 				return env.SetSSHAgent(cmd.Context(), args[0])
 			}, msg.SSHAgentFailed)
 			return nil
 		},
 	}
-	cmd.AddCommand(newSSHAgentAddCmd(), newSSHAgentKeysCmd())
+	cmd.AddCommand(newSSHAgentAddCmd(u), newSSHAgentKeysCmd(u))
 	return cmd
 }
 
-func newSSHAgentAddCmd() *cobra.Command {
+func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 	var o sshagent.AddOptions
 	cmd := &cobra.Command{
 		Use:   "add KEY_FILE",
@@ -49,7 +49,7 @@ func newSSHAgentAddCmd() *cobra.Command {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error { return env.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
+			withEnv(u, func(env *vm.Env) error { return env.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}
@@ -59,7 +59,7 @@ func newSSHAgentAddCmd() *cobra.Command {
 	return cmd
 }
 
-func newSSHAgentKeysCmd() *cobra.Command {
+func newSSHAgentKeysCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "keys",
 		Short: "List the keys in devvm's own SSH agent",
@@ -67,7 +67,7 @@ func newSSHAgentKeysCmd() *cobra.Command {
 			"then each key added to it: its file, its fingerprint and how it's loaded.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error { return env.AgentKeys(cmd.Context(), ui.Stdout()) }, msg.AgentKeysFailed)
+			withEnv(u, func(env *vm.Env) error { return env.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}

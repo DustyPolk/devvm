@@ -23,7 +23,6 @@ import (
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // header starts the ssh config devvm writes.
@@ -35,14 +34,14 @@ const hostKeyTimeout = 30 * time.Second
 // hostKeysMax is the most of a VM's answer read for its host keys.
 const hostKeysMax = 64 << 10
 
-// Config is devvm's ssh config and its VMs' host keys. New sets every
-// field; tests change them.
+// Config is devvm's ssh config and its VMs' host keys. New sets its
+// backends; its caller sets what it prints and asks.
 type Config struct {
 	Dirs     paths.Dirs
 	Backends []backend.Backend // every backend, for every VM
 	Review   backend.Review    // what their ssh is checked against
-	// What it prints (ui's), and asks: [Y/n]; Terminal reports whether
-	// it can ask.
+	// What it prints, and asks: [Y/n]; Terminal reports whether it can
+	// ask.
 	Info, Warn, Say func(msg.M)
 	Confirm         func(msg.M) bool
 	Terminal        func() bool
@@ -50,10 +49,7 @@ type Config struct {
 
 // New returns the ssh config for the VMs of every backend in reg.
 func New(d paths.Dirs, reg *backend.Registry) *Config {
-	return &Config{
-		Dirs: d, Backends: reg.All(), Review: reg.Review, Info: ui.Info, Warn: ui.Warn, Say: ui.Say,
-		Confirm: func(m msg.M) bool { return ui.Confirm(m) }, Terminal: ui.StdinIsTerminal,
-	}
+	return &Config{Dirs: d, Backends: reg.All(), Review: reg.Review}
 }
 
 // Alias is the name ssh and editors reach vm by: devvm-<folder>, or the

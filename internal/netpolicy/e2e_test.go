@@ -27,7 +27,7 @@ func TestE2ESelfCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := lima.New(d)
+	b := lima.New(d, testUI{t})
 	st, err := state.ReadVM(d, vm)
 	if err != nil {
 		t.Fatal(err)

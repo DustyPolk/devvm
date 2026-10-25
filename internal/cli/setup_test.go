@@ -43,7 +43,9 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 		t.Fatal(err)
 	}
 	var a *asked
+	u, _, _ := testUI()
 	s := setup{
+		ui:       u,
 		terminal: func() bool { return terminal },
 		pickOne: func(help msg.M, cs []ui.Choice) int {
 			if a != nil {

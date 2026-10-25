@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
@@ -66,8 +65,8 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	}
 
 	var created atomic.Bool // an interrupt's cleanups may run while this goes on
-	remove := ui.AddCleanup(func(ctx context.Context) {
-		if !created.Load() || ui.Interrupted() {
+	remove := l.AddCleanup(func(ctx context.Context) {
+		if !created.Load() || l.Interrupted() {
 			l.unfinished(ctx, inst)
 		}
 	})
@@ -82,7 +81,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 			steps++
 		}
 	}
-	ctx = ui.WithSteps(ctx, steps)
+	ctx = l.WithSteps(ctx, steps)
 	var built backend.Built
 	var conv *converted
 	if spec.Parent == "" {
@@ -233,7 +232,7 @@ func (l *Lima) unfinished(ctx context.Context, inst string) {
 	if _, err := l.inspect(ctx, inst); err != nil {
 		return // never created, or Lima can't say: nothing devvm can delete
 	}
-	if ui.Interrupted() {
+	if l.Interrupted() {
 		l.Info(msg.InterruptedImage(inst))
 	} else {
 		l.Info(msg.UnfinishedImage(inst))

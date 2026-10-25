@@ -10,13 +10,13 @@ import (
 
 // newPortsCmd is devvm ports [all|none|LIST], and add and rm LIST, each
 // with -g for what new VMs forward.
-func newPortsCmd() *cobra.Command {
+func newPortsCmd(u *ui.UI) *cobra.Command {
 	var global bool
 	// run shows the ports without a change, else makes it.
 	run := func(cmd *cobra.Command, c *vm.PortsChange) {
-		withEnv(func(env *vm.Env) error {
+		withEnv(u, func(env *vm.Env) error {
 			if c == nil {
-				return env.Ports(cmd.Context(), ui.Stdout(), global)
+				return env.Ports(cmd.Context(), u.Stdout(), global)
 			}
 			c.Global = global
 			return env.SetPorts(cmd.Context(), *c)

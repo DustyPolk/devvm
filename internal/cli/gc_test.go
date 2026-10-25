@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -32,18 +33,22 @@ func TestDeleteStaleKeepsImagesInUse(t *testing.T) {
 		{Listed: build.Listed{Image: build.Image{Key: "ba9876543210"}}, builder: b},
 	}
 	f.Errs = map[string]error{"DeleteImage": msg.ImageInUse("0123456789ab", "devvm-p-0123456789abcd")}
-	if err := deleteStale(t.Context(), imgs); err != nil {
+	u, _, errOut := testUI()
+	if err := deleteStale(t.Context(), u, imgs); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.Methods(); !slices.Equal(got, []string{"DeleteImage", "DeleteImage"}) {
 		t.Errorf("calls: %v", got)
+	}
+	if !strings.HasPrefix(errOut.String(), "devvm: image_in_use ") {
+		t.Errorf("stderr %q, want image_in_use", errOut)
 	}
 	if _, err := state.ReadImage(d, "0123456789ab"); err != nil {
 		t.Errorf("the image in use lost its record: %v", err)
 	}
 	boom := errors.New("boom")
 	f.Errs = map[string]error{"DeleteImage": boom}
-	if err := deleteStale(t.Context(), imgs); !errors.Is(err, boom) {
+	if err := deleteStale(t.Context(), u, imgs); !errors.Is(err, boom) {
 		t.Errorf("deleteStale = %v, want %v", err, boom)
 	}
 }

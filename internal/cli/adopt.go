@@ -4,11 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newAdoptCmd is devvm adopt.
-func newAdoptCmd() *cobra.Command {
+func newAdoptCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "adopt",
 		Short: "Use the VM made for an earlier folder at this path here",
@@ -17,7 +18,7 @@ func newAdoptCmd() *cobra.Command {
 			"adopt gives it to this folder, with its files, tokens and allowlist, after asking.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error { return env.Adopt(cmd.Context()) }, msg.AdoptFailed)
+			withEnv(u, func(env *vm.Env) error { return env.Adopt(cmd.Context()) }, msg.AdoptFailed)
 			return nil
 		},
 	}

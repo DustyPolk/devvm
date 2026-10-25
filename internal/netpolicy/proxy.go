@@ -26,7 +26,6 @@ import (
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Proxy starts and stops VMs' proxies: devvm _proxy, one per VM, in the
@@ -52,16 +51,25 @@ type Proxy struct {
 	Listening func(port int) bool
 	// Tick is how often a start looks for the proxy to listen, ten times.
 	Tick time.Duration
-	// What it prints (ui's), and asks: [y/N] and [Y/n]; Terminal reports
-	// whether it can ask.
+	// What it prints, and asks: [y/N] and [Y/n]; Terminal reports whether
+	// it can ask.
 	Note, Warn   func(msg.M)
 	Ask, Confirm func(msg.M) bool
 	Terminal     func() bool
 }
 
+// UI is where the proxies print and ask.
+type UI interface {
+	Note(msg.M)
+	Warn(msg.M)
+	Ask(msg.M) bool
+	Confirm(q ...msg.M) bool
+	StdinIsTerminal() bool
+}
+
 // NewProxy returns the proxies of devvm's folders, run by self (devvm's
-// binary), with its files in root.
-func NewProxy(d paths.Dirs, root, self string, store *secrets.Store) *Proxy {
+// binary), with its files in root, printing and asking through u.
+func NewProxy(d paths.Dirs, root, self string, store *secrets.Store, u UI) *Proxy {
 	return &Proxy{
 		Dirs: d, Root: root, Self: self, OS: runtime.GOOS, Secrets: store,
 		Start: platform.StartDetached, Args: platform.ProcessArgs, ExcludeFromBackup: platform.ExcludeFromBackup,
@@ -69,8 +77,8 @@ func NewProxy(d paths.Dirs, root, self string, store *secrets.Store) *Proxy {
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
 		},
 		Listening: listening, Tick: 500 * time.Millisecond,
-		Note: ui.Note, Warn: ui.Warn, Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) },
-		Terminal: ui.StdinIsTerminal,
+		Note: u.Note, Warn: u.Warn, Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) },
+		Terminal: u.StdinIsTerminal,
 	}
 }
 

@@ -238,12 +238,29 @@ func (f *proxies) count() int {
 	return f.n
 }
 
+// testUI logs what the proxies and backends print, and refuses what they
+// ask, without a terminal; it runs commands as they are, counts no steps
+// and keeps no cleanups.
+type testUI struct{ t *testing.T }
+
+func (u testUI) Info(m msg.M)                                            { u.t.Log(m.Names()) }
+func (u testUI) Note(m msg.M)                                            { u.t.Log(m.Names()) }
+func (u testUI) Warn(m msg.M)                                            { u.t.Log(m.Names()) }
+func (testUI) Ask(msg.M) bool                                            { return false }
+func (testUI) Confirm(...msg.M) bool                                     { return false }
+func (testUI) StdinIsTerminal() bool                                     { return false }
+func (testUI) LogNote()                                                  {}
+func (testUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
+func (testUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
+func (testUI) Interrupted() bool                                         { return false }
+func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+
 func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	t.Helper()
-	store := secrets.NewStore(d, t.TempDir())
+	store := secrets.NewStore(d, t.TempDir(), testUI{t}.Warn)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	f := &proxies{args: map[int][]string{}}
-	p := NewProxy(d, repo, "/bin/sh", store)
+	p := NewProxy(d, repo, "/bin/sh", store, testUI{t})
 	p.Start, p.Args, p.Tick = f.start(t), f.argsOf, time.Millisecond
 	p.Listening = func(int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }

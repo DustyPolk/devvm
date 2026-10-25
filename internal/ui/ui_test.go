@@ -1,51 +1,37 @@
 package ui
 
 import (
-	"bufio"
 	"bytes"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// sandbox points ui's streams at buffers, with input in, and its run log
-// into a temporary data folder, in names mode. It undoes it all afterwards.
-func sandbox(t *testing.T, in string) (out, errOut *bytes.Buffer) {
-	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
-	t.Setenv("DEVVM_VERBOSE", "")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
-	oldOut, oldErr, oldIn := stdout, stderr, stdin
-	oldInTTY, oldErrTTY, oldWidth := stdinTTY, stderrTTY, termWidth
-	stdout, stderr, stdin = out, errOut, bufio.NewReader(strings.NewReader(in))
-	stdinTTY = func() bool { return false }
-	stderrTTY = func() bool { return false }
-	termWidth = func() int { return 0 }
-	resetRun()
-	t.Cleanup(func() {
-		resetRun()
-		stdout, stderr, stdin = oldOut, oldErr, oldIn
-		stdinTTY, stderrTTY, termWidth = oldInTTY, oldErrTTY, oldWidth
-	})
-	return out, errOut
-}
+// env is an environment for a UI's getenv.
+type env map[string]string
 
-// resetRun forgets the run: its status line, log, cleanups and interrupt.
-func resetRun() {
-	stopStatus()
-	runLog.Lock()
-	if runLog.f != nil {
-		_ = runLog.f.Close()
-	}
-	runLog.f, runLog.path, runLog.noted = nil, "", false
-	runLog.Unlock()
-	cleanups.Lock()
-	cleanups.funcs = nil
-	cleanups.Unlock()
-	interrupted.Store(false)
+func (e env) get(k string) string { return e[k] }
+
+// testUI returns a UI on buffers, with input in, an empty environment and
+// its run logs in a temporary folder.
+func testUI(t *testing.T, in string) (u *UI, out, errOut *bytes.Buffer) {
+	t.Helper()
+	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
+	u = New(strings.NewReader(in), out, errOut)
+	u.getenv = env{}.get
+	logs := filepath.Join(t.TempDir(), "logs", "runs")
+	u.runLogs = func() (string, error) { return logs, nil }
+	u.readPassword = func() (string, error) { return "", errors.New("no terminal") }
+	t.Cleanup(func() {
+		u.stopStatus()
+		if u.log.f != nil {
+			_ = u.log.f.Close()
+		}
+	})
+	return u, out, errOut
 }
 
 // exitCode runs f, returning the code it exits with through Die, or -1.
@@ -64,20 +50,22 @@ func exitCode(f func()) (code int) {
 }
 
 func TestStreamsAndPrefixes(t *testing.T) {
+	t.Parallel()
 	m := msg.MsgUnknown("x")
 	for _, tc := range []struct {
 		name          string
-		print         func(msg.M)
+		print         func(*UI, msg.M)
 		stdout, stder string
 	}{
-		{"say", Say, "msg_unknown name=x\n", ""},
-		{"info", Info, "==> msg_unknown name=x\n", ""},
-		{"note", Note, "", "msg_unknown name=x\n"},
-		{"warn", Warn, "", "devvm: msg_unknown name=x\n"},
+		{"say", (*UI).Say, "msg_unknown name=x\n", ""},
+		{"info", (*UI).Info, "==> msg_unknown name=x\n", ""},
+		{"note", (*UI).Note, "", "msg_unknown name=x\n"},
+		{"warn", (*UI).Warn, "", "devvm: msg_unknown name=x\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			out, errOut := sandbox(t, "")
-			tc.print(m)
+			t.Parallel()
+			u, out, errOut := testUI(t, "")
+			tc.print(u, m)
 			if out.String() != tc.stdout || errOut.String() != tc.stder {
 				t.Errorf("stdout %q, stderr %q; want %q, %q", out, errOut, tc.stdout, tc.stder)
 			}
@@ -89,18 +77,19 @@ func TestWarnAndDiePrefixEveryLine(t *testing.T) {
 	if got, want := prefixLines("devvm: ", "one\ntwo"), "devvm: one\ndevvm: two\n"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	_, errOut := sandbox(t, "")
+	u, _, errOut := testUI(t, "")
 	t.Setenv("DEVVM_MESSAGES", "")
 	m := msg.MsgUnknown("a")
-	Warn(m)
+	u.Warn(m)
 	if got, want := errOut.String(), "devvm: "+m.Text()+"\n"; got != want {
 		t.Errorf("warn: got %q, want %q", got, want)
 	}
 }
 
 func TestDiePrintsAndExits1(t *testing.T) {
-	out, errOut := sandbox(t, "")
-	if code := exitCode(func() { Die(msg.MsgUnknown("VM")) }); code != 1 {
+	t.Parallel()
+	u, out, errOut := testUI(t, "")
+	if code := exitCode(func() { u.Die(msg.MsgUnknown("VM")) }); code != 1 {
 		t.Errorf("exit code %d, want 1", code)
 	}
 	if got, want := errOut.String(), "devvm: msg_unknown name=VM\n"; got != want || out.Len() != 0 {
@@ -108,13 +97,14 @@ func TestDiePrintsAndExits1(t *testing.T) {
 	}
 	// Interrupted, it dies quietly.
 	errOut.Reset()
-	interrupted.Store(true)
-	if code := exitCode(func() { Die(msg.MsgUnknown("VM")) }); code != 1 || errOut.Len() != 0 {
+	u.interrupted.Store(true)
+	if code := exitCode(func() { u.Die(msg.MsgUnknown("VM")) }); code != 1 || errOut.Len() != 0 {
 		t.Errorf("interrupted: exit code %d, stderr %q; want 1 and nothing", code, errOut)
 	}
 }
 
 func TestConfirm(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		in   string
 		bare bool
@@ -126,64 +116,68 @@ func TestConfirm(t *testing.T) {
 		{"N\n", true, false},
 		{"no", false, false}, // the last line needn't end in a newline
 	} {
-		sandbox(t, tc.in)
+		u, _, _ := testUI(t, tc.in)
 		var q []msg.M
 		if !tc.bare {
 			q = append(q, msg.MsgUnknown("x"))
 		}
-		if got := Confirm(q...); got != tc.want {
+		if got := u.Confirm(q...); got != tc.want {
 			t.Errorf("Confirm with %q = %v, want %v", tc.in, got, tc.want)
 		}
 	}
-	sandbox(t, "")
-	if code := exitCode(func() { Confirm(msg.MsgUnknown("x")) }); code != 1 {
+	u, _, _ := testUI(t, "")
+	if code := exitCode(func() { u.Confirm(msg.MsgUnknown("x")) }); code != 1 {
 		t.Errorf("no answer at all: exit code %d, want 1", code)
 	}
 }
 
 func TestAsk(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]bool{"y\n": true, "Yes\n": true, "n\n": false, "\n": false, "x\n": false} {
-		sandbox(t, in)
-		if got := Ask(msg.MsgUnknown("me")); got != want {
+		u, _, _ := testUI(t, in)
+		if got := u.Ask(msg.MsgUnknown("me")); got != want {
 			t.Errorf("Ask with %q = %v, want %v", in, got, want)
 		}
 	}
-	sandbox(t, "")
-	if code := exitCode(func() { Ask(msg.MsgUnknown("me")) }); code != 1 {
+	u, _, _ := testUI(t, "")
+	if code := exitCode(func() { u.Ask(msg.MsgUnknown("me")) }); code != 1 {
 		t.Errorf("no answer at all: exit code %d, want 1", code)
 	}
 }
 
 func TestPromptsOnlyAtATerminal(t *testing.T) {
-	_, errOut := sandbox(t, "y\n\n")
-	Ask(msg.MsgUnknown("me"))
+	t.Parallel()
+	u, _, errOut := testUI(t, "y\n\n")
+	u.Ask(msg.MsgUnknown("me"))
 	if errOut.Len() != 0 {
 		t.Errorf("input isn't a terminal, but the prompt was printed: %q", errOut)
 	}
-	stdinTTY = func() bool { return true }
-	Confirm()
+	u.stdinTTY = true
+	u.Confirm()
 	if got, want := errOut.String(), "[Y/n] "; got != want {
 		t.Errorf("prompt %q, want %q", got, want)
 	}
-	_, errOut = sandbox(t, "y\n")
-	stdinTTY = func() bool { return true }
-	Ask(msg.MsgUnknown("me"))
+	u, _, errOut = testUI(t, "y\n")
+	u.stdinTTY = true
+	u.Ask(msg.MsgUnknown("me"))
 	if got, want := errOut.String(), "msg_unknown name=me [y/N] "; got != want {
 		t.Errorf("prompt %q, want %q", got, want)
 	}
 }
 
 func TestStdoutIsForData(t *testing.T) {
-	out, _ := sandbox(t, "")
-	_, _ = Stdout().Write([]byte("a table\n"))
+	t.Parallel()
+	u, out, _ := testUI(t, "")
+	_, _ = u.Stdout().Write([]byte("a table\n"))
 	if out.String() != "a table\n" {
 		t.Errorf("got %q", out)
 	}
 }
 
 func TestStderrIsForLogLines(t *testing.T) {
-	out, errOut := sandbox(t, "")
-	_, _ = Stderr().Write([]byte("a log line\n"))
+	t.Parallel()
+	u, out, errOut := testUI(t, "")
+	_, _ = u.Stderr().Write([]byte("a log line\n"))
 	if errOut.String() != "a log line\n" || out.Len() != 0 {
 		t.Errorf("got %q, stdout %q", errOut, out)
 	}
@@ -192,21 +186,20 @@ func TestStderrIsForLogLines(t *testing.T) {
 // A secret is read without echo at a terminal, after the prompt; else as a
 // line, with no prompt.
 func TestSecret(t *testing.T) {
-	out, errOut := sandbox(t, "ghp_x\r\nrest")
-	if v := Secret(msg.TokenPrompt()); v != "ghp_x" || errOut.Len() != 0 {
+	t.Parallel()
+	u, out, errOut := testUI(t, "ghp_x\r\nrest")
+	if v := u.Secret(msg.TokenPrompt()); v != "ghp_x" || errOut.Len() != 0 {
 		t.Errorf("piped: %q, stderr %q", v, errOut)
 	}
-	if v := Line(); v != "rest" {
+	if v := u.Line(); v != "rest" {
 		t.Errorf("the end of input: %q", v)
 	}
-	if v := Line(); v != "" {
+	if v := u.Line(); v != "" {
 		t.Errorf("after it: %q", v)
 	}
-	old := readPassword
-	t.Cleanup(func() { readPassword = old })
-	readPassword = func() (string, error) { return "ghp_y", nil }
-	stdinTTY = func() bool { return true }
-	if v := Secret(msg.TokenPrompt()); v != "ghp_y" || errOut.String() != "token_prompt \n" || out.Len() != 0 {
+	u.readPassword = func() (string, error) { return "ghp_y", nil }
+	u.stdinTTY = true
+	if v := u.Secret(msg.TokenPrompt()); v != "ghp_y" || errOut.String() != "token_prompt \n" || out.Len() != 0 {
 		t.Errorf("terminal: %q, stderr %q", v, errOut)
 	}
 }

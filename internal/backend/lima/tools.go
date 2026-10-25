@@ -9,7 +9,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // ToolsVM is the throwaway VM shared tools are built in.
@@ -53,9 +52,9 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	}
 	// A failure leaves it to the cleanup, which runs once the caller has
 	// shown the run log's end.
-	done := ui.AddCleanup(func(ctx context.Context) { _ = l.deleteIfThere(ctx, ToolsVM) })
+	done := l.AddCleanup(func(ctx context.Context) { _ = l.deleteIfThere(ctx, ToolsVM) })
 	// Its steps: clone, configure and start, the script, delete.
-	ctx = ui.WithSteps(ctx, 5)
+	ctx = l.WithSteps(ctx, 5)
 	if err := l.Runner.Run(ctx, msg.CloningImage("base"), l.limactl(ctx, "clone", "--tty=false", "--mount-none",
 		"--set", mounts, base, ToolsVM)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(ToolsVM))

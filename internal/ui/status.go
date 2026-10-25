@@ -21,6 +21,7 @@ const redrawEvery = 200 * time.Millisecond
 const doneAfter = 3 * time.Second
 
 type statusLine struct {
+	u       *UI
 	label   string
 	start   time.Time
 	stopped chan struct{}
@@ -31,38 +32,33 @@ type statusLine struct {
 	frame   int
 }
 
-var active struct {
-	sync.Mutex
-	s *statusLine
-}
-
 // Status shows label on a status line, around slow work that isn't one
 // logged command, until stop is called. Only in a terminal, and not with
 // DEVVM_VERBOSE.
-func Status(label msg.M) (stop func()) {
-	if verbose() || !stderrTTY() {
+func (u *UI) Status(label msg.M) (stop func()) {
+	if u.verbose() || !u.stderrTTY {
 		return func() {}
 	}
-	s := startStatus(label.Line())
+	s := u.startStatus(label.Line())
 	return s.stop
 }
 
-func startStatus(label string) *statusLine {
-	stopStatus()
-	s := &statusLine{label: label, start: time.Now(), stopped: make(chan struct{}), ended: make(chan struct{})}
-	active.Lock()
-	active.s = s
-	active.Unlock()
+func (u *UI) startStatus(label string) *statusLine {
+	u.stopStatus()
+	s := &statusLine{u: u, label: label, start: time.Now(), stopped: make(chan struct{}), ended: make(chan struct{})}
+	u.status.Lock()
+	u.status.s = s
+	u.status.Unlock()
 	s.draw()
 	go s.run()
 	return s
 }
 
 // stopStatus stops the status line showing, if any.
-func stopStatus() {
-	active.Lock()
-	s := active.s
-	active.Unlock()
+func (u *UI) stopStatus() {
+	u.status.Lock()
+	s := u.status.s
+	u.status.Unlock()
 	if s != nil {
 		s.stop()
 	}
@@ -75,8 +71,8 @@ func (s *statusLine) run() {
 	for {
 		select {
 		case <-s.stopped:
-			s.cols = width()
-			write(stderr, clearLine(s.drawn, s.cols))
+			s.cols = s.u.width()
+			s.u.write(s.u.stderr, clearLine(s.drawn, s.cols))
 			return
 		case <-t.C:
 			s.draw()
@@ -85,15 +81,15 @@ func (s *statusLine) run() {
 }
 
 func (s *statusLine) draw() {
-	frames := glyphs(os.Getenv)[1:]
-	s.cols = width()
+	frames := glyphs(s.u.getenv)[1:]
+	s.cols = s.u.width()
 	text := "    " + frames[s.frame%len(frames)] + " " +
-		statusText(s.label, int(time.Since(s.start).Seconds()), lastLine(logPath()), s.cols)
+		statusText(s.label, int(time.Since(s.start).Seconds()), lastLine(s.u.logPath()), s.cols)
 	text = truncate(text, s.cols-1)
 	s.frame++
 	// No line wrapping while it draws: a resize between reading the width
 	// and drawing would wrap.
-	write(stderr, clearLine(s.drawn, s.cols)+"\033[?7l"+text+"\033[?7h")
+	s.u.write(s.u.stderr, clearLine(s.drawn, s.cols)+"\033[?7l"+text+"\033[?7h")
 	s.drawn = utf8.RuneCountInString(text)
 }
 
@@ -101,17 +97,17 @@ func (s *statusLine) stop() {
 	s.once.Do(func() {
 		close(s.stopped)
 		<-s.ended
-		active.Lock()
-		if active.s == s {
-			active.s = nil
+		s.u.status.Lock()
+		if s.u.status.s == s {
+			s.u.status.s = nil
 		}
-		active.Unlock()
+		s.u.status.Unlock()
 	})
 }
 
 // width is the terminal's width, 80 when unknown (some terminals say 0).
-func width() int {
-	if w := termWidth(); w > 0 {
+func (u *UI) width() int {
+	if w := u.termWidth(); w > 0 {
 		return w
 	}
 	return 80
@@ -134,8 +130,8 @@ func glyphs(getenv func(string) string) []string {
 }
 
 // doneLine is what a step that took a while leaves behind.
-func doneLine(label string, secs int) string {
-	return "    " + glyphs(os.Getenv)[0] + " " + label + " (" + duration(secs) + ")\n"
+func (u *UI) doneLine(label string, secs int) string {
+	return "    " + glyphs(u.getenv)[0] + " " + label + " (" + duration(secs) + ")\n"
 }
 
 // duration is 5s, or 2m05s from a minute.
@@ -154,7 +150,7 @@ func statusText(label string, secs int, logLine string, cols int) string {
 	if i := strings.LastIndexByte(logLine, '\r'); i >= 0 {
 		logLine = logLine[i+1:]
 	}
-	logLine = OneLine(logLine)
+	logLine = oneLine(logLine)
 	room := cols - utf8.RuneCountInString(text) - 9
 	if room >= 10 && logLine != "" {
 		text += "  " + truncate(logLine, room)
@@ -185,9 +181,8 @@ func clearLine(drawn, cols int) string {
 	return "\r\033[K" + strings.Repeat("\033[A\033[K", up)
 }
 
-// OneLine drops every control character from s, newlines and tabs too: a
-// value a VM made, for one line of data output.
-func OneLine(s string) string {
+// oneLine drops every control character from s, newlines and tabs too.
+func oneLine(s string) string {
 	return strings.NewReplacer("\t", "", "\n", "").Replace(printable(s))
 }
 

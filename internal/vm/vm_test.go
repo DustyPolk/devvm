@@ -180,6 +180,29 @@ func TestPortsBackend(t *testing.T) {
 	}
 }
 
+// testUI is devvm's UI for these tests: it prints nothing, fails the test
+// on a question, runs commands as they are, their output dropped, counts
+// no steps and keeps no cleanups.
+type testUI struct{ t *testing.T }
+
+func (testUI) Info(msg.M)                {}
+func (testUI) Warn(msg.M)                {}
+func (testUI) Note(msg.M)                {}
+func (testUI) Say(msg.M)                 {}
+func (u testUI) Ask(m msg.M) bool        { u.t.Errorf("asked %s", m.Names()); return false }
+func (u testUI) Confirm(q ...msg.M) bool { u.t.Errorf("asked %v", q); return false }
+func (testUI) StdinIsTerminal() bool     { return false }
+func (testUI) LogNote()                  {}
+func (testUI) LogWriter() io.Writer      { return io.Discard }
+func (testUI) Status(msg.M) func()       { return func() {} }
+func (testUI) Interrupted() bool         { return false }
+func (testUI) Stdout() io.Writer         { return io.Discard }
+func (testUI) Stderr() io.Writer         { return io.Discard }
+
+func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+
+func (testUI) AddCleanup(func(context.Context)) func() { return func() {} }
+
 // upEnv is up on a fake backend, in a temporary sandbox, with a project
 // folder named web.
 func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend.Command) {
@@ -189,8 +212,6 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The run log goes in the sandbox too.
-	t.Setenv("XDG_DATA_HOME", root)
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +219,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	// The shared tools' versions come from the stub mise: the fixture lock.
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	tl := tools.New(d, repo)
+	tl := tools.New(d, repo, testUI{t})
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {
 			return filepath.Join(repo, "testdata", "stubs", "mise")
@@ -224,7 +245,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Dirs: d, Root: repo, Registry: reg, Tools: tl, Proxy: testProxy(t, d, repo, home), Dir: dir, Home: home, OS: "darwin",
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
-			p := gitprotect.New(dir)
+			p := gitprotect.New(dir, quiet)
 			p.OS = "darwin" // as the Env's
 			p.Chflags = func(context.Context, string, string) error { return nil }
 			return p
@@ -241,11 +262,13 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Ask: unasked(t), Confirm: unasked(t),
 		PickFeatures: func(fs []build.Feature) []build.Feature { return fs },
 		Terminal:     func() bool { return false },
+		Stdout:       io.Discard, LogNote: func() {}, LogWriter: testUI{t}.LogWriter, LoggedCmd: testUI{t}.LoggedCmd,
+		AddCleanup: testUI{t}.AddCleanup, Interrupted: testUI{t}.Interrupted,
 	}
 	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
 	// is put back.
 	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
-	e.Agent = sshagent.New(d, e.mounts)
+	e.Agent = sshagent.New(d, e.mounts, testUI{t})
 	e.Agent.Run = (&agentCalls{}).run
 	return e, f, &execs
 }
@@ -277,9 +300,9 @@ func (a *agentCalls) run(_ context.Context, _ bool, argv ...string) (string, int
 // no Keychain and no backups.
 func testProxy(t *testing.T, d paths.Dirs, root, home string) *netpolicy.Proxy {
 	t.Helper()
-	store := secrets.NewStore(d, home)
+	store := secrets.NewStore(d, home, quiet)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
-	p := netpolicy.NewProxy(d, root, "/devvm", store)
+	p := netpolicy.NewProxy(d, root, "/devvm", store, testUI{t})
 	p.Terminal = func() bool { return false }
 	var mu sync.Mutex
 	args := map[int][]string{}

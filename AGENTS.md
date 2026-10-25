@@ -6,7 +6,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 
 | Path | What |
 | --- | --- |
-| `cmd/devvm/` | the entry point: the root command through `ui.Main`; the only `os.Exit` |
+| `cmd/devvm/` | the entry point: `ui.Main` makes the run's UI and runs the root command with it; the only `os.Exit` |
 | `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `limactl`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | up for a new VM (`up.go`) and an existing one (`existing.go`), the commands on a folder's VM (`commands.go`); `--clone` (`clone.go`); agents' mounts; the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
@@ -17,7 +17,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
 | `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `backends/`, `lima/`, `smolvm/` (experimental; its in-VM scripts embedded) |
-| `internal/ui/` | the only package that prints: messages, prompts, status line, run log, cleanups, signals |
+| `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files (errors aren't messages yet) |
 | `internal/platform/`, `internal/ubuntu/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads) |
@@ -54,15 +54,15 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 
 ## Go conventions
 
-- **Only `internal/ui` prints.** forbidigo bans `fmt.Print*`, `os.Stdout`/`os.Stderr` elsewhere and `os.Exit` outside `cmd/devvm`. Data goes to `ui.Stdout()`, non-message log lines to `ui.Stderr()`.
-- **Only `internal/cli` calls ui's messages and prompts** (`ui.Info`, `Warn`, `Note`, `Say`, `Ask`, `Confirm`, `Pick`): other packages take fields (`Info`/`Warn func(msg.M)`, `Confirm func(msg.M) bool`…) their constructors or cli set to ui's, or cli asks first and passes the answer in.
-- **Fail with `ui.Die(msg.X(...))`:** it prints and panics; `ui.Main` recovers, runs the cleanups, returns 1. Commands end with `fail` (`ui.DieLogged` for a `LoggedError`). INT/TERM/HUP cancel the root context, wait for the logged command, run the cleanups and return 130; a second signal is ignored; after one, `Die` prints nothing. A logged command a signal ended (or 128+) waits up to 1 s for devvm's own interrupt, as Ctrl+C can end it first.
-- **Cleanups:** whatever a failure would leave (a build VM, a temp file) registers `ui.AddCleanup` and is removed once done; one only for interrupts checks `ui.Interrupted()`. Cleanups get a fresh context.
-- **External commands run with `ui.LoggedCmd(ctx, step, cmd)`:** output to the run log, failure via `ui.DieLogged`. `ui.WithSteps(ctx, n)` numbers steps.
+- **Only `internal/ui` prints.** forbidigo bans `fmt.Print*`, `os.Stdout`/`os.Stderr` elsewhere and `os.Exit` outside `cmd/devvm`. Data goes to the UI's `Stdout()`, non-message log lines to its `Stderr()`.
+- **Only `cmd/devvm` and `internal/cli` import `internal/ui`** (depguard): cli passes the run's `*ui.UI` to each command; other packages take what they need as fields (`Info`/`Warn func(msg.M)`, `LoggedCmd`, `AddCleanup`, `Interrupted`…), set from a small `UI` interface of their own that their constructors take, or cli asks first and passes the answer in.
+- **Fail with `u.Die(msg.X(...))`:** it prints and panics; `ui.Main` recovers, runs the cleanups, returns 1. Commands end with `fail` (`DieLogged` for a `LoggedError`). INT/TERM/HUP cancel the root context, wait for the logged command, run the cleanups and return 130; a second signal is ignored; after one, `Die` prints nothing. A logged command a signal ended (or 128+) waits up to 1 s for devvm's own interrupt, as Ctrl+C can end it first.
+- **Cleanups:** whatever a failure would leave (a build VM, a temp file) registers with the UI's `AddCleanup` and is removed once done; one only for interrupts checks `Interrupted()`. Cleanups get a fresh context.
+- **External commands run with the UI's `LoggedCmd(ctx, step, cmd)`** (a backend's `Runner`): output to the run log, failure via `DieLogged`. `WithSteps(ctx, n)` numbers steps.
 - **OS-specific code goes behind build tags** in `internal/platform` (`*_darwin.go`, `*_linux.go`, `*_other.go`).
 - **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
-- **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars; the exceptions are `internal/proxy`'s globals (set by `Main`) and `internal/ui`'s process-wide terminal and run state.
+- **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars; the one exception is `internal/proxy`'s globals (set by `Main`).
 - **A command exists only once it's ported;** `TestReferenceIsCurrent` fails on a stale CLI reference.
 - `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
 

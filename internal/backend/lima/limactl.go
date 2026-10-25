@@ -17,13 +17,11 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Runner runs the commands the backend makes. Tests swap in a fake.
 type Runner interface {
-	// Run runs a command into the run log, with step on the status line
-	// (ui.LoggedCmd).
+	// Run runs a command into the run log, with step on the status line.
 	Run(ctx context.Context, step msg.M, cmd *exec.Cmd) error
 	// Output runs a command and returns its standard output.
 	Output(cmd *exec.Cmd) ([]byte, error)
@@ -31,15 +29,19 @@ type Runner interface {
 	Attach(cmd *exec.Cmd) error
 }
 
-type uiRunner struct{}
-
-func (uiRunner) Run(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
-	return ui.LoggedCmd(ctx, step, cmd)
+// logRunner runs commands into the run log through logged (the UI's
+// LoggedCmd).
+type logRunner struct {
+	logged func(ctx context.Context, step msg.M, cmd *exec.Cmd) error
 }
 
-func (uiRunner) Output(cmd *exec.Cmd) ([]byte, error) { return cmd.Output() }
+func (r logRunner) Run(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
+	return r.logged(ctx, step, cmd)
+}
 
-func (uiRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
+func (logRunner) Output(cmd *exec.Cmd) ([]byte, error) { return cmd.Output() }
+
+func (logRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 
 // limactl returns a limactl command on devvm's own Lima home. It runs in
 // devvm's data folder: Lima writes lima.REJECTED.yaml into the folder it

@@ -9,7 +9,7 @@ import (
 )
 
 // newNetworkCmd is devvm network [on|off].
-func newNetworkCmd() *cobra.Command {
+func newNetworkCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "network [on|off]",
 		Short: "Show or change the network policy of this folder's VM",
@@ -19,9 +19,9 @@ func newNetworkCmd() *cobra.Command {
 		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: []string{"on", "off"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error {
+			withEnv(u, func(env *vm.Env) error {
 				if len(args) == 0 {
-					return env.Network(cmd.Context(), ui.Stdout())
+					return env.Network(cmd.Context(), u.Stdout())
 				}
 				return env.SetNetwork(cmd.Context(), args[0] == "on")
 			}, msg.NetworkFailed)

@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // --clone: the VM works on its own clone of the repo instead of mounting
@@ -103,7 +102,7 @@ func (e *Env) seedClone(ctx context.Context, b backend.Backend, st *state.VM, f 
 	}
 	const initRepo = `sudo mkdir -p -- "$1" && sudo chown -- "$(id -u):$(id -g)" "$1" && cd -- "$1" &&
 git init -q && git config receive.denyCurrentBranch updateInstead && git symbolic-ref HEAD "refs/heads/$2"`
-	log := ui.LogWriter()
+	log := e.LogWriter()
 	if err := b.Exec(ctx, vm, []string{"sh", "-c", initRepo, "sh", dir, branch}, backend.ExecOpts{Stdout: log, Stderr: log}); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -111,7 +110,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 		return backend.Logged(msg.CloneSeedFailed(vm))
 	}
 	e.Info(msg.CopyingBranches())
-	if err := ui.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, dir, "push", "-q", cloneURL(vm, dir), "--all")); err != nil {
+	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, dir, "push", "-q", cloneURL(vm, dir), "--all")); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -200,7 +199,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	for n := 0; n < cloneShown && s.Scan(); n++ {
 		shown.WriteString(msg.Shown(s.Text()) + "\n")
 	}
-	_, _ = ui.Stdout().Write([]byte(shown.String()))
+	_, _ = e.Stdout.Write([]byte(shown.String()))
 	if !e.Terminal() {
 		return false, msg.NoTerminalDelete()
 	}
@@ -216,7 +215,7 @@ func (e *Env) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 func (e *Env) cloneGit(ctx context.Context, b backend.Backend, vm, dir string, args ...string) ([]byte, error) {
 	out := &capped{max: cloneOutMax}
 	argv := append([]string{"git", "-C", dir}, args...)
-	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: ui.LogWriter()}); err != nil {
+	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()}); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -281,7 +280,7 @@ func (e *Env) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetc
 		saved[i] = prefix + "/" + br
 		args = append(args, "refs/heads/"+br+":refs/heads/"+saved[i])
 	}
-	if err := ui.LoggedCmd(ctx, msg.Fetching(prefix), e.gitSSH(ctx, dir, args...)); err != nil {
+	if err := e.LoggedCmd(ctx, msg.Fetching(prefix), e.gitSSH(ctx, dir, args...)); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

@@ -9,7 +9,7 @@ import (
 )
 
 // newLogCmd is devvm log [-f] [-n N] [--blocked].
-func newLogCmd() *cobra.Command {
+func newLogCmd(u *ui.UI) *cobra.Command {
 	var lines uint
 	var o vm.LogOptions
 	cmd := &cobra.Command{
@@ -23,7 +23,7 @@ func newLogCmd() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.Lines = int(min(lines, 1<<31-1)) //nolint:gosec // bounded
-			withEnv(func(env *vm.Env) error { return env.Log(cmd.Context(), ui.Stdout(), o) }, msg.LogFailed)
+			withEnv(u, func(env *vm.Env) error { return env.Log(cmd.Context(), u.Stdout(), o) }, msg.LogFailed)
 			return nil
 		},
 	}

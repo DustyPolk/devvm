@@ -20,7 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Builder builds images on one backend.
@@ -36,11 +35,14 @@ type Builder struct {
 	// Lookup looks up From's digest when building; nil for the internet's
 	// (from.NewLookup).
 	Lookup *from.Lookup
-	// What it prints and asks, its caller's (ui's): Confirm is [Y/n];
-	// Pick asks which features base gets, each as chosen so far.
+	// What it prints and asks, its caller's: Confirm is [Y/n]; Pick asks
+	// which features base gets, each as chosen so far; Terminal reports
+	// whether it can ask; LogNote says where the run log is, once a run.
 	Info, Warn, Say func(msg.M)
 	Confirm         func(msg.M) bool
 	Pick            func([]Feature) []Feature
+	Terminal        func() bool
+	LogNote         func()
 
 	looked bool // From's digest was looked up in this run
 }
@@ -99,7 +101,7 @@ func (b *Builder) lookUp(ctx context.Context) error {
 	}
 	l := b.Lookup
 	if l == nil {
-		l = from.NewLookup(b.Dirs)
+		l = from.NewLookup(b.Dirs, b.Warn)
 	}
 	if err := l.Refresh(ctx, b.From); err != nil {
 		return err
@@ -275,7 +277,7 @@ func (b *Builder) build(ctx context.Context, name string) error {
 	default:
 		b.Info(msg.BuildingImage(name, key))
 	}
-	ui.LogNote()
+	b.LogNote()
 	out, err := b.Backend.BuildImage(ctx, spec)
 	if err != nil {
 		return err
@@ -402,7 +404,7 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 	}
 	if len(above) > 0 {
 		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name))
-		if ui.StdinIsTerminal() && !b.Confirm(msg.Continue()) {
+		if b.Terminal() && !b.Confirm(msg.Continue()) {
 			b.Info(msg.NothingChanged())
 			return nil
 		}

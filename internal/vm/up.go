@@ -5,7 +5,9 @@ package vm
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -28,7 +30,6 @@ import (
 	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Keys of a VM's state that up writes, besides state's own.
@@ -58,7 +59,7 @@ type Options struct {
 	From            string // --from, or its default: the container image a new VM's base starts from
 }
 
-// Env is what up runs with. FromEnv sets every field; tests change them.
+// Env is what up runs with. NewEnv sets every field; tests change them.
 type Env struct {
 	Dirs     paths.Dirs
 	Root     string // devvm's own files (paths.Root)
@@ -86,18 +87,42 @@ type Env struct {
 	SSHAdd func(ctx context.Context, args ...string) int
 	// Agent is devvm's own SSH agent.
 	Agent *sshagent.Agent
-	// What it prints and asks (ui's): Ask is [y/N], Confirm [Y/n];
-	// PickFeatures asks which features base gets (build.Builder.Pick);
-	// Terminal reports whether it can ask.
+	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
+	// asks which features base gets (build.Builder.Pick); Terminal reports
+	// whether it can ask.
 	Info, Warn, Note, Say func(msg.M)
 	Ask, Confirm          func(msg.M) bool
 	PickFeatures          func([]build.Feature) []build.Feature
 	Terminal              func() bool
+	// Stdout is where data output goes.
+	Stdout io.Writer
+	// The run log: LogNote says where it is, once a run; LogWriter is
+	// where the output of a backend's Exec goes; LoggedCmd runs a command
+	// into it.
+	LogNote   func()
+	LogWriter func() io.Writer
+	LoggedCmd func(ctx context.Context, step msg.M, cmd *exec.Cmd) error
+	// AddCleanup adds to the run's cleanup stack; Interrupted reports
+	// whether the run was interrupted.
+	AddCleanup  func(f func(context.Context)) (remove func())
+	Interrupted func() bool
 }
 
-// NewEnv returns the environment up runs in here, devvm being self. Its
-// caller sets PickFeatures.
-func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error) {
+// UI is what up and the commands on a VM need of devvm's UI: where they
+// print and ask, the run log, the cleanup stack, and data output.
+type UI interface {
+	tools.UI
+	netpolicy.UI
+	sshagent.UI
+	Say(msg.M)
+	Interrupted() bool
+	Stdout() io.Writer
+	Stderr() io.Writer
+}
+
+// NewEnv returns the environment up runs in here, devvm being self, on u.
+// Its caller sets PickFeatures.
+func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry, u UI) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -107,15 +132,19 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 	}
 	home := os.Getenv("HOME")
 	e := &Env{
-		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root),
-		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home)),
+		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root, u),
+		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home, u.Warn), u),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
-		Host: ThisHost, Protector: gitprotect.New, Exec: execShell, Environ: os.Environ(),
-		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig, SSHAdd: sshAdd,
-		Info: ui.Info, Warn: ui.Warn, Note: ui.Note, Say: ui.Say,
-		Ask: ui.Ask, Confirm: func(m msg.M) bool { return ui.Confirm(m) }, Terminal: ui.StdinIsTerminal,
+		Host: ThisHost, Exec: execShell, Environ: os.Environ(),
+		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
+		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
+		Info:   u.Info, Warn: u.Warn, Note: u.Note, Say: u.Say,
+		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Terminal: u.StdinIsTerminal,
+		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
+		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	}
-	e.Agent = sshagent.New(d, e.mounts)
+	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
+	e.Agent = sshagent.New(d, e.mounts, u)
 	return e, nil
 }
 
@@ -125,6 +154,7 @@ func (e *Env) builder(b backend.Backend, fromRef string) *build.Builder {
 	return &build.Builder{
 		Dirs: e.Dirs, Root: e.Root, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
+		Terminal: e.Terminal, LogNote: e.LogNote,
 	}
 }
 
@@ -347,13 +377,13 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	}
 
 	e.Info(msg.CreatingFrom(img, vm))
-	ui.LogNote()
+	e.LogNote()
 	// Until its first shell nothing of anyone's is in it: an interrupt
 	// deletes it and its state, and takes off .git's locks, or removes
 	// the repo's remote for its clone.
 	var locking atomic.Bool
-	done := ui.AddCleanup(func(ctx context.Context) {
-		if !ui.Interrupted() {
+	done := e.AddCleanup(func(ctx context.Context) {
+		if !e.Interrupted() {
 			return
 		}
 		e.Info(msg.InterruptedVM(vm))
@@ -568,7 +598,7 @@ func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
 // sshConfig is the ssh config for every backend's VMs.
 func (e *Env) sshConfig() *sshconfig.Config {
 	c := sshconfig.New(e.Dirs, e.Registry)
-	c.Info, c.Warn, c.Say, c.Confirm = e.Info, e.Warn, e.Say, e.Confirm
+	c.Info, c.Warn, c.Say, c.Confirm, c.Terminal = e.Info, e.Warn, e.Say, e.Confirm, e.Terminal
 	return c
 }
 

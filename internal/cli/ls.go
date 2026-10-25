@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"fmt"
+	"io"
 	"strings"
 	"text/tabwriter"
 
@@ -16,7 +17,7 @@ import (
 )
 
 // newLsCmd is devvm ls.
-func newLsCmd() *cobra.Command {
+func newLsCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls",
 		Short: "List the project VMs",
@@ -28,26 +29,26 @@ func newLsCmd() *cobra.Command {
 			dirs, err := paths.FromEnv()
 			var ls []vm.Listed
 			if err == nil {
-				ls, err = listVMs(cmd, dirs)
+				ls, err = listVMs(cmd, u, dirs)
 			}
-			fail(err, msg.LsFailed)
-			return writeList(ls)
+			fail(u, err, msg.LsFailed)
+			return writeList(u.Stdout(), ls)
 		},
 	}
 }
 
-func listVMs(cmd *cobra.Command, dirs paths.Dirs) ([]vm.Listed, error) {
-	reg, err := backends.Registry(dirs)
+func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error) {
+	reg, err := backends.Registry(dirs, u)
 	if err != nil {
 		return nil, err
 	}
 	return vm.List(cmd.Context(), dirs, reg)
 }
 
-// writeList prints the VMs as a table, a header first; a value a VM lacks
-// is -.
-func writeList(ls []vm.Listed) error {
-	w := tabwriter.NewWriter(ui.Stdout(), 0, 0, 2, ' ', 0)
+// writeList writes the VMs to out as a table, a header first; a value a
+// VM lacks is -.
+func writeList(out io.Writer, ls []vm.Listed) error {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	row := func(vals ...string) {
 		for i, v := range vals {
 			vals[i] = cmp.Or(v, "-")

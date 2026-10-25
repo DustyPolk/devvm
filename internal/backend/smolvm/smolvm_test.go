@@ -26,6 +26,17 @@ func (execRunner) Output(cmd *exec.Cmd) ([]byte, error) { return cmd.Output() }
 
 func (execRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 
+// testUI prints nothing, runs commands as they are, counts no steps and
+// keeps no cleanups.
+type testUI struct{}
+
+func (testUI) Info(msg.M)                                                {}
+func (testUI) Warn(msg.M)                                                {}
+func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+func (testUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
+func (testUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
+func (testUI) Interrupted() bool                                         { return false }
+
 // sandbox is a smolvm backend on the stub (testdata/stubs/smolvm), first
 // on PATH, with devvm's folders in a new temporary folder; its user is u,
 // uid 501, on a host with 64 GiB.
@@ -70,6 +81,7 @@ func newSandbox(t *testing.T) sandbox {
 		KVM: "/dev/kvm", Terminal: func() bool { return false },
 		FreePort: func() (int, error) { return 61022, nil }, PortFree: func(int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
+		WithSteps: testUI{}.WithSteps, AddCleanup: testUI{}.AddCleanup, Interrupted: testUI{}.Interrupted,
 	}
 	return sandbox{s, stub}
 }

@@ -18,6 +18,19 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 )
 
+// testUI prints nothing, runs commands as they are, counts no steps and
+// keeps no cleanups.
+type testUI struct{}
+
+func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+func (testUI) Info(msg.M)                                                {}
+func (testUI) Note(msg.M)                                                {}
+func (testUI) Warn(msg.M)                                                {}
+func (testUI) LogNote()                                                  {}
+func (testUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
+func (testUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
+func (testUI) Interrupted() bool                                         { return false }
+
 // call is a command the fake runner was given.
 type call struct {
 	argv []string // the program's base name, then its arguments
@@ -124,7 +137,7 @@ func sandbox(t *testing.T) paths.Dirs {
 // runner; warnings go to warned.
 func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
 	t.Helper()
-	l := New(sandbox(t))
+	l := New(sandbox(t), testUI{})
 	f := &fakeRunner{out: map[string]string{}}
 	var warned []string
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"
@@ -142,7 +155,7 @@ func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
 func stubLima(t *testing.T) (*Lima, *[]string) {
 	t.Helper()
 	l, _, warned := testLima(t, "darwin")
-	l.Runner = uiRunner{}
+	l.Runner = logRunner{testUI{}.LoggedCmd}
 	return l, warned
 }
 

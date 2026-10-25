@@ -20,7 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Key is a VM's state key for its choice.
@@ -82,24 +81,34 @@ type Agent struct {
 	Warn     func(msg.M)
 }
 
+// UI is where the agent prints, and the run log ssh-add's output goes to
+// when it asks for a passphrase.
+type UI interface {
+	Info(msg.M)
+	Note(msg.M)
+	Warn(msg.M)
+	LogWriter() io.Writer
+}
+
 // New returns devvm's agent, whose socket is in d's data folder; mounts
-// lists what project VMs mount.
-func New(d paths.Dirs, mounts func(ctx context.Context) ([]Mount, error)) *Agent {
+// lists what project VMs mount. It prints through u.
+func New(d paths.Dirs, mounts func(ctx context.Context) ([]Mount, error), u UI) *Agent {
 	sock := d.AgentSock()
 	return &Agent{
 		Dirs: d, Mounts: mounts, Getenv: os.Getenv, LookPath: exec.LookPath,
 		Run: func(ctx context.Context, terminal bool, argv ...string) (string, int) {
-			return run(ctx, sock, terminal, argv...)
+			return run(ctx, sock, u.LogWriter, terminal, argv...)
 		},
-		Info: ui.Info, Note: ui.Note, Warn: ui.Warn,
+		Info: u.Info, Note: u.Note, Warn: u.Warn,
 	}
 }
 
 // Socket is the agent's socket, which VMs that forward it get.
 func (a *Agent) Socket() string { return a.Dirs.AgentSock() }
 
-// run runs argv with SSH_AUTH_SOCK set to sock.
-func run(ctx context.Context, sock string, terminal bool, argv ...string) (string, int) {
+// run runs argv with SSH_AUTH_SOCK set to sock; with terminal, its output
+// goes to log's writer.
+func run(ctx context.Context, sock string, log func() io.Writer, terminal bool, argv ...string) (string, int) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // OpenSSH's tools, with devvm's arguments
 	cmd.Env = slices.DeleteFunc(os.Environ(), func(e string) bool { return strings.HasPrefix(e, "SSH_AUTH_SOCK=") })
 	cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+sock)
@@ -107,7 +116,7 @@ func run(ctx context.Context, sock string, terminal bool, argv ...string) (strin
 	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
 	if terminal {
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, ui.LogWriter(), ui.LogWriter()
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, log(), log()
 	} else {
 		cmd.Stdout = &out
 	}

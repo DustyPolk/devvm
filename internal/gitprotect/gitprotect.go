@@ -30,7 +30,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Keys of a VM's state that git protection keeps.
@@ -57,15 +56,16 @@ type Protector struct {
 	// Locked reports whether a path has the user-immutable flag, not
 	// following a symlink (platform.Immutable).
 	Locked func(path string) bool
-	// Warn prints a warning (ui.Warn).
+	// Warn prints a warning.
 	Warn func(msg.M)
 }
 
-// New returns the protector for the project folder dir.
-func New(dir string) *Protector {
+// New returns the protector for the project folder dir, warning through
+// warn.
+func New(dir string, warn func(msg.M)) *Protector {
 	return &Protector{
 		Dir: dir, Home: os.Getenv("HOME"), OS: runtime.GOOS,
-		Chflags: platform.Chflags, Locked: platform.Immutable, Warn: ui.Warn,
+		Chflags: platform.Chflags, Locked: platform.Immutable, Warn: warn,
 	}
 }
 

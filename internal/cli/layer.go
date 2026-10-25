@@ -10,7 +10,7 @@ import (
 )
 
 // newLayerCmd is devvm layer new NAME.
-func newLayerCmd() *cobra.Command {
+func newLayerCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "layer",
 		Short: "Your own image layers",
@@ -33,8 +33,8 @@ func newLayerCmd() *cobra.Command {
 			if err == nil {
 				script, policy, err = build.NewLayer(dirs, args[0])
 			}
-			fail(err, msg.LayerNewFailed)
-			ui.Info(msg.LayerCreated(args[0], policy, script))
+			fail(u, err, msg.LayerNewFailed)
+			u.Info(msg.LayerCreated(args[0], policy, script))
 			return nil
 		},
 	})

@@ -34,7 +34,7 @@ func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[
 	t.Setenv("DEVVM_MESSAGES", "names")
 	root := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	s := NewStore(d, filepath.Join(root, "home"))
+	s := NewStore(d, filepath.Join(root, "home"), func(m msg.M) { t.Log(m.Names()) })
 	kc := map[string]string{}
 	s.Keychain = keychain
 	s.KeychainGet = func(_ context.Context, service, account string) (string, error) {

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode"
 
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Log is a VM's event log, as devvm log shows it. NewLog sets every
@@ -141,11 +141,23 @@ func FormatEvent(line string) (string, bool) {
 	if len(e.Secrets) > 0 {
 		d += ", token: " + strings.Join(e.Secrets, ",")
 	}
-	return fmt.Sprintf("%s  %-7s  %s  %s", ui.OneLine(e.Time), what, hostPort(e), ui.OneLine(d)), true
+	return fmt.Sprintf("%s  %-7s  %s  %s", oneLine(e.Time), what, hostPort(e), oneLine(d)), true
 }
 
 func hostPort(e proxy.Event) string {
-	return net.JoinHostPort(ui.OneLine(e.Host), strconv.Itoa(e.Port))
+	return net.JoinHostPort(oneLine(e.Host), strconv.Itoa(e.Port))
+}
+
+// oneLine drops every control character from s (C0, newlines and tabs
+// too, DEL and C1): a value the VM's proxy logged, for one line of data
+// output.
+func oneLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // WriteBlocked writes the log's blocks to w as a table, one row per host
@@ -185,7 +197,7 @@ func (l *Log) WriteBlocked(w io.Writer) error {
 			rows[k] = r
 		}
 		r.count++
-		r.last = ui.OneLine(e.Time)
+		r.last = oneLine(e.Time)
 	}
 	rest, err := readLines(bufio.NewReader(f), &read, add)
 	if err != nil {

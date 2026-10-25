@@ -28,7 +28,7 @@ func oneSecret(cmd *cobra.Command) {
 }
 
 // newSecretCmd is devvm secret: tokens kept on this machine.
-func newSecretCmd() *cobra.Command {
+func newSecretCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret",
 		Short: "Tokens kept on this machine, for VMs to use",
@@ -37,14 +37,14 @@ func newSecretCmd() *cobra.Command {
 			"into requests for the token's hosts; without it, the VM gets the token. devvm secret alone " +
 			"lists them, as devvm secret ls does.",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd) },
+		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u) },
 	}
-	cmd.AddCommand(newSecretSetCmd(), newSecretRmCmd(), newSecretLsCmd(),
-		newSecretUseCmd("use", true), newSecretUseCmd("unuse", false), newSecretGetCmd())
+	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u), newSecretLsCmd(u),
+		newSecretUseCmd(u, "use", true), newSecretUseCmd(u, "unuse", false), newSecretGetCmd(u))
 	return cmd
 }
 
-func newSecretSetCmd() *cobra.Command {
+func newSecretSetCmd(u *ui.UI) *cobra.Command {
 	var stdin bool
 	cmd := &cobra.Command{
 		Use:   "set NAME",
@@ -54,7 +54,7 @@ func newSecretSetCmd() *cobra.Command {
 			"it; --stdin reads a line instead. A claude token comes from claude setup-token. Proxies running " +
 			"put the new token in at once.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			saveSecret(cmd, args[0], stdin)
+			saveSecret(cmd, u, args[0], stdin)
 			return nil
 		},
 	}
@@ -65,30 +65,30 @@ func newSecretSetCmd() *cobra.Command {
 
 // saveSecret asks for a secret's token (with stdin, reads a line) and
 // saves it.
-func saveSecret(cmd *cobra.Command, name string, stdin bool) {
+func saveSecret(cmd *cobra.Command, u *ui.UI, name string, stdin bool) {
 	var given string
 	if stdin {
-		given = ui.Line()
+		given = u.Line()
 	} else {
-		if ui.StdinIsTerminal() {
+		if u.StdinIsTerminal() {
 			if name == "claude" {
-				ui.Note(msg.ClaudeTokenHowto())
+				u.Note(msg.ClaudeTokenHowto())
 			} else {
-				ui.Note(msg.GithubTokenHowto())
+				u.Note(msg.GithubTokenHowto())
 			}
 		}
-		given = ui.Secret(msg.TokenPrompt())
+		given = u.Secret(msg.TokenPrompt())
 	}
-	withEnv(func(env *vm.Env) error { return env.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
+	withEnv(u, func(env *vm.Env) error { return env.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
 }
 
-func newSecretRmCmd() *cobra.Command {
+func newSecretRmCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rm NAME",
 		Short: "Delete a saved token",
 		Long:  "Delete a saved token. Proxies running stop putting it in at once; what a VM did with it stays done.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error { return env.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
+			withEnv(u, func(env *vm.Env) error { return env.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
 			return nil
 		},
 	}
@@ -96,22 +96,22 @@ func newSecretRmCmd() *cobra.Command {
 	return cmd
 }
 
-func newSecretLsCmd() *cobra.Command {
+func newSecretLsCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls",
 		Short: "List the tokens, whether each is saved, and the VMs using it",
 		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd) },
+		RunE:  func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u) },
 	}
 }
 
-func listSecrets(cmd *cobra.Command) error {
-	withEnv(func(env *vm.Env) error { return env.Secrets(cmd.Context(), ui.Stdout()) }, msg.SecretFailed)
+func listSecrets(cmd *cobra.Command, u *ui.UI) error {
+	withEnv(u, func(env *vm.Env) error { return env.Secrets(cmd.Context(), u.Stdout()) }, msg.SecretFailed)
 	return nil
 }
 
 // newSecretUseCmd is devvm secret use (use) or unuse.
-func newSecretUseCmd(name string, use bool) *cobra.Command {
+func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
 	short, long := "Let this folder's VM use a token", "Let this folder's VM use a token: "+
 		"its proxy puts it in at once, and the VM gets its placeholder (the token, without network policy) "+
 		"from its next launch."
@@ -125,7 +125,7 @@ func newSecretUseCmd(name string, use bool) *cobra.Command {
 		Short: short,
 		Long:  long,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error { return env.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
+			withEnv(u, func(env *vm.Env) error { return env.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
 			return nil
 		},
 	}
@@ -134,7 +134,7 @@ func newSecretUseCmd(name string, use bool) *cobra.Command {
 }
 
 // newSecretGetCmd is devvm secret get, which VMs' proxies run for a value.
-func newSecretGetCmd() *cobra.Command {
+func newSecretGetCmd(u *ui.UI) *cobra.Command {
 	var force bool
 	get := &cobra.Command{
 		Use:    "get NAME",
@@ -143,16 +143,16 @@ func newSecretGetCmd() *cobra.Command {
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Not to a terminal, so a value isn't shown by accident.
-			if ui.StdoutIsTerminal() && !force {
-				ui.Die(msg.SecretToTerminal())
+			if u.StdoutIsTerminal() && !force {
+				u.Die(msg.SecretToTerminal())
 			}
 			dirs, err := paths.FromEnv()
 			var v string
 			if err == nil {
-				v, err = secrets.NewStore(dirs, os.Getenv("HOME")).Get(cmd.Context(), args[0])
+				v, err = secrets.NewStore(dirs, os.Getenv("HOME"), u.Warn).Get(cmd.Context(), args[0])
 			}
-			fail(err, func(reason string) msg.M { return msg.SecretReadFailed(reason, msg.Shown(args[0])) })
-			_, err = ui.Stdout().Write([]byte(v + "\n"))
+			fail(u, err, func(reason string) msg.M { return msg.SecretReadFailed(reason, msg.Shown(args[0])) })
+			_, err = u.Stdout().Write([]byte(v + "\n"))
 			return err
 		},
 	}
@@ -161,7 +161,7 @@ func newSecretGetCmd() *cobra.Command {
 }
 
 // newAuthCmd is devvm auth claude: devvm secret set claude.
-func newAuthCmd() *cobra.Command {
+func newAuthCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:       "auth claude",
 		Short:     "Save the Claude token: devvm secret set claude",
@@ -169,7 +169,7 @@ func newAuthCmd() *cobra.Command {
 		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: []string{"claude"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			saveSecret(cmd, "claude", false)
+			saveSecret(cmd, u, "claude", false)
 			return nil
 		},
 	}

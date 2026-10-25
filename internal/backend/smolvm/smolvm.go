@@ -26,6 +26,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -42,7 +43,6 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Name is the backend's name.
@@ -104,16 +104,33 @@ type Smolvm struct {
 	// reports whether one is: for a VM's ssh forward.
 	FreePort func() (int, error)
 	PortFree func(int) bool
-	// Info prints what the backend is doing (ui.Info).
+	// Info prints what the backend is doing.
 	Info func(msg.M)
 	// Warn prints a warning.
 	Warn func(msg.M)
+	// WithSteps numbers the logged commands of a phase of so many steps.
+	WithSteps func(ctx context.Context, total int) context.Context
+	// AddCleanup adds to the run's cleanup stack; Interrupted reports
+	// whether the run was interrupted.
+	AddCleanup  func(f func(context.Context)) (remove func())
+	Interrupted func() bool
+}
+
+// UI is where the backend prints, the run log its commands run into, and
+// the run's cleanup stack.
+type UI interface {
+	Info(msg.M)
+	Warn(msg.M)
+	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
+	WithSteps(ctx context.Context, total int) context.Context
+	AddCleanup(f func(context.Context)) (remove func())
+	Interrupted() bool
 }
 
 var _ backend.Backend = (*Smolvm)(nil)
 
-// New returns the smolvm backend for devvm's folders.
-func New(d paths.Dirs) *Smolvm {
+// New returns the smolvm backend for devvm's folders, on u.
+func New(d paths.Dirs, u UI) *Smolvm {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -125,12 +142,13 @@ func New(d paths.Dirs) *Smolvm {
 		kvm = "/dev/kvm"
 	}
 	return &Smolvm{
-		Dirs: d, Runner: uiRunner{}, OS: runtime.GOOS, Arch: runtime.GOARCH, Root: filepath.Dir(self),
+		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Root: filepath.Dir(self),
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
 		Digest: from.NewRegistry().Digest, KVM: kvm,
 		Terminal: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
 		FreePort: freePort, PortFree: portFree,
-		Info: ui.Info, Warn: ui.Warn,
+		Info: u.Info, Warn: u.Warn,
+		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	}
 }
 

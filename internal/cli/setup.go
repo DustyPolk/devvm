@@ -15,7 +15,7 @@ import (
 
 // newSetupCmd is devvm setup [--backend NAME] [--features LIST]. Its
 // --backend is its own, in place of the root's for new VMs.
-func newSetupCmd() *cobra.Command {
+func newSetupCmd(u *ui.UI) *cobra.Command {
 	var features, backendName string
 	cmd := &cobra.Command{
 		Use:   "setup",
@@ -32,7 +32,7 @@ func newSetupCmd() *cobra.Command {
 			if cmd.Flags().Changed("features") {
 				list = &features
 			}
-			fail(newSetup().run(list, backendName), msg.SetupFailed)
+			fail(u, newSetup(u).run(list, backendName), msg.SetupFailed)
 			return nil
 		},
 	}
@@ -42,18 +42,20 @@ func newSetupCmd() *cobra.Command {
 	return cmd
 }
 
-// setup is devvm setup's run: whether it's in a terminal, and how it asks
-// for the backend.
+// setup is devvm setup's run: the UI it prints through, whether it's in a
+// terminal, and how it asks for the backend.
 type setup struct {
+	ui       *ui.UI
 	terminal func() bool
 	pickOne  func(msg.M, []ui.Choice) int
 }
 
-// newSetup returns a setup on ui's terminal and picker.
-func newSetup() setup {
+// newSetup returns a setup on u's terminal and picker.
+func newSetup(u *ui.UI) setup {
 	return setup{
-		terminal: func() bool { return ui.StdinIsTerminal() && ui.StdoutIsTerminal() },
-		pickOne:  ui.PickOne,
+		ui:       u,
+		terminal: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
+		pickOne:  u.PickOne,
 	}
 }
 
@@ -68,7 +70,7 @@ func (s setup) run(features *string, backendName string) error {
 	}
 	ask := backendName == "" && features == nil && s.terminal()
 	if backendName != "" || ask {
-		reg, err := backends.Registry(dirs)
+		reg, err := backends.Registry(dirs, s.ui)
 		if err != nil {
 			return err
 		}
@@ -82,7 +84,7 @@ func (s setup) run(features *string, backendName string) error {
 		if err := state.WriteBackend(dirs, backendName); err != nil {
 			return err
 		}
-		ui.Info(msg.DefaultBackend(backendName))
+		s.ui.Info(msg.DefaultBackend(backendName))
 		if features == nil && !ask {
 			return nil
 		}
@@ -91,7 +93,7 @@ func (s setup) run(features *string, backendName string) error {
 	if err != nil {
 		return err
 	}
-	b := newBuilder(dirs, root, nil, backend.Review{}, nil, "")
+	b := newBuilder(s.ui, dirs, root, nil, backend.Review{}, nil, "")
 	var changed bool
 	if features == nil {
 		changed, err = b.PickFeatures()
@@ -101,11 +103,11 @@ func (s setup) run(features *string, backendName string) error {
 	if err != nil || !changed {
 		return err
 	}
-	ui.Info(msg.BaseWillRebuild())
+	s.ui.Info(msg.BaseWillRebuild())
 	if built, err := state.AnyImage(dirs); err != nil {
 		return err
 	} else if built {
-		ui.Say(msg.GCOldHint())
+		s.ui.Say(msg.GCOldHint())
 	}
 	return nil
 }

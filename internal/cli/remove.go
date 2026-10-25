@@ -4,11 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newRemoveCmd is devvm remove TOOLS.
-func newRemoveCmd(g *globals) *cobra.Command {
+func newRemoveCmd(u *ui.UI, g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove TOOLS",
 		Short: "Take shared tools out of this folder's VM, then open a shell in it",
@@ -17,7 +18,7 @@ func newRemoveCmd(g *globals) *cobra.Command {
 			"layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error { return env.Remove(cmd.Context(), g.options(), args[0]) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return env.Remove(cmd.Context(), g.options(), args[0]) }, msg.UpFailed)
 			return nil
 		},
 	}

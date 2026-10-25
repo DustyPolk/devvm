@@ -6,8 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"sync"
-	"sync/atomic"
 	"syscall"
 )
 
@@ -20,20 +18,6 @@ type exitError struct{ code int }
 
 func exit(code int) { panic(exitError{code}) }
 
-var (
-	interrupted atomic.Bool
-
-	// commands is read-locked while a logged command runs, so an interrupt
-	// can wait for the run's commands to end before cleaning up.
-	commands sync.RWMutex
-
-	cleanups struct {
-		sync.Mutex
-		next  int
-		funcs []cleanup
-	}
-)
-
 type cleanup struct {
 	id int
 	f  func(ctx context.Context)
@@ -42,24 +26,25 @@ type cleanup struct {
 // Interrupted reports whether the run was interrupted (Ctrl+C, TERM, a
 // closed terminal). A cleanup that only undoes unfinished work on an
 // interrupt checks it.
-func Interrupted() bool { return interrupted.Load() }
+func (u *UI) Interrupted() bool { return u.interrupted.Load() }
 
 // AddCleanup adds f to the cleanup stack, which runs, last added first, when
 // the run ends: normally, through Die, or interrupted. f gets a context of
 // its own, as the run's is canceled by then. Call remove once there's
 // nothing left to clean up.
-func AddCleanup(f func(ctx context.Context)) (remove func()) {
-	cleanups.Lock()
-	defer cleanups.Unlock()
-	cleanups.next++
-	id := cleanups.next
-	cleanups.funcs = append(cleanups.funcs, cleanup{id, f})
+func (u *UI) AddCleanup(f func(ctx context.Context)) (remove func()) {
+	c := &u.cleanups
+	c.Lock()
+	defer c.Unlock()
+	c.next++
+	id := c.next
+	c.funcs = append(c.funcs, cleanup{id, f})
 	return func() {
-		cleanups.Lock()
-		defer cleanups.Unlock()
-		for i, c := range cleanups.funcs {
-			if c.id == id {
-				cleanups.funcs = append(cleanups.funcs[:i], cleanups.funcs[i+1:]...)
+		c.Lock()
+		defer c.Unlock()
+		for i, cl := range c.funcs {
+			if cl.id == id {
+				c.funcs = append(c.funcs[:i], c.funcs[i+1:]...)
 				return
 			}
 		}
@@ -68,20 +53,21 @@ func AddCleanup(f func(ctx context.Context)) (remove func()) {
 
 // runCleanups runs the cleanup stack, last added first. A cleanup that dies
 // or panics doesn't stop the rest.
-func runCleanups() {
+func (u *UI) runCleanups() {
+	c := &u.cleanups
 	for {
-		cleanups.Lock()
-		n := len(cleanups.funcs)
+		c.Lock()
+		n := len(c.funcs)
 		if n == 0 {
-			cleanups.Unlock()
+			c.Unlock()
 			return
 		}
-		c := cleanups.funcs[n-1]
-		cleanups.funcs = cleanups.funcs[:n-1]
-		cleanups.Unlock()
+		cl := c.funcs[n-1]
+		c.funcs = c.funcs[:n-1]
+		c.Unlock()
 		func() {
 			defer func() { _ = recover() }()
-			c.f(context.Background())
+			cl.f(context.Background())
 		}()
 	}
 }
@@ -105,16 +91,22 @@ func call(ctx context.Context, fn func(context.Context) int) (r result) {
 	return result{code: fn(ctx)}
 }
 
-// Main runs fn, the whole of devvm's run, and returns the exit code: fn's,
-// or 1 after Die. Then it runs the cleanup stack.
+// Main makes the UI on devvm's own streams and runs fn, the whole of
+// devvm's run, with it. It returns the exit code: fn's, or 1 after Die.
+// Then it runs the cleanup stack.
 //
 // INT, TERM and HUP cancel fn's context, which stops the command running,
 // and then run the cleanups and return InterruptedCode. A second signal
 // during the cleanups is ignored, so they aren't stopped halfway. fn's own
 // code keeps running until it next starts a command (which fails, its
 // context being canceled) or dies, quietly.
-func Main(fn func(ctx context.Context) int) int {
-	interrupted.Store(false)
+func Main(fn func(ctx context.Context, u *UI) int) int {
+	u := onTerminal()
+	return u.main(func(ctx context.Context) int { return fn(ctx, u) })
+}
+
+// main is Main on u.
+func (u *UI) main(fn func(ctx context.Context) int) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigs := make(chan os.Signal, 1)
@@ -127,16 +119,16 @@ func Main(fn func(ctx context.Context) int) int {
 	select {
 	case r = <-done:
 	case <-sigs:
-		interrupted.Store(true)
+		u.interrupted.Store(true)
 		cancel()
-		stopStatus()
-		commands.Lock() // the commands running have ended
-		commands.Unlock()
-		write(stderr, "\n")
+		u.stopStatus()
+		u.commands.Lock() // the commands running have ended
+		u.commands.Unlock()
+		u.write(u.stderr, "\n")
 		r = result{code: InterruptedCode}
 	}
-	stopStatus()
-	runCleanups()
+	u.stopStatus()
+	u.runCleanups()
 	if r.panic != nil {
 		panic(r.panic)
 	}

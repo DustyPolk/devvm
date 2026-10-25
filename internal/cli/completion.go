@@ -17,7 +17,7 @@ import (
 var shells = []string{"bash", "zsh", "fish"}
 
 // newCompletionCmd is devvm completion SHELL.
-func newCompletionCmd() *cobra.Command {
+func newCompletionCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "completion SHELL",
 		Short: "Print the shell completion script for bash, zsh or fish",
@@ -28,7 +28,7 @@ func newCompletionCmd() *cobra.Command {
 		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: shells,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, out := cmd.Root(), ui.Stdout()
+			root, out := cmd.Root(), u.Stdout()
 			switch args[0] {
 			case "bash":
 				return root.GenBashCompletionV2(out, true)
@@ -44,7 +44,8 @@ func newCompletionCmd() *cobra.Command {
 // addCompletions sets how the shell completes root's commands' arguments
 // and flags: image names for IMAGE, tool names for TOOLS, backend names
 // for --backend, and no file names, which none of them take.
-func addCompletions(root *cobra.Command) {
+func addCompletions(root *cobra.Command, u *ui.UI) {
+	backendNames := completeBackend(u)
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.CompletionOptions.SetDefaultShellCompDirective(cobra.ShellCompDirectiveNoFileComp)
 	for _, c := range root.Commands() {
@@ -54,12 +55,12 @@ func addCompletions(root *cobra.Command) {
 		case "remove":
 			c.ValidArgsFunction = completeTools
 		case "setup":
-			_ = c.RegisterFlagCompletionFunc("backend", completeBackend)
+			_ = c.RegisterFlagCompletionFunc("backend", backendNames)
 			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
 		}
 	}
 	root.ValidArgsFunction = completeImage
-	_ = root.RegisterFlagCompletionFunc("backend", completeBackend)
+	_ = root.RegisterFlagCompletionFunc("backend", backendNames)
 	_ = root.RegisterFlagCompletionFunc("ports", cobra.FixedCompletions([]string{"all", "none"}, cobra.ShellCompDirectiveNoFileComp))
 }
 
@@ -101,17 +102,20 @@ func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.
 	return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeBackend completes --backend with the backends' names.
-func completeBackend(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	dirs, err := paths.FromEnv()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// completeBackend returns what completes --backend with the backends'
+// names.
+func completeBackend(u *ui.UI) cobra.CompletionFunc {
+	return func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		dirs, err := paths.FromEnv()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		reg, err := backends.Registry(dirs, u)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return reg.Names(), cobra.ShellCompDirectiveNoFileComp
 	}
-	reg, err := backends.Registry(dirs)
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	return reg.Names(), cobra.ShellCompDirectiveNoFileComp
 }
 
 // joined completes the last of the +-joined parts in toComplete with the

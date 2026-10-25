@@ -4,17 +4,28 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/cli"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 func main() {
 	if len(os.Args) != 2 {
 		log.Fatal("usage: docgen DIR")
 	}
-	if err := write(cli.NewRoot(), os.Args[1]); err != nil {
+	if err := write(newRoot(), os.Args[1]); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// newRoot is devvm's command, for its pages only: none of it runs, so its
+// UI has no input and prints nowhere.
+func newRoot() *cobra.Command {
+	return cli.NewRoot(ui.New(strings.NewReader(""), io.Discard, io.Discard))
 }

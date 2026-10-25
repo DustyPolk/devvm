@@ -18,7 +18,7 @@ import (
 )
 
 // newDoctorCmd is devvm doctor.
-func newDoctorCmd(g *globals) *cobra.Command {
+func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 	var fixes bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -30,28 +30,28 @@ func newDoctorCmd(g *globals) *cobra.Command {
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reg, b, err := doctorBackend(g.backend)
-			fail(err, msg.DoctorFailed)
+			reg, b, err := doctorBackend(u, g.backend)
+			fail(u, err, msg.DoctorFailed)
 			problems := b.Problems(cmd.Context())
 			if fixes {
-				return writeFixes(ui.Stdout(), problems)
+				return writeFixes(u.Stdout(), problems)
 			}
-			if err := writeFeatures(ui.Stdout(), reg.All()); err != nil {
+			if err := writeFeatures(u.Stdout(), reg.All()); err != nil {
 				return err
 			}
 			if _, err := exec.LookPath("docker"); err == nil {
-				ui.Say(msg.DockerFound())
+				u.Say(msg.DockerFound())
 			} else {
-				ui.Say(msg.DockerMissing())
+				u.Say(msg.DockerMissing())
 			}
 			if len(problems) == 0 {
-				ui.Say(msg.DoctorOK(b.Name(), devvmVersion()))
+				u.Say(msg.DoctorOK(b.Name(), devvmVersion()))
 				return nil
 			}
 			for _, p := range problems[:len(problems)-1] {
-				ui.Warn(p.Msg)
+				u.Warn(p.Msg)
 			}
-			ui.Die(problems[len(problems)-1].Msg)
+			u.Die(problems[len(problems)-1].Msg)
 			return nil
 		},
 	}
@@ -61,12 +61,12 @@ func newDoctorCmd(g *globals) *cobra.Command {
 
 // doctorBackend returns devvm's backends and the one new VMs get: flag's
 // (--backend), else the default.
-func doctorBackend(flag string) (*backend.Registry, backend.Backend, error) {
+func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return nil, nil, err
 	}
-	reg, err := backends.Registry(dirs)
+	reg, err := backends.Registry(dirs, u)
 	if err != nil {
 		return nil, nil, err
 	}

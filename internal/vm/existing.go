@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // open opens a shell in a VM that exists, made for this folder. An image
@@ -326,7 +325,7 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 			continue
 		}
 		e.Info(msg.Adding(l))
-		ui.LogNote()
+		e.LogNote()
 		if err := e.runScript(ctx, b, vm, builder.LayerScript(l)); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -365,7 +364,7 @@ func (e *Env) runScript(ctx context.Context, b backend.Backend, vm, path string)
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	out := ui.LogWriter()
+	out := e.LogWriter()
 	return b.Exec(ctx, vm, []string{"bash", "-s"}, backend.ExecOpts{Stdin: f, Stdout: out, Stderr: out})
 }
 

@@ -27,7 +27,6 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // Name is the backend's name.
@@ -69,21 +68,34 @@ type Lima struct {
 	// DockerRunning reports whether Docker runs, for --from images only
 	// it has.
 	DockerRunning func(ctx context.Context) bool
-	// Info prints what the backend is doing (ui.Info).
+	// Info prints what the backend is doing.
 	Info func(msg.M)
 	// Warn prints a warning, and where the run log has more.
 	Warn func(msg.M)
+	// WithSteps numbers the logged commands of a phase of so many steps.
+	WithSteps func(ctx context.Context, total int) context.Context
+	// AddCleanup adds to the run's cleanup stack; Interrupted reports
+	// whether the run was interrupted.
+	AddCleanup  func(f func(context.Context)) (remove func())
+	Interrupted func() bool
 }
 
-func warn(m msg.M) {
-	ui.Warn(m)
-	ui.LogNote()
+// UI is where the backend prints, the run log its commands run into, and
+// the run's cleanup stack.
+type UI interface {
+	ubuntu.UI
+	Info(msg.M)
+	Warn(msg.M)
+	LogNote()
+	WithSteps(ctx context.Context, total int) context.Context
+	AddCleanup(f func(context.Context)) (remove func())
+	Interrupted() bool
 }
 
 var _ backend.Backend = (*Lima)(nil)
 
-// New returns the Lima backend for devvm's folders.
-func New(d paths.Dirs) *Lima {
+// New returns the Lima backend for devvm's folders, on u.
+func New(d paths.Dirs, u UI) *Lima {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -92,11 +104,13 @@ func New(d paths.Dirs) *Lima {
 	}
 	root := filepath.Dir(self)
 	return &Lima{
-		Dirs: d, Runner: uiRunner{}, OS: runtime.GOOS, Arch: runtime.GOARCH,
+		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Root: root, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
-		Ubuntu: ubuntu.New(root, os.Getenv).Image, Memory: platform.Memory,
+		Ubuntu: ubuntu.New(root, os.Getenv, u).Image, Memory: platform.Memory,
 		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
-		DockerRunning: from.DockerRunning, Info: ui.Info, Warn: warn,
+		DockerRunning: from.DockerRunning,
+		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
+		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	}
 }
 

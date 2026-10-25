@@ -20,7 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // UbuntuImage is the container image base starts from without --from:
@@ -82,8 +81,8 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	}
 
 	var created atomic.Bool // an interrupt's cleanups may run while this goes on
-	remove := ui.AddCleanup(func(ctx context.Context) {
-		if !created.Load() || ui.Interrupted() {
+	remove := s.AddCleanup(func(ctx context.Context) {
+		if !created.Load() || s.Interrupted() {
 			s.unfinished(ctx, inst)
 		}
 	})
@@ -94,7 +93,7 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	if spec.Parent == "" {
 		steps += 2
 	}
-	ctx = ui.WithSteps(ctx, steps)
+	ctx = s.WithSteps(ctx, steps)
 	built := backend.Built{}
 	args := []string{
 		"machine", "create", "--name", inst, "--label", LabelKey + "=" + s.Dirs.Data,
@@ -250,7 +249,7 @@ func (s *Smolvm) packInto(ctx context.Context, vm, key string) error {
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		return err
 	}
-	done := ui.AddCleanup(func(context.Context) { _ = os.RemoveAll(tmp) })
+	done := s.AddCleanup(func(context.Context) { _ = os.RemoveAll(tmp) })
 	defer done()
 	if err := s.Runner.Run(ctx, msg.PackingImage(vm),
 		s.smolvm(ctx, "pack", "create", "--from-vm", vm, "-o", filepath.Join(tmp, "image"))); err != nil {
@@ -270,7 +269,7 @@ func (s *Smolvm) unfinished(ctx context.Context, inst string) {
 	if _, err := s.inspect(ctx, inst); err != nil {
 		return // never created, someone else's, or smolvm can't say
 	}
-	if ui.Interrupted() {
+	if s.Interrupted() {
 		s.Info(msg.InterruptedImage(inst))
 	} else {
 		s.Info(msg.UnfinishedImage(inst))

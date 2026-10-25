@@ -496,7 +496,7 @@ func TestRealLocks(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	t.Cleanup(func() { _ = exec.Command("chflags", "-R", "nouchg", f.root).Run() }) //nolint:noctx,gosec // cleanup, of the test's own folder
-	f.p.Chflags = New(f.dir).Chflags
+	f.p.Chflags = New(f.dir, nil).Chflags
 	f.git(f.root, "init", "-q", "--template=", f.dir)
 	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
 		t.Fatal(err)
@@ -513,7 +513,7 @@ func TestRealLocks(t *testing.T) {
 	if len(f.warns) > 0 {
 		t.Errorf("warnings %q", f.warns)
 	}
-	if locked := New(f.dir).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
+	if locked := New(f.dir, nil).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
 		t.Error("Locked doesn't see the flag")
 	}
 }

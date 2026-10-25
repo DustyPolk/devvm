@@ -152,7 +152,7 @@ base, the `--from` bases and the shared tool images stay cached between runs, ex
 
 ## Messages
 
-Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; `internal/ui` does.
+Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; the run's `ui.UI` does. Only `cmd/devvm` and `internal/cli` hold it: other packages print through `Info`/`Warn` fields and the like, which cli sets from it.
 
 The locale files are in [go-i18n](https://github.com/nicksnyder/go-i18n)'s TOML format, with only go-i18n's own message fields, so go-i18n's loader reads them as they are and its `goi18n` tools work on them:
 

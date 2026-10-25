@@ -1,12 +1,28 @@
 package backends
 
 import (
+	"context"
+	"os/exec"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
+
+// quietUI prints nothing, runs commands as they are, counts no steps and
+// keeps no cleanups.
+type quietUI struct{}
+
+func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+func (quietUI) Info(msg.M)                                                {}
+func (quietUI) Note(msg.M)                                                {}
+func (quietUI) Warn(msg.M)                                                {}
+func (quietUI) LogNote()                                                  {}
+func (quietUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
+func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
+func (quietUI) Interrupted() bool                                         { return false }
 
 // DEVVM_UNREVIEWED counts only in a test build: a release ignores it.
 func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
@@ -16,7 +32,7 @@ func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 		build string
 		want  bool
 	}{{"", false}, {"yes", false}, {"allowed", true}} {
-		r, err := registry(d, c.build, "smolvm:egress-proxy")
+		r, err := registry(d, quietUI{}, c.build, "smolvm:egress-proxy")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -30,7 +46,7 @@ func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 func TestLimaIsTheDefault(t *testing.T) {
 	t.Parallel()
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	r, err := Registry(d)
+	r, err := Registry(d, quietUI{})
 	if err != nil {
 		t.Fatal(err)
 	}

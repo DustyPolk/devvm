@@ -9,10 +9,10 @@ import (
 	"github.com/w3cj/devvm/internal/ui"
 )
 
-// main runs devvm through ui.Main, which recovers ui.Die, runs the cleanup
-// stack and handles Ctrl+C, and exits with its code.
+// main runs devvm through ui.Main, which makes the run's UI, recovers its
+// Die, runs the cleanup stack and handles Ctrl+C, and exits with its code.
 func main() {
-	os.Exit(ui.Main(func(ctx context.Context) int {
-		return cli.Execute(ctx, os.Args[1:])
+	os.Exit(ui.Main(func(ctx context.Context, u *ui.UI) int {
+		return cli.Execute(ctx, u, os.Args[1:])
 	}))
 }

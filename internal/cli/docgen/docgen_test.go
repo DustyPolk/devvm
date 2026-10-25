@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-
-	"github.com/w3cj/devvm/internal/cli"
 )
 
 // checkedIn is the reference in the repo, from this package's folder.
@@ -61,7 +59,7 @@ func generated(t *testing.T, root *cobra.Command) string {
 }
 
 func TestReferenceIsCurrent(t *testing.T) {
-	if diff := differences(t, generated(t, cli.NewRoot()), checkedIn); diff != nil {
+	if diff := differences(t, generated(t, newRoot()), checkedIn); diff != nil {
 		t.Fatalf("docs/content/docs/cli is stale (%v): run mise run cli-docs", diff)
 	}
 }
@@ -88,7 +86,7 @@ func TestStaleReferenceIsCaught(t *testing.T) {
 		}, []string{"_index.md", "devvm.md", "devvm_update.md"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := cli.NewRoot()
+			root := newRoot()
 			tc.edit(root)
 			if got := differences(t, generated(t, root), checkedIn); !slices.Equal(got, tc.want) {
 				t.Errorf("differences = %v, want %v", got, tc.want)
@@ -98,7 +96,7 @@ func TestStaleReferenceIsCaught(t *testing.T) {
 }
 
 func TestHiddenCommandsAreLeftOut(t *testing.T) {
-	files, err := generate(cli.NewRoot())
+	files, err := generate(newRoot())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +131,7 @@ func TestWriteReplacesOldPages(t *testing.T) {
 	if err := os.WriteFile(old, []byte("old"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := write(cli.NewRoot(), dir); err != nil {
+	if err := write(newRoot(), dir); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(old); !os.IsNotExist(err) {

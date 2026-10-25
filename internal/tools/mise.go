@@ -18,7 +18,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // The mise devvm resolves the tools lock with, on the host: pinned, and
@@ -75,7 +74,7 @@ func (t *Tools) HostMise(ctx context.Context) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	stop := ui.Status(msg.DownloadingMise(miseVersion))
+	stop := t.Status(msg.DownloadingMise(miseVersion))
 	defer stop()
 	tmp := path + ".tmp"
 	sum, err := t.download(ctx, fmt.Sprintf(t.miseURL, miseVersion, platform), tmp)
@@ -172,7 +171,7 @@ func (t *Tools) Resolve(ctx context.Context, out string) error {
 	if err != nil {
 		return err
 	}
-	if err := ui.LoggedCmd(ctx, msg.ResolvingTools(), cmd); err != nil {
+	if err := t.LoggedCmd(ctx, msg.ResolvingTools(), cmd); err != nil {
 		return t.resolveFailed(ctx)
 	}
 	data, err := os.ReadFile(filepath.Join(tmp, "mise.lock")) //nolint:gosec // devvm's own temporary folder
@@ -314,7 +313,7 @@ func (t *Tools) lockVersions(ctx context.Context, mise, tool string, versions []
 	if err != nil {
 		return nil
 	}
-	_ = ui.LoggedCmd(ctx, msg.ResolvingTools(), cmd)          // what it locked is checked below
+	_ = t.LoggedCmd(ctx, msg.ResolvingTools(), cmd)           // what it locked is checked below
 	data, err := os.ReadFile(filepath.Join(dir, "mise.lock")) //nolint:gosec // devvm's own temporary folder
 	if err != nil {
 		return nil

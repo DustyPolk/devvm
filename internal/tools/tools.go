@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -30,7 +31,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // ShareAt is where VMs have the share, read-only, and where the tools
@@ -57,8 +57,15 @@ type Tools struct {
 	Detach func(path string, args []string, out *os.File) (int, error)
 	// ShareWait is how long the share's lock is waited for between tries.
 	ShareWait time.Duration
-	Info      func(msg.M)
-	Warn      func(msg.M)
+	// What it prints: Warn says where the run log is too.
+	Info, Warn func(msg.M)
+	// LogNote says where the run log is, once a run; Status shows a status
+	// line until stop; LoggedCmd runs a command into the run log.
+	LogNote   func()
+	Status    func(label msg.M) (stop func())
+	LoggedCmd func(ctx context.Context, step msg.M, cmd *exec.Cmd) error
+	// AddCleanup adds to the run's cleanup stack.
+	AddCleanup func(f func(context.Context)) (remove func())
 
 	// The host's mise: its download's URL (a format taking the version
 	// and platform) and checksums, by platform.
@@ -66,9 +73,20 @@ type Tools struct {
 	miseSums map[string]string
 }
 
+// UI is where the shared tools print, the run log and status line their
+// slow steps show on, and the run's cleanup stack.
+type UI interface {
+	Info(msg.M)
+	Warn(msg.M)
+	LogNote()
+	Status(label msg.M) (stop func())
+	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
+	AddCleanup(f func(context.Context)) (remove func())
+}
+
 // New returns the shared tools in devvm's folders, with devvm's files in
-// root.
-func New(d paths.Dirs, root string) *Tools {
+// root, on u.
+func New(d paths.Dirs, root string, u UI) *Tools {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -78,13 +96,10 @@ func New(d paths.Dirs, root string) *Tools {
 	return &Tools{
 		Dirs: d, Root: root, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: platform.StartDetached,
-		ShareWait: time.Second, Info: ui.Info, Warn: warn, miseURL: miseURL, miseSums: miseSHA256,
+		ShareWait: time.Second, miseURL: miseURL, miseSums: miseSHA256,
+		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
+		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
 	}
-}
-
-func warn(m msg.M) {
-	ui.Warn(m)
-	ui.LogNote()
 }
 
 // MiseArch is mise's name for a Go architecture: the host's, and so its

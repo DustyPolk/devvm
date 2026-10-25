@@ -19,9 +19,9 @@ type Choice struct {
 	On         bool
 }
 
-// rawInput puts the terminal devvm reads from into raw mode, returning
-// what undoes it. Swapped by the tests.
-var rawInput = func() (restore func(), err error) {
+// rawTerminal puts the terminal devvm reads from into raw mode, returning
+// what undoes it.
+func rawTerminal() (restore func(), err error) {
 	old, err := term.MakeRaw(fd(os.Stdin))
 	if err != nil {
 		return nil, err
@@ -33,9 +33,9 @@ var rawInput = func() (restore func(), err error) {
 // down (or k and j) move, space toggles, enter confirms. It returns them
 // as chosen. Without a terminal to read from and print to, it returns
 // them as given. Ctrl+C ends the run as interrupted.
-func Pick(help msg.M, choices []Choice) []Choice {
+func (u *UI) Pick(help msg.M, choices []Choice) []Choice {
 	out := slices.Clone(choices)
-	pick(help, out, false)
+	u.pick(help, out, false)
 	return out
 }
 
@@ -44,34 +44,34 @@ func Pick(help msg.M, choices []Choice) []Choice {
 // the first that's on and returns the index of the one chosen. Without a
 // terminal to read from and print to, that's the one it started from.
 // Ctrl+C ends the run as interrupted.
-func PickOne(help msg.M, choices []Choice) int {
+func (u *UI) PickOne(help msg.M, choices []Choice) int {
 	out := slices.Clone(choices)
 	start := max(slices.IndexFunc(out, func(c Choice) bool { return c.On }), 0)
 	for i := range out {
 		out[i].On = i == start
 	}
-	pick(help, out, true)
+	u.pick(help, out, true)
 	return max(slices.IndexFunc(out, func(c Choice) bool { return c.On }), 0)
 }
 
 // pick runs pickLoop on the terminal, choices changed in place; without
 // one it leaves them as they are.
-func pick(help msg.M, choices []Choice, one bool) {
-	if len(choices) == 0 || !stdinTTY() || !stdoutTTY() {
+func (u *UI) pick(help msg.M, choices []Choice, one bool) {
+	if len(choices) == 0 || !u.stdinTTY || !u.stdoutTTY {
 		return
 	}
-	restore, err := rawInput()
+	restore, err := u.rawInput()
 	if err != nil {
 		return
 	}
 	// In raw mode a line ends with \r\n; the cursor is hidden meanwhile.
-	write(stdout, strings.ReplaceAll(help.String(), "\n", "\r\n")+"\r\n\033[?25l")
-	ok := pickLoop(stdin, choices, one)
-	write(stdout, "\033[?25h")
+	u.write(u.stdout, strings.ReplaceAll(help.String(), "\n", "\r\n")+"\r\n\033[?25l")
+	ok := u.pickLoop(u.stdin, choices, one)
+	u.write(u.stdout, "\033[?25h")
 	restore()
 	if !ok {
-		write(stderr, "\n")
-		interrupted.Store(true)
+		u.write(u.stderr, "\n")
+		u.interrupted.Store(true)
 		exit(InterruptedCode)
 	}
 }
@@ -79,7 +79,7 @@ func pick(help msg.M, choices []Choice, one bool) {
 // pickLoop draws the choices and reads keys until enter (or the end of
 // the input), toggling choices in place, or with one, moving the one
 // that's on with the cursor. It's false on Ctrl+C.
-func pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
+func (u *UI) pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
 	cur, n := 0, len(choices)
 	open, on, closed := "[", "x", "]"
 	if one {
@@ -98,7 +98,7 @@ func pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
 			}
 			fmt.Fprintf(&b, "\033[2K%s %s%s%s %-10s %s\r\n", ptr, open, mark, closed, printable(c.Name), printable(c.Desc))
 		}
-		write(stdout, b.String())
+		u.write(u.stdout, b.String())
 		key, err := in.ReadByte()
 		if err != nil {
 			return true
@@ -132,6 +132,6 @@ func pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
 				choices[i].On = i == cur
 			}
 		}
-		write(stdout, fmt.Sprintf("\033[%dA", n))
+		u.write(u.stdout, fmt.Sprintf("\033[%dA", n))
 	}
 }

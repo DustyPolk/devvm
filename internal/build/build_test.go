@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -62,9 +63,8 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 		}
 		write(t, filepath.Join(root, "tools", name), string(data))
 	}
-	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "xdg")) // the run log
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
-	tl := tools.New(d, root)
+	tl := tools.New(d, root, quietUI{})
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {
 			return filepath.Join(repo, "testdata", "stubs", "mise")
@@ -74,14 +74,28 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 	return quiet(&Builder{Dirs: d, Root: root, Backend: f, Tools: tl}), f
 }
 
-// quiet makes b print nothing, keep the features chosen, and answer yes.
+// quiet makes b print nothing, keep the features chosen, and answer yes,
+// without a terminal.
 func quiet(b *Builder) *Builder {
 	none := func(msg.M) {}
 	b.Info, b.Warn, b.Say = none, none, none
 	b.Confirm = func(msg.M) bool { return true }
 	b.Pick = func(fs []Feature) []Feature { return fs }
+	b.Terminal = func() bool { return false }
+	b.LogNote = func() {}
 	return b
 }
+
+// quietUI is the shared tools' UI: it prints nothing, runs commands as
+// they are, their output dropped, and keeps no cleanups.
+type quietUI struct{}
+
+func (quietUI) Info(msg.M)                                                {}
+func (quietUI) Warn(msg.M)                                                {}
+func (quietUI) LogNote()                                                  {}
+func (quietUI) Status(msg.M) func()                                       { return func() {} }
+func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
+func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
 
 func isMsg(err error, id string) bool {
 	m, ok := errors.AsType[msg.M](err)

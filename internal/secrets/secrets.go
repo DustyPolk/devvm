@@ -24,7 +24,6 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // KeySecrets is the VM state key listing the secrets bound to it,
@@ -95,16 +94,17 @@ type Store struct {
 	// Login runs the proxy's login helper (devvm _proxy -login …) with
 	// args, its output to out.
 	Login func(args []string, out io.Writer) error
-	// Warn prints a warning (ui.Warn).
+	// Warn prints a warning.
 	Warn func(msg.M)
 }
 
-// NewStore returns the store for devvm's folders and the user's home.
-func NewStore(d paths.Dirs, home string) *Store {
+// NewStore returns the store for devvm's folders and the user's home,
+// warning through warn.
+func NewStore(d paths.Dirs, home string, warn func(msg.M)) *Store {
 	s := &Store{
 		Dirs: d, Home: home, Keychain: platform.HasKeychain, Getenv: os.Getenv,
 		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
-		Warn: ui.Warn,
+		Warn: warn,
 	}
 	s.Login = func(args []string, out io.Writer) error {
 		kept := func(agent string, names []string) { LoginKept(s.Warn, agent, names) }

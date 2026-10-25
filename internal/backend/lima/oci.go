@@ -20,7 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // OCIVM is the throwaway VM a container image is converted in (--from).
@@ -75,7 +74,7 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, mem float64) (*conv
 			unlock()
 		}
 	}
-	remove := ui.AddCleanup(cleanup)
+	remove := l.AddCleanup(cleanup)
 	vmOut := filepath.Join(out, "vm")
 	if err := os.Mkdir(vmOut, 0o700); err != nil {
 		return nil, err

@@ -10,7 +10,7 @@ import (
 )
 
 // newGitProtectCmd is devvm git-protect [on|strict|off].
-func newGitProtectCmd() *cobra.Command {
+func newGitProtectCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "git-protect [on|strict|off]",
 		Short: "Show or change .git protection for this folder's VM",
@@ -21,9 +21,9 @@ func newGitProtectCmd() *cobra.Command {
 		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: gitprotect.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error {
+			withEnv(u, func(env *vm.Env) error {
 				if len(args) == 0 {
-					return env.GitProtect(cmd.Context(), ui.Stdout())
+					return env.GitProtect(cmd.Context(), u.Stdout())
 				}
 				return env.SetGitProtect(cmd.Context(), args[0])
 			}, msg.GitProtectFailed)

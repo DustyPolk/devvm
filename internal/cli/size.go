@@ -11,7 +11,7 @@ import (
 // newSizeCmd is devvm size [--cpus N] [--memory GiB] [--disk GiB], with -g
 // for the size new VMs get. Its size flags are its own, in place of the
 // root's for new VMs.
-func newSizeCmd() *cobra.Command {
+func newSizeCmd(u *ui.UI) *cobra.Command {
 	var (
 		global bool
 		s      vm.Size
@@ -25,9 +25,9 @@ func newSizeCmd() *cobra.Command {
 			"get instead; what it leaves unset is the image's.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error {
+			withEnv(u, func(env *vm.Env) error {
 				if s == (vm.Size{}) {
-					return env.ShowSize(cmd.Context(), ui.Stdout(), global)
+					return env.ShowSize(cmd.Context(), u.Stdout(), global)
 				}
 				return env.SetSize(cmd.Context(), s, global)
 			}, msg.SizeFailed)

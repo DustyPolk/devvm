@@ -6,11 +6,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newExportCmd is devvm export [FILE].
-func newExportCmd() *cobra.Command {
+func newExportCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "export [FILE]",
 		Short: "Save this folder's VM's agent history to a .tar.gz",
@@ -19,7 +20,7 @@ func newExportCmd() *cobra.Command {
 			"VM is started for it. FILE is replaced only once the export is complete.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(func(env *vm.Env) error {
+			withEnv(u, func(env *vm.Env) error {
 				file := ""
 				if len(args) == 1 {
 					abs, err := filepath.Abs(args[0])

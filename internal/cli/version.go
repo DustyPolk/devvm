@@ -38,7 +38,7 @@ func addVersion(root *cobra.Command) {
 
 // newVersionCmd is devvm version, the same as devvm --version. Hidden:
 // --version is the one the help shows.
-func newVersionCmd() *cobra.Command {
+func newVersionCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:               "version",
 		Short:             "Print devvm's version",
@@ -46,7 +46,7 @@ func newVersionCmd() *cobra.Command {
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := ui.Stdout().Write([]byte(cmd.Root().Version + "\n"))
+			_, err := u.Stdout().Write([]byte(cmd.Root().Version + "\n"))
 			return err
 		},
 	}

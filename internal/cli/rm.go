@@ -4,11 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newRmCmd is devvm rm [-f].
-func newRmCmd() *cobra.Command {
+func newRmCmd(u *ui.UI) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "rm",
@@ -21,7 +22,7 @@ func newRmCmd() *cobra.Command {
 			"folder at this path is deleted only after you confirm, even with -f.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(func(env *vm.Env) error { return env.Rm(cmd.Context(), force) }, msg.RmFailed)
+			withEnv(u, func(env *vm.Env) error { return env.Rm(cmd.Context(), force) }, msg.RmFailed)
 			return nil
 		},
 	}
