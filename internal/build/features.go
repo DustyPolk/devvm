@@ -73,19 +73,28 @@ func (b *Builder) chosenFeatures() ([]string, error) {
 }
 
 // chooseFeatures asks which features base gets, the first time anything
-// is built: every feature is chosen to start with, and without a
-// terminal that's the choice. It's saved in the base-features file.
+// is built (PickFeatures).
 func (b *Builder) chooseFeatures() error {
 	if _, err := os.Stat(b.Dirs.BaseFeatures()); !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	names, shadowed := b.Features()
-	for _, file := range shadowed {
-		ui.Warn(msg.FeatureShadowed(strings.TrimSuffix(filepath.Base(file), ".sh"), file))
+	_, err := b.PickFeatures()
+	return err
+}
+
+// PickFeatures asks which features base gets, starting from those chosen
+// (every one until they're chosen); without a terminal, that's the
+// choice. It saves and prints the choice, and reports whether it changed
+// base's features.
+func (b *Builder) PickFeatures() (changed bool, err error) {
+	before, err := b.chosenFeatures()
+	if err != nil {
+		return false, err
 	}
+	names := b.features()
 	choices := make([]ui.Choice, len(names))
 	for i, n := range names {
-		choices[i] = ui.Choice{Name: n, Desc: description(b.FeatureScript(n)), On: true}
+		choices[i] = ui.Choice{Name: n, Desc: description(b.FeatureScript(n)), On: slices.Contains(before, n)}
 	}
 	var chosen []string
 	for _, c := range ui.Pick(msg.FeaturesHelp(), choices) {
@@ -93,15 +102,53 @@ func (b *Builder) chooseFeatures() error {
 			chosen = append(chosen, c.Name)
 		}
 	}
+	return b.saveFeatures(before, chosen)
+}
+
+// SetFeatures chooses these features for base, in the order features
+// run, and saves and prints the choice. It reports whether that changed
+// base's features. A name that isn't a feature is no_feature.
+func (b *Builder) SetFeatures(want []string) (changed bool, err error) {
+	before, err := b.chosenFeatures()
+	if err != nil {
+		return false, err
+	}
+	names := b.features()
+	for _, w := range want {
+		if !slices.Contains(names, w) {
+			return false, msg.NoFeature(w, strings.Join(names, " "))
+		}
+	}
+	var chosen []string
+	for _, n := range names {
+		if slices.Contains(want, n) {
+			chosen = append(chosen, n)
+		}
+	}
+	return b.saveFeatures(before, chosen)
+}
+
+// features is Features, warning about the user's features it ignores.
+func (b *Builder) features() []string {
+	names, shadowed := b.Features()
+	for _, file := range shadowed {
+		ui.Warn(msg.FeatureShadowed(strings.TrimSuffix(filepath.Base(file), ".sh"), file))
+	}
+	return names
+}
+
+// saveFeatures saves and prints the chosen features, reporting whether
+// they differ from those before.
+func (b *Builder) saveFeatures(before, chosen []string) (bool, error) {
 	if err := state.WriteBaseFeatures(b.Dirs, chosen); err != nil {
-		return err
+		return false, err
 	}
 	if len(chosen) == 0 {
 		ui.Info(msg.BaseFeaturesNone())
 	} else {
 		ui.Info(msg.BaseFeatures(strings.Join(chosen, " ")))
 	}
-	return nil
+	return !slices.Equal(before, chosen), nil
 }
 
 // description is what a feature's script says it adds: its second line,

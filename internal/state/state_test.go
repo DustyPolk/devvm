@@ -266,6 +266,31 @@ func TestImage(t *testing.T) {
 	}
 }
 
+// AnyImage counts only records: files named like a key.
+func TestAnyImage(t *testing.T) {
+	d := testDirs(t)
+	if found, err := AnyImage(d); err != nil || found {
+		t.Errorf("no images folder: %v, %v", found, err)
+	}
+	if err := SetFromDigest(d, "alpine:3", "sha256:aa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpRebuild(d, "base", ""); err != nil {
+		t.Fatal(err)
+	}
+	write(t, d.ImageState("0123456789zz"), "name=base\n")
+	write(t, d.ImageState("0123456789a"), "name=base\n")
+	if found, err := AnyImage(d); err != nil || found {
+		t.Errorf("no records: %v, %v", found, err)
+	}
+	if err := WriteImage(d, "0123456789ab", Image{Name: "base"}); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := AnyImage(d); err != nil || !found {
+		t.Errorf("a record: %v, %v", found, err)
+	}
+}
+
 func TestImageBad(t *testing.T) {
 	d := testDirs(t)
 	tests := []struct {

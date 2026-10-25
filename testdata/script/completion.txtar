@@ -39,6 +39,11 @@ stdout '^python$'
 # Flags: backend names, the ports keywords; never file names.
 exec devvm __complete --backend ''
 stdout '^lima$'
+exec devvm __complete setup --backend ''
+stdout '^lima$'
+exec devvm __complete setup --features fzf,
+stdout '^fzf,omb$'
+! stdout '^fzf,fzf$'
 exec devvm __complete --ports ''
 stdout '^all$'
 stdout '^none$'

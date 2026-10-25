@@ -53,7 +53,16 @@ Like `layers/base.sh`, each feature pins its downloads to a version and SHA-256 
 
 The first time devvm builds anything, it asks which features `base` gets, with every one chosen to start with: up and down (or `k` and `j`) move, space toggles, Enter confirms. Without a terminal, every feature is chosen. devvm prints the choice and saves it in `~/.config/devvm/base-features`, one name per line, in the order they run.
 
-To change the choice, edit that file: an empty file chooses none. The chosen features are part of `base`'s [key](images.md#caching), so a new choice makes `base` and the images built on it rebuild on next use. A name without a script is skipped, with a warning.
+To change the choice:
+
+```sh
+devvm setup                     # asks again, starting from the current choice
+devvm setup --features fzf,omb  # without asking; --features '' chooses none
+```
+
+Without a terminal, `devvm setup` keeps the choice. A name that isn't a feature is refused, and nothing changes. You can also edit `base-features` yourself: an empty file chooses none, and a name without a script is skipped, with a warning.
+
+The chosen features are part of `base`'s [key](images.md#caching), so a new choice makes `base` and the images built on it rebuild on next use; `devvm setup` says so. The old images are then stale: [`devvm gc`](images.md#cleaning-up) deletes them.
 
 ### Your own features
 

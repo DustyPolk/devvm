@@ -194,14 +194,19 @@ func BaseBuildTime() M {
 	return M{id: "base_build_time"}
 }
 
-// BaseFeatures is [base_features]: "base features: {{.features}}"
+// BaseFeatures is [base_features]: "base features: {{.features}} (devvm setup changes them)"
 func BaseFeatures(features string) M {
 	return M{id: "base_features", vals: []val{{"features", features}}}
 }
 
-// BaseFeaturesNone is [base_features_none]: "base features: none"
+// BaseFeaturesNone is [base_features_none]: "base features: none (devvm setup changes them)"
 func BaseFeaturesNone() M {
 	return M{id: "base_features_none"}
+}
+
+// BaseWillRebuild is [base_will_rebuild]: "base and the images built on it rebuild with these features when next used"
+func BaseWillRebuild() M {
+	return M{id: "base_will_rebuild"}
 }
 
 // BranchNamesInvalid is [branch_names_invalid]: "skipping the VM's branches with names git refuses: {{.refs}}"
@@ -377,6 +382,11 @@ func CreatingFromUbuntu(vm string) M {
 // CustomLayerRemove is [custom_layer_remove]: "{{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again"
 func CustomLayerRemove(layer string, vm string) M {
 	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
+}
+
+// DefaultBackend is [default_backend]: "new VMs get the {{.backend}} backend"
+func DefaultBackend(backend string) M {
+	return M{id: "default_backend", vals: []val{{"backend", backend}}}
 }
 
 // DeleteAnyway is [delete_anyway]: "Delete anyway?"
@@ -562,6 +572,11 @@ func GCImage(image string, key string) M {
 // GCImages is [gc_images]: "stale and unfinished images:"
 func GCImages() M {
 	return M{id: "gc_images"}
+}
+
+// GCOldHint is [gc_old_hint]: "devvm gc deletes the old ones"
+func GCOldHint() M {
+	return M{id: "gc_old_hint"}
 }
 
 // GCTools is [gc_tools]: "{{.count}} unused tool images ({{.size}})"
@@ -1054,6 +1069,11 @@ func NoDigest(from string) M {
 	return M{id: "no_digest", vals: []val{{"from", from}}}
 }
 
+// NoFeature is [no_feature]: "there's no {{.feature}} feature: choose from {{.features}}"
+func NoFeature(feature string, features string) M {
+	return M{id: "no_feature", vals: []val{{"feature", feature}, {"features", features}}}
+}
+
 // NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved: devvm secret set github"
 func NoGithubToken(vm string) M {
 	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
@@ -1432,6 +1452,11 @@ func SecretWithImage(vm string) M {
 // SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
 func SetidFiles(files string) M {
 	return M{id: "setid_files", vals: []val{{"files", files}}}
+}
+
+// SetupFailed is [setup_failed]: "couldn't save the settings: {{.reason}}"
+func SetupFailed(reason string) M {
+	return M{id: "setup_failed", vals: []val{{"reason", reason}}}
 }
 
 // ShareLockHeld is [share_lock_held]: "{{.dir}}/.lock is held: if no other devvm is running, remove it"
@@ -1821,6 +1846,7 @@ var specs = map[string]spec{
 	"base_build_time":             {},
 	"base_features":               {fields: []string{"features"}},
 	"base_features_none":          {},
+	"base_will_rebuild":           {},
 	"branch_names_invalid":        {fields: []string{"refs"}},
 	"build_failed":                {fields: []string{"image", "reason"}},
 	"building_image":              {fields: []string{"image", "key"}},
@@ -1856,6 +1882,7 @@ var specs = map[string]spec{
 	"creating_from":               {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":        {fields: []string{"vm"}},
 	"custom_layer_remove":         {fields: []string{"layer", "vm"}},
+	"default_backend":             {fields: []string{"backend"}},
 	"delete_anyway":               {},
 	"delete_failed":               {fields: []string{"vm"}},
 	"delete_other_folder_vm":      {fields: []string{"vm", "was"}},
@@ -1893,6 +1920,7 @@ var specs = map[string]spec{
 	"gc_failed":                   {fields: []string{"reason"}},
 	"gc_image":                    {fields: []string{"image", "key"}},
 	"gc_images":                   {},
+	"gc_old_hint":                 {},
 	"gc_tools":                    {plural: true, fields: []string{"count", "size"}},
 	"gc_unfinished":               {fields: []string{"key"}},
 	"git_appeared":                {},
@@ -1991,6 +2019,7 @@ var specs = map[string]spec{
 	"newer_tools":                 {fields: []string{"tools"}},
 	"no_claude_token":             {fields: []string{"vm"}},
 	"no_digest":                   {fields: []string{"from"}},
+	"no_feature":                  {fields: []string{"feature", "features"}},
 	"no_github_token":             {fields: []string{"vm"}},
 	"no_image_for":                {fields: []string{"agents", "dir", "envs"}},
 	"no_image_named":              {fields: []string{"image"}},
@@ -2067,6 +2096,7 @@ var specs = map[string]spec{
 	"secret_used":                 {fields: []string{"secret", "vm"}},
 	"secret_with_image":           {fields: []string{"vm"}},
 	"setid_files":                 {fields: []string{"files"}},
+	"setup_failed":                {fields: []string{"reason"}},
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},
 	"size_defaults":               {fields: []string{"size"}},

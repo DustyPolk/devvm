@@ -1,6 +1,7 @@
 package build
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -105,6 +107,71 @@ func TestChooseFeatures(t *testing.T) {
 	}
 	if got, err := state.ReadBaseFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"omb"}) {
 		t.Errorf("a saved choice changed: %q, %v", got, err)
+	}
+}
+
+// PickFeatures starts from the current choice (without a terminal, it's
+// kept), dropping names without a script; every feature until there's one.
+func TestPickFeatures(t *testing.T) {
+	b := featureBuilder(t)
+	for _, tc := range []struct {
+		name    string
+		saved   []string // nil: no file
+		want    []string
+		changed bool
+	}{
+		{"unchosen", nil, []string{"fzf", "omb", "mine"}, false},
+		{"none", []string{}, nil, false},
+		{"kept", []string{"mine", "fzf"}, []string{"fzf", "mine"}, true},
+		{"in order", []string{"fzf", "mine"}, []string{"fzf", "mine"}, false},
+		{"no script", []string{"omb", "nope"}, []string{"omb"}, true},
+	} {
+		if tc.saved == nil {
+			_ = os.Remove(b.Dirs.BaseFeatures())
+		} else if err := state.WriteBaseFeatures(b.Dirs, tc.saved); err != nil {
+			t.Fatal(err)
+		}
+		changed, err := b.PickFeatures()
+		got, rerr := state.ReadBaseFeatures(b.Dirs)
+		if err != nil || rerr != nil || !slices.Equal(got, tc.want) || changed != tc.changed {
+			t.Errorf("%s: saved %q, changed %v (%v, %v); want %q, %v", tc.name, got, changed, err, rerr, tc.want, tc.changed)
+		}
+	}
+}
+
+// SetFeatures saves the features named, in the order features run, and
+// refuses a name that isn't one.
+func TestSetFeatures(t *testing.T) {
+	b := featureBuilder(t)
+	if err := state.WriteBaseFeatures(b.Dirs, []string{"omb"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		set      []string
+		want     []string
+		changed  bool
+		refusing string
+	}{
+		{"same", []string{"omb"}, []string{"omb"}, false, ""},
+		{"ordered", []string{"mine", "fzf", "mine"}, []string{"fzf", "mine"}, true, ""},
+		{"none", nil, nil, true, ""},
+		{"unknown", []string{"fzf", "nope"}, nil, false, "no_feature"},
+	} {
+		changed, err := b.SetFeatures(tc.set)
+		if tc.refusing != "" {
+			if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != tc.refusing {
+				t.Errorf("%s: err %v, want %s", tc.name, err, tc.refusing)
+			}
+			continue
+		}
+		got, rerr := state.ReadBaseFeatures(b.Dirs)
+		if err != nil || rerr != nil || !slices.Equal(got, tc.want) || changed != tc.changed {
+			t.Errorf("%s: saved %q, changed %v (%v, %v); want %q, %v", tc.name, got, changed, err, rerr, tc.want, tc.changed)
+		}
+	}
+	if got, _ := state.ReadBaseFeatures(b.Dirs); len(got) != 0 {
+		t.Errorf("a refused choice saved %q", got)
 	}
 }
 

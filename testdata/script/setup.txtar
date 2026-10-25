@@ -1,0 +1,72 @@
+# setup: base's features (asked in a terminal; without one, kept, or
+# every one until they're chosen; --features without asking) and the
+# default backend. A new choice says base rebuilds, and once images are
+# built that devvm gc deletes the old ones.
+env DEVVM_MESSAGES=names
+env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
+
+# Kept: none chosen.
+exec devvm setup
+stdout '^==> base_features_none$'
+! stdout base_will_rebuild
+! stderr .
+! stub_calls
+
+# Unchosen: every feature.
+rm $CHOSEN
+exec devvm setup
+stdout '^==> base_features features=cli-tools fzf omb$'
+! stdout base_will_rebuild
+
+# --features, in the order features run; nothing built yet.
+exec devvm setup --features omb,fzf
+stdout '^==> base_features features=fzf omb$'
+stdout '^==> base_will_rebuild$'
+! stdout gc_old_hint
+cmp $CHOSEN fzf-omb
+exec devvm setup --features fzf,omb
+! stdout base_will_rebuild
+
+# Built: a new choice rebuilds base, and gc deletes the old one.
+exec devvm build base
+exec devvm setup --features ''
+stdout '^==> base_features_none$'
+stdout '^==> base_will_rebuild$'
+stdout '^gc_old_hint$'
+exec devvm build base
+stdout '^==> building_image image=base key='
+exec devvm gc
+stdout '^gc_image image=base key='
+
+# A name that isn't a feature changes nothing.
+! exec devvm setup --features fzf,nope
+stderr '^devvm: no_feature feature=nope features=cli-tools fzf omb$'
+! stdout base_features
+exec devvm setup
+stdout '^==> base_features_none$'
+
+# The default backend: only it, unless --features is given too.
+exec devvm setup --backend lima
+stdout '^==> default_backend backend=lima$'
+! stdout base_features
+cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
+exec devvm setup --backend lima --features fzf
+stdout '^==> default_backend backend=lima$'
+stdout '^==> base_features features=fzf$'
+! exec devvm setup --backend nope
+stderr '^devvm: backend_unknown backends=lima name=nope$'
+cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
+
+# An unreadable choice stays for you to fix.
+cp bad $CHOSEN
+! exec devvm setup
+stderr '^devvm: setup_failed reason=.*base-features'
+cmp $CHOSEN bad
+
+-- fzf-omb --
+fzf
+omb
+-- lima.txt --
+lima
+-- bad --
+Not_A_Feature

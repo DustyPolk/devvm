@@ -53,6 +53,9 @@ func addCompletions(root *cobra.Command) {
 			c.ValidArgsFunction = completeImage
 		case "remove":
 			c.ValidArgsFunction = completeTools
+		case "setup":
+			_ = c.RegisterFlagCompletionFunc("backend", completeBackend)
+			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
 		}
 	}
 	root.ValidArgsFunction = completeImage
@@ -83,6 +86,21 @@ func completeTools(_ *cobra.Command, args []string, toComplete string) ([]cobra.
 	return joined(toComplete, slices.Concat(image.Toolchains, image.Agents)), cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeFeatures completes setup's --features: base's features, after
+// the ones already given.
+func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	dirs, err := paths.FromEnv()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	root, err := paths.Root()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	features, _ := (&build.Builder{Dirs: dirs, Root: root}).Features()
+	return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeBackend completes --backend with the backends' names.
 func completeBackend(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	dirs, err := paths.FromEnv()
@@ -100,8 +118,13 @@ func completeBackend(*cobra.Command, []string, string) ([]cobra.Completion, cobr
 // names it starts, leaving out the parts already given: node+c gives
 // node+claude and node+codex.
 func joined(toComplete string, names []string) []cobra.Completion {
-	i := strings.LastIndex(toComplete, "+") + 1
-	given := strings.Split(toComplete[:i], "+")
+	return joinedBy("+", toComplete, names)
+}
+
+// joinedBy is joined for parts joined by sep.
+func joinedBy(sep, toComplete string, names []string) []cobra.Completion {
+	i := strings.LastIndex(toComplete, sep) + 1
+	given := strings.Split(toComplete[:i], sep)
 	var out []cobra.Completion
 	for _, n := range names {
 		if strings.HasPrefix(n, toComplete[i:]) && !slices.Contains(given, n) {

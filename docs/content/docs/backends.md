@@ -53,7 +53,7 @@ A project VM's name is `devvm-<folder>-<hash>`: up to 20 characters of the folde
 A new VM gets the first of:
 
 1. `--backend`.
-2. The default in `~/.config/devvm/backend`: one line, the backend's name.
+2. The default, which `devvm setup --backend NAME` sets. It's kept in `~/.config/devvm/backend`: one line, the backend's name.
 3. `lima`.
 
 A VM's state records its backend, and the VM stays on it: `--backend` on an existing VM is ignored. When the backend file, or a VM's state, names a backend devvm doesn't have, devvm stops and lists the ones it has.

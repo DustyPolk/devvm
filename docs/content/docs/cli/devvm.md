@@ -53,6 +53,7 @@ devvm [IMAGE] [flags]
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm setup](devvm_setup.md): Choose base's features and the default backend
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"os"
 	"strings"
 	"time"
 
@@ -76,6 +77,24 @@ func RemoveImage(d paths.Dirs, key string) error {
 		return err
 	}
 	return removeFile(d.ImageState(key))
+}
+
+// AnyImage reports whether any image has a record: a file in the images
+// folder named like a key, 12 hex digits.
+func AnyImage(d paths.Dirs) (bool, error) {
+	entries, err := os.ReadDir(d.Images())
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	for _, e := range entries {
+		if _, err := hex.DecodeString(e.Name()); err == nil && len(e.Name()) == 12 && e.Type().IsRegular() &&
+			e.Name() == strings.ToLower(e.Name()) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // BumpRebuild changes an image's rebuild counter, which its key hashes, so
