@@ -70,11 +70,11 @@ func (t *Tools) Built(file string) bool {
 }
 
 // Build builds the tool images these files name that the share lacks, in
-// a throwaway VM made from base's image (key base) on b. The VM runs
-// upstream installers, so it never sees the share: it writes into a folder
-// of its own, and each image is checked to be a plain file, moved into the
-// share and its hash recorded.
-func (t *Tools) Build(ctx context.Context, b backend.Backend, base, libc string, files []string) error {
+// a throwaway VM made from base's image (key base) on b, in tg's format.
+// The VM runs upstream installers, so it never sees the share: it writes
+// into a folder of its own, and each image is checked to be a plain file,
+// moved into the share and its hash recorded.
+func (t *Tools) Build(ctx context.Context, b backend.Backend, base string, tg Target, files []string) error {
 	var todo []string
 	for _, f := range files {
 		if !t.Built(f) {
@@ -108,12 +108,12 @@ func (t *Tools) Build(ctx context.Context, b backend.Backend, base, libc string,
 		}
 		// build.sh installs the lock's version: the lock may have moved
 		// on while this one waited.
-		if cur, err := t.File(lock, tool, libc); err != nil {
+		if cur, err := t.File(lock, tool, tg); err != nil {
 			return err
 		} else if cur != f {
 			return msg.ToolsChanged()
 		}
-		if t.noDownload(lock, tool, libc) {
+		if t.noDownload(lock, tool, tg.Libc) {
 			return msg.ToolUnbuilt(tool, v)
 		}
 		build = append(build, f)
@@ -123,12 +123,12 @@ func (t *Tools) Build(ctx context.Context, b backend.Backend, base, libc string,
 	}
 	t.Info(msg.BuildingTools(label(build)))
 	ui.LogNote()
-	return t.batch(ctx, b, base, lock, build)
+	return t.batch(ctx, b, base, tg.Format, lock, build)
 }
 
 // batch builds these tool images in one throwaway VM with a folder of its
 // own, then moves them into the share.
-func (t *Tools) batch(ctx context.Context, b backend.Backend, base string, lock Lock, files []string) error {
+func (t *Tools) batch(ctx context.Context, b backend.Backend, base, format string, lock Lock, files []string) error {
 	out, err := os.MkdirTemp(t.Dirs.Data, "tools-build.")
 	if err != nil {
 		return err
@@ -160,7 +160,7 @@ func (t *Tools) batch(ctx context.Context, b backend.Backend, base string, lock 
 		args = append(args, tools[i], versions[i], f)
 	}
 	spec := backend.ToolsSpec{
-		Base: base, Out: out, OutAt: ShareAt, Args: args, Net: backend.NetInternet,
+		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: format, Net: backend.NetInternet,
 		Script: backend.Script{Name: "build.sh", Path: filepath.Join(t.Root, "tools", "build.sh")},
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {

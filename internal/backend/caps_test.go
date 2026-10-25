@@ -81,7 +81,7 @@ func TestEveryFeatureIsListed(t *testing.T) {
 		}
 		seen[f] = true
 	}
-	if len(seen) != 14 {
+	if len(seen) != 16 {
 		t.Errorf("%d features; a new one goes in Features and on the backends page", len(seen))
 	}
 }
@@ -103,7 +103,8 @@ func TestFeaturesNeeded(t *testing.T) {
 			Name: "v", Project: "/p", AgentDirs: []string{"/h/.claude"}, Tools: "/t", ToolsAt: "/opt/devvm",
 			AgentForwarding: true, Size: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 60}, Ports: backend.Ports{All: true},
 		}.Features(), f(backend.FeatureClone, backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare,
-			backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk, backend.FeaturePorts)},
+			backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk, backend.FeaturePorts,
+			backend.FeaturePortsAll)},
 		{"some ports", backend.Ports{Ranges: []backend.PortRange{{5173, 5173}}}.Features(), f(backend.FeaturePorts)},
 		{"no ports", backend.Ports{}.Features(), nil},
 		{"direct", backend.Confinement{Net: backend.NetDirect}.Features(), nil},

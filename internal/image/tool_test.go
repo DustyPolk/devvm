@@ -56,6 +56,7 @@ func TestToolFile(t *testing.T) {
 		{"tools/build.sh", toolRoot("#!/bin/bash\n# edit\n"), func(*Tool) {}},
 		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc = "musl" }},
 		{"the version", root, func(t *Tool) { t.Version = "24.22.0" }},
+		{"the format (smolvm's)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

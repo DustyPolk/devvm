@@ -117,9 +117,9 @@ func (e *Env) Update(ctx context.Context, o Options) error {
 	}
 	vm, st := t.f.Name, t.st
 	builder := e.builder(t.b, st.Get(state.KeyFrom))
-	libc := st.Get(KeyLibc)
-	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, libc, files) }
-	files, changed, err := e.Tools.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), libc)
+	tg := toolTarget(t.b, st)
+	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, tg, files) }
+	files, changed, err := e.Tools.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), tg)
 	if err != nil {
 		return err
 	}
@@ -497,6 +497,11 @@ func (e *Env) SetSSHAgent(ctx context.Context, mode string) error {
 	in, err := b.Inspect(ctx, vm)
 	if err != nil {
 		return err
+	}
+	if sshagent.Forwards(mode) != in.AgentForwarding {
+		if err := backend.Require(b, vm, backend.FeatureAgentToggle); err != nil {
+			return err
+		}
 	}
 	if err := st.Set(sshagent.Key, mode); err != nil {
 		return err

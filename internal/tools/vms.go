@@ -46,8 +46,8 @@ func Remove(vm, imageName string, files []string, names string) (string, []strin
 
 // Newer returns the tools of an image name at the lock's versions that a
 // VM with these tool files doesn't have, as "claude 2.1.295".
-func (t *Tools) Newer(ctx context.Context, imageName string, have []string, libc string) ([]string, error) {
-	files, err := t.Files(ctx, image.ToolsOf(imageName), libc)
+func (t *Tools) Newer(ctx context.Context, imageName string, have []string, tg Target) ([]string, error) {
+	files, err := t.Files(ctx, image.ToolsOf(imageName), tg)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +63,8 @@ func (t *Tools) Newer(ctx context.Context, imageName string, have []string, libc
 // WarnNewer warns when there are newer shared tools than a VM's: moving
 // to them is cheap, as nothing in the VM's disk changes. It never changes
 // the VM.
-func (t *Tools) WarnNewer(ctx context.Context, imageName string, have []string, libc string) error {
-	newer, err := t.Newer(ctx, imageName, have, libc)
+func (t *Tools) WarnNewer(ctx context.Context, imageName string, have []string, tg Target) error {
+	newer, err := t.Newer(ctx, imageName, have, tg)
 	if err != nil {
 		return err
 	}
@@ -78,11 +78,11 @@ func (t *Tools) WarnNewer(ctx context.Context, imageName string, have []string, 
 // checks upstream first (unless there's no lock yet: resolving it is
 // checking), has build build what the share lacks of them, and returns the
 // VM's new tool files. changed is false when they were the newest already.
-func (t *Tools) Update(ctx context.Context, build func(context.Context, []string) error, vm, imageName string, have []string, libc string) (files []string, changed bool, err error) {
+func (t *Tools) Update(ctx context.Context, build func(context.Context, []string) error, vm, imageName string, have []string, tg Target) (files []string, changed bool, err error) {
 	if _, err := os.Stat(t.Dirs.ToolLock()); err == nil {
 		t.Check(ctx)
 	}
-	if files, err = t.Files(ctx, image.ToolsOf(imageName), libc); err != nil {
+	if files, err = t.Files(ctx, image.ToolsOf(imageName), tg); err != nil {
 		return nil, false, err
 	}
 	if slices.Equal(files, have) {

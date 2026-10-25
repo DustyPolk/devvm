@@ -52,10 +52,10 @@ func (t *Tools) ReadLock() (Lock, error) {
 // version first; a name with none of its tools in the share as not
 // installed. inUse counts the VMs that list each image file. The lock is
 // read as it is (List never goes online): an image at its version for
-// libc is current, and when the share has some of a name's tools but not
-// the lock's version of one, that version is listed as not built. Without
-// a lock, an image no VM lists has no state.
-func (t *Tools) List(libc string, inUse map[string]int) ([]Listed, error) {
+// any of tgs is current, and when the share has some of a name's tools but
+// not the lock's version of one for the first, that version is listed as
+// not built. Without a lock, an image no VM lists has no state.
+func (t *Tools) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 	entries, err := os.ReadDir(t.Dirs.Tools())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
@@ -82,9 +82,19 @@ func (t *Tools) List(libc string, inUse map[string]int) ([]Listed, error) {
 			continue
 		}
 		for _, tool := range image.GroupTools(name) {
+			// A tool the lock lacks has none.
+			var currents []string
 			current := ""
-			if lock != nil {
-				current, _ = t.File(lock, tool, libc) // a tool the lock lacks has none
+			for i, tg := range tgs {
+				if lock == nil {
+					break
+				}
+				if f, _ := t.File(lock, tool, tg); f != "" {
+					currents = append(currents, f)
+					if i == 0 {
+						current = f
+					}
+				}
 			}
 			if current != "" && !slices.Contains(files[tool], current) {
 				rows = append(rows, Listed{Name: name, Tool: tool, Version: lock.Version(tool), State: StateNotBuilt})
@@ -103,7 +113,7 @@ func (t *Tools) List(libc string, inUse map[string]int) ([]Listed, error) {
 				}
 				l := Listed{Name: name, Tool: tool, Version: v, File: f, Built: true, Size: size, VMs: inUse[f]}
 				switch {
-				case f == current:
+				case slices.Contains(currents, f):
 					l.State = StateCurrent
 				case l.VMs > 0:
 					l.State = StateInUse

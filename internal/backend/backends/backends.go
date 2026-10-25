@@ -5,11 +5,12 @@ package backends
 import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
+	"github.com/w3cj/devvm/internal/backend/smolvm"
 	"github.com/w3cj/devvm/internal/paths"
 )
 
-// Registry returns the registry of devvm's backends, on devvm's folders.
-// lima is the default (backend.Default).
+// Registry returns the registry of devvm's backends, on devvm's folders:
+// lima, the default (backend.Default), and smolvm (experimental).
 func Registry(d paths.Dirs) (*backend.Registry, error) {
-	return backend.NewRegistry(lima.New(d))
+	return backend.NewRegistry(lima.New(d), smolvm.New(d))
 }

@@ -3,7 +3,7 @@ title: Backends
 weight: 30
 ---
 
-A backend is what runs devvm's VMs and builds their images. devvm decides what goes into a VM (its image, its folders, its size, its network policy) and the backend runs it. [Lima](lima.md) is the backend today. smolvm is next, experimental, and Docker is planned.
+A backend is what runs devvm's VMs and builds their images. devvm decides what goes into a VM (its image, its folders, its size, its network policy) and the backend runs it. [Lima](lima.md) is the default backend; [smolvm](smolvm.md) is experimental, and Docker is planned.
 
 Each backend has its own images: an image's key includes its backend, so one backend never uses another's.
 
@@ -17,21 +17,23 @@ Each backend declares how it has each feature:
 
 `devvm doctor` lists them for every backend devvm has, an emulation whose review hasn't passed as `unreviewed`.
 
-The smolvm column is from tests of smolvm 1.32.2 on an arm64 Mac, before devvm has the backend; Linux hosts are untested.
+The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Its emulations are planned: until each is reviewed, smolvm has none of those features.
 
 | Feature | What it is | Lima | smolvm (experimental) | Docker (planned) |
 | --- | --- | --- | --- | --- |
-| `build-image` | build images from the layer and feature scripts | native | native: a machine from Ubuntu's container image runs the scripts, then is packed (`pack create --from-vm`); each image is a full pack, 420 MB for `base` | native |
+| `build-image` | build images from the layer and feature scripts | native | native: a machine from Ubuntu's container image runs the scripts, then is packed (`pack create --from-vm`); each image is a full pack, about 450 MB for `base` ([details](smolvm.md#building-images)) | native |
 | `build-confinement` | builds reach the internet but not the host's loopback, or nothing | native: Seatbelt (macOS); on Linux QEMU `restrict=on` for no network, while a build with the internet reaches the host's loopback ([details](lima.md#confinement)) | native: its default network refuses the host's loopback; no network for nothing | to be decided |
-| `from` | `base` from a container image (`--from`) | native: converted to a disk | native: boots container images, by digest | native |
-| `clone` | a project VM from an image | native: APFS copy-on-write (macOS), qcow2 overlay (Linux) ([details](lima.md#clones-and-overlays)) | native: a machine from the image's pack, copy-on-write (1 MiB new) | native |
+| `from` | `base` from a container image (`--from`) | native: converted to a disk | native: boots registry images, by digest | native |
+| `clone` | a project VM from an image | native: APFS copy-on-write (macOS), qcow2 overlay (Linux) ([details](lima.md#clones-and-overlays)) | native: a machine from the image's pack ([details](smolvm.md#its-machines)) | native |
 | `project-mount` | the project folder, read-write | native: virtiofs (macOS), 9p (Linux) | native: virtiofs; files the VM makes are the user's on the host, mode 0600 | native |
 | `agent-folders` | agents' host folders, read-only | native: read-only mounts, enforced by the host | native: read-only mounts, enforced by the host | native |
 | `tools-share` | the shared tools, read-only | native: a read-only mount, enforced by the host | native: a read-only mount, enforced by the host; tool images uncompressed, as its kernel's EROFS has no compression | native |
-| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` and a `guestfwd` to the proxy (Linux) ([details](lima.md#confinement)) | emulated: an allow list of the host, and devvm's proxy deciding each connection; DNS stays open unless closed ([details](design.md#smolvm)) | emulated |
-| `ssh` | ssh for editors | native: Lima's ssh forward and config | emulated: sshd, started by devvm after each start, on a forwarded port | emulated |
-| `ports` | the VM's ports forwarded to the host's loopback | native: port forward rules ([details](lima.md#ports)) | native for servers listening on all addresses, at most 64 mappings; emulated for all ports and servers on the VM's loopback | native (recreating the container) or emulated |
-| `agent-forwarding` | ssh-agent forwarding | native | native, chosen when the VM is made; emulated to turn it on or off later | native |
+| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` and a `guestfwd` to the proxy (Linux) ([details](lima.md#confinement)) | none; planned emulation: an allow list of the host, and devvm's proxy deciding each connection ([details](design.md#smolvm)) | emulated |
+| `ssh` | ssh for editors | native: Lima's ssh forward and config | none; planned emulation: sshd, started by devvm after each start, on a forwarded port | emulated |
+| `ports` | the listed ports forwarded to the host's loopback | native: port forward rules ([details](lima.md#ports)) | native for servers listening on all addresses, at most 64 ports ([details](smolvm.md#what-devvm-sets-on-a-vm)) | native (recreating the container) |
+| `ports-all` | every port forwarded, servers on the VM's loopback included | native | none; planned emulation | emulated |
+| `agent-forwarding` | ssh-agent forwarding, chosen when the VM is made | native | native | native |
+| `agent-toggle` | turning a VM's ssh-agent forwarding on or off later | native | none; planned emulation | native |
 | `cpus` | a VM's CPUs | native | native | native |
 | `memory` | a VM's memory | native | native | native |
 | `disk` | a VM's disk size | native: grows, never shrinks | native: grows, never shrinks | none |

@@ -1,0 +1,535 @@
+// Package smolvm is the smolvm backend (experimental): each VM is a smolvm
+// machine, a microVM running its image as a container, with no init
+// system. Images are packs (smolvm pack create --from-vm) in devvm's data
+// folder, and a project VM is a machine made from its image's pack.
+//
+// On macOS smolvm keeps every machine in the user's own state, so devvm's
+// carry a label naming devvm's data folder, and devvm never stops, changes
+// or deletes a machine without it. On Linux smolvm's state is devvm's own
+// (--state-dir) as well.
+//
+// What smolvm lacks is refused (Caps): network policy, ssh for editors,
+// forwarding every port, and turning agent forwarding on or off later.
+package smolvm
+
+import (
+	"context"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"net"
+	"net/url"
+	"os"
+	"os/user"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
+
+	"golang.org/x/term"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ui"
+)
+
+// Name is the backend's name.
+const Name = "smolvm"
+
+// ImagePrefix starts the name of an image's build machine:
+// devvm-img-<key>. Once built, the image is its pack.
+const ImagePrefix = "devvm-img-"
+
+// LabelKey is the label every machine devvm makes carries, its value
+// devvm's data folder.
+const LabelKey = "devvm.data"
+
+// Gateway is the host as a machine reaches it.
+const Gateway = "100.96.0.1"
+
+// maxPorts is the most ports a machine forwards.
+const maxPorts = 64
+
+// devvm's own scripts, run as root in machines. Those that go into base
+// are in its key (KeyFiles).
+var (
+	//go:embed prepare.sh
+	prepareScript []byte
+	//go:embed shims.sh
+	shimsScript []byte
+	//go:embed services.sh
+	servicesScript []byte
+	//go:embed plain.sh
+	plainScript []byte
+)
+
+// Smolvm is the backend. New sets every field; tests change them.
+type Smolvm struct {
+	Dirs   paths.Dirs
+	Runner Runner
+	// OS and Arch are the host's, as Go names them.
+	OS, Arch string
+	// Root holds devvm's own files: base.yaml (base's CPUs, memory and
+	// disk).
+	Root string
+	// Getenv reads the environment (SSH_AUTH_SOCK).
+	Getenv func(string) string
+	// User is the host's user, whose name and uid the VM's user gets.
+	User func() (*user.User, error)
+	// Memory returns the host's memory in bytes.
+	Memory func() (uint64, error)
+	// Digest looks up a container image's digest (sha256:…) in its
+	// registry: Ubuntu's, for base.
+	Digest func(ctx context.Context, ref string) (string, error)
+	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
+	KVM string
+	// Terminal reports whether devvm's input is a terminal (a shell gets
+	// one then).
+	Terminal func() bool
+	// Info prints what the backend is doing (ui.Info).
+	Info func(msg.M)
+	// Warn prints a warning.
+	Warn func(msg.M)
+}
+
+var _ backend.Backend = (*Smolvm)(nil)
+
+// New returns the smolvm backend for devvm's folders.
+func New(d paths.Dirs) *Smolvm {
+	self, err := os.Executable()
+	if err == nil {
+		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
+			self = r
+		}
+	}
+	kvm := os.Getenv("DEVVM_KVM")
+	if kvm == "" {
+		kvm = "/dev/kvm"
+	}
+	return &Smolvm{
+		Dirs: d, Runner: uiRunner{}, OS: runtime.GOOS, Arch: runtime.GOARCH, Root: filepath.Dir(self),
+		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
+		Digest: from.NewRegistry().Digest, KVM: kvm,
+		Terminal: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
+		Info:     ui.Info, Warn: ui.Warn,
+	}
+}
+
+// Name returns smolvm.
+func (s *Smolvm) Name() string { return Name }
+
+// Caps is what smolvm has natively. The rest waits for emulations, each
+// refused until its review passes: egress through devvm's proxy, ssh for
+// editors, every port forwarded, and agent forwarding turned on or off
+// once a VM is made.
+func (s *Smolvm) Caps() backend.Caps {
+	caps := backend.Caps{}
+	for _, f := range []backend.Feature{
+		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
+		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeaturePorts,
+		backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk,
+	} {
+		caps[f] = backend.Native
+	}
+	return caps
+}
+
+// NameMax is 0: smolvm keeps a machine's sockets in a folder named by a
+// hash, so names have no limit devvm meets.
+func (s *Smolvm) NameMax() int { return 0 }
+
+// KeyFiles are devvm's scripts for smolvm that go into base.
+func (s *Smolvm) KeyFiles() map[string][]byte {
+	return map[string][]byte{"smolvm/prepare.sh": prepareScript, "smolvm/shims.sh": shimsScript}
+}
+
+// ToolFormat is uncompressed EROFS (plain.sh), as smolvm's kernel mounts
+// no other: its name changes with the script.
+func (s *Smolvm) ToolFormat() string {
+	sum := sha256.Sum256(plainScript)
+	return "plain-" + hex.EncodeToString(sum[:])[:12]
+}
+
+// record is what devvm set on one of its machines, which smolvm machine ls
+// doesn't show: kept in devvm's data folder (paths.Dirs.SmolvmVM).
+type record struct {
+	Image      string            `json:"image"` // its image's key
+	Project    string            `json:"project,omitempty"`
+	AgentDirs  []string          `json:"agent_dirs,omitempty"`
+	Tools      string            `json:"tools,omitempty"`
+	ToolsAt    string            `json:"tools_at,omitempty"`
+	Forwarding bool              `json:"forwarding,omitempty"`
+	Ports      []string          `json:"ports,omitempty"` // as -p has them: 5173:5173, 8000-8002:8000-8002
+	Env        map[string]string `json:"env,omitempty"`
+}
+
+func (s *Smolvm) readRecord(vm string) (record, error) {
+	var r record
+	b, err := os.ReadFile(s.Dirs.SmolvmVM(vm))
+	if errors.Is(err, fs.ErrNotExist) {
+		return r, nil
+	} else if err != nil {
+		return r, err
+	}
+	return r, json.Unmarshal(b, &r)
+}
+
+func (s *Smolvm) writeRecord(vm string, r record) error {
+	if err := os.MkdirAll(filepath.Dir(s.Dirs.SmolvmVM(vm)), 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return err
+	}
+	return state.WriteFile(s.Dirs.SmolvmVM(vm), append(b, '\n'))
+}
+
+// keyPattern is an image key.
+var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
+
+// imageKey returns the key of an image's build machine, and whether it is
+// one.
+func imageKey(name string) (string, bool) {
+	key, ok := strings.CutPrefix(name, ImagePrefix)
+	return key, ok && keyPattern.MatchString(key)
+}
+
+// pack is an image's pack: smolvm's stub, beside its .smolmachine.
+func (s *Smolvm) pack(key string) string { return filepath.Join(s.Dirs.SmolvmImage(key), "image") }
+
+func (s *Smolvm) packFile(key string) string { return s.pack(key) + ".smolmachine" }
+
+// stateDir is smolvm's own state on Linux hosts.
+func (s *Smolvm) stateDir() string { return filepath.Join(s.Dirs.Smolvm(), "state") }
+
+// List lists devvm's machines, without images' and the tools build's.
+func (s *Smolvm) List(ctx context.Context) ([]backend.Instance, error) {
+	ms, err := s.ours(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []backend.Instance
+	for _, m := range ms {
+		if _, ok := imageKey(m.Name); ok || m.Name == ToolsVM {
+			continue
+		}
+		in, err := s.instance(m)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, in)
+	}
+	return out, nil
+}
+
+// Inspect returns one of devvm's machines.
+func (s *Smolvm) Inspect(ctx context.Context, vm string) (backend.Instance, error) {
+	m, err := s.inspect(ctx, vm)
+	if errors.Is(err, errForeign) {
+		return backend.Instance{}, fmt.Errorf("%s: %w", vm, backend.ErrNotFound)
+	} else if err != nil {
+		return backend.Instance{}, err
+	}
+	return s.instance(m)
+}
+
+func (s *Smolvm) instance(m machine) (backend.Instance, error) {
+	r, err := s.readRecord(m.Name)
+	if err != nil {
+		return backend.Instance{}, err
+	}
+	return backend.Instance{
+		Name: m.Name, Status: m.status(), Size: m.size(),
+		AgentDirs: slices.Clone(r.AgentDirs), AgentForwarding: r.Forwarding,
+	}, nil
+}
+
+// Stop stops one of devvm's machines; a stopped one is left as it is.
+func (s *Smolvm) Stop(ctx context.Context, vm string) error {
+	m, err := s.inspect(ctx, vm)
+	if err != nil {
+		return notFound(vm, err)
+	}
+	if m.status() == backend.StatusStopped {
+		return nil
+	}
+	return s.stop(ctx, vm)
+}
+
+// Delete deletes one of devvm's machines, stopping it first.
+func (s *Smolvm) Delete(ctx context.Context, vm string) error {
+	if _, err := s.inspect(ctx, vm); err != nil {
+		return notFound(vm, err)
+	}
+	return s.remove(ctx, vm)
+}
+
+// notFound makes a machine that isn't devvm's one it doesn't have.
+func notFound(vm string, err error) error {
+	if errors.Is(err, errForeign) {
+		return fmt.Errorf("%s: %w", vm, backend.ErrNotFound)
+	}
+	return err
+}
+
+// user is the VM's user: the host's name and uid.
+func (s *Smolvm) user() (name, uid string, err error) {
+	u, err := s.User()
+	if err != nil {
+		return "", "", err
+	}
+	return u.Username, u.Uid, nil
+}
+
+func home(name string) string { return "/home/" + name + ".guest" }
+
+// loginEnv is what runs a command as the VM's user would get from logging
+// in: smolvm's exec sets HOME alone, and reads no /etc/environment, which
+// devvm's scripts write to (BASH_ENV).
+const loginEnv = `set -a; [ -r /etc/environment ] && . /etc/environment; set +a; exec "$@"`
+
+// userArgs are machine exec's arguments that run argv as the VM's user, in
+// dir.
+func (s *Smolvm) userArgs(vm, dir string, input, tty bool, argv []string) ([]string, error) {
+	name, _, err := s.user()
+	if err != nil {
+		return nil, err
+	}
+	if dir == "" {
+		dir = "/"
+	}
+	args := []string{"machine", "exec", "--name", vm}
+	if input {
+		args = append(args, "-i")
+	}
+	if tty {
+		args = append(args, "-t")
+	}
+	args = append(args, "-u", name, "-w", dir,
+		"-e", "USER="+name, "-e", "LOGNAME="+name, "-e", "HOME="+home(name), "-e", "SHELL=/bin/bash",
+		"--", "sh", "-c", loginEnv, "sh")
+	return append(args, argv...), nil
+}
+
+// Exec runs argv in the VM as its user, in o.Dir. smolvm passes each
+// argument as it is: no shell reads them.
+func (s *Smolvm) Exec(ctx context.Context, vm string, argv []string, o backend.ExecOpts) error {
+	args, err := s.userArgs(vm, o.Dir, o.Stdin != nil, false, argv)
+	if err != nil {
+		return err
+	}
+	cmd := s.smolvm(ctx, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr
+	return s.Runner.Attach(cmd)
+}
+
+// Shell returns a login shell in dir as the VM's user, with a terminal when
+// devvm has one.
+func (s *Smolvm) Shell(ctx context.Context, vm, dir string) (backend.Command, error) {
+	args, err := s.userArgs(vm, dir, true, s.Terminal(), []string{"bash", "-l"})
+	if err != nil {
+		return backend.Command{}, err
+	}
+	cmd := s.smolvm(ctx, args...)
+	if cmd.Err != nil {
+		return backend.Command{}, cmd.Err
+	}
+	return backend.Command{Path: cmd.Path, Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir}, nil
+}
+
+// SSH is refused: smolvm runs no sshd (its emulation is to come).
+func (s *Smolvm) SSH(_ context.Context, vm string) (backend.SSHTarget, error) {
+	return backend.SSHTarget{}, msg.BackendLacks(Name, string(backend.FeatureSSH), vm)
+}
+
+// stopped returns a machine that must be stopped to be changed, and its
+// record.
+func (s *Smolvm) stopped(ctx context.Context, vm string) (machine, record, error) {
+	m, err := s.inspect(ctx, vm)
+	if err != nil {
+		return machine{}, record{}, notFound(vm, err)
+	}
+	if m.status() != backend.StatusStopped {
+		return machine{}, record{}, msg.VMNotStopped(vm)
+	}
+	r, err := s.readRecord(vm)
+	return m, r, err
+}
+
+// SetSize changes a stopped VM's size where it differs. Disks only grow.
+func (s *Smolvm) SetSize(ctx context.Context, vm string, sz backend.Size) error {
+	if sz == (backend.Size{}) {
+		return nil
+	}
+	m, _, err := s.stopped(ctx, vm)
+	if err != nil {
+		return err
+	}
+	cur := m.size()
+	var opts []string
+	if sz.CPUs > 0 && sz.CPUs != cur.CPUs {
+		opts = append(opts, "--cpus", strconv.Itoa(sz.CPUs))
+	}
+	if sz.MemoryGiB > 0 && sz.MemoryGiB != cur.MemoryGiB {
+		opts = append(opts, "--mem", mib(sz.MemoryGiB))
+	}
+	if sz.DiskGiB > 0 && sz.DiskGiB < cur.DiskGiB {
+		return msg.DiskShrink(gibString(cur.DiskGiB), vm, gibString(sz.DiskGiB))
+	}
+	if sz.DiskGiB > cur.DiskGiB {
+		opts = append(opts, "--storage", gibCeil(sz.DiskGiB))
+	}
+	return s.update(ctx, vm, opts...)
+}
+
+func gibString(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }
+
+// mib is GiB as smolvm's --mem takes it.
+func mib(g float64) string { return strconv.Itoa(int(g * 1024)) }
+
+// gibCeil is a disk size as smolvm's --storage takes it: whole GiB.
+func gibCeil(g float64) string {
+	n := int(g)
+	if float64(n) < g {
+		n++
+	}
+	return strconv.Itoa(n)
+}
+
+// portArgs are -p's values for p: each range to the same ports on the
+// host. All is refused (ports-all), and so is more than smolvm forwards.
+func portArgs(vm string, p backend.Ports) ([]string, error) {
+	if p.All {
+		return nil, msg.BackendLacks(Name, string(backend.FeaturePortsAll), vm)
+	}
+	var out []string
+	n := 0
+	for _, r := range p.Ranges {
+		n += r.To - r.From + 1
+		if r.From == r.To {
+			out = append(out, fmt.Sprintf("%d:%d", r.From, r.From))
+		} else {
+			out = append(out, fmt.Sprintf("%d-%d:%d-%d", r.From, r.To, r.From, r.To))
+		}
+	}
+	if n > maxPorts {
+		return nil, msg.SmolvmTooManyPorts(strconv.Itoa(n), strconv.Itoa(maxPorts), vm)
+	}
+	return out, nil
+}
+
+// SetPorts changes which of a stopped VM's ports are forwarded.
+func (s *Smolvm) SetPorts(ctx context.Context, vm string, p backend.Ports) error {
+	want, err := portArgs(vm, p)
+	if err != nil {
+		return err
+	}
+	_, r, err := s.stopped(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if slices.Equal(want, r.Ports) {
+		return nil
+	}
+	var opts []string
+	for _, old := range r.Ports {
+		opts = append(opts, "--remove-port", old)
+	}
+	for _, w := range want {
+		opts = append(opts, "-p", w)
+	}
+	if err := s.update(ctx, vm, opts...); err != nil {
+		return err
+	}
+	r.Ports = want
+	return s.writeRecord(vm, r)
+}
+
+// volume is a -v value: host path, its path in the VM, and :ro unless
+// writable. A path with a colon is refused: smolvm splits on colons.
+func volume(host, at string, writable bool) (string, error) {
+	for _, p := range []string{host, at} {
+		if strings.Contains(p, ":") {
+			return "", msg.SmolvmMountColon(p)
+		}
+	}
+	v := host + ":" + at
+	if !writable {
+		v += ":ro"
+	}
+	return v, nil
+}
+
+// SetAgentDirs replaces a stopped VM's agent folder mounts.
+func (s *Smolvm) SetAgentDirs(ctx context.Context, vm string, dirs []string) error {
+	_, r, err := s.stopped(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if slices.Equal(r.AgentDirs, dirs) {
+		return nil
+	}
+	var opts []string
+	for _, d := range r.AgentDirs {
+		opts = append(opts, "--remove-volume", d+":"+d)
+	}
+	for _, d := range dirs {
+		v, err := volume(d, d, false)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, "-v", v)
+	}
+	if err := s.update(ctx, vm, opts...); err != nil {
+		return err
+	}
+	r.AgentDirs = slices.Clone(dirs)
+	return s.writeRecord(vm, r)
+}
+
+// SetAgentForwarding is refused unless it's already as asked: smolvm sets
+// forwarding when a machine is made (agent-toggle).
+func (s *Smolvm) SetAgentForwarding(ctx context.Context, vm string, on bool) error {
+	_, r, err := s.stopped(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if r.Forwarding == on {
+		return nil
+	}
+	return msg.BackendLacks(Name, string(backend.FeatureAgentToggle), vm)
+}
+
+// ProxyURL is devvm's proxy as a machine reaches it, at the gateway; ""
+// unless c.Net is NetProxy.
+func (s *Smolvm) ProxyURL(c backend.Confinement) string {
+	if c.Net != backend.NetProxy {
+		return ""
+	}
+	u := url.URL{Scheme: "http", Host: net.JoinHostPort(Gateway, strconv.Itoa(c.ProxyPort))}
+	if c.ProxyUser != "" {
+		u.User = url.UserPassword(c.ProxyUser, c.ProxyPassword)
+	}
+	return u.String()
+}
+
+// sortedEnv is env as KEY=value, sorted.
+func sortedEnv(env map[string]string) []string {
+	var out []string
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		out = append(out, k+"="+env[k])
+	}
+	return out
+}

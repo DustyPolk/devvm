@@ -17,8 +17,10 @@ const (
 	FeatureToolsShare       Feature = "tools-share"       // the shared tools folder, read-only
 	FeatureEgressProxy      Feature = "egress-proxy"      // egress only through devvm's proxy (NetProxy)
 	FeatureSSH              Feature = "ssh"               // ssh for editors
-	FeaturePorts            Feature = "ports"             // forwarding guest ports to host loopback
-	FeatureAgentForwarding  Feature = "agent-forwarding"  // ssh-agent forwarding
+	FeaturePorts            Feature = "ports"             // forwarding listed guest ports to host loopback
+	FeaturePortsAll         Feature = "ports-all"         // forwarding every guest port, whatever address it listens on
+	FeatureAgentForwarding  Feature = "agent-forwarding"  // ssh-agent forwarding, chosen when a VM is made
+	FeatureAgentToggle      Feature = "agent-toggle"      // turning a VM's ssh-agent forwarding on or off later
 	FeatureCPUs             Feature = "cpus"              // setting a VM's CPUs
 	FeatureMemory           Feature = "memory"            // setting a VM's memory
 	FeatureDisk             Feature = "disk"              // setting a VM's disk size
@@ -28,7 +30,8 @@ const (
 var Features = []Feature{
 	FeatureBuildImage, FeatureBuildConfinement, FeatureFrom, FeatureClone,
 	FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
-	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeatureAgentForwarding,
+	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeaturePortsAll,
+	FeatureAgentForwarding, FeatureAgentToggle,
 	FeatureCPUs, FeatureMemory, FeatureDisk,
 }
 
@@ -157,7 +160,10 @@ func (s Size) Features() []Feature {
 
 // Features returns what forwarding the ports needs: nothing for none.
 func (p Ports) Features() []Feature {
-	if p.All || len(p.Ranges) > 0 {
+	switch {
+	case p.All:
+		return []Feature{FeaturePorts, FeaturePortsAll}
+	case len(p.Ranges) > 0:
 		return []Feature{FeaturePorts}
 	}
 	return nil

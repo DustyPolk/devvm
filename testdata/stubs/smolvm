@@ -1,0 +1,91 @@
+#!/bin/bash
+# Stand-in for smolvm in tests. Logs every call to $STUB_LOG. Its machines are files in
+# $STUB_DIR/smolvm/: one per machine, "STATE CPUS MEM_MIB STORAGE_GB NET LABEL", which create,
+# start, stop, update and delete keep up to date; machine ls --json answers from them. A machine
+# with $STUB_DIR/smolvm-foreign-NAME has another label (someone else's). start fails with
+# $STUB_DIR/smolvm-start-fails, leaving it stopped, and records the SSH agent it was given
+# ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/smolvm-agent-NAME. exec answers the libc check
+# with gnu (musl with $STUB_DIR/build-libc saying so), keeps the tar stream a VM's setup is sent as
+# $STUB_DIR/sync.tar, appends a script's second line to $STUB_DIR/scripts when one is fed to bash
+# -s or sh -s, and fails with $STUB_DIR/exec-fails (a script fed to bash -s: with $STUB_DIR/script-fails). The tools build machine's build.sh writes the
+# images it's asked for into the folder it mounts. pack create writes its stub and .smolmachine.
+# --version is 1.32.2, or $STUB_DIR/smolvm-version.
+set -euo pipefail
+echo "smolvm $*" >> "$STUB_LOG"
+dir=$STUB_DIR/smolvm
+mkdir -p "$dir"
+[[ ${1:-} != --version ]] || { echo "smolvm $(cat "$STUB_DIR/smolvm-version" 2>/dev/null || echo 1.32.2)"; exit 0; }
+cmd="${1:-} ${2:-}"
+shift 2 || true
+# Options before --, and the arguments after it.
+name="" label="" cpus="" mem="" storage="" net="" out="" vols=() after=()
+while (( $# )); do
+  case $1 in
+    --name|-n) name=$2; shift ;;
+    --label) label=${2#*=}; shift ;;
+    --cpus) cpus=$2; shift ;;
+    --mem) mem=$2; shift ;;
+    --storage) storage=$2; shift ;;
+    --net) net=true ;;
+    --no-net) net=false ;;
+    -o|--output) out=$2; shift ;;
+    --from-vm) name=$2; shift ;;
+    -v) vols+=("$2"); shift ;;
+    --state-dir|--image|--from|-p|--remove-port|--remove-volume|-e|--remove-env|-u|-w) shift ;;
+    --) shift; after=("$@"); break ;;
+  esac
+  shift
+done
+f=$dir/$name
+get() { read -r st c m s n l < "$f"; }
+put() { echo "$st $c $m $s $n $l" > "$f"; }
+case $cmd in
+  "machine ls")
+    sep="" out="["
+    for m in "$dir"/*; do
+      [[ -f $m ]] || continue
+      read -r st c mm s n l < "$m"; nm=$(basename "$m")
+      [[ ! -e $STUB_DIR/smolvm-foreign-$nm ]] || l=/elsewhere
+      out+="$sep{\"name\":\"$nm\",\"state\":\"$st\",\"cpus\":$c,\"memory_mib\":$mm,\"storage_gb\":$s,\"network\":$n,\"labels\":{\"devvm.data\":\"$l\"}}"
+      sep=,
+    done
+    echo "$out]" ;;
+  "machine create")
+    [[ ! -e $f ]] || { echo "exists" >&2; exit 1; }
+    echo "created ${cpus:-4} ${mem:-8192} ${storage:-null} ${net:-false} $label" > "$f"
+    for v in ${vols[@]+"${vols[@]}"}; do [[ $v != *:/mnt/devvm-tools ]] || echo "${v%%:*}" > "$STUB_DIR/tools-out"; done ;;
+  "machine start")
+    get
+    [[ ! -e $STUB_DIR/smolvm-start-fails ]] || exit 1
+    echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/smolvm-agent-$name"
+    mkdir -p "$STUB_DIR/smolvm-data/$name"
+    printf '%s\n1792910265912021' "$PPID" > "$STUB_DIR/smolvm-data/$name/agent.pid"
+    st=running; put ;;
+  "machine stop") get; st=stopped; put ;;
+  "machine delete") rm -f "$f" ;;
+  "machine update")
+    get
+    [[ -z $cpus ]] || c=$cpus
+    [[ -z $mem ]] || m=$mem
+    [[ -z $storage ]] || s=$storage
+    [[ -z $net ]] || n=$net
+    put ;;
+  "machine data-dir") echo "$STUB_DIR/smolvm-data/$name" ;;
+  "machine exec")
+    [[ ! -e $STUB_DIR/exec-fails ]] || exit 1
+    line="${after[*]}"
+    if [[ $line == *"command -v apk"* ]]; then cat "$STUB_DIR/build-libc" 2>/dev/null || echo gnu; exit 0; fi
+    if [[ $line == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; exit 0; fi
+    if [[ $name == devvm-tools-build && $line == *" bash -s -- "* ]]; then
+      tout=$(cat "$STUB_DIR/tools-out")
+      for ((i = 0; i < ${#after[@]}; i++)); do [[ ${after[i]} == -- ]] && break; done
+      for ((i = i + 3; i < ${#after[@]}; i += 3)); do echo "image ${after[i]}" > "$tout/${after[i]}"; done
+      cat > /dev/null; exit 0
+    fi
+    if [[ $line == *"bash -s"* || $line == *"sh -s"* ]]; then
+      sed -n 2p >> "$STUB_DIR/scripts"; cat > /dev/null || true
+      [[ ! -e $STUB_DIR/script-fails || $line != *"bash -s"* ]] || exit 1
+    fi ;;
+  "pack create")
+    : > "$out"; echo pack > "$out.smolmachine" ;;
+esac

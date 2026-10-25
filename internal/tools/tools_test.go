@@ -22,6 +22,12 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 )
 
+// Lima's targets: build.sh's own format.
+var (
+	gnuT  = Target{Libc: "gnu"}
+	muslT = Target{Libc: "musl"}
+)
+
 func repo(t *testing.T, parts ...string) string {
 	t.Helper()
 	p, err := filepath.Abs(filepath.Join(append([]string{"..", ".."}, parts...)...))
@@ -472,7 +478,7 @@ func TestVersionEntry(t *testing.T) {
 func TestFiles(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
-	files, err := e.Files(t.Context(), []string{"node", "claude"}, "gnu")
+	files, err := e.Files(t.Context(), []string{"node", "claude"}, gnuT)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,16 +493,16 @@ func TestFiles(t *testing.T) {
 	if !slices.Equal(tools, []string{"node", "pnpm", "bun", "claude"}) {
 		t.Errorf("tools = %q", tools)
 	}
-	musl, err := e.Files(t.Context(), []string{"node"}, "musl")
+	musl, err := e.Files(t.Context(), []string{"node"}, muslT)
 	if err != nil || musl[0] == files[0] {
 		t.Errorf("musl's node = %q, %v", musl, err)
 	}
 	bad := regexp.MustCompile(`(?m)(\[\[tools\.go\]\]\n)version = ".*"`).ReplaceAll(fixture(t), []byte(`${1}version = "1$$(id)"`))
 	e.locked(t, bad)
-	if _, err := e.Files(t.Context(), []string{"go"}, "gnu"); names(err) != `tool_bad_version tool=go version="1$(id)"` {
+	if _, err := e.Files(t.Context(), []string{"go"}, gnuT); names(err) != `tool_bad_version tool=go version="1$(id)"` {
 		t.Errorf("a bad version: %v", names(err))
 	}
-	if _, err := e.File(Lock(fixture(t)), "zig", "gnu"); names(err) != "tool_not_locked lock="+e.Dirs.ToolLock()+" tool=zig" {
+	if _, err := e.File(Lock(fixture(t)), "zig", gnuT); names(err) != "tool_not_locked lock="+e.Dirs.ToolLock()+" tool=zig" {
 		t.Errorf("a tool the lock hasn't: %v", names(err))
 	}
 }
@@ -515,7 +521,7 @@ func (e env) files(t *testing.T, tools ...string) []string {
 	t.Helper()
 	var out []string
 	for _, tool := range tools {
-		f, err := e.File(Lock(read(t, e.Dirs.ToolLock())), tool, "gnu")
+		f, err := e.File(Lock(read(t, e.Dirs.ToolLock())), tool, gnuT)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -558,7 +564,7 @@ func TestBuild(t *testing.T) {
 	all := e.files(t, "node", "pnpm", "bun", "claude")
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]), []byte("built"))
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]+".sha256"), []byte("x\n"))
-	if err := e.Build(t.Context(), f, baseKey, "gnu", all); err != nil {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, all); err != nil {
 		t.Fatal(names(err))
 	}
 	if ms := f.Methods(); !slices.Equal(ms, []string{"BuildTools"}) {
@@ -583,7 +589,7 @@ func TestBuild(t *testing.T) {
 	e.checkHashes(t, []string{all[0], all[2], all[3]})
 	e.noLeftovers(t)
 	// Nothing to do when the share has them all.
-	if err := e.Build(t.Context(), f, baseKey, "gnu", all); err != nil || len(f.Calls()) != 1 {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, all); err != nil || len(f.Calls()) != 1 {
 		t.Errorf("built again: %v %q", err, f.Methods())
 	}
 }
@@ -603,7 +609,7 @@ func TestBuildFolder(t *testing.T) {
 		}
 		return nil
 	}
-	if err := e.Build(t.Context(), f, baseKey, "gnu", e.files(t, "uv")); names(err) != "tool_bad_output file="+e.files(t, "uv")[0] {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, e.files(t, "uv")); names(err) != "tool_bad_output file="+e.files(t, "uv")[0] {
 		t.Errorf("Build with no image written = %v", names(err))
 	}
 	e.noLeftovers(t)
@@ -615,7 +621,7 @@ func TestBuildOneBatch(t *testing.T) {
 	e.locked(t, fixture(t))
 	f := fake()
 	files := e.files(t, "node", "go", "bun")
-	if err := e.Build(t.Context(), f, baseKey, "gnu", files); err != nil {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, files); err != nil {
 		t.Fatal(names(err))
 	}
 	var batches [][]string
@@ -646,7 +652,7 @@ func TestBuildHostileOutput(t *testing.T) {
 	f := fake()
 	f.ToolsBuild = func(spec backend.ToolsSpec) error { return os.Symlink(victim, filepath.Join(spec.Out, spec.Args[2])) }
 	node := e.files(t, "node")
-	if err := e.Build(t.Context(), f, baseKey, "gnu", node); names(err) != "tool_bad_output file="+node[0] {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, node); names(err) != "tool_bad_output file="+node[0] {
 		t.Errorf("Build = %v", names(err))
 	}
 	if _, err := os.Lstat(filepath.Join(e.Dirs.Tools(), node[0])); !errors.Is(err, os.ErrNotExist) {
@@ -661,7 +667,7 @@ func TestBuildHostileOutput(t *testing.T) {
 		// whatever it planted.
 		return os.Symlink(victim, filepath.Join(e.Dirs.Tools(), file+".sha256"))
 	}
-	if err := e.Build(t.Context(), f, baseKey, "gnu", node); err != nil {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, node); err != nil {
 		t.Fatal(names(err))
 	}
 	if string(read(t, victim)) != "victim\n" {
@@ -677,14 +683,14 @@ func TestBuildRefuses(t *testing.T) {
 	lock := regexp.MustCompile(`(?m)^(\[tools\.node\."platforms\.linux-.*-musl"\])$`).ReplaceAll(fixture(t), []byte("$1\ninstall = \"source\""))
 	e.locked(t, lock)
 	f := fake()
-	musl, err := e.File(Lock(lock), "node", "musl")
+	musl, err := e.File(Lock(lock), "node", muslT)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Build(t.Context(), f, baseKey, "musl", []string{musl}); names(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
+	if err := e.Build(t.Context(), f, baseKey, muslT, []string{musl}); names(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
 		t.Errorf("Build = %v", names(err))
 	}
-	if err := e.Build(t.Context(), f, baseKey, "gnu", []string{"node-1.0.0-0123456789ab.erofs"}); names(err) != "tools_changed" {
+	if err := e.Build(t.Context(), f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); names(err) != "tools_changed" {
 		t.Errorf("Build of a version the lock moved on from = %v", names(err))
 	}
 	if len(f.Calls()) > 0 {
@@ -736,7 +742,7 @@ func TestUnusedAndDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	unused := func() []string {
-		ls, err := e.List("gnu", map[string]int{used: 1})
+		ls, err := e.List([]Target{gnuT}, map[string]int{used: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -785,7 +791,7 @@ func TestList(t *testing.T) {
 	for _, f := range []string{old, used, goCur, claude, "x.erofs.tmp"} {
 		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
 	}
-	ls, err := e.List("gnu", map[string]int{used: 2, claude: 1})
+	ls, err := e.List([]Target{gnuT}, map[string]int{used: 2, claude: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -816,14 +822,14 @@ func TestList(t *testing.T) {
 	if err := os.Remove(filepath.Join(e.Dirs.Tools(), goCur)); err != nil {
 		t.Fatal(err)
 	}
-	ls, _ = e.List("gnu", nil)
+	ls, _ = e.List([]Target{gnuT}, nil)
 	if len(ls) < 4 || ls[3].State != StateNotBuilt || ls[3].Version != "1.27.2" || ls[3].Built || ls[4].State != StateUnused {
 		t.Errorf("List without the lock's go: %+v", ls)
 	}
 	if err := os.Remove(e.Dirs.ToolLock()); err != nil {
 		t.Fatal(err)
 	}
-	ls, _ = e.List("gnu", map[string]int{used: 1})
+	ls, _ = e.List([]Target{gnuT}, map[string]int{used: 1})
 	if len(ls) < 5 || ls[3].State != StateInUse || ls[4].State != "" {
 		t.Errorf("List without a lock: %+v", ls)
 	}
@@ -877,7 +883,7 @@ func TestWarnNewer(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	have := append(e.files(t, "node", "pnpm", "bun"), "claude-2.0.0-0123456789ab.erofs")
-	if err := e.WarnNewer(t.Context(), "node+claude", have, "gnu"); err != nil {
+	if err := e.WarnNewer(t.Context(), "node+claude", have, gnuT); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"devvm: newer_tools tools=claude " + Lock(fixture(t)).Version("claude")}
@@ -885,7 +891,7 @@ func TestWarnNewer(t *testing.T) {
 		t.Errorf("said %q, want %q", *e.said, want)
 	}
 	*e.said = nil
-	if err := e.WarnNewer(t.Context(), "node+claude", e.files(t, "node", "pnpm", "bun", "claude"), "gnu"); err != nil || len(*e.said) > 0 {
+	if err := e.WarnNewer(t.Context(), "node+claude", e.files(t, "node", "pnpm", "bun", "claude"), gnuT); err != nil || len(*e.said) > 0 {
 		t.Errorf("said %q, %v", *e.said, err)
 	}
 }
@@ -898,10 +904,10 @@ func TestUpdate(t *testing.T) {
 	newer := regexp.MustCompile(`(?m)(\[\[tools\.go\]\]\n)version = ".*"`).ReplaceAll(fixture(t), []byte(`${1}version = "9.9.9"`))
 	e.stubLocks(t, newer, newer, "")
 	f := fake()
-	build := func(ctx context.Context, files []string) error { return e.Build(ctx, f, baseKey, "gnu", files) }
+	build := func(ctx context.Context, files []string) error { return e.Build(ctx, f, baseKey, gnuT, files) }
 	vm := "devvm-p-abc123abc123ab"
 	before := e.files(t, "go")
-	files, changed, err := e.Update(t.Context(), build, vm, "go", before, "gnu")
+	files, changed, err := e.Update(t.Context(), build, vm, "go", before, gnuT)
 	if err != nil {
 		t.Fatal(names(err))
 	}
@@ -912,7 +918,7 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("said %q", *e.said)
 	}
 	*e.said = nil
-	if again, changed, err := e.Update(t.Context(), build, vm, "go", files, "gnu"); err != nil || changed || !slices.Equal(again, files) {
+	if again, changed, err := e.Update(t.Context(), build, vm, "go", files, gnuT); err != nil || changed || !slices.Equal(again, files) {
 		t.Errorf("Update again = %q, %v, %v", again, changed, err)
 	}
 	if !slices.Contains(*e.said, "==> tools_newest vm="+vm) {
@@ -920,7 +926,7 @@ func TestUpdate(t *testing.T) {
 	}
 	t.Setenv("MISE_STUB_FAIL", "1")
 	*e.said = nil
-	if _, changed, err := e.Update(t.Context(), build, vm, "go", before, "gnu"); err != nil || !changed {
+	if _, changed, err := e.Update(t.Context(), build, vm, "go", before, gnuT); err != nil || !changed {
 		t.Errorf("Update offline = %v, %v", changed, err)
 	}
 	if !slices.Contains(*e.said, "devvm: tools_check_failed") {

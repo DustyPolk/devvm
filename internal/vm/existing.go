@@ -14,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -47,7 +48,7 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 	if err := builder.WarnIfOutdated(st.Get(state.KeyChain)); err != nil {
 		return err
 	}
-	if err := e.Tools.WarnNewer(ctx, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), st.Get(KeyLibc)); err != nil {
+	if err := e.Tools.WarnNewer(ctx, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), toolTarget(b, st)); err != nil {
 		return err
 	}
 	if err := e.Tools.RefreshDaily(); err != nil {
@@ -135,6 +136,9 @@ func applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend
 	}
 	if in.AgentForwarding == want {
 		return nil
+	}
+	if err := backend.Require(b, st.Name(), backend.FeatureAgentToggle); err != nil {
+		return err
 	}
 	if in.Status == backend.StatusRunning {
 		ui.Warn(msg.AgentNextStart(st.Name()))
@@ -296,12 +300,12 @@ func (e *Env) addLayers(ctx context.Context, want string, t *found, builder *bui
 		ui.Info(msg.Keeping(img))
 		return nil
 	}
-	libc := st.Get(KeyLibc)
-	files, err := e.Tools.Files(ctx, image.ToolsOf(added), libc)
+	tg := toolTarget(b, st)
+	files, err := e.Tools.Files(ctx, image.ToolsOf(added), tg)
 	if err != nil {
 		return err
 	}
-	if err := e.buildTools(ctx, builder, libc, files); err != nil {
+	if err := e.buildTools(ctx, builder, tg, files); err != nil {
 		return err
 	}
 	newImg := image.Normalize(img + "+" + added)
@@ -364,9 +368,15 @@ func (e *Env) runScript(ctx context.Context, b backend.Backend, vm, path string)
 	return b.Exec(ctx, vm, []string{"bash", "-s"}, backend.ExecOpts{Stdin: f, Stdout: out, Stderr: out})
 }
 
+// toolTarget is what a VM's tool images are built for: its base's C
+// library and its backend's format.
+func toolTarget(b backend.Backend, st *state.VM) tools.Target {
+	return tools.Target{Libc: st.Get(KeyLibc), Format: b.ToolFormat()}
+}
+
 // buildTools builds the tool images the share lacks of files, from base's
 // image as it is now, built first if it isn't.
-func (e *Env) buildTools(ctx context.Context, builder *build.Builder, libc string, files []string) error {
+func (e *Env) buildTools(ctx context.Context, builder *build.Builder, tg tools.Target, files []string) error {
 	if !slices.ContainsFunc(files, func(f string) bool { return !e.Tools.Built(f) }) {
 		return nil
 	}
@@ -377,5 +387,5 @@ func (e *Env) buildTools(ctx context.Context, builder *build.Builder, libc strin
 	if err != nil {
 		return err
 	}
-	return e.Tools.Build(ctx, builder.Backend, base, libc, files)
+	return e.Tools.Build(ctx, builder.Backend, base, tg, files)
 }

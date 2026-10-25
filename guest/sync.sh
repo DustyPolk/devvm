@@ -17,7 +17,8 @@ host_home=$(cat "$s/host_home")
 
 # shellcheck source=/dev/null
 . "$s/vm"
-systemd=false; command -v systemctl >/dev/null && systemd=true   # else OpenRC (Alpine)
+# Running systemd, else OpenRC (Alpine) or none (smolvm, which may have systemctl installed).
+systemd=false; [[ -d /run/systemd/system ]] && systemd=true
 if [[ -n "$DEVVM_HOSTNAME" && "$(hostname)" != "$DEVVM_HOSTNAME" ]]; then
   if $systemd; then sudo hostnamectl set-hostname "$DEVVM_HOSTNAME"
   else echo "$DEVVM_HOSTNAME" | sudo tee /etc/hostname >/dev/null; sudo hostname "$DEVVM_HOSTNAME"; fi

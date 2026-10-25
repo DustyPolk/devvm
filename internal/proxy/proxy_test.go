@@ -427,7 +427,8 @@ func TestMainRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sleep.Process.Kill() })
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(sleep.Process.Pid)), 0o600); err != nil {
+	// As smolvm writes it: the pid, then its start time (Lima's has the pid alone).
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(sleep.Process.Pid)+"\n1792910265912021"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// A free port, given back for the proxy to take.

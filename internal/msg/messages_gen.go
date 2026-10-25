@@ -384,6 +384,11 @@ func CreatingFrom(image string, vm string) M {
 	return M{id: "creating_from", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
+// CreatingFromImage is [creating_from_image]: "creating {{.vm}} from {{.image}}"
+func CreatingFromImage(image string, vm string) M {
+	return M{id: "creating_from_image", vals: []val{{"image", image}, {"vm", vm}}}
+}
+
 // CreatingFromUbuntu is [creating_from_ubuntu]: "creating {{.vm}} from Ubuntu's cloud image"
 func CreatingFromUbuntu(vm string) M {
 	return M{id: "creating_from_ubuntu", vals: []val{{"vm", vm}}}
@@ -1229,6 +1234,16 @@ func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
 
+// PackFailed is [pack_failed]: "couldn't pack {{.vm}} into its image"
+func PackFailed(vm string) M {
+	return M{id: "pack_failed", vals: []val{{"vm", vm}}}
+}
+
+// PackingImage is [packing_image]: "packing {{.vm}} into its image"
+func PackingImage(vm string) M {
+	return M{id: "packing_image", vals: []val{{"vm", vm}}}
+}
+
 // PolicyFailed is [policy_failed]: "couldn't read or change the network policy rules: {{.reason}}"
 func PolicyFailed(reason string) M {
 	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
@@ -1527,6 +1542,76 @@ func SizeNotGib(flag string, value string) M {
 // SizePending is [size_pending]: "{{.vm}} gets {{.size}} from its next start: devvm restart"
 func SizePending(size string, vm string) M {
 	return M{id: "size_pending", vals: []val{{"size", size}, {"vm", vm}}}
+}
+
+// SmolvmBroken is [smolvm_broken]: "smolvm --version failed: reinstall smolvm"
+func SmolvmBroken() M {
+	return M{id: "smolvm_broken"}
+}
+
+// SmolvmBrokenFix is [smolvm_broken_fix]: "smolvm --version failed: run {{.fix}}"
+func SmolvmBrokenFix(fix string) M {
+	return M{id: "smolvm_broken_fix", vals: []val{{"fix", fix}}}
+}
+
+// SmolvmFromRegistryOnly is [smolvm_from_registry_only]: "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
+func SmolvmFromRegistryOnly(image string) M {
+	return M{id: "smolvm_from_registry_only", vals: []val{{"image", image}}}
+}
+
+// SmolvmHostUnsupported is [smolvm_host_unsupported]: "the smolvm backend doesn't run on {{.host}}: use an arm64 Mac, or Linux on arm64 or x86_64"
+func SmolvmHostUnsupported(host string) M {
+	return M{id: "smolvm_host_unsupported", vals: []val{{"host", host}}}
+}
+
+// SmolvmMachineForeign is [smolvm_machine_foreign]: "smolvm has a machine named {{.vm}} that isn't this devvm's: delete or rename it with smolvm"
+func SmolvmMachineForeign(vm string) M {
+	return M{id: "smolvm_machine_foreign", vals: []val{{"vm", vm}}}
+}
+
+// SmolvmMissing is [smolvm_missing]: "smolvm isn't installed: install smolvm 1.32 or newer"
+func SmolvmMissing() M {
+	return M{id: "smolvm_missing"}
+}
+
+// SmolvmMissingFix is [smolvm_missing_fix]: "smolvm isn't installed: run {{.fix}}"
+func SmolvmMissingFix(fix string) M {
+	return M{id: "smolvm_missing_fix", vals: []val{{"fix", fix}}}
+}
+
+// SmolvmMountColon is [smolvm_mount_colon]: "smolvm can't mount {{.path}}: its path has a colon"
+func SmolvmMountColon(path string) M {
+	return M{id: "smolvm_mount_colon", vals: []val{{"path", path}}}
+}
+
+// SmolvmNoAgent is [smolvm_no_agent]: "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
+func SmolvmNoAgent(vm string) M {
+	return M{id: "smolvm_no_agent", vals: []val{{"vm", vm}}}
+}
+
+// SmolvmOld is [smolvm_old]: "smolvm {{.version}} is too old: upgrade to smolvm 1.32 or newer"
+func SmolvmOld(version string) M {
+	return M{id: "smolvm_old", vals: []val{{"version", version}}}
+}
+
+// SmolvmOldFix is [smolvm_old_fix]: "smolvm {{.version}} is too old: run {{.fix}}"
+func SmolvmOldFix(fix string, version string) M {
+	return M{id: "smolvm_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
+}
+
+// SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
+func SmolvmScriptFailed(script string, vm string) M {
+	return M{id: "smolvm_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
+}
+
+// SmolvmTooManyPorts is [smolvm_too_many_ports]: "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}: forward fewer with devvm ports"
+func SmolvmTooManyPorts(asked string, max string, vm string) M {
+	return M{id: "smolvm_too_many_ports", vals: []val{{"asked", asked}, {"max", max}, {"vm", vm}}}
+}
+
+// SmolvmUpdateFailed is [smolvm_update_failed]: "couldn't change {{.vm}}'s smolvm settings"
+func SmolvmUpdateFailed(vm string) M {
+	return M{id: "smolvm_update_failed", vals: []val{{"vm", vm}}}
 }
 
 // SSHAgentEmpty is [ssh_agent_empty]: "your SSH agent has no keys, so git over SSH won't work in the VM"
@@ -1932,6 +2017,7 @@ var specs = map[string]spec{
 	"cpus_not_number":             {fields: []string{"value"}},
 	"creating":                    {fields: []string{"vm"}},
 	"creating_from":               {fields: []string{"image", "vm"}},
+	"creating_from_image":         {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":        {fields: []string{"vm"}},
 	"custom_layer_remove":         {fields: []string{"layer", "vm"}},
 	"default_backend":             {fields: []string{"backend"}},
@@ -2101,6 +2187,8 @@ var specs = map[string]spec{
 	"nothing_to_clean":            {},
 	"oci_waiting":                 {},
 	"opencode_login_kept":         {fields: []string{"providers"}},
+	"pack_failed":                 {fields: []string{"vm"}},
+	"packing_image":               {fields: []string{"vm"}},
 	"policy_failed":               {fields: []string{"reason"}},
 	"port_invalid":                {fields: []string{"value"}},
 	"port_not_listed":             {fields: []string{"port", "ports"}},
@@ -2161,6 +2249,20 @@ var specs = map[string]spec{
 	"size_next_start":             {fields: []string{"vm"}},
 	"size_not_gib":                {fields: []string{"flag", "value"}},
 	"size_pending":                {fields: []string{"size", "vm"}},
+	"smolvm_broken":               {},
+	"smolvm_broken_fix":           {fields: []string{"fix"}},
+	"smolvm_from_registry_only":   {fields: []string{"image"}},
+	"smolvm_host_unsupported":     {fields: []string{"host"}},
+	"smolvm_machine_foreign":      {fields: []string{"vm"}},
+	"smolvm_missing":              {},
+	"smolvm_missing_fix":          {fields: []string{"fix"}},
+	"smolvm_mount_colon":          {fields: []string{"path"}},
+	"smolvm_no_agent":             {fields: []string{"vm"}},
+	"smolvm_old":                  {fields: []string{"version"}},
+	"smolvm_old_fix":              {fields: []string{"fix", "version"}},
+	"smolvm_script_failed":        {fields: []string{"script", "vm"}},
+	"smolvm_too_many_ports":       {fields: []string{"asked", "max", "vm"}},
+	"smolvm_update_failed":        {fields: []string{"vm"}},
 	"ssh_agent_empty":             {},
 	"ssh_agent_failed":            {fields: []string{"reason"}},
 	"ssh_agent_flag_ignored":      {},

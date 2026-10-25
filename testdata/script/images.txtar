@@ -14,7 +14,7 @@ stdout '^node +- +- +- +- +not installed$'
 stdout '^opencode +- +- +- +- +not installed$'
 ! stderr .
 stub_calls
-stdout '^limactl list --json\n\z'
+stdout '^limactl list --json\nsmolvm machine ls --json\n\z'
 
 # base, foo on it, a build that didn't finish, and a project VM.
 mkdir $XDG_CONFIG_HOME/devvm/layers

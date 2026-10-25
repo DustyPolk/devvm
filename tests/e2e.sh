@@ -21,20 +21,27 @@
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
+#     --backend smolvm
+#                the smolvm backend's own section instead (experimental): base and a layer built as
+#                packs, a project VM's mounts, size, ports, Docker and agent forwarding, a node VM's
+#                shared tools, what it refuses (network policy, ssh, every port, agent toggling), and
+#                that no machine without the sandbox's label is touched. Its machines share your
+#                smolvm (macOS): it deletes only those it made, with the sandbox's label.
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
 # tokens. devvm is built from this checkout into the sandbox, with its files next to it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network from"
-usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network"
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone gc tools network" backend=lima
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
     --from)  sel=$sections_all ;;
     --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2"); shift
              for s in $sel; do [[ " $sections_all " == *" $s "* ]] || usage; done ;;
+    --backend) [[ ${2:-} == smolvm ]] || usage; backend=smolvm sel=smolvm; shift ;;
     *) usage ;;
   esac
   shift
@@ -81,11 +88,31 @@ lockv() { awk -v t="[[tools.$1]]" '$0 == t { f = 1; next } f && /^version = / { 
 m() { "$D" _msg "$@"; }
 export -f m; export D
 
+# smol_ls: the sandbox's smolvm machines, "NAME STATE" lines: those with its label. smol_others: every
+# other machine smolvm has, "NAME LABEL" (yours, on macOS). smolvm's JSON has each machine's keys
+# sorted, labels before name and state.
+smol_json() { SMOLVM_USAGE=0 smolvm machine ls --json 2>/dev/null | awk '
+  /^  \{/ { lab = ""; n = ""; s = "" }
+  /^      "devvm\.data": / { v = $0; sub(/^[^:]*: "/, "", v); sub(/",?$/, "", v); lab = v }
+  /^    "name": / { v = $0; sub(/^[^:]*: "/, "", v); sub(/",?$/, "", v); n = v }
+  /^    "state": / { v = $0; sub(/^[^:]*: "/, "", v); sub(/",?$/, "", v); s = v }
+  /^  \}/ { print n "\t" s "\t" lab }'; }
+smol_ls() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 == want { print $1, $2 }'; }
+smol_others() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 != want { print $1, $3 }'; }
+smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
+export -f smol_json smol_ls smol_status
 created=()   # VMs this run made; the only ones it deletes
 cleanup() {
   local n
   for n in ${created[@]+"${created[@]}"}; do
-    limactl delete -f "$n" >/dev/null 2>&1
+    if [[ $backend == smolvm ]]; then
+      # Only a machine with the sandbox's label, and the image's pack.
+      [[ -z $(smol_status "$n") ]] || SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1
+      rm -f "$XDG_DATA_HOME/devvm/smolvm/vms/$n.json"
+      [[ $n != devvm-img-* ]] || rm -rf "$XDG_DATA_HOME/devvm/smolvm/images/${n#devvm-img-}"
+    else
+      limactl delete -f "$n" >/dev/null 2>&1
+    fi
     rm -f "$images/${n#devvm-img-}" "$vms/$n"
   done
   rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
@@ -176,8 +203,15 @@ in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
 
 if $clean; then
   section "cleaning cached images"
-  for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
-  rm -rf "$images" "$share"
+  if [[ $backend == smolvm ]]; then
+    # smolvm's images and their records, not Lima's.
+    for n in $(smol_ls | awk '$1 ~ /^devvm-img-/ { print $1 }'); do SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1; done
+    for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do [[ ! -d $k ]] || rm -f "$images/$(basename "$k")"; done
+    rm -rf "$XDG_DATA_HOME/devvm/smolvm/images"
+  else
+    for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
+    rm -rf "$images" "$share"
+  fi
 fi
 
 if want tools; then
@@ -795,6 +829,137 @@ check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '
 check "and the build VM and its temporary folders are gone" bash -c "
   ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
 # An image only Docker has (built, never pushed) isn't checked: making one would change Docker's images.
+fi
+
+if want smolvm; then
+# The smolvm backend (experimental): its native features, and a one-line refusal for the rest. Its
+# machines share your smolvm on macOS: only those with the sandbox's label are looked at, and the
+# others must be the same at the end.
+S=(--backend smolvm)
+me=$(id -un)
+others_before=$(smol_others)
+# in_smol VM CMD: CMD in a login shell as the VM's user, as devvm's shell has it.
+in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" -- bash -lc "$2" </dev/null; }
+section "smolvm: shared tool versions"
+check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
+
+section "smolvm: images"
+check "devvm doctor finds everything smolvm needs" bash -c "'$D' doctor --backend smolvm </dev/null >'$work/last.log' 2>&1 &&
+  [[ -z \$('$D' doctor --backend smolvm --fixes </dev/null) ]]"
+check "build base" quiet env DEVVM_MESSAGES=names "$D" "${S[@]}" build base
+kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
+# A cached base: the pack recorded as base.
+[[ -n $kb ]] || kb=$(for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do
+  k=$(basename "$k"); grep -qx name=base "$images/$k" 2>/dev/null && echo "$k"; done | head -1)
+packs=$XDG_DATA_HOME/devvm/smolvm/images
+check "base is a pack, recorded with Ubuntu's container image by digest; its build machine is gone" bash -c "
+  [[ -n '$kb' && -f '$packs/$kb/image.smolmachine' ]] && grep -qx libc=gnu '$images/$kb' &&
+  grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@sha256:[0-9a-f]{64}$' '$images/$kb' && [[ -z \$(smol_status devvm-img-$kb) ]]"
+fixture=$layers/e2esmol.sh
+token=e2e-smolvm-ran-$$-$(date +%s)
+printf '#!/bin/bash\necho %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" > "$fixture"
+check "a layer builds from base's pack, its script run as the VM's user" bash -c "'$D' ${S[*]} build e2esmol </dev/null >'$work/last.log' 2>&1 &&
+  grep -qx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+owned e2esmol
+kf=$(keys_of e2esmol | head -1)
+check "it's a pack too, and devvm images lists both on smolvm" bash -c "[[ -n '$kf' && -f '$packs/$kf/image.smolmachine' ]] &&
+  out=\$('$D' images </dev/null 2>/dev/null) && grep -qE '^base +ubuntu [0-9.]+ +[0-9a-f]{12} +$kb +current +[0-9.]+[KMGT] +smolvm$' <<<\"\$out\" &&
+  grep -qE '^e2esmol +ubuntu [0-9.]+ +[0-9a-f]{12} +$kf +current +[0-9.]+[KMGT] +smolvm$' <<<\"\$out\""
+echo "# edited" >> "$fixture"
+check "rebuild makes a new one and deletes the stale one, not base" bash -c "'$D' ${S[*]} rebuild e2esmol </dev/null >/dev/null 2>&1 &&
+  [[ \$(keys_of e2esmol | wc -l) -eq 1 && \$(keys_of e2esmol) != $kf && ! -e '$packs/$kf' && -f '$packs/$kb/image.smolmachine' ]]"
+owned e2esmol
+check "images rm deletes it" bash -c "'$D' ${S[*]} images rm e2esmol </dev/null >/dev/null 2>&1 && [[ -z \$(keys_of e2esmol) ]]"
+rm -f "$fixture"
+printf '#!/bin/bash\nexit 3\n' > "$layers/e2esmolfail.sh"
+DEVVM_MESSAGES=names "$D" "${S[@]}" build e2esmolfail </dev/null >"$work/fail.log" 2>&1; rc=$?
+kx=$(sed -n 's/^==> building_image image=e2esmolfail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
+[[ -z $kx ]] || created+=("devvm-img-$kx")
+check "a failed script keeps its machine, stopped, and says how to look inside" bash -c "
+  [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: smolvm_script_failed script=e2esmolfail\.sh vm=devvm-img-$kx$' '$work/fail.log' &&
+  [[ \$(smol_status devvm-img-$kx) == stopped ]] && '$D' ${S[*]} images rm '$kx' </dev/null >/dev/null 2>&1 && [[ -z \$(smol_status devvm-img-$kx) ]]"
+rm -f "$layers/e2esmolfail.sh"
+
+section "smolvm: what it refuses"
+r=$(newproj smolrefused)
+check "every port (the default), in one line naming the VM" bash -c "cd '$r' &&
+  ! DEVVM_MESSAGES=names '$D' ${S[*]} --no-network-policy base </dev/null >'$work/last.log' 2>&1 &&
+  grep -qE '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-smolrefused-[0-9a-f]{14}$' '$work/last.log' &&
+  [[ -z \$(vm_of '$r') ]]"
+check "network policy" bash -c "cd '$r' && ! DEVVM_MESSAGES=names '$D' ${S[*]} --network-policy --ports none base </dev/null >'$work/last.log' 2>&1 &&
+  grep -qE '^devvm: backend_lacks backend=smolvm feature=egress-proxy vm=' '$work/last.log'"
+check "--clone (ssh)" bash -c "cd '$r' && git init -q && git -c user.email=e@e -c user.name=e commit -q --allow-empty -m e &&
+  ! DEVVM_MESSAGES=names '$D' ${S[*]} --clone --no-network-policy --ports none base </dev/null >'$work/last.log' 2>&1 &&
+  grep -qE '^devvm: backend_lacks backend=smolvm feature=ssh vm=' '$work/last.log'"
+
+section "smolvm: a base project"
+p=$(newproj smolweb); git -C "$p" init -q
+launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${S[@]}" --no-network-policy --ports 47180 --cpus 2 --memory 3 --disk 120 base
+check "devvm creates the VM from base's pack, labelled, and opens a shell in the folder as you" bash -c "
+  [[ -n '$vm' && \$(smol_status '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
+  grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=smolvm '$vms/$vm' && grep -qx net=off '$vms/$vm'"
+check "it gets --cpus, --memory and --disk" in_smol "$vm" \
+  '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
+check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +\S+ +off +smolvm +$p\$'"
+check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
+  in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -c \"\$1\" </dev/null; }
+  in_smol 'echo from-vm > $p/vm.txt' && grep -qx from-vm '$p/vm.txt' && [[ \$(stat -f %Su '$p/vm.txt' 2>/dev/null || stat -c %U '$p/vm.txt') == '$me' ]]"
+check "the shared tools are read-only, even for root" bash -c "! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- touch /mnt/devvm-tools/x </dev/null 2>/dev/null"
+check "hostname is the folder" in_smol "$vm" '[[ $(hostname) == smolweb ]]'
+check "Exec's arguments, folder, input and user reach the VM as given" bash -c "cd '$root' &&
+  DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/smolvm |
+  grep -q -- '--- PASS: TestE2EExecQuoting'"
+check "Docker runs in it, started by devvm" in_smol "$vm" 'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
+check "SSH agent forwarding is off" in_smol "$vm" '[[ -z ${SSH_AUTH_SOCK:-} ]]'
+# A listener on every address (Ubuntu's container image has perl, not python), left running.
+SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e \
+  '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47180", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' \
+  </dev/null >/dev/null 2>&1
+check "the listed port reaches this machine's loopback" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47180 && exit 0; sleep 1; done; exit 1'
+check "ssh, network policy, every port and turning agent forwarding on are refused in one line" bash -c "cd '$p' &&
+  ! DEVVM_MESSAGES=names '$D' ssh </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=ssh vm=$vm' '$work/e' &&
+  ! DEVVM_MESSAGES=names '$D' network on </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=egress-proxy vm=$vm' '$work/e' &&
+  ! DEVVM_MESSAGES=names '$D' ports all </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=ports-all vm=$vm' '$work/e' &&
+  ! DEVVM_MESSAGES=names '$D' ssh-agent on </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e' &&
+  grep -qx net=off '$vms/$vm'"
+check "a running VM's new size and ports wait for its next start, and apply on restart" bash -c "cd '$p' &&
+  '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
+  printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
+  [[ \$('$D' ports 2>/dev/null) == 47180,47181 ]]"
+check "a smaller disk is refused" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D' size --disk 100 </dev/null >'$work/last.log' 2>&1 &&
+  grep -q 'disk_shrink' '$work/last.log'"
+check "devvm stop stops it, and devvm starts it again" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
+  [[ \$(smol_status $vm) == stopped ]] && printf 'echo again\n' | '$D' 2>&1 | grep -qx again && [[ \$(smol_status $vm) == running ]]"
+check "rm deletes only this VM, with its state" bash -c "cd '$p' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+  [[ -z \$(smol_status $vm) && ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json' ]]"
+
+section "smolvm: SSH agent forwarding"
+g=$(newproj smolagent)
+user_agent_pid=$(ssh-agent -a "$work/smol-agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+rm -f "$work/smol-key" "$work/smol-key.pub"; ssh-keygen -q -t ed25519 -N '' -C e2e-smolvm -f "$work/smol-key"
+SSH_AUTH_SOCK=$work/smol-agent.sock ssh-add -q "$work/smol-key" 2>/dev/null
+(cd "$g" && printf 'ssh-add -l\n' | SSH_AUTH_SOCK=$work/smol-agent.sock "$D" "${S[@]}" --no-network-policy --ports none --ssh-agent base >"$work/last.log" 2>&1)
+vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
+check "--ssh-agent: the VM uses the agent it was started with" bash -c "[[ -n '$vm' ]] && grep -q e2e-smolvm '$work/last.log'"
+check "turning it off is refused" bash -c "cd '$g' && ! DEVVM_MESSAGES=names '$D' ssh-agent off </dev/null 2>'$work/e' &&
+  grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e'"
+(cd "$g" && quiet "$D" rm -f)
+kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
+rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-agent.sock"
+
+section "smolvm: shared tools"
+t=$(newproj smoltools); echo '{}' > "$t/package.json"
+launch "$t" 'node -v' "${S[@]}" --no-network-policy --ports none --no-git-protect
+check "a node VM: its tools built uncompressed for smolvm, from the share, at the locked versions" bash -c "
+  [[ -n '$vm' ]] && grep -qx image=node '$vms/$vm' && grep -qx v$(lockv node) '$work/last.log' &&
+  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f && -f '$share'/\$f.sha256 ]] || exit 1; done"
+check "node, npm, pnpm and bun work, each a read-only image" in_smol "$vm" \
+  "npm -v && pnpm -v && bun -v && [[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]] && ! touch /opt/devvm/tools/node/$(lockv node)/x 2>/dev/null"
+check "the tools build left no machine behind" bash -c "[[ -z \$(smol_status devvm-tools-build) ]]"
+check "restarted, the tools are mounted again" bash -c "cd '$t' && printf 'node -v\n' | '$D' restart 2>&1 | grep -qx v$(lockv node)"
+(cd "$t" && quiet "$D" rm -f)
+
+check "no machine without the sandbox's label was touched" bash -c "[[ \"\$(smol_others)\" == '$others_before' ]]"
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

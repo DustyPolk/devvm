@@ -50,8 +50,13 @@ func (b *Builder) Inputs() (image.Inputs, error) {
 	if err != nil {
 		return image.Inputs{}, err
 	}
+	var own map[string][]byte
+	if kf, ok := b.Backend.(backend.KeyFiles); ok {
+		own = kf.KeyFiles()
+	}
 	return image.Inputs{
 		Backend:      b.Backend.Name(),
+		BackendFiles: own,
 		Root:         os.DirFS(b.Root),
 		Layers:       os.DirFS(b.Dirs.Layers()),
 		Features:     os.DirFS(b.Dirs.Features()),
@@ -160,6 +165,17 @@ func (b *Builder) BaseLibc() (string, error) {
 	return rec.Libc, nil
 }
 
+// ToolTarget is what the shared tools of a new VM on this backend are
+// built for: base's C library as it is now (BaseLibc), and the backend's
+// format.
+func (b *Builder) ToolTarget() (tools.Target, error) {
+	libc, err := b.BaseLibc()
+	if err != nil {
+		return tools.Target{}, err
+	}
+	return tools.Target{Libc: libc, Format: b.Backend.ToolFormat()}, nil
+}
+
 // Build builds an image name's image, and the images under it, unless
 // they're built; then the shared tool images it names that the share
 // lacks.
@@ -179,11 +195,11 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if len(groups) == 0 {
 		return nil
 	}
-	libc, err := b.BaseLibc()
+	tg, err := b.ToolTarget()
 	if err != nil {
 		return err
 	}
-	files, err := b.Tools.Files(ctx, groups, libc)
+	files, err := b.Tools.Files(ctx, groups, tg)
 	if err != nil {
 		return err
 	}
@@ -191,7 +207,7 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	return b.Tools.Build(ctx, b.Backend, base, libc, files)
+	return b.Tools.Build(ctx, b.Backend, base, tg, files)
 }
 
 func (b *Builder) build(ctx context.Context, name string) error {

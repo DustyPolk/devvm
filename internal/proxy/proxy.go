@@ -581,8 +581,9 @@ func watchLifeline(path string) {
 	for range time.Tick(lifelineTick) {
 		if pid == 0 {
 			if b, err := os.ReadFile(path); err == nil { //nolint:gosec // devvm names the pid file
-
-				if p, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && p > 0 && syscall.Kill(p, 0) == nil {
+				// The pid is the first line: smolvm's has its start time on a second.
+				first, _, _ := strings.Cut(string(b), "\n")
+				if p, err := strconv.Atoi(strings.TrimSpace(first)); err == nil && p > 0 && syscall.Kill(p, 0) == nil {
 					pid = p
 				}
 			}

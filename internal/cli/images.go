@@ -146,15 +146,24 @@ func listImages(ctx context.Context, b *build.Builder) ([]listedImage, []tools.L
 			imgs = append(imgs, listedImage{Listed: l, Backend: be.Name(), builder: bb})
 		}
 	}
-	libc, err := b.BaseLibc()
+	// Current for the default backend's new VMs, or any backend's.
+	tg, err := b.ToolTarget()
 	if err != nil {
 		return nil, nil, err
+	}
+	tgs := []tools.Target{tg}
+	for _, be := range reg.All() {
+		t, err := (&build.Builder{Dirs: b.Dirs, Root: b.Root, Backend: be, Tools: b.Tools, From: b.From}).ToolTarget()
+		if err != nil {
+			return nil, nil, err
+		}
+		tgs = append(tgs, t)
 	}
 	inUse, err := vm.ToolsInUse(b.Dirs)
 	if err != nil {
 		return nil, nil, err
 	}
-	ts, err := b.Tools.List(libc, inUse)
+	ts, err := b.Tools.List(tgs, inUse)
 	return imgs, ts, err
 }
 

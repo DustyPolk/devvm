@@ -5,12 +5,12 @@ env DEVVM_MESSAGES=names
 env VMS=$XDG_DATA_HOME/devvm/vms
 env RUN=$XDG_DATA_HOME/devvm/run
 
-# No VMs: the header alone, and nothing is asked of Lima but its list.
+# No VMs: the header alone, and nothing is asked of a backend but its list.
 exec devvm ls
 cmp stdout header.txt
 ! stderr .
 stub_calls
-stdout '^limactl list --json\n\z'
+stdout '^limactl list --json\nsmolvm machine ls --json\n\z'
 
 # A folder named img-foo gives a VM named like an image: listed, while
 # the image it was made from isn't. No network policy: off.

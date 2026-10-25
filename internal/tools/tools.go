@@ -230,20 +230,27 @@ func (t *Tools) Check(ctx context.Context) {
 	}
 }
 
-// File returns a tool's image file at the lock's version, for a base
-// with libc.
-func (t *Tools) File(lock Lock, tool, libc string) (string, error) {
+// Target is what a VM's tool images are built for: its base's C library
+// and its backend's image format.
+type Target struct {
+	Libc   string // gnu or musl
+	Format string // the backend's ToolFormat: "" for tools/build.sh's own
+}
+
+// File returns a tool's image file at the lock's version, for a VM of
+// that target.
+func (t *Tools) File(lock Lock, tool string, tg Target) (string, error) {
 	entry := lock.Entry(tool)
 	v := field(entry, "version")
 	if v == "" {
 		return "", msg.ToolNotLocked(t.Dirs.ToolLock(), tool)
 	}
-	return image.ToolFile(os.DirFS(t.Root), image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: libc})
+	return image.ToolFile(os.DirFS(t.Root), image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: tg.Libc, Format: tg.Format})
 }
 
 // Files returns the image files of the tools behind each of these names
 // (node is node, pnpm and bun), at the lock's versions.
-func (t *Tools) Files(ctx context.Context, names []string, libc string) ([]string, error) {
+func (t *Tools) Files(ctx context.Context, names []string, tg Target) ([]string, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -254,7 +261,7 @@ func (t *Tools) Files(ctx context.Context, names []string, libc string) ([]strin
 	var files []string
 	for _, n := range names {
 		for _, tool := range image.GroupTools(n) {
-			f, err := t.File(lock, tool, libc)
+			f, err := t.File(lock, tool, tg)
 			if err != nil {
 				return nil, err
 			}

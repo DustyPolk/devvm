@@ -16,7 +16,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
-| `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `backends/`, `lima/` |
+| `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `backends/`, `lima/`, `smolvm/` (experimental; its in-VM scripts embedded) |
 | `internal/ui/` | the only package that prints: messages, prompts, status line, run log, cleanups, signals |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files (errors aren't messages yet) |
@@ -30,7 +30,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
 
-Still to come: smolvm and docker backends; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
+Still to come: smolvm's emulations, the docker backend; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
 
 ## Tasks
 
@@ -88,7 +88,8 @@ Still to come: smolvm and docker backends; the release keys (`packaging/minisign
 - **Don't touch the user's own VMs or images.** Manual runs: `DEVVM_LIMA_HOME=~/.lt LIMA_HOME=~/.lt XDG_DATA_HOME=/tmp/x/data XDG_CONFIG_HOME=/tmp/x/config DEVVM_SECRET_SERVICE=devvm-sandbox-test` (devvm's Lima home is `$XDG_DATA_HOME/devvm/lima` unless `DEVVM_LIMA_HOME`; `LIMA_HOME` is for your `limactl`). Add a `base-features` file and pass `--network-policy`/`--no-network-policy` so nothing prompts. Delete test Keychain items. Never use the user's tokens or logins: a network-policy VM reads its agent's login file from `HOME`, so give it its own (the Keychain needs the real `HOME`: test it apart).
 - **End-to-end:** `tests/e2e.sh` builds devvm from the checkout and drives real VMs in its sandbox (`~/.lt-e2e-go`, `/tmp/devvm-go-e2e`, service `devvm-go-e2e`), deleting only what it made; images stay cached (`--clean`). `tools` first resolves the newest tool versions. Run it in the background. Sections: `images`, `project`, `clone` (a throwaway repo, its own `HOME`), `gc` (an `img-*` folder's VM, a stale fixture), `tools` (a node VM), `network` (a claude VM), `from` (Debian 12, Alpine and Ubuntu bases, a docker that isn't running). Tiers: none (all but `from`, no features); `--from` (everything, every feature; before merging `layers/`, `tools/`, `features/`, `oci/` or `--from` changes); `--only a,b` (with `from`: every feature); to come: `--quick` (project, `--clone`, size, gc, network; after most changes). Hosted CI can't run it on macOS.
 - **Linux hosts:** `LIMA_HOME=~/.lt-linux-go`, VM `linuxhost` (nested virtualization, the repo read-only, copied to `~/devvm`), set up as [testing.md](docs/content/docs/testing.md) says; never `~/.lt-linux`, which is the user's.
-- **e2e to come:** `--backend`; network: git over SSH, opencode's login; tools: python, uv, claude, codex, rust, go, adding in place, gc.
+- **`tests/e2e.sh --backend smolvm`** runs only the `smolvm` section (after touching `internal/backend/smolvm` or shared code); it acts only on machines with its sandbox's label.
+- **e2e to come:** network: git over SSH, opencode's login; tools: python, uv, claude, codex, rust, go, adding in place, gc.
 - **Delete test VMs and temp files afterwards.** Long builds run in the background. Tests that `chflags` real files unlock them (`chflags -R nouchg`), only in their own temp folders.
 - **The testscript runner stops the sandbox's proxies** (`pkill -f` on `-lifeline`): the stub hostagent is gone before they look, so they'd wait 15 minutes.
 - **`limactl shell` reads stdin:** give it none unless the input is meant for it.
@@ -104,8 +105,8 @@ Still to come: smolvm and docker backends; the release keys (`packaging/minisign
 - **Linux hosts (QEMU):** mounts are 9p, and a 9p share mounts once per guest. Docker writes bind-mounted files as root, so containers that write host files `chown` them back. Ubuntu's `docker.io` has no BuildKit (`RUN --mount` needs `docker-buildx`). Debian's tmpfs `/tmp` hides anything mounted below it during boot. Project VMs' qcow2 disks are overlays of their image's, so never start an image VM or write its disk after it's built.
 - **Shared tools:** mise rewrites `latest`/`24`/`lts` links in a tool's folder after any install, so those folders are local in the VM; only version folders are mounted.
 - **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
-- **smolvm runs an image as a container in an Alpine microVM:** no init system, `exec` enters the container as root, `/dev` has no loop nodes (`mknod`), its EROFS mounts only uncompressed images, Docker needs `-v /var/lib/docker`.
-- **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine (pack machines grow fine). `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`.
+- **smolvm runs an image as a container in an Alpine microVM:** no init system, `exec` enters the container as root with only `HOME` set (no `USER`, no `/etc/environment`), `/dev` has no loop nodes (`mknod`), its EROFS mounts only uncompressed images, Docker needs `-v /var/lib/docker` and installs `systemctl` (tell systemd by `/run/systemd/system`). virtiofs shows host files as the host's uid, so the VM's user has it.
+- **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine, and a pack machine whose pack (stub and `.smolmachine`) is gone. `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`. On macOS it shares the user's machines: touch only those with devvm's label.
 - **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`.
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 

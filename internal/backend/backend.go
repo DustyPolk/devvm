@@ -51,8 +51,14 @@ type Backend interface {
 	// BuildTools runs the shared tools' build script in a throwaway VM
 	// made from base's image, with spec.Out mounted writable, and deletes
 	// the VM: at once, or after a failure once the run ends (a ui
-	// cleanup), so the run log ends with what failed.
+	// cleanup), so the run log ends with what failed. The images it
+	// leaves are in spec.Format, which is ToolFormat's.
 	BuildTools(ctx context.Context, spec ToolsSpec) error
+	// ToolFormat is the format of the tool images the backend's VMs
+	// mount, which their keys hash: "" for the build script's own
+	// (compressed EROFS), else a name of the backend's that changes
+	// whenever what it makes of them does.
+	ToolFormat() string
 
 	// CreateVM makes a VM from an image, stopped.
 	CreateVM(ctx context.Context, image string, spec VMSpec) error
@@ -94,8 +100,16 @@ type Backend interface {
 	SetPorts(ctx context.Context, vm string, p Ports) error
 	// SetAgentDirs replaces a stopped VM's agent folder mounts.
 	SetAgentDirs(ctx context.Context, vm string, dirs []string) error
-	// SetAgentForwarding turns a stopped VM's ssh-agent forwarding on or off.
+	// SetAgentForwarding turns a stopped VM's ssh-agent forwarding on or
+	// off (FeatureAgentToggle).
 	SetAgentForwarding(ctx context.Context, vm string, on bool) error
+}
+
+// KeyFiles is a backend that puts files of its own into base (scripts it
+// runs before devvm's), which base's key hashes too: by name, their
+// contents. A backend that puts nothing in doesn't implement it.
+type KeyFiles interface {
+	KeyFiles() map[string][]byte
 }
 
 // Problem is something a backend needs that the host lacks, as devvm
@@ -159,7 +173,8 @@ type ToolsSpec struct {
 	OutAt  string
 	Script Script
 	Args   []string
-	Net    Net // the network the build gets: NetInternet or NetNone
+	Format string // the images' format: the backend's ToolFormat
+	Net    Net    // the network the build gets: NetInternet or NetNone
 }
 
 // Built is what a build reports, for the image's record.

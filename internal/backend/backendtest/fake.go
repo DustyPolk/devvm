@@ -39,6 +39,7 @@ type Fake struct {
 	Unconfined   bool              // Confined answers false (else: true, or for a VM Start started, whether with NetProxy)
 	LifelineFile string            // Lifeline's answer
 	Missing      []backend.Problem // Problems' answer
+	Format       string            // ToolFormat's answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -185,6 +186,9 @@ func (f *Fake) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	}
 	return nil
 }
+
+// ToolFormat returns Format.
+func (f *Fake) ToolFormat() string { return f.Format }
 
 // CreateVM records the call and adds a stopped instance.
 func (f *Fake) CreateVM(_ context.Context, image string, spec backend.VMSpec) error {

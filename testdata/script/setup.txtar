@@ -54,7 +54,7 @@ exec devvm setup --backend lima --features fzf
 stdout '^==> default_backend backend=lima$'
 stdout '^==> base_features features=fzf$'
 ! exec devvm setup --backend nope
-stderr '^devvm: backend_unknown backends=lima name=nope$'
+stderr '^devvm: backend_unknown backends=lima, smolvm name=nope$'
 cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
 
 # An unreadable choice stays for you to fix.

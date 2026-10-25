@@ -11,7 +11,7 @@ A backend feature devvm builds from other parts of the backend ([emulated](backe
 
 ## smolvm
 
-Tried with smolvm 1.32.2 on an arm64 Mac, before devvm has the backend ([its column](backends.md#features)).
+Tried with smolvm 1.32.2 on an arm64 Mac before devvm had the backend ([its column](backends.md#features), [its page](smolvm.md)). The backend has its native features; the emulations below are to come, each refused until reviewed.
 
 **Network policy.** smolvm's allow lists work per address, not per port, and DNS has its own path:
 
@@ -21,16 +21,17 @@ Tried with smolvm 1.32.2 on an arm64 Mac, before devvm has the backend ([its col
 
 So `egress-proxy` would be emulated: the gateway as the only allowed address, DNS closed, and devvm's proxy as the decider, taking over only its own port. Without the decider, an allow list alone isn't network policy.
 
-**What the backend needs from the interface:**
+**How the backend fits the interface:**
 
-- **Tool images:** uncompressed EROFS (`mkfs.erofs` without `-z`), since smolvm's kernel can't mount compressed ones, so the image's key includes the format. Loop devices need `mknod` first.
-- **No init system:** the image runs as a container in a microVM. What base's systemd units do (the tools mount, Docker) and sshd, devvm runs after each start. Docker needs `/var/lib/docker` on the VM's own disk (`-v /var/lib/docker`).
-- **Ubuntu's container image, not its cloud image:** before the scripts, base needs `ca-certificates`, `sudo` and the VM's user (`ubuntu` already has uid 1000). `Built.Origin` is the image's digest.
-- **Network at create:** packs carry the build VM's network, CPUs and memory, and `--block-private` can't be removed from them, so builds use smolvm's default network and `CreateVM` sets everything. Allow lists change on a stopped VM (`machine update`), so `Start` sets them. The decider's address and token come with `Confinement`; the proxy reaches the VM at the gateway.
-- **ssh-agent forwarding is chosen at create:** `machine update` can't change it. The agent socket is read at each start.
+- **Tool images:** uncompressed EROFS, since smolvm's kernel can't mount compressed ones. The tools build machine runs `tools/build.sh` as on Lima, then makes each image again without compression (`plain.sh`), so `build.sh` and Lima's tool keys stay as they are. A backend names its format (`ToolFormat`, `plain-<plain.sh's hash>`), which a tool image's key hashes when it isn't build.sh's own; one share holds both kinds.
+- **No init system:** the image runs as a container in a microVM. While a build's scripts run, `systemctl` and `rc-update` are stand-ins that do nothing; after each start devvm makes the loop devices, mounts the tools and starts Docker (`services.sh`). Docker's storage is `-v /var/lib/docker`, on the machine's own disk. A project VM's setup tells a running systemd by `/run/systemd/system`, not by `systemctl` being there (Docker's packages install it).
+- **Ubuntu's container image, not its cloud image:** before the scripts, base gets `ca-certificates`, `sudo`, `bash` and the VM's user (`prepare.sh`). The user has the host's name and uid, as on Lima: virtiofs shows the project folder as the host's uid, so `ubuntu` (uid 1000) couldn't write it; a user with that uid is removed first. `Built.Origin` is the image by its digest. The backend's own scripts that go into base are in its key (`KeyFiles`).
+- **Network at create:** packs carry the build machine's network, CPUs and memory, and `--block-private` can't be removed from them, so builds use smolvm's default network and `CreateVM` sets everything. The network changes on a stopped VM (`machine update`), so `Start` sets it where it differs. To come (`egress-proxy`): the decider's address and token with `Confinement`, the proxy at the gateway.
+- **ssh-agent forwarding is chosen at create:** `machine update` can't change it, so turning it on or off later is a feature of its own (`agent-toggle`). The agent socket is read at each start.
+- **Every port** isn't what smolvm forwards (at most 64, servers on all addresses), so `ports-all` is a feature of its own, which new VMs ask for by default.
 - **Lifeline:** smolvm's `agent.pid` has a second line, the start time, so the proxy reads only the first.
-- **Ports** are set on a stopped VM, so `Confinement.SSHPort` becomes a forward set before the start.
-- **State:** `--state-dir` is Linux only, so on macOS devvm's machines share the user's smolvm, told apart by a label. smolvm keeps a local usage journal; devvm turns it off (`SMOLVM_USAGE=0`).
+- **Ports** are set on a stopped VM, so `Confinement.SSHPort` will be a forward set before the start (`ssh`, to come).
+- **State:** `--state-dir` is Linux only, so on macOS devvm's machines share the user's smolvm, told apart by a label naming devvm's data folder; devvm acts only on machines with it. smolvm keeps a local usage journal; devvm turns it off (`SMOLVM_USAGE=0`).
 
 ## Shared tools
 

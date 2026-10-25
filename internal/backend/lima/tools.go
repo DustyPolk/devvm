@@ -23,6 +23,9 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if spec.Net != backend.NetInternet && spec.Net != backend.NetNone {
 		return fmt.Errorf("lima: builds are confined, not started with network %d", spec.Net)
 	}
+	if spec.Format != l.ToolFormat() {
+		return fmt.Errorf("lima: tool images are build.sh's own, not %q", spec.Format)
+	}
 	if !keyPattern.MatchString(spec.Base) {
 		return fmt.Errorf("lima: invalid image key %q", spec.Base)
 	}
@@ -76,6 +79,9 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	done()
 	return nil
 }
+
+// ToolFormat is build.sh's own: Lima's guests mount compressed EROFS.
+func (l *Lima) ToolFormat() string { return "" }
 
 // deleteIfThere deletes a VM if devvm's Lima home has it.
 func (l *Lima) deleteIfThere(ctx context.Context, vm string) error {

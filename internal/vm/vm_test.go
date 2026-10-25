@@ -508,7 +508,7 @@ func TestUpTools(t *testing.T) {
 	}
 	var files []string
 	for _, tool := range []string{"node", "pnpm", "bun", "claude"} {
-		file, err := e.Tools.File(tools.Lock(lock), tool, "gnu")
+		file, err := e.Tools.File(tools.Lock(lock), tool, tools.Target{Libc: "gnu"})
 		if err != nil {
 			t.Fatal(err)
 		}

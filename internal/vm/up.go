@@ -295,7 +295,12 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if net {
 		conf.Net = backend.NetProxy
 	}
-	if err := backend.Require(b, vm, append(spec.Features(), conf.Features()...)...); err != nil {
+	need := append(spec.Features(), conf.Features()...)
+	if o.Clone {
+		// Its clone is copied in and fetched over ssh.
+		need = append(need, backend.FeatureSSH)
+	}
+	if err := backend.Require(b, vm, need...); err != nil {
 		return err
 	}
 	// A new VM gets the newest tools: check now when the daily check is
@@ -311,11 +316,12 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	if err != nil {
 		return err
 	}
-	libc, err := builder.BaseLibc()
+	tg, err := builder.ToolTarget()
 	if err != nil {
 		return err
 	}
-	files, err := e.Tools.Files(ctx, groups, libc)
+	libc := tg.Libc
+	files, err := e.Tools.Files(ctx, groups, tg)
 	if err != nil {
 		return err
 	}

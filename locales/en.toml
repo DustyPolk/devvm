@@ -132,6 +132,62 @@ other = "devvm's Lima home {{.home}} is too long for {{.vm}}'s name: set DEVVM_L
 [mount_comma]
 other = "Lima can't mount {{.path}}: its path has a comma"
 
+[smolvm_missing]
+other = "smolvm isn't installed: install smolvm 1.32 or newer"
+
+[smolvm_missing_fix]
+description = "fix is a command, such as brew install smol-machines/tap/smolvm"
+other = "smolvm isn't installed: run {{.fix}}"
+
+[smolvm_broken]
+other = "smolvm --version failed: reinstall smolvm"
+
+[smolvm_broken_fix]
+description = "fix is a command, such as brew reinstall smolvm"
+other = "smolvm --version failed: run {{.fix}}"
+
+[smolvm_old]
+other = "smolvm {{.version}} is too old: upgrade to smolvm 1.32 or newer"
+
+[smolvm_old_fix]
+description = "fix is a command, such as brew upgrade smolvm"
+other = "smolvm {{.version}} is too old: run {{.fix}}"
+
+[smolvm_host_unsupported]
+description = "host is Go's names for the host's system and processor (linux/riscv64)"
+other = "the smolvm backend doesn't run on {{.host}}: use an arm64 Mac, or Linux on arm64 or x86_64"
+
+[smolvm_machine_foreign]
+other = "smolvm has a machine named {{.vm}} that isn't this devvm's: delete or rename it with smolvm"
+
+[smolvm_update_failed]
+other = "couldn't change {{.vm}}'s smolvm settings"
+
+[smolvm_script_failed]
+other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
+
+[smolvm_from_registry_only]
+other = "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
+
+[smolvm_mount_colon]
+other = "smolvm can't mount {{.path}}: its path has a colon"
+
+[smolvm_too_many_ports]
+description = "max and asked are numbers of ports"
+other = "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}: forward fewer with devvm ports"
+
+[smolvm_no_agent]
+other = "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
+
+[creating_from_image]
+other = "creating {{.vm}} from {{.image}}"
+
+[packing_image]
+other = "packing {{.vm}} into its image"
+
+[pack_failed]
+other = "couldn't pack {{.vm}} into its image"
+
 [image_missing]
 other = "there's no image {{.key}} in devvm's Lima home: build it again"
 

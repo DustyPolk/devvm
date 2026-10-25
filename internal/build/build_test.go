@@ -136,10 +136,11 @@ func TestBuildTools(t *testing.T) {
 	if tools.Base != chain[0].Key || len(tools.Args) != 12 || tools.Args[0] != "node" || tools.Args[9] != "claude" {
 		t.Errorf("tools spec = %+v", tools)
 	}
-	if libc, err := b.BaseLibc(); libc != "musl" || err != nil {
-		t.Errorf("BaseLibc = %q, %v", libc, err)
+	tg, err := b.ToolTarget()
+	if tg.Libc != "musl" || tg.Format != "" || err != nil {
+		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
-	files, err := b.Tools.Files(t.Context(), []string{"node", "claude"}, "musl")
+	files, err := b.Tools.Files(t.Context(), []string{"node", "claude"}, tg)
 	if err != nil {
 		t.Fatal(err)
 	}

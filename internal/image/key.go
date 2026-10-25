@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"hash"
 	"io/fs"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/paths"
@@ -28,6 +30,9 @@ const keyFormat = "devvm image key 1"
 type Inputs struct {
 	// Backend is the backend that builds the image: lima, smolvm, docker.
 	Backend string
+	// BackendFiles are the backend's own files that go into base
+	// (backend.KeyFiles), by name. Nil for none.
+	BackendFiles map[string][]byte
 	// Root holds devvm's own files: base.yaml, layers/base.sh, features/
 	// and oci/ (paths.Root).
 	Root fs.FS
@@ -177,12 +182,15 @@ func (in Inputs) Chain(name string) (Chain, error) {
 	return chain, nil
 }
 
-// baseKey hashes base: the backend, base.yaml, layers/base.sh, the image
-// it starts from with its digest and the scripts that convert it, the
-// chosen features and its rebuild counter.
+// baseKey hashes base: the backend and its own files, base.yaml,
+// layers/base.sh, the image it starts from with its digest and the scripts
+// that convert it, the chosen features and its rebuild counter.
 func (in Inputs) baseKey() (string, error) {
 	k := newKeyHash()
 	k.field("backend", in.Backend)
+	for _, name := range slices.Sorted(maps.Keys(in.BackendFiles)) {
+		k.bytes("backend-file "+name, in.BackendFiles[name])
+	}
 	for _, f := range []string{"base.yaml", "layers/base.sh"} {
 		if err := k.own(in.Root, f); err != nil {
 			return "", err

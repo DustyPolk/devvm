@@ -110,6 +110,9 @@ type Tool struct {
 	LockEntry []byte
 	// Libc is the C library it's built for: gnu, or musl.
 	Libc string
+	// Format is the image's EROFS format, as its backend names it (the
+	// backend's ToolFormat): "" for tools/build.sh's own, compressed.
+	Format string
 }
 
 var (
@@ -121,7 +124,8 @@ var (
 
 // ToolFile names a tool's image: <tool>-<version>-<key>.erofs. The key is
 // 12 hex digits of a SHA-256 over the tool's lock entry, devvm's
-// tools/build.sh (in root) and the libc.
+// tools/build.sh (in root), the libc and, unless it's build.sh's own, the
+// format.
 func ToolFile(root fs.FS, t Tool) (string, error) {
 	if !toolName.MatchString(t.Name) {
 		return "", fmt.Errorf("invalid tool name %q", t.Name)
@@ -140,6 +144,9 @@ func ToolFile(root fs.FS, t Tool) (string, error) {
 		return "", err
 	}
 	k.field("libc", t.Libc)
+	if t.Format != "" {
+		k.field("format", t.Format)
+	}
 	return t.Name + "-" + t.Version + "-" + k.sum() + ".erofs", nil
 }
 
