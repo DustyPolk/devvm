@@ -490,10 +490,13 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	if conf.Net != backend.NetProxy {
 		e.Proxy.Stop(vm)
 	} else {
-		var err error
-		if conf, err = e.Proxy.Prepare(ctx, b, st, false); err != nil {
+		p, err := e.Proxy.Prepare(ctx, b, st, false)
+		if err != nil {
 			return conf, err
 		}
+		// The proxy's confinement, with the agent chosen above.
+		p.AgentSocket = conf.AgentSocket
+		conf = p
 	}
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {

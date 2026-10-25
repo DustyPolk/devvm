@@ -43,6 +43,35 @@ func TestUpSSHAgent(t *testing.T) {
 	}
 }
 
+// A VM with network policy whose mode is devvm starts confined with
+// devvm's agent too: the proxy's confinement keeps it.
+func TestOpenAgentNetworkPolicy(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
+	f.ExecFunc = noDirect
+	e.Agent.Run = (&agentCalls{}).run
+	st := existingVM(t, e, Options{Image: "base", NetworkPolicy: true, SSHAgent: true})
+	vm := st.Name()
+	if err := st.Set(sshagent.Key, sshagent.Devvm); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Stop(t.Context()); err != nil {
+		t.Fatal(names(err))
+	}
+	before := len(f.Calls())
+	if err := e.Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	calls := f.Calls()[before:]
+	start := slices.IndexFunc(calls, func(c backendtest.Call) bool { return c.Method == "Start" })
+	if start < 0 {
+		t.Fatalf("%s didn't start: %v", vm, calls)
+	}
+	if c, _ := calls[start].Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != e.Agent.Socket() || c.ProxyPassword == "" {
+		t.Errorf("started with %+v, want the proxy and agent %q", c, e.Agent.Socket())
+	}
+}
+
 // A VM whose mode is devvm starts with devvm's agent, its keys loaded,
 // and devvm's connections to it carry that agent; a stopped VM's backend
 // forwarding is made to match its mode, a running one's waits for its
