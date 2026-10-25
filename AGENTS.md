@@ -104,6 +104,9 @@ Still to come: smolvm and docker backends; the release keys (`packaging/minisign
 - **Linux hosts (QEMU):** mounts are 9p, and a 9p share mounts once per guest. Docker writes bind-mounted files as root, so containers that write host files `chown` them back. Ubuntu's `docker.io` has no BuildKit (`RUN --mount` needs `docker-buildx`). Debian's tmpfs `/tmp` hides anything mounted below it during boot. Project VMs' qcow2 disks are overlays of their image's, so never start an image VM or write its disk after it's built.
 - **Shared tools:** mise rewrites `latest`/`24`/`lts` links in a tool's folder after any install, so those folders are local in the VM; only version folders are mounted.
 - **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
+- **smolvm runs an image as a container in an Alpine microVM:** no init system, `exec` enters the container as root, `/dev` has no loop nodes (`mknod`), its EROFS mounts only uncompressed images, Docker needs `-v /var/lib/docker`.
+- **smolvm packs carry their build VM's network, CPUs and memory;** `--block-private` can't be removed. `update --storage` breaks a registry-image machine (pack machines grow fine). `--state-dir` is Linux only: run it with `SMOLVM_USAGE=0`.
+- **smolvm's network:** allow lists are per address (the gateway `100.96.0.1` is every host loopback port), DNS answers any name under them, forwarded ports reach only servers on `0.0.0.0`.
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 
 ## Commits and tasks

@@ -9,6 +9,29 @@ For contributors: why devvm is built the way it is, what was tried and dropped, 
 
 A backend feature devvm builds from other parts of the backend ([emulated](backends.md#features)) gets a note here before its review: what it's built from, the guarantee it keeps, what could break it, and the end-to-end checks that prove it. Then the threat check, then it's marked reviewed. None so far: every feature Lima has is native.
 
+## smolvm
+
+Tried with smolvm 1.32.2 on an arm64 Mac, before devvm has the backend ([its column](backends.md#features)).
+
+**Network policy.** smolvm's allow lists work per address, not per port, and DNS has its own path:
+
+- With `--allow-cidr` of the host's gateway (`100.96.0.1`), the VM reaches every port on the host's loopback (ssh, local databases), not just the proxy's, and nothing else.
+- Under any allow list, the gateway answers DNS for any name, even queries sent to `8.8.8.8`: a way out for data. `--allow-host-pattern` of a name that doesn't exist makes it answer NXDOMAIN; `--dns 127.0.0.1` makes it time out. Whether a refused query still leaves the host is unchecked.
+- `--mediated-egress` with `--egress-interceptor` hands each connection the allow list admits to a host process, with its address and port: it allows, denies, or takes the connection over. A test decider that took over only the proxy's port reached the proxy, and nothing else got through. It fails closed: with the decider gone, connections are reset, and the VM won't start without it.
+
+So `egress-proxy` would be emulated: the gateway as the only allowed address, DNS closed, and devvm's proxy as the decider, taking over only its own port. Without the decider, an allow list alone isn't network policy.
+
+**What the backend needs from the interface:**
+
+- **Tool images:** uncompressed EROFS (`mkfs.erofs` without `-z`), since smolvm's kernel can't mount compressed ones, so the image's key includes the format. Loop devices need `mknod` first.
+- **No init system:** the image runs as a container in a microVM. What base's systemd units do (the tools mount, Docker) and sshd, devvm runs after each start. Docker needs `/var/lib/docker` on the VM's own disk (`-v /var/lib/docker`).
+- **Ubuntu's container image, not its cloud image:** before the scripts, base needs `ca-certificates`, `sudo` and the VM's user (`ubuntu` already has uid 1000). `Built.Origin` is the image's digest.
+- **Network at create:** packs carry the build VM's network, CPUs and memory, and `--block-private` can't be removed from them, so builds use smolvm's default network and `CreateVM` sets everything. Allow lists change on a stopped VM (`machine update`), so `Start` sets them. The decider's address and token come with `Confinement`; the proxy reaches the VM at the gateway.
+- **ssh-agent forwarding is chosen at create:** `machine update` can't change it. The agent socket is read at each start.
+- **Lifeline:** smolvm's `agent.pid` has a second line, the start time, so the proxy reads only the first.
+- **Ports** are set on a stopped VM, so `Confinement.SSHPort` becomes a forward set before the start.
+- **State:** `--state-dir` is Linux only, so on macOS devvm's machines share the user's smolvm, told apart by a label. smolvm keeps a local usage journal; devvm turns it off (`SMOLVM_USAGE=0`).
+
 ## Shared tools
 
 Each tool version is one compressed EROFS image, loop-mounted read-only in each VM from a read-only share ([details](images.md#shared-tools)).
