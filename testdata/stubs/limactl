@@ -9,7 +9,9 @@
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
-# start writes the VM's ha.pid (devvm's pid, which runs), and
+# start writes the VM's ha.pid (devvm's pid, which runs) and the SSH agent
+# it was given ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/start-agent-<name>,
+# and shell its agent to $STUB_DIR/shell-agent; and
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
 # start), and with $STUB_DIR/start-hangs it hangs (touching
 # $STUB_DIR/hanging first). clone fails with $STUB_DIR/clone-fails,
@@ -99,6 +101,7 @@ case ${1:-} in
     set_status "${names[0]}" Running
     mkdir -p "$LIMA_HOME/${names[0]}"
     echo "$PPID" > "$LIMA_HOME/${names[0]}/ha.pid"
+    echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/start-agent-${names[0]}"
     cfg="$LIMA_HOME/${names[0]}/ssh.config"
     [[ -f $cfg ]] || printf 'Host lima-%s\n  IdentityFile "%s/_config/user"\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  NoHostAuthenticationForLocalhost yes\n  PreferredAuthentications publickey\n  BatchMode yes\n  IdentitiesOnly yes\n  User stub\n  ControlMaster auto\n  ControlPath "%s/ssh.sock"\n  ControlPersist yes\n  PermitLocalCommand yes\n  LocalCommand touch /x/ran\n  Hostname 127.0.0.1\n  Port 60022\n' \
       "${names[0]}" "$LIMA_HOME" "$LIMA_HOME/${names[0]}" > "$cfg"
@@ -108,6 +111,7 @@ case ${1:-} in
     for n in "${names[@]}"; do set_status "$n"; done
     [[ ! -e $STUB_DIR/delete-fails ]] || exit 1 ;;
   shell)
+    echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/shell-agent"
     # A clone's git: Exec's command line is "cd '/' && exec WORDS".
     line=${*: -1}
     if [[ $line == "cd '/' && exec 'git' '-C' "* || ($line == "cd '/' && exec 'sh' '-c' "* && $line == *receive.denyCurrentBranch*) ]]; then

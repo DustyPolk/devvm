@@ -1,0 +1,388 @@
+// Package sshagent is SSH agent forwarding into project VMs: each VM's
+// choice (off; on, the user's own agent; devvm, devvm's own), and devvm's
+// own agent, which holds only the keys added to it, so a VM that forwards
+// it can never use the user's others.
+package sshagent
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ui"
+)
+
+// Key is a VM's state key for its choice.
+const Key = "ssh_agent"
+
+// A VM's choices.
+const (
+	Off   = "off"   // no agent
+	On    = "on"    // the user's own (SSH_AUTH_SOCK)
+	Devvm = "devvm" // devvm's own
+)
+
+// Modes are the choices, as devvm ssh-agent takes them.
+var Modes = []string{On, Devvm, Off}
+
+// Mode is a VM's choice: off unless its state says on or devvm.
+func Mode(st *state.VM) string {
+	switch v := st.Get(Key); v {
+	case On, Devvm:
+		return v
+	}
+	return Off
+}
+
+// Forwards reports whether a VM with mode forwards an agent.
+func Forwards(mode string) bool { return mode == On || mode == Devvm }
+
+// DefaultLifetime is how long devvm's agent keeps a key added without a
+// lifetime: the next launch that needs it loads it again.
+const DefaultLifetime = "12h"
+
+// Forever is the lifetime of a key the agent keeps until it ends.
+const Forever = "forever"
+
+// lifetime is a duration ssh-add -t takes: 30m, 8h, 1h30m, 3600.
+var lifetime = regexp.MustCompile(`^([0-9]+[smhdwSMHDW]?)+$`)
+
+// ValidLifetime reports whether s is a lifetime --lifetime takes.
+func ValidLifetime(s string) bool { return s == Forever || lifetime.MatchString(s) }
+
+// Mount is a host folder a project VM mounts.
+type Mount struct{ VM, Dir string }
+
+// Agent is devvm's own SSH agent. New sets every field; tests change them.
+type Agent struct {
+	Dirs paths.Dirs
+	// Run runs an OpenSSH tool (ssh-add, ssh-agent, ssh-keygen) with
+	// devvm's agent as its agent, and returns its output and exit code
+	// (127 when it can't run). terminal connects ssh-add's input to
+	// devvm's, to ask for a key's passphrase; its output isn't kept.
+	Run func(ctx context.Context, terminal bool, argv ...string) (out string, code int)
+	// Mounts returns the host folders project VMs mount.
+	Mounts func(ctx context.Context) ([]Mount, error)
+	// Getenv and LookPath find an ssh-askpass, for --confirm.
+	Getenv   func(string) string
+	LookPath func(string) (string, error)
+	Info     func(msg.M)
+	Note     func(msg.M)
+	Warn     func(msg.M)
+}
+
+// New returns devvm's agent, whose socket is in d's data folder; mounts
+// lists what project VMs mount.
+func New(d paths.Dirs, mounts func(ctx context.Context) ([]Mount, error)) *Agent {
+	sock := d.AgentSock()
+	return &Agent{
+		Dirs: d, Mounts: mounts, Getenv: os.Getenv, LookPath: exec.LookPath,
+		Run: func(ctx context.Context, terminal bool, argv ...string) (string, int) {
+			return run(ctx, sock, terminal, argv...)
+		},
+		Info: ui.Info, Note: ui.Note, Warn: ui.Warn,
+	}
+}
+
+// Socket is the agent's socket, which VMs that forward it get.
+func (a *Agent) Socket() string { return a.Dirs.AgentSock() }
+
+// run runs argv with SSH_AUTH_SOCK set to sock.
+func run(ctx context.Context, sock string, terminal bool, argv ...string) (string, int) {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // OpenSSH's tools, with devvm's arguments
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(e string) bool { return strings.HasPrefix(e, "SSH_AUTH_SOCK=") })
+	cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+sock)
+	// ssh-agent leaves its agent running: it gets no pipe to hold open.
+	cmd.WaitDelay = time.Second
+	var out bytes.Buffer
+	if terminal {
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, ui.LogWriter(), ui.LogWriter()
+	} else {
+		cmd.Stdout = &out
+	}
+	err := cmd.Run()
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
+		return out.String(), ee.ExitCode()
+	}
+	if err != nil {
+		return out.String(), 127
+	}
+	return out.String(), 0
+}
+
+// list returns ssh-add -l's output and code: 0 with keys, 1 with none, 2
+// with no agent.
+func (a *Agent) list(ctx context.Context) (string, int) {
+	return a.Run(ctx, false, "ssh-add", "-l")
+}
+
+// held returns the fingerprints and comments of the keys the agent holds.
+func held(out string) (fps, comments []string) {
+	for l := range strings.SplitSeq(out, "\n") {
+		f := strings.Fields(l)
+		if len(f) < 3 || !strings.HasPrefix(f[1], "SHA256:") {
+			continue
+		}
+		fps = append(fps, f[1])
+		comments = append(comments, strings.Join(f[2:len(f)-1], " "))
+	}
+	return fps, comments
+}
+
+// start starts the agent unless it runs (a reboot ends it), and reports
+// whether it holds keys.
+func (a *Agent) start(ctx context.Context) (bool, error) {
+	switch _, code := a.list(ctx); code {
+	case 0:
+		return true, nil
+	case 1:
+		return false, nil
+	}
+	sock := a.Socket()
+	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
+		return false, err
+	}
+	if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	if _, code := a.Run(ctx, false, "ssh-agent", "-a", sock); code != 0 {
+		return false, msg.AgentStartFailed(sock)
+	}
+	return false, nil
+}
+
+// Ensure starts the agent unless it runs, and loads the keys added to it
+// that it doesn't hold: after a reboot, and after a key's lifetime ran
+// out. A key is loaded only while its file holds the key that was added
+// (its fingerprint, pinned when it was added), and isn't in a folder a VM
+// mounts; it warns about each one it doesn't load.
+func (a *Agent) Ensure(ctx context.Context) error {
+	hasKeys, err := a.start(ctx)
+	if err != nil {
+		return err
+	}
+	keys, err := state.ReadAgentKeys(a.Dirs)
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		if !hasKeys {
+			a.Warn(msg.AgentNoKeys())
+		}
+		return nil
+	}
+	out, _ := a.list(ctx)
+	loaded, _ := held(out)
+	for _, k := range keys {
+		if !strings.HasPrefix(k.Fingerprint, "SHA256:") {
+			a.Warn(msg.AgentKeyUnpinned(k.File))
+			continue
+		}
+		if slices.Contains(loaded, k.Fingerprint) {
+			continue
+		}
+		vm, err := a.mountedBy(ctx, k.File)
+		if err != nil {
+			return err
+		}
+		if vm != "" {
+			a.Warn(msg.AgentKeyMounted(k.File, vm))
+			continue
+		}
+		if _, err := a.load(ctx, k.File, k.Options, k.Fingerprint); err != nil {
+			if m, ok := errors.AsType[msg.M](err); ok {
+				a.Warn(m)
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// load loads key into the agent with its options, if it's still the key
+// with fingerprint pinned (any key, with pinned ""), and returns its
+// fingerprint. The file is read once, into a private copy, and the copy is
+// what's checked and loaded: the path may be a name a VM can change (a
+// link to the user's main key). The copy has nothing beside it, so its
+// public key comes from the private key itself.
+func (a *Agent) load(ctx context.Context, key, options, pinned string) (string, error) {
+	data, err := os.ReadFile(key) //nolint:gosec // a key the user added
+	if err != nil {
+		return "", msg.AgentLoadFailed(key)
+	}
+	tmp, err := os.MkdirTemp("", "devvm-key.")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	copied := filepath.Join(tmp, "key")
+	if err := os.WriteFile(copied, data, 0o600); err != nil { //nolint:gosec // a folder of devvm's own
+		return "", err
+	}
+	out, code := a.Run(ctx, false, "ssh-keygen", "-lf", copied)
+	f := strings.Fields(out)
+	if code != 0 || len(f) < 2 || !strings.HasPrefix(f[1], "SHA256:") {
+		return "", msg.AgentKeyNoFingerprint(key)
+	}
+	fp := f[1]
+	if pinned != "" && fp != pinned {
+		return "", msg.AgentKeyChanged(key)
+	}
+	argv := []string{"ssh-add"}
+	life := DefaultLifetime
+	for o := range strings.FieldsSeq(options) {
+		switch {
+		case o == "confirm":
+			argv = append(argv, "-c")
+		case strings.HasPrefix(o, "lifetime="):
+			life = strings.TrimPrefix(o, "lifetime=")
+		}
+	}
+	if life != Forever {
+		argv = append(argv, "-t", life)
+	}
+	if _, code := a.Run(ctx, true, append(argv, copied)...); code != 0 {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return "", msg.AgentLoadFailed(key)
+	}
+	return fp, nil
+}
+
+// mountedBy returns a project VM that mounts a folder holding the file key
+// names in the end (a link to a key in a project folder is as readable
+// there), or "".
+func (a *Agent) mountedBy(ctx context.Context, key string) (string, error) {
+	file := resolved(key)
+	ms, err := a.Mounts(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, m := range ms {
+		dir := resolved(m.Dir)
+		if file == dir || strings.HasPrefix(file, strings.TrimSuffix(dir, "/")+"/") {
+			return m.VM, nil
+		}
+	}
+	return "", nil
+}
+
+// resolved is path with its links resolved, as far as they resolve.
+func resolved(path string) string {
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	if r, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
+		return filepath.Join(r, filepath.Base(path))
+	}
+	return path
+}
+
+// AddOptions are how devvm ssh-agent add loads a key.
+type AddOptions struct {
+	Confirm  bool   // the agent asks before each use, through ssh-askpass
+	Lifetime string // how long it keeps the key: DefaultLifetime when "", or Forever
+}
+
+// Add loads a key into the agent, started first unless it runs, and
+// records it with its fingerprint and options, replacing what was recorded
+// for it, so it's loaded again when it's needed. A key in a folder a VM
+// mounts is refused: that VM could read it.
+func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
+	if fi, err := os.Stat(file); err != nil || !fi.Mode().IsRegular() {
+		return msg.AgentKeyNotFound(file)
+	}
+	key, err := filepath.Abs(file)
+	if err != nil {
+		return err
+	}
+	if dir, err := filepath.EvalSymlinks(filepath.Dir(key)); err == nil {
+		key = filepath.Join(dir, filepath.Base(key))
+	}
+	var opts []string
+	if o.Confirm {
+		if a.Getenv("SSH_ASKPASS") == "" {
+			if _, err := a.LookPath("ssh-askpass"); err != nil {
+				return msg.AgentConfirmNeedsAskpass()
+			}
+		}
+		opts = append(opts, "confirm")
+	}
+	if o.Lifetime != "" {
+		if !ValidLifetime(o.Lifetime) {
+			return msg.AgentLifetimeInvalid(msg.Shown(o.Lifetime))
+		}
+		opts = append(opts, "lifetime="+o.Lifetime)
+	}
+	vm, err := a.mountedBy(ctx, key)
+	if err != nil {
+		return err
+	}
+	if vm != "" {
+		return msg.AgentKeyMounted(key, vm)
+	}
+	if _, err := a.start(ctx); err != nil {
+		return err
+	}
+	options := strings.Join(opts, " ")
+	fp, err := a.load(ctx, key, options, "")
+	if err != nil {
+		return err
+	}
+	keys, err := state.ReadAgentKeys(a.Dirs)
+	if err != nil {
+		return err
+	}
+	keys = slices.DeleteFunc(keys, func(k state.AgentKey) bool { return k.File == key })
+	if err := state.WriteAgentKeys(a.Dirs, append(keys, state.AgentKey{File: key, Fingerprint: fp, Options: options})); err != nil {
+		return err
+	}
+	out, _ := a.list(ctx)
+	_, comments := held(out)
+	for i, c := range comments {
+		comments[i] = msg.Shown(c)
+	}
+	a.Info(msg.AgentHolds(strings.Join(comments, " ")))
+	a.Note(msg.AgentHoldsNote())
+	return nil
+}
+
+// Keys writes to w the keys the agent holds, as ssh-add -l lists them,
+// loading those it lacks first, then each key added to it: its file, its
+// fingerprint and how it's loaded.
+func (a *Agent) Keys(ctx context.Context, w io.Writer) error {
+	if err := a.Ensure(ctx); err != nil {
+		return err
+	}
+	out, _ := a.list(ctx)
+	if _, err := io.WriteString(w, out); err != nil {
+		return err
+	}
+	keys, err := state.ReadAgentKeys(a.Dirs)
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		opts := k.Options
+		if !strings.Contains(opts, "lifetime=") {
+			opts = strings.TrimSpace(opts + " lifetime=" + DefaultLifetime)
+		}
+		if _, err := io.WriteString(w, k.File+": "+k.Fingerprint+" "+opts+"\n"); err != nil {
+			return err
+		}
+	}
+	return nil
+}

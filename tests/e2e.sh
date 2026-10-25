@@ -5,7 +5,8 @@
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then opening it again,
-#                restart and rm, and an agent VM's folders and exported history; clone makes a --clone
+#                restart and rm, an agent VM's folders and exported history, and SSH agent forwarding
+#                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; tools makes a node
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
@@ -45,6 +46,7 @@ work=/tmp/devvm-go-e2e
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE=devvm-go-e2e   # its Keychain items: fake tokens only, deleted at the end
 unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
+unset SSH_AUTH_SOCK   # your SSH agent is never reached: checks that need one start their own
 mkdir -p "$LIMA_HOME"
 for real in "$HOME/.lima" "$HOME/.local/share/devvm/lima"; do
   real=$(cd "$real" 2>/dev/null && pwd -P || echo "$real")
@@ -89,7 +91,9 @@ cleanup() {
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
-  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
+  [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
+  pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
+  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
@@ -371,6 +375,37 @@ in_vm "$vm" 'mkdir -p ~/.claude/projects/e2e && echo e2e-transcript > ~/.claude/
 check "rm exports its agents' history, without their logins, then deletes it" bash -c "cd '$a' && HOME='$ah' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && f=\$(ls '$XDG_DATA_HOME'/devvm/exports/$vm-*.tar.gz) && tar -tzf \"\$f\" > '$work/export.list' &&
   grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list'"
+
+section "SSH agents"
+# A home of its own, without keys. A throwaway agent with a throwaway key stands for yours; devvm's
+# own agent (its socket in the sandbox's data folder) gets another.
+sa=$work/agent-ssh; rm -rf "$sa"; mkdir -p "$sa/home"; sa=$(cd "$sa" && pwd -P)
+ssh-keygen -q -t ed25519 -N '' -C devvm-e2e-user-key -f "$sa/user-key"
+ssh-keygen -q -t ed25519 -N '' -C devvm-e2e-key -f "$sa/devvm-key"
+user_agent_pid=$(ssh-agent -a "$sa/user.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+SSH_AUTH_SOCK=$sa/user.sock ssh-add -q "$sa/user-key" 2>/dev/null
+# as_user CMD...: CMD with that home and agent.
+as_user() { HOME=$sa/home SSH_AUTH_SOCK=$sa/user.sock "$@"; }
+export -f as_user; export sa
+g=$(newproj agentvm)
+(cd "$g" && as_user quiet "$D" --no-network-policy --no-git-protect --ssh-agent base)
+vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
+check "--ssh-agent: the VM uses your agent's keys" bash -c "
+  [[ \$(as_user limactl shell --workdir / $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-user-key ]]"
+check "ssh-agent add loads a key into devvm's own agent" bash -c "
+  as_user '$D' ssh-agent add '$sa/devvm-key' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=devvm-e2e-key)\""
+check "ssh-agent devvm, then restart: the VM uses only that key, not yours" bash -c "cd '$g' &&
+  as_user '$D' ssh-agent devvm </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' restart >>'$work/last.log' 2>&1 &&
+  [[ \$(as_user limactl shell --workdir / $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-key ]]"
+check "so does an editor connecting by name, whatever agent it has" bash -c "
+  [[ \$(as_user ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-key ]]"
+check "ssh-agent off, then restart: no agent in the VM" bash -c "cd '$g' &&
+  as_user '$D' ssh-agent off </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' restart >>'$work/last.log' 2>&1 &&
+  ! as_user limactl shell --workdir / $vm ssh-add -l </dev/null &&
+  grep -A8 '^Host .* $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' | grep -q '^  ForwardAgent no\$'"
+check "rm deletes the SSH agent VM" bash -c "cd '$g' && as_user '$D' rm -f </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
+kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
+pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock"
 fi
 
 if want clone; then

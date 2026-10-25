@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -23,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -52,6 +54,7 @@ type Options struct {
 	UnsafeFolder    bool   // --unsafe-folder
 	NoGitProtect    bool   // --no-git-protect
 	Clone           bool   // --clone
+	SSHAgent        bool   // --ssh-agent: a new VM forwards the user's SSH agent
 	From            string // --from, or its default: the container image a new VM's base starts from
 }
 
@@ -75,8 +78,11 @@ type Env struct {
 	Getenv    func(string) string
 	HostTZ    func() string
 	GitConfig func(ctx context.Context, dir, key string) string
-	// SSHAdd runs ssh-add with args and returns its exit code.
+	// SSHAdd runs ssh-add with args, on the user's own agent, and returns
+	// its exit code.
 	SSHAdd func(ctx context.Context, args ...string) int
+	// Agent is devvm's own SSH agent.
+	Agent *sshagent.Agent
 }
 
 // NewEnv returns the environment up runs in here, devvm being self.
@@ -89,13 +95,15 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry) (*Env, error
 		return nil, err
 	}
 	home := os.Getenv("HOME")
-	return &Env{
+	e := &Env{
 		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root),
 		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home)),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
 		Host: ThisHost, Protector: gitprotect.New, Exec: execShell,
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig, SSHAdd: sshAdd,
-	}, nil
+	}
+	e.Agent = sshagent.New(d, e.mounts)
+	return e, nil
 }
 
 // builder returns the builder of images on b whose base starts from
@@ -190,6 +198,7 @@ func (e *Env) find(ctx context.Context, flag string) (*found, error) {
 	switch _, err := b.Inspect(ctx, f.Name); {
 	case err == nil:
 		t.exists = true
+		e.useAgent(sshagent.Mode(st))
 	case !errors.Is(err, backend.ErrNotFound):
 		return nil, err
 	}
@@ -276,8 +285,13 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	// from it. Its agents' folders on the host are mounted read-only.
 	spec := backend.VMSpec{
 		Name: vm, Project: f.Dir, AgentDirs: AgentMounts(e.Home, img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
-		Size: size.Backend(), Ports: PortsBackend(ports),
+		AgentForwarding: o.SSHAgent, Size: size.Backend(), Ports: PortsBackend(ports),
 	}
+	agent := sshagent.Off
+	if o.SSHAgent {
+		agent = sshagent.On
+	}
+	e.useAgent(agent)
 	mode := ""
 	if o.Clone {
 		spec.Project, mode = "", ModeClone
@@ -362,6 +376,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 	for _, kv := range [][2]string{
 		{KeyNet, netState},
 		{KeyMode, mode},
+		{sshagent.Key, agent},
 		{KeyLibc, libc},
 		{KeyTools, strings.Join(files, " ")},
 		{KeyCPUs, size.CPUs},
@@ -391,7 +406,7 @@ func (e *Env) create(ctx context.Context, o Options, f project.Folder, b backend
 		if err := e.Protector(f.Dir).NewVM(ctx, st, o.NoGitProtect); err != nil {
 			return err
 		}
-		if project.SSHRemote(ctx, f.Dir) {
+		if !o.SSHAgent && project.SSHRemote(ctx, f.Dir) {
 			ui.Warn(msg.SSHRemoteHint(vm))
 		}
 		// Files an earlier VM of this folder made are named too.
@@ -457,6 +472,14 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
 		return conf, err
 	}
+	// The VM's backend forwards the agent it gets when it starts: devvm's
+	// own, with the keys it lacks loaded, for a VM that uses it.
+	if sshagent.Mode(st) == sshagent.Devvm {
+		if err := e.Agent.Ensure(ctx); err != nil {
+			return conf, err
+		}
+		conf.AgentSocket = e.Agent.Socket()
+	}
 	if conf.Net != backend.NetProxy {
 		e.Proxy.Stop(vm)
 	} else {
@@ -472,6 +495,48 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		return conf, err
 	}
 	return conf, nil
+}
+
+// useAgent makes the SSH agent devvm's own connections to the folder's VM
+// carry the one its mode says: devvm's, the user's, or none. Its backend's
+// connections to it (Lima's share one) and the shell's are among them.
+func (e *Env) useAgent(mode string) {
+	switch mode {
+	case sshagent.Devvm:
+		_ = os.Setenv("SSH_AUTH_SOCK", e.Agent.Socket())
+	case sshagent.On:
+	default:
+		_ = os.Unsetenv("SSH_AUTH_SOCK")
+	}
+}
+
+// mounts returns the host folders project VMs mount, as their state and
+// backends have them: the project folder (not a --clone VM's), agent
+// folders, the tools share. A backend that can't list runs no VMs.
+func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
+	var ms []sshagent.Mount
+	for _, b := range e.Registry.All() {
+		ins, err := b.List(ctx)
+		if err != nil {
+			continue
+		}
+		for _, in := range ins {
+			if !project.IsVM(in.Name) {
+				continue
+			}
+			st, err := state.ReadVM(e.Dirs, in.Name)
+			if err != nil {
+				return nil, err
+			}
+			if dir := st.Get(state.KeyDir); dir != "" && !isClone(st) {
+				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: dir})
+			}
+			for _, d := range append(slices.Clone(in.AgentDirs), e.Dirs.Tools()) {
+				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: d})
+			}
+		}
+	}
+	return ms, nil
 }
 
 // sshConfig is the ssh config for every backend's VMs.

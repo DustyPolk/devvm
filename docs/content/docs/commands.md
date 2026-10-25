@@ -27,6 +27,7 @@ Options for a new VM:
 | `--no-network-policy` | create the VM without network policy, so it reaches anything this machine can |
 | `--clone` | create the VM with its own clone of the repo instead of mounting the folder ([details](clone.md)) |
 | `--no-git-protect` | create the VM without `.git` protection |
+| `--ssh-agent` | create the VM forwarding your SSH agent: while you're connected, anything in it can use your keys ([details](ssh.md#agent-forwarding)) |
 | `--unsafe-folder` | mount a folder devvm refuses (one that is or holds your home folder or devvm's own, or is inside devvm's own) anyway ([details](security.md#only-the-project-folder)) |
 | `--cpus N`, `--memory GiB`, `--disk GiB` | the VM's size ([details](#size-and-ports)) |
 | `--ports all\|none\|LIST` | which ports the VM forwards ([details](#size-and-ports)) |
@@ -59,9 +60,9 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size, ports, backend and `--from`.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection, size, ports, SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
 5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
-6. A stopped VM gets the size and ports its state asks for; a running one gets them when it next starts, and devvm says so.
+6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) its state asks for; a running one gets them when it next starts, and devvm says so. A VM that forwards your agent has it checked for keys; one that uses devvm's own gets the keys it lacks loaded.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.
 8. The [self-check](network.md#the-self-check) runs: a VM whose network policy doesn't hold is stopped.
 9. It sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first.
@@ -118,6 +119,14 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm secret set claude\|github [--stdin]`, `devvm auth claude` | save a token on this machine; with network policy, VMs get a placeholder and their proxy puts the token in ([details](network.md#saving-and-binding-tokens)) |
 | `devvm secret use\|unuse NAME` | let this folder's VM use a token, or stop it (`claude`: automatic for an image with `claude`) |
 | `devvm secret ls`, `devvm secret rm NAME` | list the tokens, whether each is saved and the VMs using it; delete a saved one |
+
+## SSH
+
+| | |
+| --- | --- |
+| `devvm ssh-agent [on\|devvm\|off]` | show this folder's VM's SSH agent forwarding (`off`, `on`: yours, `devvm`: devvm's own), or change it from its next start: `devvm restart` ([details](ssh.md#agent-forwarding)) |
+| `devvm ssh-agent add KEY_FILE [--confirm] [--lifetime DURATION]` | load a key into devvm's own agent, and record it, so it's loaded again when a VM needs it ([details](ssh.md#devvms-own-agent)) |
+| `devvm ssh-agent keys` | list the keys devvm's own agent holds, then those added to it |
 
 ## Images
 

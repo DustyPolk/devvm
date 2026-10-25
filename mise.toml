@@ -45,12 +45,14 @@ run = [
 [tasks.test]
 description = "Run the unit and CLI tests"
 env = { CGO_ENABLED = "1" }
-# Tests get a throwaway HOME and XDG folders, so none can reach the real ones.
+# Tests get a throwaway HOME and XDG folders, so none can reach the real ones,
+# and no SSH agent.
 run = '''
 GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" GOPATH="$(go env GOPATH)"
 export GOCACHE GOMODCACHE GOPATH
 home="$(mktemp -d "${TMPDIR:-/tmp}/devvm-test.XXXXXX")"
 trap 'rm -rf "$home"' EXIT
+unset SSH_AUTH_SOCK
 HOME="$home" XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
   gotestsum -- -race -cover ./...
 '''

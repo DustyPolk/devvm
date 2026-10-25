@@ -21,6 +21,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
@@ -103,7 +104,9 @@ func (c *Config) Write(ctx context.Context) error {
 			return err
 		}
 		if ok {
-			c.entry(&buf, Alias(r.in.Name, all), r.in, t)
+			if err := c.entry(&buf, Alias(r.in.Name, all), r.in, t); err != nil {
+				return err
+			}
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -113,16 +116,28 @@ func (c *Config) Write(ctx context.Context) error {
 }
 
 // entry writes vm's Host block. Its own host keys are checked, and agent
-// forwarding is what the VM has, an explicit no included, so a Host *
-// of the user's doesn't apply: ssh takes an option's first value.
-func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, t backend.SSHTarget) {
+// forwarding is what the VM's state says, an explicit no included, so a
+// Host * of the user's doesn't apply: ssh takes an option's first value.
+func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, t backend.SSHTarget) error {
 	hosts := alias
 	if alias != in.Name {
 		hosts += " " + in.Name
 	}
-	forward := "no"
-	if in.AgentForwarding {
+	st, err := state.ReadVM(c.Dirs, in.Name)
+	if err != nil {
+		return err
+	}
+	forward, identity := "no", ""
+	switch sshagent.Mode(st) {
+	case sshagent.On:
 		forward = "yes"
+	case sshagent.Devvm:
+		// Editors forward devvm's own agent too. OpenSSH forwards a
+		// socket only when it sees an agent of its own: the same one,
+		// so an editor started without SSH_AUTH_SOCK (or with another)
+		// still forwards it.
+		forward = `"` + c.Dirs.AgentSock() + `"`
+		identity = "  IdentityAgent " + forward
 	}
 	lines := []string{
 		"", "Host " + hosts,
@@ -135,9 +150,11 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 		// forward the agent of whichever process opened it.
 		"  ControlMaster no",
 		"  ControlPath none",
-		"  Hostname " + t.Host,
-		"  Port " + strconv.Itoa(t.Port),
 	}
+	if identity != "" {
+		lines = append(lines, identity)
+	}
+	lines = append(lines, "  Hostname "+t.Host, "  Port "+strconv.Itoa(t.Port))
 	if t.User != "" {
 		lines = append(lines, "  User "+t.User)
 	}
@@ -145,6 +162,7 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 		lines = append(lines, "  "+o.Key+" "+o.Value)
 	}
 	buf.WriteString(strings.Join(lines, "\n") + "\n")
+	return nil
 }
 
 // A host key as a VM shows it: its type and its key.

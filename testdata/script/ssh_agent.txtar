@@ -1,0 +1,137 @@
+# SSH agent forwarding: off unless asked for; --ssh-agent forwards yours,
+# devvm ssh-agent devvm devvm's own, which holds only the keys added to it
+# (the ssh-agent and ssh-add stubs). Every connection devvm opens to a VM
+# carries the agent its mode says, or none. Your own agent is a made-up
+# socket the stubs never answer on.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env VMS=$XDG_DATA_HOME/devvm/vms
+env CFG=$XDG_CONFIG_HOME/devvm
+env SSH_AUTH_SOCK=$WORK/user.sock
+
+# No VM yet.
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm ssh-agent
+stderr '^devvm: no_vm_ssh_agent dir=\S*/web$'
+! exec devvm ssh-agent maybe
+stderr '^devvm: usage_error '
+
+# A new VM: no forwarding, and none of devvm's connections to it carries
+# your agent. An SSH origin says so.
+exec git init -q
+exec git remote add origin git@github.com:o/r.git
+exec devvm --no-network-policy --no-git-protect base
+stderr '^devvm: ssh_remote_hint vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^ssh_agent=off$'
+stub_calls
+stdout '^limactl clone .* --set \.ssh\.forwardAgent=false '
+exec sh -c 'cat "$STUB_DIR"/start-agent-devvm-web-* "$STUB_DIR/shell-agent"'
+stdout '\Aunset\nunset\n\z'
+exec sh -c 'cat "$CFG/ssh_config"'
+stdout '^  ForwardAgent no$'
+! stdout IdentityAgent
+exec devvm ssh-agent
+stdout '\Aoff\n\z'
+exec devvm --ssh-agent
+stderr '^devvm: ssh_agent_flag_ignored$'
+
+# --ssh-agent: yours, checked first (not running here, with a key in
+# ~/.ssh: it says so), on every connection; no hint for an SSH origin.
+mkdir $WORK/fwd
+cd $WORK/fwd
+exec git init -q
+exec git remote add origin git@github.com:o/r.git
+mkdir $HOME/.ssh
+exec sh -c 'echo k > "$HOME/.ssh/id_ed25519"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --no-network-policy --no-git-protect --ssh-agent base
+! stderr ssh_remote_hint
+stderr '^devvm: no_ssh_agent$'
+exec sh -c 'cat "$VMS"/devvm-fwd-*'
+stdout '^ssh_agent=on$'
+stub_calls
+stdout '^limactl clone .* --set \.ssh\.forwardAgent=true '
+stdout '^ssh-add -l SOCK=\S*/user\.sock$'
+exec sh -c 'cat "$STUB_DIR"/start-agent-devvm-fwd-* "$STUB_DIR/shell-agent"'
+stdout '\A\S*/user\.sock\n\S*/user\.sock\n\z'
+exec sh -c 'cat "$CFG/ssh_config"'
+stdout '^Host devvm-fwd devvm-fwd-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent yes\n'
+! stdout IdentityAgent
+exec devvm ssh-agent
+stdout '\Aon\n\z'
+rm $HOME/.ssh
+
+# devvm ssh-agent add: the key and its fingerprint recorded, devvm's agent
+# started, the key loaded there, kept 12 hours.
+mkdir $WORK/keys
+exec sh -c 'echo deploy > "$WORK/keys/deploy"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ssh-agent add $WORK/keys/deploy
+stdout '^==> agent_holds keys=deploy$'
+stderr '^agent_holds_note$'
+exec sh -c 'cat "$CFG/agent-keys"'
+stdout '\A\S*/keys/deploy\tSHA256:fp-deploy\t\n\z'
+stub_calls
+stdout '^ssh-agent -a \S*/data/devvm/agent\.sock$'
+stdout '^ssh-add -t 12h key:deploy$'
+! stdout 'user\.sock'
+exec devvm ssh-agent add $WORK/keys/deploy --lifetime 30m
+exec sh -c 'cat "$CFG/agent-keys"'
+stdout '\A\S*/keys/deploy\tSHA256:fp-deploy\tlifetime=30m\n\z'
+exec devvm ssh-agent add $WORK/keys/deploy
+! exec devvm ssh-agent add $WORK/keys/none
+stderr '^devvm: agent_key_not_found key=\S*/keys/none$'
+! exec devvm ssh-agent add $WORK/keys/deploy --lifetime soon
+stderr '^devvm: agent_lifetime_invalid value=soon$'
+env SSH_ASKPASS=
+! exec devvm ssh-agent add $WORK/keys/deploy --confirm
+stderr '^devvm: agent_confirm_needs_askpass$'
+# A key in a folder a VM mounts: that VM could read it.
+exec sh -c 'echo inside > "$WORK/web/key"'
+! exec devvm ssh-agent add $WORK/web/key
+stderr '^devvm: agent_key_mounted key=\S*/web/key vm=devvm-web-[0-9a-f]{14}$'
+exec devvm ssh-agent keys
+stdout '\A256 SHA256:fp-deploy deploy \(ED25519\)\n\S*/keys/deploy: SHA256:fp-deploy lifetime=12h\n\z'
+
+# devvm ssh-agent devvm on the running VM: from its next start. Its ssh
+# config entry forwards devvm's agent, and names it as the agent, so
+# OpenSSH forwards it however the editor was started.
+cd $WORK/web
+exec devvm ssh-agent devvm
+stderr '^devvm: agent_devvm_risk vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> agent_set_running mode=devvm vm=devvm-web-[0-9a-f]{14}$'
+exec devvm ssh-agent
+stdout '\Adevvm\n\z'
+exec devvm ssh-agent devvm
+stdout '^==> agent_already mode=devvm vm=devvm-web-[0-9a-f]{14}$'
+exec devvm
+stderr '^devvm: agent_next_start vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$STUB_DIR/shell-agent"'
+stdout '\A\S*/data/devvm/agent\.sock\n\z'
+exec sh -c 'cat "$CFG/ssh_config"'
+stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent "\S*/data/devvm/agent\.sock"\n  ControlMaster no\n  ControlPath none\n  IdentityAgent "\S*/data/devvm/agent\.sock"\n'
+
+# Restarted: its backend forwards an agent, devvm's, with the keys its
+# agent lacks loaded again (after a reboot here).
+rm $STUB_DIR/agent-up
+exec sh -c ': > "$STUB_LOG"'
+exec devvm restart
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.ssh\.forwardAgent=true$'
+stdout '^ssh-agent -a \S*/data/devvm/agent\.sock$'
+stdout '^ssh-add -t 12h key:deploy$'
+exec sh -c 'cat "$STUB_DIR"/start-agent-devvm-web-*'
+stdout '\A\S*/data/devvm/agent\.sock\n\z'
+
+# Off again: from its next start; devvm's connections carry no agent at
+# once, and its entry says no.
+exec devvm ssh-agent off
+stdout '^==> agent_set_running mode=off vm=devvm-web-[0-9a-f]{14}$'
+! stderr risk
+exec devvm
+exec sh -c 'cat "$STUB_DIR/shell-agent"'
+stdout '\Aunset\n\z'
+exec sh -c 'cat "$CFG/ssh_config"'
+stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'

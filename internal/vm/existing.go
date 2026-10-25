@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
@@ -76,6 +77,12 @@ func (e *Env) open(ctx context.Context, o Options, t *found) error {
 	if err := applyPorts(ctx, b, st, running); err != nil {
 		return err
 	}
+	if err := applyAgent(ctx, b, st, in); err != nil {
+		return err
+	}
+	if sshagent.Mode(st) == sshagent.On {
+		e.checkAgent(ctx)
+	}
 	conf, err := e.run(ctx, b, st)
 	if err != nil {
 		return err
@@ -101,6 +108,29 @@ func warnIgnored(o Options) {
 	if o.Ports != "" {
 		ui.Warn(msg.PortsFlagIgnored())
 	}
+	if o.SSHAgent {
+		ui.Warn(msg.SSHAgentFlagIgnored())
+	}
+}
+
+// applyAgent makes a stopped VM's backend forward an SSH agent when its
+// mode says it does, and not otherwise. A running VM's waits for its next
+// start.
+func applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
+	want := sshagent.Forwards(sshagent.Mode(st))
+	if want {
+		if err := backend.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
+			return err
+		}
+	}
+	if in.AgentForwarding == want {
+		return nil
+	}
+	if in.Status == backend.StatusRunning {
+		ui.Warn(msg.AgentNextStart(st.Name()))
+		return nil
+	}
+	return b.SetAgentForwarding(ctx, st.Name(), want)
 }
 
 // checkSetID names set-id files in the folder on Linux hosts, where they
@@ -144,6 +174,13 @@ func (e *Env) run(ctx context.Context, b backend.Backend, st *state.VM) (backend
 		var err error
 		started, err = e.start(ctx, b, st, conf)
 		return err
+	}
+	// A running VM that uses devvm's agent gets the keys whose lifetime
+	// ran out loaded again; one that starts does in start.
+	if in.Status == backend.StatusRunning && sshagent.Mode(st) == sshagent.Devvm {
+		if err := e.Agent.Ensure(ctx); err != nil {
+			return conf, err
+		}
 	}
 	switch {
 	case in.Status != backend.StatusRunning:

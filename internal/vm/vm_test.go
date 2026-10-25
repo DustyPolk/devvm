@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -202,8 +203,26 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		GitConfig: func(_ context.Context, _, key string) string {
 			return map[string]string{"user.name": "A User", "user.email": "a@example.com"}[key]
 		},
+		// The user's own agent: one that holds keys.
+		SSHAdd: func(context.Context, ...string) int { return 0 },
 	}
+	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
+	// is put back.
+	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
+	e.Agent = sshagent.New(d, e.mounts)
+	e.Agent.Run = (&agentCalls{}).run
 	return e, f, &execs
+}
+
+// agentCalls stands in for devvm's own agent, which runs and holds a key.
+type agentCalls struct{ calls []string }
+
+func (a *agentCalls) run(_ context.Context, _ bool, argv ...string) (string, int) {
+	a.calls = append(a.calls, strings.Join(argv, " "))
+	if len(argv) == 2 && argv[0] == "ssh-add" && argv[1] == "-l" {
+		return "256 SHA256:fp k (ED25519)\n", 0
+	}
+	return "", 0
 }
 
 // testProxy runs each VM's "proxy" as a sleep that says it listens, with

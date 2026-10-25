@@ -570,7 +570,7 @@ other = "creating {{.vm}} from {{.image}}"
 other = "interrupted: deleting {{.vm}}, which wasn't ready yet"
 
 [ssh_remote_hint]
-other = "origin is an SSH remote, but {{.vm}} has no SSH agent: git over SSH won't work in it"
+other = "origin is an SSH remote, but {{.vm}} has no SSH agent, so git over SSH won't work in it: devvm ssh-agent on"
 
 [ssh_include_needed]
 description = "line is the Include line for ~/.ssh/config"
@@ -603,6 +603,78 @@ other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\
 
 [load_key_with]
 other = "load it with: {{.cmd}}"
+
+[ssh_agent_flag_ignored]
+other = "--ssh-agent only applies to new VMs: devvm ssh-agent on"
+
+[ssh_agent_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't show or change this folder's VM's SSH agent forwarding: {{.reason}}"
+
+[agent_keys_failed]
+description = "reason is an error from the system, in English"
+other = "couldn't use devvm's SSH agent: {{.reason}}"
+
+[no_vm_ssh_agent]
+other = "no VM for {{.dir}}: devvm makes one, devvm --ssh-agent one that forwards your SSH agent"
+
+[agent_already]
+description = "mode is on (the user's agent), devvm (devvm's own) or off"
+other = "SSH agent forwarding is already {{.mode}} for {{.vm}}"
+
+[agent_on_risk]
+other = "while you're connected, anything in {{.vm}} can use the keys in your SSH agent"
+
+[agent_devvm_risk]
+other = "while you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent: devvm ssh-agent keys lists them"
+
+[agent_set_running]
+description = "mode is on (the user's agent), devvm (devvm's own) or off"
+other = "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies on devvm restart"
+
+[agent_set_stopped]
+description = "mode is on (the user's agent), devvm (devvm's own) or off"
+other = "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies when the VM next starts"
+
+[agent_next_start]
+other = "{{.vm}}'s SSH agent forwarding changes when it next starts: devvm restart"
+
+[agent_start_failed]
+other = "couldn't start devvm's SSH agent at {{.sock}}"
+
+[agent_no_keys]
+other = "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it: devvm ssh-agent add KEY_FILE"
+
+[agent_load_failed]
+other = "couldn't load {{.key}} into devvm's SSH agent"
+
+[agent_key_changed]
+other = "{{.key}} isn't the key added to devvm's SSH agent any more, so it isn't loaded: if you replaced it, devvm ssh-agent add {{.key}}"
+
+[agent_key_unpinned]
+other = "{{.key}} has no fingerprint in devvm's agent keys, so it isn't loaded: devvm ssh-agent add {{.key}}"
+
+[agent_key_no_fingerprint]
+other = "can't read {{.key}}'s fingerprint without its passphrase (an encrypted PEM key): convert it with ssh-keygen -p -f {{.key}}"
+
+[agent_key_mounted]
+other = "{{.key}} is in a folder {{.vm}} mounts, so that VM can read it: keep keys for devvm's SSH agent outside project folders"
+
+[agent_key_not_found]
+other = "no key file {{.key}}"
+
+[agent_lifetime_invalid]
+other = "--lifetime takes a duration (30m, 8h, 1d) or forever, not {{.value}}"
+
+[agent_confirm_needs_askpass]
+other = "--confirm needs an ssh-askpass program to ask with, which macOS doesn't have: brew install theseal/ssh-askpass/ssh-askpass"
+
+[agent_holds]
+description = "keys is a space-separated list of the keys' comments"
+other = "devvm's SSH agent holds: {{.keys}}"
+
+[agent_holds_note]
+other = "VMs with devvm ssh-agent devvm can use it while you're connected; devvm loads it again after a reboot."
 
 [clone_needs_git]
 other = "--clone needs git on this machine"

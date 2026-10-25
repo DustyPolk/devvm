@@ -28,4 +28,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm secret set](devvm_secret_set.md): Save a token on this machine
 - [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a token
 - [devvm secret use](devvm_secret_use.md): Let this folder's VM use a token
+- [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
+- [devvm ssh-agent add](devvm_ssh-agent_add.md): Load a key into devvm's own SSH agent
+- [devvm ssh-agent keys](devvm_ssh-agent_keys.md): List the keys in devvm's own SSH agent
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

@@ -32,6 +32,21 @@ func AdoptVM(vm string, was string) M {
 	return M{id: "adopt_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
+// AgentAlready is [agent_already]: "SSH agent forwarding is already {{.mode}} for {{.vm}}"
+func AgentAlready(mode string, vm string) M {
+	return M{id: "agent_already", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
+// AgentConfirmNeedsAskpass is [agent_confirm_needs_askpass]: "--confirm needs an ssh-askpass program to ask with, which macOS doesn't have: brew install theseal/ssh-askpass/ssh-askpass"
+func AgentConfirmNeedsAskpass() M {
+	return M{id: "agent_confirm_needs_askpass"}
+}
+
+// AgentDevvmRisk is [agent_devvm_risk]: "while you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent: devvm ssh-agent keys lists them"
+func AgentDevvmRisk(vm string) M {
+	return M{id: "agent_devvm_risk", vals: []val{{"vm", vm}}}
+}
+
 // AgentDirComma is [agent_dir_comma]: "not mounting {{.path}}: Lima can't mount paths with a comma"
 func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
@@ -45,6 +60,86 @@ func AgentDirsAdded(dirs string, vm string) M {
 // AgentDirsRemoved is [agent_dirs_removed]: "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
 func AgentDirsRemoved(dirs string, vm string) M {
 	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
+}
+
+// AgentHolds is [agent_holds]: "devvm's SSH agent holds: {{.keys}}"
+func AgentHolds(keys string) M {
+	return M{id: "agent_holds", vals: []val{{"keys", keys}}}
+}
+
+// AgentHoldsNote is [agent_holds_note]: "VMs with devvm ssh-agent devvm can use it while you're connected; devvm loads it again after a reboot."
+func AgentHoldsNote() M {
+	return M{id: "agent_holds_note"}
+}
+
+// AgentKeyChanged is [agent_key_changed]: "{{.key}} isn't the key added to devvm's SSH agent any more, so it isn't loaded: if you replaced it, devvm ssh-agent add {{.key}}"
+func AgentKeyChanged(key string) M {
+	return M{id: "agent_key_changed", vals: []val{{"key", key}}}
+}
+
+// AgentKeyMounted is [agent_key_mounted]: "{{.key}} is in a folder {{.vm}} mounts, so that VM can read it: keep keys for devvm's SSH agent outside project folders"
+func AgentKeyMounted(key string, vm string) M {
+	return M{id: "agent_key_mounted", vals: []val{{"key", key}, {"vm", vm}}}
+}
+
+// AgentKeyNoFingerprint is [agent_key_no_fingerprint]: "can't read {{.key}}'s fingerprint without its passphrase (an encrypted PEM key): convert it with ssh-keygen -p -f {{.key}}"
+func AgentKeyNoFingerprint(key string) M {
+	return M{id: "agent_key_no_fingerprint", vals: []val{{"key", key}}}
+}
+
+// AgentKeyNotFound is [agent_key_not_found]: "no key file {{.key}}"
+func AgentKeyNotFound(key string) M {
+	return M{id: "agent_key_not_found", vals: []val{{"key", key}}}
+}
+
+// AgentKeyUnpinned is [agent_key_unpinned]: "{{.key}} has no fingerprint in devvm's agent keys, so it isn't loaded: devvm ssh-agent add {{.key}}"
+func AgentKeyUnpinned(key string) M {
+	return M{id: "agent_key_unpinned", vals: []val{{"key", key}}}
+}
+
+// AgentKeysFailed is [agent_keys_failed]: "couldn't use devvm's SSH agent: {{.reason}}"
+func AgentKeysFailed(reason string) M {
+	return M{id: "agent_keys_failed", vals: []val{{"reason", reason}}}
+}
+
+// AgentLifetimeInvalid is [agent_lifetime_invalid]: "--lifetime takes a duration (30m, 8h, 1d) or forever, not {{.value}}"
+func AgentLifetimeInvalid(value string) M {
+	return M{id: "agent_lifetime_invalid", vals: []val{{"value", value}}}
+}
+
+// AgentLoadFailed is [agent_load_failed]: "couldn't load {{.key}} into devvm's SSH agent"
+func AgentLoadFailed(key string) M {
+	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
+}
+
+// AgentNextStart is [agent_next_start]: "{{.vm}}'s SSH agent forwarding changes when it next starts: devvm restart"
+func AgentNextStart(vm string) M {
+	return M{id: "agent_next_start", vals: []val{{"vm", vm}}}
+}
+
+// AgentNoKeys is [agent_no_keys]: "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it: devvm ssh-agent add KEY_FILE"
+func AgentNoKeys() M {
+	return M{id: "agent_no_keys"}
+}
+
+// AgentOnRisk is [agent_on_risk]: "while you're connected, anything in {{.vm}} can use the keys in your SSH agent"
+func AgentOnRisk(vm string) M {
+	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
+}
+
+// AgentSetRunning is [agent_set_running]: "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies on devvm restart"
+func AgentSetRunning(mode string, vm string) M {
+	return M{id: "agent_set_running", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
+// AgentSetStopped is [agent_set_stopped]: "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies when the VM next starts"
+func AgentSetStopped(mode string, vm string) M {
+	return M{id: "agent_set_stopped", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
+// AgentStartFailed is [agent_start_failed]: "couldn't start devvm's SSH agent at {{.sock}}"
+func AgentStartFailed(sock string) M {
+	return M{id: "agent_start_failed", vals: []val{{"sock", sock}}}
 }
 
 // BackendFlagIgnored is [backend_flag_ignored]: "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
@@ -887,6 +982,11 @@ func NoVMPolicy(dir string) M {
 	return M{id: "no_vm_policy", vals: []val{{"dir", dir}}}
 }
 
+// NoVMSSHAgent is [no_vm_ssh_agent]: "no VM for {{.dir}}: devvm makes one, devvm --ssh-agent one that forwards your SSH agent"
+func NoVMSSHAgent(dir string) M {
+	return M{id: "no_vm_ssh_agent", vals: []val{{"dir", dir}}}
+}
+
 // NotARule is [not_a_rule]: "not a rule: {{.rule}}"
 func NotARule(rule string) M {
 	return M{id: "not_a_rule", vals: []val{{"rule", rule}}}
@@ -1152,6 +1252,16 @@ func SSHAgentEmpty() M {
 	return M{id: "ssh_agent_empty"}
 }
 
+// SSHAgentFailed is [ssh_agent_failed]: "couldn't show or change this folder's VM's SSH agent forwarding: {{.reason}}"
+func SSHAgentFailed(reason string) M {
+	return M{id: "ssh_agent_failed", vals: []val{{"reason", reason}}}
+}
+
+// SSHAgentFlagIgnored is [ssh_agent_flag_ignored]: "--ssh-agent only applies to new VMs: devvm ssh-agent on"
+func SSHAgentFlagIgnored() M {
+	return M{id: "ssh_agent_flag_ignored"}
+}
+
 // SSHIncludeAdded is [ssh_include_added]: "added to ~/.ssh/config"
 func SSHIncludeAdded() M {
 	return M{id: "ssh_include_added"}
@@ -1167,7 +1277,7 @@ func SSHIncludeYourself() M {
 	return M{id: "ssh_include_yourself"}
 }
 
-// SSHRemoteHint is [ssh_remote_hint]: "origin is an SSH remote, but {{.vm}} has no SSH agent: git over SSH won't work in it"
+// SSHRemoteHint is [ssh_remote_hint]: "origin is an SSH remote, but {{.vm}} has no SSH agent, so git over SSH won't work in it: devvm ssh-agent on"
 func SSHRemoteHint(vm string) M {
 	return M{id: "ssh_remote_hint", vals: []val{{"vm", vm}}}
 }
@@ -1440,9 +1550,28 @@ var specs = map[string]spec{
 	"adding":                      {fields: []string{"layer"}},
 	"adopt_failed":                {fields: []string{"reason"}},
 	"adopt_vm":                    {fields: []string{"vm", "was"}},
+	"agent_already":               {fields: []string{"mode", "vm"}},
+	"agent_confirm_needs_askpass": {},
+	"agent_devvm_risk":            {fields: []string{"vm"}},
 	"agent_dir_comma":             {fields: []string{"path"}},
 	"agent_dirs_added":            {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":          {fields: []string{"dirs", "vm"}},
+	"agent_holds":                 {fields: []string{"keys"}},
+	"agent_holds_note":            {},
+	"agent_key_changed":           {fields: []string{"key"}},
+	"agent_key_mounted":           {fields: []string{"key", "vm"}},
+	"agent_key_no_fingerprint":    {fields: []string{"key"}},
+	"agent_key_not_found":         {fields: []string{"key"}},
+	"agent_key_unpinned":          {fields: []string{"key"}},
+	"agent_keys_failed":           {fields: []string{"reason"}},
+	"agent_lifetime_invalid":      {fields: []string{"value"}},
+	"agent_load_failed":           {fields: []string{"key"}},
+	"agent_next_start":            {fields: []string{"vm"}},
+	"agent_no_keys":               {},
+	"agent_on_risk":               {fields: []string{"vm"}},
+	"agent_set_running":           {fields: []string{"mode", "vm"}},
+	"agent_set_stopped":           {fields: []string{"mode", "vm"}},
+	"agent_start_failed":          {fields: []string{"sock"}},
 	"backend_flag_ignored":        {fields: []string{"backend", "vm"}},
 	"backend_lacks":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unknown":             {fields: []string{"backends", "name"}},
@@ -1611,6 +1740,7 @@ var specs = map[string]spec{
 	"no_ubuntu_image":             {fields: []string{"url", "version"}},
 	"no_vm":                       {fields: []string{"dir"}},
 	"no_vm_policy":                {fields: []string{"dir"}},
+	"no_vm_ssh_agent":             {fields: []string{"dir"}},
 	"not_a_rule":                  {fields: []string{"rule"}},
 	"not_an_image":                {fields: []string{"name"}},
 	"not_setup_token":             {},
@@ -1664,6 +1794,8 @@ var specs = map[string]spec{
 	"size_next_start":             {fields: []string{"vm"}},
 	"size_not_gib":                {fields: []string{"flag", "value"}},
 	"ssh_agent_empty":             {},
+	"ssh_agent_failed":            {fields: []string{"reason"}},
+	"ssh_agent_flag_ignored":      {},
 	"ssh_include_added":           {},
 	"ssh_include_needed":          {fields: []string{"line"}},
 	"ssh_include_yourself":        {},

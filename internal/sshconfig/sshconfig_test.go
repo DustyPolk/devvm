@@ -11,6 +11,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/sshagent"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -70,15 +72,58 @@ func read(t *testing.T, path string) string {
 	return string(data)
 }
 
+func setAgent(t *testing.T, c *Config, vm, mode string) {
+	t.Helper()
+	st, err := state.ReadVM(c.Dirs, vm)
+	if err == nil {
+		err = st.Set(sshagent.Key, mode)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Agent forwarding is what the VM's state says, whatever its backend
+// config has: devvm's own agent by its socket, as the agent too, so it's
+// forwarded however the editor was started.
+func TestWriteAgent(t *testing.T) {
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning, AgentForwarding: true}}
+	sock := `"` + c.Dirs.AgentSock() + `"`
+	for _, tc := range []struct {
+		mode  string
+		want  string
+		agent bool
+	}{
+		{sshagent.Devvm, "  ForwardAgent " + sock + "\n", true},
+		{sshagent.On, "  ForwardAgent yes\n", false},
+		{sshagent.Off, "  ForwardAgent no\n", false},
+		{"", "  ForwardAgent no\n", false},
+	} {
+		setAgent(t, c, web, tc.mode)
+		if err := c.Write(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		got := read(t, c.Dirs.SSHConfig())
+		if !strings.Contains(got, tc.want) || strings.Count(got, "ForwardAgent") != 1 {
+			t.Errorf("mode %q:\n%s", tc.mode, got)
+		}
+		if has := strings.Contains(got, "  ControlPath none\n  IdentityAgent "+sock+"\n  Hostname "); has != tc.agent {
+			t.Errorf("mode %q: IdentityAgent %v, want %v:\n%s", tc.mode, has, tc.agent, got)
+		}
+	}
+}
+
 func TestWrite(t *testing.T) {
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{
 		web:                      {Name: web, Status: backend.StatusRunning},
 		api:                      {Name: api, Status: backend.StatusStopped},
-		imgish:                   {Name: imgish, Status: backend.StatusRunning, AgentForwarding: true},
+		imgish:                   {Name: imgish, Status: backend.StatusRunning},
 		"devvm-img-0123456789ab": {Name: "devvm-img-0123456789ab", Status: backend.StatusRunning},
 		"devvm-tools-build":      {Name: "devvm-tools-build", Status: backend.StatusRunning},
 	}
+	setAgent(t, c, imgish, sshagent.On)
 	if err := c.Write(t.Context()); err != nil {
 		t.Fatal(err)
 	}

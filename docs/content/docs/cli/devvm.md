@@ -27,6 +27,7 @@ devvm [IMAGE] [flags]
       --no-git-protect      create the VM without .git protection
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
       --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
+      --ssh-agent           create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)
       --unsafe-folder       mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway
       --version             print devvm's version
 ```
@@ -47,4 +48,5 @@ devvm [IMAGE] [flags]
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it
