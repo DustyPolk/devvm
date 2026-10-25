@@ -74,6 +74,53 @@ func TestPickKeys(t *testing.T) {
 	}
 }
 
+func TestPickOneKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name, keys string
+		start      int // the choice on; -1 for none
+		want       int
+	}{
+		{"enter keeps the current", "\r", 1, 1},
+		{"none on starts at the first", "\r", -1, 0},
+		{"j moves down", "j\r", 0, 1},
+		{"down arrow twice", "\x1b[B\x1b[B\r", 0, 2},
+		{"up wraps to the last", "\x1b[A\r", 0, 2},
+		{"k from the current", "k\r", 2, 1},
+		{"space and other keys do nothing", " xq\x1b[C\r", 1, 1},
+		{"the end of input confirms", "j", 1, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, _ := sandbox(t, tc.keys)
+			restored := pickTerminal(t)
+			in := []Choice{{"a", "first", false}, {"b", "second", false}, {"c", "third", false}}
+			if tc.start >= 0 {
+				in[tc.start].On = true
+			}
+			if got := PickOne(msg.MsgUnknown("x"), in); got != tc.want {
+				t.Errorf("chosen %d, want %d", got, tc.want)
+			}
+			if *restored != 1 {
+				t.Errorf("raw mode undone %d times, want 1", *restored)
+			}
+			s := out.String()
+			if !strings.HasPrefix(s, "msg_unknown name=x\r\n\033[?25l") || !strings.HasSuffix(s, "\033[?25h") {
+				t.Errorf("output %q: no help first, or the cursor not shown again", s)
+			}
+			first := max(tc.start, 0)
+			if row := "> (*) " + in[first].Name; !strings.Contains(s, row) {
+				t.Errorf("output %q: no row %q", s, row)
+			}
+		})
+	}
+}
+
+func TestPickOneWithoutTerminal(t *testing.T) {
+	out, _ := sandbox(t, "j\r")
+	if got := PickOne(msg.MsgUnknown("x"), choices()); got != 0 || out.Len() != 0 {
+		t.Errorf("chosen %d, printed %q: want the first on, nothing printed", got, out)
+	}
+}
+
 func TestPickWithoutTerminal(t *testing.T) {
 	out, _ := sandbox(t, " \r")
 	got := Pick(msg.MsgUnknown("x"), choices())

@@ -60,7 +60,7 @@ devvm setup                     # asks again, starting from the current choice
 devvm setup --features fzf,omb  # without asking; --features '' chooses none
 ```
 
-Without a terminal, `devvm setup` keeps the choice. A name that isn't a feature is refused, and nothing changes. You can also edit `base-features` yourself: an empty file chooses none, and a name without a script is skipped, with a warning.
+In a terminal, `devvm setup` first asks for the [default backend](backends.md#choosing-a-backend), then the features; `--features` doesn't ask for the backend. Without a terminal, `devvm setup` keeps the choice. A name that isn't a feature is refused, and nothing changes. You can also edit `base-features` yourself: an empty file chooses none, and a name without a script is skipped, with a warning.
 
 The chosen features are part of `base`'s [key](images.md#caching), so a new choice makes `base` and the images built on it rebuild on next use; `devvm setup` says so. The old images are then stale: [`devvm gc`](images.md#cleaning-up) deletes them.
 

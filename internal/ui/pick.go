@@ -35,16 +35,38 @@ var rawInput = func() (restore func(), err error) {
 // them as given. Ctrl+C ends the run as interrupted.
 func Pick(help msg.M, choices []Choice) []Choice {
 	out := slices.Clone(choices)
-	if len(out) == 0 || !stdinTTY() || !stdoutTTY() {
-		return out
+	pick(help, out, false)
+	return out
+}
+
+// PickOne shows the choices under help and lets the user choose one: up
+// and down (or k and j) move the choice, enter confirms. It starts from
+// the first that's on and returns the index of the one chosen. Without a
+// terminal to read from and print to, that's the one it started from.
+// Ctrl+C ends the run as interrupted.
+func PickOne(help msg.M, choices []Choice) int {
+	out := slices.Clone(choices)
+	start := max(slices.IndexFunc(out, func(c Choice) bool { return c.On }), 0)
+	for i := range out {
+		out[i].On = i == start
+	}
+	pick(help, out, true)
+	return max(slices.IndexFunc(out, func(c Choice) bool { return c.On }), 0)
+}
+
+// pick runs pickLoop on the terminal, choices changed in place; without
+// one it leaves them as they are.
+func pick(help msg.M, choices []Choice, one bool) {
+	if len(choices) == 0 || !stdinTTY() || !stdoutTTY() {
+		return
 	}
 	restore, err := rawInput()
 	if err != nil {
-		return out
+		return
 	}
 	// In raw mode a line ends with \r\n; the cursor is hidden meanwhile.
 	write(stdout, strings.ReplaceAll(help.String(), "\n", "\r\n")+"\r\n\033[?25l")
-	ok := pickLoop(stdin, out)
+	ok := pickLoop(stdin, choices, one)
 	write(stdout, "\033[?25h")
 	restore()
 	if !ok {
@@ -52,24 +74,29 @@ func Pick(help msg.M, choices []Choice) []Choice {
 		interrupted.Store(true)
 		exit(InterruptedCode)
 	}
-	return out
 }
 
 // pickLoop draws the choices and reads keys until enter (or the end of
-// the input), toggling choices in place. It's false on Ctrl+C.
-func pickLoop(in *bufio.Reader, choices []Choice) bool {
+// the input), toggling choices in place, or with one, moving the one
+// that's on with the cursor. It's false on Ctrl+C.
+func pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
 	cur, n := 0, len(choices)
+	open, on, closed := "[", "x", "]"
+	if one {
+		cur = max(slices.IndexFunc(choices, func(c Choice) bool { return c.On }), 0)
+		open, on, closed = "(", "*", ")"
+	}
 	for {
 		var b strings.Builder
 		for i, c := range choices {
 			mark, ptr := " ", " "
 			if c.On {
-				mark = "x"
+				mark = on
 			}
 			if i == cur {
 				ptr = ">"
 			}
-			fmt.Fprintf(&b, "\033[2K%s [%s] %-10s %s\r\n", ptr, mark, printable(c.Name), printable(c.Desc))
+			fmt.Fprintf(&b, "\033[2K%s %s%s%s %-10s %s\r\n", ptr, open, mark, closed, printable(c.Name), printable(c.Desc))
 		}
 		write(stdout, b.String())
 		key, err := in.ReadByte()
@@ -82,7 +109,9 @@ func pickLoop(in *bufio.Reader, choices []Choice) bool {
 		case '\r', '\n':
 			return true
 		case ' ':
-			choices[cur].On = !choices[cur].On
+			if !one {
+				choices[cur].On = !choices[cur].On
+			}
 		case 'k':
 			cur = (cur + n - 1) % n
 		case 'j':
@@ -96,6 +125,11 @@ func pickLoop(in *bufio.Reader, choices []Choice) bool {
 					cur = (cur + 1) % n
 				}
 				_, _ = in.Discard(2)
+			}
+		}
+		if one {
+			for i := range choices {
+				choices[i].On = i == cur
 			}
 		}
 		write(stdout, fmt.Sprintf("\033[%dA", n))

@@ -319,6 +319,12 @@ other = "devvm gc deletes the old ones"
 [default_backend]
 other = "new VMs get the {{.backend}} backend"
 
+[backend_help]
+other = "Default backend for new VMs (up/down to choose, enter to confirm):"
+
+[backend_experimental]
+other = "experimental"
+
 [setup_failed]
 description = "reason is an error from the system, in English"
 other = "couldn't save the settings: {{.reason}}"

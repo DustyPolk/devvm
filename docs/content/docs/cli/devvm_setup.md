@@ -3,11 +3,11 @@ title: devvm setup
 weight: 36
 ---
 
-Choose base's features and the default backend
+Choose the default backend and base's features
 
 ## Synopsis
 
-Choose the optional features the base image gets: omb (oh-my-bash), fzf, cli-tools, and your own in ~/.config/devvm/features. In a terminal it asks, starting from the current choice; --features chooses them instead. A new choice makes base and the images built on it rebuild when next used. --backend sets the backend new VMs get by default; with only it, the features stay as they are.
+Choose the backend new VMs get by default (lima, or smolvm, experimental), then the optional features the base image gets: omb (oh-my-bash), fzf, cli-tools, and your own in ~/.config/devvm/features. In a terminal it asks for both, starting from the current choices. --backend chooses the backend without asking, and with only it the features stay as they are; --features chooses the features without asking, and with only it the backend stays as it is. A new choice of features makes base and the images built on it rebuild when next used.
 
 ```text
 devvm setup [flags]

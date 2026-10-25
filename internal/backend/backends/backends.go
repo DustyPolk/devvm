@@ -29,3 +29,7 @@ func Registry(d paths.Dirs) (*backend.Registry, error) {
 	backend.Warn = ui.Warn
 	return backend.NewRegistry(lima.New(d), smolvm.New(d))
 }
+
+// Experimental reports whether the backend by that name is experimental:
+// smolvm.
+func Experimental(name string) bool { return name == smolvm.Name }

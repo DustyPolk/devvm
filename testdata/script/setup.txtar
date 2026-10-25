@@ -1,14 +1,17 @@
-# setup: base's features (asked in a terminal; without one, kept, or
-# every one until they're chosen; --features without asking) and the
-# default backend. A new choice says base rebuilds, and once images are
-# built that devvm gc deletes the old ones.
+# setup: the default backend and base's features (both asked in a
+# terminal, which Go tests cover; without one, the backend isn't asked and
+# the features are kept, or every one until they're chosen; --backend and
+# --features without asking). A new choice of features says base
+# rebuilds, and once images are built that devvm gc deletes the old ones.
 env DEVVM_MESSAGES=names
 env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
 
-# Kept: none chosen.
+# Kept: none chosen; no backend asked.
 exec devvm setup
 stdout '^==> base_features_none$'
 ! stdout base_will_rebuild
+! stdout default_backend
+! exists $XDG_CONFIG_HOME/devvm/backend
 ! stderr .
 ! stub_calls
 
@@ -23,6 +26,7 @@ exec devvm setup --features omb,fzf
 stdout '^==> base_features features=fzf omb$'
 stdout '^==> base_will_rebuild$'
 ! stdout gc_old_hint
+! stdout default_backend
 cmp $CHOSEN fzf-omb
 exec devvm setup --features fzf,omb
 ! stdout base_will_rebuild

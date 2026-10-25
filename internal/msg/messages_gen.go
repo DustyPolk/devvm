@@ -149,9 +149,19 @@ func AlreadyStopped(vm string) M {
 	return M{id: "already_stopped", vals: []val{{"vm", vm}}}
 }
 
+// BackendExperimental is [backend_experimental]: "experimental"
+func BackendExperimental() M {
+	return M{id: "backend_experimental"}
+}
+
 // BackendFlagIgnored is [backend_flag_ignored]: "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
 func BackendFlagIgnored(backend string, vm string) M {
 	return M{id: "backend_flag_ignored", vals: []val{{"backend", backend}, {"vm", vm}}}
+}
+
+// BackendHelp is [backend_help]: "Default backend for new VMs (up/down to choose, enter to confirm):"
+func BackendHelp() M {
+	return M{id: "backend_help"}
 }
 
 // BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
@@ -2000,7 +2010,9 @@ var specs = map[string]spec{
 	"agent_set_stopped":           {fields: []string{"mode", "vm"}},
 	"agent_start_failed":          {fields: []string{"sock"}},
 	"already_stopped":             {fields: []string{"vm"}},
+	"backend_experimental":        {},
 	"backend_flag_ignored":        {fields: []string{"backend", "vm"}},
+	"backend_help":                {},
 	"backend_lacks":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unknown":             {fields: []string{"backends", "name"}},
 	"backend_unknown_default":     {fields: []string{"backends", "file", "name"}},
