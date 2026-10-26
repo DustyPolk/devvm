@@ -64,7 +64,7 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		return err
 	}
 	if !t.exists {
-		return e.create(ctx, o, t.f, t.b, size, ports)
+		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
 	}
 	if err := e.checkFolder(t.f, t.st); err != nil {
 		return err
@@ -86,8 +86,11 @@ type newVM struct {
 	builder *build.Builder
 }
 
+// creation makes a new VM: its plan, its build and its cleanup.
+type creation struct{ Launch }
+
 // create makes the folder's VM and opens a shell in it.
-func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) error {
+func (e creation) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) error {
 	vm := f.Name
 	n, err := e.plan(ctx, o, f, b, size, ports)
 	if err != nil {
@@ -193,7 +196,7 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 // plan checks and chooses what a new VM gets, all before the build,
 // which can take minutes: its image, size, ports, network policy (asked
 // for), SSH agent and the backend features it needs.
-func (e Launch) plan(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) (newVM, error) {
+func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) (newVM, error) {
 	vm := f.Name
 	if o.Clone {
 		if err := checkCloneRepo(ctx, f.Dir); err != nil {
@@ -283,7 +286,7 @@ func (n newVM) record(st *state.VM, libc string, files []string) error {
 // anyone's is in the VM: an interrupt deletes it and its state, and
 // takes off .git's locks (once locking is set), or removes the repo's
 // remote for its clone.
-func (e Launch) undoCreate(b backend.Backend, f project.Folder, locking *atomic.Bool) func(context.Context) {
+func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomic.Bool) func(context.Context) {
 	vm := f.Name
 	return func(ctx context.Context) {
 		if !e.Interrupted() {
@@ -297,7 +300,7 @@ func (e Launch) undoCreate(b backend.Backend, f project.Folder, locking *atomic.
 			e.Protector(f.Dir).Unlock(ctx)
 		}
 		if st, err := state.ReadVM(e.Dirs, vm); err == nil && isClone(st) {
-			clones(e).removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
+			clones{e.Env}.removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
 		}
 		_ = e.sshConfig().ForgetHostKeys(vm)
 		_ = e.Proxy.Forget(vm)

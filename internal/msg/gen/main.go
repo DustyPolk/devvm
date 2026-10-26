@@ -65,10 +65,8 @@ type message struct {
 
 func (m message) plural() bool { return m.one != "" }
 
-var (
-	idRe    = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
-	fieldRe = idRe
-)
+// idRe is a message ID or a template field: snake_case.
+var idRe = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
 // parseMessages reads and checks the message file. Each table is a
 // message; a key go-i18n doesn't know, or a nested table, is refused.
@@ -120,7 +118,7 @@ func parseMessage(id string, t table) (message, error) {
 		return message{}, errors.New("{{.count}} is for plural messages: add a one text")
 	}
 	for f := range fields {
-		if !fieldRe.MatchString(f) {
+		if !idRe.MatchString(f) {
 			return message{}, fmt.Errorf("field %q must be snake_case", f)
 		}
 		if p := goName(f, false); token.IsKeyword(p) || taken[p] {

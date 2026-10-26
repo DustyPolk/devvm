@@ -73,6 +73,33 @@ golangci-lint enforces the [Go conventions](https://github.com/w3cj/devvm/blob/m
 
 A fresh context elsewhere, such as for a cleanup that outlives a canceled run, or a lookup that many requests share, takes `//nolint:forbidigo // <why>`.
 
+## The structure test
+
+`internal/structure` parses every Go file in the repo, tests and every platform's included, generated files left out, and checks what linters don't. `mise run test` runs it. Each failure starts with its rule and the file and line:
+
+| Rule | Checks |
+| --- | --- |
+| `max-methods` | no type has more than 24 methods, value and pointer receivers together; a larger one splits by what its methods do |
+| `no-init` | no `func init()` |
+| `package-vars` | outside `internal/proxy`, a package-level `var` is a blank interface check, an `Err*`/`err*` sentinel from `errors.New` or `fmt.Errorf`, a `regexp.MustCompile`, `template.Must` or `sync.Once*` result, a `//go:embed` file, or listed in `allowedVars`; anything else becomes a field, a const or a local |
+| `layers` | which packages import which, in non-test files (tests may wire packages together) |
+
+The layers:
+
+- Only `cmd/devvm` and `internal/cli` import `internal/ui`; only `internal/cli` imports `internal/vm`; only `cmd/devvm` imports `internal/cli`.
+- `internal/backend/...` imports none of `internal/vm`, `build`, `tools`, `netpolicy`, `secrets`, `project`, `gitprotect`, `sshconfig` or `sshagent`.
+- Only `internal/backend/registry` and `internal/cli` import a backend (`lima`, `smolvm`); only tests import `backendtest`.
+- `internal/proxy` imports no other devvm package.
+- `assets`, `locales`, `internal/platform` and `internal/msg/gen` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg` and `internal/paths`; `internal/image` only `assets`, `internal/msg` and `internal/paths`.
+
+Everything it holds the code to is in `devvm()` in `internal/structure/structure_test.go`:
+
+- **`largeTypes`** lists the types allowed more methods (the backends, which implement all of `backend.Backend`, among them), each with its count as its maximum and why. One that grows fails; one that shrinks fails until its maximum is lowered.
+- **`allowedVars`** lists the other package-level vars, by package folder and name, each with why: values set by `-ldflags`, fixed tables, test fixtures. An entry whose var is gone fails.
+- **`layers`** is the layering table: a layer's packages (`from`, but not `exceptFrom`) import none of `to` (but `exceptTo`); `x/...` is `x` and the packages below it.
+
+`TestRulesFail` breaks each rule, and each layer, on small sources and checks the failure names it.
+
 ## CLI tests
 
 CLI tests are [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scripts in `testdata/script/*.txtar`, run by `internal/cli/script_test.go` against a freshly built `devvm`. Call it with `exec devvm …`:

@@ -22,6 +22,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files, `assets.FS` written out where a path is needed (errors aren't messages yet) |
 | `internal/platform/`, `internal/ubuntu/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads) |
 | `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`), `smolvm/` (smolvm's in-VM scripts) |
+| `internal/structure/` | the structure test (tests only) |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |
 | `scripts/`, `packaging/`, `.goreleaser.yaml`, `VERSION`, `CHANGELOG.md` | `bump.sh` (pins), `release.sh` (signed-tag checks around GoReleaser, then minisign); the Homebrew formula; `VERSION` is read by the scripts only |
@@ -65,6 +66,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
 - **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars (reassign: no package sets another's); the one exception is `internal/proxy`'s globals (set by `Main`).
+- **The structure test** (`internal/structure`, in `mise run test`) holds types to 24 methods, bans `func init`, allows only constants' kin as package vars and checks the package layers: see [Contributing](docs/content/docs/contributing.md#the-structure-test) before raising a limit or listing an exception.
 - **A command exists only once it's ported;** `TestReferenceIsCurrent` fails on a stale CLI reference.
 - `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
 
