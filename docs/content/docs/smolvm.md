@@ -94,7 +94,7 @@ A machine runs its image as a container, and nothing starts at boot. After each 
 
 - the loop devices the shared tools are mounted with (`/dev` has none), then the tools' mounts;
 - the VM's [sshd](#ssh-for-editors), with new host keys; its log is `/var/log/devvm-sshd.log`;
-- Docker's daemon, in a VM with the [docker layer](images.md#built-in-layers), in the background, logging to `/var/log/dockerd.log`. The layer's script also starts it when it's added to a running VM.
+- Docker's daemon, in a VM with the [docker layer](images.md#built-in-layers), in the background, logging to `/var/log/dockerd.log`. The layer's script also starts it when it's added to a running VM, and devvm's setup restarts it the same way when a launch changes its [network policy](network.md) settings (`/etc/conf.d/docker` on Alpine, which it reads).
 
 The shared tools are their own images on smolvm: uncompressed EROFS, as its kernel mounts no other. A tool image's key includes the format, so Lima's and smolvm's VMs each get theirs from the one share.
 

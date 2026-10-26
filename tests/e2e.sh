@@ -947,9 +947,9 @@ check "devvm doctor finds everything smolvm needs" bash -c "'$D' doctor --backen
   [[ -z \$('$D' doctor --backend smolvm --fixes </dev/null) ]]"
 check "build base" quiet env DEVVM_MESSAGES=names "$D" "${S[@]}" build base
 kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
-# A cached base: the pack recorded as base.
+# A cached base: the pack recorded as base, not --from another image (the Alpine checks' bases).
 [[ -n $kb ]] || kb=$(for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do
-  k=$(basename "$k"); grep -qx name=base "$images/$k" 2>/dev/null && echo "$k"; done | head -1)
+  k=$(basename "$k"); grep -qx name=base "$images/$k" 2>/dev/null && grep -qx from= "$images/$k" && echo "$k"; done | head -1)
 packs=$XDG_DATA_HOME/devvm/smolvm/images
 check "base is a pack, recorded with Ubuntu's container image by digest; its build machine is gone" bash -c "
   [[ -n '$kb' && -f '$packs/$kb/image.smolmachine' ]] && grep -qx libc=gnu '$images/$kb' &&
@@ -1669,6 +1669,18 @@ check "devvm network on: devvm restart starts it confined again" bash -c "cd '$n
 check "... its allow list and DNS closed again, and direct connections fail" smolnet_closed "$vm"
 check "rm -f deletes it, its proxy and its state" bash -c "cd '$np' && ${U[*]} '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
   [[ -z \$(smol_status '$vm') && ! -e '$vms/$vm' ]] && sleep 4 && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+# Alpine with the docker layer: launching adds devvm's proxy to Docker's settings, so it restarts
+# Docker's daemon, with no init system (not through OpenRC, which isn't running).
+na=$(newproj smolnetalp)
+(cd "$na" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --from alpine:3 --network-policy --ports none --no-git-protect docker >"$work/last.log" 2>&1)
+rc=$?
+va=$(vm_of "$na"); [[ -z $va ]] || created+=("$va")
+check "a VM --from alpine:3 with the docker layer and network policy is made, and the self-check passed" bash -c "
+  [[ $rc -eq 0 && -n '$va' && \$(smol_status '$va') == running ]] && grep -qx net_check=ok '$vms/$va' && grep -qx libc=musl '$vms/$va' ||
+  { tail -5 '$work/last.log'; false; }"
+check "... its Docker, restarted by devvm, pulls through the proxy" in_smol "$va" \
+  'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
+(cd "$na" && quiet "${U[@]}" "$D" rm -f)
 kill "$listener" 2>/dev/null; [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null; listener="" udp_listener=""
 rm -f "$work/listener.auth"
 

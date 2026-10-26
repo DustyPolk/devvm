@@ -284,7 +284,18 @@ if command -v dockerd >/dev/null; then
   docker_proxies /root/.docker/config.json sudo
   if [[ "$before" != "$(sudo cat "$dropin" 2>/dev/null || true)" ]]; then
     if $systemd; then sudo systemctl daemon-reload && sudo systemctl restart docker
-    else sudo rc-service docker restart >/dev/null; fi
+    elif [[ -e /run/openrc/softlevel ]]; then sudo rc-service docker restart >/dev/null
+    else
+      # No init system (smolvm): stopped, then started as assets/smolvm/services.sh starts it, with
+      # Docker's settings read (devvm's block) and the proxy variables sudo keeps.
+      sudo sh -c 'pid=$(cat /run/docker.pid 2>/dev/null || true)
+        if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then
+          i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
+        fi
+        [ ! -f /etc/conf.d/docker ] || . /etc/conf.d/docker
+        mkdir -p /var/log
+        nohup dockerd -p /run/docker.pid >/var/log/dockerd.log 2>&1 </dev/null &'
+    fi
   fi
 fi
 
