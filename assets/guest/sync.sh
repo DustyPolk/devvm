@@ -286,7 +286,7 @@ if command -v dockerd >/dev/null; then
     if $systemd; then sudo systemctl daemon-reload && sudo systemctl restart docker
     elif [[ -e /run/openrc/softlevel ]]; then sudo rc-service docker restart >/dev/null
     else
-      # No init system (smolvm): stopped, then started as assets/smolvm/services.sh starts it, with
+      # No init system (smolvm): stopped, then started as assets/container/services.sh starts it, with
       # Docker's settings read (devvm's block) and the proxy variables sudo keeps.
       sudo sh -c 'pid=$(cat /run/docker.pid 2>/dev/null || true)
         if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then

@@ -24,7 +24,8 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 		Short: "List the project VMs",
 		Long: "List the project VMs on every backend, by name: each one's status, image, .git protection " +
 			"(on, off, or clone for a --clone VM), network policy (on, off, or unenforced: not confined by " +
-			"devvm), backend and folder. What a VM's state doesn't have (its creation didn't finish) is -.",
+			"devvm), backend and folder. What a VM's state doesn't have (its creation didn't finish) is -. " +
+			"A VM whose backend sizes no disks (docker) and that holds more than VMs get elsewhere is warned about.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dirs, err := paths.FromEnv()
@@ -33,7 +34,15 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 				ls, err = listVMs(cmd, u, dirs)
 			}
 			fail(u, err, msg.LsFailed)
-			return writeList(u.Stdout(), ls)
+			if err := writeList(u.Stdout(), ls); err != nil {
+				return err
+			}
+			for _, l := range ls {
+				if l.DiskOver != nil {
+					u.Warn(*l.DiskOver)
+				}
+			}
+			return nil
 		},
 	}
 }

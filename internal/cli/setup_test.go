@@ -104,7 +104,11 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 			if a := shown(); (a != nil) != tc.ask {
 				t.Fatalf("asked %v, want %v", a != nil, tc.ask)
 			} else if a != nil {
-				want := []ui.Choice{{Name: "lima", On: tc.start == "lima"}, {Name: "smolvm", Desc: "backend_experimental", On: tc.start == "smolvm"}}
+				want := []ui.Choice{
+					{Name: "docker", Desc: "backend_experimental", On: tc.start == "docker"},
+					{Name: "lima", On: tc.start == "lima"},
+					{Name: "smolvm", Desc: "backend_experimental", On: tc.start == "smolvm"},
+				}
 				if a.help != "backend_help" || !slices.Equal(a.choices, want) {
 					t.Errorf("shown %q %+v, want backend_help %+v", a.help, a.choices, want)
 				}

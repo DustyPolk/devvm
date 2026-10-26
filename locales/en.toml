@@ -203,6 +203,97 @@ other = "{{.vm}} runs without ssh, so none of its ports are forwarded"
 [smolvm_ports_failed]
 other = "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
 
+[docker_host_unsupported]
+description = "host is Go's names for the host's system and processor (windows/amd64)"
+other = "the docker backend doesn't run on {{.host}}: use macOS or Linux"
+
+[docker_not_installed]
+other = "Docker isn't installed: install Docker Desktop, or Docker's engine on Linux, 29.1 or newer"
+
+[docker_down]
+other = "Docker's engine isn't running, or docker can't reach it: start Docker Desktop, or Docker's service"
+
+[docker_access]
+description = "fix is a command, such as sudo usermod -aG docker alice"
+other = "you can't reach Docker's engine: run {{.fix}}, then log in again"
+
+[docker_old]
+other = "Docker {{.version}} is too old: upgrade to Docker 29.1 or newer"
+
+[docker_not_linux]
+description = "os is the containers' system, as Docker names it (windows)"
+other = "Docker's engine runs {{.os}} containers: switch it to Linux containers"
+
+[docker_arch]
+description = "engine and host are processors, as uname names them (x86_64, aarch64)"
+other = "Docker's engine runs {{.engine}} containers, and this machine is {{.host}}: use an engine of this machine's"
+
+[docker_engine_desktop]
+other = "Docker's engine: Docker Desktop {{.version}}, every VM in its one Linux VM"
+
+[docker_engine_linux]
+other = "Docker's engine: Docker {{.version}} on this machine, every VM sharing its kernel"
+
+[docker_engine_other]
+description = "name is the engine's own (OrbStack, Ubuntu 26.04 LTS)"
+other = "Docker's engine: Docker {{.version}} ({{.name}}), not Docker Desktop or this machine's: builds aren't confined on it"
+
+[docker_file_sharing]
+description = "dirs is a space-separated list of host folders"
+other = "Docker Desktop mounts only folders under {{.dirs}}"
+
+[docker_not_shared]
+other = "Docker Desktop doesn't share {{.path}} with containers: add it in Settings > Resources > File sharing"
+
+[docker_mount_path]
+other = "Docker can't mount {{.path}}: its path has a comma or a quote"
+
+[docker_container_foreign]
+other = "Docker has a container named {{.name}} that isn't this devvm's: remove or rename it with docker"
+
+[docker_volume_foreign]
+other = "Docker has a volume named {{.name}} that isn't this devvm's: remove it with docker"
+
+[docker_volume_failed]
+other = "couldn't make or delete Docker's volume {{.name}}"
+
+[docker_image_rm_failed]
+other = "couldn't delete Docker's image {{.image}}"
+
+[docker_script_failed]
+other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with docker start {{.vm}}, then docker exec -it {{.vm}} bash; devvm gc deletes it"
+
+[committing_image]
+other = "committing {{.vm}}"
+
+[docker_commit_failed]
+other = "couldn't commit {{.vm}}"
+
+[pulling_image]
+other = "pulling {{.image}}"
+
+[docker_pull_failed]
+other = "couldn't pull {{.image}}"
+
+[docker_update_failed]
+other = "couldn't change {{.vm}}'s Docker settings"
+
+[docker_remaking]
+other = "making {{.vm}}'s container again, for its new mounts or network: its disk and home are kept"
+
+[unpacking_tools]
+other = "unpacking the shared tools"
+
+[docker_tools_failed]
+other = "couldn't unpack the shared tools into Docker's volume {{.volume}}"
+
+[disk_over]
+description = "used and limit are sizes in GiB; backend is a backend's name (docker)"
+other = "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB VMs get elsewhere, and the {{.backend}} backend doesn't limit it: free some space"
+
+[size_disk_default_unused]
+other = "new VMs' default disk size doesn't apply to {{.vm}}: the {{.backend}} backend sets none"
+
 [creating_from_image]
 other = "creating {{.vm}} from {{.image}}"
 

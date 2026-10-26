@@ -207,10 +207,10 @@ func (s *Smolvm) baseImage(ctx context.Context, f *backend.From) (ref, origin st
 	return ref, UbuntuImage + "@" + digest, nil
 }
 
-// rootScript runs one of devvm's scripts for smolvm as root in a running
-// machine, fed to sh with args.
+// rootScript runs one of devvm's scripts for images run as containers
+// (containerScript) as root in a running machine, fed to sh with args.
 func (s *Smolvm) rootScript(ctx context.Context, vm, name string, args ...string) error {
-	script, err := s.script(name)
+	script, err := s.containerScript(name)
 	if err != nil {
 		return err
 	}

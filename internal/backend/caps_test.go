@@ -82,7 +82,7 @@ func TestEveryFeatureIsListed(t *testing.T) {
 		}
 		seen[f] = true
 	}
-	if len(seen) != 16 {
+	if len(seen) != 17 {
 		t.Errorf("%d features; a new one goes in Features and on the backends page", len(seen))
 	}
 }

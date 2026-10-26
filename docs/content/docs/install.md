@@ -5,11 +5,11 @@ weight: 10
 
 ## Requirements
 
-devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. Its VMs run on a [backend](backends.md): [Lima](lima.md#requirements), which needs Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm`.
+devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. Its VMs run on a [backend](backends.md): [Lima](lima.md#requirements), which needs Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm`; or the experimental [smolvm](smolvm.md#requirements), or [Docker](docker.md#requirements), which needs Docker 29.1 or newer (Docker Desktop on macOS).
 
 ssh and editors reach VMs through devvm's ssh config, which needs OpenSSH 8.7 or newer (`ssh -V`; macOS 13's and Ubuntu 22.04's have it): older versions refuse its `PermitRemoteOpen` ([details](ssh.md#ssh-access-by-name)).
 
-Docker is optional: only `--from` with an image only Docker has needs it ([details](from.md#images-only-docker-has)). Everything else (toolchains, agents, Docker for your projects with the [docker layer](images.md#built-in-layers)) is installed inside the VMs.
+Docker is optional: only the Docker backend, and `--from` with an image only Docker has, need it ([details](from.md#images-only-docker-has)). Everything else (toolchains, agents, Docker for your projects with the [docker layer](images.md#built-in-layers)) is installed inside the VMs.
 
 ## Installing devvm
 
@@ -54,6 +54,10 @@ devvm never installs anything on the host itself. Every command that needs the b
 | `kvm` | `/dev/kvm`, on Linux | none: turn on virtualization |
 | `kvm-access` | access to `/dev/kvm` | `sudo usermod -aG kvm USER`, then log in again |
 | `lima-config` | no Lima global configs in devvm's Lima home ([details](lima.md#a-lima-home-of-its-own)) | none: move them out |
+| `docker` | Docker, for the Docker backend | none: install Docker Desktop, or Docker's engine on Linux |
+| `docker-engine` | Docker's engine, running and reachable | none: start it |
+| `docker-access` | access to Docker's socket, on Linux | `sudo usermod -aG docker USER`, then log in again |
+| `docker-version`, `docker-os`, `docker-arch` | Docker 29.1 or newer, running Linux containers of this machine's processor | none |
 
 devvm is one binary: its own files (`base.yaml`, base's scripts and policy, the features, the shared tools' config and build script, what it sends into VMs, `--from`'s conversion) are built into it, so a copy of it runs anywhere. What needs a path (Lima's `base.yaml`, the folder `--from`'s build VM mounts, the policy files VMs' proxies read) is written out to `~/.local/share/devvm/assets/<hash>`, a folder per version of those files.
 

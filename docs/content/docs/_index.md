@@ -14,6 +14,8 @@ title: Docs
 - [Working on a clone](clone.md): `--clone`, a VM with its own clone of the repo instead of the folder mounted.
 - [Backends](backends.md): what runs the VMs, what each one can do, and choosing one.
 - [Lima](lima.md): what devvm sets up in Lima, how it confines VMs, and its limits.
+- [smolvm](smolvm.md): the experimental microVM backend, and what devvm emulates on it.
+- [Docker](docker.md): the experimental container backend: containers, not VMs, and what that means.
 - [Known limits](limits.md): what devvm can't do, in one list.
 - [CLI reference](cli/_index.md): every command, with its arguments and flags.
 

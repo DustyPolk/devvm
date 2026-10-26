@@ -1,0 +1,138 @@
+# The docker backend (experimental), on the docker stub: its checks, base
+# built by committing a container, a project VM made from it with its
+# mounts and its own home volume, made again when its mounts change, and
+# the features it lacks refused in one line naming the VM. The stub is a
+# Linux engine of this machine's (DEVVM_DOCKER_KIND, read by test builds),
+# where builds are confined; on Docker Desktop they're refused. Registries
+# are never reached: the pinned image needs no lookup, and HTTPS_PROXY
+# points at nothing.
+env DEVVM_MESSAGES=names
+env DEVVM_DOCKER_KIND=linux
+env VMS=$XDG_DATA_HOME/devvm/vms
+env HTTPS_PROXY=http://127.0.0.1:9
+env https_proxy=http://127.0.0.1:9
+env PIN=ubuntu:26.04@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+# Its checks: an engine it reaches, which doctor names; one the user can't
+# reach, with the fix.
+exec devvm doctor --backend docker
+stdout '^docker_engine_linux version=29\.1\.3$'
+stdout '^doctor_ok backend=docker version=\S+$'
+stdout '^FEATURE +DOCKER +LIMA +SMOLVM$'
+stdout '^build-confinement +native +native +native$'
+stdout '^egress-proxy +none +native +emulated$'
+stdout '^docker-layer +none +native +native$'
+exec sh -c ': > "$STUB_DIR/docker-denied"'
+! exec devvm doctor --backend docker
+stderr '^devvm: docker_access fix=sudo usermod -aG docker \S+$'
+rm $STUB_DIR/docker-denied
+
+# Base: the image pulled by its digest, a labelled container from it with
+# base.yaml's size, prepared, its scripts run between the stand-ins, then
+# committed as devvm's image and deleted.
+exec devvm --backend docker --from $PIN build base
+stdout '^==> building_image_from from=ubuntu:26\.04@sha256:a+ image=base key=[0-9a-f]{12}$'
+stub_calls
+stdout '^docker image pull ubuntu:26\.04@sha256:a+$'
+stdout '^docker container create --name devvm-img-[0-9a-f]{12}-[0-9a-f]{8} --label devvm\.data=\S+/data/devvm --label devvm\.key=[0-9a-f]{12} --label devvm\.kind=build --init --user 0:0 --entrypoint sleep --cpus 4 --memory \d+m --memory-swap \d+m --hostname devvm-build --network bridge ubuntu:26\.04@sha256:a+ infinity$'
+stdout '^docker container start devvm-img-[0-9a-f]{12}-[0-9a-f]{8}$'
+stdout '^docker exec -i -u 0 devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- \S+ \d+( \d+)?$'
+stdout '^docker exec -i -u 0 devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- on$'
+stdout '^docker exec -i -u \S+ -w / .* devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -c .* sh bash -s$'
+stdout '^docker exec -i -u 0 devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- off$'
+stdout '^docker container commit --change LABEL devvm\.kind=image --change LABEL devvm\.key=[0-9a-f]{12} devvm-img-[0-9a-f]{12}-[0-9a-f]{8} devvm-[0-9a-f]{8}:[0-9a-f]{12}$'
+stdout '^docker container rm -f -v devvm-img-[0-9a-f]{12}-[0-9a-f]{8}$'
+! stdout limactl
+exec devvm images
+stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +docker$'
+
+# What it lacks is refused in one line naming the VM, before anything is
+# made: every port (the default), network policy, a disk size, SSH agent
+# forwarding, the docker layer.
+mkdir $WORK/web
+cd $WORK/web
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm --backend docker --from $PIN --no-network-policy base
+stderr '^devvm: backend_lacks backend=docker feature=ports vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm --backend docker --from $PIN --network-policy --ports none base
+stderr '^devvm: backend_lacks backend=docker feature=egress-proxy vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none --disk 200 base
+stderr '^devvm: backend_lacks backend=docker feature=disk vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none --ssh-agent base
+stderr '^devvm: backend_lacks backend=docker feature=agent-forwarding vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
+stderr '^devvm: backend_lacks backend=docker feature=docker-layer vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'container create'
+! exists $VMS
+
+# A VM: its home a volume of its own, the project folder bind-mounted,
+# the tools volume read-only, its hostname the folder's; started, its
+# services run without Docker's daemon, set up, then the shell. A default
+# disk size doesn't apply to it, said.
+exec devvm size -g --disk 150
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+stderr '^devvm: size_disk_default_unused backend=docker vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^docker volume create --label devvm\.data=\S+ devvm-web-[0-9a-f]{14}-home$'
+stdout '^docker volume create --label devvm\.data=\S+ devvm-tools-[0-9a-f]{8}$'
+stdout '^docker container create --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --label devvm\.config=[0-9a-f]{16} --label devvm\.kind=vm --init --user 0:0 --entrypoint sleep --cpus 4 --memory \d+m --memory-swap \d+m --hostname web --network bridge --mount type=bind,src=\S+/web,dst=\S+/web --mount type=volume,src=devvm-tools-[0-9a-f]{8},dst=/mnt/devvm-tools,readonly --mount type=volume,src=devvm-web-[0-9a-f]{14}-home,dst=/home/\S+\.guest devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
+stdout '^docker container start devvm-web-[0-9a-f]{14}$'
+stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off devvm-web-[0-9a-f]{14} sh -s --$'
+stdout '^docker exec -i -u \S+ -w \S+/web .* devvm-web-[0-9a-f]{14} sh -c .* sh bash -l$'
+exists $STUB_DIR/sync.tar
+exec devvm ls
+stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +docker +\S+/web$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^backend=docker$'
+! stdout '^disk='
+
+# devvm size: its CPUs and memory, and what its disk holds; changed with
+# docker update on a stopped VM; a disk size refused.
+exec devvm size
+stdout '\Acpus=4 memory=\S+GiB disk_used=\S+GiB\n\z'
+exec devvm stop
+exec sh -c ': > "$STUB_LOG"'
+exec devvm size --cpus 2
+stdout '^==> vm_size size=cpus=2 memory=\S+ vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^docker update --cpus 2 devvm-web-[0-9a-f]{14}$'
+! exec devvm size --disk 300
+stderr '^devvm: backend_lacks backend=docker feature=disk vm=devvm-web-[0-9a-f]{14}$'
+
+# Started again with the same mounts: the same container.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stub_calls
+! stdout 'container (commit|create|rm)'
+stdout '^docker container start devvm-web-[0-9a-f]{14}$'
+
+# rm deletes its container, its home volume and its record.
+exec devvm rm -f
+stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^docker container rm -f -v devvm-web-[0-9a-f]{14}$'
+stdout '^docker volume rm devvm-web-[0-9a-f]{14}-home$'
+! stdout 'volume rm devvm-tools'
+! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-web-*'
+exec devvm ls
+! stdout devvm-web
+
+# On Docker Desktop builds are refused, as its containers reach the host's
+# loopback: in one line, nothing made. An image built already is used.
+env DEVVM_DOCKER_KIND=desktop
+mkdir $WORK/desk
+cd $WORK/desk
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none node
+stderr '^devvm: backend_lacks backend=docker feature=build-confinement vm=node .+$'
+stub_calls
+! stdout 'container create'
+exec devvm doctor --backend docker
+stdout '^docker_engine_desktop version=29\.1\.3$'
+stdout '^build-confinement +none +native +native$'
+exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+stdout '^==> creating_from image=base vm=devvm-desk-[0-9a-f]{14}$'
+exec devvm rm -f

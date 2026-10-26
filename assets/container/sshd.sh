@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run as root in base's build machine after its scripts: sshd, for devvm's ssh for editors
+# Run as root in base's build machine or container after its scripts: sshd, for devvm's ssh for editors
 # (services.sh starts it). After them, as it comes from the archive they left (Ubuntu's, pinned to a
 # snapshot), so it fits what they installed: from the live archive, before them, its systemd
 # libraries were newer than the snapshot's, which packages layers install (Docker's) then couldn't

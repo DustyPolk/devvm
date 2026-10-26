@@ -42,7 +42,7 @@ devvm ships one layer, `docker`, chosen like any other (`devvm node+docker`, `de
 | --- | --- |
 | docker | Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, its signing key's checksum and each package's version pinned at the top of the script (Alpine's own packages on `--from alpine`, unpinned); the VM's user in the `docker` group; the daemon started at each boot |
 
-A VM without it has no Docker.
+A VM without it has no Docker. Running Docker's engine in a VM is a backend feature of its own, `docker-layer` ([features](backends.md#features)): the [Docker backend](docker.md) lacks it, so a VM with the layer is refused there, made or added to, before anything's built.
 
 ## Shared tools
 
@@ -56,7 +56,7 @@ The toolchains and coding agents aren't image layers: they're shared tools, whic
 | go | Go |
 | claude, codex, opencode | the coding agents |
 
-Each tool version is built once into a compressed read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it (`<image>.sha256`). Every VM has that folder mounted read-only at `/mnt/devvm-tools`, and mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. Any mix works without building anything new, and ten VMs with node share one copy. [mise](https://mise.jdx.dev) runs them:
+Each tool version is built once into a compressed read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it (`<image>.sha256`). Every VM has that folder mounted read-only at `/mnt/devvm-tools`, and mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. On [Docker](docker.md#shared-tools) the images are unpacked into a volume, mounted there instead, and each folder linked where its image would be mounted. Any mix works without building anything new, and ten VMs with node share one copy. [mise](https://mise.jdx.dev) runs them:
 
 - **They work as usual:** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`), `cargo`, from any shell, including `bash -c` from agents and editors over SSH.
 - **A project's own version files win:** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and `go.mod`'s `toolchain` line pick their version, which installs into the VM the first time it's used.
@@ -112,7 +112,7 @@ The image (base and its layers) is built first if it isn't, with the shared tool
 Each image is built in a VM of its own, which then is the image:
 
 1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings, or with `--from`, from a container image [converted into a disk](from.md#how-its-converted). A layer's VM is a copy of its parent image.
-2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement).
+2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement) and [Docker](docker.md#building-images), which can't build on Docker Desktop yet.
 3. The script runs: `assets/layers/base.sh` for base, then its chosen [features](customizing.md), the layer's for a layer.
 4. The VM stops. Its record is written last, with its chain, what base started from, and its C library.
 
@@ -228,6 +228,7 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 - `--cpus` takes a whole number, `--memory` and `--disk` a size in GiB: `16`, `16G` or `16GiB`, decimals allowed. More CPUs or memory than this machine has is refused.
 - A stopped VM changes at once. A running one keeps its size until it next starts (`devvm restart`): until then, `devvm size` shows what it has now and says what changes.
 - Disks grow but never shrink: a disk smaller than the VM's is refused.
+- On [Docker](docker.md#what-devvm-sets-on-a-vm), a VM's disk has no size of its own: `--disk` is refused, a default disk size doesn't apply, and `devvm size` shows what the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), warning past 100 GiB.
 
 ### Disk use
 

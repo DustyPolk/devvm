@@ -55,7 +55,7 @@ fi
 
 # Running now too, for a VM it's added to in place: systemd started it with the package; OpenRC
 # starts it here; with no init system (smolvm), devvm starts it after each start
-# (assets/smolvm/services.sh), and here.
+# (assets/container/services.sh), and here.
 if [[ -d /run/systemd/system ]]; then
   :
 elif [[ -d /run/openrc ]]; then

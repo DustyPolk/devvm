@@ -65,6 +65,17 @@ Gotchas of this setup:
 - A VM booting while another one works boots degraded and its downloads time out: `tests/e2e.sh` stops a VM it's done with before starting the next.
 - minisign, for signing releases, has no linux/arm64 build, so mise skips it there.
 
+## Docker engines
+
+`tests/e2e.sh --backend docker` checks the [Docker backend](docker.md) on two engines, which differ in what a container reaches on the host:
+
+- **A Linux engine**, in a Lima VM e2e makes the first time and keeps: Lima home `~/.lt-e2e-go-docker` (or `$DEVVM_E2E_DOCKER_LIMA_HOME`), VM `dockerhost`, Ubuntu 26.04 with Docker's engine from Ubuntu's archive and you in its `docker` group, and only this checkout mounted, read-only. e2e builds a test build of `devvm` for it here, copies it in, and runs its own Docker checks there (`DEVVM_E2E_BIN` names the binary, as the VM has no Go). Its images stay cached in the VM's Docker; `--clean` deletes them. `limactl stop dockerhost` (with that `LIMA_HOME`) when done; `limactl delete` to start over. The checkout's path is the VM's mount: run e2e from the same one.
+- **Docker Desktop**, yours: e2e touches only what has its sandbox's label, checks that everything else is the same at the end, and deletes everything with the label then. Desktop can't build yet, so it copies base and the shared tools from the Linux engine's run: both keep their state at `/tmp/devvm-go-e2e-docker`, so the images carry the label and names Desktop's run looks for.
+
+On Linux, `--backend docker` checks the machine's own engine, which must be rootful and its own.
+
+The CLI tests stand in a stub for Docker's engine (`testdata/stubs/docker`). A test build reads `DEVVM_DOCKER_KIND` (`linux`, `desktop`, `other`) as the engine's kind, so they build on a stand-in Linux engine on any host; releases ignore it.
+
 ## x86_64 hosts
 
 These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.

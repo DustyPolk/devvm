@@ -198,7 +198,7 @@ func TestFormatAndKeyFiles(t *testing.T) {
 		t.Errorf("ToolFormat = %q", f)
 	}
 	kf := s.KeyFiles()
-	if len(kf) != 3 || len(kf["smolvm/prepare.sh"]) == 0 || len(kf["smolvm/shims.sh"]) == 0 || len(kf["smolvm/sshd.sh"]) == 0 {
+	if len(kf) != 3 || len(kf["container/prepare.sh"]) == 0 || len(kf["container/shims.sh"]) == 0 || len(kf["container/sshd.sh"]) == 0 {
 		t.Errorf("KeyFiles = %v", slices.Collect(func(yield func(string) bool) {
 			for k := range kf {
 				if !yield(k) {

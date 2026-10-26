@@ -90,7 +90,7 @@ exec devvm --from debian:13
 stderr '^devvm: from_ignored vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
 stub_calls
-! stdout 'limactl create|docker'
+! stdout 'limactl create|docker image'
 exec devvm --from $PIN
 ! stderr from_ignored
 cd $WORK

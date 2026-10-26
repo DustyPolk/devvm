@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"math"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -209,13 +210,62 @@ func (e Settings) ShowSize(ctx context.Context, w io.Writer, global bool) error 
 	if err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, SizeText(in.Size)+"\n"); err != nil {
+	line := SizeText(in.Size)
+	used, over, err := e.diskUsed(ctx, t.b, t.f.Name)
+	if err != nil {
 		return err
+	}
+	if used != "" {
+		line += " " + KeyDiskUsed + "=" + used + "GiB"
+	}
+	if _, err := io.WriteString(w, line+"\n"); err != nil {
+		return err
+	}
+	if over != nil {
+		e.Warn(*over)
 	}
 	if p := pendingSize(t.st, in.Size); p != (backend.Size{}) {
 		e.Note(msg.SizePending(SizeText(p), t.f.Name))
 	}
 	return nil
+}
+
+// KeyDiskUsed is what devvm size shows of a VM whose backend sizes no
+// disks (backend.DiskUser): what its disk holds, in GiB.
+const KeyDiskUsed = "disk_used"
+
+// diskUsed is what the VM's disk holds, in GiB, on a backend that sizes
+// no disks, with the warning for one past the size VMs get elsewhere;
+// "" on other backends.
+func (e *Env) diskUsed(ctx context.Context, b backend.Backend, vm string) (string, *msg.M, error) {
+	du, ok := b.(backend.DiskUser)
+	if !ok {
+		return "", nil, nil
+	}
+	used, limit, err := du.DiskUsed(ctx, vm)
+	if err != nil {
+		return "", nil, err
+	}
+	shown := gibText(used)
+	if limit > 0 && used > limit {
+		m := msg.DiskOver(b.Name(), gibText(limit), shown, vm)
+		return shown, &m, nil
+	}
+	return shown, nil, nil
+}
+
+// warnDisk warns when the VM's disk holds more than VMs get elsewhere, on
+// a backend that sizes no disks. One it can't measure goes unsaid: the
+// launch goes on.
+func (e *Env) warnDisk(ctx context.Context, b backend.Backend, vm string) {
+	if _, over, err := e.diskUsed(ctx, b, vm); err == nil && over != nil {
+		e.Warn(*over)
+	}
+}
+
+// gibText is bytes in GiB, to a tenth.
+func gibText(n int64) string {
+	return strconv.FormatFloat(math.Round(float64(n)/(1<<30)*10)/10, 'f', -1, 64)
 }
 
 // SetSize changes the folder's VM's size to what s sets: at once when it's

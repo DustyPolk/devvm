@@ -345,7 +345,7 @@ func checkDecider(vm string, c backend.Confinement) error {
 // services runs services.sh in a running machine, with args (servicesArgs
 // for its sshd); a failure stops it.
 func (s *Smolvm) services(ctx context.Context, vm string, args []string) error {
-	script, err := s.script("services.sh")
+	script, err := s.containerScript("services.sh")
 	if err != nil {
 		return err
 	}

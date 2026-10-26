@@ -12,6 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -244,5 +245,60 @@ func TestUpRequires(t *testing.T) {
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") || len(*execs) > 0 {
 		t.Errorf("calls = %q, execs %+v", ms, *execs)
+	}
+}
+
+// The docker layer needs docker-layer of the backend, before anything is
+// built: for a new VM, and for one it's added to.
+func TestUpRequiresDockerLayer(t *testing.T) {
+	caps := allNative()
+	delete(caps, backend.FeatureDockerLayer)
+	e, f, _ := upEnv(t, caps)
+	err := Launch{e}.Up(t.Context(), Options{Image: "docker", NoNetworkPolicy: true, Ports: "none"})
+	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
+		t.Errorf("Up = %v", got)
+	}
+	if ms := f.Methods(); slices.Contains(ms, "BuildImage") {
+		t.Errorf("calls = %q", ms)
+	}
+	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	before := len(f.Calls())
+	err = Launch{e}.Up(t.Context(), Options{Image: "docker"})
+	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
+		t.Errorf("adding it: %v", got)
+	}
+	if ms := f.Methods()[before:]; slices.Contains(ms, "Exec") {
+		t.Errorf("calls = %q", ms)
+	}
+}
+
+// A default disk size doesn't apply on a backend that sizes no disks:
+// left out, said; --disk is refused.
+func TestUpDefaultDiskUnused(t *testing.T) {
+	caps := allNative()
+	delete(caps, backend.FeatureDisk)
+	e, f, _ := upEnv(t, caps)
+	if err := state.WriteSize(e.Dirs, state.Size{CPUs: "2", Disk: "150"}); err != nil {
+		t.Fatal(err)
+	}
+	var warned []string
+	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"}); err != nil {
+		t.Fatal(names(err))
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	if spec.Size != (backend.Size{CPUs: 2}) {
+		t.Errorf("size = %+v", spec.Size)
+	}
+	if len(warned) != 1 || !strings.HasPrefix(warned[0], "size_disk_default_unused backend=fake vm=devvm-web-") {
+		t.Errorf("warned %q", warned)
+	}
+	if st, _ := state.ReadVM(e.Dirs, spec.Name); st.Get(KeyDisk) != "" || st.Get(KeyCPUs) != "2" {
+		t.Errorf("state disk=%q cpus=%q", st.Get(KeyDisk), st.Get(KeyCPUs))
+	}
+	e2, _, _ := upEnv(t, caps)
+	err := (Launch{e2}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
+	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
+		t.Errorf("--disk: %v", got)
 	}
 }

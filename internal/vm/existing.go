@@ -166,7 +166,11 @@ func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, erro
 	if sshagent.Mode(st) == sshagent.On {
 		e.checkAgent(ctx)
 	}
-	return e.run(ctx, b, st)
+	conf, err := e.run(ctx, b, st)
+	if err == nil {
+		e.warnDisk(ctx, b, vm)
+	}
+	return conf, err
 }
 
 // warnIgnored warns about the flags only new VMs take.
@@ -313,6 +317,9 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 		return nil
 	}
 	added := strings.Join(missing, "+")
+	if err := e.Registry.Require(b, vm, backend.ImageFeatures(added)...); err != nil {
+		return err
+	}
 	mounts := e.AgentMounts(added)
 	if !e.Terminal() {
 		return msg.NoTerminalConfirm(vm, want)

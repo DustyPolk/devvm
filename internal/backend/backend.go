@@ -150,6 +150,22 @@ func AgentUnchosen(ctx context.Context, b Backend, vm string) (bool, error) {
 	return a.AgentUnchosen(ctx, vm)
 }
 
+// DiskUser is a backend whose VMs' disks have no size of their own
+// (FeatureDisk none): it says how much one holds instead, which devvm size
+// shows, and the size it's meant to stay under, past which launches warn.
+type DiskUser interface {
+	// DiskUsed is what the VM's disk holds, in bytes, and the size it's
+	// meant to stay under.
+	DiskUsed(ctx context.Context, vm string) (used, limit int64, err error)
+}
+
+// Reporter is a backend that tells devvm doctor more about what it runs
+// on (Docker's engine, which folders it can mount), once Problems found
+// none.
+type Reporter interface {
+	Report(ctx context.Context) []msg.M
+}
+
 // Problem is something a backend needs that the host lacks, as devvm
 // doctor reports it.
 type Problem struct {
@@ -224,8 +240,12 @@ type Built struct {
 // VMSpec is a VM to create from an image. Mounts are at the same path in
 // the VM as on the host, except the tools share.
 type VMSpec struct {
-	Name      string
-	Project   string   // the project folder, read-write; "" for none (--clone)
+	Name    string
+	Project string // the project folder, read-write; "" for none (--clone)
+	// CloneAt is where a --clone VM keeps its own clone of the project (the
+	// folder's path); "" for a VM that mounts the folder. A backend may keep
+	// it on a disk of its own.
+	CloneAt   string
 	AgentDirs []string // agents' host folders, read-only
 	Tools     string   // the shared tools folder, read-only at ToolsAt; "" for none
 	ToolsAt   string   // where the tools folder is in the VM

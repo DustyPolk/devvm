@@ -7,6 +7,7 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/docker"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -26,20 +27,26 @@ func (quietUI) AddCleanup(func(context.Context)) func()                   { retu
 func (quietUI) Interrupted() bool                                         { return false }
 func (quietUI) StdinIsTerminal() bool                                     { return false }
 
-// DEVVM_UNREVIEWED counts only in a test build: a release ignores it.
+// DEVVM_UNREVIEWED and DEVVM_DOCKER_KIND count only in a test build: a
+// release ignores them.
 func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 	t.Parallel()
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
+	env := map[string]string{"DEVVM_UNREVIEWED": "smolvm:egress-proxy", "DEVVM_DOCKER_KIND": "linux"}
 	for _, c := range []struct {
 		build string
 		want  bool
 	}{{"", false}, {"yes", false}, {"allowed", true}} {
-		r, err := newFor(d, assets.FS, quietUI{}, c.build, "smolvm:egress-proxy")
+		r, err := newFor(d, assets.FS, quietUI{}, c.build, func(k string) string { return env[k] })
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got := r.Unreviewed["smolvm:egress-proxy"]; got != c.want {
 			t.Errorf("build %q: let through = %v", c.build, got)
+		}
+		b, _ := r.Lookup("docker")
+		if got := b.(*docker.Docker).Kind == "linux"; got != c.want {
+			t.Errorf("build %q: docker's kind set = %v", c.build, got)
 		}
 	}
 }

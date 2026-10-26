@@ -92,7 +92,7 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"base.yaml", "", func(e *env) { e.edit("root/base.yaml") }, all},
 		{"layers/base.sh", "", func(e *env) { e.edit("root/layers/base.sh") }, all},
 		{"the backend", "", func(e *env) { e.in.Backend = "smolvm" }, all},
-		{"a backend's own file", "", func(e *env) { e.in.BackendFiles = map[string][]byte{"smolvm/prepare.sh": []byte("x")} }, all},
+		{"a backend's own file", "", func(e *env) { e.in.BackendFiles = map[string][]byte{"container/prepare.sh": []byte("x")} }, all},
 		{"no backend files is none", "", func(e *env) { e.in.BackendFiles = map[string][]byte{} }, nil},
 		{"a chosen built-in feature's script", "", func(e *env) { e.edit("root/features/fzf.sh") }, all},
 		{"a chosen user feature's script", "", func(e *env) { e.edit("features/mine.sh") }, all},

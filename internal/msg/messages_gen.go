@@ -349,6 +349,11 @@ func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
 
+// CommittingImage is [committing_image]: "committing {{.vm}}"
+func CommittingImage(vm string) M {
+	return M{id: "committing_image", vals: []val{{"vm", vm}}}
+}
+
 // ConfigNotCopied is [config_not_copied]: "couldn't read {{.file}} to take its keys out, so {{.vm}} doesn't get it"
 func ConfigNotCopied(file string, vm string) M {
 	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
@@ -484,9 +489,54 @@ func Detected(found string) M {
 	return M{id: "detected", vals: []val{{"found", found}}}
 }
 
+// DiskOver is [disk_over]: "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB VMs get elsewhere, and the {{.backend}} backend doesn't limit it: free some space"
+func DiskOver(backend string, limit string, used string, vm string) M {
+	return M{id: "disk_over", vals: []val{{"backend", backend}, {"limit", limit}, {"used", used}, {"vm", vm}}}
+}
+
 // DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
 func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
+}
+
+// DockerAccess is [docker_access]: "you can't reach Docker's engine: run {{.fix}}, then log in again"
+func DockerAccess(fix string) M {
+	return M{id: "docker_access", vals: []val{{"fix", fix}}}
+}
+
+// DockerArch is [docker_arch]: "Docker's engine runs {{.engine}} containers, and this machine is {{.host}}: use an engine of this machine's"
+func DockerArch(engine string, host string) M {
+	return M{id: "docker_arch", vals: []val{{"engine", engine}, {"host", host}}}
+}
+
+// DockerCommitFailed is [docker_commit_failed]: "couldn't commit {{.vm}}"
+func DockerCommitFailed(vm string) M {
+	return M{id: "docker_commit_failed", vals: []val{{"vm", vm}}}
+}
+
+// DockerContainerForeign is [docker_container_foreign]: "Docker has a container named {{.name}} that isn't this devvm's: remove or rename it with docker"
+func DockerContainerForeign(name string) M {
+	return M{id: "docker_container_foreign", vals: []val{{"name", name}}}
+}
+
+// DockerDown is [docker_down]: "Docker's engine isn't running, or docker can't reach it: start Docker Desktop, or Docker's service"
+func DockerDown() M {
+	return M{id: "docker_down"}
+}
+
+// DockerEngineDesktop is [docker_engine_desktop]: "Docker's engine: Docker Desktop {{.version}}, every VM in its one Linux VM"
+func DockerEngineDesktop(version string) M {
+	return M{id: "docker_engine_desktop", vals: []val{{"version", version}}}
+}
+
+// DockerEngineLinux is [docker_engine_linux]: "Docker's engine: Docker {{.version}} on this machine, every VM sharing its kernel"
+func DockerEngineLinux(version string) M {
+	return M{id: "docker_engine_linux", vals: []val{{"version", version}}}
+}
+
+// DockerEngineOther is [docker_engine_other]: "Docker's engine: Docker {{.version}} ({{.name}}), not Docker Desktop or this machine's: builds aren't confined on it"
+func DockerEngineOther(name string, version string) M {
+	return M{id: "docker_engine_other", vals: []val{{"name", name}, {"version", version}}}
 }
 
 // DockerExportFailed is [docker_export_failed]: "couldn't export {{.from}} from Docker"
@@ -494,9 +544,19 @@ func DockerExportFailed(from string) M {
 	return M{id: "docker_export_failed", vals: []val{{"from", from}}}
 }
 
+// DockerFileSharing is [docker_file_sharing]: "Docker Desktop mounts only folders under {{.dirs}}"
+func DockerFileSharing(dirs string) M {
+	return M{id: "docker_file_sharing", vals: []val{{"dirs", dirs}}}
+}
+
 // DockerFound is [docker_found]: "Docker: found, for --from with images only Docker has"
 func DockerFound() M {
 	return M{id: "docker_found"}
+}
+
+// DockerHostUnsupported is [docker_host_unsupported]: "the docker backend doesn't run on {{.host}}: use macOS or Linux"
+func DockerHostUnsupported(host string) M {
+	return M{id: "docker_host_unsupported", vals: []val{{"host", host}}}
 }
 
 // DockerImageChanged is [docker_image_changed]: "{{.from}} changed in Docker while devvm built from it (a rebuild?): run devvm again"
@@ -504,14 +564,79 @@ func DockerImageChanged(from string) M {
 	return M{id: "docker_image_changed", vals: []val{{"from", from}}}
 }
 
+// DockerImageRmFailed is [docker_image_rm_failed]: "couldn't delete Docker's image {{.image}}"
+func DockerImageRmFailed(image string) M {
+	return M{id: "docker_image_rm_failed", vals: []val{{"image", image}}}
+}
+
 // DockerMissing is [docker_missing]: "Docker: not found (optional: only --from with images only Docker has needs it)"
 func DockerMissing() M {
 	return M{id: "docker_missing"}
 }
 
+// DockerMountPath is [docker_mount_path]: "Docker can't mount {{.path}}: its path has a comma or a quote"
+func DockerMountPath(path string) M {
+	return M{id: "docker_mount_path", vals: []val{{"path", path}}}
+}
+
+// DockerNotInstalled is [docker_not_installed]: "Docker isn't installed: install Docker Desktop, or Docker's engine on Linux, 29.1 or newer"
+func DockerNotInstalled() M {
+	return M{id: "docker_not_installed"}
+}
+
+// DockerNotLinux is [docker_not_linux]: "Docker's engine runs {{.os}} containers: switch it to Linux containers"
+func DockerNotLinux(os string) M {
+	return M{id: "docker_not_linux", vals: []val{{"os", os}}}
+}
+
+// DockerNotShared is [docker_not_shared]: "Docker Desktop doesn't share {{.path}} with containers: add it in Settings > Resources > File sharing"
+func DockerNotShared(path string) M {
+	return M{id: "docker_not_shared", vals: []val{{"path", path}}}
+}
+
+// DockerOld is [docker_old]: "Docker {{.version}} is too old: upgrade to Docker 29.1 or newer"
+func DockerOld(version string) M {
+	return M{id: "docker_old", vals: []val{{"version", version}}}
+}
+
 // DockerOnly is [docker_only]: "{{.from}} is an image only Docker has (built and never pushed, or private): start Docker and try again"
 func DockerOnly(from string) M {
 	return M{id: "docker_only", vals: []val{{"from", from}}}
+}
+
+// DockerPullFailed is [docker_pull_failed]: "couldn't pull {{.image}}"
+func DockerPullFailed(image string) M {
+	return M{id: "docker_pull_failed", vals: []val{{"image", image}}}
+}
+
+// DockerRemaking is [docker_remaking]: "making {{.vm}}'s container again, for its new mounts or network: its disk and home are kept"
+func DockerRemaking(vm string) M {
+	return M{id: "docker_remaking", vals: []val{{"vm", vm}}}
+}
+
+// DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with docker start {{.vm}}, then docker exec -it {{.vm}} bash; devvm gc deletes it"
+func DockerScriptFailed(script string, vm string) M {
+	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
+}
+
+// DockerToolsFailed is [docker_tools_failed]: "couldn't unpack the shared tools into Docker's volume {{.volume}}"
+func DockerToolsFailed(volume string) M {
+	return M{id: "docker_tools_failed", vals: []val{{"volume", volume}}}
+}
+
+// DockerUpdateFailed is [docker_update_failed]: "couldn't change {{.vm}}'s Docker settings"
+func DockerUpdateFailed(vm string) M {
+	return M{id: "docker_update_failed", vals: []val{{"vm", vm}}}
+}
+
+// DockerVolumeFailed is [docker_volume_failed]: "couldn't make or delete Docker's volume {{.name}}"
+func DockerVolumeFailed(name string) M {
+	return M{id: "docker_volume_failed", vals: []val{{"name", name}}}
+}
+
+// DockerVolumeForeign is [docker_volume_foreign]: "Docker has a volume named {{.name}} that isn't this devvm's: remove it with docker"
+func DockerVolumeForeign(name string) M {
+	return M{id: "docker_volume_foreign", vals: []val{{"name", name}}}
 }
 
 // DoctorFailed is [doctor_failed]: "couldn't check what devvm needs: {{.reason}}"
@@ -1369,6 +1494,11 @@ func ProxyStartFailed(log string, vm string) M {
 	return M{id: "proxy_start_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
 
+// PullingImage is [pulling_image]: "pulling {{.image}}"
+func PullingImage(image string) M {
+	return M{id: "pulling_image", vals: []val{{"image", image}}}
+}
+
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
 func QEMUMissing(program string) M {
 	return M{id: "qemu_missing", vals: []val{{"program", program}}}
@@ -1562,6 +1692,11 @@ func ShareWaiting(dir string) M {
 // SizeDefaults is [size_defaults]: "new VMs get {{.size}}"
 func SizeDefaults(size string) M {
 	return M{id: "size_defaults", vals: []val{{"size", size}}}
+}
+
+// SizeDiskDefaultUnused is [size_disk_default_unused]: "new VMs' default disk size doesn't apply to {{.vm}}: the {{.backend}} backend sets none"
+func SizeDiskDefaultUnused(backend string, vm string) M {
+	return M{id: "size_disk_default_unused", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
 // SizeFailed is [size_failed]: "couldn't show or change the size: {{.reason}}"
@@ -1914,6 +2049,11 @@ func UnknownLayer(agents string, envs string, layer string) M {
 	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
 }
 
+// UnpackingTools is [unpacking_tools]: "unpacking the shared tools"
+func UnpackingTools() M {
+	return M{id: "unpacking_tools"}
+}
+
 // UnsafeFolder is [unsafe_folder]: "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, --clone, or --unsafe-folder if you mean it"
 func UnsafeFolder(dir string, holds string) M {
 	return M{id: "unsafe_folder", vals: []val{{"dir", dir}, {"holds", holds}}}
@@ -2090,6 +2230,7 @@ var specs = map[string]spec{
 	"cloning_image":               {fields: []string{"parent"}},
 	"code_failed":                 {fields: []string{"reason"}},
 	"codex_login_kept":            {fields: []string{"keys"}},
+	"committing_image":            {fields: []string{"vm"}},
 	"config_not_copied":           {fields: []string{"file", "vm"}},
 	"config_redacted":             {fields: []string{"file", "keys", "vm"}},
 	"configuring":                 {fields: []string{"vm"}},
@@ -2117,12 +2258,36 @@ var specs = map[string]spec{
 	"deleted_unfinished_build":    {fields: []string{"key"}},
 	"deleting":                    {fields: []string{"vm"}},
 	"detected":                    {fields: []string{"found"}},
+	"disk_over":                   {fields: []string{"backend", "limit", "used", "vm"}},
 	"disk_shrink":                 {fields: []string{"have", "vm", "want"}},
+	"docker_access":               {fields: []string{"fix"}},
+	"docker_arch":                 {fields: []string{"engine", "host"}},
+	"docker_commit_failed":        {fields: []string{"vm"}},
+	"docker_container_foreign":    {fields: []string{"name"}},
+	"docker_down":                 {},
+	"docker_engine_desktop":       {fields: []string{"version"}},
+	"docker_engine_linux":         {fields: []string{"version"}},
+	"docker_engine_other":         {fields: []string{"name", "version"}},
 	"docker_export_failed":        {fields: []string{"from"}},
+	"docker_file_sharing":         {fields: []string{"dirs"}},
 	"docker_found":                {},
+	"docker_host_unsupported":     {fields: []string{"host"}},
 	"docker_image_changed":        {fields: []string{"from"}},
+	"docker_image_rm_failed":      {fields: []string{"image"}},
 	"docker_missing":              {},
+	"docker_mount_path":           {fields: []string{"path"}},
+	"docker_not_installed":        {},
+	"docker_not_linux":            {fields: []string{"os"}},
+	"docker_not_shared":           {fields: []string{"path"}},
+	"docker_old":                  {fields: []string{"version"}},
 	"docker_only":                 {fields: []string{"from"}},
+	"docker_pull_failed":          {fields: []string{"image"}},
+	"docker_remaking":             {fields: []string{"vm"}},
+	"docker_script_failed":        {fields: []string{"script", "vm"}},
+	"docker_tools_failed":         {fields: []string{"volume"}},
+	"docker_update_failed":        {fields: []string{"vm"}},
+	"docker_volume_failed":        {fields: []string{"name"}},
+	"docker_volume_foreign":       {fields: []string{"name"}},
 	"doctor_failed":               {fields: []string{"reason"}},
 	"doctor_ok":                   {fields: []string{"backend", "version"}},
 	"downloading_mise":            {fields: []string{"version"}},
@@ -2294,6 +2459,7 @@ var specs = map[string]spec{
 	"proxy_failed":                {fields: []string{"reason"}},
 	"proxy_port_taken":            {fields: []string{"port", "vm"}},
 	"proxy_start_failed":          {fields: []string{"log", "vm"}},
+	"pulling_image":               {fields: []string{"image"}},
 	"qemu_missing":                {fields: []string{"program"}},
 	"qemu_missing_fix":            {fields: []string{"fix", "program"}},
 	"qemu_refused":                {},
@@ -2333,6 +2499,7 @@ var specs = map[string]spec{
 	"share_lock_held":             {fields: []string{"dir"}},
 	"share_waiting":               {fields: []string{"dir"}},
 	"size_defaults":               {fields: []string{"size"}},
+	"size_disk_default_unused":    {fields: []string{"backend", "vm"}},
 	"size_failed":                 {fields: []string{"reason"}},
 	"size_flags_ignored":          {},
 	"size_next_start":             {fields: []string{"vm"}},
@@ -2403,6 +2570,7 @@ var specs = map[string]spec{
 	"unfinished_image":            {fields: []string{"vm"}},
 	"unknown_feature":             {fields: []string{"feature"}},
 	"unknown_layer":               {fields: []string{"agents", "envs", "layer"}},
+	"unpacking_tools":             {},
 	"unsafe_folder":               {fields: []string{"dir", "holds"}},
 	"unsafe_folder_inside":        {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":          {fields: []string{"dir", "holds"}},

@@ -265,11 +265,20 @@ func (b Builds) build(ctx context.Context, name string) error {
 	if name == image.Base && b.From != "" {
 		spec.From = &backend.From{Ref: b.From, Digest: digest}
 	}
+	// What building it needs, only when it's built: an image the backend
+	// has, with its record, needs none of it.
+	done, leftover, err := b.built(ctx, key)
+	if err != nil || done {
+		return err
+	}
 	if err := b.Review.Require(b.Backend, name, spec.Features()...); err != nil {
 		return err
 	}
-	if done, err := b.built(ctx, name, key); err != nil || done {
-		return err
+	if leftover {
+		b.Info(msg.ImageLeftover(name, key))
+		if err := b.deleteImage(ctx, key); err != nil {
+			return err
+		}
 	}
 	libc := ""
 	data, err := fs.ReadFile(b.Assets, "layers/base.sh")
@@ -338,22 +347,21 @@ func (b Builds) build(ctx context.Context, name string) error {
 }
 
 // built reports whether the image with key is built: the backend has it,
-// and its record. One without a record is left over from a build that
-// didn't finish, and is deleted.
-func (b Builds) built(ctx context.Context, name, key string) (bool, error) {
+// and its record. One without a record (leftover) is left over from a
+// build that didn't finish, for the caller to delete.
+func (b Builds) built(ctx context.Context, key string) (done, leftover bool, err error) {
 	keys, err := b.Backend.Images(ctx)
 	if err != nil || !slices.Contains(keys, key) {
-		return false, err
+		return false, false, err
 	}
 	_, err = state.ReadImage(b.Dirs, key)
 	if err == nil {
-		return true, nil
+		return true, false, nil
 	}
 	if _, corrupt := errors.AsType[*state.CorruptError](err); !corrupt && !errors.Is(err, fs.ErrNotExist) {
-		return false, err
+		return false, false, err
 	}
-	b.Info(msg.ImageLeftover(name, key))
-	return false, b.deleteImage(ctx, key)
+	return false, true, nil
 }
 
 func (b *Env) deleteImage(ctx context.Context, key string) error {

@@ -25,6 +25,9 @@ type Listed struct {
 	Net     string // its network policy: on, off or unenforced (netpolicy.Listed)
 	Backend string
 	Folder  string
+	// DiskOver warns that its disk holds more than VMs get elsewhere, on
+	// a backend that sizes no disks (backend.DiskUser); nil otherwise.
+	DiskOver *msg.M
 }
 
 // List lists the project VMs on every backend, sorted by name. A backend
@@ -77,6 +80,13 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	}
 	if isClone(st) {
 		l.Git = ModeClone
+	}
+	if du, ok := b.(backend.DiskUser); ok {
+		// One it can't measure goes unsaid: ls lists it all the same.
+		if used, limit, err := du.DiskUsed(ctx, in.Name); err == nil && limit > 0 && used > limit {
+			m := msg.DiskOver(b.Name(), gibText(limit), gibText(used), in.Name)
+			l.DiskOver = &m
+		}
 	}
 	l.Net, err = netpolicy.Listed(ctx, b, st, in.Status == backend.StatusRunning)
 	return l, err

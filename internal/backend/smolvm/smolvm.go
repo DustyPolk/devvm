@@ -163,6 +163,7 @@ func (s *Smolvm) Caps() backend.Caps {
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
 		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeaturePorts,
 		backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk,
+		backend.FeatureDockerLayer,
 	} {
 		caps[f] = backend.Native
 	}
@@ -180,12 +181,18 @@ func (s *Smolvm) NameMax() int { return 0 }
 // script is one of devvm's scripts for smolvm: smolvm/<name> in Assets.
 func (s *Smolvm) script(name string) ([]byte, error) { return fs.ReadFile(s.Assets, "smolvm/"+name) }
 
+// containerScript is one of the scripts smolvm shares with Docker, for
+// images run as containers: container/<name> in Assets.
+func (s *Smolvm) containerScript(name string) ([]byte, error) {
+	return fs.ReadFile(s.Assets, "container/"+name)
+}
+
 // KeyFiles are devvm's scripts for smolvm that go into base; one missing
 // is hashed as empty.
 func (s *Smolvm) KeyFiles() map[string][]byte {
 	files := map[string][]byte{}
 	for _, n := range []string{"prepare.sh", "shims.sh", "sshd.sh"} {
-		files["smolvm/"+n], _ = s.script(n)
+		files["container/"+n], _ = s.containerScript(n)
 	}
 	return files
 }

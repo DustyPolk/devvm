@@ -143,6 +143,13 @@ func (d Dirs) SmolvmImage(key string) string { return filepath.Join(d.Smolvm(), 
 // SmolvmVM is the record of what the smolvm backend set on a VM.
 func (d Dirs) SmolvmVM(vm string) string { return filepath.Join(d.Smolvm(), "vms", vm+".json") }
 
+// Docker holds the Docker backend's files: what it set on each VM, and
+// which shared tools it unpacked into its tools volume.
+func (d Dirs) Docker() string { return filepath.Join(d.Data, "docker") }
+
+// DockerVM is the record of what the Docker backend set on a VM.
+func (d Dirs) DockerVM(vm string) string { return filepath.Join(d.Docker(), "vms", vm+".json") }
+
 // BaseFeatures lists the features chosen for the base image.
 func (d Dirs) BaseFeatures() string { return filepath.Join(d.Config, "base-features") }
 

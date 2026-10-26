@@ -115,9 +115,15 @@ func LayerName(name string) bool {
 	return name != Base && !IsTool(name) && layerName.MatchString(name)
 }
 
+// DockerLayer is the built-in layer with Docker's engine.
+const DockerLayer = "docker"
+
 // Builtins are the layers devvm ships, layers/<name>.sh in its own files:
 // chosen like the user's, whose layers can't take their names.
-var Builtins = []string{"docker"}
+var Builtins = []string{DockerLayer}
+
+// HasLayer reports whether an image's name has the layer.
+func HasLayer(name, layer string) bool { return slices.Contains(strings.Split(name, "+"), layer) }
 
 // IsBuiltin reports whether a layer is one devvm ships.
 func IsBuiltin(name string) bool { return slices.Contains(Builtins, name) }

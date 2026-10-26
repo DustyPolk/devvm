@@ -25,7 +25,8 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 		Use:   "doctor",
 		Short: "Check what devvm needs on this machine",
 		Long: "Check what the backend new VMs get (--backend for another) needs on this machine, and say how to " +
-			"get what's missing: devvm never installs it. Then list each backend's features (native, emulated, " +
+			"get what's missing: devvm never installs it. The docker backend also says which engine it uses, and on " +
+			"Docker Desktop which folders it shares. Then list each backend's features (native, emulated, " +
 			"unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which " +
 			"only --from with an image only Docker has needs. Fails when something is missing.",
 		Args:              cobra.NoArgs,
@@ -46,6 +47,11 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 				u.Say(msg.DockerMissing())
 			}
 			if len(problems) == 0 {
+				if r, ok := b.(backend.Reporter); ok {
+					for _, m := range r.Report(cmd.Context()) {
+						u.Say(m)
+					}
+				}
 				u.Say(msg.DoctorOK(b.Name(), devvmVersion()))
 				return nil
 			}

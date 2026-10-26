@@ -5,6 +5,8 @@ weight: 25
 
 devvm treats everything in a VM as untrusted, a coding agent with root included: the VM's user has passwordless sudo. This is what that code can and can't reach on your machine.
 
+All of it rests on the VM's boundary. On the [Docker](docker.md) backend (experimental) a VM is a container, not a VM: on Linux it shares your machine's kernel, and on macOS Docker Desktop's one VM with every other container. What's below holds there only as far as a container's boundary does ([isolation](docker.md#isolation-a-container-is-not-a-vm)).
+
 | | |
 | --- | --- |
 | The project folder | read and write; with `--clone`, not mounted: the VM has its own clone ([details](clone.md)) |
@@ -35,7 +37,7 @@ A VM belongs to the folder it was made for: its path, and the folder itself (its
 
 ### Read-only and confined builds
 
-Images are built with nothing from the host mounted, and their builds are confined: they reach the internet but not your machine's own services ([details](lima.md#confinement)). Credentials never go into them. A tool build writes into a folder of its own, never the shared tools: devvm checks each image, moves it in and records its hash ([details](images.md#building-tools)). devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them, and devvm refuses a VM with a network it didn't give it, which would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
+Images are built with nothing from the host mounted, and their builds are confined: they reach the internet but not your machine's own services ([details](lima.md#confinement)). Docker Desktop can't confine them yet, so devvm builds nothing there ([details](docker.md#building-images)). Credentials never go into them. A tool build writes into a folder of its own, never the shared tools: devvm checks each image, moves it in and records its hash ([details](images.md#building-tools)). devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them, and devvm refuses a VM with a network it didn't give it, which would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
 
 ### `.git` protection
 
@@ -69,5 +71,6 @@ The proxy's CA (`~/.local/share/devvm/ca`) is how it reads traffic to the hosts 
 - **What VS Code relays** over Remote-SSH (`devvm code`): ports its programs in the VM listen on, and your GitHub sign-in for git's prompts. devvm turns both off in the VM's VS Code settings each time it sets the VM up, but the VM can turn them back on: set them in your own VS Code settings too ([VS Code](ssh.md#vs-code)).
 - **Set-id bits on Linux hosts.** Root in a VM can set the set-user-id and set-group-id bits on files in the project folder. On macOS they don't reach the host (virtiofs drops them). On Linux they do, and the files are yours, so a set-user-id one runs as you for anyone else on the machine who runs it. devvm names such files when it creates a VM for the folder (`chmod u-s,g-s FILE` clears them). Don't run programs from the project folder as another user.
 - **Escapes from the VM itself**: bugs in Lima, Apple's Virtualization framework or QEMU, or on smolvm in smolvm and libkrun, which also keep its network policy.
+- **Escapes from a container, on Docker:** a kernel or Docker flaw reaches your machine on Linux, and on macOS Docker Desktop's VM, with every other container and what Desktop shares with them. Root in a container has the host kernel's system calls, filtered by Docker's seccomp profile, and Docker's default capabilities. Docker VMs have no network policy yet: they reach the internet and your network, and on Docker Desktop your Mac's services on `localhost` too (`host.docker.internal`) ([details](docker.md#what-devvm-sets-on-a-vm)).
 
 Found a way out of a VM? See [SECURITY.md](https://github.com/w3cj/devvm/blob/main/SECURITY.md).

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -217,6 +218,12 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 		return newVM{}, err
 	}
 	n := newVM{size: size.Or(def), ports: ports, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
+	// A default disk size on a backend that sizes no disks (Docker's) is
+	// left out, said; --disk is refused below.
+	if size.Disk == "" && n.size.Disk != "" && !e.Registry.Allowed(b, backend.FeatureDisk) {
+		e.Warn(msg.SizeDiskDefaultUnused(b.Name(), vm))
+		n.size.Disk = ""
+	}
 	host, err := e.Host()
 	if err != nil {
 		return newVM{}, err
@@ -245,12 +252,12 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	}
 	e.useAgent(n.agent)
 	if o.Clone {
-		n.spec.Project, n.mode = "", ModeClone
+		n.spec.Project, n.spec.CloneAt, n.mode = "", f.Dir, ModeClone
 	}
 	if n.net {
 		n.conf.Net = backend.NetProxy
 	}
-	need := append(n.spec.Features(), n.conf.Features()...)
+	need := slices.Concat(n.spec.Features(), n.conf.Features(), backend.ImageFeatures(n.img))
 	if o.Clone {
 		// Its clone is copied in and fetched over ssh.
 		need = append(need, backend.FeatureSSH)

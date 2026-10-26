@@ -38,31 +38,56 @@
 #                way out with network policy),
 #                and that no machine without the sandbox's label is touched. Its machines share your
 #                smolvm (macOS): it deletes only those it made, with the sandbox's label.
+#     --backend docker [--engine linux|desktop]
+#                the Docker backend's own section instead (experimental), state under
+#                /tmp/devvm-go-e2e-docker. On Linux, on this machine's engine: base and a layer built by
+#                committing containers, confined (no host loopback-only server reached, one on every
+#                address reached), a failed build kept, a project VM's mounts, its files the host user's
+#                (uid and gid), its home a volume of its own, size, no Docker inside, what it lacks
+#                refused in one line, agent folders added and removed (its container made again from a
+#                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume.
+#                On macOS, the same on a Linux engine in a Lima VM e2e keeps (Lima home
+#                ~/.lt-e2e-go-docker, VM dockerhost: this checkout read-only, devvm built for it here),
+#                then on Docker Desktop: builds refused in one line, then base and the tools copied from
+#                the Linux engine's run (Desktop can't build yet) for a project VM, an agent VM and a
+#                node VM. --engine runs one of the two. Docker Desktop is yours: only what has the
+#                sandbox's label is touched, the rest must be the same at the end, and everything with
+#                the label is deleted then. --clean deletes the Linux engine's images first.
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
-# tokens. devvm is built from this checkout into the sandbox, with its files next to it.
+# tokens. devvm is built from this checkout into the sandbox, with its files next to it (or copied from
+# $DEVVM_E2E_BIN, a test build of it, where there's no Go: the docker host VM).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network from"
-usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network" backend=lima
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm | --backend docker [--engine linux|desktop]]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone gc tools network" backend=lima engines=""
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
     --from)  sel=$sections_all ;;
     --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2"); shift
              for s in $sel; do [[ " $sections_all " == *" $s "* ]] || usage; done ;;
-    --backend) [[ ${2:-} == smolvm ]] || usage; backend=smolvm sel=smolvm; shift ;;
+    --backend) case ${2:-} in smolvm|docker) backend=$2 sel=$2 ;; *) usage ;; esac; shift ;;
+    --engine) [[ ${2:-} == linux || ${2:-} == desktop ]] || usage; engines=$2; shift ;;
     *) usage ;;
   esac
   shift
 done
+[[ -z $engines || $backend == docker ]] || usage
+# The Docker engines checked: this machine's on Linux; on macOS a Linux one in a VM, then Desktop's.
+if [[ $backend == docker && -z $engines ]]; then
+  if [[ "$(uname -s)" == Darwin ]]; then engines="linux desktop"; else engines=linux; fi
+fi
 want() { [[ " $sel " == *" $1 "* ]]; }
 
 # Its own Lima home (other sandboxes' images aren't its own), for devvm and for its own limactl calls.
 export DEVVM_LIMA_HOME=${DEVVM_E2E_LIMA_HOME:-$HOME/.lt-e2e-go}
 export LIMA_HOME=$DEVVM_LIMA_HOME
 work=/tmp/devvm-go-e2e
+# The Docker backend's: apart, so it runs beside the others. The same path in the docker host VM, so
+# what the Linux engine's run built carries the label Docker Desktop's run looks for.
+[[ $backend != docker ]] || work=/tmp/devvm-go-e2e-docker
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE=devvm-go-e2e   # its Keychain items: fake tokens only, deleted at the end
 unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
@@ -79,8 +104,12 @@ src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 # A test build: DEVVM_UNREVIEWED counts in it (never in a release).
-(cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed" \
-  -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
+testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed")
+if [[ -n ${DEVVM_E2E_BIN:-} ]]; then
+  cp "$DEVVM_E2E_BIN" "$src/devvm" || { echo "e2e: no devvm at $DEVVM_E2E_BIN" >&2; exit 1; }
+else
+  (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" "${testbuild[@]}" -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
+fi
 # The features are in base's key, so only a run with from (which checks them) builds them; every
 # other selection shares one smaller base.
 if want from; then for f in "$root"/assets/features/*.sh; do basename "$f" .sh; done > "$XDG_CONFIG_HOME/devvm/base-features"
@@ -113,6 +142,38 @@ smol_ls() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 == want { 
 smol_others() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 != want { print $1, $3 }'; }
 smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
 export -f smol_json smol_ls smol_status
+# The Docker backend's: only what has the sandbox's label ($dlabel). dns is its names' hash of the data
+# folder (devvm-$dns:KEY images, devvm-img-KEY-$dns build containers).
+dlabel=label=devvm.data=$XDG_DATA_HOME/devvm
+dns=$(printf %s "$XDG_DATA_HOME/devvm" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-8)
+# d_state NAME: the state of the sandbox's container by that name (running, exited, created), "" for none.
+d_state() { docker container ls -a --filter "$dlabel" --format '{{.Names}} {{.State}}' 2>/dev/null | awk -v n="$1" '$1 == n { print $2 }'; }
+# d_vol NAME, d_img REF: the sandbox's volume, or image, by that name is there.
+d_vol() { docker volume ls -q --filter "$dlabel" 2>/dev/null | grep -qx "$1"; }
+d_img() { docker image ls --filter "$dlabel" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -qx "$1"; }
+# d_rm NAME: the sandbox's container by that name, and its volumes and commits.
+d_rm() { local n=$1 v i
+  [[ -z $(d_state "$n") ]] || docker container rm -f -v "$n" >/dev/null 2>&1
+  for v in "$n-home" "$n-clone"; do ! d_vol "$v" || docker volume rm "$v" >/dev/null 2>&1; done
+  for i in $(docker image ls --filter "$dlabel" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep "^devvm-$dns:$n-"); do
+    docker image rm "$i" >/dev/null 2>&1; done; }
+# d_purge: everything with the sandbox's label: containers, then volumes, then images.
+d_purge() { local x
+  for x in $(docker container ls -a -q --filter "$dlabel" 2>/dev/null); do docker container rm -f -v "$x" >/dev/null 2>&1; done
+  for x in $(docker volume ls -q --filter "$dlabel" 2>/dev/null); do docker volume rm "$x" >/dev/null 2>&1; done
+  for x in $(docker image ls --filter "$dlabel" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); do docker image rm "$x" >/dev/null 2>&1; done; }
+# d_ours: how many containers, volumes and images have the sandbox's label.
+d_ours() { { docker container ls -a -q --filter "$dlabel"; docker volume ls -q --filter "$dlabel"; docker image ls -q --filter "$dlabel"; } 2>/dev/null | grep -c .; }
+# d_others: what Docker has without the sandbox's label: containers (ID and name), images (ID) and
+# volumes (name). Yours, on Docker Desktop: the same at the end.
+d_others() {
+  { docker container ls -a --format '{{.ID}} {{.Names}} {{.Label "devvm.data"}}' | awk -v w="$XDG_DATA_HOME/devvm" '$3 != w { print "container", $1, $2 }'
+    comm -23 <(docker image ls -a -q --no-trunc | sort -u) <(docker image ls -a -q --no-trunc --filter "$dlabel" | sort -u) | sed 's/^/image /'
+    docker volume ls --format '{{.Name}} {{.Label "devvm.data"}}' | awk -v w="$XDG_DATA_HOME/devvm" '$2 != w { print "volume", $1 }'
+  } 2>/dev/null | sort; }
+export -f d_state d_vol d_img d_ours; export dlabel dns
+d_desktop=false   # set once Docker Desktop's checks start: cleanup then deletes all with the label there
+d_servers=()      # the build confinement check's servers
 created=()   # VMs this run made; the only ones it deletes
 # ps_watch: every host process's command line, sampled every 0.1 s into $work/ps.log until
 # ps_unwatch, for checking a secret was in none while devvm ran.
@@ -131,12 +192,20 @@ cleanup() {
       [[ -z $(smol_status "$n") ]] || SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1
       rm -f "$XDG_DATA_HOME/devvm/smolvm/vms/$n.json" "$XDG_DATA_HOME/devvm/smolvm/vms/$n.proxy" "$XDG_DATA_HOME/devvm/smolvm/vms/$n.ports."*
       [[ $n != devvm-img-* ]] || rm -rf "$XDG_DATA_HOME/devvm/smolvm/images/${n#devvm-img-}"
+    elif [[ $backend == docker ]]; then
+      # Only what has the sandbox's label: the VM's container, volumes and commits; an image's tag and
+      # build container.
+      if [[ $n == devvm-img-* ]]; then
+        d_rm "$n-$dns"; ! d_img "devvm-$dns:${n#devvm-img-}" || docker image rm "devvm-$dns:${n#devvm-img-}" >/dev/null 2>&1
+      else d_rm "$n"; rm -f "$XDG_DATA_HOME/devvm/docker/vms/$n.json"; fi
     else
       limactl delete -f "$n" >/dev/null 2>&1
     fi
     rm -f "$images/${n#devvm-img-}" "$vms/$n"
   done
   rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
+  ! $d_desktop || d_purge
+  for n in ${d_servers[@]+"${d_servers[@]}"}; do kill "$n" 2>/dev/null; done
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
@@ -259,6 +328,10 @@ if $clean; then
     for n in $(smol_ls | awk '$1 ~ /^devvm-img-/ { print $1 }'); do SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1; done
     for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do [[ ! -d $k ]] || rm -f "$images/$(basename "$k")"; done
     rm -rf "$XDG_DATA_HOME/devvm/smolvm/images"
+  elif [[ $backend == docker ]]; then
+    # This engine's, with the sandbox's label (Docker Desktop's are deleted after each run anyway).
+    [[ " $engines " != *" linux "* || "$(uname -s)" == Darwin ]] || d_purge
+    rm -rf "$images" "$share" "$XDG_DATA_HOME/devvm/docker"
   else
     for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
     rm -rf "$images" "$share"
@@ -1845,6 +1918,271 @@ check "restarted, the tools are mounted again" bash -c "cd '$t' && printf 'node 
 (cd "$t" && quiet "$D" rm -f)
 
 check "no machine without the sandbox's label was touched" bash -c "[[ \"\$(smol_others)\" == '$others_before' ]]"
+fi
+
+if want docker; then
+# The Docker backend (experimental): its native features, and a one-line refusal for the rest.
+B=(--backend docker)
+me=$(id -un)
+# in_d VM CMD: CMD in a login shell as the VM's user, as devvm's shell has it; in_root VM CMD: as root.
+in_d() { docker exec -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" "$1" bash -lc "$2" </dev/null; }
+in_root() { docker exec -u 0 "$1" sh -c "$2" </dev/null; }
+# mounted VM DEST TYPE RW: the VM's container mounts TYPE (bind, volume) at DEST, read-write or not.
+mounted() { docker container inspect -f '{{range .Mounts}}{{.Type}}|{{.Destination}}|{{.RW}} {{end}}' "$1" 2>/dev/null |
+  tr ' ' '\n' | grep -qx "$3|$2|$4"; }
+export -f mounted d_others
+# refused DIR FEATURE ARGS...: devvm ARGS in DIR stops in one line, naming FEATURE, and makes nothing.
+refused() { local d=$1 f=$2 before out; shift 2
+  before=$(d_ours)
+  out=$(cd "$d" && DEVVM_MESSAGES=names "$D" "${B[@]}" "$@" </dev/null 2>&1) && { echo "it ran: $out"; return 1; }
+  echo "$out"
+  [[ $(grep -c '^devvm: ' <<<"$out") -eq 1 ]] && grep -qE "^devvm: backend_lacks backend=docker feature=$f vm=" <<<"$out" &&
+    [[ $(d_ours) == "$before" ]]; }
+# owner_is_me FILE: the host file is the user's, and on Linux its group too.
+owner_is_me() { local o; o=$(stat -c '%u %g' "$1" 2>/dev/null || stat -f '%u %g' "$1")
+  echo "owner: $o"; [[ ${o% *} == "$(id -u)" ]] && { [[ "$(uname -s)" != Linux ]] || [[ ${o#* } == "$(id -g)" ]]; }; }
+
+# docker_project NAME: a base VM's checks, on whichever engine: mounts, its home, the tools, size.
+docker_project() {
+  local p; p=$(newproj "$1"); git -C "$p" init -q
+  launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${B[@]}" --no-network-policy --ports none --cpus 2 --memory 3 base
+  check "devvm makes the VM a container from base, labelled, and opens a shell in the folder as you" bash -c "
+    [[ -n '$vm' && \$(d_state '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
+    grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=docker '$vms/$vm' && grep -qx net=off '$vms/$vm' &&
+    [[ \$(docker container inspect -f '{{index .Config.Labels \"devvm.kind\"}}' '$vm') == vm ]]"
+  check "it gets --cpus and --memory" in_d "$vm" '[[ $(nproc) == 2 && $(cat /sys/fs/cgroup/memory.max) == 3221225472 ]]'
+  check "ls lists it on docker" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +\S+ +off +docker +$p\$'"
+  check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
+    docker exec -u '$me' '$vm' sh -c 'echo from-vm > \"$p/vm.txt\"' </dev/null && grep -qx from-vm '$p/vm.txt'"
+  check "... yours on this machine (and your group on Linux)" owner_is_me "$p/vm.txt"
+  check "its home is a volume of its own, the shared tools one read-only, even for root" bash -c "
+    mounted '$vm' /home/$me.guest volume true && mounted '$vm' /mnt/devvm-tools volume false && d_vol '$vm-home' &&
+    ! docker exec -u 0 '$vm' touch /mnt/devvm-tools/x </dev/null 2>/dev/null"
+  check "hostname is the folder" in_d "$vm" "[[ \$(hostname) == $1 ]]"
+  check "it has no Docker" in_d "$vm" '! command -v dockerd && ! command -v docker'
+  check "devvm size shows its CPUs, memory and what its disk holds" bash -c "cd '$p' &&
+    [[ \$('$D' size 2>/dev/null) =~ ^cpus=2\ memory=3GiB\ disk_used=[0-9.]+GiB\$ ]]"
+  in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
+  check "devvm stop stops it; devvm starts it again, its disk as it was" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
+    [[ \$(d_state $vm) == exited ]] && printf 'cat /var/tmp/e2e-kept\n' | '$D' 2>&1 | grep -qx kept && [[ \$(d_state $vm) == running ]]"
+  q=$(newproj "$1-no"); git -C "$q" init -q; git -C "$q" -c user.name=e2e -c user.email=e2e@example.com commit -q --allow-empty -m e2e
+  check "every port, the default, is refused in one line, nothing made" refused "$q" ports --no-network-policy base
+  check "network policy too" refused "$q" egress-proxy --network-policy --ports none base
+  check "the docker layer too" refused "$q" docker-layer --no-network-policy --ports none docker
+  check "a disk size too" refused "$q" disk --no-network-policy --ports none --disk 200 base
+  check "SSH agent forwarding too" refused "$q" agent-forwarding --no-network-policy --ports none --ssh-agent base
+  check "--clone too: it needs ssh" refused "$q" ssh --no-network-policy --ports none --clone base
+  check "rm deletes its container, its home volume and its state" bash -c "cd '$p' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/docker/vms/$vm.json' ]]"
+}
+
+# docker_agents NAME: an agent VM's folders, read-only; one added or removed makes its container again
+# from a commit of its own, its disk and home kept.
+docker_agents() {
+  local ah=$work/agent-home a
+  rm -rf "$ah"; mkdir -p "$ah/.claude/skills/e2e"; ah=$(cd "$ah" && pwd -P)
+  echo '# e2e skill' > "$ah/.claude/skills/e2e/SKILL.md"
+  a=$(newproj "$1")
+  (cd "$a" && HOME=$ah quiet "$D" "${B[@]}" --no-network-policy --ports none --no-git-protect claude)
+  vm=$(vm_of "$a"); [[ -z $vm ]] || created+=("$vm")
+  check "an agent's folder is bind-mounted read-only at its host path, even for root, and linked into the VM's home" bash -c "
+    [[ -n '$vm' ]] && mounted '$vm' '$ah/.claude/skills' bind false && ! docker exec -u 0 '$vm' touch '$ah/.claude/skills/x' </dev/null 2>/dev/null &&
+    docker exec -u '$me' -e HOME=/home/$me.guest '$vm' sh -c 'grep -q e2e ~/.claude/skills/e2e/SKILL.md' </dev/null"
+  in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
+  in_d "$vm" 'echo home > ~/e2e-home'
+  mkdir -p "$ah/.claude/agents"
+  check "a new agent folder is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
+    grep -qF \"\$(m mounts_next_start vm=$vm | head -1)\""
+  check "restart makes its container again from a commit of its own, mounting it, its disk and home kept" bash -c "cd '$a' &&
+    printf 'cat /var/tmp/e2e-kept ~/e2e-home\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
+    grep -qF \"\$(m docker_remaking vm=$vm | head -1)\" '$work/last.log' && grep -qx kept '$work/last.log' && grep -qx home '$work/last.log' &&
+    mounted '$vm' '$ah/.claude/agents' bind false && d_img 'devvm-$dns:$vm-1'"
+  rm -rf "$ah/.claude/skills"
+  check "a removed one: made again, the commit before deleted, and it starts" bash -c "cd '$a' &&
+    printf 'cat /var/tmp/e2e-kept\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 && grep -qx kept '$work/last.log' &&
+    ! mounted '$vm' '$ah/.claude/skills' bind false && [[ \$(d_state $vm) == running ]] && d_img 'devvm-$dns:$vm-2' && ! d_img 'devvm-$dns:$vm-1'"
+  check "rm deletes its container, volumes and commit" bash -c "cd '$a' && HOME='$ah' '$D' rm -f </dev/null >/dev/null 2>&1 &&
+    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && ! d_img 'devvm-$dns:$vm-2'"
+}
+
+# docker_tools NAME: a node VM's shared tools, unpacked in Docker's tools volume and linked.
+docker_tools() {
+  local t; t=$(newproj "$1"); echo '{}' > "$t/package.json"
+  launch "$t" 'node -v' "${B[@]}" --no-network-policy --ports none --no-git-protect
+  check "a node VM: its tools at the locked versions, in the share, recorded" bash -c "
+    [[ -n '$vm' ]] && grep -qx image=node '$vms/$vm' && grep -qx v$(lockv node) '$work/last.log' &&
+    for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f && -f '$share'/\$f.sha256 ]] || exit 1; done"
+  check "node, npm, pnpm and bun work, each linked from Docker's tools volume, read-only even for root" bash -c "
+    in_d() { docker exec -u '$me' -e HOME=/home/$me.guest -e USER=$me '$vm' bash -lc \"\$1\" </dev/null; }
+    in_d 'npm -v && pnpm -v && bun -v' && in_d '[[ \$(readlink /opt/devvm/tools/node/$(lockv node)) == /mnt/devvm-tools/node-$(lockv node)-*.erofs ]]' &&
+    ! docker exec -u 0 '$vm' touch /opt/devvm/tools/node/$(lockv node)/x </dev/null 2>/dev/null"
+  check "the tools' build and unpacking left no container behind" bash -c "
+    [[ -z \$(d_state devvm-tools-build-$dns) && -z \$(d_state devvm-tools-unpack-$dns) ]]"
+  check "restarted, the tools are there again" bash -c "cd '$t' && printf 'node -v\n' | '$D' restart 2>&1 | grep -qx v$(lockv node)"
+  (cd "$t" && quiet "$D" rm -f)
+}
+
+# docker_linux: the checks on this machine's engine, a Linux one.
+docker_linux() {
+  local others_before kb fixture token kf kx rc
+  others_before=$(d_others)
+  section "docker: shared tool versions"
+  check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
+
+  section "docker: images"
+  check "devvm doctor finds everything, an engine of this machine's, and builds confined" bash -c "
+    DEVVM_MESSAGES=names '$D' doctor --backend docker </dev/null >'$work/last.log' 2>&1 &&
+    grep -qE '^docker_engine_linux version=' '$work/last.log' && grep -qE '^build-confinement +native ' '$work/last.log' &&
+    [[ -z \$('$D' doctor --backend docker --fixes </dev/null) ]]"
+  check "build base" quiet env DEVVM_MESSAGES=names "$D" "${B[@]}" build base
+  kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
+  [[ -n $kb ]] || kb=$(for k in $(keys_of base); do grep -qx from= "$images/$k" && d_img "devvm-$dns:$k" && echo "$k"; done | head -1)
+  check "base is an image of devvm's, recorded with Ubuntu's container image by digest; its build container is gone" bash -c "
+    [[ -n '$kb' ]] && d_img 'devvm-$dns:$kb' && grep -qx libc=gnu '$images/$kb' &&
+    grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@sha256:[0-9a-f]{64}$' '$images/$kb' && [[ -z \$(d_state devvm-img-$kb-$dns) ]]"
+  # Build confinement: servers on this machine, on its loopback and on every address, and a layer that
+  # tries both through the build container's gateway.
+  python3 -m http.server -b 127.0.0.1 47190 >/dev/null 2>&1 & d_servers+=($!)
+  python3 -m http.server -b 0.0.0.0 47191 >/dev/null 2>&1 & d_servers+=($!)
+  sleep 1
+  fixture=$layers/e2edock.sh token=e2e-docker-ran-$$-$(date +%s)
+  cat > "$fixture" <<EOF
+#!/bin/bash
+gw=\$(awk '\$2 == "00000000" { print \$3; exit }' /proc/net/route)
+gw=\$(printf '%d.%d.%d.%d' 0x\${gw:6:2} 0x\${gw:4:2} 0x\${gw:2:2} 0x\${gw:0:2})
+curl -sS -m 5 -o /dev/null "http://\$gw:47190/" && echo e2e-loopback-reached || echo e2e-loopback-refused
+curl -sS -m 5 -o /dev/null "http://\$gw:47191/" && echo e2e-every-reached || echo e2e-every-refused
+curl -sS -m 20 -o /dev/null https://api.github.com && echo e2e-internet-reached || echo e2e-internet-refused
+echo $token
+EOF
+  check "a layer builds from base's image, its script run as the VM's user" bash -c "'$D' ${B[*]} build e2edock </dev/null >'$work/last.log' 2>&1 &&
+    grep -qx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+  owned e2edock
+  check "... confined: it reached the internet, and this machine only on every address, never its loopback" bash -c "
+    f=\$(grep -lx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log | tail -1) && grep -qx e2e-internet-reached \"\$f\" &&
+    grep -qx e2e-every-reached \"\$f\" && grep -qx e2e-loopback-refused \"\$f\""
+  kill "${d_servers[@]}" 2>/dev/null; d_servers=()
+  kf=$(keys_of e2edock | head -1)
+  check "devvm images lists both on docker" bash -c "out=\$('$D' images </dev/null 2>/dev/null) &&
+    grep -qE '^base +ubuntu [0-9.]+ +[0-9a-f]{12} +$kb +current +[0-9.]+[KMGT] +docker$' <<<\"\$out\" &&
+    grep -qE '^e2edock +ubuntu [0-9.]+ +[0-9a-f]{12} +$kf +current +[0-9.]+[KMGT] +docker$' <<<\"\$out\""
+  echo "# edited" >> "$fixture"
+  check "rebuild makes a new one and deletes the stale one, not base" bash -c "'$D' ${B[*]} rebuild e2edock </dev/null >/dev/null 2>&1 &&
+    [[ \$(keys_of e2edock | wc -l) -eq 1 && \$(keys_of e2edock) != $kf ]] && ! d_img 'devvm-$dns:$kf' && d_img 'devvm-$dns:$kb'"
+  owned e2edock
+  check "images rm deletes it" bash -c "'$D' ${B[*]} images rm e2edock </dev/null >/dev/null 2>&1 && [[ -z \$(keys_of e2edock) ]]"
+  rm -f "$fixture"
+  printf '#!/bin/bash\nexit 3\n' > "$layers/e2edockfail.sh"
+  DEVVM_MESSAGES=names "$D" "${B[@]}" build e2edockfail </dev/null >"$work/fail.log" 2>&1; rc=$?
+  kx=$(sed -n 's/^==> building_image image=e2edockfail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
+  [[ -z $kx ]] || created+=("devvm-img-$kx")
+  check "a failed script keeps its container, stopped, and says how to look inside" bash -c "
+    [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: docker_script_failed script=e2edockfail\.sh vm=devvm-img-$kx-$dns$' '$work/fail.log' &&
+    [[ \$(d_state devvm-img-$kx-$dns) == exited ]] && '$D' ${B[*]} images rm '$kx' </dev/null >/dev/null 2>&1 && [[ -z \$(d_state devvm-img-$kx-$dns) ]]"
+  rm -f "$layers/e2edockfail.sh"
+
+  section "docker: a base project"
+  docker_project dweb
+  section "docker: agent folders"
+  docker_agents dagents
+  section "docker: shared tools"
+  docker_tools dtools
+  check "nothing without the sandbox's label was touched" bash -c "[[ \"\$(d_others)\" == '$others_before' ]]"
+}
+
+# dh ARGS: limactl on the docker host VM's own Lima home, from outside the repo.
+dh_home=${DEVVM_E2E_DOCKER_LIMA_HOME:-$HOME/.lt-e2e-go-docker}
+dh() { (cd /tmp && LIMA_HOME=$dh_home limactl "$@"); }
+# dockerhost: the docker host VM, made the first time (Ubuntu with Docker's engine from its archive,
+# this checkout mounted read-only, you in the docker group) and kept, running.
+dockerhost() {
+  mkdir -p "$dh_home"
+  if ! dh list -q 2>/dev/null | grep -qx dockerhost; then
+    dh create --name=dockerhost --tty=false --vm-type=vz --cpus=6 --memory=8 --disk=60 --containerd=none \
+      --mount-only "$root" template:ubuntu-26.04 >"$work/dockerhost.log" 2>&1 || return 1
+  fi
+  [[ $(dh list --format '{{.Status}}' dockerhost) == Running ]] || dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1 || return 1
+  dh shell --workdir / dockerhost sh -c 'command -v docker >/dev/null && id -nG | grep -qw docker' </dev/null && return 0
+  dh shell --workdir / dockerhost sudo sh -c 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+    docker.io netcat-openbsd jq perl curl git python3 && usermod -aG docker "$SUDO_USER"' </dev/null >>"$work/dockerhost.log" 2>&1 &&
+    dh stop dockerhost >>"$work/dockerhost.log" 2>&1 && dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1; }
+# in_dh CMD: CMD in the docker host VM.
+in_dh() { dh shell --workdir / dockerhost bash -c "$1"; }
+
+# docker_linux_vm: this script's Linux checks, run in the docker host VM with devvm built here for it;
+# its results count here.
+docker_linux_vm() {
+  local arch out np nf
+  section "docker: a Linux engine, in the docker host VM ($dh_home)"
+  if ! dockerhost; then echo "  the docker host VM didn't start: see $work/dockerhost.log"; fail=$((fail + 1)); failed+=("docker host VM"); return; fi
+  arch=$(cd "$root" && "${gocmd[@]}" env GOARCH)
+  mkdir -p "$work/linux"
+  if ! (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch "${gocmd[@]}" "${testbuild[@]}" -o "$work/linux/devvm" ./cmd/devvm) ||
+    ! dh copy "$work/linux/devvm" dockerhost:/tmp/devvm-e2e-bin >/dev/null; then
+    echo "  couldn't build devvm for it"; fail=$((fail + 1)); failed+=("devvm for the docker host VM"); return
+  fi
+  in_dh "DEVVM_E2E_BIN=/tmp/devvm-e2e-bin bash '$root/tests/e2e.sh' --backend docker $($clean && echo --clean)" </dev/null 2>&1 |
+    tee "$work/linux.log" | while IFS= read -r l; do echo "  linux | $l"; done
+  out=$(grep -E '^e2e: [0-9]+ passed, [0-9]+ failed' "$work/linux.log" | tail -1)
+  np=$(sed -E 's/^e2e: ([0-9]+) passed.*/\1/' <<<"$out") nf=$(sed -E 's/^e2e: [0-9]+ passed, ([0-9]+) failed.*/\1/' <<<"$out")
+  if [[ -z $out ]] || grep -q '^e2e: FAILED' "$work/linux.log"; then nf=$((${nf:-0} + 1)); fi
+  pass=$((pass + ${np:-0})) fail=$((fail + ${nf:-0}))
+  (( ${nf:-0} == 0 )) || failed+=("the Linux engine's (see $work/linux.log)")
+}
+
+# docker_from_vm: base, its record, and the shared tools the docker host VM's run built, into this
+# machine's Docker and sandbox: Docker Desktop can't build until its builds are confined. The paths are
+# the same in the VM, so they carry the sandbox's label and names.
+docker_from_vm() {
+  local k files f
+  mkdir -p "$images" "$share" "$XDG_DATA_HOME/devvm/docker"
+  for k in $(in_dh "cd '$images' 2>/dev/null && grep -lx name=base * | while read -r k; do grep -qx from= \$k && docker image inspect devvm-$dns:\$k >/dev/null 2>&1 && echo \$k; done" </dev/null); do
+    in_dh "docker image save devvm-$dns:$k" </dev/null | docker image load >/dev/null || return 1
+    in_dh "cat '$images/$k'" </dev/null > "$images/$k" || return 1
+  done
+  in_dh "cat '$lock'" </dev/null > "$lock" &&
+    in_dh "cat '$XDG_DATA_HOME/devvm/docker/tools.json'" </dev/null > "$XDG_DATA_HOME/devvm/docker/tools.json" || return 1
+  files=$(tr -d '[]"' < "$XDG_DATA_HOME/devvm/docker/tools.json" | tr ',' ' ')
+  for f in $files; do
+    in_dh "cd '$share' && tar -cf - '$f' '$f.sha256'" </dev/null | tar -C "$share" -xf - || return 1
+  done
+  [[ -n $(keys_of base) && -n $files ]]
+}
+
+# docker_desktop: the checks on Docker Desktop, yours: only what has the sandbox's label is touched,
+# and it's all deleted at the end.
+docker_desktop() {
+  local others_before
+  section "docker: Docker Desktop"
+  d_desktop=true
+  others_before=$(d_others)
+  d_purge
+  rm -rf "$images" "$share" "$lock" "$XDG_DATA_HOME/devvm/docker"
+  check "devvm doctor finds Docker Desktop, the folders it shares, and builds not confined" bash -c "
+    DEVVM_MESSAGES=names '$D' doctor --backend docker </dev/null >'$work/last.log' 2>&1 &&
+    grep -qE '^docker_engine_desktop version=' '$work/last.log' && grep -qE '^docker_file_sharing dirs=' '$work/last.log' &&
+    grep -qE '^build-confinement +none ' '$work/last.log'"
+  check "a build is refused in one line, nothing made" bash -c "! DEVVM_MESSAGES=names '$D' ${B[*]} build base </dev/null >'$work/last.log' 2>&1 &&
+    grep -qx 'devvm: backend_lacks backend=docker feature=build-confinement vm=base' '$work/last.log' && [[ \$(d_ours) == 0 ]]"
+  check "base and the shared tools copied in from the Linux engine's run" docker_from_vm
+  docker_project ddesk
+  local x; x=$(newproj ddeskx)
+  launch "$x" exit "${B[@]}" --no-network-policy --ports none base
+  check "Exec's arguments, folder, input and user reach the VM as given" bash -c "[[ -n '$vm' ]] && cd '$root' &&
+    DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/docker |
+    grep -q -- '--- PASS: TestE2EExecQuoting'"
+  (cd "$x" && quiet "$D" rm -f)
+  docker_agents ddagents
+  docker_tools ddtools
+  d_purge
+  check "all with the sandbox's label is deleted, and nothing else was touched" bash -c "
+    [[ \$(d_ours) == 0 && \"\$(d_others)\" == '$others_before' ]]"
+  d_desktop=false
+}
+
+if [[ "$(uname -s)" == Linux && " $engines " == *" linux "* ]]; then docker_linux
+elif [[ " $engines " == *" linux "* ]]; then docker_linux_vm; fi
+[[ " $engines " != *" desktop "* ]] || docker_desktop
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

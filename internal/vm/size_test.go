@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -181,5 +184,63 @@ func TestSetSize(t *testing.T) {
 	b.Reset()
 	if err := s.ShowSize(t.Context(), &b, true); err != nil || b.String() != "cpus=2\nmemory=4\ndisk=\n" {
 		t.Errorf("ShowSize -g = %q, %v", b.String(), names(err))
+	}
+}
+
+// diskFake is a fake backend whose VMs' disks have no size of their own
+// (backend.DiskUser): each holds used bytes, against limit.
+type diskFake struct {
+	*backendtest.Fake
+	used, limit int64
+}
+
+func (d *diskFake) DiskUsed(context.Context, string) (int64, int64, error) {
+	return d.used, d.limit, nil
+}
+
+// On a backend that sizes no disks, devvm size shows what the VM's disk
+// holds, and it and each launch warn once that's past the size VMs get
+// elsewhere.
+func TestDiskUsed(t *testing.T) {
+	caps := allNative()
+	delete(caps, backend.FeatureDisk)
+	e, f, _ := upEnv(t, caps)
+	df := &diskFake{Fake: f, used: 3 << 29, limit: 100 << 30}
+	reg, err := backend.NewRegistry(df)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Registry = reg
+	var warned []string
+	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})
+	in := f.Instances[st.Name()]
+	in.Size = backend.Size{CPUs: 4, MemoryGiB: 8}
+	f.Instances[st.Name()] = in
+	var b strings.Builder
+	if err := (Settings{e}).ShowSize(t.Context(), &b, false); err != nil || b.String() != "cpus=4 memory=8GiB disk_used=1.5GiB\n" || len(warned) != 0 {
+		t.Errorf("ShowSize = %q, %v, warned %q", b.String(), names(err), warned)
+	}
+	df.used = 101 << 30
+	b.Reset()
+	if err := (Settings{e}).ShowSize(t.Context(), &b, false); err != nil || b.String() != "cpus=4 memory=8GiB disk_used=101GiB\n" {
+		t.Errorf("ShowSize = %q, %v", b.String(), names(err))
+	}
+	if len(warned) != 1 || warned[0] != "disk_over backend=fake limit=100 used=101 vm="+st.Name() {
+		t.Errorf("warned %q", warned)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if len(warned) != 2 || warned[1] != warned[0] {
+		t.Errorf("a launch warned %q", warned)
+	}
+	ls, err := List(t.Context(), e.Dirs, e.Registry)
+	if err != nil || len(ls) != 1 || ls[0].DiskOver == nil || ls[0].DiskOver.Names() != warned[0] {
+		t.Errorf("List = %+v, %v", ls, err)
+	}
+	df.used = 1 << 30
+	if ls, err := List(t.Context(), e.Dirs, e.Registry); err != nil || len(ls) != 1 || ls[0].DiskOver != nil {
+		t.Errorf("List under the limit = %+v, %v", ls, err)
 	}
 }

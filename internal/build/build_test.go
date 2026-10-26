@@ -317,6 +317,34 @@ func TestBuildRequires(t *testing.T) {
 	}
 }
 
+// An image the backend has, with its record, needs nothing of building:
+// a backend that can't build it now still uses it. One without its record
+// is refused before it's deleted.
+func TestBuiltNeedsNoBuild(t *testing.T) {
+	b, f := testEnv(t)
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+		t.Fatal(err)
+	}
+	delete(f.Capabilities, backend.FeatureBuildConfinement)
+	before := len(f.Calls())
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+		t.Errorf("Build of a built image = %v", err)
+	}
+	key, err := b.Key("base")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.RemoveImage(b.Dirs, key); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Builds{b}).Build(t.Context(), "base"); !isMsg(err, "backend_lacks") {
+		t.Errorf("Build of a leftover = %v, want backend_lacks", err)
+	}
+	if ms := f.Methods()[before:]; slices.Contains(ms, "DeleteImage") || slices.Contains(ms, "BuildImage") {
+		t.Errorf("calls = %q", ms)
+	}
+}
+
 // A failed build writes no record, so the next build starts over.
 func TestFailedBuildHasNoRecord(t *testing.T) {
 	b, f := testEnv(t)

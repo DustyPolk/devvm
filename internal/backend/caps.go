@@ -3,6 +3,7 @@ package backend
 import (
 	"strings"
 
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -28,6 +29,7 @@ const (
 	FeatureCPUs             Feature = "cpus"              // setting a VM's CPUs
 	FeatureMemory           Feature = "memory"            // setting a VM's memory
 	FeatureDisk             Feature = "disk"              // setting a VM's disk size
+	FeatureDockerLayer      Feature = "docker-layer"      // the docker layer: Docker's engine running in the VM
 )
 
 // Features is every feature, in the backends page's order.
@@ -36,7 +38,7 @@ var Features = []Feature{
 	FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
 	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeaturePortsAll,
 	FeatureAgentForwarding, FeatureAgentToggle,
-	FeatureCPUs, FeatureMemory, FeatureDisk,
+	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer,
 }
 
 // Support is how a backend has a feature: natively, emulated (usable only
@@ -154,6 +156,15 @@ func (s ImageSpec) Features() []Feature {
 		fs = append(fs, FeatureMemory)
 	}
 	return append(fs, s.Net.Features()...)
+}
+
+// ImageFeatures returns what a VM of the image (layers joined with +)
+// needs for its layers: docker-layer when it has the docker layer.
+func ImageFeatures(img string) []Feature {
+	if image.HasLayer(img, image.DockerLayer) {
+		return []Feature{FeatureDockerLayer}
+	}
+	return nil
 }
 
 // Features returns what the tools build needs.

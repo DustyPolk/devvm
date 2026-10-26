@@ -1,9 +1,10 @@
 #!/bin/sh
-# Run as root in a machine after each start, for what base's services do at boot on Lima: a smolvm
-# machine runs no init system. Its /dev has no loop devices, which the shared tools' images are
-# mounted with, so they're made first; then the tools are mounted (devvm-tools, once
-# assets/guest/sync.sh installed it), the VM's sshd started when it's asked for, and Docker's daemon
-# started in the background where the VM has it (the docker layer).
+# Run as root in a machine or container after each start, for what base's services do at boot on
+# Lima: an image run as a container (smolvm's machines, Docker's containers) runs no init system.
+# Its /dev has no loop devices, which the shared tools' images are mounted with, so they're made
+# first; then the tools are mounted or linked (devvm-tools, once assets/guest/sync.sh installed it),
+# the VM's sshd started when it's asked for, and Docker's daemon started in the background where the
+# VM has it (the docker layer), unless DEVVM_DOCKERD is off (Docker's containers can't run it).
 #   services.sh [ssh USER KEY [VAR...]]
 # ssh: devvm's sshd for ssh and editors, on a config of its own: new host keys (ed25519) at each
 # start, so no two VMs made from one image share them; USER alone may log in, with KEY (the VM's
@@ -90,7 +91,7 @@ if [ "${1:-}" = ssh ]; then
   "$sshd" -f "$conf" -E /var/log/devvm-sshd.log
 fi
 pid=$(cat /run/docker.pid 2>/dev/null || true)
-if command -v dockerd >/dev/null 2>&1 && ! { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; }; then
+if [ "${DEVVM_DOCKERD:-}" != off ] && command -v dockerd >/dev/null 2>&1 && ! { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; }; then
   mkdir -p /var/log
   nohup dockerd -p /run/docker.pid >/var/log/dockerd.log 2>&1 </dev/null &
 fi
