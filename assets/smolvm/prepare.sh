@@ -21,7 +21,9 @@ case " $ID ${ID_LIKE:-} " in
     id "$name" >/dev/null 2>&1 || useradd --create-home --home-dir "$home" --uid "$uid" --shell /bin/bash "$name"
     ;;
   *" alpine "*)
-    apk add --no-cache ca-certificates sudo bash shadow
+    # OpenRC and ssh's client too, which Alpine's container image lacks: base.sh adds an OpenRC
+    # service (enabled only: smolvm runs no init system) and writes /etc/ssh/ssh_known_hosts.
+    apk add --no-cache ca-certificates sudo bash shadow openrc openssh-client
     other=$(getent passwd "$uid" | cut -d: -f1 || true)
     if [ -n "$other" ] && [ "$other" != "$name" ]; then deluser --remove-home "$other"; fi
     id "$name" >/dev/null 2>&1 || adduser -D -h "$home" -u "$uid" -s /bin/bash "$name"

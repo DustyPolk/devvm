@@ -31,7 +31,7 @@
 #                devvm's or none never reaching yours, one started by smolvm machine start from your
 #                shell stopped), ssh for editors' emulation (pinned
 #                host keys of each VM's own, its own key alone, no forwarding out even past a hostile
-#                sshd, devvm ssh and code, a --clone VM's push and fetch), network policy's emulation
+#                sshd, devvm ssh and code, an alpine:3 VM, a --clone VM's push and fetch), network policy's emulation
 #                (nothing but the proxy, DNS kept on this machine, failing closed, the policy, ssh
 #                opening no way out), every port's (servers on the VM's loopback or all its addresses
 #                reach this machine's loopback alone, never a port of this machine's or devvm's, no
@@ -1273,6 +1273,15 @@ check "a VM made from the same image has host keys of its own, and a port of its
 check "... and a key of its own: its key doesn't log in to the other VM, the other's own does (the control)" smolssh_otherkey "$vm" "$vm2"
 check "an image without sshd (root removed it): the next start runs without ssh, warned, and the VM runs" smolssh_nosshd "$vm2" "$q2"
 (cd "$q2" && quiet "${UR[@]}" "$D" rm -f)
+# Alpine's container image lacks OpenRC and ssh's client, which base's scripts write into.
+qa=$(newproj smolalpine)
+(cd "$qa" && printf 'exit\n' | HOME=$sc/home "${UR[@]}" "$D" "${S[@]}" --from alpine:3 --no-network-policy --ports none base >"$work/last.log" 2>&1)
+vma=$(vm_of "$qa"); [[ -z $vma ]] || created+=("$vma")
+check "a VM --from alpine:3 is made, and ssh devvm-smolalpine reaches it, on Alpine, as the VM's user" bash -c "
+  [[ -n '$vma' ]] && grep -qx libc=musl '$vms/$vma' &&
+  out=\$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o BatchMode=yes devvm-smolalpine '. /etc/os-release; echo \$ID; id -un' </dev/null) &&
+  [[ \$out == alpine\$'\n''$me' ]] || { echo \"\${out:-}\"; tail -5 '$work/last.log'; false; }"
+(cd "$qa" && quiet "${UR[@]}" "$D" rm -f)
 check "its port taken while it's stopped: its next start forwards another, and ssh reaches it" smolssh_squatted "$vm" "$q" devvm-smolssh
 check "devvm stop drops its entry, and nothing listens on its port" smolssh_stopped "$vm" "$q"
 check "rm deletes it, its entry and its pinned keys" bash -c "cd '$q' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
