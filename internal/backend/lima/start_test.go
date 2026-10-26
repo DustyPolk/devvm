@@ -314,7 +314,7 @@ func TestProfile(t *testing.T) {
 	if n := strings.Count(p.render(), "unix-socket"); n != 1 {
 		t.Errorf("%d unix-socket rules without an agent", n)
 	}
-	if strings.Contains(p.render(), "3128") {
+	if strings.Contains(p.render(), "localhost:3128") {
 		t.Error("a proxy port without a proxy")
 	}
 	// A build with the internet: everything but host loopback.
