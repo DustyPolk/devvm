@@ -180,7 +180,7 @@ func TestFreePort(t *testing.T) {
 	if err := st.Set(KeyProxyPort, "34567"); err != nil {
 		t.Fatal(err)
 	}
-	used, err := UsedPorts(d)
+	used, err := UsedPorts(d, "")
 	if err != nil || !used[23456] || !used[34567] || len(used) != 2 {
 		t.Errorf("UsedPorts = %v, %v", used, err)
 	}
@@ -190,9 +190,15 @@ func TestFreePort(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	used, err = UsedPorts(d)
+	used, err = UsedPorts(d, "")
 	if err != nil || len(used) != 7 || !used[5173] || !used[40000] || !used[40002] || !used[41000] {
 		t.Errorf("UsedPorts with forwards = %v, %v", used, err)
+	}
+	// The VM's own forwarder: its listed ports aren't reserved from it,
+	// its ssh and proxy ports are.
+	used, err = UsedPorts(d, st.Name())
+	if err != nil || len(used) != 2 || !used[23456] || !used[34567] {
+		t.Errorf("UsedPorts for its own forwarder = %v, %v", used, err)
 	}
 	if err := st.Set(keyPorts, "all"); err != nil {
 		t.Fatal(err)

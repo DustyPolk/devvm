@@ -120,7 +120,7 @@ func (c *Config) Write(ctx context.Context) error {
 			continue
 		}
 		t, err := r.b.SSH(ctx, r.in.Name)
-		if err != nil || t.Host == "" || t.Port == 0 {
+		if err != nil || t.Host == "" || t.Port == 0 && t.ProxyCommand == "" || strings.ContainsAny(t.ProxyCommand, "\r\n") {
 			continue
 		}
 		ok, err := c.recordHostKeys(ctx, r.b, r.in.Name)
@@ -150,6 +150,12 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 	st, err := state.ReadVM(c.Dirs, in.Name)
 	if err != nil {
 		return err
+	}
+	// A backend's own way in (Docker's docker exec), else none, whatever a
+	// Host * of the user's says.
+	proxy := "none"
+	if t.ProxyCommand != "" {
+		proxy = t.ProxyCommand
 	}
 	forward, identity := "no", ""
 	switch sshagent.Mode(st) {
@@ -193,11 +199,14 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 		"  PermitRemoteOpen none",
 		"  AddKeysToAgent no",
 		"  ProxyJump none",
-		"  ProxyCommand none",
+		"  ProxyCommand "+proxy,
 		"  UpdateHostKeys no",
 		"  HashKnownHosts no",
 	)
-	lines = append(lines, "  Hostname "+t.Host, "  Port "+strconv.Itoa(t.Port))
+	lines = append(lines, "  Hostname "+t.Host)
+	if t.Port > 0 {
+		lines = append(lines, "  Port "+strconv.Itoa(t.Port))
+	}
 	if t.User != "" {
 		lines = append(lines, "  User "+t.User)
 	}

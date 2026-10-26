@@ -67,3 +67,35 @@ func TestListenLoopback(t *testing.T) {
 		})
 	}
 }
+
+// A port whose connections ListenExclusive's own listener ended first
+// (TIME_WAIT) is free again once it's closed: a forwarder started again
+// takes it back.
+func TestListenExclusiveAgain(t *testing.T) {
+	p := freePort(t)
+	addr := "127.0.0.1:" + strconv.Itoa(p)
+	l, err := ListenExclusive(t.Context(), "tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := net.Dial("tcp", addr) //nolint:noctx // the test's
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := l.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	_, _ = c.Read(make([]byte, 1))
+	_ = c.Close()
+	_ = l.Close()
+	if PortInUse(t.Context(), p) {
+		t.Error("in use after its connections ended")
+	}
+	again, err := ListenLoopback(t.Context(), addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = again.Close()
+}

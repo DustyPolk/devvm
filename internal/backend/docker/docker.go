@@ -15,9 +15,12 @@
 // container is committed and made again from that commit, under the same
 // name (start.go). The VM's home is a volume of its own, kept across that.
 //
-// Network policy, ssh for editors, ports, agent forwarding and the docker
-// layer are left to later work: they're none in Caps, so devvm refuses
-// them in one line.
+// ssh for editors (ssh.go), forwarding ports (ports.go) and SSH agent
+// forwarding, chosen when a VM is made and changed later (its ssh
+// sessions', agent.go) are emulated, all over one transport: docker exec
+// into the container, to an sshd of its own per connection; all reviewed.
+// Network policy and the docker layer are left to later work: they're none
+// in Caps, so devvm refuses them in one line.
 package docker
 
 import (
@@ -38,6 +41,7 @@ import (
 	"sync"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -113,6 +117,15 @@ type Docker struct {
 	// set: tests', and test builds' (DEVVM_DOCKER_KIND), so builds run on a
 	// stand-in engine anywhere; "" asks the engine.
 	Kind string
+	// Self is devvm's binary, as it was run: ssh's ProxyCommand for a VM
+	// runs it (ConnectCmd), and so does each VM's port forwarder.
+	Self string
+	// Getenv reads the environment (connectEnv: DOCKER_HOST…), and
+	// LookPath finds a command on PATH (docker).
+	Getenv   func(string) string
+	LookPath func(string) (string, error)
+	// Forwards runs the port forwarders of VMs that forward ports.
+	Forwards vmssh.Forwards
 	// Info prints what the backend is doing; Warn prints a warning.
 	Info, Warn func(msg.M)
 	// WithSteps numbers the logged commands of a phase of so many steps.
@@ -148,10 +161,14 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 	if home, err := os.UserHomeDir(); err == nil && runtime.GOOS == "darwin" {
 		sharing = filepath.Join(home, "Library", "Group Containers", "group.com.docker", "settings-store.json")
 	}
+	// As run, a link's path kept: devvm's ssh config names it, and a link
+	// (Homebrew's) outlives the version it points to.
+	self, _ := os.Executable()
 	return &Docker{
 		client: client{Runner: logRunner{u.LoggedCmd}, names: names{Data: d.Data}}, Dirs: d, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		User: user.Current, Hostname: os.Hostname, Digest: from.NewRegistry().Digest,
 		Terminal: u.StdinIsTerminal, SharingFile: sharing,
+		Self: self, Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	}
@@ -164,10 +181,16 @@ func (d *Docker) Name() string { return Name }
 // containers, --from any image Docker has or pulls, containers from
 // images, bind mounts, the tools in a volume, CPUs and memory. Build
 // confinement only on a Linux engine on this machine, whose containers
-// don't reach its loopback: Docker Desktop's reach the host's. The rest
-// are none until devvm emulates them.
+// don't reach its loopback: Docker Desktop's reach the host's. ssh for
+// editors, ports (listed and every one) and agent forwarding (and turning
+// it on or off) are emulated over docker exec, and reviewed. The rest are
+// none until devvm emulates them.
 func (d *Docker) Caps() backend.Caps {
-	caps := backend.Caps{}
+	caps := backend.Caps{
+		backend.FeatureSSH: backend.Emulated(true), backend.FeaturePorts: backend.Emulated(true),
+		backend.FeaturePortsAll: backend.Emulated(true), backend.FeatureAgentForwarding: backend.Emulated(true),
+		backend.FeatureAgentToggle: backend.Emulated(true),
+	}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureFrom, backend.FeatureClone, backend.FeatureProjectMount,
 		backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeatureCPUs, backend.FeatureMemory,
@@ -228,6 +251,22 @@ type record struct {
 	Commit string            `json:"commit,omitempty"`
 	Gen    int               `json:"gen,omitempty"`
 	Env    map[string]string `json:"env,omitempty"`
+	// Forwarding is whether its ssh sessions forward an SSH agent (agent.go);
+	// Agent is whether its last start's do: none (""), or the one devvm's
+	// SSH_AUTH_SOCK names (vmssh.AgentUser).
+	Forwarding bool   `json:"forwarding,omitempty"`
+	Agent      string `json:"agent,omitempty"`
+	// PortsAll is set when it forwards every port, else Ports are those it
+	// lists (none when empty), through its forwarder (ports.go).
+	PortsAll bool                `json:"ports_all,omitempty"`
+	Ports    []backend.PortRange `json:"ports,omitempty"`
+	// Started is its container's start time at its last start by Start,
+	// with ssh once SSHUp is set (its sshd's config written, and cleared
+	// before each start); NoSSHD is set when that start found no sshd in
+	// its image (ssh.go).
+	Started string `json:"started,omitempty"`
+	SSHUp   bool   `json:"ssh_up,omitempty"`
+	NoSSHD  bool   `json:"no_sshd,omitempty"`
 }
 
 func (d *Docker) readRecord(vm string) (record, error) {
@@ -288,16 +327,18 @@ func (d *Docker) instance(c container) (backend.Instance, error) {
 	}
 	return backend.Instance{
 		Name: c.name(), Status: c.status(), Size: c.size(),
-		AgentDirs: slices.Clone(r.AgentDirs), AgentFixed: true,
+		AgentDirs: slices.Clone(r.AgentDirs), AgentForwarding: r.Forwarding,
 	}, nil
 }
 
-// Stop stops one of devvm's VMs; a stopped one is left as it is.
+// Stop stops one of devvm's VMs, and its port forwarder; a stopped one is
+// left as it is.
 func (d *Docker) Stop(ctx context.Context, vm string) error {
 	c, err := d.vm(ctx, vm)
 	if err != nil {
 		return err
 	}
+	d.Forwards.Stop(vm)
 	if c.status() == backend.StatusStopped {
 		return nil
 	}
@@ -305,7 +346,7 @@ func (d *Docker) Stop(ctx context.Context, vm string) error {
 }
 
 // Delete deletes one of devvm's VMs, stopping it first: its container,
-// its volumes, its own commit and its record.
+// its volumes, its own commit, its forwarder, its keys and its record.
 func (d *Docker) Delete(ctx context.Context, vm string) error {
 	if _, err := d.vm(ctx, vm); err != nil {
 		return err
@@ -314,8 +355,16 @@ func (d *Docker) Delete(ctx context.Context, vm string) error {
 	if err != nil {
 		return err
 	}
+	if err := d.Forwards.Remove(vm); err != nil {
+		return err
+	}
 	if err := d.removeContainer(ctx, msg.Deleting(vm), vm); err != nil {
 		return err
+	}
+	for _, f := range []string{d.sshKey(vm), d.knownHosts(vm)} {
+		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
 	}
 	for _, v := range []string{homeVolume(vm), cloneVolume(vm)} {
 		if err := d.removeVolume(ctx, v); err != nil {
@@ -385,8 +434,20 @@ func (d *Docker) Exec(ctx context.Context, vm string, argv []string, o backend.E
 }
 
 // Shell returns a login shell in dir as the VM's user, with a terminal when
-// devvm has one.
+// devvm has one: over its ssh when its start ran its sshd (an ssh session,
+// with the agent that start chose, agent.go), else through docker exec.
 func (d *Docker) Shell(ctx context.Context, vm, dir string) (backend.Command, error) {
+	sshArgs, ok, err := d.sshShell(ctx, vm, dir)
+	if err != nil {
+		return backend.Command{}, err
+	}
+	if ok {
+		path, err := d.LookPath("ssh")
+		if err != nil {
+			return backend.Command{}, err
+		}
+		return backend.Command{Path: path, Args: append([]string{"ssh"}, sshArgs...), Env: os.Environ(), Dir: d.Data}, nil
+	}
 	args, err := d.userArgs(vm, dir, true, d.Terminal(), []string{"bash", "-l"})
 	if err != nil {
 		return backend.Command{}, err
@@ -396,11 +457,6 @@ func (d *Docker) Shell(ctx context.Context, vm, dir string) (backend.Command, er
 		return backend.Command{}, cmd.Err
 	}
 	return backend.Command{Path: cmd.Path, Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir}, nil
-}
-
-// SSH is none: ssh for editors isn't emulated on Docker yet.
-func (d *Docker) SSH(_ context.Context, vm string) (backend.SSHTarget, error) {
-	return backend.SSHTarget{}, msg.BackendLacks(Name, string(backend.FeatureSSH), vm)
 }
 
 // ProxyURL is "": network policy isn't emulated on Docker yet.
@@ -455,15 +511,6 @@ func (d *Docker) SetSize(ctx context.Context, vm string, sz backend.Size) error 
 	return nil
 }
 
-// SetPorts accepts none: forwarding ports isn't emulated on Docker yet.
-func (d *Docker) SetPorts(ctx context.Context, vm string, p backend.Ports) error {
-	if f := p.Features(); len(f) > 0 {
-		return msg.BackendLacks(Name, string(f[0]), vm)
-	}
-	_, _, err := d.stopped(ctx, vm)
-	return err
-}
-
 // SetAgentDirs replaces a stopped VM's agent folder mounts, from its next
 // start: its container is made again then (start.go).
 func (d *Docker) SetAgentDirs(ctx context.Context, vm string, dirs []string) error {
@@ -476,14 +523,4 @@ func (d *Docker) SetAgentDirs(ctx context.Context, vm string, dirs []string) err
 	}
 	r.AgentDirs = slices.Clone(dirs)
 	return d.writeRecord(vm, r)
-}
-
-// SetAgentForwarding accepts only off: agent forwarding isn't emulated on
-// Docker yet.
-func (d *Docker) SetAgentForwarding(ctx context.Context, vm string, on bool) error {
-	if on {
-		return msg.BackendLacks(Name, string(backend.FeatureAgentForwarding), vm)
-	}
-	_, _, err := d.stopped(ctx, vm)
-	return err
 }

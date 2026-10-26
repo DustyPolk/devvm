@@ -514,6 +514,11 @@ func DockerCommitFailed(vm string) M {
 	return M{id: "docker_commit_failed", vals: []val{{"vm", vm}}}
 }
 
+// DockerConnectFailed is [docker_connect_failed]: "couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}"
+func DockerConnectFailed(reason string, vm string) M {
+	return M{id: "docker_connect_failed", vals: []val{{"reason", reason}, {"vm", vm}}}
+}
+
 // DockerContainerForeign is [docker_container_foreign]: "Docker has a container named {{.name}} that isn't this devvm's: remove or rename it with docker"
 func DockerContainerForeign(name string) M {
 	return M{id: "docker_container_foreign", vals: []val{{"name", name}}}
@@ -619,6 +624,11 @@ func DockerScriptFailed(script string, vm string) M {
 	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
+// DockerSSHPath is [docker_ssh_path]: "devvm's ssh config can't name {{.path}}: it has a quote, a backslash, a percent sign or a control character"
+func DockerSSHPath(path string) M {
+	return M{id: "docker_ssh_path", vals: []val{{"path", path}}}
+}
+
 // DockerToolsFailed is [docker_tools_failed]: "couldn't unpack the shared tools into Docker's volume {{.volume}}"
 func DockerToolsFailed(volume string) M {
 	return M{id: "docker_tools_failed", vals: []val{{"volume", volume}}}
@@ -697,6 +707,11 @@ func FetchUntil(file string, remote string) M {
 // Fetching is [fetching]: "fetching the VM's branches into {{.prefix}}/*"
 func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
+}
+
+// ForwarderFailed is [forwarder_failed]: "port forwarder: {{.reason}}"
+func ForwarderFailed(reason string) M {
+	return M{id: "forwarder_failed", vals: []val{{"reason", reason}}}
 }
 
 // FromCachedNotFound is [from_cached_not_found]: "{{.host}} doesn't have {{.from}}, or it's private: using the digest devvm last saw"
@@ -1444,6 +1459,11 @@ func PortsFlagIgnored() M {
 	return M{id: "ports_flag_ignored"}
 }
 
+// PortsForwardFailed is [ports_forward_failed]: "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
+func PortsForwardFailed(log string, vm string) M {
+	return M{id: "ports_forward_failed", vals: []val{{"log", log}, {"vm", vm}}}
+}
+
 // PortsListNeeded is [ports_list_needed]: "devvm ports add and rm take ports and ranges like 5173,8000-8010, not {{.value}}"
 func PortsListNeeded(value string) M {
 	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
@@ -1452,6 +1472,11 @@ func PortsListNeeded(value string) M {
 // PortsNextStart is [ports_next_start]: "{{.vm}}'s new ports apply when it next starts: devvm restart"
 func PortsNextStart(vm string) M {
 	return M{id: "ports_next_start", vals: []val{{"vm", vm}}}
+}
+
+// PortsNoSSH is [ports_no_ssh]: "{{.vm}} runs without ssh, so none of its ports are forwarded"
+func PortsNoSSH(vm string) M {
+	return M{id: "ports_no_ssh", vals: []val{{"vm", vm}}}
 }
 
 // PortsNow is [ports_now]: "{{.vm}} forwards {{.ports}}"
@@ -1734,11 +1759,6 @@ func SmolvmBrokenFix(fix string) M {
 	return M{id: "smolvm_broken_fix", vals: []val{{"fix", fix}}}
 }
 
-// SmolvmForwarderFailed is [smolvm_forwarder_failed]: "smolvm port forwarder: {{.reason}}"
-func SmolvmForwarderFailed(reason string) M {
-	return M{id: "smolvm_forwarder_failed", vals: []val{{"reason", reason}}}
-}
-
 // SmolvmFromRegistryOnly is [smolvm_from_registry_only]: "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
 func SmolvmFromRegistryOnly(image string) M {
 	return M{id: "smolvm_from_registry_only", vals: []val{{"image", image}}}
@@ -1774,16 +1794,6 @@ func SmolvmNoAgent(vm string) M {
 	return M{id: "smolvm_no_agent", vals: []val{{"vm", vm}}}
 }
 
-// SmolvmNoSSH is [smolvm_no_ssh]: "{{.vm}} was started without ssh: devvm restart starts it with it"
-func SmolvmNoSSH(vm string) M {
-	return M{id: "smolvm_no_ssh", vals: []val{{"vm", vm}}}
-}
-
-// SmolvmNoSshd is [smolvm_no_sshd]: "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
-func SmolvmNoSshd(vm string) M {
-	return M{id: "smolvm_no_sshd", vals: []val{{"vm", vm}}}
-}
-
 // SmolvmOld is [smolvm_old]: "smolvm {{.version}} is too old: upgrade to smolvm 1.32 or newer"
 func SmolvmOld(version string) M {
 	return M{id: "smolvm_old", vals: []val{{"version", version}}}
@@ -1797,16 +1807,6 @@ func SmolvmOldFix(fix string, version string) M {
 // SmolvmPortSSH is [smolvm_port_ssh]: "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
 func SmolvmPortSSH(port string, vm string) M {
 	return M{id: "smolvm_port_ssh", vals: []val{{"port", port}, {"vm", vm}}}
-}
-
-// SmolvmPortsFailed is [smolvm_ports_failed]: "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
-func SmolvmPortsFailed(log string, vm string) M {
-	return M{id: "smolvm_ports_failed", vals: []val{{"log", log}, {"vm", vm}}}
-}
-
-// SmolvmPortsNoSSH is [smolvm_ports_no_ssh]: "{{.vm}} runs without ssh, so none of its ports are forwarded"
-func SmolvmPortsNoSSH(vm string) M {
-	return M{id: "smolvm_ports_no_ssh", vals: []val{{"vm", vm}}}
 }
 
 // SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
@@ -2119,6 +2119,16 @@ func VMNameNoRoom(backend string, max string) M {
 	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
 }
 
+// VMNoSSH is [vm_no_ssh]: "{{.vm}} was started without ssh: devvm restart starts it with it"
+func VMNoSSH(vm string) M {
+	return M{id: "vm_no_ssh", vals: []val{{"vm", vm}}}
+}
+
+// VMNoSshd is [vm_no_sshd]: "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
+func VMNoSshd(vm string) M {
+	return M{id: "vm_no_sshd", vals: []val{{"vm", vm}}}
+}
+
 // VMNotRunning is [vm_not_running]: "{{.vm}} isn't running: start it first"
 func VMNotRunning(vm string) M {
 	return M{id: "vm_not_running", vals: []val{{"vm", vm}}}
@@ -2263,6 +2273,7 @@ var specs = map[string]spec{
 	"docker_access":               {fields: []string{"fix"}},
 	"docker_arch":                 {fields: []string{"engine", "host"}},
 	"docker_commit_failed":        {fields: []string{"vm"}},
+	"docker_connect_failed":       {fields: []string{"reason", "vm"}},
 	"docker_container_foreign":    {fields: []string{"name"}},
 	"docker_down":                 {},
 	"docker_engine_desktop":       {fields: []string{"version"}},
@@ -2284,6 +2295,7 @@ var specs = map[string]spec{
 	"docker_pull_failed":          {fields: []string{"image"}},
 	"docker_remaking":             {fields: []string{"vm"}},
 	"docker_script_failed":        {fields: []string{"script", "vm"}},
+	"docker_ssh_path":             {fields: []string{"path"}},
 	"docker_tools_failed":         {fields: []string{"volume"}},
 	"docker_update_failed":        {fields: []string{"vm"}},
 	"docker_volume_failed":        {fields: []string{"name"}},
@@ -2300,6 +2312,7 @@ var specs = map[string]spec{
 	"fetch_failed":                {fields: []string{"vm"}},
 	"fetch_until":                 {fields: []string{"file", "remote"}},
 	"fetching":                    {fields: []string{"prefix"}},
+	"forwarder_failed":            {fields: []string{"reason"}},
 	"from_cached_not_found":       {fields: []string{"from", "host"}},
 	"from_cached_unreachable":     {fields: []string{"from", "host"}},
 	"from_ignored":                {fields: []string{"vm"}},
@@ -2449,8 +2462,10 @@ var specs = map[string]spec{
 	"ports_default":               {fields: []string{"ports"}},
 	"ports_failed":                {fields: []string{"reason"}},
 	"ports_flag_ignored":          {},
+	"ports_forward_failed":        {fields: []string{"log", "vm"}},
 	"ports_list_needed":           {fields: []string{"value"}},
 	"ports_next_start":            {fields: []string{"vm"}},
+	"ports_no_ssh":                {fields: []string{"vm"}},
 	"ports_now":                   {fields: []string{"ports", "vm"}},
 	"ports_pending":               {fields: []string{"ports", "vm"}},
 	"ports_rm_all":                {},
@@ -2507,7 +2522,6 @@ var specs = map[string]spec{
 	"size_pending":                {fields: []string{"size", "vm"}},
 	"smolvm_broken":               {},
 	"smolvm_broken_fix":           {fields: []string{"fix"}},
-	"smolvm_forwarder_failed":     {fields: []string{"reason"}},
 	"smolvm_from_registry_only":   {fields: []string{"image"}},
 	"smolvm_host_unsupported":     {fields: []string{"host"}},
 	"smolvm_machine_foreign":      {fields: []string{"vm"}},
@@ -2515,13 +2529,9 @@ var specs = map[string]spec{
 	"smolvm_missing_fix":          {fields: []string{"fix"}},
 	"smolvm_mount_colon":          {fields: []string{"path"}},
 	"smolvm_no_agent":             {fields: []string{"vm"}},
-	"smolvm_no_ssh":               {fields: []string{"vm"}},
-	"smolvm_no_sshd":              {fields: []string{"vm"}},
 	"smolvm_old":                  {fields: []string{"version"}},
 	"smolvm_old_fix":              {fields: []string{"fix", "version"}},
 	"smolvm_port_ssh":             {fields: []string{"port", "vm"}},
-	"smolvm_ports_failed":         {fields: []string{"log", "vm"}},
-	"smolvm_ports_no_ssh":         {fields: []string{"vm"}},
 	"smolvm_script_failed":        {fields: []string{"script", "vm"}},
 	"smolvm_ssh_port_forwarded":   {fields: []string{"port", "vm"}},
 	"smolvm_too_many_ports":       {fields: []string{"asked", "max", "vm"}},
@@ -2584,6 +2594,8 @@ var specs = map[string]spec{
 	"vm_is_now":                   {fields: []string{"image", "vm"}},
 	"vm_lacks":                    {fields: []string{"has", "layer", "vm"}},
 	"vm_name_no_room":             {fields: []string{"backend", "max"}},
+	"vm_no_ssh":                   {fields: []string{"vm"}},
+	"vm_no_sshd":                  {fields: []string{"vm"}},
 	"vm_not_running":              {fields: []string{"vm"}},
 	"vm_not_stopped":              {fields: []string{"vm"}},
 	"vm_other_folder":             {fields: []string{"vm", "was"}},

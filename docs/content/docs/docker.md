@@ -19,13 +19,15 @@ Everything else devvm promises (only the project folder mounted, agents' folders
 
 Docker's container features are native: building images, `--from` any image Docker has or pulls, the project folder, agents' folders, the shared tools, and CPUs and memory ([features](backends.md#features)). On Linux, builds are confined; on Docker Desktop they aren't yet, so it can't build ([below](#building-images)).
 
-The rest aren't emulated yet, so devvm refuses a VM that needs them, in one line naming the VM: network policy, ssh for editors (and so `devvm ssh`, `devvm code` and `--clone`), forwarding ports, SSH agent forwarding, a disk size and the [docker layer](images.md#built-in-layers). Until they are, make Docker VMs with:
+ssh for editors (and so `devvm ssh`, `devvm code` and `--clone`), forwarding ports (listed, and every one) and SSH agent forwarding (and turning it on or off later) are emulated, and reviewed, all over one transport, `docker exec` into the container ([below](#ssh-for-editors)).
+
+The rest aren't emulated yet, so devvm refuses a VM that needs them, in one line naming the VM: network policy, a disk size and the [docker layer](images.md#built-in-layers). Make Docker VMs with:
 
 ```sh
-devvm --backend docker --no-network-policy --ports none
+devvm --backend docker --no-network-policy
 ```
 
-`--ports none` because every port is forwarded by default; `devvm ports -g none` makes it the default for new VMs. A default disk size you set (`devvm size -g --disk`) doesn't apply to them, and devvm says so (`size_disk_default_unused`).
+A default disk size you set (`devvm size -g --disk`) doesn't apply to them, and devvm says so (`size_disk_default_unused`).
 
 ## Requirements
 
@@ -71,9 +73,39 @@ Docker sets a container's mounts and network when it makes it, and they can't ch
 
 ## No init system
 
-A container runs Docker's init (`--init`) and a sleep under it; nothing starts at boot. After each start devvm runs, as root, what base's services do on Lima: the shared tools linked (below). It never runs the VM's sshd (ssh isn't emulated yet) or Docker's daemon (`dockerd` needs a privileged container).
+A container runs Docker's init (`--init`) and a sleep under it; nothing starts at boot. After each start devvm runs, as root, what base's services do on Lima: the shared tools linked (below), and, with [ssh](#ssh-for-editors), its sshd's config and new host key. No sshd daemon runs (each ssh connection runs its own), nor Docker's daemon (`dockerd` needs a privileged container).
 
-devvm's commands in a VM (its setup, your shell) run as the VM's user with the environment a login would give: `HOME`, `USER`, and `/etc/environment`.
+devvm's commands in a VM (its setup) run as the VM's user with the environment a login would give: `HOME`, `USER`, and `/etc/environment`. So does your shell: through `docker exec`, or over the VM's ssh once that start ran it, an ssh session with the [agent](#ssh-agent-forwarding) the VM's choice names.
+
+## ssh for editors
+
+Emulated, and reviewed ([design](design.md#ssh-for-editors-on-docker)): `devvm ssh`, `devvm code`, `--clone` and the [ssh config entries](ssh.md#ssh-access-by-name) work as on Lima, and the container publishes nothing.
+
+- **No sshd listens:** after each start devvm writes the VM's sshd config (`/etc/devvm/ssh/sshd_config`, root's alone) and makes it a new ed25519 host key, and starts no daemon. Each ssh connection is an sshd of its own in the container (`sshd -i`, as root), its input and output the connection: `docker exec -i` runs it, and nothing else in the container, or on any network, can connect to it.
+- **The way in:** devvm's ssh config names `devvm _docker-connect` as the VM's `ProxyCommand`, with `docker`'s path, devvm's data folder and the engine devvm reaches (`DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CONFIG`), so an editor started without them reaches the same one. It checks the container is devvm's (its label), a VM's, and running, then runs `docker exec` on its ID. A path with a quote, a backslash or a `%` can't go in the entry (`docker_ssh_path`); a failure is `docker_connect_failed`.
+- **Host keys of the VM's own,** read through `docker exec` and pinned in `~/.config/devvm/known_hosts`, as on Lima; a key that doesn't match is refused.
+- **Only the VM's own key logs in, as the VM's user:** `~/.local/share/devvm/docker/vms/<vm>.key` (mode 600), its public half that VM's only authorized key. No passwords, no root, no other user. Entries offer only that key, not your agent's.
+- **No way out through ssh, as long as your ssh doesn't ask for one,** as on [smolvm](smolvm.md#ssh-for-editors): devvm's entry turns X11, tunnels, remote SOCKS forwards and adding keys to an agent off, and the sshd allows only local forwarding, a defence for an honest VM.
+
+A VM started without ssh, or started outside devvm since (`docker start`), gets no entry from devvm's next launch, and `devvm ssh` says to restart it (`vm_no_ssh`); its shell is a `docker exec`. A VM whose image has no sshd starts and runs without ssh, warned (`vm_no_sshd`): a VM made after `devvm rebuild` has it.
+
+## Ports
+
+Emulated, and reviewed ([design](design.md#ports-on-docker)): a container's ports reach your machine only when it publishes them, which Docker fixes when it makes the container, and then only servers on its network address, never its loopback. So a VM publishes nothing, and a forwarder of devvm's on your machine forwards its ports, as [smolvm's](smolvm.md#every-port) does:
+
+- **What it forwards:** with every port (`--ports all`, the default), each TCP port from 1024 up that a server in the VM listens on, on its loopback or all its addresses; with a list (`--ports 5173,8000-8010`), those ports alone, however many you list, less those a program on your machine has when the VM starts (warned, `ports_taken`). To the same port on your machine's `127.0.0.1` and `::1`, within a few seconds of the server starting; the forward goes when the server does. At most 256 at once.
+- **What it never takes:** a port a program on your machine has, on any address, and a port devvm records for another VM.
+- **How it reaches the VM:** over the VM's [ssh](#ssh-for-editors), through `devvm _docker-connect`, with the VM's own key and its pinned host key, asking for no forwarding into your machine.
+- **Its process** is `devvm _docker-ports`, one per VM, started after each start with ssh; it ends once Docker no longer runs that start of the container (asked every 30 s, and whenever its connection ends), and `devvm stop` stops it. Its log is `~/.local/share/devvm/docker/vms/<vm>.ports.log`. A VM without ssh forwards no ports, warned (`ports_no_ssh`); one whose forwarder doesn't start runs on, warned with its log (`ports_forward_failed`).
+
+## SSH agent forwarding
+
+Emulated, and reviewed, chosen when a VM is made (`--ssh-agent`) and changed later (`devvm ssh-agent on`, `devvm` or `off`) ([design](design.md#ssh-agent-forwarding-on-docker)): no socket is mounted into a container, so only ssh sessions forward an agent, as Lima's do.
+
+- **Your shell,** an ssh session once the start ran ssh, forwards the agent the VM's choice names: yours (`SSH_AUTH_SOCK`), devvm's own, or none.
+- **The ssh config's entry,** for editors, `ssh` and `git`, forwards the one the VM's choice names (`ForwardAgent`, and `IdentityAgent` for devvm's), an explicit no included, as on Lima.
+- **Nothing else in the VM has one:** devvm's setup and other commands run through `docker exec`, and the port forwarder forwards none. A program in the VM reaches the agent only while a session that forwards it is open.
+- **A change** applies to your shell's next session; turning forwarding on, from the VM's next start (`devvm restart`). The ssh config's entry follows the VM's choice from devvm's next launch, any folder's, as on Lima: turned on, `ssh` by name and editors forward the agent before the restart.
 
 ## Shared tools
 

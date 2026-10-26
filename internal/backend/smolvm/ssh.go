@@ -1,28 +1,17 @@
 package smolvm
 
 import (
-	"bytes"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
-	"encoding/binary"
-	"encoding/pem"
 	"errors"
-	"io/fs"
-	"maps"
 	"net"
-	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/state"
 )
 
 // ssh for editors is emulated, and reviewed: smolvm runs no sshd, so devvm
@@ -34,11 +23,11 @@ import (
 //     sshd starts: no two VMs made from one pack share them, and devvm
 //     reads them through smolvm's exec, as it does on Lima;
 //   - sshd runs on devvm's own config (services.sh): the VM's user alone,
-//     with the VM's own key (sshKey) alone, no passwords; local forwarding
-//     only, no remote forwarding, tunnels or X11. Root in the VM can change
-//     that: what keeps the VM's connections from going out through the
-//     host is the host's ssh, which asks for none of those (devvm's entry
-//     pins its options);
+//     with the VM's own key (sshKey, vmssh.EnsureKey) alone, no passwords;
+//     local forwarding only, no remote forwarding, tunnels or X11. Root in
+//     the VM can change that: what keeps the VM's connections from going
+//     out through the host is the host's ssh, which asks for none of those
+//     (devvm's entry pins its options);
 //   - its guest port, 22, is forwarded from a host loopback port
 //     (sshForward): Confinement.SSHPort, or one of the backend's, kept while
 //     it stays free, never one of the VM's own forwards. It's one of the 64
@@ -53,123 +42,10 @@ const (
 	userPortsMax = maxPorts - 1
 )
 
-// sshComment is the comment of devvm's keys for its smolvm VMs.
-const sshComment = "devvm"
-
 // sshKey is the key devvm's ssh logs in to one VM with, beside its record,
-// made at its first start with ssh: its public half is that VM's only
-// authorized key, so it logs in to no other.
+// made at its first start with ssh.
 func (s *Smolvm) sshKey(vm string) string {
 	return filepath.Join(filepath.Dir(s.Dirs.SmolvmVM(vm)), vm+".key")
-}
-
-// ensureSSHKey makes the VM's key when it's missing (or isn't one of
-// devvm's), and returns its public half as an authorized_keys line, read
-// from the private key itself: one file, written whole.
-func (s *Smolvm) ensureSSHKey(vm string) (string, error) {
-	path := s.sshKey(vm)
-	b, err := os.ReadFile(path) //nolint:gosec // devvm's own file
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", err
-	}
-	if pub, ok := sshPublic(b); ok {
-		return pub, nil
-	}
-	privPEM, pub, err := newSSHKey(sshComment)
-	if err != nil {
-		return "", err
-	}
-	return pub, state.WriteFile(path, privPEM)
-}
-
-// sshPublic returns the public half of an ed25519 key in OpenSSH's format,
-// unencrypted (as newSSHKey writes it), as an authorized_keys line.
-func sshPublic(privPEM []byte) (string, bool) {
-	blk, _ := pem.Decode(privPEM)
-	if blk == nil || blk.Type != "OPENSSH PRIVATE KEY" {
-		return "", false
-	}
-	rest, ok := bytes.CutPrefix(blk.Bytes, []byte("openssh-key-v1\x00"))
-	if !ok {
-		return "", false
-	}
-	var fields [4][]byte
-	for i := range fields {
-		if fields[i], rest, ok = sshField(rest); !ok {
-			return "", false
-		}
-		if i == 2 { // the key count
-			if len(rest) < 4 || binary.BigEndian.Uint32(rest) != 1 {
-				return "", false
-			}
-			rest = rest[4:]
-		}
-	}
-	// cipher none, kdf none, no kdf options, then the public key's blob.
-	blob := fields[3]
-	if string(fields[0]) != "none" || string(fields[1]) != "none" || len(fields[2]) != 0 {
-		return "", false
-	}
-	kt, keyRest, ok := sshField(blob)
-	if pk, _, pok := sshField(keyRest); !ok || !pok || string(kt) != "ssh-ed25519" || len(pk) != ed25519.PublicKeySize {
-		return "", false
-	}
-	if inner, _, iok := sshField(rest); !iok || len(inner) == 0 {
-		return "", false
-	}
-	return "ssh-ed25519 " + base64.StdEncoding.EncodeToString(blob) + " " + sshComment, true
-}
-
-// sshField reads one ssh wire format string from b.
-func sshField(b []byte) (field, rest []byte, ok bool) {
-	if len(b) < 4 {
-		return nil, nil, false
-	}
-	n := int64(binary.BigEndian.Uint32(b))
-	if int64(len(b)-4) < n {
-		return nil, nil, false
-	}
-	return b[4 : 4+n], b[4+n:], true
-}
-
-// sshPubLine is an ed25519 public key line, as newSSHKey writes it.
-var sshPubLine = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]+=* [A-Za-z0-9.-]+\n?$`)
-
-// newSSHKey makes an ed25519 key: the private one in OpenSSH's format,
-// unencrypted, and the public one as an authorized_keys line.
-func newSSHKey(comment string) (privPEM []byte, pubLine string, err error) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, "", err
-	}
-	blob := sshString(nil, []byte("ssh-ed25519"))
-	blob = sshString(blob, pub)
-	var check [4]byte
-	if _, err := rand.Read(check[:]); err != nil {
-		return nil, "", err
-	}
-	inner := append(append([]byte{}, check[:]...), check[:]...)
-	inner = sshString(inner, []byte("ssh-ed25519"))
-	inner = sshString(inner, pub)
-	inner = sshString(inner, priv)
-	inner = sshString(inner, []byte(comment))
-	for i := byte(1); len(inner)%8 != 0; i++ {
-		inner = append(inner, i)
-	}
-	body := sshString([]byte("openssh-key-v1\x00"), []byte("none"))
-	body = sshString(body, []byte("none"))
-	body = sshString(body, nil)
-	body = binary.BigEndian.AppendUint32(body, 1)
-	body = sshString(body, blob)
-	body = sshString(body, inner)
-	privPEM = pem.EncodeToMemory(&pem.Block{Type: "OPENSSH PRIVATE KEY", Bytes: body})
-	return privPEM, "ssh-ed25519 " + base64.StdEncoding.EncodeToString(blob) + " " + comment, nil
-}
-
-// sshString appends b to buf as the ssh wire format's string: its length,
-// then its bytes.
-func sshString(buf, b []byte) []byte {
-	return append(binary.BigEndian.AppendUint32(buf, uint32(len(b))), b...) //nolint:gosec // devvm's own short fields
 }
 
 // sshForward is the host loopback port a VM's ssh is forwarded from at a
@@ -237,30 +113,20 @@ func freePort(ctx context.Context) (int, error) {
 	return 0, errors.New("smolvm: no free port on the host's loopback")
 }
 
-// envName is a variable's name, as services.sh is given those its ssh
-// sessions get.
-var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
 // servicesArgs are services.sh's arguments for a start that runs the VM's
 // sshd: the user, devvm's public key, and the names of the variables its
-// sessions get from the start's environment (env's, and the proxy's under
-// network policy), values never in arguments.
+// sessions get: the proxy's under network policy, then env's.
 func servicesArgs(user, pub string, env map[string]string, proxy bool) []string {
-	var names []string
+	var first []string
 	if proxy {
-		names = slices.Clone(proxyVars)
+		first = proxyVars
 	}
-	for _, k := range slices.Sorted(maps.Keys(env)) {
-		if envName.MatchString(k) {
-			names = append(names, k)
-		}
-	}
-	return append([]string{"ssh", user, pub}, names...)
+	return vmssh.ServicesArgs(user, pub, first, env)
 }
 
 // SSH returns how ssh reaches a running VM whose start ran its sshd: its
 // forward on the host's loopback, the VM's user, and devvm's key alone.
-// A VM started without it gets smolvm_no_ssh.
+// A VM started without it gets vm_no_ssh.
 func (s *Smolvm) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
 	m, err := s.inspect(ctx, vm)
 	if err != nil {
@@ -275,9 +141,9 @@ func (s *Smolvm) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) 
 	}
 	switch {
 	case r.NoSSHD:
-		return backend.SSHTarget{}, msg.SmolvmNoSshd(vm)
+		return backend.SSHTarget{}, msg.VMNoSshd(vm)
 	case r.SSHPort == 0 || !r.SSHUp:
-		return backend.SSHTarget{}, msg.SmolvmNoSSH(vm)
+		return backend.SSHTarget{}, msg.VMNoSSH(vm)
 	}
 	name, _, err := s.user()
 	if err != nil {

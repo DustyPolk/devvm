@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -15,8 +16,15 @@ import (
 // sets on every listener: with it, macOS and the BSDs let a listener on
 // one address (127.0.0.1:5432) take a port another program has on every
 // address (*:5432), and with it that program's connections to that
-// address. Without it, the port must be free on every address.
+// address. Without it, the port must be free on every address. Linux
+// refuses that bind with it too, while a socket listens on the port: there
+// it's kept, as without it a port this listener's connections left in
+// TIME_WAIT can't be listened on again, by anyone, for a minute.
 func ListenExclusive(ctx context.Context, network, addr string) (net.Listener, error) {
+	if runtime.GOOS == "linux" {
+		var lc net.ListenConfig
+		return lc.Listen(ctx, network, addr)
+	}
 	lc := net.ListenConfig{Control: func(_, _ string, c syscall.RawConn) error {
 		var serr error
 		if err := c.Control(func(fd uintptr) {

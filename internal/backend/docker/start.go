@@ -174,7 +174,7 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	}
 	r := record{
 		Image: img, Project: spec.Project, CloneAt: spec.CloneAt, AgentDirs: slices.Clone(spec.AgentDirs),
-		Tools: spec.Tools != "",
+		Tools: spec.Tools != "", Forwarding: spec.AgentForwarding, PortsAll: spec.Ports.All, Ports: slices.Clone(spec.Ports.Ranges),
 	}
 	c, err := d.vmConfig(vm, r, backend.NetDirect, nil)
 	if err != nil {
@@ -214,15 +214,11 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	return d.create(ctx, msg.Creating(vm), vm, d.imageRef(img), map[string]string{kindLabel: kindVM, configLabel: c.hash()}, c, cpus, mem)
 }
 
-// checkCreate checks what CreateVM is asked for: a valid image key, the
-// image built, no container by the VM's name, and ports none (not
-// emulated yet).
+// checkCreate checks what CreateVM is asked for: a valid image key, no
+// disk size, the image built, and no container by the VM's name.
 func (d *Docker) checkCreate(ctx context.Context, img string, spec backend.VMSpec) error {
 	if !keyPattern.MatchString(img) {
 		return fmt.Errorf("docker: invalid image key %q", img)
-	}
-	for _, f := range append(spec.Ports.Features(), boolFeature(spec.AgentForwarding, backend.FeatureAgentForwarding)...) {
-		return msg.BackendLacks(Name, string(f), spec.Name)
 	}
 	if spec.Size.DiskGiB > 0 {
 		return msg.BackendLacks(Name, string(backend.FeatureDisk), spec.Name)
@@ -238,14 +234,6 @@ func (d *Docker) checkCreate(ctx context.Context, img string, spec backend.VMSpe
 	return nil
 }
 
-// boolFeature is f when on, else none.
-func boolFeature(on bool, f backend.Feature) []backend.Feature {
-	if on {
-		return []backend.Feature{f}
-	}
-	return nil
-}
-
 // Start starts a stopped container, then what base's services do at boot
 // on Lima (services.sh, Docker's daemon left out): containers run no init
 // system. A running one is left as it is.
@@ -254,15 +242,13 @@ func boolFeature(on bool, f backend.Feature) []backend.Feature {
 // the VM wants now (its mounts, network and environment, as config has
 // them): where they differ, it's made again from a commit of its own
 // (remake), with the same name and volumes. The shared tools' volume is
-// brought up to the share first (syncTools).
+// brought up to the share first (syncTools). With c.SSH, services.sh
+// writes its sshd's config and host key, which is pinned (ssh.go); its
+// ssh sessions forward the agent c chooses (agent.go); its forwarder
+// starts once that's done, for the ports it forwards (ports.go).
 func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) error {
 	if f := c.Features(); c.Net == backend.NetProxy {
 		return msg.BackendLacks(Name, string(f[0]), vm)
-	}
-	if c.Ports != nil {
-		if f := c.Ports.Features(); len(f) > 0 {
-			return msg.BackendLacks(Name, string(f[0]), vm)
-		}
 	}
 	ct, err := d.vm(ctx, vm)
 	if err != nil {
@@ -275,7 +261,47 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 	if err != nil {
 		return err
 	}
-	want, err := d.vmConfig(vm, r, c.Net, c.Env)
+	if err := d.prepare(ctx, vm, ct, &r, c); err != nil {
+		return err
+	}
+	// Recorded before the start: one that fails leaves it without ssh.
+	r.SSHUp, r.NoSSHD, r.Started, r.Agent = false, false, "", sessionAgent(r, c)
+	if err := d.writeRecord(vm, r); err != nil {
+		return err
+	}
+	d.Forwards.Stop(vm)
+	if err := d.Runner.Run(ctx, msg.Starting(vm), d.docker(ctx, "container", "start", vm)); err != nil {
+		return backend.Logged(msg.StartFailed(vm))
+	}
+	sshd, err := d.sshdArgs(ctx, vm, &r, c)
+	if err != nil {
+		return err
+	}
+	if err := d.services(ctx, vm, r, sshd); err != nil {
+		return err
+	}
+	if ct, err = d.vm(ctx, vm); err != nil {
+		return err
+	}
+	key := ""
+	if sshd != nil {
+		if key, err = d.pinHostKey(ctx, vm); err != nil {
+			return err
+		}
+	}
+	r.Started, r.SSHUp = ct.State.StartedAt, sshd != nil
+	if err := d.writeRecord(vm, r); err != nil {
+		return err
+	}
+	d.forward(vm, ct, r, c, key)
+	return nil
+}
+
+// prepare gets a stopped VM's container ready for a start with c: the
+// shared tools' volume brought up to the share, and the container made
+// again where what Docker fixed differs from what the VM wants.
+func (d *Docker) prepare(ctx context.Context, vm string, ct container, r *record, c backend.Confinement) error {
+	want, err := d.vmConfig(vm, *r, c.Net, c.Env)
 	if err != nil {
 		return err
 	}
@@ -285,35 +311,31 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 			return err
 		}
 	}
-	if ct.Config.Labels[configLabel] != want.hash() {
-		for _, m := range append([]string{r.Project}, r.AgentDirs...) {
-			if m == "" {
-				continue
-			}
-			if err := d.checkShared(m); err != nil {
-				return err
-			}
+	if ct.Config.Labels[configLabel] == want.hash() {
+		return nil
+	}
+	for _, m := range append([]string{r.Project}, r.AgentDirs...) {
+		if m == "" {
+			continue
 		}
-		if err := d.remake(ctx, vm, ct, &r, want); err != nil {
+		if err := d.checkShared(m); err != nil {
 			return err
 		}
 	}
-	if err := d.Runner.Run(ctx, msg.Starting(vm), d.docker(ctx, "container", "start", vm)); err != nil {
-		return backend.Logged(msg.StartFailed(vm))
-	}
-	return d.services(ctx, vm, r)
+	return d.remake(ctx, vm, ct, r, want)
 }
 
-// services runs services.sh in a running container, without Docker's
-// daemon (dockerd can't run in an unprivileged container), then gives a
-// --clone VM's user its clone's folder, a volume's root; a failure stops
-// it.
-func (d *Docker) services(ctx context.Context, vm string, r record) error {
+// services runs services.sh in a running container, with args (its sshd's,
+// ssh.go), without Docker's daemon (dockerd can't run in an unprivileged
+// container) and its sshd's daemon (each connection runs its own,
+// Connect), then gives a --clone VM's user its clone's folder, a volume's
+// root; a failure stops it.
+func (d *Docker) services(ctx context.Context, vm string, r record, args []string) error {
 	script, err := d.script("container/services.sh")
 	if err != nil {
 		return err
 	}
-	cmd := d.asRoot(ctx, vm, []string{"DEVVM_DOCKERD=off"})
+	cmd := d.asRoot(ctx, vm, []string{"DEVVM_DOCKERD=off", "DEVVM_SSHD=inetd"}, args...)
 	cmd.Stdin = bytes.NewReader(script)
 	err = d.Runner.Run(ctx, msg.M{}, cmd)
 	if err == nil && r.CloneAt != "" {

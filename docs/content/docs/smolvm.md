@@ -67,7 +67,7 @@ Emulated, and reviewed: `devvm ssh`, `devvm code`, `--clone` and the [ssh config
 - **Agent forwarding** is the entry's, as on Lima: `ForwardAgent` as the VM's [SSH agent](ssh.md#agent-forwarding) choice says. smolvm forwards one of its own too ([below](#ssh-agent-forwarding)).
 - **The same environment as devvm's own commands:** sessions get `/etc/environment` and, with network policy, the proxy's settings, a login's or not.
 
-A VM running since a start without ssh (from an older devvm) gets no entry, and `devvm ssh` says to restart it (`smolvm_no_ssh`). A VM whose image has no sshd (made before devvm installed one) starts and runs without ssh, warned (`smolvm_no_sshd`): a VM made after `devvm rebuild` has it.
+A VM running since a start without ssh gets no entry, and `devvm ssh` says to restart it (`vm_no_ssh`). A VM whose image has no sshd starts and runs without ssh, warned (`vm_no_sshd`): a VM made after `devvm rebuild` has it.
 
 ## Every port
 
@@ -76,7 +76,7 @@ Emulated, and reviewed ([design](design.md#every-port-on-smolvm)): a VM that for
 - **What it forwards:** every TCP port from 1024 up that a server in the VM listens on, on the VM's loopback (`127.0.0.1`, `::1`) or all its addresses, to the same port on your machine's `127.0.0.1` and `::1`, within a few seconds of the server starting; the forward goes when the server does. At most 256 at once.
 - **What it never takes:** a port a program on your machine has, on any address (that program keeps it, and its connections; the forward waits for the VM's server to stop and start again), and a port devvm records for any VM (its ssh, proxy and decider ports, and the ports VMs list), even while it's free. A program that starts on a port after it's forwarded can still bind it on all addresses, and then its `localhost` connections reach the VM, as on Lima.
 - **How it reaches the VM:** over the VM's [ssh](#ssh-for-editors), with the VM's own key and its host key read through smolvm, asking for no forwarding into your machine: the VM learns of each connection only as one to its own loopback, and opens none to your machine. With network policy, the VM still reaches nothing but its proxy.
-- **Its process** is `devvm _smolvm-ports`, one per VM, started after the VM's sshd and ended with it; `devvm stop` stops it. Its log is `~/.local/share/devvm/smolvm/vms/<vm>.ports.log`. A VM without ssh (an image without sshd) forwards no ports, warned (`smolvm_ports_no_ssh`); one whose forwarder doesn't start runs on, warned with its log (`smolvm_ports_failed`).
+- **Its process** is `devvm _smolvm-ports`, one per VM, started after the VM's sshd and ended with it; `devvm stop` stops it. Its log is `~/.local/share/devvm/smolvm/vms/<vm>.ports.log`. A VM without ssh (an image without sshd) forwards no ports, warned (`ports_no_ssh`); one whose forwarder doesn't start runs on, warned with its log (`ports_forward_failed`).
 
 ## SSH agent forwarding
 

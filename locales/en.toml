@@ -184,10 +184,10 @@ other = "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}
 description = "port is the guest port of the VM's sshd (22)"
 other = "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
 
-[smolvm_no_ssh]
+[vm_no_ssh]
 other = "{{.vm}} was started without ssh: devvm restart starts it with it"
 
-[smolvm_no_sshd]
+[vm_no_sshd]
 other = "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
 
 [smolvm_ssh_port_forwarded]
@@ -197,10 +197,10 @@ other = "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave
 [smolvm_no_agent]
 other = "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
 
-[smolvm_ports_no_ssh]
+[ports_no_ssh]
 other = "{{.vm}} runs without ssh, so none of its ports are forwarded"
 
-[smolvm_ports_failed]
+[ports_forward_failed]
 other = "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
 
 [docker_host_unsupported]
@@ -247,6 +247,9 @@ other = "Docker Desktop doesn't share {{.path}} with containers: add it in Setti
 
 [docker_mount_path]
 other = "Docker can't mount {{.path}}: its path has a comma or a quote"
+
+[docker_ssh_path]
+other = "devvm's ssh config can't name {{.path}}: it has a quote, a backslash, a percent sign or a control character"
 
 [docker_container_foreign]
 other = "Docker has a container named {{.name}} that isn't this devvm's: remove or rename it with docker"
@@ -1340,9 +1343,13 @@ other = "{{.vm}} has no network policy, so Claude Code's MCP servers' env values
 description = "reason is an error from the system or the flag parser, in English"
 other = "network policy proxy: {{.reason}}"
 
-[smolvm_forwarder_failed]
+[forwarder_failed]
 description = "reason is an error from the system or the flag parser, in English"
-other = "smolvm port forwarder: {{.reason}}"
+other = "port forwarder: {{.reason}}"
+
+[docker_connect_failed]
+description = "reason is an error from the system, docker or the flag parser, in English"
+other = "couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}"
 
 [bad_secret_service]
 other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"

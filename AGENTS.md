@@ -7,7 +7,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | Path | What |
 | --- | --- |
 | `cmd/devvm/` | the entry point: `ui.Main` makes the run's UI and runs the root command with it; the only `os.Exit` |
-| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `limactl`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_smolvm-ports`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
+| `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `limactl`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_smolvm-ports`, `_docker-ports`, `_docker-connect`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
 | `internal/vm/` | `Env` (`env.go`: shared dependencies, finding and starting the folder's VM); `Launch`: a new VM (`up.go`), an existing one (`existing.go`), `ssh.go`, agents' mounts; `Lifecycle` (`lifecycle.go`); `Settings` (`settings.go`, `size.go`, `ports.go`, `sshagent.go`); `Net` (`network.go`, `secret.go`); `--clone` (`clone.go`); the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/`, `internal/sshagent/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line; each VM's SSH agent choice, devvm's own agent and its keys |
@@ -16,7 +16,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
-| `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `registry/` (every backend's), `lima/`, `smolvm/`, `docker/` (both experimental) |
+| `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `registry/` (every backend's), `lima/`, `smolvm/`, `docker/` (both experimental), `vmssh/` (their ssh: VMs' keys, the port forwarder) |
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files, `assets.FS` written out where a path is needed (errors aren't messages yet) |

@@ -21,6 +21,9 @@ stdout '^doctor_ok backend=docker version=\S+$'
 stdout '^FEATURE +DOCKER +LIMA +SMOLVM$'
 stdout '^build-confinement +native +native +native$'
 stdout '^egress-proxy +none +native +emulated$'
+stdout '^ssh +emulated +native +emulated$'
+stdout '^ports-all +emulated +native +emulated$'
+stdout '^agent-toggle +emulated +native +emulated$'
 stdout '^docker-layer +none +native +native$'
 exec sh -c ': > "$STUB_DIR/docker-denied"'
 ! exec devvm doctor --backend docker
@@ -47,19 +50,14 @@ exec devvm images
 stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +docker$'
 
 # What it lacks is refused in one line naming the VM, before anything is
-# made: every port (the default), network policy, a disk size, SSH agent
-# forwarding, the docker layer.
+# made: network policy, a disk size, the docker layer.
 mkdir $WORK/web
 cd $WORK/web
 exec sh -c ': > "$STUB_LOG"'
-! exec devvm --backend docker --from $PIN --no-network-policy base
-stderr '^devvm: backend_lacks backend=docker feature=ports vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN --network-policy --ports none base
 stderr '^devvm: backend_lacks backend=docker feature=egress-proxy vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none --disk 200 base
 stderr '^devvm: backend_lacks backend=docker feature=disk vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm --backend docker --from $PIN --no-network-policy --ports none --ssh-agent base
-stderr '^devvm: backend_lacks backend=docker feature=agent-forwarding vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
 stderr '^devvm: backend_lacks backend=docker feature=docker-layer vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
@@ -68,8 +66,9 @@ stub_calls
 
 # A VM: its home a volume of its own, the project folder bind-mounted,
 # the tools volume read-only, its hostname the folder's; started, its
-# services run without Docker's daemon, set up, then the shell. A default
-# disk size doesn't apply to it, said.
+# services run without Docker's daemon and with its sshd's config, set
+# up, then the shell, an ssh session forwarding no agent. A default disk
+# size doesn't apply to it, said.
 exec devvm size -g --disk 150
 exec sh -c ': > "$STUB_LOG"'
 exec devvm --backend docker --from $PIN --no-network-policy --ports none base
@@ -80,8 +79,10 @@ stdout '^docker volume create --label devvm\.data=\S+ devvm-web-[0-9a-f]{14}-hom
 stdout '^docker volume create --label devvm\.data=\S+ devvm-tools-[0-9a-f]{8}$'
 stdout '^docker container create --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --label devvm\.config=[0-9a-f]{16} --label devvm\.kind=vm --init --user 0:0 --entrypoint sleep --cpus 4 --memory \d+m --memory-swap \d+m --hostname web --network bridge --mount type=bind,src=\S+/web,dst=\S+/web --mount type=volume,src=devvm-tools-[0-9a-f]{8},dst=/mnt/devvm-tools,readonly --mount type=volume,src=devvm-web-[0-9a-f]{14}-home,dst=/home/\S+\.guest devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
 stdout '^docker container start devvm-web-[0-9a-f]{14}$'
-stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off devvm-web-[0-9a-f]{14} sh -s --$'
-stdout '^docker exec -i -u \S+ -w \S+/web .* devvm-web-[0-9a-f]{14} sh -c .* sh bash -l$'
+stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd devvm-web-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- ''\S+/web'' && exec bash -l$'
+! stdout 'devvm-web-[0-9a-f]{14} sh -c .* sh bash -l$'
+! stderr backend_unreviewed
 exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +docker +\S+/web$'
@@ -119,6 +120,64 @@ stdout '^docker volume rm devvm-web-[0-9a-f]{14}-home$'
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-web-*'
 exec devvm ls
 ! stdout devvm-web
+
+# Its emulations, reviewed, so unwarned: ssh for editors through docker
+# exec, nothing published (devvm's ssh config names devvm _docker-connect
+# as ProxyCommand); every port, through a forwarder of devvm's over that
+# ssh (its host key read through docker exec and pinned); the shell an ssh
+# session forwarding the user's agent.
+mkdir $WORK/emu
+cd $WORK/emu
+exec sh -c 'printf "0100007F:B8E0\n" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
+exec devvm --backend docker --from $PIN --no-network-policy --ssh-agent base
+! stderr backend_unreviewed
+! stderr 'ports_(no_ssh|forward_failed)'
+stub_calls
+! stdout 'docker container create .* (-p|--publish) '
+stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} sh -c if \[ -x /usr/sbin/sshd \]; then echo sshd; else echo none; fi$'
+stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd devvm-emu-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} cat /etc/ssh/ssh_host_ed25519_key\.pub$'
+stdout '^ssh -F none -M -S \S+/data/devvm/run/docker-[0-9a-f]{16}\.ctl -T .* -o IdentityAgent=none -o IdentityFile=\S+/docker/vms/devvm-emu-[0-9a-f]{14}\.key .* -o HostKeyAlias=devvm-emu-[0-9a-f]{14} .* -o ForwardAgent=no .* -o ProxyCommand=''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}'' -l \S+ devvm-emu-[0-9a-f]{14} sh -s$'
+stdout '^ssh -F none -T -o ControlMaster=no -o ControlPath=none .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* -o ProxyCommand=.* -l \S+ devvm-emu-[0-9a-f]{14} cd -- ''\S+/emu'' && exec bash -l$'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*.ports.log'
+stdout '^devvm ports: port 47328: forwarded$'
+grep '^Host devvm-emu devvm-emu-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  ProxyCommand ''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}''$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
+! grep '^  Port ' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^devvm-emu-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/known_hosts
+exec devvm ssh
+stdout '^ssh_host_info dir=\S+/emu host=devvm-emu$'
+
+# The agent turned off while it runs: from its next start; then none.
+exec devvm ssh-agent off
+stdout '^==> agent_set_running mode=off vm=devvm-emu-[0-9a-f]{14}$'
+! stderr backend_unreviewed
+exec devvm stop
+! exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stub_calls
+stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- ''\S+/emu'' && exec bash -l$'
+grep '^  ForwardAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
+
+# Listed ports: through the forwarder too, those alone; one a program on
+# this machine has is left out, warned.
+exec devvm stop
+exec devvm ports 47328,9-10
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stub_calls
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*.ports.log'
+stdout '^devvm ports: forwarding devvm-emu-[0-9a-f]{14}''s ports$'
+exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
+stdout ' -only 47328,9-10$'
+
+# rm deletes its forwarder, its keys and its entry.
+exec devvm rm -f
+! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*'
+! grep devvm-emu $XDG_CONFIG_HOME/devvm/ssh_config
+rm $STUB_DIR/guest-ports
 
 # On Docker Desktop builds are refused, as its containers reach the host's
 # loopback: in one line, nothing made. An image built already is used.

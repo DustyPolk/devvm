@@ -10,7 +10,7 @@
 //
 // Network policy is emulated, reviewed (start.go); ssh for editors is
 // emulated, reviewed (ssh.go); forwarding every port is emulated,
-// reviewed (forward.go); turning agent forwarding on or off later is
+// reviewed (forward.go, vmssh.Forwarder); turning agent forwarding on or off later is
 // emulated, reviewed (agent.go).
 package smolvm
 
@@ -34,9 +34,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -100,7 +100,7 @@ type Smolvm struct {
 	AddCleanup  func(f func(context.Context)) (remove func())
 	Interrupted func() bool
 	// Forwards runs the port forwarders of VMs that forward every port.
-	Forwards Forwards
+	Forwards vmssh.Forwards
 }
 
 // UI is where the backend prints, the run log its commands run into, the
@@ -138,9 +138,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 		FreePort: freePort, PortFree: platform.PortFree,
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		Forwards: Forwards{
-			Dirs: d, Self: self, Detach: platform.StartDetached, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
-		},
+		Forwards: newForwards(d, self),
 	}
 }
 

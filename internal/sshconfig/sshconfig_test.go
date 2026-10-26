@@ -330,6 +330,42 @@ func TestEntriesWithRealSSH(t *testing.T) {
 	}
 }
 
+// A backend that reaches its VMs through a command of its own (Docker's)
+// gets it as ProxyCommand, in place of none, and no Port; ssh reads it so,
+// whatever a Host * of the user's says. One whose command has a newline
+// gets no entry.
+func TestWriteProxyCommand(t *testing.T) {
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	proxy := "'/bin/devvm' '_docker-connect' '-data' '/a b' '" + web + "'"
+	f.Target = backend.SSHTarget{Host: web, User: "u", ProxyCommand: proxy}
+	if err := c.Write(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got := read(t, c.Dirs.SSHConfig())
+	want := strings.Replace(pinned, "  ProxyCommand none\n", "  ProxyCommand "+proxy+"\n", 1) + "  Hostname " + web + "\n  User u\n"
+	if !strings.HasSuffix(got, want) || strings.Contains(got, "  Port ") || strings.Count(got, "  ProxyCommand ") != 1 {
+		t.Errorf("ssh config:\n%s", got)
+	}
+	if sshPath, err := exec.LookPath("ssh"); err == nil {
+		user := filepath.Join(t.TempDir(), "config")
+		if err := os.WriteFile(user, []byte("Include "+c.Dirs.SSHConfig()+"\nHost *\n  ProxyCommand nc %h %p\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.CommandContext(t.Context(), sshPath, "-G", "-F", user, "devvm-web").CombinedOutput() //nolint:gosec // the test's own config
+		if err != nil || !slices.Contains(strings.Split(string(out), "\n"), "proxycommand "+proxy) {
+			t.Errorf("ssh -G: %v\n%s", err, out)
+		}
+	}
+	f.Target.ProxyCommand = "x\ny"
+	if err := c.Write(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, c.Dirs.SSHConfig()); got != header {
+		t.Errorf("a newline: %q", got)
+	}
+}
+
 func TestParseHostKeys(t *testing.T) {
 	out := "ssh-ed25519 AAAAC3Nza root@vm\necdsa-sha2-nistp256 AAAAE2Vj= c\n\nssh-rsa\nrsa AAAA\nssh-x AA AA\nssh-y A\"A\n"
 	want := "v ssh-ed25519 AAAAC3Nza\nv ecdsa-sha2-nistp256 AAAAE2Vj=\nv ssh-x AA\n"

@@ -11,9 +11,10 @@
 # volumes are folders in $STUB_DIR/docker/{containers,images,volumes}/NAME, each with a labels file
 # (KEY=VALUE lines) and the rest one file per field (status, image, cpus, memory, hostname, network,
 # mounts, layers, env), which create, start, stop, rm, rename, commit, import, update, volume create
-# and rm keep up to date; ls, inspect and system df answer from them. $STUB_DIR/docker-foreign-NAME
+# and rm keep up to date; ls, inspect and system df answer from them. A container has an ID (found
+# by inspect and exec too) and a start time, which each start changes. $STUB_DIR/docker-foreign-NAME
 # gives a container or volume another label (someone else's). exec answers the libc check with
-# gnu, keeps the tar stream a VM's setup is sent as $STUB_DIR/sync.tar, appends a script's second
+# gnu, the sshd probe with sshd (none when $STUB_DIR/no-sshd exists), the host key's cat with one, keeps the tar stream a VM's setup is sent as $STUB_DIR/sync.tar, appends a script's second
 # line to $STUB_DIR/scripts when one is fed to bash -s or sh -s (failing with $STUB_DIR/script-fails
 # for bash -s), and the tools build's build.sh writes the images it's asked for into the folder it
 # mounts. run (the tools' unpacking) appends its arguments after -- to $STUB_DIR/unpacked.
@@ -54,6 +55,10 @@ matches() { local d=$1 f; shift
 # labels_of NAME KIND: an object's labels file, someone else's when docker-foreign-NAME exists.
 foreign() { [[ -e $STUB_DIR/docker-foreign-$1 ]]; }
 missing() { echo "Error response from daemon: No such $1: $2" >&2; exit 1; }
+# by_id NAME: the name of the container with that ID, else NAME.
+by_id() { local d
+  for d in "$STUB_DIR"/docker/containers/*; do [[ -f $d/id && $(cat "$d/id") == "$1" ]] && { basename "$d"; return; }; done
+  echo "$1"; }
 
 # Options: what devvm passes, read into variables; the rest are the arguments.
 name="" labels=() filters=() mounts=() envs=() changes=() format="" cpus="" memory="" hostname="" network=""
@@ -92,11 +97,15 @@ case "$cmd" in
     if $size; then [[ -d $C/${args[0]} ]] || missing container "${args[0]}"; field "$C/${args[0]}" sizerw 1048576; exit 0; fi
     out="" sep=""
     for n in "${args[@]}"; do
+      n=$(by_id "$n")
       d=$C/$n
       [[ -d $d ]] || missing container "$n"
       lab=$(json_labels "$d")
       foreign "$n" && lab='{"devvm.data":"/elsewhere"}'
-      out+="$sep{\"Name\":\"/$n\",\"State\":{\"Status\":\"$(field "$d" status)\"},\"Config\":{\"Labels\":$lab,\"Env\":[]},"
+      if [[ $format == "{{.State.Running}} {{.State.StartedAt}}" ]]; then
+        [[ $(field "$d" status) == running ]] && echo "true $(field "$d" started)" || echo "false $(field "$d" started)"; exit 0
+      fi
+      out+="$sep{\"Id\":\"$(field "$d" id)\",\"Name\":\"/$n\",\"State\":{\"Status\":\"$(field "$d" status)\",\"StartedAt\":\"$(field "$d" started)\"},\"Config\":{\"Labels\":$lab,\"Env\":[]},"
       out+="\"HostConfig\":{\"NanoCpus\":$(( $(field "$d" cpus 0) * 1000000000 )),\"Memory\":$(field "$d" memory 0)},\"Image\":\"$(field "$d" image)\"}"
       sep=,
     done
@@ -113,11 +122,14 @@ case "$cmd" in
     echo "$hostname" > "$d/hostname"; echo "$network" > "$d/network"
     printf '%s\n' ${mounts[@]+"${mounts[@]}"} > "$d/mounts"
     printf '%s\n' ${envs[@]+"${envs[@]}"} > "$d/env"
+    echo "id-$name-$RANDOM" > "$d/id"
     [[ ! -d $I/$img ]] || cp "$I/$img/layers" "$d/layers"
     exit 0 ;;
   "container start")
     [[ -d $C/${args[0]} ]] || missing container "${args[0]}"
     [[ ! -e $STUB_DIR/docker-start-fails ]] || exit 1
+    n=$(( $(field "$C/${args[0]}" starts 0) + 1 )); echo "$n" > "$C/${args[0]}/starts"
+    echo "2026-01-01T00:00:0${n}Z" > "$C/${args[0]}/started"
     echo running > "$C/${args[0]}/status"; exit 0 ;;
   "container stop")
     [[ -d $C/${args[0]} ]] || missing container "${args[0]}"
@@ -203,10 +215,12 @@ case $verb in
     [[ -z $memory ]] || echo $(( ${memory%m} * 1048576 )) > "$d/memory"
     exit 0 ;;
   exec)
-    n=${args[0]} line="${args[*]}"
+    n=$(by_id "${args[0]}") line="${args[*]}"
     [[ -d $C/$n ]] || missing container "$n"
     [[ $(field "$C/$n" status) == running ]] || { echo "container $n is not running" >&2; exit 1; }
     if [[ $line == *"command -v apk"* ]]; then cat "$STUB_DIR/build-libc" 2>/dev/null || echo gnu; exit 0; fi
+    if [[ $line == *"then echo sshd"* ]]; then if [[ -e $STUB_DIR/no-sshd ]]; then echo none; else echo sshd; fi; exit 0; fi
+    if [[ $line == *"/etc/ssh/ssh_host_"* ]]; then echo "ssh-ed25519 AAAAstub root@stub"; exit 0; fi
     if [[ $line == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; exit 0; fi
     if [[ $n == devvm-tools-build-* && $line == *" bash -s -- "* ]]; then
       tout=$(sed -n 's/^type=bind,src=\([^,]*\),dst=\/mnt\/devvm-tools$/\1/p' "$C/$n/mounts")

@@ -3,8 +3,8 @@
 # VM. Logs every call to $STUB_LOG, and runs the git command it's given
 # here, on $STUB_DIR/vmfs/DIR (the VM's files, as the limactl stub keeps
 # them). With $STUB_DIR/ssh-fails, or for anything else, it fails as ssh
-# does. A master connection (-M, a smolvm VM's port forwarder's) reads the script it's
-# fed, answers it with $STUB_DIR/guest-ports (what listens in the VM, as /proc/net/tcp has
+# does. A login shell in a folder (a Docker VM's shell over ssh) reads its input and ends. A
+# master connection (-M, a smolvm or Docker VM's port forwarder's) reads the script it's fed, answers it with $STUB_DIR/guest-ports (what listens in the VM, as /proc/net/tcp has
 # it) and ".", then waits to be stopped.
 set -euo pipefail
 echo "ssh $*" >> "$STUB_LOG"
@@ -20,5 +20,7 @@ case $cmd in
   "git-receive-pack "* | "git-upload-pack "*)
     eval "set -- $cmd"
     exec git "${1#git-}" "$STUB_DIR/vmfs$2" ;;
+  "cd -- "*" && exec bash -l")
+    cat > /dev/null; exit 0 ;;
 esac
 exit 255

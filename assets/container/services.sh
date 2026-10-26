@@ -12,6 +12,8 @@
 # (a defence for an honest VM: root here can change it), to IPv4 or IPv6; its sessions get /etc/environment and each
 # VAR from this script's environment (the proxy's under network policy), as devvm's own commands
 # do. The config holds them, so it's root's alone. devvm asks for it only once it found sshd there.
+# With DEVVM_SSHD=inetd (Docker's containers) no sshd daemon starts and nothing listens: each
+# connection runs sshd -i on this config, through docker exec (devvm _docker-connect).
 set -eu
 i=0
 while [ "$i" -lt 64 ]; do
@@ -88,7 +90,7 @@ if [ "${1:-}" = ssh ]; then
   } > "$conf"
   umask 022
   "$sshd" -t -f "$conf"
-  "$sshd" -f "$conf" -E /var/log/devvm-sshd.log
+  [ "${DEVVM_SSHD:-}" = inetd ] || "$sshd" -f "$conf" -E /var/log/devvm-sshd.log
 fi
 pid=$(cat /run/docker.pid 2>/dev/null || true)
 if [ "${DEVVM_DOCKERD:-}" != off ] && command -v dockerd >/dev/null 2>&1 && ! { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; }; then

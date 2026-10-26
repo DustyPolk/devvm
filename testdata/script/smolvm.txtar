@@ -47,7 +47,7 @@ cd $WORK/all
 exec sh -c 'printf "0100007F:B8DF\n00000000:0050\n" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
 exec devvm --backend smolvm --from $PIN --no-network-policy base
 ! stderr 'backend_unreviewed'
-! stderr 'smolvm_ports'
+! stderr 'ports_'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-all-[0-9a-f]{14} .* -v \S+:/mnt/devvm-tools:ro --ssh-agent$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-all-[0-9a-f]{14} -- cat /etc/ssh/ssh_host_ed25519_key\.pub$'
@@ -185,12 +185,12 @@ stdout '^ssh_host_info dir=\S+/sshd host=devvm-sshd$'
 # entry, and devvm ssh says so.
 exec sh -c 'touch "$STUB_DIR/no-sshd"; : > "$STUB_LOG"'
 exec devvm restart
-stderr '^devvm: smolvm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
+stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 stub_calls
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s --$'
 ! grep 'devvm-sshd' $XDG_CONFIG_HOME/devvm/ssh_config
 ! exec devvm ssh
-stderr '^devvm: smolvm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
+stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 rm $STUB_DIR/no-sshd
 exec devvm rm -f
 stdout '^==> deleted vm=devvm-sshd-[0-9a-f]{14}$'

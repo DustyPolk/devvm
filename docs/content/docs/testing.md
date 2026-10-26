@@ -88,7 +88,7 @@ devvm refuses an emulated feature until its review passes, yet the review needs 
 DEVVM_UNREVIEWED=smolvm:ports-all devvm --backend smolvm base
 ```
 
-It's for tests only, of an emulation before its review: none needs it now (smolvm's network policy, ssh for editors, forwarding of every port and agent toggling were checked this way, then reviewed). It never makes a feature a backend lacks usable, and `devvm doctor` still shows the feature `unreviewed`.
+It's for tests only, of an emulation before its review: none needs it now, as every emulation is reviewed. It never makes a feature a backend lacks usable, and `devvm doctor` still shows the feature `unreviewed`.
 
 ## Manual checks
 

@@ -4,69 +4,22 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// A VM's key is OpenSSH's ed25519 format, which ssh-keygen reads back to
-// the same public key, as devvm reads it from the private key; it's made
-// once per VM, one file, mode 600, and again when it's gone or isn't one.
+// A VM's key is beside its record, one per VM.
 func TestSSHKey(t *testing.T) {
-	priv, pub, err := newSSHKey(sshComment)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sshPubLine.MatchString(pub) || !strings.HasPrefix(string(priv), "-----BEGIN OPENSSH PRIVATE KEY-----\n") {
-		t.Fatalf("key: %q\n%s", pub, priv)
-	}
-	if got, ok := sshPublic(priv); !ok || got != pub {
-		t.Errorf("sshPublic = %q, %v; want %q", got, ok, pub)
-	}
-	for _, bad := range [][]byte{nil, []byte("garbage"), priv[:len(priv)/2], []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n")} {
-		if _, ok := sshPublic(bad); ok {
-			t.Errorf("sshPublic(%q) = ok", bad)
-		}
-	}
-	if kg, err := exec.LookPath("ssh-keygen"); err == nil {
-		f := filepath.Join(t.TempDir(), "key")
-		if err := os.WriteFile(f, priv, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		out, err := exec.CommandContext(t.Context(), kg, "-y", "-f", f).Output() //nolint:gosec // the test's own file
-		if err != nil {
-			t.Fatalf("ssh-keygen -y: %v", err)
-		}
-		if strings.Fields(string(out))[1] != strings.Fields(pub)[1] {
-			t.Errorf("ssh-keygen reads %q, want %q", out, pub)
-		}
-	}
-
 	s := newSandbox(t)
 	a, b := "devvm-a-0123456789abcd", "devvm-b-0123456789abcd"
-	first, err := s.ensureSSHKey(a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi, err := os.Stat(s.sshKey(a)); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(s.sshKey(a)) != filepath.Dir(s.Dirs.SmolvmVM(a)) {
-		t.Errorf("%s: %v, %v", s.sshKey(a), fi, err)
-	}
-	if again, err := s.ensureSSHKey(a); err != nil || again != first {
-		t.Errorf("again: %q, %v", again, err)
-	}
-	if other, err := s.ensureSSHKey(b); err != nil || other == first {
-		t.Errorf("another VM's: %q, %v", other, err)
-	}
-	if err := os.WriteFile(s.sshKey(a), []byte("not a key"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if fresh, err := s.ensureSSHKey(a); err != nil || fresh == first || !sshPubLine.MatchString(fresh) {
-		t.Errorf("not a key: %q, %v", fresh, err)
+	if filepath.Dir(s.sshKey(a)) != filepath.Dir(s.Dirs.SmolvmVM(a)) || s.sshKey(a) == s.sshKey(b) {
+		t.Errorf("keys: %s, %s", s.sshKey(a), s.sshKey(b))
 	}
 }
 
@@ -89,7 +42,7 @@ func TestStartSSH(t *testing.T) {
 	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil {
 		t.Fatal(err)
 	}
-	pub, err := s.ensureSSHKey(vm)
+	pub, err := vmssh.EnsureKey(s.sshKey(vm))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +74,7 @@ func TestStartSSH(t *testing.T) {
 	if err := s.writeRecord(vm, r); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SSH(t.Context(), vm); names(err) != "smolvm_no_ssh vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_no_ssh vm="+vm {
 		t.Errorf("sshd not up: %v", err)
 	}
 
@@ -187,7 +140,7 @@ func TestStartSSH(t *testing.T) {
 		got[len(got)-1] != "smolvm machine exec --name "+vm+" -i -- sh -s --" {
 		t.Errorf("without ssh: %q", got)
 	}
-	if _, err := s.SSH(t.Context(), vm); names(err) != "smolvm_no_ssh vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_no_ssh vm="+vm {
 		t.Errorf("without ssh: %v", err)
 	}
 	s.touch(t, "smolvm-foreign-"+vm)
@@ -211,14 +164,14 @@ func TestStartNoSSHD(t *testing.T) {
 	if m, err := s.inspect(t.Context(), vm); err != nil || m.status() != backend.StatusRunning {
 		t.Errorf("not running: %+v, %v", m, err)
 	}
-	if !slices.Equal(warned, []string{"smolvm_no_sshd vm=" + vm}) {
+	if !slices.Equal(warned, []string{"vm_no_sshd vm=" + vm}) {
 		t.Errorf("warned %q", warned)
 	}
 	// services.sh ran the rest, asked for no sshd.
 	if got := s.calls(t); got[len(got)-1] != "smolvm machine exec --name "+vm+" -i -- sh -s --" {
 		t.Errorf("calls: %q", got)
 	}
-	if _, err := s.SSH(t.Context(), vm); names(err) != "smolvm_no_sshd vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_no_sshd vm="+vm {
 		t.Errorf("SSH: %v", err)
 	}
 	if err := s.Delete(t.Context(), vm); err != nil {

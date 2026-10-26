@@ -45,7 +45,12 @@
 #                address reached), a failed build kept, a project VM's mounts, its files the host user's
 #                (uid and gid), its home a volume of its own, size, no Docker inside, what it lacks
 #                refused in one line, agent folders added and removed (its container made again from a
-#                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume.
+#                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume;
+#                ssh for editors', ports' and agent forwarding's emulations (nothing published or
+#                listening, pinned host keys of each VM's own, its own key alone, no forwarding out even
+#                past a hostile sshd, a VM started outside devvm, devvm ssh and code, every port and
+#                listed ports through devvm's forwarder, never a port of this machine's programs or
+#                another VM's, the agent in ssh sessions alone, a --clone VM).
 #                On macOS, the same on a Linux engine in a Lima VM e2e keeps (Lima home
 #                ~/.lt-e2e-go-docker, VM dockerhost: this checkout read-only, devvm built for it here),
 #                then on Docker Desktop: builds refused in one line, then base and the tools copied from
@@ -215,6 +220,7 @@ cleanup() {
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
   pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
+  pkill -f "[_]docker-ports -vm .* -key $XDG_DATA_HOME/" 2>/dev/null       # Docker VMs' forwarders, the sandbox's
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
     "$work/dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log"
@@ -295,12 +301,13 @@ launch() {
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
 # host_port_kept DIR VM PORT CONTROL SERVE: a program on this machine has PORT, which VM lists, on
-# every address (no SO_REUSEADDR): the VM's next start leaves it out, warned, and with servers in the
+# every address (with SO_REUSEADDR, as most servers do, so its ended connections don't hold the port
+# on Linux once it's gone): the VM's next start leaves it out, warned, and with servers in the
 # VM on PORT and CONTROL (SERVE VM PORTS...), PORT's localhost connections still reach the program
 # and CONTROL's the VM. Once the program is gone, the next start forwards PORT again.
 host_port_kept() { local hp out r=1
   (cd "$1" && "$D" stop </dev/null >/dev/null 2>&1) || { echo "stop failed"; return 1; }
-  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5) or die;
+  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5, ReuseAddr => 1) or die;
     while ($c = $s->accept) { print $c "host-program\n"; close $c }' "$3" &
   hp=$!; sleep 0.5
   (cd "$1" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1)
@@ -1285,15 +1292,15 @@ smolssh_squatted() { local p n sq
   sshs -o BatchMode=yes "$3" true; local r=$?
   kill "$sq" 2>/dev/null; wait "$sq" 2>/dev/null
   [[ -n $n && $n != "$p" ]] && (( r == 0 )); }
-# smolssh_nosshd VM DIR: root moves sshd away; devvm's next start warns smolvm_no_sshd, the VM runs
+# smolssh_nosshd VM DIR: root moves sshd away; devvm's next start warns vm_no_sshd, the VM runs
 # with no entry, and devvm ssh says so; sshd put back, a start has ssh again (the control).
 smolssh_nosshd() {
   SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null || return 1
   (cd "$2" && printf 'exit\n' | "${UR[@]}" DEVVM_MESSAGES=names "$D" restart >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
-  if ! grep -qx "devvm: smolvm_no_sshd vm=$1" "$work/last.log" || [[ $(smol_status "$1") != running ]] || grep -q "$1" "$dsc"; then
+  if ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/last.log" || [[ $(smol_status "$1") != running ]] || grep -q "$1" "$dsc"; then
     cat "$work/last.log"; return 1
   fi
-  if (cd "$2" && "${UR[@]}" DEVVM_MESSAGES=names "$D" ssh </dev/null 2>"$work/e") || ! grep -qx "devvm: smolvm_no_sshd vm=$1" "$work/e"; then
+  if (cd "$2" && "${UR[@]}" DEVVM_MESSAGES=names "$D" ssh </dev/null 2>"$work/e") || ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/e"; then
     cat "$work/e"; return 1
   fi
   SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd.away /usr/sbin/sshd </dev/null || return 1
@@ -1797,7 +1804,7 @@ pa=$(newproj smolall)
 vm=$(vm_of "$pa"); [[ -z $vm ]] || created+=("$vm")
 check "the VM forwards every port (the default), with a forwarder of devvm's, none of smolvm's but its ssh's" bash -c "
   [[ -n '$vm' && \$(smol_status '$vm') == running ]] && ! grep -q backend_unreviewed '$work/last.log' &&
-  ! grep -q smolvm_ports '$work/last.log' && [[ -n \$(smolpa_forwarder '$vm') ]] && smolpa_log '$vm' | grep -q \"forwarding $vm's ports\""
+  ! grep -qE 'ports_(no_ssh|forward_failed)' '$work/last.log' && [[ -n \$(smolpa_forwarder '$vm') ]] && smolpa_log '$vm' | grep -q \"forwarding $vm's ports\""
 check "... its machine's process listening on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
 check "... its ssh master reading no config of yours, the VM's key alone, its host key pinned, no forwarding asked for" smolpa_master "$vm"
 smolpa_serve "$vm" 127.0.0.1 47391; smolpa_serve "$vm" ::1 47392; smolpa_serve "$vm" 0.0.0.0 47393; smolpa_serve "$vm" :: 47394
@@ -1927,6 +1934,7 @@ me=$(id -un)
 # in_d VM CMD: CMD in a login shell as the VM's user, as devvm's shell has it; in_root VM CMD: as root.
 in_d() { docker exec -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" "$1" bash -lc "$2" </dev/null; }
 in_root() { docker exec -u 0 "$1" sh -c "$2" </dev/null; }
+export -f in_d in_root; export me
 # mounted VM DEST TYPE RW: the VM's container mounts TYPE (bind, volume) at DEST, read-write or not.
 mounted() { docker container inspect -f '{{range .Mounts}}{{.Type}}|{{.Destination}}|{{.RW}} {{end}}' "$1" 2>/dev/null |
   tr ' ' '\n' | grep -qx "$3|$2|$4"; }
@@ -1965,13 +1973,10 @@ docker_project() {
   in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
   check "devvm stop stops it; devvm starts it again, its disk as it was" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
     [[ \$(d_state $vm) == exited ]] && printf 'cat /var/tmp/e2e-kept\n' | '$D' 2>&1 | grep -qx kept && [[ \$(d_state $vm) == running ]]"
-  q=$(newproj "$1-no"); git -C "$q" init -q; git -C "$q" -c user.name=e2e -c user.email=e2e@example.com commit -q --allow-empty -m e2e
-  check "every port, the default, is refused in one line, nothing made" refused "$q" ports --no-network-policy base
-  check "network policy too" refused "$q" egress-proxy --network-policy --ports none base
+  q=$(newproj "$1-no")
+  check "network policy is refused in one line, nothing made" refused "$q" egress-proxy --network-policy --ports none base
   check "the docker layer too" refused "$q" docker-layer --no-network-policy --ports none docker
   check "a disk size too" refused "$q" disk --no-network-policy --ports none --disk 200 base
-  check "SSH agent forwarding too" refused "$q" agent-forwarding --no-network-policy --ports none --ssh-agent base
-  check "--clone too: it needs ssh" refused "$q" ssh --no-network-policy --ports none --clone base
   check "rm deletes its container, its home volume and its state" bash -c "cd '$p' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
     [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/docker/vms/$vm.json' ]]"
 }
@@ -2022,9 +2027,397 @@ docker_tools() {
   (cd "$t" && quiet "$D" rm -f)
 }
 
+# Docker's emulations (ssh for editors, ports, agent forwarding). Their guarantees: nothing published
+# or listening, each VM's own host keys pinned and its own key the only login, as the VM's user; no
+# forwarding out that devvm's entry lets through, whatever the VM runs as sshd; ports on this
+# machine's loopback alone, never one of its programs' or another VM's; the agent in ssh sessions
+# alone, as the VM's choice says. A home of the checks' own (Docker's own config kept), with an
+# ~/.ssh/config set up as the docs say, whose Host * forwards the agent; ssh gets no agent but
+# throwaway ones; a stub code.
+# d_emu_begin / d_emu_end: into the checks' home, and out again.
+d_emu_begin() {
+  d_real_home=$HOME
+  export DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+  sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc/home/.ssh" "$sc/bin"
+  dsc=$XDG_CONFIG_HOME/devvm/ssh_config kh=$XDG_CONFIG_HOME/devvm/known_hosts
+  printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$dsc" > "$sc/config"
+  cp "$sc/config" "$sc/home/.ssh/config"
+  printf '#!/bin/sh\necho "$*" > %s/code-args\n' "$sc" > "$sc/bin/code"; chmod +x "$sc/bin/code"
+  agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+  export HOME=$sc/home sc dsc kh
+}
+d_emu_end() {
+  kill "$agent_pid" 2>/dev/null; agent_pid=""
+  export HOME=$d_real_home
+}
+# dsh ARGS...: ssh through the checks' config, without an agent. dssh_proxy HOST: the ProxyCommand ssh
+# runs for it. dssh_key VM: its pinned host key. d_procs VM: the commands running in the VM.
+dsh() { env -u SSH_AUTH_SOCK ssh -F "$sc/config" "$@" </dev/null; }
+dssh_proxy() { ssh -G -F "$sc/config" "$1" 2>/dev/null | sed -n 's/^proxycommand //p'; }
+dssh_key() { awk -v n="$1" '$1 == n { print $2, $3 }' "$kh"; }
+d_procs() { docker exec -u 0 "$1" sh -c 'for c in /proc/[0-9]*/cmdline; do tr "\0\n" "  " < "$c"; echo; done 2>/dev/null' </dev/null; }
+# d_serve VM HOST PORT: a server in the VM, as root, answering "vm-PORT" on HOST (:: takes IPv4 too),
+# left running. d_unserve VM PORT: it stops.
+d_serve() { docker exec -d -u 0 "$1" perl -MIO::Socket::IP -e '($h, $p) = @ARGV;
+  $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Listen => 5, ReuseAddr => 1, V6Only => ($h eq "::" ? 0 : 1), GetAddrInfoFlags => 0) or die "$@";
+  while ($c = $s->accept) { print $c "vm-$p\n"; close $c }' "$2" "$3" </dev/null >/dev/null 2>&1; }
+d_unserve() { docker exec -u 0 "$1" sh -c 'for p in /proc/[0-9]*; do tr "\0\n" "  " < $p/cmdline 2>/dev/null | grep -q "^perl .* $1 *\$" && kill ${p#/proc/}; done; true' sh "$2" </dev/null; }
+# d_serve_any VM PORTS...: d_serve on every IPv4 address, for host_port_kept.
+d_serve_any() { local p; for p in "${@:2}"; do d_serve "$1" 0.0.0.0 "$p"; done; }
+# d_v6 VM: the VM has an IPv6 loopback (Docker turns IPv6 off in containers on some engines).
+d_v6() { docker exec "$1" sh -c 'grep -q "^00000000000000000000000000000001 " /proc/net/if_inet6' </dev/null 2>/dev/null; }
+# h_v6: this machine has one.
+h_v6() { perl -MIO::Socket::IP -e 'IO::Socket::IP->new(LocalHost => "::1", LocalPort => 0, Listen => 1) or exit 1' 2>/dev/null; }
+# d_answers PORT WANT [6]: this machine's 127.0.0.1 (and ::1 with 6) answers WANT on PORT, within 20 s.
+d_answers() { local a b; for _ in $(seq 20); do
+    a=$(nc -w 2 127.0.0.1 "$1" </dev/null 2>/dev/null); b=$2
+    [[ -z ${3:-} ]] || b=$(nc -6 -w 2 ::1 "$1" </dev/null 2>/dev/null)
+    [[ $a == "$2" && $b == "$2" ]] && return 0; sleep 1; done
+  echo "127.0.0.1: ${a:-nothing}${3:+, ::1: ${b:-nothing}}"; return 1; }
+# d_closed PORT: nothing answers on this machine's loopback on PORT, within 15 s.
+d_closed() { for _ in $(seq 15); do
+    if ! nc -z 127.0.0.1 "$1" 2>/dev/null && { ! h_v6 || ! nc -6 -z ::1 "$1" 2>/dev/null; }; then return 0; fi; sleep 1; done
+  echo "port $1 still answers"; return 1; }
+# d_fwd VM: its forwarder's pid. d_fwdlog VM: its log.
+d_fwd() { pgrep -f -- "[_]docker-ports -vm $1 " | head -1; }
+d_fwdlog() { cat "$XDG_DATA_HOME/devvm/docker/vms/$1.ports.log" 2>/dev/null; }
+# d_listens PID: what that process listens on (TCP), ADDRESS:PORT lines.
+d_listens() { if command -v lsof >/dev/null; then lsof -nP -a -p "$1" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }'
+  else ss -ltnpH 2>/dev/null | awk -v p="pid=$1," 'index($0, p) { print $4 }'; fi | sort -u; }
+# d_unpublished VM: its container publishes no port.
+d_unpublished() { local b; b=$(docker container inspect -f '{{json .HostConfig.PortBindings}} {{json .NetworkSettings.Ports}}' "$1" 2>/dev/null)
+  echo "published: ${b:-?}"; [[ -n $b ]] && ! grep -q HostPort <<<"$b"; }
+export -f dsh dssh_proxy dssh_key d_procs d_serve d_unserve d_v6 h_v6 d_answers d_closed d_fwd d_fwdlog d_listens d_unpublished
+# d_hostile VM HOST: root in the VM rewrites its sshd's config to allow remote forwarding, X11 and
+# tunnels (with xauth for X11); each connection's sshd reads it. Through a config of the check's own
+# whose Host * asks for X11 and to add keys to the agent, the session gets no display and the agent
+# no key; the same asked on the command line gets both (the controls), and ssh -R now works (not
+# covered: the entry can't refuse it). Then the agent is emptied; the next start writes devvm's
+# config again.
+d_hostile() { local hc=$sc/hostile-config d keys
+  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n' "$dsc" > "$hc"
+  docker exec -u 0 "$1" sh -c 'apt-get update -q >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends xauth >/dev/null 2>&1 &&
+    c=/etc/devvm/ssh/sshd_config && sed -i -e "s/^AllowTcpForwarding .*/AllowTcpForwarding yes/" -e "s/^AllowStreamLocalForwarding .*/AllowStreamLocalForwarding yes/" \
+      -e "s/^X11Forwarding .*/X11Forwarding yes/" -e "s/^PermitTunnel .*/PermitTunnel yes/" -e "s/^PermitListen .*/PermitListen any/" "$c" &&
+    /usr/sbin/sshd -t -f "$c"' </dev/null || { echo "no hostile sshd"; return 1; }
+  sshh() { DISPLAY=:9 SSH_AUTH_SOCK=$sc/agent.sock ssh -F "$hc" -o BatchMode=yes "$@" </dev/null 2>/dev/null; }
+  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
+  d=$(sshh "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
+  echo "through Host *: display $d, agent ${keys:-empty}"
+  [[ $d == x=none && -z $keys ]] || return 1
+  d=$(sshh -Y -o AddKeysToAgent=yes "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
+  echo "asked on the command line: display $d, agent ${keys:-empty}"
+  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
+  [[ $d != x=none && -n $keys ]] || return 1
+  sshh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 "$2" true || { echo "ssh -R refused by the hostile sshd"; return 1; }; }
+# d_hostserve ADDR PORT: this machine's own program on ADDR (:: takes IPv4 too, as Node's and Go's
+# servers do), answering "host-PORT", left running; its pid in d_hostprogs.
+d_hostprogs=()
+d_hostserve() { perl -MIO::Socket::IP -e '($h, $p) = @ARGV;
+    $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Listen => 5, ReuseAddr => 1, V6Only => ($h eq "::" ? 0 : 1)) or die "$@";
+    while ($c = $s->accept) { print $c "host-$p\n"; close $c }' "$1" "$2" </dev/null >/dev/null 2>&1 &
+  d_hostprogs+=($!); }
+# d_hosts_kept VM: with this machine's programs on 47401 (127.0.0.1 alone), 47402 (::1 alone) and
+# 47403 (every address, IPv4 and IPv6 at once) and the VM's servers on all its addresses on each,
+# each program keeps its port, the VM's server isn't forwarded, and localhost never reaches two
+# programs. Without IPv6 here, 127.0.0.1 alone.
+d_hosts_kept() { local vm=$1 p ports=47401 all
+  ! h_v6 || ports="47401 47402 47403"
+  for _ in $(seq 15); do
+    all=true; for p in $ports; do d_fwdlog "$vm" | grep -q "port $p: not forwarded" || all=false; done
+    ! $all || break; sleep 1; done
+  d_fwdlog "$vm" | grep -E 'port 4740[123]'
+  for p in $ports; do d_fwdlog "$vm" | grep -q "port $p: not forwarded" || { echo "port $p: no refusal logged"; return 1; }; done
+  if [[ $(nc -w 2 127.0.0.1 47401 </dev/null) != host-47401 ]] || { h_v6 && nc -6 -z ::1 47401 2>/dev/null; }; then
+    echo "47401 not the host's alone"; return 1; fi
+  h_v6 || return 0
+  if [[ $(nc -6 -w 2 ::1 47402 </dev/null) != host-47402 ]] || nc -z 127.0.0.1 47402 2>/dev/null; then
+    echo "47402 not the host's alone"; return 1; fi
+  [[ $(nc -w 2 127.0.0.1 47403 </dev/null) == host-47403 && $(nc -6 -w 2 ::1 47403 </dev/null) == host-47403 ]] ||
+    { echo "47403 not the host's"; return 1; }; }
+# d_not_loopback VM: a server on the VM's own network address alone isn't forwarded, nor a port devvm
+# records for another VM (its listed ports), free on this machine; one on the VM's loopback, started
+# after them, is (the control).
+d_not_loopback() { local vm=$1 ip r=0
+  ip=$(docker container inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$vm" 2>/dev/null | awk '{ print $1 }')
+  [[ $ip =~ ^[0-9.]+$ && $ip != 127.* ]] || { echo "the VM's address: ${ip:-none}"; return 1; }
+  printf 'net=off\nports=47406\n' > "$vms/devvm-e2e-reserved"
+  d_serve "$vm" "$ip" 47404; d_serve "$vm" 0.0.0.0 47406; sleep 2; d_serve "$vm" 127.0.0.1 47405
+  d_answers 47405 vm-47405 || { echo "the control isn't forwarded"; r=1; }
+  d_closed 47404 && d_closed 47406 || r=1
+  ! d_fwdlog "$vm" | grep -E 'port (47404|47406)' || r=1
+  rm -f "$vms/devvm-e2e-reserved"; return "$r"; }
+
+# docker_ssh NAME: ssh for editors' emulation.
+docker_ssh() {
+  local q q2 vm2 k1 qa vma
+  section "docker: ssh for editors"
+  q=$(newproj "$1"); git -C "$q" init -q
+  (cd "$q" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${B[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
+  vm=$(vm_of "$q"); [[ -z $vm ]] || created+=("$vm")
+  check "the ssh config lists it by the folder's name, through devvm _docker-connect, with no port" bash -c "
+    [[ -n '$vm' ]] && ! grep -q backend_unreviewed '$work/last.log' &&
+    grep -q '^Host devvm-$1 $vm\$' '$dsc' && [[ \$(dssh_proxy devvm-$1) == *\"'_docker-connect'\"*\"'$vm'\" ]] &&
+    ! awk -v h='$vm' '\$1 == \"Host\" { on = (\$3 == h) } on && \$1 == \"Port\"' '$dsc' | grep -q ."
+  check "its container publishes nothing, and nothing in it listens for ssh, nor runs sshd, between connections" bash -c "
+    d_unpublished '$vm' && ! docker exec '$vm' sh -c 'cat /proc/net/tcp /proc/net/tcp6' </dev/null 2>/dev/null | awk '\$4 == \"0A\" { print \$2 }' | grep -qi ':0016\$' &&
+    ! d_procs '$vm' | grep -q sshd"
+  check "its host key is pinned, as the VM has it: ed25519, its only one" bash -c "
+    vmk=\$(docker exec -u 0 '$vm' sh -c 'cat /etc/ssh/ssh_host_*_key.pub' </dev/null | awk '{ print \$1, \$2 }') &&
+    echo \"the VM's: \$vmk; pinned: \$(dssh_key '$vm')\" && [[ -n \$vmk && \$vmk == \"\$(dssh_key '$vm')\" && \$vmk == 'ssh-ed25519 '* ]]"
+  check "ssh devvm-$1 reaches it, as the VM's user, with the environment devvm's commands get" bash -c "
+    out=\$(dsh devvm-$1 'id -un; hostname; echo \$BASH_ENV') && [[ \$out == '$me'\$'\n''$1'\$'\n'/etc/profile.d/devvm-tools.sh ]] || { echo \"\$out\"; false; }"
+  check "... each connection an sshd of its own, gone with it" bash -c "dsh devvm-$1 true && sleep 1 && ! d_procs '$vm' | grep -q sshd"
+  check "agent forwarding stays off, whatever Host * says; ssh -A forwards it (the control)" bash -c "
+    SSH_AUTH_SOCK='$sc/agent.sock' ssh -F '$sc/config' devvm-$1 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null &&
+    SSH_AUTH_SOCK='$sc/agent.sock' ssh -A -F '$sc/config' devvm-$1 'test -S \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
+  check "a changed host key is refused" bash -c "
+    cp '$kh' '$sc/kh' && rm -f '$sc/changed' '$sc/changed.pub' && ssh-keygen -q -t ed25519 -N '' -f '$sc/changed' &&
+    { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/changed.pub')\"; } > '$kh' &&
+    { dsh devvm-$1 true 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } && (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
+  check "password and keyboard-interactive logins are refused: publickey alone is offered" bash -c "
+    out=\$(env -u SSH_AUTH_SOCK ssh -v -F '$sc/config' -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive \
+      -o BatchMode=yes devvm-$1 true </dev/null 2>&1); r=\$?
+    (( r == 255 )) && grep -qE 'Authentications that can continue: publickey[[:space:]]*\$' <<<\"\$out\" &&
+    ! grep -qE 'Authentications that can continue: .*(password|keyboard)' <<<\"\$out\""
+  check "only devvm's key logs in, as the VM's user: another key, root and another user are refused" bash -c "
+    rm -f '$sc/other' '$sc/other.pub'; ssh-keygen -q -t ed25519 -N '' -f '$sc/other' &&
+    ! env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile='$kh' -o HostKeyAlias='$vm' -o StrictHostKeyChecking=yes \
+      -o BatchMode=yes -o IdentitiesOnly=yes -i '$sc/other' -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null &&
+    ! dsh -o BatchMode=yes -l root devvm-$1 true && ! dsh -o BatchMode=yes -l nobody devvm-$1 true && dsh -o BatchMode=yes devvm-$1 true"
+  d_serve "$vm" 127.0.0.1 47501
+  check "devvm's sshd refuses remote forwarding (a port, a socket); a local forward to the VM's loopback works" bash -c "
+    ! dsh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-$1 true &&
+    ! dsh -o ExitOnForwardFailure=yes -R '/tmp/devvm-e2e-$$.sock:$sc/agent.sock' devvm-$1 true &&
+    for _ in \$(seq 10); do [[ \$(dsh -W 127.0.0.1:47501 devvm-$1 2>/dev/null | head -1) == vm-47501 ]] && exit 0; sleep 1; done; false"
+  check "sshd runs devvm's settings, and its config is root's alone" bash -c "
+    t=\$(docker exec -u 0 '$vm' /usr/sbin/sshd -T -f /etc/devvm/ssh/sshd_config </dev/null) || exit 1
+    for want in 'allowusers $me' 'permitrootlogin no' 'authenticationmethods publickey' 'passwordauthentication no' \
+      'kbdinteractiveauthentication no' 'allowtcpforwarding local' 'allowstreamlocalforwarding local' 'permitlisten none' \
+      'gatewayports no' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
+      grep -qx \"\$want\" <<<\"\$t\" || { echo \"not \$want\"; exit 1; }; done
+    [[ \$(docker exec -u 0 '$vm' stat -c '%U %a' /etc/devvm/ssh/sshd_config </dev/null) == 'root 600' ]]"
+  check "devvm _docker-connect refuses another devvm's container, in one line, running nothing" bash -c "
+    out=\$(DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data /tmp/devvm-e2e-elsewhere '$vm' </dev/null 2>&1)
+    r=\$?; echo \"\$out\"; (( r != 0 )) && grep -qx 'devvm: docker_container_foreign name=$vm' <<<\"\$out\" &&
+    [[ \$(grep -c '^devvm: ' <<<\"\$out\") -eq 1 ]] && ! d_procs '$vm' | grep -q sshd"
+  check "devvm ssh names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
+    '$D' ssh </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m ssh_host_info dir=$q host=devvm-$1 | head -1)\" '$work/last.log' &&
+    PATH='$sc/bin':\$PATH '$D' code </dev/null >'$work/last.log' 2>&1 && [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-$1 $q' ]]"
+  check "devvm's shell is an ssh session: SSH_CONNECTION set, in the folder" bash -c "cd '$q' &&
+    out=\$(printf 'pwd; echo \"conn=\${SSH_CONNECTION:+yes}\"\n' | '$D' 2>&1) && grep -qx '$q' <<<\"\$out\" && grep -qx conn=yes <<<\"\$out\" || { echo \"\$out\"; false; }"
+  check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" d_hostile "$vm" "devvm-$1"
+  k1=$(dssh_key "$vm")
+  check "restart: new host keys, pinned again, devvm's sshd config again (remote forwarding refused), and ssh reaches it" bash -c "cd '$q' &&
+    printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(d_state '$vm') == running ]] &&
+    k=\$(dssh_key '$vm') && [[ -n \$k && \$k != '$k1' ]] && ! dsh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-$1 true && dsh devvm-$1 true"
+  check "started outside devvm (docker restart): devvm ssh says so, its entry goes, and devvm's shell is a docker exec; devvm restart has ssh again" bash -c "cd '$q' &&
+    docker restart -t 1 '$vm' >/dev/null && ! DEVVM_MESSAGES=names '$D' ssh </dev/null >'$work/e' 2>&1 &&
+    grep -qx 'devvm: vm_no_ssh vm=$vm' '$work/e' && ! grep -q '$vm' '$dsc' &&
+    out=\$(printf 'echo \"conn=\${SSH_CONNECTION:-none}\"\n' | '$D' 2>&1) && grep -qx conn=none <<<\"\$out\" &&
+    printf 'exit\n' | '$D' restart >/dev/null 2>&1 && grep -q '^Host devvm-$1 $vm\$' '$dsc' && dsh devvm-$1 true"
+  q2=$(newproj "${1}2")
+  (cd "$q2" && printf 'exit\n' | "$D" "${B[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
+  vm2=$(vm_of "$q2"); [[ -z $vm2 ]] || created+=("$vm2")
+  check "a VM made from the same image has host keys of its own" bash -c "
+    [[ -n '$vm2' ]] && a=\$(dssh_key '$vm') && b=\$(dssh_key '$vm2') && [[ -n \$a && -n \$b && \$a != \$b ]] && dsh devvm-${1}2 true"
+  check "... and a key of its own: its key doesn't log in to the other VM, the other's own does (the control)" bash -c "
+    with_key() { env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile='$kh' -o HostKeyAlias='$vm' -o StrictHostKeyChecking=yes \
+      -o BatchMode=yes -o IdentitiesOnly=yes -i '$XDG_DATA_HOME/devvm/docker/vms/'\$1.key -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null 2>/dev/null; }
+    ! with_key '$vm2' && with_key '$vm'"
+  check "an image without sshd (root moved it away): the next start runs without ssh, warned, and the VM runs" bash -c "cd '$q2' &&
+    docker exec -u 0 '$vm2' mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null &&
+    printf 'exit\n' | DEVVM_MESSAGES=names '$D' restart >'$work/last.log' 2>&1 && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/last.log' &&
+    [[ \$(d_state '$vm2') == running ]] && ! grep -q '$vm2' '$dsc' &&
+    ! DEVVM_MESSAGES=names '$D' ssh </dev/null 2>'$work/e' && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/e'"
+  (cd "$q2" && quiet "$D" rm -f)
+  if [[ "$(uname -s)" == Linux ]]; then
+    qa=$(newproj "${1}alpine")
+    (cd "$qa" && printf 'exit\n' | "$D" "${B[@]}" --from alpine:3 --no-network-policy --ports none base >"$work/last.log" 2>&1)
+    vma=$(vm_of "$qa"); [[ -z $vma ]] || created+=("$vma")
+    check "a VM --from alpine:3 is made, and ssh devvm-${1}alpine reaches it, on Alpine, as the VM's user" bash -c "
+      [[ -n '$vma' ]] && grep -qx libc=musl '$vms/$vma' &&
+      out=\$(dsh -o BatchMode=yes devvm-${1}alpine '. /etc/os-release; echo \$ID; id -un') &&
+      [[ \$out == alpine\$'\n''$me' ]] || { echo \"\${out:-}\"; tail -5 '$work/last.log'; false; }"
+    (cd "$qa" && quiet "$D" rm -f)
+  else
+    skip "a VM --from alpine:3 is made, and ssh reaches it, on Alpine" "Docker Desktop can't build"
+  fi
+  check "devvm stop drops its entry; devvm _docker-connect refuses the stopped VM, running nothing" bash -c "cd '$q' &&
+    '$D' stop </dev/null >/dev/null 2>&1 && ! grep -q '$vm' '$dsc' &&
+    ! DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data '$XDG_DATA_HOME/devvm' '$vm' </dev/null 2>'$work/e' &&
+    grep -qx 'devvm: vm_not_running vm=$vm' '$work/e'"
+  check "rm deletes it, its entry, its key and its pinned keys" bash -c "cd '$q' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
+    [[ -z \$(d_state '$vm') ]] && ! grep -q '$vm' '$dsc' && ! grep -q '^$vm ' '$kh' && ! ls '$XDG_DATA_HOME/devvm/docker/vms/$vm'.* 2>/dev/null"
+}
+
+# docker_ports NAME: ports' and every port's emulation.
+docker_ports() {
+  local pa pl pid hp v6=""
+  section "docker: ports"
+  pa=$(newproj "$1")
+  (cd "$pa" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${B[@]}" --no-network-policy --no-git-protect base >"$work/last.log" 2>&1)
+  vm=$(vm_of "$pa"); [[ -z $vm ]] || created+=("$vm")
+  check "a VM forwards every port (the default) with a forwarder of devvm's, and publishes nothing" bash -c "
+    [[ -n '$vm' && \$(d_state '$vm') == running ]] && ! grep -q backend_unreviewed '$work/last.log' &&
+    ! grep -q 'ports_' '$work/last.log' && [[ -n \$(d_fwd '$vm') ]] && d_fwdlog '$vm' | grep -q \"forwarding $vm's ports\" && d_unpublished '$vm'"
+  check "... its ssh master reading no config of yours, the VM's key alone, its host key pinned, no forwarding asked for, through devvm _docker-connect" bash -c "
+    m=\$(ps -axww -o command= | grep -- '[s]sh -F none -M .*HostKeyAlias=$vm ' | head -1); echo \"\$m\"
+    [[ \$m == *IdentityAgent=none* && \$m == *StrictHostKeyChecking=yes* && \$m == *ClearAllForwardings=yes* && \$m == *PermitRemoteOpen=none* &&
+      \$m == *ForwardAgent=no* && \$m == *\"ProxyCommand='\"*\"' '_docker-connect' \"* ]] && ! grep -qE ' -[RLDAXY]( |\$)' <<<\"\$m\""
+  ! d_v6 "$vm" || ! h_v6 || v6=6
+  d_serve "$vm" 127.0.0.1 47511; d_serve "$vm" 0.0.0.0 47513
+  [[ -z $v6 ]] || { d_serve "$vm" ::1 47512; d_serve "$vm" :: 47514; }
+  check "a server on the VM's loopback alone reaches this machine's$([[ -z $v6 ]] || echo ", at 127.0.0.1 and ::1")" d_answers 47511 vm-47511 $v6
+  check "... one on all its IPv4 addresses too" d_answers 47513 vm-47513 $v6
+  if [[ -n $v6 ]]; then
+    check "... one on its IPv6 loopback alone, and one on all its addresses" bash -c "d_answers 47512 vm-47512 6 && d_answers 47514 vm-47514 6"
+  else
+    skip "... one on its IPv6 loopback alone, and one on all its addresses" "no IPv6 loopback in the VM or here"
+  fi
+  check "the forwarder listens on this machine's loopback alone" bash -c "
+    l=\$(d_listens \"\$(d_fwd '$vm')\"); echo \"\$l\"; grep -qE '^(127\.0\.0\.1|\[::1\]):47511\$' <<<\"\$l\" && ! grep -vE '^(127\.0\.0\.1|\[::1\]):[0-9]+\$' <<<\"\$l\""
+  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47515", Listen => 5, ReuseAddr => 1) or die;
+    while ($c = $s->accept) { print $c "host-47515\n"; close $c }' </dev/null >/dev/null 2>&1 &
+  hp=$!; sleep 0.5
+  d_serve "$vm" 127.0.0.1 47515; d_serve "$vm" 0.0.0.0 1023
+  check "a port this machine has on any address stays its own, and one below 1024 isn't forwarded" bash -c "
+    for _ in \$(seq 15); do d_fwdlog '$vm' | grep -q 'port 47515: not forwarded' && break; sleep 1; done
+    d_fwdlog '$vm' | grep -q 'port 47515: not forwarded' && [[ \$(nc -w 2 127.0.0.1 47515 </dev/null) == host-47515 ]] &&
+    ! d_fwdlog '$vm' | grep -q 'port 1023' && d_closed 1023"
+  kill "$hp" 2>/dev/null; wait "$hp" 2>/dev/null
+  d_hostserve 127.0.0.1 47401
+  ! h_v6 || { d_hostserve ::1 47402; d_hostserve :: 47403; }
+  sleep 0.5
+  d_serve "$vm" 0.0.0.0 47401; d_serve "$vm" 0.0.0.0 47402; d_serve "$vm" 0.0.0.0 47403
+  check "... so does one on its loopback alone$(h_v6 && echo ", IPv4 or IPv6, and one on every address, IPv4 and IPv6 at once")" d_hosts_kept "$vm"
+  kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
+  check "a server on the VM's own address alone isn't forwarded, nor a port another VM lists, while it's free (a loopback server is, the control)" d_not_loopback "$vm"
+  check "a server that stops: its forward goes; the others stay" bash -c "d_unserve '$vm' 47513 && d_closed 47513 && d_answers 47511 vm-47511"
+  check "devvm stop stops the forwarder, and nothing listens on its ports" bash -c "cd '$pa' && '$D' stop </dev/null >/dev/null 2>&1 &&
+    [[ -z \$(d_fwd '$vm') ]] && d_closed 47511"
+  check "started again, it has a new forwarder, which forwards a server started then" bash -c "cd '$pa' &&
+    printf 'exit\n' | '$D' >'$work/last.log' 2>&1 && [[ -n \$(d_fwd '$vm') ]] && d_serve '$vm' 127.0.0.1 47516 && d_answers 47516 vm-47516"
+  check "docker stop outside devvm ends its forwarder" bash -c "docker stop -t 1 '$vm' >/dev/null &&
+    for _ in \$(seq 40); do [[ -z \$(d_fwd '$vm') ]] && break; sleep 1; done; [[ -z \$(d_fwd '$vm') ]] && d_closed 47516"
+  check "rm deletes it, its forwarder and its files" bash -c "cd '$pa' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
+    [[ -z \$(d_state '$vm') && -z \$(d_fwd '$vm') ]] && ! ls '$XDG_DATA_HOME/devvm/docker/vms/$vm'.* 2>/dev/null"
+  # Listed ports: the same forwarder, those alone.
+  pl=$(newproj "${1}list")
+  (cd "$pl" && printf 'exit\n' | "$D" "${B[@]}" --no-network-policy --no-git-protect --ports 47521,47180-47181 base >"$work/last.log" 2>&1)
+  vm=$(vm_of "$pl"); [[ -z $vm ]] || created+=("$vm")
+  d_serve "$vm" 127.0.0.1 47521; d_serve "$vm" 127.0.0.1 47522
+  check "listed ports: through the forwarder too, only those (an unlisted port isn't forwarded), nothing published" bash -c "
+    [[ -n '$vm' ]] && d_answers 47521 vm-47521 && d_closed 47522 && d_unpublished '$vm' &&
+    ps -axww -o command= | grep -- '[_]docker-ports -vm $vm ' | grep -q -- ' -only 47521,47180-47181\$'"
+  check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$pl" "$vm" 47181 47180 d_serve_any
+  (cd "$pl" && quiet "$D" rm -f)
+}
+
+# docker_agent NAME: agent forwarding's and turning it on or off's emulations. Your agent is a
+# throwaway one (ua_sock); devvm's own has a throwaway key.
+docker_agent() {
+  local g ua da
+  section "docker: SSH agent forwarding"
+  ua=$work/d-agent.sock da=$XDG_DATA_HOME/devvm/agent.sock
+  rm -f "$ua" "$work/d-key" "$work/d-key.pub" "$work/d-dkey" "$work/d-dkey.pub"
+  user_agent_pid=$(ssh-agent -a "$ua" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+  ssh-keygen -q -t ed25519 -N '' -C e2e-docker-user -f "$work/d-key"
+  ssh-keygen -q -t ed25519 -N '' -C e2e-docker-devvm -f "$work/d-dkey"
+  SSH_AUTH_SOCK=$ua ssh-add -q "$work/d-key" 2>/dev/null
+  # d_shell_keys DIR: what devvm's shell in DIR lists of its agent, devvm run with yours.
+  d_shell_keys() { (cd "$1" && printf 'ssh-add -l 2>&1 || true\n' | SSH_AUTH_SOCK=$ua "$D" 2>&1); }
+  # d_ssh_keys HOST: what ssh HOST lists of its agent, ssh run with yours.
+  d_ssh_keys() { SSH_AUTH_SOCK=$ua ssh -F "$sc/config" "$1" 'ssh-add -l 2>&1 || true' </dev/null 2>&1; }
+  # d_switch DIR MODE: devvm ssh-agent MODE, then devvm restart, run with yours.
+  d_switch() { (cd "$1" && SSH_AUTH_SOCK=$ua "$D" ssh-agent "$2" </dev/null >"$work/last.log" 2>&1 &&
+    printf 'exit\n' | SSH_AUTH_SOCK=$ua "$D" restart >>"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }; }
+  # d_only OUT COMMENT: OUT lists that key alone. d_none OUT: no agent at all.
+  d_only() { echo "agent: $1"; [[ $(grep -c 'SHA256:' <<<"$1") -eq 1 ]] && grep -q "$2" <<<"$1"; }
+  d_none() { echo "agent: $1"; grep -qiE 'could not open a connection|error connecting to agent' <<<"$1" && ! grep -q 'SHA256:' <<<"$1"; }
+  export ua work; export -f d_shell_keys d_ssh_keys d_switch d_only d_none
+  g=$(newproj "$1")
+  (cd "$g" && printf 'exit\n' | SSH_AUTH_SOCK=$ua DEVVM_MESSAGES=names "$D" "${B[@]}" --no-network-policy --ports none --ssh-agent base >"$work/last.log" 2>&1)
+  vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
+  check "--ssh-agent: no socket is mounted, and nothing outside an ssh session has an agent, even root" bash -c "
+    [[ -n '$vm' ]] && ! grep -q backend_unreviewed '$work/last.log' &&
+    ! docker container inspect -f '{{range .Mounts}}{{.Source}} {{end}}' '$vm' | grep -qiE '\.sock|ssh-agent|ssh-auth' &&
+    docker exec -u 0 '$vm' sh -c 'test -z \"\${SSH_AUTH_SOCK:-}\" && ! ls /tmp/ssh-* >/dev/null 2>&1' </dev/null"
+  check "... devvm's shell, an ssh session, lists your key" bash -c "d_only \"\$(d_shell_keys '$g')\" e2e-docker-user"
+  check "... so does ssh by name" bash -c "d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
+  check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
+    SSH_AUTH_SOCK='$ua' '$D' ssh-agent add '$work/d-dkey' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=e2e-docker-devvm)\""
+  check "ssh-agent devvm while it runs: devvm's next shell lists devvm's key alone, never yours" bash -c "cd '$g' &&
+    SSH_AUTH_SOCK='$ua' DEVVM_MESSAGES=names '$D' ssh-agent devvm </dev/null >'$work/e' 2>&1 && grep -q 'agent_set_running mode=devvm vm=$vm\$' '$work/e' &&
+    d_only \"\$(d_shell_keys '$g')\" e2e-docker-devvm"
+  check "devvm, after a restart: the shell and ssh by name list devvm's key alone, never yours" bash -c "
+    d_switch '$g' devvm && d_only \"\$(d_shell_keys '$g')\" e2e-docker-devvm && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-devvm"
+  check "on, after a restart: yours alone" bash -c "
+    d_switch '$g' on && d_only \"\$(d_shell_keys '$g')\" e2e-docker-user && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
+  check "off, after a restart: no agent, in the shell or by name" bash -c "
+    d_switch '$g' off && d_none \"\$(d_shell_keys '$g')\" &&
+    SSH_AUTH_SOCK='$ua' ssh -F '$sc/config' devvm-$1 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
+  check "... your agent holds only its key, devvm's only its own" bash -c "
+    u=\$(SSH_AUTH_SOCK='$ua' ssh-add -l 2>&1); d=\$(SSH_AUTH_SOCK='$da' ssh-add -l 2>&1); echo \"yours: \$u; devvm's: \$d\"
+    [[ \$(grep -c . <<<\"\$u\") -eq 1 ]] && grep -q e2e-docker-user <<<\"\$u\" && ! grep -q e2e-docker-user <<<\"\$d\""
+  (cd "$g" && quiet env SSH_AUTH_SOCK="$ua" "$D" rm -f)
+  g=$(newproj "${1}on")
+  (cd "$g" && printf 'exit\n' | SSH_AUTH_SOCK=$ua "$D" "${B[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
+  vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
+  check "a VM made without it: none; turned on while it runs, devvm's shell has none until a restart, ssh by name yours from devvm's next launch (as on Lima); after a restart, the shell too" bash -c "
+    [[ -n '$vm' ]] && d_none \"\$(d_shell_keys '$g')\" &&
+    (cd '$g' && SSH_AUTH_SOCK='$ua' '$D' ssh-agent on </dev/null >'$work/last.log' 2>&1) &&
+    d_none \"\$(d_shell_keys '$g')\" && d_only \"\$(d_ssh_keys devvm-${1}on)\" e2e-docker-user &&
+    d_switch '$g' on && d_only \"\$(d_shell_keys '$g')\" e2e-docker-user"
+  (cd "$g" && quiet env SSH_AUTH_SOCK="$ua" "$D" rm -f)
+  kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
+  pkill -f "[s]sh-agent -a $da"
+  rm -f "$work/d-key" "$work/d-key.pub" "$work/d-dkey" "$work/d-dkey.pub" "$ua" "$XDG_CONFIG_HOME/devvm/agent-keys"
+}
+
+# docker_clone NAME: a --clone VM, over its ssh. A throwaway repo, with a branch besides main and a
+# file it doesn't track; host git without your settings.
+docker_clone() {
+  local c cgit
+  section "docker: --clone"
+  export GIT_CONFIG_GLOBAL=$sc/home/.gitconfig GIT_CONFIG_NOSYSTEM=1
+  c=$(newproj "$1")
+  git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$c" -c user.email=e@e -c user.name=e commit -qm one &&
+    git -C "$c" branch other && echo host-only > "$c/untracked"
+  (cd "$c" && printf 'pwd; git branch --show-current\n' | "$D" "${B[@]}" --clone --no-network-policy --ports none base >"$work/last.log" 2>&1)
+  vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
+  cgit="GIT_SSH_COMMAND='ssh -F $dsc' git -C '$c'"
+  check "the VM has its own clone in a volume of its own, every branch pushed in over ssh, nothing of the folder mounted, and the shell opens in it" bash -c "
+    [[ -n '$vm' ]] && grep -qx mode=clone '$vms/$vm' && grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' &&
+    mounted '$vm' '$c' volume true && ! mounted '$vm' '$c' bind true &&
+    [[ \$(in_d '$vm' \"git -C '$c' branch --format='%(refname:short)'\" | tr '\n' ' ') == 'main other ' ]] &&
+    in_d '$vm' \"git -C '$c' log --oneline\" | grep -q one && in_d '$vm' \"[ ! -e '$c/untracked' ]\""
+  check "the repo has a devvm remote, by the VM's name" bash -c "[[ \$(git -C '$c' remote get-url devvm) == '$vm:$c' ]]"
+  in_d "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
+  check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgit fetch -q devvm && git -C '$c' log --oneline devvm/main | grep -q from-vm"
+  check "pushing a branch into it works too" bash -c "git -C '$c' branch pushed other && $cgit push -q devvm pushed &&
+    in_d '$vm' \"git -C '$c' rev-parse -q --verify refs/heads/pushed\" >/dev/null"
+  check "rm -f deletes it, its clone's volume and the remote; the fetched work stays as a local branch" bash -c "cd '$c' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
+    [[ -z \$(d_state '$vm') && ! -e '$vms/$vm' ]] && ! d_vol '$vm-clone' && ! git -C '$c' remote | grep -q devvm &&
+    git -C '$c' log --oneline saved/devvm/main | grep -q from-vm"
+  unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+}
+
+# docker_emulated PREFIX: every emulation's checks, its folders named from PREFIX.
+docker_emulated() {
+  d_emu_begin
+  docker_ssh "${1}ssh"
+  docker_ports "${1}ports"
+  docker_agent "${1}agent"
+  docker_clone "${1}cloned"
+  d_emu_end
+}
+
 # docker_linux: the checks on this machine's engine, a Linux one.
 docker_linux() {
   local others_before kb fixture token kf kx rc
+  # alpine:3, which docker_ssh builds a base from, pulled first: Docker keeps the image devvm pulls.
+  docker image pull -q alpine:3 >/dev/null 2>&1
   others_before=$(d_others)
   section "docker: shared tool versions"
   check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
@@ -2087,6 +2480,7 @@ EOF
   docker_agents dagents
   section "docker: shared tools"
   docker_tools dtools
+  docker_emulated d
   check "nothing without the sandbox's label was touched" bash -c "[[ \"\$(d_others)\" == '$others_before' ]]"
 }
 
@@ -2174,6 +2568,7 @@ docker_desktop() {
   (cd "$x" && quiet "$D" rm -f)
   docker_agents ddagents
   docker_tools ddtools
+  docker_emulated dd
   d_purge
   check "all with the sandbox's label is deleted, and nothing else was touched" bash -c "
     [[ \$(d_ours) == 0 && \"\$(d_others)\" == '$others_before' ]]"

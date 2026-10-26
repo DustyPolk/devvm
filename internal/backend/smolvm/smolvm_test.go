@@ -15,6 +15,7 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 )
@@ -78,11 +79,13 @@ func newSandbox(t *testing.T) sandbox {
 		FreePort: func(context.Context) (int, error) { return 61022, nil }, PortFree: func(context.Context, int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
 		WithSteps: testUI{}.WithSteps, AddCleanup: testUI{}.AddCleanup, Interrupted: testUI{}.Interrupted,
-		Forwards: Forwards{
-			Dirs: d, Self: "/devvm", Tick: time.Millisecond,
-			Detach: func(string, []string, *os.File) (int, error) { return 0, errors.New("no forwarder here") },
-			Args:   func(int) ([]string, error) { return nil, errors.New("no process") },
-		},
+		Forwards: func() vmssh.Forwards {
+			f := newForwards(d, "/devvm")
+			f.Tick = time.Millisecond
+			f.Detach = func(string, []string, *os.File) (int, error) { return 0, errors.New("no forwarder here") }
+			f.Args = func(int) ([]string, error) { return nil, errors.New("no process") }
+			return f
+		}(),
 	}
 	return sandbox{s, stub}
 }

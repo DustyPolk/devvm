@@ -380,6 +380,10 @@ type SSHTarget struct {
 	// ConfigFile is an ssh config the backend keeps for the VM, with its
 	// identity; "" when it has none.
 	ConfigFile string
+	// ProxyCommand is the command ssh connects through instead of Host and
+	// Port (ssh's ProxyCommand), a line for the user's shell, its words
+	// quoted, no % tokens; "" for none.
+	ProxyCommand string
 }
 
 // SSHOption is an ssh config option: IdentityFile "/path".

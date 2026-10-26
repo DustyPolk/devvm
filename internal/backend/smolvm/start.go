@@ -15,10 +15,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -116,7 +116,7 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 		if err != nil {
 			return err
 		}
-		pub, err := s.ensureSSHKey(vm)
+		pub, err := vmssh.EnsureKey(s.sshKey(vm))
 		if err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 			return err
 		}
 		if noSSHD {
-			s.Warn(msg.SmolvmNoSshd(vm))
+			s.Warn(msg.VMNoSshd(vm))
 			sshd = nil
 		}
 	}
@@ -245,24 +245,26 @@ func listedPorts(vm string, c backend.Confinement, r *record, opts []string) ([]
 // warned about: the VM runs on.
 func (s *Smolvm) forward(ctx context.Context, vm string, r record, c backend.Confinement) {
 	if !r.SSHUp {
-		s.Warn(msg.SmolvmPortsNoSSH(vm))
+		s.Warn(msg.PortsNoSSH(vm))
 		return
 	}
-	failed := func() { s.Warn(msg.SmolvmPortsFailed(s.Forwards.Log(vm), vm)) }
+	failed := func() { s.Warn(msg.PortsForwardFailed(s.Forwards.Log(vm), vm)) }
 	out, err := vmOutput(ctx, s.Runner, func(ctx context.Context) *exec.Cmd {
-		return s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "cat", "/etc/ssh/ssh_host_ed25519_key.pub")
+		return s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "cat", vmssh.HostKeyPath)
 	})
-	key, ok := hostKey(out)
+	key, ok := vmssh.HostKey(out)
 	name, _, uerr := s.user()
-	if err != nil || !ok || uerr != nil {
+	lifeline := s.Lifeline(ctx, vm)
+	if err != nil || !ok || uerr != nil || lifeline == "" {
 		failed()
 		return
 	}
-	spec := forwardSpec{
-		lifeline: s.Lifeline(ctx, vm), user: name, key: s.sshKey(vm), hostKey: key, sshPort: r.SSHPort,
-		reserve: []int{r.SSHPort, c.ProxyPort, deciderPort(c.Decider)},
+	spec := vmssh.Spec{
+		User: name, Key: s.sshKey(vm), HostKey: key,
+		Reserve: []int{r.SSHPort, c.ProxyPort, deciderPort(c.Decider)},
+		Args:    []string{"-lifeline", lifeline, "-port", strconv.Itoa(r.SSHPort)},
 	}
-	if spec.lifeline == "" || s.Forwards.Start(vm, spec) != nil {
+	if s.Forwards.Start(vm, spec) != nil {
 		failed()
 	}
 }
@@ -280,24 +282,11 @@ const (
 func vmOutput(ctx context.Context, r Runner, mk func(context.Context) *exec.Cmd) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, vmOutputTimeout)
 	defer cancel()
-	out := &capped{max: vmOutputMax}
+	out := &vmssh.Capped{Max: vmOutputMax}
 	cmd := mk(ctx)
 	cmd.Stdout, cmd.WaitDelay = out, time.Second
 	err := r.Attach(cmd)
 	return out.Bytes(), err
-}
-
-// capped keeps the first max bytes written to it.
-type capped struct {
-	bytes.Buffer
-	max int
-}
-
-func (w *capped) Write(p []byte) (int, error) {
-	if room := w.max - w.Len(); room > 0 {
-		w.Buffer.Write(p[:min(len(p), room)])
-	}
-	return len(p), nil
 }
 
 // sshdProbe answers "sshd" when the machine's image has sshd, else "none".
@@ -390,7 +379,7 @@ func runsOn(cur, want string) bool {
 	}
 	first, _, _ := strings.Cut(cur, "\n")
 	pid, err := strconv.Atoi(first)
-	return err == nil && pid > 0 && alive(pid)
+	return err == nil && pid > 0 && vmssh.ProcessRuns(pid)
 }
 
 // lifeline returns what the machine's lifeline holds (its pid and start
@@ -405,15 +394,6 @@ func (s *Smolvm) lifeline(ctx context.Context, vm string) (string, error) {
 		return "", nil
 	}
 	return strings.TrimSpace(string(b)), err
-}
-
-// alive reports whether a process runs with that pid.
-func alive(pid int) bool {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
 }
 
 // Lifeline is the pid file of the process that runs the machine, in

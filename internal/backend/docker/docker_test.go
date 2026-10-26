@@ -10,9 +10,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 )
@@ -61,7 +63,16 @@ func newSandbox(t *testing.T) *sandbox {
 			return "sha256:" + strings.Repeat("ab", 32), nil
 		},
 		Terminal: func() bool { return false },
-		Info:     func(m msg.M) { s.infos = append(s.infos, m) }, Warn: func(msg.M) {},
+		Self:     "/devvm", Getenv: func(string) string { return "" },
+		LookPath: func(c string) (string, error) { return "/bin/" + c, nil },
+		Forwards: func() vmssh.Forwards {
+			f := newForwards(d, "/devvm")
+			f.Tick = time.Millisecond
+			f.Detach = func(string, []string, *os.File) (int, error) { return 0, errors.New("no forwarder here") }
+			f.Args = func(int) ([]string, error) { return nil, errors.New("no process") }
+			return f
+		}(),
+		Info: func(m msg.M) { s.infos = append(s.infos, m) }, Warn: func(msg.M) {},
 		WithSteps:  func(ctx context.Context, _ int) context.Context { return ctx },
 		AddCleanup: func(func(context.Context)) func() { return func() {} }, Interrupted: func() bool { return false },
 	}
@@ -202,12 +213,17 @@ func TestCapsByEngine(t *testing.T) {
 			if got := s.Caps()[backend.FeatureBuildConfinement].Usable(); got != c.confined || s.engineKind() != c.kind {
 				t.Errorf("build confinement = %v, kind %s; want %v, %s", got, s.engineKind(), c.confined, c.kind)
 			}
-			for _, f := range []backend.Feature{
-				backend.FeatureEgressProxy, backend.FeatureSSH, backend.FeaturePorts, backend.FeaturePortsAll,
-				backend.FeatureAgentForwarding, backend.FeatureAgentToggle, backend.FeatureDisk, backend.FeatureDockerLayer,
-			} {
+			for _, f := range []backend.Feature{backend.FeatureEgressProxy, backend.FeatureDisk, backend.FeatureDockerLayer} {
 				if s.Caps()[f] != backend.None {
 					t.Errorf("%s = %s, want none", f, s.Caps()[f])
+				}
+			}
+			// Over docker exec, on every engine, reviewed.
+			for _, f := range []backend.Feature{
+				backend.FeatureSSH, backend.FeaturePorts, backend.FeaturePortsAll, backend.FeatureAgentForwarding, backend.FeatureAgentToggle,
+			} {
+				if s.Caps()[f] != backend.Emulated(true) {
+					t.Errorf("%s = %s, want emulated, reviewed", f, s.Caps()[f])
 				}
 			}
 		})
@@ -501,15 +517,9 @@ func TestCreateVM(t *testing.T) {
 func TestCreateVMRefused(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, baseKey)
-	for name, spec := range map[string]backend.VMSpec{
-		"ports":            {Name: vm, Ports: backend.Ports{All: true}},
-		"agent-forwarding": {Name: vm, AgentForwarding: true},
-		"disk":             {Name: vm, Size: backend.Size{DiskGiB: 200}},
-	} {
-		err := s.CreateVM(t.Context(), baseKey, spec)
-		if shown(err) != msg.BackendLacks(Name, name, vm).Names() {
-			t.Errorf("%s: %v", name, err)
-		}
+	err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Size: backend.Size{DiskGiB: 200}})
+	if shown(err) != msg.BackendLacks(Name, "disk", vm).Names() {
+		t.Errorf("disk: %v", err)
 	}
 	if err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/a,b"}); id(err) != "docker_mount_path" {
 		t.Errorf("a comma: %v", err)
@@ -538,7 +548,7 @@ func TestStart(t *testing.T) {
 	}
 	want := []string{
 		"docker container start " + vm,
-		"docker exec -i -u 0 -e DEVVM_DOCKERD=off " + vm + " sh -s --",
+		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd " + vm + " sh -s --",
 		"docker exec -u 0 " + vm + " chown u /p/web",
 	}
 	if calls := s.calls(t); !slices.Equal(calls, want) {
@@ -547,6 +557,10 @@ func TestStart(t *testing.T) {
 	if !strings.Contains(s.field(t, "containers/"+vm+"/mounts"), "type=volume,src="+vm+"-clone,dst=/p/web") {
 		t.Errorf("mounts: %s", s.field(t, "containers/"+vm+"/mounts"))
 	}
+	// Without ssh: none to reach.
+	if _, err := s.SSH(t.Context(), vm); id(err) != "vm_no_ssh" {
+		t.Errorf("SSH without ssh: %v", err)
+	}
 	// Running: left as it is.
 	s.reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil || len(s.calls(t)) != 0 {
@@ -554,10 +568,6 @@ func TestStart(t *testing.T) {
 	}
 	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); shown(err) != msg.BackendLacks(Name, "egress-proxy", vm).Names() {
 		t.Errorf("network policy: %v", err)
-	}
-	ports := &backend.Ports{Ranges: []backend.PortRange{{From: 80, To: 80}}}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Ports: ports}); shown(err) != msg.BackendLacks(Name, "ports", vm).Names() {
-		t.Errorf("ports: %v", err)
 	}
 }
 
@@ -768,9 +778,10 @@ func TestDiskUsed(t *testing.T) {
 }
 
 // Commands in a VM run as its user with a login's environment; a shell
-// gets a terminal when devvm has one.
+// gets a terminal when devvm has one; without ssh, through docker exec.
 func TestExecAndShell(t *testing.T) {
 	s := newSandbox(t)
+	s.createVM(t, backend.VMSpec{Project: "/p/web"})
 	s.Terminal = func() bool { return true }
 	c, err := s.Shell(t.Context(), vm, "/p/web")
 	if err != nil {

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Run as the VM's user by its port forwarder on the host (devvm _smolvm-ports), over devvm's ssh,
-# for forwarding every port: the TCP sockets listening in the VM, as /proc/net/tcp and tcp6 have
+# Run as the VM's user by its port forwarder on the host (devvm _smolvm-ports, _docker-ports), over
+# devvm's ssh, for forwarding its ports: the TCP sockets listening in the VM, as /proc/net/tcp and tcp6 have
 # their local addresses (ADDRESS:PORT, in hex), one per line, each list ended by a line ".". A list
 # goes out when it changes, and every 10 s all the same, so the script ends soon after the
 # connection does. The forwarder decides what it forwards: this only reports.

@@ -101,9 +101,11 @@ func (n names) toolsVolume() string { return "devvm-tools-" + n.ns() }
 // container is a container as docker container inspect has it: the fields
 // devvm reads.
 type container struct {
+	ID    string `json:"Id"`
 	Name  string `json:"Name"` // /name
 	State struct {
-		Status string `json:"Status"`
+		Status    string `json:"Status"`
+		StartedAt string `json:"StartedAt"` // its last start, which a stop keeps
 	} `json:"State"`
 	Config struct {
 		Labels map[string]string `json:"Labels"`
