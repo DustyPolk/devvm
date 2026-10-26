@@ -53,8 +53,9 @@ A VM's proxy reads these policy files, in order, as one list:
 
 | File | Rules for |
 | --- | --- |
-| `assets/layers/base.policy` (devvm's, [written out](install.md#installing-devvm)) | every VM: OS packages, mise's version lists, GitHub, container registries |
+| `assets/layers/base.policy` (devvm's, [written out](install.md#installing-devvm)) | every VM: OS packages, mise's version lists, GitHub |
 | `assets/shared-tools/<name>.policy` (devvm's, written out) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
+| `assets/layers/<name>.policy` (devvm's, written out) | each [built-in layer](images.md#built-in-layers) in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
 | `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
 | `~/.local/share/devvm/vms/<vm>.policy` | that VM only ([`devvm policy`](#changing-rules)) |
@@ -105,7 +106,7 @@ A blocked request gets `403`, naming the host, the reason and the rule that woul
 The VM's setup, on every launch:
 
 - installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only;
-- points what ignores those variables at the proxy: apt, sudo (which keeps them), every ssh connection (a `ProxyCommand` that tunnels through the proxy, which checks the host and port against the allowlist), and Docker's daemon and containers;
+- points what ignores those variables at the proxy: apt, sudo (which keeps them), every ssh connection (a `ProxyCommand` that tunnels through the proxy, which checks the host and port against the allowlist), and, with the [docker layer](images.md#built-in-layers), Docker's daemon and containers;
 - puts the VM's placeholders in `~/.config/devvm/env`, which login shells read (`CLAUDE_CODE_OAUTH_TOKEN`, `GH_TOKEN`), and git's credential helper for GitHub over HTTPS when `github` is bound;
 - adds `devvm-why`, which prints what the proxy blocked lately, and a note before each prompt when something new was blocked;
 - tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.

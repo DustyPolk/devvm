@@ -283,7 +283,7 @@ other = "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu
 other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
 
 [unknown_layer]
-description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
+description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
 other = "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
 
 [layer_name_invalid]
@@ -724,7 +724,7 @@ other = "couldn't show or change which ports are forwarded: {{.reason}}"
 other = "detected a {{.found}} project"
 
 [no_image_for]
-description = "envs (base, the toolchains and the user's layers) and agents are space-separated lists of names"
+description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
 other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
 
 [net_about]

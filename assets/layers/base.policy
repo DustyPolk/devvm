@@ -9,6 +9,8 @@ security.ubuntu.com
 esm.ubuntu.com
 deb.debian.org
 security.debian.org
+# Alpine's packages (--from alpine)
+dl-cdn.alpinelinux.org
 
 # mise's version lists, for versions a project's version files ask for (the downloads themselves are
 # in each tool's policy)
@@ -23,13 +25,3 @@ raw.githubusercontent.com
 objects.githubusercontent.com
 release-assets.githubusercontent.com
 lfs.github.com
-
-# Containers
-registry-1.docker.io
-auth.docker.io
-production.cloudflare.docker.com
-production.cloudfront.docker.com
-download.docker.com
-ghcr.io
-pkg-containers.githubusercontent.com
-dl-cdn.alpinelinux.org

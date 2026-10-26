@@ -43,6 +43,7 @@ func devvm() rules {
 			"internal/gitprotect.Modes":            table,
 			"internal/image.Toolchains":            table,
 			"internal/image.Agents":                table,
+			"internal/image.Builtins":              table,
 			"internal/msg.docs":                    table,
 			"internal/msg/gen.taken":               table,
 			"internal/msg/gen.initialisms":         table,

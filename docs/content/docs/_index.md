@@ -4,7 +4,7 @@ title: Docs
 
 - [Installing](install.md): what devvm needs on your machine, Homebrew and the install script, `devvm doctor`, upgrading and uninstalling.
 - [Commands](commands.md): devvm in a project folder, its options, and the image commands.
-- [Images and VMs](images.md): base and your layers, which image a VM gets, how images are built and cached, and where devvm keeps its state.
+- [Images and VMs](images.md): base, devvm's docker layer and your own layers, which image a VM gets, how images are built and cached, and where devvm keeps its state.
 - [Starting from a container image](from.md): `--from`, a base from `node:24`, `alpine:3` or your own image.
 - [Customizing images](customizing.md): your own layers, and the optional extras in every VM (oh-my-bash, fzf, CLI tools, your own).
 - [Security model](security.md): what a VM can and can't reach on your machine.

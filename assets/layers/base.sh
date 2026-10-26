@@ -1,5 +1,5 @@
 #!/bin/bash
-# Essentials, Docker, and mise for the shared tools (shared-tools/).
+# Essentials, and mise for the shared tools (shared-tools/).
 # shellcheck disable=SC2034  # the checksums are read through sha()
 set -euxo pipefail
 # Pinned downloads (scripts/bump.sh updates them).
@@ -9,26 +9,17 @@ mise_sha256_amd64=6eb1b890e90818417ca34c90dbbd47881917d5cd199f31b63b062ea9c6b18d
 mise_sha256_arm64_musl=e036eb7bd3ca63e8565497e597967484330a74ff24e9c4c9f2ac41824cbf4090
 mise_sha256_amd64_musl=fc5137a3147494e039c3d5fc3d84de354170d7d8dafdb0b5f0b6f3f19d1dd922
 # apt_snapshot: the distribution's packages come from its archive as it was then (snapshot.ubuntu.com,
-# snapshot.debian.org), so the same image key means the same packages. Docker's repository has no
-# snapshots: its packages are pinned by version.
+# snapshot.debian.org), so the same image key means the same packages.
 apt_snapshot=20261009T000000Z
-docker_version=29.9.0
-containerd_version=2.4.1
-buildx_version=0.38.0
-compose_version=5.6.0
-model_version=1.2.6
-docker_gpg_sha256=1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
 
 export DEBIAN_FRONTEND=noninteractive
 # Alpine (--from alpine): apk, OpenRC and musl. Its packages come from the release's repositories,
-# which have no snapshots, and Docker is Alpine's own package: neither is pinned.
+# which have no snapshots: they aren't pinned.
 if command -v apk >/dev/null; then
   # GNU tar: devvm's launch sends files with it (busybox's lacks options it uses).
   sudo apk add --no-cache git curl wget ca-certificates build-base unzip jq ripgrep bash coreutils tar \
-    util-linux util-linux-misc losetup findmnt erofs-utils docker docker-cli-buildx docker-cli-compose
-  echo "devvm: Alpine's packages, Docker included, aren't pinned" >&2
-  sudo rc-update add docker default
-  sudo addgroup "$USER" docker
+    util-linux util-linux-misc losetup findmnt erofs-utils
+  echo "devvm: Alpine's packages aren't pinned" >&2
   musl=_musl
 else
 musl=""
@@ -83,34 +74,7 @@ fi
 SH
 sudo chmod 755 /usr/local/bin/devvm-fetch
 
-# Docker from its signed apt repository (the key's checksum pinned), each package at the repository's
-# build of the pinned version for this distribution.
 if [[ -z $musl ]]; then
-# shellcheck source=/dev/null
-. /etc/os-release
-case " $ID ${ID_LIKE:-} " in
-  *" ubuntu "*) dist=ubuntu codename=${UBUNTU_CODENAME:-$VERSION_CODENAME} ;;
-  *)            dist=debian codename=$VERSION_CODENAME ;;
-esac
-devvm-fetch "https://download.docker.com/linux/$dist/gpg" "$docker_gpg_sha256" /tmp/docker.asc
-sudo install -D -m 644 /tmp/docker.asc /etc/apt/keyrings/docker.asc
-rm /tmp/docker.asc
-printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nSigned-By: /etc/apt/keyrings/docker.asc\n' \
-  "$dist" "$codename" | sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null
-apt_update
-pkgver() {   # pkgver PACKAGE VERSION: the repository's full version for it (epoch and build suffix)
-  local v
-  v=$(apt-cache madison "$1" | awk -v want="$2" '{ v = $3; sub(/^[0-9]+:/, "", v) } index(v, want "-") == 1 { print $3; exit }')
-  [[ -n $v ]] || { echo "devvm: Docker's repository has no $1 $2 for $dist $codename" >&2; exit 1; }
-  echo "$1=$v"
-}
-sudo apt-get install -y \
-  "$(pkgver docker-ce "$docker_version")" "$(pkgver docker-ce-cli "$docker_version")" \
-  "$(pkgver docker-ce-rootless-extras "$docker_version")" "$(pkgver containerd.io "$containerd_version")" \
-  "$(pkgver docker-buildx-plugin "$buildx_version")" "$(pkgver docker-compose-plugin "$compose_version")" \
-  "$(pkgver docker-model-plugin "$model_version")"
-sudo usermod -aG docker "$USER"
-
 # Ubuntu's cloud image is a server's: drop what a dev VM doesn't use (snapd, multipath, modem and disk
 # managers, firmware updates, crash reporting, tracing tools, kernel headers), and apt's background
 # updates, which hold apt's lock and, under network policy, show up as blocks. Measured: 0.9 GB less

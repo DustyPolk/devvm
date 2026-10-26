@@ -69,15 +69,15 @@ fzf
 omb
 mine
 -- ran-all --
-# Essentials, Docker, and mise for the shared tools (shared-tools/).
+# Essentials, and mise for the shared tools (shared-tools/).
 # CLI tools: bat, fd, eza, zoxide (z), btop, tree, tldr
 # fzf: fuzzy Ctrl-R history and Ctrl-T file search
 # oh-my-bash: themed prompt, completions, aliases
 # my tools
 -- ran-some --
-# Essentials, Docker, and mise for the shared tools (shared-tools/).
+# Essentials, and mise for the shared tools (shared-tools/).
 # fzf: fuzzy Ctrl-R history and Ctrl-T file search
 # oh-my-bash: themed prompt, completions, aliases
 echo foo
 -- ran-none --
-# Essentials, Docker, and mise for the shared tools (shared-tools/).
+# Essentials, and mise for the shared tools (shared-tools/).

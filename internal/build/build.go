@@ -1,5 +1,5 @@
 // Package build builds images through a backend and keeps their records:
-// base, and the user's layers on it. An image is built once per key and
+// base, and layers on it (devvm's built-in ones and the user's). An image is built once per key and
 // reused while its key matches; rebuilding one bumps its rebuild counter,
 // which changes its key.
 //
@@ -128,14 +128,15 @@ func (b Builds) lookUp(ctx context.Context) error {
 	return nil
 }
 
-// Layers returns base and the user's layers, sorted: the scripts in the
-// layers folder with names a layer can have (not a shared tool's).
+// Layers returns base, then the built-in layers and the user's, sorted:
+// the scripts in the layers folder with names a layer can have (not a
+// shared tool's or a built-in layer's).
 func (b *Env) Layers() []string {
-	names := []string{image.Base}
+	names := slices.Concat([]string{image.Base}, image.Builtins)
 	entries, _ := os.ReadDir(b.Dirs.Layers()) // no folder: no layers
 	for _, e := range entries {
 		n, ok := strings.CutSuffix(e.Name(), ".sh")
-		if ok && image.LayerName(n) && b.isLayer(n) {
+		if ok && image.LayerName(n) && !image.IsBuiltin(n) && b.isLayer(n) {
 			names = append(names, n)
 		}
 	}
@@ -143,25 +144,36 @@ func (b *Env) Layers() []string {
 	return names
 }
 
-// LayerScript is the script of one of the user's layers.
-func (b *Env) LayerScript(layer string) string {
+// LayerData is a layer's script: devvm's own for a built-in layer, else
+// the user's.
+func (b *Env) LayerData(layer string) ([]byte, error) {
+	if image.IsBuiltin(layer) {
+		return fs.ReadFile(b.Assets, "layers/"+layer+".sh")
+	}
+	return os.ReadFile(b.userLayer(layer))
+}
+
+func (b *Env) userLayer(layer string) string {
 	return filepath.Join(b.Dirs.Layers(), layer+".sh")
 }
 
 func (b *Env) isLayer(layer string) bool {
-	fi, err := os.Stat(b.LayerScript(layer))
+	if image.IsBuiltin(layer) {
+		return true
+	}
+	fi, err := os.Stat(b.userLayer(layer))
 	return err == nil && fi.Mode().IsRegular()
 }
 
 // Environments returns what an image can be made of besides the agents:
-// base, the toolchains and the user's layers.
+// base, the toolchains, the built-in layers and the user's.
 func (b *Env) Environments() []string {
 	layers := b.Layers()
 	return slices.Concat(layers[:1], image.Toolchains, layers[1:])
 }
 
 // CheckLayers refuses an image name with a part that isn't base, a shared
-// tool or one of the user's layers. Names become file names: nothing else
+// tool, a built-in layer or one of the user's layers. Names become file names: nothing else
 // gets past it.
 func (b *Env) CheckLayers(name string) error {
 	for p := range strings.SplitSeq(name, "+") {
@@ -276,7 +288,7 @@ func (b Builds) build(ctx context.Context, name string) error {
 		}
 		libc = rec.Libc
 		layer := name[strings.LastIndex(name, "+")+1:]
-		data, err := os.ReadFile(b.LayerScript(layer))
+		data, err := b.LayerData(layer)
 		if err != nil {
 			return err
 		}

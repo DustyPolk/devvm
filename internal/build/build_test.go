@@ -114,28 +114,30 @@ func isMsg(err error, id string) bool {
 	return ok && m.ID() == id
 }
 
-// Layers are the user's scripts with names image names can hold; nothing
-// else gets past CheckLayers.
+// Layers are devvm's built-in ones and the user's scripts with names image
+// names can hold; nothing else gets past CheckLayers.
 func TestLayersAndCheckLayers(t *testing.T) {
 	b, _ := testEnv(t)
 	write(t, filepath.Join(b.Dirs.Layers(), "Bad_Name.sh"), "")
 	write(t, filepath.Join(b.Dirs.Layers(), "base.sh"), "")
-	write(t, filepath.Join(assetsDir(b), "layers", "stray.sh"), "") // devvm's own folder holds only base
+	write(t, filepath.Join(assetsDir(b), "layers", "stray.sh"), "") // not a built-in layer
 	if err := os.Mkdir(filepath.Join(b.Dirs.Layers(), "dir.sh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A layer with a shared tool's name isn't one.
+	// A layer with a shared tool's name isn't one; one with a built-in
+	// layer's is the built-in one, listed once.
 	write(t, filepath.Join(b.Dirs.Layers(), "node.sh"), "")
-	if got, want := b.Layers(), []string{"base", "bar", "foo"}; !slices.Equal(got, want) {
+	write(t, filepath.Join(b.Dirs.Layers(), "docker.sh"), "")
+	if got, want := b.Layers(), []string{"base", "bar", "docker", "foo"}; !slices.Equal(got, want) {
 		t.Errorf("Layers() = %q, want %q", got, want)
 	}
-	if got, want := b.Environments(), []string{"base", "node", "python", "rust", "go", "bar", "foo"}; !slices.Equal(got, want) {
+	if got, want := b.Environments(), []string{"base", "node", "python", "rust", "go", "bar", "docker", "foo"}; !slices.Equal(got, want) {
 		t.Errorf("Environments() = %q, want %q", got, want)
 	}
-	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("claude codex opencode", "base node python rust go bar foo", "stray").Error() {
+	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("claude codex opencode", "base node python rust go bar docker foo", "stray").Error() {
 		t.Errorf("CheckLayers(stray) = %v", err)
 	}
-	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "node+foo+claude", "go"} {
+	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "node+foo+claude", "go", "docker", "node+docker"} {
 		if err := b.CheckLayers(ok); err != nil {
 			t.Errorf("CheckLayers(%q): %v", ok, err)
 		}
@@ -261,6 +263,28 @@ func TestBuild(t *testing.T) {
 		if c.Method != "Images" {
 			t.Errorf("a built image called %s", c.Method)
 		}
+	}
+}
+
+// A built-in layer runs devvm's script, not the user's of the same name.
+func TestBuildBuiltinLayer(t *testing.T) {
+	b, f := testEnv(t)
+	write(t, filepath.Join(assetsDir(b), "layers", "docker.sh"), "#!/bin/bash\necho devvm's\n")
+	write(t, filepath.Join(b.Dirs.Layers(), "docker.sh"), "#!/bin/bash\necho yours\n")
+	if err := (Builds{b}).Build(t.Context(), "foo+docker"); err != nil {
+		t.Fatal(err)
+	}
+	calls := f.Calls()
+	last := calls[len(calls)-1]
+	if last.Method != "BuildImage" {
+		t.Fatalf("last call %s", last.Method)
+	}
+	got := last.Args[0].(backend.ImageSpec)
+	if got.Image != "foo+docker" || !sameScripts(got.Scripts, []backend.Script{script("docker.sh", "#!/bin/bash\necho devvm's\n")}) {
+		t.Errorf("built %+v", got)
+	}
+	if data, err := b.LayerData("docker"); err != nil || string(data) != "#!/bin/bash\necho devvm's\n" {
+		t.Errorf("LayerData(docker) = %q, %v", data, err)
 	}
 }
 

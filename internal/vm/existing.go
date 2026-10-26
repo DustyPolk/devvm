@@ -1,8 +1,8 @@
 package vm
 
 import (
+	"bytes"
 	"context"
-	"os"
 	"slices"
 	"strings"
 
@@ -341,31 +341,51 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 			return err
 		}
 	}
-	if _, err := e.run(ctx, b, st); err != nil {
+	// The new image is the VM's while its layers' scripts run, so its proxy
+	// allows their hosts too; it's set back when one fails.
+	if err := st.Set(state.KeyImage, newImg); err != nil {
 		return err
 	}
-	for _, l := range missing {
-		if image.IsTool(l) {
-			continue
+	if err := e.runLayers(ctx, b, st, builder, missing); err != nil {
+		if rerr := st.Set(state.KeyImage, img); rerr != nil {
+			return rerr
 		}
-		e.Info(msg.Adding(l))
-		e.LogNote()
-		if err := e.runScript(ctx, b, vm, builder.LayerScript(l)); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return backend.Logged(msg.AddLayerFailed(l, vm))
-		}
+		return err
 	}
 	if len(files) > 0 {
 		if err := st.Set(KeyTools, strings.Join(append(strings.Fields(st.Get(KeyTools)), files...), " ")); err != nil {
 			return err
 		}
 	}
-	if err := st.Set(state.KeyImage, newImg); err != nil {
+	e.Info(msg.VMIsNow(newImg, vm))
+	return nil
+}
+
+// runLayers starts the VM as its state says, then runs the scripts of the
+// layers among names in it, in order.
+func (e Launch) runLayers(ctx context.Context, b backend.Backend, st *state.VM, builder *build.Env, names []string) error {
+	vm := st.Name()
+	if _, err := e.run(ctx, b, st); err != nil {
 		return err
 	}
-	e.Info(msg.VMIsNow(newImg, vm))
+	for _, l := range names {
+		if image.IsTool(l) {
+			continue
+		}
+		data, err := builder.LayerData(l)
+		if err != nil {
+			return err
+		}
+		e.Info(msg.Adding(l))
+		e.LogNote()
+		out := e.LogWriter()
+		if err := b.Exec(ctx, vm, []string{"bash", "-s"}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: out, Stderr: out}); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return backend.Logged(msg.AddLayerFailed(l, vm))
+		}
+	}
 	return nil
 }
 
@@ -379,17 +399,6 @@ func (e Launch) wantedImage(want, dir string, b *build.Env) (string, error) {
 	}
 	img := image.Normalize(want)
 	return img, b.CheckLayers(img)
-}
-
-// runScript runs a host script in the VM, fed to bash, its output logged.
-func (e Launch) runScript(ctx context.Context, b backend.Backend, vm, path string) error {
-	f, err := os.Open(path) //nolint:gosec // the user's own layer
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	out := e.LogWriter()
-	return b.Exec(ctx, vm, []string{"bash", "-s"}, backend.ExecOpts{Stdin: f, Stdout: out, Stderr: out})
 }
 
 // toolTarget is what a VM's tool images are built for: its base's C

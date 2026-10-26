@@ -34,11 +34,11 @@ Images aren't machines: each is a pack (`smolvm pack create --from-vm`) in `~/.l
 - Builds use smolvm's default network: the internet, not the host's loopback. A pack keeps its build machine's network, CPUs and memory, so devvm sets all three on every VM it makes.
 - Base's CPUs, memory and disk are `base.yaml`'s: 4 CPUs, 8 GiB (half the host's memory on a small host), 100 GiB.
 
-devvm's own scripts for this (`prepare.sh`, `shims.sh`, and `sshd.sh`, which installs sshd after base's scripts, from the Ubuntu snapshot they pin) are in `base`'s key, with the backend: smolvm's images are never Lima's.
+devvm's own scripts for this (`prepare.sh`, `shims.sh`, and `sshd.sh`, which installs sshd after base's scripts, from the Ubuntu snapshot they pin, and keeps the snapshot's package lists for layers) are in `base`'s key, with the backend: smolvm's images are never Lima's.
 
 ## What devvm sets on a VM
 
-- **Mounts:** the project folder (read-write) and agents' folders (read-only) at their host paths, the shared tools at `/mnt/devvm-tools` (read-only), and `/var/lib/docker` on the machine's own disk, which Docker's storage needs. A path with a colon is refused: smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, mode 0600.
+- **Mounts:** the project folder (read-write) and agents' folders (read-only) at their host paths, the shared tools at `/mnt/devvm-tools` (read-only), and `/var/lib/docker` on the machine's own disk, which the [docker layer](images.md#built-in-layers)'s storage needs (every VM gets it, so the layer can be added in place). A path with a colon is refused: smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, mode 0600.
 - **Network:** smolvm's own, without network policy: the internet, not the host's loopback. With it, [below](#network-policy).
 - **Size:** what you ask for, or base's; the disk only grows.
 - **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 63 ports: smolvm forwards 64, and one is the VM's [ssh](#ssh-for-editors). Port 22 is that ssh's, so listing it is refused (`smolvm_port_ssh`). Only servers listening on all addresses (`0.0.0.0`) are reached. smolvm's forwards share a port a program on the host has on every address (`SO_REUSEADDR`), taking that program's `localhost` connections, so a start leaves out the listed ports in use, warned ([ports](images.md#ports)), and sets them again once a start finds them free (`machine update`, on the stopped VM). `all`, the default, is [emulated](#every-port).
@@ -94,7 +94,7 @@ A machine runs its image as a container, and nothing starts at boot. After each 
 
 - the loop devices the shared tools are mounted with (`/dev` has none), then the tools' mounts;
 - the VM's [sshd](#ssh-for-editors), with new host keys; its log is `/var/log/devvm-sshd.log`;
-- Docker's daemon, in the background, logging to `/var/log/dockerd.log`.
+- Docker's daemon, in a VM with the [docker layer](images.md#built-in-layers), in the background, logging to `/var/log/dockerd.log`. The layer's script also starts it when it's added to a running VM.
 
 The shared tools are their own images on smolvm: uncompressed EROFS, as its kernel mounts no other. A tool image's key includes the format, so Lima's and smolvm's VMs each get theirs from the one share.
 

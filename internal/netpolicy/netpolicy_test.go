@@ -67,6 +67,11 @@ func TestPolicyFiles(t *testing.T) {
 	if got[2] != "/c/layers/pg.policy" {
 		t.Errorf("a custom layer's policy = %q", got[2])
 	}
+	// A built-in layer's is devvm's.
+	got = PolicyFiles(d, "/r", "vm1", "node+docker")
+	if got[2] != "/r/layers/docker.policy" {
+		t.Errorf("a built-in layer's policy = %q", got[2])
+	}
 	if got := PolicyFiles(d, "/r", "vm1", "base"); len(got) != 4 {
 		t.Errorf("base's PolicyFiles = %q", got)
 	}
@@ -74,7 +79,7 @@ func TestPolicyFiles(t *testing.T) {
 
 // Every image part devvm has comes with its allowlist.
 func TestEveryPartHasAPolicy(t *testing.T) {
-	for _, p := range append([]string{"base"}, append(image.Toolchains, image.Agents...)...) {
+	for _, p := range slices.Concat([]string{"base"}, image.Toolchains, image.Agents, image.Builtins) {
 		d := paths.Dirs{Data: "/d", Config: "/c"}
 		f := PolicyFiles(d, ".", "vm1", p)
 		if p != "base" {

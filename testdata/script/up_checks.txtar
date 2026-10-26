@@ -71,7 +71,7 @@ env DEVVM_LIMA_HOME=$LIMA_HOME
 mkdir $WORK/empty
 cd $WORK/empty
 ! exec devvm --no-network-policy
-stderr '^devvm: no_image_for agents=claude codex opencode dir=/\S*/empty envs=base node python rust go foo$'
+stderr '^devvm: no_image_for agents=claude codex opencode dir=/\S*/empty envs=base node python rust go docker foo$'
 # A named image skips detection; layers are checked before anything runs.
 mkdir $WORK/node
 cd $WORK/node
@@ -79,7 +79,7 @@ cp $WORK/package.json package.json
 exec sh -c ': > "$STUB_LOG"'
 ! exec devvm --no-network-policy stray
 ! stdout detected
-stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go foo layer=stray$'
+stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go docker foo layer=stray$'
 stub_calls
 ! stdout 'create|clone|start'
 exec devvm --no-network-policy base+foo

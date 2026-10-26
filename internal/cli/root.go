@@ -21,7 +21,8 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		Use:   "devvm [IMAGE]",
 		Short: "Open a shell in this folder's VM, creating it first",
 		Long: "Open a shell in this folder's VM, at the same path, creating the VM first. A new VM " +
-			"gets IMAGE (base, your layers and the shared tools joined with +: node+python+claude), " +
+			"gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: " +
+			"node+python+docker+claude), " +
 			"else the toolchains the folder's files call for, with any agents IMAGE names on top, built " +
 			"if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and " +
 			"its .git hooks and config are locked against changes from the VM (macOS); with --clone, " +

@@ -2,8 +2,8 @@
 # Run as root in a machine after each start, for what base's services do at boot on Lima: a smolvm
 # machine runs no init system. Its /dev has no loop devices, which the shared tools' images are
 # mounted with, so they're made first; then the tools are mounted (devvm-tools, once
-# assets/guest/sync.sh installed it), the VM's sshd started when it's asked for, and Docker's daemon started in the
-# background, where base has them.
+# assets/guest/sync.sh installed it), the VM's sshd started when it's asked for, and Docker's daemon
+# started in the background where the VM has it (the docker layer).
 #   services.sh [ssh USER KEY [VAR...]]
 # ssh: devvm's sshd for ssh and editors, on a config of its own: new host keys (ed25519) at each
 # start, so no two VMs made from one image share them; USER alone may log in, with KEY (the VM's

@@ -1,6 +1,8 @@
 package vm
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -121,6 +123,52 @@ func TestAddLayers(t *testing.T) {
 	*asked = nil
 	if err := l.Up(t.Context(), Options{Image: "claude"}); err != nil || len(*asked) > 0 {
 		t.Errorf("again: %v, asked %q", names(err), *asked)
+	}
+}
+
+// A built-in layer added in place runs devvm's script, with the new image
+// already the VM's (its proxy reads the layer's policy from it); a script
+// that fails sets the image back.
+func TestAddBuiltinLayer(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	l := Launch{e}
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	vm := st.Name()
+	answers(t, e, true)
+	want, err := fs.ReadFile(e.Assets, "layers/docker.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scripts, during []string
+	fail := true
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		if !slices.Equal(argv, []string{"bash", "-s"}) {
+			return nil
+		}
+		b, _ := readAll(o)
+		scripts = append(scripts, b)
+		now, _ := state.ReadVM(e.Dirs, vm)
+		during = append(during, now.Get(state.KeyImage))
+		if fail {
+			return errors.New("exit 1")
+		}
+		return nil
+	}
+	if err := l.Up(t.Context(), Options{Image: "docker"}); !strings.HasPrefix(names(err), "add_layer_failed ") {
+		t.Errorf("failing script: %v", names(err))
+	}
+	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "base" {
+		t.Errorf("after a failed script, image=%s", st.Get(state.KeyImage))
+	}
+	fail = false
+	if err := l.Up(t.Context(), Options{Image: "docker"}); err != nil {
+		t.Fatal(names(err))
+	}
+	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "docker" {
+		t.Errorf("image=%s", st.Get(state.KeyImage))
+	}
+	if len(scripts) != 2 || scripts[1] != string(want) || !slices.Equal(during, []string{"docker", "docker"}) {
+		t.Errorf("%d scripts, devvm's last: %v, image while running %q", len(scripts), len(scripts) == 2 && scripts[1] == string(want), during)
 	}
 }
 

@@ -51,4 +51,4 @@ Besides the agents' config, every launch sets the VM up from this machine's sett
 - telemetry off where an environment variable can't do it: Go's, and Codex's analytics and metrics;
 - `(devvm)` at the start of the prompt.
 
-With network policy it also installs devvm's CA, points apt, sudo, ssh and Docker at the proxy, adds `devvm-why` (what the proxy blocked lately), and tells the agents, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail ([Inside the VM](network.md#inside-the-vm)). Tokens go in `~/.config/devvm/env`, which login shells read.
+With network policy it also installs devvm's CA, points apt, sudo, ssh and Docker ([its layer](images.md#built-in-layers)'s) at the proxy, adds `devvm-why` (what the proxy blocked lately), and tells the agents, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail ([Inside the VM](network.md#inside-the-vm)). Tokens go in `~/.config/devvm/env`, which login shells read.

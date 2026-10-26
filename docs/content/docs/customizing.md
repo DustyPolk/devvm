@@ -15,7 +15,8 @@ devvm node+postgres         # a VM with node and your layer; or devvm build post
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that runs once, with bash as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and `NAME.policy` next to it unless that exists; it refuses a script that exists.
 
-- **Names:** lowercase letters, digits and dashes, starting with a letter or digit, and neither `base` nor a shared tool's (`node`, `claude`, …).
+- **Names:** lowercase letters, digits and dashes, starting with a letter or digit, and not `base`, a [built-in layer's](images.md#built-in-layers) (`docker`) or a shared tool's (`node`, `claude`, …).
+- Built-in layers go in the same image names as yours: `devvm node+docker+postgres`.
 - Put PATH changes in `~/.profile`.
 - Download with `devvm-fetch URL SHA256 OUT`, which `base` installs: it fails when the checksum doesn't match.
 - `NAME.policy` lists the hosts VMs with the layer can reach with [network policy](network.md#allowlists), one rule per line.

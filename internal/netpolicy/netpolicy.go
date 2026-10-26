@@ -89,8 +89,9 @@ func newRandom(st *state.VM, key string, n int) (string, error) {
 }
 
 // PolicyFiles returns a VM's policy files, in order: base's and each of its
-// image's parts' (a shared tool's from devvm's shared-tools/, a layer's
-// from the user's layers), the user's own for every VM, the VM's own, and
+// image's parts' (a shared tool's from devvm's shared-tools/, a built-in
+// layer's from devvm's layers/, another layer's from the user's layers),
+// the user's own for every VM, the VM's own, and
 // the hosts its secrets imply. devvm's own are in assets, the folder
 // they're written out in. A missing file has no rules.
 func PolicyFiles(d paths.Dirs, assets, vm, img string) []string {
@@ -100,6 +101,8 @@ func PolicyFiles(d paths.Dirs, assets, vm, img string) []string {
 		case p == "" || p == "base":
 		case image.IsTool(p):
 			files = append(files, filepath.Join(assets, "shared-tools", p+".policy"))
+		case image.IsBuiltin(p):
+			files = append(files, filepath.Join(assets, "layers", p+".policy"))
 		default:
 			files = append(files, filepath.Join(d.Layers(), p+".policy"))
 		}

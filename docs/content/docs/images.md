@@ -5,11 +5,11 @@ weight: 20
 
 ## Base
 
-`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, Docker and mise. `--from` starts it from a container image instead ([details](from.md)). `assets/base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `assets/layers/base.sh` installs it, then the optional [features](customizing.md) you chose.
+`base` is the image every other one is built on: Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq and mise. Docker is a [layer of devvm's](#built-in-layers): `devvm node+docker`. `--from` starts it from a container image instead ([details](from.md)). `assets/base.yaml` holds its VM settings (4 CPUs, 8 GiB of memory, a 100 GiB disk) and `assets/layers/base.sh` installs it, then the optional [features](customizing.md) you chose.
 
 It drops the server extras Ubuntu's cloud image comes with: snapd, multipath, ModemManager, udisks, firmware updates, crash reporting, tracing tools, kernel headers, and apt's background updates and upgrades. That saves 0.9 GB of disk and 100 MB of memory per VM. The everyday tools stay (htop, tmux, lsof, strace, tcpdump, rsync, nano and so on).
 
-Each download in `assets/layers/base.sh` is pinned to a version and SHA-256 at the top of the script, and the build fails if a checksum doesn't match. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and Docker's packages are pinned by version. Project VMs use the live archive, so `apt upgrade` gets current updates.
+Each download in `assets/layers/base.sh` is pinned to a version and SHA-256 at the top of the script, and the build fails if a checksum doesn't match. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com). Project VMs use the live archive, so `apt upgrade` gets current updates.
 
 ### Ubuntu's cloud image
 
@@ -25,14 +25,24 @@ The Ubuntu image isn't part of base's key: a newer one doesn't make base stale. 
 
 ## Layers
 
-An image is base and your layers on it, bottom first, joined with `+`: `foo+bar` is `bar` on `foo` on `base`. `base` itself can be left out, so `base+foo` is `foo`. An image name can also hold [shared tools](#shared-tools), which aren't layers.
+An image is base and layers on it, bottom first, joined with `+`: `foo+bar` is `bar` on `foo` on `base`. `base` itself can be left out, so `base+foo` is `foo`. An image name can also hold [shared tools](#shared-tools), which aren't layers.
 
-A layer is a script of yours, `~/.config/devvm/layers/<name>.sh`, run with bash in the image's VM as its user, who has sudo. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and is neither `base` nor a shared tool's. devvm refuses any other name in an image, and a layer without its script. `devvm layer new NAME` starts one ([details](customizing.md#your-own-layers)).
+A layer is a script, run with bash in the image's VM as its user, who has sudo: one of devvm's [built-in layers](#built-in-layers), or one of yours, `~/.config/devvm/layers/<name>.sh`. Its name is lowercase letters, digits and dashes, starting with a letter or digit, and is neither `base` nor a shared tool's. devvm refuses any other name in an image, and a layer without its script. `devvm layer new NAME` starts one of yours ([details](customizing.md#your-own-layers)).
 
 ```sh
 devvm build foo+bar   # builds base, foo and foo+bar, unless they're built
 devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 ```
+
+### Built-in layers
+
+devvm ships one layer, `docker`, chosen like any other (`devvm node+docker`, `devvm build docker`) and added to an existing VM in place ([adding to a VM](commands.md#adding-to-a-vm)). Its script is `assets/layers/docker.sh`, embedded in devvm, and its [allowlist](network.md#allowlists) `assets/layers/docker.policy`. Its name is reserved: `devvm layer new docker` is refused, and a `docker.sh` of yours isn't read.
+
+| Layer | Brings |
+| --- | --- |
+| docker | Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, its signing key's checksum and each package's version pinned at the top of the script (Alpine's own packages on `--from alpine`, unpinned); the VM's user in the `docker` group; the daemon started at each boot |
+
+A VM without it has no Docker.
 
 ## Shared tools
 
@@ -93,9 +103,9 @@ If more than one matches, they all go in, in that order (`package.json` and `pyp
 
 Agents go on top of the folder's toolchains: `devvm claude` in a folder with `package.json` makes a `node+claude` VM, and a `claude` one (base and Claude) when nothing is detected. Naming a toolchain or a layer skips detection (`devvm python+claude`), and so does `devvm base`.
 
-Image names are put in one order: the toolchains (node, python, rust, go), then your layers as given, then the agents. So `claude+node` and `node+claude` are the same.
+Image names are put in one order: the toolchains (node, python, rust, go), then the layers as given, then the agents. So `claude+node` and `node+claude` are the same.
 
-The image (base and your layers) is built first if it isn't, with the shared tools the name has, and the VM is a copy of the image. A VM keeps the image and tools it was made from.
+The image (base and its layers) is built first if it isn't, with the shared tools the name has, and the VM is a copy of the image. A VM keeps the image and tools it was made from.
 
 ## Building
 
@@ -103,7 +113,7 @@ Each image is built in a VM of its own, which then is the image:
 
 1. base is a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings, or with `--from`, from a container image [converted into a disk](from.md#how-its-converted). A layer's VM is a copy of its parent image.
 2. The VM starts confined: it reaches the internet but not the host's own services on loopback, and forwards no ports. How that's enforced depends on the backend: see [Lima](lima.md#confinement).
-3. The script runs: `assets/layers/base.sh` for base, then its chosen [features](customizing.md), yours for a layer.
+3. The script runs: `assets/layers/base.sh` for base, then its chosen [features](customizing.md), the layer's for a layer.
 4. The VM stops. Its record is written last, with its chain, what base started from, and its C library.
 
 Nothing from the host is mounted into a build: layer scripts run third-party installers, which mustn't see your files. base gets `base.yaml`'s memory, or half the host's when that would leave the host less than 2 GiB. The images built on it, and their VMs, keep that.
@@ -115,6 +125,7 @@ Images are built in layers and cached, like Docker's. `base` comes first, and ea
 | Image | Its key hashes |
 | --- | --- |
 | `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it |
+| a built-in layer | its parent's key, its name, its script (`assets/layers/<name>.sh`) and its rebuild counter |
 | a custom layer | its parent's key, its name, its script (`~/.config/devvm/layers/<name>.sh`) and its rebuild counter |
 
 So:

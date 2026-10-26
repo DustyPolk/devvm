@@ -34,11 +34,11 @@ type Inputs struct {
 	// (backend.KeyFiles), by name. Nil for none.
 	BackendFiles map[string][]byte
 	// Assets holds devvm's own files (assets.FS): base.yaml,
-	// layers/base.sh, features/ and oci/. Files are hashed by their names
-	// in it.
+	// layers/base.sh, the built-in layers, features/ and oci/. Files are
+	// hashed by their names in it.
 	Assets fs.FS
 	// Layers holds the user's layers, <name>.sh (paths.Dirs.Layers). Nil
-	// when there are none.
+	// when there are none. A built-in layer's name is never read here.
 	Layers fs.FS
 	// Features holds the user's features, <name>.sh (paths.Dirs.Features).
 	// Nil when there are none. A built-in feature of the same name wins.
@@ -114,6 +114,13 @@ func (in Inputs) Outdated(chain Chain) ([]string, error) {
 func LayerName(name string) bool {
 	return name != Base && !IsTool(name) && layerName.MatchString(name)
 }
+
+// Builtins are the layers devvm ships, layers/<name>.sh in its own files:
+// chosen like the user's, whose layers can't take their names.
+var Builtins = []string{"docker"}
+
+// IsBuiltin reports whether a layer is one devvm ships.
+func IsBuiltin(name string) bool { return slices.Contains(Builtins, name) }
 
 var layerName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
@@ -227,13 +234,17 @@ func (in Inputs) baseKey() (string, error) {
 	return k.sum(), nil
 }
 
-// layerKey hashes a layer: its parent's key, its name, the user's script
-// and its rebuild counter.
+// layerKey hashes a layer: its parent's key, its name, its script (devvm's
+// for a built-in layer, else the user's) and its rebuild counter.
 func (in Inputs) layerKey(img, layer, parent string) (string, error) {
 	k := newKeyHash()
 	k.field("parent", parent)
 	k.field("layer", layer)
-	if _, err := k.optional("user-layer", in.Layers, layer+".sh"); err != nil {
+	if IsBuiltin(layer) {
+		if err := k.own(in.Assets, "layers/"+layer+".sh"); err != nil {
+			return "", err
+		}
+	} else if _, err := k.optional("user-layer", in.Layers, layer+".sh"); err != nil {
 		return "", err
 	}
 	if err := k.rebuild(in, img); err != nil {

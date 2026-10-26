@@ -1,5 +1,5 @@
 #!/bin/bash
-# Update the versions and checksums pinned in assets/ (layers/base.sh, features/*.sh,
+# Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh) and internal/tools/mise.go (devvm's host mise).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
@@ -93,7 +93,7 @@ bump_apt() {
 
 # Docker's packages: the newest of each in its repository for base's Ubuntu release, and its signing key.
 bump_docker() {
-  local f=assets/layers/base.sh idx p var new sha
+  local f=assets/layers/docker.sh idx p var new sha
   idx=$(fetch https://download.docker.com/linux/ubuntu/dists/resolute/stable/binary-arm64/Packages)
   for p in docker-ce:docker containerd.io:containerd docker-buildx-plugin:buildx \
       docker-compose-plugin:compose docker-model-plugin:model; do

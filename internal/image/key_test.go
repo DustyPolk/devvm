@@ -269,15 +269,44 @@ func TestKeyWithoutUserFolders(t *testing.T) {
 	}
 }
 
-// devvm's own files, embedded, give base a key.
+// A built-in layer's key hashes devvm's script, never the user's of the
+// same name; devvm's must be there.
+func TestBuiltinLayerKey(t *testing.T) {
+	e := newEnv(t, "")
+	key := func() string {
+		t.Helper()
+		k, err := e.in.Key("foo+docker")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k
+	}
+	first := key()
+	e.edit("layers/docker.sh") // the user's, made
+	if key() != first {
+		t.Error("a user's docker.sh changed the built-in layer's key")
+	}
+	e.edit("root/layers/docker.sh")
+	if key() == first {
+		t.Error("devvm's docker.sh didn't change its key")
+	}
+	e.remove("root/layers/docker.sh")
+	if _, err := e.in.Key("docker"); err == nil {
+		t.Error("no layers/docker.sh: no error")
+	}
+}
+
+// devvm's own files, embedded, give base and every built-in layer a key.
 func TestKeyOfTheRealFiles(t *testing.T) {
 	in := Inputs{Backend: "lima", Assets: assets.FS}
-	key, err := in.Key(Base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(key) {
-		t.Errorf("key %q", key)
+	for _, name := range append([]string{Base}, Builtins...) {
+		key, err := in.Key(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(key) {
+			t.Errorf("%s: key %q", name, key)
+		}
 	}
 }
 

@@ -84,7 +84,7 @@ A VM whose creation didn't finish (devvm was stopped after making it, before it 
 
 - Shared tools are built if the share lacks them, and join the VM's list: they're mounted at once, nothing is installed in its disk.
 - An agent's config folders are mounted, which stops the VM first: anything running in it stops.
-- A layer's script runs in the VM, as when it builds an image. A script that fails leaves the VM as it was otherwise.
+- A layer's script runs in the VM, as when it builds an image; with network policy, its proxy allows the layer's hosts for it. A script that fails leaves the VM as it was otherwise.
 
 The VM's image is then its old one with them. `devvm remove TOOLS` takes shared tools out again; layers can't be, as their scripts changed the VM's disk: save your work outside the project folder, `devvm rm`, and make the VM again.
 

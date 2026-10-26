@@ -3,7 +3,7 @@
 #   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
-#                project makes a VM from base in a project folder and checks its mounts, ssh by
+#                project makes a VM from base in a project folder and checks its mounts, no Docker, ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (never a listed port a program here has),
 #                devvm git-protect and rm, an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
@@ -16,24 +16,24 @@
 #                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
 #                stops its proxy
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
-#                from node:24 (Debian 12, with node, python and claude) and alpine:3 (musl tools,
-#                Docker on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
+#                from node:24 (Debian 12, with node, python, the docker layer and claude) and alpine:3
+#                (musl tools, the docker layer on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
 #                docker that isn't running
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
-#                packs, a project VM's mounts, size, ports (never one a program here has), Docker and
-#                agent forwarding, a node VM's
+#                packs, a project VM's mounts, size, ports (never one a program here has), no Docker
+#                without the docker layer, agent forwarding, a node VM's
 #                shared tools, agent toggling's emulation (your agent, devvm's or none from each
 #                start, devvm export's too, none reaching no agent and adding to none, a VM set to
 #                devvm's or none never reaching yours, one started by smolvm machine start from your
 #                shell stopped), ssh for editors' emulation (pinned
 #                host keys of each VM's own, its own key alone, no forwarding out even past a hostile
 #                sshd, devvm ssh and code, an alpine:3 VM, a --clone VM's push and fetch), network policy's emulation
-#                (nothing but the proxy, DNS kept on this machine, failing closed, the policy, ssh
-#                opening no way out), every port's (servers on the VM's loopback or all its addresses
+#                (a docker VM: nothing but the proxy, Docker's pulls through it, DNS kept on this
+#                machine, failing closed, the policy, ssh opening no way out), every port's (servers on the VM's loopback or all its addresses
 #                reach this machine's loopback alone, never a port of this machine's or devvm's, no
 #                way out with network policy),
 #                and that no machine without the sandbox's label is touched. Its machines share your
@@ -388,6 +388,7 @@ check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm 
 # nothing).
 check "nothing else from the host is mounted" bash -c "[[ \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$p $share ' ]]"
 check "SSH agent forwarding is off" bash -c "! limactl shell --workdir / $vm ssh-add -l </dev/null"
+check "without the docker layer, it has no Docker" in_vm "$vm" '! command -v dockerd && ! command -v docker && ! systemctl cat docker.service >/dev/null 2>&1'
 check "hostname is the folder" bash -c "[[ \$(limactl shell --workdir / $vm hostname </dev/null) == web ]]"
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
@@ -871,8 +872,8 @@ export -f from_record
 
 f=$(newproj fromdocker); echo '{}' > "$f/package.json"
 fh=$work/from-home; mkdir -p "$fh"   # the claude VM's: no agent config of yours
-HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy node+python+claude   # node:24 is Debian 12
-check "a node+python+claude VM from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
+HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy node+python+docker+claude   # node:24 is Debian 12
+check "a node+python+docker+claude VM from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
   grep -qx from=node:24 '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
   grep -qE '^digest=node@sha256:[0-9a-f]{64}$' \"\$(from_record node:24)\""
@@ -881,15 +882,17 @@ check "its node, claude and every feature work" in_vm "$vm" \
 check "python, python3 and claude are the locked versions" in_vm "$vm" \
   "[[ \$(python --version) == 'Python $(lockv python)' && \$(python3 --version) == 'Python $(lockv python)' && \$(claude --version) == '$(lockv claude) '* ]]"
 check "an interactive shell starts without errors" bash -c "out=\$(limactl shell --workdir / $vm bash -ic true </dev/null 2>&1) && ! grep -iE 'error|unknown option|not found' <<<\"\$out\""
+check "the docker layer's Docker runs in it (Docker's Debian repository), for the VM's user too" in_vm "$vm" \
+  'sudo docker run --rm hello-world | grep -q Hello && id -nG | grep -qw docker'
 (cd "$f" && HOME=$fh quiet "$D" rm -f)
 
-# Alpine: apk, OpenRC and musl, so its own (musl) tool images.
+# Alpine: apk, OpenRC and musl, so its own (musl) tool images; the docker layer from Alpine's packages.
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
-nd launch "$al" exit --from alpine:3 --no-network-policy
+nd launch "$al" exit --from alpine:3 --no-network-policy node+docker
 check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$vms/$vm' && grep -qx libc=musl \"\$(from_record alpine:3)\""
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
-check "Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
+check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
 check "and every feature" in_vm "$vm" 'eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 # As root: syslog's and acpid's pid files are root-only, so a user's rc-status calls them crashed.
 check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/dev/null)" ]]'
@@ -993,7 +996,7 @@ check "hostname is the folder" in_smol "$vm" '[[ $(hostname) == smolweb ]]'
 check "Exec's arguments, folder, input and user reach the VM as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/smolvm |
   grep -q -- '--- PASS: TestE2EExecQuoting'"
-check "Docker runs in it, started by devvm" in_smol "$vm" 'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
+check "without the docker layer, it has no Docker" in_smol "$vm" '! command -v dockerd && ! command -v docker && [[ ! -e /run/docker.pid ]]'
 check "SSH agent forwarding is off: the agent devvm's commands get, if any, reaches nothing" in_smol "$vm" \
   '[[ -z ${SSH_AUTH_SOCK:-} ]] || ssh-add -l 2>&1 | grep -qi "communication with agent failed\|error connecting to agent"'
 # A listener on every address (Ubuntu's container image has perl, not python), left running.
@@ -1318,8 +1321,8 @@ unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 section "smolvm: network policy"
 # The emulation's guarantee (reviewed): a VM with network policy reaches nothing but its proxy,
 # through devvm's decider; DNS it's refused never leaves this machine; with the proxy gone nothing
-# gets out, and smolvm won't start it without a decider; its policy applies as on Lima. A base VM:
-# no agent, so no login is read. Your own HOME, as smolvm keeps its machines under it. U is what
+# gets out, and smolvm won't start it without a decider; its policy applies as on Lima. A docker VM,
+# whose daemon goes through the proxy too: no agent, so no login is read. Your own HOME, as smolvm keeps its machines under it. U is what
 # devvm runs with (an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here). Its ssh
 # is checked to open no way out.
 U=(env)
@@ -1569,7 +1572,7 @@ echo listener-key > "$work/listener.auth"
 listener=$!
 np=$(newproj smolnet)
 ps_watch
-(cd "$np" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --ports none --no-git-protect base >"$work/last.log" 2>&1)
+(cd "$np" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --ports none --no-git-protect docker >"$work/last.log" 2>&1)
 ps_unwatch
 vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
 pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
@@ -1589,6 +1592,8 @@ check "the proxy's password was in no host process's arguments while devvm launc
   { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\" || { echo not in a login; false; }; } &&
   { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'tr \"\\\\0\" \"\\\\n\" < /proc/\$(cat /run/docker.pid)/environ' </dev/null |
     grep -qF \"https_proxy=http://devvm:\$key@\" || { echo not in the daemon devvm started; false; }; }"
+check "the docker layer's Docker, started by devvm, pulls through the proxy (the layer's allowlist)" in_smol "$vm" \
+  'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
 check "its allow list is the host's gateway alone, and its DNS a name that doesn't exist" smolnet_lists "$vm"
 check "... on virtio-net: it asks the gateway's resolver" smol_vnet "$vm"
 check "an allowed host works, through the proxy" in_smol "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"

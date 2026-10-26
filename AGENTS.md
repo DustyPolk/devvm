@@ -21,7 +21,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files, `assets.FS` written out where a path is needed (errors aren't messages yet) |
 | `internal/platform/`, `internal/ubuntu/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads) |
-| `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`), `smolvm/` (smolvm's in-VM scripts) |
+| `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts; the built-in layers, `docker`, each with its policy), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`), `smolvm/` (smolvm's in-VM scripts) |
 | `internal/structure/` | the structure test (tests only) |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |

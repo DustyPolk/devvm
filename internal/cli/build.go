@@ -25,7 +25,7 @@ func newBuildCmd(u *ui.UI, g *globals) *cobra.Command {
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
 		Long: "Build an image and the images under it, unless they're built, and the shared tool " +
-			"images it names that aren't. IMAGE is base, or your layers joined with +, bottom first " +
+			"images it names that aren't. IMAGE is base, or layers (devvm's docker, your own) joined with +, bottom first " +
 			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

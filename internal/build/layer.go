@@ -36,7 +36,7 @@ const layerPolicy = `# Hosts a VM with the NAME layer can reach with network pol
 // or whose script exists, is refused.
 func NewLayer(dirs paths.Dirs, name string) (script, policy string, err error) {
 	switch {
-	case name == image.Base || image.IsTool(name):
+	case name == image.Base || image.IsTool(name) || image.IsBuiltin(name):
 		return "", "", msg.LayerNameReserved(name)
 	case !image.LayerName(name):
 		return "", "", msg.LayerNameInvalid(name)

@@ -7,7 +7,7 @@ Your own image layers
 
 ## Synopsis
 
-Your own image layers: scripts in ~/.config/devvm/layers that an image runs on top of base, named in images like the shared tools (node+NAME).
+Your own image layers: scripts in ~/.config/devvm/layers that an image runs on top of base, named in images like the shared tools and devvm's built-in layers (node+docker+NAME).
 
 ```text
 devvm layer [flags]

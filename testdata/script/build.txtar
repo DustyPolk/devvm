@@ -21,7 +21,7 @@ stdout '^limactl start --tty=false devvm-img-[0-9a-f]{12}$'
 stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
 stdout '^limactl shell --workdir / devvm-img-[0-9a-f]{12} sync$'
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
-grep 'Essentials, Docker, and mise' $STUB_DIR/scripts
+grep 'Essentials, and mise' $STUB_DIR/scripts
 exec sh -c 'cat "$IMAGES"/*'
 stdout '^name=base$'
 stdout '^chain=base=[0-9a-f]{12}$'
@@ -70,9 +70,9 @@ stdout -count=2 '^libc=gnu$'
 # Names that aren't base or a layer are refused, before anything runs.
 exec sh -c ': > "$STUB_LOG"'
 ! exec devvm build foo+stray
-stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar foo layer=stray$'
+stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar docker foo layer=stray$'
 ! exec devvm rebuild ../../x
-stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar foo layer=\.\./\.\./x$'
+stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar docker foo layer=\.\./\.\./x$'
 ! exec devvm build
 stderr 'usage_error'
 ! stub_calls
