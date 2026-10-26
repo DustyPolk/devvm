@@ -24,6 +24,7 @@ func (quietUI) LogNote()                                                  {}
 func (quietUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
 func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
 func (quietUI) Interrupted() bool                                         { return false }
+func (quietUI) StdinIsTerminal() bool                                     { return false }
 
 // DEVVM_UNREVIEWED counts only in a test build: a release ignores it.
 func TestUnreviewedOnlyInTestBuilds(t *testing.T) {

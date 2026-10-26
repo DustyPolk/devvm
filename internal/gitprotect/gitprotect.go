@@ -325,7 +325,7 @@ func hasHooks(dir string) bool {
 			found = true
 			return fs.SkipAll
 		}
-		return nil //nolint:nilerr // unreadable: skipped, like find
+		return nil // unreadable: skipped, like find
 	})
 	return found
 }

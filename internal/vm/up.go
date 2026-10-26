@@ -72,87 +72,44 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	return e.open(ctx, o, t)
 }
 
+// newVM is what create checked and chose for a new VM before building
+// anything.
+type newVM struct {
+	img     string
+	size    Size
+	ports   string
+	net     bool
+	agent   string // sshagent.On or Off
+	mode    string // ModeClone, or ""
+	spec    backend.VMSpec
+	conf    backend.Confinement
+	builder *build.Builder
+}
+
 // create makes the folder's VM and opens a shell in it.
 func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) error {
 	vm := f.Name
-	if o.Clone {
-		if err := checkCloneRepo(ctx, f.Dir); err != nil {
-			return err
-		}
-	} else if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
-		return err
-	}
-	// Defaults are checked again: the files may be edited by hand. All
-	// before the build, which can take minutes.
-	def, err := e.defaultSize()
+	n, err := e.plan(ctx, o, f, b, size, ports)
 	if err != nil {
-		return err
-	}
-	size = size.Or(def)
-	host, err := e.Host()
-	if err != nil {
-		return err
-	}
-	if err := size.Check(host, BaseDisk(e.Assets), vm); err != nil {
-		return err
-	}
-	if ports == "" {
-		if ports, err = e.defaultPorts(); err != nil {
-			return err
-		}
-	}
-	builder := e.builder(b, o.From)
-	img, err := e.resolveImage(o.Image, f.Dir, builder)
-	if err != nil {
-		return err
-	}
-	// Asked before the build, which can take minutes.
-	net := e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
-	// Every VM has the share, read-only: a tool added later is mounted
-	// from it. Its agents' folders on the host are mounted read-only.
-	spec := backend.VMSpec{
-		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
-		AgentForwarding: o.SSHAgent, Size: size.Backend(), Ports: PortsBackend(ports),
-	}
-	agent := sshagent.Off
-	if o.SSHAgent {
-		agent = sshagent.On
-	}
-	e.useAgent(agent)
-	mode := ""
-	if o.Clone {
-		spec.Project, mode = "", ModeClone
-	}
-	conf := backend.Confinement{Net: backend.NetDirect}
-	if net {
-		conf.Net = backend.NetProxy
-	}
-	need := append(spec.Features(), conf.Features()...)
-	if o.Clone {
-		// Its clone is copied in and fetched over ssh.
-		need = append(need, backend.FeatureSSH)
-	}
-	if err := e.Registry.Require(b, vm, need...); err != nil {
 		return err
 	}
 	// A new VM gets the newest tools: check now when the daily check is
 	// due.
-	groups := image.ToolsOf(img)
+	groups := image.ToolsOf(n.img)
 	if len(groups) > 0 && e.Tools.CheckDue() {
 		e.Tools.Check(ctx)
 	}
-	if err := builder.Build(ctx, img); err != nil {
+	if err := n.builder.Build(ctx, n.img); err != nil {
 		return err
 	}
-	chain, err := builder.Chain(image.WithoutTools(img))
+	chain, err := n.builder.Chain(image.WithoutTools(n.img))
 	if err != nil {
 		return err
 	}
-	tg, err := builder.ToolTarget()
+	tg, err := n.builder.ToolTarget()
 	if err != nil {
 		return err
 	}
-	libc := tg.Libc
 	files, err := e.Tools.Files(ctx, groups, tg)
 	if err != nil {
 		return err
@@ -165,34 +122,14 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 		return err
 	}
 
-	e.Info(msg.CreatingFrom(img, vm))
+	e.Info(msg.CreatingFrom(n.img, vm))
 	e.LogNote()
-	// Until its first shell nothing of anyone's is in it: an interrupt
-	// deletes it and its state, and takes off .git's locks, or removes
-	// the repo's remote for its clone.
 	var locking atomic.Bool
-	done := e.AddCleanup(func(ctx context.Context) {
-		if !e.Interrupted() {
-			return
-		}
-		e.Info(msg.InterruptedVM(vm))
-		if err := b.Delete(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
-			e.Warn(msg.DeleteFailed(vm))
-		}
-		if locking.Load() {
-			e.Protector(f.Dir).Unlock(ctx)
-		}
-		if st, err := state.ReadVM(e.Dirs, vm); err == nil && isClone(st) {
-			clones(e).removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
-		}
-		_ = e.sshConfig().ForgetHostKeys(vm)
-		_ = e.Proxy.Forget(vm)
-		_ = os.Remove(e.Dirs.VMState(vm))
-	})
+	done := e.AddCleanup(e.undoCreate(b, f, &locking))
 	// The state first, with the network choice: if a later step fails,
 	// the VM never starts without it.
 	st, err := state.CreateVM(e.Dirs, vm, state.NewVM{
-		Image: img, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(),
+		Image: n.img, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(),
 	})
 	if err != nil {
 		return err
@@ -202,33 +139,15 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 	if err := e.Proxy.Forget(vm); err != nil {
 		return err
 	}
-	netState := "off"
-	if net {
-		netState = "on"
-	}
-	for _, kv := range [][2]string{
-		{KeyNet, netState},
-		{KeyMode, mode},
-		{sshagent.Key, agent},
-		{KeyLibc, libc},
-		{KeyTools, strings.Join(files, " ")},
-		{KeyCPUs, size.CPUs},
-		{KeyMemory, size.Memory},
-		{KeyDisk, size.Disk},
-	} {
-		if kv[1] == "" {
-			continue
-		}
-		if err := st.Set(kv[0], kv[1]); err != nil {
-			return err
-		}
-	}
-	if err := b.CreateVM(ctx, chain.Key(), spec); err != nil {
+	if err := n.record(st, tg.Libc, files); err != nil {
 		return err
 	}
-	if ports != "" && ports != PortsAll {
+	if err := b.CreateVM(ctx, chain.Key(), n.spec); err != nil {
+		return err
+	}
+	if n.ports != "" && n.ports != PortsAll {
 		for _, k := range []string{KeyPorts, KeyPortsSet} {
-			if err := st.Set(k, ports); err != nil {
+			if err := st.Set(k, n.ports); err != nil {
 				return err
 			}
 		}
@@ -245,7 +164,7 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 		// Files an earlier VM of this folder made are named too.
 		e.checkSetID(f.Dir)
 	}
-	if spec.AgentForwarding {
+	if n.spec.AgentForwarding {
 		e.checkAgent(ctx)
 	}
 	e.Info(msg.Starting(vm))
@@ -253,7 +172,7 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 	var started backend.Confinement
 	start := func(ctx context.Context) error {
 		var err error
-		started, err = e.start(ctx, b, st, conf)
+		started, err = e.start(ctx, b, st, n.conf)
 		return err
 	}
 	if err := start(ctx); err != nil {
@@ -269,6 +188,121 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 	}
 	done()
 	return e.Exec(cmd)
+}
+
+// plan checks and chooses what a new VM gets, all before the build,
+// which can take minutes: its image, size, ports, network policy (asked
+// for), SSH agent and the backend features it needs.
+func (e Launch) plan(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) (newVM, error) {
+	vm := f.Name
+	if o.Clone {
+		if err := checkCloneRepo(ctx, f.Dir); err != nil {
+			return newVM{}, err
+		}
+	} else if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
+		return newVM{}, err
+	}
+	// Defaults are checked again: the files may be edited by hand.
+	def, err := e.defaultSize()
+	if err != nil {
+		return newVM{}, err
+	}
+	n := newVM{size: size.Or(def), ports: ports, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
+	host, err := e.Host()
+	if err != nil {
+		return newVM{}, err
+	}
+	if err := n.size.Check(host, BaseDisk(e.Assets), vm); err != nil {
+		return newVM{}, err
+	}
+	if n.ports == "" {
+		if n.ports, err = e.defaultPorts(); err != nil {
+			return newVM{}, err
+		}
+	}
+	n.builder = e.builder(b, o.From)
+	if n.img, err = e.resolveImage(o.Image, f.Dir, n.builder); err != nil {
+		return newVM{}, err
+	}
+	n.net = e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
+	// Every VM has the share, read-only: a tool added later is mounted
+	// from it. Its agents' folders on the host are mounted read-only.
+	n.spec = backend.VMSpec{
+		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
+		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: PortsBackend(n.ports),
+	}
+	if o.SSHAgent {
+		n.agent = sshagent.On
+	}
+	e.useAgent(n.agent)
+	if o.Clone {
+		n.spec.Project, n.mode = "", ModeClone
+	}
+	if n.net {
+		n.conf.Net = backend.NetProxy
+	}
+	need := append(n.spec.Features(), n.conf.Features()...)
+	if o.Clone {
+		// Its clone is copied in and fetched over ssh.
+		need = append(need, backend.FeatureSSH)
+	}
+	if err := e.Registry.Require(b, vm, need...); err != nil {
+		return newVM{}, err
+	}
+	return n, nil
+}
+
+// record writes a new VM's choices into its state, with the libc and
+// tool files it was given.
+func (n newVM) record(st *state.VM, libc string, files []string) error {
+	netState := "off"
+	if n.net {
+		netState = "on"
+	}
+	for _, kv := range [][2]string{
+		{KeyNet, netState},
+		{KeyMode, n.mode},
+		{sshagent.Key, n.agent},
+		{KeyLibc, libc},
+		{KeyTools, strings.Join(files, " ")},
+		{KeyCPUs, n.size.CPUs},
+		{KeyMemory, n.size.Memory},
+		{KeyDisk, n.size.Disk},
+	} {
+		if kv[1] == "" {
+			continue
+		}
+		if err := st.Set(kv[0], kv[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// undoCreate is create's cleanup. Until its first shell nothing of
+// anyone's is in the VM: an interrupt deletes it and its state, and
+// takes off .git's locks (once locking is set), or removes the repo's
+// remote for its clone.
+func (e Launch) undoCreate(b backend.Backend, f project.Folder, locking *atomic.Bool) func(context.Context) {
+	vm := f.Name
+	return func(ctx context.Context) {
+		if !e.Interrupted() {
+			return
+		}
+		e.Info(msg.InterruptedVM(vm))
+		if err := b.Delete(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
+			e.Warn(msg.DeleteFailed(vm))
+		}
+		if locking.Load() {
+			e.Protector(f.Dir).Unlock(ctx)
+		}
+		if st, err := state.ReadVM(e.Dirs, vm); err == nil && isClone(st) {
+			clones(e).removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
+		}
+		_ = e.sshConfig().ForgetHostKeys(vm)
+		_ = e.Proxy.Forget(vm)
+		_ = os.Remove(e.Dirs.VMState(vm))
+	}
 }
 
 // setUp sets up a running VM, started with conf, for a shell in the

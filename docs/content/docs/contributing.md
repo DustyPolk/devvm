@@ -59,6 +59,20 @@ Before and after every change, `mise run fmt && mise run lint && mise run test` 
 
 CI runs `lint` and `test` on macOS and Linux.
 
+## Go lint rules
+
+golangci-lint enforces the [Go conventions](https://github.com/w3cj/devvm/blob/main/AGENTS.md#go-conventions) in `.golangci.yml`:
+
+| Rule | Enforces |
+| --- | --- |
+| forbidigo | only `internal/ui` prints (`fmt.Print*`, `os.Stdout`, `os.Stderr`); only `cmd/devvm` calls `os.Exit`; only `internal/ui` and `cmd/devvm` make a context (`context.Background`, `context.TODO`), every other function takes its caller's |
+| depguard | the allowed modules; `internal/proxy` uses only the standard library; only `cmd/devvm` and `internal/cli` import `internal/ui` |
+| nolintlint | every `//nolint` names its linters and says why, and is still needed |
+| reassign | no package reassigns another package's variables, tests included |
+| revive | at most 100 statements or 160 lines a function (`function-length`), and a cognitive complexity of 75 (`cognitive-complexity`) |
+
+A fresh context elsewhere, such as for a cleanup that outlives a canceled run, or a lookup that many requests share, takes `//nolint:forbidigo // <why>`.
+
 ## CLI tests
 
 CLI tests are [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scripts in `testdata/script/*.txtar`, run by `internal/cli/script_test.go` against a freshly built `devvm`. Call it with `exec devvm …`:

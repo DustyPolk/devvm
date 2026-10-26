@@ -38,7 +38,7 @@ func NewLog(d paths.Dirs, vm string) *Log {
 // With follow it then writes each new one, until ctx ends. Lines that
 // aren't events are skipped.
 func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error {
-	f, err := os.Open(l.Path) //nolint:gosec // the VM's event log, in devvm's folder
+	f, err := os.Open(l.Path)
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func oneLine(s string) string {
 // whatever the allowlist says, or a host the policy doesn't take, gets -
 // instead: the command is meant to be pasted into a shell.
 func (l *Log) WriteBlocked(w io.Writer) error {
-	f, err := os.Open(l.Path) //nolint:gosec // the VM's event log, in devvm's folder
+	f, err := os.Open(l.Path)
 	if err != nil {
 		return err
 	}

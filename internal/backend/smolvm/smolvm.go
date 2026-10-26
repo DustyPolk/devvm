@@ -34,8 +34,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/term"
-
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
@@ -101,11 +99,12 @@ type Smolvm struct {
 	Interrupted func() bool
 }
 
-// UI is where the backend prints, the run log its commands run into, and
-// the run's cleanup stack.
+// UI is where the backend prints, the run log its commands run into, the
+// run's cleanup stack, and whether devvm's input is a terminal.
 type UI interface {
 	Info(msg.M)
 	Warn(msg.M)
+	StdinIsTerminal() bool
 	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
 	WithSteps(ctx context.Context, total int) context.Context
 	AddCleanup(f func(context.Context)) (remove func())
@@ -125,7 +124,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
 		Digest: from.NewRegistry().Digest, KVM: kvm,
-		Terminal: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
+		Terminal: u.StdinIsTerminal,
 		FreePort: freePort, PortFree: portFree,
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,

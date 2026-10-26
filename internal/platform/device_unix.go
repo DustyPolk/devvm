@@ -31,5 +31,5 @@ func DevIno(fi fs.FileInfo) string {
 	if !ok {
 		return ""
 	}
-	return strconv.FormatUint(uint64(st.Dev), 10) + ":" + strconv.FormatUint(st.Ino, 10) //nolint:gosec,unconvert // Dev's type differs between systems
+	return strconv.FormatUint(uint64(st.Dev), 10) + ":" + strconv.FormatUint(st.Ino, 10) //nolint:gosec,unconvert,nolintlint // Dev's type differs between systems: each needs one of the two
 }

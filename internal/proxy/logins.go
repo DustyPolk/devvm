@@ -45,7 +45,8 @@ var (
 	// Refresh this long before an access token expires: the proxy caches values for valueTTL.
 	refreshMargin = 10 * time.Minute
 	farFuture     = time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
-	httpClient    = &http.Client{Timeout: 30 * time.Second}
+	// How long a token refresh may take.
+	refreshTimeout = 30 * time.Second
 	// -login-salt: the VM's key, which ends every placeholder, so each VM's are its own (a proxy
 	// only puts a value in for the placeholders bound for its VM).
 	loginSalt = ""
@@ -105,11 +106,11 @@ func lockLogin(path string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(d.Fd()), syscall.LOCK_EX); err != nil { //nolint:gosec // file descriptors fit in an int
+	if err := syscall.Flock(int(d.Fd()), syscall.LOCK_EX); err != nil {
 		_ = d.Close()
 		return nil, err
 	}
-	return func() { _ = syscall.Flock(int(d.Fd()), syscall.LOCK_UN); _ = d.Close() }, nil //nolint:gosec // as above
+	return func() { _ = syscall.Flock(int(d.Fd()), syscall.LOCK_UN); _ = d.Close() }, nil
 }
 
 // writeJSON replaces path atomically, keeping it mode 600.
@@ -398,7 +399,9 @@ func opencodeGet(path, name string) (string, error) {
 	return "", fmt.Errorf("no opencode login %q", id)
 }
 
-// refresh posts an OAuth refresh request, as JSON (Codex) or a form (opencode).
+// refresh posts an OAuth refresh request, as JSON (Codex) or a form (opencode), within
+// refreshTimeout. It runs under the login file's lock and rewrites it, for every request that
+// needs the token: no one request's end cancels it.
 func refresh(u string, form bool, fields map[string]string) (map[string]any, error) {
 	var body []byte
 	ctype := "application/json"
@@ -411,12 +414,14 @@ func refresh(u string, form bool, fields map[string]string) (map[string]any, err
 	} else {
 		body, _ = json.Marshal(fields)
 	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, u, bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout) //nolint:forbidigo // shared by every request
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", ctype)
-	resp, err := httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

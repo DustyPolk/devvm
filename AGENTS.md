@@ -55,6 +55,8 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 ## Go conventions
 
 - **Only `internal/ui` prints.** forbidigo bans `fmt.Print*`, `os.Stdout`/`os.Stderr` elsewhere and `os.Exit` outside `cmd/devvm`. Data goes to the UI's `Stdout()`, non-message log lines to its `Stderr()`.
+- **Functions take their caller's `ctx`:** forbidigo bans `context.Background`/`TODO` outside `internal/ui` and `cmd/devvm`; one that must outlive its caller's gets `//nolint:forbidigo // why`.
+- **Every `//nolint` names its linters and says why** (nolintlint). Functions stay within revive's `function-length` and `cognitive-complexity` limits: split one that grows past them.
 - **Only `cmd/devvm` and `internal/cli` import `internal/ui`** (depguard): cli passes the run's `*ui.UI` to each command; other packages take what they need as fields (`Info`/`Warn func(msg.M)`, `LoggedCmd`, `AddCleanup`, `Interrupted`…), set from a small `UI` interface of their own that their constructors take, or cli asks first and passes the answer in.
 - **Fail with `u.Die(msg.X(...))`:** it prints and panics; `ui.Main` recovers, runs the cleanups, returns 1. Commands end with `fail` (`DieLogged` for a `LoggedError`). INT/TERM/HUP cancel the root context, wait for the logged command, run the cleanups and return 130; a second signal is ignored; after one, `Die` prints nothing. A logged command a signal ended (or 128+) waits up to 1 s for devvm's own interrupt, as Ctrl+C can end it first.
 - **Cleanups:** whatever a failure would leave (a build VM, a temp file) registers with the UI's `AddCleanup` and is removed once done; one only for interrupts checks `Interrupted()`. Cleanups get a fresh context.
@@ -62,7 +64,7 @@ Still to come: smolvm's emulations, the docker backend; the release keys (`packa
 - **OS-specific code goes behind build tags** in `internal/platform` (`*_darwin.go`, `*_linux.go`, `*_other.go`).
 - **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
-- **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars; the one exception is `internal/proxy`'s globals (set by `Main`).
+- **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars (reassign: no package sets another's); the one exception is `internal/proxy`'s globals (set by `Main`).
 - **A command exists only once it's ported;** `TestReferenceIsCurrent` fails on a stale CLI reference.
 - `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
 

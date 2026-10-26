@@ -422,7 +422,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
-		intercept(bufConn{client, buf.Reader}, host, port, e)
+		intercept(r.Context(), bufConn{client, buf.Reader}, host, port, e)
 		return
 	}
 	up, err := dial(r.Context(), host, port)

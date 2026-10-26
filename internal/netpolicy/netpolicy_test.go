@@ -217,9 +217,9 @@ func (f *proxies) start(t *testing.T) func(string, []string, *os.File) (int, err
 	return func(path string, args []string, out *os.File) (int, error) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		cmd := exec.CommandContext(context.Background(), "sleep", "30")
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		if f.quiet {
-			cmd = exec.CommandContext(context.Background(), "true")
+			cmd = exec.CommandContext(t.Context(), "true")
 		}
 		if err := cmd.Start(); err != nil {
 			return 0, err

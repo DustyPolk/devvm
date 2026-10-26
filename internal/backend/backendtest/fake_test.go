@@ -1,7 +1,6 @@
 package backendtest
 
 import (
-	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -10,7 +9,7 @@ import (
 )
 
 func TestFakeRecordsAndAnswers(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	f := New("fake", backend.Caps{backend.FeatureClone: backend.Native})
 	f.ShellCmd = backend.Command{Path: "/bin/true", Args: []string{"true"}}
 
@@ -58,7 +57,7 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 }
 
 func TestFakePresetErrors(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	boom := errors.New("boom")
 	f := New("fake", nil)
 	f.Errs = map[string]error{"CreateVM": boom}

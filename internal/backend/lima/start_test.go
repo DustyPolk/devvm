@@ -86,39 +86,11 @@ func TestStartConfined(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			l, f, _ := testLima(t, tc.os)
 			t.Setenv(GuestFwdEnv, "left over")
-			f.out["limactl list --json"] = stoppedVM
-			if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(l.haPIDFile("v"), []byte("12345\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			// limactl edit writes the environment it's given into lima.yaml.
-			yaml := filepath.Join(l.Dirs.LimaVM("v"), "lima.yaml")
-			if err := os.WriteFile(yaml, []byte("cpus: 4\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
-				t.Fatal(err)
-			}
-			f.do = func(c call) {
-				if i := slices.IndexFunc(c.argv, func(a string) bool { return strings.HasPrefix(a, ".env = ") }); i >= 0 && c.argv[1] == "edit" {
-					if err := os.WriteFile(yaml, []byte("cpus: 4\nenv: "+strings.TrimPrefix(c.argv[i], ".env = ")+"\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
-						t.Error(err)
-					}
-				}
-			}
+			yaml := stoppedWithYAML(t, l, f)
 			if err := l.Start(t.Context(), "v", tc.c); err != nil {
 				t.Fatal(err)
 			}
-			var edits []string
-			for _, c := range f.calls {
-				if c.argv[1] == "edit" {
-					for i, a := range c.argv {
-						if a == "--set" {
-							edits = append(edits, c.argv[i+1])
-						}
-					}
-				}
-			}
-			if !slices.Equal(edits, tc.edits) {
+			if edits := editSets(f); !slices.Equal(edits, tc.edits) {
 				t.Errorf("edits\n%s\nwant\n%s", strings.Join(edits, "\n"), strings.Join(tc.edits, "\n"))
 			}
 			// The password is in no command's arguments: devvm writes it into
@@ -128,35 +100,9 @@ func TestStartConfined(t *testing.T) {
 					t.Errorf("the password is in %q", c.line())
 				}
 			}
-			data, err := os.ReadFile(yaml) //nolint:gosec // the test's own file
-			if err != nil {
-				t.Fatal(err)
-			}
-			u := l.ProxyURL(tc.c)
-			if tc.c.Net == backend.NetProxy {
-				fi, err := os.Stat(yaml)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !strings.Contains(string(data), `"HTTP_PROXY":"`+u+`"`) || strings.Contains(string(data), passwordStandIn) || fi.Mode().Perm() != 0o600 {
-					t.Errorf("lima.yaml (%v):\n%s", fi.Mode(), data)
-				}
-			} else if u != "" || string(data) != "cpus: 4\n" {
-				t.Errorf("ProxyURL = %q, lima.yaml:\n%s", u, data)
-			}
+			checkLimaYAML(t, l, yaml, tc.c)
 			s := startCall(t, f)
-			args := s.argv[slices.Index(s.argv, "start"):]
-			if !slices.Equal(args, []string{"start", "--tty=false", "v"}) {
-				t.Errorf("start's arguments: %q", args)
-			}
-			if wrapped := s.argv[0] == "sandbox-exec"; wrapped != tc.wrapped {
-				t.Errorf("under sandbox-exec: %q", s.argv)
-			} else if wrapped {
-				lc := s.argv[3]
-				if !slices.Equal(s.argv[1:3], []string{"-f", l.profileFile("v")}) || !filepath.IsAbs(lc) || filepath.Base(lc) != "limactl" {
-					t.Errorf("sandbox-exec's arguments: %q", s.argv)
-				}
-			}
+			checkStartCall(t, l, s, tc.wrapped)
 			w, ok := envOf(s, "QEMU_SYSTEM_AARCH64")
 			if ok != tc.qemu || ok && w != filepath.Join(l.Dirs.Run(), "qemu", "qemu-system-aarch64") {
 				t.Errorf("QEMU_SYSTEM_AARCH64=%q (%v)", w, ok)
@@ -164,15 +110,101 @@ func TestStartConfined(t *testing.T) {
 			if fwd, _ := envOf(s, GuestFwdEnv); tc.qemu && fwd != tc.guestfwd {
 				t.Errorf("%s=%q, want %q", GuestFwdEnv, fwd, tc.guestfwd)
 			}
-			if s.dir != l.Dirs.Data {
-				t.Errorf("ran in %s", s.dir)
-			}
 			if ok, err := l.Confined(t.Context(), "v"); err != nil {
 				t.Fatal(err)
 			} else if ok {
 				t.Error("Confined with a hostagent that doesn't run")
 			}
 		})
+	}
+}
+
+// stoppedWithYAML makes v a stopped VM with a stale hostagent pid and a
+// lima.yaml that limactl edit writes the environment it's given into,
+// and returns lima.yaml's path.
+func stoppedWithYAML(t *testing.T, l *Lima, f *fakeRunner) string {
+	t.Helper()
+	f.out["limactl list --json"] = stoppedVM
+	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.haPIDFile("v"), []byte("12345\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	yaml := filepath.Join(l.Dirs.LimaVM("v"), "lima.yaml")
+	if err := os.WriteFile(yaml, []byte("cpus: 4\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
+		t.Fatal(err)
+	}
+	f.do = func(c call) {
+		if i := slices.IndexFunc(c.argv, func(a string) bool { return strings.HasPrefix(a, ".env = ") }); i >= 0 && c.argv[1] == "edit" {
+			if err := os.WriteFile(yaml, []byte("cpus: 4\nenv: "+strings.TrimPrefix(c.argv[i], ".env = ")+"\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
+				t.Error(err)
+			}
+		}
+	}
+	return yaml
+}
+
+// editSets returns the --set values of every limactl edit, in order.
+func editSets(f *fakeRunner) []string {
+	var edits []string
+	for _, c := range f.calls {
+		if c.argv[1] != "edit" {
+			continue
+		}
+		for i, a := range c.argv {
+			if a == "--set" {
+				edits = append(edits, c.argv[i+1])
+			}
+		}
+	}
+	return edits
+}
+
+// checkLimaYAML checks that a start with c left lima.yaml with the proxy's
+// address and password (owner-only), or untouched without the proxy.
+func checkLimaYAML(t *testing.T, l *Lima, yaml string, c backend.Confinement) {
+	t.Helper()
+	data, err := os.ReadFile(yaml) //nolint:gosec // the test's own file
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := l.ProxyURL(c)
+	if c.Net != backend.NetProxy {
+		if u != "" || string(data) != "cpus: 4\n" {
+			t.Errorf("ProxyURL = %q, lima.yaml:\n%s", u, data)
+		}
+		return
+	}
+	fi, err := os.Stat(yaml)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"HTTP_PROXY":"`+u+`"`) || strings.Contains(string(data), passwordStandIn) || fi.Mode().Perm() != 0o600 {
+		t.Errorf("lima.yaml (%v):\n%s", fi.Mode(), data)
+	}
+}
+
+// checkStartCall checks limactl start's arguments, folder and, when
+// wrapped, its sandbox-exec profile.
+func checkStartCall(t *testing.T, l *Lima, s call, wrapped bool) {
+	t.Helper()
+	args := s.argv[slices.Index(s.argv, "start"):]
+	if !slices.Equal(args, []string{"start", "--tty=false", "v"}) {
+		t.Errorf("start's arguments: %q", args)
+	}
+	if s.dir != l.Dirs.Data {
+		t.Errorf("ran in %s", s.dir)
+	}
+	if (s.argv[0] == "sandbox-exec") != wrapped {
+		t.Errorf("under sandbox-exec: %q", s.argv)
+		return
+	}
+	if wrapped {
+		lc := s.argv[3]
+		if !slices.Equal(s.argv[1:3], []string{"-f", l.profileFile("v")}) || !filepath.IsAbs(lc) || filepath.Base(lc) != "limactl" {
+			t.Errorf("sandbox-exec's arguments: %q", s.argv)
+		}
 	}
 }
 

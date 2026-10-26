@@ -195,7 +195,7 @@ func (p *Proxy) Forget(vm string) error {
 // decider too, with a token new at each start.
 func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, running bool) (backend.Confinement, error) {
 	vm := st.Name()
-	lifeline := b.Lifeline(vm)
+	lifeline := b.Lifeline(ctx, vm)
 	none := backend.Confinement{}
 	// The CA lasts 30 days: a new one is made when it has under a week left
 	// (VMs trust it from their next start). Kept out of backups: a copy of

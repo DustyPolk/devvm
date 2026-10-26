@@ -22,7 +22,7 @@ func sniOf(rec []byte) string {
 			return nil, errStop
 		},
 	})
-	_ = c.HandshakeContext(context.Background())
+	_ = c.HandshakeContext(context.Background()) //nolint:forbidigo // reads a record in memory: nothing to wait for or cancel
 	return name
 }
 

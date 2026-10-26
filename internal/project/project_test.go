@@ -186,13 +186,13 @@ func TestSetIDFiles(t *testing.T) {
 	mkdirs(t, filepath.Join(d, "sub"))
 	tool := filepath.Join(d, "sub", "tool")
 	touch(t, filepath.Join(d, "plain"), tool)
-	if err := os.Chmod(tool, fs.ModeSetuid|0o755); err != nil { //nolint:gosec // the test's own file
+	if err := os.Chmod(tool, fs.ModeSetuid|0o755); err != nil {
 		t.Fatal(err)
 	}
 	if got := SetIDFiles(d); !slices.Equal(got, []string{tool}) {
 		t.Errorf("SetIDFiles = %v, want %s", got, tool)
 	}
-	if err := os.Chmod(tool, fs.ModeSetgid|0o755); err != nil { //nolint:gosec // the test's own file
+	if err := os.Chmod(tool, fs.ModeSetgid|0o755); err != nil {
 		t.Fatal(err)
 	}
 	if got := SetIDFiles(d); len(got) != 1 {

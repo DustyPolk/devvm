@@ -178,7 +178,7 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 		return backend.Logged(msg.StartFailed(vm))
 	}
 	if proxy {
-		if r.Confined, err = s.lifeline(vm); err != nil {
+		if r.Confined, err = s.lifeline(ctx, vm); err != nil {
 			return err
 		}
 		if err := s.writeRecord(vm, r); err != nil {
@@ -281,7 +281,7 @@ func (s *Smolvm) Confined(ctx context.Context, vm string) (bool, error) {
 	if m.status() != backend.StatusRunning || !m.closed() {
 		return false, nil
 	}
-	cur, err := s.lifeline(vm)
+	cur, err := s.lifeline(ctx, vm)
 	if err != nil || cur != r.Confined {
 		return false, err
 	}
@@ -295,8 +295,8 @@ func (s *Smolvm) Confined(ctx context.Context, vm string) (bool, error) {
 
 // lifeline returns what the machine's lifeline holds (its pid and start
 // time), "" when there's none.
-func (s *Smolvm) lifeline(vm string) (string, error) {
-	path := s.Lifeline(vm)
+func (s *Smolvm) lifeline(ctx context.Context, vm string) (string, error) {
+	path := s.Lifeline(ctx, vm)
 	if path == "" {
 		return "", nil
 	}
@@ -319,10 +319,9 @@ func alive(pid int) bool {
 // Lifeline is the pid file of the process that runs the machine, in
 // smolvm's folder for it: its first line is the pid, its second the start
 // time. "" when smolvm can't say where that is.
-func (s *Smolvm) Lifeline(vm string) string {
-	out, err := s.Runner.Output(s.smolvm(context.Background(), "machine", "data-dir", "--name", vm))
-	dir := strings.TrimSpace(string(out))
-	if err != nil || !filepath.IsAbs(dir) {
+func (s *Smolvm) Lifeline(ctx context.Context, vm string) string {
+	dir := s.dataDir(ctx, vm)
+	if dir == "" {
 		return ""
 	}
 	return filepath.Join(dir, "agent.pid")

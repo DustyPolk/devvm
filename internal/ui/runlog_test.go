@@ -20,7 +20,7 @@ func (u *UI) logged(ctx context.Context, step msg.M, argv ...string) error {
 
 func writeFile(t *testing.T, path, s string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(s), 0o600); err != nil { //nolint:gosec // the test's own files
+	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -172,7 +172,7 @@ func TestKeepsTheLast20Logs(t *testing.T) {
 	u, _, _ := testUI(t, "")
 	runs, _ := u.runLogs()
 	logs := filepath.Dir(runs)
-	if err := os.MkdirAll(runs, 0o700); err != nil { //nolint:gosec // the test's own folder
+	if err := os.MkdirAll(runs, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-time.Hour)

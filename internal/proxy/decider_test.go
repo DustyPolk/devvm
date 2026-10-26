@@ -35,7 +35,7 @@ func preludeFor(token []byte, dest netip.AddrPort, first []byte) []byte {
 	}
 	_ = binary.Write(&b, binary.BigEndian, dest.Port())
 	b.Write(a.AsSlice())
-	_ = binary.Write(&b, binary.BigEndian, uint16(min(len(first), 0xffff))) //nolint:gosec // capped
+	_ = binary.Write(&b, binary.BigEndian, uint16(min(len(first), 0xffff)))
 	b.Write(first)
 	return b.Bytes()
 }

@@ -13,6 +13,8 @@ linters:
     - misspell
     - nilerr
     - noctx
+    - nolintlint
+    - reassign
     - revive
     - unconvert
     - usestdlibvars
@@ -80,16 +82,32 @@ linters:
           msg: print through internal/ui.
         - pattern: ^os\.(Stdout|Stderr)$
           msg: print through internal/ui.
+        - pattern: ^context\.(Background|TODO)$
+          msg: take the caller's ctx; a fresh one only where it must outlive it, with a nolint saying why.
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    reassign:
+      patterns:
+        - ".*"
+    revive:
+      enable-default-rules: true
+      rules:
+        # Just above the largest today: statements, then lines.
+        - name: function-length
+          arguments: [100, 160]
+        - name: cognitive-complexity
+          arguments: [75]
   exclusions:
     presets:
       - std-error-handling
     rules:
       - path: ^cmd/devvm/
         linters: [forbidigo]
-        text: os\.Exit
+        text: os\.Exit|context\.(Background|TODO)
       - path: ^internal/ui/
         linters: [forbidigo]
-        text: fmt\.Print|os\.(Stdout|Stderr)
+        text: fmt\.Print|os\.(Stdout|Stderr)|context\.(Background|TODO)
     paths:
       - ^\.agents/
 

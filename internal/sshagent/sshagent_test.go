@@ -363,7 +363,7 @@ func TestRealAgent(t *testing.T) {
 	if err := os.MkdirAll(d.Data, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	agent := exec.CommandContext(context.Background(), "ssh-agent", "-D", "-a", d.AgentSock()) //nolint:gosec // the test's own socket
+	agent := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", d.AgentSock()) //nolint:gosec // the test's own socket
 	if err := agent.Start(); err != nil {
 		t.Fatal(err)
 	}

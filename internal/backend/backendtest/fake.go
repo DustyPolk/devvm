@@ -303,7 +303,7 @@ func (f *Fake) Exec(_ context.Context, vm string, argv []string, o backend.ExecO
 }
 
 // Lifeline returns LifelineFile.
-func (f *Fake) Lifeline(string) string { return f.LifelineFile }
+func (f *Fake) Lifeline(context.Context, string) string { return f.LifelineFile }
 
 // UsesDecider returns Decides.
 func (f *Fake) UsesDecider() bool { return f.Decides }

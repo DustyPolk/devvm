@@ -53,7 +53,7 @@ func TestWriteLog(t *testing.T) {
 		{0, ""},
 	} {
 		var b bytes.Buffer
-		if err := (&Log{Path: path}).Write(context.Background(), &b, c.n, false); err != nil || b.String() != c.want {
+		if err := (&Log{Path: path}).Write(t.Context(), &b, c.n, false); err != nil || b.String() != c.want {
 			t.Errorf("n=%d: %q, %v; want %q", c.n, b.String(), err, c.want)
 		}
 	}
@@ -95,7 +95,7 @@ func TestWriteLogFollow(t *testing.T) {
 		}
 	}
 	var out syncBuffer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	l := &Log{Path: path, Tick: 5 * time.Millisecond}
 	go func() { done <- l.Write(ctx, &out, 1, true) }()

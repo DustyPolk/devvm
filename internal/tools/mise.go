@@ -164,7 +164,7 @@ func (t *Tools) Resolve(ctx context.Context, out string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "mise.toml"), config, 0o600); err != nil { //nolint:gosec // devvm's own temporary folder
+	if err := os.WriteFile(filepath.Join(tmp, "mise.toml"), config, 0o600); err != nil {
 		return err
 	}
 	cmd, err := miseCmd(ctx, mise, tmp, "lock", "--platform", strings.Join(t.platforms(), ","))

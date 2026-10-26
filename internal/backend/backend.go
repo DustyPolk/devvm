@@ -73,7 +73,7 @@ type Backend interface {
 	// Lifeline is the pid file of the host process that runs the VM once
 	// it starts, which the VM's proxy follows: it exits when that process
 	// does. Not a VM's own file: the VM can't write it.
-	Lifeline(vm string) string
+	Lifeline(ctx context.Context, vm string) string
 	// ProxyURL is devvm's proxy as a VM started with c reaches it, its
 	// user and password included; "" unless c.Net is NetProxy.
 	ProxyURL(c Confinement) string

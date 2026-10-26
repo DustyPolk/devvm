@@ -347,7 +347,7 @@ func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 
 // Lifeline is the VM's hostagent's pid file: the process that runs the VM
 // and its network.
-func (l *Lima) Lifeline(vm string) string { return l.haPIDFile(vm) }
+func (l *Lima) Lifeline(_ context.Context, vm string) string { return l.haPIDFile(vm) }
 
 // ProxyURL is devvm's proxy as a VM started with c reaches it.
 func (l *Lima) ProxyURL(c backend.Confinement) string {

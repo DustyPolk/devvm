@@ -132,7 +132,9 @@ var secretValue = func(name string) (string, error) {
 	if secretCmd == "" {
 		return "", errors.New("no -secret-cmd")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// The value is cached for every request: no one request's end cancels it.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) //nolint:forbidigo // shared by every request
+
 	defer cancel()
 	out, err := exec.CommandContext(ctx, secretCmd, "secret", "get", name).Output() //nolint:gosec // devvm names itself
 	if err != nil {
@@ -339,15 +341,19 @@ func leafFor(host string) (*tls.Certificate, error) {
 // intercept serves one CONNECT tunnel to host:443 whose host has bindings: TLS with a minted
 // certificate on the client side, HTTP/1.1 or HTTP/2 inside, and each request forwarded upstream
 // over a new TLS connection with the secrets put in. Each request must be for host itself: the
-// secrets are bound to it, so another Host (a site on the same CDN, say) gets 421.
-func intercept(client net.Conn, host string, port int, e Event) {
+// secrets are bound to it, so another Host (a site on the same CDN, say) gets 421. The handshake
+// with the VM gets 30 seconds.
+func intercept(ctx context.Context, client net.Conn, host string, port int, e Event) {
 	tconn := tls.Server(client, &tls.Config{
 		NextProtos: []string{"h2", "http/1.1"},
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return leafFor(host)
 		},
 	})
-	if err := tconn.HandshakeContext(context.Background()); err != nil {
+	hctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	err := tconn.HandshakeContext(hctx)
+	cancel()
+	if err != nil {
 		e.Event, e.Reason = "blocked", "TLS with the VM failed (is the devvm CA installed?): "+err.Error()
 		record(e)
 		_ = client.Close()

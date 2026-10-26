@@ -166,7 +166,7 @@ func testProxy(t *testing.T, d paths.Dirs, home string) *netpolicy.Proxy {
 	var mu sync.Mutex
 	args := map[int][]string{}
 	p.Start = func(path string, a []string, out *os.File) (int, error) {
-		cmd := exec.CommandContext(context.Background(), "sleep", "30")
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		if err := cmd.Start(); err != nil {
 			return 0, err
 		}

@@ -93,7 +93,7 @@ func ThisHost() (Host, error) {
 	if err != nil {
 		return Host{}, err
 	}
-	return Host{CPUs: runtime.NumCPU(), MemoryGiB: int(mem >> 30)}, nil //nolint:gosec // GiB fit in an int
+	return Host{CPUs: runtime.NumCPU(), MemoryGiB: int(mem >> 30)}, nil
 }
 
 // Check refuses a parsed size the host can't give, or a disk smaller than

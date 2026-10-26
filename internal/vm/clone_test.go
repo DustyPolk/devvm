@@ -1,7 +1,6 @@
 package vm
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,9 +62,9 @@ func cloneEnv(t *testing.T) (e *Env, f *backendtest.Fake, vmfs string) {
 		var cmd *exec.Cmd
 		switch {
 		case len(argv) > 3 && argv[0] == "git" && argv[1] == "-C":
-			cmd = exec.CommandContext(context.Background(), "git", append([]string{"-C", vmfs + argv[2]}, argv[3:]...)...) //nolint:gosec // the test's own
+			cmd = exec.CommandContext(t.Context(), "git", append([]string{"-C", vmfs + argv[2]}, argv[3:]...)...) //nolint:gosec // the test's own
 		case len(argv) == 6 && argv[0] == "sh" && strings.Contains(argv[2], "receive.denyCurrentBranch"):
-			cmd = exec.CommandContext(context.Background(), "bash", "-c", `sudo() { "$@"; }; `+argv[2], argv[3], vmfs+argv[4], argv[5]) //nolint:gosec // the test's own
+			cmd = exec.CommandContext(t.Context(), "bash", "-c", `sudo() { "$@"; }; `+argv[2], argv[3], vmfs+argv[4], argv[5]) //nolint:gosec // the test's own
 		default:
 			return nil
 		}

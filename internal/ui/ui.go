@@ -103,7 +103,7 @@ func runLogs() (string, error) {
 	return d.RunLogs(), nil
 }
 
-func fd(f *os.File) int { return int(f.Fd()) } //nolint:gosec // file descriptors fit in an int
+func fd(f *os.File) int { return int(f.Fd()) }
 
 func isTerminal(f *os.File) bool { return term.IsTerminal(fd(f)) }
 

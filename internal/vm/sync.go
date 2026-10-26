@@ -180,7 +180,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []st
 // settings files with the values under secret-looking keys taken out (one
 // that can't be read that way isn't sent).
 func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) error {
-	ca, err := os.ReadFile(filepath.Join(e.Dirs.CA(), "ca.pem")) //nolint:gosec // devvm's own CA
+	ca, err := os.ReadFile(filepath.Join(e.Dirs.CA(), "ca.pem"))
 	if err != nil {
 		return err
 	}

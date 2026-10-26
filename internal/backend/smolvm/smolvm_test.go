@@ -37,6 +37,7 @@ func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { retur
 func (testUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
 func (testUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
 func (testUI) Interrupted() bool                                         { return false }
+func (testUI) StdinIsTerminal() bool                                     { return false }
 
 // sandbox is a smolvm backend on the stub (testdata/stubs/smolvm), first
 // on PATH, with devvm's folders in a new temporary folder; its user is u,
@@ -352,7 +353,7 @@ func TestStart(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(s.stub, "smolvm-agent-"+fw)); strings.TrimSpace(string(b)) != "/a.sock" {
 		t.Errorf("agent: %q", b)
 	}
-	if got := s.Lifeline(fw); got != filepath.Join(s.stub, "smolvm-data", fw, "agent.pid") {
+	if got := s.Lifeline(t.Context(), fw); got != filepath.Join(s.stub, "smolvm-data", fw, "agent.pid") {
 		t.Errorf("Lifeline = %q", got)
 	}
 	if err := s.Stop(t.Context(), fw); err != nil {
