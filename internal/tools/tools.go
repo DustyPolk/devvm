@@ -3,8 +3,9 @@
 // is one read-only image in the share, built once in a throwaway VM and
 // mounted into every VM that uses it, where mise runs it.
 //
-// Which versions is per user: assets/shared-tools/mise.toml says which releases (node 24,
-// the latest claude), and the host's mise resolves it into the tools lock,
+// Which versions is per user: devvm's shared-tools/mise.toml says which
+// releases (node 24, the latest claude), and the host's mise resolves it
+// into the tools lock,
 // with each download's checksum per platform. Builds install exactly the
 // lock's versions, checked against those checksums. The lock is resolved
 // on first use and again when mise.toml changes; once a day a
@@ -44,9 +45,9 @@ const checkEvery = 24 * time.Hour
 // change them.
 type Tools struct {
 	Dirs paths.Dirs
-	// Root holds devvm's own files, its assets/: shared-tools/mise.toml
+	// Assets holds devvm's own files (assets.FS): shared-tools/mise.toml
 	// and shared-tools/build.sh.
-	Root string
+	Assets fs.FS
 	// Self is devvm's binary, which the daily check runs.
 	Self string
 	// OS and Arch are the host's, as Go names them.
@@ -85,9 +86,9 @@ type UI interface {
 	AddCleanup(f func(context.Context)) (remove func())
 }
 
-// New returns the shared tools in devvm's folders, with devvm's files in
-// root, on u.
-func New(d paths.Dirs, root string, u UI) *Tools {
+// New returns the shared tools in devvm's folders, with devvm's own files
+// (assets), on u.
+func New(d paths.Dirs, assets fs.FS, u UI) *Tools {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -95,7 +96,7 @@ func New(d paths.Dirs, root string, u UI) *Tools {
 		}
 	}
 	return &Tools{
-		Dirs: d, Root: root, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
+		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: platform.StartDetached,
 		ShareWait: time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
@@ -127,7 +128,8 @@ func (t *Tools) platform(libc string) string {
 	return p
 }
 
-func (t *Tools) configFile() string { return filepath.Join(t.Root, "shared-tools", "mise.toml") }
+// config is devvm's shared-tools/mise.toml.
+func (t *Tools) config() ([]byte, error) { return fs.ReadFile(t.Assets, "shared-tools/mise.toml") }
 
 // lockConfig is the mise.toml the lock was resolved from.
 func (t *Tools) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
@@ -138,7 +140,7 @@ func (t *Tools) checkedFile() string { return t.Dirs.ToolLock() + ".checked" }
 // Lock returns the tools lock, resolving it first when there's none yet or
 // shared-tools/mise.toml changed since (a devvm upgrade).
 func (t *Tools) Lock(ctx context.Context) (Lock, error) {
-	want, err := os.ReadFile(t.configFile())
+	want, err := t.config()
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +263,7 @@ func (t *Tools) File(lock Lock, tool string, tg Target) (string, error) {
 	if v == "" {
 		return "", msg.ToolNotLocked(t.Dirs.ToolLock(), tool)
 	}
-	return image.ToolFile(os.DirFS(t.Root), image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: tg.Libc, Format: tg.Format})
+	return image.ToolFile(t.Assets, image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: tg.Libc, Format: tg.Format})
 }
 
 // Files returns the image files of the tools behind each of these names

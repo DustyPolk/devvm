@@ -102,7 +102,7 @@ stdout '^api\.anthropic\.com:443$'
 # Its proxy's policy files: base's, claude's, the user's, the VM's own and
 # its secrets' hosts.
 exec sh -c 'cat "$RUN"/devvm-agent-*.proxy.policy'
-stdout '/assets/layers/base\.policy,\S*/assets/shared-tools/claude\.policy,\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy$'
+stdout '/data/devvm/assets/[0-9a-f]{16}/layers/base\.policy,\S*/data/devvm/assets/[0-9a-f]{16}/shared-tools/claude\.policy,\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy$'
 env CLAUDE_CODE_OAUTH_TOKEN=
 
 # A Codex login on the host: its bindings and hosts, with the VM's

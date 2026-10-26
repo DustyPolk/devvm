@@ -124,13 +124,13 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage,
 	if err := from.Check(b.From); err != nil {
 		return nil, nil, err
 	}
-	reg, err := registry.New(b.Dirs, u)
+	reg, err := registry.New(b.Dirs, b.Assets, u)
 	if err != nil {
 		return nil, nil, err
 	}
 	var imgs []listedImage
 	for _, be := range reg.All() {
-		bb := newBuilder(u, b.Dirs, b.Root, be, reg.Review, b.Tools, "")
+		bb := newBuilder(u, b.Dirs, be, reg.Review, b.Tools, "")
 		ls, err := bb.Listing(ctx)
 		if err != nil {
 			if used, uerr := vm.BackendUsed(b.Dirs, be.Name()); uerr != nil {
@@ -154,7 +154,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage,
 	}
 	tgs := []tools.Target{tg}
 	for _, be := range reg.All() {
-		t, err := newBuilder(u, b.Dirs, b.Root, be, reg.Review, b.Tools, b.From).ToolTarget()
+		t, err := newBuilder(u, b.Dirs, be, reg.Review, b.Tools, b.From).ToolTarget()
 		if err != nil {
 			return nil, nil, err
 		}

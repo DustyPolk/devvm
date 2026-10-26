@@ -178,7 +178,7 @@ type From struct {
 // Script is a script run in a VM, fed on its standard input to bash.
 type Script struct {
 	Name string // for status lines and errors: base.sh
-	Path string // on the host
+	Data []byte
 }
 
 // ToolsSpec is a shared tools build: Script, fed to bash with Args, in a

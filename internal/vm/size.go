@@ -4,8 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
-	"os"
-	"path/filepath"
+	"io/fs"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -282,10 +281,11 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	return nil
 }
 
-// BaseDisk returns the disk size in GiB that base.yaml in root gives base,
-// and so every image and new VM (disks can't shrink); 0 when it sets none.
-func BaseDisk(root string) float64 {
-	f, err := os.Open(filepath.Join(root, "base.yaml")) //nolint:gosec // devvm's own file
+// BaseDisk returns the disk size in GiB that base.yaml in assets, devvm's
+// own files, gives base, and so every image and new VM (disks can't
+// shrink); 0 when it sets none.
+func BaseDisk(assets fs.FS) float64 {
+	f, err := assets.Open("base.yaml")
 	if err != nil {
 		return 0
 	}

@@ -3,6 +3,7 @@
 package registry
 
 import (
+	"io/fs"
 	"os"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -22,18 +23,19 @@ type UI interface {
 	smolvm.UI
 }
 
-// New returns the registry of devvm's backends, on devvm's folders
-// and u: lima, the default (backend.Default), and smolvm (experimental).
-// In a test build, the unreviewed emulations DEVVM_UNREVIEWED names are let
-// through, with a warning each time: for their end-to-end checks.
-func New(d paths.Dirs, u UI) (*backend.Registry, error) {
-	return newFor(d, u, unreviewed, os.Getenv("DEVVM_UNREVIEWED"))
+// New returns the registry of devvm's backends, on devvm's folders, its
+// own files (assets) and u: lima, the default (backend.Default), and
+// smolvm (experimental). In a test build, the unreviewed emulations
+// DEVVM_UNREVIEWED names are let through, with a warning each time: for
+// their end-to-end checks.
+func New(d paths.Dirs, assets fs.FS, u UI) (*backend.Registry, error) {
+	return newFor(d, assets, u, unreviewed, os.Getenv("DEVVM_UNREVIEWED"))
 }
 
 // newFor is New for a build whose unreviewed is build, with
 // DEVVM_UNREVIEWED's value env.
-func newFor(d paths.Dirs, u UI, build, env string) (*backend.Registry, error) {
-	r, err := backend.NewRegistry(lima.New(d, u), smolvm.New(d, u))
+func newFor(d paths.Dirs, assets fs.FS, u UI, build, env string) (*backend.Registry, error) {
+	r, err := backend.NewRegistry(lima.New(d, assets, u), smolvm.New(d, assets, u))
 	if err != nil {
 		return nil, err
 	}

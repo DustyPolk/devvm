@@ -1,9 +1,11 @@
 package lima
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -109,9 +111,13 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 				Kernel: &limaKernel{Location: filepath.Join(conv.dir, "kernel"), Cmdline: conv.cmdline},
 				Initrd: &limaFile{Location: filepath.Join(conv.dir, "initrd")},
 			}})
+			assets, err := l.assets()
+			if err != nil {
+				return backend.Built{}, err
+			}
 			if err := l.Runner.Run(ctx, msg.Creating(inst), l.limactl(ctx, "create", "--tty=false",
 				"--mount-none", "--name="+inst, "--set", ".images = "+images,
-				"--memory="+gibString(mem), filepath.Join(l.Root, "base.yaml"))); err != nil {
+				"--memory="+gibString(mem), filepath.Join(assets, "base.yaml"))); err != nil {
 				return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 			}
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
@@ -191,9 +197,13 @@ func (l *Lima) createFromUbuntu(ctx context.Context, vm string, mem float64, opt
 	if err != nil {
 		return ubuntu.Image{}, err
 	}
+	assets, err := l.assets()
+	if err != nil {
+		return ubuntu.Image{}, err
+	}
 	images := yqJSON([]limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}})
 	args := append([]string{"create", "--tty=false", "--mount-none", "--name=" + vm, "--set", ".images = " + images}, opts...)
-	args = append(args, "--memory="+gibString(mem), filepath.Join(l.Root, "base.yaml"))
+	args = append(args, "--memory="+gibString(mem), filepath.Join(assets, "base.yaml"))
 	if err := l.Runner.Run(ctx, msg.CreatingFromUbuntu(vm), l.limactl(ctx, args...)); err != nil {
 		return ubuntu.Image{}, backend.Logged(msg.VMCreateFailed(vm))
 	}
@@ -213,13 +223,8 @@ func limaArch(goarch string) string {
 
 // runScript runs a script in the VM, fed to bash on its standard input.
 func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script) error {
-	f, err := os.Open(s.Path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
 	cmd := l.limactl(ctx, "shell", vm, "bash", "-s")
-	cmd.Stdin = f
+	cmd.Stdin = bytes.NewReader(s.Data)
 	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
 		return backend.Logged(msg.ScriptFailed(s.Name, vm))
 	}
@@ -246,7 +251,7 @@ var memoryLine = regexp.MustCompile(`(?m)^memory:\s*([0-9.]+)GiB\s*$`)
 // when that would leave the host less than 2 GiB (a VM asking for all of
 // it doesn't start). Images built from base, and their VMs, keep it.
 func (l *Lima) buildMemory() (float64, error) {
-	data, err := os.ReadFile(filepath.Join(l.Root, "base.yaml"))
+	data, err := fs.ReadFile(l.Assets, "base.yaml")
 	if err != nil {
 		return 0, err
 	}

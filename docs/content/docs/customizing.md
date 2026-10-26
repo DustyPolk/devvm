@@ -47,7 +47,7 @@ Features are optional extras built into [`base`](images.md#base), after `assets/
 | `fzf` | fuzzy Ctrl-R history and Ctrl-T file search |
 | `cli-tools` | bat, fd, eza, zoxide (`z`), btop, tree, tldr |
 
-Like `assets/layers/base.sh`, each feature pins its downloads to a version and SHA-256 at the top of its script, `assets/features/<name>.sh` next to devvm's binary.
+Like `assets/layers/base.sh`, each feature pins its downloads to a version and SHA-256 at the top of its script, `assets/features/<name>.sh` in the repo, built into devvm.
 
 ### Choosing features
 

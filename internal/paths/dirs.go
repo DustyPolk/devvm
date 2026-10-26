@@ -102,6 +102,10 @@ func (d Dirs) Logs() string { return filepath.Join(d.Data, "logs") }
 // RunLogs holds the logs of devvm's runs: builds and the commands they ran.
 func (d Dirs) RunLogs() string { return filepath.Join(d.Logs(), "runs") }
 
+// Assets holds devvm's own files written out where a path is needed, one
+// folder per version of them, named by their hash.
+func (d Dirs) Assets() string { return filepath.Join(d.Data, "assets") }
+
 // Bin holds the binaries devvm builds for the host (the proxy).
 func (d Dirs) Bin() string { return filepath.Join(d.Data, "bin") }
 

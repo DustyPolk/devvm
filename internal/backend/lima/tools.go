@@ -1,10 +1,10 @@
 package lima
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -62,13 +62,8 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if err := l.Start(ctx, ToolsVM, backend.Confinement{Net: spec.Net}); err != nil {
 		return err
 	}
-	f, err := os.Open(spec.Script.Path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
 	cmd := l.limactl(ctx, append([]string{"shell", "--workdir", "/", ToolsVM, "bash", "-s", "--"}, spec.Args...)...)
-	cmd.Stdin = f
+	cmd.Stdin = bytes.NewReader(spec.Script.Data)
 	if err := l.Runner.Run(ctx, msg.BuildingToolsIn(ToolsVM), cmd); err != nil {
 		return backend.Logged(msg.ToolsBuildFailed())
 	}

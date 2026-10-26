@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -25,9 +27,7 @@ const (
 func buildLima(t *testing.T, os string, parentStatus string) (*Lima, *fakeRunner) {
 	t.Helper()
 	l, f, _ := testLima(t, os)
-	l.Root = t.TempDir()
-	writeTestFile(t, filepath.Join(l.Root, "base.yaml"), "cpus: 4\nmemory: 8GiB\n")
-	writeTestFile(t, filepath.Join(l.Root, "layers", "base.sh"), "#!/bin/bash\n")
+	l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("cpus: 4\nmemory: 8GiB\n")}}
 	l.Ubuntu = func(context.Context) (ubuntu.Image, error) {
 		return ubuntu.Image{URL: "https://example.com/r/ubuntu.img", Digest: "sha256:1111"}, nil
 	}
@@ -64,6 +64,16 @@ func writeTestFile(t *testing.T, path, data string) {
 	}
 }
 
+// assetsDir is where l's files are written out.
+func assetsDir(t *testing.T, l *Lima) string {
+	t.Helper()
+	dir, err := state.WriteAssets(l.Dirs, l.Assets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func checkLines(t *testing.T, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
@@ -80,10 +90,9 @@ func checkLines(t *testing.T, got, want []string) {
 // in its build sandbox, its script run, flushed and stopped.
 func TestBuildImageBase(t *testing.T) {
 	l, f := buildLima(t, "darwin", "")
-	script := filepath.Join(l.Root, "layers", "base.sh")
 	built, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "base.sh", Path: script}},
+		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +104,7 @@ func TestBuildImageBase(t *testing.T) {
 	checkLines(t, f.lines(), []string{
 		"limactl create --tty=false --mount-none --name=" + inst +
 			` --set .images = [{"location":"https://example.com/r/ubuntu.img","arch":"aarch64","digest":"sha256:1111"}]` +
-			" --memory=8 " + filepath.Join(l.Root, "base.yaml"),
+			" --memory=8 " + filepath.Join(assetsDir(t, l), "base.yaml"),
 		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
 		"sandbox-exec -f " + l.profileFile(inst) + " ",
 		"limactl shell " + inst + " bash -s",
@@ -114,11 +123,9 @@ func TestBuildImageLayer(t *testing.T) {
 	l, f := buildLima(t, "linux", "Running")
 	inst := "devvm-img-" + layerKey
 	writeTestFile(t, l.disk(inst), "qcow2")
-	script := filepath.Join(t.TempDir(), "foo.sh")
-	writeTestFile(t, script, "#!/bin/bash\necho foo\n")
 	built, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "foo.sh", Path: script}},
+		Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +155,7 @@ func TestBuildImageScriptFails(t *testing.T) {
 	f.fail = []string{"limactl shell " + inst + " bash -s"}
 	_, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "base.sh", Path: filepath.Join(l.Root, "layers", "base.sh")}},
+		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}},
 	})
 	e, ok := errors.AsType[*backend.LoggedError](err)
 	if !ok || e.Msg.ID() != "script_failed" {
@@ -193,13 +200,11 @@ func TestBuildImageRefuses(t *testing.T) {
 			case "no Ubuntu image":
 				l.Ubuntu = func(context.Context) (ubuntu.Image, error) { return ubuntu.Image{}, msg.NoUbuntuImage("x", "26.04") }
 			case "no memory in GiB":
-				writeTestFile(t, filepath.Join(l.Root, "base.yaml"), "memory: 8G\n")
+				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("memory: 8G\n")}}
 			case "no host memory":
 				l.Memory = func() (uint64, error) { return 0, errors.ErrUnsupported }
 			case "a missing base.yml":
-				if err := os.Remove(filepath.Join(l.Root, "base.yaml")); err != nil {
-					t.Fatal(err)
-				}
+				l.Assets = fstest.MapFS{}
 			}
 			spec := base
 			change(&spec)

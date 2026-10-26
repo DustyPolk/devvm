@@ -67,17 +67,16 @@ func (s *Smolvm) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if err := s.Start(ctx, ToolsVM, backend.Confinement{Net: spec.Net}); err != nil {
 		return err
 	}
-	f, err := os.Open(spec.Script.Path)
+	plainScript, err := s.script("plain.sh")
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
 	args, err := s.userArgs(ToolsVM, "/", true, false, append([]string{"bash", "-s", "--"}, spec.Args...))
 	if err != nil {
 		return err
 	}
 	cmd := s.smolvm(ctx, args...)
-	cmd.Stdin = f
+	cmd.Stdin = bytes.NewReader(spec.Script.Data)
 	if err := s.Runner.Run(ctx, msg.BuildingToolsIn(ToolsVM), cmd); err != nil {
 		return backend.Logged(msg.ToolsBuildFailed())
 	}

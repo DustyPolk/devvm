@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
@@ -76,11 +77,7 @@ func builder(u *ui.UI, flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	root, err := paths.Root()
-	if err != nil {
-		return nil, err
-	}
-	reg, err := registry.New(dirs, u)
+	reg, err := registry.New(dirs, assets.FS, u)
 	if err != nil {
 		return nil, err
 	}
@@ -88,15 +85,15 @@ func builder(u *ui.UI, flag string) (*build.Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newBuilder(u, dirs, root, c.Backend, reg.Review, tools.New(dirs, root, u), ""), nil
+	return newBuilder(u, dirs, c.Backend, reg.Review, tools.New(dirs, assets.FS, u), ""), nil
 }
 
 // newBuilder returns a builder of images on be, its features checked
 // against rv, whose base starts from fromRef, printing and asking through
 // u.
-func newBuilder(u *ui.UI, dirs paths.Dirs, root string, be backend.Backend, rv backend.Review, t *tools.Tools, fromRef string) *build.Builder {
+func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Tools, fromRef string) *build.Builder {
 	return &build.Builder{
-		Dirs: dirs, Root: root, Backend: be, Review: rv, Tools: t, From: fromRef,
+		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef,
 		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote,
 	}

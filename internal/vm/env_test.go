@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/build"
@@ -77,8 +78,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	// The shared tools' versions come from the stub mise: the fixture lock.
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	assets := filepath.Join(repo, "assets")
-	tl := tools.New(d, assets, testUI{t})
+	tl := tools.New(d, assets.FS, testUI{t})
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {
 			return filepath.Join(repo, "testdata", "stubs", "mise")
@@ -101,7 +101,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	var execs []backend.Command
 	home := filepath.Join(root, "home")
 	e := &Env{
-		Dirs: d, Root: assets, Registry: reg, Tools: tl, Proxy: testProxy(t, d, assets, home), Dir: dir, Home: home, OS: "darwin",
+		Dirs: d, Assets: assets.FS, Registry: reg, Tools: tl, Proxy: testProxy(t, d, home), Dir: dir, Home: home, OS: "darwin",
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
 			p := gitprotect.New(dir, quiet)
@@ -157,11 +157,11 @@ func (a *agentCalls) run(_ context.Context, _ bool, argv ...string) (string, int
 
 // testProxy runs each VM's "proxy" as a sleep that says it listens, with
 // no Keychain and no backups.
-func testProxy(t *testing.T, d paths.Dirs, root, home string) *netpolicy.Proxy {
+func testProxy(t *testing.T, d paths.Dirs, home string) *netpolicy.Proxy {
 	t.Helper()
 	store := secrets.NewStore(d, home, quiet)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
-	p := netpolicy.NewProxy(d, root, "/devvm", store, testUI{t})
+	p := netpolicy.NewProxy(d, assets.FS, "/devvm", store, testUI{t})
 	p.Terminal = func() bool { return false }
 	var mu sync.Mutex
 	args := map[int][]string{}

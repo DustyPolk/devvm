@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
@@ -66,7 +67,7 @@ func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, e
 	if err != nil {
 		return nil, nil, err
 	}
-	reg, err := registry.New(dirs, u)
+	reg, err := registry.New(dirs, assets.FS, u)
 	if err != nil {
 		return nil, nil, err
 	}

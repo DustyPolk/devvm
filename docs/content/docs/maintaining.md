@@ -23,7 +23,7 @@ For maintainers: version bumps and releases. Run the scripts with mise, which pu
 
   | File | What |
   | --- | --- |
-  | `devvm-<version>-<os>-<arch>.tar.gz` | the binary and the files it reads next to itself (`assets/`), for `darwin` and `linux`, `arm64` and `amd64` |
+  | `devvm-<version>-<os>-<arch>.tar.gz` | the binary, its files (`assets/`) embedded, with `README.md`, `CHANGELOG.md` and `LICENSE`, for `darwin` and `linux`, `arm64` and `amd64` |
   | `devvm-<version>.tar.gz` | the source, which the Homebrew formula builds from |
   | `SHA256SUMS`, `SHA256SUMS.minisig` | their checksums, and the signature |
   | `install.sh` | the install script, set to this release and to `packaging/minisign.pub`'s key |
@@ -31,5 +31,5 @@ For maintainers: version bumps and releases. Run the scripts with mise, which pu
 
 - `scripts/release.sh --head` builds from HEAD's commit instead, for testing, with `VERSION`'s version. It's unsigned unless `DEVVM_MINISIGN_KEY` names a test key; `DEVVM_MINISIGN_PUB` names its public key in place of `packaging/minisign.pub`. `DEVVM_RELEASE_URL` points the formula at a test location. A commit without `install.sh` is refused.
 - To try `dist/install.sh` on such a build, copy `dist/` to `DIR/releases/download/v<version>/`, then in a throwaway `HOME` with `DEVVM_PREFIX` under it: `DEVVM_INSTALL_TEST=1 source dist/install.sh`, set `repo_url=file://DIR` and `protos='=https,file'` (it downloads over HTTPS only), and run `main --no-deps`. Without `--no-deps` it offers to install what the host lacks: answer no, or run it with no terminal.
-- Every build sets the version with `-X github.com/w3cj/devvm/internal/cli.version=<version>`: devvm doesn't read `VERSION`. The formula (`packaging/homebrew/devvm.rb`) builds with Go the same way, and passes `brew audit --strict`.
+- Every build sets the version with `-X github.com/w3cj/devvm/internal/cli.version=<version>`: devvm doesn't read `VERSION`. The formula (`packaging/homebrew/devvm.rb`) builds with Go the same way, installs the binary alone, and passes `brew audit --strict`.
 - Attach the archives, `SHA256SUMS`, `SHA256SUMS.minisig` and `install.sh` to the GitHub release; `devvm.rb` goes in `w3cj/homebrew-tap` as `Formula/devvm.rb`. Publishing is the maintainer's call: ask first.

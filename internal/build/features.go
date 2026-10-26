@@ -2,26 +2,29 @@ package build
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
 // Features returns the base image features there are: devvm's own
-// (assets/features/<name>.sh), sorted, then the user's (paths.Dirs.Features),
-// sorted. shadowed holds the user's scripts named like one of devvm's,
-// which are ignored.
+// (features/<name>.sh in Assets), sorted, then the user's
+// (paths.Dirs.Features), sorted. shadowed holds the user's scripts named
+// like one of devvm's, which are ignored.
 func (b *Builder) Features() (features, shadowed []string) {
-	own := scripts(filepath.Join(b.Root, "features"))
+	own := scripts(b.Assets, "features")
 	features = slices.Clone(own)
-	for _, n := range scripts(b.Dirs.Features()) {
+	for _, n := range scripts(os.DirFS(b.Dirs.Features()), ".") {
 		if slices.Contains(own, n) {
 			shadowed = append(shadowed, filepath.Join(b.Dirs.Features(), n+".sh"))
 		} else {
@@ -31,14 +34,14 @@ func (b *Builder) Features() (features, shadowed []string) {
 	return features, shadowed
 }
 
-// scripts returns the names of the regular <name>.sh files in dir that a
-// feature can have, sorted. No folder: none.
-func scripts(dir string) []string {
+// scripts returns the names of the regular <name>.sh files in dir of fsys
+// that a feature can have, sorted. No folder: none.
+func scripts(fsys fs.FS, dir string) []string {
 	var names []string
-	entries, _ := os.ReadDir(dir)
+	entries, _ := fs.ReadDir(fsys, dir)
 	for _, e := range entries {
 		n, ok := strings.CutSuffix(e.Name(), ".sh")
-		if ok && image.FeatureName(n) && regular(filepath.Join(dir, e.Name())) {
+		if ok && image.FeatureName(n) && regular(fsys, path.Join(dir, e.Name())) {
 			names = append(names, n)
 		}
 	}
@@ -46,18 +49,28 @@ func scripts(dir string) []string {
 	return names
 }
 
-func regular(path string) bool {
-	fi, err := os.Stat(path)
+// regular reports whether name in fsys is a regular file, links followed.
+func regular(fsys fs.FS, name string) bool {
+	fi, err := fs.Stat(fsys, name)
 	return err == nil && fi.Mode().IsRegular()
 }
 
 // FeatureScript is a feature's script: devvm's own when it has one by
-// that name, else the user's.
-func (b *Builder) FeatureScript(name string) string {
-	if own := filepath.Join(b.Root, "features", name+".sh"); regular(own) {
-		return own
+// that name, else the user's. No script is an error matching
+// fs.ErrNotExist.
+func (b *Builder) FeatureScript(name string) (backend.Script, error) {
+	s := backend.Script{Name: name + ".sh"}
+	own, user := path.Join("features", s.Name), os.DirFS(b.Dirs.Features())
+	var err error
+	switch {
+	case regular(b.Assets, own):
+		s.Data, err = fs.ReadFile(b.Assets, own)
+	case regular(user, s.Name):
+		s.Data, err = fs.ReadFile(user, s.Name)
+	default:
+		err = fs.ErrNotExist
 	}
-	return filepath.Join(b.Dirs.Features(), name+".sh")
+	return s, err
 }
 
 // chosenFeatures returns the features chosen for base: the base-features
@@ -92,7 +105,8 @@ func (b *Builder) PickFeatures() (changed bool, err error) {
 	names := b.features()
 	features := make([]Feature, len(names))
 	for i, n := range names {
-		features[i] = Feature{Name: n, Desc: description(b.FeatureScript(n)), On: slices.Contains(before, n)}
+		s, _ := b.FeatureScript(n)
+		features[i] = Feature{Name: n, Desc: description(s.Data), On: slices.Contains(before, n)}
 	}
 	var chosen []string
 	for _, f := range b.Pick(features) {
@@ -158,13 +172,8 @@ func (b *Builder) saveFeatures(before, chosen []string) (bool, error) {
 
 // description is what a feature's script says it adds: its second line,
 // a comment, without the #.
-func description(path string) string {
-	f, err := os.Open(path) //nolint:gosec // devvm's or the user's feature
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-	s := bufio.NewScanner(f)
+func description(script []byte) string {
+	s := bufio.NewScanner(bytes.NewReader(script))
 	for i := 0; i < 2 && s.Scan(); i++ {
 		if i == 1 {
 			line, ok := strings.CutPrefix(s.Text(), "#")
@@ -179,19 +188,22 @@ func description(path string) string {
 
 // featureScripts returns the scripts of base's chosen features, in order,
 // skipping any without one.
-func (b *Builder) featureScripts() ([]string, error) {
+func (b *Builder) featureScripts() ([]backend.Script, error) {
 	chosen, err := b.chosenFeatures()
 	if err != nil {
 		return nil, err
 	}
-	var paths []string
+	var out []backend.Script
 	for _, f := range chosen {
-		p := b.FeatureScript(f)
-		if !regular(p) {
+		s, err := b.FeatureScript(f)
+		if errors.Is(err, fs.ErrNotExist) {
 			b.Warn(msg.UnknownFeature(f))
 			continue
 		}
-		paths = append(paths, p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
 	}
-	return paths, nil
+	return out, nil
 }

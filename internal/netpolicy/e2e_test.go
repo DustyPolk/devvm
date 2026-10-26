@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/msg"
@@ -27,7 +28,7 @@ func TestE2ESelfCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := lima.New(d, testUI{t})
+	b := lima.New(d, assets.FS, testUI{t})
 	st, err := state.ReadVM(d, vm)
 	if err != nil {
 		t.Fatal(err)

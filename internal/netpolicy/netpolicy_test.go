@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/image"
@@ -33,15 +36,6 @@ func names(err error) string {
 	}
 	return err.Error()
 }
-
-// assets is the repo's assets/, devvm's own files.
-var assets = func() string {
-	r, err := filepath.Abs(filepath.Join("..", "..", "assets"))
-	if err != nil {
-		panic(err)
-	}
-	return r
-}()
 
 // sandbox returns devvm's folders in a temporary folder, and a VM's state
 // there with that image.
@@ -82,13 +76,36 @@ func TestPolicyFiles(t *testing.T) {
 func TestEveryPartHasAPolicy(t *testing.T) {
 	for _, p := range append([]string{"base"}, append(image.Toolchains, image.Agents...)...) {
 		d := paths.Dirs{Data: "/d", Config: "/c"}
-		f := PolicyFiles(d, assets, "vm1", p)
+		f := PolicyFiles(d, ".", "vm1", p)
 		if p != "base" {
 			f = f[1:]
 		}
-		if _, err := os.Stat(f[0]); err != nil {
+		if _, err := fs.Stat(assets.FS, f[0]); err != nil {
 			t.Errorf("%s has no policy: %v", p, err)
 		}
+	}
+}
+
+// The written-out folders of devvm's files that proxies were started with
+// are in use; files elsewhere name none.
+func TestAssetsInUse(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir(), Config: "/c"}
+	a := d.Assets()
+	for name, files := range map[string]string{
+		"vm1.proxy.policy": a + "/aaaa/layers/base.policy," + a + "/aaaa/shared-tools/node.policy,/c/policy",
+		"vm2.proxy.policy": a + "/bbbb/layers/base.policy",
+		"vm3.proxy.policy": "/elsewhere/cccc/layers/base.policy," + a + "/../dddd/x," + a,
+		"vm4.proxy.bin":    a + "/eeee/layers/base.policy",
+	} {
+		if err := state.WriteFile(filepath.Join(d.Run(), name), []byte(files)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, want := AssetsInUse(d), map[string]bool{"aaaa": true, "bbbb": true}; !maps.Equal(got, want) {
+		t.Errorf("AssetsInUse = %v, want %v", got, want)
+	}
+	if got := AssetsInUse(paths.Dirs{Data: t.TempDir()}); len(got) != 0 {
+		t.Errorf("no proxies: %v", got)
 	}
 }
 
@@ -261,7 +278,7 @@ func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	store := secrets.NewStore(d, t.TempDir(), testUI{t}.Warn)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	f := &proxies{args: map[int][]string{}}
-	p := NewProxy(d, assets, "/bin/sh", store, testUI{t})
+	p := NewProxy(d, assets.FS, "/bin/sh", store, testUI{t})
 	p.Start, p.Args, p.Tick = f.start(t), f.argsOf, time.Millisecond
 	p.Listening = func(int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
@@ -309,8 +326,17 @@ func TestPrepare(t *testing.T) {
 		t.Fatal("no proxy runs")
 	}
 	args := strings.Join(f.args[pid], " ")
+	hash, err := state.AssetsHash(assets.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	written := filepath.Join(d.Assets(), hash)
+	if _, err := os.Stat(filepath.Join(written, "layers", "base.policy")); err != nil {
+		t.Errorf("base's policy isn't written out: %v", err)
+	}
 	for _, want := range []string{
-		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() + " -policy " + assets + "/layers/base.policy,",
+		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() + " -policy " + written + "/layers/base.policy," +
+			written + "/shared-tools/node.policy,",
 		" -log " + d.Logs() + "/" + st.Name() + ".jsonl -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
 		" -secrets " + d.Run() + "/" + st.Name() + ".secrets.json -secret-cmd /bin/sh -auth-file " + d.Run() + "/" + st.Name() + ".proxy.auth",
 	} {

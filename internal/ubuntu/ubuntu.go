@@ -2,7 +2,7 @@
 // release of the series with an image for the host, and the image's
 // checksum from that release's SHA256SUMS. When gpgv is installed,
 // SHA256SUMS must be signed by Ubuntu's cloud image key, pinned in devvm's
-// assets/layers/ubuntu-cloud.gpg.
+// own files (layers/ubuntu-cloud.gpg).
 //
 // The image itself isn't downloaded here: the backend fetches it and checks
 // it against the digest.
@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -35,7 +36,8 @@ const (
 	DefaultURL = "https://cloud-images.ubuntu.com/releases/" + Series
 	// URLEnv moves DefaultURL, to a mirror or a file:// folder (tests).
 	URLEnv = "DEVVM_UBUNTU_URL"
-	// Keyring is Ubuntu's cloud image signing key, in devvm's own files.
+	// Keyring is Ubuntu's cloud image signing key, by its path in devvm's
+	// own files.
 	Keyring = "layers/ubuntu-cloud.gpg"
 )
 
@@ -59,8 +61,8 @@ type Finder struct {
 	// URL lists the dated releases (release-YYYYMMDD/), each with its
 	// SHA256SUMS and SHA256SUMS.gpg. http(s):// or file://.
 	URL string
-	// Keyring is the path of the key SHA256SUMS must be signed with.
-	Keyring string
+	// Assets holds devvm's own files, Keyring among them.
+	Assets fs.FS
 	// Arch is the host's, as Go and Ubuntu's image names have it (arm64,
 	// amd64).
 	Arch string
@@ -82,9 +84,9 @@ type UI interface {
 	Note(msg.M)
 }
 
-// New returns a Finder for devvm's files in root, with the URL from
+// New returns a Finder with devvm's own files (assets), the URL from
 // DEVVM_UBUNTU_URL when it's set, running gpgv and printing through u.
-func New(root string, getenv func(string) string, u UI) *Finder {
+func New(assets fs.FS, getenv func(string) string, u UI) *Finder {
 	url := DefaultURL
 	if v := getenv(URLEnv); v != "" {
 		url = v
@@ -95,7 +97,7 @@ func New(root string, getenv func(string) string, u UI) *Finder {
 	}
 	return &Finder{
 		URL:        strings.TrimRight(url, "/"),
-		Keyring:    filepath.Join(root, Keyring),
+		Assets:     assets,
 		Arch:       runtime.GOARCH,
 		Client:     NewClient(),
 		RetryDelay: time.Second,
@@ -219,8 +221,9 @@ func Checksum(sums []byte, file string) string {
 }
 
 // verify checks that sums, release's SHA256SUMS, is signed by Ubuntu's
-// key, with gpgv in a home of its own, so no other key counts. Without
-// gpgv it notes that only the download vouches for them.
+// key, with gpgv in a home of its own, so no other key counts; the key is
+// written beside them. Without gpgv it notes that only the download
+// vouches for them.
 func (f *Finder) verify(ctx context.Context, release string, sums []byte) error {
 	if f.GPGV == "" {
 		f.Note(msg.UbuntuUnsigned())
@@ -239,17 +242,21 @@ func (f *Finder) verify(ctx context.Context, release string, sums []byte) error 
 		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	sumsFile, sigFile, home := filepath.Join(dir, "SHA256SUMS"), filepath.Join(dir, "SHA256SUMS.gpg"), filepath.Join(dir, "gnupg")
-	if err := os.WriteFile(sumsFile, sums, 0o600); err != nil {
+	key, err := fs.ReadFile(f.Assets, Keyring)
+	if err != nil {
 		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
 	}
-	if err := os.WriteFile(sigFile, sig, 0o600); err != nil {
-		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
+	sumsFile, sigFile, home := filepath.Join(dir, "SHA256SUMS"), filepath.Join(dir, "SHA256SUMS.gpg"), filepath.Join(dir, "gnupg")
+	keyring := filepath.Join(dir, filepath.Base(Keyring))
+	for file, data := range map[string][]byte{sumsFile: sums, sigFile: sig, keyring: key} {
+		if err := os.WriteFile(file, data, 0o600); err != nil {
+			return fmt.Errorf("checking Ubuntu's checksums: %w", err)
+		}
 	}
 	if err := os.Mkdir(home, 0o700); err != nil {
 		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, f.GPGV, "--keyring", f.Keyring, sigFile, sumsFile) //nolint:gosec // gpgv, found on PATH
+	cmd := exec.CommandContext(ctx, f.GPGV, "--keyring", keyring, sigFile, sumsFile) //nolint:gosec // gpgv, found on PATH
 	cmd.Env = append(os.Environ(), "GNUPGHOME="+home)
 	if err := f.Run(ctx, cmd); err != nil {
 		if ctx.Err() != nil {

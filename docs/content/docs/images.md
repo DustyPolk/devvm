@@ -175,7 +175,7 @@ Listing never resolves the tools lock: before there is one, no tool image is cur
 
 ### Cleaning up
 
-`devvm gc` deletes what `devvm images` lists as stale or unfinished, on every backend, with their records, and the shared tool images it lists as `unused`, with their hashes. It lists them first, and in a terminal asks; without one, it goes ahead.
+`devvm gc` deletes what `devvm images` lists as stale or unfinished, on every backend, with their records, and the shared tool images it lists as `unused`, with their hashes, and the copies of devvm's own files that older versions [wrote out](install.md#installing-devvm), except those a VM's proxy was started with. It lists them first, and in a terminal asks; without one, it goes ahead.
 
 - VMs are never deleted, nor is a current image or a tool image any VM's state lists: a stopped VM's, or one deleted outside devvm whose state is left.
 - On Linux hosts, a stale image whose disk VMs are overlays of stays, and devvm says which VMs use it.

@@ -2,7 +2,6 @@ package lima
 
 import (
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,11 +10,9 @@ import (
 
 func toolsSpec(t *testing.T, out string) backend.ToolsSpec {
 	t.Helper()
-	script := filepath.Join(t.TempDir(), "build.sh")
-	writeTestFile(t, script, "#!/bin/bash\n")
 	return backend.ToolsSpec{
 		Base: baseKey, Out: out, OutAt: "/mnt/devvm-tools", Net: backend.NetInternet,
-		Script: backend.Script{Name: "build.sh", Path: script},
+		Script: backend.Script{Name: "build.sh", Data: []byte("#!/bin/bash\n")},
 		Args:   []string{"node", "24.21.0", "node-24.21.0-0123456789ab.erofs"},
 	}
 }

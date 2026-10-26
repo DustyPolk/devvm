@@ -1,11 +1,12 @@
 package vm
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -81,10 +82,10 @@ func TestSizeCheck(t *testing.T) {
 }
 
 func TestBaseDisk(t *testing.T) {
-	if got := BaseDisk(filepath.Join("..", "..", "assets")); got != 100 {
-		t.Errorf("BaseDisk(the repo's assets) = %v, want base.yaml's 100", got)
+	if got := BaseDisk(assets.FS); got != 100 {
+		t.Errorf("BaseDisk(devvm's files) = %v, want base.yaml's 100", got)
 	}
-	if got := BaseDisk(t.TempDir()); got != 0 {
+	if got := BaseDisk(fstest.MapFS{}); got != 0 {
 		t.Errorf("BaseDisk(no base.yaml) = %v", got)
 	}
 }

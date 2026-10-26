@@ -25,7 +25,7 @@ import (
 // Builder builds images on one backend.
 type Builder struct {
 	Dirs    paths.Dirs
-	Root    string // devvm's own files, its assets/: base.yaml, layers/, features/, oci/ (paths.Root)
+	Assets  fs.FS // devvm's own files (assets.FS): base.yaml, layers/, features/, oci/
 	Backend backend.Backend
 	Review  backend.Review // what Backend's features are checked against
 	Tools   *tools.Tools   // the shared tools image names hold
@@ -65,7 +65,7 @@ func (b *Builder) Inputs() (image.Inputs, error) {
 	return image.Inputs{
 		Backend:      b.Backend.Name(),
 		BackendFiles: own,
-		Root:         os.DirFS(b.Root),
+		Assets:       b.Assets,
 		Layers:       os.DirFS(b.Dirs.Layers()),
 		Features:     os.DirFS(b.Dirs.Features()),
 		BaseFeatures: features,
@@ -242,7 +242,11 @@ func (b *Builder) build(ctx context.Context, name string) error {
 		return err
 	}
 	libc := ""
-	script := backend.Script{Name: "base.sh", Path: filepath.Join(b.Root, "layers", "base.sh")}
+	data, err := fs.ReadFile(b.Assets, "layers/base.sh")
+	if err != nil {
+		return err
+	}
+	script := backend.Script{Name: "base.sh", Data: data}
 	if parent := image.Parent(name); parent != "" {
 		if err := b.build(ctx, parent); err != nil {
 			return err
@@ -254,7 +258,11 @@ func (b *Builder) build(ctx context.Context, name string) error {
 		}
 		libc = rec.Libc
 		layer := name[strings.LastIndex(name, "+")+1:]
-		script = backend.Script{Name: layer + ".sh", Path: b.LayerScript(layer)}
+		data, err := os.ReadFile(b.LayerScript(layer))
+		if err != nil {
+			return err
+		}
+		script = backend.Script{Name: layer + ".sh", Data: data}
 	}
 	spec.Scripts = []backend.Script{script}
 	if name == image.Base {
@@ -263,9 +271,7 @@ func (b *Builder) build(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		for _, p := range features {
-			spec.Scripts = append(spec.Scripts, backend.Script{Name: filepath.Base(p), Path: p})
-		}
+		spec.Scripts = append(spec.Scripts, features...)
 	}
 
 	switch {

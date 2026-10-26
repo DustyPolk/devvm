@@ -439,6 +439,11 @@ func Deleted(vm string) M {
 	return M{id: "deleted", vals: []val{{"vm", vm}}}
 }
 
+// DeletedAssets is [deleted_assets]: "deleted {{.count}} old copies of devvm's files"
+func DeletedAssets(count int) M {
+	return M{id: "deleted_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // DeletedImage is [deleted_image]: "deleted image {{.image}} ({{.key}})"
 func DeletedImage(image string, key string) M {
 	return M{id: "deleted_image", vals: []val{{"image", image}, {"key", key}}}
@@ -582,6 +587,11 @@ func FromNotFound(from string, host string) M {
 // FromUnreachable is [from_unreachable]: "can't reach {{.host}} to look up {{.from}} (offline?)"
 func FromUnreachable(from string, host string) M {
 	return M{id: "from_unreachable", vals: []val{{"from", from}, {"host", host}}}
+}
+
+// GCAssets is [gc_assets]: "{{.count}} old copies of devvm's files"
+func GCAssets(count int) M {
+	return M{id: "gc_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
 // GCConfirm is [gc_confirm]: "delete them? VMs aren't touched"
@@ -2068,6 +2078,7 @@ var specs = map[string]spec{
 	"delete_failed":               {fields: []string{"vm"}},
 	"delete_other_folder_vm":      {fields: []string{"vm", "was"}},
 	"deleted":                     {fields: []string{"vm"}},
+	"deleted_assets":              {plural: true, fields: []string{"count"}},
 	"deleted_image":               {fields: []string{"image", "key"}},
 	"deleted_old_image":           {fields: []string{"image", "key"}},
 	"deleted_tools":               {plural: true, fields: []string{"count"}},
@@ -2097,6 +2108,7 @@ var specs = map[string]spec{
 	"from_ignored":                {fields: []string{"vm"}},
 	"from_not_found":              {fields: []string{"from", "host"}},
 	"from_unreachable":            {fields: []string{"from", "host"}},
+	"gc_assets":                   {plural: true, fields: []string{"count"}},
 	"gc_confirm":                  {},
 	"gc_failed":                   {fields: []string{"reason"}},
 	"gc_image":                    {fields: []string{"image", "key"}},

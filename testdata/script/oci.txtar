@@ -1,14 +1,14 @@
 # assets/oci/build.sh's pieces, sourced (it runs main only when executed), with
 # a stand-in crane in the folder it runs in.
-exec bash libc-test.sh $DEVVM_BIN/assets/oci/build.sh
+exec bash libc-test.sh $DEVVM_REPO/assets/oci/build.sh
 cmp stdout libc.want
 
 # An image without this VM's architecture says which ones it has.
-! exec bash arch-test.sh $DEVVM_BIN/assets/oci/build.sh
+! exec bash arch-test.sh $DEVVM_REPO/assets/oci/build.sh
 stderr '^devvm: ''node:24'' has no linux/arm64 build \(it has: amd64 s390x\)$'
 
 # crane is pinned for both architectures.
-exec bash pins-test.sh $DEVVM_BIN/assets/oci/build.sh
+exec bash pins-test.sh $DEVVM_REPO/assets/oci/build.sh
 
 -- libc-test.sh --
 # libc_for: gnu for Debian and Ubuntu (and their derivatives), musl for

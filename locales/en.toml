@@ -501,6 +501,14 @@ other = "nothing deleted"
 one = "deleted {{.count}} unused tool image"
 other = "deleted {{.count}} unused tool images"
 
+[gc_assets]
+one = "{{.count}} old copy of devvm's files"
+other = "{{.count}} old copies of devvm's files"
+
+[deleted_assets]
+one = "deleted {{.count}} old copy of devvm's files"
+other = "deleted {{.count}} old copies of devvm's files"
+
 [vm_outdated]
 description = "changed is a comma-separated list of image names"
 other = "{{.changed}} changed since this VM was made: it keeps the image it has"

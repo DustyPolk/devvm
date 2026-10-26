@@ -248,8 +248,12 @@ func checkDecider(vm string, c backend.Confinement) error {
 // services runs services.sh in a running machine, with args (servicesArgs
 // for its sshd); a failure stops it.
 func (s *Smolvm) services(ctx context.Context, vm string, args []string) error {
+	script, err := s.script("services.sh")
+	if err != nil {
+		return err
+	}
 	cmd := s.asRoot(ctx, vm, args...)
-	cmd.Stdin = bytes.NewReader(servicesScript)
+	cmd.Stdin = bytes.NewReader(script)
 	if err := s.Runner.Run(ctx, msg.M{}, cmd); err != nil {
 		if ctx.Err() == nil {
 			_ = s.stop(ctx, vm)

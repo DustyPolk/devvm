@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,7 +51,7 @@ const (
 // the ssh config. NewEnv sets every field; tests change them.
 type Env struct {
 	Dirs     paths.Dirs
-	Root     string // devvm's own files (paths.Root)
+	Assets   fs.FS // devvm's own files (assets.FS)
 	Registry *backend.Registry
 	Tools    *tools.Tools
 	Proxy    *netpolicy.Proxy // VMs' network policy proxies
@@ -108,9 +109,9 @@ type UI interface {
 	Stderr() io.Writer
 }
 
-// NewEnv returns the environment up runs in here, devvm being self, on u.
-// Its caller sets PickFeatures.
-func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry, u UI) (*Env, error) {
+// NewEnv returns the environment up runs in here, with devvm's own files
+// (assets), devvm being self, on u. Its caller sets PickFeatures.
+func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -120,8 +121,8 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry, u UI) (*Env,
 	}
 	home := os.Getenv("HOME")
 	e := &Env{
-		Dirs: d, Root: root, Registry: reg, Tools: tools.New(d, root, u),
-		Proxy: netpolicy.NewProxy(d, root, self, secrets.NewStore(d, home, u.Warn), u),
+		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, u),
+		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, home, u.Warn), u),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
 		Host: ThisHost, Exec: execShell, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
@@ -140,7 +141,7 @@ func NewEnv(d paths.Dirs, root, self string, reg *backend.Registry, u UI) (*Env,
 // fromRef ("" for the backend's own).
 func (e *Env) builder(b backend.Backend, fromRef string) *build.Builder {
 	return &build.Builder{
-		Dirs: e.Dirs, Root: e.Root, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
+		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
 		Terminal: e.Terminal, LogNote: e.LogNote,
 	}

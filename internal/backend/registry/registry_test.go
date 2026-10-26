@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -32,7 +33,7 @@ func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 		build string
 		want  bool
 	}{{"", false}, {"yes", false}, {"allowed", true}} {
-		r, err := newFor(d, quietUI{}, c.build, "smolvm:egress-proxy")
+		r, err := newFor(d, assets.FS, quietUI{}, c.build, "smolvm:egress-proxy")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +47,7 @@ func TestUnreviewedOnlyInTestBuilds(t *testing.T) {
 func TestLimaIsTheDefault(t *testing.T) {
 	t.Parallel()
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	r, err := New(d, quietUI{})
+	r, err := New(d, assets.FS, quietUI{})
 	if err != nil {
 		t.Fatal(err)
 	}

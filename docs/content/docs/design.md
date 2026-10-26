@@ -125,6 +125,10 @@ Each tool version is one compressed EROFS image, loop-mounted read-only in each 
 
 Lima on QEMU keeps one qcow2 disk per VM, and a clone copies it (2.0 GB for `base`). A project VM's disk is a qcow2 overlay of its image's instead ([details](lima.md#clones-and-overlays)): 196 KB new, 12 MB after booting, the same speed except fsync writes (1.8–2.5 s vs 1.2–2.1 s per GiB). Flattening one (`qemu-img rebase -b ""`) took 8 s, if it's ever needed.
 
+## One binary
+
+devvm's own files (`assets/` in the repo: `base.yaml`, `layers/`, `features/`, `shared-tools/`, `guest/`, `oci/`, `smolvm/`) are embedded in the binary (`assets.FS`), so devvm installs, moves and upgrades as one file and can't find a mismatched copy beside it. Code reads them from that file system; scripts reach VMs on their standard input, never by path or file mode. Only what needs a path gets one: the whole set is written out to `~/.local/share/devvm/assets/<hash>` (16 hex digits of a SHA-256 over each file's name and contents), files 600 and folders 700, built in a temporary folder beside it and renamed into place, so concurrent runs share the first complete one. That's `base.yaml` for `limactl create`, `oci/` mounted read-only into `--from`'s build VM (root there reads it), and the policy files a VM's proxy reads, by path, for as long as it runs. `devvm gc` deletes older copies except those a proxy was started with.
+
 ## devvm's own Lima home
 
 Lima merges `_config/default.yaml` and `override.yaml` of its home into every VM. In `~/.lima`, a `networks: [{vzNAT: true}]` there gave a VM with network policy a second network card with a default route around its proxy (the self-check caught it), and an extra mount went unnoticed. Hence a Lima home of devvm's own, which refuses those files and any network devvm didn't give a VM ([details](lima.md#a-lima-home-of-its-own)). The costs: plain `limactl list` doesn't show devvm's VMs, and VM names are shorter, as Lima's ssh socket path is at most 104 characters.

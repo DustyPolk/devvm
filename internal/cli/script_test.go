@@ -33,9 +33,8 @@ func TestScript(t *testing.T) {
 	})
 }
 
-// buildDevvm builds cmd/devvm into a temporary folder, with a copy of the
-// assets/ devvm reads next to itself, and returns that folder. It's a test
-// build: DEVVM_UNREVIEWED counts.
+// buildDevvm builds cmd/devvm, its files embedded, into a temporary folder
+// and returns that folder. It's a test build: DEVVM_UNREVIEWED counts.
 func buildDevvm(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -44,9 +43,6 @@ func buildDevvm(t *testing.T) string {
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOBIN="+dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)
-	}
-	if err := os.CopyFS(filepath.Join(dir, "assets"), os.DirFS(filepath.Join("..", "..", "assets"))); err != nil {
-		t.Fatal(err)
 	}
 	return dir
 }
@@ -125,7 +121,7 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	if err != nil {
 		return err
 	}
-	env.Setenv("DEVVM_REPO", repo) // for the repo's own scripts (scripts/)
+	env.Setenv("DEVVM_REPO", repo) // for the repo's own scripts (scripts/, assets/)
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil
 }

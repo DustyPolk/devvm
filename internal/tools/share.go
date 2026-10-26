@@ -145,7 +145,11 @@ func (t *Tools) batch(ctx context.Context, b backend.Backend, base, format strin
 	if err := os.Mkdir(build, 0o700); err != nil {
 		return err
 	}
-	config, err := os.ReadFile(t.configFile())
+	config, err := t.config()
+	if err != nil {
+		return err
+	}
+	script, err := fs.ReadFile(t.Assets, "shared-tools/build.sh")
 	if err != nil {
 		return err
 	}
@@ -161,7 +165,7 @@ func (t *Tools) batch(ctx context.Context, b backend.Backend, base, format strin
 	}
 	spec := backend.ToolsSpec{
 		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: format, Net: backend.NetInternet,
-		Script: backend.Script{Name: "build.sh", Path: filepath.Join(t.Root, "shared-tools", "build.sh")},
+		Script: backend.Script{Name: "build.sh", Data: script},
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {
 		return err

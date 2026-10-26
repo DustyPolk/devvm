@@ -33,10 +33,10 @@ type Inputs struct {
 	// BackendFiles are the backend's own files that go into base
 	// (backend.KeyFiles), by name. Nil for none.
 	BackendFiles map[string][]byte
-	// Root holds devvm's own files, its assets/: base.yaml,
-	// layers/base.sh, features/ and oci/ (paths.Root). Files are hashed
-	// by their names in it.
-	Root fs.FS
+	// Assets holds devvm's own files (assets.FS): base.yaml,
+	// layers/base.sh, features/ and oci/. Files are hashed by their names
+	// in it.
+	Assets fs.FS
 	// Layers holds the user's layers, <name>.sh (paths.Dirs.Layers). Nil
 	// when there are none.
 	Layers fs.FS
@@ -193,7 +193,7 @@ func (in Inputs) baseKey() (string, error) {
 		k.bytes("backend-file "+name, in.BackendFiles[name])
 	}
 	for _, f := range []string{"base.yaml", "layers/base.sh"} {
-		if err := k.own(in.Root, f); err != nil {
+		if err := k.own(in.Assets, f); err != nil {
 			return "", err
 		}
 	}
@@ -201,7 +201,7 @@ func (in Inputs) baseKey() (string, error) {
 		k.field("from", in.From)
 		k.field("from-digest", in.FromDigest)
 		for _, f := range []string{"oci/build.sh", "oci/bootify.sh", "oci/kernel.sh"} {
-			if err := k.own(in.Root, f); err != nil {
+			if err := k.own(in.Assets, f); err != nil {
 				return "", err
 			}
 		}
@@ -211,7 +211,7 @@ func (in Inputs) baseKey() (string, error) {
 			return "", fmt.Errorf("invalid feature name %q", f)
 		}
 		k.field("feature", f)
-		builtin, err := k.optional("builtin-feature", in.Root, "features/"+f+".sh")
+		builtin, err := k.optional("builtin-feature", in.Assets, "features/"+f+".sh")
 		if err != nil {
 			return "", err
 		}

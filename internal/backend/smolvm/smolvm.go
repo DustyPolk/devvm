@@ -16,7 +16,6 @@ package smolvm
 import (
 	"context"
 	"crypto/sha256"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -62,30 +61,16 @@ const Gateway = "100.96.0.1"
 // maxPorts is the most ports a machine forwards.
 const maxPorts = 64
 
-// devvm's own scripts, run as root in machines. Those that go into base
-// are in its key (KeyFiles).
-var (
-	//go:embed prepare.sh
-	prepareScript []byte
-	//go:embed shims.sh
-	shimsScript []byte
-	//go:embed sshd.sh
-	sshdScript []byte
-	//go:embed services.sh
-	servicesScript []byte
-	//go:embed plain.sh
-	plainScript []byte
-)
-
 // Smolvm is the backend. New sets every field; tests change them.
 type Smolvm struct {
 	Dirs   paths.Dirs
 	Runner Runner
 	// OS and Arch are the host's, as Go names them.
 	OS, Arch string
-	// Root holds devvm's own files, its assets/: base.yaml (base's CPUs,
-	// memory and disk).
-	Root string
+	// Assets holds devvm's own files (assets.FS): base.yaml (base's CPUs,
+	// memory and disk) and the scripts smolvm/ has, run as root in
+	// machines.
+	Assets fs.FS
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
 	// User is the host's user, whose name and uid the VM's user gets.
@@ -129,20 +114,15 @@ type UI interface {
 
 var _ backend.Backend = (*Smolvm)(nil)
 
-// New returns the smolvm backend for devvm's folders, on u.
-func New(d paths.Dirs, u UI) *Smolvm {
-	self, err := os.Executable()
-	if err == nil {
-		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
-			self = r
-		}
-	}
+// New returns the smolvm backend for devvm's folders and its own files
+// (assets), on u.
+func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 	kvm := os.Getenv("DEVVM_KVM")
 	if kvm == "" {
 		kvm = "/dev/kvm"
 	}
 	return &Smolvm{
-		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Root: paths.RootOf(self),
+		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
 		Digest: from.NewRegistry().Digest, KVM: kvm,
 		Terminal: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
@@ -180,15 +160,24 @@ func (s *Smolvm) UsesDecider() bool { return true }
 // hash, so names have no limit devvm meets.
 func (s *Smolvm) NameMax() int { return 0 }
 
-// KeyFiles are devvm's scripts for smolvm that go into base.
+// script is one of devvm's scripts for smolvm: smolvm/<name> in Assets.
+func (s *Smolvm) script(name string) ([]byte, error) { return fs.ReadFile(s.Assets, "smolvm/"+name) }
+
+// KeyFiles are devvm's scripts for smolvm that go into base; one missing
+// is hashed as empty.
 func (s *Smolvm) KeyFiles() map[string][]byte {
-	return map[string][]byte{"smolvm/prepare.sh": prepareScript, "smolvm/shims.sh": shimsScript, "smolvm/sshd.sh": sshdScript}
+	files := map[string][]byte{}
+	for _, n := range []string{"prepare.sh", "shims.sh", "sshd.sh"} {
+		files["smolvm/"+n], _ = s.script(n)
+	}
+	return files
 }
 
 // ToolFormat is uncompressed EROFS (plain.sh), as smolvm's kernel mounts
 // no other: its name changes with the script.
 func (s *Smolvm) ToolFormat() string {
-	sum := sha256.Sum256(plainScript)
+	plain, _ := s.script("plain.sh") // missing, BuildTools fails
+	sum := sha256.Sum256(plain)
 	return "plain-" + hex.EncodeToString(sum[:])[:12]
 }
 

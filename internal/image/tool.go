@@ -124,9 +124,9 @@ var (
 
 // ToolFile names a tool's image: <tool>-<version>-<key>.erofs. The key is
 // 12 hex digits of a SHA-256 over the tool's lock entry, devvm's
-// shared-tools/build.sh (in root, its assets/), the libc and, unless it's build.sh's own, the
-// format.
-func ToolFile(root fs.FS, t Tool) (string, error) {
+// shared-tools/build.sh (in assets, devvm's own files), the libc and,
+// unless it's build.sh's own, the format.
+func ToolFile(assets fs.FS, t Tool) (string, error) {
 	if !toolName.MatchString(t.Name) {
 		return "", fmt.Errorf("invalid tool name %q", t.Name)
 	}
@@ -140,7 +140,7 @@ func ToolFile(root fs.FS, t Tool) (string, error) {
 	k.field("tool", t.Name)
 	k.field("version", t.Version)
 	k.bytes("lock-entry", t.LockEntry)
-	if err := k.own(root, "shared-tools/build.sh"); err != nil {
+	if err := k.own(assets, "shared-tools/build.sh"); err != nil {
 		return "", err
 	}
 	k.field("libc", t.Libc)

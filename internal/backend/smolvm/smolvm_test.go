@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -49,7 +50,7 @@ func newSandbox(t *testing.T) sandbox {
 	t.Helper()
 	root := t.TempDir()
 	stub := filepath.Join(root, "stub")
-	for _, d := range []string{"data", "config", "stub", "src"} {
+	for _, d := range []string{"data", "config", "stub"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -58,20 +59,13 @@ func newSandbox(t *testing.T) sandbox {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := os.ReadFile(filepath.Join("..", "..", "..", "assets", "base.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "src", "base.yaml"), base, 0o600); err != nil { //nolint:gosec // the test's own folder
-		t.Fatal(err)
-	}
 	t.Setenv("STUB_DIR", stub)
 	t.Setenv("STUB_LOG", filepath.Join(stub, "calls"))
 	t.Setenv("SMOLVM_MACHINE_NAME", "users-own")
 	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
 	s := &Smolvm{
-		Dirs: d, Runner: execRunner{}, OS: "darwin", Arch: "arm64", Root: filepath.Join(root, "src"),
+		Dirs: d, Runner: execRunner{}, OS: "darwin", Arch: "arm64", Assets: assets.FS,
 		Getenv: func(string) string { return "" },
 		User:   func() (*user.User, error) { return &user.User{Username: "u", Uid: "501"}, nil },
 		Memory: func() (uint64, error) { return 64 << 30, nil },
@@ -510,13 +504,9 @@ func TestStartConfined(t *testing.T) {
 // scripts run between the stand-ins, packed, then deleted.
 func TestBuildBase(t *testing.T) {
 	s := newSandbox(t)
-	script := filepath.Join(t.TempDir(), "base.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/bash\necho base\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	built, err := s.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: "0123456789ab", Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "base.sh", Path: script}},
+		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\necho base\n")}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -576,13 +566,9 @@ func TestBuildFails(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, "0123456789ab")
 	s.touch(t, "script-fails")
-	script := filepath.Join(t.TempDir(), "foo.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/bash\nexit 3\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	_, err := s.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "foo", Key: "ba9876543210", Parent: "0123456789ab", Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "foo.sh", Path: script}},
+		Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\nexit 3\n")}},
 	})
 	if names(err) != "smolvm_script_failed script=foo.sh vm=devvm-img-ba9876543210" {
 		t.Errorf("failed: %v", err)

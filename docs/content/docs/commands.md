@@ -152,7 +152,7 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm layer new NAME` | start a layer of your own: `~/.config/devvm/layers/NAME.sh`, a script to edit, and its allowlist, `NAME.policy` ([details](customizing.md#your-own-layers)) |
 | `devvm images` | list the images on every backend, with their state and size, then the shared tool images, with how many VMs use each ([details](images.md#listing-images)) |
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](images.md#deleting-images)) |
-| `devvm gc` | delete the stale and unfinished images on every backend, and the tool images no VM uses that aren't the tools lock's; it lists them first, and in a terminal asks. VMs are never deleted ([details](images.md#cleaning-up)) |
+| `devvm gc` | delete the stale and unfinished images on every backend, the tool images no VM uses that aren't the tools lock's, and old copies of devvm's files; it lists them first, and in a terminal asks. VMs are never deleted ([details](images.md#cleaning-up)) |
 
 `--backend NAME` builds, or deletes, on that backend instead of the one new VMs get, and `--from IMAGE` on a base from that container image ([details](from.md)).
 

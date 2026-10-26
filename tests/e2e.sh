@@ -66,15 +66,14 @@ for real in "$HOME/.lima" "$HOME/.local/share/devvm/lima"; do
   [[ "$(cd "$LIMA_HOME" && pwd -P)" != "$real" ]] || { echo "e2e: refusing to use your real Lima home ($real)" >&2; exit 1; }
 done
 
-# devvm runs from a copy, built from this checkout, so the test can edit its files (and editing the
-# repo mid-run is harmless).
+# devvm is built from this checkout into the sandbox, its files embedded (so editing the repo mid-run
+# is harmless).
 src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 # A test build: DEVVM_UNREVIEWED counts in it (never in a release).
 (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" build -ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed" \
   -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-cp -R "$root/assets" "$src/"
 # The features are in base's key, so only a run with from (which checks them) builds them; every
 # other selection shares one smaller base.
 if want from; then for f in "$root"/assets/features/*.sh; do basename "$f" .sh; done > "$XDG_CONFIG_HOME/devvm/base-features"
@@ -238,7 +237,7 @@ if want tools; then
 # resolved by devvm's pinned mise, downloaded and checked on the first run.
 section "shared tool versions"
 march=arm64; [[ "$(uname -m)" != x86_64 ]] || march=x64   # the lock's platform: mise's name for the arch
-ntools=$(awk -F' *= *' '/^\[tools\]/ { s = 1; next } /^\[/ { s = 0 } s && NF == 2' "$src/assets/shared-tools/mise.toml" | wc -l)
+ntools=$(awk -F' *= *' '/^\[tools\]/ { s = 1; next } /^\[/ { s = 0 } s && NF == 2' "$root/assets/shared-tools/mise.toml" | wc -l)
 check "the shared tools resolve to upstream's newest, with checksums" bash -c "'$D' _refresh-tools </dev/null >'$work/last.log' 2>&1 &&
   (( \$(grep -c '^\[\[tools\.' '$lock') == $ntools )) &&
   (( \$(grep -A1 '\"platforms.linux-$march\"\]' '$lock' | grep -c '^checksum = \"sha256:') == $ntools - 1 ))"

@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -51,16 +53,21 @@ func write(t *testing.T, path, s string) {
 	}
 }
 
-// fakeGPGV stands in for gpgv: it records each call, and a signature is
-// good unless bad is set.
+// fakeGPGV stands in for gpgv: it records each call and the keyring it
+// was given, and a signature is good unless bad is set.
 type fakeGPGV struct {
-	bad   bool
-	calls [][]string
-	homes []string
+	bad      bool
+	calls    [][]string
+	homes    []string
+	keyrings []string
 }
 
 func (g *fakeGPGV) run(_ context.Context, cmd *exec.Cmd) error {
 	g.calls = append(g.calls, cmd.Args)
+	if i := slices.Index(cmd.Args, "--keyring"); i >= 0 && i+1 < len(cmd.Args) {
+		key, _ := os.ReadFile(cmd.Args[i+1])
+		g.keyrings = append(g.keyrings, string(key))
+	}
 	for _, e := range cmd.Env {
 		if h, ok := strings.CutPrefix(e, "GNUPGHOME="); ok {
 			g.homes = append(g.homes, h)
@@ -87,9 +94,12 @@ func served(t *testing.T, test func(t *testing.T, dir, url string)) {
 	})
 }
 
+// testAssets is devvm's files with a stand-in for Ubuntu's key.
+var testAssets = fstest.MapFS{Keyring: {Data: []byte("key")}}
+
 func finder(url, arch string, g *fakeGPGV, notes *[]msg.M) *Finder {
 	return &Finder{
-		URL: url, Keyring: "/devvm/" + Keyring, Arch: arch, Client: NewClient(), GPGV: "gpgv", Run: g.run,
+		URL: url, Assets: testAssets, Arch: arch, Client: NewClient(), GPGV: "gpgv", Run: g.run,
 		Note: func(m msg.M) { *notes = append(*notes, m) },
 	}
 }
@@ -165,9 +175,12 @@ func TestImageSignature(t *testing.T) {
 			t.Fatalf("gpgv calls %q, homes %q", g.calls, g.homes)
 		}
 		args, tmp := g.calls[0], filepath.Dir(g.homes[0])
-		want := []string{"gpgv", "--keyring", "/devvm/layers/ubuntu-cloud.gpg", filepath.Join(tmp, "SHA256SUMS.gpg"), filepath.Join(tmp, "SHA256SUMS")}
+		want := []string{"gpgv", "--keyring", filepath.Join(tmp, "ubuntu-cloud.gpg"), filepath.Join(tmp, "SHA256SUMS.gpg"), filepath.Join(tmp, "SHA256SUMS")}
 		if !slices.Equal(args, want) {
 			t.Errorf("gpgv %q, want %q", args, want)
+		}
+		if !slices.Equal(g.keyrings, []string{"key"}) {
+			t.Errorf("keyrings %q, want devvm's key", g.keyrings)
 		}
 		if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s is still there: %v", tmp, err)
@@ -212,11 +225,7 @@ func TestRealSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := filepath.Abs(filepath.Join("..", "..", "assets"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := New(root, func(string) string { return "file://" + src }, testUI{t})
+	f := New(assets.FS, func(string) string { return "file://" + src }, testUI{t})
 	f.GPGV, f.Arch = gpgv, "arm64"
 	img, err := f.Image(t.Context())
 	if err != nil {
@@ -253,11 +262,11 @@ func TestRealSignature(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	f := New("/devvm", func(string) string { return "" }, testUI{t})
-	if f.URL != DefaultURL || f.Keyring != "/devvm/layers/ubuntu-cloud.gpg" {
+	f := New(testAssets, func(string) string { return "" }, testUI{t})
+	if f.URL != DefaultURL || f.Assets == nil {
 		t.Errorf("default: %+v", f)
 	}
-	f = New("/devvm", func(k string) string {
+	f = New(testAssets, func(k string) string {
 		if k == URLEnv {
 			return "file:///tmp/ubuntu/"
 		}

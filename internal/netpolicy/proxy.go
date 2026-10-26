@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/rand/v2"
 	"net"
 	"net/url"
@@ -34,7 +35,7 @@ import (
 // (SelfCheck). NewProxy sets every field; tests change them.
 type Proxy struct {
 	Dirs    paths.Dirs
-	Root    string // devvm's own files, its assets/: layers/, shared-tools/
+	Assets  fs.FS  // devvm's own files (assets.FS): layers/, shared-tools/
 	Self    string // devvm's binary, which runs as the proxy
 	OS      string // the host's, as Go names it
 	Secrets *secrets.Store
@@ -68,10 +69,10 @@ type UI interface {
 }
 
 // NewProxy returns the proxies of devvm's folders, run by self (devvm's
-// binary), with its files in root, printing and asking through u.
-func NewProxy(d paths.Dirs, root, self string, store *secrets.Store, u UI) *Proxy {
+// binary), with its own files (assets), printing and asking through u.
+func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u UI) *Proxy {
 	return &Proxy{
-		Dirs: d, Root: root, Self: self, OS: runtime.GOOS, Secrets: store,
+		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Secrets: store,
 		Start: platform.StartDetached, Args: platform.ProcessArgs, ExcludeFromBackup: platform.ExcludeFromBackup,
 		InitCA: func(dir string) error {
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
@@ -83,6 +84,36 @@ func NewProxy(d paths.Dirs, root, self string, store *secrets.Store, u UI) *Prox
 }
 
 func (p *Proxy) run(vm, ext string) string { return filepath.Join(p.Dirs.Run(), vm+".proxy"+ext) }
+
+// PolicyFiles returns the policy files of the VM vm, of image img, its
+// proxy reads (PolicyFiles), devvm's own written out for it.
+func (p *Proxy) PolicyFiles(vm, img string) ([]string, error) {
+	assets, err := state.WriteAssets(p.Dirs, p.Assets)
+	if err != nil {
+		return nil, err
+	}
+	return PolicyFiles(p.Dirs, assets, vm, img), nil
+}
+
+// AssetsInUse returns the folders of devvm's files written out
+// (state.WriteAssets) that VMs' proxies were started with, by name: kept
+// while a proxy may still read its policy files there.
+func AssetsInUse(d paths.Dirs) map[string]bool {
+	inUse := map[string]bool{}
+	started, _ := filepath.Glob(filepath.Join(d.Run(), "*.proxy.policy"))
+	for _, f := range started {
+		files, err := os.ReadFile(f) //nolint:gosec // devvm's run folder
+		if err != nil {
+			continue
+		}
+		for file := range strings.SplitSeq(string(files), ",") {
+			if rel, err := filepath.Rel(d.Assets(), file); err == nil && rel != "." && filepath.IsLocal(rel) {
+				inUse[strings.Split(filepath.ToSlash(rel), "/")[0]] = true
+			}
+		}
+	}
+	return inUse
+}
 
 // EventLog is a VM's log of its proxy's decisions (JSON lines).
 func EventLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".jsonl") }
@@ -195,7 +226,11 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	// or removed), from another devvm binary (an upgrade), or holding a CA
 	// since replaced (which mints certificates the VM no longer trusts
 	// after its next setup) starts again too, on the same port.
-	files := strings.Join(PolicyFiles(p.Dirs, p.Root, vm, st.Get(state.KeyImage)), ",")
+	policies, err := p.PolicyFiles(vm, st.Get(state.KeyImage))
+	if err != nil {
+		return none, err
+	}
+	files := strings.Join(policies, ",")
 	bin, _ := image.SHA256File(p.Self)
 	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))
 	if !running || read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum {

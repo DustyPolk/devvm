@@ -1,5 +1,6 @@
-# gc: deletes what devvm images lists as stale or unfinished, and the
-# tool images it lists as unused, after listing them; not a terminal, so
+# gc: deletes what devvm images lists as stale or unfinished, the tool
+# images it lists as unused, and old copies of devvm's files no VM's proxy
+# was started with, after listing them; not a terminal, so
 # it doesn't ask. Never a project VM (one named like an image included),
 # a current image, or a tool image a VM's state lists.
 env DEVVM_MESSAGES=names
@@ -33,6 +34,15 @@ mkdir $VMS
 exec sh -c 'printf "image=go\ndir=/p\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
 exec sh -c 'printf "image=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$VMS/devvm-gone-12345612345612"'
 
+# Copies of devvm's files: the current one (the builds wrote it), an old
+# one, and old ones a VM's proxy was started with and a run is writing.
+env ASSETS=$XDG_DATA_HOME/devvm/assets
+exec sh -c 'ls "$ASSETS" | grep -cx "[0-9a-f]\{16\}"'
+stdout '^1$'
+mkdir $ASSETS/0000000000000000 $ASSETS/1111111111111111 $ASSETS/.tmp-123
+mkdir $XDG_DATA_HOME/devvm/run
+exec sh -c 'echo "$ASSETS/1111111111111111/layers/base.policy,/c/policy" > "$XDG_DATA_HOME/devvm/run/devvm-p-12345612345612.proxy.policy"'
+
 # devvm images says how many images gc deletes, and what it frees.
 exec devvm images
 stdout '^foo .* stale '
@@ -47,6 +57,8 @@ stdout '^gc_unfinished key=000000000000$'
 stdout '^gc_unfinished key=111111111111$'
 stdout '^gc_unfinished key=node$'
 stdout '^gc_tools count=1 size=\S+$'
+stdout '^gc_assets count=1$'
+stdout '^==> deleted_assets count=1$'
 stdout -count=1 '^==> deleted_image '
 stdout -count=3 '^==> deleted_unfinished_build '
 stdout '^==> deleted_tools count=1$'
@@ -68,6 +80,11 @@ exists $SHARE/go-1.20.0-0123456789ab.erofs
 exists $SHARE/go-1.19.0-0123456789ab.erofs
 exec sh -c 'ls "$SHARE"/claude-*.erofs'
 ! exists $SHARE/.lock
+! exists $ASSETS/0000000000000000
+exists $ASSETS/1111111111111111
+exists $ASSETS/.tmp-123
+exec sh -c 'ls "$ASSETS" | grep -cx "[0-9a-f]\{16\}"'
+stdout '^2$'
 
 # Again: nothing left, and devvm images has nothing to say.
 exec devvm gc

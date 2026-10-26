@@ -134,7 +134,11 @@ func (e Net) Policy(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return netpolicy.WriteRules(w, netpolicy.PolicyFiles(e.Dirs, e.Root, t.f.Name, t.st.Get(state.KeyImage)))
+	files, err := e.Proxy.PolicyFiles(t.f.Name, t.st.Get(state.KeyImage))
+	if err != nil {
+		return err
+	}
+	return netpolicy.WriteRules(w, files)
 }
 
 // PolicyChange adds rules to the folder's VM's own policy file (deny: as

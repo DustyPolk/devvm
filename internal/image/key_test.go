@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 	"testing/fstest"
+
+	"github.com/w3cj/devvm/assets"
 )
 
 // env is a copy of the fixtures in testdata, and the inputs that read it.
@@ -27,7 +29,7 @@ func newEnv(t *testing.T, from string) *env {
 	}
 	e := &env{t: t, dir: dir, in: Inputs{
 		Backend:      "lima",
-		Root:         os.DirFS(filepath.Join(dir, "root")),
+		Assets:       os.DirFS(filepath.Join(dir, "root")),
 		Layers:       os.DirFS(filepath.Join(dir, "layers")),
 		Features:     os.DirFS(filepath.Join(dir, "features")),
 		BaseFeatures: []string{"fzf", "mine"},
@@ -167,7 +169,7 @@ func TestKeyIsStable(t *testing.T) {
 func TestKeyFieldsAreSeparate(t *testing.T) {
 	key := func(files fstest.MapFS, features []string) string {
 		t.Helper()
-		k, err := Inputs{Backend: "lima", Root: files, BaseFeatures: features}.Key(Base)
+		k, err := Inputs{Backend: "lima", Assets: files, BaseFeatures: features}.Key(Base)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -267,9 +269,9 @@ func TestKeyWithoutUserFolders(t *testing.T) {
 	}
 }
 
-// devvm's own files, the repo's assets/, give base a key.
+// devvm's own files, embedded, give base a key.
 func TestKeyOfTheRealFiles(t *testing.T) {
-	in := Inputs{Backend: "lima", Root: os.DirFS(filepath.Join("..", "..", "assets"))}
+	in := Inputs{Backend: "lima", Assets: assets.FS}
 	key, err := in.Key(Base)
 	if err != nil {
 		t.Fatal(err)

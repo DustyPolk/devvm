@@ -93,7 +93,7 @@ func (e Launch) create(ctx context.Context, o Options, f project.Folder, b backe
 	if err != nil {
 		return err
 	}
-	if err := size.Check(host, BaseDisk(e.Root), vm); err != nil {
+	if err := size.Check(host, BaseDisk(e.Assets), vm); err != nil {
 		return err
 	}
 	if ports == "" {

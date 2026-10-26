@@ -83,14 +83,19 @@ func lockTools(l Lock) []string {
 	return out
 }
 
-// env is a sandbox: devvm's folders, a copy of shared-tools/, the stub mise
-// resolving the fixture lock, and what the tools printed.
+// env is a sandbox: devvm's folders, devvm's files with a copy of
+// shared-tools/, the stub mise resolving the fixture lock, and what the
+// tools printed.
 type env struct {
 	*Tools
+	root   string // devvm's files, Assets
 	log    string // the stub's calls
 	said   *[]string
 	detach *[]string
 }
+
+// configFile is devvm's shared-tools/mise.toml.
+func (e env) configFile() string { return filepath.Join(e.root, "shared-tools", "mise.toml") }
 
 func newEnv(t *testing.T) env {
 	t.Helper()
@@ -110,7 +115,7 @@ func newEnv(t *testing.T) env {
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
-	tl := New(d, root, quietUI{})
+	tl := New(d, os.DirFS(root), quietUI{})
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
 	tl.Getenv = func(k string) string {
@@ -126,7 +131,7 @@ func newEnv(t *testing.T) env {
 		detached = append(detached, path+" "+strings.Join(args, " ")+" > "+out.Name())
 		return 1, nil
 	}
-	return env{Tools: tl, log: log, said: &said, detach: &detached}
+	return env{Tools: tl, root: root, log: log, said: &said, detach: &detached}
 }
 
 // calls returns the stub's calls, and forgets them.
@@ -587,7 +592,7 @@ func TestBuild(t *testing.T) {
 		"node", lock.Version("node"), all[0], "bun", lock.Version("bun"), all[2], "claude", lock.Version("claude"), all[3],
 	}
 	if spec.Base != baseKey || spec.OutAt != ShareAt || spec.Net != backend.NetInternet || !slices.Equal(spec.Args, wantArgs) ||
-		spec.Script.Path != filepath.Join(e.Root, "shared-tools", "build.sh") {
+		spec.Script.Name != "build.sh" || !bytes.Equal(spec.Script.Data, read(t, filepath.Join(e.root, "shared-tools", "build.sh"))) {
 		t.Errorf("spec = %+v", spec)
 	}
 	if filepath.Dir(spec.Out) != e.Dirs.Data || !strings.HasPrefix(filepath.Base(spec.Out), "tools-build.") {

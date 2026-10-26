@@ -135,7 +135,7 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		return backend.Built{}, err
 	}
 	if spec.Parent == "" {
-		if err := s.rootScript(ctx, inst, "prepare.sh", prepareScript, name, uid); err != nil {
+		if err := s.rootScript(ctx, inst, "prepare.sh", name, uid); err != nil {
 			return failed(err)
 		}
 		out, err := s.Runner.Output(s.smolvm(ctx, "machine", "exec", "--name", inst, "--",
@@ -145,7 +145,7 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		}
 		built.Libc = strings.TrimSpace(string(out))
 	}
-	if err := s.rootScript(ctx, inst, "shims.sh", shimsScript, "on"); err != nil {
+	if err := s.rootScript(ctx, inst, "shims.sh", "on"); err != nil {
 		return failed(err)
 	}
 	for _, sc := range spec.Scripts {
@@ -154,11 +154,11 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		}
 	}
 	if spec.Parent == "" {
-		if err := s.rootScript(ctx, inst, "sshd.sh", sshdScript); err != nil {
+		if err := s.rootScript(ctx, inst, "sshd.sh"); err != nil {
 			return failed(err)
 		}
 	}
-	if err := s.rootScript(ctx, inst, "shims.sh", shimsScript, "off"); err != nil {
+	if err := s.rootScript(ctx, inst, "shims.sh", "off"); err != nil {
 		return failed(err)
 	}
 	if err := s.stop(ctx, inst); err != nil {
@@ -207,9 +207,13 @@ func (s *Smolvm) baseImage(ctx context.Context, f *backend.From) (ref, origin st
 	return ref, UbuntuImage + "@" + digest, nil
 }
 
-// rootScript runs one of devvm's scripts as root in a running machine, fed
-// to sh with args.
-func (s *Smolvm) rootScript(ctx context.Context, vm, name string, script []byte, args ...string) error {
+// rootScript runs one of devvm's scripts for smolvm as root in a running
+// machine, fed to sh with args.
+func (s *Smolvm) rootScript(ctx context.Context, vm, name string, args ...string) error {
+	script, err := s.script(name)
+	if err != nil {
+		return err
+	}
 	cmd := s.asRoot(ctx, vm, args...)
 	cmd.Stdin = bytes.NewReader(script)
 	if err := s.Runner.Run(ctx, msg.RunningScript(name, vm), cmd); err != nil {
@@ -220,17 +224,12 @@ func (s *Smolvm) rootScript(ctx context.Context, vm, name string, script []byte,
 
 // runScript runs a script in the machine as its user, fed to bash.
 func (s *Smolvm) runScript(ctx context.Context, vm string, sc backend.Script) error {
-	f, err := os.Open(sc.Path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
 	args, err := s.userArgs(vm, "", true, false, []string{"bash", "-s"})
 	if err != nil {
 		return err
 	}
 	cmd := s.smolvm(ctx, args...)
-	cmd.Stdin = f
+	cmd.Stdin = bytes.NewReader(sc.Data)
 	if err := s.Runner.Run(ctx, msg.RunningScript(sc.Name, vm), cmd); err != nil {
 		return backend.Logged(msg.SmolvmScriptFailed(sc.Name, vm))
 	}
@@ -465,7 +464,7 @@ const gib = 1 << 30
 // CPUs, memory and disk, as Lima's base has them; the memory halved when
 // it would leave the host less than 2 GiB.
 func (s *Smolvm) baseSize() (cpus int, mem, disk float64, err error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, "base.yaml"))
+	data, err := fs.ReadFile(s.Assets, "base.yaml")
 	if err != nil {
 		return 0, 0, 0, err
 	}

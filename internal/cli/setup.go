@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
@@ -70,7 +71,7 @@ func (s setup) run(features *string, backendName string) error {
 	}
 	ask := backendName == "" && features == nil && s.terminal()
 	if backendName != "" || ask {
-		reg, err := registry.New(dirs, s.ui)
+		reg, err := registry.New(dirs, assets.FS, s.ui)
 		if err != nil {
 			return err
 		}
@@ -89,11 +90,7 @@ func (s setup) run(features *string, backendName string) error {
 			return nil
 		}
 	}
-	root, err := paths.Root()
-	if err != nil {
-		return err
-	}
-	b := newBuilder(s.ui, dirs, root, nil, backend.Review{}, nil, "")
+	b := newBuilder(s.ui, dirs, nil, backend.Review{}, nil, "")
 	var changed bool
 	if features == nil {
 		changed, err = b.PickFeatures()

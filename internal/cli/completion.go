@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
@@ -94,11 +95,7 @@ func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	root, err := paths.Root()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	features, _ := (&build.Builder{Dirs: dirs, Root: root}).Features()
+	features, _ := (&build.Builder{Dirs: dirs, Assets: assets.FS}).Features()
 	return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -110,7 +107,7 @@ func completeBackend(u *ui.UI) cobra.CompletionFunc {
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
-		reg, err := registry.New(dirs, u)
+		reg, err := registry.New(dirs, assets.FS, u)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}

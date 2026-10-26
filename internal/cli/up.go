@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
@@ -100,11 +101,11 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := registry.New(dirs, u)
+	reg, err := registry.New(dirs, assets.FS, u)
 	if err != nil {
 		return nil, err
 	}
-	e, err := vm.NewEnv(dirs, paths.RootOf(self), self, reg, u)
+	e, err := vm.NewEnv(dirs, assets.FS, self, reg, u)
 	if err != nil {
 		return nil, err
 	}

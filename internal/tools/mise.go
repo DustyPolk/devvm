@@ -160,7 +160,7 @@ func (t *Tools) Resolve(ctx context.Context, out string) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	config, err := os.ReadFile(t.configFile())
+	config, err := t.config()
 	if err != nil {
 		return err
 	}

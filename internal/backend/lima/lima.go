@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -48,8 +50,8 @@ type Lima struct {
 	OS, Arch string
 	// Self is devvm's binary, which the QEMU wrapper runs.
 	Self string
-	// Root holds devvm's own files, its assets/: base.yaml, layers/, oci/.
-	Root string
+	// Assets holds devvm's own files (assets.FS): base.yaml, oci/.
+	Assets fs.FS
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
 	// OCIWait is how long a --from conversion waits between looks at
@@ -94,19 +96,19 @@ type UI interface {
 
 var _ backend.Backend = (*Lima)(nil)
 
-// New returns the Lima backend for devvm's folders, on u.
-func New(d paths.Dirs, u UI) *Lima {
+// New returns the Lima backend for devvm's folders and its own files
+// (assets), on u.
+func New(d paths.Dirs, assets fs.FS, u UI) *Lima {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
 			self = r
 		}
 	}
-	root := paths.RootOf(self)
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Self: self, Root: root, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
-		Ubuntu: ubuntu.New(root, os.Getenv, u).Image, Memory: platform.Memory,
+		Self: self, Assets: assets, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
+		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: platform.Memory,
 		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
@@ -116,6 +118,10 @@ func New(d paths.Dirs, u UI) *Lima {
 
 // Name returns lima.
 func (l *Lima) Name() string { return Name }
+
+// assets returns the folder devvm's own files are written out in, for
+// limactl create's base.yaml and the conversion VM's oci/.
+func (l *Lima) assets() (string, error) { return state.WriteAssets(l.Dirs, l.Assets) }
 
 // Caps is what Lima has: everything, natively.
 func (l *Lima) Caps() backend.Caps {

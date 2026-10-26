@@ -32,8 +32,8 @@ stdout '^--proto =https --proto-redir =https -fsSL -o x https://example.com/a$'
 exec bash run_fix.sh
 stdout '^\* ;id$'
 
-# This host's archive, checked and unpacked, the binary and its files
-# linked, older versions dropped. No key in the script: no signature
+# This host's archive, checked and unpacked, the binary linked, older
+# versions dropped. No key in the script: no signature
 # checked.
 exec bash fresh.sh
 cmp stdout fresh.want
@@ -134,8 +134,8 @@ stderr '^install: --version needs a version$'
 ! exec bash main.sh --no-deps --version '1.2.3/../x'
 stderr '^install: not a devvm version: ''1.2.3/../x''$'
 
-# devvm itself, installed: it finds its files through the link, and its
-# own check (the sandbox's stubs) finds nothing missing.
+# devvm itself, installed: its files are in it, and its own check (the
+# sandbox's stubs) finds nothing missing.
 exec bash real.sh
 stdout '^fzf$'
 stdout '^==> everything devvm needs is installed$'
@@ -156,14 +156,14 @@ if [[ -n ${UN:-} ]]; then
 fi
 
 # release VERSION [CONTENT]: a release whose archive for this host holds a
-# devvm printing CONTENT (default: VERSION) and an assets/base.yaml.
+# devvm printing CONTENT (default: VERSION) and a README.md.
 release() {
   local v=$1 d=$WORK/repo/releases/download/v$1 n
   n=devvm-$v-$(platform)
-  mkdir -p "$d" "$WORK/build/$n/assets"
+  mkdir -p "$d" "$WORK/build/$n"
   printf '#!/bin/sh\necho %s\n' "${2:-$v}" > "$WORK/build/$n/devvm"
   chmod 755 "$WORK/build/$n/devvm"
-  echo base > "$WORK/build/$n/assets/base.yaml"
+  echo readme > "$WORK/build/$n/README.md"
   tar -czf "$d/$n.tar.gz" -C "$WORK/build" "$n"
   echo "$(sha256 "$d/$n.tar.gz")  $n.tar.gz" > "$d/SHA256SUMS"
 }
@@ -248,12 +248,12 @@ mkdir -p "$prefix/lib/devvm/0.0.9"
 install_devvm 0.1.0 >/dev/null
 [[ "$(readlink "$prefix/bin/devvm")" == "$prefix/lib/devvm/0.1.0/devvm" ]] && echo linked
 "$prefix/bin/devvm"
-cat "$prefix/lib/devvm/0.1.0/assets/base.yaml"
+cat "$prefix/lib/devvm/0.1.0/README.md"
 ls -A "$prefix/lib/devvm"
 -- fresh.want --
 linked
 0.1.0
-base
+readme
 0.1.0
 -- reinstall.sh --
 . "$WORK/lib.sh"
@@ -356,7 +356,7 @@ sudo usermod -aG kvm me
 release 0.1.0
 main "$@"
 -- real.sh --
-# The devvm the tests built, with its files, as a release.
+# The devvm the tests built, alone, as a release.
 . "$WORK/lib.sh"
 n=devvm-1.2.3-$(platform)
 d=$WORK/repo/releases/download/v1.2.3

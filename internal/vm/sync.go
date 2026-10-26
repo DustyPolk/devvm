@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,7 +28,7 @@ const syncCmd = `d=$(mktemp -d); tar -xf - -C "$d" --warning=no-unknown-keyword 
 // syncer sends a running VM its setup.
 type syncer struct{ *Env }
 
-// sync sets up a running VM on every launch: assets/guest/sync.sh runs in it,
+// sync sets up a running VM on every launch: devvm's guest/sync.sh runs in it,
 // with what it needs sent over as a tar stream, staged in memory (it holds
 // credentials): the host's settings, the agents' config, the VM's tokens
 // or their placeholders, and its shared tools. With network policy its
@@ -54,13 +55,13 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 	return nil
 }
 
-// stage returns what sync sends; see assets/guest/sync.sh for each file.
+// stage returns what sync sends; see devvm's guest/sync.sh for each file.
 func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []string, proxyURL string) (*stage, error) {
 	vm, img, net := st.Name(), st.Get(state.KeyImage), netpolicy.On(st)
 	store := e.Proxy.Secrets
 	s := &stage{}
 	for _, name := range []string{"sync.sh", "tools.sh"} {
-		data, err := os.ReadFile(filepath.Join(e.Root, "guest", name)) //nolint:gosec // devvm's own files
+		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err
 		}

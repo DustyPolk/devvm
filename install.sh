@@ -4,7 +4,7 @@
 #   ... | bash -s -- --yes            answer yes to every question
 #   ... | bash -s -- --version 0.1.0  a given release (also DEVVM_VERSION)
 #   ... | bash -s -- --no-deps        devvm only
-# devvm (the binary and the files it reads next to itself) goes in ~/.local/lib/devvm/<version>,
+# devvm (its binary, with its README, changelog and license) goes in ~/.local/lib/devvm/<version>,
 # linked from ~/.local/bin/devvm (DEVVM_PREFIX instead of ~/.local). It never needs sudo; installing
 # QEMU or joining the kvm group does, and asks first.
 # Everything is in functions, so a download cut short runs nothing.

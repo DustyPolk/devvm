@@ -53,8 +53,8 @@ A VM's proxy reads these policy files, in order, as one list:
 
 | File | Rules for |
 | --- | --- |
-| `assets/layers/base.policy` (next to devvm) | every VM: OS packages, mise's version lists, GitHub, container registries |
-| `assets/shared-tools/<name>.policy` (next to devvm) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
+| `assets/layers/base.policy` (devvm's, [written out](install.md#installing-devvm)) | every VM: OS packages, mise's version lists, GitHub, container registries |
+| `assets/shared-tools/<name>.policy` (devvm's, written out) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
 | `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
 | `~/.local/share/devvm/vms/<vm>.policy` | that VM only ([`devvm policy`](#changing-rules)) |

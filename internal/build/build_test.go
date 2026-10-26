@@ -1,6 +1,7 @@
 package build
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"maps"
@@ -64,14 +65,25 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 		write(t, filepath.Join(root, "shared-tools", name), string(data))
 	}
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
-	tl := tools.New(d, root, quietUI{})
+	tl := tools.New(d, os.DirFS(root), quietUI{})
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {
 			return filepath.Join(repo, "testdata", "stubs", "mise")
 		}
 		return ""
 	}
-	return quiet(&Builder{Dirs: d, Root: root, Backend: f, Tools: tl}), f
+	return quiet(&Builder{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl}), f
+}
+
+// assetsDir is the folder of testBuilder's devvm's files, its Assets.
+func assetsDir(b *Builder) string { return filepath.Join(filepath.Dir(b.Dirs.Data), "root") }
+
+func script(name, data string) backend.Script { return backend.Script{Name: name, Data: []byte(data)} }
+
+// sameScripts reports whether two lists of scripts have the same names
+// and contents, in order.
+func sameScripts(a, b []backend.Script) bool {
+	return slices.EqualFunc(a, b, func(x, y backend.Script) bool { return x.Name == y.Name && bytes.Equal(x.Data, y.Data) })
 }
 
 // quiet makes b print nothing, keep the features chosen, and answer yes,
@@ -108,7 +120,7 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	b, _ := testBuilder(t)
 	write(t, filepath.Join(b.Dirs.Layers(), "Bad_Name.sh"), "")
 	write(t, filepath.Join(b.Dirs.Layers(), "base.sh"), "")
-	write(t, filepath.Join(b.Root, "layers", "stray.sh"), "") // devvm's own folder holds only base
+	write(t, filepath.Join(assetsDir(b), "layers", "stray.sh"), "") // devvm's own folder holds only base
 	if err := os.Mkdir(filepath.Join(b.Dirs.Layers(), "dir.sh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -220,14 +232,14 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("built %d images, want 3: %+v", len(specs), specs)
 	}
 	for i, want := range []backend.ImageSpec{
-		{Image: "base", Key: chain[0].Key, Scripts: []backend.Script{{Name: "base.sh", Path: filepath.Join(b.Root, "layers", "base.sh")}}},
-		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Scripts: []backend.Script{{Name: "foo.sh", Path: filepath.Join(b.Dirs.Layers(), "foo.sh")}}},
-		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Scripts: []backend.Script{{Name: "bar.sh", Path: filepath.Join(b.Dirs.Layers(), "bar.sh")}}},
+		{Image: "base", Key: chain[0].Key, Scripts: []backend.Script{script("base.sh", "#!/bin/bash\n")}},
+		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Scripts: []backend.Script{script("foo.sh", "#!/bin/bash\necho foo\n")}},
+		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Scripts: []backend.Script{script("bar.sh", "#!/bin/bash\necho bar\n")}},
 	} {
 		want.Net = backend.NetInternet
 		got := specs[i]
 		if got.Image != want.Image || got.Key != want.Key || got.Parent != want.Parent || got.Net != want.Net ||
-			got.From != nil || got.MemoryGiB != 0 || !slices.Equal(got.Scripts, want.Scripts) {
+			got.From != nil || got.MemoryGiB != 0 || !sameScripts(got.Scripts, want.Scripts) {
 			t.Errorf("build %d: %+v, want %+v", i, got, want)
 		}
 	}
@@ -379,7 +391,7 @@ func fromBuilder(t *testing.T, digest *string, lookups *int) (*Builder, *backend
 	t.Helper()
 	b, f := testBuilder(t)
 	for _, s := range []string{"build.sh", "bootify.sh", "kernel.sh"} {
-		write(t, filepath.Join(b.Root, "oci", s), "#!/bin/bash\n")
+		write(t, filepath.Join(assetsDir(b), "oci", s), "#!/bin/bash\n")
 	}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		*lookups++
@@ -428,7 +440,7 @@ func TestBuildFrom(t *testing.T) {
 		}
 	}
 	// Ubuntu's base is another image.
-	ubuntu := &Builder{Dirs: b.Dirs, Root: b.Root, Backend: b.Backend, Tools: b.Tools}
+	ubuntu := &Builder{Dirs: b.Dirs, Assets: b.Assets, Backend: b.Backend, Tools: b.Tools}
 	if k, err := ubuntu.Key("base"); err != nil || k == chain[0].Key {
 		t.Errorf("Ubuntu's base: %s, %v", k, err)
 	}
@@ -442,7 +454,7 @@ func TestBuildFrom(t *testing.T) {
 
 	// The tag moved: the next build looks it up, and base and foo are new.
 	digest = "sha256:" + strings.Repeat("b", 64)
-	again := quiet(&Builder{Dirs: b.Dirs, Root: b.Root, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup})
+	again := quiet(&Builder{Dirs: b.Dirs, Assets: b.Assets, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup})
 	if err := again.Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -137,7 +138,7 @@ func sandbox(t *testing.T) paths.Dirs {
 // runner; warnings go to warned.
 func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
 	t.Helper()
-	l := New(sandbox(t), testUI{})
+	l := New(sandbox(t), assets.FS, testUI{})
 	f := &fakeRunner{out: map[string]string{}}
 	var warned []string
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"

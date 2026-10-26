@@ -2,6 +2,7 @@ package build
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,8 +19,8 @@ import (
 func featureBuilder(t *testing.T) *Builder {
 	t.Helper()
 	b, _ := testBuilder(t)
-	write(t, filepath.Join(b.Root, "features", "omb.sh"), "#!/bin/bash\n# oh-my-bash: a prompt\n")
-	write(t, filepath.Join(b.Root, "features", "fzf.sh"), "#!/bin/bash\n#fuzzy search  \n")
+	write(t, filepath.Join(assetsDir(b), "features", "omb.sh"), "#!/bin/bash\n# oh-my-bash: a prompt\n")
+	write(t, filepath.Join(assetsDir(b), "features", "fzf.sh"), "#!/bin/bash\n#fuzzy search  \n")
 	write(t, filepath.Join(b.Dirs.Features(), "mine.sh"), "#!/bin/bash\n# my tools\n")
 	write(t, filepath.Join(b.Dirs.Features(), "fzf.sh"), "#!/bin/bash\n# mine\n")
 	write(t, filepath.Join(b.Dirs.Features(), "Bad_Name.sh"), "")
@@ -42,19 +43,22 @@ func TestFeatures(t *testing.T) {
 		t.Errorf("shadowed = %q, want %q", shadowed, want)
 	}
 	for name, want := range map[string]string{
-		"fzf":  filepath.Join(b.Root, "features", "fzf.sh"),
-		"mine": filepath.Join(b.Dirs.Features(), "mine.sh"),
-		"gone": filepath.Join(b.Dirs.Features(), "gone.sh"),
+		"fzf":  "#!/bin/bash\n#fuzzy search  \n",
+		"mine": "#!/bin/bash\n# my tools\n",
 	} {
-		if got := b.FeatureScript(name); got != want {
-			t.Errorf("FeatureScript(%s) = %s, want %s", name, got, want)
+		if got, err := b.FeatureScript(name); err != nil || got.Name != name+".sh" || string(got.Data) != want {
+			t.Errorf("FeatureScript(%s) = %+v, %v; want %q", name, got, err, want)
+		}
+	}
+	for _, name := range []string{"gone", "dir"} {
+		if _, err := b.FeatureScript(name); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("FeatureScript(%s): %v, want none", name, err)
 		}
 	}
 }
 
 // A feature's description is its script's second line, a comment.
 func TestDescription(t *testing.T) {
-	dir := t.TempDir()
 	for _, tc := range []struct{ name, script, want string }{
 		{"comment", "#!/bin/bash\n# oh-my-bash: a prompt\nset -e\n", "oh-my-bash: a prompt"},
 		{"no space", "#!/bin/bash\n#fuzzy  \n", "fuzzy"},
@@ -62,14 +66,9 @@ func TestDescription(t *testing.T) {
 		{"one line", "#!/bin/bash\n", ""},
 		{"empty", "", ""},
 	} {
-		p := filepath.Join(dir, tc.name)
-		write(t, p, tc.script)
-		if got := description(p); got != tc.want {
+		if got := description([]byte(tc.script)); got != tc.want {
 			t.Errorf("%s: description = %q, want %q", tc.name, got, tc.want)
 		}
-	}
-	if got := description(filepath.Join(dir, "missing")); got != "" {
-		t.Errorf("missing: description = %q", got)
 	}
 }
 
@@ -193,13 +192,13 @@ func TestBuildRunsFeatures(t *testing.T) {
 	}
 	want := [][]backend.Script{
 		{
-			{Name: "base.sh", Path: filepath.Join(b.Root, "layers", "base.sh")},
-			{Name: "mine.sh", Path: filepath.Join(b.Dirs.Features(), "mine.sh")},
-			{Name: "fzf.sh", Path: filepath.Join(b.Root, "features", "fzf.sh")},
+			script("base.sh", "#!/bin/bash\n"),
+			script("mine.sh", "#!/bin/bash\n# my tools\n"),
+			script("fzf.sh", "#!/bin/bash\n#fuzzy search  \n"),
 		},
-		{{Name: "foo.sh", Path: filepath.Join(b.Dirs.Layers(), "foo.sh")}},
+		{script("foo.sh", "#!/bin/bash\necho foo\n")},
 	}
-	if !slices.EqualFunc(got, want, slices.Equal) {
+	if !slices.EqualFunc(got, want, sameScripts) {
 		t.Errorf("scripts %+v, want %+v", got, want)
 	}
 }

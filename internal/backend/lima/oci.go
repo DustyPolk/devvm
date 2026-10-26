@@ -43,8 +43,9 @@ type converted struct {
 
 // convert turns spec.From into a disk, kernel and initrd, without Docker
 // (unless only Docker has the image): a throwaway VM from Ubuntu's cloud
-// image runs assets/oci/build.sh, where crane pulls exactly the recorded digest
-// and bootify.sh adds what a container lacks. The image's own code runs as
+// image runs oci/build.sh, from devvm's files written out and mounted
+// read-only, where crane pulls exactly the recorded digest and bootify.sh
+// adds what a container lacks. The image's own code runs as
 // root in that VM, so everything it writes is untrusted: it gets only a
 // subfolder of devvm's temporary folder, and what comes out is checked
 // before Lima sees it. One conversion runs at a time. The build VM and
@@ -95,7 +96,11 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, mem float64) (*conv
 	if err := l.deleteIfThere(ctx, OCIVM); err != nil {
 		return nil, err
 	}
-	oci := filepath.Join(l.Root, "oci")
+	assets, err := l.assets()
+	if err != nil {
+		return nil, err
+	}
+	oci := filepath.Join(assets, "oci")
 	mounts, err := mountsSet([]mount{{Location: vmOut, Writable: ptr(true)}, {Location: oci, Writable: ptr(false)}})
 	if err != nil {
 		return nil, err

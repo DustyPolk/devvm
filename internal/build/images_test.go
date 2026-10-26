@@ -102,7 +102,7 @@ func TestDelete(t *testing.T) {
 		t.Error("foo's record stays")
 	}
 	for _, s := range []string{"build.sh", "bootify.sh", "kernel.sh"} {
-		write(t, filepath.Join(b.Root, "oci", s), "#!/bin/bash\n")
+		write(t, filepath.Join(assetsDir(b), "oci", s), "#!/bin/bash\n")
 	}
 	b.From = "node:24"
 	if err := b.Delete(ctx, []string{"base"}); !isMsg(err, "no_image_named_from") {

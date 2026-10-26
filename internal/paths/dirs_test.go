@@ -84,6 +84,7 @@ func TestFiles(t *testing.T) {
 		{d.Run(), "/d/run"},
 		{d.Logs(), "/d/logs"},
 		{d.RunLogs(), "/d/logs/runs"},
+		{d.Assets(), "/d/assets"},
 		{d.Bin(), "/d/bin"},
 		{d.CA(), "/d/ca"},
 		{d.Tools(), "/d/tools"},
