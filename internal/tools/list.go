@@ -39,7 +39,7 @@ type Listed struct {
 
 // ReadLock reads the tools lock as it is, never resolving it: nil when
 // there's none yet.
-func (t *Tools) ReadLock() (Lock, error) {
+func (t Versions) ReadLock() (Lock, error) {
 	data, err := os.ReadFile(t.Dirs.ToolLock())
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -55,12 +55,12 @@ func (t *Tools) ReadLock() (Lock, error) {
 // any of tgs is current, and when the share has some of a name's tools but
 // not the lock's version of one for the first, that version is listed as
 // not built. Without a lock, an image no VM lists has no state.
-func (t *Tools) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
+func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 	entries, err := os.ReadDir(t.Dirs.Tools())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	lock, err := t.ReadLock()
+	lock, err := Versions(t).ReadLock()
 	if err != nil {
 		return nil, err
 	}

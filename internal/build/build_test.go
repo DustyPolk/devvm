@@ -162,25 +162,25 @@ func TestBuildTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var tools backend.ToolsSpec
+	var spec backend.ToolsSpec
 	for _, c := range f.Calls() {
 		if c.Method == "BuildTools" {
-			tools, _ = c.Args[0].(backend.ToolsSpec)
+			spec, _ = c.Args[0].(backend.ToolsSpec)
 		}
 	}
-	if tools.Base != chain[0].Key || len(tools.Args) != 12 || tools.Args[0] != "node" || tools.Args[9] != "claude" {
-		t.Errorf("tools spec = %+v", tools)
+	if spec.Base != chain[0].Key || len(spec.Args) != 12 || spec.Args[0] != "node" || spec.Args[9] != "claude" {
+		t.Errorf("tools spec = %+v", spec)
 	}
 	tg, err := b.ToolTarget()
 	if tg.Libc != "musl" || tg.Format != "" || err != nil {
 		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
-	files, err := b.Tools.Files(t.Context(), []string{"node", "claude"}, tg)
+	files, err := tools.Versions{Env: b.Tools}.Files(t.Context(), []string{"node", "claude"}, tg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, file := range files {
-		if !b.Tools.Built(file) || !slices.Contains(tools.Args, file) {
+		if !(tools.Share{Env: b.Tools}).Built(file) || !slices.Contains(spec.Args, file) {
 			t.Errorf("%s: not built for musl", file)
 		}
 	}

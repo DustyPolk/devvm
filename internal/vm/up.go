@@ -99,8 +99,9 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	// A new VM gets the newest tools: check now when the daily check is
 	// due.
 	groups := image.ToolsOf(n.img)
-	if len(groups) > 0 && e.Tools.CheckDue() {
-		e.Tools.Check(ctx)
+	versions := tools.Versions{Env: e.Tools}
+	if len(groups) > 0 && versions.CheckDue() {
+		versions.Check(ctx)
 	}
 	if err := n.builder.Build(ctx, n.img); err != nil {
 		return err
@@ -113,7 +114,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
-	files, err := e.Tools.Files(ctx, groups, tg)
+	files, err := versions.Files(ctx, groups, tg)
 	if err != nil {
 		return err
 	}

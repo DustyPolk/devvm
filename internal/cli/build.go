@@ -91,7 +91,7 @@ func builder(u *ui.UI, flag string) (*build.Builder, error) {
 // newBuilder returns a builder of images on be, its features checked
 // against rv, whose base starts from fromRef, printing and asking through
 // u.
-func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Tools, fromRef string) *build.Builder {
+func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Env, fromRef string) *build.Builder {
 	return &build.Builder{
 		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef,
 		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },

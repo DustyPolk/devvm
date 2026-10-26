@@ -12,6 +12,11 @@
 // launch resolves it again in the background, so VMs can move to newer
 // versions. A VM lists its tool images in its state, so a newer version
 // never changes a VM that has one.
+//
+// Env is what the shared tools run with; Versions keeps the lock (resolving
+// it, the daily check, the image files an image name's tools are); Share
+// builds, lists and deletes the share's tool images; VMs moves a VM to
+// newer tools.
 package tools
 
 import (
@@ -41,9 +46,11 @@ const ShareAt = "/mnt/devvm-tools"
 // checkEvery is how often the lock is resolved again.
 const checkEvery = 24 * time.Hour
 
-// Tools is the shared tools of one user. New sets every field; tests
-// change them.
-type Tools struct {
+// Env is what one user's shared tools run with, shared by Versions, Share
+// and VMs; its methods are what they share: the platforms, devvm's
+// mise.toml, a tool's image file and the share's lock. New sets every
+// field; tests change them.
+type Env struct {
 	Dirs paths.Dirs
 	// Assets holds devvm's own files (assets.FS): shared-tools/mise.toml
 	// and shared-tools/build.sh.
@@ -75,6 +82,18 @@ type Tools struct {
 	miseSums map[string]string
 }
 
+// Versions is the tools lock: resolving it with the host's mise, the daily
+// check, and the image files of an image name's tools at its versions.
+type Versions struct{ *Env }
+
+// Share is the share's tool images: building what it lacks, listing and
+// deleting them.
+type Share struct{ *Env }
+
+// VMs is a VM's shared tools against the lock: whether newer ones are
+// there, and moving the VM to them.
+type VMs struct{ *Env }
+
 // UI is where the shared tools print, the run log and status line their
 // slow steps show on, and the run's cleanup stack.
 type UI interface {
@@ -88,14 +107,14 @@ type UI interface {
 
 // New returns the shared tools in devvm's folders, with devvm's own files
 // (assets), on u.
-func New(d paths.Dirs, assets fs.FS, u UI) *Tools {
+func New(d paths.Dirs, assets fs.FS, u UI) *Env {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
 			self = r
 		}
 	}
-	return &Tools{
+	return &Env{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: platform.StartDetached,
 		ShareWait: time.Second, miseURL: miseURL, miseSums: miseSHA256,
@@ -114,13 +133,13 @@ func MiseArch(goarch string) string {
 }
 
 // platforms are the platforms the lock resolves: the VMs', glibc and musl.
-func (t *Tools) platforms() []string {
+func (t *Env) platforms() []string {
 	a := MiseArch(t.Arch)
 	return []string{"linux-" + a, "linux-" + a + "-musl"}
 }
 
 // platform is the platform of a VM whose base has libc.
-func (t *Tools) platform(libc string) string {
+func (t *Env) platform(libc string) string {
 	p := "linux-" + MiseArch(t.Arch)
 	if libc == "musl" {
 		p += "-musl"
@@ -129,17 +148,17 @@ func (t *Tools) platform(libc string) string {
 }
 
 // config is devvm's shared-tools/mise.toml.
-func (t *Tools) config() ([]byte, error) { return fs.ReadFile(t.Assets, "shared-tools/mise.toml") }
+func (t *Env) config() ([]byte, error) { return fs.ReadFile(t.Assets, "shared-tools/mise.toml") }
 
 // lockConfig is the mise.toml the lock was resolved from.
-func (t *Tools) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
+func (t Versions) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
 
 // checkedFile is touched whenever the lock is resolved.
-func (t *Tools) checkedFile() string { return t.Dirs.ToolLock() + ".checked" }
+func (t Versions) checkedFile() string { return t.Dirs.ToolLock() + ".checked" }
 
 // Lock returns the tools lock, resolving it first when there's none yet or
 // shared-tools/mise.toml changed since (a devvm upgrade).
-func (t *Tools) Lock(ctx context.Context) (Lock, error) {
+func (t Versions) Lock(ctx context.Context) (Lock, error) {
 	want, err := t.config()
 	if err != nil {
 		return nil, err
@@ -163,7 +182,7 @@ func (t *Tools) Lock(ctx context.Context) (Lock, error) {
 	return Lock(lock), err
 }
 
-func (t *Tools) touchChecked() error {
+func (t Versions) touchChecked() error {
 	now := t.Now()
 	err := os.Chtimes(t.checkedFile(), now, now)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -177,7 +196,7 @@ func (t *Tools) touchChecked() error {
 
 // CheckDue reports whether the daily check is due: there's a lock, not
 // resolved in the last day. Never with DEVVM_NO_TOOL_CHECK set.
-func (t *Tools) CheckDue() bool {
+func (t Versions) CheckDue() bool {
 	if t.Getenv("DEVVM_NO_TOOL_CHECK") != "" {
 		return false
 	}
@@ -189,12 +208,12 @@ func (t *Tools) CheckDue() bool {
 }
 
 // checkLog is where the daily check's output goes.
-func (t *Tools) checkLog() string { return filepath.Join(t.Dirs.Logs(), "tools-check.log") }
+func (t Versions) checkLog() string { return filepath.Join(t.Dirs.Logs(), "tools-check.log") }
 
 // RefreshDaily starts devvm _refresh-tools in the background once a day,
 // when the check is due, so a later launch knows of newer versions. It
 // doesn't wait for it.
-func (t *Tools) RefreshDaily() error {
+func (t Versions) RefreshDaily() error {
 	if !t.CheckDue() {
 		return nil
 	}
@@ -218,7 +237,7 @@ func (t *Tools) RefreshDaily() error {
 
 // Refresh resolves the lock again, and swaps the new one in while no
 // build is reading it. A failure leaves the lock as it was.
-func (t *Tools) Refresh(ctx context.Context) error {
+func (t Versions) Refresh(ctx context.Context) error {
 	next := t.Dirs.ToolLock() + ".next"
 	if err := t.Resolve(ctx, next); err != nil {
 		return err
@@ -239,7 +258,7 @@ func (t *Tools) Refresh(ctx context.Context) error {
 
 // Check is Refresh for a user waiting on it: a failure is a warning, and
 // the versions it has stay.
-func (t *Tools) Check(ctx context.Context) {
+func (t Versions) Check(ctx context.Context) {
 	t.Info(msg.CheckingTools())
 	if err := t.Refresh(ctx); err != nil {
 		if ctx.Err() == nil {
@@ -257,7 +276,7 @@ type Target struct {
 
 // File returns a tool's image file at the lock's version, for a VM of
 // that target.
-func (t *Tools) File(lock Lock, tool string, tg Target) (string, error) {
+func (t *Env) File(lock Lock, tool string, tg Target) (string, error) {
 	entry := lock.Entry(tool)
 	v := field(entry, "version")
 	if v == "" {
@@ -268,7 +287,7 @@ func (t *Tools) File(lock Lock, tool string, tg Target) (string, error) {
 
 // Files returns the image files of the tools behind each of these names
 // (node is node, pnpm and bun), at the lock's versions.
-func (t *Tools) Files(ctx context.Context, names []string, tg Target) ([]string, error) {
+func (t Versions) Files(ctx context.Context, names []string, tg Target) ([]string, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -292,7 +311,7 @@ func (t *Tools) Files(ctx context.Context, names []string, tg Target) ([]string,
 // noDownload reports whether the lock has no download of a tool for a VM
 // whose base has libc (no version had one), or builds it from source,
 // which mise falls back to.
-func (t *Tools) noDownload(lock Lock, tool, libc string) bool {
+func (t Share) noDownload(lock Lock, tool, libc string) bool {
 	return !lock.HasDownload(tool, []string{t.platform(libc)})
 }
 

@@ -53,7 +53,7 @@ type Env struct {
 	Dirs     paths.Dirs
 	Assets   fs.FS // devvm's own files (assets.FS)
 	Registry *backend.Registry
-	Tools    *tools.Tools
+	Tools    *tools.Env
 	Proxy    *netpolicy.Proxy // VMs' network policy proxies
 	Dir      string           // the folder devvm runs in, a physical path
 	Home     string

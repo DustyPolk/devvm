@@ -22,7 +22,7 @@ func newRefreshToolsCmd(u *ui.UI) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dirs, err := paths.FromEnv()
 			if err == nil {
-				err = tools.New(dirs, assets.FS, u).Refresh(cmd.Context())
+				err = tools.Versions{Env: tools.New(dirs, assets.FS, u)}.Refresh(cmd.Context())
 			}
 			fail(u, err, func(string) msg.M { return msg.ToolsCheckFailed() })
 			return nil

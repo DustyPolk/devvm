@@ -164,7 +164,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage,
 	if err != nil {
 		return nil, nil, err
 	}
-	ts, err := b.Tools.List(tgs, inUse)
+	ts, err := tools.Share{Env: b.Tools}.List(tgs, inUse)
 	return imgs, ts, err
 }
 

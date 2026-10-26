@@ -52,7 +52,7 @@ func newClient() *http.Client {
 
 // HostMise returns the path of the host's mise: DEVVM_HOST_MISE when set
 // (tests), else devvm's pinned mise, downloaded once and checked.
-func (t *Tools) HostMise(ctx context.Context) (string, error) {
+func (t Versions) HostMise(ctx context.Context) (string, error) {
 	if p := t.Getenv("DEVVM_HOST_MISE"); p != "" {
 		return p, nil
 	}
@@ -96,7 +96,7 @@ func (t *Tools) HostMise(ctx context.Context) (string, error) {
 }
 
 // download writes url's body to path and returns its SHA-256.
-func (t *Tools) download(ctx context.Context, url, path string) (string, error) {
+func (t Versions) download(ctx context.Context, url, path string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", err
@@ -150,7 +150,7 @@ func miseCmd(ctx context.Context, mise, dir string, args ...string) (*exec.Cmd, 
 // resolve, it writes nothing and returns tools_resolve_failed, with the
 // details in the run log. mise's version lists come from its versions
 // host (no GitHub rate limit).
-func (t *Tools) Resolve(ctx context.Context, out string) error {
+func (t Versions) Resolve(ctx context.Context, out string) error {
 	mise, err := t.HostMise(ctx)
 	if err != nil {
 		return err
@@ -203,7 +203,7 @@ func (t *Tools) Resolve(ctx context.Context, out string) error {
 	return nil
 }
 
-func (t *Tools) resolveFailed(ctx context.Context) error {
+func (t Versions) resolveFailed(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -223,7 +223,7 @@ const candidates = 5
 // Older versions come from the tool's backend (GitHub releases for aqua
 // tools), not mise's versions host, which can list tags with no release.
 // The next daily check tries the newest again.
-func (t *Tools) stepBack(ctx context.Context, mise string, lock Lock, names []string, specs map[string]string) Lock {
+func (t Versions) stepBack(ctx context.Context, mise string, lock Lock, names []string, specs map[string]string) Lock {
 	for _, tool := range names {
 		if lock.HasDownload(tool, t.platforms()) {
 			continue
@@ -261,7 +261,7 @@ func (t *Tools) stepBack(ctx context.Context, mise string, lock Lock, names []st
 // olderVersions lists up to five versions of a tool older than v, newest
 // first: those its backend lists before v (all of them when v isn't
 // listed), with spec's prefix ("24") unless it's latest.
-func (t *Tools) olderVersions(ctx context.Context, mise, backendName, spec, v string) []string {
+func (t Versions) olderVersions(ctx context.Context, mise, backendName, spec, v string) []string {
 	dir, err := os.MkdirTemp("", "devvm-tools.")
 	if err != nil {
 		return nil
@@ -296,7 +296,7 @@ func (t *Tools) olderVersions(ctx context.Context, mise, backendName, spec, v st
 // lockVersions locks these versions of a tool, all in one lock (mise
 // takes a list of versions), in a folder of its own: mise also reads the
 // mise.toml of the folders above. Nil when there are none, or mise fails.
-func (t *Tools) lockVersions(ctx context.Context, mise, tool string, versions []string) Lock {
+func (t Versions) lockVersions(ctx context.Context, mise, tool string, versions []string) Lock {
 	if len(versions) == 0 {
 		return nil
 	}

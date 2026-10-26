@@ -68,7 +68,7 @@ func (e Launch) Update(ctx context.Context, o Options) error {
 	builder := e.builder(t.b, st.Get(state.KeyFrom))
 	tg := toolTarget(t.b, st)
 	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, tg, files) }
-	files, changed, err := e.Tools.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), tg)
+	files, changed, err := tools.VMs{Env: e.Tools}.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), tg)
 	if err != nil {
 		return err
 	}
@@ -111,10 +111,11 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err := builder.WarnIfOutdated(st.Get(state.KeyChain)); err != nil {
 		return err
 	}
-	if err := e.Tools.WarnNewer(ctx, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), toolTarget(b, st)); err != nil {
+	have := strings.Fields(st.Get(KeyTools))
+	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, st.Get(state.KeyImage), have, toolTarget(b, st)); err != nil {
 		return err
 	}
-	if err := e.Tools.RefreshDaily(); err != nil {
+	if err := (tools.Versions{Env: e.Tools}).RefreshDaily(); err != nil {
 		return err
 	}
 	if err := e.UpdateAgentDirs(ctx, b, st); err != nil {
@@ -311,7 +312,7 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 		return nil
 	}
 	tg := toolTarget(b, st)
-	files, err := e.Tools.Files(ctx, image.ToolsOf(added), tg)
+	files, err := tools.Versions{Env: e.Tools}.Files(ctx, image.ToolsOf(added), tg)
 	if err != nil {
 		return err
 	}
@@ -387,7 +388,8 @@ func toolTarget(b backend.Backend, st *state.VM) tools.Target {
 // buildTools builds the tool images the share lacks of files, from base's
 // image as it is now, built first if it isn't.
 func (e Launch) buildTools(ctx context.Context, builder *build.Builder, tg tools.Target, files []string) error {
-	if !slices.ContainsFunc(files, func(f string) bool { return !e.Tools.Built(f) }) {
+	share := tools.Share{Env: e.Tools}
+	if !slices.ContainsFunc(files, func(f string) bool { return !share.Built(f) }) {
 		return nil
 	}
 	if err := builder.Build(ctx, image.Base); err != nil {
@@ -397,5 +399,5 @@ func (e Launch) buildTools(ctx context.Context, builder *build.Builder, tg tools
 	if err != nil {
 		return err
 	}
-	return e.Tools.Build(ctx, builder.Review, builder.Backend, base, tg, files)
+	return share.Build(ctx, builder.Review, builder.Backend, base, tg, files)
 }

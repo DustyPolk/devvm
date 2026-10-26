@@ -87,7 +87,10 @@ func lockTools(l Lock) []string {
 // shared-tools/, the stub mise resolving the fixture lock, and what the
 // tools printed.
 type env struct {
-	*Tools
+	*Env
+	Versions
+	Share
+	VMs
 	root   string // devvm's files, Assets
 	log    string // the stub's calls
 	said   *[]string
@@ -131,7 +134,7 @@ func newEnv(t *testing.T) env {
 		detached = append(detached, path+" "+strings.Join(args, " ")+" > "+out.Name())
 		return 1, nil
 	}
-	return env{Tools: tl, root: root, log: log, said: &said, detach: &detached}
+	return env{Env: tl, Versions: Versions{tl}, Share: Share{tl}, VMs: VMs{tl}, root: root, log: log, said: &said, detach: &detached}
 }
 
 // calls returns the stub's calls, and forgets them.

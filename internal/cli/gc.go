@@ -102,7 +102,7 @@ func gc(ctx context.Context, u *ui.UI, g *globals) error {
 	for _, t := range unused {
 		files = append(files, t.File)
 	}
-	if err := b.Tools.Delete(files); err != nil {
+	if err := (tools.Share{Env: b.Tools}).Delete(files); err != nil {
 		return err
 	}
 	u.Info(msg.DeletedTools(len(files)))

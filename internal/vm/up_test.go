@@ -213,7 +213,7 @@ func TestUpTools(t *testing.T) {
 		t.Errorf("staged tools = %q", got)
 	}
 	for _, file := range files {
-		if !e.Tools.Built(file) {
+		if !(tools.Share{Env: e.Tools}).Built(file) {
 			t.Errorf("%s isn't in the share", file)
 		}
 	}

@@ -28,7 +28,7 @@ type Builder struct {
 	Assets  fs.FS // devvm's own files (assets.FS): base.yaml, layers/, features/, oci/
 	Backend backend.Backend
 	Review  backend.Review // what Backend's features are checked against
-	Tools   *tools.Tools   // the shared tools image names hold
+	Tools   *tools.Env     // the shared tools image names hold
 	// From is the container image base starts from (--from); "" for the
 	// backend's own Ubuntu. Its images are apart from other bases'.
 	From string
@@ -207,7 +207,7 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	files, err := b.Tools.Files(ctx, groups, tg)
+	files, err := tools.Versions{Env: b.Tools}.Files(ctx, groups, tg)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	return b.Tools.Build(ctx, b.Review, b.Backend, base, tg, files)
+	return tools.Share{Env: b.Tools}.Build(ctx, b.Review, b.Backend, base, tg, files)
 }
 
 func (b *Builder) build(ctx context.Context, name string) error {

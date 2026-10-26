@@ -21,12 +21,12 @@ const (
 	waitNote   = 3
 )
 
-func (t *Tools) shareLock() string { return filepath.Join(t.Dirs.Tools(), ".lock") }
+func (t *Env) shareLock() string { return filepath.Join(t.Dirs.Tools(), ".lock") }
 
 // LockShare holds the share's lock, for a build writing tool images or a
 // swap of the lock, until unlock is called or the run ends. Another devvm
 // holding it is waited for.
-func (t *Tools) LockShare(ctx context.Context) (unlock func(), err error) {
+func (t *Env) LockShare(ctx context.Context) (unlock func(), err error) {
 	if err := os.MkdirAll(t.Dirs.Tools(), 0o700); err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (t *Tools) LockShare(ctx context.Context) (unlock func(), err error) {
 
 // Built reports whether a tool image is in the share with the hash devvm
 // recorded when it moved it in (FILE.sha256).
-func (t *Tools) Built(file string) bool {
+func (t Share) Built(file string) bool {
 	for _, p := range []string{file, file + ".sha256"} {
 		if fi, err := os.Stat(filepath.Join(t.Dirs.Tools(), p)); err != nil || !fi.Mode().IsRegular() {
 			return false
@@ -74,7 +74,7 @@ func (t *Tools) Built(file string) bool {
 // it never sees the share: it writes into a folder of its own, and each
 // image is checked to be a plain file, moved into the share and its hash
 // recorded.
-func (t *Tools) Build(ctx context.Context, rv backend.Review, b backend.Backend, base string, tg Target, files []string) error {
+func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, base string, tg Target, files []string) error {
 	var todo []string
 	for _, f := range files {
 		if !t.Built(f) {
@@ -93,7 +93,7 @@ func (t *Tools) Build(ctx context.Context, rv backend.Review, b backend.Backend,
 		return err
 	}
 	defer unlock()
-	lock, err := t.Lock(ctx)
+	lock, err := Versions(t).Lock(ctx)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (t *Tools) Build(ctx context.Context, rv backend.Review, b backend.Backend,
 
 // batch builds these tool images in one throwaway VM with a folder of its
 // own, then moves them into the share.
-func (t *Tools) batch(ctx context.Context, b backend.Backend, base, format string, lock Lock, files []string) error {
+func (t Share) batch(ctx context.Context, b backend.Backend, base, format string, lock Lock, files []string) error {
 	out, err := os.MkdirTemp(t.Dirs.Data, "tools-build.")
 	if err != nil {
 		return err
@@ -221,7 +221,7 @@ func Unused(ls []Listed) []Listed {
 
 // Delete deletes tool images from the share, with their hashes. Only
 // tool image names are taken, nothing else in the share.
-func (t *Tools) Delete(files []string) error {
+func (t Share) Delete(files []string) error {
 	for _, f := range files {
 		if _, _, ok := image.ParseToolFile(f); !ok || filepath.Base(f) != f {
 			return fmt.Errorf("not a tool image: %q", f)
