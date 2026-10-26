@@ -33,9 +33,9 @@ func write(t *testing.T, path, data string) {
 	}
 }
 
-// testBuilder returns a builder on a fake backend with every feature, in a
+// testEnv returns an Env on a fake backend with every feature, in a
 // temporary folder with devvm's files and the user's layers foo and bar.
-func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
+func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	t.Helper()
 	dir := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
@@ -72,11 +72,11 @@ func testBuilder(t *testing.T) (*Builder, *backendtest.Fake) {
 		}
 		return ""
 	}
-	return quiet(&Builder{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl}), f
+	return quiet(&Env{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl}), f
 }
 
-// assetsDir is the folder of testBuilder's devvm's files, its Assets.
-func assetsDir(b *Builder) string { return filepath.Join(filepath.Dir(b.Dirs.Data), "root") }
+// assetsDir is the folder of testEnv's devvm's files, its Assets.
+func assetsDir(b *Env) string { return filepath.Join(filepath.Dir(b.Dirs.Data), "root") }
 
 func script(name, data string) backend.Script { return backend.Script{Name: name, Data: []byte(data)} }
 
@@ -88,7 +88,7 @@ func sameScripts(a, b []backend.Script) bool {
 
 // quiet makes b print nothing, keep the features chosen, and answer yes,
 // without a terminal.
-func quiet(b *Builder) *Builder {
+func quiet(b *Env) *Env {
 	none := func(msg.M) {}
 	b.Info, b.Warn, b.Say = none, none, none
 	b.Confirm = func(msg.M) bool { return true }
@@ -117,7 +117,7 @@ func isMsg(err error, id string) bool {
 // Layers are the user's scripts with names image names can hold; nothing
 // else gets past CheckLayers.
 func TestLayersAndCheckLayers(t *testing.T) {
-	b, _ := testBuilder(t)
+	b, _ := testEnv(t)
 	write(t, filepath.Join(b.Dirs.Layers(), "Bad_Name.sh"), "")
 	write(t, filepath.Join(b.Dirs.Layers(), "base.sh"), "")
 	write(t, filepath.Join(assetsDir(b), "layers", "stray.sh"), "") // devvm's own folder holds only base
@@ -150,9 +150,9 @@ func TestLayersAndCheckLayers(t *testing.T) {
 // A name with tools builds its image (base and its layers, not the tools)
 // and the missing tool images, from base's image, for base's libc.
 func TestBuildTools(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	f.Built.Libc = "musl"
-	if err := b.Build(t.Context(), "claude+foo+node"); err != nil {
+	if err := (Builds{b}).Build(t.Context(), "claude+foo+node"); err != nil {
 		t.Fatal(err)
 	}
 	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images", "BuildImage", "BuildImage", "BuildTools"}) {
@@ -186,7 +186,7 @@ func TestBuildTools(t *testing.T) {
 	}
 	// Built: nothing to do.
 	n := len(f.Calls())
-	if err := b.Build(t.Context(), "node+foo+claude"); err != nil || slices.Contains(f.Methods()[n:], "BuildTools") {
+	if err := (Builds{b}).Build(t.Context(), "node+foo+claude"); err != nil || slices.Contains(f.Methods()[n:], "BuildTools") {
 		t.Errorf("built again: %v %q", err, f.Methods()[n:])
 	}
 }
@@ -195,8 +195,8 @@ func TestBuildTools(t *testing.T) {
 // rebuilt.
 func TestRebuildRefusesTools(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	b, f := testBuilder(t)
-	if err := b.Rebuild(t.Context(), "node+claude"); err == nil || err.Error() != "tools_not_images tools=node claude" {
+	b, f := testEnv(t)
+	if err := (Builds{b}).Rebuild(t.Context(), "node+claude"); err == nil || err.Error() != "tools_not_images tools=node claude" {
 		t.Errorf("Rebuild = %v", err)
 	}
 	if len(f.Calls()) > 0 {
@@ -206,16 +206,16 @@ func TestRebuildRefusesTools(t *testing.T) {
 
 // Before base is built, its libc is gnu.
 func TestBaseLibcUnbuilt(t *testing.T) {
-	b, _ := testBuilder(t)
+	b, _ := testEnv(t)
 	if libc, err := b.BaseLibc(); libc != "gnu" || err != nil {
 		t.Errorf("BaseLibc = %q, %v", libc, err)
 	}
 }
 
 func TestBuild(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	ctx := t.Context()
-	if err := b.Build(ctx, "foo+bar"); err != nil {
+	if err := (Builds{b}).Build(ctx, "foo+bar"); err != nil {
 		t.Fatal(err)
 	}
 	chain, err := b.Chain("foo+bar")
@@ -254,7 +254,7 @@ func TestBuild(t *testing.T) {
 
 	// Built: nothing to do.
 	n := len(f.Calls())
-	if err := b.Build(ctx, "base+foo+bar"); err != nil {
+	if err := (Builds{b}).Build(ctx, "base+foo+bar"); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range f.Calls()[n:] {
@@ -266,9 +266,9 @@ func TestBuild(t *testing.T) {
 
 // An image above base keeps its parent's C library.
 func TestBuildKeepsTheLibc(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	f.Built.Libc = "musl"
-	if err := b.Build(t.Context(), "foo"); err != nil {
+	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}
 	key, err := b.Key("foo")
@@ -283,9 +283,9 @@ func TestBuildKeepsTheLibc(t *testing.T) {
 // A backend that can't build, or not confined, is refused before anything
 // is built.
 func TestBuildRequires(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	delete(f.Capabilities, backend.FeatureBuildConfinement)
-	if err := b.Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
+	if err := (Builds{b}).Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
 		t.Errorf("Build = %v, want backend_lacks", err)
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {
@@ -295,9 +295,9 @@ func TestBuildRequires(t *testing.T) {
 
 // A failed build writes no record, so the next build starts over.
 func TestFailedBuildHasNoRecord(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	f.Errs = map[string]error{"BuildImage": backend.Logged(msg.ScriptFailed("base.sh", "x"))}
-	if err := b.Build(t.Context(), "base"); err == nil {
+	if err := (Builds{b}).Build(t.Context(), "base"); err == nil {
 		t.Fatal("Build succeeded")
 	}
 	if entries, _ := os.ReadDir(b.Dirs.Images()); len(entries) != 0 {
@@ -306,14 +306,14 @@ func TestFailedBuildHasNoRecord(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	ctx := t.Context()
-	if err := b.Build(ctx, "foo"); err != nil {
+	if err := (Builds{b}).Build(ctx, "foo"); err != nil {
 		t.Fatal(err)
 	}
 	f.ImageKeys = append(f.ImageKeys, "0123456789ab") // no record: unfinished
 	write(t, filepath.Join(b.Dirs.Layers(), "foo.sh"), "#!/bin/bash\necho edited\n")
-	imgs, err := b.List(ctx)
+	imgs, err := (Images{b}).List(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,16 +329,16 @@ func TestList(t *testing.T) {
 // Rebuild gives the image a new key, and deletes the old one and those on
 // it, never the others.
 func TestRebuild(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	ctx := t.Context()
-	if err := b.Build(ctx, "foo+bar"); err != nil {
+	if err := (Builds{b}).Build(ctx, "foo+bar"); err != nil {
 		t.Fatal(err)
 	}
 	old, err := b.Chain("foo+bar")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Rebuild(ctx, "foo"); err != nil {
+	if err := (Builds{b}).Rebuild(ctx, "foo"); err != nil {
 		t.Fatal(err)
 	}
 	newFoo, err := b.Key("foo")
@@ -369,14 +369,14 @@ func TestRebuild(t *testing.T) {
 
 // An old image the backend won't delete (a VM uses it) stays.
 func TestRebuildKeepsImagesInUse(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	ctx := t.Context()
-	if err := b.Build(ctx, "base"); err != nil {
+	if err := (Builds{b}).Build(ctx, "base"); err != nil {
 		t.Fatal(err)
 	}
 	old := f.ImageKeys[0]
 	f.Errs = map[string]error{"DeleteImage": msg.ImageInUse(old, "devvm-p-0123456789abcd")}
-	if err := b.Rebuild(ctx, "base"); err != nil {
+	if err := (Builds{b}).Rebuild(ctx, "base"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := state.ReadImage(b.Dirs, old); err != nil {
@@ -384,12 +384,12 @@ func TestRebuildKeepsImagesInUse(t *testing.T) {
 	}
 }
 
-// fromBuilder is testBuilder with --from node:24, the conversion's
+// fromEnv is testEnv with --from node:24, the conversion's
 // scripts, and a registry whose digest for it is *digest; lookups counts
 // what it's asked.
-func fromBuilder(t *testing.T, digest *string, lookups *int) (*Builder, *backendtest.Fake) {
+func fromEnv(t *testing.T, digest *string, lookups *int) (*Env, *backendtest.Fake) {
 	t.Helper()
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	for _, s := range []string{"build.sh", "bootify.sh", "kernel.sh"} {
 		write(t, filepath.Join(assetsDir(b), "oci", s), "#!/bin/bash\n")
 	}
@@ -412,9 +412,9 @@ func fromBuilder(t *testing.T, digest *string, lookups *int) (*Builder, *backend
 // every image on it records both.
 func TestBuildFrom(t *testing.T) {
 	digest, lookups := "sha256:"+strings.Repeat("a", 64), 0
-	b, f := fromBuilder(t, &digest, &lookups)
+	b, f := fromEnv(t, &digest, &lookups)
 	f.Built = backend.Built{Origin: "node@" + digest, Libc: "musl"}
-	if err := b.Build(t.Context(), "foo"); err != nil {
+	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}
 	if lookups != 1 {
@@ -440,22 +440,22 @@ func TestBuildFrom(t *testing.T) {
 		}
 	}
 	// Ubuntu's base is another image.
-	ubuntu := &Builder{Dirs: b.Dirs, Assets: b.Assets, Backend: b.Backend, Tools: b.Tools}
+	ubuntu := &Env{Dirs: b.Dirs, Assets: b.Assets, Backend: b.Backend, Tools: b.Tools}
 	if k, err := ubuntu.Key("base"); err != nil || k == chain[0].Key {
 		t.Errorf("Ubuntu's base: %s, %v", k, err)
 	}
 	// Keys, lists and outdated checks use the recorded digest: no lookups.
-	if imgs, err := b.List(t.Context()); err != nil || len(imgs) != 2 || !imgs[0].Current || !imgs[1].Current || imgs[0].From != "node:24" {
+	if imgs, err := (Images{b}).List(t.Context()); err != nil || len(imgs) != 2 || !imgs[0].Current || !imgs[1].Current || imgs[0].From != "node:24" {
 		t.Errorf("List: %+v, %v", imgs, err)
 	}
-	if err := b.WarnIfOutdated(chain.String()); err != nil || lookups != 1 {
+	if err := (Builds{b}).WarnIfOutdated(chain.String()); err != nil || lookups != 1 {
 		t.Errorf("WarnIfOutdated: %v, %d lookups", err, lookups)
 	}
 
 	// The tag moved: the next build looks it up, and base and foo are new.
 	digest = "sha256:" + strings.Repeat("b", 64)
-	again := quiet(&Builder{Dirs: b.Dirs, Assets: b.Assets, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup})
-	if err := again.Build(t.Context(), "foo"); err != nil {
+	again := quiet(&Env{Dirs: b.Dirs, Assets: b.Assets, Backend: b.Backend, Tools: b.Tools, From: b.From, Lookup: b.Lookup})
+	if err := (Builds{again}).Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}
 	moved, err := again.Chain("foo")
@@ -465,7 +465,7 @@ func TestBuildFrom(t *testing.T) {
 	if moved[0].Key == chain[0].Key || moved[1].Key == chain[1].Key {
 		t.Errorf("a moved tag kept the keys: %s, %s", moved, chain)
 	}
-	if imgs, err := again.List(t.Context()); err != nil || len(imgs) != 4 || imgs[0].Current || imgs[1].Current {
+	if imgs, err := (Images{again}).List(t.Context()); err != nil || len(imgs) != 4 || imgs[0].Current || imgs[1].Current {
 		t.Errorf("after the move, the old images are stale: %+v, %v", imgs, err)
 	}
 }
@@ -474,9 +474,9 @@ func TestBuildFrom(t *testing.T) {
 // other bases'.
 func TestBuildFromPinned(t *testing.T) {
 	digest, lookups := "", 0
-	b, f := fromBuilder(t, &digest, &lookups)
+	b, f := fromEnv(t, &digest, &lookups)
 	b.From = "node:24@sha256:" + strings.Repeat("c", 64)
-	if err := b.Rebuild(t.Context(), "base"); err != nil {
+	if err := (Builds{b}).Rebuild(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
 	if lookups != 0 {
@@ -498,9 +498,9 @@ func TestBuildFromPinned(t *testing.T) {
 // A backend without --from is refused before anything is built.
 func TestBuildFromRequires(t *testing.T) {
 	digest, lookups := "sha256:"+strings.Repeat("a", 64), 0
-	b, f := fromBuilder(t, &digest, &lookups)
+	b, f := fromEnv(t, &digest, &lookups)
 	delete(f.Capabilities, backend.FeatureFrom)
-	if err := b.Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
+	if err := (Builds{b}).Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
 		t.Errorf("Build = %v, want backend_lacks", err)
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {

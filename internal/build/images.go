@@ -40,7 +40,7 @@ var sha256Hex = regexp.MustCompile(`sha256:([0-9a-f]{12})`)
 
 // Listing lists the backend's images by name, those without one last,
 // with their state, origin and size.
-func (b *Builder) Listing(ctx context.Context) ([]Listed, error) {
+func (b Images) Listing(ctx context.Context) ([]Listed, error) {
 	imgs, err := b.List(ctx)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (b *Builder) Listing(ctx context.Context) ([]Listed, error) {
 // origin is what an image's base started from, and its digest's first 12
 // hex digits. An image above base on Ubuntu's cloud image records no
 // digest: its base's record has it.
-func (b *Builder) origin(img Image) (origin, id string) {
+func (b Images) origin(img Image) (origin, id string) {
 	d := img.Digest
 	if d == "" && img.From == "" && len(img.Chain) > 0 && img.Chain[0].Name == image.Base {
 		if rec, err := state.ReadImage(b.Dirs, img.Chain[0].Key); err == nil && rec.From == "" {
@@ -107,7 +107,7 @@ var keyLike = regexp.MustCompile(`^[0-9a-f]{12}$`)
 // unfinished build has only its key), with their records. Each must be
 // built: nothing is deleted until every one is found. Shared tools aren't
 // images, and are refused.
-func (b *Builder) Delete(ctx context.Context, refs []string) error {
+func (b Images) Delete(ctx context.Context, refs []string) error {
 	built, err := b.Backend.Images(ctx)
 	if err != nil {
 		return err
@@ -155,12 +155,12 @@ func (b *Builder) Delete(ctx context.Context, refs []string) error {
 // DeleteKey deletes the image with this key, with its record. The backend
 // may refuse it as a message: on Linux hosts, one whose disk VMs use
 // (image_in_use).
-func (b *Builder) DeleteKey(ctx context.Context, key string) error {
+func (b Images) DeleteKey(ctx context.Context, key string) error {
 	return b.deleteImage(ctx, key)
 }
 
 // recordName is the name in an image's record, "" when it has none.
-func (b *Builder) recordName(key string) string {
+func (b Images) recordName(key string) string {
 	rec, err := state.ReadImage(b.Dirs, key)
 	if err != nil {
 		return ""

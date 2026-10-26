@@ -114,7 +114,7 @@ func gc(ctx context.Context, u *ui.UI, g *globals) error {
 // stays, saying so.
 func deleteStale(ctx context.Context, u *ui.UI, imgs []listedImage) error {
 	for _, l := range imgs {
-		if err := l.builder.DeleteKey(ctx, l.Key); err != nil {
+		if err := l.images.DeleteKey(ctx, l.Key); err != nil {
 			if m, ok := errors.AsType[msg.M](err); ok {
 				u.Warn(m)
 				continue

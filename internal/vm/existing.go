@@ -108,7 +108,7 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 			return err
 		}
 	}
-	if err := builder.WarnIfOutdated(st.Get(state.KeyChain)); err != nil {
+	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Get(state.KeyChain)); err != nil {
 		return err
 	}
 	have := strings.Fields(st.Get(KeyTools))
@@ -282,7 +282,7 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 // toolchains, as for a new VM): shared tools join its list and are
 // mounted on launch; a layer's script runs in it. New agents' folders are
 // mounted, which restarts it.
-func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *build.Builder) error {
+func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *build.Env) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	img := st.Get(state.KeyImage)
 	wanted, err := e.wantedImage(want, t.f.Dir, builder)
@@ -358,7 +358,7 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 
 // wantedImage is the image want names for this folder, as for a new VM,
 // without saying what it detected.
-func (e Launch) wantedImage(want, dir string, b *build.Builder) (string, error) {
+func (e Launch) wantedImage(want, dir string, b *build.Env) (string, error) {
 	if needsDetection(want) {
 		if found := project.Detect(dir); len(found) > 0 {
 			want = strings.Join(append(found, want), "+")
@@ -387,12 +387,12 @@ func toolTarget(b backend.Backend, st *state.VM) tools.Target {
 
 // buildTools builds the tool images the share lacks of files, from base's
 // image as it is now, built first if it isn't.
-func (e Launch) buildTools(ctx context.Context, builder *build.Builder, tg tools.Target, files []string) error {
+func (e Launch) buildTools(ctx context.Context, builder *build.Env, tg tools.Target, files []string) error {
 	share := tools.Share{Env: e.Tools}
 	if !slices.ContainsFunc(files, func(f string) bool { return !share.Built(f) }) {
 		return nil
 	}
-	if err := builder.Build(ctx, image.Base); err != nil {
+	if err := (build.Builds{Env: builder}).Build(ctx, image.Base); err != nil {
 		return err
 	}
 	base, err := builder.Key(image.Base)

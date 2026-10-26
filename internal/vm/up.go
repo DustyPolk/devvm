@@ -83,7 +83,7 @@ type newVM struct {
 	mode    string // ModeClone, or ""
 	spec    backend.VMSpec
 	conf    backend.Confinement
-	builder *build.Builder
+	builder *build.Env
 }
 
 // creation makes a new VM: its plan, its build and its cleanup.
@@ -103,7 +103,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if len(groups) > 0 && versions.CheckDue() {
 		versions.Check(ctx)
 	}
-	if err := n.builder.Build(ctx, n.img); err != nil {
+	if err := (build.Builds{Env: n.builder}).Build(ctx, n.img); err != nil {
 		return err
 	}
 	chain, err := n.builder.Chain(image.WithoutTools(n.img))
@@ -358,7 +358,7 @@ func (e Launch) checkUnsafe(dir string, unsafe bool) error {
 // one named, or with nothing but agents named, the folder's toolchains
 // and the agents on top (devvm claude in a node project is node+claude).
 // base is a choice of its own: nothing is detected over it.
-func (e Launch) resolveImage(want, dir string, b *build.Builder) (string, error) {
+func (e Launch) resolveImage(want, dir string, b *build.Env) (string, error) {
 	if needsDetection(want) {
 		found := project.Detect(dir)
 		switch {

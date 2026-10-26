@@ -30,7 +30,6 @@ func devvm() rules {
 			"internal/backend/backendtest.Fake": {32, "backend.Backend's 27 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {34, "one method per folder or file devvm uses: a list"},
 			"internal/ui.UI":                    {40, "the one terminal: messages, prompts, status line, run log, cleanups, signals"},
-			"internal/build.Builder":            {32, "building and rebuilding images, and their records"},
 		},
 		allowedVars: map[string]string{
 			"internal/cli.version":                 ldflags,

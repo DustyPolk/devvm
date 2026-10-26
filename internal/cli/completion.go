@@ -75,7 +75,7 @@ func completeImage(_ *cobra.Command, args []string, toComplete string) ([]cobra.
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	b := &build.Builder{Dirs: dirs}
+	b := &build.Env{Dirs: dirs}
 	return joined(toComplete, slices.Concat(b.Environments(), image.Agents)), cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -95,7 +95,7 @@ func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	features, _ := (&build.Builder{Dirs: dirs, Assets: assets.FS}).Features()
+	features, _ := (&build.Env{Dirs: dirs, Assets: assets.FS}).Features()
 	return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
 }
 

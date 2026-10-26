@@ -67,7 +67,7 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
-			return joined(toComplete, (&build.Builder{Dirs: dirs}).Layers()), cobra.ShellCompDirectiveNoFileComp
+			return joined(toComplete, (&build.Env{Dirs: dirs}).Layers()), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			b, err := builder(u, g.backend)
@@ -79,7 +79,7 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 				err = b.Backend.Check(cmd.Context())
 			}
 			if err == nil {
-				err = b.Delete(cmd.Context(), args)
+				err = build.Images{Env: b}.Delete(cmd.Context(), args)
 			}
 			fail(u, err, msg.ImagesRmFailed)
 			return nil
@@ -88,11 +88,11 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 	return c
 }
 
-// listedImage is an image, its backend's name and a builder on it.
+// listedImage is an image, its backend's name and the images on it.
 type listedImage struct {
 	build.Listed
 	Backend string
-	builder *build.Builder
+	images  build.Images
 }
 
 // staleImages returns the images that aren't current: stale, or
@@ -119,7 +119,7 @@ func toolsSize(ts []tools.Listed) int64 {
 // listImages lists the images on every backend, and the shared tools for
 // the base new VMs get on b (its backend and From). A backend that can't
 // list fails it only when a VM's state names that backend.
-func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage, []tools.Listed, error) {
+func listImages(ctx context.Context, u *ui.UI, b *build.Env) ([]listedImage, []tools.Listed, error) {
 	defer u.Status(msg.ReadingImages())()
 	if err := from.Check(b.From); err != nil {
 		return nil, nil, err
@@ -130,8 +130,8 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage,
 	}
 	var imgs []listedImage
 	for _, be := range reg.All() {
-		bb := newBuilder(u, b.Dirs, be, reg.Review, b.Tools, "")
-		ls, err := bb.Listing(ctx)
+		on := build.Images{Env: newBuilder(u, b.Dirs, be, reg.Review, b.Tools, "")}
+		ls, err := on.Listing(ctx)
 		if err != nil {
 			if used, uerr := vm.BackendUsed(b.Dirs, be.Name()); uerr != nil {
 				return nil, nil, uerr
@@ -144,7 +144,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Builder) ([]listedImage,
 			return nil, nil, err
 		}
 		for _, l := range ls {
-			imgs = append(imgs, listedImage{Listed: l, Backend: be.Name(), builder: bb})
+			imgs = append(imgs, listedImage{Listed: l, Backend: be.Name(), images: on})
 		}
 	}
 	// Current for the default backend's new VMs, or any backend's.

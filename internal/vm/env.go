@@ -77,7 +77,7 @@ type Env struct {
 	// Agent is devvm's own SSH agent.
 	Agent *sshagent.Agent
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
-	// asks which features base gets (build.Builder.Pick); Terminal reports
+	// asks which features base gets (build.Env.Pick); Terminal reports
 	// whether it can ask.
 	Info, Warn, Note, Say func(msg.M)
 	Ask, Confirm          func(msg.M) bool
@@ -137,10 +137,10 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 	return e, nil
 }
 
-// builder returns the builder of images on b whose base starts from
+// builder returns what builds images on b whose base starts from
 // fromRef ("" for the backend's own).
-func (e *Env) builder(b backend.Backend, fromRef string) *build.Builder {
-	return &build.Builder{
+func (e *Env) builder(b backend.Backend, fromRef string) *build.Env {
+	return &build.Env{
 		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
 		Terminal: e.Terminal, LogNote: e.LogNote,

@@ -27,10 +27,10 @@ func TestDeleteStaleKeepsImagesInUse(t *testing.T) {
 	if err := state.WriteImage(d, "0123456789ab", state.Image{Name: "base"}); err != nil {
 		t.Fatal(err)
 	}
-	b := &build.Builder{Dirs: d, Backend: f}
+	b := build.Images{Env: &build.Env{Dirs: d, Backend: f}}
 	imgs := []listedImage{
-		{Listed: build.Listed{Image: build.Image{Key: "0123456789ab", Name: "base"}}, builder: b},
-		{Listed: build.Listed{Image: build.Image{Key: "ba9876543210"}}, builder: b},
+		{Listed: build.Listed{Image: build.Image{Key: "0123456789ab", Name: "base"}}, images: b},
+		{Listed: build.Listed{Image: build.Image{Key: "ba9876543210"}}, images: b},
 	}
 	f.Errs = map[string]error{"DeleteImage": msg.ImageInUse("0123456789ab", "devvm-p-0123456789abcd")}
 	u, _, errOut := testUI()

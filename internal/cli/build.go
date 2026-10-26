@@ -29,7 +29,7 @@ func newBuildCmd(u *ui.UI, g *globals) *cobra.Command {
 			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), u, g, args[0], (*build.Builder).Build)
+			return imageCmd(cmd.Context(), u, g, args[0], build.Builds.Build)
 		},
 	}
 }
@@ -44,14 +44,14 @@ func newRebuildCmd(u *ui.UI, g *globals) *cobra.Command {
 			"their versions come from the tools lock.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), u, g, args[0], (*build.Builder).Rebuild)
+			return imageCmd(cmd.Context(), u, g, args[0], build.Builds.Rebuild)
 		},
 	}
 }
 
-// imageCmd runs do on the builder of the backend new VMs get, once the
+// imageCmd runs do on the builds of the backend new VMs get, once the
 // name is one and the backend can run.
-func imageCmd(ctx context.Context, u *ui.UI, g *globals, name string, do func(*build.Builder, context.Context, string) error) error {
+func imageCmd(ctx context.Context, u *ui.UI, g *globals, name string, do func(build.Builds, context.Context, string) error) error {
 	b, err := builder(u, g.backend)
 	if err == nil {
 		b.From = g.fromRef()
@@ -64,15 +64,15 @@ func imageCmd(ctx context.Context, u *ui.UI, g *globals, name string, do func(*b
 		err = b.Backend.Check(ctx)
 	}
 	if err == nil {
-		err = do(b, ctx, name)
+		err = do(build.Builds{Env: b}, ctx, name)
 	}
 	fail(u, err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
 	return nil
 }
 
-// builder returns a builder on the backend new VMs get: flag's (--backend),
+// builder returns what builds images on the backend new VMs get: flag's (--backend),
 // else the default.
-func builder(u *ui.UI, flag string) (*build.Builder, error) {
+func builder(u *ui.UI, flag string) (*build.Env, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return nil, err
@@ -88,11 +88,11 @@ func builder(u *ui.UI, flag string) (*build.Builder, error) {
 	return newBuilder(u, dirs, c.Backend, reg.Review, tools.New(dirs, assets.FS, u), ""), nil
 }
 
-// newBuilder returns a builder of images on be, its features checked
+// newBuilder returns what builds images on be, its features checked
 // against rv, whose base starts from fromRef, printing and asking through
 // u.
-func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Env, fromRef string) *build.Builder {
-	return &build.Builder{
+func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Env, fromRef string) *build.Env {
+	return &build.Env{
 		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef,
 		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote,

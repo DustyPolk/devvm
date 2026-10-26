@@ -21,7 +21,7 @@ import (
 // (features/<name>.sh in Assets), sorted, then the user's
 // (paths.Dirs.Features), sorted. shadowed holds the user's scripts named
 // like one of devvm's, which are ignored.
-func (b *Builder) Features() (features, shadowed []string) {
+func (b *Env) Features() (features, shadowed []string) {
 	own := scripts(b.Assets, "features")
 	features = slices.Clone(own)
 	for _, n := range scripts(os.DirFS(b.Dirs.Features()), ".") {
@@ -58,7 +58,7 @@ func regular(fsys fs.FS, name string) bool {
 // FeatureScript is a feature's script: devvm's own when it has one by
 // that name, else the user's. No script is an error matching
 // fs.ErrNotExist.
-func (b *Builder) FeatureScript(name string) (backend.Script, error) {
+func (b *Env) FeatureScript(name string) (backend.Script, error) {
 	s := backend.Script{Name: name + ".sh"}
 	own, user := path.Join("features", s.Name), os.DirFS(b.Dirs.Features())
 	var err error
@@ -75,7 +75,7 @@ func (b *Builder) FeatureScript(name string) (backend.Script, error) {
 
 // chosenFeatures returns the features chosen for base: the base-features
 // file's, or until there is one, every feature.
-func (b *Builder) chosenFeatures() ([]string, error) {
+func (b *Env) chosenFeatures() ([]string, error) {
 	chosen, err := state.ReadBaseFeatures(b.Dirs)
 	if errors.Is(err, fs.ErrNotExist) {
 		all, _ := b.Features()
@@ -86,7 +86,7 @@ func (b *Builder) chosenFeatures() ([]string, error) {
 
 // chooseFeatures asks which features base gets, the first time anything
 // is built (PickFeatures).
-func (b *Builder) chooseFeatures() error {
+func (b Choice) chooseFeatures() error {
 	if _, err := os.Stat(b.Dirs.BaseFeatures()); !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -97,7 +97,7 @@ func (b *Builder) chooseFeatures() error {
 // PickFeatures asks which features base gets (Pick), starting from those
 // chosen (every one until they're chosen). It saves and prints the choice,
 // and reports whether it changed base's features.
-func (b *Builder) PickFeatures() (changed bool, err error) {
+func (b Choice) PickFeatures() (changed bool, err error) {
 	before, err := b.chosenFeatures()
 	if err != nil {
 		return false, err
@@ -127,7 +127,7 @@ type Feature struct {
 // SetFeatures chooses these features for base, in the order features
 // run, and saves and prints the choice. It reports whether that changed
 // base's features. A name that isn't a feature is no_feature.
-func (b *Builder) SetFeatures(want []string) (changed bool, err error) {
+func (b Choice) SetFeatures(want []string) (changed bool, err error) {
 	before, err := b.chosenFeatures()
 	if err != nil {
 		return false, err
@@ -148,7 +148,7 @@ func (b *Builder) SetFeatures(want []string) (changed bool, err error) {
 }
 
 // features is Features, warning about the user's features it ignores.
-func (b *Builder) features() []string {
+func (b Choice) features() []string {
 	names, shadowed := b.Features()
 	for _, file := range shadowed {
 		b.Warn(msg.FeatureShadowed(strings.TrimSuffix(filepath.Base(file), ".sh"), file))
@@ -158,7 +158,7 @@ func (b *Builder) features() []string {
 
 // saveFeatures saves and prints the chosen features, reporting whether
 // they differ from those before.
-func (b *Builder) saveFeatures(before, chosen []string) (bool, error) {
+func (b Choice) saveFeatures(before, chosen []string) (bool, error) {
 	if err := state.WriteBaseFeatures(b.Dirs, chosen); err != nil {
 		return false, err
 	}
@@ -188,7 +188,7 @@ func description(script []byte) string {
 
 // featureScripts returns the scripts of base's chosen features, in order,
 // skipping any without one.
-func (b *Builder) featureScripts() ([]backend.Script, error) {
+func (b Builds) featureScripts() ([]backend.Script, error) {
 	chosen, err := b.chosenFeatures()
 	if err != nil {
 		return nil, err

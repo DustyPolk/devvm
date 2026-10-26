@@ -11,10 +11,10 @@ import (
 // Listing: by name, unfinished builds last; base on Ubuntu with its
 // release date and digest, which the images on it show too.
 func TestListing(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	ctx := t.Context()
 	f.Built.Origin = "https://cloud-images.ubuntu.com/releases/resolute/release-20261001/u.img sha256:0123456789abcdef"
-	if err := b.Build(ctx, "foo"); err != nil {
+	if err := (Builds{b}).Build(ctx, "foo"); err != nil {
 		t.Fatal(err)
 	}
 	foo, err := b.Key("foo")
@@ -24,7 +24,7 @@ func TestListing(t *testing.T) {
 	f.ImageKeys = append(f.ImageKeys, "000000000000") // no record: unfinished
 	f.ImageSizes = map[string]int64{foo: 1 << 30}
 	write(t, filepath.Join(b.Dirs.Layers(), "foo.sh"), "#!/bin/bash\necho edited\n")
-	ls, err := b.Listing(ctx)
+	ls, err := (Images{b}).Listing(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,13 +48,13 @@ func TestListing(t *testing.T) {
 
 // A --from image lists its image and digest.
 func TestListingFrom(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	f.ImageKeys = []string{"0123456789ab"}
 	rec := state.Image{Name: "base", Chain: "base=0123456789ab", From: "node:24", Digest: "node@sha256:fedcba9876543210", Libc: "gnu"}
 	if err := state.WriteImage(b.Dirs, "0123456789ab", rec); err != nil {
 		t.Fatal(err)
 	}
-	ls, err := b.Listing(t.Context())
+	ls, err := (Images{b}).Listing(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,9 +66,9 @@ func TestListingFrom(t *testing.T) {
 // Delete: by name or by key, after every one is found; never shared tools
 // or what isn't built.
 func TestDelete(t *testing.T) {
-	b, f := testBuilder(t)
+	b, f := testEnv(t)
 	ctx := t.Context()
-	if err := b.Build(ctx, "foo"); err != nil {
+	if err := (Builds{b}).Build(ctx, "foo"); err != nil {
 		t.Fatal(err)
 	}
 	base, err := b.Key("base")
@@ -81,18 +81,18 @@ func TestDelete(t *testing.T) {
 	}
 	f.ImageKeys = append(f.ImageKeys, "000000000000")
 	for _, refs := range [][]string{{"node"}, {"foo+claude"}, {"bar"}, {"nope"}, {"fedcba987654"}, {"000000000000", "bar"}} {
-		if err := b.Delete(ctx, refs); err == nil {
+		if err := (Images{b}).Delete(ctx, refs); err == nil {
 			t.Errorf("Delete %q: no error", refs)
 		}
 	}
-	if !isMsg(b.Delete(ctx, []string{"node"}), "tools_not_images_rm") || !isMsg(b.Delete(ctx, []string{"bar"}), "no_image_named") ||
-		!isMsg(b.Delete(ctx, []string{"nope"}), "unknown_layer") {
+	if !isMsg((Images{b}).Delete(ctx, []string{"node"}), "tools_not_images_rm") || !isMsg((Images{b}).Delete(ctx, []string{"bar"}), "no_image_named") ||
+		!isMsg((Images{b}).Delete(ctx, []string{"nope"}), "unknown_layer") {
 		t.Error("Delete: not the messages expected")
 	}
 	if len(f.ImageKeys) != 3 {
 		t.Fatalf("a failed Delete deleted: %v left", f.ImageKeys)
 	}
-	if err := b.Delete(ctx, []string{"000000000000", "base+foo", foo}); err != nil {
+	if err := (Images{b}).Delete(ctx, []string{"000000000000", "base+foo", foo}); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(f.ImageKeys, []string{base}) {
@@ -105,7 +105,7 @@ func TestDelete(t *testing.T) {
 		write(t, filepath.Join(assetsDir(b), "oci", s), "#!/bin/bash\n")
 	}
 	b.From = "node:24"
-	if err := b.Delete(ctx, []string{"base"}); !isMsg(err, "no_image_named_from") {
+	if err := (Images{b}).Delete(ctx, []string{"base"}); !isMsg(err, "no_image_named_from") {
 		t.Errorf("another base's: %v, want no_image_named_from", err)
 	}
 }

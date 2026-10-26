@@ -8,6 +8,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/registry"
+	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -90,7 +91,7 @@ func (s setup) run(features *string, backendName string) error {
 			return nil
 		}
 	}
-	b := newBuilder(s.ui, dirs, nil, backend.Review{}, nil, "")
+	b := build.Choice{Env: newBuilder(s.ui, dirs, nil, backend.Review{}, nil, "")}
 	var changed bool
 	if features == nil {
 		changed, err = b.PickFeatures()

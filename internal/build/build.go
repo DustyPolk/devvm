@@ -2,6 +2,11 @@
 // base, and the user's layers on it. An image is built once per key and
 // reused while its key matches; rebuilding one bumps its rebuild counter,
 // which changes its key.
+//
+// Env is what images are built with, and what the groups share: keys,
+// layers, the features there are, base's C library. Builds builds and
+// rebuilds images; Images lists and deletes them, with their records;
+// Choice chooses base's features.
 package build
 
 import (
@@ -22,8 +27,11 @@ import (
 	"github.com/w3cj/devvm/internal/tools"
 )
 
-// Builder builds images on one backend.
-type Builder struct {
+// Env is what images on one backend are built with, shared by Builds,
+// Images and Choice; its methods are what they share: image keys and
+// chains, the user's layers, the features there are and those chosen,
+// base's C library and deleting an image.
+type Env struct {
 	Dirs    paths.Dirs
 	Assets  fs.FS // devvm's own files (assets.FS): base.yaml, layers/, features/, oci/
 	Backend backend.Backend
@@ -47,9 +55,19 @@ type Builder struct {
 	looked bool // From's digest was looked up in this run
 }
 
+// Builds builds images, and builds them again.
+type Builds struct{ *Env }
+
+// Images is the backend's images and their records: listing and deleting
+// them.
+type Images struct{ *Env }
+
+// Choice is base's features: asking which it gets, or setting them.
+type Choice struct{ *Env }
+
 // Inputs returns what the backend's image keys hash, read from disk:
 // From's digest as last recorded.
-func (b *Builder) Inputs() (image.Inputs, error) {
+func (b *Env) Inputs() (image.Inputs, error) {
 	digest, err := from.Recorded(b.Dirs, b.From)
 	if err != nil {
 		return image.Inputs{}, err
@@ -76,7 +94,7 @@ func (b *Builder) Inputs() (image.Inputs, error) {
 }
 
 // Key returns an image's key as it is now.
-func (b *Builder) Key(name string) (string, error) {
+func (b *Env) Key(name string) (string, error) {
 	in, err := b.Inputs()
 	if err != nil {
 		return "", err
@@ -85,7 +103,7 @@ func (b *Builder) Key(name string) (string, error) {
 }
 
 // Chain returns an image's chain as it is now.
-func (b *Builder) Chain(name string) (image.Chain, error) {
+func (b *Env) Chain(name string) (image.Chain, error) {
 	in, err := b.Inputs()
 	if err != nil {
 		return nil, err
@@ -95,7 +113,7 @@ func (b *Builder) Chain(name string) (image.Chain, error) {
 
 // lookUp looks up From's digest, once a run, before any key that builds
 // is worked out: every key holds base's.
-func (b *Builder) lookUp(ctx context.Context) error {
+func (b Builds) lookUp(ctx context.Context) error {
 	if b.From == "" || b.looked {
 		return nil
 	}
@@ -112,7 +130,7 @@ func (b *Builder) lookUp(ctx context.Context) error {
 
 // Layers returns base and the user's layers, sorted: the scripts in the
 // layers folder with names a layer can have (not a shared tool's).
-func (b *Builder) Layers() []string {
+func (b *Env) Layers() []string {
 	names := []string{image.Base}
 	entries, _ := os.ReadDir(b.Dirs.Layers()) // no folder: no layers
 	for _, e := range entries {
@@ -126,18 +144,18 @@ func (b *Builder) Layers() []string {
 }
 
 // LayerScript is the script of one of the user's layers.
-func (b *Builder) LayerScript(layer string) string {
+func (b *Env) LayerScript(layer string) string {
 	return filepath.Join(b.Dirs.Layers(), layer+".sh")
 }
 
-func (b *Builder) isLayer(layer string) bool {
+func (b *Env) isLayer(layer string) bool {
 	fi, err := os.Stat(b.LayerScript(layer))
 	return err == nil && fi.Mode().IsRegular()
 }
 
 // Environments returns what an image can be made of besides the agents:
 // base, the toolchains and the user's layers.
-func (b *Builder) Environments() []string {
+func (b *Env) Environments() []string {
 	layers := b.Layers()
 	return slices.Concat(layers[:1], image.Toolchains, layers[1:])
 }
@@ -145,7 +163,7 @@ func (b *Builder) Environments() []string {
 // CheckLayers refuses an image name with a part that isn't base, a shared
 // tool or one of the user's layers. Names become file names: nothing else
 // gets past it.
-func (b *Builder) CheckLayers(name string) error {
+func (b *Env) CheckLayers(name string) error {
 	for p := range strings.SplitSeq(name, "+") {
 		if p != image.Base && !image.IsTool(p) && (!image.LayerName(p) || !b.isLayer(p)) {
 			return msg.UnknownLayer(strings.Join(image.Agents, " "), strings.Join(b.Environments(), " "), p)
@@ -156,7 +174,7 @@ func (b *Builder) CheckLayers(name string) error {
 
 // BaseLibc is the C library of base as it is now: its record's, gnu when
 // it isn't built. The shared tools are built for it.
-func (b *Builder) BaseLibc() (string, error) {
+func (b *Env) BaseLibc() (string, error) {
 	key, err := b.Key(image.Base)
 	if err != nil {
 		return "", err
@@ -176,7 +194,7 @@ func (b *Builder) BaseLibc() (string, error) {
 // ToolTarget is what the shared tools of a new VM on this backend are
 // built for: base's C library as it is now (BaseLibc), and the backend's
 // format.
-func (b *Builder) ToolTarget() (tools.Target, error) {
+func (b *Env) ToolTarget() (tools.Target, error) {
 	libc, err := b.BaseLibc()
 	if err != nil {
 		return tools.Target{}, err
@@ -187,13 +205,13 @@ func (b *Builder) ToolTarget() (tools.Target, error) {
 // Build builds an image name's image, and the images under it, unless
 // they're built; then the shared tool images it names that the share
 // lacks.
-func (b *Builder) Build(ctx context.Context, name string) error {
+func (b Builds) Build(ctx context.Context, name string) error {
 	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
 		return err
 	}
 	// Every key holds base's, so its features are chosen first.
-	if err := b.chooseFeatures(); err != nil {
+	if err := Choice(b).chooseFeatures(); err != nil {
 		return err
 	}
 	if err := b.build(ctx, image.WithoutTools(name)); err != nil {
@@ -218,7 +236,7 @@ func (b *Builder) Build(ctx context.Context, name string) error {
 	return tools.Share{Env: b.Tools}.Build(ctx, b.Review, b.Backend, base, tg, files)
 }
 
-func (b *Builder) build(ctx context.Context, name string) error {
+func (b Builds) build(ctx context.Context, name string) error {
 	if err := b.lookUp(ctx); err != nil {
 		return err
 	}
@@ -310,7 +328,7 @@ func (b *Builder) build(ctx context.Context, name string) error {
 // built reports whether the image with key is built: the backend has it,
 // and its record. One without a record is left over from a build that
 // didn't finish, and is deleted.
-func (b *Builder) built(ctx context.Context, name, key string) (bool, error) {
+func (b Builds) built(ctx context.Context, name, key string) (bool, error) {
 	keys, err := b.Backend.Images(ctx)
 	if err != nil || !slices.Contains(keys, key) {
 		return false, err
@@ -326,7 +344,7 @@ func (b *Builder) built(ctx context.Context, name, key string) (bool, error) {
 	return false, b.deleteImage(ctx, key)
 }
 
-func (b *Builder) deleteImage(ctx context.Context, key string) error {
+func (b *Env) deleteImage(ctx context.Context, key string) error {
 	if err := b.Backend.DeleteImage(ctx, key); err != nil {
 		return err
 	}
@@ -346,7 +364,7 @@ type Image struct {
 }
 
 // List returns the backend's images, with their records.
-func (b *Builder) List(ctx context.Context) ([]Image, error) {
+func (b Images) List(ctx context.Context) ([]Image, error) {
 	keys, err := b.Backend.Images(ctx)
 	if err != nil {
 		return nil, err
@@ -382,7 +400,7 @@ func (b *Builder) List(ctx context.Context) ([]Image, error) {
 // counter changes, so it gets a new key. Then it deletes the stale images
 // (the old one and those built on it among them) that no VM uses. When
 // images are built on it, it asks first in a terminal.
-func (b *Builder) Rebuild(ctx context.Context, name string) error {
+func (b Builds) Rebuild(ctx context.Context, name string) error {
 	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
 		return err
@@ -391,14 +409,14 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 	if t := image.ToolsOf(name); len(t) > 0 {
 		return msg.ToolsNotImages(strings.Join(t, " "))
 	}
-	if err := b.chooseFeatures(); err != nil {
+	if err := Choice(b).chooseFeatures(); err != nil {
 		return err
 	}
 	old, err := b.Key(name)
 	if err != nil {
 		return err
 	}
-	imgs, err := b.List(ctx)
+	imgs, err := Images(b).List(ctx)
 	if err != nil {
 		return err
 	}
@@ -421,7 +439,7 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 	if err := b.build(ctx, name); err != nil {
 		return err
 	}
-	if imgs, err = b.List(ctx); err != nil {
+	if imgs, err = Images(b).List(ctx); err != nil {
 		return err
 	}
 	for _, img := range imgs {
@@ -447,7 +465,7 @@ func (b *Builder) Rebuild(ctx context.Context, name string) error {
 
 // WarnIfOutdated warns when an image a VM was made from has changed since:
 // chain is the VM's, as its state records it. It never changes the VM.
-func (b *Builder) WarnIfOutdated(chain string) error {
+func (b Builds) WarnIfOutdated(chain string) error {
 	in, err := b.Inputs()
 	if err != nil {
 		return err
