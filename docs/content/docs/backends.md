@@ -17,7 +17,7 @@ Each backend declares how it has each feature:
 
 `devvm doctor` lists them for every backend devvm has, an emulation whose review hasn't passed as `unreviewed`.
 
-The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Network policy, ssh for editors and every port forwarded are emulated and reviewed; its other emulation is planned. Until each is reviewed, devvm refuses it.
+The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Network policy, ssh for editors, every port forwarded and turning agent forwarding on or off are emulated and reviewed. An emulation is refused until it's reviewed.
 
 | Feature | What it is | Lima | smolvm (experimental) | Docker (planned) |
 | --- | --- | --- | --- | --- |
@@ -33,7 +33,7 @@ The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are 
 | `ports` | the listed ports forwarded to the host's loopback | native: port forward rules ([details](lima.md#ports)) | native for servers listening on all addresses, at most 63 ports, as one of smolvm's 64 is ssh's ([details](smolvm.md#what-devvm-sets-on-a-vm)) | native (recreating the container) |
 | `ports-all` | every port forwarded, servers on the VM's loopback included | native | emulated (reviewed): a forwarder of devvm's on the host, over the VM's ssh, for what listens in the VM from port 1024 up, never a port the host has ([details](smolvm.md#every-port)) | emulated |
 | `agent-forwarding` | ssh-agent forwarding, chosen when the VM is made | native | native | native |
-| `agent-toggle` | turning a VM's ssh-agent forwarding on or off later | native | none; planned emulation | native |
+| `agent-toggle` | turning a VM's ssh-agent forwarding on or off later | native | emulated (reviewed): every VM made forwarding, and each start given your agent, devvm's, or none, a path no socket can be at; one started outside devvm is stopped ([details](smolvm.md#ssh-agent-forwarding)) | native |
 | `cpus` | a VM's CPUs | native | native | native |
 | `memory` | a VM's memory | native | native | native |
 | `disk` | a VM's disk size | native: grows, never shrinks | native: grows, never shrinks | none |

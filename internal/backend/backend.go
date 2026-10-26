@@ -128,6 +128,28 @@ func UsesDecider(b Backend) bool {
 	return ok && d.UsesDecider()
 }
 
+// AgentStarter is a backend whose VM forwards whatever SSH agent the
+// command that starts it names (smolvm's machine start), so a VM started
+// some other way than by Start can have one devvm didn't choose for it. A
+// backend whose agent is the VM's config, or fixed when it's made,
+// doesn't implement it.
+type AgentStarter interface {
+	// AgentUnchosen reports whether a running VM may forward an agent
+	// devvm didn't choose: made forwarding one, and not running on the
+	// process Start last started.
+	AgentUnchosen(ctx context.Context, vm string) (bool, error)
+}
+
+// AgentUnchosen reports whether b's running VM may forward an agent devvm
+// didn't choose for it (AgentStarter); never on other backends.
+func AgentUnchosen(ctx context.Context, b Backend, vm string) (bool, error) {
+	a, ok := b.(AgentStarter)
+	if !ok {
+		return false, nil
+	}
+	return a.AgentUnchosen(ctx, vm)
+}
+
 // Problem is something a backend needs that the host lacks, as devvm
 // doctor reports it.
 type Problem struct {
@@ -208,9 +230,13 @@ type VMSpec struct {
 	Tools     string   // the shared tools folder, read-only at ToolsAt; "" for none
 	ToolsAt   string   // where the tools folder is in the VM
 
-	AgentForwarding bool  // forward ssh-agent into the VM
-	Size            Size  // zero fields take the image's
-	Ports           Ports // which ports to forward to host loopback
+	AgentForwarding bool // forward ssh-agent into the VM
+	// AgentToggle is whether its forwarding may be turned on or off later
+	// (FeatureAgentToggle let through): a backend that sets forwarding
+	// only when a VM is made makes it ready for that.
+	AgentToggle bool
+	Size        Size  // zero fields take the image's
+	Ports       Ports // which ports to forward to host loopback
 }
 
 // Size is a VM's CPUs, memory and disk. Zero is unset.
@@ -273,6 +299,9 @@ type Confinement struct {
 	// AgentSocket is the ssh-agent the VM's forwarding uses: "" for the
 	// user's own (SSH_AUTH_SOCK), or devvm's.
 	AgentSocket string
+	// NoAgent is set when the VM's choice is no agent: a backend whose VM
+	// forwards one anyway (made so, for agent-toggle) gives it none.
+	NoAgent bool
 }
 
 // Status is a VM's state as its backend reports it.
@@ -291,6 +320,9 @@ type Instance struct {
 	Size            Size     // what it has, all set
 	AgentDirs       []string // its agent folder mounts
 	AgentForwarding bool
+	// AgentFixed is set when its forwarding can't be turned on: it was
+	// made without, on a backend that sets forwarding only then.
+	AgentFixed bool
 }
 
 // ExecOpts is where a command run in a VM runs and what it's connected to.

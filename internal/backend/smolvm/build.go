@@ -439,7 +439,10 @@ func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	for _, p := range ports {
 		args = append(args, "-p", p)
 	}
-	if spec.AgentForwarding {
+	// Forwarding is fixed now: a VM whose forwarding may change later
+	// forwards from the start, given no agent while it's off (agent.go).
+	forwarding := spec.AgentForwarding || spec.AgentToggle
+	if forwarding {
 		args = append(args, "--ssh-agent")
 	}
 	if err := s.Runner.Run(ctx, msg.Creating(vm), s.smolvm(ctx, args...)); err != nil {
@@ -447,7 +450,7 @@ func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	}
 	return s.writeRecord(vm, record{
 		Image: img, Project: spec.Project, AgentDirs: slices.Clone(spec.AgentDirs), Tools: spec.Tools, ToolsAt: spec.ToolsAt,
-		Forwarding: spec.AgentForwarding, Ports: ports, PortsAll: spec.Ports.All,
+		Forwarding: forwarding, AgentOff: forwarding && !spec.AgentForwarding, Ports: ports, PortsAll: spec.Ports.All,
 	})
 }
 

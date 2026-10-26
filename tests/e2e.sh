@@ -24,7 +24,10 @@
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
 #                packs, a project VM's mounts, size, ports, Docker and agent forwarding, a node VM's
-#                shared tools, what it refuses (agent toggling), ssh for editors' emulation (pinned
+#                shared tools, agent toggling's emulation (your agent, devvm's or none from each
+#                start, devvm export's too, none reaching no agent and adding to none, a VM set to
+#                devvm's or none never reaching yours, one started by smolvm machine start from your
+#                shell stopped), ssh for editors' emulation (pinned
 #                host keys of each VM's own, its own key alone, no forwarding out even past a hostile
 #                sshd, devvm ssh and code, a --clone VM's push and fetch), network policy's emulation
 #                (nothing but the proxy, DNS kept on this machine, failing closed, the policy, ssh
@@ -962,15 +965,17 @@ check "Exec's arguments, folder, input and user reach the VM as given" bash -c "
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/smolvm |
   grep -q -- '--- PASS: TestE2EExecQuoting'"
 check "Docker runs in it, started by devvm" in_smol "$vm" 'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
-check "SSH agent forwarding is off" in_smol "$vm" '[[ -z ${SSH_AUTH_SOCK:-} ]]'
+check "SSH agent forwarding is off: the agent devvm's commands get, if any, reaches nothing" in_smol "$vm" \
+  '[[ -z ${SSH_AUTH_SOCK:-} ]] || ssh-add -l 2>&1 | grep -qi "communication with agent failed\|error connecting to agent"'
 # A listener on every address (Ubuntu's container image has perl, not python), left running.
 SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e \
   '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47180", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' \
   </dev/null >/dev/null 2>&1
 check "the listed port reaches this machine's loopback" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47180 && exit 0; sleep 1; done; exit 1'
-check "turning agent forwarding on is refused in one line" bash -c "cd '$p' &&
-  ! DEVVM_MESSAGES=names '$D' ssh-agent on </dev/null 2>'$work/e' && grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e' &&
-  grep -qx net=off '$vms/$vm'"
+check "made ready to turn agent forwarding on later, and given none: smolvm's socket reaches no agent" bash -c "
+  grep -qx agent_toggle=on '$vms/$vm' && grep -qx ssh_agent=off '$vms/$vm' &&
+  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add -l' </dev/null 2>&1 |
+  grep -qi 'communication with agent failed\|error connecting to agent'"
 check "its process listens on its listed port (the control) and its ssh forward's, nothing else" smol_listens_only "$vm" 47180 "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
 check "a running VM's new size and ports wait for its next start, and apply on restart" bash -c "cd '$p' &&
   '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
@@ -984,19 +989,97 @@ check "rm deletes only this VM, with its state" bash -c "cd '$p' && '$D' rm -f <
   [[ -z \$(smol_status $vm) && ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json' ]]"
 
 section "smolvm: SSH agent forwarding"
+# Turning it on or off later is emulated (agent-toggle), and reviewed. Its guarantee: a VM set to
+# devvm's agent or none never reaches yours, nor one set to none any agent: nothing listed, nothing
+# added, not even by root; one started outside devvm is stopped. The agents and keys are e2e's own:
+# a throwaway one as yours (ua_sock), and devvm's own in the sandbox with a throwaway key.
+ua_sock=$work/smol-agent.sock da_sock=$XDG_DATA_HOME/devvm/agent.sock
+rm -f "$ua_sock" "$work/smol-key" "$work/smol-key.pub" "$work/smol-dkey" "$work/smol-dkey.pub"
+user_agent_pid=$(ssh-agent -a "$ua_sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
+ssh-keygen -q -t ed25519 -N '' -C e2e-smolvm-user -f "$work/smol-key"
+ssh-keygen -q -t ed25519 -N '' -C e2e-smolvm-devvm -f "$work/smol-dkey"
+SSH_AUTH_SOCK=$ua_sock ssh-add -q "$work/smol-key" 2>/dev/null
+# as_ua [VAR=VALUE...] CMD...: CMD with your (throwaway) agent, as devvm runs from your shell.
+as_ua() { env SSH_AUTH_SOCK="$ua_sock" "$@"; }
+# smol_keys VM: what the VM's agent lists, asked as root through smolvm's agent socket in the VM. Each
+# exec runs from a shell with your agent: smolvm reads it only at a start, so it reaches no VM.
+smol_keys() { SSH_AUTH_SOCK=$ua_sock SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c 'SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add -l' </dev/null 2>&1; }
+# smol_add VM: root in the VM adds a key it made to the agent it's given (e2e-from-vm).
+smol_add() { SSH_AUTH_SOCK=$ua_sock SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c 'rm -f /tmp/vmkey /tmp/vmkey.pub &&
+  ssh-keygen -q -t ed25519 -N "" -C e2e-from-vm -f /tmp/vmkey && SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add /tmp/vmkey' </dev/null 2>&1; }
+# agents_clean: your agent holds only its key, and devvm's (if it runs) only its own: nothing of the VM's.
+agents_clean() { local u d; u=$(SSH_AUTH_SOCK=$ua_sock ssh-add -l 2>&1); d=$(SSH_AUTH_SOCK=$da_sock ssh-add -l 2>&1)
+  echo "yours: $u; devvm's: $d"; [[ $(grep -c . <<<"$u") -eq 1 ]] && grep -q e2e-smolvm-user <<<"$u" && ! grep -q e2e-from-vm <<<"$d"; }
+# smol_only VM COMMENT: the VM's agent lists that key alone.
+smol_only() { local k; k=$(smol_keys "$1"); echo "VM's agent: $k"; [[ $(grep -c . <<<"$k") -eq 1 ]] && grep -q "$2" <<<"$k"; }
+# smol_no_agent VM: the VM has smolvm's agent socket (made forwarding), which reaches no agent at all
+# (not an empty one): nothing answers, none added, root asking; your agent and devvm's are untouched.
+smol_no_agent() { local k a
+  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- test -S /tmp/ssh-agent.sock </dev/null || { echo "no agent socket in the VM"; return 1; }
+  k=$(smol_keys "$1"); echo "VM's agent: $k"
+  grep -qiE 'communication with agent failed|error connecting to agent|could not open a connection' <<<"$k" &&
+    ! grep -qiE 'no identities|SHA256:' <<<"$k" || return 1
+  a=$(smol_add "$1") && { echo "added: $a"; return 1; }
+  echo "adding: $a"; agents_clean; }
+# smol_switch DIR MODE CHECK...: devvm ssh-agent MODE, then devvm restart, from your shell; then CHECK.
+smol_switch() { (cd "$1" && as_ua "$D" ssh-agent "$2" </dev/null >"$work/last.log" 2>&1 &&
+  printf 'exit\n' | as_ua "$D" restart >>"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
+  shift 2; "$@"; }
+# smol_vm_adds VM: root in the VM adds a key of its own to the agent it's given, your agent here (the
+# add check's control); the key is taken out again.
+smol_vm_adds() { local pub
+  smol_add "$1" >/dev/null && SSH_AUTH_SOCK=$ua_sock ssh-add -l | grep -q e2e-from-vm || return 1
+  pub=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- cat /tmp/vmkey.pub </dev/null) && printf '%s\n' "$pub" > "$work/vmkey.pub" &&
+  SSH_AUTH_SOCK=$ua_sock ssh-add -d "$work/vmkey.pub" >/dev/null 2>&1; rm -f "$work/vmkey.pub"; agents_clean; }
+export -f smol_keys smol_add smol_only smol_no_agent agents_clean as_ua; export ua_sock da_sock
+
 g=$(newproj smolagent)
-user_agent_pid=$(ssh-agent -a "$work/smol-agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
-rm -f "$work/smol-key" "$work/smol-key.pub"; ssh-keygen -q -t ed25519 -N '' -C e2e-smolvm -f "$work/smol-key"
-SSH_AUTH_SOCK=$work/smol-agent.sock ssh-add -q "$work/smol-key" 2>/dev/null
-(cd "$g" && printf 'ssh-add -l\n' | SSH_AUTH_SOCK=$work/smol-agent.sock "$D" "${S[@]}" --no-network-policy --ports none --ssh-agent base >"$work/last.log" 2>&1)
+(cd "$g" && printf 'ssh-add -l\n' | as_ua DEVVM_MESSAGES=names "$D" "${S[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
 vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
-check "--ssh-agent: the VM uses the agent it was started with" bash -c "[[ -n '$vm' ]] && grep -q e2e-smolvm '$work/last.log'"
+check "a new VM is made ready to change it, unwarned, and recorded so" bash -c "[[ -n '$vm' ]] &&
+  ! grep -q 'backend_unreviewed' '$work/last.log' &&
+  grep -qx agent_toggle=on '$vms/$vm' && grep -qx ssh_agent=off '$vms/$vm'"
+check "off: started from your shell, with your agent, the VM reaches no agent, and can't add to one" smol_no_agent "$vm"
+check "devvm's own shell has no agent's keys either" bash -c "! grep -q 'e2e-smolvm' '$work/last.log'"
+check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
+  as_ua '$D' ssh-agent add '$work/smol-dkey' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=e2e-smolvm-devvm)\""
+check "ssh-agent devvm while it runs: nothing changes until its next start" bash -c "cd '$g' &&
+  as_ua DEVVM_MESSAGES=names '$D' ssh-agent devvm </dev/null >'$work/e' 2>&1 && grep -q 'agent_set_running mode=devvm vm=$vm\$' '$work/e'"
+check "  still no agent" smol_no_agent "$vm"
+check "devvm, after a restart: the VM uses devvm's key alone, never yours" smol_switch "$g" devvm smol_only "$vm" e2e-smolvm-devvm
+check "  with devvm's agent ended while it runs: no agent, never yours" bash -c "pkill -f '[s]sh-agent -a $da_sock';
+  for i in \$(seq 20); do [[ ! -S '$da_sock' ]] && break; sleep 0.25; done; smol_no_agent '$vm'"
+check "on, after a restart: your agent's key alone, never devvm's" smol_switch "$g" on smol_only "$vm" e2e-smolvm-user
+check "  root in the VM can add a key to it then (the add check's control)" smol_vm_adds "$vm"
+check "off while it runs, stopped, then started by devvm export (no launch, its record still forwarding yours): no agent" bash -c "cd '$g' &&
+  as_ua '$D' ssh-agent off </dev/null >/dev/null 2>&1 && as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
+  ! grep -q agent_off '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json' &&
+  { as_ua '$D' export '$work/smol-export.tar.gz' </dev/null >'$work/last.log' 2>&1; rm -f '$work/smol-export.tar.gz'; true; } &&
+  [[ \$(smol_status '$vm') == running ]] && smol_no_agent '$vm'"
+check "off, after a restart: no agent again, your agent and devvm's untouched" smol_switch "$g" off smol_no_agent "$vm"
+check "stopped, then smolvm machine start from your shell: the VM, set to off, gets your agent" bash -c "cd '$g' &&
+  as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
+  SSH_AUTH_SOCK='$ua_sock' SMOLVM_USAGE=0 smolvm machine start --name '$vm' </dev/null >/dev/null 2>&1 && smol_only '$vm' e2e-smolvm-user"
+check "  devvm export stops it, in one line, before anything runs in it" bash -c "cd '$g' &&
+  ! as_ua DEVVM_MESSAGES=names '$D' export '$work/smol-export.tar.gz' </dev/null 2>'$work/e' && ! test -e '$work/smol-export.tar.gz' &&
+  grep -qx 'devvm: agent_unchosen_stop vm=$vm' '$work/e' && [[ \$(smol_status '$vm') == stopped ]]"
+check "  so does devvm, started that way again; then devvm starts it with none" bash -c "cd '$g' &&
+  SSH_AUTH_SOCK='$ua_sock' SMOLVM_USAGE=0 smolvm machine start --name '$vm' </dev/null >/dev/null 2>&1 &&
+  ! as_ua DEVVM_MESSAGES=names '$D' </dev/null 2>'$work/e' && grep -qx 'devvm: agent_unchosen_stop vm=$vm' '$work/e' &&
+  [[ \$(smol_status '$vm') == stopped ]] && printf 'exit\n' | as_ua '$D' >/dev/null 2>&1 && smol_no_agent '$vm'"
+check "  devvm ssh on its own start keeps it running" bash -c "cd '$g' &&
+  as_ua DEVVM_MESSAGES=names '$D' ssh </dev/null >'$work/e' 2>&1 && ! grep -q agent_unchosen '$work/e' && [[ \$(smol_status '$vm') == running ]]"
+(cd "$g" && quiet as_ua "$D" rm -f)
+g=$(newproj smolfwd)
+(cd "$g" && printf 'ssh-add -l\n' | as_ua "$D" "${S[@]}" --no-network-policy --ports none --ssh-agent base >"$work/last.log" 2>&1)
+vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
+check "--ssh-agent: the VM uses the agent it was started with" bash -c "[[ -n '$vm' ]] && grep -q e2e-smolvm-user '$work/last.log'"
 check "with its ssh forward, even with no ports of its own, smolvm's own network is virtio-net: the gateway's resolver" smol_vnet "$vm"
-check "turning it off is refused" bash -c "cd '$g' && ! DEVVM_MESSAGES=names '$D' ssh-agent off </dev/null 2>'$work/e' &&
-  grep -qx 'devvm: backend_lacks backend=smolvm feature=agent-toggle vm=$vm' '$work/e'"
-(cd "$g" && quiet "$D" rm -f)
+check "turned off, after a restart: no agent" smol_switch "$g" off smol_no_agent "$vm"
+(cd "$g" && quiet as_ua "$D" rm -f)
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
-rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-agent.sock"
+pkill -f "[s]sh-agent -a $da_sock"
+rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-dkey" "$work/smol-dkey.pub" "$ua_sock" "$XDG_CONFIG_HOME/devvm/agent-keys"
 
 section "smolvm: ssh for editors"
 # The emulation's guarantee (reviewed): each VM's own host keys, pinned; the VM's own key the only
@@ -1396,7 +1479,8 @@ smolnet_fail_closed() {
   # The control: a decider that allows everything lets the same probe through to the listener.
   smolnet_fake_allow_seen "$1" || return 1
   SMOLVM_USAGE=0 smolvm machine stop --name "$1" >/dev/null 2>&1 &&
-  ! env -u SMOLVM_INTERCEPTOR_TOKEN SMOLVM_USAGE=0 smolvm machine start --name "$1" >"$work/e" 2>&1 && [[ $(smol_status "$1") != running ]]
+  ! env -u SMOLVM_INTERCEPTOR_TOKEN SSH_AUTH_SOCK=/dev/null/e2e-no-agent SMOLVM_USAGE=0 smolvm machine start --name "$1" >"$work/e" 2>&1 &&
+    [[ $(smol_status "$1") != running ]] && grep -qi interceptor "$work/e"
 }
 # smolnet_widened VM DIR: its allow list widened while it runs (smolvm machine update): devvm shows
 # it unenforced, and its next launch stops it; the one after starts it confined again.
@@ -1506,7 +1590,7 @@ check "its allow list widened while it runs: devvm shows it unenforced, stops it
 check "with its proxy gone nothing gets out (the host's loopback listener included), nor with a decider that answers garbage or nothing, while one that allows everything lets the probe through (the control); smolvm won't start it without a decider" \
   smolnet_fail_closed "$vm"
 check "started outside devvm, with a decider of someone else's: devvm stops it and opens nothing" bash -c "
-  SMOLVM_INTERCEPTOR_TOKEN=\$(openssl rand -hex 32) SMOLVM_USAGE=0 smolvm machine start --name '$vm' --mediated-egress --egress-interceptor 127.0.0.1:9 >/dev/null 2>&1 &&
+  SMOLVM_INTERCEPTOR_TOKEN=\$(openssl rand -hex 32) SSH_AUTH_SOCK=/dev/null/e2e-no-agent SMOLVM_USAGE=0 smolvm machine start --name '$vm' --mediated-egress --egress-interceptor 127.0.0.1:9 >/dev/null 2>&1 &&
   [[ \$(smol_status '$vm') == running ]] && cd '$np' &&
   ! printf 'echo e2e-opened\n' | ${U[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
   grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(smol_status '$vm') == stopped ]]"

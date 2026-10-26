@@ -204,6 +204,9 @@ func (e Launch) applyAgent(ctx context.Context, b backend.Backend, st *state.VM,
 	if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentToggle); err != nil {
 		return err
 	}
+	if want && in.AgentFixed {
+		return msg.AgentFixed(b.Name(), st.Name())
+	}
 	if in.Status == backend.StatusRunning {
 		e.Warn(msg.AgentNextStart(st.Name()))
 		return nil
@@ -213,7 +216,9 @@ func (e Launch) applyAgent(ctx context.Context, b backend.Backend, st *state.VM,
 
 // run starts the VM if it's stopped, confined as its state says, then
 // checks that its network policy holds (netpolicy.SelfCheck, which stops
-// it if not). It returns the confinement the VM runs with. A running VM's
+// it if not). A running VM that may forward an SSH agent devvm didn't
+// choose is stopped (checkAgentStart). It returns the confinement the VM
+// runs with. A running VM's
 // proxy is kept, unless it needs starting again (Prepare); one whose
 // network policy was turned off keeps it until it starts again.
 func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
@@ -273,6 +278,14 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 	}
 	if err := e.Proxy.SelfCheck(ctx, b, st, start); err != nil {
 		return conf, err
+	}
+	// One that was running, unless the self-check started it again, is
+	// checked for an agent devvm didn't choose; after network policy's
+	// check, which says more.
+	if in.Status == backend.StatusRunning {
+		if err := e.checkAgentStart(ctx, b, st); err != nil {
+			return conf, err
+		}
 	}
 	return started, nil
 }

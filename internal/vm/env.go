@@ -43,6 +43,9 @@ const (
 	KeyDisk     = "disk"           // GiB
 	KeyPorts    = "ports"          // which ports it forwards (ParsePorts); unset for all
 	KeyPortsSet = "ports_set"      // what its backend config forwards; unset for all
+	// KeyAgentToggle is set when its backend emulates turning its SSH agent
+	// forwarding on or off (made ready for it), which its starts rely on.
+	KeyAgentToggle = "agent_toggle"
 )
 
 // Env is what the commands on a folder's VM run with, shared by Launch,
@@ -295,12 +298,20 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 			return conf, e.Registry.Require(b, vm, f)
 		}
 	}
+	// So does one whose backend emulates turning its SSH agent forwarding
+	// on or off, made ready for it.
+	if st.Get(KeyAgentToggle) != "" && !e.Registry.Allowed(b, backend.FeatureAgentToggle) {
+		return conf, e.Registry.Require(b, vm, backend.FeatureAgentToggle)
+	}
 	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
 		return conf, err
 	}
 	// The VM's backend forwards the agent it gets when it starts: devvm's
-	// own, with the keys it lacks loaded, for a VM that uses it.
-	if sshagent.Mode(st) == sshagent.Devvm {
+	// own, with the keys it lacks loaded, for a VM that uses it; none for
+	// one that uses none.
+	mode := sshagent.Mode(st)
+	conf.NoAgent = !sshagent.Forwards(mode)
+	if mode == sshagent.Devvm {
 		if err := e.Agent.Ensure(ctx); err != nil {
 			return conf, err
 		}
@@ -314,7 +325,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 			return conf, err
 		}
 		// The proxy's confinement, with the agent chosen above.
-		p.AgentSocket = conf.AgentSocket
+		p.AgentSocket, p.NoAgent = conf.AgentSocket, conf.NoAgent
 		conf = p
 	}
 	// ssh for editors, where the backend has it (an emulation once it's
@@ -329,12 +340,36 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	return conf, nil
 }
 
-// ensureRunning starts the VM if it's stopped, confined as its state says.
+// checkAgentStart stops a running VM that may forward an SSH agent devvm
+// didn't choose for it, its backend says (one started outside devvm, on a
+// backend whose starts name the agent), unless it uses the user's anyway.
+// The stop isn't cancelled with ctx: an interrupt never leaves it running.
+func (e *Env) checkAgentStart(ctx context.Context, b backend.Backend, st *state.VM) error {
+	vm := st.Name()
+	if sshagent.Mode(st) == sshagent.On {
+		return nil
+	}
+	unchosen, err := backend.AgentUnchosen(ctx, b, vm)
+	if err != nil || !unchosen {
+		return err
+	}
+	if err := b.Stop(context.WithoutCancel(ctx), vm); err != nil {
+		return err
+	}
+	e.Proxy.Stop(vm)
+	return msg.AgentUnchosenStop(vm)
+}
+
+// ensureRunning starts the VM if it's stopped, confined as its state says;
+// a running one is checked for an agent devvm didn't choose.
 func (e *Env) ensureRunning(ctx context.Context, t *found) error {
 	vm, b := t.f.Name, t.b
 	in, err := b.Inspect(ctx, vm)
-	if err != nil || in.Status == backend.StatusRunning {
+	if err != nil {
 		return err
+	}
+	if in.Status == backend.StatusRunning {
+		return e.checkAgentStart(ctx, b, t.st)
 	}
 	conf := backend.Confinement{Net: backend.NetDirect}
 	if netpolicy.On(t.st) {

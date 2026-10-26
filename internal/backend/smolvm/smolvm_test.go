@@ -166,6 +166,7 @@ func TestCaps(t *testing.T) {
 			backend.FeatureEgressProxy: "emulated", // reviewed
 			backend.FeatureSSH:         "emulated", // reviewed
 			backend.FeaturePortsAll:    "emulated", // reviewed
+			backend.FeatureAgentToggle: "emulated", // reviewed
 		}[f]
 		if none == "" {
 			none = "none"
@@ -184,8 +185,8 @@ func TestCaps(t *testing.T) {
 	if err := r.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...); err != nil {
 		t.Errorf("every port: %v", err)
 	}
-	if got := names(r.Require(s, "devvm-x", backend.FeatureAgentToggle)); got != "backend_lacks backend=smolvm feature=agent-toggle vm=devvm-x" {
-		t.Errorf("agent toggle: %s", got)
+	if err := r.Require(s, "devvm-x", backend.FeatureAgentToggle); err != nil {
+		t.Errorf("agent toggle: %v", err)
 	}
 }
 
@@ -369,11 +370,160 @@ func TestStart(t *testing.T) {
 	if err := s.Stop(t.Context(), fw); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetAgentForwarding(t.Context(), fw, false); names(err) != "backend_lacks backend=smolvm feature=agent-toggle vm="+fw {
-		t.Errorf("toggle: %v", err)
+	// None chosen for this start alone (Confinement.NoAgent): no agent at
+	// all, whatever the user's or devvm's.
+	s.Getenv = func(string) string { return "/user.sock" }
+	if err := s.Start(t.Context(), fw, backend.Confinement{NoAgent: true, AgentSocket: "/a.sock"}); err != nil {
+		t.Fatal(err)
 	}
-	if err := s.SetAgentForwarding(t.Context(), fw, true); err != nil {
-		t.Errorf("unchanged: %v", err)
+	if got := s.startAgent(t, fw); got != noAgent {
+		t.Errorf("no agent: %q", got)
+	}
+	// A machine made without forwarding never gets the agent devvm has.
+	t.Setenv("SSH_AUTH_SOCK", "/devvm-has.sock")
+	if err := s.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.startAgent(t, vm); got != "unset" {
+		t.Errorf("made without: %q", got)
+	}
+}
+
+// startAgent stops vm, if it runs, and returns the agent its last start
+// was given: unset for none.
+func (s sandbox) startAgent(t *testing.T, vm string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(s.stub, "smolvm-agent-"+vm)) //nolint:gosec // the stub's file in the test's own folder
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// Turning forwarding on or off (agent-toggle, emulated): a machine made
+// ready for it (AgentToggle) forwards from the start, and each start gives
+// it the agent devvm's choice names, none when it's off; one made without
+// forwarding can't get it.
+func TestAgentToggle(t *testing.T) {
+	s := newSandbox(t)
+	s.image(t, "0123456789ab")
+	s.Getenv = func(k string) string {
+		if k == "SSH_AUTH_SOCK" {
+			return "/user.sock"
+		}
+		return ""
+	}
+	vm := "devvm-t-0123456789abcd"
+	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: vm, AgentToggle: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.calls(t); len(got) != 1 || !strings.HasSuffix(got[0], " --ssh-agent") {
+		t.Errorf("create: %q", got)
+	}
+	in, err := s.Inspect(t.Context(), vm)
+	if err != nil || in.AgentForwarding || in.AgentFixed {
+		t.Errorf("made off: %+v, %v", in, err)
+	}
+	steps := []struct {
+		on   bool
+		conf backend.Confinement
+		want string
+	}{
+		{false, backend.Confinement{NoAgent: true}, noAgent},
+		{true, backend.Confinement{}, "/user.sock"},
+		{true, backend.Confinement{AgentSocket: "/devvm.sock"}, "/devvm.sock"},
+		// Off in its record wins over a confinement that names an agent.
+		{false, backend.Confinement{AgentSocket: "/devvm.sock"}, noAgent},
+		{false, backend.Confinement{}, noAgent},
+	}
+	for i, st := range steps {
+		if err := s.SetAgentForwarding(t.Context(), vm, st.on); err != nil {
+			t.Fatalf("%d: %v", i, err)
+		}
+		if in, err := s.Inspect(t.Context(), vm); err != nil || in.AgentForwarding != st.on {
+			t.Errorf("%d: Inspect = %+v, %v", i, in, err)
+		}
+		if err := s.Start(t.Context(), vm, st.conf); err != nil {
+			t.Fatalf("%d: %v", i, err)
+		}
+		if got := s.startAgent(t, vm); got != st.want {
+			t.Errorf("%d: agent %q, want %q", i, got, st.want)
+		}
+	}
+	// On, with no agent of the user's: refused before anything changes.
+	if err := s.SetAgentForwarding(t.Context(), vm, true); err != nil {
+		t.Fatal(err)
+	}
+	s.Getenv = func(string) string { return "" }
+	s.reset(t)
+	if err := s.Start(t.Context(), vm, backend.Confinement{}); names(err) != "smolvm_no_agent vm="+vm || len(s.calls(t)) != 0 {
+		t.Errorf("no agent: %v, %q", err, s.calls(t))
+	}
+	// Running: changed only once it's stopped.
+	if err := s.Start(t.Context(), vm, backend.Confinement{NoAgent: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAgentForwarding(t.Context(), vm, false); names(err) != "vm_not_stopped vm="+vm {
+		t.Errorf("running: %v", err)
+	}
+	// Made without forwarding: off stays off, on is refused.
+	fixed := "devvm-x-0123456789abcd"
+	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: fixed}); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := s.Inspect(t.Context(), fixed); err != nil || in.AgentForwarding || !in.AgentFixed {
+		t.Errorf("made without: %+v, %v", in, err)
+	}
+	if err := s.SetAgentForwarding(t.Context(), fixed, false); err != nil {
+		t.Errorf("off: %v", err)
+	}
+	if err := s.SetAgentForwarding(t.Context(), fixed, true); names(err) != "agent_fixed backend=smolvm vm="+fixed {
+		t.Errorf("on: %v", err)
+	}
+	// Made forwarding (--ssh-agent): on.
+	fw := "devvm-f-0123456789abcd"
+	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: fw, AgentForwarding: true, AgentToggle: true}); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := s.Inspect(t.Context(), fw); err != nil || !in.AgentForwarding || in.AgentFixed {
+		t.Errorf("made on: %+v, %v", in, err)
+	}
+	// Started by Start: the agent devvm chose. Started some other way
+	// since (another lifeline): one it may not have chosen; stopped, none.
+	if err := s.Start(t.Context(), fw, backend.Confinement{NoAgent: true}); err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.AgentUnchosen(t.Context(), fw); u || err != nil {
+		t.Errorf("started by devvm: %v, %v", u, err)
+	}
+	other := []byte(strconv.Itoa(os.Getpid()) + "\n1")
+	if err := os.WriteFile(filepath.Join(s.stub, "smolvm-data", fw, "agent.pid"), other, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.AgentUnchosen(t.Context(), fw); !u || err != nil {
+		t.Errorf("started elsewhere: %v, %v", u, err)
+	}
+	if err := s.Stop(t.Context(), fw); err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.AgentUnchosen(t.Context(), fw); u || err != nil {
+		t.Errorf("stopped: %v, %v", u, err)
+	}
+	// Made without forwarding: no agent however it's started.
+	if err := s.Start(t.Context(), fixed, backend.Confinement{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.stub, "smolvm-data", fixed, "agent.pid"), other, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.AgentUnchosen(t.Context(), fixed); u || err != nil {
+		t.Errorf("made without: %v, %v", u, err)
 	}
 }
 

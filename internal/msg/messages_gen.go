@@ -64,6 +64,11 @@ func AgentDirsRemoved(dirs string, vm string) M {
 	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
 }
 
+// AgentFixed is [agent_fixed]: "{{.vm}} was made without SSH agent forwarding, which {{.backend}} can't add later: devvm rm, then devvm --ssh-agent"
+func AgentFixed(backend string, vm string) M {
+	return M{id: "agent_fixed", vals: []val{{"backend", backend}, {"vm", vm}}}
+}
+
 // AgentHolds is [agent_holds]: "devvm's SSH agent holds: {{.keys}}"
 func AgentHolds(keys string) M {
 	return M{id: "agent_holds", vals: []val{{"keys", keys}}}
@@ -142,6 +147,11 @@ func AgentSetStopped(mode string, vm string) M {
 // AgentStartFailed is [agent_start_failed]: "couldn't start devvm's SSH agent at {{.sock}}"
 func AgentStartFailed(sock string) M {
 	return M{id: "agent_start_failed", vals: []val{{"sock", sock}}}
+}
+
+// AgentUnchosenStop is [agent_unchosen_stop]: "{{.vm}} wasn't started by devvm, so it may forward an SSH agent you didn't choose: devvm stopped it; devvm starts it again"
+func AgentUnchosenStop(vm string) M {
+	return M{id: "agent_unchosen_stop", vals: []val{{"vm", vm}}}
 }
 
 // AlreadyStopped is [already_stopped]: "{{.vm}} is already stopped"
@@ -2018,6 +2028,7 @@ var specs = map[string]spec{
 	"agent_dir_comma":             {fields: []string{"path"}},
 	"agent_dirs_added":            {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":          {fields: []string{"dirs", "vm"}},
+	"agent_fixed":                 {fields: []string{"backend", "vm"}},
 	"agent_holds":                 {fields: []string{"keys"}},
 	"agent_holds_note":            {},
 	"agent_key_changed":           {fields: []string{"key"}},
@@ -2034,6 +2045,7 @@ var specs = map[string]spec{
 	"agent_set_running":           {fields: []string{"mode", "vm"}},
 	"agent_set_stopped":           {fields: []string{"mode", "vm"}},
 	"agent_start_failed":          {fields: []string{"sock"}},
+	"agent_unchosen_stop":         {fields: []string{"vm"}},
 	"already_stopped":             {fields: []string{"vm"}},
 	"backend_experimental":        {},
 	"backend_flag_ignored":        {fields: []string{"backend", "vm"}},

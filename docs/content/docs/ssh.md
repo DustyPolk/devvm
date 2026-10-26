@@ -41,7 +41,7 @@ The VM can change that file back. For a VM you don't trust, set the three in you
 
 SSH agent forwarding is off by default. While it's on and you're connected, anything in the VM, coding agents included, can *use* the agent's keys, to push or to log in to servers, say. It can't copy them. Turn it on for one VM when you need git over SSH there.
 
-- `devvm --ssh-agent` creates the VM forwarding your agent. `devvm ssh-agent on`, `devvm` or `off` changes it for an existing VM from its next start (`devvm restart` for a running one); `devvm ssh-agent` shows it.
+- `devvm --ssh-agent` creates the VM forwarding your agent. `devvm ssh-agent on`, `devvm` or `off` changes it for an existing VM from its next start (`devvm restart` for a running one); `devvm ssh-agent` shows it. On smolvm, changing it is emulated, and reviewed; there the VM has the agent while it runs, not only while you're connected ([smolvm](smolvm.md#ssh-agent-forwarding)).
 - It applies to devvm's shells and to these entries alike. Off, an entry says `ForwardAgent no`, whatever your own `Host *` settings say, and none of devvm's own connections to the VM carry your agent.
 - With it off, git over SSH in the VM fails. devvm says so when it creates a VM for a repo whose `origin` is an SSH URL. Use an HTTPS remote with a token instead, or turn forwarding on.
 - **No keys loaded:** when a VM forwards your agent, it has no keys and `~/.ssh` has one, devvm offers to load it (`ssh-add --apple-use-keychain` on macOS). To keep it loaded across reboots, add `AddKeysToAgent yes` (and `UseKeychain yes` on macOS) under `Host *` in `~/.ssh/config`.

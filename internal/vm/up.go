@@ -149,6 +149,11 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := b.CreateVM(ctx, chain.Key(), n.spec); err != nil {
 		return err
 	}
+	if n.spec.AgentToggle && b.Caps()[backend.FeatureAgentToggle].IsEmulated() {
+		if err := st.Set(KeyAgentToggle, "on"); err != nil {
+			return err
+		}
+	}
 	if n.ports != "" && n.ports != PortsAll {
 		for _, k := range []string{KeyPorts, KeyPortsSet} {
 			if err := st.Set(k, n.ports); err != nil {
@@ -253,6 +258,9 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err := e.Registry.Require(b, vm, need...); err != nil {
 		return newVM{}, err
 	}
+	// Ready for devvm ssh-agent to change later, where it may be changed
+	// (an emulation once it's reviewed); otherwise fixed when it's made.
+	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
 	return n, nil
 }
 

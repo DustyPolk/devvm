@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,9 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	}
 	env.Setenv("DEVVM_KVM", kvm)
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
+	// The stub smolvm's machines run on this process, which outlives each
+	// command, as smolvm's own does.
+	env.Setenv("SMOLVM_STUB_PID", strconv.Itoa(os.Getpid()))
 	// The shared tools' versions: the stub mise, which resolves the
 	// fixture lock.
 	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))

@@ -40,7 +40,8 @@ func (logRunner) Output(cmd *exec.Cmd) ([]byte, error) { return cmd.Output() }
 func (logRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 
 // smolvm returns a smolvm command: its usage journal off, never the
-// machine SMOLVM_MACHINE_NAME names (devvm always names one), in devvm's
+// machine SMOLVM_MACHINE_NAME names (devvm always names one), never the
+// SSH agent devvm has (Start names the one a machine gets), in devvm's
 // data folder. On Linux it keeps its state in devvm's own folder; on
 // macOS, where it can't, devvm's machines share the user's smolvm and are
 // told apart by their label.
@@ -49,7 +50,7 @@ func (s *Smolvm) smolvm(ctx context.Context, args ...string) *exec.Cmd {
 		args = slices.Concat(args[:2], []string{"--state-dir", s.stateDir()}, args[2:])
 	}
 	cmd := exec.CommandContext(ctx, "smolvm", args...) //nolint:gosec // devvm's own arguments
-	cmd.Env = setEnv(os.Environ(), "SMOLVM_USAGE=0", "SMOLVM_MACHINE_NAME")
+	cmd.Env = setEnv(os.Environ(), "SMOLVM_USAGE=0", "SMOLVM_MACHINE_NAME", "SSH_AUTH_SOCK")
 	cmd.Dir = s.Dirs.Data
 	if err := os.MkdirAll(s.Dirs.Data, 0o700); err != nil && cmd.Err == nil {
 		cmd.Err = err // the command then fails with it

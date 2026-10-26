@@ -51,9 +51,9 @@ const (
 // devvm's proxy alone, through its decider (c.Decider), with the proxy's
 // address in HTTP_PROXY and HTTPS_PROXY (and lowercase), which devvm's
 // execs get from the machine's proxy file (proxyFile), so the password is
-// in no process's arguments. A machine that
-// forwards an SSH agent forwards c.AgentSocket, or the user's
-// (SSH_AUTH_SOCK). With c.SSH its ssh is forwarded (sshForward) and
+// in no process's arguments. A machine made forwarding an SSH agent
+// forwards the one agentSocket chooses: none, c.AgentSocket, or the
+// user's (SSH_AUTH_SOCK). With c.SSH its ssh is forwarded (sshForward) and
 // services.sh runs its sshd; without, the forward goes. A VM that
 // forwards every port gets its forwarder once its sshd runs (forward).
 func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) error {
@@ -73,6 +73,12 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	r, err := s.readRecord(vm)
 	if err != nil {
 		return err
+	}
+	agent := ""
+	if r.Forwarding {
+		if agent, err = agentSocket(vm, r, c, s.Getenv); err != nil {
+			return err
+		}
 	}
 	var opts []string
 	if proxy {
@@ -149,7 +155,7 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	}
 	// Recorded before the start: a start that fails leaves it unconfined,
 	// and without ssh until services.sh ran its sshd.
-	r.Mediated, r.Confined = r.Mediated || proxy, ""
+	r.Mediated, r.Confined, r.Started = r.Mediated || proxy, "", ""
 	r.SSHUp, r.NoSSHD = false, false
 	if err := s.writeRecord(vm, r); err != nil {
 		return err
@@ -165,28 +171,23 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	} else {
 		cmd.Env = setEnv(cmd.Env, "SMOLVM_INTERCEPTOR_TOKEN")
 	}
-	if r.Forwarding {
-		sock := c.AgentSocket
-		if sock == "" {
-			sock = s.Getenv("SSH_AUTH_SOCK")
-		}
-		if sock == "" {
-			return msg.SmolvmNoAgent(vm)
-		}
-		cmd.Env = setEnv(cmd.Env, "SSH_AUTH_SOCK="+sock)
-	} else {
-		cmd.Env = setEnv(cmd.Env, "SSH_AUTH_SOCK")
+	// The agent it forwards (agentSocket), read at this start alone; one
+	// made without forwarding gets none (smolvm's commands never pass on
+	// devvm's own SSH_AUTH_SOCK).
+	if agent != "" {
+		cmd.Env = setEnv(cmd.Env, "SSH_AUTH_SOCK="+agent)
 	}
 	if err := s.Runner.Run(ctx, msg.Starting(vm), cmd); err != nil {
 		return backend.Logged(msg.StartFailed(vm))
 	}
+	if r.Started, err = s.lifeline(ctx, vm); err != nil {
+		return err
+	}
 	if proxy {
-		if r.Confined, err = s.lifeline(ctx, vm); err != nil {
-			return err
-		}
-		if err := s.writeRecord(vm, r); err != nil {
-			return err
-		}
+		r.Confined = r.Started
+	}
+	if err := s.writeRecord(vm, r); err != nil {
+		return err
 	}
 	noSSHD := false
 	if sshd != nil {
@@ -353,15 +354,18 @@ func (s *Smolvm) Confined(ctx context.Context, vm string) (bool, error) {
 		return false, nil
 	}
 	cur, err := s.lifeline(ctx, vm)
-	if err != nil || cur != r.Confined {
-		return false, err
+	return err == nil && runsOn(cur, r.Confined), err
+}
+
+// runsOn reports whether a machine whose lifeline holds cur runs on the
+// process recorded as want: the same, and that process runs.
+func runsOn(cur, want string) bool {
+	if want == "" || cur != want {
+		return false
 	}
 	first, _, _ := strings.Cut(cur, "\n")
 	pid, err := strconv.Atoi(first)
-	if err != nil || pid <= 0 {
-		return false, nil //nolint:nilerr // an unreadable pid is no process of devvm's start
-	}
-	return alive(pid), nil
+	return err == nil && pid > 0 && alive(pid)
 }
 
 // lifeline returns what the machine's lifeline holds (its pid and start

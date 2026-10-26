@@ -10,8 +10,8 @@
 //
 // Network policy is emulated, reviewed (start.go); ssh for editors is
 // emulated, reviewed (ssh.go); forwarding every port is emulated,
-// reviewed (forward.go). What smolvm lacks is refused (Caps): turning
-// agent forwarding on or off later.
+// reviewed (forward.go); turning agent forwarding on or off later is
+// emulated, reviewed (agent.go).
 package smolvm
 
 import (
@@ -152,11 +152,12 @@ func (s *Smolvm) Name() string { return Name }
 // each connection), ssh for editors emulated and reviewed (an sshd of
 // devvm's, ssh.go), and every port forwarded emulated and reviewed (a
 // forwarder of devvm's over that ssh, forward.go). Agent forwarding
-// turned on or off once a VM is made waits for an emulation.
+// turned on or off once a VM is made is emulated and reviewed (every VM
+// made forwarding, an agent chosen at each start, agent.go).
 func (s *Smolvm) Caps() backend.Caps {
 	caps := backend.Caps{
 		backend.FeatureEgressProxy: backend.Emulated(true), backend.FeatureSSH: backend.Emulated(true),
-		backend.FeaturePortsAll: backend.Emulated(true),
+		backend.FeaturePortsAll: backend.Emulated(true), backend.FeatureAgentToggle: backend.Emulated(true),
 	}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
@@ -200,12 +201,16 @@ func (s *Smolvm) ToolFormat() string {
 // record is what devvm set on one of its machines, which smolvm machine ls
 // doesn't show: kept in devvm's data folder (paths.Dirs.SmolvmVM).
 type record struct {
-	Image      string   `json:"image"` // its image's key
-	Project    string   `json:"project,omitempty"`
-	AgentDirs  []string `json:"agent_dirs,omitempty"`
-	Tools      string   `json:"tools,omitempty"`
-	ToolsAt    string   `json:"tools_at,omitempty"`
+	Image     string   `json:"image"` // its image's key
+	Project   string   `json:"project,omitempty"`
+	AgentDirs []string `json:"agent_dirs,omitempty"`
+	Tools     string   `json:"tools,omitempty"`
+	ToolsAt   string   `json:"tools_at,omitempty"`
+	// Forwarding is set when the machine was made forwarding an SSH
+	// agent (--ssh-agent), which smolvm fixes then; AgentOff when devvm's
+	// choice for it is none, so each start gives it no agent (agent.go).
 	Forwarding bool     `json:"forwarding,omitempty"`
+	AgentOff   bool     `json:"agent_off,omitempty"`
 	Ports      []string `json:"ports,omitempty"` // as -p has them: 5173:5173, 8000-8002:8000-8002
 	// PortsAll is set when it forwards every port: through its forwarder
 	// (forward.go), with none of smolvm's.
@@ -217,6 +222,9 @@ type record struct {
 	// Confined is the lifeline (agent.pid: its pid and start time) of the
 	// machine's last start through devvm's decider; "" after any other.
 	Confined string `json:"confined,omitempty"`
+	// Started is the lifeline of the machine's last start by Start, with
+	// the agent devvm chose (agent.go); "" while a start is under way.
+	Started string `json:"started,omitempty"`
 	// SSHPort is the host loopback port its sshd is forwarded from, set
 	// while it's started with it (Confinement.SSH); 0 otherwise.
 	SSHPort int `json:"ssh_port,omitempty"`
@@ -344,7 +352,7 @@ func (s *Smolvm) instance(m machine) (backend.Instance, error) {
 	}
 	return backend.Instance{
 		Name: m.Name, Status: m.status(), Size: m.size(),
-		AgentDirs: slices.Clone(r.AgentDirs), AgentForwarding: r.Forwarding,
+		AgentDirs: slices.Clone(r.AgentDirs), AgentForwarding: r.Forwarding && !r.AgentOff, AgentFixed: !r.Forwarding,
 	}, nil
 }
 
@@ -591,19 +599,6 @@ func (s *Smolvm) SetAgentDirs(ctx context.Context, vm string, dirs []string) err
 	}
 	r.AgentDirs = slices.Clone(dirs)
 	return s.writeRecord(vm, r)
-}
-
-// SetAgentForwarding is refused unless it's already as asked: smolvm sets
-// forwarding when a machine is made (agent-toggle).
-func (s *Smolvm) SetAgentForwarding(ctx context.Context, vm string, on bool) error {
-	_, r, err := s.stopped(ctx, vm)
-	if err != nil {
-		return err
-	}
-	if r.Forwarding == on {
-		return nil
-	}
-	return msg.BackendLacks(Name, string(backend.FeatureAgentToggle), vm)
 }
 
 // ProxyURL is devvm's proxy as a machine reaches it, at the gateway; ""

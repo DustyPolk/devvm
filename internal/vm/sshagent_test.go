@@ -66,8 +66,21 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 	if start < 0 {
 		t.Fatalf("%s didn't start: %v", vm, calls)
 	}
-	if c, _ := calls[start].Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != e.Agent.Socket() || c.ProxyPassword == "" {
+	if c, _ := calls[start].Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != e.Agent.Socket() || c.ProxyPassword == "" || c.NoAgent {
 		t.Errorf("started with %+v, want the proxy and agent %q", c, e.Agent.Socket())
+	}
+	// Off: the proxy's confinement says no agent too.
+	if err := st.Set(sshagent.Key, sshagent.Off); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != "" || !c.NoAgent {
+		t.Errorf("off: started with %+v", c)
 	}
 }
 
@@ -183,6 +196,143 @@ func TestSetSSHAgent(t *testing.T) {
 	}
 	if sshagent.Mode(st) != sshagent.Off {
 		t.Errorf("mode = %s", sshagent.Mode(st))
+	}
+}
+
+// A backend that emulates turning forwarding on or off (agent-toggle):
+// a new VM is made ready for it only while it's let through (warned when
+// unreviewed), and its state says so; each start says whether the VM gets
+// no agent; once it isn't let through, that VM no longer starts. A VM made
+// without forwarding where it's fixed can't have it turned on.
+func TestAgentToggleEmulated(t *testing.T) {
+	caps := allNative()
+	caps[backend.FeatureAgentToggle] = backend.Emulated(false)
+	e, f, _ := upEnv(t, caps)
+	var warned []string
+	e.Registry.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	vm := st.Name()
+	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); !spec.AgentToggle || spec.AgentForwarding {
+		t.Errorf("spec = %+v", spec)
+	}
+	if !slices.Contains(warned, "backend_unreviewed_used backend=fake feature=agent-toggle vm="+vm) || st.Get(KeyAgentToggle) != "on" {
+		t.Errorf("warned %q, state %q", warned, st.Get(KeyAgentToggle))
+	}
+	if c, _ := call(f, "Start").Args[1].(backend.Confinement); !c.NoAgent || c.AgentSocket != "" {
+		t.Errorf("off: started with %+v", c)
+	}
+	// devvm's own, from its next start.
+	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.NoAgent || c.AgentSocket != e.Agent.Socket() || !f.Instances[vm].AgentForwarding {
+		t.Errorf("devvm: started with %+v", c)
+	}
+	// No longer let through: it doesn't start.
+	e.Registry.Unreviewed = nil
+	if err := f.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); names(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+vm {
+		t.Errorf("refused: %s", names(err))
+	}
+	// Made without forwarding, where that's fixed: on is refused.
+	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
+	in := f.Instances[vm]
+	in.AgentForwarding, in.AgentFixed = false, true
+	f.Instances[vm] = in
+	if err := st.Set(sshagent.Key, sshagent.Off); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); names(err) != "agent_fixed backend=fake vm="+vm {
+		t.Errorf("fixed, devvm ssh-agent on: %s", names(err))
+	}
+	if err := st.Set(sshagent.Key, sshagent.On); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); names(err) != "agent_fixed backend=fake vm="+vm {
+		t.Errorf("fixed, launched on: %s", names(err))
+	}
+}
+
+// starterFake is a backend whose starts name the VM's agent
+// (backend.AgentStarter): unchosen is AgentUnchosen's answer.
+type starterFake struct {
+	*backendtest.Fake
+	unchosen bool
+}
+
+func (s *starterFake) AgentUnchosen(context.Context, string) (bool, error) { return s.unchosen, nil }
+
+// A running VM that may forward an agent devvm didn't choose (started
+// outside devvm) is stopped by a launch and an export's start, unless it
+// uses the user's agent anyway; on other backends nothing is asked.
+func TestAgentUnchosen(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	vm := st.Name()
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatalf("not an AgentStarter: %s", names(err))
+	}
+	w := &starterFake{Fake: f, unchosen: true}
+	reg, err := backend.NewRegistry(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Registry = reg
+	stopped := func() bool { return f.Instances[vm].Status != backend.StatusRunning }
+	for _, mode := range []string{sshagent.Off, sshagent.Devvm} {
+		if err := st.Set(sshagent.Key, mode); err != nil {
+			t.Fatal(err)
+		}
+		e.Agent.Run = (&agentCalls{}).run
+		if err := (Launch{e}).Up(t.Context(), Options{}); names(err) != "agent_unchosen_stop vm="+vm || !stopped() {
+			t.Errorf("%s: launch %s, stopped %v", mode, names(err), stopped())
+		}
+		// Started by devvm again: chosen.
+		w.unchosen = false
+		if err := (Launch{e}).Up(t.Context(), Options{}); err != nil || stopped() {
+			t.Fatalf("%s: relaunch %s", mode, names(err))
+		}
+		w.unchosen = true
+	}
+	// An export's start (ensureRunning) checks a running VM too.
+	fd, err := e.folderVM(t.Context(), msg.NoVM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ensureRunning(t.Context(), fd); names(err) != "agent_unchosen_stop vm="+vm || !stopped() {
+		t.Errorf("export: %s, stopped %v", names(err), stopped())
+	}
+	// The user's agent: nothing to keep from it.
+	w.unchosen = false
+	if err := st.Set(sshagent.Key, sshagent.On); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	w.unchosen = true
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil || stopped() {
+		t.Errorf("on: %s, stopped %v", names(err), stopped())
+	}
+}
+
+// Without agent-toggle let through, a new VM isn't made ready for it.
+func TestAgentToggleRefused(t *testing.T) {
+	caps := allNative()
+	caps[backend.FeatureAgentToggle] = backend.Emulated(false)
+	e, f, _ := upEnv(t, caps)
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.AgentToggle || st.Get(KeyAgentToggle) != "" {
+		t.Errorf("spec = %+v, state %q", spec, st.Get(KeyAgentToggle))
+	}
+	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); names(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+st.Name() {
+		t.Errorf("devvm ssh-agent on: %s", names(err))
 	}
 }
 
