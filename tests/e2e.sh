@@ -1346,12 +1346,23 @@ smolnet_direct_open() {
 # smolnet_fake_decider MODE: a decider of nobody's on the VM's decider port, which answers garbage
 # (garbage), closes without a verdict (silent), allows every connection direct (allow: verdict 0),
 # or takes every one over and answers it itself, 418 (take: verdict 2, the fail-closed probes'
-# positive control); its pid in $fake.
+# positive control); its pid in $fake. It fails, naming the port, unless it listens within 10 s.
 smolnet_fake_decider() {
-  perl -MIO::Socket::INET -e '$m = shift; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:" . shift, Listen => 16, ReuseAddr => 1) or die;
+  perl -MIO::Socket::INET -e '$m = shift; $p = shift; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:$p", Listen => 16, ReuseAddr => 1) or die "$@\n";
     while ($c = $s->accept) { sysread($c, $b, 4096); print $c "\x07garbage" if $m eq "garbage"; print $c "\x00" if $m eq "allow";
-      print $c "\x02HTTP/1.1 418 squatter\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" if $m eq "take"; close $c }' "$1" "$dp" >/dev/null 2>&1 &
-  fake=$!; sleep 0.5; }
+      print $c "\x02HTTP/1.1 418 squatter\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" if $m eq "take"; close $c }' "$1" "$dp" >/dev/null 2>"$work/fake.log" &
+  fake=$!
+  for _ in $(seq 20); do
+    lsof -t -a -p "$fake" -iTCP:"$dp" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+    kill -0 "$fake" 2>/dev/null || break
+    sleep 0.5
+  done
+  echo "the fake decider ($1) isn't listening on 127.0.0.1:$dp: $(cat "$work/fake.log")"
+  kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""; return 1; }
+# smolnet_port_free PORT: nothing listens on PORT within 10 s, else it fails naming it.
+smolnet_port_free() {
+  for _ in $(seq 20); do lsof -t -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 || return 0; sleep 0.5; done
+  echo "port $1 is still listened on: $(lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>&1)"; return 1; }
 # smolnet_nothing_out VM: nothing gets out: not through the proxy, not directly, not to the host's
 # loopback listener through the gateway (which answers 407).
 smolnet_nothing_out() {
@@ -1365,10 +1376,10 @@ smolnet_nothing_out() {
 # a fail-open when there is one (its positive control).
 smolnet_fake_allow_seen() {
   local allow take
-  smolnet_fake_decider allow
+  smolnet_fake_decider allow || return 1
   allow=$(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/")
   kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
-  smolnet_fake_decider take
+  smolnet_fake_decider take || return 1
   take=$(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/")
   kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
   [[ $allow != 407 && $take == 418 ]] || { echo "with a decider that allows: $allow (want no 407), that takes over: $take (want 418)"; return 1; }
@@ -1377,10 +1388,10 @@ smolnet_fake_allow_seen() {
 # garbage or nothing; and smolvm won't start it without a decider.
 smolnet_fail_closed() {
   local pid m
-  pid=$(smolnet_proxy "$1") && [[ -n $pid ]] && kill "$pid" && sleep 1 || return 1
+  pid=$(smolnet_proxy "$1") && [[ -n $pid ]] && kill "$pid" && smolnet_port_free "$dp" || return 1
   if smolnet_proxy "$1" >/dev/null || ! smolnet_nothing_out "$1"; then echo "with the proxy gone"; return 1; fi
   for m in garbage silent; do
-    smolnet_fake_decider "$m"
+    smolnet_fake_decider "$m" || return 1
     smolnet_nothing_out "$1"; local rc=$?
     kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
     (( rc == 0 )) || { echo "with a decider that answers $m"; return 1; }
