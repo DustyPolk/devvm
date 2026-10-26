@@ -20,6 +20,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
 )
 
 // ports.sh's report as the forwarder reads it: each port to the address
@@ -149,7 +150,7 @@ func TestForwarder(t *testing.T) {
 			_, _ = fmt.Fprintf(conn, "to %s\n", net.JoinHostPort(h, strconv.Itoa(p)))
 			_ = conn.Close()
 		},
-		Listen: listenLoopback,
+		Listen: platform.ListenLoopback,
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -235,7 +236,7 @@ func TestForwarderGap(t *testing.T) {
 			applied = append(applied, time.Now())
 			return nil, nil
 		},
-		Watch: vm.watch, Listen: listenLoopback,
+		Watch: vm.watch, Listen: platform.ListenLoopback,
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -299,32 +300,12 @@ func TestForwarderReservedUnknown(t *testing.T) {
 	f := &Forwarder{
 		VM: "devvm-f", Log: &log, ports: map[int]*forward{}, skipped: map[int]bool{},
 		Reserved: func() (map[int]bool, error) { return nil, errors.New("unreadable") },
-		Listen:   listenLoopback,
+		Listen:   platform.ListenLoopback,
 	}
 	f.apply(t.Context(), map[int]string{p: "127.0.0.1"})
 	if len(f.ports) != 0 || !strings.Contains(log.String(), "no new ports forwarded") {
 		t.Errorf("forwarded %v; log %q", f.ports, log.String())
 	}
-}
-
-// A port the host has on any address is refused; one that's free, or held
-// only by ended connections, is taken.
-func TestListenLoopback(t *testing.T) {
-	p := freePorts(t, 1)[0]
-	wild, err := net.Listen("tcp4", "0.0.0.0:"+strconv.Itoa(p)) //nolint:noctx // the test's
-	if err != nil {
-		t.Fatal(err)
-	}
-	if l, err := listenLoopback(t.Context(), "127.0.0.1:"+strconv.Itoa(p)); err == nil {
-		_ = l.Close()
-		t.Error("took a port the host has on every address")
-	}
-	_ = wild.Close()
-	l, err := listenLoopback(t.Context(), "127.0.0.1:"+strconv.Itoa(p))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = l.Close()
 }
 
 // The master asks for nothing to be forwarded, reads no configuration of

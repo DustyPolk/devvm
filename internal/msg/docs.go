@@ -90,6 +90,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"port_invalid":                "commands#size-and-ports",
 	"ports_list_needed":           "images#ports",
 	"ports_rm_all":                "images#ports",
+	"ports_taken":                 "images#ports",
 	"no_image_for":                "images#which-image-a-new-vm-gets",
 	"net_direct_route":            "network#the-self-check",
 	"net_unenforced_stop":         "network#the-self-check",

@@ -266,3 +266,59 @@ func PortsBackend(v string) backend.Ports {
 	}
 	return p
 }
+
+// startPorts returns the listed ports a stopped VM forwards from this
+// start (its backend's, KeyPortsSet), less those a program on the host
+// has on any address, which a forward would share, taking that program's
+// loopback connections: they're left out, warned, until a start finds
+// them free. nil for every port or none.
+func (e *Env) startPorts(ctx context.Context, st *state.VM) *backend.Ports {
+	v := orAll(st.Get(KeyPortsSet))
+	if v == PortsAll || v == PortsNone {
+		return nil
+	}
+	free, taken := splitPorts(PortsBackend(v).Ranges, func(p int) bool { return e.PortInUse(ctx, p) })
+	if len(taken) > 0 {
+		n := 0
+		for _, r := range taken {
+			n += r.To - r.From + 1
+		}
+		e.Warn(msg.PortsTaken(n, portsValue(taken), st.Name()))
+	}
+	return &backend.Ports{Ranges: free}
+}
+
+// splitPorts splits ranges into the ports inUse says are free and those it
+// says aren't, each as ranges: a range wholly free stays as it is.
+func splitPorts(rs []backend.PortRange, inUse func(int) bool) (free, taken []backend.PortRange) {
+	add := func(out []backend.PortRange, from, p int) []backend.PortRange {
+		if n := len(out); n > 0 && out[n-1].From >= from && out[n-1].To == p-1 {
+			out[n-1].To = p
+			return out
+		}
+		return append(out, backend.PortRange{From: p, To: p})
+	}
+	for _, r := range rs {
+		for p := r.From; p <= r.To; p++ {
+			if inUse(p) {
+				taken = add(taken, r.From, p)
+			} else {
+				free = add(free, r.From, p)
+			}
+		}
+	}
+	return free, taken
+}
+
+// portsValue is ranges as a ports value lists them (5173,8000-8010).
+func portsValue(rs []backend.PortRange) string {
+	var es []string
+	for _, r := range rs {
+		e := strconv.Itoa(r.From)
+		if r.To != r.From {
+			e += "-" + strconv.Itoa(r.To)
+		}
+		es = append(es, e)
+	}
+	return strings.Join(es, ",")
+}

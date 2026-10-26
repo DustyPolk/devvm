@@ -17,6 +17,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -59,7 +60,7 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 	sshPort := c.SSHPort
 	if sshPort == 0 && l.OS == "darwin" && c.Net != backend.NetDirect {
 		// The profile names the port, so Lima can't pick it.
-		if sshPort, err = freePort(); err != nil {
+		if sshPort, err = freePort(ctx); err != nil {
 			return err
 		}
 	}
@@ -232,10 +233,15 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts 
 	case !noDNS && len(cfg.DNS) > 0:
 		sets = append(sets, "del(.dns)")
 	}
-	if c.Net == backend.NetInternet || c.Net == backend.NetNone {
+	switch {
+	case c.Net == backend.NetInternet || c.Net == backend.NetNone:
 		// The build's code can't take a port on host loopback that a host
 		// program trusts.
 		sets = append(sets, portsSet(backend.Ports{}))
+	case c.Ports != nil && !forwardsPorts(cfg.PortForwards, *c.Ports):
+		// The listed ports this start forwards: not those a host program
+		// has, which Lima's forwards would share (SO_REUSEADDR).
+		sets = append(sets, portsSet(*c.Ports))
 	}
 	for _, s := range sets {
 		opts = append(opts, "--set", s)
@@ -296,14 +302,21 @@ func (l *Lima) proxyURL(c backend.Confinement) string {
 	return u.String()
 }
 
-// freePort returns a loopback port nothing listens on now.
-func freePort() (int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // a moment's listen
-	if err != nil {
-		return 0, err
+// freePort returns a loopback port nothing listens on now, on any address
+// (platform.PortFree).
+func freePort(ctx context.Context) (int, error) {
+	for range 20 {
+		ln, err := platform.ListenLoopback(ctx, "127.0.0.1:0")
+		if err != nil {
+			return 0, err
+		}
+		port := ln.Addr().(*net.TCPAddr).Port
+		_ = ln.Close()
+		if platform.PortFree(ctx, port) {
+			return port, nil
+		}
 	}
-	defer func() { _ = ln.Close() }()
-	return ln.Addr().(*net.TCPAddr).Port, nil
+	return 0, errors.New("lima: no free port on the host's loopback")
 }
 
 // recordStart notes the hostagent Lima started for the VM, which a

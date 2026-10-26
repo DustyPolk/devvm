@@ -5,7 +5,8 @@
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder and checks its mounts, ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
-#                again, restart, devvm size, devvm ports, devvm git-protect and rm, an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
+#                again, restart, devvm size, devvm ports (never a listed port a program here has),
+#                devvm git-protect and rm, an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
@@ -23,7 +24,8 @@
 #                between runs)
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
-#                packs, a project VM's mounts, size, ports, Docker and agent forwarding, a node VM's
+#                packs, a project VM's mounts, size, ports (never one a program here has), Docker and
+#                agent forwarding, a node VM's
 #                shared tools, agent toggling's emulation (your agent, devvm's or none from each
 #                start, devvm export's too, none reaching no agent and adding to none, a VM set to
 #                devvm's or none never reaching yours, one started by smolvm machine start from your
@@ -223,6 +225,32 @@ launch() {
   vm=$(vm_of "$d"); [[ -z $vm ]] || created+=("$vm")
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
+# host_port_kept DIR VM PORT CONTROL SERVE: a program on this machine has PORT, which VM lists, on
+# every address (no SO_REUSEADDR): the VM's next start leaves it out, warned, and with servers in the
+# VM on PORT and CONTROL (SERVE VM PORTS...), PORT's localhost connections still reach the program
+# and CONTROL's the VM. Once the program is gone, the next start forwards PORT again.
+host_port_kept() { local hp out r=1
+  (cd "$1" && "$D" stop </dev/null >/dev/null 2>&1) || { echo "stop failed"; return 1; }
+  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5) or die;
+    while ($c = $s->accept) { print $c "host-program\n"; close $c }' "$3" &
+  hp=$!; sleep 0.5
+  (cd "$1" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1)
+  if grep -qx "devvm: ports_taken count=1 ports=$3 vm=$2" "$work/last.log"; then
+    "$5" "$2" "$3" "$4"
+    for _ in $(seq 20); do nc -z 127.0.0.1 "$4" && break; sleep 1; done; sleep 3
+    out=$(nc -w 2 127.0.0.1 "$3" </dev/null)
+    echo "control $4: $(nc -z 127.0.0.1 "$4" && echo forwarded); $3 answered by: ${out:-nothing}"
+    nc -z 127.0.0.1 "$4" && [[ $out == host-program ]] && r=0
+  else cat "$work/last.log"; fi
+  kill "$hp" 2>/dev/null; wait "$hp" 2>/dev/null
+  (( r == 0 )) || return 1
+  (cd "$1" && "$D" stop </dev/null >/dev/null 2>&1 && printf 'exit\n' | DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1)
+  ! grep -q ports_taken "$work/last.log" || { cat "$work/last.log"; return 1; }
+  "$5" "$2" "$3"
+  for _ in $(seq 20); do nc -z 127.0.0.1 "$3" && return 0; sleep 1; done
+  echo "$3 not forwarded again"; return 1; }
+# lima_serve VM PORTS...: a server in the VM on each port, every address, left running.
+lima_serve() { local p; for p in "${@:2}"; do in_vm "$1" "setsid -f python3 -m http.server -b 0.0.0.0 $p </dev/null >/dev/null 2>&1"; done; }
 
 if $clean; then
   section "cleaning cached images"
@@ -456,6 +484,7 @@ check "only the listed ports reach this machine, whatever the address" bash -c \
   'for i in $(seq 20); do nc -z 127.0.0.1 47173 && break; sleep 1; done; sleep 3
   for p in 47170 47171 47172 47173; do nc -z 127.0.0.1 $p || exit 1; done
   for p in 47174 47175 47176 47177; do ! nc -z 127.0.0.1 $p || exit 1; done'
+check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$p" "$vm" 47170 47171 lima_serve
 if [[ "$(uname -s)" == Darwin ]]; then
   check "a swapped .git is reported" bash -c "limactl shell --workdir / $vm bash -c 'cd $p && mv .git .git-old && git init -q' </dev/null;
     cd '$p' && printf 'exit\n' | '$D' 2>&1 | grep -qF \"\$(m git_replaced git=$p/.git | head -1)\""
@@ -981,6 +1010,11 @@ check "a running VM's new size and ports wait for its next start, and apply on r
   '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
   printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
   [[ \$('$D' ports 2>/dev/null) == 47180,47181 ]]"
+# smol_serve VM PORTS...: a server in the VM on each port, every address, left running.
+smol_serve() { local p; for p in "${@:2}"; do SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- perl -MIO::Socket::INET -e \
+  '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:" . shift, Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' "$p" \
+  </dev/null >/dev/null 2>&1; done; }
+check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$p" "$vm" 47181 47180 smol_serve
 check "a smaller disk is refused" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D' size --disk 100 </dev/null >'$work/last.log' 2>&1 &&
   grep -q 'disk_shrink' '$work/last.log'"
 check "devvm stop stops it, and devvm starts it again" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&

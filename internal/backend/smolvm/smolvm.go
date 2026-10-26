@@ -87,8 +87,8 @@ type Smolvm struct {
 	Terminal func() bool
 	// FreePort returns a port free on the host's loopback, and PortFree
 	// reports whether one is: for a VM's ssh forward.
-	FreePort func() (int, error)
-	PortFree func(int) bool
+	FreePort func(context.Context) (int, error)
+	PortFree func(context.Context, int) bool
 	// Info prints what the backend is doing.
 	Info func(msg.M)
 	// Warn prints a warning.
@@ -135,7 +135,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
 		Digest: from.NewRegistry().Digest, KVM: kvm,
 		Terminal: u.StdinIsTerminal,
-		FreePort: freePort, PortFree: portFree,
+		FreePort: freePort, PortFree: platform.PortFree,
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 		Forwards: Forwards{

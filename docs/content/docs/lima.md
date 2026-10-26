@@ -69,6 +69,8 @@ An image is a stopped VM in devvm's Lima home, `devvm-img-<key>`. base's is made
 
 Lima forwards every port a VM listens on to the same port on the host's `localhost`, unless told otherwise. devvm gives it a rule per port or range a VM forwards, then rules ignoring everything else. A VM forwarding all ports gets Lima's own behavior.
 
+Lima's forwards listen with `SO_REUSEADDR`, so on macOS one takes `127.0.0.1:PORT` even while a program on the host has `*:PORT`, and that program's `localhost` connections with it. So each start checks a VM's listed ports first, listening on each without `SO_REUSEADDR`, and leaves out those in use ([ports](images.md#ports)): the rules for that start are the list less those ports. The rules change only where they differ, as any change gives the VM new ssh host keys at its next boot, which devvm pins again: a start that leaves a port out, and the next one that forwards it again. A VM forwarding all ports isn't checked: Lima makes its forwards as servers in it start, whatever the host has.
+
 ## Limits
 
 - **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has at most 104 characters. A long Lima home leaves less room for the name: set `DEVVM_LIMA_HOME` to a shorter folder if devvm says it's too long.

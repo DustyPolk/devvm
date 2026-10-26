@@ -708,6 +708,11 @@ other = "{{.vm}} forwards {{.ports}} from its next start: devvm restart"
 [ports_default]
 other = "new VMs forward {{.ports}}"
 
+[ports_taken]
+description = "ports is a list of ports and ranges, like 5173,8000-8010; count is how many ports"
+one = "{{.vm}} doesn't forward port {{.ports}} this start: it's in use on this machine"
+other = "{{.vm}} doesn't forward ports {{.ports}} this start: they're in use on this machine"
+
 [no_vm_ports]
 other = "no VM for {{.dir}}: devvm --ports LIST makes one that forwards only those, or -g sets what new VMs forward"
 

@@ -123,6 +123,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Terminal:     func() bool { return false },
 		Stdout:       io.Discard, LogNote: func() {}, LogWriter: testUI{t}.LogWriter, LoggedCmd: testUI{t}.LoggedCmd,
 		AddCleanup: testUI{t}.AddCleanup, Interrupted: testUI{t}.Interrupted,
+		PortInUse: func(context.Context, int) bool { return false },
 	}
 	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
 	// is put back.

@@ -199,6 +199,7 @@ devvm ports -g none         # what new VMs forward (default: all)
 - A stopped VM changes at once. A running one keeps what it forwards until it next starts (`devvm restart`): until then, `devvm ports` shows what it forwards now and says what it will.
 - `add` and `rm` take ports and ranges, not `all` or `none`; `rm` on a VM that forwards every port is refused, as there's no list to remove from. `-g` works with them too.
 - Ports are forwarded with or without [network policy](network.md). Builds forward none.
+- **A listed port a program on this machine has**, on any address, isn't forwarded from a start that finds it so, with a warning (`ports_taken`): the forward would share the port and take that program's `localhost` connections. The VM starts all the same, and the next start that finds the port free forwards it again. Only the start checks: a program that takes the port later isn't covered (Lima makes a forward once a server in the VM listens).
 
 ## Size
 

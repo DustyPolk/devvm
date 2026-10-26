@@ -439,26 +439,6 @@ func lifelineHolds(path, life string) bool {
 	return err == nil && pid > 0 && alive(pid)
 }
 
-// listenLoopback listens on a host loopback address only where the port is
-// free on every address (platform.ListenExclusive). A port in use only by
-// connections that have ended (TIME_WAIT: nothing answers on it) is taken
-// as Go takes any.
-func listenLoopback(ctx context.Context, addr string) (net.Listener, error) {
-	l, err := platform.ListenExclusive(ctx, "tcp", addr)
-	if err == nil || !errors.Is(err, syscall.EADDRINUSE) {
-		return l, err
-	}
-	d := net.Dialer{Timeout: 300 * time.Millisecond}
-	if c, derr := d.DialContext(ctx, "tcp", addr); derr == nil {
-		_ = c.Close()
-		return nil, err // a program of the host's listens there
-	} else if !errors.Is(derr, syscall.ECONNREFUSED) {
-		return nil, err
-	}
-	var lc net.ListenConfig
-	return lc.Listen(ctx, "tcp", addr)
-}
-
 // sshForward is how the forwarder reaches a VM: its sshd's port on the
 // host's loopback, the VM's user and key, its pinned host key, and the
 // master's control socket.
@@ -587,7 +567,7 @@ func ForwardMain(ctx context.Context, args []string, script []byte, reserved fun
 			}
 			return out, err
 		},
-		Watch: o.watch(script, log), Relay: o.relay, Listen: listenLoopback,
+		Watch: o.watch(script, log), Relay: o.relay, Listen: platform.ListenLoopback,
 	}
 	return f.Run(ctx)
 }

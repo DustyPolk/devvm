@@ -1344,6 +1344,11 @@ func PortsRmAll() M {
 	return M{id: "ports_rm_all"}
 }
 
+// PortsTaken is [ports_taken]: "{{.vm}} doesn't forward ports {{.ports}} this start: they're in use on this machine"
+func PortsTaken(count int, ports string, vm string) M {
+	return M{id: "ports_taken", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"ports", ports}, {"vm", vm}}}
+}
+
 // ProxyCAFailed is [proxy_ca_failed]: "couldn't create the network policy proxy's CA in {{.dir}}"
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
@@ -2284,6 +2289,7 @@ var specs = map[string]spec{
 	"ports_now":                   {fields: []string{"ports", "vm"}},
 	"ports_pending":               {fields: []string{"ports", "vm"}},
 	"ports_rm_all":                {},
+	"ports_taken":                 {plural: true, fields: []string{"count", "ports", "vm"}},
 	"proxy_ca_failed":             {fields: []string{"dir"}},
 	"proxy_failed":                {fields: []string{"reason"}},
 	"proxy_port_taken":            {fields: []string{"port", "vm"}},

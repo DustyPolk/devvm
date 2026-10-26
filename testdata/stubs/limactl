@@ -6,7 +6,8 @@
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
 # and 100 GiB, which edit's --cpus, --memory and --disk change; edit's
-# --set .env goes into $LIMA_HOME/<name>/lima.yaml. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# --set .env goes into $LIMA_HOME/<name>/lima.yaml, and clone's and edit's --set .portForwards
+# into its config. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
@@ -93,6 +94,18 @@ if [[ ${1:-} == shell && " $* " == *"/oci/build.sh "* ]]; then
   fi
   exit 0
 fi
+# A VM's port forwards, as clone and edit set them (--set .portForwards = RULES), go into the
+# config list shows ($STUB_DIR/ports-<name>.json).
+if [[ ${1:-} == clone || ${1:-} == edit ]]; then
+  target=${names[0]:-}
+  [[ $1 != clone ]] || target=${names[1]:-}
+  args=("$@")
+  for ((i = 0; i < ${#args[@]} - 1; i++)); do
+    if [[ ${args[i]} == --set && ${args[i + 1]} == ".portForwards = "* ]]; then
+      echo "${args[i + 1]#.portForwards = }" > "$STUB_DIR/ports-$target.json"
+    fi
+  done
+fi
 case ${1:-} in
   create) for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done ;;
   clone)
@@ -171,6 +184,9 @@ esac
 while read -r n st; do
   read -r cpus mem disk < <(cat "$STUB_DIR/size-$n" 2>/dev/null || echo "4 8589934592 107374182400")
   cfg=$(cat "$STUB_DIR/config-$n.json" 2>/dev/null || echo '{}')
+  pf=$(cat "$STUB_DIR/ports-$n.json" 2>/dev/null || true)
+  if [[ -n $pf && $cfg == '{}' ]]; then cfg="{\"portForwards\":$pf}"
+  elif [[ -n $pf ]]; then cfg="{\"portForwards\":$pf,${cfg#\{}"; fi
   printf '{"name":"%s","status":"%s","dir":"%s","cpus":%s,"memory":%s,"disk":%s,"sshLocalPort":60022,"sshConfigFile":"%s","config":%s}\n' \
     "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$LIMA_HOME/$n/ssh.config" "$cfg"
 done < "$inst"

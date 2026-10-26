@@ -79,6 +79,9 @@ type Env struct {
 	SSHAdd func(ctx context.Context, args ...string) int
 	// Agent is devvm's own SSH agent.
 	Agent *sshagent.Agent
+	// PortInUse reports whether a program on the host has a port, on any
+	// address (platform.PortInUse): a listed port that isn't forwarded.
+	PortInUse func(ctx context.Context, port int) bool
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
 	// asks which features base gets (build.Env.Pick); Terminal reports
 	// whether it can ask.
@@ -134,6 +137,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Terminal: u.StdinIsTerminal,
 		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
+		PortInUse: platform.PortInUse,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
 	e.Agent = sshagent.New(d, e.mounts, u)
@@ -331,6 +335,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// ssh for editors, where the backend has it (an emulation once it's
 	// reviewed): a VM without it starts all the same.
 	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil
+	conf.Ports = e.startPorts(ctx, st)
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)

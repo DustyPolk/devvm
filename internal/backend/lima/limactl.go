@@ -118,6 +118,7 @@ type config struct {
 	Env               map[string]string `json:"env"`
 	PropagateProxyEnv *bool             `json:"propagateProxyEnv"`
 	DNS               []string          `json:"dns"`
+	PortForwards      []portForward     `json:"portForwards"`
 	HostResolver      struct {
 		Enabled *bool `json:"enabled"`
 	} `json:"hostResolver"`

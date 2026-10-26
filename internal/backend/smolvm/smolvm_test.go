@@ -75,7 +75,7 @@ func newSandbox(t *testing.T) sandbox {
 			return "sha256:" + strings.Repeat("ab", 32), nil
 		},
 		KVM: "/dev/kvm", Terminal: func() bool { return false },
-		FreePort: func() (int, error) { return 61022, nil }, PortFree: func(int) bool { return true },
+		FreePort: func(context.Context) (int, error) { return 61022, nil }, PortFree: func(context.Context, int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
 		WithSteps: testUI{}.WithSteps, AddCleanup: testUI{}.AddCleanup, Interrupted: testUI{}.Interrupted,
 		Forwards: Forwards{
@@ -389,6 +389,44 @@ func TestStart(t *testing.T) {
 	}
 	if got := s.startAgent(t, vm); got != "unset" {
 		t.Errorf("made without: %q", got)
+	}
+}
+
+// A start forwards the listed ports it's given (those in use on the host
+// left out) where the machine forwards others, and leaves them otherwise.
+func TestStartListedPorts(t *testing.T) {
+	s := newSandbox(t)
+	vm := "devvm-p-0123456789abcd"
+	s.machine(t, vm, "stopped 4 8192 20 true")
+	if err := s.writeRecord(vm, record{Ports: []string{"5173:5173", "8000-8002:8000-8002"}}); err != nil {
+		t.Fatal(err)
+	}
+	ranges := func(rs ...backend.PortRange) *backend.Ports { return &backend.Ports{Ranges: rs} }
+	for _, tc := range []struct {
+		name   string
+		ports  *backend.Ports
+		update string // machine update's options; "" for none
+		record []string
+	}{
+		{"as it forwards", ranges(backend.PortRange{From: 5173, To: 5173}, backend.PortRange{From: 8000, To: 8002}), "", []string{"5173:5173", "8000-8002:8000-8002"}},
+		{"one left out", ranges(backend.PortRange{From: 8000, To: 8002}), " --remove-port 5173:5173 --remove-port 8000-8002:8000-8002 -p 8000-8002:8000-8002", []string{"8000-8002:8000-8002"}},
+		{"not given", nil, "", []string{"8000-8002:8000-8002"}},
+		{"back again", ranges(backend.PortRange{From: 5173, To: 5173}, backend.PortRange{From: 8000, To: 8002}), " --remove-port 8000-8002:8000-8002 -p 5173:5173 -p 8000-8002:8000-8002", []string{"5173:5173", "8000-8002:8000-8002"}},
+	} {
+		s.reset(t)
+		if err := s.Start(t.Context(), vm, backend.Confinement{Ports: tc.ports}); err != nil {
+			t.Fatal(err)
+		}
+		got := s.calls(t)
+		if tc.update == "" && strings.HasPrefix(got[0], "smolvm machine update") || tc.update != "" && got[0] != "smolvm machine update --name "+vm+tc.update {
+			t.Errorf("%s: %q", tc.name, got)
+		}
+		if r, err := s.readRecord(vm); err != nil || !slices.Equal(r.Ports, tc.record) {
+			t.Errorf("%s: record %q, %v", tc.name, r.Ports, err)
+		}
+		if err := s.Stop(t.Context(), vm); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

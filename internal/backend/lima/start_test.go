@@ -1,6 +1,7 @@
 package lima
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -116,6 +117,45 @@ func TestStartConfined(t *testing.T) {
 				t.Error("Confined with a hostagent that doesn't run")
 			}
 		})
+	}
+}
+
+// A start sets the listed ports it's given where the VM's rules, as
+// limactl list fills them in, forward others; never without them.
+func TestStartSetsPorts(t *testing.T) {
+	// As limactl list --json has portsSet's rules for 5173: a guestIP and
+	// the host side filled in.
+	const listed = `{"portForwards":[
+		{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[5173,5173],"hostIP":"127.0.0.1","hostPortRange":[5173,5173],"proto":"any"},
+		{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true},
+		{"guestIPMustBeZero":true,"guestIP":"0.0.0.0","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true},
+		{"guestIPMustBeZero":false,"guestIP":"::","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true}]}`
+	ports := func(ps ...int) *backend.Ports {
+		p := &backend.Ports{}
+		for _, n := range ps {
+			p.Ranges = append(p.Ranges, backend.PortRange{From: n, To: n})
+		}
+		return p
+	}
+	l, _, _ := testLima(t, "darwin")
+	for _, tc := range []struct {
+		name, cfg string
+		ports     *backend.Ports
+		want      []string
+	}{
+		{"as listed", listed, ports(5173), nil},
+		{"one left out", listed, ports(), []string{"--set", portsSet(backend.Ports{})}},
+		{"back again", `{"portForwards":[]}`, ports(5173), []string{"--set", portsSet(*ports(5173))}},
+		{"another", listed, ports(5174), []string{"--set", portsSet(*ports(5174))}},
+		{"not given", listed, nil, nil},
+	} {
+		var cfg config
+		if err := json.Unmarshal([]byte(tc.cfg), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := l.startSets(&cfg, backend.Confinement{Ports: tc.ports}, 0); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

@@ -18,10 +18,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -176,18 +176,18 @@ func sshString(buf, b []byte) []byte {
 // start that runs it: c.SSHPort when the caller chose one (network
 // policy's), else the one it had while that's free, else a new one; never
 // one of the VM's own forwards.
-func (s *Smolvm) sshForward(vm string, c backend.Confinement, r record) (int, error) {
+func (s *Smolvm) sshForward(ctx context.Context, vm string, c backend.Confinement, r record) (int, error) {
 	if c.SSHPort > 0 {
 		if forwards(r.Ports, c.SSHPort) {
 			return 0, msg.SmolvmSSHPortForwarded(strconv.Itoa(c.SSHPort), vm)
 		}
 		return c.SSHPort, nil
 	}
-	if r.SSHPort > 0 && !forwards(r.Ports, r.SSHPort) && s.PortFree(r.SSHPort) {
+	if r.SSHPort > 0 && !forwards(r.Ports, r.SSHPort) && s.PortFree(ctx, r.SSHPort) {
 		return r.SSHPort, nil
 	}
 	for range 20 {
-		p, err := s.FreePort()
+		p, err := s.FreePort(ctx)
 		if err != nil {
 			return 0, err
 		}
@@ -220,36 +220,21 @@ func forwards(ports []string, port int) bool {
 func sshForwardSpec(port int) string { return strconv.Itoa(port) + ":" + strconv.Itoa(sshGuestPort) }
 
 // freePort is a port free on the host's loopback, IPv4 and IPv6, as
-// smolvm forwards on both.
-func freePort() (int, error) {
+// smolvm forwards on both, and on every other address
+// (platform.PortFree).
+func freePort(ctx context.Context) (int, error) {
 	for range 20 {
-		l, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // a moment's listen
+		l, err := platform.ListenLoopback(ctx, "127.0.0.1:0")
 		if err != nil {
 			return 0, err
 		}
 		port := l.Addr().(*net.TCPAddr).Port
 		_ = l.Close()
-		if portFree(port) {
+		if platform.PortFree(ctx, port) {
 			return port, nil
 		}
 	}
 	return 0, errors.New("smolvm: no free port on the host's loopback")
-}
-
-// portFree reports whether nothing listens on a host loopback port, IPv4
-// or IPv6 (a host without IPv6 counts as free there).
-func portFree(port int) bool {
-	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port))) //nolint:noctx // a moment's listen
-	if err != nil {
-		return false
-	}
-	_ = l.Close()
-	l6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port))) //nolint:noctx // a moment's listen
-	if err != nil {
-		return !errors.Is(err, syscall.EADDRINUSE)
-	}
-	_ = l6.Close()
-	return true
 }
 
 // envName is a variable's name, as services.sh is given those its ssh

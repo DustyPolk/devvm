@@ -81,6 +81,20 @@ exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
 grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 
+# A listed port a program on this machine has, on any address, isn't
+# forwarded from a start that finds it so, warned: smolvm's forward would
+# share it, and take its connections.
+listen_any TAKEN
+exec devvm stop
+exec devvm ports add $TAKEN
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --remove-port 5173:5173 --remove-port 8000-8001:8000-8001 --remove-port '$TAKEN':'$TAKEN' -p 5173:5173 -p 8000-8001:8000-8001$'
+exec devvm ports
+stdout '^5173,8000-8001,'$TAKEN'$'
+
 # Its agent forwarding can be turned on later (emulated, reviewed): made
 # forwarding, and given no agent, a path no socket can be at.
 exec sh -c 'cat "$VMS"/devvm-web-*'

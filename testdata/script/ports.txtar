@@ -98,6 +98,28 @@ stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.portForwards = 
 exec devvm --ports none
 stderr '^devvm: ports_flag_ignored$'
 
+# A listed port a program on this machine has, on any address, isn't
+# forwarded from a start that finds it so, warned: Lima's forward would
+# share it, and take its connections. Lima's rules change only where they
+# differ.
+listen_any TAKEN
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec devvm ports 5173,$TAKEN
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} .*--set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\},\{"guestIP":"127\.0\.0\.1",'
+! stdout '"guestPortRange":\['$TAKEN
+exec devvm ports
+stdout '\A5173,'$TAKEN'\n\z'
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout portForwards
+
 # Completion: the keywords and add and rm.
 exec devvm __complete ports ''
 stdout '^all$'

@@ -106,10 +106,13 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	for _, k := range proxyVars {
 		delete(env, k) // the proxy file's
 	}
+	if opts, err = listedPorts(vm, c, &r, opts); err != nil {
+		return err
+	}
 	// The VM's ssh: forwarded while it's asked for, its sshd run then.
 	var sshd []string
 	if c.SSH {
-		port, err := s.sshForward(vm, c, r)
+		port, err := s.sshForward(ctx, vm, c, r)
 		if err != nil {
 			return err
 		}
@@ -212,6 +215,28 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 		s.forward(ctx, vm, r, c)
 	}
 	return nil
+}
+
+// listedPorts returns opts with machine update's options that make a
+// stopped machine forward the listed ports c has for this start (c.Ports:
+// those a host program has left out), where they differ from what it
+// forwards (r, updated); none without c.Ports.
+func listedPorts(vm string, c backend.Confinement, r *record, opts []string) ([]string, error) {
+	if c.Ports == nil {
+		return opts, nil
+	}
+	want, err := portArgs(vm, *c.Ports)
+	if err != nil || slices.Equal(want, r.Ports) {
+		return opts, err
+	}
+	for _, old := range r.Ports {
+		opts = append(opts, "--remove-port", old)
+	}
+	for _, w := range want {
+		opts = append(opts, "-p", w)
+	}
+	r.Ports = want
+	return opts, nil
 }
 
 // forward starts the forwarder of a VM that forwards every port, once its

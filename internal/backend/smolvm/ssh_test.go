@@ -1,6 +1,7 @@
 package smolvm
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -81,7 +82,7 @@ func TestStartSSH(t *testing.T) {
 		t.Fatal(err)
 	}
 	next := []int{61022, 61023}
-	s.FreePort = func() (int, error) { p := next[0]; next = next[1:]; return p, nil }
+	s.FreePort = func(context.Context) (int, error) { p := next[0]; next = next[1:]; return p, nil }
 	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_not_running vm="+vm {
 		t.Errorf("stopped: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestStartSSH(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.reset(t)
-		s.PortFree = func(int) bool { return tc.free }
+		s.PortFree = func(context.Context, int) bool { return tc.free }
 		next = []int{61099}
 		if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil {
 			t.Fatal(err)

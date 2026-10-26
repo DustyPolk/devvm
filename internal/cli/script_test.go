@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +29,7 @@ func TestScript(t *testing.T) {
 			return sandbox(env, bin, stubs)
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
+			"listen_any": listenAny,
 			"stub_calls": stubCalls,
 			"wait_file":  waitFile,
 		},
@@ -145,6 +147,18 @@ func waitFile(ts *testscript.TestScript, neg bool, args []string) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	ts.Fatalf("%s didn't appear", args[0])
+}
+
+// listenAny listens on a free port on every address, as a program on the
+// host does, until the script ends, and sets VAR to the port.
+func listenAny(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: listen_any VAR")
+	}
+	l, err := net.Listen("tcp", ":0") //nolint:noctx,gosec // every address, as the program it stands for; the script's whole life
+	ts.Check(err)
+	ts.Defer(func() { _ = l.Close() })
+	ts.Setenv(args[0], strconv.Itoa(l.Addr().(*net.TCPAddr).Port))
 }
 
 // stubCalls writes the calls the stubs logged to stdout, one per line.

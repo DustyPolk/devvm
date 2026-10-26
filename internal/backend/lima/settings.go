@@ -20,7 +20,10 @@ type portForward struct {
 // in order, and its own last rule forwards everything, so all is no rules
 // at all. A rule without guestIP matches every address a server binds to,
 // but an ignore rule needs one for each of 127.0.0.1, 0.0.0.0 and ::.
-func portsSet(p backend.Ports) string {
+func portsSet(p backend.Ports) string { return ".portForwards = " + yqJSON(portRules(p)) }
+
+// portRules are portsSet's rules.
+func portRules(p backend.Ports) []portForward {
 	rules := []portForward{}
 	if !p.All {
 		for _, r := range p.Ranges {
@@ -30,7 +33,24 @@ func portsSet(p backend.Ports) string {
 			rules = append(rules, portForward{GuestIP: ip, GuestPortRange: [2]int{1, 65535}, Proto: "any", Ignore: true})
 		}
 	}
-	return ".portForwards = " + yqJSON(rules)
+	return rules
+}
+
+// forwardsPorts reports whether a VM's rules, as limactl list has them,
+// are portRules(p): limactl fills in a guestIP (127.0.0.1) and the host
+// side, so only what devvm set is compared, guestIP for ignore rules alone.
+func forwardsPorts(have []portForward, p backend.Ports) bool {
+	want := portRules(p)
+	if len(have) != len(want) {
+		return false
+	}
+	for i, w := range want {
+		h := have[i]
+		if h.GuestPortRange != w.GuestPortRange || h.Proto != w.Proto || h.Ignore != w.Ignore || w.Ignore && h.GuestIP != w.GuestIP {
+			return false
+		}
+	}
+	return true
 }
 
 // mountsSet is the --set for a VM's mounts. Paths with a comma are

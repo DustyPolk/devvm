@@ -302,6 +302,11 @@ type Confinement struct {
 	// NoAgent is set when the VM's choice is no agent: a backend whose VM
 	// forwards one anyway (made so, for agent-toggle) gives it none.
 	NoAgent bool
+	// Ports is what a VM that lists its ports forwards from this start:
+	// the list, less the ports a program on the host has. The backend
+	// forwards these where its VM forwards others. nil leaves its ports as
+	// they are (every port, none, a build's).
+	Ports *Ports
 }
 
 // Status is a VM's state as its backend reports it.
