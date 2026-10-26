@@ -1584,6 +1584,11 @@ func SmolvmBrokenFix(fix string) M {
 	return M{id: "smolvm_broken_fix", vals: []val{{"fix", fix}}}
 }
 
+// SmolvmForwarderFailed is [smolvm_forwarder_failed]: "smolvm port forwarder: {{.reason}}"
+func SmolvmForwarderFailed(reason string) M {
+	return M{id: "smolvm_forwarder_failed", vals: []val{{"reason", reason}}}
+}
+
 // SmolvmFromRegistryOnly is [smolvm_from_registry_only]: "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
 func SmolvmFromRegistryOnly(image string) M {
 	return M{id: "smolvm_from_registry_only", vals: []val{{"image", image}}}
@@ -1642,6 +1647,16 @@ func SmolvmOldFix(fix string, version string) M {
 // SmolvmPortSSH is [smolvm_port_ssh]: "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
 func SmolvmPortSSH(port string, vm string) M {
 	return M{id: "smolvm_port_ssh", vals: []val{{"port", port}, {"vm", vm}}}
+}
+
+// SmolvmPortsFailed is [smolvm_ports_failed]: "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
+func SmolvmPortsFailed(log string, vm string) M {
+	return M{id: "smolvm_ports_failed", vals: []val{{"log", log}, {"vm", vm}}}
+}
+
+// SmolvmPortsNoSSH is [smolvm_ports_no_ssh]: "{{.vm}} runs without ssh, so none of its ports are forwarded"
+func SmolvmPortsNoSSH(vm string) M {
+	return M{id: "smolvm_ports_no_ssh", vals: []val{{"vm", vm}}}
 }
 
 // SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
@@ -2307,6 +2322,7 @@ var specs = map[string]spec{
 	"size_pending":                {fields: []string{"size", "vm"}},
 	"smolvm_broken":               {},
 	"smolvm_broken_fix":           {fields: []string{"fix"}},
+	"smolvm_forwarder_failed":     {fields: []string{"reason"}},
 	"smolvm_from_registry_only":   {fields: []string{"image"}},
 	"smolvm_host_unsupported":     {fields: []string{"host"}},
 	"smolvm_machine_foreign":      {fields: []string{"vm"}},
@@ -2319,6 +2335,8 @@ var specs = map[string]spec{
 	"smolvm_old":                  {fields: []string{"version"}},
 	"smolvm_old_fix":              {fields: []string{"fix", "version"}},
 	"smolvm_port_ssh":             {fields: []string{"port", "vm"}},
+	"smolvm_ports_failed":         {fields: []string{"log", "vm"}},
+	"smolvm_ports_no_ssh":         {fields: []string{"vm"}},
 	"smolvm_script_failed":        {fields: []string{"script", "vm"}},
 	"smolvm_ssh_port_forwarded":   {fields: []string{"port", "vm"}},
 	"smolvm_too_many_ports":       {fields: []string{"asked", "max", "vm"}},

@@ -14,7 +14,7 @@ exec devvm doctor
 stdout '^FEATURE +LIMA +SMOLVM\n'
 stdout '^build-image +native +native\n'
 stdout '^egress-proxy +native +emulated\n'
-stdout '^ports-all +native +none\n'
+stdout '^ports-all +native +emulated\n'
 stdout '^agent-toggle +native +none\n'
 stdout '^disk +native +native\n'
 stdout '^docker_found\n'

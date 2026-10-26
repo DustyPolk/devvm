@@ -10,11 +10,13 @@ import (
 	"maps"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -52,7 +54,8 @@ const (
 // in no process's arguments. A machine that
 // forwards an SSH agent forwards c.AgentSocket, or the user's
 // (SSH_AUTH_SOCK). With c.SSH its ssh is forwarded (sshForward) and
-// services.sh runs its sshd; without, the forward goes.
+// services.sh runs its sshd; without, the forward goes. A VM that
+// forwards every port gets its forwarder once its sshd runs (forward).
 func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) error {
 	proxy := c.Net == backend.NetProxy
 	if proxy {
@@ -198,11 +201,77 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	if err := s.services(ctx, vm, sshd); err != nil {
 		return err
 	}
-	if r.SSHPort == 0 {
-		return nil
+	if r.SSHPort > 0 {
+		r.SSHUp, r.NoSSHD = !noSSHD, noSSHD
+		if err := s.writeRecord(vm, r); err != nil {
+			return err
+		}
 	}
-	r.SSHUp, r.NoSSHD = !noSSHD, noSSHD
-	return s.writeRecord(vm, r)
+	if r.PortsAll {
+		s.forward(ctx, vm, r, c)
+	}
+	return nil
+}
+
+// forward starts the forwarder of a VM that forwards every port, once its
+// sshd runs (forward.go): its host key read through smolvm, and never on
+// its own ssh's, proxy's or decider's port. One that can't start is
+// warned about: the VM runs on.
+func (s *Smolvm) forward(ctx context.Context, vm string, r record, c backend.Confinement) {
+	if !r.SSHUp {
+		s.Warn(msg.SmolvmPortsNoSSH(vm))
+		return
+	}
+	failed := func() { s.Warn(msg.SmolvmPortsFailed(s.Forwards.Log(vm), vm)) }
+	out, err := vmOutput(ctx, s.Runner, func(ctx context.Context) *exec.Cmd {
+		return s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "cat", "/etc/ssh/ssh_host_ed25519_key.pub")
+	})
+	key, ok := hostKey(out)
+	name, _, uerr := s.user()
+	if err != nil || !ok || uerr != nil {
+		failed()
+		return
+	}
+	spec := forwardSpec{
+		lifeline: s.Lifeline(ctx, vm), user: name, key: s.sshKey(vm), hostKey: key, sshPort: r.SSHPort,
+		reserve: []int{r.SSHPort, c.ProxyPort, deciderPort(c.Decider)},
+	}
+	if spec.lifeline == "" || s.Forwards.Start(vm, spec) != nil {
+		failed()
+	}
+}
+
+// What devvm reads of what the VM prints, and how long it waits for it:
+// root in the VM decides both.
+const (
+	vmOutputMax     = 64 << 10
+	vmOutputTimeout = 30 * time.Second
+)
+
+// vmOutput runs the command mk makes, whose output the VM makes, through
+// r, returning at most vmOutputMax bytes of it and waiting vmOutputTimeout
+// at most.
+func vmOutput(ctx context.Context, r Runner, mk func(context.Context) *exec.Cmd) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, vmOutputTimeout)
+	defer cancel()
+	out := &capped{max: vmOutputMax}
+	cmd := mk(ctx)
+	cmd.Stdout, cmd.WaitDelay = out, time.Second
+	err := r.Attach(cmd)
+	return out.Bytes(), err
+}
+
+// capped keeps the first max bytes written to it.
+type capped struct {
+	bytes.Buffer
+	max int
+}
+
+func (w *capped) Write(p []byte) (int, error) {
+	if room := w.max - w.Len(); room > 0 {
+		w.Buffer.Write(p[:min(len(p), room)])
+	}
+	return len(p), nil
 }
 
 // sshdProbe answers "sshd" when the machine's image has sshd, else "none".
@@ -212,7 +281,9 @@ const sshdProbe = `if [ -x /usr/sbin/sshd ] || command -v sshd >/dev/null 2>&1; 
 // before devvm installed one), asked before services.sh runs, so no other
 // failure reads as it; one that can't say stops it.
 func (s *Smolvm) lacksSSHD(ctx context.Context, vm string) (bool, error) {
-	out, err := s.Runner.Output(s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "sh", "-c", sshdProbe))
+	out, err := vmOutput(ctx, s.Runner, func(ctx context.Context) *exec.Cmd {
+		return s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "sh", "-c", sshdProbe)
+	})
 	switch strings.TrimSpace(string(out)) {
 	case "none":
 		return true, nil

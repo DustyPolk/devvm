@@ -3,10 +3,18 @@
 # VM. Logs every call to $STUB_LOG, and runs the git command it's given
 # here, on $STUB_DIR/vmfs/DIR (the VM's files, as the limactl stub keeps
 # them). With $STUB_DIR/ssh-fails, or for anything else, it fails as ssh
-# does.
+# does. A master connection (-M, a smolvm VM's port forwarder's) reads the script it's
+# fed, answers it with $STUB_DIR/guest-ports (what listens in the VM, as /proc/net/tcp has
+# it) and ".", then waits to be stopped.
 set -euo pipefail
 echo "ssh $*" >> "$STUB_LOG"
 [[ ! -e $STUB_DIR/ssh-fails ]] || exit 255
+if [[ " $* " == *" -M "* ]]; then
+  cat > /dev/null
+  [[ ! -f $STUB_DIR/guest-ports ]] || cat "$STUB_DIR/guest-ports"
+  echo .
+  exec sleep 300
+fi
 cmd=${*: -1}
 case $cmd in
   "git-receive-pack "* | "git-upload-pack "*)

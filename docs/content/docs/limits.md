@@ -9,4 +9,4 @@ weight: 33
 - **Linux hosts** have no `.git` protection: use `--clone` ([details](git-protection.md#linux-hosts)).
 - **Agent folders** made or deleted on this machine reach a running VM only after a restart; devvm offers one ([details](coding-agents.md#mounts)).
 - **With Lima:** project paths can't contain commas, folder names in VM names are cut short, disks grow but never shrink ([details](lima.md#limits)).
-- **smolvm is experimental:** network policy is emulated, with one narrow DNS channel ([details](smolvm.md#network-policy)); ssh for editors is emulated ([details](smolvm.md#ssh-for-editors)); no every port forwarded, or SSH agent forwarding changed once a VM is made; at most 63 ports; project paths can't contain colons ([details](smolvm.md)).
+- **smolvm is experimental:** network policy is emulated, with one narrow DNS channel ([details](smolvm.md#network-policy)); ssh for editors is emulated ([details](smolvm.md#ssh-for-editors)); every port forwarded is emulated, from port 1024 up ([details](smolvm.md#every-port)); no SSH agent forwarding changed once a VM is made; at most 63 listed ports; project paths can't contain colons ([details](smolvm.md)).

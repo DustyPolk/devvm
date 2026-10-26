@@ -8,7 +8,7 @@
 # ssh: devvm's sshd for ssh and editors, on a config of its own: new host keys (ed25519) at each
 # start, so no two VMs made from one image share them; USER alone may log in, with KEY (the VM's
 # own, an authorized_keys line) alone; local forwarding only, no remote forwarding, tunnels or X11
-# (a defence for an honest VM: root here can change it); its sessions get /etc/environment and each
+# (a defence for an honest VM: root here can change it), to IPv4 or IPv6; its sessions get /etc/environment and each
 # VAR from this script's environment (the proxy's under network policy), as devvm's own commands
 # do. The config holds them, so it's root's alone. devvm asks for it only once it found sshd there.
 set -eu
@@ -58,8 +58,9 @@ if [ "${1:-}" = ssh ]; then
   umask 077
   {
     echo "# devvm's sshd for ssh and editors, written at each start (services.sh)."
+    # IPv4 alone to listen on; both to connect to, so forwarding every port reaches servers on ::1.
     echo "ListenAddress 0.0.0.0:22"
-    echo "AddressFamily inet"
+    echo "AddressFamily any"
     echo "HostKey /etc/ssh/ssh_host_ed25519_key"
     echo "PidFile /run/devvm-sshd.pid"
     echo "AllowUsers $user"

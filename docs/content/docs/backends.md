@@ -17,7 +17,7 @@ Each backend declares how it has each feature:
 
 `devvm doctor` lists them for every backend devvm has, an emulation whose review hasn't passed as `unreviewed`.
 
-The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Network policy and ssh for editors are emulated and reviewed; its other emulations are planned. Until each is reviewed, devvm refuses it.
+The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are untested. Network policy, ssh for editors and every port forwarded are emulated and reviewed; its other emulation is planned. Until each is reviewed, devvm refuses it.
 
 | Feature | What it is | Lima | smolvm (experimental) | Docker (planned) |
 | --- | --- | --- | --- | --- |
@@ -31,7 +31,7 @@ The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac; Linux hosts are 
 | `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt (macOS), QEMU `restrict=on` and a `guestfwd` to the proxy (Linux) ([details](lima.md#confinement)) | emulated (reviewed): an allow list of the host, DNS closed but for one name, and devvm's proxy deciding each connection ([details](smolvm.md#network-policy)) | emulated |
 | `ssh` | ssh for editors | native: Lima's ssh forward and config | emulated (reviewed): an sshd of devvm's, started after each start with new host keys and the VM's own key alone, and entries that ask for no forwarding out, on a port forwarded from the host's loopback ([details](smolvm.md#ssh-for-editors)) | emulated |
 | `ports` | the listed ports forwarded to the host's loopback | native: port forward rules ([details](lima.md#ports)) | native for servers listening on all addresses, at most 63 ports, as one of smolvm's 64 is ssh's ([details](smolvm.md#what-devvm-sets-on-a-vm)) | native (recreating the container) |
-| `ports-all` | every port forwarded, servers on the VM's loopback included | native | none; planned emulation | emulated |
+| `ports-all` | every port forwarded, servers on the VM's loopback included | native | emulated (reviewed): a forwarder of devvm's on the host, over the VM's ssh, for what listens in the VM from port 1024 up, never a port the host has ([details](smolvm.md#every-port)) | emulated |
 | `agent-forwarding` | ssh-agent forwarding, chosen when the VM is made | native | native | native |
 | `agent-toggle` | turning a VM's ssh-agent forwarding on or off later | native | none; planned emulation | native |
 | `cpus` | a VM's CPUs | native | native | native |

@@ -37,13 +37,33 @@ exec sh -c 'ls "$PACKS"/*/image.smolmachine'
 exec devvm images
 stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +smolvm$'
 
-# A new VM forwards every port by default, which smolvm can't: refused;
-# nothing is made.
+# A new VM forwards every port by default, which smolvm emulates
+# (reviewed): none of smolvm's forwards; once its sshd runs, a forwarder of
+# devvm's on the host reaches it over ssh (a master, offering the VM's key
+# alone, its host key read through smolvm and pinned), and forwards what
+# listens in the VM.
+mkdir $WORK/all
+cd $WORK/all
+exec sh -c 'printf "0100007F:B8DF\n00000000:0050\n" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
+exec devvm --backend smolvm --from $PIN --no-network-policy base
+! stderr 'backend_unreviewed'
+! stderr 'smolvm_ports'
+stub_calls
+stdout '^smolvm machine create( --state-dir \S+)? --name devvm-all-[0-9a-f]{14} .* -v \S+:/mnt/devvm-tools:ro$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-all-[0-9a-f]{14} -- cat /etc/ssh/ssh_host_ed25519_key\.pub$'
+stdout '^ssh -F none -M -S \S+/data/devvm/run/smolvm-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/smolvm/vms/devvm-all-[0-9a-f]{14}\.key .* -o HostKeyAlias=devvm-all-[0-9a-f]{14} .* -o PermitRemoteOpen=none -o ClearAllForwardings=yes .* -p [0-9]+ -l \S+ 127\.0\.0\.1 sh -s$'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*.ports.known_hosts'
+stdout '^devvm-all-[0-9a-f]{14} ssh-ed25519 AAAAstub$'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*.ports.log'
+stdout '^devvm ports: port 47327: forwarded$'
+stdout '^devvm ports: forwarding devvm-all-[0-9a-f]{14}''s ports$'
+! stdout 'port 80'
+exec devvm stop
+exec devvm rm -f
+! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*'
+rm $STUB_DIR/guest-ports
 mkdir $WORK/web
 cd $WORK/web
-! exec devvm --backend smolvm --from $PIN --no-network-policy base
-stderr '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-web-[0-9a-f]{14}$'
-! exists $VMS
 
 # Listed ports: made from base's pack with everything set (a pack would
 # give it its build machine's), started, set up, then the shell.
@@ -61,10 +81,7 @@ exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
 grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 
-# What smolvm lacks, in one line naming the VM: every port, agent
-# forwarding changed.
-! exec devvm ports all
-stderr '^devvm: backend_lacks backend=smolvm feature=ports-all vm=devvm-web-[0-9a-f]{14}$'
+# What smolvm lacks, in one line naming the VM: agent forwarding changed.
 ! exec devvm ssh-agent on
 stderr '^devvm: backend_lacks backend=smolvm feature=agent-toggle vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-web-*'

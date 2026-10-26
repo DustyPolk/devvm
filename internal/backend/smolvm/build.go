@@ -447,7 +447,7 @@ func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	}
 	return s.writeRecord(vm, record{
 		Image: img, Project: spec.Project, AgentDirs: slices.Clone(spec.AgentDirs), Tools: spec.Tools, ToolsAt: spec.ToolsAt,
-		Forwarding: spec.AgentForwarding, Ports: ports,
+		Forwarding: spec.AgentForwarding, Ports: ports, PortsAll: spec.Ports.All,
 	})
 }
 

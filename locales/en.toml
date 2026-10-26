@@ -197,6 +197,12 @@ other = "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave
 [smolvm_no_agent]
 other = "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
 
+[smolvm_ports_no_ssh]
+other = "{{.vm}} runs without ssh, so none of its ports are forwarded"
+
+[smolvm_ports_failed]
+other = "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
+
 [creating_from_image]
 other = "creating {{.vm}} from {{.image}}"
 
@@ -1231,6 +1237,10 @@ other = "{{.vm}} has no network policy, so Claude Code's MCP servers' env values
 [proxy_failed]
 description = "reason is an error from the system or the flag parser, in English"
 other = "network policy proxy: {{.reason}}"
+
+[smolvm_forwarder_failed]
+description = "reason is an error from the system or the flag parser, in English"
+other = "smolvm port forwarder: {{.reason}}"
 
 [bad_secret_service]
 other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"

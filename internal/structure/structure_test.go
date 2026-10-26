@@ -26,7 +26,7 @@ func devvm() rules {
 		maxMethods: 24,
 		largeTypes: map[string]large{
 			"internal/backend/lima.Lima":        {64, "a backend: backend.Backend's 27 methods and Lima's own"},
-			"internal/backend/smolvm.Smolvm":    {68, "a backend: backend.Backend's 27 methods and smolvm's own"},
+			"internal/backend/smolvm.Smolvm":    {69, "a backend: backend.Backend's 27 methods and smolvm's own"},
 			"internal/backend/backendtest.Fake": {32, "backend.Backend's 27 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {34, "one method per folder or file devvm uses: a list"},
 			"internal/ui.UI":                    {40, "the one terminal: messages, prompts, status line, run log, cleanups, signals"},

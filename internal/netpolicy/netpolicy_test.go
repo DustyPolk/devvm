@@ -166,7 +166,7 @@ func TestChoose(t *testing.T) {
 	}
 }
 
-// usedPorts lists the ports VMs have; freePort avoids them.
+// UsedPorts lists the ports VMs have; freePort avoids them.
 func TestFreePort(t *testing.T) {
 	d, st := sandbox(t, "base")
 	if err := st.Set(KeySSHPort, "23456"); err != nil {
@@ -175,9 +175,9 @@ func TestFreePort(t *testing.T) {
 	if err := st.Set(KeyProxyPort, "34567"); err != nil {
 		t.Fatal(err)
 	}
-	used, err := usedPorts(d)
+	used, err := UsedPorts(d)
 	if err != nil || !used[23456] || !used[34567] || len(used) != 2 {
-		t.Errorf("usedPorts = %v, %v", used, err)
+		t.Errorf("UsedPorts = %v, %v", used, err)
 	}
 	// And the ports VMs forward, wanted or set: all and none name none.
 	for k, v := range map[string]string{keyPorts: "5173,40000-40002", keyPortsSet: "41000, bad,9-1"} {
@@ -185,9 +185,9 @@ func TestFreePort(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	used, err = usedPorts(d)
+	used, err = UsedPorts(d)
 	if err != nil || len(used) != 7 || !used[5173] || !used[40000] || !used[40002] || !used[41000] {
-		t.Errorf("usedPorts with forwards = %v, %v", used, err)
+		t.Errorf("UsedPorts with forwards = %v, %v", used, err)
 	}
 	if err := st.Set(keyPorts, "all"); err != nil {
 		t.Fatal(err)

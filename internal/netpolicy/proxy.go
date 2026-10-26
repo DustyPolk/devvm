@@ -402,7 +402,7 @@ func logged(path string, before int64, want []byte) bool {
 // freePort returns a loopback port from 20000 to 59999 nothing listens on
 // and no VM has.
 func (p *Proxy) freePort() (int, error) {
-	used, err := usedPorts(p.Dirs)
+	used, err := UsedPorts(p.Dirs)
 	if err != nil {
 		return 0, err
 	}
@@ -415,8 +415,10 @@ func (p *Proxy) freePort() (int, error) {
 	return 0, errors.New("no free port on 127.0.0.1")
 }
 
-// usedPorts returns the ssh, proxy and decider ports VMs have.
-func usedPorts(d paths.Dirs) (map[int]bool, error) {
+// UsedPorts returns the ssh, proxy and decider ports VMs have, and the
+// ports they list to forward: what a new one avoids, and what a VM that
+// forwards every port never takes (smolvm's).
+func UsedPorts(d paths.Dirs) (map[int]bool, error) {
 	ents, err := os.ReadDir(d.VMs())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil

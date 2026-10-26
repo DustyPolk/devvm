@@ -186,8 +186,9 @@ func (s *Smolvm) update(ctx context.Context, vm string, opts ...string) error {
 	return nil
 }
 
-// stop stops a machine.
+// stop stops a machine, and its port forwarder.
 func (s *Smolvm) stop(ctx context.Context, vm string) error {
+	s.Forwards.Stop(vm)
 	if err := s.Runner.Run(ctx, msg.Stopping(vm), s.smolvm(ctx, "machine", "stop", "--name", vm)); err != nil {
 		return backend.Logged(msg.StopFailed(vm))
 	}
@@ -196,8 +197,12 @@ func (s *Smolvm) stop(ctx context.Context, vm string) error {
 
 // remove deletes a machine and what devvm keeps for it.
 func (s *Smolvm) remove(ctx context.Context, vm string) error {
+	s.Forwards.Stop(vm)
 	if err := s.Runner.Run(ctx, msg.Deleting(vm), s.smolvm(ctx, "machine", "delete", "--name", vm, "-f")); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
+	}
+	if err := s.Forwards.Remove(vm); err != nil {
+		return err
 	}
 	for _, f := range []string{s.Dirs.SmolvmVM(vm), s.proxyFile(vm), s.sshKey(vm)} {
 		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {

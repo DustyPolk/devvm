@@ -9,8 +9,9 @@
 // (--state-dir) as well.
 //
 // Network policy is emulated, reviewed (start.go); ssh for editors is
-// emulated, reviewed (ssh.go). What smolvm lacks is refused (Caps):
-// forwarding every port, and turning agent forwarding on or off later.
+// emulated, reviewed (ssh.go); forwarding every port is emulated,
+// reviewed (forward.go). What smolvm lacks is refused (Caps): turning
+// agent forwarding on or off later.
 package smolvm
 
 import (
@@ -33,6 +34,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
@@ -97,6 +99,8 @@ type Smolvm struct {
 	// whether the run was interrupted.
 	AddCleanup  func(f func(context.Context)) (remove func())
 	Interrupted func() bool
+	// Forwards runs the port forwarders of VMs that forward every port.
+	Forwards Forwards
 }
 
 // UI is where the backend prints, the run log its commands run into, the
@@ -120,6 +124,12 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 	if kvm == "" {
 		kvm = "/dev/kvm"
 	}
+	self, err := os.Executable()
+	if err == nil {
+		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
+			self = r
+		}
+	}
 	return &Smolvm{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
@@ -128,6 +138,9 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 		FreePort: freePort, PortFree: portFree,
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
+		Forwards: Forwards{
+			Dirs: d, Self: self, Detach: platform.StartDetached, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
+		},
 	}
 }
 
@@ -136,11 +149,15 @@ func (s *Smolvm) Name() string { return Name }
 
 // Caps is what smolvm has natively, egress through devvm's proxy emulated
 // and reviewed (Start: an allow list of the host, and the proxy deciding
-// each connection), and ssh for editors emulated and reviewed (an sshd of
-// devvm's, ssh.go). The rest waits for emulations: every port
-// forwarded, and agent forwarding turned on or off once a VM is made.
+// each connection), ssh for editors emulated and reviewed (an sshd of
+// devvm's, ssh.go), and every port forwarded emulated and reviewed (a
+// forwarder of devvm's over that ssh, forward.go). Agent forwarding
+// turned on or off once a VM is made waits for an emulation.
 func (s *Smolvm) Caps() backend.Caps {
-	caps := backend.Caps{backend.FeatureEgressProxy: backend.Emulated(true), backend.FeatureSSH: backend.Emulated(true)}
+	caps := backend.Caps{
+		backend.FeatureEgressProxy: backend.Emulated(true), backend.FeatureSSH: backend.Emulated(true),
+		backend.FeaturePortsAll: backend.Emulated(true),
+	}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
 		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeaturePorts,
@@ -183,14 +200,17 @@ func (s *Smolvm) ToolFormat() string {
 // record is what devvm set on one of its machines, which smolvm machine ls
 // doesn't show: kept in devvm's data folder (paths.Dirs.SmolvmVM).
 type record struct {
-	Image      string            `json:"image"` // its image's key
-	Project    string            `json:"project,omitempty"`
-	AgentDirs  []string          `json:"agent_dirs,omitempty"`
-	Tools      string            `json:"tools,omitempty"`
-	ToolsAt    string            `json:"tools_at,omitempty"`
-	Forwarding bool              `json:"forwarding,omitempty"`
-	Ports      []string          `json:"ports,omitempty"` // as -p has them: 5173:5173, 8000-8002:8000-8002
-	Env        map[string]string `json:"env,omitempty"`
+	Image      string   `json:"image"` // its image's key
+	Project    string   `json:"project,omitempty"`
+	AgentDirs  []string `json:"agent_dirs,omitempty"`
+	Tools      string   `json:"tools,omitempty"`
+	ToolsAt    string   `json:"tools_at,omitempty"`
+	Forwarding bool     `json:"forwarding,omitempty"`
+	Ports      []string `json:"ports,omitempty"` // as -p has them: 5173:5173, 8000-8002:8000-8002
+	// PortsAll is set when it forwards every port: through its forwarder
+	// (forward.go), with none of smolvm's.
+	PortsAll bool              `json:"ports_all,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
 	// Mediated is set once the machine started through devvm's decider:
 	// smolvm then requires one at every start, until devvm removes that.
 	Mediated bool `json:"mediated,omitempty"`
@@ -476,11 +496,12 @@ func gibCeil(g float64) string {
 }
 
 // portArgs are -p's values for a project VM's ports p: each range to the
-// same ports on the host. All is refused (ports-all), and so is more than
-// smolvm forwards besides the VM's ssh, or the guest port its sshd has.
+// same ports on the host; none for all, which its forwarder forwards
+// (forward.go). More than smolvm forwards besides the VM's ssh is refused,
+// and so is the guest port its sshd has.
 func portArgs(vm string, p backend.Ports) ([]string, error) {
 	if p.All {
-		return nil, msg.BackendLacks(Name, string(backend.FeaturePortsAll), vm)
+		return nil, nil
 	}
 	var out []string
 	n := 0
@@ -511,20 +532,22 @@ func (s *Smolvm) SetPorts(ctx context.Context, vm string, p backend.Ports) error
 	if err != nil {
 		return err
 	}
-	if slices.Equal(want, r.Ports) {
+	if slices.Equal(want, r.Ports) && r.PortsAll == p.All {
 		return nil
 	}
 	var opts []string
-	for _, old := range r.Ports {
-		opts = append(opts, "--remove-port", old)
-	}
-	for _, w := range want {
-		opts = append(opts, "-p", w)
+	if !slices.Equal(want, r.Ports) {
+		for _, old := range r.Ports {
+			opts = append(opts, "--remove-port", old)
+		}
+		for _, w := range want {
+			opts = append(opts, "-p", w)
+		}
 	}
 	if err := s.update(ctx, vm, opts...); err != nil {
 		return err
 	}
-	r.Ports = want
+	r.Ports, r.PortsAll = want, p.All
 	return s.writeRecord(vm, r)
 }
 

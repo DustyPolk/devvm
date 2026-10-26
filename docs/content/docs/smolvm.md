@@ -5,7 +5,7 @@ weight: 32
 
 [smolvm](https://github.com/smol-machines/smolvm) is an experimental backend: each project gets a microVM that runs its image as a container, with no init system. Choose it per VM with `--backend smolvm`, or for every new VM with `devvm setup --backend smolvm`.
 
-It lacks forwarding every port, and turning SSH agent forwarding on or off once a VM is made. [Network policy](#network-policy) and [ssh for editors](#ssh-for-editors) (`devvm ssh`, `devvm code`, `--clone`) are emulated, and reviewed. devvm refuses what it lacks in one line naming the VM ([features](backends.md#features)); those come later, as reviewed emulations.
+It lacks turning SSH agent forwarding on or off once a VM is made. [Network policy](#network-policy), [ssh for editors](#ssh-for-editors) (`devvm ssh`, `devvm code`, `--clone`) and [forwarding every port](#every-port), the default for new VMs, are emulated, and reviewed. devvm refuses what it lacks in one line naming the VM ([features](backends.md#features)); that comes later, as a reviewed emulation.
 
 ## Requirements
 
@@ -41,7 +41,7 @@ devvm's own scripts for this (`prepare.sh`, `shims.sh`, and `sshd.sh`, which ins
 - **Mounts:** the project folder (read-write) and agents' folders (read-only) at their host paths, the shared tools at `/mnt/devvm-tools` (read-only), and `/var/lib/docker` on the machine's own disk, which Docker's storage needs. A path with a colon is refused: smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, mode 0600.
 - **Network:** smolvm's own, without network policy: the internet, not the host's loopback. With it, [below](#network-policy).
 - **Size:** what you ask for, or base's; the disk only grows.
-- **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 63 ports: smolvm forwards 64, and one is the VM's [ssh](#ssh-for-editors). Port 22 is that ssh's, so listing it is refused (`smolvm_port_ssh`). Only servers listening on all addresses (`0.0.0.0`) are reached. `all`, the default, is refused: pass `--ports` or set `devvm ports -g`.
+- **Ports:** those you list (`--ports 5173,8000-8010`), each to the same port on the host's `127.0.0.1` and `::1`, at most 63 ports: smolvm forwards 64, and one is the VM's [ssh](#ssh-for-editors). Port 22 is that ssh's, so listing it is refused (`smolvm_port_ssh`). Only servers listening on all addresses (`0.0.0.0`) are reached. `all`, the default, is [emulated](#every-port).
 - **SSH agent forwarding:** chosen when the VM is made (`--ssh-agent`), and fixed then. At each start smolvm forwards the agent `SSH_AUTH_SOCK` names (devvm's own with `devvm ssh-agent devvm`); with none, the start stops (`smolvm_no_agent`).
 - **Environment:** the proxy's settings with network policy, as on Lima. The proxy variables come from the VM's proxy file, `~/.local/share/devvm/smolvm/vms/<vm>.proxy` (mode 600), which devvm writes at each start with network policy (and removes without): each of devvm's commands in the VM names it (`smolvm machine exec --secret-file`), and smolvm reads it, so the proxy's password is in no process's arguments. A `smolvm machine exec` of your own gets the variables only in a login shell. (`machine create --secret-file` would last, but smolvm ignores it for a VM made from a pack.)
 
@@ -68,6 +68,15 @@ Emulated, and reviewed: `devvm ssh`, `devvm code`, `--clone` and the [ssh config
 - **The same environment as devvm's own commands:** sessions get `/etc/environment` and, with network policy, the proxy's settings, a login's or not.
 
 A VM running since a start without ssh (from an older devvm) gets no entry, and `devvm ssh` says to restart it (`smolvm_no_ssh`). A VM whose image has no sshd (made before devvm installed one) starts and runs without ssh, warned (`smolvm_no_sshd`): a VM made after `devvm rebuild` has it.
+
+## Every port
+
+Emulated, and reviewed ([design](design.md#every-port-on-smolvm)): a VM that forwards every port (`--ports all`, the default) gets none of smolvm's forwards, and a forwarder of devvm's on your machine instead, much as Lima forwards a VM's ports:
+
+- **What it forwards:** every TCP port from 1024 up that a server in the VM listens on, on the VM's loopback (`127.0.0.1`, `::1`) or all its addresses, to the same port on your machine's `127.0.0.1` and `::1`, within a few seconds of the server starting; the forward goes when the server does. At most 256 at once.
+- **What it never takes:** a port a program on your machine has, on any address (that program keeps it, and its connections; the forward waits for the VM's server to stop and start again), and a port devvm records for any VM (its ssh, proxy and decider ports, and the ports VMs list), even while it's free. A program that starts on a port after it's forwarded can still bind it on all addresses, and then its `localhost` connections reach the VM, as on Lima.
+- **How it reaches the VM:** over the VM's [ssh](#ssh-for-editors), with the VM's own key and its host key read through smolvm, asking for no forwarding into your machine: the VM learns of each connection only as one to its own loopback, and opens none to your machine. With network policy, the VM still reaches nothing but its proxy.
+- **Its process** is `devvm _smolvm-ports`, one per VM, started after the VM's sshd and ended with it; `devvm stop` stops it. Its log is `~/.local/share/devvm/smolvm/vms/<vm>.ports.log`. A VM without ssh (an image without sshd) forwards no ports, warned (`smolvm_ports_no_ssh`); one whose forwarder doesn't start runs on, warned with its log (`smolvm_ports_failed`).
 
 ## No init system
 

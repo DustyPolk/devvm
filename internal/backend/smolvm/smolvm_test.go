@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
@@ -77,6 +78,11 @@ func newSandbox(t *testing.T) sandbox {
 		FreePort: func() (int, error) { return 61022, nil }, PortFree: func(int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
 		WithSteps: testUI{}.WithSteps, AddCleanup: testUI{}.AddCleanup, Interrupted: testUI{}.Interrupted,
+		Forwards: Forwards{
+			Dirs: d, Self: "/devvm", Tick: time.Millisecond,
+			Detach: func(string, []string, *os.File) (int, error) { return 0, errors.New("no forwarder here") },
+			Args:   func(int) ([]string, error) { return nil, errors.New("no process") },
+		},
 	}
 	return sandbox{s, stub}
 }
@@ -159,6 +165,7 @@ func TestCaps(t *testing.T) {
 		none := map[backend.Feature]string{
 			backend.FeatureEgressProxy: "emulated", // reviewed
 			backend.FeatureSSH:         "emulated", // reviewed
+			backend.FeaturePortsAll:    "emulated", // reviewed
 		}[f]
 		if none == "" {
 			none = "none"
@@ -174,9 +181,11 @@ func TestCaps(t *testing.T) {
 	if err := r.Require(s, "devvm-x", backend.FeatureSSH); err != nil {
 		t.Errorf("ssh: %v", err)
 	}
-	err := r.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...)
-	if got := names(err); got != "backend_lacks backend=smolvm feature=ports-all vm=devvm-x" {
-		t.Errorf("every port: %s", got)
+	if err := r.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...); err != nil {
+		t.Errorf("every port: %v", err)
+	}
+	if got := names(r.Require(s, "devvm-x", backend.FeatureAgentToggle)); got != "backend_lacks backend=smolvm feature=agent-toggle vm=devvm-x" {
+		t.Errorf("agent toggle: %s", got)
 	}
 }
 
@@ -207,8 +216,9 @@ func TestPortArgs(t *testing.T) {
 	if got, err := portArgs("v", backend.Ports{}); err != nil || got != nil {
 		t.Errorf("none: %q, %v", got, err)
 	}
-	if _, err := portArgs("v", backend.Ports{All: true}); names(err) != "backend_lacks backend=smolvm feature=ports-all vm=v" {
-		t.Errorf("all: %v", err)
+	// Every port is its forwarder's: none of smolvm's.
+	if got, err := portArgs("v", backend.Ports{All: true}); err != nil || got != nil {
+		t.Errorf("all: %q, %v", got, err)
 	}
 	// One of smolvm's 64 is the VM's ssh.
 	if _, err := portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3062}}}); err != nil {

@@ -40,7 +40,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	addUpFlags(root, uf)
 	addVersion(root)
 	root.AddCommand(newBuildCmd(u, g), newRebuildCmd(u, g), newImagesCmd(u, g), newGCCmd(u, g), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
-		newRestartCmd(u, g), newStopCmd(u), newRemoveCmd(u, g), newUpdateCmd(u, g), newAdoptCmd(u), newExportCmd(u), newRmCmd(u), newLsCmd(u), newLogCmd(u), newPolicyCmd(u), newNetworkCmd(u), newSSHCmd(u), newCodeCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
+		newRestartCmd(u, g), newStopCmd(u), newRemoveCmd(u, g), newUpdateCmd(u, g), newAdoptCmd(u), newExportCmd(u), newRmCmd(u), newLsCmd(u), newLogCmd(u), newPolicyCmd(u), newNetworkCmd(u), newSSHCmd(u), newCodeCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newSmolvmPortsCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
 		newAuthCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	return root

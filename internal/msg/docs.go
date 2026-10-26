@@ -23,6 +23,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"smolvm_mount_colon":        "smolvm#what-devvm-sets-on-a-vm",
 	"smolvm_too_many_ports":     "smolvm#what-devvm-sets-on-a-vm",
 	"smolvm_no_agent":           "smolvm#what-devvm-sets-on-a-vm",
+	"smolvm_ports_no_ssh":       "smolvm#every-port",
+	"smolvm_ports_failed":       "smolvm#every-port",
 	"smolvm_port_ssh":           "smolvm#ssh-for-editors",
 	"smolvm_no_ssh":             "smolvm#ssh-for-editors",
 	"smolvm_no_sshd":            "smolvm#ssh-for-editors",
