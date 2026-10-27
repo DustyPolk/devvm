@@ -124,7 +124,7 @@ Images are built in layers and cached, like Docker's. `base` comes first, and ea
 
 | Image | Its key hashes |
 | --- | --- |
-| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it |
+| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it; on smolvm and Docker, their scripts for containers and Ubuntu's container image, pinned by digest |
 | a built-in layer | its parent's key, its name, its script (`assets/layers/<name>.sh`) and its rebuild counter |
 | a custom layer | its parent's key, its name, its script (`~/.config/devvm/layers/<name>.sh`) and its rebuild counter |
 

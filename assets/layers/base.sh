@@ -9,8 +9,9 @@ mise_sha256_amd64=6eb1b890e90818417ca34c90dbbd47881917d5cd199f31b63b062ea9c6b18d
 mise_sha256_arm64_musl=e036eb7bd3ca63e8565497e597967484330a74ff24e9c4c9f2ac41824cbf4090
 mise_sha256_amd64_musl=fc5137a3147494e039c3d5fc3d84de354170d7d8dafdb0b5f0b6f3f19d1dd922
 # apt_snapshot: the distribution's packages come from its archive as it was then (snapshot.ubuntu.com,
-# snapshot.debian.org), so the same image key means the same packages.
-apt_snapshot=20261009T000000Z
+# snapshot.debian.org), so the same image key means the same packages. It moves with Ubuntu's container
+# image (internal/ubuntu), which mustn't be newer.
+apt_snapshot=20261026T000000Z
 
 export DEBIAN_FRONTEND=noninteractive
 # Alpine (--from alpine): apk, OpenRC and musl. Its packages come from the release's repositories,

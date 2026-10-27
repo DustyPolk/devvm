@@ -120,6 +120,8 @@ fi
 if want from; then for f in "$root"/assets/features/*.sh; do basename "$f" .sh; done > "$XDG_CONFIG_HOME/devvm/base-features"
 else : > "$XDG_CONFIG_HOME/devvm/base-features"; fi
 D=$src/devvm
+# The digest of Ubuntu's container image smolvm's and Docker's base start from, as devvm pins it.
+ubuntu_pin=$(sed -n 's/^const ContainerDigest = "\(sha256:[0-9a-f]\{64\}\)"$/\1/p' "$root/internal/ubuntu/ubuntu.go")
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
 vms=$XDG_DATA_HOME/devvm/vms         # the VMs' state, one per VM
@@ -236,7 +238,9 @@ trap 'exit 130' INT TERM
 # Progress: each result shows [n/N], how long it took (since the previous check, so builds count),
 # and the time left as the previous run measured it ($work/timings: "label<TAB>seconds"). A
 # heartbeat every minute says what's happening during long steps.
-timings=$work/timings-$(tr ' ' '-' <<<"$sel")   # per selection: they run different checks
+# Per selection and Docker engines: they run different checks (on macOS, the Linux engine's are timed by
+# its own run, in the docker host VM).
+timings=$work/timings-$(tr ' ' '-' <<<"$sel${engines:+ $engines}")
 : > "$timings.new"
 total=$(wc -l 2>/dev/null < "$timings" | tr -d ' '); [[ ${total:-0} -gt 0 ]] || total="?"
 started=$SECONDS ncheck=0
@@ -943,7 +947,8 @@ fi
 if want from; then
 section "--from"
 # Registry images need no Docker: these run with a docker that's installed but not running (it
-# logs what devvm asked it, which may only be whether it has the image).
+# logs what devvm asked it, which may only be whether it has the image, and, as each launch asks
+# every backend, which VMs of devvm's it has).
 mkdir -p "$work/nodocker"; : > "$work/docker-calls"
 printf '#!/bin/sh\necho "docker $*" >> "%s"\necho "Cannot connect to the Docker daemon" >&2; exit 1\n' \
   "$work/docker-calls" > "$work/nodocker/docker"
@@ -984,7 +989,8 @@ check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/de
 
 # Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.
 check "base builds from ubuntu:26.04" nd quiet "$D" --from ubuntu:26.04 build base
-check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '$work/docker-calls'"
+check "none of them needed Docker" bash -c "! grep -v -e '^docker image inspect ' \
+  -e '^docker container ls -a -q --no-trunc --filter label=devvm\.data=$XDG_DATA_HOME/devvm --filter label=devvm\.kind=vm$' '$work/docker-calls'"
 check "and the build VM and its temporary folders are gone" bash -c "
   ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
 # An image only Docker has (built, never pushed) isn't checked: making one would change Docker's images.
@@ -1011,9 +1017,11 @@ export -f smol_pid
 # forward is TSI, where the VM asks this machine's resolver itself; any forward, or an allow list, is
 # virtio-net, where it asks smolvm's (the gateway, 100.96.0.1). design.md's DNS detection rests on it.
 smol_nameserver() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf </dev/null; }
-# smol_tsi VM: it asks this machine's first resolver (not the gateway).
-smol_tsi() { local ns host; ns=$(smol_nameserver "$1"); host=$(awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf)
-  echo "VM's: ${ns:-none}, this machine's: ${host:-none}"; [[ -n $ns && $ns != 100.96.0.1 && $ns == "$host" ]]; }
+# smol_tsi VM: it asks one of this machine's resolvers (not the gateway). The first can be one the VM
+# can't use (an IPv6 link-local address, scoped to this machine's interface): smolvm skips it.
+smol_tsi() { local ns host; ns=$(smol_nameserver "$1"); host=$(awk '$1 == "nameserver" { print $2 }' /etc/resolv.conf)
+  echo "VM's: ${ns:-none}, this machine's: $(paste -sd ' ' - <<<"${host:-none}")"
+  [[ -n $ns && $ns != 100.96.0.1 ]] && grep -qxF -- "$ns" <<<"$host"; }
 smol_vnet() { local ns; ns=$(smol_nameserver "$1"); echo "VM's: ${ns:-none}"; [[ $ns == 100.96.0.1 ]]; }
 # smol_listens_only VM PORT...: the host process that runs it listens on each PORT (the control:
 # what lsof sees), and on no other TCP port.
@@ -1035,9 +1043,9 @@ kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/la
 [[ -n $kb ]] || kb=$(for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do
   k=$(basename "$k"); grep -qx name=base "$images/$k" 2>/dev/null && grep -qx from= "$images/$k" && echo "$k"; done | head -1)
 packs=$XDG_DATA_HOME/devvm/smolvm/images
-check "base is a pack, recorded with Ubuntu's container image by digest; its build machine is gone" bash -c "
-  [[ -n '$kb' && -f '$packs/$kb/image.smolmachine' ]] && grep -qx libc=gnu '$images/$kb' &&
-  grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@sha256:[0-9a-f]{64}$' '$images/$kb' && [[ -z \$(smol_status devvm-img-$kb) ]]"
+check "base is a pack, recorded with Ubuntu's container image by its pinned digest; its build machine is gone" bash -c "
+  [[ -n '$kb' && -n '$ubuntu_pin' && -f '$packs/$kb/image.smolmachine' ]] && grep -qx libc=gnu '$images/$kb' &&
+  grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' '$images/$kb' && [[ -z \$(smol_status devvm-img-$kb) ]]"
 fixture=$layers/e2esmol.sh
 token=e2e-smolvm-ran-$$-$(date +%s)
 printf '#!/bin/bash\necho %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" > "$fixture"
@@ -2427,8 +2435,10 @@ docker_emulated() {
 # docker_linux: the checks on this machine's engine, a Linux one.
 docker_linux() {
   local others_before kb fixture token kf kx rc
-  # alpine:3, which docker_ssh builds a base from, pulled first: Docker keeps the image devvm pulls.
+  # alpine:3, which docker_ssh builds a base from, and Ubuntu's pinned image, which base starts from,
+  # pulled first: Docker keeps the images devvm pulls.
   docker image pull -q alpine:3 >/dev/null 2>&1
+  docker image pull -q "docker.io/library/ubuntu@$ubuntu_pin" >/dev/null 2>&1
   others_before=$(d_others)
   section "docker: shared tool versions"
   check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
@@ -2441,9 +2451,9 @@ docker_linux() {
   check "build base" quiet env DEVVM_MESSAGES=names "$D" "${B[@]}" build base
   kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
   [[ -n $kb ]] || kb=$(for k in $(keys_of base); do grep -qx from= "$images/$k" && d_img "devvm-$dns:$k" && echo "$k"; done | head -1)
-  check "base is an image of devvm's, recorded with Ubuntu's container image by digest; its build container is gone" bash -c "
-    [[ -n '$kb' ]] && d_img 'devvm-$dns:$kb' && grep -qx libc=gnu '$images/$kb' &&
-    grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@sha256:[0-9a-f]{64}$' '$images/$kb' && [[ -z \$(d_state devvm-img-$kb-$dns) ]]"
+  check "base is an image of devvm's, recorded with Ubuntu's container image by its pinned digest; its build container is gone" bash -c "
+    [[ -n '$kb' && -n '$ubuntu_pin' ]] && d_img 'devvm-$dns:$kb' && grep -qx libc=gnu '$images/$kb' &&
+    grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' '$images/$kb' && [[ -z \$(d_state devvm-img-$kb-$dns) ]]"
   # Build confinement: servers on this machine, on its loopback and on every address, and a layer that
   # tries both through the build container's gateway.
   python3 -m http.server -b 127.0.0.1 47190 >/dev/null 2>&1 & d_servers+=($!)

@@ -110,8 +110,8 @@ type Backend interface {
 }
 
 // KeyFiles is a backend that puts files of its own into base (scripts it
-// runs before devvm's), which base's key hashes too: by name, their
-// contents. A backend that puts nothing in doesn't implement it.
+// runs before devvm's, the image it starts from), which base's key hashes
+// too: by name, their contents. A backend that puts nothing in doesn't implement it.
 type KeyFiles interface {
 	KeyFiles() map[string][]byte
 }

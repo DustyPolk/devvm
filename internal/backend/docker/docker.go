@@ -42,10 +42,10 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
-	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // Name is the backend's name.
@@ -104,9 +104,6 @@ type Docker struct {
 	// Hostname is the host's name, which a Docker engine on this machine
 	// has too.
 	Hostname func() (string, error)
-	// Digest looks up a container image's digest (sha256:…) in its
-	// registry: Ubuntu's, for base.
-	Digest func(ctx context.Context, ref string) (string, error)
 	// Terminal reports whether devvm's input is a terminal (a shell gets
 	// one then).
 	Terminal func() bool
@@ -166,7 +163,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 	self, _ := os.Executable()
 	return &Docker{
 		client: client{Runner: logRunner{u.LoggedCmd}, names: names{Data: d.Data}}, Dirs: d, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
-		User: user.Current, Hostname: os.Hostname, Digest: from.NewRegistry().Digest,
+		User: user.Current, Hostname: os.Hostname,
 		Terminal: u.StdinIsTerminal, SharingFile: sharing,
 		Self: self, Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
 		Info: u.Info, Warn: u.Warn,
@@ -210,9 +207,10 @@ func (d *Docker) NameMax() int { return 0 }
 func (d *Docker) script(name string) ([]byte, error) { return fs.ReadFile(d.Assets, name) }
 
 // KeyFiles are the scripts base's containers run that go into base, which
-// smolvm's machines run too; one missing is hashed as empty.
+// smolvm's machines run too, one missing hashed as empty, and Ubuntu's
+// pinned image.
 func (d *Docker) KeyFiles() map[string][]byte {
-	files := map[string][]byte{}
+	files := map[string][]byte{"ubuntu-image": []byte(ubuntu.ContainerRef)}
 	for _, n := range []string{"container/prepare.sh", "container/shims.sh", "container/sshd.sh"} {
 		files[n], _ = d.script(n)
 	}

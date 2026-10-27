@@ -1,4 +1,5 @@
-// Package ubuntu finds Ubuntu's cloud image for base: the newest dated
+// Package ubuntu pins Ubuntu's container image and finds Ubuntu's cloud
+// image for base. The cloud image is Lima's: the newest dated
 // release of the series with an image for the host, and the image's
 // checksum from that release's SHA256SUMS. When gpgv is installed,
 // SHA256SUMS must be signed by Ubuntu's cloud image key, pinned in devvm's
@@ -39,7 +40,25 @@ const (
 	// Keyring is Ubuntu's cloud image signing key, by its path in devvm's
 	// own files.
 	Keyring = "layers/ubuntu-cloud.gpg"
+	// ContainerRepo is Ubuntu's container image, which smolvm's and
+	// Docker's base start from without --from: Version's, by
+	// ContainerDigest.
+	ContainerRepo = "docker.io/library/ubuntu"
 )
+
+// ContainerDigest pins ContainerRepo's image: its index's digest, every
+// platform's. scripts/bump.sh moves it with layers/base.sh's package
+// snapshot, to an image built before the snapshot: one with newer packages
+// than the snapshot has leaves apt unable to install what depends on their
+// exact versions.
+const ContainerDigest = "sha256:19fcd1bf268f02b60aca3bd30bd8a6d9a11759a430e32921833e65f16d87348a"
+
+// ContainerRef is the pinned image by its digest, as it's pulled.
+const ContainerRef = ContainerRepo + "@" + ContainerDigest
+
+// ContainerOrigin is how base's record names the pinned image: its tag and
+// digest.
+const ContainerOrigin = ContainerRepo + ":" + Version + "@" + ContainerDigest
 
 const (
 	timeout = 60 * time.Second // per request, body included

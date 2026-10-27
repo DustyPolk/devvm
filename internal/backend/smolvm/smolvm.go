@@ -37,11 +37,11 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
-	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // Name is the backend's name.
@@ -77,9 +77,6 @@ type Smolvm struct {
 	User func() (*user.User, error)
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
-	// Digest looks up a container image's digest (sha256:…) in its
-	// registry: Ubuntu's, for base.
-	Digest func(ctx context.Context, ref string) (string, error)
 	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
 	KVM string
 	// Terminal reports whether devvm's input is a terminal (a shell gets
@@ -133,7 +130,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 	return &Smolvm{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
-		Digest: from.NewRegistry().Digest, KVM: kvm,
+		KVM:      kvm,
 		Terminal: u.StdinIsTerminal,
 		FreePort: freePort, PortFree: platform.PortFree,
 		Info: u.Info, Warn: u.Warn,
@@ -185,10 +182,10 @@ func (s *Smolvm) containerScript(name string) ([]byte, error) {
 	return fs.ReadFile(s.Assets, "container/"+name)
 }
 
-// KeyFiles are devvm's scripts for smolvm that go into base; one missing
-// is hashed as empty.
+// KeyFiles are devvm's scripts for smolvm that go into base, one missing
+// hashed as empty, and Ubuntu's pinned image.
 func (s *Smolvm) KeyFiles() map[string][]byte {
-	files := map[string][]byte{}
+	files := map[string][]byte{"ubuntu-image": []byte(ubuntu.ContainerRef)}
 	for _, n := range []string{"prepare.sh", "shims.sh", "sshd.sh"} {
 		files["container/"+n], _ = s.containerScript(n)
 	}

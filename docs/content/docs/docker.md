@@ -50,7 +50,7 @@ Docker's engine is yours (Docker Desktop's especially), so:
 
 ## Building images
 
-- `base` is a container from Ubuntu's container image (`ubuntu:26.04`), by the digest its registry has at the time, which its record keeps; with `--from`, from that image by its recorded digest, which may be one only Docker has. Each layer is a container from its parent's image. Each image is the container committed (`docker commit`), its layers shared with its parent's.
+- `base` is a container from Ubuntu's container image (`ubuntu:26.04`), by the digest devvm pins with base's package snapshot (`ContainerDigest` in `internal/ubuntu/ubuntu.go`), which is in base's key and its record; with `--from`, from that image by its recorded digest, which may be one only Docker has. Each layer is a container from its parent's image. Each image is the container committed (`docker commit`), its layers shared with its parent's.
 - Before `assets/layers/base.sh`, devvm adds what Ubuntu's cloud image has and a container lacks: `sudo`, CA certificates, `bash` (on Alpine, OpenRC and ssh's client too) and the VM's user, and after base's scripts `sshd` (without host keys), as on [smolvm](smolvm.md#building-images): the same scripts, in `base`'s key. The user has your name and uid, and on Linux your group's id too, so the files it makes in the project folder are yours; home is `/home/<you>.guest`.
 - The scripts run as that user, with stand-ins for `systemctl` and `rc-update` while they run: containers run no init system.
 - Base's CPUs and memory are `base.yaml`'s: 4 CPUs, 8 GiB (half the engine's memory on a small one).

@@ -19,12 +19,8 @@ import (
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
-// UbuntuImage is the container image base starts from without --from:
-// Ubuntu's, of the release Lima's base has.
-const UbuntuImage = "docker.io/library/ubuntu:" + ubuntu.Version
-
 // BuildImage builds an image: a container made from its parent's image,
-// or for base from Ubuntu's container image (or spec.From's, which Docker
+// or for base from Ubuntu's pinned container image (or spec.From's, which Docker
 // has or pulls), by its digest, prepared as Lima's cloud image comes
 // (prepare.sh: sudo, CA certificates, the VM's user; after its scripts,
 // sshd.sh: sshd, without host keys). It mounts nothing from the host and
@@ -184,7 +180,7 @@ func (d *Docker) runBuild(ctx context.Context, inst string, spec backend.ImageSp
 // baseImage is the container image base starts from, pulled when it's a
 // registry's, and what its record says it started from: spec's (as
 // recorded: a registry digest, or Docker's own ID for an image only Docker
-// has), else Ubuntu's, looked up now.
+// has), else Ubuntu's, pinned.
 func (d *Docker) baseImage(ctx context.Context, f *backend.From) (ref, origin string, err error) {
 	if f != nil {
 		if f.Digest == "" {
@@ -202,20 +198,7 @@ func (d *Docker) baseImage(ctx context.Context, f *backend.From) (ref, origin st
 		}
 		return f.Digest, f.Digest, d.pull(ctx, f.Digest)
 	}
-	digest, err := d.Digest(ctx, UbuntuImage)
-	switch {
-	case errors.Is(err, from.ErrUnreachable):
-		return "", "", msg.FromUnreachable(UbuntuImage, from.ParseRef(UbuntuImage).Host)
-	case errors.Is(err, from.ErrNotFound):
-		return "", "", msg.FromNotFound(UbuntuImage, from.ParseRef(UbuntuImage).Host)
-	case err != nil:
-		return "", "", err
-	}
-	if !from.Valid(digest) {
-		return "", "", msg.BadFrom(msg.Shown(digest))
-	}
-	ref = strings.TrimSuffix(UbuntuImage, ":"+ubuntu.Version) + "@" + digest
-	return ref, UbuntuImage + "@" + digest, d.pull(ctx, ref)
+	return ubuntu.ContainerRef, ubuntu.ContainerOrigin, d.pull(ctx, ubuntu.ContainerRef)
 }
 
 // rootScript runs one of the scripts devvm runs in images as containers

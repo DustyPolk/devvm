@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // execRunner runs the commands as they are: here, the smolvm stub.
@@ -72,10 +73,7 @@ func newSandbox(t *testing.T) sandbox {
 		Getenv: func(string) string { return "" },
 		User:   func() (*user.User, error) { return &user.User{Username: "u", Uid: "501"}, nil },
 		Memory: func() (uint64, error) { return 64 << 30, nil },
-		Digest: func(context.Context, string) (string, error) {
-			return "sha256:" + strings.Repeat("ab", 32), nil
-		},
-		KVM: "/dev/kvm", Terminal: func() bool { return false },
+		KVM:    "/dev/kvm", Terminal: func() bool { return false },
 		FreePort: func(context.Context) (int, error) { return 61022, nil }, PortFree: func(context.Context, int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
 		WithSteps: testUI{}.WithSteps, AddCleanup: testUI{}.AddCleanup, Interrupted: testUI{}.Interrupted,
@@ -194,14 +192,15 @@ func TestCaps(t *testing.T) {
 }
 
 // Tool images are uncompressed, named by plain.sh; base's key has
-// prepare.sh, shims.sh and sshd.sh.
+// prepare.sh, shims.sh, sshd.sh and Ubuntu's pinned image.
 func TestFormatAndKeyFiles(t *testing.T) {
 	s := newSandbox(t)
 	if f := s.ToolFormat(); !strings.HasPrefix(f, "plain-") || len(f) != len("plain-")+12 {
 		t.Errorf("ToolFormat = %q", f)
 	}
 	kf := s.KeyFiles()
-	if len(kf) != 3 || len(kf["container/prepare.sh"]) == 0 || len(kf["container/shims.sh"]) == 0 || len(kf["container/sshd.sh"]) == 0 {
+	if len(kf) != 4 || len(kf["container/prepare.sh"]) == 0 || len(kf["container/shims.sh"]) == 0 || len(kf["container/sshd.sh"]) == 0 ||
+		string(kf["ubuntu-image"]) != ubuntu.ContainerRef {
 		t.Errorf("KeyFiles = %v", slices.Collect(func(yield func(string) bool) {
 			for k := range kf {
 				if !yield(k) {
@@ -702,7 +701,7 @@ func TestStartConfined(t *testing.T) {
 	}
 }
 
-// Base: a machine from Ubuntu's container image by digest, prepared, its
+// Base: a machine from Ubuntu's pinned container image, prepared, its
 // scripts run between the stand-ins, packed, then deleted.
 func TestBuildBase(t *testing.T) {
 	s := newSandbox(t)
@@ -713,15 +712,14 @@ func TestBuildBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := "sha256:" + strings.Repeat("ab", 32)
-	if built.Libc != "gnu" || built.Origin != UbuntuImage+"@"+digest {
+	if built.Libc != "gnu" || built.Origin != "docker.io/library/ubuntu:26.04@"+ubuntu.ContainerDigest {
 		t.Errorf("Built = %+v", built)
 	}
 	inst := "devvm-img-0123456789ab"
 	got := s.calls(t)
 	want := []string{
 		"smolvm machine create --name " + inst + " --label devvm.data=" + s.Dirs.Data +
-			" --cpus 4 --mem 8192 --storage 100 -v /var/lib/docker --net --image docker.io/library/ubuntu@" + digest,
+			" --cpus 4 --mem 8192 --storage 100 -v /var/lib/docker --net --image docker.io/library/ubuntu@" + ubuntu.ContainerDigest,
 		"smolvm machine start --name " + inst,
 		"smolvm machine exec --name " + inst + " -i -- sh -s --",
 		"smolvm machine exec --name " + inst + " -i -- sh -s -- u 501",

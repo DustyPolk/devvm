@@ -19,6 +19,32 @@ cmp stdout mise-base.want
 exec grep -E 'miseVersion =|"(macos|linux)-' repo/internal/tools/mise.go
 cmp stdout mise-go.want
 
+# apt moves base's snapshot to today and Ubuntu's container image to the
+# digest of the index the registry sent, built before the snapshot.
+exec repo/scripts/bump.sh apt
+stdout '^  ubuntu +19fcd1bf268f +-> 8186ab583383$'
+exec grep '^apt_snapshot=' repo/assets/layers/base.sh
+stdout '^apt_snapshot=[0-9]{8}T000000Z$'
+exec grep '^const ContainerDigest = ' repo/internal/ubuntu/ubuntu.go
+stdout '^const ContainerDigest = "sha256:8186ab5833835533fd62c92e6a51bb4e3a194c74406f64f10befc8a7cd388c91"$'
+
+# An image built after the snapshot, or one whose build time isn't one, is
+# refused, and nothing is edited.
+exec bash repo.sh
+cp repo/assets/layers/base.sh base.before
+cp repo/internal/ubuntu/ubuntu.go ubuntu.before
+cp ubuntu-future up/ubuntu-amd64
+! exec repo/scripts/bump.sh apt
+stderr '^bump: Ubuntu''s image was built at 29990101T000000Z, after today''s snapshot '
+cmp repo/assets/layers/base.sh base.before
+cmp repo/internal/ubuntu/ubuntu.go ubuntu.before
+cp ubuntu-hostile up/ubuntu-amd64
+! exec repo/scripts/bump.sh apt
+stderr '^bump: upstream gave ubuntu_built an unexpected value: '
+cmp repo/assets/layers/base.sh base.before
+cmp repo/internal/ubuntu/ubuntu.go ubuntu.before
+! exists pwned
+
 # Upstream values that aren't a version or a checksum are refused, and
 # nothing is edited: a command for a checksum, one in a version, and a
 # missing asset (an empty checksum).
@@ -63,25 +89,44 @@ stderr '^bump: unknown tool ''nope'''
 # A copy of the files bump.sh edits, and upstream's good answers.
 set -eu
 rm -rf repo up
-mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools up
+mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools repo/internal/ubuntu up
 cp "$DEVVM_REPO/scripts/bump.sh" repo/scripts/
 cp "$DEVVM_REPO/assets/oci/build.sh" repo/assets/oci/
 cp "$DEVVM_REPO/assets/layers/base.sh" repo/assets/layers/
 cp "$DEVVM_REPO/internal/tools/mise.go" repo/internal/tools/
+cp "$DEVVM_REPO/internal/ubuntu/ubuntu.go" repo/internal/ubuntu/
 cp latest-good up/crane-latest
 cp sums-good up/crane-sums
 cp mise-latest up/mise-latest
 cp mise-sums up/mise-sums
+cp ubuntu-index up/ubuntu-index
+cp ubuntu-arm64 up/ubuntu-arm64
+cp ubuntu-amd64 up/ubuntu-amd64
 -- bin/curl --
 #!/bin/bash
-# Answers crane's and mise's releases from $WORK/up/; anything else fails.
+# Answers crane's and mise's releases and Ubuntu's container image from
+# $WORK/up/; anything else fails.
 for a in "$@"; do case $a in
   */go-containerregistry/releases/latest) cat "$WORK/up/crane-latest"; exit ;;
   */go-containerregistry/*/checksums.txt) cat "$WORK/up/crane-sums"; exit ;;
   */jdx/mise/releases/latest) cat "$WORK/up/mise-latest"; exit ;;
   */jdx/mise/*/SHASUMS256.txt) cat "$WORK/up/mise-sums"; exit ;;
+  https://auth.docker.io/token*) echo '{"token":"t"}'; exit ;;
+  */library/ubuntu/manifests/26.04) cat "$WORK/up/ubuntu-index"; exit ;;
+  */library/ubuntu/manifests/sha256:aaaa*) cat "$WORK/up/ubuntu-arm64"; exit ;;
+  */library/ubuntu/manifests/sha256:bbbb*) cat "$WORK/up/ubuntu-amd64"; exit ;;
 esac; done
 exit 22
+-- ubuntu-index --
+{"manifests":[{"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","platform":{"architecture":"arm64","os":"linux"}},{"digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","platform":{"architecture":"amd64","os":"linux"}}]}
+-- ubuntu-arm64 --
+{"annotations":{"org.opencontainers.image.created":"2000-01-02T03:04:05.309136+00:00"}}
+-- ubuntu-amd64 --
+{"annotations":{"org.opencontainers.image.created":"2000-01-02T03:04:06Z"}}
+-- ubuntu-future --
+{"annotations":{"org.opencontainers.image.created":"2999-01-01T00:00:00Z"}}
+-- ubuntu-hostile --
+{"annotations":{"org.opencontainers.image.created":"$(touch pwned)"}}
 -- latest-good --
 {"tag_name":"v9.9.9"}
 -- latest-hostile --

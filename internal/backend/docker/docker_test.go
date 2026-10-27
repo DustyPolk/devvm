@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // execRunner runs the commands as they are: here, the docker stub.
@@ -59,9 +60,6 @@ func newSandbox(t *testing.T) *sandbox {
 		client: client{Runner: execRunner{}, names: names{Data: d.Data}}, Dirs: d, OS: "linux", Arch: "arm64", Assets: assets.FS,
 		User:     func() (*user.User, error) { return &user.User{Username: "u", Uid: "501", Gid: "1000"}, nil },
 		Hostname: func() (string, error) { return "stub-host", nil },
-		Digest: func(context.Context, string) (string, error) {
-			return "sha256:" + strings.Repeat("ab", 32), nil
-		},
 		Terminal: func() bool { return false },
 		Self:     "/devvm", Getenv: func(string) string { return "" },
 		LookPath: func(c string) (string, error) { return "/bin/" + c, nil },
@@ -334,8 +332,8 @@ func TestBuildBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pinned := "docker.io/library/ubuntu@sha256:" + strings.Repeat("ab", 32)
-	if built.Origin != UbuntuImage+"@sha256:"+strings.Repeat("ab", 32) || built.Libc != "gnu" {
+	pinned := "docker.io/library/ubuntu@" + ubuntu.ContainerDigest
+	if built.Origin != "docker.io/library/ubuntu:26.04@"+ubuntu.ContainerDigest || built.Libc != "gnu" {
 		t.Errorf("Built = %+v", built)
 	}
 	inst := s.buildName(baseKey)

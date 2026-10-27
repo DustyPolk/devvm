@@ -22,16 +22,12 @@ import (
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
-// UbuntuImage is the container image base starts from without --from:
-// Ubuntu's, of the release Lima's base has.
-const UbuntuImage = "docker.io/library/ubuntu:" + ubuntu.Version
-
 // dockerDir is a folder on a machine's own disk, not its overlay root,
 // which Docker's storage needs.
 const dockerDir = "/var/lib/docker"
 
 // BuildImage builds an image's pack. Base is a machine made from Ubuntu's
-// container image (or spec.From's), by its digest, prepared as Lima's cloud
+// pinned container image (or spec.From's), by its digest, prepared as Lima's cloud
 // image comes (prepare.sh: sudo, CA certificates, the VM's user; after its
 // scripts, sshd.sh: sshd, without host keys); a layer
 // a machine made from its parent's pack. Neither mounts anything from the
@@ -105,7 +101,7 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	}
 	step := msg.CloningImage(image.Parent(spec.Image))
 	if spec.Parent == "" {
-		ref, origin, err := s.baseImage(ctx, spec.From)
+		ref, origin, err := s.baseImage(spec.From)
 		if err != nil {
 			return backend.Built{}, err
 		}
@@ -176,9 +172,8 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 
 // baseImage is the container image base starts from, by digest, and what
 // its record says it started from: spec's (as recorded), else Ubuntu's,
-// looked up now. One only Docker has is refused: smolvm pulls from
-// registries.
-func (s *Smolvm) baseImage(ctx context.Context, f *backend.From) (ref, origin string, err error) {
+// pinned. One only Docker has is refused: smolvm pulls from registries.
+func (s *Smolvm) baseImage(f *backend.From) (ref, origin string, err error) {
 	if f != nil {
 		if f.Digest == "" {
 			return "", "", msg.NoDigest(f.Ref)
@@ -191,20 +186,7 @@ func (s *Smolvm) baseImage(ctx context.Context, f *backend.From) (ref, origin st
 		}
 		return f.Digest, f.Digest, nil
 	}
-	digest, err := s.Digest(ctx, UbuntuImage)
-	switch {
-	case errors.Is(err, from.ErrUnreachable):
-		return "", "", msg.FromUnreachable(UbuntuImage, from.ParseRef(UbuntuImage).Host)
-	case errors.Is(err, from.ErrNotFound):
-		return "", "", msg.FromNotFound(UbuntuImage, from.ParseRef(UbuntuImage).Host)
-	case err != nil:
-		return "", "", err
-	}
-	if !from.Valid(digest) {
-		return "", "", msg.BadFrom(msg.Shown(digest))
-	}
-	ref = strings.TrimSuffix(UbuntuImage, ":"+ubuntu.Version) + "@" + digest
-	return ref, UbuntuImage + "@" + digest, nil
+	return ubuntu.ContainerRef, ubuntu.ContainerOrigin, nil
 }
 
 // rootScript runs one of devvm's scripts for images run as containers
