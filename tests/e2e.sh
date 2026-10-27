@@ -947,8 +947,8 @@ fi
 if want from; then
 section "--from"
 # Registry images need no Docker: these run with a docker that's installed but not running (it
-# logs what devvm asked it, which may only be whether it has the image, and, as each launch asks
-# every backend, which VMs of devvm's it has).
+# logs what devvm asked it, which may only be whether it has the image: launches ask only the
+# backends a VM's state names).
 mkdir -p "$work/nodocker"; : > "$work/docker-calls"
 printf '#!/bin/sh\necho "docker $*" >> "%s"\necho "Cannot connect to the Docker daemon" >&2; exit 1\n' \
   "$work/docker-calls" > "$work/nodocker/docker"
@@ -989,8 +989,7 @@ check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/de
 
 # Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.
 check "base builds from ubuntu:26.04" nd quiet "$D" --from ubuntu:26.04 build base
-check "none of them needed Docker" bash -c "! grep -v -e '^docker image inspect ' \
-  -e '^docker container ls -a -q --no-trunc --filter label=devvm\.data=$XDG_DATA_HOME/devvm --filter label=devvm\.kind=vm$' '$work/docker-calls'"
+check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '$work/docker-calls'"
 check "and the build VM and its temporary folders are gone" bash -c "
   ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
 # An image only Docker has (built, never pushed) isn't checked: making one would change Docker's images.

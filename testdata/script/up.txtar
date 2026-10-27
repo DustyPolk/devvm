@@ -29,7 +29,8 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 ! stdout 'limactl edit --tty=false devvm-web'
 ! stdout 'devvm-tools-build'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
-stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n|smolvm machine ls --json\n|docker container ls [^\n]*\n)+limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\nlimactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+! stdout '^(docker|smolvm) '
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\nlimactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exists $XDG_DATA_HOME/devvm/tools
 ! exists $XDG_DATA_HOME/devvm/mise.lock
 # .git's hooks and config locked (macOS); elsewhere, not.
@@ -76,6 +77,17 @@ stub_calls
 ! stdout chflags
 exec sh -c 'cat "$VMS"/devvm-api-*'
 stdout '^git_protect=off$'
+
+# Launches ask only the backends a VM's state names: with only Lima's VMs,
+# neither docker nor smolvm runs, for a new VM or an existing one.
+stub_calls
+! stdout '^(docker|smolvm) '
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --no-network-policy base
+! stdout creating_from
+stub_calls
+stdout '^limactl list --json$'
+! stdout '^(docker|smolvm) '
 
 # Linux hosts: set-id files in the folder are named (they reach the host).
 [linux] mkdir $WORK/setid

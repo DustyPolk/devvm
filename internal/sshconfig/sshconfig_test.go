@@ -76,7 +76,7 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 	}
 	quiet := func(msg.M) {}
 	return &Config{
-		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")}, Backends: []backend.Backend{f},
+		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")}, Backends: func() ([]backend.Backend, error) { return []backend.Backend{f}, nil },
 		Info: quiet, Warn: quiet, Say: quiet, Terminal: func() bool { return false },
 	}, f
 }

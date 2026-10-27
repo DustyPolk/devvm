@@ -436,10 +436,15 @@ func (e *Env) useAgent(mode string) {
 
 // mounts returns the host folders project VMs mount, as their state and
 // backends have them: the project folder (not a --clone VM's), agent
-// folders, the tools share. A backend that can't list runs no VMs.
+// folders, the tools share. Only backends some VM's state names are
+// asked; one that can't list runs no VMs.
 func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
+	bs, err := e.Registry.Used(e.Dirs)
+	if err != nil {
+		return nil, err
+	}
 	var ms []sshagent.Mount
-	for _, b := range e.Registry.All() {
+	for _, b := range bs {
 		ins, err := b.List(ctx)
 		if err != nil {
 			continue

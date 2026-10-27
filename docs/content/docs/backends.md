@@ -73,3 +73,5 @@ devvm setup --backend NAME   # without asking; the features stay as they are
 In a terminal, `devvm setup` lists every backend, the experimental ones marked, starting from the current default: up and down (or `k` and `j`) move, Enter confirms. devvm saves and prints the choice, then asks for [base's features](customizing.md#choosing-features). With `--features` alone, or without a terminal, it doesn't ask for the backend.
 
 A VM's state records its backend, and the VM stays on it: `--backend` on an existing VM is ignored. When the backend file, or a VM's state, names a backend devvm doesn't have, devvm stops and lists the ones it has.
+
+A launch asks only the backends some VM's state names for their VMs (for the [ssh config](ssh.md) and the SSH agent's folder checks), so a backend no VM uses, not running or not installed, never runs or slows one down.

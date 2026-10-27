@@ -37,9 +37,11 @@ const hostKeysMax = 64 << 10
 // Config is devvm's ssh config and its VMs' host keys. New sets its
 // backends; its caller sets what it prints and asks.
 type Config struct {
-	Dirs     paths.Dirs
-	Backends []backend.Backend // every backend, for every VM
-	Review   backend.Review    // what their ssh is checked against
+	Dirs paths.Dirs
+	// Backends returns the backends asked for VMs: those some VM's state
+	// names, read as each config is written.
+	Backends func() ([]backend.Backend, error)
+	Review   backend.Review // what their ssh is checked against
 	// What it prints, and asks: [Y/n]; Terminal reports whether it can
 	// ask.
 	Info, Warn, Say func(msg.M)
@@ -47,9 +49,10 @@ type Config struct {
 	Terminal        func() bool
 }
 
-// New returns the ssh config for the VMs of every backend in reg.
+// New returns the ssh config for the VMs of the backends in reg that some
+// VM's state names.
 func New(d paths.Dirs, reg *backend.Registry) *Config {
-	return &Config{Dirs: d, Backends: reg.All(), Review: reg.Review}
+	return &Config{Dirs: d, Backends: func() ([]backend.Backend, error) { return reg.Used(d) }, Review: reg.Review}
 }
 
 // Alias is the name ssh and editors reach vm by: devvm-<folder>, or the
@@ -74,12 +77,17 @@ type running struct {
 	in backend.Instance
 }
 
-// projectVMs returns every backend's project VMs: their names, and those
-// running. A backend that can't list runs nothing to reach.
-func (c *Config) projectVMs(ctx context.Context) ([]string, []running) {
+// projectVMs returns the project VMs of the backends some VM's state
+// names: their names, and those running. A backend that can't list runs
+// nothing to reach.
+func (c *Config) projectVMs(ctx context.Context) ([]string, []running, error) {
+	bs, err := c.Backends()
+	if err != nil {
+		return nil, nil, err
+	}
 	var all []string
 	var up []running
-	for _, b := range c.Backends {
+	for _, b := range bs {
 		ins, err := b.List(ctx)
 		if err != nil {
 			continue
@@ -94,13 +102,14 @@ func (c *Config) projectVMs(ctx context.Context) ([]string, []running) {
 			}
 		}
 	}
-	return all, up
+	return all, up, nil
 }
 
-// Host is the name ssh and editors reach vm by: its Alias among every
-// backend's project VMs.
+// Host is the name ssh and editors reach vm by: its Alias among the
+// project VMs of the backends some VM's state names (none when their
+// states can't be read).
 func (c *Config) Host(ctx context.Context, vm string) string {
-	all, _ := c.projectVMs(ctx)
+	all, _, _ := c.projectVMs(ctx)
 	return Alias(vm, all)
 }
 
@@ -111,7 +120,10 @@ func (c *Config) Host(ctx context.Context, vm string) string {
 // must check it reaches the VM. Nor does one whose backend's ssh isn't
 // usable (an emulation not yet reviewed).
 func (c *Config) Write(ctx context.Context) error {
-	all, up := c.projectVMs(ctx)
+	all, up, err := c.projectVMs(ctx)
+	if err != nil {
+		return err
+	}
 	slices.SortFunc(up, func(a, b running) int { return strings.Compare(a.in.Name, b.in.Name) })
 	var buf strings.Builder
 	buf.WriteString(header)

@@ -27,6 +27,26 @@ func VMNames(d paths.Dirs) ([]string, error) {
 	return names, nil
 }
 
+// Backends returns the backends the VMs' states name: the only ones that
+// hold devvm's VMs.
+func Backends(d paths.Dirs) (map[string]bool, error) {
+	vms, err := VMNames(d)
+	if err != nil {
+		return nil, err
+	}
+	used := map[string]bool{}
+	for _, vm := range vms {
+		st, err := ReadVM(d, vm)
+		if err != nil {
+			return nil, err
+		}
+		if name := st.Get(KeyBackend); name != "" {
+			used[name] = true
+		}
+	}
+	return used, nil
+}
+
 // Keys of a VM's state. Other lowercase keys (a-z, 0-9, _) may be set too.
 const (
 	KeyImage   = "image"   // the image the VM was made from, plus layers added in place

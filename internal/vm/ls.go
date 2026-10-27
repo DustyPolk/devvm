@@ -38,9 +38,9 @@ func List(ctx context.Context, d paths.Dirs, reg *backend.Registry) ([]Listed, e
 	for _, b := range reg.All() {
 		ins, err := b.List(ctx)
 		if err != nil {
-			if used, uerr := BackendUsed(d, b.Name()); uerr != nil {
+			if used, uerr := state.Backends(d); uerr != nil {
 				return nil, uerr
-			} else if !used {
+			} else if !used[b.Name()] {
 				continue
 			}
 			if cerr := b.Check(ctx); cerr != nil {
@@ -110,22 +110,4 @@ func ToolsInUse(d paths.Dirs) (map[string]int, error) {
 		}
 	}
 	return n, nil
-}
-
-// BackendUsed reports whether any VM's state names the backend.
-func BackendUsed(d paths.Dirs, name string) (bool, error) {
-	vms, err := state.VMNames(d)
-	if err != nil {
-		return false, err
-	}
-	for _, vm := range vms {
-		st, err := state.ReadVM(d, vm)
-		if err != nil {
-			return false, err
-		}
-		if st.Get(state.KeyBackend) == name {
-			return true, nil
-		}
-	}
-	return false, nil
 }

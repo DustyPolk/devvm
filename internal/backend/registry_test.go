@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -95,6 +96,49 @@ func TestFor(t *testing.T) {
 			}
 			if c.Backend.Name() != tc.want || c.FlagIgnored != tc.ignored {
 				t.Errorf("got %s (flag ignored %v), want %s (%v)", c.Backend.Name(), c.FlagIgnored, tc.want, tc.ignored)
+			}
+		})
+	}
+}
+
+// Used is the registered backends some VM's state names, sorted: a state
+// without backend= and one naming a backend not here count for none.
+func TestUsed(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		vms   []string // each VM's backend=, "" for none
+		want  string
+		files string // a file that isn't a VM's state, in their folder
+	}{
+		{name: "no VMs", want: ""},
+		{name: "one backend's", vms: []string{"lima", "lima"}, want: "lima"},
+		{name: "two backends', sorted", vms: []string{"smolvm", "docker", "lima"}, want: "docker lima smolvm"},
+		{name: "unrecorded and unknown backends", vms: []string{"", "qemu", "smolvm"}, want: "smolvm"},
+		{name: "a VM's policy file", vms: []string{"lima"}, files: "devvm-0.policy", want: "lima"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testDirs(t)
+			r := testRegistry(t, "lima", "smolvm", "docker")
+			for i, b := range tc.vms {
+				if _, err := state.CreateVM(d, "devvm-"+strconv.Itoa(i), state.NewVM{Image: "base", Backend: b}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.files != "" {
+				if err := os.WriteFile(filepath.Join(d.VMs(), tc.files), []byte("backend=docker\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			bs, err := r.Used(d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, b := range bs {
+				got = append(got, b.Name())
+			}
+			if g := strings.Join(got, " "); g != tc.want {
+				t.Errorf("got %q, want %q", g, tc.want)
 			}
 		})
 	}

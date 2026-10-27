@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -133,9 +134,9 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Env) ([]listedImage, []t
 		on := build.Images{Env: newBuilder(u, b.Dirs, be, reg.Review, b.Tools, "")}
 		ls, err := on.Listing(ctx)
 		if err != nil {
-			if used, uerr := vm.BackendUsed(b.Dirs, be.Name()); uerr != nil {
+			if used, uerr := state.Backends(b.Dirs); uerr != nil {
 				return nil, nil, uerr
-			} else if !used {
+			} else if !used[be.Name()] {
 				continue
 			}
 			if cerr := be.Check(ctx); cerr != nil {
