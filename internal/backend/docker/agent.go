@@ -15,19 +15,19 @@ import (
 //
 //   - devvm's shell is an ssh session once ssh runs (Shell), forwarding,
 //     when its start forwards one (record.Agent), the agent devvm's
-//     SSH_AUTH_SOCK names, which devvm sets from the VM's choice: the
-//     user's, devvm's own, or none (unset);
+//     SSH_AUTH_SOCK names, which devvm sets from the choice the VM's
+//     current start was made with: the user's, devvm's own, or none
+//     (unset);
 //   - devvm's ssh config's entry, for editors, ssh and git, forwards the
-//     agent the VM's state says (ForwardAgent and IdentityAgent), an
+//     agent of that same choice (ForwardAgent and IdentityAgent), an
 //     explicit no included, as it does for Lima;
 //   - devvm's own other connections (its exec, its forwarder) forward
 //     none.
 //
 // So a VM's forwarding needs nothing set when it's made: it's on or off
-// in the record, for devvm ssh-agent to show. devvm's shell's is turned
-// on at the VM's next start, and which agent it forwards follows the VM's
-// choice at once; the ssh config's entry follows the VM's choice from
-// devvm's next launch, as Lima's does.
+// in the record, for devvm ssh-agent to show. A change reaches devvm's
+// shell and the ssh config's entry at the VM's next start, as on Lima
+// (StartID tells starts apart).
 
 // SetAgentForwarding turns a stopped VM's SSH agent forwarding on or off,
 // from its next start: its ssh sessions forward the agent that start
@@ -44,7 +44,8 @@ func (d *Docker) SetAgentForwarding(ctx context.Context, vm string, on bool) err
 // sessionAgent is whether a start's ssh sessions forward an agent
 // (record.Agent, vmssh.SessionArgs's): none, or the one devvm's
 // SSH_AUTH_SOCK names when it opens the shell (vmssh.AgentUser), which
-// devvm sets from the VM's choice: the user's, devvm's own, or none.
+// devvm sets from the choice the start was made with: the user's, devvm's
+// own, or none.
 func sessionAgent(r record, c backend.Confinement) string {
 	if !r.Forwarding || c.NoAgent {
 		return ""

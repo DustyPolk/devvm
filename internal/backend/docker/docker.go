@@ -468,6 +468,15 @@ func (d *Docker) Confined(context.Context, string) (bool, error) { return false,
 // Lifeline is "": no proxy follows a VM on Docker yet.
 func (d *Docker) Lifeline(context.Context, string) string { return "" }
 
+// StartID is a running VM's container and the time it last started.
+func (d *Docker) StartID(ctx context.Context, vm string) (string, error) {
+	c, err := d.vm(ctx, vm)
+	if err != nil || c.status() != backend.StatusRunning {
+		return "", err
+	}
+	return c.ID + " " + c.State.StartedAt, nil
+}
+
 // stopped returns a VM that must be stopped to be changed, and its record.
 func (d *Docker) stopped(ctx context.Context, vm string) (container, record, error) {
 	c, err := d.vm(ctx, vm)

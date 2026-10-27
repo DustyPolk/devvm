@@ -149,10 +149,16 @@ grep '^devvm-emu-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/know
 exec devvm ssh
 stdout '^ssh_host_info dir=\S+/emu host=devvm-emu$'
 
-# The agent turned off while it runs: from its next start; then none.
+# The agent turned off while it runs: from its next start, the shell's and
+# the ssh config entry's alike; then none.
 exec devvm ssh-agent off
 stdout '^==> agent_set_running mode=off vm=devvm-emu-[0-9a-f]{14}$'
 ! stderr backend_unreviewed
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stub_calls
+stdout '^ssh -F none -T .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* cd -- ''\S+/emu'' && exec bash -l$'
+grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
 exec devvm stop
 ! exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
 exec sh -c ': > "$STUB_LOG"'

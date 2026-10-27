@@ -123,12 +123,16 @@ func (c *Config) Write(ctx context.Context) error {
 		if err != nil || t.Host == "" || t.Port == 0 && t.ProxyCommand == "" || strings.ContainsAny(t.ProxyCommand, "\r\n") {
 			continue
 		}
+		start, err := r.b.StartID(ctx, r.in.Name)
+		if err != nil {
+			continue
+		}
 		ok, err := c.recordHostKeys(ctx, r.b, r.in.Name)
 		if err != nil {
 			return err
 		}
 		if ok {
-			if err := c.entry(&buf, Alias(r.in.Name, all), r.in, t); err != nil {
+			if err := c.entry(&buf, Alias(r.in.Name, all), r.in, t, start); err != nil {
 				return err
 			}
 		}
@@ -140,9 +144,10 @@ func (c *Config) Write(ctx context.Context) error {
 }
 
 // entry writes vm's Host block. Its own host keys are checked, and agent
-// forwarding is what the VM's state says, an explicit no included, so a
-// Host * of the user's doesn't apply: ssh takes an option's first value.
-func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, t backend.SSHTarget) error {
+// forwarding is the choice its current start (start) was made with, as
+// devvm's own shell has it (sshagent.Running), an explicit no included, so
+// a Host * of the user's doesn't apply: ssh takes an option's first value.
+func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, t backend.SSHTarget, start string) error {
 	hosts := alias
 	if alias != in.Name {
 		hosts += " " + in.Name
@@ -158,7 +163,7 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 		proxy = t.ProxyCommand
 	}
 	forward, identity := "no", ""
-	switch sshagent.Mode(st) {
+	switch sshagent.Running(st, start) {
 	case sshagent.On:
 		forward = "yes"
 	case sshagent.Devvm:

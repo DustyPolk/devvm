@@ -138,14 +138,44 @@ func TestOpenAgent(t *testing.T) {
 	if slices.Contains(f.Methods()[before:], "SetAgentForwarding") || !f.Instances[vm].AgentForwarding {
 		t.Errorf("running, turned off: calls %q", f.Methods()[before:])
 	}
-	if _, ok := os.LookupEnv("SSH_AUTH_SOCK"); ok {
-		t.Error("SSH_AUTH_SOCK is set for a VM without forwarding")
+	// devvm's connections keep the agent it started with.
+	if got := os.Getenv("SSH_AUTH_SOCK"); got != e.Agent.Socket() {
+		t.Errorf("running, turned off: SSH_AUTH_SOCK=%q, want %q", got, e.Agent.Socket())
 	}
 	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
 		t.Fatal(names(err))
 	}
 	if f.Instances[vm].AgentForwarding {
 		t.Error("restart didn't turn forwarding off")
+	}
+	if _, ok := os.LookupEnv("SSH_AUTH_SOCK"); ok {
+		t.Error("restarted: SSH_AUTH_SOCK is set for a VM without forwarding")
+	}
+}
+
+// A running VM runs with the agent choice its start was made with, as
+// devvm recorded it; one started some other way, or stopped, with its
+// choice.
+func TestRunningAgent(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, SSHAgent: true})
+	vm := st.Name()
+	if err := st.Set(sshagent.Key, sshagent.Devvm); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		do   func()
+		want string
+	}{
+		{"started by devvm", func() {}, sshagent.On},
+		{"started outside devvm", func() { f.Restart(vm) }, sshagent.Devvm},
+		{"stopped", func() { _ = f.Stop(t.Context(), vm) }, sshagent.Devvm},
+	} {
+		c.do()
+		if got, err := runningAgent(t.Context(), f, st); err != nil || got != c.want {
+			t.Errorf("%s: %q, %v; want %q", c.name, got, err, c.want)
+		}
 	}
 }
 

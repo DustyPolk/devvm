@@ -31,7 +31,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
 
-Still to come: Docker's emulations (ssh, ports, agent, network policy) and its docker layer; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
+Still to come: Docker's emulations (network policy) and its docker layer; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
 
 ## Tasks
 

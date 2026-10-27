@@ -371,6 +371,19 @@ func (s *Smolvm) Confined(ctx context.Context, vm string) (bool, error) {
 	return err == nil && runsOn(cur, r.Confined), err
 }
 
+// StartID is what a running machine's lifeline holds: the pid and start
+// time of the process that runs it, which each start makes anew.
+func (s *Smolvm) StartID(ctx context.Context, vm string) (string, error) {
+	m, err := s.inspect(ctx, vm)
+	if err != nil {
+		return "", notFound(vm, err)
+	}
+	if m.status() != backend.StatusRunning {
+		return "", nil
+	}
+	return s.lifeline(ctx, vm)
+}
+
 // runsOn reports whether a machine whose lifeline holds cur runs on the
 // process recorded as want: the same, and that process runs.
 func runsOn(cur, want string) bool {

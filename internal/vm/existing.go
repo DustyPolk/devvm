@@ -247,10 +247,8 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 		started, err = e.start(ctx, b, st, conf)
 		return err
 	}
-	// A running VM that uses devvm's agent gets the keys whose lifetime
-	// ran out loaded again; one that starts does in start.
-	if in.Status == backend.StatusRunning && sshagent.Mode(st) == sshagent.Devvm {
-		if err := e.Agent.Ensure(ctx); err != nil {
+	if in.Status == backend.StatusRunning {
+		if err := e.reloadAgent(ctx, b, st); err != nil {
 			return conf, err
 		}
 	}
@@ -292,6 +290,17 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 		}
 	}
 	return started, nil
+}
+
+// reloadAgent loads the keys whose lifetime ran out into devvm's agent
+// again for a running VM that runs with it (runningAgent); one that
+// starts gets them in start.
+func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM) error {
+	mode, err := runningAgent(ctx, b, st)
+	if err != nil || mode != sshagent.Devvm {
+		return err
+	}
+	return e.Agent.Ensure(ctx)
 }
 
 // addLayers adds to the VM, in place and after asking, what it lacks of

@@ -132,6 +132,42 @@ func TestWriteAgent(t *testing.T) {
 	}
 }
 
+// A VM devvm started forwards the agent its start was made with: a change
+// waits for its next start. One started some other way since forwards the
+// one its state says.
+func TestWriteAgentStarted(t *testing.T) {
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning, AgentForwarding: true}}
+	setAgent(t, c, web, sshagent.Off)
+	st, err := state.ReadVM(c.Dirs, web)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, err := f.StartID(t.Context(), web)
+	if err == nil {
+		err = sshagent.RecordStart(st, sshagent.Off, start)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAgent(t, c, web, sshagent.On)
+	for _, tc := range []struct {
+		name, want string
+		do         func()
+	}{
+		{"changed while running", "  ForwardAgent no\n", func() {}},
+		{"started outside devvm", "  ForwardAgent yes\n", func() { f.Restart(web) }},
+	} {
+		tc.do()
+		if err := c.Write(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, tc.want) {
+			t.Errorf("%s:\n%s", tc.name, got)
+		}
+	}
+}
+
 func TestWrite(t *testing.T) {
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{

@@ -49,9 +49,10 @@ type Fake struct {
 	// call, in place of writing the images.
 	ToolsBuild func(backend.ToolsSpec) error
 
-	mu    sync.Mutex
-	calls []Call
-	nets  map[string]backend.Net // by name: the network Start last started it with
+	mu     sync.Mutex
+	calls  []Call
+	nets   map[string]backend.Net // by name: the network Start last started it with
+	starts map[string]int         // by name: how many starts it had
 }
 
 var _ backend.Backend = (*Fake)(nil)
@@ -225,6 +226,7 @@ func (f *Fake) Start(_ context.Context, vm string, c backend.Confinement) error 
 		f.nets = map[string]backend.Net{}
 	}
 	f.nets[vm] = c.Net
+	f.bump(vm)
 	return nil
 }
 
@@ -304,6 +306,39 @@ func (f *Fake) Exec(_ context.Context, vm string, argv []string, o backend.ExecO
 
 // Lifeline returns LifelineFile.
 func (f *Fake) Lifeline(context.Context, string) string { return f.LifelineFile }
+
+// StartID returns a running instance's start: "start-N" for its Nth by
+// Start, "start-0" for one preset running. Restart (a start outside
+// Start) gives it another.
+func (f *Fake) StartID(_ context.Context, vm string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	in, ok := f.Instances[vm]
+	if !ok {
+		return "", fmt.Errorf("%s: %w", vm, backend.ErrNotFound)
+	}
+	if in.Status != backend.StatusRunning {
+		return "", nil
+	}
+	return "start-" + strconv.Itoa(f.starts[vm]), nil
+}
+
+// Restart stands for a start of vm outside devvm: it runs, on a start of
+// its own.
+func (f *Fake) Restart(vm string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_ = f.change(vm, func(in *backend.Instance) { in.Status = backend.StatusRunning })
+	f.bump(vm)
+}
+
+// bump gives vm's next start. The caller holds the lock.
+func (f *Fake) bump(vm string) {
+	if f.starts == nil {
+		f.starts = map[string]int{}
+	}
+	f.starts[vm]++
+}
 
 // UsesDecider returns Decides.
 func (f *Fake) UsesDecider() bool { return f.Decides }

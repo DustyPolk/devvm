@@ -74,6 +74,10 @@ type Backend interface {
 	// it starts, which the VM's proxy follows: it exits when that process
 	// does. Not a VM's own file: the VM can't write it.
 	Lifeline(ctx context.Context, vm string) string
+	// StartID identifies a running VM's current start: every start gets
+	// another, whether devvm or something else made it. Asked only of a
+	// running VM; "" when the backend can't tell.
+	StartID(ctx context.Context, vm string) (string, error)
 	// ProxyURL is devvm's proxy as a VM started with c reaches it, its
 	// user and password included; "" unless c.Net is NetProxy.
 	ProxyURL(c Confinement) string

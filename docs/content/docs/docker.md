@@ -102,10 +102,10 @@ Emulated, and reviewed ([design](design.md#ports-on-docker)): a container's port
 
 Emulated, and reviewed, chosen when a VM is made (`--ssh-agent`) and changed later (`devvm ssh-agent on`, `devvm` or `off`) ([design](design.md#ssh-agent-forwarding-on-docker)): no socket is mounted into a container, so only ssh sessions forward an agent, as Lima's do.
 
-- **Your shell,** an ssh session once the start ran ssh, forwards the agent the VM's choice names: yours (`SSH_AUTH_SOCK`), devvm's own, or none.
-- **The ssh config's entry,** for editors, `ssh` and `git`, forwards the one the VM's choice names (`ForwardAgent`, and `IdentityAgent` for devvm's), an explicit no included, as on Lima.
+- **Your shell,** an ssh session once the start ran ssh, forwards the agent the VM's start was made with: yours (`SSH_AUTH_SOCK`), devvm's own, or none.
+- **The ssh config's entry,** for editors, `ssh` and `git`, forwards the same one (`ForwardAgent`, and `IdentityAgent` for devvm's), an explicit no included, as on Lima.
 - **Nothing else in the VM has one:** devvm's setup and other commands run through `docker exec`, and the port forwarder forwards none. A program in the VM reaches the agent only while a session that forwards it is open.
-- **A change** applies to your shell's next session; turning forwarding on, from the VM's next start (`devvm restart`). The ssh config's entry follows the VM's choice from devvm's next launch, any folder's, as on Lima: turned on, `ssh` by name and editors forward the agent before the restart.
+- **A change** applies from the VM's next start (`devvm restart`), to your shell and the ssh config's entry alike, as on Lima.
 
 ## Shared tools
 

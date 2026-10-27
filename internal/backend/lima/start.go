@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -356,6 +357,24 @@ func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 		return false, nil //nolint:nilerr // an unreadable pid is no hostagent of devvm's
 	}
 	return alive(pid), nil
+}
+
+// StartID is a running VM's hostagent: its pid file, which each start
+// writes anew, by the pid it holds and when it was written; "" without
+// one (Lima removes it when the VM stops).
+func (l *Lima) StartID(_ context.Context, vm string) (string, error) {
+	path := l.haPIDFile(vm)
+	fi, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	} else if err != nil {
+		return "", err
+	}
+	pid, err := os.ReadFile(path) //nolint:gosec // Lima's own pid file for the VM
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(pid)) + " " + fi.ModTime().UTC().Format(time.RFC3339Nano), nil
 }
 
 // Lifeline is the VM's hostagent's pid file: the process that runs the VM

@@ -128,6 +128,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
 	// is put back.
 	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
+	e.Environ = []string{"SSH_AUTH_SOCK=/user/agent"}
 	e.Agent = sshagent.New(d, e.mounts, testUI{t})
 	e.Agent.Run = (&agentCalls{}).run
 	return e, f, &execs

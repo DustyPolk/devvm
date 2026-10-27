@@ -7,6 +7,8 @@ package sshagent
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -46,6 +48,38 @@ func Mode(st *state.VM) string {
 
 // Forwards reports whether a VM with mode forwards an agent.
 func Forwards(mode string) bool { return mode == On || mode == Devvm }
+
+// StartedKey is a VM's state key for the choice devvm last started it
+// with, and that start: "<mode>_<start>", the start a hash of what its
+// backend identifies it by (backend.Backend's StartID).
+const StartedKey = "ssh_agent_started"
+
+// RecordStart records that devvm started the VM with mode, start
+// identifying that start; "" records none.
+func RecordStart(st *state.VM, mode, start string) error {
+	if start == "" {
+		return st.Set(StartedKey, "")
+	}
+	return st.Set(StartedKey, mode+"_"+startHash(start))
+}
+
+// Running is the choice a VM runs with, start identifying its current
+// start ("" for none): the one devvm recorded for that start, so a change
+// waits for the next; else, for a stopped VM or one something else
+// started, its choice.
+func Running(st *state.VM, start string) string {
+	mode, h, ok := strings.Cut(st.Get(StartedKey), "_")
+	if start != "" && ok && h == startHash(start) && slices.Contains(Modes, mode) {
+		return mode
+	}
+	return Mode(st)
+}
+
+// startHash is a start's identity as a state value holds it.
+func startHash(start string) string {
+	sum := sha256.Sum256([]byte(start))
+	return hex.EncodeToString(sum[:16])
+}
 
 // DefaultLifetime is how long devvm's agent keeps a key added without a
 // lifetime: the next launch that needs it loads it again.

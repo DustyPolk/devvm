@@ -204,10 +204,16 @@ func (e *Env) find(ctx context.Context, flag string) (*found, error) {
 		return nil, err
 	}
 	t := &found{f: f, st: st, b: b, flagIgnored: choice.FlagIgnored}
-	switch _, err := b.Inspect(ctx, f.Name); {
+	switch in, err := b.Inspect(ctx, f.Name); {
 	case err == nil:
 		t.exists = true
-		e.useAgent(sshagent.Mode(st))
+		mode := sshagent.Mode(st)
+		if in.Status == backend.StatusRunning {
+			if mode, err = runningAgent(ctx, b, st); err != nil {
+				return nil, err
+			}
+		}
+		e.useAgent(mode)
 	case !errors.Is(err, backend.ErrNotFound):
 		return nil, err
 	}
@@ -321,6 +327,8 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		}
 		conf.AgentSocket = e.Agent.Socket()
 	}
+	// devvm's own connections carry the agent of the start they're on.
+	e.useAgent(mode)
 	if conf.Net != backend.NetProxy {
 		e.Proxy.Stop(vm)
 	} else {
@@ -342,7 +350,24 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		}
 		return conf, err
 	}
-	return conf, nil
+	// The agent it started with, until its next start: its ssh config
+	// entry's and devvm's shell's. One whose start can't be told apart
+	// gets none recorded, and follows its choice.
+	start, err := b.StartID(ctx, vm)
+	if err != nil {
+		start = ""
+	}
+	return conf, sshagent.RecordStart(st, mode, start)
+}
+
+// runningAgent is the SSH agent choice a running VM runs with: its
+// current start's (sshagent.Running).
+func runningAgent(ctx context.Context, b backend.Backend, st *state.VM) (string, error) {
+	start, err := b.StartID(ctx, st.Name())
+	if err != nil {
+		return "", err
+	}
+	return sshagent.Running(st, start), nil
 }
 
 // checkAgentStart stops a running VM that may forward an SSH agent devvm
@@ -389,13 +414,21 @@ func (e *Env) ensureRunning(ctx context.Context, t *found) error {
 }
 
 // useAgent makes the SSH agent devvm's own connections to the folder's VM
-// carry the one its mode says: devvm's, the user's, or none. Its backend's
-// connections to it (Lima's share one) and the shell's are among them.
+// carry the one mode says: devvm's, the user's (the one devvm started
+// with), or none. Its backend's connections to it (Lima's share one) and
+// the shell's are among them.
 func (e *Env) useAgent(mode string) {
-	switch mode {
-	case sshagent.Devvm:
+	user, ok := "", false
+	for _, kv := range e.Environ {
+		if v, found := strings.CutPrefix(kv, "SSH_AUTH_SOCK="); found {
+			user, ok = v, true
+		}
+	}
+	switch {
+	case mode == sshagent.Devvm:
 		_ = os.Setenv("SSH_AUTH_SOCK", e.Agent.Socket())
-	case sshagent.On:
+	case mode == sshagent.On && ok:
+		_ = os.Setenv("SSH_AUTH_SOCK", user)
 	default:
 		_ = os.Unsetenv("SSH_AUTH_SOCK")
 	}

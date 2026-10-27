@@ -223,9 +223,14 @@ stdout '^/dev/null/devvm-no-agent$'
 exec devvm ssh-agent devvm
 exec sh -c 'cat "$STUB_DIR"/smolvm-agent-devvm-agent-*'
 stdout '^/dev/null/devvm-no-agent$'
+exec devvm
+exec sh -c 'cat "$XDG_CONFIG_HOME/devvm/ssh_config"'
+stdout '^Host devvm-agent devvm-agent-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 exec devvm restart
 exec sh -c 'cat "$STUB_DIR"/smolvm-agent-devvm-agent-*'
 stdout '^\S+/data/devvm/agent\.sock$'
+exec sh -c 'cat "$XDG_CONFIG_HOME/devvm/ssh_config"'
+stdout '^Host devvm-agent devvm-agent-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent "\S+/data/devvm/agent\.sock"\n'
 exec devvm ssh-agent on
 exec devvm restart
 exec sh -c 'cat "$STUB_DIR"/smolvm-agent-devvm-agent-*'

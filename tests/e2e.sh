@@ -655,6 +655,10 @@ check "--ssh-agent: the VM uses your agent's keys" bash -c "
   [[ \$(as_user limactl shell --workdir / $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-user-key ]]"
 check "ssh-agent add loads a key into devvm's own agent" bash -c "
   as_user '$D' ssh-agent add '$sa/devvm-key' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=devvm-e2e-key)\""
+check "ssh-agent devvm while it runs: after a launch, devvm's shell and ssh by name still use yours, until a restart" bash -c "cd '$g' &&
+  as_user '$D' ssh-agent devvm </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' >>'$work/last.log' 2>&1 &&
+  [[ \$(as_user ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-user-key ]] &&
+  [[ \$(printf 'ssh-add -l\nexit\n' | as_user '$D' 2>/dev/null | awk '/SHA256:/ { print \$3 }') == devvm-e2e-user-key ]]"
 check "ssh-agent devvm, then restart: the VM uses only that key, not yours" bash -c "cd '$g' &&
   as_user '$D' ssh-agent devvm </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' restart >>'$work/last.log' 2>&1 &&
   [[ \$(as_user limactl shell --workdir / $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-key ]]"
@@ -1148,7 +1152,10 @@ smol_vm_adds() { local pub
   smol_add "$1" >/dev/null && SSH_AUTH_SOCK=$ua_sock ssh-add -l | grep -q e2e-from-vm || return 1
   pub=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- cat /tmp/vmkey.pub </dev/null) && printf '%s\n' "$pub" > "$work/vmkey.pub" &&
   SSH_AUTH_SOCK=$ua_sock ssh-add -d "$work/vmkey.pub" >/dev/null 2>&1; rm -f "$work/vmkey.pub"; agents_clean; }
-export -f smol_keys smol_add smol_only smol_no_agent agents_clean as_ua; export ua_sock da_sock
+# smol_name_keys VM: what ssh by name lists of the agent its session has, ssh run with yours, then
+# ssh-add's exit code (rc=2: no agent).
+smol_name_keys() { SSH_AUTH_SOCK=$ua_sock ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$1" 'ssh-add -l 2>&1; echo "rc=$?"' </dev/null 2>&1; }
+export -f smol_keys smol_add smol_only smol_no_agent smol_name_keys agents_clean as_ua; export ua_sock da_sock
 
 g=$(newproj smolagent)
 (cd "$g" && printf 'ssh-add -l\n' | as_ua DEVVM_MESSAGES=names "$D" "${S[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
@@ -1163,7 +1170,11 @@ check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
 check "ssh-agent devvm while it runs: nothing changes until its next start" bash -c "cd '$g' &&
   as_ua DEVVM_MESSAGES=names '$D' ssh-agent devvm </dev/null >'$work/e' 2>&1 && grep -q 'agent_set_running mode=devvm vm=$vm\$' '$work/e'"
 check "  still no agent" smol_no_agent "$vm"
+check "  after a launch, ssh by name has none either, until a restart" bash -c "cd '$g' && printf 'exit\n' | as_ua '$D' >'$work/last.log' 2>&1 &&
+  out=\$(smol_name_keys '$vm'); echo \"\$out\"; grep -qx 'rc=2' <<<\"\$out\" && ! grep -q SHA256: <<<\"\$out\""
 check "devvm, after a restart: the VM uses devvm's key alone, never yours" smol_switch "$g" devvm smol_only "$vm" e2e-smolvm-devvm
+check "  so does ssh by name" bash -c "out=\$(smol_name_keys '$vm'); echo \"\$out\"; grep -qx 'rc=0' <<<\"\$out\" &&
+  [[ \$(grep -c SHA256: <<<\"\$out\") -eq 1 ]] && grep -q e2e-smolvm-devvm <<<\"\$out\""
 check "  with devvm's agent ended while it runs: no agent, never yours" bash -c "pkill -f '[s]sh-agent -a $da_sock';
   for i in \$(seq 20); do [[ ! -S '$da_sock' ]] && break; sleep 0.25; done; smol_no_agent '$vm'"
 check "on, after a restart: your agent's key alone, never devvm's" smol_switch "$g" on smol_only "$vm" e2e-smolvm-user
@@ -2347,9 +2358,9 @@ docker_agent() {
   check "... so does ssh by name" bash -c "d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
   check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
     SSH_AUTH_SOCK='$ua' '$D' ssh-agent add '$work/d-dkey' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=e2e-docker-devvm)\""
-  check "ssh-agent devvm while it runs: devvm's next shell lists devvm's key alone, never yours" bash -c "cd '$g' &&
+  check "ssh-agent devvm while it runs: devvm's next shell and ssh by name still list yours alone, until a restart" bash -c "cd '$g' &&
     SSH_AUTH_SOCK='$ua' DEVVM_MESSAGES=names '$D' ssh-agent devvm </dev/null >'$work/e' 2>&1 && grep -q 'agent_set_running mode=devvm vm=$vm\$' '$work/e' &&
-    d_only \"\$(d_shell_keys '$g')\" e2e-docker-devvm"
+    d_only \"\$(d_shell_keys '$g')\" e2e-docker-user && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
   check "devvm, after a restart: the shell and ssh by name list devvm's key alone, never yours" bash -c "
     d_switch '$g' devvm && d_only \"\$(d_shell_keys '$g')\" e2e-docker-devvm && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-devvm"
   check "on, after a restart: yours alone" bash -c "
@@ -2364,11 +2375,11 @@ docker_agent() {
   g=$(newproj "${1}on")
   (cd "$g" && printf 'exit\n' | SSH_AUTH_SOCK=$ua "$D" "${B[@]}" --no-network-policy --ports none base >"$work/last.log" 2>&1)
   vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
-  check "a VM made without it: none; turned on while it runs, devvm's shell has none until a restart, ssh by name yours from devvm's next launch (as on Lima); after a restart, the shell too" bash -c "
+  check "a VM made without it: none; turned on while it runs, neither devvm's shell nor ssh by name has one until a restart; then both yours" bash -c "
     [[ -n '$vm' ]] && d_none \"\$(d_shell_keys '$g')\" &&
     (cd '$g' && SSH_AUTH_SOCK='$ua' '$D' ssh-agent on </dev/null >'$work/last.log' 2>&1) &&
-    d_none \"\$(d_shell_keys '$g')\" && d_only \"\$(d_ssh_keys devvm-${1}on)\" e2e-docker-user &&
-    d_switch '$g' on && d_only \"\$(d_shell_keys '$g')\" e2e-docker-user"
+    d_none \"\$(d_shell_keys '$g')\" && d_none \"\$(d_ssh_keys devvm-${1}on)\" &&
+    d_switch '$g' on && d_only \"\$(d_shell_keys '$g')\" e2e-docker-user && d_only \"\$(d_ssh_keys devvm-${1}on)\" e2e-docker-user"
   (cd "$g" && quiet env SSH_AUTH_SOCK="$ua" "$D" rm -f)
   kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
   pkill -f "[s]sh-agent -a $da"
