@@ -13,6 +13,8 @@ The VM can reach nothing but this proxy (on macOS its Lima hostagent runs under 
 
 On smolvm, the VM's allow list is the host alone and smolvm asks the proxy about each connection before making it (mediated egress): with `-decider`, the proxy is that decider too, on a loopback port of its own. It takes over connections to its own address in the VM (`-decider-to`), which it then serves as any other, password and policy included, and refuses the rest, logged as `blocked`. A connection without the token smolvm was started with (`-decider-token-file`) gets no answer.
 
+On Docker, whose VMs can't reach the host's loopback, it also listens on a unix socket (`-listen-unix`), only the user's: a relay (`devvm _proxy -relay`, in a container on the VM's own network) passes each connection the VM makes to it there, unread, and the proxy serves it as any other.
+
 It returns when the VM's hostagent is gone.
 
 ## Files
@@ -23,6 +25,7 @@ It returns when the VM's hostagent is gone.
 | `policy.go` | the rule syntax and matching (`ValidRule`: `devvm policy` takes only these); policy files are re-read when they change |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
 | `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
+| `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
 | `redact.go` | agents' settings files (`settings.json`, `config.toml`, opencode's config) for VMs with network policy: values under secret-looking keys replaced |
@@ -35,7 +38,7 @@ It returns when the VM's hostagent is gone.
 ```text
 devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -lifeline HA.pid \
   -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY \
-  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN]
+  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] [-listen-unix SOCKET]
 ```
 
 Flags take one dash or two.
@@ -43,6 +46,7 @@ Flags take one dash or two.
 | Flag | What |
 |---|---|
 | `-listen` | the VM's proxy port, on loopback |
+| `-listen-unix` | Docker only: also listen on this unix socket, mode 600; a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
 | `-policy` | the policy files, comma-separated, in order; a missing file has no rules |
 | `-log` | the JSON-lines event log; default stdout |
@@ -65,6 +69,7 @@ Other modes, each doing one thing and returning:
 | `-login … -login-bindings` | print the login's secret bindings (JSON, no values; `-login-salt` as above); with `-login-hosts`, their hosts as allowlist lines (`host:443`) |
 | `-login … -login-get NAME` | print one value, refreshing an OAuth token when it's due |
 | `-redact json\|toml` | copy stdin to stdout with values under secret-looking keys replaced by `devvm-redacted`, their paths on stderr |
+| `-relay ADDR -relay-to SOCKET` | listen on ADDR and pass each connection, both ways and unread, to the proxy's socket, until stopped (Docker's relay containers) |
 
 Inside the VM, `http://devvm.proxy/blocked` lists recent blocks, `/blocked/new` those since the last prompt, and `/ca.pem` serves the CA certificate.
 

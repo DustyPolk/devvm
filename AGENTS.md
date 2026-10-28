@@ -31,7 +31,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
 
-Still to come: Docker's emulations (network policy) and its docker layer; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
+Still to come: Docker's docker layer; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
 
 ## Tasks
 
@@ -118,7 +118,7 @@ Still to come: Docker's emulations (network policy) and its docker layer; the re
 - **smolvm reads `SSH_AUTH_SOCK` only at `machine start`,** and a machine made with `--ssh-agent` won't start without one (a missing path is accepted): e2e's direct starts pass `/dev/null/...`.
 - **smolvm base's packages before `assets/layers/base.sh`** come from Ubuntu's live archive, then base.sh pins a snapshot: anything pulling systemd libraries (openssh-server) goes after base's scripts (`sshd.sh`), or Docker's packages can't be installed. Under mediated egress a refused connection still opens in the guest, then resets (test with data, not a connect); TCP and UDP to any port 53 go to its resolver; `--dns` is create-only; a machine once started mediated won't start without a decider until `--no-egress-interceptor`.
 - **Docker's networks:** Desktop's containers reach the host's loopback (`host.docker.internal`); on Linux the gateway reaches the host's servers on all addresses, an `--internal` network's too unless `inhibit_ipv4`; internal networks publish no ports and resolve no outside names.
-- **Docker's mounts:** a bind-mounted host socket works alone, not inside a mounted folder on Desktop (`Not supported`); Desktop shows it as root's 0660 and follows the path (none there: connects hang), Linux binds the inode (a socket in a mounted folder works, `chmod` in the container changes the host's).
+- **Docker's mounts:** a bind-mounted host socket works alone (`-v`: Desktop's `--mount` says the source doesn't exist), not inside a mounted folder on Desktop (`Not supported`); Desktop shows it as root's 0660 and follows the path (none there: connects hang), Linux binds the inode (a socket in a mounted folder works, `chmod` in the container changes the host's).
 - **Docker's containers:** systemd needs a read-write `/sys/fs/cgroup` (the host's whole tree), `dockerd` and loop devices `--privileged`; `-p`, mounts and the network are fixed at create (`docker update`: limits only); `--storage-opt size` is refused on Desktop and ignored by the containerd store; Alpine's image lacks OpenRC and ssh, which base.sh writes into.
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 

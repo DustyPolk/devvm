@@ -19,8 +19,10 @@
 // forwarding, chosen when a VM is made and changed later (its ssh
 // sessions', agent.go) are emulated, all over one transport: docker exec
 // into the container, to an sshd of its own per connection; all reviewed.
-// Network policy and the docker layer are left to later work: they're none
-// in Caps, so devvm refuses them in one line.
+// Network policy, and build confinement on Docker Desktop, are emulated
+// too (egress.go): an internal network of the VM's own, with a relay to
+// devvm's proxy on the host; reviewed. The docker layer is none in Caps,
+// so devvm refuses it in one line.
 package docker
 
 import (
@@ -39,11 +41,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -115,8 +119,28 @@ type Docker struct {
 	// stand-in engine anywhere; "" asks the engine.
 	Kind string
 	// Self is devvm's binary, as it was run: ssh's ProxyCommand for a VM
-	// runs it (ConnectCmd), and so does each VM's port forwarder.
+	// runs it (ConnectCmd), and so does each VM's port forwarder, and a
+	// Docker Desktop build's proxy.
 	Self string
+	// Linux returns the path of devvm's Linux build for this machine's
+	// processor, which network policy's relays run (linux.go): with
+	// fetch, fetching a release's own when it isn't there yet.
+	Linux func(ctx context.Context, fetch bool) (string, error)
+	// LinuxURL and LinuxSHA256 are a release's Linux build: its archive
+	// and its devvm's SHA-256, which a release sets (registry); "" for
+	// none to fetch. LinuxOS, when set, is the host's system as finding
+	// it has it (test builds': darwin, to fetch on any host).
+	LinuxURL, LinuxSHA256, LinuxOS string
+	// Detach starts a process that outlives devvm
+	// (platform.StartDetached): a VM's lifeline.
+	Detach func(path string, args []string, out *os.File) (int, error)
+	// Spawn starts a process that can outlive devvm and returns it
+	// (platform.StartDetachedProcess): a build's proxy, stopped through
+	// it, so never another process given its pid.
+	Spawn func(path string, args []string, out *os.File) (*os.Process, error)
+	// Tick is how often a build's proxy is looked at while it starts, ten
+	// times at most.
+	Tick time.Duration
 	// Getenv reads the environment (connectEnv: DOCKER_HOST…), and
 	// LookPath finds a command on PATH (docker).
 	Getenv   func(string) string
@@ -161,14 +185,28 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 	// As run, a link's path kept: devvm's ssh config names it, and a link
 	// (Homebrew's) outlives the version it points to.
 	self, _ := os.Executable()
-	return &Docker{
+	dk := &Docker{
 		client: client{Runner: logRunner{u.LoggedCmd}, names: names{Data: d.Data}}, Dirs: d, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		User: user.Current, Hostname: os.Hostname,
 		Terminal: u.StdinIsTerminal, SharingFile: sharing,
-		Self: self, Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
+		Self: self, Detach: platform.StartDetached, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond,
+		Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	}
+	// LinuxURL and LinuxSHA256 as they are when it's asked: the registry
+	// sets them.
+	dk.Linux = func(ctx context.Context, fetch bool) (string, error) {
+		goos := dk.OS
+		if dk.LinuxOS != "" {
+			goos = dk.LinuxOS
+		}
+		return linuxFinder{
+			Self: dk.Self, GOOS: goos, GOARCH: dk.Arch, URL: dk.LinuxURL, SHA256: dk.LinuxSHA256,
+			Copy: linuxCopy(dk.Dirs, dk.Arch), Info: dk.Info,
+		}.find(ctx, fetch)
+	}
+	return dk
 }
 
 // Name returns docker.
@@ -177,11 +215,13 @@ func (d *Docker) Name() string { return Name }
 // Caps is what Docker has natively: building images by committing
 // containers, --from any image Docker has or pulls, containers from
 // images, bind mounts, the tools in a volume, CPUs and memory. Build
-// confinement only on a Linux engine on this machine, whose containers
-// don't reach its loopback: Docker Desktop's reach the host's. ssh for
-// editors, ports (listed and every one) and agent forwarding (and turning
-// it on or off) are emulated over docker exec, and reviewed. The rest are
-// none until devvm emulates them.
+// confinement is native on a Linux engine on this machine, whose
+// containers don't reach its loopback; on Docker Desktop, whose
+// containers reach the host's, it's emulated (egress.go), as network
+// policy is on both, all reviewed. Neither on another engine, which can't
+// reach this machine's proxy. ssh for editors, ports
+// (listed and every one) and agent forwarding (and turning it on or off)
+// are emulated over docker exec, and reviewed. The rest are none.
 func (d *Docker) Caps() backend.Caps {
 	caps := backend.Caps{
 		backend.FeatureSSH: backend.Emulated(true), backend.FeaturePorts: backend.Emulated(true),
@@ -194,8 +234,13 @@ func (d *Docker) Caps() backend.Caps {
 	} {
 		caps[f] = backend.Native
 	}
-	if d.engineKind() == kindLinux {
+	switch d.engineKind() {
+	case kindLinux:
 		caps[backend.FeatureBuildConfinement] = backend.Native
+		caps[backend.FeatureEgressProxy] = backend.Emulated(true)
+	case kindDesktop:
+		caps[backend.FeatureBuildConfinement] = backend.Emulated(true)
+		caps[backend.FeatureEgressProxy] = backend.Emulated(true)
 	}
 	return caps
 }
@@ -246,9 +291,14 @@ type record struct {
 	Tools     bool     `json:"tools,omitempty"` // it mounts the tools volume
 	// Commit is the commit of its own its container runs, Gen's: "" for
 	// one made from its image.
-	Commit string            `json:"commit,omitempty"`
-	Gen    int               `json:"gen,omitempty"`
-	Env    map[string]string `json:"env,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	Gen    int    `json:"gen,omitempty"`
+	// Confined is its container's ID and start time at its last start by
+	// Start through devvm's proxy, NetID its own network's ID and RelayID
+	// its relay's container's ID then (egress.go); "" for a start without.
+	Confined string `json:"confined,omitempty"`
+	NetID    string `json:"net_id,omitempty"`
+	RelayID  string `json:"relay_id,omitempty"`
 	// Forwarding is whether its ssh sessions forward an SSH agent (agent.go);
 	// Agent is whether its last start's do: none (""), or the one devvm's
 	// SSH_AUTH_SOCK names (vmssh.AgentUser).
@@ -329,22 +379,25 @@ func (d *Docker) instance(c container) (backend.Instance, error) {
 	}, nil
 }
 
-// Stop stops one of devvm's VMs, and its port forwarder; a stopped one is
-// left as it is.
+// Stop stops one of devvm's VMs, its port forwarder and its relay to
+// devvm's proxy; a stopped one is left as it is.
 func (d *Docker) Stop(ctx context.Context, vm string) error {
 	c, err := d.vm(ctx, vm)
 	if err != nil {
 		return err
 	}
 	d.Forwards.Stop(vm)
-	if c.status() == backend.StatusStopped {
-		return nil
+	if c.status() != backend.StatusStopped {
+		if err := d.stop(ctx, vm); err != nil {
+			return err
+		}
 	}
-	return d.stop(ctx, vm)
+	return egress{d}.stopRelay(ctx, vm)
 }
 
 // Delete deletes one of devvm's VMs, stopping it first: its container,
-// its volumes, its own commit, its forwarder, its keys and its record.
+// its volumes, its own commit, its forwarder, its keys, its relay and
+// network (egress.go) and its record.
 func (d *Docker) Delete(ctx context.Context, vm string) error {
 	if _, err := d.vm(ctx, vm); err != nil {
 		return err
@@ -357,6 +410,9 @@ func (d *Docker) Delete(ctx context.Context, vm string) error {
 		return err
 	}
 	if err := d.removeContainer(ctx, msg.Deleting(vm), vm); err != nil {
+		return err
+	}
+	if err := (egress{d}).forget(ctx, vm); err != nil {
 		return err
 	}
 	for _, f := range []string{d.sshKey(vm), d.knownHosts(vm)} {
@@ -397,8 +453,9 @@ func home(name string) string { return "/home/" + name + ".guest" }
 const loginEnv = `set -a; [ -r /etc/environment ] && . /etc/environment; set +a; exec "$@"`
 
 // userArgs are docker's arguments that run argv as the VM's user in a
-// running container, in dir.
-func (d *Docker) userArgs(vm, dir string, input, tty bool, argv []string) ([]string, error) {
+// running container, in dir; in a build's container, with its proxy
+// settings (execEnv).
+func (d *Docker) userArgs(ctx context.Context, vm, dir string, input, tty bool, argv []string) ([]string, error) {
 	name, _, _, err := d.user()
 	if err != nil {
 		return nil, err
@@ -406,7 +463,7 @@ func (d *Docker) userArgs(vm, dir string, input, tty bool, argv []string) ([]str
 	if dir == "" {
 		dir = "/"
 	}
-	args := []string{"exec"}
+	args := append([]string{"exec"}, execEnvArgs(ctx)...)
 	if input {
 		args = append(args, "-i")
 	}
@@ -422,7 +479,7 @@ func (d *Docker) userArgs(vm, dir string, input, tty bool, argv []string) ([]str
 // Exec runs argv in the VM as its user, in o.Dir. Docker passes each
 // argument as it is: no shell reads them.
 func (d *Docker) Exec(ctx context.Context, vm string, argv []string, o backend.ExecOpts) error {
-	args, err := d.userArgs(vm, o.Dir, o.Stdin != nil, false, argv)
+	args, err := d.userArgs(ctx, vm, o.Dir, o.Stdin != nil, false, argv)
 	if err != nil {
 		return err
 	}
@@ -446,7 +503,7 @@ func (d *Docker) Shell(ctx context.Context, vm, dir string) (backend.Command, er
 		}
 		return backend.Command{Path: path, Args: append([]string{"ssh"}, sshArgs...), Env: os.Environ(), Dir: d.Data}, nil
 	}
-	args, err := d.userArgs(vm, dir, true, d.Terminal(), []string{"bash", "-l"})
+	args, err := d.userArgs(ctx, vm, dir, true, d.Terminal(), []string{"bash", "-l"})
 	if err != nil {
 		return backend.Command{}, err
 	}
@@ -457,14 +514,31 @@ func (d *Docker) Shell(ctx context.Context, vm, dir string) (backend.Command, er
 	return backend.Command{Path: cmd.Path, Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir}, nil
 }
 
-// ProxyURL is "": network policy isn't emulated on Docker yet.
-func (d *Docker) ProxyURL(backend.Confinement) string { return "" }
+// ProxyURL is devvm's proxy as a VM started with c reaches it: its relay,
+// devvm-proxy on its own network, on c's port, with the user and
+// password; "" unless c.Net is NetProxy.
+func (d *Docker) ProxyURL(c backend.Confinement) string {
+	if c.Net != backend.NetProxy {
+		return ""
+	}
+	return proxyURL(c.ProxyPort, c.ProxyPassword)
+}
 
-// Confined is false: no VM runs confined to devvm's proxy on Docker yet.
-func (d *Docker) Confined(context.Context, string) (bool, error) { return false, nil }
+// ProxySocket is where a VM's proxy listens for its relay (egress.go).
+func (d *Docker) ProxySocket(vm string) string { return proxySocket(d.Dirs, vm) }
 
-// Lifeline is "": no proxy follows a VM on Docker yet.
-func (d *Docker) Lifeline(context.Context, string) string { return "" }
+// Confined reports whether a running VM runs as Start left it through
+// devvm's proxy: that start of its container, on its own network alone,
+// which still confines (egress.go).
+func (d *Docker) Confined(ctx context.Context, vm string) (bool, error) {
+	return egress{d}.confined(ctx, vm)
+}
+
+// Lifeline is the pid file of a VM's docker container wait, which a start
+// through devvm's proxy runs and which ends when the container stops.
+func (d *Docker) Lifeline(_ context.Context, vm string) string {
+	return strings.TrimSuffix(d.Dirs.DockerVM(vm), ".json") + ".lifeline"
+}
 
 // StartID is a running VM's container and the time it last started.
 func (d *Docker) StartID(ctx context.Context, vm string) (string, error) {

@@ -24,7 +24,7 @@ For a VM with network policy, devvm:
 1. makes its CA, if it has none with over a week left, and keeps it out of Time Machine (macOS);
 2. writes the VM's [secrets](#secrets) as its proxy sees them;
 3. starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for it to say it's listening;
-4. starts the VM [confined](lima.md#confinement) (on smolvm, [emulated](smolvm.md#network-policy)), its proxy settings pointing at the proxy;
+4. starts the VM [confined](lima.md#confinement) (on smolvm, [emulated](smolvm.md#network-policy); on Docker, [emulated](docker.md#network-policy)), its proxy settings pointing at the proxy;
 5. runs [the self-check](#the-self-check), before the VM's setup and its shell;
 6. sets the VM up: devvm's CA, the proxy for the tools that don't read the environment, the VM's placeholders and its [agents' logins and settings](#agents-logins-and-settings) with your keys taken out.
 
@@ -41,9 +41,9 @@ One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`
 - for hosts with a bound secret, swaps the placeholder in one header for the real value ([Secrets](#secrets)); everything else passes unread;
 - logs every decision.
 
-On smolvm it also decides, before smolvm makes it, each connection the VM opens: it takes over those to itself and refuses the rest ([details](smolvm.md#network-policy)).
+On smolvm it also decides, before smolvm makes it, each connection the VM opens: it takes over those to itself and refuses the rest ([details](smolvm.md#network-policy)). On Docker, whose VMs can't reach the host's loopback, it also listens on a unix socket only you can reach, which a relay on the VM's own network passes the VM's connections to, unread ([details](docker.md#network-policy)).
 
-It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file; on smolvm, the machine's process), or 15 minutes after starting if the hostagent never appears; `devvm stop` stops it at once. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
+It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file; on smolvm, the machine's process; on Docker, a `docker container wait` on the VM's container), or 15 minutes after starting if the hostagent never appears; `devvm stop` stops it at once. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
 
 devvm counts a proxy as started only once it says it's listening on the VM's port and still runs: a program that took the port first would otherwise get the VM's traffic. If it doesn't, devvm stops and names the proxy's log. A VM already running whose proxy can't start again (gone, and another program took its port, or it fails to start) is stopped too (`net_proxy_down_stopped`): a VM with network policy never runs on without its proxy. The next `devvm` starts both.
 
@@ -118,7 +118,7 @@ Network policy holds only while the VM runs on the Lima process devvm started co
 - **Not started confined** (started outside devvm, or running since before `devvm network on`): in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
 - **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
 
-On smolvm, the process devvm started is the machine's, through the proxy's decider; `smolvm machine start` refuses the VM without a decider, and one started with someone else's isn't confined.
+On smolvm, the process devvm started is the machine's, through the proxy's decider; `smolvm machine start` refuses the VM without a decider, and one started with someone else's isn't confined. On Docker, it's that start of the container, on its own network alone, with nothing else on it ([details](docker.md#network-policy)).
 
 `devvm ls` shows such a VM's network policy as `unenforced`: one whose last self-check failed, or one running that isn't on the process devvm started confined (checked on the host each time). So does `devvm network`.
 
@@ -191,6 +191,7 @@ devvm runs the proxy as itself. Flags take one dash or two; errors end in one li
 | Flag | What |
 | --- | --- |
 | `-listen` | the address to listen on (default `127.0.0.1:0`) |
+| `-listen-unix` | also listen on this unix socket, only you can reach (mode 600); a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
 | `-policy` | the policy files, comma-separated |
 | `-log` | the JSON-lines event log (default: standard output) |
@@ -213,6 +214,8 @@ Modes that do one thing and exit:
 | `-login claude -login-file F -login-secrets` | print the MCP servers whose settings hold secrets |
 | `-login … -login-get NAME` | print one value, refreshing an OAuth token when it's due |
 | `-redact json\|toml` | copy standard input to standard output with secret-looking values replaced, their paths on standard error |
+
+`-relay ADDR -relay-to SOCKET` is a relay: it listens on `ADDR` and passes each connection, both ways and unread, to the proxy's unix socket, until it's stopped; it decides nothing. Docker's relay containers run it.
 
 ## Not covered
 

@@ -132,6 +132,24 @@ func UsesDecider(b Backend) bool {
 	return ok && d.UsesDecider()
 }
 
+// ProxySocket is a backend whose VMs reach devvm's proxy through a unix
+// socket on the host rather than its loopback port (Docker's, through a
+// relay on the VM's own network): the proxy listens on that socket too.
+// A backend whose VMs reach the port doesn't implement it.
+type ProxySocket interface {
+	// ProxySocket is the socket's path for the VM; "" for none.
+	ProxySocket(vm string) string
+}
+
+// ProxySocketOf is the socket b's VM reaches devvm's proxy through
+// (ProxySocket); "" on other backends.
+func ProxySocketOf(b Backend, vm string) string {
+	if s, ok := b.(ProxySocket); ok {
+		return s.ProxySocket(vm)
+	}
+	return ""
+}
+
 // AgentStarter is a backend whose VM forwards whatever SSH agent the
 // command that starts it names (smolvm's machine start), so a VM started
 // some other way than by Start can have one devvm didn't choose for it. A

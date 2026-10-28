@@ -35,6 +35,8 @@ func devvm() rules {
 		allowedVars: map[string]string{
 			"internal/cli.version":                   ldflags,
 			"internal/backend/registry.unreviewed":   ldflags + ", by test builds only",
+			"internal/backend/registry.linuxURL":     ldflags + ", by releases' macOS builds only",
+			"internal/backend/registry.linuxSHA256":  ldflags + ", by releases' macOS builds only",
 			"internal/backend.Features":              table,
 			"internal/backend.Native":                "a Support value, as a const would be",
 			"internal/backend.None":                  "a Support value, as a const would be",

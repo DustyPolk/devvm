@@ -348,6 +348,17 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		}
 		decider = []string{"-decider", conf.Decider, "-decider-to", u.Host, "-decider-token-file", tok}
 	}
+	// A VM that reaches the proxy through a socket of the host's: in a
+	// folder of its own, the user's alone.
+	if sock := backend.ProxySocketOf(b, vm); sock != "" {
+		if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
+			return err
+		}
+		if err := os.Chmod(filepath.Dir(sock), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+			return err
+		}
+		decider = append(decider, "-listen-unix", sock)
+	}
 	logPath := ProxyLog(p.Dirs, vm)
 	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
 	if err != nil {

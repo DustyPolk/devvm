@@ -1,6 +1,8 @@
 #!/bin/bash
 # Build a release's files in dist/ with GoReleaser (.goreleaser.yaml), from git (only what's committed):
-#   devvm-<version>-<os>-<arch>.tar.gz  the binary and the files it reads, for darwin and linux, arm64 and amd64
+#   devvm-<version>-<os>-<arch>.tar.gz  the binary and the files it reads, for darwin and linux, arm64 and amd64;
+#                                       darwin's binaries carry the address of their processor's linux archive
+#                                       and its devvm's SHA-256, which they fetch and check for Docker
 #   devvm-<version>.tar.gz              the source, which the Homebrew formula builds from
 #   SHA256SUMS                          their checksums, which install.sh checks
 #   SHA256SUMS.minisig                  SHA256SUMS signed with the release key (minisign), which install.sh checks
@@ -70,17 +72,35 @@ trap 'rm -rf "$tmp"' EXIT
 src=$tmp/src
 { git clone -q --no-checkout "$root" "$src" && git -C "$src" checkout -q --detach "$commit"; } ||
   die "couldn't check out $ref"
-args=(release --clean --skip=publish)
-if [[ $ref == HEAD ]]; then args+=(--snapshot); else export GORELEASER_CURRENT_TAG=$ref; fi
-(cd "$src" && DEVVM_VERSION=$v goreleaser "${args[@]}") || die "goreleaser failed"
+snap=()
+if [[ $ref == HEAD ]]; then snap=(--snapshot); else export GORELEASER_CURRENT_TAG=$ref; fi
+# Two passes. First the Linux builds alone, for their SHA-256s, which the macOS builds carry (with
+# the Linux archive's address): a Docker VM on macOS fetches its version's Linux build and checks it
+# against them before use. Then the release, whose Linux builds must come out the same, byte for
+# byte (Go's builds are reproducible: the same commit, Go, flags and -trimpath).
+(cd "$src" && DEVVM_VERSION=$v goreleaser build --clean --id devvm ${snap[@]+"${snap[@]}"}) || die "goreleaser's Linux builds failed"
+linux_sum() { local b
+  for b in "$src"/dist/devvm_linux_"$1"*/devvm; do [[ -f $b ]] && { shasum -a 256 "$b" | cut -d' ' -f1; return; }; done
+  die "no Linux $1 build"; }
+arm64=$(linux_sum arm64) amd64=$(linux_sum amd64)
+(cd "$src" && DEVVM_VERSION=$v DEVVM_RELEASE_URL=$url DEVVM_LINUX_SHA256_ARM64=$arm64 DEVVM_LINUX_SHA256_AMD64=$amd64 \
+  goreleaser release --clean --skip=publish ${snap[@]+"${snap[@]}"}) || die "goreleaser failed"
+[[ $(linux_sum arm64) == "$arm64" && $(linux_sum amd64) == "$amd64" ]] ||
+  die "the Linux builds came out different the second time: the macOS builds' SHA-256s would be wrong"
 rm -rf "$out"
 mv "$src/dist" "$out"
+# Each Linux archive's devvm is the build whose SHA-256 the macOS builds have.
+for a in arm64 amd64; do
+  want=$arm64; [[ $a == arm64 ]] || want=$amd64
+  got=$(tar -xzOf "$out/devvm-$v-linux-$a.tar.gz" "devvm-$v-linux-$a/devvm" | shasum -a 256 | cut -d' ' -f1)
+  [[ $got == "$want" ]] || die "devvm-$v-linux-$a.tar.gz's devvm isn't the build the macOS builds pin"
+done
 
 # The built binary for this host says the release's version (GoReleaser's own default sets one devvm
 # doesn't read).
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case $(uname -m) in arm64 | aarch64) arch=arm64 ;; x86_64) arch=amd64 ;; *) arch=none ;; esac
-for bin in "$out/devvm_${os}_$arch"*/devvm; do
+for bin in "$out"/devvm*_"${os}_$arch"*/devvm; do
   [[ -x $bin ]] || continue
   got=$("$bin" --version) || die "$bin --version failed"
   [[ $got == "$v" ]] || die "$bin --version says '$got', not $v"

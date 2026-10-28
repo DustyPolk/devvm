@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -96,7 +97,7 @@ func (d *Docker) readEngine(ctx context.Context) (engine, backend.Problem, bool)
 	}
 	if err != nil || e.ServerVersion == "" {
 		if ee, ok := errors.AsType[*exec.ExitError](err); ok && bytes.Contains(bytes.ToLower(ee.Stderr), []byte("permission denied")) {
-			fix := "sudo usermod -aG docker " + d.userName()
+			fix := "sudo usermod -aG docker " + userName(d.User)
 			return e, backend.Problem{Key: "docker-access", Fix: fix, Msg: msg.DockerAccess(fix)}, false
 		}
 		return e, backend.Problem{Key: "docker-engine", Msg: msg.DockerDown()}, false
@@ -108,9 +109,9 @@ func (d *Docker) readEngine(ctx context.Context) (engine, backend.Problem, bool)
 	return e, backend.Problem{}, true
 }
 
-// userName is the host user's name, for a fix.
-func (d *Docker) userName() string {
-	if u, err := d.User(); err == nil && u.Username != "" {
+// userName is the host user's name (current's), for a fix.
+func userName(current func() (*user.User, error)) string {
+	if u, err := current(); err == nil && u.Username != "" {
 		return u.Username
 	}
 	return "$USER"
@@ -204,6 +205,11 @@ func (d *Docker) Report(ctx context.Context) []msg.M {
 		out = append(out, msg.DockerEngineLinux(e.ServerVersion))
 	default:
 		out = append(out, msg.DockerEngineOther(e.ServerVersion, cmp.Or(e.OperatingSystem, e.Name)))
+	}
+	// What network policy's relays run, and Docker Desktop's builds' too.
+	var m msg.M
+	if _, err := d.Linux(ctx, false); e.kind != kindOther && errors.As(err, &m) {
+		out = append(out, m)
 	}
 	return out
 }

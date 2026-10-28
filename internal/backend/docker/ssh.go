@@ -148,8 +148,8 @@ func (d *Docker) vmOutput(ctx context.Context, vm string, argv ...string) ([]byt
 }
 
 // sshdArgs gets a stopped VM ready for this start's sshd when c asks for
-// ssh: services.sh's arguments (the user, the VM's own key, and the names
-// of the variables its sessions get), or nil for none. A container whose
+// ssh: services.sh's arguments (the user and the VM's own key), or nil
+// for none. A container whose
 // image has no sshd gets none, warned.
 func (d *Docker) sshdArgs(ctx context.Context, vm string, r *record, c backend.Confinement) ([]string, error) {
 	if !c.SSH {
@@ -171,7 +171,9 @@ func (d *Docker) sshdArgs(ctx context.Context, vm string, r *record, c backend.C
 	if err != nil {
 		return nil, err
 	}
-	return vmssh.ServicesArgs(name, pub, nil, c.Env), nil
+	// Its sessions' environment is /etc/environment's, where Start puts c's
+	// (egress.go): no variables of services.sh's own.
+	return vmssh.ServicesArgs(name, pub, nil, nil), nil
 }
 
 // pinHostKey reads the VM's sshd's host key, which services.sh just made,

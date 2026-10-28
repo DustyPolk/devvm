@@ -260,6 +260,33 @@ other = "Docker has a volume named {{.name}} that isn't this devvm's: remove it 
 [docker_volume_failed]
 other = "couldn't make or delete Docker's volume {{.name}}"
 
+[docker_network_foreign]
+other = "Docker has a network named {{.name}} that isn't this devvm's: remove it with docker"
+
+[docker_network_failed]
+other = "couldn't make, change or delete Docker's network {{.name}}"
+
+[docker_network_shared]
+other = "Docker's network {{.name}} has containers devvm didn't put there: take them off it (docker network disconnect {{.name}} CONTAINER), then try again"
+
+[docker_relay_image_failed]
+other = "couldn't make the empty image devvm's proxy relays run in"
+
+[docker_linux_build_missing]
+other = "devvm's Linux build isn't at {{.path}}, and this devvm isn't a release, which fetches its own: build devvm for Linux there, as this one was built, or install a release"
+
+[docker_linux_build_fetching]
+other = "fetching devvm's Linux build, which Docker runs in containers: {{.url}}"
+
+[docker_linux_build_fetch_failed]
+other = "couldn't fetch devvm's Linux build from {{.url}}: check the connection, then run devvm again"
+
+[docker_linux_build_mismatch]
+other = "devvm's Linux build from {{.url}} doesn't match the SHA-256 this devvm has, so it isn't used: reinstall devvm"
+
+[docker_linux_build_other]
+other = "{{.path}} isn't this devvm's Linux build: reinstall devvm"
+
 [docker_image_rm_failed]
 other = "couldn't delete Docker's image {{.image}}"
 
@@ -282,7 +309,7 @@ other = "couldn't pull {{.image}}"
 other = "couldn't change {{.vm}}'s Docker settings"
 
 [docker_remaking]
-other = "making {{.vm}}'s container again, for its new mounts or network: its disk and home are kept"
+other = "making {{.vm}}'s container again, for its new mounts or capabilities: its disk and home are kept"
 
 [unpacking_tools]
 other = "unpacking the shared tools"

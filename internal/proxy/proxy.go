@@ -17,6 +17,8 @@
 //
 // On a backend that asks the host about each connection a VM opens (smolvm), the proxy is also
 // that decider (-decider, decider.go): it takes over connections to itself and refuses the rest.
+// On one whose VMs can't reach the host's loopback (Docker), it also listens on a unix socket
+// (-listen-unix), which a relay on the VM's own network reaches (-relay, relay.go).
 //
 // It exits when the VM's hostagent does (-lifeline). Standard library only: it prints nothing
 // itself, but writes to the streams devvm hands Main.
@@ -67,6 +69,9 @@ var (
 func newFlags() *flag.FlagSet {
 	fs := flag.NewFlagSet("devvm _proxy", flag.ContinueOnError)
 	fs.StringVar(&listen, "listen", "127.0.0.1:0", "address to listen on")
+	fs.StringVar(&listenUnix, "listen-unix", "", "also listen on this unix socket, only the user's (relay.go)")
+	fs.StringVar(&relayAddr, "relay", "", "relay mode: listen on this address and pass each connection, unread, to -relay-to (relay.go)")
+	fs.StringVar(&relayTo, "relay-to", "", "with -relay: the proxy's unix socket")
 	fs.StringVar(&vmName, "vm", "vm", "VM name, for logs")
 	fs.StringVar(&policies, "policy", "", "policy files, comma-separated (missing files have no rules)")
 	fs.StringVar(&logPath, "log", "", "JSON-lines event log (default: stdout)")
@@ -581,16 +586,23 @@ func handler(w http.ResponseWriter, r *http.Request) {
 var lifelineTick = 3 * time.Second
 
 // watchLifeline returns once the hostagent named by the pid file is gone, or never appears. It
-// follows the first hostagent it sees, not later ones: a restarted VM gets a new proxy.
+// follows the first hostagent it sees, not later ones: a restarted VM gets a new proxy. A pid file
+// written since it started whose process is already gone (the VM stopped between two looks) is a
+// hostagent gone too; an older one is an earlier start's, and waited past.
 func watchLifeline(path string) {
 	start, pid := time.Now(), 0
 	for range time.Tick(lifelineTick) {
 		if pid == 0 {
-			if b, err := os.ReadFile(path); err == nil { //nolint:gosec // devvm names the pid file
+			fi, serr := os.Stat(path)
+			if b, err := os.ReadFile(path); err == nil && serr == nil { //nolint:gosec // devvm names the pid file
 				// The pid is the first line: smolvm's has its start time on a second.
 				first, _, _ := strings.Cut(string(b), "\n")
-				if p, err := strconv.Atoi(strings.TrimSpace(first)); err == nil && p > 0 && syscall.Kill(p, 0) == nil {
-					pid = p
+				if p, err := strconv.Atoi(strings.TrimSpace(first)); err == nil && p > 0 {
+					if syscall.Kill(p, 0) == nil {
+						pid = p
+					} else if !fi.ModTime().Before(start) {
+						return
+					}
 				}
 			}
 		}
@@ -648,6 +660,9 @@ func Main(args []string, std IO) error {
 	if initCADir != "" {
 		return initCA(initCADir)
 	}
+	if relayAddr != "" {
+		return runRelay(relayAddr, relayTo)
+	}
 	if caFile != "" {
 		if err := loadCA(caFile, caKeyF); err != nil {
 			return err
@@ -697,6 +712,18 @@ func Main(args []string, std IO) error {
 		return err
 	}
 	srv := &http.Server{Handler: http.HandlerFunc(handler), ReadHeaderTimeout: 30 * time.Second}
+	if listenUnix != "" {
+		uln, err := listenOn(listenUnix)
+		if err != nil {
+			_ = ln.Close()
+			if h != nil {
+				_ = h.Close()
+			}
+			return err
+		}
+		defer func() { _ = uln.Close() }()
+		go func() { _ = srv.Serve(uln) }()
+	}
 	if h != nil {
 		defer func() { _ = h.Close() }()
 		logf("deciding on %s for %s, taking over %s", h.Addr(), vmName, to)

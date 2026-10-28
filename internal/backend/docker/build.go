@@ -72,13 +72,18 @@ func (d *Docker) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		built.Origin, step = origin, msg.CreatingFromImage(ref, inst)
 	}
 	labels := map[string]string{kindLabel: kindBuild, keyLabel: spec.Key}
-	c := config{Hostname: "devvm-build", Net: netMode(spec.Net)}
+	ctx, netw, lifeline, done, err := egress{d}.buildNet(ctx, inst, spec.Net)
+	if err != nil {
+		return backend.Built{}, err
+	}
+	undo := d.AddCleanup(done)
+	c := config{Hostname: "devvm-build", Net: netw, CapDrop: buildCaps(inst, netw)}
 	if err := d.create(ctx, step, inst, ref, labels, c, cpus, mem); err != nil {
 		return backend.Built{}, err
 	}
 	created.Store(true)
-	if err := d.Runner.Run(ctx, msg.Starting(inst), d.docker(ctx, "container", "start", inst)); err != nil {
-		return backend.Built{}, backend.Logged(msg.StartFailed(inst))
+	if err := (egress{d}).startBuild(ctx, inst, lifeline); err != nil {
+		return backend.Built{}, err
 	}
 	if built.Libc, err = d.runBuild(ctx, inst, spec, name, uid, gid); err != nil {
 		if ctx.Err() == nil {
@@ -96,7 +101,25 @@ func (d *Docker) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		return backend.Built{}, err
 	}
 	remove()
+	undo()
+	done(ctx)
 	return built, nil
+}
+
+// startBuild starts a build's container (inst), and with lifeline the
+// lifeline its proxy follows (egress.go).
+func (e egress) startBuild(ctx context.Context, inst, lifeline string) error {
+	if err := e.d.Runner.Run(ctx, msg.Starting(inst), e.d.docker(ctx, "container", "start", inst)); err != nil {
+		return backend.Logged(msg.StartFailed(inst))
+	}
+	if lifeline == "" {
+		return nil
+	}
+	c, err := e.d.inspect(ctx, inst)
+	if err != nil {
+		return err
+	}
+	return e.follow(ctx, c.ID, lifeline)
 }
 
 // checkBuild checks what BuildImage is asked for: the network, the keys,
@@ -105,11 +128,8 @@ func (d *Docker) checkBuild(ctx context.Context, spec backend.ImageSpec) error {
 	if spec.From != nil && spec.Parent != "" {
 		return errors.New("docker: only base starts from a container image")
 	}
-	if err := checkBuildNet(spec.Net); err != nil {
+	if err := checkBuildNet(d.Caps(), spec.Image, spec.Net); err != nil {
 		return err
-	}
-	if !d.Caps()[backend.FeatureBuildConfinement].Usable() {
-		return msg.BackendLacks(Name, string(backend.FeatureBuildConfinement), spec.Image)
 	}
 	for _, k := range []string{spec.Key, spec.Parent} {
 		if k != "" && !keyPattern.MatchString(k) {
@@ -132,14 +152,19 @@ func (d *Docker) checkBuild(ctx context.Context, spec backend.ImageSpec) error {
 	return nil
 }
 
-// checkBuildNet refuses a build's network that isn't a confined one.
-func checkBuildNet(n backend.Net) error {
+// checkBuildNet refuses a build's network that isn't a confined one, and
+// a build (name) on an engine where devvm can't confine it (caps): its
+// caller checked an emulation's review.
+func checkBuildNet(caps backend.Caps, name string, n backend.Net) error {
 	switch n {
 	case backend.NetInternet, backend.NetNone:
-		return nil
 	case backend.NetDirect, backend.NetProxy:
+		return fmt.Errorf("docker: builds are confined, not started with network %d", n)
 	}
-	return fmt.Errorf("docker: builds are confined, not started with network %d", n)
+	if s := caps[backend.FeatureBuildConfinement]; !s.IsNative() && !s.IsEmulated() {
+		return msg.BackendLacks(Name, string(backend.FeatureBuildConfinement), name)
+	}
+	return nil
 }
 
 // runBuild runs a build's scripts in its running container, and returns
@@ -164,6 +189,10 @@ func (d *Docker) runBuild(ctx context.Context, inst string, spec backend.ImageSp
 	if err := d.rootScript(ctx, inst, "shims.sh", "on"); err != nil {
 		return "", err
 	}
+	e := egress{d}
+	if err := e.buildSudo(ctx, inst, true); err != nil {
+		return "", err
+	}
 	for _, sc := range spec.Scripts {
 		if err := d.runScript(ctx, inst, sc); err != nil {
 			return "", err
@@ -173,6 +202,9 @@ func (d *Docker) runBuild(ctx context.Context, inst string, spec backend.ImageSp
 		if err := d.rootScript(ctx, inst, "sshd.sh"); err != nil {
 			return "", err
 		}
+	}
+	if err := e.buildSudo(ctx, inst, false); err != nil {
+		return "", err
 	}
 	return libc, d.rootScript(ctx, inst, "shims.sh", "off")
 }
@@ -218,7 +250,7 @@ func (d *Docker) rootScript(ctx context.Context, name, script string, args ...st
 
 // runScript runs a script in the container as the VM's user, fed to bash.
 func (d *Docker) runScript(ctx context.Context, name string, sc backend.Script) error {
-	args, err := d.userArgs(name, "", true, false, []string{"bash", "-s"})
+	args, err := d.userArgs(ctx, name, "", true, false, []string{"bash", "-s"})
 	if err != nil {
 		return err
 	}

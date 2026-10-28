@@ -26,7 +26,7 @@ func TestStartSSH(t *testing.T) {
 		t.Errorf("stopped: %v", err)
 	}
 	c := backend.Confinement{SSH: true, Env: map[string]string{"NO_PROXY": "localhost"}}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Env: c.Env}); err != nil { // its container made with Env
+	if err := s.Start(t.Context(), vm, backend.Confinement{Env: c.Env}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Stop(t.Context(), vm); err != nil {
@@ -40,14 +40,20 @@ func TestStartSSH(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Its sessions get the environment from /etc/environment, where the
+	// start put it.
 	want := []string{
 		"docker container start " + vm,
+		"docker exec -i -u 0 " + vm + " sh -c " + envScript,
 		"docker exec -u 0 " + vm + " sh -c " + sshdProbe,
-		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd " + vm + " sh -s -- ssh u " + pub + " NO_PROXY",
+		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd " + vm + " sh -s -- ssh u " + pub,
 		"docker exec -u 0 " + vm + " cat /etc/ssh/ssh_host_ed25519_key.pub",
 	}
 	if got := s.calls(t); !slices.Equal(got, want) {
 		t.Errorf("calls:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.stub, "environment")); string(b) != "# devvm-proxy begin\nNO_PROXY=localhost\n# devvm-proxy end\n" {
+		t.Errorf("/etc/environment's block: %q", b)
 	}
 	if b, err := os.ReadFile(s.knownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAstub\n" {
 		t.Errorf("known_hosts: %q, %v", b, err)

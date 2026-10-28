@@ -6,9 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,9 +28,14 @@ const maxLayers = 100
 // compares at each start with what the VM wants.
 type config struct {
 	Hostname string
-	Net      string   // bridge, or none
-	Mounts   []string // --mount's values, in order
-	Env      []string // KEY=value, sorted
+	// Net is the network it's made on: bridge, none or a build's own. A
+	// VM's is bridge, and each start moves it where it goes (egress.go).
+	Net    string
+	Mounts []string // --mount's values, in order
+	// CapDrop are the capabilities it's made without: a VM's, and a
+	// build's on a network of its own, NET_RAW (no raw or packet sockets:
+	// ping uses ICMP datagram sockets).
+	CapDrop []string
 }
 
 // hash is the config's hash, which a VM's container carries (configLabel).
@@ -40,19 +48,19 @@ func (c config) hash() string {
 // args are docker container create's options for the config.
 func (c config) args() []string {
 	args := []string{"--hostname", c.Hostname, "--network", c.Net}
-	for _, e := range c.Env {
-		args = append(args, "-e", e)
-	}
 	for _, m := range c.Mounts {
 		args = append(args, "--mount", m)
+	}
+	for _, cp := range c.CapDrop {
+		args = append(args, "--cap-drop", cp)
 	}
 	return args
 }
 
 // netMode is Docker's network for a network devvm asks for: its default
 // bridge, or none. A Linux engine's bridge reaches the internet and not
-// the host's loopback; Docker Desktop's reaches both (build confinement
-// isn't native there, so builds aren't started on it).
+// the host's loopback; Docker Desktop's reaches both, so its builds get a
+// network of their own (egress.go).
 func netMode(n backend.Net) string {
 	if n == backend.NetNone {
 		return "none"
@@ -90,15 +98,16 @@ func volume(name, at string, writable bool) string {
 }
 
 // vmConfig is what the VM's container is made with: its hostname, from
-// its name (devvm-<folder>-<hash>: the folder's part, as on Lima); the
-// network n; its mounts: the project folder (or its clone's volume), its
-// agents' folders, the tools volume and its home's volume; and env.
-func (d *Docker) vmConfig(vm string, r record, n backend.Net, env map[string]string) (config, error) {
+// its name (devvm-<folder>-<hash>: the folder's part, as on Lima); Docker's
+// default network; no NET_RAW; its mounts: the project folder (or its
+// clone's volume), its agents' folders, the tools volume and its home's
+// volume.
+func (d *Docker) vmConfig(vm string, r record) (config, error) {
 	name, _, _, err := d.user()
 	if err != nil {
 		return config{}, err
 	}
-	c := config{Hostname: hostname(vm), Net: netMode(n)}
+	c := config{Hostname: hostname(vm), Net: netMode(backend.NetDirect), CapDrop: []string{"NET_RAW"}}
 	if r.Project != "" {
 		m, err := bind(r.Project, true)
 		if err != nil {
@@ -120,9 +129,6 @@ func (d *Docker) vmConfig(vm string, r record, n backend.Net, env map[string]str
 		c.Mounts = append(c.Mounts, volume(d.toolsVolume(), toolsAt, false))
 	}
 	c.Mounts = append(c.Mounts, volume(homeVolume(vm), home(name), true))
-	for _, k := range slices.Sorted(maps.Keys(env)) {
-		c.Env = append(c.Env, k+"="+env[k])
-	}
 	return c, nil
 }
 
@@ -176,7 +182,7 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 		Image: img, Project: spec.Project, CloneAt: spec.CloneAt, AgentDirs: slices.Clone(spec.AgentDirs),
 		Tools: spec.Tools != "", Forwarding: spec.AgentForwarding, PortsAll: spec.Ports.All, Ports: slices.Clone(spec.Ports.Ranges),
 	}
-	c, err := d.vmConfig(vm, r, backend.NetDirect, nil)
+	c, err := d.vmConfig(vm, r)
 	if err != nil {
 		return err
 	}
@@ -188,7 +194,11 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 			return err
 		}
 	}
-	// What a VM by this name deleted some other way left: its volumes.
+	// What a VM by this name deleted some other way left: its relay and
+	// network, and its volumes.
+	if err := (egress{d}).forget(ctx, vm); err != nil {
+		return err
+	}
 	vols := []string{homeVolume(vm)}
 	if spec.CloneAt != "" {
 		vols = append(vols, cloneVolume(vm))
@@ -239,16 +249,19 @@ func (d *Docker) checkCreate(ctx context.Context, img string, spec backend.VMSpe
 // system. A running one is left as it is.
 //
 // What Docker fixes when it makes a container is compared first with what
-// the VM wants now (its mounts, network and environment, as config has
-// them): where they differ, it's made again from a commit of its own
-// (remake), with the same name and volumes. The shared tools' volume is
-// brought up to the share first (syncTools). With c.SSH, services.sh
-// writes its sshd's config and host key, which is pinned (ssh.go); its
-// ssh sessions forward the agent c chooses (agent.go); its forwarder
-// starts once that's done, for the ports it forwards (ports.go).
+// the VM wants now (its mounts, as config has them): where they differ,
+// it's made again from a commit of its own (remake), with the same name
+// and volumes. The shared tools' volume is brought up to the share first
+// (syncTools). Then its network is set (egress.go): with NetProxy, its
+// own network alone, with its relay to devvm's proxy, and once it runs,
+// the proxy's address in its /etc/environment and the lifeline the proxy
+// follows; else Docker's default one. With c.SSH, services.sh writes its
+// sshd's config and host key, which is pinned (ssh.go); its ssh sessions
+// forward the agent c chooses (agent.go); its forwarder starts once
+// that's done, for the ports it forwards (ports.go).
 func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) error {
-	if f := c.Features(); c.Net == backend.NetProxy {
-		return msg.BackendLacks(Name, string(f[0]), vm)
+	if err := checkProxy(d.Caps(), vm, c); err != nil {
+		return err
 	}
 	ct, err := d.vm(ctx, vm)
 	if err != nil {
@@ -261,17 +274,31 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 	if err != nil {
 		return err
 	}
-	if err := d.prepare(ctx, vm, ct, &r, c); err != nil {
+	if err := d.prepare(ctx, vm, ct, &r); err != nil {
 		return err
 	}
-	// Recorded before the start: one that fails leaves it without ssh.
-	r.SSHUp, r.NoSSHD, r.Started, r.Agent = false, false, "", sessionAgent(r, c)
+	e := egress{d}
+	if err := e.vmNetwork(ctx, vm, &r, c); err != nil {
+		return err
+	}
+	// Recorded before the start: one that fails leaves it without ssh, and
+	// unconfined.
+	r.SSHUp, r.NoSSHD, r.Started, r.Agent, r.Confined = false, false, "", sessionAgent(r, c), ""
 	if err := d.writeRecord(vm, r); err != nil {
 		return err
 	}
 	d.Forwards.Stop(vm)
+	if err := os.Remove(d.Lifeline(ctx, vm)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	if err := d.Runner.Run(ctx, msg.Starting(vm), d.docker(ctx, "container", "start", vm)); err != nil {
 		return backend.Logged(msg.StartFailed(vm))
+	}
+	if err := e.setEnv(ctx, vm, proxyEnv(c)); err != nil {
+		if ctx.Err() == nil {
+			_ = d.stop(ctx, vm)
+		}
+		return err
 	}
 	sshd, err := d.sshdArgs(ctx, vm, &r, c)
 	if err != nil {
@@ -290,6 +317,14 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 		}
 	}
 	r.Started, r.SSHUp = ct.State.StartedAt, sshd != nil
+	// Through devvm's proxy: this start is the confined one, and the
+	// proxy follows it.
+	if c.Net == backend.NetProxy {
+		r.Confined = ct.ID + " " + ct.State.StartedAt
+		if err := e.follow(ctx, ct.ID, d.Lifeline(ctx, vm)); err != nil {
+			return err
+		}
+	}
 	if err := d.writeRecord(vm, r); err != nil {
 		return err
 	}
@@ -297,11 +332,26 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 	return nil
 }
 
+// checkProxy refuses a start through devvm's proxy without its port and
+// password, or on an engine that can't reach it (caps).
+func checkProxy(caps backend.Caps, vm string, c backend.Confinement) error {
+	if c.Net != backend.NetProxy {
+		return nil
+	}
+	if s := caps[backend.FeatureEgressProxy]; !s.IsEmulated() {
+		return msg.BackendLacks(Name, string(backend.FeatureEgressProxy), vm)
+	}
+	if c.ProxyPort < 1 || c.ProxyPort > 65535 || c.ProxyPassword == "" {
+		return fmt.Errorf("docker: %s: no proxy to start it through", vm)
+	}
+	return nil
+}
+
 // prepare gets a stopped VM's container ready for a start with c: the
 // shared tools' volume brought up to the share, and the container made
 // again where what Docker fixed differs from what the VM wants.
-func (d *Docker) prepare(ctx context.Context, vm string, ct container, r *record, c backend.Confinement) error {
-	want, err := d.vmConfig(vm, *r, c.Net, c.Env)
+func (d *Docker) prepare(ctx context.Context, vm string, ct container, r *record) error {
+	want, err := d.vmConfig(vm, *r)
 	if err != nil {
 		return err
 	}

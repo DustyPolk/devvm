@@ -48,3 +48,30 @@ func TestStartDetached(t *testing.T) {
 		t.Error("it shares the test's session")
 	}
 }
+
+// The process StartDetachedProcess returns is the one it started, in a
+// session of its own: a signal through it ends that process.
+func TestStartDetachedProcess(t *testing.T) {
+	out, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = out.Close() }()
+	p, err := StartDetachedProcess("/bin/sleep", []string{"30"}, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sid, err := unix.Getsid(p.Pid); err != nil || sid != p.Pid {
+		t.Errorf("session = %d, %v, want its own (%d)", sid, err, p.Pid)
+	}
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	st, err := p.Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws, ok := st.Sys().(syscall.WaitStatus); !ok || ws.Signal() != syscall.SIGTERM {
+		t.Errorf("ended %v, want by SIGTERM", st)
+	}
+}

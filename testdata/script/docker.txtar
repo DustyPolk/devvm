@@ -3,7 +3,8 @@
 # mounts and its own home volume, made again when its mounts change, and
 # the features it lacks refused in one line naming the VM. The stub is a
 # Linux engine of this machine's (DEVVM_DOCKER_KIND, read by test builds),
-# where builds are confined; on Docker Desktop they're refused. Registries
+# where builds are confined; on Docker Desktop their confinement is
+# emulated, through a proxy of devvm's. Registries
 # are never reached: the pinned image needs no lookup, and HTTPS_PROXY
 # points at nothing.
 env DEVVM_MESSAGES=names
@@ -20,7 +21,7 @@ stdout '^docker_engine_linux version=29\.1\.3$'
 stdout '^doctor_ok backend=docker version=\S+$'
 stdout '^FEATURE +DOCKER +LIMA +SMOLVM$'
 stdout '^build-confinement +native +native +native$'
-stdout '^egress-proxy +none +native +emulated$'
+stdout '^egress-proxy +emulated +native +emulated$'
 stdout '^ssh +emulated +native +emulated$'
 stdout '^ports-all +emulated +native +emulated$'
 stdout '^agent-toggle +emulated +native +emulated$'
@@ -50,12 +51,10 @@ exec devvm images
 stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +docker$'
 
 # What it lacks is refused in one line naming the VM, before anything is
-# made: network policy, a disk size, the docker layer.
+# made: a disk size, the docker layer.
 mkdir $WORK/web
 cd $WORK/web
 exec sh -c ': > "$STUB_LOG"'
-! exec devvm --backend docker --from $PIN --network-policy --ports none base
-stderr '^devvm: backend_lacks backend=docker feature=egress-proxy vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none --disk 200 base
 stderr '^devvm: backend_lacks backend=docker feature=disk vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
@@ -77,7 +76,7 @@ stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 stdout '^docker volume create --label devvm\.data=\S+ devvm-web-[0-9a-f]{14}-home$'
 stdout '^docker volume create --label devvm\.data=\S+ devvm-tools-[0-9a-f]{8}$'
-stdout '^docker container create --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --label devvm\.config=[0-9a-f]{16} --label devvm\.kind=vm --init --user 0:0 --entrypoint sleep --cpus 4 --memory \d+m --memory-swap \d+m --hostname web --network bridge --mount type=bind,src=\S+/web,dst=\S+/web --mount type=volume,src=devvm-tools-[0-9a-f]{8},dst=/mnt/devvm-tools,readonly --mount type=volume,src=devvm-web-[0-9a-f]{14}-home,dst=/home/\S+\.guest devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
+stdout '^docker container create --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --label devvm\.config=[0-9a-f]{16} --label devvm\.kind=vm --init --user 0:0 --entrypoint sleep --cpus 4 --memory \d+m --memory-swap \d+m --hostname web --network bridge --mount type=bind,src=\S+/web,dst=\S+/web --mount type=volume,src=devvm-tools-[0-9a-f]{8},dst=/mnt/devvm-tools,readonly --mount type=volume,src=devvm-web-[0-9a-f]{14}-home,dst=/home/\S+\.guest --cap-drop NET_RAW devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
 stdout '^docker container start devvm-web-[0-9a-f]{14}$'
 stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd devvm-web-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
 stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- ''\S+/web'' && exec bash -l$'
@@ -185,19 +184,49 @@ exec devvm rm -f
 ! grep devvm-emu $XDG_CONFIG_HOME/devvm/ssh_config
 rm $STUB_DIR/guest-ports
 
-# On Docker Desktop builds are refused, as its containers reach the host's
-# loopback: in one line, nothing made. An image built already is used.
+# On Docker Desktop builds' confinement is emulated, and reviewed, as its
+# containers reach the host's loopback (its builds are the unit tests').
+# An image built already is used.
 env DEVVM_DOCKER_KIND=desktop
 mkdir $WORK/desk
 cd $WORK/desk
-exec sh -c ': > "$STUB_LOG"'
-! exec devvm --backend docker --from $PIN --no-network-policy --ports none node
-stderr '^devvm: backend_lacks backend=docker feature=build-confinement vm=node .+$'
-stub_calls
-! stdout 'container create'
 exec devvm doctor --backend docker
 stdout '^docker_engine_desktop version=29\.1\.3$'
-stdout '^build-confinement +none +native +native$'
+stdout '^build-confinement +emulated +native +native$'
+stdout '^egress-proxy +emulated +native +emulated$'
 exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+! stderr backend_unreviewed
 stdout '^==> creating_from image=base vm=devvm-desk-[0-9a-f]{14}$'
+exec devvm rm -f
+
+# A release fetches its own version's Linux build, which network policy's
+# relay runs, the first time a Docker VM needs it: from the release's Linux
+# archive (here a loopback server, with a test build of devvm for Linux),
+# checked against the SHA-256 the release has before it's used. One that
+# doesn't match is refused, and nothing kept; doctor never fetches.
+mkdir $WORK/fetch
+cd $WORK/fetch
+linux_release mismatch
+exec devvm doctor --backend docker
+! stdout docker_linux_build
+! exists $XDG_DATA_HOME/devvm/docker/bin/devvm-linux-$LINUX_ARCH
+! exec devvm --backend docker --from $PIN --network-policy --ports none base
+stdout '^==> docker_linux_build_fetching url=http://127\.0\.0\.1:\d+/devvm-0\.0\.0-linux-\w+\.tar\.gz$'
+stderr '^devvm: docker_linux_build_mismatch url=http://127\.0\.0\.1:\d+/devvm-0\.0\.0-linux-\w+\.tar\.gz$'
+! exists $XDG_DATA_HOME/devvm/docker/bin/devvm-linux-$LINUX_ARCH
+exec devvm rm -f
+linux_release match
+! exec devvm --backend docker --from $PIN --network-policy --ports none base
+stdout '^==> docker_linux_build_fetching url='
+! stderr docker_linux_build
+# The stub's VM answers the self-check's direct connection, so devvm stops
+# it; the fetch is what's checked here.
+stderr '^devvm: net_direct_route vm=devvm-fetch-[0-9a-f]{14}$'
+exists $XDG_DATA_HOME/devvm/docker/bin/devvm-linux-$LINUX_ARCH
+stub_calls
+stdout '^docker container create --name devvm-fetch-[0-9a-f]{14}-proxy .* --mount type=bind,src=\S+/docker/bin/devvm-linux-\w+,dst=/devvm,readonly '
+# Kept: the next start fetches nothing.
+! exec devvm
+! stdout docker_linux_build_fetching
+stderr '^devvm: net_direct_route vm=devvm-fetch-[0-9a-f]{14}$'
 exec devvm rm -f

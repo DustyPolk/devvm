@@ -36,6 +36,11 @@ type sandbox struct {
 	*Docker
 	stub  string
 	infos []msg.M
+	// detached are the processes Detach and Spawn started, each its path
+	// and arguments.
+	detached [][]string
+	// spawned is how each process Spawn started ended, once it has.
+	spawned []chan error
 }
 
 func newSandbox(t *testing.T) *sandbox {
@@ -56,12 +61,30 @@ func newSandbox(t *testing.T) *sandbox {
 	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 	d := paths.Dirs{Data: filepath.Join(root, "data", "devvm"), Config: filepath.Join(root, "config", "devvm"), Lima: filepath.Join(root, "lima")}
 	s := &sandbox{stub: stub}
+	// devvm's Linux build, as findLinux would find it.
+	linux := filepath.Join(root, "devvm-linux")
+	if err := os.WriteFile(linux, []byte("devvm for linux"), 0o700); err != nil { //nolint:gosec // a stand-in for a binary
+		t.Fatal(err)
+	}
 	s.Docker = &Docker{
 		client: client{Runner: execRunner{}, names: names{Data: d.Data}}, Dirs: d, OS: "linux", Arch: "arm64", Assets: assets.FS,
 		User:     func() (*user.User, error) { return &user.User{Username: "u", Uid: "501", Gid: "1000"}, nil },
 		Hostname: func() (string, error) { return "stub-host", nil },
 		Terminal: func() bool { return false },
 		Self:     "/devvm", Getenv: func(string) string { return "" },
+		Linux: func(context.Context, bool) (string, error) { return linux, nil },
+		// A sleep stands in for each, a proxy saying it listens.
+		Detach: func(path string, args []string, out *os.File) (int, error) {
+			p, err := s.sleep(t, path, args, out)
+			if err != nil {
+				return 0, err
+			}
+			return p.Pid, nil
+		},
+		Spawn: func(path string, args []string, out *os.File) (*os.Process, error) {
+			return s.sleep(t, path, args, out)
+		},
+		Tick:     time.Millisecond,
 		LookPath: func(c string) (string, error) { return "/bin/" + c, nil },
 		Forwards: func() vmssh.Forwards {
 			f := newForwards(d, "/devvm")
@@ -93,12 +116,31 @@ func (s *sandbox) calls(t *testing.T) []string {
 	var out []string
 	for l := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
 		if l == "" || strings.HasPrefix(l, "docker container inspect") || strings.HasPrefix(l, "docker image inspect") ||
-			strings.HasPrefix(l, "docker container ls") || strings.HasPrefix(l, "docker volume inspect") || strings.HasPrefix(l, "docker info") {
+			strings.HasPrefix(l, "docker container ls") || strings.HasPrefix(l, "docker volume inspect") || strings.HasPrefix(l, "docker info") ||
+			strings.HasPrefix(l, "docker network inspect") {
 			continue
 		}
 		out = append(out, l)
 	}
 	return out
+}
+
+// sleep starts a sleep in place of path with args, recorded (detached,
+// spawned); one for _proxy writes to out that it listens.
+func (s *sandbox) sleep(t *testing.T, path string, args []string, out *os.File) (*os.Process, error) {
+	s.detached = append(s.detached, append([]string{path}, args...))
+	sleep := exec.CommandContext(t.Context(), "sleep", "60")
+	if err := sleep.Start(); err != nil {
+		return nil, err
+	}
+	ended := make(chan error, 1)
+	go func() { ended <- sleep.Wait() }()
+	t.Cleanup(func() { _ = sleep.Process.Kill() })
+	s.spawned = append(s.spawned, ended)
+	if slices.Contains(args, "_proxy") {
+		_, _ = out.WriteString("devvm proxy: listening on 127.0.0.1:40000 for x\n")
+	}
+	return sleep.Process, nil
 }
 
 func (s *sandbox) reset(t *testing.T) {
@@ -182,20 +224,22 @@ const (
 	vm      = "devvm-web-0123456789abcd"
 )
 
-// The engine's kind decides build confinement: native only on a Linux
-// engine of this machine's, rootful.
+// The engine's kind decides build confinement: native on a Linux engine
+// of this machine's, rootful; emulated, and reviewed, on Docker Desktop,
+// as network policy is on both; neither elsewhere.
 func TestCapsByEngine(t *testing.T) {
+	reviewed := backend.Emulated(true)
 	cases := []struct {
 		name, info, os, host string
-		confined             bool
+		confinement, egress  backend.Support
 		kind                 string
 	}{
-		{"this machine's", `"OperatingSystem":"Ubuntu","Name":"h"`, "linux", "h", true, kindLinux},
-		{"Docker Desktop", `"OperatingSystem":"Docker Desktop","Name":"docker-desktop"`, "darwin", "mac", false, kindDesktop},
-		{"Docker Desktop on Linux", `"OperatingSystem":"Docker Desktop","Name":"h"`, "linux", "h", false, kindDesktop},
-		{"another machine's", `"OperatingSystem":"Ubuntu","Name":"elsewhere"`, "linux", "h", false, kindOther},
-		{"rootless", `"OperatingSystem":"Ubuntu","Name":"h","SecurityOptions":["name=rootless"]`, "linux", "h", false, kindOther},
-		{"colima on a Mac", `"OperatingSystem":"Ubuntu","Name":"mac"`, "darwin", "mac", false, kindOther},
+		{"this machine's", `"OperatingSystem":"Ubuntu","Name":"h"`, "linux", "h", backend.Native, reviewed, kindLinux},
+		{"Docker Desktop", `"OperatingSystem":"Docker Desktop","Name":"docker-desktop"`, "darwin", "mac", reviewed, reviewed, kindDesktop},
+		{"Docker Desktop on Linux", `"OperatingSystem":"Docker Desktop","Name":"h"`, "linux", "h", reviewed, reviewed, kindDesktop},
+		{"another machine's", `"OperatingSystem":"Ubuntu","Name":"elsewhere"`, "linux", "h", backend.None, backend.None, kindOther},
+		{"rootless", `"OperatingSystem":"Ubuntu","Name":"h","SecurityOptions":["name=rootless"]`, "linux", "h", backend.None, backend.None, kindOther},
+		{"colima on a Mac", `"OperatingSystem":"Ubuntu","Name":"mac"`, "darwin", "mac", backend.None, backend.None, kindOther},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -208,10 +252,12 @@ func TestCapsByEngine(t *testing.T) {
 			if ps := s.Problems(t.Context()); len(ps) > 0 {
 				t.Fatalf("Problems: %v", ps)
 			}
-			if got := s.Caps()[backend.FeatureBuildConfinement].Usable(); got != c.confined || s.engineKind() != c.kind {
-				t.Errorf("build confinement = %v, kind %s; want %v, %s", got, s.engineKind(), c.confined, c.kind)
+			caps := s.Caps()
+			if caps[backend.FeatureBuildConfinement] != c.confinement || caps[backend.FeatureEgressProxy] != c.egress || s.engineKind() != c.kind {
+				t.Errorf("build confinement %s, egress proxy %s, kind %s; want %s, %s, %s", caps[backend.FeatureBuildConfinement],
+					caps[backend.FeatureEgressProxy], s.engineKind(), c.confinement, c.egress, c.kind)
 			}
-			for _, f := range []backend.Feature{backend.FeatureEgressProxy, backend.FeatureDisk, backend.FeatureDockerLayer} {
+			for _, f := range []backend.Feature{backend.FeatureDisk, backend.FeatureDockerLayer} {
 				if s.Caps()[f] != backend.None {
 					t.Errorf("%s = %s, want none", f, s.Caps()[f])
 				}
@@ -305,6 +351,13 @@ func TestReport(t *testing.T) {
 	got := s.Report(t.Context())
 	if len(got) != 2 || got[0].ID() != "docker_engine_desktop" || got[1].String() != msg.DockerFileSharing("/Users /tmp").String() {
 		t.Errorf("Desktop: %v", got)
+	}
+	// Without devvm's Linux build, which network policy and its builds run.
+	s.Linux = func(context.Context, bool) (string, error) {
+		return "", msg.DockerLinuxBuildMissing("/x/devvm-linux-arm64")
+	}
+	if got := s.Report(t.Context()); len(got) != 3 || got[2].ID() != "docker_linux_build_missing" {
+		t.Errorf("no Linux build: %v", got)
 	}
 	if err := s.checkShared("/Users/me/p"); err != nil {
 		t.Errorf("a shared folder: %v", err)
@@ -405,11 +458,11 @@ func TestBuildLayerFails(t *testing.T) {
 	}
 }
 
-// Builds are refused where they can't be confined: Docker Desktop's
-// containers reach the host's loopback.
-func TestBuildRefusedOnDesktop(t *testing.T) {
+// Builds are refused where devvm can't confine them: an engine it doesn't
+// know, which can't reach its proxy.
+func TestBuildRefusedElsewhere(t *testing.T) {
 	s := newSandbox(t)
-	s.Kind = kindDesktop
+	s.Kind = kindOther
 	if ps := s.Problems(t.Context()); len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -478,14 +531,14 @@ func TestCreateVM(t *testing.T) {
 	if !ok {
 		t.Fatalf("calls: %v", s.calls(t))
 	}
-	cfg, err := s.vmConfig(vm, record{Project: "/p/web", AgentDirs: []string{"/h/.claude"}, Tools: true}, backend.NetDirect, nil)
+	cfg, err := s.vmConfig(vm, record{Project: "/p/web", AgentDirs: []string{"/h/.claude"}, Tools: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := "docker container create --name " + vm + " --label devvm.data=" + s.Dirs.Data + " --label devvm.config=" + cfg.hash() +
 		" --label devvm.kind=vm --init --user 0:0 --entrypoint sleep --cpus 2 --memory 8192m --memory-swap 8192m" +
 		" --hostname web --network bridge --mount type=bind,src=/p/web,dst=/p/web --mount type=bind,src=/h/.claude,dst=/h/.claude,readonly" +
-		" --mount type=volume,src=" + s.toolsVolume() + ",dst=/mnt/devvm-tools,readonly --mount type=volume,src=" + vm + "-home,dst=/home/u.guest " +
+		" --mount type=volume,src=" + s.toolsVolume() + ",dst=/mnt/devvm-tools,readonly --mount type=volume,src=" + vm + "-home,dst=/home/u.guest --cap-drop NET_RAW " +
 		s.imageRef(baseKey) + " infinity"
 	if c != want {
 		t.Errorf("create:\n%s\nwant\n%s", c, want)
@@ -546,6 +599,7 @@ func TestStart(t *testing.T) {
 	}
 	want := []string{
 		"docker container start " + vm,
+		"docker exec -i -u 0 " + vm + " sh -c " + envScript,
 		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd " + vm + " sh -s --",
 		"docker exec -u 0 " + vm + " chown u /p/web",
 	}
@@ -563,9 +617,6 @@ func TestStart(t *testing.T) {
 	s.reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil || len(s.calls(t)) != 0 {
 		t.Errorf("a running VM: %v %v", s.calls(t), err)
-	}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); shown(err) != msg.BackendLacks(Name, "egress-proxy", vm).Names() {
-		t.Errorf("network policy: %v", err)
 	}
 }
 

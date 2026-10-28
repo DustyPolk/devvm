@@ -18,10 +18,14 @@
 # line to $STUB_DIR/scripts when one is fed to bash -s or sh -s (failing with $STUB_DIR/script-fails
 # for bash -s), and the tools build's build.sh writes the images it's asked for into the folder it
 # mounts. run (the tools' unpacking) appends its arguments after -- to $STUB_DIR/unpacked.
+# Networks are folders in $STUB_DIR/docker/networks/NAME (labels, internal, inhibit), which network
+# create, rm, connect and disconnect keep up to date (a container's networks file lists its own);
+# network inspect answers with the running containers on one as its members. An exec that writes
+# devvm's block in /etc/environment keeps its input as $STUB_DIR/environment.
 set -euo pipefail
 echo "docker $*" >> "$STUB_LOG"
 store=$STUB_DIR/docker
-mkdir -p "$store/containers" "$store/images" "$store/volumes"
+mkdir -p "$store/containers" "$store/images" "$store/volumes" "$store/networks"
 cmd="${1:-} ${2:-}"
 case "$cmd" in
   "info "*)
@@ -61,8 +65,8 @@ by_id() { local d
   echo "$1"; }
 
 # Options: what devvm passes, read into variables; the rest are the arguments.
-name="" labels=() filters=() mounts=() envs=() changes=() format="" cpus="" memory="" hostname="" network=""
-user="" args=() input=false size=false verb=${1:-}
+name="" labels=() filters=() mounts=() envs=() changes=() opts=() format="" cpus="" memory="" hostname="" network=""
+user="" args=() input=false size=false internal=false verb=${1:-}
 case $verb in exec|update) shift 1 ;; *) shift 2 || true ;; esac
 while (( $# )); do
   case $1 in
@@ -70,6 +74,11 @@ while (( $# )); do
     --label) labels+=("$2"); shift ;;
     --filter) filters+=("$2"); shift ;;
     --mount) mounts+=("$2"); shift ;;
+    -v) if [[ $cmd == "container create" ]]; then mounts+=("volume=$2"); shift; fi ;;
+    -o) opts+=("$2"); shift ;;
+    --internal) internal=true ;;
+    --network-alias|--cap-drop|--security-opt|--pids-limit|--env-file) shift ;;
+    --read-only) ;;
     -e) envs+=("$2"); shift ;;
     --change) changes+=("$2"); shift ;;
     --format) format=$2; shift ;;
@@ -80,12 +89,16 @@ while (( $# )); do
     -u|--user) user=$2; shift ;;
     -w|--entrypoint|--memory-swap|-t) [[ $1 == -t && ${2:-} != [0-9]* ]] || shift ;;
     -i) input=true ;;
-    -a|-q|--no-trunc|--init|--rm|-f|-v|--size) [[ $1 != --size ]] || size=true ;;
+    -a|-q|--no-trunc|--init|--rm|-f|--size) [[ $1 != --size ]] || size=true ;;
     *) args=("$@"); break ;;
   esac
   shift
 done
-C=$store/containers I=$store/images V=$store/volumes
+C=$store/containers I=$store/images V=$store/volumes N=$store/networks
+# json_networks DIR: a container's networks as inspect has them.
+json_networks() { local s="" n
+  while read -r n; do [[ -n $n ]] && s+="${s:+,}\"$n\":{\"NetworkID\":\"id-net-$n\"}"; done < <(cat "$1/networks" 2>/dev/null)
+  echo "{$s}"; }
 
 case "$cmd" in
   "container ls")
@@ -106,7 +119,8 @@ case "$cmd" in
         [[ $(field "$d" status) == running ]] && echo "true $(field "$d" started)" || echo "false $(field "$d" started)"; exit 0
       fi
       out+="$sep{\"Id\":\"$(field "$d" id)\",\"Name\":\"/$n\",\"State\":{\"Status\":\"$(field "$d" status)\",\"StartedAt\":\"$(field "$d" started)\"},\"Config\":{\"Labels\":$lab,\"Env\":[]},"
-      out+="\"HostConfig\":{\"NanoCpus\":$(( $(field "$d" cpus 0) * 1000000000 )),\"Memory\":$(field "$d" memory 0)},\"Image\":\"$(field "$d" image)\"}"
+      out+="\"HostConfig\":{\"NanoCpus\":$(( $(field "$d" cpus 0) * 1000000000 )),\"Memory\":$(field "$d" memory 0)},"
+      out+="\"NetworkSettings\":{\"Networks\":$(json_networks "$d")},\"Image\":\"$(field "$d" image)\"}"
       sep=,
     done
     echo "[$out]"; exit 0 ;;
@@ -119,18 +133,19 @@ case "$cmd" in
     printf '%s\n' ${labels[@]+"${labels[@]}"} > "$d/labels"
     echo created > "$d/status"; echo "$img" > "$d/image"; echo "${cpus:-0}" > "$d/cpus"
     m=0; [[ -z $memory ]] || m=$(( ${memory%m} * 1048576 )); echo "$m" > "$d/memory"
-    echo "$hostname" > "$d/hostname"; echo "$network" > "$d/network"
+    echo "$hostname" > "$d/hostname"; echo "$network" > "$d/network"; echo "$network" > "$d/networks"
     printf '%s\n' ${mounts[@]+"${mounts[@]}"} > "$d/mounts"
     printf '%s\n' ${envs[@]+"${envs[@]}"} > "$d/env"
     echo "id-$name-$RANDOM" > "$d/id"
     [[ ! -d $I/$img ]] || cp "$I/$img/layers" "$d/layers"
     exit 0 ;;
   "container start")
-    [[ -d $C/${args[0]} ]] || missing container "${args[0]}"
+    d=$C/$(by_id "${args[0]}")
+    [[ -d $d ]] || missing container "${args[0]}"
     [[ ! -e $STUB_DIR/docker-start-fails ]] || exit 1
-    n=$(( $(field "$C/${args[0]}" starts 0) + 1 )); echo "$n" > "$C/${args[0]}/starts"
-    echo "2026-01-01T00:00:0${n}Z" > "$C/${args[0]}/started"
-    echo running > "$C/${args[0]}/status"; exit 0 ;;
+    n=$(( $(field "$d" starts 0) + 1 )); echo "$n" > "$d/starts"
+    echo "2026-01-01T00:00:0${n}Z" > "$d/started"
+    echo running > "$d/status"; exit 0 ;;
   "container stop")
     [[ -d $C/${args[0]} ]] || missing container "${args[0]}"
     echo exited > "$C/${args[0]}/status"; exit 0 ;;
@@ -189,6 +204,34 @@ case "$cmd" in
       case $ch in LABEL\ *) kv=${ch#LABEL }; echo "${kv//\"/}" >> "$I/$ref/labels" ;; esac
     done
     exit 0 ;;
+  "network create")
+    [[ ! -e $N/${args[0]} ]] || { echo "network with name ${args[0]} already exists" >&2; exit 1; }
+    mkdir -p "$N/${args[0]}"; printf '%s\n' ${labels[@]+"${labels[@]}"} > "$N/${args[0]}/labels"
+    echo "$internal" > "$N/${args[0]}/internal"
+    inhibit=false; for o in ${opts[@]+"${opts[@]}"}; do [[ $o != com.docker.network.bridge.inhibit_ipv4=true ]] || inhibit=true; done
+    echo "$inhibit" > "$N/${args[0]}/inhibit"; exit 0 ;;
+  "network inspect")
+    d=$N/${args[0]}
+    [[ -d $d ]] || { echo "[]"; echo "Error response from daemon: network ${args[0]} not found" >&2; exit 1; }
+    lab=$(json_labels "$d"); foreign "${args[0]}" && lab='{"devvm.data":"/elsewhere"}'
+    members="" sep=""
+    for c in "$C"/*; do
+      if ! [[ -d $c && $(field "$c" status) == running ]] || ! grep -qx "${args[0]}" "$c/networks" 2>/dev/null; then continue; fi
+      members+="$sep\"$(field "$c" id)\":{\"Name\":\"$(basename "$c")\"}"; sep=,
+    done
+    opt=""; [[ $(field "$d" inhibit) != true ]] || opt='"com.docker.network.bridge.inhibit_ipv4":"true"'
+    echo "[{\"Id\":\"id-net-${args[0]}\",\"Internal\":$(field "$d" internal false),\"Options\":{$opt},\"Labels\":$lab,\"Containers\":{$members}}]"
+    exit 0 ;;
+  "network rm")
+    [[ -d $N/${args[0]} ]] || { echo "network ${args[0]} not found" >&2; exit 1; }
+    rm -rf "${N:?}/${args[0]}"; exit 0 ;;
+  "network connect")
+    [[ -d $N/${args[0]} || ${args[0]} == bridge ]] || { echo "network ${args[0]} not found" >&2; exit 1; }
+    c=$C/$(by_id "${args[1]}"); [[ -d $c ]] || missing container "${args[1]}"
+    echo "${args[0]}" >> "$c/networks"; exit 0 ;;
+  "network disconnect")
+    c=$C/$(by_id "${args[1]}"); [[ -d $c ]] || missing container "${args[1]}"
+    grep -vx "${args[0]}" "$c/networks" > "$c/networks.new" || true; mv "$c/networks.new" "$c/networks"; exit 0 ;;
   "volume create")
     mkdir -p "$V/${args[0]}"; printf '%s\n' ${labels[@]+"${labels[@]}"} > "$V/${args[0]}/labels"; exit 0 ;;
   "volume inspect")
@@ -222,6 +265,7 @@ case $verb in
     if [[ $line == *"then echo sshd"* ]]; then if [[ -e $STUB_DIR/no-sshd ]]; then echo none; else echo sshd; fi; exit 0; fi
     if [[ $line == *"/etc/ssh/ssh_host_"* ]]; then echo "ssh-ed25519 AAAAstub root@stub"; exit 0; fi
     if [[ $line == *"tar -xf - "* ]]; then cat > "$STUB_DIR/sync.tar"; exit 0; fi
+    if [[ $line == *"devvm-proxy begin"* ]]; then cat > "$STUB_DIR/environment"; exit 0; fi
     if [[ $n == devvm-tools-build-* && $line == *" bash -s -- "* ]]; then
       tout=$(sed -n 's/^type=bind,src=\([^,]*\),dst=\/mnt\/devvm-tools$/\1/p' "$C/$n/mounts")
       for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} == -- ]] && break; done

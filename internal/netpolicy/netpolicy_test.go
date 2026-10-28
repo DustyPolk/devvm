@@ -453,6 +453,41 @@ func TestPrepareDecider(t *testing.T) {
 	}
 }
 
+// socketed is a backend whose VMs reach the proxy through a socket of the
+// host's (backend.ProxySocket).
+type socketed struct {
+	*backendtest.Fake
+	sock string
+}
+
+func (s socketed) ProxySocket(string) string { return s.sock }
+
+// On a backend whose VMs reach the proxy through a socket, the proxy
+// listens on it too, in a folder only the user can reach; on others, on
+// none.
+func TestPrepareSocket(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, f := testProxy(t, d)
+	sock := filepath.Join(d.Data, "docker", "sock", "x", "p.sock")
+	if _, err := p.Prepare(t.Context(), socketed{lifelined(), sock}, st, false); err != nil {
+		t.Fatal(names(err))
+	}
+	pid, _ := p.PID(st.Name())
+	if args := strings.Join(f.args[pid], " "); !strings.HasSuffix(args, " -listen-unix "+sock) {
+		t.Errorf("the proxy's arguments %q: want -listen-unix %s", args, sock)
+	}
+	if fi, err := os.Stat(filepath.Dir(sock)); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("the socket's folder: %v %v", fi, err)
+	}
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(names(err))
+	}
+	pid, _ = p.PID(st.Name())
+	if args := strings.Join(f.args[pid], " "); strings.Contains(args, "-listen-unix") {
+		t.Errorf("without a socket: %q", args)
+	}
+}
+
 // A running VM keeps its proxy, unless the proxy is from another devvm
 // binary, holds a CA since replaced, or its allowlist files changed. A
 // stopped VM's always starts again.

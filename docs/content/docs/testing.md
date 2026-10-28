@@ -70,7 +70,7 @@ Gotchas of this setup:
 `tests/e2e.sh --backend docker` checks the [Docker backend](docker.md) on two engines, which differ in what a container reaches on the host:
 
 - **A Linux engine**, in a Lima VM e2e makes the first time and keeps: Lima home `~/.lt-e2e-go-docker` (or `$DEVVM_E2E_DOCKER_LIMA_HOME`), VM `dockerhost`, Ubuntu 26.04 with Docker's engine from Ubuntu's archive and you in its `docker` group, and only this checkout mounted, read-only. e2e builds a test build of `devvm` for it here, copies it in, and runs its own Docker checks there (`DEVVM_E2E_BIN` names the binary, as the VM has no Go). Its images stay cached in the VM's Docker; `--clean` deletes them. `limactl stop dockerhost` (with that `LIMA_HOME`) when done; `limactl delete` to start over. The checkout's path is the VM's mount: run e2e from the same one.
-- **Docker Desktop**, yours: e2e touches only what has its sandbox's label, checks that everything else is the same at the end, and deletes everything with the label then. Desktop can't build yet, so it copies base and the shared tools from the Linux engine's run: both keep their state at `/tmp/devvm-go-e2e-docker`, so the images carry the label and names Desktop's run looks for.
+- **Docker Desktop**, yours: e2e touches only what has its sandbox's label, checks that everything else is the same at the end, and deletes everything with the label then. The images bases start from, which devvm pulls by digest (Ubuntu's pinned one, `alpine:3`'s), are the exception: Docker keeps them, as it does any image devvm pulls. It builds its own images, through a proxy of devvm's, with devvm's Linux build beside the test build, as a macOS release has it. Network policy's DNS check captures DNS on the engine's own network: a container of the sandbox's, from `alpine:3`, on Desktop's host network (its VM's), `tcpdump` added from Alpine's packages, deleted at the end of the section.
 
 On Linux, `--backend docker` checks the machine's own engine, which must be rootful and its own.
 
@@ -82,13 +82,15 @@ These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`
 
 ## Unreviewed emulations
 
-devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a test build, `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A test build is one made with `-ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed"`, as `tests/e2e.sh` and the CLI tests make theirs; releases (GoReleaser, the Homebrew formula) set only the version, so they ignore it:
+devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a test build, `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A test build is one made with `-ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed"`, as `tests/e2e.sh` and the CLI tests make theirs; releases (GoReleaser, the Homebrew formula) don't set it, so they ignore it:
 
 ```sh
 DEVVM_UNREVIEWED=smolvm:ports-all devvm --backend smolvm base
 ```
 
 It's for tests only, of an emulation before its review: none needs it now, as every emulation is reviewed. It never makes a feature a backend lacks usable, and `devvm doctor` still shows the feature `unreviewed`.
+
+A test build also reads `DEVVM_LINUX_BUILD_URL` and `DEVVM_LINUX_BUILD_SHA256` in place of a release's Linux archive and its devvm's SHA-256, and then fetches devvm's [Linux build](docker.md#requirements) as a release on macOS does, whatever the host: the CLI tests serve one on a loopback port, with a matching SHA-256 and a mismatched one.
 
 ## Manual checks
 

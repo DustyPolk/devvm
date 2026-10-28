@@ -28,6 +28,8 @@ It installs the release it comes with, or `--version`'s:
 3. It puts devvm, one binary with its README, changelog and license, in `~/.local/lib/devvm/<version>`, links `~/.local/bin/devvm` to it, and says how to add `~/.local/bin` to `PATH` when it's missing.
 4. It runs `devvm doctor --fixes` and offers each fix, asking first ([details](#checking-what-devvm-needs)): Lima with Homebrew when you have it, else Lima's latest release (checked against its `SHA256SUMS`) into `~/.local`; on Linux, QEMU with your package manager and access to `/dev/kvm` (joining the `kvm` group: log out and back in afterwards), which use sudo. Without a terminal or `--yes`, it installs none. Then it runs `devvm doctor`.
 
+On macOS, the [Docker](docker.md#requirements) backend later fetches one more file the first time a Docker VM or build needs it: the same release's Linux archive, whose devvm it checks against the SHA-256 the installed devvm has of it before using it. Homebrew's devvm has its Linux build already, built from source.
+
 The signature catches an archive or `SHA256SUMS` someone replaced, which the checksum alone can't. It can't catch a release replaced whole: `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't. You can also download `install.sh` and read it before you run it.
 
 Options go after `bash -s --`:

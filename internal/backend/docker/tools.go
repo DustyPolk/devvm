@@ -85,14 +85,23 @@ func (d *Docker) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	done := d.AddCleanup(func(ctx context.Context) { _ = d.removeIfThere(ctx, name) })
 	// Its steps: create, start, the script, delete, the unpacking.
 	ctx = d.WithSteps(ctx, 5)
-	c := config{Hostname: "devvm-tools", Net: netMode(spec.Net), Mounts: []string{out}}
+	e := egress{d}
+	ctx, netw, lifeline, undoNet, err := e.buildNet(ctx, name, spec.Net)
+	if err != nil {
+		return err
+	}
+	undo := d.AddCleanup(undoNet)
+	c := config{Hostname: "devvm-tools", Net: netw, Mounts: []string{out}, CapDrop: buildCaps(name, netw)}
 	if err := d.create(ctx, msg.CloningImage(image.Base), name, d.imageRef(spec.Base), map[string]string{kindLabel: kindTools}, c, cpus, mem); err != nil {
 		return err
 	}
-	if err := d.Runner.Run(ctx, msg.Starting(name), d.docker(ctx, "container", "start", name)); err != nil {
-		return backend.Logged(msg.StartFailed(name))
+	if err := e.startBuild(ctx, name, lifeline); err != nil {
+		return err
 	}
-	args, err := d.userArgs(name, "/", true, false, append([]string{"bash", "-s", "--"}, spec.Args...))
+	if err := e.buildSudo(ctx, name, true); err != nil {
+		return err
+	}
+	args, err := d.userArgs(ctx, name, "/", true, false, append([]string{"bash", "-s", "--"}, spec.Args...))
 	if err != nil {
 		return err
 	}
@@ -105,6 +114,8 @@ func (d *Docker) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		return err
 	}
 	done()
+	undo()
+	undoNet(ctx)
 	var files []string
 	for i := 2; i < len(spec.Args); i += 3 {
 		f := spec.Args[i]
@@ -120,11 +131,8 @@ func (d *Docker) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 
 // checkTools checks what BuildTools is asked for.
 func (d *Docker) checkTools(spec backend.ToolsSpec) error {
-	if err := checkBuildNet(spec.Net); err != nil {
+	if err := checkBuildNet(d.Caps(), d.toolsName(), spec.Net); err != nil {
 		return err
-	}
-	if !d.Caps()[backend.FeatureBuildConfinement].Usable() {
-		return msg.BackendLacks(Name, string(backend.FeatureBuildConfinement), d.toolsName())
 	}
 	if spec.Format != d.ToolFormat() {
 		return fmt.Errorf("docker: tool images are %s, not %q", d.ToolFormat(), spec.Format)

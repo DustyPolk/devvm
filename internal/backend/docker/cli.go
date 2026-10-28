@@ -115,6 +115,12 @@ type container struct {
 		NanoCpus int64 `json:"NanoCpus"`
 		Memory   int64 `json:"Memory"`
 	} `json:"HostConfig"`
+	NetworkSettings struct {
+		// Networks are the networks it's on, by name.
+		Networks map[string]struct {
+			NetworkID string `json:"NetworkID"`
+		} `json:"Networks"`
+	} `json:"NetworkSettings"`
 	Image string `json:"Image"` // its image's ID
 }
 
@@ -394,9 +400,9 @@ func (cl client) commit(ctx context.Context, name, ref, kind, key string) error 
 }
 
 // asRoot is a command run as root in a running container, its input fed
-// to sh: devvm's own scripts.
+// to sh: devvm's own scripts; with a build's proxy settings (execEnv).
 func (cl client) asRoot(ctx context.Context, name string, env []string, args ...string) *exec.Cmd {
-	a := []string{"exec", "-i", "-u", "0"}
+	a := append([]string{"exec", "-i", "-u", "0"}, execEnvArgs(ctx)...)
 	for _, e := range env {
 		a = append(a, "-e", e)
 	}
