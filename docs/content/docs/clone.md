@@ -3,48 +3,50 @@ title: Working on a clone
 weight: 28
 ---
 
-`devvm --clone` gives the VM its own clone of the repo instead of mounting the folder, so nothing in the VM can touch your working tree or `.git`. Use it when you don't trust what runs in the VM, such as an agent working unattended, or on Linux hosts, which have no [`.git` protection](git-protection.md#linux-hosts).
+`devvm --clone` gives the VM its own clone of the repo instead of mounting your folder, so nothing in the VM can touch your working tree or `.git`. Use it when you don't trust what runs in the VM, such as an agent working unattended, and on Linux hosts, which have no [`.git` protection](git-protection.md#linux-hosts).
 
 ```sh
-devvm --clone              # a new VM: your branches are copied into it, and the shell opens in its clone
-git fetch devvm            # later, on this machine: the VM's work, as devvm/<branch>
+devvm --clone              # create the VM, copy your branches into it and open a shell in its clone
+git fetch devvm            # later, on this machine, fetch the VM's work as devvm/<branch>
 git log -p main..devvm/main
 ```
 
 ## What's copied
 
-The VM mounts nothing from this machine but the shared tools and its [agents' config folders](coding-agents.md#mounts). Once it runs, devvm makes a repo at the folder's path in the VM and pushes every local branch into it, over [the VM's SSH entry](ssh.md#ssh-access-by-name), which checks its pinned host keys. Your current branch is checked out there, and the shell opens in it.
+From this machine, the VM mounts only the shared tools and its [agents' config folders](coding-agents.md#mounts). Once the VM is running, devvm creates a repo in it at the same path as your folder and pushes every local branch into it. The push goes over [the VM's SSH entry](ssh.md#ssh-access-by-name), which checks the VM's pinned host keys. devvm checks out your current branch in the clone, and your shell opens there.
 
-Nothing else is copied: not tags, not uncommitted changes, not untracked or ignored files (`.env`, `node_modules`). devvm warns about uncommitted changes. Commit them and `git push devvm BRANCH` to send them later.
+devvm copies only your local branches. Tags, uncommitted changes, and untracked or ignored files such as `.env` and `node_modules` stay on this machine. devvm warns you about uncommitted changes, so you can commit them and send them later with `git push devvm BRANCH`.
 
-A copy that fails (the VM can't be reached, say) is tried again the next time you run devvm in the folder.
+If the copy fails, for example because the VM can't be reached, devvm tries again the next time you run it in the folder.
 
 ## The remote
 
-The repo gets a git remote for the VM, named `devvm`, or `devvm-<folder>` when `devvm` is taken, then the VM's full name. Its URL is the VM's full name and the clone's path, so it goes through devvm's ssh config:
+devvm adds a git remote for the VM to your repo. It's named `devvm`, or `devvm-<folder>` if `devvm` is already taken, or the VM's full name if both are. The remote's URL is the VM's full name followed by the clone's path, so git connects through devvm's ssh config, and fetching needs two things:
 
-- **It needs the `Include` line** in `~/.ssh/config` ([SSH access by name](ssh.md#ssh-access-by-name)). devvm offers to add it when it makes the clone, and on `devvm ssh` or `devvm code`; without a terminal, or until you add it, fetch with `GIT_SSH_COMMAND='ssh -F ~/.config/devvm/ssh_config' git fetch devvm`.
-- **It needs the VM running.** A stopped VM has no SSH entry, so `git fetch` says it can't resolve the name. Run `devvm` or `devvm ssh` in the folder first.
+- Your `~/.ssh/config` needs devvm's `Include` line ([SSH access by name](ssh.md#ssh-access-by-name)). devvm offers to add it when it creates the clone, and again when you run `devvm ssh` or `devvm code`. Until the line is there, or when devvm had no terminal to ask in, fetch with `GIT_SSH_COMMAND='ssh -F ~/.config/devvm/ssh_config' git fetch devvm`.
+- The VM must be running. A stopped VM has no SSH entry, so `git fetch` fails because it can't resolve the name. Run `devvm` or `devvm ssh` in the folder first.
 
 ## Fetching the VM's work
 
-Fetching runs nothing from the VM on this machine: git only receives objects and updates `devvm/*` (rm's fetch: new `saved/devvm/*` branches). The commits themselves are untrusted, so review them before you merge them, check them out or run anything they change, as you would a contributor's branch.
+Fetching runs nothing from the VM on this machine. git only receives objects and updates the `devvm/*` branches, or creates new `saved/devvm/*` branches when `devvm rm` does the fetch. The commits themselves are untrusted, though, so treat them as you would a contributor's branch and review them before you merge them, check them out or run anything they change.
 
 ## Deleting the VM
 
-`devvm rm` checks the clone first, starting the VM if it's stopped:
+Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd lose, starting the VM if it's stopped:
 
-1. When it has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches, `saved/devvm/<branch>`.
-2. When it has uncommitted changes, devvm lists them (the first 20) and asks before deleting them with the VM.
+1. If the clone has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches named `saved/devvm/<branch>`.
+2. If the clone has uncommitted changes, devvm lists the first 20 and asks before deleting them along with the VM.
 
-Without a terminal to ask in, either one refuses, and the VM stays. Then devvm deletes the VM and, if the remote still points at the VM, removes it fully (`git remote remove`: its `devvm/*` branches and upstream settings go too). First, any `devvm/*` branch with commits no other branch has, fetched by you or otherwise, is kept as a new local branch under `saved/devvm/` too. devvm names the branches it makes. They're yours to review, merge or delete (`git branch -D saved/devvm/main`).
+If either check finds something and there's no terminal to ask in, devvm refuses and keeps the VM.
 
-The local branches are named `saved/<remote>/<branch>`, after the remote's name. devvm never overwrites a branch: if any branch is, is in or holds `saved/<remote>`, it uses `saved/<remote>-2`, then `-3`, up to `-99`. With none free (a branch named `saved`, say), rm refuses before fetching and the VM stays; at deletion, the remote stays, with its branches. Branch names come from the VM, so devvm shows them quoted and skips any that git refuses as branch names.
+Once the checks pass, devvm deletes the VM. If the remote still points at the VM, devvm then removes it with `git remote remove`, which also deletes its `devvm/*` branches and their upstream settings. Before it does, devvm keeps every `devvm/*` branch that has commits no other branch has as a new local branch under `saved/devvm/`, whoever fetched it. devvm names each branch it creates, and they're yours to review, merge or delete (`git branch -D saved/devvm/main`).
 
-`devvm rm -f` skips the checks; it still keeps fetched branches.
+The local branches are named `saved/<remote>/<branch>`, after the remote. devvm never overwrites a branch. If a branch named `saved/<remote>` exists, or one under it, or one it would sit under, devvm uses `saved/<remote>-2` instead, then `-3`, and so on up to `-99`. If none of those names is free, for example because a branch is named `saved`, `devvm rm` refuses before fetching and keeps the VM. When that happens as devvm is about to remove the remote, it leaves the remote and its branches in place. Because branch names come from the VM, devvm quotes them when it shows them and skips any that git refuses as branch names.
+
+`devvm rm -f` skips both checks, but it still keeps the fetched branches as described above.
 
 ## Requirements
 
-- The folder is the top folder of a git repo, with at least one commit and a branch checked out (HEAD not detached).
-- git on this machine. The VM's images have git.
-- The choice is made when the VM is created. devvm refuses `--clone` for a VM that mounts its folder: save any work in it, then `devvm rm` and `devvm --clone`. A `--clone` VM stays one; `--clone` again is optional.
+- The folder is the top folder of a git repo that has at least one commit and a branch checked out, not a detached HEAD.
+- git is installed on this machine. The VM's images already have it.
+- You choose `--clone` when the VM is created. devvm refuses `--clone` for an existing VM that mounts its folder, so to switch, save any work in that VM, then run `devvm rm` and `devvm --clone`. Once a VM is a `--clone` VM it stays one, and you don't need to pass `--clone` again.

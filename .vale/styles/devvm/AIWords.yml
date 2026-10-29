@@ -1,0 +1,33 @@
+extends: existence
+message: "Use a plain word instead of '%s' (see the docs-voice skill)."
+level: error
+ignorecase: true
+tokens:
+  - additionally
+  - crucial
+  - delve[sd]?
+  - enhanc(?:e|es|ed|ing)
+  - foster(?:s|ed|ing)?
+  - garner(?:s|ed)?
+  - intricac(?:y|ies)
+  - intricate
+  - landscape
+  - meticulous(?:ly)?
+  - pivotal
+  - robust(?:ly)?
+  - seamless(?:ly)?
+  - showcas(?:e|es|ed|ing)
+  - tapestry
+  - testament
+  - underscor(?:e|es|ed|ing)
+  - vibrant
+  - leverag(?:e|es|ed|ing)
+  - streamlin(?:e|es|ed|ing)
+  - effortless(?:ly)?
+  - (?:serves|stands|acts) as
+  - boasts
+  - deep dive
+  - in conclusion
+  - in summary
+  - worth noting
+  - plays an? \w+ role
