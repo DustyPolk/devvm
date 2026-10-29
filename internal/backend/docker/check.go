@@ -47,9 +47,16 @@ type engine struct {
 	Name            string   `json:"Name"`
 	MemTotal        int64    `json:"MemTotal"`
 	SecurityOptions []string `json:"SecurityOptions"`
+	// Runtimes are the container runtimes it has, by name: sysbox-runc
+	// where Sysbox is installed.
+	Runtimes map[string]json.RawMessage `json:"Runtimes"`
 	// kind is engineKind's, set when it's read.
 	kind string
 }
+
+// sysboxRuntime is Sysbox's runtime, as Docker names it once Sysbox's
+// package is installed.
+const sysboxRuntime = "sysbox-runc"
 
 // Check reports whether Docker can run VMs here: the first of Problems.
 func (d *Docker) Check(ctx context.Context) error {
@@ -181,8 +188,8 @@ func unameArch(goarch string) string {
 	return goarch
 }
 
-// Report says which engine devvm uses, and on Docker Desktop which folders
-// it shares with containers.
+// Report says which engine devvm uses, whether it has Sysbox, and on
+// Docker Desktop which folders it shares with containers.
 func (d *Docker) Report(ctx context.Context) []msg.M {
 	d.mu.Lock()
 	e := d.eng
@@ -205,6 +212,9 @@ func (d *Docker) Report(ctx context.Context) []msg.M {
 		out = append(out, msg.DockerEngineLinux(e.ServerVersion))
 	default:
 		out = append(out, msg.DockerEngineOther(e.ServerVersion, cmp.Or(e.OperatingSystem, e.Name)))
+	}
+	if _, ok := e.Runtimes[sysboxRuntime]; ok {
+		out = append(out, msg.DockerSysbox())
 	}
 	// What network policy's relays run, and Docker Desktop's builds' too.
 	var m msg.M

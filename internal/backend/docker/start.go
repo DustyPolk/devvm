@@ -36,6 +36,9 @@ type config struct {
 	// build's on a network of its own, NET_RAW (no raw or packet sockets:
 	// ping uses ICMP datagram sockets).
 	CapDrop []string
+	// Runtime is a VM's made for the docker layer: Sysbox's
+	// (dockerlayer.go).
+	Runtime string
 }
 
 // hash is the config's hash, which a VM's container carries (configLabel).
@@ -53,6 +56,9 @@ func (c config) args() []string {
 	}
 	for _, cp := range c.CapDrop {
 		args = append(args, "--cap-drop", cp)
+	}
+	if c.Runtime != "" {
+		args = append(args, "--runtime", c.Runtime)
 	}
 	return args
 }
@@ -101,7 +107,7 @@ func volume(name, at string, writable bool) string {
 // its name (devvm-<folder>-<hash>: the folder's part, as on Lima); Docker's
 // default network; no NET_RAW; its mounts: the project folder (or its
 // clone's volume), its agents' folders, the tools volume and its home's
-// volume.
+// volume. One made for the docker layer differs (layerConfig).
 func (d *Docker) vmConfig(vm string, r record) (config, error) {
 	name, _, _, err := d.user()
 	if err != nil {
@@ -129,7 +135,7 @@ func (d *Docker) vmConfig(vm string, r record) (config, error) {
 		c.Mounts = append(c.Mounts, volume(d.toolsVolume(), toolsAt, false))
 	}
 	c.Mounts = append(c.Mounts, volume(homeVolume(vm), home(name), true))
-	return c, nil
+	return layerConfig(c, vm, r), nil
 }
 
 // hostname is a VM's hostname: its folder's part of devvm-<folder>-<hash>,
@@ -161,8 +167,9 @@ func (d *Docker) create(ctx context.Context, step msg.M, name, image string, lab
 
 // CreateVM makes a new, stopped container from the image, with its own
 // home volume (the image's home copied in) and, for --clone, a volume for
-// its clone. Its CPUs and memory are base's unless spec sets them; its
-// disk is the engine's.
+// its clone; for the docker layer, under Sysbox (DockerLayer), with volumes for
+// Docker's engine in it. Its CPUs and memory are base's unless spec sets
+// them; its disk is the engine's.
 func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) error {
 	vm := spec.Name
 	if err := d.checkCreate(ctx, img, spec); err != nil {
@@ -181,6 +188,12 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	r := record{
 		Image: img, Project: spec.Project, CloneAt: spec.CloneAt, AgentDirs: slices.Clone(spec.AgentDirs),
 		Tools: spec.Tools != "", Forwarding: spec.AgentForwarding, PortsAll: spec.Ports.All, Ports: slices.Clone(spec.Ports.Ranges),
+	}
+	if spec.DockerLayer {
+		if _, err := d.DockerLayer(vm); err != nil {
+			return err
+		}
+		r.Runtime = sysboxRuntime
 	}
 	c, err := d.vmConfig(vm, r)
 	if err != nil {
@@ -203,6 +216,9 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	if spec.CloneAt != "" {
 		vols = append(vols, cloneVolume(vm))
 	}
+	if r.dockerLayer() {
+		vols = append(vols, engineVolumes(vm)...)
+	}
 	for _, v := range vols {
 		if err := d.removeVolume(ctx, v); err != nil {
 			return err
@@ -215,6 +231,12 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	// names without), and up to the share.
 	if r.Tools {
 		if err := d.syncTools(ctx, d.imageRef(img)); err != nil {
+			return err
+		}
+	}
+	// Docker would make the network a container names unlabelled.
+	if r.dockerLayer() {
+		if err := (egress{d}).layerNetwork(ctx, vm); err != nil {
 			return err
 		}
 	}
@@ -273,6 +295,22 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 	r, err := d.readRecord(vm)
 	if err != nil {
 		return err
+	}
+	// Root in it can change its own network.
+	if c.Net == backend.NetProxy && r.dockerLayer() {
+		return msg.NetDockerLayer(Name, vm)
+	}
+	// Its own network and its engine's volumes, before a container made
+	// again names them (SetDockerLayer's, or another remake).
+	if r.dockerLayer() {
+		for _, v := range engineVolumes(vm) {
+			if err := d.ensureVolume(ctx, v); err != nil {
+				return err
+			}
+		}
+		if err := (egress{d}).layerNetwork(ctx, vm); err != nil {
+			return err
+		}
 	}
 	if err := d.prepare(ctx, vm, ct, &r); err != nil {
 		return err
@@ -376,16 +414,21 @@ func (d *Docker) prepare(ctx context.Context, vm string, ct container, r *record
 }
 
 // services runs services.sh in a running container, with args (its sshd's,
-// ssh.go), without Docker's daemon (dockerd can't run in an unprivileged
-// container) and its sshd's daemon (each connection runs its own,
-// Connect), then gives a --clone VM's user its clone's folder, a volume's
+// ssh.go), without loop devices (its tools are folders, linked), its
+// sshd's daemon (each connection runs its own, Connect), and Docker's
+// daemon but in a VM made for the docker layer (dockerd can't run in
+// another), then gives a --clone VM's user its clone's folder, a volume's
 // root; a failure stops it.
 func (d *Docker) services(ctx context.Context, vm string, r record, args []string) error {
 	script, err := d.script("container/services.sh")
 	if err != nil {
 		return err
 	}
-	cmd := d.asRoot(ctx, vm, []string{"DEVVM_DOCKERD=off", "DEVVM_SSHD=inetd"}, args...)
+	env := []string{"DEVVM_LOOP=off", "DEVVM_SSHD=inetd"}
+	if !r.dockerLayer() {
+		env = append([]string{"DEVVM_DOCKERD=off"}, env...)
+	}
+	cmd := d.asRoot(ctx, vm, env, args...)
 	cmd.Stdin = bytes.NewReader(script)
 	err = d.Runner.Run(ctx, msg.M{}, cmd)
 	if err == nil && r.CloneAt != "" {

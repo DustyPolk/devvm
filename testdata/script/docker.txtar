@@ -26,6 +26,7 @@ stdout '^ssh +emulated +native +emulated$'
 stdout '^ports-all +emulated +native +emulated$'
 stdout '^agent-toggle +emulated +native +emulated$'
 stdout '^docker-layer +none +native +native$'
+! stdout docker_sysbox
 exec sh -c ': > "$STUB_DIR/docker-denied"'
 ! exec devvm doctor --backend docker
 stderr '^devvm: docker_access fix=sudo usermod -aG docker \S+$'
@@ -51,14 +52,19 @@ exec devvm images
 stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +docker$'
 
 # What it lacks is refused in one line naming the VM, before anything is
-# made: a disk size, the docker layer.
+# made: a disk size; the docker layer without Sysbox, saying to install it
+# on this Linux engine (on Docker Desktop, to use a VM backend).
 mkdir $WORK/web
 cd $WORK/web
 exec sh -c ': > "$STUB_LOG"'
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none --disk 200 base
 stderr '^devvm: backend_lacks backend=docker feature=disk vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
-stderr '^devvm: backend_lacks backend=docker feature=docker-layer vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: docker_layer_no_sysbox vm=devvm-web-[0-9a-f]{14}$'
+env DEVVM_DOCKER_KIND=desktop
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
+stderr '^devvm: docker_layer_needs_vm vm=devvm-web-[0-9a-f]{14}$'
+env DEVVM_DOCKER_KIND=linux
 stub_calls
 ! stdout 'container create'
 ! exists $VMS
@@ -78,7 +84,7 @@ stdout '^docker volume create --label devvm\.data=\S+ devvm-web-[0-9a-f]{14}-hom
 stdout '^docker volume create --label devvm\.data=\S+ devvm-tools-[0-9a-f]{8}$'
 stdout '^docker container create --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --label devvm\.config=[0-9a-f]{16} --label devvm\.kind=vm --init --user 0:0 --entrypoint sleep --cpus 4 --memory \d+m --memory-swap \d+m --hostname web --network bridge --mount type=bind,src=\S+/web,dst=\S+/web --mount type=volume,src=devvm-tools-[0-9a-f]{8},dst=/mnt/devvm-tools,readonly --mount type=volume,src=devvm-web-[0-9a-f]{14}-home,dst=/home/\S+\.guest --cap-drop NET_RAW devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
 stdout '^docker container start devvm-web-[0-9a-f]{14}$'
-stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd devvm-web-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd devvm-web-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
 stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- ''\S+/web'' && exec bash -l$'
 ! stdout 'devvm-web-[0-9a-f]{14} sh -c .* sh bash -l$'
 ! stderr backend_unreviewed
@@ -120,6 +126,64 @@ stdout '^docker volume rm devvm-web-[0-9a-f]{14}-home$'
 exec devvm ls
 ! stdout devvm-web
 
+# Under Sysbox, where the engine has it, emulated and reviewed, so
+# unwarned: the VM runs under its runtime, said, recorded, on a network of
+# its own, with volumes of its own for Docker's engine, Docker's daemon
+# started after each start; ls shows it; no network policy, at creation or
+# later; rm deletes its network and volumes. Added in place to a VM with
+# network policy, refused before anything changes.
+exec sh -c ': > "$STUB_DIR/docker-sysbox"'
+env DEVVM_DOCKER_PROC_SYS=$WORK/sys
+mkdir $WORK/sys/net/ipv4/conf/br-id-net-devvm
+exec sh -c 'echo 0 > "$DEVVM_DOCKER_PROC_SYS/net/ipv4/conf/br-id-net-devvm/route_localnet"'
+exec devvm doctor --backend docker
+stdout '^docker-layer +emulated +native +native$'
+stdout '^docker_sysbox$'
+mkdir $WORK/sysbox
+cd $WORK/sysbox
+! exec devvm --backend docker --from $PIN --network-policy --ports none docker
+stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --backend docker --from $PIN --ports none docker
+stdout '^==> docker_layer_runtime backend=docker runtime=sysbox vm=devvm-sysbox-[0-9a-f]{14}$'
+! stdout net_about
+! stderr backend_unreviewed
+stub_calls
+stdout '^docker volume create --label devvm\.data=\S+ devvm-sysbox-[0-9a-f]{14}-docker$'
+stdout '^docker volume create --label devvm\.data=\S+ devvm-sysbox-[0-9a-f]{14}-containerd$'
+stdout '^docker network create --label devvm\.data=\S+ --label devvm\.kind=vm devvm-sysbox-[0-9a-f]{14}-docker-net$'
+stdout '^docker container create --name devvm-sysbox-[0-9a-f]{14} .* --network devvm-sysbox-[0-9a-f]{14}-docker-net .* --mount type=volume,src=devvm-sysbox-[0-9a-f]{14}-containerd,dst=/var/lib/containerd --runtime sysbox-runc devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
+! stdout 'container create --name devvm-sysbox-.* --cap-drop'
+stdout '^docker exec -i -u 0 -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd devvm-sysbox-[0-9a-f]{14} sh -s -- ssh '
+exec sh -c 'cat "$VMS"/devvm-sysbox-*'
+stdout '^docker_layer=sysbox$'
+stdout '^net=off$'
+exec devvm ls
+stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +on +off +docker \(sysbox\) +\S+/sysbox$'
+! exec devvm network on
+stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
+exec devvm rm -f
+stub_calls
+stdout '^docker volume rm devvm-sysbox-[0-9a-f]{14}-docker$'
+stdout '^docker volume rm devvm-sysbox-[0-9a-f]{14}-containerd$'
+stdout '^docker network rm devvm-sysbox-[0-9a-f]{14}-docker-net$'
+mkdir $WORK/inplace
+cd $WORK/inplace
+exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+exec devvm network on
+! exec devvm docker
+stderr '^devvm: net_docker_layer backend=docker vm=devvm-inplace-[0-9a-f]{14}$'
+exec devvm rm -f
+# A bridge routing to this machine's loopback (Docker's userland proxy
+# off): refused.
+exec sh -c 'echo 1 > "$DEVVM_DOCKER_PROC_SYS/net/ipv4/conf/br-id-net-devvm/route_localnet"'
+mkdir $WORK/localnet
+cd $WORK/localnet
+! exec devvm --backend docker --from $PIN --ports none docker
+stderr '^devvm: docker_route_localnet vm=devvm-localnet-[0-9a-f]{14}$'
+! exec sh -c 'ls -d "$STUB_DIR"/docker/containers/devvm-localnet-*'
+rm $STUB_DIR/docker-sysbox
+
 # Its emulations, reviewed, so unwarned: ssh for editors through docker
 # exec, nothing published (devvm's ssh config names devvm _docker-connect
 # as ProxyCommand); every port, through a forwarder of devvm's over that
@@ -134,7 +198,7 @@ exec devvm --backend docker --from $PIN --no-network-policy --ssh-agent base
 stub_calls
 ! stdout 'docker container create .* (-p|--publish) '
 stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} sh -c if \[ -x /usr/sbin/sshd \]; then echo sshd; else echo none; fi$'
-stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd devvm-emu-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd devvm-emu-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
 stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} cat /etc/ssh/ssh_host_ed25519_key\.pub$'
 stdout '^ssh -F none -M -S \S+/data/devvm/run/docker-[0-9a-f]{16}\.ctl -T .* -o IdentityAgent=none -o IdentityFile=\S+/docker/vms/devvm-emu-[0-9a-f]{14}\.key .* -o HostKeyAlias=devvm-emu-[0-9a-f]{14} .* -o ForwardAgent=no .* -o ProxyCommand=''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}'' -l \S+ devvm-emu-[0-9a-f]{14} sh -s$'
 stdout '^ssh -F none -T -o ControlMaster=no -o ControlPath=none .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* -o ProxyCommand=.* -l \S+ devvm-emu-[0-9a-f]{14} cd -- ''\S+/emu'' && exec bash -l$'

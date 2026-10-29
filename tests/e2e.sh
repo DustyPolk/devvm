@@ -46,6 +46,14 @@
 #                (uid and gid), its home a volume of its own, size, no Docker inside, what it lacks
 #                refused in one line, agent folders added and removed (its container made again from a
 #                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume;
+#                the docker layer under Sysbox (an emulation, reviewed; refused on an engine without
+#                it, on Docker Desktop saying to use a VM backend): a user namespace of its own, every
+#                capability in it, the folder's files yours (root's set-user-id file root's, named at
+#                the next launch), its engine's own volumes, its own network alone (containers on
+#                Docker's default network and another out of reach even as root, and this machine's
+#                loopback even routed to, the internet not; IPv6 turned on reaches this machine's
+#                servers), Docker running in it after each start, no network policy, ls saying so;
+#                added in place to a VM, its disk and home kept, and made as it was when a script fails;
 #                ssh for editors', ports' and agent forwarding's emulations (nothing published or
 #                listening, pinned host keys of each VM's own, its own key alone, no forwarding out even
 #                past a hostile sshd, a VM started outside devvm, devvm ssh and code, every port and
@@ -61,7 +69,8 @@
 #                unenforced and stopped, another container on its network refused, network off and
 #                on, ping without NET_RAW).
 #                On macOS, the same on a Linux engine in a Lima VM e2e keeps (Lima home
-#                ~/.lt-e2e-go-docker, VM dockerhost: this checkout read-only, devvm built for it here),
+#                ~/.lt-e2e-go-docker, VM dockerhost: this checkout read-only, devvm built for it here,
+#                Sysbox installed, pinned),
 #                then on Docker Desktop, with devvm's Linux build beside devvm: base, a layer, an
 #                Alpine base and the tools built there through a proxy of their own (the internet
 #                reached, this machine's loopback not, no NET_RAW), a project
@@ -2020,8 +2029,7 @@ docker_project() {
   check "devvm stop stops it; devvm starts it again, its disk as it was" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
     [[ \$(d_state $vm) == exited ]] && printf 'cat /var/tmp/e2e-kept\n' | '$D' 2>&1 | grep -qx kept && [[ \$(d_state $vm) == running ]]"
   q=$(newproj "$1-no")
-  check "the docker layer is refused in one line, nothing made" refused "$q" docker-layer --no-network-policy --ports none docker
-  check "a disk size too" refused "$q" disk --no-network-policy --ports none --disk 200 base
+  check "a disk size is refused in one line, nothing made" refused "$q" disk --no-network-policy --ports none --disk 200 base
   check "rm deletes its container, its home volume and its state" bash -c "cd '$p' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
     [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/docker/vms/$vm.json' ]]"
 }
@@ -2070,6 +2078,186 @@ docker_tools() {
     [[ -z \$(d_state devvm-tools-build-$dns) && -z \$(d_state devvm-tools-unpack-$dns) ]]"
   check "restarted, the tools are there again" bash -c "cd '$t' && printf 'node -v\n' | '$D' restart 2>&1 | grep -qx v$(lockv node)"
   (cd "$t" && quiet "$D" rm -f)
+}
+
+# d_sysbox: the engine has Sysbox's runtime.
+d_sysbox() { docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"sysbox-runc"'; }
+# d_inner VM: Docker's engine in the VM runs a container as the VM's user, which reaches the internet.
+d_inner() { in_d "$1" 'for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+  docker run --rm alpine:3 sh -c "wget -q -O /dev/null https://api.github.com && echo e2e-inner-ran"' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran; }
+# d_layer_refused DIR NAME ARGS...: devvm ARGS in DIR on docker stops in one line, NAME's message,
+# and makes nothing.
+d_layer_refused() { local d=$1 n=$2 before out; shift 2
+  before=$(d_ours)
+  out=$(cd "$d" && DEVVM_MESSAGES=names "$D" --backend docker "$@" </dev/null 2>&1) && { echo "it ran: $out"; return 1; }
+  echo "$out"
+  [[ $(grep -c '^devvm: ' <<<"$out") -eq 1 ]] && grep -qE "^devvm: $n( |\$)" <<<"$out" && [[ $(d_ours) == "$before" ]]; }
+# d_layer_vm VM: a VM made for the docker layer: under Sysbox's runtime, not privileged, its Docker
+# engine's volumes mounted read-write, on its own network, alone.
+d_layer_vm() { local r m
+  r=$(docker container inspect -f '{{.HostConfig.Privileged}} {{.HostConfig.Runtime}}' "$1"); echo "privileged, runtime: $r"
+  m=$(docker network inspect -f '{{range $id, $c := .Containers}}{{$id}} {{end}}' "$1-docker-net" 2>/dev/null | xargs)
+  echo "networks: $(dn_nets "$1"); members: $m"
+  [[ $r == 'false sysbox-runc' ]] && mounted "$1" /var/lib/docker volume true && mounted "$1" /var/lib/containerd volume true &&
+    d_vol "$1-docker" && d_vol "$1-containerd" && [[ $(dn_nets "$1") == "$1-docker-net" ]] && d_net "$1-docker-net" &&
+    [[ $(docker network inspect -f '{{.Internal}}' "$1-docker-net") == false ]] &&
+    [[ $m == "$(docker container inspect -f '{{.Id}}' "$1")" ]]; }
+# d_plain_vm VM: a VM as any other: Docker's runtime, without NET_RAW, on Docker's default network.
+d_plain_vm() { local r
+  r=$(docker container inspect -f '{{.HostConfig.Runtime}} {{.HostConfig.CapDrop}}' "$1"); echo "runtime, dropped: $r; networks: $(dn_nets "$1")"
+  [[ $r == 'runc [NET_RAW]' || $r == 'runc [CAP_NET_RAW]' ]] && [[ $(dn_nets "$1") == bridge ]]; }
+# d_reach FROM...: FROM (a command prefix) connects to $standin_ip:8080 and reads the stand-in's line.
+d_reach() { "$@" bash -c "exec 3<>/dev/tcp/$standin_ip/8080 && head -1 <&3" 2>&1 | grep -qx e2e-standin; }
+# d_isolated VM: a stand-in container of the sandbox's from VM's image, on Docker's default network,
+# then on another network: VM can't reach it, even as root, while another container on that network
+# can (the control); VM reaches the internet.
+d_isolated() { local img n r=0
+  img=$(docker container inspect -f '{{.Config.Image}}' "$1")
+  docker network create --label "devvm.data=$XDG_DATA_HOME/devvm" "$1-othernet" >/dev/null || return 1
+  for n in bridge "$1-othernet"; do
+    docker run -d --name "$1-standin" --label "devvm.data=$XDG_DATA_HOME/devvm" --network "$n" --entrypoint perl "$img" \
+      -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => 8080, Listen => 5, ReuseAddr => 1) or die;
+        while ($c = $s->accept) { print $c "e2e-standin\n"; close $c }' >/dev/null || { r=1; break; }
+    standin_ip=$(docker container inspect -f "{{(index .NetworkSettings.Networks \"$n\").IPAddress}}" "$1-standin"); export standin_ip
+    sleep 1
+    echo "stand-in on $n at $standin_ip"
+    if d_reach timeout 5 docker exec -u 0 "$1"; then echo "the VM reaches it"; r=1
+    elif d_reach docker run --rm --label "devvm.data=$XDG_DATA_HOME/devvm" --network "$n" --entrypoint timeout "$img" 5; then
+      echo "the VM doesn't reach it; the control does"
+    else echo "the control doesn't reach it"; r=1
+    fi
+    docker rm -f "$1-standin" >/dev/null 2>&1
+  done
+  docker network rm "$1-othernet" >/dev/null 2>&1
+  (( r == 0 )) && in_root "$1" 'curl -sS -m 20 -o /dev/null https://api.github.com' && echo "the internet reached"; }
+# d_netroot VM: root in VM, through Docker's engine in it (a container on the VM's own network
+# namespace, privileged in it, as anyone in the VM's docker group can run), runs the script on its
+# input.
+d_netroot() { docker exec -i -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" "$1" bash -lc 'docker run --rm -i --privileged --network host alpine:3 sh -s'; }
+# d_udp_host ADDR PORT: a server of this machine's on ADDR, UDP port PORT, in the background, which
+# writes the first datagram it gets to $work/udp-PORT.
+d_udp_host() { rm -f "$work/udp-$2"
+  perl -MIO::Socket::IP -e '($h, $p, $f) = @ARGV; $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Proto => "udp") or die "$@";
+    $SIG{ALRM} = sub { exit 0 }; alarm 60; $s->recv($m, 100); open(F, ">", $f) or die; print F $m; close F' "$1" "$2" "$work/udp-$2" </dev/null >/dev/null 2>&1 &
+  d_hostprogs+=($!); }
+# d_layer_loopback VM: root in VM sends UDP through its gateway to this machine's server on every
+# address (the control), then routes 127.0.0.1 to its gateway (route_localnet on in the VM, the local
+# table moved behind) and sends to this machine's server on its loopback: only the control's arrives,
+# as the bridge's route_localnet is off.
+d_layer_loopback() { local br out
+  br=br-$(docker network inspect -f '{{.Id}}' "$1-docker-net" | cut -c1-12)
+  d_udp_host 0.0.0.0 47411; d_udp_host 127.0.0.1 47412; sleep 1
+  out=$(printf '%s\n' 'gw=$(ip route | awk "/^default/ { print \$3 }")' 'echo e2e-every | nc -u -w1 "$gw" 47411' \
+    'sysctl -qw net.ipv4.conf.all.route_localnet=1 net.ipv4.conf.eth0.route_localnet=1' \
+    'ip rule add pref 10 to 127.0.0.1 lookup 100 && ip rule del pref 0 && ip rule add pref 20 lookup local &&' \
+    '  ip route add 127.0.0.1/32 via "$gw" dev eth0 table 100 && ip route get 127.0.0.1 | grep -q " via $gw " && echo e2e-routed' \
+    'for _ in 1 2 3; do echo e2e-loopback | nc -u -w1 127.0.0.1 47412; done' \
+    'ip rule add pref 0 lookup local; ip rule del pref 20; ip rule del pref 10' | d_netroot "$1" 2>&1)
+  sleep 2; kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
+  echo "$out"; echo "bridge $br route_localnet: $(cat "/proc/sys/net/ipv4/conf/$br/route_localnet")"
+  echo "every address got: $(cat "$work/udp-47411" 2>/dev/null); loopback got: $(cat "$work/udp-47412" 2>/dev/null)"
+  grep -qx e2e-routed <<<"$out" && grep -qx e2e-every "$work/udp-47411" && [[ ! -s $work/udp-47412 ]]; }
+# d_layer_ipv6 VM: root in VM turns IPv6 on for its interface and reaches this machine's server on ::
+# through the bridge's link-local address (on its own host's servers on every address, IPv4's gateway
+# reaches them too).
+d_layer_ipv6() { local br ll out
+  br=br-$(docker network inspect -f '{{.Id}}' "$1-docker-net" | cut -c1-12)
+  ll=$(ip -6 addr show "$br" | awk '/inet6 fe80/ { sub(/\/.*/, "", $2); print $2; exit }')
+  d_hostserve :: 47413; sleep 1
+  out=$(printf '%s\n' 'sysctl -qw net.ipv6.conf.eth0.disable_ipv6=0; sleep 3' "nc -w3 $ll%eth0 47413 </dev/null" \
+    'sysctl -qw net.ipv6.conf.eth0.disable_ipv6=1' | d_netroot "$1" 2>&1)
+  kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
+  echo "bridge $br at $ll; the VM got: $out"; grep -qx host-47413 <<<"$out"; }
+# with_tty CMD...: CMD with a terminal (devvm asks before adding a layer), its input from ours.
+with_tty() { if [[ "$(uname -s)" == Darwin ]]; then script -q /dev/null "$@"; else script -qec "$(printf '%q ' "$@")" /dev/null; fi; }
+# d_layer_failed DIR VM: the docker layer added in place to VM (DIR's) with e2elayerfail, whose script
+# fails: refused, and VM made as it was (its image base, no docker_layer, a VM as any other, its
+# network and engine's volumes gone); network policy then turns on (and off again).
+d_layer_failed() { local d=$1 vm=$2
+  (cd "$d" && printf 'y\nexit\n' | DEVVM_MESSAGES=names with_tty "$D" docker+e2elayerfail >"$work/last.log" 2>&1)
+  tr -d '\r' < "$work/last.log" | grep -E '^(devvm|==>) ' | tail -4
+  echo "state: $(grep -E '^(image|docker_layer|net)=' "$vms/$vm" | xargs)"
+  grep -q '^devvm: add_layer_failed ' "$work/last.log" && grep -qx image=base "$vms/$vm" && ! grep -q '^docker_layer=.' "$vms/$vm" &&
+    d_plain_vm "$vm" && ! d_vol "$vm-docker" && ! d_vol "$vm-containerd" && ! d_net "$vm-docker-net" && echo "made as it was" || return 1
+  (cd "$d" && DEVVM_MESSAGES=names "$D" network on </dev/null 2>&1 | tail -3) && grep -qx net=on "$vms/$vm" &&
+    (cd "$d" && DEVVM_MESSAGES=names "$D" network off </dev/null >/dev/null 2>&1); }
+# d_engine_kept DIR VM: devvm restart in DIR starts VM's Docker engine again, with the image d_inner
+# pulled; else what its engine logged.
+d_engine_kept() {
+  (cd "$1" && printf 'exit\n' | "$D" restart >"$work/last.log" 2>&1) || { tail -5 "$work/last.log"; return 1; }
+  in_d "$2" 'for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done; docker image inspect alpine:3 >/dev/null' && return 0
+  in_root "$2" 'echo "pid file: $(cat /run/docker.pid); processes: $(for p in /proc/[0-9]*; do printf "%s=%s " "${p#/proc/}" "$(cat "$p/comm")"; done)"
+    tail -3 /var/log/dockerd.log'
+  return 1; }
+export -f d_inner d_layer_vm d_plain_vm owner_is_me with_tty
+
+# docker_layer NAME: the docker layer, under Sysbox where the engine has it (an emulation, reviewed),
+# new and added in place; refused elsewhere (on Docker Desktop, saying to use a VM backend; on a Linux
+# engine without Sysbox, to install it), and with network policy.
+docker_layer() {
+  local q s p n=docker_layer_no_sysbox
+  q=$(newproj "$1-no")
+  p=$(newproj "$1-inplace")
+  launch "$p" exit "${B[@]}" --no-network-policy --ports none base
+  if ! d_sysbox; then
+    ! $d_desktop || n=docker_layer_needs_vm
+    check "the docker layer is refused without Sysbox ($n), in one line, nothing made" \
+      d_layer_refused "$q" "$n" --no-network-policy --ports none docker
+    check "... and added in place, before anything changes" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D' docker </dev/null >'$work/last.log' 2>&1;
+      cat '$work/last.log'; [[ \$(grep -c '^devvm: ' '$work/last.log') -eq 1 ]] && grep -qE '^devvm: $n vm=$vm\$' '$work/last.log' &&
+      grep -qx image=base '$vms/$vm' && [[ \$(d_state '$vm') == running ]]"
+    (cd "$p" && quiet "$D" rm -f)
+    return 0
+  fi
+  check "the docker layer with network policy is refused in one line, nothing made" \
+    d_layer_refused "$q" net_docker_layer --network-policy --ports none docker
+
+  s=$(newproj "$1-sysbox")
+  (cd "$s" && DEVVM_MESSAGES=names "$D" "${B[@]}" --ports none docker </dev/null >"$work/last.log" 2>&1)
+  vm=$(vm_of "$s"); [[ -z $vm ]] || created+=("$vm")
+  check "under Sysbox: its runtime, not privileged, said, unwarned, its engine's volumes, its own network alone, no network policy" bash -c "
+    [[ -n '$vm' ]] && grep -qE '^==> docker_layer_runtime backend=docker runtime=sysbox vm=$vm\$' '$work/last.log' &&
+    ! grep -q backend_unreviewed '$work/last.log' &&
+    d_layer_vm '$vm' && grep -qx docker_layer=sysbox '$vms/$vm' && grep -qx net=off '$vms/$vm' || { tail -5 '$work/last.log'; false; }"
+  check "... root in it isn't root here: a user namespace of its own" in_root "$vm" \
+    '! grep -qE "^ *0 +0 +4294967295\$" /proc/self/uid_map && cat /proc/self/uid_map'
+  check "... root has every capability in its own namespaces, NET_ADMIN and NET_RAW among them" in_root "$vm" \
+    'b=$(sed -n "s/^CapBnd:[[:space:]]*//p" /proc/self/status); echo "bounding set: $b"; [ $((0x$b >> 12 & 3)) -eq 3 ]'
+  check "... Docker's engine runs in it, started by devvm, for the VM's user" d_inner "$vm"
+  check "... it reaches the internet, but no container on Docker's default network or another, even as root" d_isolated "$vm"
+  check "... nor this machine's loopback, even as root routing 127.0.0.1 out (its servers on every address, it does)" \
+    d_layer_loopback "$vm"
+  check "... root turning IPv6 on reaches this machine's servers on :: through the bridge's link-local address" d_layer_ipv6 "$vm"
+  check "... what it writes in the folder is yours" bash -c "docker exec -u '$me' '$vm' sh -c 'echo from-vm > \"$s/vm.txt\"' </dev/null &&
+    owner_is_me '$s/vm.txt'"
+  check "... root's set-user-id file in the folder is root's here too, and its next launch names it as root's" bash -c "
+    in_root '$vm' 'cp /bin/true \"$s/e2e-setid\" && chmod 4755 \"$s/e2e-setid\"' && [[ \$(stat -c '%u %a' '$s/e2e-setid') == '0 4755' ]] &&
+    cd '$s' && printf 'exit\n' | DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1; in_root '$vm' 'rm -f \"$s/e2e-setid\"'
+    grep -E '^(==> |devvm: )?setid_root_files ' '$work/last.log' | grep -q e2e-setid"
+  check "... ls shows it" bash -c "cd '$s' && '$D' ls 2>/dev/null | grep -Eq '^$vm +Running +.* +docker \(sysbox\) +$s\$'"
+  check "... network policy can't be turned on" bash -c "cd '$s' && ! DEVVM_MESSAGES=names '$D' network on </dev/null 2>'$work/last.log' &&
+    grep -qx 'devvm: net_docker_layer backend=docker vm=$vm' '$work/last.log' && grep -qx net=off '$vms/$vm'"
+  check "... restarted, its engine runs again with its images kept" d_engine_kept "$s" "$vm"
+  check "rm deletes its container, volumes and network" bash -c "cd '$s' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
+    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-docker' && ! d_vol '$vm-containerd' && ! d_net '$vm-docker-net'"
+
+  vm=$(vm_of "$p")
+  in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
+  in_d "$vm" 'echo home > ~/e2e-home'
+  printf '#!/bin/bash\nexit 3\n' > "$layers/e2elayerfail.sh"
+  check "added in place with a layer whose script fails: the VM made as it was, network policy free to turn on" \
+    d_layer_failed "$p" "$vm"
+  rm -f "$layers/e2elayerfail.sh"
+  check "added in place: the VM made again under Sysbox, on its own network, its disk and home kept" bash -c "
+    cd '$p' && printf 'y\ncat /var/tmp/e2e-kept ~/e2e-home\nexit\n' | DEVVM_MESSAGES=names with_tty '$D' docker \
+      >'$work/last.log' 2>&1; tr -d '\r' < '$work/last.log' > '$work/last.txt'
+    grep -qx image=docker '$vms/$vm' && grep -qx docker_layer=sysbox '$vms/$vm' && grep -qx kept '$work/last.txt' &&
+    grep -qx home '$work/last.txt' && d_layer_vm '$vm' || { tail -5 '$work/last.txt'; false; }"
+  # Its shell, a login, has the docker group the layer added (docker exec's -u doesn't, under Sysbox).
+  check "... Docker's engine runs in it, for the VM's user in its shell" bash -c "cd '$p' &&
+    printf 'for _ in \$(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done\ndocker run --rm alpine:3 echo e2e-inner-ran\n' |
+      '$D' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran"
+  (cd "$p" && quiet "$D" rm -f)
 }
 
 # Docker's emulations (ssh for editors, ports, agent forwarding). Their guarantees: nothing published
@@ -2806,6 +2994,8 @@ EOF
   docker_agents dagents
   section "docker: shared tools"
   docker_tools dtools
+  section "docker: the docker layer"
+  docker_layer dlayer
   docker_emulated d
   docker_netpolicy dnet
   check "nothing without the sandbox's label was touched" bash -c "[[ \"\$(d_others)\" == '$others_before' ]]"
@@ -2814,8 +3004,13 @@ EOF
 # dh ARGS: limactl on the docker host VM's own Lima home, from outside the repo.
 dh_home=${DEVVM_E2E_DOCKER_LIMA_HOME:-$HOME/.lt-e2e-go-docker}
 dh() { (cd /tmp && LIMA_HOME=$dh_home limactl "$@"); }
+# Sysbox, which the docker host VM's engine runs the docker layer's VMs under: its release's package,
+# pinned.
+sysbox_version=0.7.1
+sysbox_sha256_arm64=04ca894ae0b53f0fa54eaacc173ce40363c9a95ea5450f773716a84ef650a69b
+sysbox_sha256_amd64=9d6d5484f980d0a17f86c492c1262015c2afb66280bdb97215b79fde6a0261c5
 # dockerhost: the docker host VM, made the first time (Ubuntu with Docker's engine from its archive,
-# this checkout mounted read-only, you in the docker group) and kept, running.
+# this checkout mounted read-only, you in the docker group, Sysbox) and kept, running.
 dockerhost() {
   mkdir -p "$dh_home"
   if ! dh list -q 2>/dev/null | grep -qx dockerhost; then
@@ -2823,10 +3018,27 @@ dockerhost() {
       --mount-only "$root" template:ubuntu-26.04 >"$work/dockerhost.log" 2>&1 || return 1
   fi
   [[ $(dh list --format '{{.Status}}' dockerhost) == Running ]] || dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1 || return 1
-  dh shell --workdir / dockerhost sh -c 'command -v docker >/dev/null && id -nG | grep -qw docker' </dev/null && return 0
-  dh shell --workdir / dockerhost sudo sh -c 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
-    docker.io netcat-openbsd jq perl curl git python3 && usermod -aG docker "$SUDO_USER"' </dev/null >>"$work/dockerhost.log" 2>&1 &&
-    dh stop dockerhost >>"$work/dockerhost.log" 2>&1 && dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1; }
+  if ! dh shell --workdir / dockerhost sh -c 'command -v docker >/dev/null && id -nG | grep -qw docker' </dev/null; then
+    dh shell --workdir / dockerhost sudo sh -c 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+      docker.io netcat-openbsd jq perl curl git python3 && usermod -aG docker "$SUDO_USER"' </dev/null >>"$work/dockerhost.log" 2>&1 &&
+      dh stop dockerhost >>"$work/dockerhost.log" 2>&1 && dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1 || return 1
+  fi
+  dockerhost_sysbox; }
+# dockerhost_sysbox: Sysbox in the docker host VM, installed once: its package, checked against its
+# pinned SHA-256, and (Ubuntu 25.04 on) fusermount3's AppArmor profile allowing Sysbox's FUSE mounts.
+dockerhost_sysbox() {
+  dh shell --workdir / dockerhost sh -c "docker info --format '{{json .Runtimes}}' | grep -q sysbox-runc" </dev/null && return 0
+  dh shell --workdir / dockerhost sudo env v="$sysbox_version" arm64="$sysbox_sha256_arm64" amd64="$sysbox_sha256_amd64" bash -c '
+    set -eu; a=$(dpkg --print-architecture); case $a in arm64) sum=$arm64 ;; amd64) sum=$amd64 ;; *) exit 1 ;; esac
+    d=$(mktemp -d); trap "rm -rf \"$d\"" EXIT
+    curl -fsSLo "$d/sysbox.deb" "https://github.com/nestybox/sysbox/releases/download/v$v/sysbox-ce_$v.linux_$a.deb"
+    echo "$sum  $d/sysbox.deb" | sha256sum -c
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$d/sysbox.deb"
+    if [ -f /etc/apparmor.d/fusermount3 ]; then
+      printf "%s\n" "mount fstype=fuse options=(nosuid,nodev) options in (ro,rw) -> /var/lib/sysboxfs/**/," \
+        "umount /var/lib/sysboxfs/**/," > /etc/apparmor.d/local/fusermount3
+      apparmor_parser -r /etc/apparmor.d/fusermount3
+    fi' </dev/null >>"$work/dockerhost.log" 2>&1; }
 # in_dh CMD: CMD in the docker host VM.
 in_dh() { dh shell --workdir / dockerhost bash -c "$1"; }
 
@@ -2924,6 +3136,7 @@ docker_desktop() {
   (cd "$x" && quiet "$D" rm -f)
   docker_agents ddagents
   docker_tools ddtools
+  docker_layer ddlayer
   docker_emulated dd
   docker_netpolicy ddnet
   d_purge

@@ -24,7 +24,8 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 		Short: "List the project VMs",
 		Long: "List the project VMs on every backend, by name: each one's status, image, .git protection " +
 			"(on, off, or clone for a --clone VM), network policy (on, off, or unenforced: not confined by " +
-			"devvm), backend and folder. What a VM's state doesn't have (its creation didn't finish) is -. " +
+			"devvm), backend and folder. A docker VM made for the docker layer shows its runtime beside its " +
+			"backend: docker (sysbox). What a VM's state doesn't have (its creation didn't finish) is -. " +
 			"A VM whose backend sizes no disks (docker) and that holds more than VMs get elsewhere is warned about.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -67,7 +68,11 @@ func writeList(out io.Writer, ls []vm.Listed) error {
 	}
 	row("NAME", "STATUS", "IMAGE", "GIT", "NET", "BACKEND", "FOLDER")
 	for _, l := range ls {
-		row(l.Name, l.Status, l.Image, l.Git, l.Net, l.Backend, l.Folder)
+		backend := l.Backend
+		if l.DockerLayer != "" {
+			backend += " (" + l.DockerLayer + ")"
+		}
+		row(l.Name, l.Status, l.Image, l.Git, l.Net, backend, l.Folder)
 	}
 	return w.Flush()
 }

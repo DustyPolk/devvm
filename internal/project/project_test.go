@@ -189,7 +189,7 @@ func TestSetIDFiles(t *testing.T) {
 	if err := os.Chmod(tool, fs.ModeSetuid|0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := SetIDFiles(d); !slices.Equal(got, []string{tool}) {
+	if got := SetIDFiles(d); !slices.Equal(got, []SetIDFile{{Path: tool, Root: os.Getuid() == 0}}) {
 		t.Errorf("SetIDFiles = %v, want %s", got, tool)
 	}
 	if err := os.Chmod(tool, fs.ModeSetgid|0o755); err != nil {
@@ -214,6 +214,27 @@ func TestSetIDFiles(t *testing.T) {
 	}
 	if got := SetIDFiles(d); len(got) != setIDMax {
 		t.Errorf("SetIDFiles = %d files, want %d", len(got), setIDMax)
+	}
+}
+
+// Root's set-user-id files and root's group's set-group-id ones run as
+// root; any other's, or root's without that bit, don't.
+func TestRootSetID(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		m        fs.FileMode
+		uid, gid uint32
+		want     bool
+	}{
+		{"set-user-id root's", fs.ModeSetuid | 0o755, 0, 1000, true},
+		{"set-group-id root's group", fs.ModeSetgid | 0o755, 1000, 0, true},
+		{"set-user-id the user's", fs.ModeSetuid | 0o755, 1000, 1000, false},
+		{"set-group-id root's, the user's group", fs.ModeSetgid | 0o755, 0, 1000, false},
+		{"set-user-id root's group", fs.ModeSetuid | 0o755, 1000, 0, false},
+	} {
+		if got := rootSetID(c.m, c.uid, c.gid); got != c.want {
+			t.Errorf("%s: %v", c.name, got)
+		}
 	}
 }
 

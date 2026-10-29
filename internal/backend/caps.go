@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/image"
@@ -165,6 +166,21 @@ func ImageFeatures(img string) []Feature {
 		return []Feature{FeatureDockerLayer}
 	}
 	return nil
+}
+
+// DockerLayerVM is a backend whose VMs run the docker layer only when made
+// for it, under a runtime that gives root in them more than its other VMs
+// get (Docker's: Sysbox, FeatureDockerLayer). Root in one can change its
+// own network, so it gets no network policy.
+type DockerLayerVM interface {
+	// DockerLayer names the runtime a VM (vm) with the docker layer runs
+	// under (sysbox), or says why the backend can't run it here, in a
+	// message naming vm.
+	DockerLayer(vm string) (string, error)
+	// SetDockerLayer makes a stopped VM one for the docker layer, added to
+	// it in place, from its next start (on); or, the layer's script having
+	// failed, one as it was before (off).
+	SetDockerLayer(ctx context.Context, vm string, on bool) error
 }
 
 // Features returns what the tools build needs.

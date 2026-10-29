@@ -238,6 +238,30 @@ other = "Docker's engine: Docker {{.version}} on this machine, every VM sharing 
 description = "name is the engine's own (OrbStack, Ubuntu 26.04 LTS)"
 other = "Docker's engine: Docker {{.version}} ({{.name}}), not Docker Desktop or this machine's: builds aren't confined on it"
 
+[docker_sysbox]
+other = "Sysbox: VMs with the docker layer run under it"
+
+[docker_layer_no_sysbox]
+other = "{{.vm}} needs Sysbox on this Docker engine for the docker layer: install it, or use a VM backend (lima, smolvm)"
+
+[docker_layer_needs_vm]
+other = "{{.vm}} needs a VM backend (lima, smolvm) for the docker layer: Docker runs it only under Sysbox, on this machine's Linux engine"
+
+[docker_route_localnet]
+other = "{{.vm}} can't run the docker layer on this Docker engine: its bridges route to this machine's loopback (\"userland-proxy\": false); turn Docker's userland proxy on, or use a VM backend (lima, smolvm)"
+
+[docker_bridge_unreadable]
+description = "bridge is a network interface's name (br-0123456789ab)"
+other = "can't read Docker's bridge {{.bridge}}'s settings for {{.vm}}"
+
+[docker_layer_runtime]
+description = "backend is a backend's name (docker); runtime is the runtime's name (sysbox)"
+other = "{{.vm}} runs the docker layer under {{.runtime}}, on {{.backend}}: no network policy for it"
+
+[net_docker_layer]
+description = "backend is a backend's name (docker)"
+other = "{{.vm}} can't have network policy with the docker layer on {{.backend}}: root in it can change its own network"
+
 [docker_file_sharing]
 description = "dirs is a space-separated list of host folders"
 other = "Docker Desktop mounts only folders under {{.dirs}}"
@@ -1168,7 +1192,11 @@ other = "removed git remote {{.remote}}"
 
 [setid_files]
 description = "files is a space-separated list of paths"
-other = "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+other = "set-user-id or set-group-id files in the project folder, which run as their owner for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+
+[setid_root_files]
+description = "files is a space-separated list of paths"
+other = "set-id files of root's in the project folder, which run as root for anyone who runs them: {{.files}}; don't run them, delete them (sudo rm FILE)"
 
 [git_protect_needs_macos_new]
 other = ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine. --clone keeps a VM out of .git"

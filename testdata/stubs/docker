@@ -7,10 +7,11 @@
 # moved meanwhile).
 # For the docker backend, an engine: `info --format {{json .}}` prints $STUB_DIR/docker-info if it
 # exists, else a Linux engine of this machine's architecture named stub-host (with
-# $STUB_DIR/docker-denied, fails as a socket the user can't open does). Its containers, images and
+# $STUB_DIR/docker-denied, fails as a socket the user can't open does), with Sysbox's runtime when
+# $STUB_DIR/docker-sysbox exists. Its containers, images and
 # volumes are folders in $STUB_DIR/docker/{containers,images,volumes}/NAME, each with a labels file
 # (KEY=VALUE lines) and the rest one file per field (status, image, cpus, memory, hostname, network,
-# mounts, layers, env), which create, start, stop, rm, rename, commit, import, update, volume create
+# mounts, layers, env, runtime), which create, start, stop, rm, rename, commit, import, update, volume create
 # and rm keep up to date; ls, inspect and system df answer from them. A container has an ID (found
 # by inspect and exec too) and a start time, which each start changes. $STUB_DIR/docker-foreign-NAME
 # gives a container or volume another label (someone else's). exec answers the libc check with
@@ -18,7 +19,7 @@
 # line to $STUB_DIR/scripts when one is fed to bash -s or sh -s (failing with $STUB_DIR/script-fails
 # for bash -s), and the tools build's build.sh writes the images it's asked for into the folder it
 # mounts. run (the tools' unpacking) appends its arguments after -- to $STUB_DIR/unpacked.
-# Networks are folders in $STUB_DIR/docker/networks/NAME (labels, internal, inhibit), which network
+# Networks are folders in $STUB_DIR/docker/networks/NAME (labels, internal, inhibit, ipv6), which network
 # create, rm, connect and disconnect keep up to date (a container's networks file lists its own);
 # network inspect answers with the running containers on one as its members. An exec that writes
 # devvm's block in /etc/environment keeps its input as $STUB_DIR/environment.
@@ -34,7 +35,8 @@ case "$cmd" in
     [[ ${2:-} == --format ]] || exit 0
     if [[ -f $STUB_DIR/docker-info ]]; then cat "$STUB_DIR/docker-info"; exit 0; fi
     arch=$(uname -m); [[ $arch != arm64 ]] || arch=aarch64
-    printf '{"ServerVersion":"29.1.3","OSType":"linux","Architecture":"%s","OperatingSystem":"Ubuntu 26.04 LTS","Name":"stub-host","MemTotal":68719476736,"SecurityOptions":["name=seccomp,profile=builtin"]}\n' "$arch"
+    rt='"runc":{}'; [[ ! -e "$STUB_DIR/docker-sysbox" ]] || rt+=',"sysbox-runc":{}'
+    printf '{"ServerVersion":"29.1.3","OSType":"linux","Architecture":"%s","OperatingSystem":"Ubuntu 26.04 LTS","Name":"stub-host","MemTotal":68719476736,"SecurityOptions":["name=seccomp,profile=builtin"],"Runtimes":{%s}}\n' "$arch" "$rt"
     exit 0 ;;
   "buildx version") [[ ! -e "$STUB_DIR/no-buildx" ]]; exit $? ;;
   "save -o")
@@ -66,7 +68,7 @@ by_id() { local d
 
 # Options: what devvm passes, read into variables; the rest are the arguments.
 name="" labels=() filters=() mounts=() envs=() changes=() opts=() format="" cpus="" memory="" hostname="" network=""
-user="" args=() input=false size=false internal=false verb=${1:-}
+user="" args=() input=false size=false internal=false runtime="" verb=${1:-}
 case $verb in exec|update) shift 1 ;; *) shift 2 || true ;; esac
 while (( $# )); do
   case $1 in
@@ -77,6 +79,7 @@ while (( $# )); do
     -v) if [[ $cmd == "container create" ]]; then mounts+=("volume=$2"); shift; fi ;;
     -o) opts+=("$2"); shift ;;
     --internal) internal=true ;;
+    --runtime) runtime=$2; shift ;;
     --network-alias|--cap-drop|--security-opt|--pids-limit|--env-file) shift ;;
     --read-only) ;;
     -e) envs+=("$2"); shift ;;
@@ -136,6 +139,7 @@ case "$cmd" in
     echo "$hostname" > "$d/hostname"; echo "$network" > "$d/network"; echo "$network" > "$d/networks"
     printf '%s\n' ${mounts[@]+"${mounts[@]}"} > "$d/mounts"
     printf '%s\n' ${envs[@]+"${envs[@]}"} > "$d/env"
+    echo "$runtime" > "$d/runtime"
     echo "id-$name-$RANDOM" > "$d/id"
     [[ ! -d $I/$img ]] || cp "$I/$img/layers" "$d/layers"
     exit 0 ;;
@@ -220,7 +224,7 @@ case "$cmd" in
       members+="$sep\"$(field "$c" id)\":{\"Name\":\"$(basename "$c")\"}"; sep=,
     done
     opt=""; [[ $(field "$d" inhibit) != true ]] || opt='"com.docker.network.bridge.inhibit_ipv4":"true"'
-    echo "[{\"Id\":\"id-net-${args[0]}\",\"Internal\":$(field "$d" internal false),\"Options\":{$opt},\"Labels\":$lab,\"Containers\":{$members}}]"
+    echo "[{\"Id\":\"id-net-${args[0]}\",\"Driver\":\"bridge\",\"Internal\":$(field "$d" internal false),\"EnableIPv6\":$(field "$d" ipv6 false),\"Options\":{$opt},\"Labels\":$lab,\"Containers\":{$members}}]"
     exit 0 ;;
   "network rm")
     [[ -d $N/${args[0]} ]] || { echo "network ${args[0]} not found" >&2; exit 1; }

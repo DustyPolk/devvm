@@ -59,6 +59,9 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	}
 	running := in.Status == backend.StatusRunning
 	if on {
+		if st.Get(KeyDockerLayer) != "" {
+			return msg.NetDockerLayer(b.Name(), vm)
+		}
 		if err := e.Registry.Require(b, vm, backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
 			return err
 		}

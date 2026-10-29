@@ -184,12 +184,25 @@ func Detect(dir string) []string {
 // setIDMax is how many set-id files SetIDFiles returns at most.
 const setIDMax = 5
 
+// SetIDFile is a file with the set-user-id or set-group-id bit; Root when
+// it runs as root or with root's group (rootSetID).
+type SetIDFile struct {
+	Path string
+	Root bool
+}
+
+// rootSetID reports whether a file with mode m, of uid and gid, runs as
+// root (set-user-id, root's) or with root's group (set-group-id, its).
+func rootSetID(m fs.FileMode, uid, gid uint32) bool {
+	return m&fs.ModeSetuid != 0 && uid == 0 || m&fs.ModeSetgid != 0 && gid == 0
+}
+
 // SetIDFiles returns up to five files in dir, on its file system, with the
 // set-user-id or set-group-id bit. On Linux hosts a VM's set-id bits reach
-// the host, and the files are the user's: a set-user-id one runs as the
-// user for anyone who runs it.
-func SetIDFiles(dir string) []string {
-	var files []string
+// the host, and a set-user-id file runs as its owner for anyone who runs
+// it: the user, or root, whom root in a Docker VM writes as.
+func SetIDFiles(dir string) []SetIDFile {
+	var files []SetIDFile
 	root, err := os.Stat(dir)
 	if err != nil {
 		return nil
@@ -209,7 +222,8 @@ func SetIDFiles(dir string) []string {
 		}
 		fi, err := d.Info()
 		if err == nil && fi.Mode()&(fs.ModeSetuid|fs.ModeSetgid) != 0 {
-			files = append(files, path)
+			uid, gid, ok := platform.Owner(fi)
+			files = append(files, SetIDFile{Path: path, Root: ok && rootSetID(fi.Mode(), uid, gid)})
 		}
 		if len(files) == setIDMax {
 			return filepath.SkipAll

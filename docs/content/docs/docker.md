@@ -23,7 +23,9 @@ ssh for editors (and so `devvm ssh`, `devvm code` and `--clone`), forwarding por
 
 [Network policy](#network-policy), and build confinement on Docker Desktop ([below](#building-images)), are emulated, and reviewed: an internal network of the VM's (or build's) own and a relay to devvm's proxy on your machine.
 
-A disk size and the [docker layer](images.md#built-in-layers) aren't there, so devvm refuses a VM that needs them, in one line naming the VM (`backend_lacks`). A default disk size you set (`devvm size -g --disk`) doesn't apply to them, and devvm says so (`size_disk_default_unused`).
+The [docker layer](#the-docker-layer) is emulated, and reviewed: under Sysbox, on a Linux engine that has it, and nowhere else. Some tools need more than a container gets ([what Docker VMs can't do](#what-docker-vms-cant-do)).
+
+A disk size isn't there, so devvm refuses a VM that asks for one, in one line naming the VM (`backend_lacks`). A default disk size you set (`devvm size -g --disk`) doesn't apply to Docker VMs, and devvm says so (`size_disk_default_unused`).
 
 ## Requirements
 
@@ -41,7 +43,7 @@ Docker's engine is yours (Docker Desktop's especially), so:
 
 - Everything devvm makes in it, containers, images, volumes and networks, carries the label `devvm.data=<devvm's data folder>`. devvm lists, starts, stops, changes and deletes only what has its label, and never prunes. A container, volume or network of yours by a name devvm wants is refused (`docker_container_foreign`, `docker_volume_foreign`, `docker_network_foreign`), never touched.
 - Names Docker keeps for everyone have a hash of that folder in them (`<hash>` below), so two devvms never share one: images are `devvm-<hash>:<key>`, the shared tools' volume `devvm-tools-<hash>`, network policy's empty image `devvm-<hash>:proxy`.
-- A VM is a container named as the VM, with a volume for its home, `<vm>-home`, and for `--clone`'s clone, `<vm>-clone`. With [network policy](#network-policy), a network `<vm>-net` and a relay container `<vm>-proxy` too; a Docker Desktop build's are `devvm-img-<key>-<hash>-net` and `-proxy`, for the build alone.
+- A VM is a container named as the VM, with a volume for its home, `<vm>-home`, and for `--clone`'s clone, `<vm>-clone`; with the [docker layer](#the-docker-layer), `<vm>-docker` and `<vm>-containerd` for its Docker engine's files and a network `<vm>-docker-net`. With [network policy](#network-policy), a network `<vm>-net` and a relay container `<vm>-proxy` too; a Docker Desktop build's are `devvm-img-<key>-<hash>-net` and `-proxy`, for the build alone.
 - `docker ps` and `docker images` show devvm's next to yours.
 - The image base starts from (Ubuntu's, or `--from`'s) is pulled by its digest, as any image you pull, and Docker keeps it. devvm doesn't delete it: it isn't labelled, and you may use it.
 
@@ -61,8 +63,8 @@ A failed build keeps its container, stopped (`docker_script_failed`): `docker st
 
 - **Mounts:** the project folder, read-write, and agents' folders, read-only (root in the container can't unmount them), at their host paths; the shared tools' volume at `/mnt/devvm-tools`, read-only; the VM's home, a volume of its own, which starts with the image's home in it. Paths with a comma or a quote are refused (`docker_mount_path`): Docker reads mounts as CSV.
 - **Docker Desktop's file sharing:** it mounts only folders under those its settings list (Settings > Resources > File sharing; `/Users`, `/Volumes`, `/private`, `/tmp` and `/var/folders` by default). devvm refuses a project or agent folder outside them (`docker_not_shared`), where it can read Desktop's settings.
-- **Network:** Docker's default network. On Docker Desktop that reaches your Mac's own services on `localhost` (`host.docker.internal`); on Linux, your machine's servers on every address, not those on its loopback. With [network policy](#network-policy), its own internal network instead.
-- **No raw sockets:** the container is made without `NET_RAW`, even for root, so tools that need raw or packet sockets (`tcpdump`, `nmap`'s raw scans, `arping`) don't run in Docker VMs, nor in Docker Desktop's builds. `ping` works, through ICMP datagram sockets, which Docker allows every group in its containers (`net.ipv4.ping_group_range`).
+- **Network:** Docker's default network. On Docker Desktop that reaches your Mac's own services on `localhost` (`host.docker.internal`); on Linux, your machine's servers on every address, not those on its loopback. With [network policy](#network-policy), its own internal network instead; with the [docker layer](#the-docker-layer), a network of its own that isn't internal.
+- **No raw sockets:** the container is made without `NET_RAW` (but with the [docker layer](#the-docker-layer)), even for root, so tools that need raw or packet sockets (`tcpdump`, `nmap`'s raw scans, `arping`) don't run in Docker VMs, nor in Docker Desktop's builds. `ping` works, through ICMP datagram sockets, which Docker allows every group in its containers (`net.ipv4.ping_group_range`).
 - **Size:** CPUs and memory, what you ask for or base's, changed with `docker update` on a stopped VM. The CPUs are a quota: coreutils' `nproc` counts it, BusyBox's doesn't, and `free` shows the whole machine.
 - **Disk:** none of its own. Docker Desktop refuses a size, and Docker's containerd image store on Linux ignores one, so a VM's disk is the engine's. `devvm size` shows what it holds (`disk_used`: its container's writes and its volumes), and each launch warns when that's past base's 100 GiB (`disk_over`).
 - **Hostname:** the folder's part of the VM's name, as devvm's setup sets it elsewhere: a container can't change its own.
@@ -86,9 +88,49 @@ Emulated, and reviewed ([design](design.md#network-policy-on-docker)). On Docker
 
 ## No init system
 
-A container runs Docker's init (`--init`) and a sleep under it; nothing starts at boot. After each start devvm runs, as root, what base's services do on Lima: the shared tools linked (below), and, with [ssh](#ssh-for-editors), its sshd's config and new host key. No sshd daemon runs (each ssh connection runs its own), nor Docker's daemon (`dockerd` needs a privileged container).
+A container runs Docker's init (`--init`) and a sleep under it; nothing starts at boot. After each start devvm runs, as root, what base's services do on Lima: the shared tools linked (below), and, with [ssh](#ssh-for-editors), its sshd's config and new host key, and with the [docker layer](#the-docker-layer), Docker's daemon. No sshd daemon runs (each ssh connection runs its own).
 
 devvm's commands in a VM (its setup) run as the VM's user with the environment a login would give: `HOME`, `USER`, and `/etc/environment`. So does your shell: through `docker exec`, or over the VM's ssh once that start ran it, an ssh session with the [agent](#ssh-agent-forwarding) the VM's choice names.
+
+## The docker layer
+
+Docker inside a Docker VM (the [docker layer](images.md#built-in-layers), `devvm node+docker`) needs Sysbox on a Linux engine. Anywhere else, use a VM backend, Lima or smolvm, which run Docker inside with nothing more given up. Emulated, and reviewed ([design](design.md#the-docker-layer-on-docker)).
+
+A container runs `dockerd` only with more than devvm gives its other containers. Sysbox gives it that without `--privileged`: a user namespace of its own, so root in it is an unprivileged user on your machine, but on its mounts, ID-mapped, so your files are yours in it and what you write there is yours. What root in it writes in the project folder is your machine's root's, as in any Docker VM: a set-user-id file it makes there runs as root on your machine for anyone who runs it (devvm names such files at each launch, `setid_root_files`; [details](security.md#what-it-doesnt-protect)). Sysbox's own code is part of the boundary.
+
+devvm never runs a container `--privileged`. Root in a privileged container has every capability and every device, without Docker's seccomp or AppArmor profile, so it can load kernel modules and write the engine's disks: on Linux that's, in effect, root on your machine; on Docker Desktop, root of Desktop's VM, with every container in it and the folders Desktop shares (your home among them).
+
+- **Where it runs:** on a Linux engine on your machine with Sysbox's runtime (`sysbox-runc`), which `devvm doctor --backend docker` reports (`docker_sysbox`). A VM with the layer runs under it, said (`docker_layer_runtime`), whether it's made with the layer or gets it in place ([adding to a VM](commands.md#adding-to-a-vm)): then its container is [made again](#changing-what-docker-fixes) from a commit, its disk and home kept. On a Linux engine without Sysbox the layer is refused in one line, before anything changes (`docker_layer_no_sysbox`); on Docker Desktop and other engines (another machine's), too (`docker_layer_needs_vm`).
+- **Its own network:** a network of its own, `<vm>-docker-net`, labelled, not internal, with nothing else on it, instead of Docker's default one: it reaches the internet, and no other container, on Docker's default network or any other, even as root. On Linux it reaches your machine's servers on every address but its loopback, as any Docker VM without network policy does (with IPv6 turned on, those on IPv6 too). One with another container on it is refused (`docker_network_shared`).
+- **Its engine's files** are in volumes of its own, `<vm>-docker` at `/var/lib/docker` and `<vm>-containerd` at `/var/lib/containerd`: Docker's storage doesn't stack on the container's own, and they're kept when its container is made again. `devvm rm` deletes them and its network.
+- **Docker's daemon** starts after each start, from base's services; the VM's user is in the `docker` group.
+- **No network policy:** root in it can change its own network: in its own network namespace it can turn IPv6 on and reach your machine's servers on the bridge's link-local address. devvm doesn't ask, and refuses `--network-policy`, `devvm network on` and adding the layer to a VM with network policy (`net_docker_layer`).
+- **`NET_RAW` and `NET_ADMIN`:** it has them, in its own namespaces: Sysbox gives root every capability there, and Docker's engine needs `NET_ADMIN`. Its own network keeps what it sends from other containers, and your machine drops what it routes to its loopback.
+- **Docker's userland proxy stays on** (its default): `"userland-proxy": false` in `daemon.json` turns `route_localnet` on for Docker's bridges, and then root in the VM could reach your machine's loopback. devvm reads its network's bridge setting at each create and start and refuses the VM in one line if it's on (`docker_route_localnet`).
+- **A script that fails** when the layer's added in place leaves the VM as it was: its container made again as any VM's, its network and engine's volumes deleted.
+- `devvm ls` shows its backend as `docker (sysbox)`; its state has `docker_layer=sysbox`.
+
+**Installing Sysbox:** its release's package for your distribution, from GitHub (`nestybox/sysbox`), which adds `sysbox-runc` to Docker's runtimes and restarts it. On Ubuntu 25.04 and later, fusermount3's AppArmor profile refuses Sysbox's FUSE mounts, and its containers don't start (`failed to pre-register with sysbox-fs`): allow them in `/etc/apparmor.d/local/fusermount3`, then reload the profile (`sudo apparmor_parser -r /etc/apparmor.d/fusermount3`):
+
+```text
+mount fstype=fuse options=(nosuid,nodev) options in (ro,rw) -> /var/lib/sysboxfs/**/,
+umount /var/lib/sysboxfs/**/,
+```
+
+Checked with Sysbox 0.7.1 on Ubuntu 26.04 (arm64, kernel 7.0, Docker 29.1). Docker Desktop has no Sysbox.
+
+## What Docker VMs can't do
+
+A Docker VM is a container with Docker's default capabilities less `NET_RAW`, no devices added, and Docker's seccomp profile. So these don't work in one (one with the [docker layer](#the-docker-layer) has `NET_RAW` and `NET_ADMIN` in its own namespaces, and still none of the devices):
+
+- **Raw packet tools** (`tcpdump`, `nmap`'s raw scans, `arping`): no `NET_RAW`. `ping` works.
+- **Firewalls, routes and VPN clients** (`iptables`, `ip route`, WireGuard, OpenVPN): no `NET_ADMIN`, and no `/dev/net/tun`.
+- **Mounting:** `mount`, loop devices, FUSE (`sshfs`, `rclone mount`): no `CAP_SYS_ADMIN`, no `/dev/fuse`.
+- **Nested virtualization** (QEMU with KVM, Android emulators, Firecracker): no `/dev/kvm`.
+- **Some profiling:** `perf` and eBPF tools, whose system calls the seccomp profile refuses. `strace` and `gdb` work.
+- **Docker inside**, and with it Kubernetes in Docker (kind, k3d): only under Sysbox on a Linux engine ([above](#the-docker-layer)).
+
+Use a VM backend (Lima or smolvm) for any of these.
 
 ## ssh for editors
 
@@ -122,6 +164,6 @@ Emulated, and reviewed, chosen when a VM is made (`--ssh-agent`) and changed lat
 
 ## Shared tools
 
-Containers can't mount the tools' images (they get no loop devices without `--privileged`), so on Docker each tool image is unpacked into one volume, `devvm-tools-<hash>`, a folder per image, by a container of devvm's with no network, after the tools build. VMs mount the volume read-only and link each of their tools' folders where other backends mount the image, which mise takes as installed. A tool image's key includes the format, so Docker's are built for it, and the share keeps their images as the record of what's built: when the volume is gone, devvm unpacks it again from them, and when `devvm gc` deletes one, its folder goes from the volume at the next start.
+Containers can't mount the tools' images (they get no loop devices), so on Docker each tool image is unpacked into one volume, `devvm-tools-<hash>`, a folder per image, by a container of devvm's with no network, after the tools build. VMs mount the volume read-only and link each of their tools' folders where other backends mount the image, which mise takes as installed. A tool image's key includes the format, so Docker's are built for it, and the share keeps their images as the record of what's built: when the volume is gone, devvm unpacks it again from them, and when `devvm gc` deletes one, its folder goes from the volume at the next start.
 
 The tools build runs in a container from base's image with only its own output folder mounted, as on other backends; it never sees the volume.

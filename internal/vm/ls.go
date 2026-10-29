@@ -24,7 +24,10 @@ type Listed struct {
 	Git     string // its .git protection: on, off, or clone for a --clone VM
 	Net     string // its network policy: on, off or unenforced (netpolicy.Listed)
 	Backend string
-	Folder  string
+	// DockerLayer is the runtime it runs the docker layer under, where its
+	// backend makes VMs for it (KeyDockerLayer).
+	DockerLayer string
+	Folder      string
 	// DiskOver warns that its disk holds more than VMs get elsewhere, on
 	// a backend that sizes no disks (backend.DiskUser); nil otherwise.
 	DiskOver *msg.M
@@ -73,7 +76,8 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	}
 	l := Listed{
 		Name: in.Name, Status: string(in.Status), Image: st.Get(state.KeyImage),
-		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(), Folder: st.Get(state.KeyDir),
+		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(), DockerLayer: st.Get(KeyDockerLayer),
+		Folder: st.Get(state.KeyDir),
 	}
 	if from := st.Get(state.KeyFrom); l.Image != "" && from != "" {
 		l.Image = msg.ImageFrom(from, l.Image).Line()

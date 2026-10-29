@@ -76,15 +76,17 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 // newVM is what create checked and chose for a new VM before building
 // anything.
 type newVM struct {
-	img     string
-	size    Size
-	ports   string
-	net     bool
-	agent   string // sshagent.On or Off
-	mode    string // ModeClone, or ""
-	spec    backend.VMSpec
-	conf    backend.Confinement
-	builder *build.Env
+	img   string
+	size  Size
+	ports string
+	net   bool
+	agent string // sshagent.On or Off
+	mode  string // ModeClone, or ""
+	// dockerLayer is how it runs the docker layer (KeyDockerLayer).
+	dockerLayer string
+	spec        backend.VMSpec
+	conf        backend.Confinement
+	builder     *build.Env
 }
 
 // creation makes a new VM: its plan, its build and its cleanup.
@@ -240,12 +242,22 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if n.img, err = e.resolveImage(o.Image, f.Dir, n.builder); err != nil {
 		return newVM{}, err
 	}
-	n.net = e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
 	// Every VM has the share, read-only: a tool added later is mounted
 	// from it. Its agents' folders on the host are mounted read-only.
 	n.spec = backend.VMSpec{
 		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
 		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: PortsBackend(n.ports),
+	}
+	layerNeeds, err := e.dockerLayer(b, &n)
+	if err != nil {
+		return newVM{}, err
+	}
+	// Root in a VM made for the docker layer can change its own network.
+	switch {
+	case n.dockerLayer == "":
+		n.net = e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
+	case o.NetworkPolicy:
+		return newVM{}, msg.NetDockerLayer(b.Name(), vm)
 	}
 	if o.SSHAgent {
 		n.agent = sshagent.On
@@ -257,7 +269,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if n.net {
 		n.conf.Net = backend.NetProxy
 	}
-	need := slices.Concat(n.spec.Features(), n.conf.Features(), backend.ImageFeatures(n.img))
+	need := slices.Concat(n.spec.Features(), n.conf.Features(), layerNeeds)
 	if o.Clone {
 		// Its clone is copied in and fetched over ssh.
 		need = append(need, backend.FeatureSSH)
@@ -265,10 +277,27 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err := e.Registry.Require(b, vm, need...); err != nil {
 		return newVM{}, err
 	}
+	dockerLayers{e.Env}.say(b, n.dockerLayer, vm)
 	// Ready for devvm ssh-agent to change later, where it may be changed
 	// (an emulation once it's reviewed); otherwise fixed when it's made.
 	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
 	return n, nil
+}
+
+// dockerLayer chooses the runtime a new VM runs the docker layer under,
+// when its image has it, on a backend that makes VMs for it
+// (dockerLayers.choice), and returns the features its layers need.
+func (e creation) dockerLayer(b backend.Backend, n *newVM) ([]backend.Feature, error) {
+	dl, made := b.(backend.DockerLayerVM)
+	if !made || !image.HasLayer(n.img, image.DockerLayer) {
+		return backend.ImageFeatures(n.img), nil
+	}
+	mode, need, err := dockerLayers{e.Env}.choice(dl, n.spec.Name)
+	if err != nil {
+		return nil, err
+	}
+	n.spec.DockerLayer, n.dockerLayer = true, mode
+	return need, nil
 }
 
 // record writes a new VM's choices into its state, with the libc and
@@ -281,6 +310,7 @@ func (n newVM) record(st *state.VM, libc string, files []string) error {
 	for _, kv := range [][2]string{
 		{KeyNet, netState},
 		{KeyMode, n.mode},
+		{KeyDockerLayer, n.dockerLayer},
 		{sshagent.Key, n.agent},
 		{KeyLibc, libc},
 		{KeyTools, strings.Join(files, " ")},

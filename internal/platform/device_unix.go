@@ -24,6 +24,15 @@ func allocated(fi fs.FileInfo) int64 {
 	return fi.Size()
 }
 
+// Owner returns a file's uid and gid, false when fi has none.
+func Owner(fi fs.FileInfo) (uid, gid uint32, ok bool) {
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, 0, false
+	}
+	return st.Uid, st.Gid, true
+}
+
 // DevIno returns a file's device and inode as "dev:ino", "" when fi has
 // none: what the file is, whatever its name.
 func DevIno(fi fs.FileInfo) string {

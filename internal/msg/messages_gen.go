@@ -509,6 +509,11 @@ func DockerArch(engine string, host string) M {
 	return M{id: "docker_arch", vals: []val{{"engine", engine}, {"host", host}}}
 }
 
+// DockerBridgeUnreadable is [docker_bridge_unreadable]: "can't read Docker's bridge {{.bridge}}'s settings for {{.vm}}"
+func DockerBridgeUnreadable(bridge string, vm string) M {
+	return M{id: "docker_bridge_unreadable", vals: []val{{"bridge", bridge}, {"vm", vm}}}
+}
+
 // DockerCommitFailed is [docker_commit_failed]: "couldn't commit {{.vm}}"
 func DockerCommitFailed(vm string) M {
 	return M{id: "docker_commit_failed", vals: []val{{"vm", vm}}}
@@ -572,6 +577,21 @@ func DockerImageChanged(from string) M {
 // DockerImageRmFailed is [docker_image_rm_failed]: "couldn't delete Docker's image {{.image}}"
 func DockerImageRmFailed(image string) M {
 	return M{id: "docker_image_rm_failed", vals: []val{{"image", image}}}
+}
+
+// DockerLayerNeedsVM is [docker_layer_needs_vm]: "{{.vm}} needs a VM backend (lima, smolvm) for the docker layer: Docker runs it only under Sysbox, on this machine's Linux engine"
+func DockerLayerNeedsVM(vm string) M {
+	return M{id: "docker_layer_needs_vm", vals: []val{{"vm", vm}}}
+}
+
+// DockerLayerNoSysbox is [docker_layer_no_sysbox]: "{{.vm}} needs Sysbox on this Docker engine for the docker layer: install it, or use a VM backend (lima, smolvm)"
+func DockerLayerNoSysbox(vm string) M {
+	return M{id: "docker_layer_no_sysbox", vals: []val{{"vm", vm}}}
+}
+
+// DockerLayerRuntime is [docker_layer_runtime]: "{{.vm}} runs the docker layer under {{.runtime}}, on {{.backend}}: no network policy for it"
+func DockerLayerRuntime(backend string, runtime string, vm string) M {
+	return M{id: "docker_layer_runtime", vals: []val{{"backend", backend}, {"runtime", runtime}, {"vm", vm}}}
 }
 
 // DockerLinuxBuildFetchFailed is [docker_linux_build_fetch_failed]: "couldn't fetch devvm's Linux build from {{.url}}: check the connection, then run devvm again"
@@ -664,6 +684,11 @@ func DockerRemaking(vm string) M {
 	return M{id: "docker_remaking", vals: []val{{"vm", vm}}}
 }
 
+// DockerRouteLocalnet is [docker_route_localnet]: "{{.vm}} can't run the docker layer on this Docker engine: its bridges route to this machine's loopback (\"userland-proxy\": false); turn Docker's userland proxy on, or use a VM backend (lima, smolvm)"
+func DockerRouteLocalnet(vm string) M {
+	return M{id: "docker_route_localnet", vals: []val{{"vm", vm}}}
+}
+
 // DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with docker start {{.vm}}, then docker exec -it {{.vm}} bash; devvm gc deletes it"
 func DockerScriptFailed(script string, vm string) M {
 	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
@@ -672,6 +697,11 @@ func DockerScriptFailed(script string, vm string) M {
 // DockerSSHPath is [docker_ssh_path]: "devvm's ssh config can't name {{.path}}: it has a quote, a backslash, a percent sign or a control character"
 func DockerSSHPath(path string) M {
 	return M{id: "docker_ssh_path", vals: []val{{"path", path}}}
+}
+
+// DockerSysbox is [docker_sysbox]: "Sysbox: VMs with the docker layer run under it"
+func DockerSysbox() M {
+	return M{id: "docker_sysbox"}
 }
 
 // DockerToolsFailed is [docker_tools_failed]: "couldn't unpack the shared tools into Docker's volume {{.volume}}"
@@ -1244,6 +1274,11 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
+// NetDockerLayer is [net_docker_layer]: "{{.vm}} can't have network policy with the docker layer on {{.backend}}: root in it can change its own network"
+func NetDockerLayer(backend string, vm string) M {
+	return M{id: "net_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
+}
+
 // NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
 func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
@@ -1739,9 +1774,14 @@ func SecretWithImage(vm string) M {
 	return M{id: "secret_with_image", vals: []val{{"vm", vm}}}
 }
 
-// SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as you for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+// SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as their owner for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
 func SetidFiles(files string) M {
 	return M{id: "setid_files", vals: []val{{"files", files}}}
+}
+
+// SetidRootFiles is [setid_root_files]: "set-id files of root's in the project folder, which run as root for anyone who runs them: {{.files}}; don't run them, delete them (sudo rm FILE)"
+func SetidRootFiles(files string) M {
+	return M{id: "setid_root_files", vals: []val{{"files", files}}}
 }
 
 // SetupFailed is [setup_failed]: "couldn't save the settings: {{.reason}}"
@@ -2317,6 +2357,7 @@ var specs = map[string]spec{
 	"disk_shrink":                     {fields: []string{"have", "vm", "want"}},
 	"docker_access":                   {fields: []string{"fix"}},
 	"docker_arch":                     {fields: []string{"engine", "host"}},
+	"docker_bridge_unreadable":        {fields: []string{"bridge", "vm"}},
 	"docker_commit_failed":            {fields: []string{"vm"}},
 	"docker_connect_failed":           {fields: []string{"reason", "vm"}},
 	"docker_container_foreign":        {fields: []string{"name"}},
@@ -2330,6 +2371,9 @@ var specs = map[string]spec{
 	"docker_host_unsupported":         {fields: []string{"host"}},
 	"docker_image_changed":            {fields: []string{"from"}},
 	"docker_image_rm_failed":          {fields: []string{"image"}},
+	"docker_layer_needs_vm":           {fields: []string{"vm"}},
+	"docker_layer_no_sysbox":          {fields: []string{"vm"}},
+	"docker_layer_runtime":            {fields: []string{"backend", "runtime", "vm"}},
 	"docker_linux_build_fetch_failed": {fields: []string{"url"}},
 	"docker_linux_build_fetching":     {fields: []string{"url"}},
 	"docker_linux_build_mismatch":     {fields: []string{"url"}},
@@ -2348,8 +2392,10 @@ var specs = map[string]spec{
 	"docker_pull_failed":              {fields: []string{"image"}},
 	"docker_relay_image_failed":       {},
 	"docker_remaking":                 {fields: []string{"vm"}},
+	"docker_route_localnet":           {fields: []string{"vm"}},
 	"docker_script_failed":            {fields: []string{"script", "vm"}},
 	"docker_ssh_path":                 {fields: []string{"path"}},
+	"docker_sysbox":                   {},
 	"docker_tools_failed":             {fields: []string{"volume"}},
 	"docker_update_failed":            {fields: []string{"vm"}},
 	"docker_volume_failed":            {fields: []string{"name"}},
@@ -2464,6 +2510,7 @@ var specs = map[string]spec{
 	"net_already":                     {fields: []string{"state", "vm"}},
 	"net_ask":                         {fields: []string{"vm"}},
 	"net_direct_route":                {fields: []string{"vm"}},
+	"net_docker_layer":                {fields: []string{"backend", "vm"}},
 	"net_flag_ignored":                {},
 	"net_off_log":                     {fields: []string{"vm"}},
 	"net_off_next_start":              {fields: []string{"vm"}},
@@ -2564,6 +2611,7 @@ var specs = map[string]spec{
 	"secret_used":                     {fields: []string{"secret", "vm"}},
 	"secret_with_image":               {fields: []string{"vm"}},
 	"setid_files":                     {fields: []string{"files"}},
+	"setid_root_files":                {fields: []string{"files"}},
 	"setup_failed":                    {fields: []string{"reason"}},
 	"share_lock_held":                 {fields: []string{"dir"}},
 	"share_waiting":                   {fields: []string{"dir"}},

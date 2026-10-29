@@ -7,7 +7,7 @@ List the project VMs
 
 ## Synopsis
 
-List the project VMs on every backend, by name: each one's status, image, .git protection (on, off, or clone for a --clone VM), network policy (on, off, or unenforced: not confined by devvm), backend and folder. What a VM's state doesn't have (its creation didn't finish) is -. A VM whose backend sizes no disks (docker) and that holds more than VMs get elsewhere is warned about.
+List the project VMs on every backend, by name: each one's status, image, .git protection (on, off, or clone for a --clone VM), network policy (on, off, or unenforced: not confined by devvm), backend and folder. A docker VM made for the docker layer shows its runtime beside its backend: docker (sysbox). What a VM's state doesn't have (its creation didn't finish) is -. A VM whose backend sizes no disks (docker) and that holds more than VMs get elsewhere is warned about.
 
 ```text
 devvm ls [flags]

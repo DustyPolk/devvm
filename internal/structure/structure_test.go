@@ -27,7 +27,7 @@ func devvm() rules {
 		largeTypes: map[string]large{
 			"internal/backend/lima.Lima":        {65, "a backend: backend.Backend's 28 methods and Lima's own"},
 			"internal/backend/smolvm.Smolvm":    {71, "a backend: backend.Backend's 28 methods and smolvm's own"},
-			"internal/backend/docker.Docker":    {78, "a backend: backend.Backend's 28 methods and Docker's own, its ssh, ports and agent emulations among them; its docker commands are its client's"},
+			"internal/backend/docker.Docker":    {80, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
 			"internal/backend/backendtest.Fake": {35, "backend.Backend's 28 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {36, "one method per folder or file devvm uses: a list"},
 			"internal/ui.UI":                    {40, "the one terminal: messages, prompts, status line, run log, cleanups, signals"},

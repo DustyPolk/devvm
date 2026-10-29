@@ -230,9 +230,13 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 	if st.Get(KeyNet) == "" {
 		return backend.Confinement{}, msg.VMUnfinished(vm)
 	}
-	conf := backend.Confinement{Net: backend.NetDirect}
-	if netpolicy.On(st) {
-		conf.Net = backend.NetProxy
+	conf := backend.Confinement{Net: backend.NetProxy}
+	switch {
+	case !netpolicy.On(st):
+		conf.Net = backend.NetDirect
+	case st.Get(KeyDockerLayer) != "":
+		// Its state edited by hand: root in it could change its network.
+		return conf, msg.NetDockerLayer(b.Name(), vm)
 	}
 	if err := e.Registry.Require(b, vm, conf.Features()...); err != nil {
 		return conf, err
@@ -307,7 +311,10 @@ func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM
 // the image want names (agents alone go on top of the folder's
 // toolchains, as for a new VM): shared tools join its list and are
 // mounted on launch; a layer's script runs in it. New agents' folders are
-// mounted, which restarts it.
+// mounted, which restarts it. On a backend that makes VMs for the docker
+// layer, adding it makes the VM one (dockerLayers), its container made
+// again at the start that runs the layer's script; a script that fails
+// makes it one as it was.
 func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *build.Env) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	img := st.Get(state.KeyImage)
@@ -326,7 +333,11 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 		return nil
 	}
 	added := strings.Join(missing, "+")
-	if err := e.Registry.Require(b, vm, backend.ImageFeatures(added)...); err != nil {
+	mode, need, err := dockerLayers(e).inPlace(b, st, added)
+	if err != nil {
+		return err
+	}
+	if err := e.Registry.Require(b, vm, need...); err != nil {
 		return err
 	}
 	mounts := e.AgentMounts(added)
@@ -349,21 +360,30 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 		return err
 	}
 	newImg := image.Normalize(img + "+" + added)
-	if len(mounts) > 0 {
+	if len(mounts) > 0 || mode != "" {
 		if err := b.Stop(ctx, vm); err != nil {
 			return err
 		}
+	}
+	if len(mounts) > 0 {
 		if err := b.SetAgentDirs(ctx, vm, e.AgentMounts(newImg)); err != nil {
 			return err
 		}
 	}
+	if err := dockerLayers(e).set(ctx, b, st, mode); err != nil {
+		return err
+	}
 	// The new image is the VM's while its layers' scripts run, so its proxy
-	// allows their hosts too; it's set back when one fails.
+	// allows their hosts too; it's set back when one fails, and a VM made
+	// one for the docker layer is made one as it was.
 	if err := st.Set(state.KeyImage, newImg); err != nil {
 		return err
 	}
 	if err := e.runLayers(ctx, b, st, builder, missing); err != nil {
 		if rerr := st.Set(state.KeyImage, img); rerr != nil {
+			return rerr
+		}
+		if rerr := dockerLayers(e).unset(ctx, b, st, mode); rerr != nil {
 			return rerr
 		}
 		return err

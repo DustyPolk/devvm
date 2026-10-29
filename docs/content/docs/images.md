@@ -42,7 +42,7 @@ devvm ships one layer, `docker`, chosen like any other (`devvm node+docker`, `de
 | --- | --- |
 | docker | Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, its signing key's checksum and each package's version pinned at the top of the script (Alpine's own packages on `--from alpine`, unpinned); the VM's user in the `docker` group; the daemon started at each boot |
 
-A VM without it has no Docker. Running Docker's engine in a VM is a backend feature of its own, `docker-layer` ([features](backends.md#features)): the [Docker backend](docker.md) lacks it, so a VM with the layer is refused there, made or added to, before anything's built.
+A VM without it has no Docker. Running Docker's engine in a VM is a backend feature of its own, `docker-layer` ([features](backends.md#features)). On the [Docker backend](docker.md#the-docker-layer) it needs Sysbox on a Linux engine, where a VM is made for it, or made one when the layer's added in place; anywhere else it's refused before anything changes: use a VM backend.
 
 ## Shared tools
 

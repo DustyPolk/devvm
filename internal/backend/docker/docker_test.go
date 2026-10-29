@@ -262,6 +262,16 @@ func TestCapsByEngine(t *testing.T) {
 					t.Errorf("%s = %s, want none", f, s.Caps()[f])
 				}
 			}
+			// Without Sysbox, the docker layer is refused: on this machine's
+			// Linux engine, saying to install it; elsewhere, to use a VM
+			// backend.
+			want := "docker_layer_needs_vm"
+			if c.kind == kindLinux {
+				want = "docker_layer_no_sysbox"
+			}
+			if rt, err := s.DockerLayer("devvm-x"); rt != "" || id(err) != want {
+				t.Errorf("DockerLayer = %q, %v; want %s", rt, err, want)
+			}
 			// Over docker exec, on every engine, reviewed.
 			for _, f := range []backend.Feature{
 				backend.FeatureSSH, backend.FeaturePorts, backend.FeaturePortsAll, backend.FeatureAgentForwarding, backend.FeatureAgentToggle,
@@ -600,7 +610,7 @@ func TestStart(t *testing.T) {
 	want := []string{
 		"docker container start " + vm,
 		"docker exec -i -u 0 " + vm + " sh -c " + envScript,
-		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd " + vm + " sh -s --",
+		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd " + vm + " sh -s --",
 		"docker exec -u 0 " + vm + " chown u /p/web",
 	}
 	if calls := s.calls(t); !slices.Equal(calls, want) {

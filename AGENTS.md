@@ -31,7 +31,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
 
-Still to come: Docker's docker layer; the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
+Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
 
 ## Tasks
 
@@ -120,6 +120,7 @@ Still to come: Docker's docker layer; the release keys (`packaging/minisign.pub`
 - **Docker's networks:** Desktop's containers reach the host's loopback (`host.docker.internal`); on Linux the gateway reaches the host's servers on all addresses, an `--internal` network's too unless `inhibit_ipv4`; internal networks publish no ports and resolve no outside names.
 - **Docker's mounts:** a bind-mounted host socket works alone (`-v`: Desktop's `--mount` says the source doesn't exist), not inside a mounted folder on Desktop (`Not supported`); Desktop shows it as root's 0660 and follows the path (none there: connects hang), Linux binds the inode (a socket in a mounted folder works, `chmod` in the container changes the host's).
 - **Docker's containers:** systemd needs a read-write `/sys/fs/cgroup` (the host's whole tree), `dockerd` and loop devices `--privileged`; `-p`, mounts and the network are fixed at create (`docker update`: limits only); `--storage-opt size` is refused on Desktop and ignored by the containerd store; Alpine's image lacks OpenRC and ssh, which base.sh writes into.
+- **Sysbox:** on Ubuntu 25.04+ fusermount3's AppArmor profile must allow mounts under `/var/lib/sysboxfs` (`/etc/apparmor.d/local/fusermount3`) or containers don't start; `docker exec -u` misses the `docker` group the layer adds in place (a login has it); root gets every capability in its namespace (`--cap-drop` ignored), writable `/proc/sys`, and writes as the host's root on ID-mapped bind mounts; only the bridge's `route_localnet` 0 keeps its routed `127.0.0.1` off the host (Docker sets 1 with `"userland-proxy": false`).
 - **Lima writes `lima.REJECTED.yaml` into the current folder** on an invalid config: run `limactl` outside the repo (devvm runs it from its data folder).
 
 ## Commits and tasks

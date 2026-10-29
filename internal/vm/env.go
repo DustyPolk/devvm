@@ -46,6 +46,11 @@ const (
 	// KeyAgentToggle is set when its backend emulates turning its SSH agent
 	// forwarding on or off (made ready for it), which its starts rely on.
 	KeyAgentToggle = "agent_toggle"
+	// KeyDockerLayer is the runtime it runs the docker layer under, on a
+	// backend that makes VMs for it (backend.DockerLayerVM): sysbox; unset
+	// for a VM that runs it as any VM, or doesn't have it. A VM with it set
+	// gets no network policy.
+	KeyDockerLayer = "docker_layer"
 )
 
 // Env is what the commands on a folder's VM run with, shared by Launch,
@@ -476,16 +481,24 @@ func (e *Env) sshConfig() *sshconfig.Config {
 }
 
 // checkSetID names set-id files in the folder on Linux hosts, where they
-// reach the host (macOS's virtiofs drops the bits).
+// reach the host (macOS's virtiofs drops the bits): those running as root
+// (root in a Docker VM writes as the host's root) apart.
 func (e *Env) checkSetID(dir string) {
 	if e.OS != "linux" {
 		return
 	}
-	if files := project.SetIDFiles(dir); len(files) > 0 {
-		var shown []string
-		for _, p := range files {
-			shown = append(shown, msg.Shown(p))
+	var root, other []string
+	for _, f := range project.SetIDFiles(dir) {
+		if f.Root {
+			root = append(root, msg.Shown(f.Path))
+		} else {
+			other = append(other, msg.Shown(f.Path))
 		}
-		e.Warn(msg.SetidFiles(strings.Join(shown, " ")))
+	}
+	if len(root) > 0 {
+		e.Warn(msg.SetidRootFiles(strings.Join(root, " ")))
+	}
+	if len(other) > 0 {
+		e.Warn(msg.SetidFiles(strings.Join(other, " ")))
 	}
 }

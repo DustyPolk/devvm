@@ -136,10 +136,12 @@ func execEnvArgs(ctx context.Context) []string {
 // network is a network as docker network inspect has it: the fields devvm
 // reads.
 type network struct {
-	ID       string            `json:"Id"`
-	Internal bool              `json:"Internal"`
-	Options  map[string]string `json:"Options"`
-	Labels   map[string]string `json:"Labels"`
+	ID         string            `json:"Id"`
+	Driver     string            `json:"Driver"`
+	Internal   bool              `json:"Internal"`
+	EnableIPv6 bool              `json:"EnableIPv6"`
+	Options    map[string]string `json:"Options"`
+	Labels     map[string]string `json:"Labels"`
 	// Containers are its members, running containers, by ID.
 	Containers map[string]struct{} `json:"Containers"`
 }
@@ -147,6 +149,13 @@ type network struct {
 // confining reports whether the network has no route out and no address
 // of the host's.
 func (n network) confining() bool { return n.Internal && n.Options[inhibitIPv4] == "true" }
+
+// plain reports whether the network is one as devvm makes a docker layer
+// VM's: a bridge, not internal, without IPv6 or options (another gateway
+// mode, no isolation).
+func (n network) plain() bool {
+	return n.Driver == "bridge" && !n.Internal && !n.EnableIPv6 && len(n.Options) == 0
+}
 
 // egress is the Docker backend's network policy and Desktop's build
 // confinement.
@@ -173,15 +182,16 @@ func (e egress) network(ctx context.Context, name string) (network, error) {
 	return ns[0], nil
 }
 
-// ensureNetwork makes devvm's network by that name unless one that
-// confines is there (one that doesn't is made again), and returns its ID.
-// Someone else's by that name is refused.
-func (e egress) ensureNetwork(ctx context.Context, name string) (string, error) {
+// ensureNetwork makes devvm's network by that name unless one as asked for
+// is there (another is made again), and returns its ID: internal, one that
+// confines (network policy's, a build's); else a plain one (a docker layer
+// VM's, dockerlayer.go). Someone else's by that name is refused.
+func (e egress) ensureNetwork(ctx context.Context, name string, internal bool) (string, error) {
 	n, err := e.network(ctx, name)
 	switch {
 	case errors.Is(err, errForeign):
 		return "", msg.DockerNetworkForeign(name)
-	case err == nil && n.confining():
+	case err == nil && internal && n.confining(), err == nil && !internal && n.plain():
 		return n.ID, nil
 	case err == nil:
 		if err := e.removeNetwork(ctx, name); err != nil {
@@ -190,10 +200,11 @@ func (e egress) ensureNetwork(ctx context.Context, name string) (string, error) 
 	case !errors.Is(err, backend.ErrNotFound):
 		return "", err
 	}
-	args := []string{
-		"network", "create", "--internal", "-o", inhibitIPv4 + "=true",
-		"--label", LabelKey + "=" + e.d.Data, "--label", kindLabel + "=" + kindProxy, name,
+	args, kind := []string{"network", "create"}, kindVM
+	if internal {
+		args, kind = append(args, "--internal", "-o", inhibitIPv4+"=true"), kindProxy
 	}
+	args = append(args, "--label", LabelKey+"="+e.d.Data, "--label", kindLabel+"="+kind, name)
 	if err := e.d.Runner.Run(ctx, msg.M{}, e.d.docker(ctx, args...)); err != nil {
 		return "", backend.Logged(msg.DockerNetworkFailed(name))
 	}
@@ -250,13 +261,14 @@ func (e egress) useNetwork(ctx context.Context, name, want string) error {
 // vmNetwork puts a stopped VM on the network c asks for: with NetProxy,
 // its own network alone, with its relay made again for c's port (the
 // record keeps the network's and the relay's IDs); else Docker's default
-// network alone, its relay and own network gone.
+// network alone (a docker layer VM's own, layerNetwork), its relay and own
+// network gone.
 func (e egress) vmNetwork(ctx context.Context, vm string, r *record, c backend.Confinement) error {
 	if c.Net != backend.NetProxy {
 		if err := e.d.removeIfThere(ctx, relayName(vm)); err != nil {
 			return err
 		}
-		if err := e.useNetwork(ctx, vm, "bridge"); err != nil {
+		if err := e.useNetwork(ctx, vm, directNet(vm, *r)); err != nil {
 			return err
 		}
 		r.NetID, r.RelayID = "", ""
@@ -281,7 +293,7 @@ func (e egress) vmNetwork(ctx context.Context, vm string, r *record, c backend.C
 // container starts (ensureNetwork), its old relay deleted, and returns
 // its ID: one with anything else on it is refused, naming it.
 func (e egress) ownNetwork(ctx context.Context, name string) (string, error) {
-	id, err := e.ensureNetwork(ctx, netName(name))
+	id, err := e.ensureNetwork(ctx, netName(name), true)
 	if err != nil {
 		return "", err
 	}
@@ -539,14 +551,41 @@ func (e egress) stopRelay(ctx context.Context, name string) error {
 	return e.d.stop(ctx, relayName(name))
 }
 
-// forget deletes what network policy left of a VM by that name: its relay,
-// its network, its lifeline and its socket's folder.
+// checkAlone refuses to delete a VM (its container's ID) while a network
+// of its own has a container on it but the VM and its relay, naming the
+// network, before anything is deleted.
+func (e egress) checkAlone(ctx context.Context, vm, id string) error {
+	ours := map[string]bool{id: true}
+	if r, err := e.d.inspect(ctx, relayName(vm)); err == nil {
+		ours[r.ID] = true
+	}
+	for _, name := range []string{netName(vm), layerNetName(vm)} {
+		n, err := e.network(ctx, name)
+		if errors.Is(err, backend.ErrNotFound) || errors.Is(err, errForeign) {
+			continue // removeNetwork says so
+		} else if err != nil {
+			return err
+		}
+		for m := range n.Containers {
+			if !ours[m] {
+				return msg.DockerNetworkShared(name)
+			}
+		}
+	}
+	return nil
+}
+
+// forget deletes what network policy left of a VM by that name (its relay,
+// its network, its lifeline and its socket's folder) and a docker layer
+// VM's own network.
 func (e egress) forget(ctx context.Context, vm string) error {
 	if err := e.d.removeIfThere(ctx, relayName(vm)); err != nil {
 		return err
 	}
-	if err := e.removeNetwork(ctx, netName(vm)); err != nil {
-		return err
+	for _, n := range []string{netName(vm), layerNetName(vm)} {
+		if err := e.removeNetwork(ctx, n); err != nil {
+			return err
+		}
 	}
 	if err := os.Remove(e.d.Lifeline(ctx, vm)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

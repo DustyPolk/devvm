@@ -46,7 +46,7 @@ func TestStartSSH(t *testing.T) {
 		"docker container start " + vm,
 		"docker exec -i -u 0 " + vm + " sh -c " + envScript,
 		"docker exec -u 0 " + vm + " sh -c " + sshdProbe,
-		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd " + vm + " sh -s -- ssh u " + pub,
+		"docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd " + vm + " sh -s -- ssh u " + pub,
 		"docker exec -u 0 " + vm + " cat /etc/ssh/ssh_host_ed25519_key.pub",
 	}
 	if got := s.calls(t); !slices.Equal(got, want) {
@@ -129,7 +129,7 @@ func TestStartNoSSHD(t *testing.T) {
 	if !slices.Equal(warned, []string{"vm_no_sshd vm=" + vm}) || s.field(t, "containers/"+vm+"/status") != "running" {
 		t.Errorf("warned %q", warned)
 	}
-	if got := s.calls(t); got[len(got)-1] != "docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_SSHD=inetd "+vm+" sh -s --" {
+	if got := s.calls(t); got[len(got)-1] != "docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd "+vm+" sh -s --" {
 		t.Errorf("calls: %q", got)
 	}
 	if _, err := s.SSH(t.Context(), vm); id(err) != "vm_no_sshd" {

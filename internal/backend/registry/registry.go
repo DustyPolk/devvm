@@ -39,7 +39,8 @@ type UI interface {
 // and docker (both experimental). In a test build, the unreviewed emulations
 // DEVVM_UNREVIEWED names are let through, with a warning each time: for
 // their end-to-end checks; DEVVM_DOCKER_KIND sets the kind of Docker's
-// engine (linux, desktop, other), for the CLI tests' stand-in engine; and
+// engine (linux, desktop, other), and DEVVM_DOCKER_PROC_SYS where its host's
+// /proc/sys is, for the CLI tests' stand-in engine; and
 // DEVVM_LINUX_BUILD_URL with DEVVM_LINUX_BUILD_SHA256 stand in for a
 // release's Linux build, fetched as on macOS whatever the host.
 func New(d paths.Dirs, assets fs.FS, u UI) (*backend.Registry, error) {
@@ -62,6 +63,9 @@ func newFor(d paths.Dirs, assets fs.FS, u UI, build string, getenv func(string) 
 	if build == "allowed" {
 		r.Unreviewed = backend.ParseUnreviewed(getenv("DEVVM_UNREVIEWED"))
 		dk.Kind = getenv("DEVVM_DOCKER_KIND")
+		if p := getenv("DEVVM_DOCKER_PROC_SYS"); p != "" {
+			dk.ProcSys = p
+		}
 	}
 	r.Warn = u.Warn
 	return r, nil

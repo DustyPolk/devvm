@@ -21,8 +21,9 @@
 // into the container, to an sshd of its own per connection; all reviewed.
 // Network policy, and build confinement on Docker Desktop, are emulated
 // too (egress.go): an internal network of the VM's own, with a relay to
-// devvm's proxy on the host; reviewed. The docker layer is none in Caps,
-// so devvm refuses it in one line.
+// devvm's proxy on the host; reviewed. The docker layer runs only in a VM
+// made for it (dockerlayer.go), under Sysbox where the engine has it, and
+// nowhere else: emulated, reviewed, with no network policy.
 package docker
 
 import (
@@ -141,6 +142,10 @@ type Docker struct {
 	// Tick is how often a build's proxy is looked at while it starts, ten
 	// times at most.
 	Tick time.Duration
+	// ProcSys is where this machine's /proc/sys is: a Linux engine's
+	// bridges' settings are read there (dockerlayer.go). Test builds' is
+	// DEVVM_DOCKER_PROC_SYS, for the CLI tests' stand-in engine.
+	ProcSys string
 	// Getenv reads the environment (connectEnv: DOCKER_HOST…), and
 	// LookPath finds a command on PATH (docker).
 	Getenv   func(string) string
@@ -190,7 +195,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 		User: user.Current, Hostname: os.Hostname,
 		Terminal: u.StdinIsTerminal, SharingFile: sharing,
 		Self: self, Detach: platform.StartDetached, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond,
-		Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
+		ProcSys: "/proc/sys", Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	}
@@ -221,12 +226,17 @@ func (d *Docker) Name() string { return Name }
 // policy is on both, all reviewed. Neither on another engine, which can't
 // reach this machine's proxy. ssh for editors, ports
 // (listed and every one) and agent forwarding (and turning it on or off)
-// are emulated over docker exec, and reviewed. The rest are none.
+// are emulated over docker exec, and reviewed. The docker layer is
+// emulated under Sysbox where a Linux engine of this machine's has it, and reviewed
+// (dockerlayer.go). The rest are none.
 func (d *Docker) Caps() backend.Caps {
 	caps := backend.Caps{
 		backend.FeatureSSH: backend.Emulated(true), backend.FeaturePorts: backend.Emulated(true),
 		backend.FeaturePortsAll: backend.Emulated(true), backend.FeatureAgentForwarding: backend.Emulated(true),
 		backend.FeatureAgentToggle: backend.Emulated(true),
+	}
+	if hasSysbox(d) && d.engineKind() == kindLinux {
+		caps[backend.FeatureDockerLayer] = backend.Emulated(true)
 	}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureFrom, backend.FeatureClone, backend.FeatureProjectMount,
@@ -315,7 +325,14 @@ type record struct {
 	Started string `json:"started,omitempty"`
 	SSHUp   bool   `json:"ssh_up,omitempty"`
 	NoSSHD  bool   `json:"no_sshd,omitempty"`
+	// Runtime is the runtime of a VM made for the docker layer, Sysbox's
+	// (sysboxRuntime), with volumes of its own for Docker's engine
+	// (dockerlayer.go); "" for any other.
+	Runtime string `json:"runtime,omitempty"`
 }
+
+// dockerLayer reports whether the VM was made for the docker layer.
+func (r record) dockerLayer() bool { return r.Runtime != "" }
 
 func (d *Docker) readRecord(vm string) (record, error) {
 	var r record
@@ -396,10 +413,14 @@ func (d *Docker) Stop(ctx context.Context, vm string) error {
 }
 
 // Delete deletes one of devvm's VMs, stopping it first: its container,
-// its volumes, its own commit, its forwarder, its keys, its relay and
+// its volumes (its Docker engine's too), its own commit, its forwarder, its keys, its relay and
 // network (egress.go) and its record.
 func (d *Docker) Delete(ctx context.Context, vm string) error {
-	if _, err := d.vm(ctx, vm); err != nil {
+	c, err := d.vm(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if err := (egress{d}).checkAlone(ctx, vm, c.ID); err != nil {
 		return err
 	}
 	r, err := d.readRecord(vm)
@@ -420,7 +441,7 @@ func (d *Docker) Delete(ctx context.Context, vm string) error {
 			return err
 		}
 	}
-	for _, v := range []string{homeVolume(vm), cloneVolume(vm)} {
+	for _, v := range append([]string{homeVolume(vm), cloneVolume(vm)}, engineVolumes(vm)...) {
 		if err := d.removeVolume(ctx, v); err != nil {
 			return err
 		}

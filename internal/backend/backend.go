@@ -279,6 +279,9 @@ type VMSpec struct {
 	AgentToggle bool
 	Size        Size  // zero fields take the image's
 	Ports       Ports // which ports to forward to host loopback
+	// DockerLayer is set when its image has the docker layer, on a backend
+	// that makes VMs for it (DockerLayerVM).
+	DockerLayer bool
 }
 
 // Size is a VM's CPUs, memory and disk. Zero is unset.
