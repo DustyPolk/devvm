@@ -26,7 +26,8 @@ func NewRoot(u *ui.UI) *cobra.Command {
 			"else the toolchains the folder's files call for, with any agents IMAGE names on top, built " +
 			"if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and " +
 			"its .git hooks and config are locked against changes from the VM (macOS); with --clone, " +
-			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A VM that exists " +
+			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets " +
+			"what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists " +
 			"is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that " +
 			"in place, after asking.",
 		SilenceUsage:  true,

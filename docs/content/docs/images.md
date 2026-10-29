@@ -103,6 +103,8 @@ If more than one matches, they all go in, in that order (`package.json` and `pyp
 
 Agents go on top of the folder's toolchains: `devvm claude` in a folder with `package.json` makes a `node+claude` VM, and a `claude` one (base and Claude) when nothing is detected. Naming a toolchain or a layer skips detection (`devvm python+claude`), and so does `devvm base`.
 
+A folder's `devcontainer.json` adds what its features map to (`docker`, toolchains) under what's named or detected, and with one, a folder where nothing is named or detected gets `base` ([`devcontainer.json`](devcontainer.md)).
+
 Image names are put in one order: the toolchains (node, python, rust, go), then the layers as given, then the agents. So `claude+node` and `node+claude` are the same.
 
 The image (base and its layers) is built first if it isn't, with the shared tools the name has, and the VM is a copy of the image. A VM keeps the image and tools it was made from.

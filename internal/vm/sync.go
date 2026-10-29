@@ -90,7 +90,13 @@ func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []st
 		{"DEVVM_GIT_EMAIL", e.GitConfig(ctx, st.Get(state.KeyDir), "user.email")},
 		{"DEVVM_PROXY", proxyURL},
 	}
+	// The devcontainer.json's variables first: devvm's own win.
+	dcEnv, err := devcontainerEnv(st)
+	if err != nil {
+		return nil, err
+	}
 	var env bytes.Buffer
+	env.WriteString(dcEnv)
 	if lang != "" {
 		env.WriteString("export LANG=" + shellQuote(lang) + "\n")
 	}

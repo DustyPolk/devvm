@@ -19,7 +19,8 @@
 # start), and with $STUB_DIR/start-hangs it hangs (touching
 # $STUB_DIR/hanging first). clone fails with $STUB_DIR/clone-fails,
 # leaving its instance (a partial clone), and delete with
-# $STUB_DIR/delete-fails, after deleting it. shell fails with $STUB_DIR/shell-fails and hangs with
+# $STUB_DIR/delete-fails, after deleting it. shell fails with $STUB_DIR/shell-fails (or when its
+# arguments contain $STUB_DIR/shell-fails-on's text) and hangs with
 # $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first), and a direct
 # connection (curl --noproxy) fails unless $STUB_DIR/net-direct exists; a script fed
 # to shell's bash -s has its second line appended to $STUB_DIR/scripts, and
@@ -176,6 +177,7 @@ case ${1:-} in
       exit 0
     fi
     [[ ! -e $STUB_DIR/shell-fails ]] || exit 1
+    [[ ! -f $STUB_DIR/shell-fails-on || "$*" != *"$(cat "$STUB_DIR/shell-fails-on")"* ]] || exit 1
     [[ ! -e $STUB_DIR/shell-hangs ]] || { : > "$STUB_DIR/hanging"; exec sleep 30; } ;;
 esac
 

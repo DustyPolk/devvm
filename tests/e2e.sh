@@ -6,7 +6,8 @@
 #                project makes a VM from base in a project folder and checks its mounts, no Docker, ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (never a listed port a program here has),
-#                devvm git-protect and rm, an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
+#                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
+#                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
@@ -636,6 +637,46 @@ check "rm deletes only this VM, with its state and ssh config entry, and unlocks
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
   ! grep -q '^$vm ' '$kh' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$p/.git/config' | grep -q uchg; } &&
   [[ -z \$(ls '$XDG_DATA_HOME/devvm/exports' 2>/dev/null) ]]"
+
+section "a devcontainer.json"
+# Its forwardPorts beyond the user's ports said, not forwarded (the default is none for this VM), its
+# variables in the shell and its commands, its postCreateCommand once, its postStartCommand at each
+# start; nothing written to the folder, and a changed file only warned about.
+dc=$(newproj dc); mkdir -p "$dc/.devcontainer"
+printf '%s\n' '{' '  // e2e' '  "name": "dc",' '  "forwardPorts": [47180],' \
+  '  "containerEnv": {"E2E_DC": "dc-${containerWorkspaceFolderBasename}"},' \
+  '  "postCreateCommand": "echo \"$E2E_DC $(pwd)\" >> ~/dc-created",' \
+  '  "postStartCommand": ["sh", "-c", "echo started >> ~/dc-started"],' '}' > "$dc/.devcontainer/devcontainer.json"
+cp "$dc/.devcontainer/devcontainer.json" "$work/dc.json"
+quiet "$D" ports -g none
+launch "$dc" 'echo "dc-env=$E2E_DC"' --no-network-policy base
+"$D" ports -g all </dev/null >/dev/null 2>&1
+check "devvm makes the VM as its devcontainer.json says, and says so" bash -c "[[ -n '$vm' && \$(status_of '$vm') == Running ]] &&
+  grep -qF \"\$(m devcontainer_using file=.devcontainer/devcontainer.json vm=$vm)\" '$work/last.log' &&
+  grep -Eqx 'devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json' '$vms/$vm' && grep -qx ports=none '$vms/$vm'"
+check "its forwardPorts don't widen your ports: said, not added" \
+  grep -qF "$(m devcontainer_ports_not_forwarded file=.devcontainer/devcontainer.json ports=47180)" "$work/last.log"
+check "its shell has the file's variables" grep -qx dc-env=dc-dc "$work/last.log"
+check "postCreateCommand ran once, in the VM, in the folder, with them" in_vm "$vm" "[[ \$(cat ~/dc-created) == 'dc-dc $dc' ]]"
+check "postStartCommand ran at its start" in_vm "$vm" '[[ $(cat ~/dc-started) == started ]]'
+check "nothing was written to the project folder" bash -c "[[ \$(ls -A '$dc') == .devcontainer && \$(ls -A '$dc/.devcontainer') == devcontainer.json ]] &&
+  cmp -s '$dc/.devcontainer/devcontainer.json' '$work/dc.json'"
+in_vm "$vm" 'setsid -f python3 -m http.server -b 0.0.0.0 47180 </dev/null >/dev/null 2>&1; setsid -f python3 -m http.server -b 0.0.0.0 47181 </dev/null >/dev/null 2>&1' >/dev/null 2>&1
+check "... and don't reach this machine" bash -c \
+  'sleep 5; ! nc -z 127.0.0.1 47180 && ! nc -z 127.0.0.1 47181'
+check "launched again, running: nothing runs again" bash -c "cd '$dc' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+  limactl shell --workdir / $vm bash -c '[[ \$(wc -l < ~/dc-created) == 1 && \$(wc -l < ~/dc-started) == 1 ]]' </dev/null"
+check "restarted: postStartCommand runs again, postCreateCommand doesn't" bash -c "cd '$dc' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
+  limactl shell --workdir / $vm bash -c '[[ \$(wc -l < ~/dc-created) == 1 && \$(wc -l < ~/dc-started) == 2 ]]' </dev/null"
+printf '%s\n' '{"forwardPorts": [47182], "postCreateCommand": "touch ~/dc-changed"}' > "$dc/.devcontainer/devcontainer.json"
+check "a changed file is warned about, and changes nothing" bash -c "cd '$dc' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m devcontainer_changed file=.devcontainer/devcontainer.json vm=$vm | head -1)\" '$work/last.log' &&
+  grep -qx ports=none '$vms/$vm' && limactl shell --workdir / $vm bash -c '[[ ! -e ~/dc-changed ]]' </dev/null"
+check "rm deletes it" bash -c "cd '$dc' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
+printf '%s\n' '{"image": "localhost:5000/app:1"}' > "$dc/.devcontainer/devcontainer.json"
+check "an image on this machine's registry is refused, nothing made" bash -c "cd '$dc' && ! '$D' --no-network-policy base </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m devcontainer_image_not_public file=.devcontainer/devcontainer.json from=localhost:5000/app:1)\" '$work/last.log' &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]]"
 
 section "agent folders and the VM's setup"
 # A home of its own: a fake agent config, history and git identity, and a fake token; nothing of

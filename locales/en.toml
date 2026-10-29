@@ -1473,3 +1473,85 @@ other = "Codex's auth.json {{.keys}} is copied into the VM as it is"
 [opencode_login_kept]
 description = "providers lists opencode's login providers, comma-separated"
 other = "opencode's {{.providers}} login is copied into the VM as it is"
+
+[devcontainer_using]
+description = "file is the devcontainer.json's path in the project folder"
+other = "making {{.vm}} as {{.file}} says: devvm --no-devcontainer skips it"
+
+[no_devcontainer_flag_ignored]
+other = "--no-devcontainer only applies to new VMs"
+
+[devcontainer_flag_wins]
+description = "key is a devcontainer.json property (image, forwardPorts), flag the devvm flag given instead (from, ports)"
+other = "{{.key}} in {{.file}} ignored: --{{.flag}} given"
+
+[devcontainer_ignored]
+description = "keys is a space-separated list of devcontainer.json properties"
+other = "{{.file}}: devvm ignores {{.keys}}"
+
+[devcontainer_unknown]
+description = "keys is a space-separated list of devcontainer.json properties"
+other = "{{.file}}: unknown, ignored: {{.keys}}"
+
+[devcontainer_initialize]
+other = "{{.file}}: initializeCommand never runs: it would run on this machine"
+
+[devcontainer_feature_options]
+description = "features is a space-separated list of feature IDs"
+other = "{{.file}}: the options of {{.features}} are ignored"
+
+[devcontainer_ports_not_forwarded]
+description = "ports is a ports list (3000,5173)"
+other = "{{.file}}: forwardPorts {{.ports}} not all forwarded, as your ports limit them: devvm ports add {{.ports}} to forward them"
+
+[devcontainer_ports_ignored]
+description = "ports is a space-separated list of forwardPorts entries"
+other = "{{.file}}: forwardPorts {{.ports}} ignored: a VM's ports reach only this machine's localhost"
+
+[devcontainer_invalid]
+other = "{{.file}} isn't valid JSON, at line {{.line}}, column {{.column}}: fix it, or run devvm --no-devcontainer"
+
+[devcontainer_bad_value]
+description = "key is a devcontainer.json property"
+other = "{{.file}}: {{.key}} isn't what devcontainer.json allows there: fix it, or run devvm --no-devcontainer"
+
+[devcontainer_local_env]
+description = "variable is the variable as the file writes it, like ${localEnv:HOME}"
+other = "{{.file}} uses {{.variable}}: devvm never puts this machine's environment in a VM; remove it, or run devvm --no-devcontainer"
+
+[devcontainer_variable]
+description = "variable is the variable as the file writes it, like ${localWorkspaceFolder}"
+other = "{{.file}} uses {{.variable}}, which devvm doesn't fill in: remove it, or run devvm --no-devcontainer"
+
+[devcontainer_build]
+description = "key is the property that builds a container: build, dockerFile, dockerComposeFile"
+other = "{{.file}} builds its container ({{.key}}), and devvm starts only from an image: run devvm --no-devcontainer"
+
+[devcontainer_feature]
+other = "{{.file}}: devvm has no layer for the feature {{.feature}}: remove it, or run devvm --no-devcontainer"
+
+[devcontainer_docker_outside]
+other = "{{.file}}: the feature {{.feature}} gives the VM this machine's Docker, which devvm never does: use docker-in-docker, or run devvm --no-devcontainer"
+
+[devcontainer_docker_net]
+description = "backend is a backend's name (docker)"
+other = "{{.vm}} can't have network policy with the docker layer {{.file}}'s docker-in-docker asks for on {{.backend}}: run devvm --no-devcontainer, or devvm --no-network-policy"
+
+[devcontainer_env_name]
+other = "{{.file}}: {{.name}} isn't an environment variable's name: fix it, or run devvm --no-devcontainer"
+
+[devcontainer_unreadable]
+other = "can't read {{.file}}: fix it, or run devvm --no-devcontainer"
+
+[devcontainer_image_not_public]
+other = "{{.file}}: its image {{.from}} isn't public in its registry, and a project's file gets only public images: devvm --from {{.from}} uses it anyway"
+
+[devcontainer_changed]
+other = "{{.vm}} was made from another version of {{.file}}, which never changes an existing VM: devvm rm, then devvm, makes it again"
+
+[devcontainer_new]
+other = "{{.vm}} was made without {{.file}}, which never changes an existing VM: devvm rm, then devvm, makes it again"
+
+[devcontainer_command_failed]
+description = "command is a devcontainer.json property, with a named command's name after it"
+other = "{{.command}} failed in {{.vm}}"

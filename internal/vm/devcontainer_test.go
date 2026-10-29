@@ -1,0 +1,228 @@
+package vm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/devcontainer"
+	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// devcontainerEnv is up on a fake backend with a devcontainer.json in the
+// project folder, its warnings and the devcontainer.json commands it runs
+// collected.
+func devcontainerTestEnv(t *testing.T, src string) (*Env, *backendtest.Fake, *[]string) {
+	t.Helper()
+	e, f, _ := upEnv(t, allNative())
+	if err := os.WriteFile(filepath.Join(e.Dir, ".devcontainer.json"), []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var warned []string
+	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	e.PublicImage = func(_ context.Context, ref string) (string, error) {
+		if ref == "private:1" {
+			return "", fmt.Errorf("%w: no", from.ErrNotFound)
+		}
+		return from.Name(ref) + "@sha256:" + strings.Repeat("a", 64), nil
+	}
+	return e, f, &warned
+}
+
+// commandsRun returns the devcontainer.json commands the fake ran, each
+// as its argv after the login shell, and the folders they ran in.
+func commandsRun(f *backendtest.Fake) (cmds []string, dirs []string) {
+	for _, c := range f.Calls() {
+		if c.Method != "Exec" || len(c.Args) < 3 {
+			continue
+		}
+		argv, _ := c.Args[1].([]string)
+		if len(argv) < 4 || !slices.Equal(argv[:4], []string{"bash", "-lc", commandScript, "devvm"}) {
+			continue
+		}
+		cmds = append(cmds, strings.Join(argv[4:], " "))
+		o, _ := c.Args[2].(backend.ExecOpts)
+		dirs = append(dirs, o.Dir)
+	}
+	return cmds, dirs
+}
+
+func TestUpDevcontainer(t *testing.T) {
+	e, f, warned := devcontainerTestEnv(t, `{
+		"image": "node:24",
+		"forwardPorts": [3000],
+		"remoteEnv": {"A": "${containerWorkspaceFolderBasename}"},
+		"onCreateCommand": ["touch", "x"],
+		"postStartCommand": "echo hi",
+	}`)
+	if err := state.WritePorts(e.Dirs, "5173"); err != nil {
+		t.Fatal(err)
+	}
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	for k, want := range map[string]string{
+		state.KeyFrom: "node@sha256:" + strings.Repeat("a", 64), KeyPorts: "5173",
+		KeyDevcontainerCreate: "", KeyDevcontainerEnv: `[{"name":"A","value":"'web'"}]`,
+	} {
+		if got := st.Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	if !strings.HasSuffix(st.Get(KeyDevcontainer), " .devcontainer.json") {
+		t.Errorf("devcontainer = %q", st.Get(KeyDevcontainer))
+	}
+	cmds, dirs := commandsRun(f)
+	if want := []string{"touch x", "sh -c echo hi"}; !slices.Equal(cmds, want) {
+		t.Errorf("ran %q, want %q", cmds, want)
+	}
+	for _, d := range dirs {
+		if d != e.Dir {
+			t.Errorf("ran in %q", d)
+		}
+	}
+	s, err := syncer{e}.stage(t.Context(), st, "web", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env := string(s.files[s.index("env")].data); !strings.HasPrefix(env, "export A='web'\n") {
+		t.Errorf("env = %q", env)
+	}
+	// Its ports beyond the user's are said, not added.
+	if want := []string{"devcontainer_ports_not_forwarded file=.devcontainer.json ports=3000"}; !slices.Equal(*warned, want) {
+		t.Errorf("warned %q, want %q", *warned, want)
+	}
+	*warned = nil
+
+	// Launched again, running: nothing runs; changed, it's said.
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if cmds, _ := commandsRun(f); len(cmds) != 2 {
+		t.Errorf("ran again: %q", cmds)
+	}
+	if err := os.WriteFile(filepath.Join(e.Dir, ".devcontainer.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if want := "devcontainer_changed file=.devcontainer.json vm=" + st.Name(); !slices.Equal(*warned, []string{want}) {
+		t.Errorf("warned %q, want %q", *warned, want)
+	}
+	// Started again: postStartCommand runs again.
+	if err := f.Stop(t.Context(), st.Name()); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if cmds, _ := commandsRun(f); !slices.Equal(cmds, []string{"touch x", "sh -c echo hi", "sh -c echo hi"}) {
+		t.Errorf("ran %q", cmds)
+	}
+}
+
+// A command that fails is said, those after it don't run, and the VM is
+// opened all the same.
+func TestUpDevcontainerCommandFails(t *testing.T) {
+	e, f, warned := devcontainerTestEnv(t, `{"onCreateCommand": "false", "postCreateCommand": "true", "postStartCommand": "echo hi"}`)
+	f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
+		if slices.Contains(argv, "false") {
+			return errors.New("exit status 1")
+		}
+		return nil
+	}
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	if want := "devcontainer_command_failed command=onCreateCommand vm=" + st.Name(); !slices.Equal(*warned, []string{want}) {
+		t.Errorf("warned %q, want %q", *warned, want)
+	}
+	if cmds, _ := commandsRun(f); !slices.Equal(cmds, []string{"sh -c false", "sh -c echo hi"}) {
+		t.Errorf("ran %q", cmds)
+	}
+}
+
+// Refused before anything is made.
+func TestUpDevcontainerRefused(t *testing.T) {
+	for _, tc := range []struct{ name, src, want string }{
+		{"not public", `{"image": "private:1"}`, "devcontainer_image_not_public file=.devcontainer.json from=private:1"},
+		{"not a reference", `{"image": "a b"}`, "bad_from from=a b"},
+		{"local env", `{"remoteEnv": {"A": "${localEnv:HOME}"}}`, "devcontainer_local_env file=.devcontainer.json variable=${localEnv:HOME}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, f, _ := devcontainerTestEnv(t, tc.src)
+			err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true})
+			if got := names(err); got != tc.want {
+				t.Errorf("error = %s, want %s", got, tc.want)
+			}
+			for _, c := range f.Calls() {
+				if c.Method == "CreateVM" || c.Method == "BuildImage" {
+					t.Errorf("made: %s", c.Method)
+				}
+			}
+		})
+	}
+}
+
+// A VM made for the docker layer gets no network policy; when only its
+// devcontainer.json's docker-in-docker asked for the layer, the question is
+// still asked, and a yes refuses it.
+func TestChooseNetDockerLayer(t *testing.T) {
+	dc := &devcontainer.Plan{File: ".devcontainer.json", Layers: []string{"docker"}}
+	for _, tc := range []struct {
+		name     string
+		o        Options
+		dockerVM bool
+		terminal bool
+		answer   bool
+		want     string // the error's names, else the choice
+		asked    bool
+	}{
+		{"no docker layer, yes", Options{}, false, true, true, "true", true},
+		{"named, --network-policy", Options{NetworkPolicy: true, Image: "docker"}, true, true, true, "net_docker_layer backend=fake vm=v", false},
+		{"named, never asked", Options{Image: "docker"}, true, true, true, "false", false},
+		{"the file's, yes", Options{dc: dc}, true, true, true, "devcontainer_docker_net backend=fake file=.devcontainer.json vm=v", true},
+		{"the file's, no", Options{dc: dc}, true, true, false, "false", true},
+		{"the file's, --no-network-policy", Options{dc: dc, NoNetworkPolicy: true}, true, true, true, "false", false},
+		{"the file's, no terminal", Options{dc: dc}, true, false, true, "false", false},
+		{"the file's and named", Options{dc: dc, Image: "node+docker"}, true, true, true, "false", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, f, _ := upEnv(t, allNative())
+			asked := false
+			e.Proxy.Terminal = func() bool { return tc.terminal }
+			e.Proxy.Note = func(msg.M) {}
+			e.Proxy.Ask = func(msg.M) bool { asked = true; return tc.answer }
+			o := tc.o
+			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v")
+			got := fmt.Sprint(on)
+			if err != nil {
+				got = names(err)
+			}
+			if got != tc.want || asked != tc.asked {
+				t.Errorf("chooseNet = %s (asked %v), want %s (asked %v)", got, asked, tc.want, tc.asked)
+			}
+		})
+	}
+}
+
+func TestDevcontainerEnvFromState(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	st, err := state.CreateVM(e.Dirs, "devvm-x-0123456789abcd", state.NewVM{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Set(KeyDevcontainerEnv, `[{"name":"A","value":"'x'"},{"name":"B;rm","value":"'y'"}]`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := devcontainerEnv(st)
+	if err != nil || got != "export A='x'\n" {
+		t.Errorf("devcontainerEnv = %q, %v", got, err)
+	}
+}

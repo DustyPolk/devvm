@@ -8,11 +8,12 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | --- | --- |
 | `cmd/devvm/` | the entry point: `ui.Main` makes the run's UI and runs the root command with it; the only `os.Exit` |
 | `internal/cli/` | Cobra commands, one file each (root = up, `build`/`rebuild`, `images`, `gc`, `layer`, `setup`, `restart`, `update`, `remove`, `adopt`, `rm`, `ls`, `log`, `doctor`, `secret`, `auth`, `ssh-agent`, `ssh`, `code`, `limactl`, `ports`, `size`, `git-protect`, `completion`, hidden `version`, `_msg`, `_qemu`, `_proxy`, `_smolvm-ports`, `_docker-ports`, `_docker-connect`, `_refresh-tools`); `script_test.go` runs testscript; `docgen/` writes the CLI reference |
-| `internal/vm/` | `Env` (`env.go`: shared dependencies, finding and starting the folder's VM); `Launch`: a new VM (`up.go`), an existing one (`existing.go`), `ssh.go`, agents' mounts; `Lifecycle` (`lifecycle.go`); `Settings` (`settings.go`, `size.go`, `ports.go`, `sshagent.go`); `Net` (`network.go`, `secret.go`); `--clone` (`clone.go`); the setup it sends (`sync.go`) |
+| `internal/vm/` | `Env` (`env.go`: shared dependencies, finding and starting the folder's VM); `Launch`: a new VM (`up.go`), an existing one (`existing.go`), `ssh.go`, agents' mounts; `Lifecycle` (`lifecycle.go`); `Settings` (`settings.go`, `size.go`, `ports.go`, `sshagent.go`); `Net` (`network.go`, `secret.go`); `--clone` (`clone.go`); a devcontainer.json's mapping and commands (`devcontainer.go`); the setup it sends (`sync.go`) |
 | `internal/project/`, `internal/gitprotect/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection |
 | `internal/sshconfig/`, `internal/sshagent/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line; each VM's SSH agent choice, devvm's own agent and its keys |
 | `internal/build/`, `internal/image/` | building and rebuilding images, their records; image keys and names (pure) |
 | `internal/from/` | `--from`: references, registry digests (anonymous token), Docker's IDs, the recorded digests |
+| `internal/devcontainer/` | a project's devcontainer.json (pure): finding it, JSONC, mapping it to a new VM's plan, refusals |
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |

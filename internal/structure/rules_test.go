@@ -216,6 +216,11 @@ func layerCases() []ruleCase {
 			files: map[string]string{"internal/image/a.go": imports("image", "internal/state")},
 			want:  &want{ruleLayers, "internal/image imports only"},
 		},
+		{
+			name:  "devcontainer importing more",
+			files: map[string]string{"internal/devcontainer/a.go": imports("devcontainer", "internal/from")},
+			want:  &want{ruleLayers, "internal/devcontainer imports only"},
+		},
 	}
 }
 

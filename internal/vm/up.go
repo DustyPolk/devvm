@@ -10,6 +10,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
@@ -33,6 +34,11 @@ type Options struct {
 	Clone           bool   // --clone
 	SSHAgent        bool   // --ssh-agent: a new VM forwards the user's SSH agent
 	From            string // --from, or its default: the container image a new VM's base starts from
+	FromSet         bool   // --from was given, not its default
+	NoDevcontainer  bool   // --no-devcontainer: a new VM ignores the folder's devcontainer.json
+	// dc is what the folder's devcontainer.json says a new VM gets
+	// (devcontainers.prepare); nil without one.
+	dc *devcontainer.Plan
 }
 
 // Launch opens a shell, ssh or an editor in the folder's VM: a new VM
@@ -95,7 +101,7 @@ type creation struct{ Launch }
 // create makes the folder's VM and opens a shell in it.
 func (e creation) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) error {
 	vm := f.Name
-	n, err := e.plan(ctx, o, f, b, size, ports)
+	n, err := e.plan(ctx, &o, f, b, size, ports)
 	if err != nil {
 		return err
 	}
@@ -147,6 +153,9 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		return err
 	}
 	if err := n.record(st, tg.Libc, files); err != nil {
+		return err
+	}
+	if err := (devcontainers{e.Env}).record(st, o); err != nil {
 		return err
 	}
 	if err := b.CreateVM(ctx, chain.Key(), n.spec); err != nil {
@@ -204,14 +213,18 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 
 // plan checks and chooses what a new VM gets, all before the build,
 // which can take minutes: its image, size, ports, network policy (asked
-// for), SSH agent and the backend features it needs.
-func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) (newVM, error) {
+// for), SSH agent and the backend features it needs, with what the
+// folder's devcontainer.json says (which changes o).
+func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b backend.Backend, size Size, ports string) (newVM, error) {
 	vm := f.Name
 	if o.Clone {
 		if err := checkCloneRepo(ctx, f.Dir); err != nil {
 			return newVM{}, err
 		}
 	} else if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
+		return newVM{}, err
+	}
+	if err := (devcontainers{e.Env}).prepare(ctx, o, vm, f.Dir); err != nil {
 		return newVM{}, err
 	}
 	// Defaults are checked again: the files may be edited by hand.
@@ -238,8 +251,19 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 			return newVM{}, err
 		}
 	}
+	// The user's ports stay a limit the file can't widen: its ports
+	// beyond them are said, not added.
+	if o.dc != nil && o.dc.Ports != "" {
+		wider, err := AddPorts(n.ports, o.dc.Ports)
+		if err != nil {
+			return newVM{}, err
+		}
+		if wider != n.ports {
+			e.Warn(msg.DevcontainerPortsNotForwarded(o.dc.File, o.dc.Ports))
+		}
+	}
 	n.builder = e.builder(b, o.From)
-	if n.img, err = e.resolveImage(o.Image, f.Dir, n.builder); err != nil {
+	if n.img, err = e.resolveImage(o.Image, f.Dir, o.dc, n.builder); err != nil {
 		return newVM{}, err
 	}
 	// Every VM has the share, read-only: a tool added later is mounted
@@ -252,12 +276,8 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err != nil {
 		return newVM{}, err
 	}
-	// Root in a VM made for the docker layer can change its own network.
-	switch {
-	case n.dockerLayer == "":
-		n.net = e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm)
-	case o.NetworkPolicy:
-		return newVM{}, msg.NetDockerLayer(b.Name(), vm)
+	if n.net, err = e.chooseNet(o, n.dockerLayer != "", b, vm); err != nil {
+		return newVM{}, err
 	}
 	if o.SSHAgent {
 		n.agent = sshagent.On
@@ -282,6 +302,24 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	// (an emulation once it's reviewed); otherwise fixed when it's made.
 	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
 	return n, nil
+}
+
+// chooseNet returns whether a new VM gets network policy (asked for). Root
+// in a VM made for the docker layer (dockerVM) can change its own network,
+// so it gets none; when only its devcontainer.json's docker-in-docker
+// asked for the layer, the question is still asked, and a yes refuses it:
+// the file never takes network policy away.
+func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm string) (bool, error) {
+	switch {
+	case !dockerVM:
+		return e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm), nil
+	case o.NetworkPolicy:
+		return false, msg.NetDockerLayer(b.Name(), vm)
+	case o.dc != nil && slices.Contains(o.dc.Layers, image.DockerLayer) && !image.HasLayer(o.Image, image.DockerLayer) &&
+		e.Proxy.Choose(false, o.NoNetworkPolicy, vm):
+		return false, msg.DevcontainerDockerNet(b.Name(), o.dc.File, vm)
+	}
+	return false, nil
 }
 
 // dockerLayer chooses the runtime a new VM runs the docker layer under,
@@ -364,8 +402,8 @@ func (e Launch) setUp(ctx context.Context, b backend.Backend, st *state.VM, f pr
 }
 
 // setUpVM sets up a running VM, started with conf: its setup sent, ssh
-// and editors reaching it by name, and a --clone VM's clone made if it
-// isn't yet.
+// and editors reaching it by name, a --clone VM's clone made if it isn't
+// yet, then its devcontainer.json's commands run (devcontainers.run).
 func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) error {
 	if err := syncer(e).sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
 		return err
@@ -374,9 +412,11 @@ func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f 
 		return err
 	}
 	if isClone(st) && st.Get(KeySeeded) == "" {
-		return clones(e).seedClone(ctx, b, st, f)
+		if err := clones(e).seedClone(ctx, b, st, f); err != nil {
+			return err
+		}
 	}
-	return nil
+	return devcontainers(e).run(ctx, b, st, f.Dir)
 }
 
 // checkUnsafe refuses a folder that is or holds the home folder or
@@ -402,8 +442,14 @@ func (e Launch) checkUnsafe(dir string, unsafe bool) error {
 // resolveImage returns the image a new VM gets, in canonical order: the
 // one named, or with nothing but agents named, the folder's toolchains
 // and the agents on top (devvm claude in a node project is node+claude).
-// base is a choice of its own: nothing is detected over it.
-func (e Launch) resolveImage(want, dir string, b *build.Env) (string, error) {
+// base is a choice of its own: nothing is detected over it. With a
+// devcontainer.json (dc), the layers its features map to go under it, and
+// nothing named or detected is base.
+func (e Launch) resolveImage(want, dir string, dc *devcontainer.Plan, b *build.Env) (string, error) {
+	var layers []string
+	if dc != nil {
+		layers = dc.Layers
+	}
 	if needsDetection(want) {
 		found := project.Detect(dir)
 		switch {
@@ -413,11 +459,17 @@ func (e Launch) resolveImage(want, dir string, b *build.Env) (string, error) {
 				found = append(found, want)
 			}
 			want = strings.Join(found, "+")
-		case want == "":
+		case want == "" && dc == nil:
 			return "", msg.NoImageFor(strings.Join(image.Agents, " "), dir, strings.Join(b.Environments(), " "))
 		}
 	}
-	img := image.Normalize(want)
+	var parts []string
+	for _, p := range slices.Concat(layers, strings.Split(want, "+")) {
+		if p != "" && !slices.Contains(parts, p) {
+			parts = append(parts, p)
+		}
+	}
+	img := image.Normalize(strings.Join(parts, "+"))
 	return img, b.CheckLayers(img)
 }
 

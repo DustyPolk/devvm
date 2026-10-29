@@ -14,6 +14,9 @@ package from
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
+	"net/netip"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -71,6 +74,9 @@ func Recorded(d paths.Dirs, ref string) (string, error) {
 type Lookup struct {
 	Dirs     paths.Dirs
 	Registry *Registry
+	// PublicRegistry is Public's: only the internet's addresses
+	// (NewPublicRegistry).
+	PublicRegistry *Registry
 	// DockerID returns Docker's ID for an image, when Docker runs and has
 	// it.
 	DockerID func(ctx context.Context, ref string) (string, bool)
@@ -80,7 +86,7 @@ type Lookup struct {
 // NewLookup returns a Lookup on the internet and this machine's Docker,
 // warning through warn.
 func NewLookup(d paths.Dirs, warn func(msg.M)) *Lookup {
-	return &Lookup{Dirs: d, Registry: NewRegistry(), DockerID: DockerID, Warn: warn}
+	return &Lookup{Dirs: d, Registry: NewRegistry(), PublicRegistry: NewPublicRegistry(), DockerID: DockerID, Warn: warn}
 }
 
 // Refresh looks up ref's digest and records it: its registry's, else
@@ -125,6 +131,65 @@ func (l *Lookup) Refresh(ctx context.Context, ref string) error {
 		return state.SetFromDigest(l.Dirs, ref, id)
 	}
 	return msg.FromUnreachable(ref, host)
+}
+
+// Public returns ref pinned to the digest its registry gives anyone
+// (name@sha256:…), for an image a project's devcontainer.json names:
+// never one only Docker has, one only a registry login reaches, or one on
+// this machine or its network (publicHost, PublicRegistry), which the
+// project would get into its VM. A pinned reference is checked the
+// same way. Offline, a digest the registry gave before is kept, with a
+// warning. It fails with ErrNotFound (wrapped) for an image that isn't
+// public, else a message.
+func (l *Lookup) Public(ctx context.Context, ref string) (string, error) {
+	host := ParseRef(ref).Host
+	if !publicHost(host) {
+		return "", fmt.Errorf("%w: %s isn't on the internet", ErrNotFound, host)
+	}
+	d, err := l.PublicRegistry.Digest(ctx, ref)
+	switch {
+	case ctx.Err() != nil:
+		return "", ctx.Err()
+	case err == nil && Pinned(ref) && !strings.HasSuffix(ref, "@"+d):
+		return "", fmt.Errorf("%w: %s answered %s", ErrNotFound, host, d)
+	case err == nil:
+		pinned := Name(ref) + "@" + d
+		if Pinned(ref) {
+			return ref, nil
+		}
+		return pinned, state.SetFromDigest(l.Dirs, ref, pinned)
+	case errors.Is(err, ErrUnreachable) && !Pinned(ref):
+		cached, rerr := Recorded(l.Dirs, ref)
+		if rerr != nil {
+			return "", rerr
+		}
+		if strings.HasPrefix(cached, Name(ref)+"@sha256:") {
+			l.Warn(msg.FromCachedUnreachable(ref, host))
+			return cached, nil
+		}
+		return "", msg.FromUnreachable(ref, host)
+	case errors.Is(err, ErrUnreachable):
+		return "", msg.FromUnreachable(ref, host)
+	}
+	return "", err
+}
+
+// publicHost reports whether a registry's host (with any port) may be the
+// internet's by its name: not localhost, nor an address that isn't the
+// internet's. What a name resolves to is checked when it's reached
+// (NewPublicRegistry).
+func publicHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		return publicAddr(ip)
+	}
+	return true
 }
 
 // DockerID returns Docker's ID for an image (sha256:…), when Docker is

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -129,6 +130,62 @@ func (f *fakeRegistry) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Docker-Content-Digest", d)
+}
+
+// NewPublicRegistry's never connects to an address that isn't the
+// internet's, by address or by a name that resolves to one: the image
+// isn't public.
+func TestPublicRegistryReachesOnlyTheInternet(t *testing.T) {
+	t.Parallel()
+	f := newFakeRegistry(t)
+	f.set("library/node:24", "sha256:"+strings.Repeat("a", 64))
+	u, err := url.Parse(f.srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, base := range []string{f.srv.URL, "https://localhost:" + u.Port()} {
+		r := NewPublicRegistry()
+		r.Base = func(string) string { return base }
+		if _, err := r.Digest(t.Context(), "node:24"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: %v", base, err)
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.calls) != 0 {
+		t.Errorf("reached: %q", f.calls)
+	}
+}
+
+func TestPublicAddr(t *testing.T) {
+	t.Parallel()
+	for s, want := range map[string]bool{
+		"1.1.1.1": true, "140.82.112.3": true, "2606:4700::1111": true,
+		"127.0.0.1": false, "::1": false, "10.1.2.3": false, "172.16.0.1": false, "192.168.5.2": false,
+		"169.254.169.254": false, "fe80::1": false, "fd00::1": false, "100.96.0.1": false, "0.0.0.0": false,
+		"0.1.2.3": false, "::": false, "::ffff:127.0.0.1": false, "::ffff:10.0.0.1": false, "224.0.0.1": false,
+		"198.18.0.1": false, "255.255.255.255": false,
+	} {
+		if got := publicAddr(netip.MustParseAddr(s)); got != want {
+			t.Errorf("publicAddr(%s) = %v", s, got)
+		}
+	}
+}
+
+func TestProxyAddr(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"http://10.0.0.1": "10.0.0.1:80", "https://proxy.corp:8443": "proxy.corp:8443",
+		"socks5://[::1]": "[::1]:1080", "http://u:p@127.0.0.1:3128": "127.0.0.1:3128",
+	} {
+		u, err := url.Parse(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := proxyAddr(u); got != want {
+			t.Errorf("proxyAddr(%s) = %s, want %s", in, got, want)
+		}
+	}
 }
 
 func (f *fakeRegistry) registry() *Registry {

@@ -8,6 +8,10 @@ import (
 	"syscall"
 )
 
+// NoBlock is the open flag that keeps opening a FIFO from waiting for a
+// writer: a file a VM could swap in for one devvm reads.
+const NoBlock = syscall.O_NONBLOCK
+
 // SameDevice reports whether two files are on the same file system.
 func SameDevice(a, b fs.FileInfo) bool {
 	sa, oka := a.Sys().(*syscall.Stat_t)

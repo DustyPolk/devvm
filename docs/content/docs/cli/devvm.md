@@ -7,7 +7,7 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking.
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking.
 
 ```text
 devvm [IMAGE] [flags]
@@ -24,6 +24,7 @@ devvm [IMAGE] [flags]
   -h, --help                help for devvm
       --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
       --network-policy      create the VM with network policy: it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here (default: ask in a terminal, else off)
+      --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json
       --no-git-protect      create the VM without .git protection
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
       --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)

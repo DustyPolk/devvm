@@ -140,6 +140,11 @@ func devvm() rules {
 				from: []string{"internal/image"}, exceptTo: []string{"assets", "internal/msg", "internal/paths"},
 				to: []string{"..."},
 			},
+			{
+				name: "internal/devcontainer imports only internal/image and internal/msg",
+				from: []string{"internal/devcontainer"}, exceptTo: []string{"internal/image", "internal/msg"},
+				to: []string{"..."},
+			},
 		},
 	}
 }

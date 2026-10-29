@@ -12,6 +12,7 @@ title: Docs
 - [.git protection](git-protection.md): how a VM is kept from changing what git runs on the host.
 - [SSH](ssh.md): reaching VMs by name from ssh and editors, their host keys, and agent forwarding.
 - [Working on a clone](clone.md): `--clone`, a VM with its own clone of the repo instead of the folder mounted.
+- [devcontainer.json](devcontainer.md): what a new VM takes from a project's `devcontainer.json`, and what it refuses.
 - [Backends](backends.md): what runs the VMs, what each one can do, and choosing one.
 - [Lima](lima.md): what devvm sets up in Lima, how it confines VMs, and its limits.
 - [smolvm](smolvm.md): the experimental microVM backend, and what devvm emulates on it.

@@ -51,6 +51,9 @@ func newTestLookup(t *testing.T) *testLookup {
 	tl.Lookup = &Lookup{
 		Dirs:     paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config")},
 		Registry: tl.reg.registry(),
+		// The fake is on this machine's loopback, which
+		// NewPublicRegistry's never reaches.
+		PublicRegistry: tl.reg.registry(),
 		DockerID: func(_ context.Context, ref string) (string, bool) {
 			tl.dockerCalls++
 			id, ok := tl.docker[ref]
@@ -66,6 +69,7 @@ func (tl *testLookup) offline(t *testing.T) {
 	t.Helper()
 	down := httptest.NewTLSServer(http.NotFoundHandler())
 	tl.Registry = &Registry{Client: down.Client(), Base: func(string) string { return down.URL }}
+	tl.PublicRegistry = tl.Registry
 	down.Close()
 }
 
@@ -198,5 +202,84 @@ func TestRefreshPinnedNeedsNoLookup(t *testing.T) {
 	}
 	if len(tl.reg.calls) != 0 || tl.dockerCalls != 0 {
 		t.Errorf("looked up: %q, docker %d", tl.reg.calls, tl.dockerCalls)
+	}
+}
+
+// Public pins an image its registry gives anyone, and never asks Docker.
+func TestPublic(t *testing.T) {
+	t.Parallel()
+	tl := newTestLookup(t)
+	tl.reg.set("library/node:24", digestOf("a"))
+	tl.reg.set("library/node:"+digestOf("b"), digestOf("b"))
+	tl.docker["myapp:dev"] = digestOf("d")
+	got, err := tl.Public(t.Context(), "node:24")
+	if err != nil || got != "node@"+digestOf("a") {
+		t.Fatalf("Public = %q, %v", got, err)
+	}
+	if d := tl.recorded(t, "node:24"); d != got {
+		t.Errorf("recorded %q", d)
+	}
+	// A pinned reference is asked for by its digest.
+	if got, err := tl.Public(t.Context(), "node@"+digestOf("b")); err != nil || got != "node@"+digestOf("b") {
+		t.Errorf("pinned: %q, %v", got, err)
+	}
+	if _, err := tl.Public(t.Context(), "node@"+digestOf("c")); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a pinned digest the registry hasn't: %v", err)
+	}
+	// Only Docker has it: not public.
+	if _, err := tl.Public(t.Context(), "myapp:dev"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an image only Docker has: %v", err)
+	}
+	if tl.dockerCalls != 0 {
+		t.Errorf("docker asked %d times", tl.dockerCalls)
+	}
+	// Offline: the registry's digest seen before, with a warning; Docker's
+	// ID recorded for another build isn't one.
+	if err := state.SetFromDigest(tl.Dirs, "myapp:dev", digestOf("d")); err != nil {
+		t.Fatal(err)
+	}
+	tl.offline(t)
+	if got, err := tl.Public(t.Context(), "node:24"); err != nil || got != "node@"+digestOf("a") {
+		t.Errorf("offline: %q, %v", got, err)
+	}
+	if want := "from_cached_unreachable from=node:24 host=" + DockerHub; strings.Join(tl.warned, "\n") != want {
+		t.Errorf("warnings %q, want %q", tl.warned, want)
+	}
+	for _, ref := range []string{"myapp:dev", "debian:13", "node@" + digestOf("b")} {
+		if _, err := tl.Public(t.Context(), ref); !isMsg(err, "from_unreachable") {
+			t.Errorf("offline %s: %v", ref, err)
+		}
+	}
+}
+
+// A registry on this machine or its network is never public, by its
+// name: never asked, and a digest recorded for it (a --from of yours)
+// never stands in for its answer.
+func TestPublicRefusesLocalRegistries(t *testing.T) {
+	t.Parallel()
+	tl := newTestLookup(t)
+	refs := []string{
+		"localhost:5000/app:1", "localhost/app", "reg.localhost:5000/app", "127.0.0.1:5000/app",
+		"[::1]:5000/app", "10.0.0.5/app:1", "192.168.1.2:5000/app", "169.254.169.254/app", "100.96.0.1:5000/app",
+		"localhost:5000/app@" + digestOf("a"),
+	}
+	for _, ref := range refs {
+		tl.reg.set(ParseRef(ref).Repo+":"+ParseRef(ref).Tag, digestOf("a"))
+		if err := state.SetFromDigest(tl.Dirs, ref, Name(ref)+"@"+digestOf("a")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, offline := range []bool{false, true} {
+		if offline {
+			tl.offline(t)
+		}
+		for _, ref := range refs {
+			if got, err := tl.Public(t.Context(), ref); !errors.Is(err, ErrNotFound) {
+				t.Errorf("%s (offline %v) = %q, %v", ref, offline, got, err)
+			}
+		}
+	}
+	if len(tl.reg.calls) != 0 || len(tl.warned) != 0 {
+		t.Errorf("asked %q, warned %q", tl.reg.calls, tl.warned)
 	}
 }

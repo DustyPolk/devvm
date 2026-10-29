@@ -6,10 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -92,6 +96,88 @@ func NewClient() *http.Client {
 	return &http.Client{Transport: t.Clone(), Timeout: timeout, CheckRedirect: httpsOnly}
 }
 
+// NewPublicRegistry returns a Registry that reaches only the internet's
+// addresses, for an image a project's file names: never this machine's
+// (loopback), its network's (private, link-local, shared) or another
+// non-public one, whatever a name resolves to. A proxy the environment
+// names is reached as it is.
+func NewPublicRegistry() *Registry {
+	r := NewRegistry()
+	t, ok := r.Client.Transport.(*http.Transport)
+	if !ok {
+		return r
+	}
+	var proxies sync.Map
+	t.Proxy = func(req *http.Request) (*url.URL, error) {
+		u, err := http.ProxyFromEnvironment(req)
+		if u != nil {
+			proxies.Store(proxyAddr(u), true)
+		}
+		return u, err
+	}
+	direct := &net.Dialer{Timeout: timeout, KeepAlive: timeout}
+	guarded := &net.Dialer{Timeout: timeout, KeepAlive: timeout, Control: publicOnly}
+	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if _, ok := proxies.Load(addr); ok {
+			return direct.DialContext(ctx, network, addr)
+		}
+		return guarded.DialContext(ctx, network, addr)
+	}
+	return r
+}
+
+// proxyAddr is the address a Transport dials for a proxy: its host and
+// port, the scheme's default port when it names none.
+func proxyAddr(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443", "socks5": "1080", "socks5h": "1080"}[u.Scheme]
+	}
+	return net.JoinHostPort(u.Hostname(), port)
+}
+
+// publicOnly refuses a connection to an address that isn't the
+// internet's: ErrNotFound, as the image isn't public.
+func publicOnly(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil || !publicAddr(ip) {
+		return fmt.Errorf("%w: %s isn't on the internet", ErrNotFound, host)
+	}
+	return nil
+}
+
+// nonPublic returns the IPv4 blocks besides Go's own classes that no
+// registry anyone reaches is in: "this network", shared address space
+// (carrier-grade NAT, smolvm's gateway), IETF protocol assignments,
+// benchmarking, and reserved.
+func nonPublic() []netip.Prefix {
+	return []netip.Prefix{
+		netip.MustParsePrefix("0.0.0.0/8"), netip.MustParsePrefix("100.64.0.0/10"),
+		netip.MustParsePrefix("192.0.0.0/24"), netip.MustParsePrefix("198.18.0.0/15"),
+		netip.MustParsePrefix("240.0.0.0/4"),
+	}
+}
+
+// publicAddr reports whether ip is an internet address: not loopback,
+// private, link-local, multicast, unspecified or otherwise reserved.
+func publicAddr(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	if !ip.IsValid() || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	for _, p := range nonPublic() {
+		if p.Contains(ip) {
+			return false
+		}
+	}
+	return true
+}
+
 // errRedirect is a redirect refused: trying again won't help.
 var errRedirect = errors.New("redirect refused")
 
@@ -109,11 +195,16 @@ func httpsOnly(req *http.Request, via []*http.Request) error {
 // from a HEAD request for its manifest, which doesn't count against
 // Docker Hub's pull limit. A registry that asks for a token gets an
 // anonymous one, from its token service: an https address only, so a
-// registry can't point devvm at a file or another scheme. It fails with
+// registry can't point devvm at a file or another scheme. A pinned
+// reference's manifest is asked for by its digest. It fails with
 // ErrUnreachable or ErrNotFound.
 func (r *Registry) Digest(ctx context.Context, ref string) (string, error) {
 	p := ParseRef(ref)
-	u := r.Base(p.Host) + "/v2/" + p.Repo + "/manifests/" + p.Tag
+	tag := p.Tag
+	if _, d, ok := strings.Cut(ref, "@"); ok {
+		tag = d
+	}
+	u := r.Base(p.Host) + "/v2/" + p.Repo + "/manifests/" + tag
 	h, err := r.head(ctx, u, "")
 	if err != nil {
 		return "", err

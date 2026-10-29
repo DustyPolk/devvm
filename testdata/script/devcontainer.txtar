@@ -1,0 +1,227 @@
+# A project's devcontainer.json, read when its VM is made: its image is
+# the VM's --from (pinned to the digest its registry gives anyone), its
+# features devvm's layers, its forwardPorts the VM's listed ports, its
+# variables the VM's environment, its commands run in the VM, once or at
+# each start. A later launch only warns when the file changed. Nothing is
+# written to the project folder, and nothing in the file runs on the host.
+# Registries are never reached: HTTPS_PROXY points at nothing, so lookups
+# are offline, and a digest recorded before stands for the registry's.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env HTTPS_PROXY=http://127.0.0.1:9
+env https_proxy=http://127.0.0.1:9
+env PIN=node:24@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+mkdir $XDG_DATA_HOME/devvm/images
+cp digests $XDG_DATA_HOME/devvm/images/from-digests
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp extra.sh $XDG_CONFIG_HOME/devvm/layers/extra.sh
+exec devvm ports -g none
+
+# Refused before anything is made, the file named: the host's environment,
+# a container to build, the host's Docker, a feature devvm has no layer
+# for, invalid JSON (where), an image the registry can't be asked about,
+# an image on this machine's registry (never asked).
+mkdir $WORK/bad
+cd $WORK/bad
+cp $WORK/localenv.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: devcontainer_local_env file=\.devcontainer\.json variable=\$\{localEnv:GITHUB_TOKEN\}$'
+cp $WORK/build.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: devcontainer_build file=\.devcontainer\.json key=build$'
+cp $WORK/outside.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: devcontainer_docker_outside feature=ghcr\.io/devcontainers/features/docker-outside-of-docker:1 file=\.devcontainer\.json$'
+cp $WORK/java.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: devcontainer_feature feature=ghcr\.io/devcontainers/features/java:1 file=\.devcontainer\.json$'
+cp $WORK/invalid.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: devcontainer_invalid column=3 file=\.devcontainer\.json line=4$'
+cp $WORK/unknown-image.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: from_unreachable from=debian:13 host=registry-1\.docker\.io$'
+cp $WORK/local-image.json .devcontainer.json
+! exec devvm --no-network-policy
+stderr '^devvm: devcontainer_image_not_public file=\.devcontainer\.json from=localhost:5000/app:1$'
+! stdout 'creating_from|building'
+stub_calls
+! stdout 'limactl (create|clone|start|shell)'
+! exists $VMS
+exec ls -A
+cmp stdout $WORK/bad-ls
+
+# A new VM: made as the file says, its image's recorded digest standing in
+# for the registry's (offline), the docker layer for docker-in-docker, the
+# user's layer named on top, the localhost ports listed; what's ignored is
+# said, initializeCommand never runs.
+mkdir $WORK/web/.devcontainer
+cd $WORK/web
+exec git init -q
+cp $WORK/web.json .devcontainer/devcontainer.json
+exec devvm --no-network-policy extra
+stdout '^==> devcontainer_using file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io$'
+stderr '^devvm: devcontainer_initialize file=\.devcontainer/devcontainer\.json$'
+stderr '^devvm: devcontainer_feature_options features=ghcr\.io/devcontainers/features/docker-in-docker:2 file=\.devcontainer/devcontainer\.json$'
+stderr '^devvm: devcontainer_ports_ignored file=\.devcontainer/devcontainer\.json ports="db:5432"$'
+stderr '^devvm: devcontainer_ports_not_forwarded file=\.devcontainer/devcontainer\.json ports=3000,5173$'
+stderr '^devvm: devcontainer_ignored file=\.devcontainer/devcontainer\.json keys=runArgs$'
+stderr '^devvm: devcontainer_unknown file=\.devcontainer/devcontainer\.json keys=bogus$'
+stdout '^==> building_image_from from=node@sha256:a{64} image=base key=[0-9a-f]{12}$'
+stdout '^==> creating_from image=docker\+extra vm=devvm-web-[0-9a-f]{14}$'
+# The commands: once, in order (named ones sorted), then postStartCommand;
+# in the VM, as its user, in the project folder, in a login shell; then
+# the shell.
+stdout '^==> running_script script=onCreateCommand vm=devvm-web-[0-9a-f]{14}\n==> running_script script=postCreateCommand a vm=devvm-web-[0-9a-f]{14}\n==> running_script script=postCreateCommand b vm=devvm-web-[0-9a-f]{14}\n==> running_script script=postStartCommand vm=devvm-web-[0-9a-f]{14}\n'
+stub_calls
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/\S*/web'' && exec ''bash'' ''-lc'' ''exec "\$@"'' ''devvm'' ''sh'' ''-c'' ''echo made > ~/made''\n'
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/\S*/web'' && exec ''bash'' ''-lc'' ''exec "\$@"'' ''devvm'' ''touch'' ''b''\nlimactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/\S*/web'' && exec ''bash'' ''-lc'' ''exec "\$@"'' ''devvm'' ''sh'' ''-c'' ''echo started >> ~/started''\n(limactl list --json\n)*limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+! stdout pwned
+# Its variables are in its environment file, before devvm's own.
+exec tar -xOf $STUB_DIR/sync.tar env
+stdout '\Aexport GREETING=''it''\\''''s web''\nexport PATH="\$\{PATH\}"'':/opt/web''\n'
+# Its state.
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json$'
+stdout '^from=node@sha256:a{64}$'
+stdout '^image=docker\+extra$'
+stdout '^ports=none$'
+stdout '^devcontainer_create=$'
+stdout '^devcontainer_start=\[\{"name":"postStartCommand","argv":\["sh","-c","echo started >> ~/started"\]\}\]$'
+# Nothing in the project folder but what was there.
+exec ls -A
+cmp stdout $WORK/web-ls
+cmp .devcontainer/devcontainer.json $WORK/web.json
+
+# Launched again, running: nothing runs again.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+! stdout running_script
+! stderr devcontainer
+stub_calls
+! stdout 'bash'' ''-lc'''
+
+# Changed: a warning each launch, nothing applied; --no-devcontainer is for
+# new VMs.
+cp $WORK/changed.json .devcontainer/devcontainer.json
+exec devvm --no-devcontainer
+stderr '^devvm: devcontainer_changed file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: no_devcontainer_flag_ignored$'
+! stdout 'running_script|devcontainer_using'
+! stderr 'devcontainer_(ignored|unknown|initialize)'
+# Gone: the same.
+rm .devcontainer/devcontainer.json
+exec devvm
+stderr '^devvm: devcontainer_changed file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
+cp $WORK/web.json .devcontainer/devcontainer.json
+exec devvm
+! stderr devcontainer
+
+# Stopped and launched: postStartCommand runs again, the others don't.
+exec devvm stop
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stdout '^==> running_script script=postStartCommand vm=devvm-web-[0-9a-f]{14}$'
+! stdout 'running_script script=(onCreate|postCreate)'
+stub_calls
+stdout 'echo started >> ~/started'
+! stdout 'echo made'
+
+# A command that fails: a warning naming it, the rest of its group skipped,
+# the VM kept and opened; postStartCommand still runs at the start.
+mkdir $WORK/fail
+cd $WORK/fail
+cp $WORK/web.json .devcontainer.json
+exec sh -c 'echo "''echo a''" > "$STUB_DIR/shell-fails-on"'
+exec devvm --no-network-policy extra
+stderr '^devvm: devcontainer_command_failed command=postCreateCommand a vm=devvm-fail-[0-9a-f]{14}$'
+! stdout 'running_script script=postCreateCommand b'
+stdout '^==> running_script script=postStartCommand vm=devvm-fail-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl shell --workdir /\S*/fail devvm-fail-[0-9a-f]{14}\n\z'
+rm $STUB_DIR/shell-fails-on
+
+# --no-devcontainer: the file isn't read (this one would be refused), and
+# later changes aren't warned about.
+mkdir $WORK/skip
+cd $WORK/skip
+cp $WORK/build.json .devcontainer.json
+exec devvm --no-network-policy --no-devcontainer base
+! stdout devcontainer_using
+exec sh -c 'cat "$VMS"/devvm-skip-*'
+stdout '^devcontainer=off$'
+cp $WORK/web.json .devcontainer.json
+exec devvm
+! stderr devcontainer
+
+# A VM made without a file: one that appears is warned about.
+mkdir $WORK/plain
+cd $WORK/plain
+exec devvm --no-network-policy base
+exec sh -c 'cat "$VMS"/devvm-plain-*'
+stdout '^devcontainer=none$'
+cp $WORK/web.json .devcontainer.json
+exec devvm
+stderr '^devvm: devcontainer_new file=\.devcontainer\.json vm=devvm-plain-[0-9a-f]{14}$'
+
+# What's given on the command line wins: --from over image, --ports over
+# forwardPorts.
+mkdir $WORK/flags
+cd $WORK/flags
+cp $WORK/web.json .devcontainer.json
+exec devvm --no-network-policy --from $PIN --ports 8080 extra
+stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
+stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=ports key=forwardPorts$'
+exec sh -c 'cat "$VMS"/devvm-flags-*'
+stdout '^from=node:24@sha256:a{64}$'
+stdout '^ports=8080$'
+
+-- digests --
+node:24=node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-- extra.sh --
+#!/bin/bash
+echo extra
+-- localenv.json --
+{"containerEnv": {"TOKEN": "${localEnv:GITHUB_TOKEN}"}}
+-- build.json --
+{"build": {"dockerfile": "Dockerfile"}}
+-- outside.json --
+{"features": {"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}}}
+-- java.json --
+{"features": {"ghcr.io/devcontainers/features/java:1": {}}}
+-- invalid.json --
+{
+  // a missing comma
+  "image": "node:24"
+  "forwardPorts": [3000]
+}
+-- unknown-image.json --
+{"image": "debian:13"}
+-- local-image.json --
+{"image": "localhost:5000/app:1"}
+-- bad-ls --
+.devcontainer.json
+-- web-ls --
+.devcontainer
+.git
+-- web.json --
+{
+  // The project's container.
+  "name": "web",
+  "image": "node:24",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {"moby": false},
+  },
+  "forwardPorts": [3000, "localhost:5173", "db:5432"],
+  "containerEnv": {"GREETING": "it's ${containerWorkspaceFolderBasename}"},
+  "remoteEnv": {"PATH": "${containerEnv:PATH}:/opt/web"},
+  "initializeCommand": "touch pwned",
+  "onCreateCommand": "echo made > ~/made",
+  "postCreateCommand": {"b": ["touch", "b"], "a": "echo a"},
+  "postStartCommand": "echo started >> ~/started",
+  "runArgs": ["--privileged"],
+  "bogus": true,
+}
+-- changed.json --
+{"image": "node:24", "forwardPorts": [9000]}

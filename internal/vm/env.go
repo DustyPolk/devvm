@@ -20,6 +20,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -87,6 +88,9 @@ type Env struct {
 	// PortInUse reports whether a program on the host has a port, on any
 	// address (platform.PortInUse): a listed port that isn't forwarded.
 	PortInUse func(ctx context.Context, port int) bool
+	// PublicImage pins an image a devcontainer.json names to the digest its
+	// registry gives anyone (from.Lookup.Public).
+	PublicImage func(ctx context.Context, ref string) (string, error)
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
 	// asks which features base gets (build.Env.Pick); Terminal reports
 	// whether it can ask.
@@ -142,7 +146,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Terminal: u.StdinIsTerminal,
 		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		PortInUse: platform.PortInUse,
+		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
 	e.Agent = sshagent.New(d, e.mounts, u)

@@ -41,6 +41,9 @@ Options for a new VM:
 | `--ports all\|none\|LIST` | which ports the VM forwards ([details](#size-and-ports)) |
 | `--backend NAME` | the [backend](backends.md#choosing-a-backend) that runs it |
 | `--from IMAGE` | start its base from a container image (`node:24`) instead of Ubuntu's cloud image ([details](from.md)) |
+| `--no-devcontainer` | create the VM without reading the folder's `devcontainer.json` ([details](devcontainer.md)) |
+
+A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets the VM it describes, as far as devvm does it: its image, ports, environment and commands, and the features devvm has layers for ([`devcontainer.json`](devcontainer.md)). Options you give win over it.
 
 Without either network policy flag devvm asks in a terminal, no by default; without a terminal the VM gets no network policy.
 
@@ -69,12 +72,12 @@ A size or ports file that doesn't hold one is refused, like a bad flag.
 1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
 2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
 3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection (`devvm git-protect` changes it), size (`devvm size` changes it), ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend and `--from`.
-5. It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
+4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection (`devvm git-protect` changes it), size (`devvm size` changes it), ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend, `--from` and `--no-devcontainer`.
+5. It warns when the folder's `devcontainer.json` isn't the one the VM was made from ([details](devcontainer.md#when-its-read)). It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
 6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) its state asks for; a running one gets them when it next starts, and devvm says so. A VM that forwards your agent has it checked for keys; one that uses devvm's own gets the keys it lacks loaded.
 7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.
 8. The [self-check](network.md#the-self-check) runs: a VM whose network policy doesn't hold is stopped.
-9. It sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first.
+9. It sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first. On the first launch after the VM started, the `postStartCommand` of the `devcontainer.json` it was made from runs before the shell opens ([commands](devcontainer.md#commands)).
 
 A VM whose creation didn't finish (devvm was stopped after making it, before it recorded the network choice) is never started: it would start without network policy. `devvm rm` deletes it.
 

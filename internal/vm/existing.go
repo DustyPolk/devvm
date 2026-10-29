@@ -134,7 +134,8 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 }
 
 // launch takes a VM that exists, made for this folder, through what each
-// launch of it does before its setup: .git checked (and on Linux, set-id
+// launch of it does before its setup: the folder's devcontainer.json
+// compared with the one it was made from; .git checked (and on Linux, set-id
 // files) unless it's a --clone VM, which mounts neither; a stopped VM's
 // size, ports and SSH agent forwarding made what its state asks for; the
 // user's agent checked for keys when the VM forwards it; then it's
@@ -147,6 +148,7 @@ func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, erro
 		return backend.Confinement{}, err
 	}
 	running := in.Status == backend.StatusRunning
+	devcontainers(e).check(st, t.f.Dir)
 	// A clone mounts nothing of the folder's.
 	if !isClone(st) {
 		if err := e.Protector(t.f.Dir).Check(ctx, st, running); err != nil {
@@ -189,6 +191,9 @@ func (e Launch) warnIgnored(o Options) {
 	}
 	if o.SSHAgent {
 		e.Warn(msg.SSHAgentFlagIgnored())
+	}
+	if o.NoDevcontainer {
+		e.Warn(msg.NoDevcontainerFlagIgnored())
 	}
 }
 
