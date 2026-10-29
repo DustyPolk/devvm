@@ -15,8 +15,10 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // testUI prints nothing, runs commands as they are, counts no steps and
@@ -269,6 +271,32 @@ func TestCapsAreAllNative(t *testing.T) {
 		if !l.Caps()[f].IsNative() {
 			t.Errorf("%s isn't native", f)
 		}
+	}
+}
+
+// base's key hashes the pinned Ubuntu cloud image for the host: another
+// pin is another key.
+func TestKeyFilesPinUbuntu(t *testing.T) {
+	l, _, _ := testLima(t, "darwin")
+	keys := map[string]bool{}
+	for _, arch := range []string{"arm64", "amd64", ""} {
+		in := image.Inputs{Backend: Name, Assets: assets.FS}
+		if arch != "" {
+			l.Arch = arch
+			kf := l.KeyFiles()
+			if got, want := string(kf["ubuntu-image"]), ubuntu.CloudPin(arch); len(kf) != 1 || got != want {
+				t.Errorf("%s: KeyFiles = %q, want ubuntu-image %q", arch, kf, want)
+			}
+			in.BackendFiles = kf
+		}
+		key, err := in.Key(image.Base)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys[key] = true
+	}
+	if len(keys) != 3 {
+		t.Errorf("base's keys: %v, want one per pin and one without", keys)
 	}
 }
 

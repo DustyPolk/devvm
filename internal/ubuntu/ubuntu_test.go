@@ -98,8 +98,10 @@ func served(t *testing.T, test func(t *testing.T, dir, url string)) {
 var testAssets = fstest.MapFS{Keyring: {Data: []byte("key")}}
 
 func finder(url, arch string, g *fakeGPGV, notes *[]msg.M) *Finder {
+	pin := map[string]string{"arm64": "sha256:" + sumArm64, "amd64": "sha256:" + sumAmd64}[arch]
 	return &Finder{
-		URL: url, Assets: testAssets, Arch: arch, Client: NewClient(), GPGV: "gpgv", Run: g.run,
+		URL: url, Release: "release-20260101", Digest: pin,
+		Assets: testAssets, Arch: arch, Client: NewClient(), GPGV: "gpgv", Run: g.run,
 		Note: func(m msg.M) { *notes = append(*notes, m) },
 	}
 }
@@ -115,14 +117,16 @@ func wantMsg(t *testing.T, err error, id string, vals ...string) {
 	}
 }
 
-// The newest dated release with an image for this host, and its checksum;
-// a newer release without files is skipped. No release: no_ubuntu_image.
+// The pinned release's image for this host, with its pinned digest, once
+// the release's SHA256SUMS lists it; a newer release is never looked at.
 func TestImage(t *testing.T) {
 	t.Parallel()
 	served(t, func(t *testing.T, dir, url string) {
-		if err := os.Mkdir(filepath.Join(dir, "release-20260301"), 0o750); err != nil {
+		newer := filepath.Join(dir, "release-20260301")
+		if err := os.Mkdir(newer, 0o750); err != nil {
 			t.Fatal(err)
 		}
+		write(t, filepath.Join(newer, "SHA256SUMS"), strings.Repeat("3", 64)+" *ubuntu-"+Version+"-server-cloudimg-arm64.img\n")
 		for arch, sum := range map[string]string{"arm64": sumArm64, "amd64": sumAmd64} {
 			var notes []msg.M
 			img, err := finder(url, arch, &fakeGPGV{}, &notes).Image(t.Context())
@@ -137,28 +141,79 @@ func TestImage(t *testing.T) {
 				t.Errorf("String: %s", img)
 			}
 		}
-		for _, r := range []string{"release-20260101", "release-20260301"} {
-			if err := os.RemoveAll(filepath.Join(dir, r)); err != nil {
-				t.Fatal(err)
-			}
-		}
-		var notes []msg.M
-		_, err := finder(url, "arm64", &fakeGPGV{}, &notes).Image(t.Context())
-		wantMsg(t, err, "no_ubuntu_image", "url="+url, "version="+Version)
 	})
 }
 
-// A checksum that isn't 64 hex digits is skipped, never put in the
-// backend's config.
-func TestImageSkipsBadChecksums(t *testing.T) {
+// Anything but the pinned checksum in the pinned release's SHA256SUMS is
+// refused, never put in the backend's config; a missing release, or an
+// architecture without a pin, finds no image.
+func TestImageRefused(t *testing.T) {
 	t.Parallel()
-	served(t, func(t *testing.T, dir, url string) {
-		bad := strings.Repeat("a", 64) + `"}]|.mounts=[{"location":"~","writable":true}]|.x=[{"y":"`
-		write(t, filepath.Join(dir, "release-20260101", "SHA256SUMS"), bad+" *ubuntu-"+Version+"-server-cloudimg-arm64.img\n")
-		var notes []msg.M
-		_, err := finder(url, "arm64", &fakeGPGV{}, &notes).Image(t.Context())
-		wantMsg(t, err, "no_ubuntu_image", "url="+url, "version="+Version)
-	})
+	file := " *ubuntu-" + Version + "-server-cloudimg-arm64.img\n"
+	tests := []struct {
+		name, sums string // "" for no SHA256SUMS
+		release    string // the Finder's, when not release-20260101
+		noPin      bool
+		want       string
+	}{
+		{name: "another checksum", sums: strings.Repeat("3", 64) + file, want: "ubuntu_checksum_unpinned"},
+		{name: "the amd64 one only", sums: sumAmd64 + " *ubuntu-" + Version + "-server-cloudimg-amd64.img\n", want: "ubuntu_checksum_unpinned"},
+		{name: "not a checksum", sums: sumArm64 + `"}]|.mounts=[{"location":"~","writable":true}]` + file, want: "ubuntu_checksum_unpinned"},
+		{name: "no release", release: "release-20250101", want: "no_ubuntu_image"},
+		{name: "no pin", noPin: true, want: "no_ubuntu_image"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			served(t, func(t *testing.T, dir, url string) {
+				if tt.sums != "" {
+					write(t, filepath.Join(dir, "release-20260101", "SHA256SUMS"), tt.sums)
+				}
+				var notes []msg.M
+				f := finder(url, "arm64", &fakeGPGV{}, &notes)
+				if tt.release != "" {
+					f.Release = tt.release
+				}
+				if tt.noPin {
+					f.Digest = ""
+				}
+				_, err := f.Image(t.Context())
+				switch tt.want {
+				case "no_ubuntu_image":
+					wantMsg(t, err, tt.want, "release="+f.Release, "url="+url, "version="+Version)
+				default:
+					wantMsg(t, err, tt.want, "file=ubuntu-"+Version+"-server-cloudimg-arm64.img", "release=release-20260101", "url="+url)
+				}
+			})
+		})
+	}
+}
+
+// The pins: each architecture's digest, 64 hex digits, and what base's key
+// on Lima hashes; none for another architecture.
+func TestCloudPin(t *testing.T) {
+	t.Parallel()
+	if !release.MatchString(CloudRelease) || ReleaseDate(CloudRelease) == "" {
+		t.Errorf("CloudRelease %q isn't a dated release", CloudRelease)
+	}
+	for arch, sum := range map[string]string{"arm64": CloudSHA256Arm64, "amd64": CloudSHA256Amd64} {
+		if !digest.MatchString(sum) {
+			t.Errorf("%s: %q isn't a SHA-256", arch, sum)
+		}
+		if got := CloudDigest(arch); got != "sha256:"+sum {
+			t.Errorf("CloudDigest(%s) = %q", arch, got)
+		}
+		want := CloudRelease + " ubuntu-" + Version + "-server-cloudimg-" + arch + ".img sha256:" + sum
+		if got := CloudPin(arch); got != want {
+			t.Errorf("CloudPin(%s) = %q, want %q", arch, got, want)
+		}
+	}
+	if CloudPin("arm64") == CloudPin("amd64") {
+		t.Error("both architectures pin the same image")
+	}
+	if got := CloudDigest("riscv64"); got != "" {
+		t.Errorf("riscv64: %q", got)
+	}
 }
 
 // The checksums must be signed by Ubuntu's key, checked with gpgv in a
@@ -210,6 +265,11 @@ func TestImageSignature(t *testing.T) {
 		if len(notes) != 1 || notes[0].ID() != "ubuntu_unsigned" || len(g.calls) != 0 {
 			t.Errorf("without gpgv: notes %v, calls %q", notes, g.calls)
 		}
+
+		// Without gpgv, the pin still decides.
+		write(t, filepath.Join(dir, "release-20260101", "SHA256SUMS"), strings.Repeat("3", 64)+" *ubuntu-"+Version+"-server-cloudimg-arm64.img\n")
+		_, err = f.Image(t.Context())
+		wantMsg(t, err, "ubuntu_checksum_unpinned")
 	})
 }
 
@@ -227,6 +287,7 @@ func TestRealSignature(t *testing.T) {
 	}
 	f := New(assets.FS, func(string) string { return "file://" + src }, testUI{t})
 	f.GPGV, f.Arch = gpgv, "arm64"
+	f.Release, f.Digest = "release-20261016", "sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24"
 	img, err := f.Image(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -263,7 +324,7 @@ func TestRealSignature(t *testing.T) {
 func TestNew(t *testing.T) {
 	t.Parallel()
 	f := New(testAssets, func(string) string { return "" }, testUI{t})
-	if f.URL != DefaultURL || f.Assets == nil {
+	if f.URL != DefaultURL || f.Assets == nil || f.Release != CloudRelease || f.Digest != CloudDigest(f.Arch) {
 		t.Errorf("default: %+v", f)
 	}
 	f = New(testAssets, func(k string) string {
@@ -274,20 +335,6 @@ func TestNew(t *testing.T) {
 	}, testUI{t})
 	if f.URL != "file:///tmp/ubuntu" {
 		t.Errorf("%s: %s", URLEnv, f.URL)
-	}
-}
-
-func TestReleases(t *testing.T) {
-	t.Parallel()
-	listing := `<a href="release-20260101/">release-20260101/</a>
-<a href="release-20260927/">release-20260927/</a>
-<a href="current/">current/</a> <a href="release-2026/">release-2026/</a>`
-	got := Releases([]byte(listing))
-	if want := []string{"release-20260927", "release-20260101"}; !slices.Equal(got, want) {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	if got := Releases(nil); len(got) != 0 {
-		t.Errorf("empty listing: %q", got)
 	}
 }
 
@@ -346,8 +393,11 @@ func TestRedirects(t *testing.T) {
 		t.Errorf("same scheme: %v", err)
 	}
 	f := finder(srv.URL+"/file", "arm64", &fakeGPGV{}, &notes)
-	if _, err := f.Releases(t.Context()); !errors.Is(err, errRedirect) {
+	if _, err := f.fetch(t.Context(), f.URL+"/"); !errors.Is(err, errRedirect) {
 		t.Errorf("to file://: got %v, want a refused redirect", err)
+	}
+	if _, err := f.Image(t.Context()); err == nil {
+		t.Error("to file://: found an image")
 	}
 }
 
@@ -368,9 +418,9 @@ func TestRetries(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	f := &Finder{URL: srv.URL, Client: NewClient()}
-	rs, err := f.Releases(t.Context())
-	if err != nil || !slices.Equal(rs, []string{"release-20260101"}) || n.Load() != 3 {
-		t.Errorf("got %q, %v after %d requests", rs, err, n.Load())
+	body, err := f.fetch(t.Context(), srv.URL+"/")
+	if err != nil || string(body) != "release-20260101" || n.Load() != 3 {
+		t.Errorf("got %q, %v after %d requests", body, err, n.Load())
 	}
 	n.Store(0)
 	if _, err := f.fetch(t.Context(), srv.URL+"/missing"); err == nil || n.Load() != 1 {

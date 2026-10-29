@@ -123,6 +123,12 @@ func (l *Lima) Name() string { return Name }
 // limactl create's base.yaml and the conversion VM's oci/.
 func (l *Lima) assets() (string, error) { return state.WriteAssets(l.Dirs, l.Assets) }
 
+// KeyFiles is the pinned Ubuntu cloud image base starts from, for the
+// host's architecture.
+func (l *Lima) KeyFiles() map[string][]byte {
+	return map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
+}
+
 // Caps is what Lima has: everything, natively.
 func (l *Lima) Caps() backend.Caps {
 	caps := backend.Caps{}

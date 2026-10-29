@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/rogpeppe/go-internal/testscript"
+
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // TestScript runs testdata/script/*.txtar against a built devvm, in a sandbox.
@@ -167,14 +169,14 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	if err := os.WriteFile(filepath.Join(root, "config", "devvm", "base-features"), nil, 0o600); err != nil {
 		return err
 	}
-	// Ubuntu's cloud images: one dated release in a folder, never the
-	// network.
-	rel := filepath.Join(root, "ubuntu", "release-20260101")
+	// Ubuntu's cloud images: the pinned dated release in a folder, with the
+	// pinned checksums, never the network.
+	rel := filepath.Join(root, "ubuntu", ubuntu.CloudRelease)
 	if err := os.MkdirAll(rel, 0o750); err != nil {
 		return err
 	}
-	sums := strings.Repeat("1", 64) + " *ubuntu-26.04-server-cloudimg-arm64.img\n" +
-		strings.Repeat("2", 64) + " *ubuntu-26.04-server-cloudimg-amd64.img\n"
+	sums := ubuntu.CloudSHA256Arm64 + " *ubuntu-" + ubuntu.Version + "-server-cloudimg-arm64.img\n" +
+		ubuntu.CloudSHA256Amd64 + " *ubuntu-" + ubuntu.Version + "-server-cloudimg-amd64.img\n"
 	if err := os.WriteFile(filepath.Join(rel, "SHA256SUMS"), []byte(sums), 0o600); err != nil {
 		return err
 	}

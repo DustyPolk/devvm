@@ -198,7 +198,9 @@ func TestBuildImageRefuses(t *testing.T) {
 			l, f := buildLima(t, "darwin", status)
 			switch name {
 			case "no Ubuntu image":
-				l.Ubuntu = func(context.Context) (ubuntu.Image, error) { return ubuntu.Image{}, msg.NoUbuntuImage("x", "26.04") }
+				l.Ubuntu = func(context.Context) (ubuntu.Image, error) {
+					return ubuntu.Image{}, msg.NoUbuntuImage("release-20260101", "x", "26.04")
+				}
 			case "no memory in GiB":
 				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("memory: 8G\n")}}
 			case "no host memory":

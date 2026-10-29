@@ -123,7 +123,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `STUB_DIR` | `stub/`, for stubs' state |
 | `STUB_LOG` | `stub/calls`, the stubs' call log |
 | `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
-| `DEVVM_UBUNTU_URL` | `ubuntu/`, with one dated release |
+| `DEVVM_UBUNTU_URL` | `ubuntu/`, with the pinned dated release |
 | `DEVVM_KVM` | `stub/kvm`, a file standing in for Linux's `/dev/kvm` |
 | `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
 | `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
@@ -134,7 +134,7 @@ The built `devvm` has the checkout's `assets/` embedded, as a release has, and n
 
 `$WORK`, the script's own folder, is the current folder.
 
-Tests never touch the network. Downloads are served from a test server (`net/http/httptest`) or read from a `file://` folder. `DEVVM_UBUNTU_URL` replaces `https://cloud-images.ubuntu.com/releases/resolute`, where devvm lists Ubuntu's dated releases: point it at a folder of `release-YYYYMMDD/` folders, each with its `SHA256SUMS` and `SHA256SUMS.gpg`, as `file:///path/to/folder`. Container registries (`--from`) are a TLS test server in Go tests; scripts use pinned digests, which need no lookup, or set `HTTPS_PROXY` to a closed port, so lookups fail as offline ones do.
+Tests never touch the network. Downloads are served from a test server (`net/http/httptest`) or read from a `file://` folder. `DEVVM_UBUNTU_URL` replaces `https://cloud-images.ubuntu.com/releases/resolute`, where devvm finds Ubuntu's pinned dated release: point it at a folder with a `release-YYYYMMDD/` folder for the pin, with its `SHA256SUMS` (listing the pinned checksums) and `SHA256SUMS.gpg`, as `file:///path/to/folder`. Container registries (`--from`) are a TLS test server in Go tests; scripts use pinned digests, which need no lookup, or set `HTTPS_PROXY` to a closed port, so lookups fail as offline ones do.
 
 A command left running in the background (`exec devvm … &name&`) can be interrupted with `kill -INT name`. `wait_file FILE` waits up to 10 seconds for a file to appear, such as one a stub writes when it gets somewhere.
 

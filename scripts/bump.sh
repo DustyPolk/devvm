@@ -1,16 +1,18 @@
 #!/bin/bash
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh), internal/tools/mise.go (devvm's host mise) and
-# internal/ubuntu/ubuntu.go (Ubuntu's container image).
+# internal/ubuntu/ubuntu.go (Ubuntu's container and cloud images).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
 # Tools: apt docker mise rustup crane omb eza tealdeer
-#   apt: base's package snapshot, and Ubuntu's container image smolvm's and Docker's base start from
+#   apt: base's package snapshot, Ubuntu's container image smolvm's and Docker's base start from, and
+#        Ubuntu's cloud image Lima's base starts from
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
 # The shared tools themselves (node, claude, ...) aren't pinned: devvm resolves them per user.
-# Needs curl and jq. Checksums come from upstream's published sums where there are any; otherwise
-# they're computed from the download (said so in the output). Edited scripts change image keys, so
-# the affected images rebuild on next use: test with `devvm build <image>`, then `devvm gc`.
+# Needs curl and jq, and gpgv for apt. Checksums come from upstream's published sums where there are
+# any; otherwise they're computed from the download (said so in the output). Edited scripts change
+# image keys, so the affected images rebuild on next use: test with `devvm build <image>`, then
+# `devvm gc`.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 all="apt docker mise rustup crane omb eza tealdeer"
@@ -44,6 +46,7 @@ valid() {
     *_sha256*) re='^[0-9a-f]{64}$' ;;
     *_commit) re='^[0-9a-f]{40}$' ;;
     *_digest) re='^sha256:[0-9a-f]{64}$' ;;
+    *_release) re='^release-[0-9]{8}$' ;;
     apt_snapshot|*_built) re='^[0-9]{8}T[0-9]{6}Z$' ;;
   esac
   [[ $2 =~ $re ]] || { printf 'bump: upstream gave %s an unexpected value: %q\n' "$1" "$2" >&2; exit 1; }
@@ -114,16 +117,52 @@ ubuntu_image() {
   done
 }
 
-# The package snapshot base builds from, today's (UTC), and Ubuntu's container image smolvm's and
-# Docker's base start from, by digest. They move together, and only to an image built before the
-# snapshot: apt can't install what depends on the exact version of a package newer than the snapshot's.
+# ubuntu_cloud DATE sets cloud_release, the newest dated release of Ubuntu's cloud image (Lima's base)
+# before DATE (YYYYMMDD), and cloud_arm64 and cloud_amd64, its images' SHA-256s from its SHA256SUMS,
+# once gpgv finds them signed by Ubuntu's cloud image key (assets/layers/ubuntu-cloud.gpg), in a home
+# of its own so no other key counts. Else exit.
+ubuntu_cloud() {
+  local u=https://cloud-images.ubuntu.com/releases/resolute r
+  command -v gpgv >/dev/null || { echo "bump: needs gpgv (brew install gnupg, or apt install gpgv)" >&2; exit 1; }
+  fetch "$u/" > "$tmp/cloud-releases"
+  cloud_release=""
+  while read -r r; do
+    if [[ ${r#release-} < $1 ]]; then cloud_release=$r; break; fi
+  done < <(grep -o 'release-[0-9]\{8\}' "$tmp/cloud-releases" | sort -ru || true)
+  if [[ -z $cloud_release ]]; then
+    echo "bump: Ubuntu has no cloud image release before the snapshot's date $1" >&2
+    exit 1
+  fi
+  valid cloud_release "$cloud_release"
+  fetch "$u/$cloud_release/SHA256SUMS" > "$tmp/SHA256SUMS"
+  fetch "$u/$cloud_release/SHA256SUMS.gpg" > "$tmp/SHA256SUMS.gpg"
+  rm -rf "$tmp/gnupg"; mkdir -m 700 "$tmp/gnupg"
+  if ! GNUPGHOME="$tmp/gnupg" gpgv --keyring "$root/assets/layers/ubuntu-cloud.gpg" \
+      "$tmp/SHA256SUMS.gpg" "$tmp/SHA256SUMS" >"$tmp/gpgv.out" 2>&1; then
+    cat "$tmp/gpgv.out" >&2
+    echo "bump: Ubuntu's checksums for $cloud_release aren't signed by Ubuntu's cloud image key" >&2
+    exit 1
+  fi
+  cloud_arm64=$(cloud_sum arm64); cloud_amd64=$(cloud_sum amd64)
+}
+# cloud_sum ARCH: the arch's image's checksum in the fetched SHA256SUMS.
+cloud_sum() {
+  awk -v f="ubuntu-26.04-server-cloudimg-$1.img" '$2 == f || $2 == "*" f { print $1; exit }' "$tmp/SHA256SUMS"
+}
+
+# The package snapshot base builds from, today's (UTC); Ubuntu's container image smolvm's and Docker's
+# base start from, by digest; and Ubuntu's cloud image Lima's base starts from, by dated release and
+# SHA-256. They move together, and only to images made before the snapshot: apt can't install what
+# depends on the exact version of a package newer than the snapshot's.
 bump_apt() {
-  local f=assets/layers/base.sh g=internal/ubuntu/ubuntu.go cur new img want=false
+  local f=assets/layers/base.sh g=internal/ubuntu/ubuntu.go cur new img rel want=false
   cur=$(get $f apt_snapshot); new=$(date -u +%Y%m%dT000000Z)
-  img=$(get_const $g ContainerDigest)
+  img=$(get_const $g ContainerDigest); rel=$(get_const $g CloudRelease)
   ubuntu_image
+  ubuntu_cloud "${new:0:8}"
   if report apt "$cur" "$new"; then want=true; fi
   if report ubuntu "${img:7:12}" "${ubuntu_digest:7:12}"; then want=true; fi
+  if report ubuntu-cloud "$rel" "$cloud_release"; then want=true; fi
   $want || return 0
   if [[ ! $ubuntu_built < $new ]]; then
     echo "bump: Ubuntu's image was built at $ubuntu_built, after today's snapshot $new: bump apt tomorrow" >&2
@@ -131,6 +170,9 @@ bump_apt() {
   fi
   set_var $f apt_snapshot "$new"
   set_var $g ContainerDigest "$ubuntu_digest" ubuntu_digest
+  set_var $g CloudRelease "$cloud_release" cloud_release
+  set_var $g CloudSHA256Arm64 "$cloud_arm64" cloud_sha256_arm64
+  set_var $g CloudSHA256Amd64 "$cloud_amd64" cloud_sha256_amd64
 }
 
 # Docker's packages: the newest of each in its repository for base's Ubuntu release, and its signing key.

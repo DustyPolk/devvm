@@ -1534,9 +1534,9 @@ func NoToken() M {
 	return M{id: "no_token"}
 }
 
-// NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image at {{.url}}: check you're online"
-func NoUbuntuImage(url string, version string) M {
-	return M{id: "no_ubuntu_image", vals: []val{{"url", url}, {"version", version}}}
+// NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}}: check you're online, or update devvm if Ubuntu removed it"
+func NoUbuntuImage(release string, url string, version string) M {
+	return M{id: "no_ubuntu_image", vals: []val{{"release", release}, {"url", url}, {"version", version}}}
 }
 
 // NoVM is [no_vm]: "no VM for {{.dir}}: devvm makes one"
@@ -2219,6 +2219,11 @@ func UbuntuBadSignature(release string, url string) M {
 	return M{id: "ubuntu_bad_signature", vals: []val{{"release", release}, {"url", url}}}
 }
 
+// UbuntuChecksumUnpinned is [ubuntu_checksum_unpinned]: "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins: not using it"
+func UbuntuChecksumUnpinned(file string, release string, url string) M {
+	return M{id: "ubuntu_checksum_unpinned", vals: []val{{"file", file}, {"release", release}, {"url", url}}}
+}
+
 // UbuntuUnsigned is [ubuntu_unsigned]: "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
 func UbuntuUnsigned() M {
 	return M{id: "ubuntu_unsigned"}
@@ -2677,7 +2682,7 @@ var specs = map[string]spec{
 	"no_terminal_delete":               {},
 	"no_terminal_fetch":                {fields: []string{"remote"}},
 	"no_token":                         {},
-	"no_ubuntu_image":                  {fields: []string{"url", "version"}},
+	"no_ubuntu_image":                  {fields: []string{"release", "url", "version"}},
 	"no_vm":                            {fields: []string{"dir"}},
 	"no_vm_git_protect":                {fields: []string{"dir"}},
 	"no_vm_policy":                     {fields: []string{"dir"}},
@@ -2814,6 +2819,7 @@ var specs = map[string]spec{
 	"tools_resolve_failed":             {},
 	"tools_switch":                     {fields: []string{"vm"}},
 	"ubuntu_bad_signature":             {fields: []string{"release", "url"}},
+	"ubuntu_checksum_unpinned":         {fields: []string{"file", "release", "url"}},
 	"ubuntu_unsigned":                  {},
 	"uncommitted_not_copied":           {fields: []string{"branch", "dir", "remote"}},
 	"unfetched_commits":                {fields: []string{"refs"}},

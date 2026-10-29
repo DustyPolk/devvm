@@ -1,9 +1,9 @@
-// Package ubuntu pins Ubuntu's container image and finds Ubuntu's cloud
-// image for base. The cloud image is Lima's: the newest dated
-// release of the series with an image for the host, and the image's
-// checksum from that release's SHA256SUMS. When gpgv is installed,
-// SHA256SUMS must be signed by Ubuntu's cloud image key, pinned in devvm's
-// own files (layers/ubuntu-cloud.gpg).
+// Package ubuntu pins Ubuntu's container image and cloud image for base.
+// The cloud image is Lima's: a pinned dated release of the series, and its
+// image's SHA-256 for each architecture. Finding it reads that release's
+// SHA256SUMS, which must list the pinned checksum; when gpgv is installed,
+// SHA256SUMS must also be signed by Ubuntu's cloud image key, pinned in
+// devvm's own files (layers/ubuntu-cloud.gpg).
 //
 // The image itself isn't downloaded here: the backend fetches it and checks
 // it against the digest.
@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
 
@@ -60,6 +59,42 @@ const ContainerRef = ContainerRepo + "@" + ContainerDigest
 // digest.
 const ContainerOrigin = ContainerRepo + ":" + Version + "@" + ContainerDigest
 
+// CloudRelease pins the cloud image Lima's base starts from: Series' dated
+// release on DefaultURL. scripts/bump.sh moves it with layers/base.sh's
+// package snapshot, to the newest release dated before the snapshot, for
+// the reason ContainerDigest moves with it.
+const CloudRelease = "release-20261016"
+
+// CloudSHA256Arm64 is CloudRelease's arm64 image's SHA-256, from its
+// signed SHA256SUMS.
+const CloudSHA256Arm64 = "8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24"
+
+// CloudSHA256Amd64 is CloudRelease's amd64 image's SHA-256, from its
+// signed SHA256SUMS.
+const CloudSHA256Amd64 = "5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5"
+
+// CloudDigest is CloudRelease's image's digest for an architecture (arm64,
+// amd64), sha256:<hex>; "" for one without an image.
+func CloudDigest(arch string) string {
+	switch arch {
+	case "arm64":
+		return "sha256:" + CloudSHA256Arm64
+	case "amd64":
+		return "sha256:" + CloudSHA256Amd64
+	}
+	return ""
+}
+
+// CloudPin is the pinned cloud image for an architecture, as base's key on
+// Lima hashes it: "<release> <file> <digest>".
+func CloudPin(arch string) string {
+	return CloudRelease + " " + cloudFile(arch) + " " + CloudDigest(arch)
+}
+
+func cloudFile(arch string) string {
+	return "ubuntu-" + Version + "-server-cloudimg-" + arch + ".img"
+}
+
 const (
 	timeout = 60 * time.Second // per request, body included
 	maxBody = 4 << 20          // the listing and SHA256SUMS are a few KB
@@ -77,9 +112,14 @@ func (i Image) String() string { return i.URL + " " + i.Digest }
 
 // Finder looks up the image. New fills it in; tests change its fields.
 type Finder struct {
-	// URL lists the dated releases (release-YYYYMMDD/), each with its
+	// URL holds the dated releases (release-YYYYMMDD/), each with its
 	// SHA256SUMS and SHA256SUMS.gpg. http(s):// or file://.
 	URL string
+	// Release is the dated release to use: CloudRelease.
+	Release string
+	// Digest is the release's image's for Arch, sha256:<hex>: CloudDigest's;
+	// "" when there's none.
+	Digest string
 	// Assets holds devvm's own files, Keyring among them.
 	Assets fs.FS
 	// Arch is the host's, as Go and Ubuntu's image names have it (arm64,
@@ -116,6 +156,8 @@ func New(assets fs.FS, getenv func(string) string, u UI) *Finder {
 	}
 	return &Finder{
 		URL:        strings.TrimRight(url, "/"),
+		Release:    CloudRelease,
+		Digest:     CloudDigest(runtime.GOARCH),
 		Assets:     assets,
 		Arch:       runtime.GOARCH,
 		Client:     NewClient(),
@@ -153,40 +195,33 @@ func sameScheme(req *http.Request, via []*http.Request) error {
 }
 
 // File is the image's file name in a release.
-func (f *Finder) File() string {
-	return "ubuntu-" + Version + "-server-cloudimg-" + f.Arch + ".img"
-}
+func (f *Finder) File() string { return cloudFile(f.Arch) }
 
-// Image returns the newest dated release's image for the host, checked
-// against that release's SHA256SUMS (signature-checked when gpgv is
-// installed). A release without the image or a usable checksum is skipped:
-// a new release's folder can appear before its files. It fails with
-// no_ubuntu_image when no release has one, and ubuntu_bad_signature when
-// the newest that has one isn't signed by Ubuntu's key.
+// Image returns the pinned release's image for the host, with its pinned
+// digest, once the release's SHA256SUMS (signature-checked when gpgv is
+// installed) lists that digest for it. It fails with no_ubuntu_image when
+// the host's architecture has no pin or the release's SHA256SUMS can't be
+// fetched, ubuntu_bad_signature when they aren't signed by Ubuntu's key,
+// and ubuntu_checksum_unpinned when they list another checksum.
 func (f *Finder) Image(ctx context.Context) (Image, error) {
-	releases, _ := f.Releases(ctx) // a failed listing finds no image
+	if f.Digest == "" {
+		return Image{}, msg.NoUbuntuImage(f.Release, f.URL, Version)
+	}
+	sums, err := f.fetch(ctx, f.URL+"/"+f.Release+"/SHA256SUMS")
+	if err != nil {
+		if ctx.Err() != nil {
+			return Image{}, ctx.Err()
+		}
+		return Image{}, msg.NoUbuntuImage(f.Release, f.URL, Version)
+	}
+	if err := f.verify(ctx, f.Release, sums); err != nil {
+		return Image{}, err
+	}
 	file := f.File()
-	for _, r := range releases {
-		sums, err := f.fetch(ctx, f.URL+"/"+r+"/SHA256SUMS")
-		if err != nil {
-			if ctx.Err() != nil {
-				return Image{}, ctx.Err()
-			}
-			continue
-		}
-		sum := Checksum(sums, file)
-		if sum == "" {
-			continue
-		}
-		if err := f.verify(ctx, r, sums); err != nil {
-			return Image{}, err
-		}
-		return Image{URL: f.URL + "/" + r + "/" + file, Digest: "sha256:" + sum}, nil
+	if "sha256:"+Checksum(sums, file) != f.Digest {
+		return Image{}, msg.UbuntuChecksumUnpinned(file, f.Release, f.URL)
 	}
-	if ctx.Err() != nil {
-		return Image{}, ctx.Err()
-	}
-	return Image{}, msg.NoUbuntuImage(f.URL, Version)
+	return Image{URL: f.URL + "/" + f.Release + "/" + file, Digest: f.Digest}, nil
 }
 
 var release = regexp.MustCompile(`release-[0-9]{8}`)
@@ -196,28 +231,6 @@ var release = regexp.MustCompile(`release-[0-9]{8}`)
 func ReleaseDate(url string) string {
 	r := release.FindString(url)
 	return strings.TrimPrefix(r, "release-")
-}
-
-// Releases returns the dated releases in the listing at URL, newest first.
-func (f *Finder) Releases(ctx context.Context) ([]string, error) {
-	page, err := f.fetch(ctx, f.URL+"/")
-	if err != nil {
-		return nil, err
-	}
-	return Releases(page), nil
-}
-
-// Releases returns the dated release names (release-20260101) in a
-// listing, newest first, each once.
-func Releases(listing []byte) []string {
-	var rs []string
-	for _, m := range release.FindAll(listing, -1) {
-		rs = append(rs, string(m))
-	}
-	slices.Sort(rs)
-	rs = slices.Compact(rs)
-	slices.Reverse(rs)
-	return rs
 }
 
 var digest = regexp.MustCompile(`^[0-9a-f]{64}$`)

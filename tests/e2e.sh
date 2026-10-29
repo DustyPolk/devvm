@@ -151,6 +151,10 @@ else : > "$XDG_CONFIG_HOME/devvm/base-features"; fi
 D=$src/devvm
 # The digest of Ubuntu's container image smolvm's and Docker's base start from, as devvm pins it.
 ubuntu_pin=$(sed -n 's/^const ContainerDigest = "\(sha256:[0-9a-f]\{64\}\)"$/\1/p' "$root/internal/ubuntu/ubuntu.go")
+# The dated release of Ubuntu's cloud image Lima's base starts from, and its images' SHA-256s.
+cloud_pin() { sed -n "s/^const $1 = \"\([0-9a-z-]*\)\"$/\1/p" "$root/internal/ubuntu/ubuntu.go"; }
+cloud_release=$(cloud_pin CloudRelease)
+cloud_sums="$(cloud_pin CloudSHA256Arm64)|$(cloud_pin CloudSHA256Amd64)"
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
 vms=$XDG_DATA_HOME/devvm/vms         # the VMs' state, one per VM
@@ -425,10 +429,11 @@ kf=$(keys_of e2efix | head -1)
 # A cached base's key: the one the fixture was built on (other selections' bases, with other
 # features, are cached too, and may be newer).
 [[ -n $kb ]] || kb=$(sed -n 's/^chain=base=\([0-9a-f]*\) e2efix=.*$/\1/p' "$images/$kf" 2>/dev/null)
-check "base is a stopped image, recorded with Ubuntu's image and its C library" bash -c "
+check "base is a stopped image, recorded with Ubuntu's pinned cloud image and its C library" bash -c "
   [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
   grep -qx 'chain=base=$kb' '$images/$kb' && grep -qx 'libc=gnu' '$images/$kb' && grep -qx 'from=' '$images/$kb' &&
-  grep -qE '^digest=https://cloud-images\.ubuntu\.com/.*/release-[0-9]{8}/.*\.img sha256:[0-9a-f]{64}$' '$images/$kb'"
+  [[ -n '$cloud_release' ]] &&
+  grep -qE '^digest=https://cloud-images\.ubuntu\.com/.*/$cloud_release/.*\.img sha256:($cloud_sums)$' '$images/$kb'"
 check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
 check "devvm limactl runs Lima on devvm's Lima home, whatever LIMA_HOME says, with its exit code" bash -c "
   [[ -n '$kb' ]] && LIMA_HOME='$work/no-lima' '$D' limactl list -q </dev/null | grep -qx devvm-img-$kb &&

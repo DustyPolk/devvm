@@ -37,7 +37,7 @@ stdout '^==> image_ready image=base$'
 stub_calls
 ! stdout '^docker'
 stdout '^gpgv --keyring '
-stdout '^limactl create --tty=false --mount-none --name=devvm-oci-build --set \.images = \[\{"location":"file://.*/release-20260101/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:(1{64}|2{64})"\}\] --set \.mounts = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm","writable":true\},\{"location":"/\S*/oci","writable":false\}\] --memory=[0-9.]+ /\S*/base\.yaml$'
+stdout '^limactl create --tty=false --mount-none --name=devvm-oci-build --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --set \.mounts = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm","writable":true\},\{"location":"/\S*/oci","writable":false\}\] --memory=[0-9.]+ /\S*/base\.yaml$'
 stdout '^limactl start --tty=false devvm-oci-build$'
 stdout '^limactl shell --workdir / devvm-oci-build sudo bash /\S*/data/devvm/assets/[0-9a-f]{16}/oci/build\.sh /\S*/data/devvm/assets/[0-9a-f]{16}/oci /\S*/tmp/devvm-oci\.[0-9]+/vm node:24@sha256:a{64} node:24@sha256:a{64} \S+ [0-9]+ /home/\S+\.guest 20G$'
 stdout '^limactl delete -f devvm-oci-build\nlimactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/disk\.raw","arch":"(aarch64|x86_64)","kernel":\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/kernel","cmdline":"root=/dev/vda rw console=hvc0"\},"initrd":\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/initrd"\}\}\] --memory=[0-9.]+ /\S*/base\.yaml$'

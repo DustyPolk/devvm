@@ -13,15 +13,17 @@ Each download in `assets/layers/base.sh` is pinned to a version and SHA-256 at t
 
 ### Ubuntu's cloud image
 
-Ubuntu removes its dated cloud images after a few months, so base doesn't pin one. Building base takes the newest dated release of Ubuntu 26.04 (`release-YYYYMMDD` on cloud-images.ubuntu.com) that has an image for the host, arm64 or amd64. A newer release whose files aren't there yet is skipped.
+On Lima, base starts from a pinned dated release of Ubuntu 26.04's cloud image (`release-YYYYMMDD` on cloud-images.ubuntu.com), with its image's SHA-256 for arm64 and amd64 (`CloudRelease`, `CloudSHA256Arm64` and `CloudSHA256Amd64` in `internal/ubuntu/ubuntu.go`). The pin moves with base's package snapshot, to the newest release dated before the snapshot, as smolvm's and Docker's container image does ([maintaining](maintaining.md#updating-pinned-versions)): a release with newer packages than the snapshot's leaves apt unable to install what depends on their exact versions.
 
 The image is checked before it's used:
 
-- Its SHA-256 comes from that release's `SHA256SUMS`, and the download must match it. A checksum that isn't 64 hex digits is ignored.
+- The release's `SHA256SUMS` must list the pinned SHA-256 for the host's image, and the download must match it. Any other checksum is refused (`ubuntu_checksum_unpinned`).
 - When `gpgv` is installed (`brew install gnupg`, or `apt install gpgv`), `SHA256SUMS` must be signed by Ubuntu's cloud image key, pinned in `assets/layers/ubuntu-cloud.gpg` (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`). No other key counts. When the signature is missing or doesn't match, devvm refuses the image.
-- Without `gpgv`, devvm says so, and only the HTTPS download vouches for the checksums.
+- Without `gpgv`, devvm says so; the pinned SHA-256 still decides.
 
-The Ubuntu image isn't part of base's key: a newer one doesn't make base stale. base's record keeps the one it was built from (its address and SHA-256), and `devvm rebuild base` takes the newest.
+Ubuntu removes its dated releases after a few months. Once the pinned one is gone, base can't be built on Lima (`no_ubuntu_image`) until devvm is updated to a newer pin.
+
+The pinned release and SHA-256 are part of base's key, so a new pin rebuilds base. base's record keeps the image it was built from (its address and SHA-256).
 
 ## Layers
 
@@ -126,7 +128,7 @@ Images are built in layers and cached, like Docker's. `base` comes first, and ea
 
 | Image | Its key hashes |
 | --- | --- |
-| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it; on smolvm and Docker, their scripts for containers and Ubuntu's container image, pinned by digest |
+| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it; on Lima, Ubuntu's pinned cloud image for the host (its release and SHA-256); on smolvm and Docker, their scripts for containers and Ubuntu's container image, pinned by digest |
 | a built-in layer | its parent's key, its name, its script (`assets/layers/<name>.sh`) and its rebuild counter |
 | a custom layer | its parent's key, its name, its script (`~/.config/devvm/layers/<name>.sh`) and its rebuild counter |
 
@@ -142,7 +144,7 @@ An image whose key no longer matches its inputs is stale. It stays until it's de
 
 ### Rebuilding
 
-`devvm rebuild <image>` builds an image again from its parent as it is: for the newest packages a script installs without a pin, or for base, Ubuntu's newest cloud image. It changes the image's rebuild counter (`~/.local/share/devvm/images/rebuilds/<image>`, or `<image>@<from>` with `--from`, kept apart for each image base starts from), which its key hashes, so the image gets a new key, and so does every image on it.
+`devvm rebuild <image>` builds an image again from its parent as it is: for the newest packages a script installs without a pin. It changes the image's rebuild counter (`~/.local/share/devvm/images/rebuilds/<image>`, or `<image>@<from>` with `--from`, kept apart for each image base starts from), which its key hashes, so the image gets a new key, and so does every image on it.
 
 When images are built on it, devvm lists them first, and in a terminal asks before going on. After the build, it deletes every stale image no VM uses: the old one and those built on it among them. They're built again, on the new one, the next time they're needed. On Linux hosts, an image whose disk VMs are overlays of stays, and devvm says which VMs use it.
 
