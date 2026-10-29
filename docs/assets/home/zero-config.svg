@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 140" role="img" aria-labelledby="art-zero-config">
+  <title id="art-zero-config">A folder, ~/web, with package.json and pyproject.toml becomes a VM with node and python: devvm reads the folder's files.</title>
+  <!-- The folder: a tab, a shadow, a panel. -->
+  <rect class="f" x="14" y="21" width="49" height="7"/>
+  <rect class="f" x="21" y="35" width="140" height="98"/>
+  <rect class="f" x="14" y="28" width="140" height="98"/>
+  <rect class="s" x="15" y="29" width="138" height="96"/>
+  <text class="t" x="21" y="53">~/web</text>
+  <text x="21" y="81"><tspan class="a">■</tspan> package.json</text>
+  <text x="21" y="95"><tspan class="a">■</tspan> pyproject.toml</text>
+  <text class="d" x="21" y="109">□ README.md</text>
+  <!-- The arrow. -->
+  <text class="a" x="161" y="81">░▒▓</text>
+  <rect class="a" x="182" y="70" width="21" height="14"/>
+  <polygon class="a" points="203,63 217,77 203,91"/>
+  <!-- The VM: a shadow, a panel, its toolchains as chips. -->
+  <rect class="f" x="231" y="35" width="133" height="98"/>
+  <rect class="f" x="224" y="28" width="133" height="98"/>
+  <rect class="s" x="225" y="29" width="131" height="96"/>
+  <text class="t" x="231" y="53">devvm-web</text>
+  <rect class="a" x="231" y="70" width="42" height="14"/>
+  <text class="k" x="238" y="81">node</text>
+  <rect class="a" x="280" y="70" width="56" height="14"/>
+  <text class="k" x="287" y="81">python</text>
+  <text class="d" x="231" y="109">node+python</text>
+</svg>

@@ -8,6 +8,8 @@
   --devvm-muted: #666666;
   --devvm-accent: #7fff00;
   --devvm-accent-soft: #c3e88d;
+  /* The blue of commands (cd) in Hextra's syntax highlighting. */
+  --devvm-blue: #0086b3;
 
   /* Hextra's primary shades are made from these: #7fff00. */
   --primary-hue: 90deg;
@@ -160,6 +162,7 @@ html.dark .highlight .chroma .go {
   margin: 4rem 0 1.25rem;
 }
 
+#content > .hx\:items-start > .asciinema-player,
 #content > .hx\:items-start > .hextra-code-block {
   width: 100%;
   margin-top: 1.5rem;
@@ -270,4 +273,98 @@ html.dark .highlight .chroma .go {
 
 #content > .hx\:items-start > ul > li > a:hover {
   color: var(--devvm-accent-soft);
+}
+
+/* The recording's player (asciinema's theme="devvm"): the iTerm2 profile it was recorded in, green on
+   black with xterm's 16 colors. On .ap-player itself: the player's stylesheet loads later and sets its
+   defaults there. */
+.ap-player.asciinema-player-theme-devvm {
+  --term-color-foreground: #00ff00;
+  --term-color-background: #000000;
+  --term-color-0: #000000;
+  --term-color-1: #bb0000;
+  --term-color-2: #00bb00;
+  --term-color-3: #bbbb00;
+  --term-color-4: #0000bb;
+  --term-color-5: #bb00bb;
+  --term-color-6: #00bbbb;
+  --term-color-7: #bbbbbb;
+  --term-color-8: #555555;
+  --term-color-9: #ff5555;
+  --term-color-10: #55ff55;
+  --term-color-11: #ffff55;
+  --term-color-12: #5555ff;
+  --term-color-13: #ff55ff;
+  --term-color-14: #55ffff;
+  --term-color-15: #ffffff;
+}
+
+.asciinema-player .ap-player {
+  border: 1px solid var(--devvm-border);
+  border-radius: 0.5rem;
+}
+
+/* The sections' art (docs/assets/home/, the art shortcode): text on Departure Mono's 7x14 cell at 11px,
+   drawn twice its size so each of the font's pixels is two of the screen's. */
+.devvm-art {
+  width: 728px;
+  max-width: 100%;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.devvm-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.devvm-art text {
+  font-family: var(--devvm-font-pixel);
+  font-size: 11px;
+  font-synthesis: none;
+  white-space: pre;
+  fill: var(--devvm-text-secondary);
+}
+
+.devvm-art .f {
+  fill: var(--devvm-blue);
+}
+
+.devvm-art .t {
+  fill: var(--devvm-text);
+}
+
+.devvm-art .m {
+  fill: var(--devvm-text-secondary);
+}
+
+.devvm-art .d {
+  fill: var(--devvm-muted);
+}
+
+.devvm-art .a {
+  fill: var(--devvm-accent);
+}
+
+/* Shapes: panels on the surface color, text on lime chips in the background's, the bare background. */
+.devvm-art rect,
+.devvm-art polygon {
+  shape-rendering: crispEdges;
+}
+
+.devvm-art .s {
+  fill: var(--devvm-surface);
+}
+
+.devvm-art .k,
+.devvm-art .bg {
+  fill: var(--devvm-bg);
+}
+
+/* Outlines (the globe): 1px lines, pixel-hard like the font. */
+.devvm-art .o {
+  fill: none;
+  stroke: var(--devvm-text);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
 }

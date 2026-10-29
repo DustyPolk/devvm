@@ -273,9 +273,11 @@ The site is [Hugo](https://gohugo.io) with the [Hextra](https://imfing.github.io
 - **Links** to other pages point at their files (`[Contributing](contributing.md)`), so the linters can check them.
 - **Style:** succinct and direct. Commands are written as devvm x or in backticks, never in quotes. No `please`, `simply` or `note that`.
 - **The home page** is `docs/content/_index.md`, on Hextra's `hextra-home` layout: its hero shortcodes, then plain Markdown.
-- **Colors:** the site is dark only (`hugo.yaml`'s `params.theme`). Its palette is in `docs/assets/css/custom.css`: a black background and one lime accent, `#7fff00`, which sets Hextra's primary color.
+- **Colors:** the site is dark only (`hugo.yaml`'s `params.theme`). Its palette is in `docs/assets/css/custom.css`: a black background and one lime accent, `#7fff00`, which sets Hextra's primary color. The home page's illustrations also use `#0086b3`, the blue that Hextra's syntax highlighting gives commands like `cd`.
 - **Fonts:** Instrument Sans for text and Martian Mono for code, from Google Fonts (`docs/layouts/_partials/custom/head-end.html`); Departure Mono, a pixel font in `docs/static/fonts/` with its license, for the logo, the home page's headings, badge and buttons. Departure Mono is sharp at multiples of 11px and has one weight.
 - **The logo** is the site's title in the navbar, styled in `custom.css`: a box, and a box-drawing lock on its corner.
+- **The illustrations** on the home page are SVGs in `docs/assets/home/`, and `{{</* art "name" */>}}` inlines one into the page, so that it gets the page's fonts and colors. Each one is drawn on Departure Mono's 11px cell, 7 pixels wide and 14 tall, and shown at twice its size, so its text and shapes stay sharp.
+- **The recording** at the top of the home page is `docs/assets/home/devvm.cast`, played by Hextra's `asciinema` shortcode with the `devvm` player theme in `custom.css`. The recording is a real run of devvm, made with `asciinema rec`. After recording, its commands were retimed so that they appear typed one letter at a time, and its bold colors were made bright, as the terminal it was recorded in shows them.
 
 `mise run lint` checks `docs/` with:
 

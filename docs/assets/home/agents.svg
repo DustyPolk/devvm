@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 140" role="img" aria-labelledby="art-agents">
+  <title id="art-agents">Your agents' skills are mounted into the VM read-only, their settings and MCP servers copied in, for claude, codex and opencode. Your token stays on your machine: the VM has a placeholder, and the proxy adds the token on the way to the API.</title>
+  <!-- Your machine. -->
+  <text class="m" x="7" y="11">your machine</text>
+  <rect class="f" x="7" y="14" width="126" height="126"/>
+  <rect class="s" x="8" y="15" width="124" height="124"/>
+  <text class="t" x="14" y="39">skills</text>
+  <text class="t" x="14" y="53">settings</text>
+  <text class="t" x="14" y="67">MCP servers</text>
+  <rect class="a" x="14" y="98" width="49" height="14"/>
+  <text class="k" x="21" y="109">token</text>
+  <!-- Into the VM. -->
+  <text class="m" x="140" y="39">─────ro────→</text>
+  <text class="m" x="140" y="53">────copy───→</text>
+  <text class="m" x="140" y="67">────copy───→</text>
+  <!-- The token: to the proxy, never the VM. -->
+  <rect class="a" x="63" y="103" width="91" height="4"/>
+  <rect class="f" x="154" y="98" width="49" height="14"/>
+  <text class="t" x="161" y="109">proxy</text>
+  <rect class="m" x="203" y="104" width="35" height="2"/>
+  <text class="a" x="175" y="123">↓</text>
+  <text class="a" x="168" y="137">API</text>
+  <!-- The VM. -->
+  <text class="m" x="231" y="11">VM</text>
+  <rect class="f" x="231" y="14" width="126" height="126"/>
+  <rect class="s" x="232" y="15" width="124" height="124"/>
+  <rect class="a" x="238" y="29" width="56" height="12"/>
+  <text class="k" x="245" y="39">claude</text>
+  <rect class="a" x="238" y="43" width="49" height="12"/>
+  <text class="k" x="245" y="53">codex</text>
+  <rect class="a" x="238" y="57" width="70" height="12"/>
+  <text class="k" x="245" y="67">opencode</text>
+  <text class="m" x="238" y="109">░░░░░░░</text>
+</svg>

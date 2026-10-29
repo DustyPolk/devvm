@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 140" role="img" aria-labelledby="art-copies">
+  <title id="art-copies">The base image is built once. Each VM, devvm-web, devvm-api and devvm-cli, is a copy of it, up in seconds. node, python, go, rust and claude are shared between them, read-only.</title>
+  <!-- The base image. -->
+  <rect class="f" x="14" y="35" width="70" height="56"/>
+  <rect class="f" x="7" y="28" width="70" height="56"/>
+  <rect class="s" x="8" y="29" width="68" height="54"/>
+  <text class="t" x="14" y="52">base</text>
+  <text class="m" x="14" y="70">▓▓▓▓▓▓▓▓</text>
+  <!-- The arrow, branching to each copy. -->
+  <text class="a" x="84" y="60">░▒</text>
+  <rect class="a" x="98" y="49" width="14" height="14"/>
+  <polygon class="a" points="112,42 126,56 112,70"/>
+  <rect class="m" x="126" y="27" width="2" height="58"/>
+  <rect class="m" x="126" y="27" width="7" height="2"/>
+  <rect class="m" x="126" y="83" width="7" height="2"/>
+  <!-- The VMs: copies. -->
+  <rect class="f" x="133" y="16" width="133" height="24"/>
+  <rect class="s" x="134" y="17" width="131" height="22"/>
+  <rect class="a" x="133" y="16" width="2" height="24"/>
+  <text x="140" y="32"><tspan class="t">devvm-web</tspan>   <tspan class="a">■ up</tspan></text>
+  <rect class="f" x="133" y="44" width="133" height="24"/>
+  <rect class="s" x="134" y="45" width="131" height="22"/>
+  <rect class="a" x="133" y="44" width="2" height="24"/>
+  <text x="140" y="60"><tspan class="t">devvm-api</tspan>   <tspan class="a">■ up</tspan></text>
+  <rect class="f" x="133" y="72" width="133" height="24"/>
+  <rect class="s" x="134" y="73" width="131" height="22"/>
+  <rect class="a" x="133" y="72" width="2" height="24"/>
+  <text x="140" y="88"><tspan class="t">devvm-cli</tspan>   <tspan class="a">■ up</tspan></text>
+  <!-- The shared tools. -->
+  <rect class="f" x="7" y="112" width="42" height="14"/>
+  <text class="t" x="14" y="123">node</text>
+  <rect class="f" x="56" y="112" width="56" height="14"/>
+  <text class="t" x="63" y="123">python</text>
+  <rect class="f" x="119" y="112" width="28" height="14"/>
+  <text class="t" x="126" y="123">go</text>
+  <rect class="f" x="154" y="112" width="42" height="14"/>
+  <text class="t" x="161" y="123">rust</text>
+  <rect class="f" x="203" y="112" width="56" height="14"/>
+  <text class="t" x="210" y="123">claude</text>
+  <text class="d" x="266" y="123">read-only</text>
+</svg>
