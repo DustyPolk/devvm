@@ -1,0 +1,273 @@
+/* The palette, from the JustBlack VS Code theme: black, one lime accent. */
+:root {
+  --devvm-bg: #000000;
+  --devvm-surface: #0f111a;
+  --devvm-border: #20474b;
+  --devvm-text: #eeeeee;
+  --devvm-text-secondary: #8f93a2;
+  --devvm-muted: #666666;
+  --devvm-accent: #7fff00;
+  --devvm-accent-soft: #c3e88d;
+
+  /* Hextra's primary shades are made from these: #7fff00. */
+  --primary-hue: 90deg;
+  --primary-saturation: 100%;
+  --primary-lightness: 50%;
+
+  /* Hextra's dark background. */
+  --hx-color-dark: var(--devvm-bg);
+
+  /* Hextra's navbar: its 3.5rem, and 30px more for the logo. */
+  --hextra-navbar-height: calc(3.5rem + 30px);
+
+  /* Fonts: Instrument Sans for text, Martian Mono for code, Departure Mono for the home page's hero. */
+  --hx-font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --hx-font-mono: "Martian Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --devvm-font-pixel: "Departure Mono", var(--hx-font-mono);
+}
+
+/* Code: Martian Mono narrower than its default, and no ligatures, so flags look as typed. */
+code,
+pre,
+kbd {
+  font-stretch: 87.5%;
+  font-variant-ligatures: none;
+}
+
+/* Martian Mono's regular reads heavy next to the text: lighter, and smoothed as the text is. */
+.hextra-code-block pre,
+code {
+  font-weight: 350;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.content :not(pre) > code {
+  font-size: 0.85em;
+}
+
+html.dark body {
+  background-color: var(--devvm-bg);
+  color: var(--devvm-text);
+}
+
+/* Code blocks on every page: a flat surface, not a tinted one. */
+html.dark .hextra-code-block pre {
+  background-color: var(--devvm-surface);
+  border-color: var(--devvm-border);
+  filter: none;
+}
+
+html.dark .highlight .chroma .gp {
+  color: var(--devvm-accent);
+}
+
+html.dark .highlight .chroma .go {
+  color: var(--devvm-text-secondary);
+}
+
+/* The logo in the navbar, on every page: the site's title, "devvm", at 22px in a 1px box (the weight of
+   Departure's 11px box lines), with an 11px box-drawing lock on its bottom-right corner. The prompt and
+   the lock are decoration: screen readers get "devvm". */
+.hextra-nav-container nav > a:first-child > span {
+  position: relative;
+  display: inline-block;
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1;
+  /* Right, in 11px characters (half a 22px one, 0.5ch): one space, then the lock's 1.5 inside the box. */
+  padding: 6px 1.25ch 6px 11px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
+/* The prompt, then the width of an 11px space: half of a 22px one. */
+.hextra-nav-container nav > a:first-child > span::before {
+  margin-right: 0.5ch;
+  content: "❯";
+  content: "❯" / "";
+}
+
+/* The lock: ┤ on the right border, ██ over the corner, each half a cell past the border's line. */
+.hextra-nav-container nav > a:first-child > span::after {
+  position: absolute;
+  right: calc(-0.5ch - 0.5px);
+  bottom: calc(-0.5lh - 0.5px);
+  font-size: 11px;
+  line-height: normal;
+  white-space: pre;
+  content: "╭┤\A██";
+  content: "╭┤\A██" / "";
+}
+
+/* The home page: Hextra's home layout wraps its content in this one div. */
+#content > .hx\:items-start {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding-top: 2rem;
+}
+
+/* Departure Mono: one weight, sized in 11px steps so its pixels stay whole. */
+#content > .hx\:items-start > h1 {
+  font-family: var(--devvm-font-pixel);
+  font-weight: 400;
+  font-synthesis: none;
+  font-size: 44px;
+  letter-spacing: 0;
+  line-height: 1.2;
+  background-image: none;
+  color: var(--devvm-text);
+  -webkit-text-fill-color: currentColor;
+  margin-top: 1rem;
+}
+
+@media (min-width: 768px) {
+  #content > .hx\:items-start > h1 {
+    font-size: 55px;
+  }
+}
+
+#content > .hx\:items-start > p {
+  color: var(--devvm-text-secondary);
+  max-width: 42rem;
+  margin: 1rem 0;
+  line-height: 1.75;
+}
+
+/* The subtitle: as wide as the page, under the headline. */
+#content > .hx\:items-start > p.not-prose {
+  max-width: none;
+}
+
+#content > .hx\:items-start > p > a {
+  color: var(--devvm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#content > .hx\:items-start > p > a:hover {
+  color: var(--devvm-accent-soft);
+}
+
+#content > .hx\:items-start > h2 {
+  color: var(--devvm-text);
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-weight: 400;
+  font-synthesis: none;
+  margin: 4rem 0 1.25rem;
+}
+
+#content > .hx\:items-start > .hextra-code-block {
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
+/* The badge, above the headline. */
+#content > .hx\:items-start > a.hx\:rounded-full {
+  font-family: var(--devvm-font-pixel);
+  font-size: 11px;
+  font-synthesis: none;
+  background-color: transparent;
+  border-color: var(--devvm-border);
+  color: var(--devvm-text-secondary);
+}
+
+#content > .hx\:items-start > a.hx\:rounded-full:hover {
+  border-color: var(--devvm-accent);
+  color: var(--devvm-text);
+}
+
+/* Hero buttons: lime with black text, then an outlined one. */
+/* Departure Mono at 22px, its next size up from 11px, with less padding than Hextra's.
+   Bold: the font has none, and a synthesized one blurs its pixels, so a 1px shadow thickens each stroke. */
+#content > .hx\:items-start > p > a.not-prose {
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-weight: 400;
+  font-synthesis: none;
+  text-shadow: 1px 0 0 currentColor;
+  line-height: 1;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--devvm-accent);
+  border: 1px solid var(--devvm-accent);
+  color: var(--devvm-bg);
+  text-decoration: none;
+}
+
+/* The buttons' row: spaced both ways when they wrap. */
+#content > .hx\:items-start > p:has(> a.not-prose) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+#content > .hx\:items-start > p > a.not-prose:hover {
+  background-color: var(--devvm-accent-soft);
+  border-color: var(--devvm-accent-soft);
+  color: var(--devvm-bg);
+}
+
+#content > .hx\:items-start > p > a.not-prose + a.not-prose {
+  background-color: transparent;
+  border-color: var(--devvm-border);
+  color: var(--devvm-text);
+}
+
+#content > .hx\:items-start > p > a.not-prose + a.not-prose:hover {
+  border-color: var(--devvm-accent);
+  color: var(--devvm-accent);
+}
+
+/* What it does: a subheading, then bullets marked with a lime dash. */
+#content > .hx\:items-start > h3 {
+  color: var(--devvm-text);
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 2rem 0 0.25rem;
+}
+
+#content > .hx\:items-start > ul {
+  max-width: 42rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#content > .hx\:items-start > ul > li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+  color: var(--devvm-text-secondary);
+  line-height: 1.75;
+}
+
+#content > .hx\:items-start > ul > li::before {
+  content: "-";
+  position: absolute;
+  left: 0;
+  color: var(--devvm-accent);
+  font-family: var(--hx-font-mono);
+}
+
+#content > .hx\:items-start > h2 + h3 {
+  margin-top: 0;
+}
+
+#content > .hx\:items-start > p > code,
+#content > .hx\:items-start > ul > li > code {
+  color: var(--devvm-accent-soft);
+  font-size: 0.85em;
+}
+
+#content > .hx\:items-start > ul > li > a {
+  color: var(--devvm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#content > .hx\:items-start > ul > li > a:hover {
+  color: var(--devvm-accent-soft);
+}

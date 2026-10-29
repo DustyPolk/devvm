@@ -1,6 +1,6 @@
 # devvm
 
-Create an isolated VM in any project folder with everything needed for you or an agent to start coding.
+One VM for every folder: an isolated sandbox with the project's toolchain, ready for you or an agent to start coding.
 
 ```sh
 cd ~/some-project
