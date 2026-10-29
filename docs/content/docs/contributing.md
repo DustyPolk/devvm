@@ -272,6 +272,10 @@ The site is [Hugo](https://gohugo.io) with the [Hextra](https://imfing.github.io
 - **Front matter** sets `title`, shown as the page's heading, and `weight`, the page's place in the sidebar. Start the body at `##`.
 - **Links** to other pages point at their files (`[Contributing](contributing.md)`), so the linters can check them.
 - **Style:** succinct and direct. Commands are written as devvm x or in backticks, never in quotes. No `please`, `simply` or `note that`.
+- **The home page** is `docs/content/_index.md`, on Hextra's `hextra-home` layout: its hero shortcodes, then plain Markdown.
+- **Colors:** the site is dark only (`hugo.yaml`'s `params.theme`). Its palette is in `docs/assets/css/custom.css`: a black background and one lime accent, `#7fff00`, which sets Hextra's primary color.
+- **Fonts:** Instrument Sans for text and Martian Mono for code, from Google Fonts (`docs/layouts/_partials/custom/head-end.html`); Departure Mono, a pixel font in `docs/static/fonts/` with its license, for the logo, the home page's headings, badge and buttons. Departure Mono is sharp at multiples of 11px and has one weight.
+- **The logo** is the site's title in the navbar, styled in `custom.css`: a box, and a box-drawing lock on its corner.
 
 `mise run lint` checks `docs/` with:
 
