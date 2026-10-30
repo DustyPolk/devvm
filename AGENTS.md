@@ -37,7 +37,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 ## Tasks
 
-`mise run <task>`: `fmt`; `lint` (Go, shellcheck, docs, `TestDocLinks`); `test` (`-race`, in a throwaway `HOME`; needs a C compiler); `vuln`; `deadcode` (lists only `backendtest`, which tests use; anything else gets a caller or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/devvm/`); `e2e`.
+`mise run <task>`: `fmt`; `lint` (`lint:code`: Go, shellcheck; `lint:docs`: docs, `TestDocLinks`); `test` (`-race`, in a throwaway `HOME`; needs a C compiler); `vuln`; `deadcode` (lists only `backendtest`, which tests use; anything else gets a caller or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/`); `e2e`.
 
 ## Rules
 

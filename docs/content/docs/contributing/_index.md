@@ -45,7 +45,9 @@ Run the tasks with `mise run <task>`:
 | Task | Does |
 | --- | --- |
 | `fmt` | formats Go code |
-| `lint` | runs golangci-lint, shellcheck, the docs linters and the message link check |
+| `lint` | runs `lint:code` and `lint:docs` |
+| `lint:code` | runs golangci-lint and shellcheck |
+| `lint:docs` | runs the docs linters and the message link check |
 | `test` | runs the tests with the race detector and coverage |
 | `vuln` | runs govulncheck |
 | `deadcode` | lists functions nothing calls outside the tests |
@@ -57,7 +59,7 @@ Run the tasks with `mise run <task>`:
 
 Before and after every change, `mise run fmt && mise run lint && mise run test` must pass.
 
-CI runs `lint` and `test` on macOS and Linux.
+CI runs `lint` and `test` on macOS and Linux. A change that touches only the docs and Markdown files skips them: the Docs workflow runs `lint:docs` and builds the site instead, and deploys it on every push to `main`.
 
 ## Go lint rules
 
@@ -280,7 +282,7 @@ The site is [Hugo](https://gohugo.io) with the [Hextra](https://imfing.github.io
 - **The illustrations** on the home page are SVGs in `docs/assets/home/`, and `{{</* art "name" */>}}` inlines one into the page, so that it gets the page's fonts and colors. Each one is drawn on Departure Mono's 11px cell, 7 pixels wide and 14 tall, and shown at twice its size, so its text and shapes stay sharp.
 - **The recording** at the top of the home page is `docs/assets/home/devvm.cast`, played by Hextra's `asciinema` shortcode with the `devvm` player theme in `custom.css`. The recording is a real run of devvm, made with `asciinema rec`. After recording, its commands were retimed so that they appear typed one letter at a time, and its bold colors were made bright, as the terminal it was recorded in shows them.
 
-`mise run lint` checks `docs/` with:
+`mise run lint:docs`, which `mise run lint` includes, checks `docs/` with:
 
 | Linter | Checks | Config |
 | --- | --- | --- |
@@ -302,4 +304,4 @@ The tests fail when the checked-in pages are stale: `TestReferenceIsCurrent` in 
 
 ### Building the site
 
-`mise run docs` serves the site at `http://localhost:1313/devvm/` and reloads on every change. `mise exec -- hugo -s docs --minify` builds it into `docs/public/`, as the Pages workflow does on every push to `main`.
+`mise run docs` serves the site at `http://localhost:1313/` and reloads on every change. `mise exec -- hugo -s docs --minify` builds it into `docs/public/`, as the Pages workflow does on every push to `main`.

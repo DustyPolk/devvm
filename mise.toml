@@ -25,6 +25,10 @@ run = "golangci-lint fmt"
 
 [tasks.lint]
 description = "Run every linter"
+depends = ["lint:code", "lint:docs"]
+
+[tasks."lint:code"]
+description = "Lint the Go code and shell scripts"
 run = [
   "golangci-lint run",
   # Shell scripts, found by a shebang on their first line (not the
@@ -34,6 +38,11 @@ run = [
     LC_ALL=C xargs -0 awk 'FNR == 1 { if ($0 ~ /^#!.*[\/ ](ba|da)?sh( |$)/) print FILENAME; nextfile }' |
     xargs -r shellcheck --external-sources
   ''',
+]
+
+[tasks."lint:docs"]
+description = "Lint the docs"
+run = [
   "markdownlint-cli2 'docs/content/**/*.md'",
   "vale docs/content",
   "lychee --offline --no-progress --include-fragments 'docs/content/**/*.md'",

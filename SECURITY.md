@@ -1,6 +1,6 @@
 # Security
 
-devvm's job is to keep what runs in a VM away from your machine. The [security model](https://w3cj.github.io/devvm/docs/safety/security/) says what it protects and what it doesn't.
+devvm's job is to keep what runs in a VM away from your machine. The [security model](https://devvm.dev/docs/safety/security/) says what it protects and what it doesn't.
 
 ## Report a vulnerability
 
@@ -22,5 +22,5 @@ Anything that breaks the security model, for example:
 
 ## Out of scope
 
-- What the [security model](https://w3cj.github.io/devvm/docs/safety/security/#what-it-doesnt-protect) lists under "What it doesn't protect", such as what allowed hosts and tokens permit, or VMs without network policy.
+- What the [security model](https://devvm.dev/docs/safety/security/#what-it-doesnt-protect) lists under "What it doesn't protect", such as what allowed hosts and tokens permit, or VMs without network policy.
 - Escapes through Lima, QEMU or Apple's Virtualization framework themselves: report those upstream. Do tell us if devvm uses them in an unsafe way.

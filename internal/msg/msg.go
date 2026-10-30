@@ -28,7 +28,7 @@ import (
 )
 
 // DocsBase is the docs site's address; doc links are under it.
-const DocsBase = "https://w3cj.github.io/devvm/docs/"
+const DocsBase = "https://devvm.dev/docs/"
 
 // M is a message with its values, made by the generated functions, and the
 // error it reports, if any (Because).

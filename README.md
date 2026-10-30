@@ -11,7 +11,7 @@ devvm detects the project's toolchain, creates a VM from a cached image, mounts 
 
 ## Quickstart
 
-devvm runs on macOS and Linux, with [Lima](https://lima-vm.io) 2.0 or newer. Install it with Homebrew (`brew install w3cj/tap/devvm`) or the install script, which offers to install what's missing ([Installing](https://w3cj.github.io/devvm/docs/getting-started/install/)). `devvm doctor` checks what's missing and how to get it.
+devvm runs on macOS and Linux, with [Lima](https://lima-vm.io) 2.0 or newer. Install it with Homebrew (`brew install w3cj/tap/devvm`) or the install script, which offers to install what's missing ([Installing](https://devvm.dev/docs/getting-started/install/)). `devvm doctor` checks what's missing and how to get it.
 
 ```console
 $ cd ~/some-project
@@ -24,11 +24,11 @@ $ devvm --network-policy base
 ==> starting devvm-some-project-71a99b1076d92c
 ```
 
-Then you're in a shell in the VM, in `~/some-project`. The first VM builds the base image. Later VMs are copies of it and start in seconds. With `--network-policy` the VM reaches only an allowlist of hosts, through a proxy on your machine ([network policy](https://w3cj.github.io/devvm/docs/safety/network/)); without a flag devvm asks. Before you trust a VM with a project, read [staying safe](https://w3cj.github.io/devvm/docs/safety/attack-vectors/#staying-safe).
+Then you're in a shell in the VM, in `~/some-project`. The first VM builds the base image. Later VMs are copies of it and start in seconds. With `--network-policy` the VM reaches only an allowlist of hosts, through a proxy on your machine ([network policy](https://devvm.dev/docs/safety/network/)); without a flag devvm asks. Before you trust a VM with a project, read [staying safe](https://devvm.dev/docs/safety/attack-vectors/#staying-safe).
 
 ## Docs
 
-[w3cj.github.io/devvm](https://w3cj.github.io/devvm/), from `docs/`: [your first VM](https://w3cj.github.io/devvm/docs/getting-started/first-vm/), [commands](https://w3cj.github.io/devvm/docs/getting-started/commands/), [the security model](https://w3cj.github.io/devvm/docs/safety/security/), [attack vectors](https://w3cj.github.io/devvm/docs/safety/attack-vectors/). Building, testing and writing docs: [Contributing](https://w3cj.github.io/devvm/docs/contributing/).
+[devvm.dev](https://devvm.dev/), from `docs/`: [your first VM](https://devvm.dev/docs/getting-started/first-vm/), [commands](https://devvm.dev/docs/getting-started/commands/), [the security model](https://devvm.dev/docs/safety/security/), [attack vectors](https://devvm.dev/docs/safety/attack-vectors/). Building, testing and writing docs: [Contributing](https://devvm.dev/docs/contributing/).
 
 ## License
 
