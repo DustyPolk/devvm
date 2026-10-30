@@ -16,8 +16,8 @@ layout: hextra-home
   An isolated sandbox with the project's toolchain, ready for you or a coding agent to start coding. devvm runs its VMs on [Lima](https://lima-vm.io/) by default, or on the experimental [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) backends.
 {{< /hextra/hero-subtitle >}}
 
-{{< hextra/hero-button text="Read the docs" link="docs/" >}}
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
+{{< hextra/hero-button text="Read the docs" link="docs/" >}}
 
 ## Quick start
 
