@@ -1,7 +1,7 @@
-{{- /* The footer, on every page: a link to the branding page. Right-clicking the navbar's logo opens that
-   page too, in place of the browser's menu; a left click, or Enter on the focused logo, still goes home. */ -}}
+{{- /* Right-clicking the navbar's logo opens the branding page, in place of the browser's menu; a left
+   click, or Enter on the focused logo, still goes home. Here because Hextra adds this partial to every
+   page. */ -}}
 {{- with site.GetPage "/branding" -}}
-  <p class="devvm-footer"><a href="{{ .RelPermalink }}">{{ .Title }}</a></p>
   <script>
     (() => {
       const logo = document.querySelector(".hextra-nav-container nav > a:first-child");

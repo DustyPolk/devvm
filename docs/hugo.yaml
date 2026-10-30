@@ -40,8 +40,12 @@ params:
   images:
     - /images/social-card.png
   navbar:
-    displayTitle: true
-    displayLogo: false
+    displayTitle: false
+    displayLogo: true
+    logo:
+      path: branding/devvm-logo-on-dark.svg
+      width: 125
+      height: 43
   theme:
     default: dark
     displayToggle: false

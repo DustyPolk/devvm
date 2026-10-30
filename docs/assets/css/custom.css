@@ -73,40 +73,10 @@ html.dark .highlight .chroma .go {
   color: var(--devvm-text-secondary);
 }
 
-/* The logo in the navbar, on every page: the site's title, "devvm", at 22px in a 1px box (the weight of
-   Departure's 11px box lines), with an 11px box-drawing lock on its bottom-right corner. The prompt and
-   the lock are decoration: screen readers get "devvm". */
-.hextra-nav-container nav > a:first-child > span {
-  position: relative;
-  display: inline-block;
-  font-family: var(--devvm-font-pixel);
-  font-size: 22px;
-  font-weight: 400;
-  font-synthesis: none;
-  line-height: 1;
-  /* Right, in 11px characters (half a 22px one, 0.5ch): one space, then the lock's 1.5 inside the box. */
-  padding: 6px 1.25ch 6px 11px;
-  border: 1px solid currentColor;
-  border-radius: 3px;
-}
-
-/* The prompt, then the width of an 11px space: half of a 22px one. */
-.hextra-nav-container nav > a:first-child > span::before {
-  margin-right: 0.5ch;
-  content: "❯";
-  content: "❯" / "";
-}
-
-/* The lock: ┤ on the right border, ██ over the corner, each half a cell past the border's line. */
-.hextra-nav-container nav > a:first-child > span::after {
-  position: absolute;
-  right: calc(-0.5ch - 0.5px);
-  bottom: calc(-0.5lh - 0.5px);
-  font-size: 11px;
-  line-height: normal;
-  white-space: pre;
-  content: "╭┤\A██";
-  content: "╭┤\A██" / "";
+/* The logo in the navbar, on every page: the branding page's SVG for dark backgrounds, at its own size
+   (hugo.yaml's navbar.logo), its pixels kept sharp. Its alt text is the site's title. */
+.hextra-nav-container nav > a:first-child > img {
+  image-rendering: pixelated;
 }
 
 /* The home page: Hextra's home layout wraps its content in this one div. */
@@ -1310,26 +1280,6 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
 .content .devvm-callout-title > .devvm-icon {
   width: 12px;
   height: 12px;
-}
-
-/* The footer (layouts/_partials/custom/footer.html): one link to the branding page, small and gray, on
-   the page's black above a line. */
-html.dark .hextra-footer {
-  background-color: var(--devvm-bg);
-  border-top: 1px solid var(--devvm-border);
-}
-
-.devvm-footer {
-  padding: 1.5rem 0;
-  font-size: 0.875rem;
-}
-
-.devvm-footer > a {
-  color: var(--devvm-text-secondary);
-}
-
-.devvm-footer > a:hover {
-  color: var(--devvm-accent);
 }
 
 /* The branding page (content/branding.md, layouts/branding.html): the home page's look, from the rules
