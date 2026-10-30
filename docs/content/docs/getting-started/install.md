@@ -5,36 +5,6 @@ weight: 1
 
 This page gets devvm installed and working on your machine, then covers upgrading and uninstalling it.
 
-## Requirements
-
-devvm runs its VMs on a [backend](../backends/_index.md), and its default backend is [Lima](../backends/lima.md#requirements). The two tables below list what devvm needs for Lima on macOS and on Linux. For each requirement, they say how to check it and how to get it, and whether devvm's install script offers to install it for you.
-
-On macOS, devvm needs:
-
-| You need | To check | To get it | The install script |
-| --- | --- | --- | --- |
-| macOS 13 or newer, on arm64 or x86_64 | `sw_vers` and `uname -m` | | doesn't |
-| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
-| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | doesn't |
-| Docker Desktop with Docker 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker Desktop | doesn't |
-
-On Linux, devvm needs:
-
-| You need | To check | To get it | The install script |
-| --- | --- | --- | --- |
-| Linux on arm64 or x86_64 | `uname -m` | | doesn't |
-| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
-| QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | offers it, with sudo |
-| Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | offers it, with sudo |
-| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | Ubuntu 22.04's has it | doesn't |
-| Docker's engine 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker's engine | doesn't |
-
-The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only the [Docker backend](../backends/docker.md#requirements) and `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) need it. The experimental [smolvm](../backends/smolvm.md#requirements) backend has requirements of its own.
-
-Everything else is installed inside the VMs, including the toolchains, the agents, and Docker for your projects with the [docker layer](../using/images.md#built-in-layers).
-
-On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Known limits](../using/limits.md#linux-hosts) lists.
-
 ## Installing devvm
 
 To install devvm, run the command for your system:
@@ -49,6 +19,41 @@ The install script needs `curl` and `tar`, and it never needs sudo for devvm its
 - `DEVVM_PREFIX=/some/dir`: install under that folder instead of `~/.local`.
 
 The script checks the download's checksum and signature before it installs anything, as [Installing and updating](../internals/install.md) explains.
+
+## Requirements
+
+devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [backend](../backends/_index.md). For your system, the table lists what devvm needs, how to check each requirement and how to get it, and whether the install script offers to install it for you.
+
+{{< os-tabs >}}
+{{< os-tab name="macOS" >}}
+
+| You need | To check | To get it | The install script |
+| --- | --- | --- | --- |
+| macOS 13 or newer, on arm64 or x86_64 | `sw_vers` and `uname -m` | | doesn't |
+| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
+| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | doesn't |
+| Docker Desktop with Docker 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker Desktop | doesn't |
+
+{{< /os-tab >}}
+{{< os-tab name="Linux" >}}
+
+| You need | To check | To get it | The install script |
+| --- | --- | --- | --- |
+| Linux on arm64 or x86_64 | `uname -m` | | doesn't |
+| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
+| QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | offers it, with sudo |
+| Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | offers it, with sudo |
+| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | Ubuntu 22.04's has it | doesn't |
+| Docker's engine 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker's engine | doesn't |
+
+{{< /os-tab >}}
+{{< /os-tabs >}}
+
+The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only the [Docker backend](../backends/docker.md#requirements) and `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) need it. The experimental [smolvm](../backends/smolvm.md#requirements) backend has requirements of its own.
+
+Everything else is installed inside the VMs, including the toolchains, the agents, and Docker for your projects with the [docker layer](../using/images.md#built-in-layers).
+
+On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Known limits](../using/limits.md#linux-hosts) lists.
 
 ## Checking what devvm needs
 

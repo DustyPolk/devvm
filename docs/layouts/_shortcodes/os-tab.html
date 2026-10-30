@@ -1,0 +1,6 @@
+{{- /* One tab of os-tabs, its Markdown kept for os-tabs to render: {{< os-tab name="macOS" >}}…{{< /os-tab >}}. */ -}}
+{{- with .Parent -}}
+  {{- .Store.Add "tabs" (slice (dict "name" ($.Get "name") "content" (trim $.Inner "\n"))) -}}
+{{- else -}}
+  {{- errorf "os-tab: outside os-tabs (%s)" .Position -}}
+{{- end -}}
