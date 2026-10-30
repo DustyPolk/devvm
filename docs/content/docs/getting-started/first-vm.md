@@ -14,11 +14,11 @@ cd ~/some-project
 devvm
 ```
 
-devvm looks at the folder's files to choose the VM's toolchains, so a folder with `package.json` gets node and one with `pyproject.toml` gets python ([which image a new VM gets](../using/images.md#which-image-a-new-vm-gets)). To choose yourself, name the image, such as `devvm node+claude` for node with Claude Code, or `devvm base` for neither.
+devvm looks at the folder's files to choose the VM's toolchains, so a folder with `package.json` gets node and one with `pyproject.toml` gets python. To choose yourself, name the image, such as `devvm node+claude` for node with Claude Code, or `devvm base` for neither. [Which image a new VM gets](../using/images.md#which-image-a-new-vm-gets) has the details.
 
-A new VM gets [network policy](../safety/network.md), which limits it to an allowlist of hosts through a proxy on your machine and keeps your secrets out of the VM. Keep it on unless you know you need the open network, because it's what keeps stolen data and secrets from leaving. In a terminal devvm asks first, with yes as the default, and without a terminal it turns network policy on. `--network-policy` answers yes up front, and `--no-network-policy` makes the VM with an open network instead. On a backend that can't give a VM network policy, devvm makes the VM without it and warns you.
+A new VM gets [network policy](../safety/network.md), which limits it to an allowlist of hosts through a proxy on your machine and keeps your secrets out of the VM. Keep it on unless you know you need the open network, because it's what keeps stolen data and secrets from leaving. In a terminal, devvm asks first and recommends yes, which is the default answer. Without a terminal, it turns network policy on. `--network-policy` answers yes up front, and `--no-network-policy` makes the VM with an open network instead. When a VM can't have network policy, for example on a backend that can't confine it to its proxy, devvm doesn't ask, but makes the VM without network policy and warns you.
 
-The first time you run devvm, it asks which optional extras every VM gets, such as oh-my-bash and fzf ([choosing features](../using/customizing.md#choosing-features)). Then it builds the base image, which takes a few minutes, and downloads Ubuntu's cloud image first:
+The first time you run devvm, it asks which optional extras every VM gets, such as oh-my-bash and fzf, as [choosing features](../using/customizing.md#choosing-features) describes. Then it downloads Ubuntu's cloud image and builds the base image, which takes a few minutes:
 
 ```console
 ==> building image base (e9f517dddef1)
@@ -31,11 +31,25 @@ The first time you run devvm, it asks which optional extras every VM gets, such 
 
 Later VMs are copies of the image and start in seconds.
 
+## Working on a clone instead
+
+A VM either mounts your project folder or works on a clone of the repo of its own. By default it mounts the folder, so the VM and your editor share the same files. With `--clone`, the VM gets its own copy of your branches instead, and nothing in it can touch your working tree or `.git`. Some people will mostly use `--clone`, for example for an agent working unattended, for a repo they don't trust, or on Linux hosts, which have no `.git` protection.
+
+You choose when devvm makes the VM, and you can't change a VM from one to the other afterwards. On a clone, the VM's work reaches your repo only when you fetch it, and you review it before you merge it:
+
+```sh
+devvm --clone                 # make the VM with its own clone, and open a shell in it
+git fetch devvm               # later, on this machine, fetch the VM's work as devvm/<branch>
+git log -p main..devvm/main   # review it before you merge it
+```
+
+[Working on a clone](../using/clone.md) has the details.
+
 ## What's in the VM
 
 When the VM is ready, devvm opens a shell in it, in `~/some-project`, the same path as on your machine. The prompt starts with `(devvm)`, so you can tell the VM's shell from your own.
 
-- **The project folder** is mounted read-write, so your editor on this machine and the VM see the same files. It's the only folder of yours the VM sees, and devvm locks its `.git` hooks and config so the VM can't change what git runs on your machine ([.git protection](../safety/git-protection.md)).
+- **The project folder** is mounted read-write, unless the VM works on a clone, so your editor on this machine and the VM see the same files. It's the only folder of yours the VM sees, and devvm locks its `.git` hooks and config so the VM can't change what git runs on your machine ([.git protection](../safety/git-protection.md)).
 - **The toolchains** are shared between VMs and read-only, so `node`, `python`, `cargo` or `go` are ready at once, and global installs go into the VM's home ([shared tools](../using/images.md#shared-tools)).
 - **Your git name and email** are set as git has them in the project folder, so commits made in the VM are yours.
 - **Ports** that a server in the VM listens on, from 1024 up, are forwarded to the same port on your machine's `localhost`, so a dev server on `:5173` opens at `localhost:5173` ([ports](../using/ports-size.md#ports)).
@@ -45,14 +59,14 @@ The VM's user has passwordless sudo, so you can install anything with `apt` as y
 
 ## Coding agents
 
-An image with an agent, such as `devvm claude`, gets your settings, skills and MCP servers for it from this machine, but never your history ([coding agents](../using/coding-agents.md)). Claude Code needs a long-lived token, which you make once on this machine:
+An image with an agent, such as `devvm claude`, gets your settings, skills and MCP servers for it from this machine, but never your history, as [coding agents](../using/coding-agents.md) explains. Claude Code needs a long-lived Claude Code token, which you make once on this machine:
 
 ```sh
 claude setup-token   # approve in the browser, then copy the sk-ant-oat01-… token it prints
 devvm auth claude    # paste it
 ```
 
-With network policy, the VM gets a placeholder instead of the token, and the proxy puts the real token into Claude's requests.
+With network policy, the VM gets a placeholder instead of your Claude Code token, and the proxy puts the real one into Claude's requests.
 
 ## Coming back to it
 

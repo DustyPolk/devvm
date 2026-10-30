@@ -16,7 +16,7 @@ It installs the release it comes with, or `--version`'s:
 
 On macOS, the [Docker](../backends/docker.md#requirements) backend later fetches one more file the first time a Docker VM or build needs it: the same release's Linux archive, whose devvm it checks against the SHA-256 the installed devvm has of it before using it. Homebrew's devvm has its Linux build already, built from source.
 
-The signature catches an archive or `SHA256SUMS` someone replaced, which the checksum alone can't. It can't catch a release replaced whole: `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't. You can also download `install.sh` and read it before you run it.
+The signature catches an archive or `SHA256SUMS` someone replaced, which the checksum alone can't. It can't catch a release replaced whole: `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't: the formula's checksum lives in a repository of its own, so a replaced GitHub release wouldn't match it. You can also download `install.sh` and read it before you run it.
 
 ## devvm doctor --fixes
 

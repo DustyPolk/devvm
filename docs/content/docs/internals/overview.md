@@ -5,6 +5,20 @@ weight: 1
 
 This page explains what devvm does, step by step, when it opens, stops and deletes a VM.
 
+## A new VM
+
+devvm makes a new VM from its image, building the image first with its [shared tools](../using/images.md#shared-tools) if it isn't built yet. The VM mounts only the project folder, read-write, and the shared tools and its [agents' config folders](../using/coding-agents.md), read-only. devvm locks the folder's `.git` hooks and config ([`.git` protection](../safety/git-protection.md)). With `--clone`, devvm doesn't mount the folder, and the VM gets its own clone of the repo instead ([working on a clone](../using/clone.md)).
+
+Then devvm starts the VM, sets it up ([the VM's setup](../using/coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](../using/ssh.md), and opens a shell in it in devvm's place, so devvm ends when the shell does. Without a terminal, the shell reads its commands from devvm's input.
+
+## Adding to a VM
+
+When `devvm IMAGE` adds to an existing VM in place ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)), the shared tools it builds are mounted at once, and nothing is installed in the VM's disk. With network policy, the VM's proxy allows a layer's hosts for its script.
+
+## Listing VMs
+
+A backend that can't list its VMs, for example because Lima isn't installed, fails `devvm ls` only when a VM's state names that backend.
+
 ## An existing VM
 
 When you run `devvm` in a folder whose VM exists, devvm opens the VM as it is and starts it if it's stopped. Each time, it does these steps in this order:
