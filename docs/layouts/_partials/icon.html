@@ -1,0 +1,12 @@
+{{- /* A pixel icon from assets/icons/, inlined so it takes the text's color and size. Takes its name, an
+   optional label and the calling shortcode's position, for the error. Without a label, screen readers skip
+   it; with one, they read the label. */ -}}
+{{- with resources.Get (printf "icons/%s.svg" .name) -}}
+  {{- $attrs := `class="devvm-icon" aria-hidden="true" focusable="false"` -}}
+  {{- with $.label -}}
+    {{- $attrs = printf `class="devvm-icon" role="img" aria-label="%s" focusable="false"` (. | htmlEscape) -}}
+  {{- end -}}
+  {{- replace (trim .Content "\n") "<svg " (printf "<svg %s " $attrs) 1 | safeHTML -}}
+{{- else -}}
+  {{- errorf "icon: no docs/assets/icons/%s.svg (%s)" .name .position -}}
+{{- end -}}

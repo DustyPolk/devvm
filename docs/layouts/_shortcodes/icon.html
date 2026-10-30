@@ -1,0 +1,5 @@
+{{- /* A pixel icon from assets/icons/, in the text's color and size: {{< icon "rocket" >}}, or with a label
+   for screen readers when the icon says something the text doesn't: {{< icon "warning" "Warning" >}}. */ -}}
+{{- $name := .Get 0 -}}
+{{- if not $name }}{{ errorf "icon: no name (%s)" .Position }}{{ end -}}
+{{- partial "icon.html" (dict "name" $name "label" (.Get 1) "position" .Position) -}}

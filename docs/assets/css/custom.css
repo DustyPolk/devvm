@@ -727,3 +727,14 @@ html.dark .devvm-install .hextra-tabs-toggle[data-state="selected"] {
   color: var(--devvm-accent-soft);
   font-size: 0.85em;
 }
+
+/* Pixel icons ({{< icon >}}): 12 pixels in 0.75em, so one icon pixel is one screen pixel in 16px text
+   and two in 32px. The icon's bottom sits on the text's baseline, and its top row is empty, so the drawing
+   stands about as tall as a capital letter. */
+.devvm-icon {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  flex-shrink: 0;
+  vertical-align: baseline;
+}
