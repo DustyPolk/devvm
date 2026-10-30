@@ -219,22 +219,22 @@ func BadSecretService() M {
 	return M{id: "bad_secret_service"}
 }
 
-// BaseBuildTime is [base_build_time]: "    a few minutes, and Ubuntu's cloud image to download the first time"
+// BaseBuildTime is [base_build_time]: "    This takes a few minutes, and the first time, devvm also downloads Ubuntu's cloud image."
 func BaseBuildTime() M {
 	return M{id: "base_build_time"}
 }
 
-// BaseFeatures is [base_features]: "base features: {{.features}} (devvm setup changes them)"
+// BaseFeatures is [base_features]: "The base image has these features: {{.features}}. To change them, run devvm setup."
 func BaseFeatures(features string) M {
 	return M{id: "base_features", vals: []val{{"features", features}}}
 }
 
-// BaseFeaturesNone is [base_features_none]: "base features: none (devvm setup changes them)"
+// BaseFeaturesNone is [base_features_none]: "The base image has no features. To choose some, run devvm setup."
 func BaseFeaturesNone() M {
 	return M{id: "base_features_none"}
 }
 
-// BaseWillRebuild is [base_will_rebuild]: "base and the images built on it rebuild with these features when next used"
+// BaseWillRebuild is [base_will_rebuild]: "The base image and the images built on it rebuild with these features when you next use them."
 func BaseWillRebuild() M {
 	return M{id: "base_will_rebuild"}
 }
@@ -244,7 +244,7 @@ func BranchNamesInvalid(refs string) M {
 	return M{id: "branch_names_invalid", vals: []val{{"refs", refs}}}
 }
 
-// BuildFailed is [build_failed]: "couldn't build {{.image}}: {{.reason}}"
+// BuildFailed is [build_failed]: "Building {{.image}} failed: {{.reason}}."
 func BuildFailed(image string, reason string) M {
 	return M{id: "build_failed", vals: []val{{"image", image}, {"reason", reason}}}
 }
@@ -374,12 +374,12 @@ func Continue() M {
 	return M{id: "continue"}
 }
 
-// ConvertBadOutput is [convert_bad_output]: "converting {{.from}} wrote an unexpected {{.file}} (the image may be hostile): not using it"
+// ConvertBadOutput is [convert_bad_output]: "Converting {{.from}} wrote an unexpected {{.file}}, so devvm didn't use it. The image may be hostile."
 func ConvertBadOutput(file string, from string) M {
 	return M{id: "convert_bad_output", vals: []val{{"file", file}, {"from", from}}}
 }
 
-// ConvertFailed is [convert_failed]: "couldn't convert {{.from}} into a disk"
+// ConvertFailed is [convert_failed]: "Converting {{.from}} into a disk failed."
 func ConvertFailed(from string) M {
 	return M{id: "convert_failed", vals: []val{{"from", from}}}
 }
@@ -424,7 +424,7 @@ func CreatingFromUbuntu(vm string) M {
 	return M{id: "creating_from_ubuntu", vals: []val{{"vm", vm}}}
 }
 
-// CustomLayerRemove is [custom_layer_remove]: "{{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again"
+// CustomLayerRemove is [custom_layer_remove]: "You can't remove a layer from {{.vm}}. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again."
 func CustomLayerRemove(layer string, vm string) M {
 	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
 }
@@ -794,7 +794,7 @@ func DockerRouteLocalnet(vm string) M {
 	return M{id: "docker_route_localnet", vals: []val{{"vm", vm}}}
 }
 
-// DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with docker start {{.vm}}, then docker exec -it {{.vm}} bash; devvm gc deletes it"
+// DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
 func DockerScriptFailed(script string, vm string) M {
 	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
@@ -859,7 +859,7 @@ func ExportingDocker(from string) M {
 	return M{id: "exporting_docker", vals: []val{{"from", from}}}
 }
 
-// FeatureShadowed is [feature_shadowed]: "ignoring {{.file}}: a built-in feature is named {{.feature}}; rename yours"
+// FeatureShadowed is [feature_shadowed]: "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
 func FeatureShadowed(feature string, file string) M {
 	return M{id: "feature_shadowed", vals: []val{{"feature", feature}, {"file", file}}}
 }
@@ -894,32 +894,32 @@ func ForwarderFailed(reason string) M {
 	return M{id: "forwarder_failed", vals: []val{{"reason", reason}}}
 }
 
-// FromCachedNotFound is [from_cached_not_found]: "{{.host}} doesn't have {{.from}}, or it's private: using the digest devvm last saw"
+// FromCachedNotFound is [from_cached_not_found]: "{{.host}} doesn't have {{.from}}, or it's private, so devvm uses the digest it last saw."
 func FromCachedNotFound(from string, host string) M {
 	return M{id: "from_cached_not_found", vals: []val{{"from", from}, {"host", host}}}
 }
 
-// FromCachedUnreachable is [from_cached_unreachable]: "can't reach {{.host}} to look up {{.from}} (offline?): using the digest devvm last saw"
+// FromCachedUnreachable is [from_cached_unreachable]: "{{.host}} didn't answer when devvm looked up {{.from}}, so devvm uses the digest it last saw."
 func FromCachedUnreachable(from string, host string) M {
 	return M{id: "from_cached_unreachable", vals: []val{{"from", from}, {"host", host}}}
 }
 
-// FromIgnored is [from_ignored]: "--from only applies to new VMs: {{.vm}} keeps what it was made from"
+// FromIgnored is [from_ignored]: "{{.vm}} keeps what it was made from, because --from applies only to new VMs."
 func FromIgnored(vm string) M {
 	return M{id: "from_ignored", vals: []val{{"vm", vm}}}
 }
 
-// FromNotFound is [from_not_found]: "{{.host}} doesn't have {{.from}}, or it's private: devvm takes public images, and images Docker has"
+// FromNotFound is [from_not_found]: "{{.host}} doesn't have {{.from}}, or it's private. devvm takes only public images and images that Docker has."
 func FromNotFound(from string, host string) M {
 	return M{id: "from_not_found", vals: []val{{"from", from}, {"host", host}}}
 }
 
-// FromUnreachable is [from_unreachable]: "can't reach {{.host}} to look up {{.from}} (offline?)"
+// FromUnreachable is [from_unreachable]: "{{.host}} didn't answer when devvm looked up {{.from}}. Check that you're online."
 func FromUnreachable(from string, host string) M {
 	return M{id: "from_unreachable", vals: []val{{"from", from}, {"host", host}}}
 }
 
-// GCAssets is [gc_assets]: "{{.count}} old copies of devvm's files"
+// GCAssets is [gc_assets]: "{{.count}} old copies of devvm's files are left from earlier versions."
 func GCAssets(count int) M {
 	return M{id: "gc_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
@@ -929,7 +929,7 @@ func GCConfirm() M {
 	return M{id: "gc_confirm"}
 }
 
-// GCFailed is [gc_failed]: "couldn't clean up: {{.reason}}"
+// GCFailed is [gc_failed]: "Cleaning up failed: {{.reason}}."
 func GCFailed(reason string) M {
 	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
 }
@@ -939,17 +939,17 @@ func GCImage(image string, key string) M {
 	return M{id: "gc_image", vals: []val{{"image", image}, {"key", key}}}
 }
 
-// GCImages is [gc_images]: "stale and unfinished images:"
+// GCImages is [gc_images]: "Stale and unfinished images:"
 func GCImages() M {
 	return M{id: "gc_images"}
 }
 
-// GCOldHint is [gc_old_hint]: "devvm gc deletes the old ones"
+// GCOldHint is [gc_old_hint]: "After they rebuild, run devvm gc to delete the old ones."
 func GCOldHint() M {
 	return M{id: "gc_old_hint"}
 }
 
-// GCTools is [gc_tools]: "{{.count}} unused tool images ({{.size}})"
+// GCTools is [gc_tools]: "{{.count}} shared tool images are unused ({{.size}})."
 func GCTools(count int, size string) M {
 	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
@@ -1094,17 +1094,17 @@ func ImageFrom(from string, image string) M {
 	return M{id: "image_from", vals: []val{{"from", from}, {"image", image}}}
 }
 
-// ImageInUse is [image_in_use]: "can't delete image {{.key}}: {{.vms}} use its disk"
+// ImageInUse is [image_in_use]: "Image {{.key}} can't be deleted, because these VMs use its disk: {{.vms}}."
 func ImageInUse(key string, vms string) M {
 	return M{id: "image_in_use", vals: []val{{"key", key}, {"vms", vms}}}
 }
 
-// ImageLeftover is [image_leftover]: "image {{.key}} is left over from a failed build of {{.image}}: building it again"
+// ImageLeftover is [image_leftover]: "Image {{.key}} is left over from a failed build of {{.image}}, so devvm builds it again."
 func ImageLeftover(image string, key string) M {
 	return M{id: "image_leftover", vals: []val{{"image", image}, {"key", key}}}
 }
 
-// ImageMissing is [image_missing]: "there's no image {{.key}} in devvm's Lima home: build it again"
+// ImageMissing is [image_missing]: "Image {{.key}} is missing. Run devvm build to build it again."
 func ImageMissing(key string) M {
 	return M{id: "image_missing", vals: []val{{"key", key}}}
 }
@@ -1114,22 +1114,22 @@ func ImageReady(image string) M {
 	return M{id: "image_ready", vals: []val{{"image", image}}}
 }
 
-// ImagesFailed is [images_failed]: "couldn't list the images: {{.reason}}"
+// ImagesFailed is [images_failed]: "Listing the images failed: {{.reason}}."
 func ImagesFailed(reason string) M {
 	return M{id: "images_failed", vals: []val{{"reason", reason}}}
 }
 
-// ImagesRmFailed is [images_rm_failed]: "couldn't delete the images: {{.reason}}"
+// ImagesRmFailed is [images_rm_failed]: "Deleting the images failed: {{.reason}}."
 func ImagesRmFailed(reason string) M {
 	return M{id: "images_rm_failed", vals: []val{{"reason", reason}}}
 }
 
-// ImagesStaleNote is [images_stale_note]: "{{.count}} images are stale or unfinished: devvm gc deletes them"
+// ImagesStaleNote is [images_stale_note]: "{{.count}} images are stale or unfinished. Run devvm gc to delete them."
 func ImagesStaleNote(count int) M {
 	return M{id: "images_stale_note", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
-// ImagesUnused is [images_unused]: "{{.size}} of tool images unused: devvm gc frees it"
+// ImagesUnused is [images_unused]: "Unused shared tool images take {{.size}}. Run devvm gc to free it."
 func ImagesUnused(size string) M {
 	return M{id: "images_unused", vals: []val{{"size", size}}}
 }
@@ -1174,27 +1174,27 @@ func KVMAccess(fix string) M {
 	return M{id: "kvm_access", vals: []val{{"fix", fix}}}
 }
 
-// LayerCreated is [layer_created]: "created {{.script}} and its allowlist {{.policy}}: edit them, then devvm build {{.layer}}, or devvm node+{{.layer}} for a VM"
+// LayerCreated is [layer_created]: "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm node+{{.layer}} to start a VM with it."
 func LayerCreated(layer string, policy string, script string) M {
 	return M{id: "layer_created", vals: []val{{"layer", layer}, {"policy", policy}, {"script", script}}}
 }
 
-// LayerExists is [layer_exists]: "{{.file}} already exists: edit it, or choose another name"
+// LayerExists is [layer_exists]: "{{.file}} already exists. Edit it, or choose another name."
 func LayerExists(file string) M {
 	return M{id: "layer_exists", vals: []val{{"file", file}}}
 }
 
-// LayerNameInvalid is [layer_name_invalid]: "{{.layer}} can't be a layer's name: use lowercase letters, digits and dashes, starting with a letter or digit"
+// LayerNameInvalid is [layer_name_invalid]: "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
 func LayerNameInvalid(layer string) M {
 	return M{id: "layer_name_invalid", vals: []val{{"layer", layer}}}
 }
 
-// LayerNameReserved is [layer_name_reserved]: "{{.layer}} is a name devvm's own images use: choose another"
+// LayerNameReserved is [layer_name_reserved]: "{{.layer}} is the name of one of devvm's own images. Choose another name for your layer."
 func LayerNameReserved(layer string) M {
 	return M{id: "layer_name_reserved", vals: []val{{"layer", layer}}}
 }
 
-// LayerNewFailed is [layer_new_failed]: "couldn't create the layer: {{.reason}}"
+// LayerNewFailed is [layer_new_failed]: "Creating the layer failed: {{.reason}}."
 func LayerNewFailed(reason string) M {
 	return M{id: "layer_new_failed", vals: []val{{"reason", reason}}}
 }
@@ -1304,12 +1304,12 @@ func MacosOld(version string) M {
 	return M{id: "macos_old", vals: []val{{"version", version}}}
 }
 
-// MiseChecksum is [mise_checksum]: "the mise {{.version}} download doesn't match its checksum: not using it"
+// MiseChecksum is [mise_checksum]: "The mise {{.version}} download doesn't match its checksum, so devvm didn't use it."
 func MiseChecksum(version string) M {
 	return M{id: "mise_checksum", vals: []val{{"version", version}}}
 }
 
-// MiseDownloadFailed is [mise_download_failed]: "couldn't download mise {{.version}}, which resolves the shared tools' versions: check you're online"
+// MiseDownloadFailed is [mise_download_failed]: "The download of mise {{.version}} failed, and devvm needs mise to resolve the shared tools' versions. Check that you're online."
 func MiseDownloadFailed(version string) M {
 	return M{id: "mise_download_failed", vals: []val{{"version", version}}}
 }
@@ -1739,7 +1739,7 @@ func ReadingImages() M {
 	return M{id: "reading_images"}
 }
 
-// RebuildReplaces is [rebuild_replaces]: "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
+// RebuildReplaces is [rebuild_replaces]: "Rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}.\ndevvm builds them again when they're next needed, and VMs keep the images they have."
 func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
 }
@@ -1834,7 +1834,7 @@ func SavedNamesTaken(remote string, vm string) M {
 	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
 }
 
-// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with devvm limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
+// ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run devvm limactl shell --start {{.vm}}."
 func ScriptFailed(script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
@@ -1904,7 +1904,7 @@ func SetupFailed(reason string) M {
 	return M{id: "setup_failed", vals: []val{{"reason", reason}}}
 }
 
-// ShareLockHeld is [share_lock_held]: "{{.dir}}/.lock is held: if no other devvm is running, remove it"
+// ShareLockHeld is [share_lock_held]: "{{.dir}}/.lock is still held after devvm waited for it. If no other devvm is running, remove it and try again."
 func ShareLockHeld(dir string) M {
 	return M{id: "share_lock_held", vals: []val{{"dir", dir}}}
 }
@@ -2004,7 +2004,7 @@ func SmolvmOldFix(fix string, version string) M {
 	return M{id: "smolvm_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
-// SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
+// SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}."
 func SmolvmScriptFailed(script string, vm string) M {
 	return M{id: "smolvm_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
@@ -2129,92 +2129,92 @@ func TooMuchMemory(have string, want string) M {
 	return M{id: "too_much_memory", vals: []val{{"have", have}, {"want", want}}}
 }
 
-// ToolBadOutput is [tool_bad_output]: "the shared tools' build wrote {{.file}} as something other than a plain file: not using it"
+// ToolBadOutput is [tool_bad_output]: "The shared tools' build wrote {{.file}} as something other than a plain file, so devvm didn't use it."
 func ToolBadOutput(file string) M {
 	return M{id: "tool_bad_output", vals: []val{{"file", file}}}
 }
 
-// ToolBadVersion is [tool_bad_version]: "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
+// ToolBadVersion is [tool_bad_version]: "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm update to resolve the shared tools again."
 func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
-// ToolNoDownload is [tool_no_download]: "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it"
+// ToolNoDownload is [tool_no_download]: "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it. The next daily check tries again."
 func ToolNoDownload(tool string, version string) M {
 	return M{id: "tool_no_download", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
-// ToolNotLocked is [tool_not_locked]: "the shared tools' lock {{.lock}} has no {{.tool}}"
+// ToolNotLocked is [tool_not_locked]: "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm update to resolve the shared tools again."
 func ToolNotLocked(lock string, tool string) M {
 	return M{id: "tool_not_locked", vals: []val{{"lock", lock}, {"tool", tool}}}
 }
 
-// ToolSteppedBack is [tool_stepped_back]: "using {{.tool}} {{.older}}: {{.tool}} {{.version}} isn't published for every platform yet"
+// ToolSteppedBack is [tool_stepped_back]: "{{.tool}} {{.version}} isn't published for every platform yet, so devvm uses {{.tool}} {{.older}}."
 func ToolSteppedBack(older string, tool string, version string) M {
 	return M{id: "tool_stepped_back", vals: []val{{"older", older}, {"tool", tool}, {"version", version}}}
 }
 
-// ToolUnbuilt is [tool_unbuilt]: "{{.tool}} {{.version}} has no download for this VM's platform yet (a new release): try again tomorrow"
+// ToolUnbuilt is [tool_unbuilt]: "{{.tool}} {{.version}} is a new release with no download for this VM's platform yet. Try again tomorrow."
 func ToolUnbuilt(tool string, version string) M {
 	return M{id: "tool_unbuilt", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
-// ToolsBuildFailed is [tools_build_failed]: "building the shared tools failed"
+// ToolsBuildFailed is [tools_build_failed]: "Building the shared tools failed."
 func ToolsBuildFailed() M {
 	return M{id: "tools_build_failed"}
 }
 
-// ToolsChanged is [tools_changed]: "the shared tools' versions changed while devvm waited: run it again"
+// ToolsChanged is [tools_changed]: "The shared tools' versions changed while devvm waited. Run the command again."
 func ToolsChanged() M {
 	return M{id: "tools_changed"}
 }
 
-// ToolsCheckFailed is [tools_check_failed]: "couldn't check for newer shared tools: using the versions devvm last found"
+// ToolsCheckFailed is [tools_check_failed]: "The check for newer shared tools failed, so devvm uses the versions it last found."
 func ToolsCheckFailed() M {
 	return M{id: "tools_check_failed"}
 }
 
-// ToolsNeedResolve is [tools_need_resolve]: "the shared tools need their versions resolved once, online: try again when you're online"
+// ToolsNeedResolve is [tools_need_resolve]: "Resolving the shared tools' versions failed, and devvm has to do it once, online. Try again when you're online."
 func ToolsNeedResolve() M {
 	return M{id: "tools_need_resolve"}
 }
 
-// ToolsNewest is [tools_newest]: "{{.vm}}'s shared tools are the newest"
+// ToolsNewest is [tools_newest]: "{{.vm}} has the newest shared tools."
 func ToolsNewest(vm string) M {
 	return M{id: "tools_newest", vals: []val{{"vm", vm}}}
 }
 
-// ToolsNotImages is [tools_not_images]: "{{.tools}}: shared tools aren't images, and their versions come from the tools lock; rebuild the image under them, devvm rebuild base"
+// ToolsNotImages is [tools_not_images]: "Shared tools aren't images, and the tools lock sets their versions, so devvm can't rebuild {{.tools}}. Rebuild the image under them instead, such as with devvm rebuild base."
 func ToolsNotImages(tools string) M {
 	return M{id: "tools_not_images", vals: []val{{"tools", tools}}}
 }
 
-// ToolsNotImagesRm is [tools_not_images_rm]: "{{.image}} names shared tools, which aren't images: name the image under them; devvm gc deletes unused tool images"
+// ToolsNotImagesRm is [tools_not_images_rm]: "{{.image}} names shared tools, and shared tools aren't images. Name the image under them, and run devvm gc to delete unused shared tool images."
 func ToolsNotImagesRm(image string) M {
 	return M{id: "tools_not_images_rm", vals: []val{{"image", image}}}
 }
 
-// ToolsResolveFailed is [tools_resolve_failed]: "couldn't resolve the shared tools' versions (offline?)"
+// ToolsResolveFailed is [tools_resolve_failed]: "Resolving the shared tools' versions failed. Check that you're online."
 func ToolsResolveFailed() M {
 	return M{id: "tools_resolve_failed"}
 }
 
-// ToolsSwitch is [tools_switch]: "{{.vm}} moves to them on this launch"
+// ToolsSwitch is [tools_switch]: "{{.vm}} moves to the newest shared tools on this launch."
 func ToolsSwitch(vm string) M {
 	return M{id: "tools_switch", vals: []val{{"vm", vm}}}
 }
 
-// UbuntuBadSignature is [ubuntu_bad_signature]: "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu's cloud image key: not using them"
+// UbuntuBadSignature is [ubuntu_bad_signature]: "Ubuntu's checksums for {{.release}} at {{.url}} don't have a valid signature from Ubuntu's cloud image key, so devvm didn't use them."
 func UbuntuBadSignature(release string, url string) M {
 	return M{id: "ubuntu_bad_signature", vals: []val{{"release", release}, {"url", url}}}
 }
 
-// UbuntuChecksumUnpinned is [ubuntu_checksum_unpinned]: "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins: not using it"
+// UbuntuChecksumUnpinned is [ubuntu_checksum_unpinned]: "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins, so devvm didn't use it."
 func UbuntuChecksumUnpinned(file string, release string, url string) M {
 	return M{id: "ubuntu_checksum_unpinned", vals: []val{{"file", file}, {"release", release}, {"url", url}}}
 }
 
-// UbuntuUnsigned is [ubuntu_unsigned]: "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
+// UbuntuUnsigned is [ubuntu_unsigned]: "gpgv isn't installed, so devvm can't check the signature on Ubuntu's checksums. devvm still checks the image against its pinned checksum. To check the signature too, run brew install gnupg, or apt install gpgv."
 func UbuntuUnsigned() M {
 	return M{id: "ubuntu_unsigned"}
 }

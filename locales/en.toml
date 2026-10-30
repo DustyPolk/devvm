@@ -62,7 +62,7 @@ other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have
 
 [tool_bad_version]
 description = "version is quoted, as the tools lock has it"
-other = "the tools lock has {{.tool}} version {{.version}}, which isn't a version: run devvm update to resolve the tools again"
+other = "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm update to resolve the shared tools again."
 
 [lima_missing]
 other = "Lima isn't installed: install Lima 2.0 or newer"
@@ -168,7 +168,7 @@ other = "smolvm has a machine named {{.vm}} that isn't this devvm's: delete or r
 other = "couldn't change {{.vm}}'s smolvm settings"
 
 [smolvm_script_failed]
-other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
+other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}."
 
 [smolvm_from_registry_only]
 other = "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
@@ -315,7 +315,7 @@ other = "{{.path}} isn't this devvm's Linux build: reinstall devvm"
 other = "couldn't delete Docker's image {{.image}}"
 
 [docker_script_failed]
-other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with docker start {{.vm}}, then docker exec -it {{.vm}} bash; devvm gc deletes it"
+other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
 
 [committing_image]
 other = "committing {{.vm}}"
@@ -358,11 +358,11 @@ other = "packing {{.vm}} into its image"
 other = "couldn't pack {{.vm}} into its image"
 
 [image_missing]
-other = "there's no image {{.key}} in devvm's Lima home: build it again"
+other = "Image {{.key}} is missing. Run devvm build to build it again."
 
 [image_in_use]
 description = "vms is a space-separated list of VM names"
-other = "can't delete image {{.key}}: {{.vms}} use its disk"
+other = "Image {{.key}} can't be deleted, because these VMs use its disk: {{.vms}}."
 
 [not_an_image]
 other = "refusing to delete {{.name}}: it's not an image"
@@ -423,54 +423,54 @@ other = "couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}
 
 [ubuntu_bad_signature]
 description = "release is a dated release's folder name (release-20260101)"
-other = "Ubuntu's checksums for {{.release}} at {{.url}} aren't signed by Ubuntu's cloud image key: not using them"
+other = "Ubuntu's checksums for {{.release}} at {{.url}} don't have a valid signature from Ubuntu's cloud image key, so devvm didn't use them."
 
 [ubuntu_checksum_unpinned]
 description = "file is the image's file name; release is the pinned dated release's folder name (release-20260101)"
-other = "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins: not using it"
+other = "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins, so devvm didn't use it."
 
 [ubuntu_unsigned]
-other = "gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)"
+other = "gpgv isn't installed, so devvm can't check the signature on Ubuntu's checksums. devvm still checks the image against its pinned checksum. To check the signature too, run brew install gnupg, or apt install gpgv."
 
 [unknown_layer]
 description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
 other = "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
 
 [layer_name_invalid]
-other = "{{.layer}} can't be a layer's name: use lowercase letters, digits and dashes, starting with a letter or digit"
+other = "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
 
 [layer_name_reserved]
-other = "{{.layer}} is a name devvm's own images use: choose another"
+other = "{{.layer}} is the name of one of devvm's own images. Choose another name for your layer."
 
 [layer_exists]
-other = "{{.file}} already exists: edit it, or choose another name"
+other = "{{.file}} already exists. Edit it, or choose another name."
 
 [layer_created]
-other = "created {{.script}} and its allowlist {{.policy}}: edit them, then devvm build {{.layer}}, or devvm node+{{.layer}} for a VM"
+other = "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm node+{{.layer}} to start a VM with it."
 
 [layer_new_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't create the layer: {{.reason}}"
+other = "Creating the layer failed: {{.reason}}."
 
 [features_help]
 other = "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
 
 [base_features]
 description = "features is a space-separated list of names"
-other = "base features: {{.features}} (devvm setup changes them)"
+other = "The base image has these features: {{.features}}. To change them, run devvm setup."
 
 [base_features_none]
-other = "base features: none (devvm setup changes them)"
+other = "The base image has no features. To choose some, run devvm setup."
 
 [no_feature]
 description = "features is a space-separated list of names"
 other = "there's no {{.feature}} feature: choose from {{.features}}"
 
 [base_will_rebuild]
-other = "base and the images built on it rebuild with these features when next used"
+other = "The base image and the images built on it rebuild with these features when you next use them."
 
 [gc_old_hint]
-other = "devvm gc deletes the old ones"
+other = "After they rebuild, run devvm gc to delete the old ones."
 
 [default_backend]
 other = "new VMs get the {{.backend}} backend"
@@ -486,23 +486,23 @@ description = "reason is an error from the system, in English"
 other = "couldn't save the settings: {{.reason}}"
 
 [feature_shadowed]
-other = "ignoring {{.file}}: a built-in feature is named {{.feature}}; rename yours"
+other = "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
 
 [unknown_feature]
 other = "skipping feature {{.feature}}: it has no script"
 
 [build_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't build {{.image}}: {{.reason}}"
+other = "Building {{.image}} failed: {{.reason}}."
 
 [image_leftover]
-other = "image {{.key}} is left over from a failed build of {{.image}}: building it again"
+other = "Image {{.key}} is left over from a failed build of {{.image}}, so devvm builds it again."
 
 [building_image]
 other = "building image {{.image}} ({{.key}})"
 
 [base_build_time]
-other = "    a few minutes, and Ubuntu's cloud image to download the first time"
+other = "    This takes a few minutes, and the first time, devvm also downloads Ubuntu's cloud image."
 
 [image_ready]
 other = "image {{.image}} ready"
@@ -522,19 +522,19 @@ description = "from is quoted like a Go string when it holds control characters"
 other = "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
 
 [from_ignored]
-other = "--from only applies to new VMs: {{.vm}} keeps what it was made from"
+other = "{{.vm}} keeps what it was made from, because --from applies only to new VMs."
 
 [from_unreachable]
-other = "can't reach {{.host}} to look up {{.from}} (offline?)"
+other = "{{.host}} didn't answer when devvm looked up {{.from}}. Check that you're online."
 
 [from_not_found]
-other = "{{.host}} doesn't have {{.from}}, or it's private: devvm takes public images, and images Docker has"
+other = "{{.host}} doesn't have {{.from}}, or it's private. devvm takes only public images and images that Docker has."
 
 [from_cached_unreachable]
-other = "can't reach {{.host}} to look up {{.from}} (offline?): using the digest devvm last saw"
+other = "{{.host}} didn't answer when devvm looked up {{.from}}, so devvm uses the digest it last saw."
 
 [from_cached_not_found]
-other = "{{.host}} doesn't have {{.from}}, or it's private: using the digest devvm last saw"
+other = "{{.host}} doesn't have {{.from}}, or it's private, so devvm uses the digest it last saw."
 
 [no_digest]
 other = "devvm has no digest for {{.from}}"
@@ -561,10 +561,10 @@ other = "converting {{.from}} into a disk, in a throwaway VM ({{.vm}})"
 other = "converting {{.from}}"
 
 [convert_failed]
-other = "couldn't convert {{.from}} into a disk"
+other = "Converting {{.from}} into a disk failed."
 
 [convert_bad_output]
-other = "converting {{.from}} wrote an unexpected {{.file}} (the image may be hostile): not using it"
+other = "Converting {{.from}} wrote an unexpected {{.file}}, so devvm didn't use it. The image may be hostile."
 
 [cloning_image]
 other = "cloning {{.parent}}'s image"
@@ -573,7 +573,7 @@ other = "cloning {{.parent}}'s image"
 other = "running {{.script}} in {{.vm}}"
 
 [script_failed]
-other = "{{.script}} failed in {{.vm}}, kept stopped: look inside with devvm limactl shell --start {{.vm}}; the next build, or devvm gc, deletes it"
+other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run devvm limactl shell --start {{.vm}}."
 
 [interrupted_image]
 other = "interrupted: deleting the unfinished image {{.vm}}"
@@ -583,7 +583,7 @@ other = "deleting the unfinished image {{.vm}}"
 
 [rebuild_replaces]
 description = "above is a space-separated list of image names"
-other = "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
+other = "Rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}.\ndevvm builds them again when they're next needed, and VMs keep the images they have."
 
 [continue]
 other = "Continue?"
@@ -602,11 +602,11 @@ other = "reading images and shared tools"
 
 [images_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't list the images: {{.reason}}"
+other = "Listing the images failed: {{.reason}}."
 
 [images_rm_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't delete the images: {{.reason}}"
+other = "Deleting the images failed: {{.reason}}."
 
 [deleted_image]
 other = "deleted image {{.image}} ({{.key}})"
@@ -618,24 +618,24 @@ other = "there's no image {{.image}}: devvm images lists them"
 other = "there's no image {{.image}} from {{.from}}: devvm images lists them"
 
 [tools_not_images_rm]
-other = "{{.image}} names shared tools, which aren't images: name the image under them; devvm gc deletes unused tool images"
+other = "{{.image}} names shared tools, and shared tools aren't images. Name the image under them, and run devvm gc to delete unused shared tool images."
 
 [images_stale_note]
-one = "{{.count}} image is stale or unfinished: devvm gc deletes it"
-other = "{{.count}} images are stale or unfinished: devvm gc deletes them"
+one = "{{.count}} image is stale or unfinished. Run devvm gc to delete it."
+other = "{{.count}} images are stale or unfinished. Run devvm gc to delete them."
 
 [images_unused]
-other = "{{.size}} of tool images unused: devvm gc frees it"
+other = "Unused shared tool images take {{.size}}. Run devvm gc to free it."
 
 [gc_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't clean up: {{.reason}}"
+other = "Cleaning up failed: {{.reason}}."
 
 [nothing_to_clean]
 other = "nothing to clean up"
 
 [gc_images]
-other = "stale and unfinished images:"
+other = "Stale and unfinished images:"
 
 [gc_image]
 other = "  {{.image}} ({{.key}})"
@@ -644,8 +644,8 @@ other = "  {{.image}} ({{.key}})"
 other = "  {{.key}}, left over from a failed build"
 
 [gc_tools]
-one = "{{.count}} unused tool image ({{.size}})"
-other = "{{.count}} unused tool images ({{.size}})"
+one = "{{.count}} shared tool image is unused ({{.size}})."
+other = "{{.count}} shared tool images are unused ({{.size}})."
 
 [gc_confirm]
 other = "Your VMs stay as they are. Delete these?"
@@ -658,8 +658,8 @@ one = "deleted {{.count}} unused tool image"
 other = "deleted {{.count}} unused tool images"
 
 [gc_assets]
-one = "{{.count}} old copy of devvm's files"
-other = "{{.count}} old copies of devvm's files"
+one = "{{.count}} old copy of devvm's files is left from an earlier version."
+other = "{{.count}} old copies of devvm's files are left from earlier versions."
 
 [deleted_assets]
 one = "deleted {{.count}} old copy of devvm's files"
@@ -1272,52 +1272,52 @@ other = "The submodule {{.sub}} keeps its git folder outside the project, at {{.
 
 [tools_not_images]
 description = "tools is a space-separated list of shared tools (node claude)"
-other = "{{.tools}}: shared tools aren't images, and their versions come from the tools lock; rebuild the image under them, devvm rebuild base"
+other = "Shared tools aren't images, and the tools lock sets their versions, so devvm can't rebuild {{.tools}}. Rebuild the image under them instead, such as with devvm rebuild base."
 
 [downloading_mise]
 other = "downloading mise {{.version}}"
 
 [mise_download_failed]
-other = "couldn't download mise {{.version}}, which resolves the shared tools' versions: check you're online"
+other = "The download of mise {{.version}} failed, and devvm needs mise to resolve the shared tools' versions. Check that you're online."
 
 [mise_checksum]
-other = "the mise {{.version}} download doesn't match its checksum: not using it"
+other = "The mise {{.version}} download doesn't match its checksum, so devvm didn't use it."
 
 [resolving_tools]
 other = "resolving the shared tools' versions"
 
 [tools_resolve_failed]
-other = "couldn't resolve the shared tools' versions (offline?)"
+other = "Resolving the shared tools' versions failed. Check that you're online."
 
 [tools_need_resolve]
-other = "the shared tools need their versions resolved once, online: try again when you're online"
+other = "Resolving the shared tools' versions failed, and devvm has to do it once, online. Try again when you're online."
 
 [tool_not_locked]
-other = "the shared tools' lock {{.lock}} has no {{.tool}}"
+other = "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm update to resolve the shared tools again."
 
 [tool_stepped_back]
-other = "using {{.tool}} {{.older}}: {{.tool}} {{.version}} isn't published for every platform yet"
+other = "{{.tool}} {{.version}} isn't published for every platform yet, so devvm uses {{.tool}} {{.older}}."
 
 [tool_no_download]
-other = "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it"
+other = "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it. The next daily check tries again."
 
 [checking_tools]
 other = "checking for newer shared tools"
 
 [tools_check_failed]
-other = "couldn't check for newer shared tools: using the versions devvm last found"
+other = "The check for newer shared tools failed, so devvm uses the versions it last found."
 
 [share_lock_held]
-other = "{{.dir}}/.lock is held: if no other devvm is running, remove it"
+other = "{{.dir}}/.lock is still held after devvm waited for it. If no other devvm is running, remove it and try again."
 
 [share_waiting]
 other = "waiting for another devvm to finish with {{.dir}}"
 
 [tools_changed]
-other = "the shared tools' versions changed while devvm waited: run it again"
+other = "The shared tools' versions changed while devvm waited. Run the command again."
 
 [tool_unbuilt]
-other = "{{.tool}} {{.version}} has no download for this VM's platform yet (a new release): try again tomorrow"
+other = "{{.tool}} {{.version}} is a new release with no download for this VM's platform yet. Try again tomorrow."
 
 [building_tools]
 description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
@@ -1327,10 +1327,10 @@ other = "building shared tools: {{.tools}}"
 other = "building the shared tools in {{.vm}}"
 
 [tools_build_failed]
-other = "building the shared tools failed"
+other = "Building the shared tools failed."
 
 [tool_bad_output]
-other = "the shared tools' build wrote {{.file}} as something other than a plain file: not using it"
+other = "The shared tools' build wrote {{.file}} as something other than a plain file, so devvm didn't use it."
 
 [newer_tools]
 description = "tools lists tools and versions: claude 2.1.295, codex 0.162.0"
@@ -1341,13 +1341,13 @@ description = "has is a space-separated list of the VM's layers and tools"
 other = "{{.vm}} doesn't have {{.layer}}: it has {{.has}}"
 
 [custom_layer_remove]
-other = "{{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again"
+other = "You can't remove a layer from {{.vm}}. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again."
 
 [tools_newest]
-other = "{{.vm}}'s shared tools are the newest"
+other = "{{.vm}} has the newest shared tools."
 
 [tools_switch]
-other = "{{.vm}} moves to them on this launch"
+other = "{{.vm}} moves to the newest shared tools on this launch."
 
 [sync_failed]
 other = "couldn't set up {{.vm}}"
