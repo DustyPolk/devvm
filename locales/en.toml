@@ -41,140 +41,140 @@ other = "can't write the run log in {{.dir}}: {{.reason}}"
 
 [backend_lacks]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
-other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
+other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see which backends do."
 
 [backend_unreviewed]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
-other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it, unreviewed: use a backend that has it"
+other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see which backends have it."
 
 [backend_unreviewed_used]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (smolvm)"
-other = "{{.vm}} uses the {{.backend}} backend's {{.feature}}, unreviewed, as DEVVM_UNREVIEWED asks: for testing only"
+other = "{{.vm}} uses the {{.backend}} backend's unreviewed {{.feature}}, because DEVVM_UNREVIEWED asks for it. Use this only for testing."
 
 [backend_unknown]
-other = "there's no {{.name}} backend: choose one of {{.backends}}"
+other = "There's no {{.name}} backend. Choose one of {{.backends}}."
 
 [backend_unknown_default]
-other = "{{.file}} sets the backend to {{.name}}, which doesn't exist: change it to one of {{.backends}}"
+other = "{{.file}} sets the backend to {{.name}}, which doesn't exist. Change it to one of {{.backends}}."
 
 [backend_unknown_vm]
-other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have: use the devvm that made it"
+other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have. Use the devvm that made it."
 
 [tool_bad_version]
 description = "version is quoted, as the tools lock has it"
 other = "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm update to resolve the shared tools again."
 
 [lima_missing]
-other = "Lima isn't installed: install Lima 2.0 or newer"
+other = "Lima isn't installed. Install Lima 2.0 or newer."
 
 [lima_broken]
-other = "limactl --version failed: reinstall Lima"
+other = "Lima is installed, but limactl --version fails. Reinstall Lima."
 
 [lima_old]
-other = "Lima {{.version}} is too old: upgrade to Lima 2.0 or newer"
+other = "Lima {{.version}} is too old. Upgrade to Lima 2.0 or newer."
 
 [lima_host_unsupported]
 description = "os is Go's name for the host's system (windows)"
-other = "the lima backend doesn't run on {{.os}}: use macOS or Linux"
+other = "The lima backend doesn't run on {{.os}}. Use macOS or Linux."
 
 [qemu_missing]
-other = "{{.program}} isn't installed: install QEMU"
+other = "{{.program}} isn't installed. Install QEMU."
 
 [lima_missing_fix]
 description = "fix is a command, such as brew install lima"
-other = "Lima isn't installed: run {{.fix}}"
+other = "Lima isn't installed. Run {{.fix}} to install it."
 
 [lima_broken_fix]
 description = "fix is a command, such as brew reinstall lima"
-other = "limactl --version failed: run {{.fix}}"
+other = "Lima is installed, but limactl --version fails. Run {{.fix}} to reinstall it."
 
 [lima_old_fix]
 description = "fix is a command, such as brew upgrade lima"
-other = "Lima {{.version}} is too old: run {{.fix}}"
+other = "Lima {{.version}} is too old. Run {{.fix}} to upgrade it."
 
 [qemu_missing_fix]
 description = "fix is a package manager's command"
-other = "{{.program}} isn't installed: run {{.fix}}"
+other = "{{.program}} isn't installed. Run {{.fix}} to install QEMU."
 
 [lima_arch_unsupported]
 description = "arch is Go's name for the host's processor (riscv64)"
-other = "the lima backend doesn't run on {{.arch}}: use an arm64 or x86_64 host"
+other = "The lima backend doesn't run on {{.arch}}. Use an arm64 or x86_64 machine."
 
 [macos_old]
-other = "macOS {{.version}} is too old for the lima backend: upgrade to macOS 13 or newer"
+other = "macOS {{.version}} is too old for the lima backend. Upgrade to macOS 13 or newer."
 
 [no_kvm]
-other = "/dev/kvm doesn't exist: turn on virtualization in the firmware, or nested virtualization for a VM"
+other = "/dev/kvm doesn't exist. Turn on virtualization in the firmware, or nested virtualization if this machine is a VM."
 
 [kvm_access]
 description = "fix is a command, such as sudo usermod -aG kvm alice"
-other = "can't open /dev/kvm: run {{.fix}}, then log in again"
+other = "You can't open /dev/kvm. Run {{.fix}}, then log in again."
 
 [docker_found]
-other = "Docker: found, for --from with images only Docker has"
+other = "Docker is installed, so --from can use container images only Docker has."
 
 [docker_missing]
-other = "Docker: not found (optional: only --from with images only Docker has needs it)"
+other = "Docker isn't installed. Only --from with a container image only Docker has needs it."
 
 [doctor_ok]
-other = "devvm {{.version}}: the {{.backend}} backend has everything it needs"
+other = "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 
 [doctor_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't check what devvm needs: {{.reason}}"
+other = "devvm couldn't check what it needs: {{.reason}}."
 
 [lima_global_config]
 description = "files is a space-separated list of paths"
-other = "Lima would add {{.files}} to every VM devvm starts: move them out of devvm's Lima home"
+other = "Lima would add {{.files}} to every VM devvm starts. Move them out of devvm's Lima home."
 
 [vm_has_networks]
 other = "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
 
 [lima_home_too_long]
-other = "devvm's Lima home {{.home}} is too long for {{.vm}}'s name: set DEVVM_LIMA_HOME to a shorter folder"
+other = "devvm's Lima home {{.home}} is too long for {{.vm}}'s name. Set DEVVM_LIMA_HOME to a shorter folder."
 
 [mount_comma]
 other = "Lima can't mount {{.path}}: its path has a comma"
 
 [smolvm_missing]
-other = "smolvm isn't installed: install smolvm 1.32 or newer"
+other = "smolvm isn't installed. Install smolvm 1.32 or newer."
 
 [smolvm_missing_fix]
 description = "fix is a command, such as brew install smol-machines/tap/smolvm"
-other = "smolvm isn't installed: run {{.fix}}"
+other = "smolvm isn't installed. Run {{.fix}} to install it."
 
 [smolvm_broken]
-other = "smolvm --version failed: reinstall smolvm"
+other = "smolvm is installed, but smolvm --version fails. Reinstall smolvm."
 
 [smolvm_broken_fix]
 description = "fix is a command, such as brew reinstall smolvm"
-other = "smolvm --version failed: run {{.fix}}"
+other = "smolvm is installed, but smolvm --version fails. Run {{.fix}} to reinstall it."
 
 [smolvm_old]
-other = "smolvm {{.version}} is too old: upgrade to smolvm 1.32 or newer"
+other = "smolvm {{.version}} is too old. Upgrade to smolvm 1.32 or newer."
 
 [smolvm_old_fix]
 description = "fix is a command, such as brew upgrade smolvm"
-other = "smolvm {{.version}} is too old: run {{.fix}}"
+other = "smolvm {{.version}} is too old. Run {{.fix}} to upgrade it."
 
 [smolvm_host_unsupported]
 description = "host is Go's names for the host's system and processor (linux/riscv64)"
-other = "the smolvm backend doesn't run on {{.host}}: use an arm64 Mac, or Linux on arm64 or x86_64"
+other = "The smolvm backend doesn't run on {{.host}}. Use an arm64 Mac, or Linux on arm64 or x86_64."
 
 [smolvm_machine_foreign]
-other = "smolvm has a machine named {{.vm}} that isn't this devvm's: delete or rename it with smolvm"
+other = "smolvm has a machine named {{.vm}} that isn't this devvm's. Delete or rename it with smolvm."
 
 [smolvm_update_failed]
-other = "couldn't change {{.vm}}'s smolvm settings"
+other = "devvm couldn't change {{.vm}}'s smolvm settings."
 
 [smolvm_script_failed]
 other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}."
 
 [smolvm_from_registry_only]
-other = "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
+other = "The smolvm backend builds only from container images in a registry, and {{.image}} is only in Docker. Push it to a registry."
 
 [smolvm_mount_colon]
-other = "smolvm can't mount {{.path}}: its path has a colon"
+other = "smolvm can't mount {{.path}}, because the path has a colon."
 
 [vm_no_ssh]
 other = "{{.vm}} was started without ssh: devvm restart starts it with it"
@@ -184,10 +184,10 @@ other = "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after de
 
 [smolvm_ssh_port_forwarded]
 description = "port is a host port"
-other = "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave it out of devvm ports"
+other = "Port {{.port}}, which {{.vm}}'s ssh uses, is also one of its forwarded ports. Leave it out of devvm ports."
 
 [smolvm_no_agent]
-other = "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
+other = "{{.vm}} forwards an SSH agent, but SSH_AUTH_SOCK isn't set. Start an agent, or set SSH_AUTH_SOCK."
 
 [ports_no_ssh]
 other = "{{.vm}} runs without ssh, so none of its ports are forwarded"
@@ -197,58 +197,58 @@ other = "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
 
 [docker_host_unsupported]
 description = "host is Go's names for the host's system and processor (windows/amd64)"
-other = "the docker backend doesn't run on {{.host}}: use macOS or Linux"
+other = "The docker backend doesn't run on {{.host}}. Use macOS or Linux."
 
 [docker_not_installed]
-other = "Docker isn't installed: install Docker Desktop, or Docker's engine on Linux, 29.1 or newer"
+other = "Docker isn't installed. Install Docker Desktop, or Docker's engine on Linux, with Docker 29.1 or newer."
 
 [docker_down]
-other = "Docker's engine isn't running, or docker can't reach it: start Docker Desktop, or Docker's service"
+other = "Docker's engine isn't running, or docker can't reach it. Start Docker Desktop, or Docker's service."
 
 [docker_access]
 description = "fix is a command, such as sudo usermod -aG docker alice"
-other = "you can't reach Docker's engine: run {{.fix}}, then log in again"
+other = "You can't reach Docker's engine. Run {{.fix}}, then log in again."
 
 [docker_old]
-other = "Docker {{.version}} is too old: upgrade to Docker 29.1 or newer"
+other = "Docker {{.version}} is too old. Upgrade to Docker 29.1 or newer."
 
 [docker_not_linux]
 description = "os is the containers' system, as Docker names it (windows)"
-other = "Docker's engine runs {{.os}} containers: switch it to Linux containers"
+other = "Docker's engine runs {{.os}} containers. Switch it to Linux containers."
 
 [docker_arch]
 description = "engine and host are processors, as uname names them (x86_64, aarch64)"
-other = "Docker's engine runs {{.engine}} containers, and this machine is {{.host}}: use an engine of this machine's"
+other = "Docker's engine runs {{.engine}} containers, but this machine is {{.host}}. Use an engine that runs {{.host}} containers."
 
 [docker_engine_desktop]
-other = "Docker's engine: Docker Desktop {{.version}}, every VM in its one Linux VM"
+other = "Docker's engine is Docker Desktop {{.version}}, which runs every VM in its one Linux VM."
 
 [docker_engine_linux]
-other = "Docker's engine: Docker {{.version}} on this machine, every VM sharing its kernel"
+other = "Docker's engine is Docker {{.version}} on this machine, and every VM shares its kernel."
 
 [docker_engine_other]
 description = "name is the engine's own (OrbStack, Ubuntu 26.04 LTS)"
-other = "Docker's engine: Docker {{.version}} ({{.name}}), not Docker Desktop or this machine's: builds aren't confined on it"
+other = "Docker's engine is Docker {{.version}} ({{.name}}), which is neither Docker Desktop nor this machine's own. devvm can't confine builds on it."
 
 [docker_sysbox]
-other = "Sysbox: VMs with the docker layer run under it"
+other = "Sysbox is installed, so VMs with the docker layer run under it."
 
 [docker_layer_no_sysbox]
-other = "{{.vm}} needs Sysbox on this Docker engine for the docker layer: install it, or use a VM backend (lima, smolvm)"
+other = "{{.vm}} needs Sysbox on this Docker engine for the docker layer. Install Sysbox, or use --backend lima."
 
 [docker_layer_needs_vm]
-other = "{{.vm}} needs a VM backend (lima, smolvm) for the docker layer: Docker runs it only under Sysbox, on this machine's Linux engine"
+other = "{{.vm}} can't run the docker layer on this Docker engine. Use --backend lima."
 
 [docker_route_localnet]
-other = "{{.vm}} can't run the docker layer on this Docker engine: its bridges route to this machine's loopback (\"userland-proxy\": false); turn Docker's userland proxy on, or use a VM backend (lima, smolvm)"
+other = "The docker layer isn't safe for {{.vm}} on this Docker engine with \"userland-proxy\": false. Turn the userland proxy back on, or use --backend lima."
 
 [docker_bridge_unreadable]
 description = "bridge is a network interface's name (br-0123456789ab)"
-other = "can't read Docker's bridge {{.bridge}}'s settings for {{.vm}}"
+other = "devvm can't read the settings of Docker's bridge {{.bridge}} for {{.vm}}."
 
 [docker_layer_runtime]
 description = "backend is a backend's name (docker); runtime is the runtime's name (sysbox)"
-other = "{{.vm}} runs the docker layer under {{.runtime}}, on {{.backend}}: no network policy for it"
+other = "{{.vm}} runs the docker layer under {{.runtime}} on {{.backend}}, so it has no network policy."
 
 [net_docker_layer]
 description = "backend is a backend's name (docker)"
@@ -264,55 +264,55 @@ other = "devvm is making {{.vm}} without network policy, because the {{.backend}
 
 [docker_file_sharing]
 description = "dirs is a space-separated list of host folders"
-other = "Docker Desktop mounts only folders under {{.dirs}}"
+other = "Docker Desktop mounts only folders under {{.dirs}}."
 
 [docker_not_shared]
-other = "Docker Desktop doesn't share {{.path}} with containers: add it in Settings > Resources > File sharing"
+other = "Docker Desktop doesn't share {{.path}} with containers. Add it in Settings > Resources > File sharing."
 
 [docker_mount_path]
-other = "Docker can't mount {{.path}}: its path has a comma or a quote"
+other = "Docker can't mount {{.path}}, because the path has a comma or a quote."
 
 [docker_ssh_path]
-other = "devvm's ssh config can't name {{.path}}: it has a quote, a backslash, a percent sign or a control character"
+other = "devvm's ssh config can't name {{.path}}, because it has a quote, a backslash, a percent sign or a control character."
 
 [docker_container_foreign]
-other = "Docker has a container named {{.name}} that isn't this devvm's: remove or rename it with docker"
+other = "Docker has a container named {{.name}} that isn't this devvm's. Remove or rename it with docker."
 
 [docker_volume_foreign]
-other = "Docker has a volume named {{.name}} that isn't this devvm's: remove it with docker"
+other = "Docker has a volume named {{.name}} that isn't this devvm's. Remove it with docker."
 
 [docker_volume_failed]
-other = "couldn't make or delete Docker's volume {{.name}}"
+other = "devvm couldn't make or delete Docker's volume {{.name}}."
 
 [docker_network_foreign]
-other = "Docker has a network named {{.name}} that isn't this devvm's: remove it with docker"
+other = "Docker has a network named {{.name}} that isn't this devvm's. Remove it with docker."
 
 [docker_network_failed]
-other = "couldn't make, change or delete Docker's network {{.name}}"
+other = "devvm couldn't make, change or delete Docker's network {{.name}}."
 
 [docker_network_shared]
-other = "Docker's network {{.name}} has containers devvm didn't put there: take them off it (docker network disconnect {{.name}} CONTAINER), then try again"
+other = "Docker's network {{.name}} has containers devvm didn't put there. Take them off it with docker network disconnect {{.name}} CONTAINER, then try again."
 
 [docker_relay_image_failed]
-other = "couldn't make the empty image devvm's proxy relays run in"
+other = "devvm couldn't make the empty image that its proxy's relays run in."
 
 [docker_linux_build_missing]
-other = "devvm's Linux build isn't at {{.path}}, and this devvm isn't a release, which fetches its own: build devvm for Linux there, as this one was built, or install a release"
+other = "devvm's Linux build isn't at {{.path}}, and only a release of devvm fetches its own. Build devvm for Linux there, as this one was built, or install a release."
 
 [docker_linux_build_fetching]
-other = "fetching devvm's Linux build, which Docker runs in containers: {{.url}}"
+other = "Fetching devvm's Linux build, which Docker runs in containers, from {{.url}}."
 
 [docker_linux_build_fetch_failed]
-other = "couldn't fetch devvm's Linux build from {{.url}}: check the connection, then run devvm again"
+other = "devvm couldn't fetch its Linux build from {{.url}}. Check the connection, then run devvm again."
 
 [docker_linux_build_mismatch]
-other = "devvm's Linux build from {{.url}} doesn't match the SHA-256 this devvm has, so it isn't used: reinstall devvm"
+other = "devvm's Linux build from {{.url}} doesn't match the SHA-256 this devvm has, so devvm didn't use it. Reinstall devvm."
 
 [docker_linux_build_other]
-other = "{{.path}} isn't this devvm's Linux build: reinstall devvm"
+other = "{{.path}} isn't this devvm's Linux build. Reinstall devvm."
 
 [docker_image_rm_failed]
-other = "couldn't delete Docker's image {{.image}}"
+other = "devvm couldn't delete Docker's image {{.image}}."
 
 [docker_script_failed]
 other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
@@ -321,25 +321,25 @@ other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the nex
 other = "committing {{.vm}}"
 
 [docker_commit_failed]
-other = "couldn't commit {{.vm}}"
+other = "devvm couldn't commit {{.vm}}."
 
 [pulling_image]
 other = "pulling {{.image}}"
 
 [docker_pull_failed]
-other = "couldn't pull {{.image}}"
+other = "devvm couldn't pull {{.image}}."
 
 [docker_update_failed]
-other = "couldn't change {{.vm}}'s Docker settings"
+other = "devvm couldn't change {{.vm}}'s Docker settings."
 
 [docker_remaking]
-other = "making {{.vm}}'s container again, for its new mounts or capabilities: its disk and home are kept"
+other = "Making {{.vm}}'s container again for its new mounts or capabilities. Its disk and home stay as they are."
 
 [unpacking_tools]
 other = "unpacking the shared tools"
 
 [docker_tools_failed]
-other = "couldn't unpack the shared tools into Docker's volume {{.volume}}"
+other = "devvm couldn't unpack the shared tools into Docker's volume {{.volume}}."
 
 [disk_over]
 description = "used and limit are sizes in GiB; backend is a backend's name (docker)"
@@ -412,10 +412,10 @@ other = "couldn't delete {{.vm}}"
 other = "couldn't create {{.vm}}"
 
 [lima_edit_failed]
-other = "couldn't change {{.vm}}'s Lima settings"
+other = "devvm couldn't change {{.vm}}'s Lima settings."
 
 [qemu_refused]
-other = "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"
+other = "devvm won't start QEMU, because its arguments don't have exactly one -netdev user,id=net0,… for devvm to restrict."
 
 [no_ubuntu_image]
 description = "release is the pinned dated release's folder name (release-20260101)"
@@ -540,16 +540,16 @@ other = "{{.host}} doesn't have {{.from}}, or it's private, so devvm uses the di
 other = "devvm has no digest for {{.from}}"
 
 [docker_only]
-other = "{{.from}} is an image only Docker has (built and never pushed, or private): start Docker and try again"
+other = "{{.from}} is a container image only Docker has, such as one built and never pushed, or a private one. Start Docker and try again."
 
 [exporting_docker]
 other = "exporting {{.from}} from Docker"
 
 [docker_export_failed]
-other = "couldn't export {{.from}} from Docker"
+other = "devvm couldn't export {{.from}} from Docker."
 
 [docker_image_changed]
-other = "{{.from}} changed in Docker while devvm built from it (a rebuild?): run devvm again"
+other = "{{.from}} changed in Docker while devvm built from it, perhaps because of a rebuild. Run devvm again."
 
 [oci_waiting]
 other = "waiting for another devvm's --from conversion to finish"
@@ -725,7 +725,7 @@ other = "no VM for {{.dir}}: devvm makes one"
 other = "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes it again"
 
 [backend_flag_ignored]
-other = "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
+other = "--backend applies only to new VMs, so {{.vm}} stays on {{.backend}}."
 
 [net_flag_ignored]
 other = "--network-policy and --no-network-policy apply only to new VMs. To change this VM's network policy, run devvm network on or devvm network off."
@@ -1406,7 +1406,7 @@ other = "port forwarder: {{.reason}}"
 
 [docker_connect_failed]
 description = "reason is an error from the system, docker or the flag parser, in English"
-other = "couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}"
+other = "devvm couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}."
 
 [bad_secret_service]
 other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"

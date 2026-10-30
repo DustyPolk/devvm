@@ -164,7 +164,7 @@ func BackendExperimental() M {
 	return M{id: "backend_experimental"}
 }
 
-// BackendFlagIgnored is [backend_flag_ignored]: "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
+// BackendFlagIgnored is [backend_flag_ignored]: "--backend applies only to new VMs, so {{.vm}} stays on {{.backend}}."
 func BackendFlagIgnored(backend string, vm string) M {
 	return M{id: "backend_flag_ignored", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
@@ -174,32 +174,32 @@ func BackendHelp() M {
 	return M{id: "backend_help"}
 }
 
-// BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it: use a backend that does"
+// BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see which backends do."
 func BackendLacks(backend string, feature string, vm string) M {
 	return M{id: "backend_lacks", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
-// BackendUnknown is [backend_unknown]: "there's no {{.name}} backend: choose one of {{.backends}}"
+// BackendUnknown is [backend_unknown]: "There's no {{.name}} backend. Choose one of {{.backends}}."
 func BackendUnknown(backends string, name string) M {
 	return M{id: "backend_unknown", vals: []val{{"backends", backends}, {"name", name}}}
 }
 
-// BackendUnknownDefault is [backend_unknown_default]: "{{.file}} sets the backend to {{.name}}, which doesn't exist: change it to one of {{.backends}}"
+// BackendUnknownDefault is [backend_unknown_default]: "{{.file}} sets the backend to {{.name}}, which doesn't exist. Change it to one of {{.backends}}."
 func BackendUnknownDefault(backends string, file string, name string) M {
 	return M{id: "backend_unknown_default", vals: []val{{"backends", backends}, {"file", file}, {"name", name}}}
 }
 
-// BackendUnknownVM is [backend_unknown_vm]: "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have: use the devvm that made it"
+// BackendUnknownVM is [backend_unknown_vm]: "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have. Use the devvm that made it."
 func BackendUnknownVM(backend string, vm string) M {
 	return M{id: "backend_unknown_vm", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// BackendUnreviewed is [backend_unreviewed]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it, unreviewed: use a backend that has it"
+// BackendUnreviewed is [backend_unreviewed]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see which backends have it."
 func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
-// BackendUnreviewedUsed is [backend_unreviewed_used]: "{{.vm}} uses the {{.backend}} backend's {{.feature}}, unreviewed, as DEVVM_UNREVIEWED asks: for testing only"
+// BackendUnreviewedUsed is [backend_unreviewed_used]: "{{.vm}} uses the {{.backend}} backend's unreviewed {{.feature}}, because DEVVM_UNREVIEWED asks for it. Use this only for testing."
 func BackendUnreviewedUsed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed_used", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
@@ -604,192 +604,192 @@ func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
 }
 
-// DockerAccess is [docker_access]: "you can't reach Docker's engine: run {{.fix}}, then log in again"
+// DockerAccess is [docker_access]: "You can't reach Docker's engine. Run {{.fix}}, then log in again."
 func DockerAccess(fix string) M {
 	return M{id: "docker_access", vals: []val{{"fix", fix}}}
 }
 
-// DockerArch is [docker_arch]: "Docker's engine runs {{.engine}} containers, and this machine is {{.host}}: use an engine of this machine's"
+// DockerArch is [docker_arch]: "Docker's engine runs {{.engine}} containers, but this machine is {{.host}}. Use an engine that runs {{.host}} containers."
 func DockerArch(engine string, host string) M {
 	return M{id: "docker_arch", vals: []val{{"engine", engine}, {"host", host}}}
 }
 
-// DockerBridgeUnreadable is [docker_bridge_unreadable]: "can't read Docker's bridge {{.bridge}}'s settings for {{.vm}}"
+// DockerBridgeUnreadable is [docker_bridge_unreadable]: "devvm can't read the settings of Docker's bridge {{.bridge}} for {{.vm}}."
 func DockerBridgeUnreadable(bridge string, vm string) M {
 	return M{id: "docker_bridge_unreadable", vals: []val{{"bridge", bridge}, {"vm", vm}}}
 }
 
-// DockerCommitFailed is [docker_commit_failed]: "couldn't commit {{.vm}}"
+// DockerCommitFailed is [docker_commit_failed]: "devvm couldn't commit {{.vm}}."
 func DockerCommitFailed(vm string) M {
 	return M{id: "docker_commit_failed", vals: []val{{"vm", vm}}}
 }
 
-// DockerConnectFailed is [docker_connect_failed]: "couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}"
+// DockerConnectFailed is [docker_connect_failed]: "devvm couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}."
 func DockerConnectFailed(reason string, vm string) M {
 	return M{id: "docker_connect_failed", vals: []val{{"reason", reason}, {"vm", vm}}}
 }
 
-// DockerContainerForeign is [docker_container_foreign]: "Docker has a container named {{.name}} that isn't this devvm's: remove or rename it with docker"
+// DockerContainerForeign is [docker_container_foreign]: "Docker has a container named {{.name}} that isn't this devvm's. Remove or rename it with docker."
 func DockerContainerForeign(name string) M {
 	return M{id: "docker_container_foreign", vals: []val{{"name", name}}}
 }
 
-// DockerDown is [docker_down]: "Docker's engine isn't running, or docker can't reach it: start Docker Desktop, or Docker's service"
+// DockerDown is [docker_down]: "Docker's engine isn't running, or docker can't reach it. Start Docker Desktop, or Docker's service."
 func DockerDown() M {
 	return M{id: "docker_down"}
 }
 
-// DockerEngineDesktop is [docker_engine_desktop]: "Docker's engine: Docker Desktop {{.version}}, every VM in its one Linux VM"
+// DockerEngineDesktop is [docker_engine_desktop]: "Docker's engine is Docker Desktop {{.version}}, which runs every VM in its one Linux VM."
 func DockerEngineDesktop(version string) M {
 	return M{id: "docker_engine_desktop", vals: []val{{"version", version}}}
 }
 
-// DockerEngineLinux is [docker_engine_linux]: "Docker's engine: Docker {{.version}} on this machine, every VM sharing its kernel"
+// DockerEngineLinux is [docker_engine_linux]: "Docker's engine is Docker {{.version}} on this machine, and every VM shares its kernel."
 func DockerEngineLinux(version string) M {
 	return M{id: "docker_engine_linux", vals: []val{{"version", version}}}
 }
 
-// DockerEngineOther is [docker_engine_other]: "Docker's engine: Docker {{.version}} ({{.name}}), not Docker Desktop or this machine's: builds aren't confined on it"
+// DockerEngineOther is [docker_engine_other]: "Docker's engine is Docker {{.version}} ({{.name}}), which is neither Docker Desktop nor this machine's own. devvm can't confine builds on it."
 func DockerEngineOther(name string, version string) M {
 	return M{id: "docker_engine_other", vals: []val{{"name", name}, {"version", version}}}
 }
 
-// DockerExportFailed is [docker_export_failed]: "couldn't export {{.from}} from Docker"
+// DockerExportFailed is [docker_export_failed]: "devvm couldn't export {{.from}} from Docker."
 func DockerExportFailed(from string) M {
 	return M{id: "docker_export_failed", vals: []val{{"from", from}}}
 }
 
-// DockerFileSharing is [docker_file_sharing]: "Docker Desktop mounts only folders under {{.dirs}}"
+// DockerFileSharing is [docker_file_sharing]: "Docker Desktop mounts only folders under {{.dirs}}."
 func DockerFileSharing(dirs string) M {
 	return M{id: "docker_file_sharing", vals: []val{{"dirs", dirs}}}
 }
 
-// DockerFound is [docker_found]: "Docker: found, for --from with images only Docker has"
+// DockerFound is [docker_found]: "Docker is installed, so --from can use container images only Docker has."
 func DockerFound() M {
 	return M{id: "docker_found"}
 }
 
-// DockerHostUnsupported is [docker_host_unsupported]: "the docker backend doesn't run on {{.host}}: use macOS or Linux"
+// DockerHostUnsupported is [docker_host_unsupported]: "The docker backend doesn't run on {{.host}}. Use macOS or Linux."
 func DockerHostUnsupported(host string) M {
 	return M{id: "docker_host_unsupported", vals: []val{{"host", host}}}
 }
 
-// DockerImageChanged is [docker_image_changed]: "{{.from}} changed in Docker while devvm built from it (a rebuild?): run devvm again"
+// DockerImageChanged is [docker_image_changed]: "{{.from}} changed in Docker while devvm built from it, perhaps because of a rebuild. Run devvm again."
 func DockerImageChanged(from string) M {
 	return M{id: "docker_image_changed", vals: []val{{"from", from}}}
 }
 
-// DockerImageRmFailed is [docker_image_rm_failed]: "couldn't delete Docker's image {{.image}}"
+// DockerImageRmFailed is [docker_image_rm_failed]: "devvm couldn't delete Docker's image {{.image}}."
 func DockerImageRmFailed(image string) M {
 	return M{id: "docker_image_rm_failed", vals: []val{{"image", image}}}
 }
 
-// DockerLayerNeedsVM is [docker_layer_needs_vm]: "{{.vm}} needs a VM backend (lima, smolvm) for the docker layer: Docker runs it only under Sysbox, on this machine's Linux engine"
+// DockerLayerNeedsVM is [docker_layer_needs_vm]: "{{.vm}} can't run the docker layer on this Docker engine. Use --backend lima."
 func DockerLayerNeedsVM(vm string) M {
 	return M{id: "docker_layer_needs_vm", vals: []val{{"vm", vm}}}
 }
 
-// DockerLayerNoSysbox is [docker_layer_no_sysbox]: "{{.vm}} needs Sysbox on this Docker engine for the docker layer: install it, or use a VM backend (lima, smolvm)"
+// DockerLayerNoSysbox is [docker_layer_no_sysbox]: "{{.vm}} needs Sysbox on this Docker engine for the docker layer. Install Sysbox, or use --backend lima."
 func DockerLayerNoSysbox(vm string) M {
 	return M{id: "docker_layer_no_sysbox", vals: []val{{"vm", vm}}}
 }
 
-// DockerLayerRuntime is [docker_layer_runtime]: "{{.vm}} runs the docker layer under {{.runtime}}, on {{.backend}}: no network policy for it"
+// DockerLayerRuntime is [docker_layer_runtime]: "{{.vm}} runs the docker layer under {{.runtime}} on {{.backend}}, so it has no network policy."
 func DockerLayerRuntime(backend string, runtime string, vm string) M {
 	return M{id: "docker_layer_runtime", vals: []val{{"backend", backend}, {"runtime", runtime}, {"vm", vm}}}
 }
 
-// DockerLinuxBuildFetchFailed is [docker_linux_build_fetch_failed]: "couldn't fetch devvm's Linux build from {{.url}}: check the connection, then run devvm again"
+// DockerLinuxBuildFetchFailed is [docker_linux_build_fetch_failed]: "devvm couldn't fetch its Linux build from {{.url}}. Check the connection, then run devvm again."
 func DockerLinuxBuildFetchFailed(url string) M {
 	return M{id: "docker_linux_build_fetch_failed", vals: []val{{"url", url}}}
 }
 
-// DockerLinuxBuildFetching is [docker_linux_build_fetching]: "fetching devvm's Linux build, which Docker runs in containers: {{.url}}"
+// DockerLinuxBuildFetching is [docker_linux_build_fetching]: "Fetching devvm's Linux build, which Docker runs in containers, from {{.url}}."
 func DockerLinuxBuildFetching(url string) M {
 	return M{id: "docker_linux_build_fetching", vals: []val{{"url", url}}}
 }
 
-// DockerLinuxBuildMismatch is [docker_linux_build_mismatch]: "devvm's Linux build from {{.url}} doesn't match the SHA-256 this devvm has, so it isn't used: reinstall devvm"
+// DockerLinuxBuildMismatch is [docker_linux_build_mismatch]: "devvm's Linux build from {{.url}} doesn't match the SHA-256 this devvm has, so devvm didn't use it. Reinstall devvm."
 func DockerLinuxBuildMismatch(url string) M {
 	return M{id: "docker_linux_build_mismatch", vals: []val{{"url", url}}}
 }
 
-// DockerLinuxBuildMissing is [docker_linux_build_missing]: "devvm's Linux build isn't at {{.path}}, and this devvm isn't a release, which fetches its own: build devvm for Linux there, as this one was built, or install a release"
+// DockerLinuxBuildMissing is [docker_linux_build_missing]: "devvm's Linux build isn't at {{.path}}, and only a release of devvm fetches its own. Build devvm for Linux there, as this one was built, or install a release."
 func DockerLinuxBuildMissing(path string) M {
 	return M{id: "docker_linux_build_missing", vals: []val{{"path", path}}}
 }
 
-// DockerLinuxBuildOther is [docker_linux_build_other]: "{{.path}} isn't this devvm's Linux build: reinstall devvm"
+// DockerLinuxBuildOther is [docker_linux_build_other]: "{{.path}} isn't this devvm's Linux build. Reinstall devvm."
 func DockerLinuxBuildOther(path string) M {
 	return M{id: "docker_linux_build_other", vals: []val{{"path", path}}}
 }
 
-// DockerMissing is [docker_missing]: "Docker: not found (optional: only --from with images only Docker has needs it)"
+// DockerMissing is [docker_missing]: "Docker isn't installed. Only --from with a container image only Docker has needs it."
 func DockerMissing() M {
 	return M{id: "docker_missing"}
 }
 
-// DockerMountPath is [docker_mount_path]: "Docker can't mount {{.path}}: its path has a comma or a quote"
+// DockerMountPath is [docker_mount_path]: "Docker can't mount {{.path}}, because the path has a comma or a quote."
 func DockerMountPath(path string) M {
 	return M{id: "docker_mount_path", vals: []val{{"path", path}}}
 }
 
-// DockerNetworkFailed is [docker_network_failed]: "couldn't make, change or delete Docker's network {{.name}}"
+// DockerNetworkFailed is [docker_network_failed]: "devvm couldn't make, change or delete Docker's network {{.name}}."
 func DockerNetworkFailed(name string) M {
 	return M{id: "docker_network_failed", vals: []val{{"name", name}}}
 }
 
-// DockerNetworkForeign is [docker_network_foreign]: "Docker has a network named {{.name}} that isn't this devvm's: remove it with docker"
+// DockerNetworkForeign is [docker_network_foreign]: "Docker has a network named {{.name}} that isn't this devvm's. Remove it with docker."
 func DockerNetworkForeign(name string) M {
 	return M{id: "docker_network_foreign", vals: []val{{"name", name}}}
 }
 
-// DockerNetworkShared is [docker_network_shared]: "Docker's network {{.name}} has containers devvm didn't put there: take them off it (docker network disconnect {{.name}} CONTAINER), then try again"
+// DockerNetworkShared is [docker_network_shared]: "Docker's network {{.name}} has containers devvm didn't put there. Take them off it with docker network disconnect {{.name}} CONTAINER, then try again."
 func DockerNetworkShared(name string) M {
 	return M{id: "docker_network_shared", vals: []val{{"name", name}}}
 }
 
-// DockerNotInstalled is [docker_not_installed]: "Docker isn't installed: install Docker Desktop, or Docker's engine on Linux, 29.1 or newer"
+// DockerNotInstalled is [docker_not_installed]: "Docker isn't installed. Install Docker Desktop, or Docker's engine on Linux, with Docker 29.1 or newer."
 func DockerNotInstalled() M {
 	return M{id: "docker_not_installed"}
 }
 
-// DockerNotLinux is [docker_not_linux]: "Docker's engine runs {{.os}} containers: switch it to Linux containers"
+// DockerNotLinux is [docker_not_linux]: "Docker's engine runs {{.os}} containers. Switch it to Linux containers."
 func DockerNotLinux(os string) M {
 	return M{id: "docker_not_linux", vals: []val{{"os", os}}}
 }
 
-// DockerNotShared is [docker_not_shared]: "Docker Desktop doesn't share {{.path}} with containers: add it in Settings > Resources > File sharing"
+// DockerNotShared is [docker_not_shared]: "Docker Desktop doesn't share {{.path}} with containers. Add it in Settings > Resources > File sharing."
 func DockerNotShared(path string) M {
 	return M{id: "docker_not_shared", vals: []val{{"path", path}}}
 }
 
-// DockerOld is [docker_old]: "Docker {{.version}} is too old: upgrade to Docker 29.1 or newer"
+// DockerOld is [docker_old]: "Docker {{.version}} is too old. Upgrade to Docker 29.1 or newer."
 func DockerOld(version string) M {
 	return M{id: "docker_old", vals: []val{{"version", version}}}
 }
 
-// DockerOnly is [docker_only]: "{{.from}} is an image only Docker has (built and never pushed, or private): start Docker and try again"
+// DockerOnly is [docker_only]: "{{.from}} is a container image only Docker has, such as one built and never pushed, or a private one. Start Docker and try again."
 func DockerOnly(from string) M {
 	return M{id: "docker_only", vals: []val{{"from", from}}}
 }
 
-// DockerPullFailed is [docker_pull_failed]: "couldn't pull {{.image}}"
+// DockerPullFailed is [docker_pull_failed]: "devvm couldn't pull {{.image}}."
 func DockerPullFailed(image string) M {
 	return M{id: "docker_pull_failed", vals: []val{{"image", image}}}
 }
 
-// DockerRelayImageFailed is [docker_relay_image_failed]: "couldn't make the empty image devvm's proxy relays run in"
+// DockerRelayImageFailed is [docker_relay_image_failed]: "devvm couldn't make the empty image that its proxy's relays run in."
 func DockerRelayImageFailed() M {
 	return M{id: "docker_relay_image_failed"}
 }
 
-// DockerRemaking is [docker_remaking]: "making {{.vm}}'s container again, for its new mounts or capabilities: its disk and home are kept"
+// DockerRemaking is [docker_remaking]: "Making {{.vm}}'s container again for its new mounts or capabilities. Its disk and home stay as they are."
 func DockerRemaking(vm string) M {
 	return M{id: "docker_remaking", vals: []val{{"vm", vm}}}
 }
 
-// DockerRouteLocalnet is [docker_route_localnet]: "{{.vm}} can't run the docker layer on this Docker engine: its bridges route to this machine's loopback (\"userland-proxy\": false); turn Docker's userland proxy on, or use a VM backend (lima, smolvm)"
+// DockerRouteLocalnet is [docker_route_localnet]: "The docker layer isn't safe for {{.vm}} on this Docker engine with \"userland-proxy\": false. Turn the userland proxy back on, or use --backend lima."
 func DockerRouteLocalnet(vm string) M {
 	return M{id: "docker_route_localnet", vals: []val{{"vm", vm}}}
 }
@@ -799,42 +799,42 @@ func DockerScriptFailed(script string, vm string) M {
 	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// DockerSSHPath is [docker_ssh_path]: "devvm's ssh config can't name {{.path}}: it has a quote, a backslash, a percent sign or a control character"
+// DockerSSHPath is [docker_ssh_path]: "devvm's ssh config can't name {{.path}}, because it has a quote, a backslash, a percent sign or a control character."
 func DockerSSHPath(path string) M {
 	return M{id: "docker_ssh_path", vals: []val{{"path", path}}}
 }
 
-// DockerSysbox is [docker_sysbox]: "Sysbox: VMs with the docker layer run under it"
+// DockerSysbox is [docker_sysbox]: "Sysbox is installed, so VMs with the docker layer run under it."
 func DockerSysbox() M {
 	return M{id: "docker_sysbox"}
 }
 
-// DockerToolsFailed is [docker_tools_failed]: "couldn't unpack the shared tools into Docker's volume {{.volume}}"
+// DockerToolsFailed is [docker_tools_failed]: "devvm couldn't unpack the shared tools into Docker's volume {{.volume}}."
 func DockerToolsFailed(volume string) M {
 	return M{id: "docker_tools_failed", vals: []val{{"volume", volume}}}
 }
 
-// DockerUpdateFailed is [docker_update_failed]: "couldn't change {{.vm}}'s Docker settings"
+// DockerUpdateFailed is [docker_update_failed]: "devvm couldn't change {{.vm}}'s Docker settings."
 func DockerUpdateFailed(vm string) M {
 	return M{id: "docker_update_failed", vals: []val{{"vm", vm}}}
 }
 
-// DockerVolumeFailed is [docker_volume_failed]: "couldn't make or delete Docker's volume {{.name}}"
+// DockerVolumeFailed is [docker_volume_failed]: "devvm couldn't make or delete Docker's volume {{.name}}."
 func DockerVolumeFailed(name string) M {
 	return M{id: "docker_volume_failed", vals: []val{{"name", name}}}
 }
 
-// DockerVolumeForeign is [docker_volume_foreign]: "Docker has a volume named {{.name}} that isn't this devvm's: remove it with docker"
+// DockerVolumeForeign is [docker_volume_foreign]: "Docker has a volume named {{.name}} that isn't this devvm's. Remove it with docker."
 func DockerVolumeForeign(name string) M {
 	return M{id: "docker_volume_foreign", vals: []val{{"name", name}}}
 }
 
-// DoctorFailed is [doctor_failed]: "couldn't check what devvm needs: {{.reason}}"
+// DoctorFailed is [doctor_failed]: "devvm couldn't check what it needs: {{.reason}}."
 func DoctorFailed(reason string) M {
 	return M{id: "doctor_failed", vals: []val{{"reason", reason}}}
 }
 
-// DoctorOK is [doctor_ok]: "devvm {{.version}}: the {{.backend}} backend has everything it needs"
+// DoctorOK is [doctor_ok]: "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 func DoctorOK(backend string, version string) M {
 	return M{id: "doctor_ok", vals: []val{{"backend", backend}, {"version", version}}}
 }
@@ -1169,7 +1169,7 @@ func KeychainSaveFailed(secret string) M {
 	return M{id: "keychain_save_failed", vals: []val{{"secret", secret}}}
 }
 
-// KVMAccess is [kvm_access]: "can't open /dev/kvm: run {{.fix}}, then log in again"
+// KVMAccess is [kvm_access]: "You can't open /dev/kvm. Run {{.fix}}, then log in again."
 func KVMAccess(fix string) M {
 	return M{id: "kvm_access", vals: []val{{"fix", fix}}}
 }
@@ -1199,57 +1199,57 @@ func LayerNewFailed(reason string) M {
 	return M{id: "layer_new_failed", vals: []val{{"reason", reason}}}
 }
 
-// LimaArchUnsupported is [lima_arch_unsupported]: "the lima backend doesn't run on {{.arch}}: use an arm64 or x86_64 host"
+// LimaArchUnsupported is [lima_arch_unsupported]: "The lima backend doesn't run on {{.arch}}. Use an arm64 or x86_64 machine."
 func LimaArchUnsupported(arch string) M {
 	return M{id: "lima_arch_unsupported", vals: []val{{"arch", arch}}}
 }
 
-// LimaBroken is [lima_broken]: "limactl --version failed: reinstall Lima"
+// LimaBroken is [lima_broken]: "Lima is installed, but limactl --version fails. Reinstall Lima."
 func LimaBroken() M {
 	return M{id: "lima_broken"}
 }
 
-// LimaBrokenFix is [lima_broken_fix]: "limactl --version failed: run {{.fix}}"
+// LimaBrokenFix is [lima_broken_fix]: "Lima is installed, but limactl --version fails. Run {{.fix}} to reinstall it."
 func LimaBrokenFix(fix string) M {
 	return M{id: "lima_broken_fix", vals: []val{{"fix", fix}}}
 }
 
-// LimaEditFailed is [lima_edit_failed]: "couldn't change {{.vm}}'s Lima settings"
+// LimaEditFailed is [lima_edit_failed]: "devvm couldn't change {{.vm}}'s Lima settings."
 func LimaEditFailed(vm string) M {
 	return M{id: "lima_edit_failed", vals: []val{{"vm", vm}}}
 }
 
-// LimaGlobalConfig is [lima_global_config]: "Lima would add {{.files}} to every VM devvm starts: move them out of devvm's Lima home"
+// LimaGlobalConfig is [lima_global_config]: "Lima would add {{.files}} to every VM devvm starts. Move them out of devvm's Lima home."
 func LimaGlobalConfig(files string) M {
 	return M{id: "lima_global_config", vals: []val{{"files", files}}}
 }
 
-// LimaHomeTooLong is [lima_home_too_long]: "devvm's Lima home {{.home}} is too long for {{.vm}}'s name: set DEVVM_LIMA_HOME to a shorter folder"
+// LimaHomeTooLong is [lima_home_too_long]: "devvm's Lima home {{.home}} is too long for {{.vm}}'s name. Set DEVVM_LIMA_HOME to a shorter folder."
 func LimaHomeTooLong(home string, vm string) M {
 	return M{id: "lima_home_too_long", vals: []val{{"home", home}, {"vm", vm}}}
 }
 
-// LimaHostUnsupported is [lima_host_unsupported]: "the lima backend doesn't run on {{.os}}: use macOS or Linux"
+// LimaHostUnsupported is [lima_host_unsupported]: "The lima backend doesn't run on {{.os}}. Use macOS or Linux."
 func LimaHostUnsupported(os string) M {
 	return M{id: "lima_host_unsupported", vals: []val{{"os", os}}}
 }
 
-// LimaMissing is [lima_missing]: "Lima isn't installed: install Lima 2.0 or newer"
+// LimaMissing is [lima_missing]: "Lima isn't installed. Install Lima 2.0 or newer."
 func LimaMissing() M {
 	return M{id: "lima_missing"}
 }
 
-// LimaMissingFix is [lima_missing_fix]: "Lima isn't installed: run {{.fix}}"
+// LimaMissingFix is [lima_missing_fix]: "Lima isn't installed. Run {{.fix}} to install it."
 func LimaMissingFix(fix string) M {
 	return M{id: "lima_missing_fix", vals: []val{{"fix", fix}}}
 }
 
-// LimaOld is [lima_old]: "Lima {{.version}} is too old: upgrade to Lima 2.0 or newer"
+// LimaOld is [lima_old]: "Lima {{.version}} is too old. Upgrade to Lima 2.0 or newer."
 func LimaOld(version string) M {
 	return M{id: "lima_old", vals: []val{{"version", version}}}
 }
 
-// LimaOldFix is [lima_old_fix]: "Lima {{.version}} is too old: run {{.fix}}"
+// LimaOldFix is [lima_old_fix]: "Lima {{.version}} is too old. Run {{.fix}} to upgrade it."
 func LimaOldFix(fix string, version string) M {
 	return M{id: "lima_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
@@ -1299,7 +1299,7 @@ func LsFailed(reason string) M {
 	return M{id: "ls_failed", vals: []val{{"reason", reason}}}
 }
 
-// MacosOld is [macos_old]: "macOS {{.version}} is too old for the lima backend: upgrade to macOS 13 or newer"
+// MacosOld is [macos_old]: "macOS {{.version}} is too old for the lima backend. Upgrade to macOS 13 or newer."
 func MacosOld(version string) M {
 	return M{id: "macos_old", vals: []val{{"version", version}}}
 }
@@ -1504,7 +1504,7 @@ func NoImageNamedFrom(from string, image string) M {
 	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
 }
 
-// NoKVM is [no_kvm]: "/dev/kvm doesn't exist: turn on virtualization in the firmware, or nested virtualization for a VM"
+// NoKVM is [no_kvm]: "/dev/kvm doesn't exist. Turn on virtualization in the firmware, or nested virtualization if this machine is a VM."
 func NoKVM() M {
 	return M{id: "no_kvm"}
 }
@@ -1719,17 +1719,17 @@ func PullingImage(image string) M {
 	return M{id: "pulling_image", vals: []val{{"image", image}}}
 }
 
-// QEMUMissing is [qemu_missing]: "{{.program}} isn't installed: install QEMU"
+// QEMUMissing is [qemu_missing]: "{{.program}} isn't installed. Install QEMU."
 func QEMUMissing(program string) M {
 	return M{id: "qemu_missing", vals: []val{{"program", program}}}
 }
 
-// QEMUMissingFix is [qemu_missing_fix]: "{{.program}} isn't installed: run {{.fix}}"
+// QEMUMissingFix is [qemu_missing_fix]: "{{.program}} isn't installed. Run {{.fix}} to install QEMU."
 func QEMUMissingFix(fix string, program string) M {
 	return M{id: "qemu_missing_fix", vals: []val{{"fix", fix}, {"program", program}}}
 }
 
-// QEMURefused is [qemu_refused]: "refusing to start QEMU: expected exactly one -netdev user,id=net0,… to restrict"
+// QEMURefused is [qemu_refused]: "devvm won't start QEMU, because its arguments don't have exactly one -netdev user,id=net0,… for devvm to restrict."
 func QEMURefused() M {
 	return M{id: "qemu_refused"}
 }
@@ -1949,57 +1949,57 @@ func SizePending(size string, vm string) M {
 	return M{id: "size_pending", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
-// SmolvmBroken is [smolvm_broken]: "smolvm --version failed: reinstall smolvm"
+// SmolvmBroken is [smolvm_broken]: "smolvm is installed, but smolvm --version fails. Reinstall smolvm."
 func SmolvmBroken() M {
 	return M{id: "smolvm_broken"}
 }
 
-// SmolvmBrokenFix is [smolvm_broken_fix]: "smolvm --version failed: run {{.fix}}"
+// SmolvmBrokenFix is [smolvm_broken_fix]: "smolvm is installed, but smolvm --version fails. Run {{.fix}} to reinstall it."
 func SmolvmBrokenFix(fix string) M {
 	return M{id: "smolvm_broken_fix", vals: []val{{"fix", fix}}}
 }
 
-// SmolvmFromRegistryOnly is [smolvm_from_registry_only]: "the smolvm backend builds only from registry images, and {{.image}} is only in Docker: push it to a registry"
+// SmolvmFromRegistryOnly is [smolvm_from_registry_only]: "The smolvm backend builds only from container images in a registry, and {{.image}} is only in Docker. Push it to a registry."
 func SmolvmFromRegistryOnly(image string) M {
 	return M{id: "smolvm_from_registry_only", vals: []val{{"image", image}}}
 }
 
-// SmolvmHostUnsupported is [smolvm_host_unsupported]: "the smolvm backend doesn't run on {{.host}}: use an arm64 Mac, or Linux on arm64 or x86_64"
+// SmolvmHostUnsupported is [smolvm_host_unsupported]: "The smolvm backend doesn't run on {{.host}}. Use an arm64 Mac, or Linux on arm64 or x86_64."
 func SmolvmHostUnsupported(host string) M {
 	return M{id: "smolvm_host_unsupported", vals: []val{{"host", host}}}
 }
 
-// SmolvmMachineForeign is [smolvm_machine_foreign]: "smolvm has a machine named {{.vm}} that isn't this devvm's: delete or rename it with smolvm"
+// SmolvmMachineForeign is [smolvm_machine_foreign]: "smolvm has a machine named {{.vm}} that isn't this devvm's. Delete or rename it with smolvm."
 func SmolvmMachineForeign(vm string) M {
 	return M{id: "smolvm_machine_foreign", vals: []val{{"vm", vm}}}
 }
 
-// SmolvmMissing is [smolvm_missing]: "smolvm isn't installed: install smolvm 1.32 or newer"
+// SmolvmMissing is [smolvm_missing]: "smolvm isn't installed. Install smolvm 1.32 or newer."
 func SmolvmMissing() M {
 	return M{id: "smolvm_missing"}
 }
 
-// SmolvmMissingFix is [smolvm_missing_fix]: "smolvm isn't installed: run {{.fix}}"
+// SmolvmMissingFix is [smolvm_missing_fix]: "smolvm isn't installed. Run {{.fix}} to install it."
 func SmolvmMissingFix(fix string) M {
 	return M{id: "smolvm_missing_fix", vals: []val{{"fix", fix}}}
 }
 
-// SmolvmMountColon is [smolvm_mount_colon]: "smolvm can't mount {{.path}}: its path has a colon"
+// SmolvmMountColon is [smolvm_mount_colon]: "smolvm can't mount {{.path}}, because the path has a colon."
 func SmolvmMountColon(path string) M {
 	return M{id: "smolvm_mount_colon", vals: []val{{"path", path}}}
 }
 
-// SmolvmNoAgent is [smolvm_no_agent]: "{{.vm}} forwards an SSH agent, and SSH_AUTH_SOCK names none: start one, or set it"
+// SmolvmNoAgent is [smolvm_no_agent]: "{{.vm}} forwards an SSH agent, but SSH_AUTH_SOCK isn't set. Start an agent, or set SSH_AUTH_SOCK."
 func SmolvmNoAgent(vm string) M {
 	return M{id: "smolvm_no_agent", vals: []val{{"vm", vm}}}
 }
 
-// SmolvmOld is [smolvm_old]: "smolvm {{.version}} is too old: upgrade to smolvm 1.32 or newer"
+// SmolvmOld is [smolvm_old]: "smolvm {{.version}} is too old. Upgrade to smolvm 1.32 or newer."
 func SmolvmOld(version string) M {
 	return M{id: "smolvm_old", vals: []val{{"version", version}}}
 }
 
-// SmolvmOldFix is [smolvm_old_fix]: "smolvm {{.version}} is too old: run {{.fix}}"
+// SmolvmOldFix is [smolvm_old_fix]: "smolvm {{.version}} is too old. Run {{.fix}} to upgrade it."
 func SmolvmOldFix(fix string, version string) M {
 	return M{id: "smolvm_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
@@ -2009,12 +2009,12 @@ func SmolvmScriptFailed(script string, vm string) M {
 	return M{id: "smolvm_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// SmolvmSSHPortForwarded is [smolvm_ssh_port_forwarded]: "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave it out of devvm ports"
+// SmolvmSSHPortForwarded is [smolvm_ssh_port_forwarded]: "Port {{.port}}, which {{.vm}}'s ssh uses, is also one of its forwarded ports. Leave it out of devvm ports."
 func SmolvmSSHPortForwarded(port string, vm string) M {
 	return M{id: "smolvm_ssh_port_forwarded", vals: []val{{"port", port}, {"vm", vm}}}
 }
 
-// SmolvmUpdateFailed is [smolvm_update_failed]: "couldn't change {{.vm}}'s smolvm settings"
+// SmolvmUpdateFailed is [smolvm_update_failed]: "devvm couldn't change {{.vm}}'s smolvm settings."
 func SmolvmUpdateFailed(vm string) M {
 	return M{id: "smolvm_update_failed", vals: []val{{"vm", vm}}}
 }
