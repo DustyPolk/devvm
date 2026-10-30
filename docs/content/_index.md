@@ -16,8 +16,8 @@ layout: hextra-home
   An isolated sandbox with your project's toolchain, ready for you or a coding agent to start coding.
 {{< /hextra/hero-subtitle >}}
 
-{{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
-{{< hextra/hero-button text="Read the docs" link="docs/" >}}
+{{< hextra/hero-button text="Install" link="docs/getting-started/install/" icon="download" >}}
+{{< hextra/hero-button text="Read the docs" link="docs/" icon="open-book" >}}
 
 ## Quick start {icon="rocket"}
 
@@ -68,8 +68,8 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 - The base image comes with [optional extras](docs/using/customizing.md#base-image-features) that you choose, such as oh-my-bash, fzf, zoxide (`z`), tree and tldr.
 - Every VM gets your git name and email, so the commits made in it are authored by you or your agent.
-- `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-ssh-and-devvm-code)).
 - Ports forward on their own, so a dev server on `:5173` in the VM opens at `localhost:5173` on your machine ([ports](docs/using/ports-size.md#ports)).
+- `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-ssh-and-devvm-code)).
 
 {{< /feature >}}
 
@@ -122,5 +122,5 @@ Yes. devvm is open source under the [MIT license](https://github.com/w3cj/devvm/
 
 Install devvm, then run `devvm` in any project folder.
 
-{{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
-{{< hextra/hero-button text="Read the docs" link="docs/" >}}
+{{< hextra/hero-button text="Install" link="docs/getting-started/install/" icon="download" >}}
+{{< hextra/hero-button text="Read the docs" link="docs/" icon="open-book" >}}

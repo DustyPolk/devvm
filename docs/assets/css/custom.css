@@ -204,6 +204,15 @@ html.dark .highlight .chroma .go {
   text-decoration: none;
 }
 
+/* A button's icon (hero-button's icon): 24px, so each icon pixel is two screen pixels, as each of
+   Departure Mono's pixels is at 22px, before the text and on its baseline. */
+#content > .hx\:items-start > p > a.not-prose > .devvm-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 0.5rem;
+  vertical-align: -3px;
+}
+
 /* The buttons' row: spaced both ways when they wrap. */
 #content > .hx\:items-start > p:has(> a.not-prose) {
   display: flex;

@@ -32,7 +32,7 @@ menu:
       weight: 3
       url: https://github.com/w3cj/devvm
       params:
-        icon: github
+        icon: dinkie-github
 
 params:
   description: "One VM for every folder: an isolated sandbox with your project's toolchain, ready for you or an agent to start coding."
