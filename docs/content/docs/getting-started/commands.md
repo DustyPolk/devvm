@@ -7,6 +7,16 @@ This page lists devvm's commands in the order you'll need them, and each row lin
 
 ## VMs
 
+In a project folder, devvm makes the folder's VM with the toolchains its files call for, and an agent's name puts that agent on top of them:
+
+```sh
+devvm          # a VM with the folder's toolchains
+devvm claude   # the same, with Claude Code
+devvm codex    # the same, with Codex
+```
+
+When the folder's VM already exists, devvm opens a shell in it, and `devvm claude` or `devvm codex` first adds the agent to it in place, after asking ([details](#adding-to-a-vm)).
+
 | | |
 | --- | --- |
 | `devvm [IMAGE]` | open a shell in this folder's VM, at the same path, making the VM first from IMAGE or from the image the folder's files call for ([details](../using/images.md#which-image-a-new-vm-gets)) |

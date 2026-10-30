@@ -7,14 +7,18 @@ This page walks through making a VM for a project folder, what you get inside it
 
 ## Making the VM
 
-Run devvm in the project folder:
+Go to the project folder and run one of these, depending on whether you want a coding agent in the VM:
 
 ```sh
 cd ~/some-project
-devvm
+devvm          # a VM with the folder's toolchains
+devvm claude   # the same, with Claude Code
+devvm codex    # the same, with Codex
 ```
 
-devvm looks at the folder's files to choose the VM's toolchains, so a folder with `package.json` gets node and one with `pyproject.toml` gets python. To choose yourself, name the image, such as `devvm node+claude` for node with Claude Code, or `devvm base` for neither. [Which image a new VM gets](../using/images.md#which-image-a-new-vm-gets) has the details.
+devvm looks at the folder's files to choose the VM's toolchains, so a folder with `package.json` gets node and one with `pyproject.toml` gets python. An agent's name, such as `claude`, `codex` or `opencode`, goes on top of those toolchains, so `devvm claude` in a node project makes a node+claude VM. In a folder with neither a toolchain's files nor a `devcontainer.json`, `devvm claude` makes a VM with Claude Code alone, but plain devvm stops and asks you to name an image. To choose yourself, name the image, such as `devvm node+claude` for node with Claude Code, or `devvm base` for neither. [Which image a new VM gets](../using/images.md#which-image-a-new-vm-gets) has the details.
+
+Claude Code in the VM needs a Claude Code token, which you make once, as [Coding agents](#coding-agents) below shows.
 
 A new VM gets [network policy](../safety/network.md), which limits it to an allowlist of hosts through a proxy on your machine and keeps your secrets out of the VM. Keep it on unless you know you need the open network, because it's what keeps stolen data and secrets from leaving. In a terminal, devvm asks first and recommends yes, which is the default answer. Without a terminal, it turns network policy on. `--network-policy` answers yes up front, and `--no-network-policy` makes the VM with an open network instead. When a VM can't have network policy, for example on a backend that can't confine it to its proxy, devvm doesn't ask, but makes the VM without network policy and warns you.
 
@@ -74,10 +78,13 @@ The VM belongs to its folder. Running `devvm` in the folder again opens a new sh
 
 ```sh
 devvm          # a shell in this folder's VM
+devvm claude   # add Claude Code to this folder's VM, after asking
 devvm code     # this folder's VM in VS Code, over Remote-SSH
 devvm stop     # stop it
 devvm ls       # every VM, with its image, network policy and folder
 devvm rm       # delete it, saving its agents' history first
 ```
+
+When the folder's VM doesn't have the agent you name, as with `devvm claude` in a VM made with plain devvm, devvm adds the agent to that VM in place. In a terminal, it asks you first. When this machine has config folders for the agent, such as `~/.claude`, devvm has to stop the VM once to mount them, so before it asks, it warns you that anything running in the VM stops, and afterwards it starts the VM again. Without a terminal, devvm changes nothing and tells you to run the command in one. [Adding to a VM](commands.md#adding-to-a-vm) has the details.
 
 [Everyday commands](commands.md) lists the rest. Before you let an agent loose in the VM, read [staying safe](../safety/_index.md#the-habits), which lists the habits that close most of what devvm leaves open.

@@ -22,12 +22,16 @@ Then run `devvm doctor`, which checks what devvm needs on your machine and says 
 
 ## Your first VM
 
-Run devvm in a project folder:
+Go to a project folder and run one of these, depending on whether you want a coding agent in the VM:
 
 ```sh
 cd ~/some-project
-devvm
+devvm          # a VM with the folder's toolchains
+devvm claude   # the same, with Claude Code
+devvm codex    # the same, with Codex
 ```
+
+In a folder whose VM already exists, `devvm claude` or `devvm codex` adds the agent to that VM after asking. [Coding agents](https://devvm.dev/docs/using/coding-agents/) explains how the agents get your settings and logins.
 
 In a terminal, devvm first asks whether the new VM gets network policy. It recommends yes, which is also the answer when you press Enter:
 
