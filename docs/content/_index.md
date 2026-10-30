@@ -63,13 +63,14 @@ All it takes is one command, and you're ready to start coding.
 ## Isolated sandbox
 
 - The VM mounts your project folder at the same path. It sees nothing else from your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
-- `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)). With `--clone`, the VM gets a clone of its own instead.
-- With [network policy](docs/safety/network.md), the VM reaches only an allowlist of hosts, through a proxy on your machine.
+- `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
+- With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
+- Every new VM gets [network policy](docs/safety/network.md) by default, so it reaches only an allowlist of hosts, through a proxy on your machine.
 - A few habits close most of what's left, and [staying safe](docs/safety/_index.md#the-habits) lists them.
 {{< art "isolated" >}}
 
 ## Made for coding agents
 
 - Claude Code, Codex and opencode get your settings, skills and MCP servers ([coding agents](docs/using/coding-agents.md)).
-- With network policy enabled, their API keys stay on your machine because the `devvm` proxy adds them to the VM's requests on the way out.
+- With network policy, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and the `devvm` proxy puts the real ones into its requests on the way out.
 {{< art "agents" >}}

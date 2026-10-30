@@ -1,6 +1,6 @@
 # oci
 
-Turns a Docker image into a disk Lima boots directly, for `--from` ([Starting from a container image](../../docs/content/docs/using/from.md)). devvm runs it in a throwaway VM booted from Ubuntu's cloud image; no Docker needed.
+These scripts turn a container image into a disk that Lima boots directly, for `--from` ([Starting from a container image](../../docs/content/docs/using/from.md)). devvm runs them in a throwaway VM booted from Ubuntu's cloud image, so the conversion doesn't need Docker.
 
 | File | What |
 |---|---|
@@ -9,9 +9,9 @@ Turns a Docker image into a disk Lima boots directly, for `--from` ([Starting fr
 | `kernel.sh` | on arm64, turns a distro's `vmlinuz` into the uncompressed `Image` Lima's `vz` needs; elsewhere it copies it as is |
 | `try.sh OUTDIR NAME` | boots a converted image as a throwaway Lima VM and runs the checks devvm relies on: init system, cloud-init, user, sudo, a writable host mount and port forwarding. macOS only (`vz`). The VM is left running: `limactl delete -f NAME` |
 
-Like every image script, downloads are pinned at the top of `build.sh` (version and checksum), checked with `sha256sum` since the build VM has no `devvm-fetch`.
+As in every image script, the downloads are pinned at the top of `build.sh` with their version and checksum. `build.sh` checks them with `sha256sum`, because the build VM has no `devvm-fetch`.
 
-The image's own code runs as root in the build VM, so devvm treats everything it writes as hostile: the build VM gets only a `vm/` subfolder of devvm's temp folder (and `oci/`, read-only), devvm checks what it wrote only once the build VM is deleted, and it refuses outputs that aren't regular files (a symlink could point Lima at a host file), a libc other than `gnu` or `musl`, or a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
+The container image's own code runs as root in the build VM, so devvm treats everything it writes as hostile. The build VM gets only a `vm/` subfolder of devvm's temp folder, and `oci/` read-only. devvm checks what the build VM wrote only once the build VM is deleted. It refuses outputs that aren't regular files, because a symlink could point Lima at a host file. It also refuses a libc other than `gnu` or `musl`, and a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
 
 ## Gotchas
 
