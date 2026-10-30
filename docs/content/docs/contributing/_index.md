@@ -230,8 +230,8 @@ A message links a docs page through the `docs` map in `internal/msg/docs.go`, fr
 
 ```go
 var docs = map[string]string{
-    "no_vm":         "using/images#where-state-lives",
-    "backend_lacks": "backends#missing-and-unreviewed-features",
+    "vm_outdated":   "using/images#outdated-vms",
+    "backend_lacks": "backends#when-a-backend-lacks-something",
 }
 ```
 
