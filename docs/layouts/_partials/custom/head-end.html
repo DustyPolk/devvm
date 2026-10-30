@@ -13,3 +13,22 @@
     font-display: swap;
   }
 </style>
+{{- /* The sidebar's top-level items get their section's pixel icon, from data/sections.yaml, the list the
+   docs' section cards use too, so the two always match. Each icon is a mask in the link's color, keyed
+   to the section page's own address. The build fails when the list names a section or an icon that
+   doesn't exist. */ -}}
+{{- $selectors := slice -}}
+{{- $rules := slice -}}
+{{- range $path, $name := site.Data.sections -}}
+  {{- $page := site.GetPage (printf "/docs/%s" $path) -}}
+  {{- if not $page }}{{ errorf "data/sections.yaml: no page docs/%s" $path }}{{ end -}}
+  {{- $svg := resources.Get (printf "icons/%s.svg" $name) -}}
+  {{- if not $svg }}{{ errorf "data/sections.yaml: no assets/icons/%s.svg for %s" $name $path }}{{ end -}}
+  {{- $selector := printf `.hextra-sidebar-container a[href=%q] > span::before` $page.RelPermalink -}}
+  {{- $selectors = $selectors | append $selector -}}
+  {{- $rules = $rules | append (printf `%s { mask-image: url("data:image/svg+xml;base64,%s"); }` $selector ($svg.Content | base64Encode)) -}}
+{{- end }}
+<style>
+  {{ printf `%s { content: ""; display: inline-block; flex-shrink: 0; width: 12px; height: 12px; margin-right: 0.5rem; vertical-align: -1px; background-color: currentColor; mask-repeat: no-repeat; mask-position: center; mask-size: 12px 12px; }` (delimit $selectors ", ") | safeCSS }}
+  {{ delimit $rules "\n  " | safeCSS }}
+</style>

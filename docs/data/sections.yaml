@@ -1,0 +1,11 @@
+# The docs' sections and their icons from assets/icons/: the one place each icon is chosen. The docs'
+# first page's section cards (the section-card shortcode) and the sidebar's top-level items (the CSS that
+# layouts/_partials/custom/head-end.html writes) both read it, so they always match. A new section gets
+# a line here.
+getting-started: rocket
+using: wrench
+safety: locked
+backends: cube
+cli: prompt
+internals: gear
+contributing: brand-github
