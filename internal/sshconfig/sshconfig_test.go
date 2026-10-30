@@ -414,6 +414,29 @@ func TestParseHostKeys(t *testing.T) {
 	}
 }
 
+// A VM's host key, for its port forwarder: read from it and pinned when
+// none is, else the pinned one, ed25519 first; none when it can't show
+// one.
+func TestHostKey(t *testing.T) {
+	c, f := testConfig(t)
+	if got, err := c.HostKey(t.Context(), f, web); err != nil || got != "ssh-ed25519 AAAAkey"+strings.ReplaceAll(web, "-", "") {
+		t.Errorf("read: %q, %v", got, err)
+	}
+	if !strings.Contains(read(t, c.Dirs.KnownHosts()), web+" ssh-ed25519 ") {
+		t.Error("not pinned")
+	}
+	if err := os.WriteFile(c.Dirs.KnownHosts(), []byte(api+" ecdsa-sha2-nistp256 AAAAe\n"+api+" ssh-ed25519 AAAAp\n"+api+" ssh-rsa AAAAr\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.ExecFunc = func(string, []string, backend.ExecOpts) error { return errors.New("not asked") }
+	if got, err := c.HostKey(t.Context(), f, api); err != nil || got != "ssh-ed25519 AAAAp" {
+		t.Errorf("pinned: %q, %v", got, err)
+	}
+	if got, err := c.HostKey(t.Context(), f, web); err == nil {
+		t.Errorf("unreadable: %q", got)
+	}
+}
+
 // Without a terminal, the Include line isn't added: it says to. Once
 // there, anywhere, nothing is asked.
 func TestEnsureInclude(t *testing.T) {

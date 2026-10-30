@@ -265,10 +265,17 @@ func TestNameMax(t *testing.T) {
 	}
 }
 
-func TestCapsAreAllNative(t *testing.T) {
+// Everything is native but ports, which devvm's forwarder forwards: an
+// emulation, reviewed.
+func TestCaps(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	for _, f := range backend.Features {
-		if !l.Caps()[f].IsNative() {
+		c := l.Caps()[f]
+		if f == backend.FeaturePorts || f == backend.FeaturePortsAll {
+			if c != backend.Emulated(true) {
+				t.Errorf("%s: %+v, want emulated and reviewed", f, c)
+			}
+		} else if !c.IsNative() {
 			t.Errorf("%s isn't native", f)
 		}
 	}
@@ -413,11 +420,15 @@ func TestCreateVM(t *testing.T) {
 		"limactl stop devvm-img-0123456789ab",
 		`limactl clone --tty=false devvm-img-0123456789ab devvm-p-0123456789abcd --mount-none` +
 			` --set .mounts = [{"location":"/my project","writable":true},{"location":"/h/.claude","writable":false},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools","writable":false}]` +
-			` --set .ssh.forwardAgent=true --set .ssh.localPort=0 --set ` + portsSet(backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}}),
+			` --set .ssh.forwardAgent=true --set .ssh.localPort=0 --set ` + noForwardsSet(),
 		"limactl edit --tty=false devvm-p-0123456789abcd --cpus 6 --disk 150",
 	}
 	if got := f.lines(); !slices.Equal(got, want) {
 		t.Errorf("ran\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// Its ports are its record's, for devvm's forwarder.
+	if p, err := l.Forwards.read("devvm-p-0123456789abcd"); err != nil || p.All || !slices.Equal(p.Ranges, []backend.PortRange{{From: 5173, To: 5173}}) {
+		t.Errorf("ports: %+v, %v", p, err)
 	}
 	err = l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-q-0123456789abcd", Project: "/a,b"})
 	if err == nil || err.Error() != "mount_comma path=/a,b" {
@@ -507,25 +518,40 @@ func TestSetSize(t *testing.T) {
 	}
 }
 
-// Ports: the listed ones, then nothing else; all leaves Lima's own rule.
-func TestPortsSet(t *testing.T) {
-	ignore := `{"guestIP":"127.0.0.1","guestPortRange":[1,65535],"proto":"any","ignore":true},` +
+// Lima forwards nothing: every guest port, TCP or UDP, is ignored on
+// 127.0.0.1 (::1 too), 0.0.0.0 and ::, before Lima's own rule.
+func TestNoForwardsSet(t *testing.T) {
+	want := `.portForwards = [{"guestIP":"127.0.0.1","guestPortRange":[1,65535],"proto":"any","ignore":true},` +
 		`{"guestIP":"0.0.0.0","guestPortRange":[1,65535],"proto":"any","ignore":true},` +
-		`{"guestIP":"::","guestPortRange":[1,65535],"proto":"any","ignore":true}`
-	for _, tc := range []struct {
-		ports backend.Ports
-		want  string
-	}{
-		{backend.Ports{All: true}, `.portForwards = []`},
-		{backend.Ports{}, `.portForwards = [` + ignore + `]`},
-		{
-			backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}},
-			`.portForwards = [{"guestPortRange":[5173,5173],"proto":"any"},{"guestPortRange":[8000,8010],"proto":"any"},` + ignore + `]`,
-		},
+		`{"guestIP":"::","guestPortRange":[1,65535],"proto":"any","ignore":true}]`
+	if got := noForwardsSet(); got != want {
+		t.Errorf("noForwardsSet() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A VM's ports record: all, none or a list; none forwarded without one.
+func TestPortsRecord(t *testing.T) {
+	l, _, _ := testLima(t, "darwin")
+	f := l.Forwards
+	if p, err := f.read("v"); err == nil {
+		t.Errorf("no record: %+v, want an error (none forwarded)", p)
+	}
+	for _, p := range []backend.Ports{
+		{}, {All: true}, {Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}},
 	} {
-		if got := portsSet(tc.ports); got != tc.want {
-			t.Errorf("portsSet(%+v) =\n%s\nwant\n%s", tc.ports, got, tc.want)
+		if err := f.write("v", p); err != nil {
+			t.Fatal(err)
 		}
+		got, err := f.read("v")
+		if err != nil || got.All != p.All || !slices.Equal(got.Ranges, p.Ranges) {
+			t.Errorf("%+v read as %+v, %v", p, got, err)
+		}
+	}
+	if err := os.WriteFile(f.file("v"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.read("v"); err == nil {
+		t.Error("a bad record read")
 	}
 }
 
@@ -538,7 +564,7 @@ func TestSetPortsAgentDirsAndForwarding(t *testing.T) {
 		do   func() error
 		want string
 	}{
-		{func() error { return l.SetPorts(ctx, "v", backend.Ports{All: true}) }, "limactl edit --tty=false v --set .portForwards = []"},
+		{func() error { return l.SetPorts(ctx, "v", backend.Ports{All: true}) }, ""},
 		{func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/.claude"}) }, ""},
 		{
 			func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/.codex"}) },
@@ -648,7 +674,8 @@ func TestStubLifecycle(t *testing.T) {
 			got = append(got, c)
 		}
 	}
-	want := []string{"limactl start --tty=false " + vm, "limactl stop " + vm, "limactl delete -f " + vm}
+	// Lima's own forwards turned off, once.
+	want := []string{"limactl edit --tty=false " + vm + " --set " + noForwardsSet(), "limactl start --tty=false " + vm, "limactl stop " + vm, "limactl delete -f " + vm}
 	if !slices.Equal(got, want) {
 		t.Errorf("calls %q, want %q", got, want)
 	}

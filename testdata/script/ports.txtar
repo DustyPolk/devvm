@@ -61,15 +61,16 @@ exec devvm ports
 ! stderr .
 exec devvm ports 5173
 
-# Stopped: changed at once, once.
+# Stopped: changed at once, in the VM's record for devvm's forwarder;
+# Lima's config is left alone (its own forwards are off).
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm ports add 8000-8010
 stdout '^==> ports_now ports=5173,8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\},\{"guestPortRange":\[8000,8010\],"proto":"any"\},\{"guestIP":"127\.0\.0\.1",'
-exec grep -c 'limactl edit' $STUB_LOG
-stdout '^1$'
+! stdout 'limactl edit'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports'
+stdout '\A5173,8000-8010\n\z'
 exec devvm ports
 stdout '\A5173,8000-8010\n\z'
 ! stderr .
@@ -92,16 +93,19 @@ stderr '^devvm: ports_all_already$'
 ! exec devvm ports rm 5173
 stderr '^devvm: ports_rm_all$'
 stub_calls
-stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.portForwards = \[\]$'
+! stdout 'limactl edit'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports'
+stdout '\Aall\n\z'
 
 # --ports on it is ignored, with a warning naming devvm ports.
 exec devvm --ports none
 stderr '^devvm: ports_flag_ignored$'
 
 # A listed port a program on this machine has, on any address, isn't
-# forwarded from a start that finds it so, warned: Lima's forward would
-# share it, and take its connections. Lima's rules change only where they
-# differ.
+# forwarded from a start that finds it so, warned: the forwarder forwards
+# the rest. Lima's config is left alone. (Its hostagent here: the test's
+# runner, so the forwarder runs on.)
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 listen_any TAKEN
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
 exec devvm ports 5173,$TAKEN
@@ -109,16 +113,14 @@ exec sh -c ': > "$STUB_LOG"'
 exec devvm
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} .*--set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\},\{"guestIP":"127\.0\.0\.1",'
-! stdout '"guestPortRange":\['$TAKEN
+! stdout portForwards
+exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $(basename "$VMS"/devvm-web-*) "'
+stdout ' -only 5173$'
 exec devvm ports
 stdout '\A5173,'$TAKEN'\n\z'
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec sh -c ': > "$STUB_LOG"'
-exec devvm
-stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
-stub_calls
-! stdout portForwards
+# Stopped, its forwarder stops too.
+exec devvm stop
+exec sh -c 'vm=$(basename "$VMS"/devvm-web-*); for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]lima-ports -vm $vm " || exit 0; sleep 0.5; done; exit 1'
 
 # Completion: the keywords and add and rm.
 exec devvm __complete ports ''

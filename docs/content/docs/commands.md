@@ -3,7 +3,7 @@ title: Commands
 weight: 15
 ---
 
-Every command, with all its flags: the [CLI reference](cli/_index.md).
+This page lists devvm's commands by task. The [CLI reference](cli/_index.md) has every command with all its flags.
 
 ## VMs
 
@@ -25,7 +25,9 @@ Every command, with all its flags: the [CLI reference](cli/_index.md).
 | `devvm size -g ...` | the same for the size new VMs get |
 | `devvm git-protect [on\|strict\|off]` | show or change this folder's VM's `.git` protection, while it's stopped ([details](git-protection.md#turning-it-on-or-off)) |
 
-A new VM is made from its image (built first if it isn't, with its [shared tools](images.md#shared-tools)), with only the project folder mounted, read-write, the shared tools and its [agents' config folders](coding-agents.md) read-only, and its `.git` hooks and config locked ([`.git` protection](git-protection.md)); with `--clone`, the folder isn't mounted and the VM gets its own clone of the repo ([working on a clone](clone.md)). Then devvm starts it, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md) and opens a shell in it, in place of devvm: when the shell ends, so does devvm. Without a terminal, the shell reads its commands from devvm's input.
+devvm makes a new VM from its image, building the image first with its [shared tools](images.md#shared-tools) if it isn't built yet. The VM mounts only the project folder, read-write, and the shared tools and its [agents' config folders](coding-agents.md), read-only. devvm locks the folder's `.git` hooks and config ([`.git` protection](git-protection.md)). With `--clone`, devvm doesn't mount the folder, and the VM gets its own clone of the repo instead ([working on a clone](clone.md)).
+
+Then devvm starts the VM, sets it up ([the VM's setup](coding-agents.md#the-vms-setup)), makes it reachable [by name over SSH](ssh.md), and opens a shell in it in devvm's place, so devvm ends when the shell does. Without a terminal, the shell reads its commands from devvm's input.
 
 Options for a new VM:
 
@@ -43,74 +45,74 @@ Options for a new VM:
 | `--from IMAGE` | start its base from a container image (`node:24`) instead of Ubuntu's cloud image ([details](from.md)) |
 | `--no-devcontainer` | create the VM without reading the folder's `devcontainer.json` ([details](devcontainer.md)) |
 
-A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets the VM it describes, as far as devvm does it: its image, ports, environment and commands, and the features devvm has layers for ([`devcontainer.json`](devcontainer.md)). Options you give win over it.
+A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets the VM that file describes, as far as devvm supports it. That covers its image, ports, environment and commands, and the features devvm has layers for ([`devcontainer.json`](devcontainer.md)). The options you give take priority over the file.
 
-Without either network policy flag devvm asks in a terminal, no by default; without a terminal the VM gets no network policy.
+If you give neither network policy flag, devvm asks in a terminal, with no as the default. Without a terminal, the VM gets no network policy.
 
-Options that take a value also work as `--cpus=N` and so on.
+Options that take a value also work with an equals sign, such as `--cpus=N`.
 
 ### Size and ports
 
-A new VM gets its image's size (`base.yaml`'s: 4 CPUs, 8 GiB of memory and a 100 GiB disk) unless you set one:
+A new VM gets its image's size unless you set one. For `base.yaml` that's 4 CPUs, 8 GiB of memory and a 100 GiB disk.
 
-- `--cpus` takes a whole number, `--memory` and `--disk` a size in GiB: `16`, `16G` or `16GiB`, decimals allowed.
-- What the flags leave unset comes from `~/.config/devvm/size`, one `cpus=`, `memory=` or `disk=` line each, if it has one (`devvm size -g` sets it).
-- devvm refuses more CPUs or memory than this machine has, and a disk smaller than the image's (disks can't shrink), before it builds anything.
+- `--cpus` takes a whole number. `--memory` and `--disk` take a size in GiB, written `16`, `16G` or `16GiB`, and decimals are allowed.
+- What the flags leave unset comes from `~/.config/devvm/size` when that file sets it, with one `cpus=`, `memory=` or `disk=` line each. `devvm size -g` writes that file.
+- devvm refuses more CPUs or memory than this machine has, and a disk smaller than the image's, because disks can't shrink. It refuses them before it builds anything.
 
-Ports the VM listens on are forwarded to the same port on this machine's `localhost`: all of them, unless `--ports` says otherwise:
+devvm forwards the TCP ports the VM listens on to the same port on this machine's `localhost`. It forwards every one from 1024 up unless `--ports` says otherwise ([how](images.md#ports)).
 
-- `all`, `none`, or ports and ranges like `5173,8000-8010`.
-- Without `--ports`, `~/.config/devvm/ports` holds the default, one line: `all`, `none` or a list (`devvm ports -g` sets it).
-- `devvm ports` changes an existing VM's ([ports](images.md#ports)), and `devvm size` its size ([size](images.md#size)).
+- `--ports` takes `all`, `none`, or ports and ranges like `5173,8000-8010`.
+- Without `--ports`, the default comes from `~/.config/devvm/ports`, which holds one line: `all`, `none` or a list. `devvm ports -g` writes that file.
+- `devvm ports` changes an existing VM's ports ([ports](images.md#ports)), and `devvm size` changes its size ([size](images.md#size)).
 
-A size or ports file that doesn't hold one is refused, like a bad flag.
+devvm refuses a size or ports file that doesn't hold a valid value, as it refuses a bad flag.
 
 ### An existing VM
 
-`devvm` in a folder whose VM exists opens it as it is, starting it if it's stopped. Each time, in this order:
+When you run `devvm` in a folder whose VM exists, devvm opens the VM as it is and starts it if it's stopped. Each time, it does these steps in this order:
 
-1. With an IMAGE that names what the VM lacks (`devvm go` in a base VM), devvm asks before adding it in place ([below](#adding-to-a-vm)).
-2. It warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or there are newer shared tools than the VM's (`devvm update` moves it to them), and checks for newer tools once a day.
-3. It matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
-4. The options for new VMs are ignored, each with a warning: the VM keeps its network policy (`devvm network` changes it), `.git` protection (`devvm git-protect` changes it), size (`devvm size` changes it), ports (`devvm ports` changes them), SSH agent forwarding (`devvm ssh-agent` changes it), backend, `--from` and `--no-devcontainer`.
-5. It warns when the folder's `devcontainer.json` isn't the one the VM was made from ([details](devcontainer.md#when-its-read)). It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder; not for a `--clone` VM, which mounts neither.
-6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) its state asks for; a running one gets them when it next starts, and devvm says so. A VM that forwards your agent has it checked for keys; one that uses devvm's own gets the keys it lacks loaded.
-7. It starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)); so does one whose network policy was turned off since it started confined, until it next starts.
-8. The [self-check](network.md#the-self-check) runs: a VM whose network policy doesn't hold is stopped.
-9. It sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first. On the first launch after the VM started, the `postStartCommand` of the `devcontainer.json` it was made from runs before the shell opens ([commands](devcontainer.md#commands)).
+1. When you give an IMAGE that names something the VM lacks, such as `devvm go` in a base VM, devvm asks before adding it in place ([below](#adding-to-a-vm)).
+2. devvm warns when an image the VM was made from has changed since ([outdated VMs](images.md#outdated-vms)), or when there are newer shared tools than the VM's, which `devvm update` moves it to. It also checks for newer tools once a day.
+3. devvm matches the VM's [agent folder mounts](coding-agents.md#mounts) to the folders on this machine.
+4. devvm ignores the options for new VMs, with a warning for each. The VM keeps its network policy, which `devvm network` changes, and its `.git` protection, which `devvm git-protect` changes. It keeps its size, which `devvm size` changes, its ports, which `devvm ports` changes, and its SSH agent forwarding, which `devvm ssh-agent` changes. It also keeps its backend, and ignores `--from` and `--no-devcontainer`.
+5. devvm warns when the folder's `devcontainer.json` isn't the one the VM was made from ([details](devcontainer.md#when-its-read)). It checks `.git` ([`.git` protection](git-protection.md#on-each-launch)) and, on Linux hosts, names set-id files in the folder. It skips both for a `--clone` VM, which mounts neither.
+6. A stopped VM gets the size, ports and [SSH agent forwarding](ssh.md#agent-forwarding) that its state asks for. A running VM gets them when it next starts, and devvm says so. When the VM forwards your agent, devvm checks that the agent has keys. When it uses devvm's own agent, devvm loads the keys the agent lacks.
+7. devvm starts the VM if it's stopped. A running VM with network policy keeps its proxy, unless what the proxy was started with has changed ([the proxy](network.md#the-proxy)). A VM whose network policy was turned off after it started confined also keeps its proxy, until it next starts.
+8. The [self-check](network.md#the-self-check) runs, and devvm stops a VM whose network policy doesn't hold.
+9. devvm sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first. On the first launch after the VM started, the `postStartCommand` of the `devcontainer.json` it was made from runs before the shell opens ([commands](devcontainer.md#commands)).
 
-A VM whose creation didn't finish (devvm was stopped after making it, before it recorded the network choice) is never started: it would start without network policy. `devvm rm` deletes it.
+devvm never starts a VM whose creation didn't finish, because it would start without network policy. That happens when devvm was stopped after making the VM but before it recorded the network choice. `devvm rm` deletes such a VM.
 
 ### Adding to a VM
 
-`devvm IMAGE` names an image as for a new VM, agents alone on top of the folder's toolchains. What the VM's image lacks of it is added in place, after you confirm in a terminal; without one, devvm stops and changes nothing:
+`devvm IMAGE` names an image as it does for a new VM, with agents alone on top of the folder's toolchains. devvm adds what the VM's image lacks of it in place, after you confirm in a terminal. Without a terminal, devvm stops and changes nothing.
 
-- Shared tools are built if the share lacks them, and join the VM's list: they're mounted at once, nothing is installed in its disk.
-- An agent's config folders are mounted, which stops the VM first: anything running in it stops.
-- A layer's script runs in the VM, as when it builds an image; with network policy, its proxy allows the layer's hosts for it. A script that fails leaves the VM as it was otherwise.
+- devvm builds shared tools that the share lacks, and they join the VM's list. They're mounted at once, and nothing is installed in the VM's disk.
+- devvm mounts an agent's config folders, which stops the VM first, so anything running in it stops.
+- A layer's script runs in the VM, as when devvm builds an image. With network policy, the VM's proxy allows the layer's hosts for it. If the script fails, the VM is otherwise left as it was.
 
-The VM's image is then its old one with them. `devvm remove TOOLS` takes shared tools out again; layers can't be, as their scripts changed the VM's disk: save your work outside the project folder, `devvm rm`, and make the VM again.
+The VM's image is then its old one with these added. `devvm remove TOOLS` takes shared tools out again. Layers can't be taken out, because their scripts changed the VM's disk, so save your work outside the project folder, run `devvm rm`, and make the VM again.
 
 ### Stopping a VM
 
-`devvm stop` stops this folder's VM, then its [proxy](network.md#the-proxy). Once the VM is stopped, devvm checks `.git` as a launch that finds it stopped does, setting the locks a running VM was waiting for ([on each launch](git-protection.md#on-each-launch)), and on Linux names set-id files in the folder; not for a `--clone` VM. The VM's [ssh config entry](ssh.md) goes. A VM that's already stopped gets the same checks.
+`devvm stop` stops this folder's VM, then its [proxy](network.md#the-proxy). Once the VM is stopped, devvm checks `.git` as a launch that finds the VM stopped does, and sets the locks that a running VM was waiting for ([on each launch](git-protection.md#on-each-launch)). On Linux it also names set-id files in the folder. It skips both for a `--clone` VM. devvm removes the VM's [ssh config entry](ssh.md). A VM that's already stopped gets the same checks.
 
 ### Deleting a VM
 
-`devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Nothing else: other VMs, images and the project folder stay.
+`devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Other VMs, images and the project folder stay.
 
-When the VM's image has an agent, devvm first exports the agents' history from it, started if it's stopped ([history](coding-agents.md#history)). An export that fails keeps the VM. A `--clone` VM's clone is checked before that, for commits this repo hasn't fetched and uncommitted changes, and the repo's remote for it goes with it, its fetched work kept as local branches ([deleting the VM](clone.md#deleting-the-vm)). `devvm rm -f` deletes it without an export or those checks.
+When the VM's image has an agent, devvm first exports the agents' history from the VM, starting it if it's stopped ([history](coding-agents.md#history)). If the export fails, devvm keeps the VM. Before that, devvm checks a `--clone` VM's clone for commits this repo hasn't fetched and for uncommitted changes. The repo's remote for the VM goes with it, and devvm keeps its fetched work as local branches ([deleting the VM](clone.md#deleting-the-vm)). `devvm rm -f` deletes the VM without an export or those checks.
 
 ### A folder made again
 
-A VM belongs to the folder it was made for: its path, and the folder itself ([one VM per folder](security.md#one-vm-per-folder)). When that folder was deleted and a new one made at the same path, devvm, `devvm restart`, `update` and `remove` refuse the VM. Two commands deal with it, each only after you confirm in a terminal:
+A VM belongs to the folder it was made for, by its path and by the folder itself ([one VM per folder](security.md#one-vm-per-folder)). When that folder was deleted and a new one made at the same path, devvm, `devvm restart`, `update` and `remove` refuse the VM. Two commands deal with it, each only after you confirm in a terminal:
 
-- `devvm rm` deletes it, without an export (its folder is gone), with `-f` or not. It may hold that project's work.
-- `devvm adopt` gives it to this folder, with its files, tokens and allowlist. Its `.git` protection starts again, as if `.git` had just appeared.
+- `devvm rm` deletes the VM, with `-f` or without it, and never exports its history, because its folder is gone. The VM may hold that project's work.
+- `devvm adopt` gives the VM to this folder, with its files, tokens and allowlist. Its `.git` protection starts again, as if `.git` had just appeared.
 
 ### Listing VMs
 
-`devvm ls` prints a table of the project VMs on every backend, sorted by name, a header first. Images and build VMs aren't in it.
+`devvm ls` prints a table of the project VMs on every backend, sorted by name, with a header first. Images and build VMs aren't in it.
 
 | Column | |
 | --- | --- |
@@ -122,7 +124,7 @@ A VM belongs to the folder it was made for: its path, and the folder itself ([on
 | `BACKEND` | the [backend](backends.md) that runs it |
 | `FOLDER` | its project folder |
 
-A value the VM's state doesn't have is `-`: a VM whose creation didn't finish has only its name, status and backend. A backend that can't list its VMs (Lima not installed, say) fails `devvm ls` only when a VM's state names it.
+A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name, status and backend. A backend that can't list its VMs, for example because Lima isn't installed, fails `devvm ls` only when a VM's state names that backend.
 
 ## Network policy
 
@@ -157,7 +159,7 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](images.md#deleting-images)) |
 | `devvm gc` | delete the stale and unfinished images on every backend, the tool images no VM uses that aren't the tools lock's, and old copies of devvm's files; it lists them first, and in a terminal asks. VMs are never deleted ([details](images.md#cleaning-up)) |
 
-`--backend NAME` builds, or deletes, on that backend instead of the one new VMs get, and `--from IMAGE` on a base from that container image ([details](from.md)).
+With `--backend NAME`, these commands build or delete on that backend instead of the one new VMs get. With `--from IMAGE`, they work on a base made from that container image ([details](from.md)).
 
 ## devvm itself
 
@@ -169,11 +171,11 @@ A value the VM's state doesn't have is `-`: a VM whose creation didn't finish ha
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the lima backend's VMs and images, which live in devvm's own Lima home, not `~/.lima` ([details](lima.md#running-limactl)) |
 
-A command's name is never an IMAGE: `devvm build` builds. For one of your layers named like a command, write it as `base+NAME`.
+devvm never reads a command's name as an IMAGE, so `devvm build` runs the build command. To use one of your layers that's named like a command, write it as `base+NAME`.
 
 ### Shell completion
 
-The script completes commands, flags, image names (with `+`, after the parts already given), shared tools for `devvm remove`, `--backend` values, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
+The completion script completes commands, flags and image names, including names joined with `+` after the parts you've already typed. It also completes shared tools for `devvm remove`, `--backend` values, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
 
 | Shell | Line | In |
 | --- | --- | --- |

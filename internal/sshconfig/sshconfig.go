@@ -269,6 +269,37 @@ func (c *Config) recordHostKeys(ctx context.Context, b backend.Backend, vm strin
 	return true, state.WriteFile(path, append(data, keys...))
 }
 
+// HostKey returns vm's host key as the known hosts file pins it (TYPE
+// BASE64), its ed25519 one where it has one, reading them from the
+// running VM first when it has none.
+func (c *Config) HostKey(ctx context.Context, b backend.Backend, vm string) (string, error) {
+	ok, err := c.recordHostKeys(ctx, b, vm)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", errors.New(vm + ": its host keys can't be read")
+	}
+	data, err := os.ReadFile(c.Dirs.KnownHosts())
+	if err != nil {
+		return "", err
+	}
+	key := ""
+	for l := range strings.SplitSeq(string(data), "\n") {
+		k, ok := strings.CutPrefix(l, vm+" ")
+		if !ok {
+			continue
+		}
+		if key == "" || strings.HasPrefix(k, "ssh-ed25519 ") {
+			key = k
+		}
+	}
+	if key == "" {
+		return "", errors.New(vm + ": no host key pinned")
+	}
+	return key, nil
+}
+
 // parseHostKeys returns the known hosts lines for the host keys in out,
 // under vm's name; lines that aren't a host key are dropped.
 func parseHostKeys(vm string, out []byte) string {

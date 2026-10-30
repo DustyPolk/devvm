@@ -40,11 +40,14 @@ stub_calls
 ! stdout 'create|clone'
 
 # The flags: the VM's size changes after the clone, and its state says so;
-# the ports it forwards are set as it's cloned.
+# the ports it forwards are recorded as it's cloned, Lima's own forwards
+# off.
 exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173, 8000-8010,5173' base
 stub_calls
-stdout '^limactl clone .* --set \.portForwards = \[\{"guestPortRange":\[5173,5173\],"proto":"any"\},\{"guestPortRange":\[8000,8010\],"proto":"any"\},\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
+stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
 stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 --disk 120$'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-sized-*.ports'
+stdout '\A5173,8000-8010\n\z'
 exec sh -c 'cat "$VMS"/devvm-sized-*'
 stdout '^cpus=2$'
 stdout '^memory=3$'
@@ -73,8 +76,10 @@ exec sh -c 'echo all > "$XDG_CONFIG_HOME/devvm/ports" && rm "$XDG_CONFIG_HOME/de
 exec sh -c ': > "$STUB_LOG"'
 exec devvm --no-network-policy base
 stub_calls
-stdout '^limactl clone .* --set \.portForwards = \[\]$'
+stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 ! stdout 'limactl edit --tty=false devvm-all'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-all-*.ports "$XDG_DATA_HOME"/devvm/lima-vms/devvm-defaults-*.ports'
+stdout '\Aall\nnone\n\z'
 exec sh -c 'cat "$VMS"/devvm-all-*'
 ! stdout 'ports|cpus|memory|disk'
 

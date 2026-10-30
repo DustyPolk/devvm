@@ -58,7 +58,7 @@ func TestStartConfined(t *testing.T) {
 			edits: []string{
 				".ssh.localPort=2222",
 				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","NO_PROXY":"localhost","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456"}`,
-				".propagateProxyEnv=false",
+				".propagateProxyEnv=false", noForwardsSet(),
 			},
 		},
 		{
@@ -67,22 +67,22 @@ func TestStartConfined(t *testing.T) {
 			edits: []string{
 				".ssh.localPort=2222",
 				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.4:3128","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.4:3128","NO_PROXY":"localhost","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.4:3128","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.4:3128"}`,
-				".propagateProxyEnv=false", ".hostResolver.enabled=false", `.dns=["127.0.0.1"]`,
+				".propagateProxyEnv=false", ".hostResolver.enabled=false", `.dns=["127.0.0.1"]`, noForwardsSet(),
 			},
 		},
 		{
 			name: "macOS, a build with no network", os: "darwin", c: backend.Confinement{Net: backend.NetNone, SSHPort: 2223}, wrapped: true,
-			edits: []string{".ssh.localPort=2223", portsSet(backend.Ports{})},
+			edits: []string{".ssh.localPort=2223", noForwardsSet()},
 		},
 		{
 			name: "Linux, a build with no network", os: "linux", c: backend.Confinement{Net: backend.NetNone}, qemu: true,
-			edits: []string{portsSet(backend.Ports{})},
+			edits: []string{noForwardsSet()},
 		},
 		{
 			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet},
-			edits: []string{portsSet(backend.Ports{})},
+			edits: []string{noForwardsSet()},
 		},
-		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}},
+		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}, edits: []string{noForwardsSet()}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l, f, _ := testLima(t, tc.os)
@@ -120,34 +120,29 @@ func TestStartConfined(t *testing.T) {
 	}
 }
 
-// A start sets the listed ports it's given where the VM's rules, as
-// limactl list fills them in, forward others; never without them.
-func TestStartSetsPorts(t *testing.T) {
-	// As limactl list --json has portsSet's rules for 5173: a guestIP and
-	// the host side filled in.
-	const listed = `{"portForwards":[
-		{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[5173,5173],"hostIP":"127.0.0.1","hostPortRange":[5173,5173],"proto":"any"},
-		{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true},
+// A start turns Lima's own forwards off where the VM's rules, as limactl
+// list fills them in, forward anything, whatever ports it's given: those
+// are the forwarder's.
+func TestStartSetsNoForwards(t *testing.T) {
+	// As limactl list --json has noForwards: the host side filled in.
+	const ignore = `{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true},
 		{"guestIPMustBeZero":true,"guestIP":"0.0.0.0","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true},
-		{"guestIPMustBeZero":false,"guestIP":"::","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true}]}`
-	ports := func(ps ...int) *backend.Ports {
-		p := &backend.Ports{}
-		for _, n := range ps {
-			p.Ranges = append(p.Ranges, backend.PortRange{From: n, To: n})
-		}
-		return p
-	}
+		{"guestIPMustBeZero":false,"guestIP":"::","guestPortRange":[1,65535],"hostIP":"127.0.0.1","hostPortRange":[1,65535],"proto":"any","ignore":true}`
+	const listed = `{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[5173,5173],"hostIP":"127.0.0.1","hostPortRange":[5173,5173],"proto":"any"}`
 	l, _, _ := testLima(t, "darwin")
+	set := []string{"--set", noForwardsSet()}
+	five := &backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}}
 	for _, tc := range []struct {
 		name, cfg string
 		ports     *backend.Ports
 		want      []string
 	}{
-		{"as listed", listed, ports(5173), nil},
-		{"one left out", listed, ports(), []string{"--set", portsSet(backend.Ports{})}},
-		{"back again", `{"portForwards":[]}`, ports(5173), []string{"--set", portsSet(*ports(5173))}},
-		{"another", listed, ports(5174), []string{"--set", portsSet(*ports(5174))}},
-		{"not given", listed, nil, nil},
+		{"off", `{"portForwards":[` + ignore + `]}`, nil, nil},
+		{"off, ports listed", `{"portForwards":[` + ignore + `]}`, five, nil},
+		{"Lima's own rule", `{"portForwards":[]}`, nil, set},
+		{"a listed port of Lima's", `{"portForwards":[` + listed + `,` + ignore + `]}`, five, set},
+		{"another address", `{"portForwards":[` + strings.Replace(ignore, `"::"`, `"::1"`, 1) + `]}`, nil, set},
+		{"TCP alone", `{"portForwards":[` + strings.ReplaceAll(ignore, `"any"`, `"tcp"`) + `]}`, nil, set},
 	} {
 		var cfg config
 		if err := json.Unmarshal([]byte(tc.cfg), &cfg); err != nil {
@@ -279,7 +274,7 @@ func TestFillPassword(t *testing.T) {
 func TestStartEditsOnlyWhatDiffers(t *testing.T) {
 	l, f, _ := testLima(t, "linux")
 	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 23456, SSHPort: 2222}
-	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"localPort":2222},"propagateProxyEnv":false,` +
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"localPort":2222},"propagateProxyEnv":false,"portForwards":` + yqJSON(noForwards()) + `,` +
 		`"hostResolver":{"enabled":false},"dns":["127.0.0.1"],"env":{"HTTPS_PROXY":"http://192.168.5.4:3128","HTTP_PROXY":"http://192.168.5.4:3128",` +
 		`"http_proxy":"http://192.168.5.4:3128","https_proxy":"http://192.168.5.4:3128"}}}`
 	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {

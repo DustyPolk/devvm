@@ -353,6 +353,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// reviewed): a VM without it starts all the same.
 	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil
 	conf.Ports = e.startPorts(ctx, st)
+	// Its host key, as its ssh config pins it, for a backend's forwarder
+	// that reaches the VM's own sshd.
+	conf.HostKey = func(ctx context.Context) (string, error) { return e.sshConfig().HostKey(ctx, b, vm) }
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)

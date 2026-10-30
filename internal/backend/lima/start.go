@@ -101,7 +101,14 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 			return err
 		}
 	}
-	return l.recordStart(vm, c.Net)
+	if err := l.recordStart(vm, c.Net); err != nil {
+		return err
+	}
+	// A project VM's ports, through devvm's forwarder (ports.go).
+	if c.HostKey != nil && !l.Forwards.start(ctx, vm, c, l.SSH, l.haPIDFile(vm)) {
+		l.Warn(msg.PortsForwardFailed(l.Forwards.Log(vm), vm))
+	}
+	return nil
 }
 
 // degraded decides on a start Lima reported as failed. Lima reports that
@@ -234,15 +241,9 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts 
 	case !noDNS && len(cfg.DNS) > 0:
 		sets = append(sets, "del(.dns)")
 	}
-	switch {
-	case c.Net == backend.NetInternet || c.Net == backend.NetNone:
-		// The build's code can't take a port on host loopback that a host
-		// program trusts.
-		sets = append(sets, portsSet(backend.Ports{}))
-	case c.Ports != nil && !forwardsPorts(cfg.PortForwards, *c.Ports):
-		// The listed ports this start forwards: not those a host program
-		// has, which Lima's forwards would share (SO_REUSEADDR).
-		sets = append(sets, portsSet(*c.Ports))
+	// Lima forwards no port: devvm's forwarder does (ports.go).
+	if !forwardsNone(cfg.PortForwards) {
+		sets = append(sets, noForwardsSet())
 	}
 	for _, s := range sets {
 		opts = append(opts, "--set", s)

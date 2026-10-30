@@ -1,8 +1,8 @@
 // Package vmssh is devvm's own ssh into VMs whose backend has none for
 // editors (smolvm's machines, Docker's containers): each VM's key, its
 // sshd's host key as devvm reads it, what services.sh is told to run its
-// sshd with, and the port forwarder that reaches the VM over that ssh
-// (Forwarder, run detached by Forwards).
+// sshd with, and the port forwarder that reaches the VM over that ssh, or
+// a Lima VM over Lima's (Forwarder, run detached by Forwards).
 package vmssh
 
 import (

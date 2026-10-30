@@ -133,6 +133,10 @@ func (d Dirs) OCIBuildLock() string { return filepath.Join(d.Data, "oci-build.lo
 // LimaVM is a VM's folder in devvm's Lima home.
 func (d Dirs) LimaVM(vm string) string { return filepath.Join(d.Lima, vm) }
 
+// LimaVMs holds the Lima backend's own files for each VM, outside Lima's
+// home: which ports it forwards, and its port forwarder's.
+func (d Dirs) LimaVMs() string { return filepath.Join(d.Data, "lima-vms") }
+
 // Smolvm holds the smolvm backend's files: its images (packs), what it set
 // on each VM, and on Linux smolvm's own state.
 func (d Dirs) Smolvm() string { return filepath.Join(d.Data, "smolvm") }

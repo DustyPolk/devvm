@@ -3,7 +3,6 @@ package lima
 import (
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -15,38 +14,33 @@ type portForward struct {
 	Ignore         bool   `json:"ignore,omitempty"`
 }
 
-// portsSet is the --set for which ports a VM forwards: the listed ones,
-// each to the same port on the host, then nothing else. Lima checks rules
-// in order, and its own last rule forwards everything, so all is no rules
-// at all. A rule without guestIP matches every address a server binds to,
-// but an ignore rule needs one for each of 127.0.0.1, 0.0.0.0 and ::.
-func portsSet(p backend.Ports) string { return ".portForwards = " + yqJSON(portRules(p)) }
+// noForwardsSet is the --set that makes Lima forward no port of a VM's,
+// TCP or UDP, on any address: devvm's forwarder forwards them (ports.go).
+// Lima checks rules in order, and its own last rule forwards everything:
+// an ignore rule for each of 127.0.0.1 (::1 too), 0.0.0.0 and :: comes
+// first. Lima's ssh is its VM driver's forward, not a rule.
+func noForwardsSet() string { return ".portForwards = " + yqJSON(noForwards()) }
 
-// portRules are portsSet's rules.
-func portRules(p backend.Ports) []portForward {
+// noForwards are noForwardsSet's rules.
+func noForwards() []portForward {
 	rules := []portForward{}
-	if !p.All {
-		for _, r := range p.Ranges {
-			rules = append(rules, portForward{GuestPortRange: [2]int{r.From, r.To}, Proto: "any"})
-		}
-		for _, ip := range []string{"127.0.0.1", "0.0.0.0", "::"} {
-			rules = append(rules, portForward{GuestIP: ip, GuestPortRange: [2]int{1, 65535}, Proto: "any", Ignore: true})
-		}
+	for _, ip := range []string{"127.0.0.1", "0.0.0.0", "::"} {
+		rules = append(rules, portForward{GuestIP: ip, GuestPortRange: [2]int{1, 65535}, Proto: "any", Ignore: true})
 	}
 	return rules
 }
 
-// forwardsPorts reports whether a VM's rules, as limactl list has them,
-// are portRules(p): limactl fills in a guestIP (127.0.0.1) and the host
-// side, so only what devvm set is compared, guestIP for ignore rules alone.
-func forwardsPorts(have []portForward, p backend.Ports) bool {
-	want := portRules(p)
+// forwardsNone reports whether a VM's rules, as limactl list has them,
+// are noForwards(): limactl fills in the host side, so only what devvm
+// set is compared.
+func forwardsNone(have []portForward) bool {
+	want := noForwards()
 	if len(have) != len(want) {
 		return false
 	}
 	for i, w := range want {
 		h := have[i]
-		if h.GuestPortRange != w.GuestPortRange || h.Proto != w.Proto || h.Ignore != w.Ignore || w.Ignore && h.GuestIP != w.GuestIP {
+		if h.GuestPortRange != w.GuestPortRange || h.Proto != w.Proto || h.Ignore != w.Ignore || h.GuestIP != w.GuestIP {
 			return false
 		}
 	}

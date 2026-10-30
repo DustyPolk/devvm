@@ -352,6 +352,11 @@ type Confinement struct {
 	// forwards these where its VM forwards others. nil leaves its ports as
 	// they are (every port, none, a build's).
 	Ports *Ports
+	// HostKey returns the VM's host key (TYPE BASE64) as devvm pins it
+	// for its ssh config, read once it runs: a backend whose own ssh
+	// devvm pins (Lima's) gives it to its port forwarder. nil for a
+	// build.
+	HostKey func(ctx context.Context) (string, error)
 }
 
 // Status is a VM's state as its backend reports it.

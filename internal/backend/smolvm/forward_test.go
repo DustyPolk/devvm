@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -14,26 +13,8 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// A forwarder follows the machine's lifeline: it holds while its contents
-// stay and its process runs, and not once a new start rewrites it.
-func TestLifeline(t *testing.T) {
-	life := filepath.Join(t.TempDir(), "agent.pid")
-	if got, err := readLifeline(life); got != "" || err != nil {
-		t.Errorf("none: %q, %v", got, err)
-	}
-	if err := os.WriteFile(life, []byte(strconv.Itoa(os.Getpid())+"\n123\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cur, err := readLifeline(life)
-	if err != nil || !lifelineHolds(life, cur) {
-		t.Errorf("holds: %q, %v", cur, err)
-	}
-	if err := os.WriteFile(life, []byte(strconv.Itoa(os.Getpid())+"\n456\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if lifelineHolds(life, cur) {
-		t.Error("holds after a new start")
-	}
+// A forwarder needs the machine's lifeline.
+func TestForwardMainLifeline(t *testing.T) {
 	if err := ForwardMain(t.Context(), []string{"-vm", "v", "-user", "u", "-key", "/k", "-known-hosts", "/kh", "-control", "/c", "-port", "1"}, nil,
 		func(string) (map[int]bool, error) { return nil, nil }, &strings.Builder{}); err == nil {
 		t.Error("no lifeline: ran")

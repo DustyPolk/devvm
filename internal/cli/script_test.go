@@ -135,7 +135,8 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		// VMs' proxies follow a stub hostagent that's gone before they
 		// look: stop them with the sandbox.
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_proxy -listen .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
-		// And smolvm VMs' port forwarders.
+		// And Lima's and smolvm's VMs' port forwarders.
+		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_lima-ports -vm .* -lifeline "+root+"/").Run()   //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_smolvm-ports -vm .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		// And Docker VMs'.
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_docker-ports -vm .* -key "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end

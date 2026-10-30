@@ -23,7 +23,7 @@ stdout '^FEATURE +DOCKER +LIMA +SMOLVM$'
 stdout '^build-confinement +native +native +native$'
 stdout '^egress-proxy +emulated +native +emulated$'
 stdout '^ssh +emulated +native +emulated$'
-stdout '^ports-all +emulated +native +emulated$'
+stdout '^ports-all +emulated +emulated +emulated$'
 stdout '^agent-toggle +emulated +native +emulated$'
 stdout '^docker-layer +none +native +native$'
 ! stdout docker_sysbox

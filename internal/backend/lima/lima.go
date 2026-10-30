@@ -80,6 +80,9 @@ type Lima struct {
 	// whether the run was interrupted.
 	AddCleanup  func(f func(context.Context)) (remove func())
 	Interrupted func() bool
+	// Forwards is how VMs' ports are forwarded: their records and
+	// forwarders.
+	Forwards forwards
 }
 
 // UI is where the backend prints, the run log its commands run into, and
@@ -113,6 +116,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Lima {
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
+		Forwards: newForwards(d, self),
 	}
 }
 
@@ -129,12 +133,15 @@ func (l *Lima) KeyFiles() map[string][]byte {
 	return map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
 }
 
-// Caps is what Lima has: everything, natively.
+// Caps is what Lima has: everything, natively, but its ports, which
+// devvm's forwarder forwards (ports.go).
 func (l *Lima) Caps() backend.Caps {
 	caps := backend.Caps{}
 	for _, f := range backend.Features {
 		caps[f] = backend.Native
 	}
+	caps[backend.FeaturePorts] = backend.Emulated(true)
+	caps[backend.FeaturePortsAll] = backend.Emulated(true)
 	return caps
 }
 
@@ -249,8 +256,11 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 		"--set", mounts,
 		"--set", ".ssh.forwardAgent="+strconv.FormatBool(spec.AgentForwarding),
 		"--set", ".ssh.localPort=0",
-		"--set", portsSet(spec.Ports))); err != nil {
+		"--set", noForwardsSet())); err != nil {
 		return backend.Logged(msg.VMCreateFailed(vm))
+	}
+	if err := l.Forwards.write(vm, spec.Ports); err != nil {
+		return err
 	}
 	if l.overlays() {
 		if err := l.overlay(ctx, src, vm); err != nil {
@@ -267,9 +277,12 @@ func (l *Lima) Stop(ctx context.Context, vm string) error {
 		return err
 	}
 	if backend.Status(in.Status) == backend.StatusStopped {
+		l.Forwards.Stop(vm)
 		return nil
 	}
-	return l.stop(ctx, vm)
+	err = l.stop(ctx, vm)
+	l.Forwards.Stop(vm)
+	return err
 }
 
 func (l *Lima) stop(ctx context.Context, vm string) error {
@@ -290,6 +303,9 @@ func (l *Lima) Delete(ctx context.Context, vm string) error {
 func (l *Lima) delete(ctx context.Context, vm string) error {
 	if err := l.Runner.Run(ctx, msg.Deleting(vm), l.limactl(ctx, "delete", "-f", vm)); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
+	}
+	if err := l.Forwards.forget(vm); err != nil {
+		return err
 	}
 	for _, f := range []string{l.profileFile(vm), l.startedFile(vm)} {
 		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -453,14 +469,6 @@ func (l *Lima) SetSize(ctx context.Context, vm string, s backend.Size) error {
 }
 
 func gibString(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }
-
-// SetPorts changes which of a stopped VM's ports are forwarded.
-func (l *Lima) SetPorts(ctx context.Context, vm string, p backend.Ports) error {
-	if _, err := l.stopped(ctx, vm); err != nil {
-		return err
-	}
-	return l.edit(ctx, vm, "--set", portsSet(p))
-}
 
 // SetAgentDirs replaces a stopped VM's agent folder mounts, keeping its
 // other mounts (the project folder, the tools share).

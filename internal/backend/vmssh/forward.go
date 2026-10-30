@@ -25,12 +25,13 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 )
 
-// The forwarder forwards a VM's ports to the host's loopback, for backends
-// whose own forwards can't: smolvm's (at most 64, and only to servers on
-// all of the guest's addresses) and Docker's (none without publishing, and
-// then only to servers on the container's network address). It runs on the
-// host, detached (devvm _smolvm-ports, devvm _docker-ports; Forwards), one
-// per VM:
+// The forwarder forwards a VM's ports to the host's loopback, by the same
+// rules on every backend: Lima's own forwards share a port a host program
+// has (SO_REUSEADDR), smolvm's are at most 64 and reach only servers on
+// all of the guest's addresses, and Docker's need publishing, and then
+// reach only servers on the container's network address. It runs on the
+// host, detached (devvm _lima-ports, _smolvm-ports, _docker-ports;
+// Forwards), one per VM:
 //
 //   - it reaches the VM only through the VM's sshd, as the VM's user with
 //     its own key, the host key read through the backend at the start and

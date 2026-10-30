@@ -15,8 +15,10 @@ stub_calls
 ! exists $VMS
 
 # A new VM: base built, then cloned with only the folder, read-write, and
-# the shared tools, read-only; no agent forwarding, every port; started and
-# set up, and devvm's last act is the shell, in the folder.
+# the shared tools, read-only; no agent forwarding; Lima's own port
+# forwards off; started, its host key pinned and its ports forwarded by
+# devvm's forwarder over Lima's ssh, set up, and devvm's last act is the
+# shell, in the folder.
 exec devvm --no-network-policy base
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
@@ -25,18 +27,22 @@ stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 [darwin] ! stderr git_protect_needs_macos_new
 [linux] stderr '^devvm: git_protect_needs_macos_new$'
 stub_calls
-stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=0 --set \.portForwards = \[\]$'
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=0 --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"0\.0\.0\.0","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"::","guestPortRange":\[1,65535\],"proto":"any","ignore":true\}\]$'
 ! stdout 'limactl edit --tty=false devvm-web'
 ! stdout 'devvm-tools-build'
-stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
+stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}\nlimactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n'
+stdout '^ssh -F none -M -S \S+/data/devvm/run/lima-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/lima/_config/user .* -o UserKnownHostsFile=\S+/data/devvm/lima-vms/devvm-web-[0-9a-f]{14}\.ports\.known_hosts .* -o HostKeyAlias=devvm-web-[0-9a-f]{14} .* -p 60022 -l stub 127\.0\.0\.1 sh -s$'
 ! stdout '^(docker|smolvm) '
-stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\nlimactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exists $XDG_DATA_HOME/devvm/tools
 ! exists $XDG_DATA_HOME/devvm/mise.lock
 # .git's hooks and config locked (macOS); elsewhere, not.
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/hooks$'
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
 [linux] ! stdout chflags
+# The forwarder pins the host key devvm pinned; the VM forwards every port.
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports; grep -c "^devvm-web-[0-9a-f]* $(cut -d" " -f2- "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts)$" "$XDG_CONFIG_HOME"/devvm/known_hosts'
+stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\nall\n1\n\z'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^image=base$'
 stdout '^dir=/\S*/web$'
