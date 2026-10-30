@@ -13,7 +13,7 @@ layout: hextra-home
 {{< /hextra/hero-headline >}}
 
 {{< hextra/hero-subtitle >}}
-  An isolated sandbox with the project's toolchain, ready for you or a coding agent to start coding.
+  An isolated sandbox with your project's toolchain, ready for you or a coding agent to start coding.
 {{< /hextra/hero-subtitle >}}
 
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
