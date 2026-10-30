@@ -31,6 +31,15 @@ The first time, devvm asks two questions. The first is whether the VM gets [netw
 
 Later VMs start in seconds.
 
+```mermaid
+flowchart TD
+  run["devvm in a project folder"] --> net["asks: network policy?"]
+  net --> built{{"base built?"}}
+  built -- "no, the first time" --> extras["asks: which extras?"] --> build["builds base, a few minutes"] --> copy
+  built -- "yes" --> copy["copies the image into a new VM"]
+  copy --> start["starts it"] --> shell["opens a shell in ~/some-project"]
+```
+
 ## Claude Code's token
 
 Claude Code in a VM needs a Claude Code token, which you make once on this machine:

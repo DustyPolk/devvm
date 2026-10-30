@@ -11,6 +11,19 @@ git fetch devvm            # later, on this machine, fetch the VM's work as devv
 git log -p main..devvm/main
 ```
 
+```mermaid
+sequenceDiagram
+  participant R as Your repo
+  participant V as The VM's clone
+  R->>V: devvm --clone pushes every local branch
+  Note over V: you or an agent commit in the VM
+  V->>R: git fetch devvm gives devvm/#lt;branch#gt;
+  Note over R: review, then merge
+  R->>V: devvm rm looks for commits not fetched
+  V->>R: fetched into saved/devvm/#lt;branch#gt;
+  Note over R,V: the VM is deleted, and its remote removed
+```
+
 ## Requirements
 
 - The folder is the top folder of a git repo that has at least one commit and a branch checked out, not a detached HEAD.

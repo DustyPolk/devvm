@@ -5,6 +5,15 @@ weight: 1
 
 Every VM is a copy of an image. An image is `base` with your choice of layers on it, and a VM also gets the shared tools its image names, such as node or Claude Code. This page covers what base and the layers bring, how the shared tools work, which image a new VM gets, and how to rebuild, list and delete images. [Images and caching](../internals/images.md) explains how devvm builds, pins and caches them, and [toolchains](toolchains.md) and [coding agents](coding-agents.md#supported-agents) list the shared tools.
 
+```mermaid
+flowchart TD
+  ubuntu["Ubuntu's cloud image,<br>or a --from image"] --> base["base, with<br>the features you chose"]
+  base --> docker["docker: a layer on base"]
+  base -. "a copy" .-> vm1["VM: node"]
+  docker -. "a copy" .-> vm2["VM: node+docker"]
+  tools[("shared tools:<br>node, claude…")] -- "mounted read-only" --> vm1 & vm2
+```
+
 ## Base
 
 `base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you ask for it with `devvm node+docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
@@ -55,6 +64,19 @@ A new VM gets the tools its image names and keeps those versions. On each launch
 - `devvm remove TOOLS` takes tools out, as in `devvm remove python+claude`. What the VM installed itself, such as other versions or global packages, stays.
 
 ## Which image a new VM gets
+
+```mermaid
+flowchart TD
+  run["devvm, or devvm IMAGE"] --> named{{"names a toolchain,<br>a layer or base?"}}
+  named -- "yes" --> order
+  named -- "no: nothing,<br>or only agents" --> detect{{"toolchain files<br>in the folder?"}}
+  detect -- "yes" --> found["those toolchains,<br>agents on top"] --> order
+  detect -- "no" --> other{{"agents named, or<br>a devcontainer.json?"}}
+  other -- "yes" --> order
+  other -- "no" --> list["devvm lists the choices"]
+  order["adds a devcontainer.json's features,<br>then orders the name:<br>toolchains, layers, agents"]
+  order --> copy["built if it isn't,<br>and the VM is a copy of it"]
+```
 
 `devvm IMAGE` names the image. `devvm` alone looks at the folder's top level for the files that call for a toolchain, and names those toolchains, in this order:
 

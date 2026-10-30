@@ -5,6 +5,20 @@ weight: 1
 
 A VM with network policy reaches only the hosts on its allowlist, through a proxy that devvm runs on this machine, and it never holds your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. New VMs get network policy by default. Without it, a VM reaches anything this machine can, including this machine's own services on `localhost`.
 
+```mermaid
+sequenceDiagram
+  participant P as The VM
+  participant X as Its proxy, on this machine
+  participant H as api.github.com
+  P->>X: GET /user, with a placeholder
+  Note over X: on the allowlist
+  X->>H: GET /user, with your GitHub token
+  H-->>X: the response
+  X-->>P: the response
+  P->>X: CONNECT example.com:443
+  X-->>P: 403: not on the allowlist
+```
+
 This page covers what you do with network policy and what you see. [How it works › Network policy](../internals/network.md) explains how devvm confines a VM to its proxy and how the proxy handles each connection.
 
 ## Turning it on or off

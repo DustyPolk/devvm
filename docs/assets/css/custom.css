@@ -437,3 +437,31 @@ html.dark .highlight .chroma .go {
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
+
+/* Diagrams (mermaid code blocks, themed in layouts/_partials/scripts/mermaid.html): at their own size,
+   centered, scrolled sideways when wider than the page. */
+.content pre.mermaid {
+  display: flex;
+  justify-content: safe center;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  padding: 0;
+  font-family: var(--devvm-font-pixel);
+  font-size: 11px;
+  font-synthesis: none;
+}
+
+.content pre.mermaid svg {
+  flex: none;
+}
+
+/* Labels' lines on the font's 14px cell, not the page's line height. Mermaid measures them in the page,
+   so their boxes fit. */
+.content pre.mermaid foreignObject p {
+  margin: 0;
+  line-height: 14px;
+}
+
+.content pre.mermaid rect {
+  shape-rendering: crispEdges;
+}

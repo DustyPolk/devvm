@@ -52,6 +52,9 @@ params:
   editURL:
     enable: true
     base: https://github.com/w3cj/devvm/edit/main/docs/content
+  # Mermaid, for diagrams: a pinned version, fetched when the site is built (layouts/_partials/scripts/mermaid.html).
+  mermaid:
+    base: https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist
   highlight:
     copy:
       enable: true
