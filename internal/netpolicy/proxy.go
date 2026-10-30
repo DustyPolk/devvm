@@ -48,8 +48,8 @@ type Proxy struct {
 	ExcludeFromBackup func(ctx context.Context, dir string) error
 	// InitCA makes devvm's CA in dir unless a current one is there.
 	InitCA func(dir string) error
-	// Listening reports whether something listens on a host loopback port.
-	Listening func(port int) bool
+	// Listening reports whether a program has a host loopback port.
+	Listening func(ctx context.Context, port int) bool
 	// Tick is how often a start looks for the proxy to listen, ten times.
 	Tick time.Duration
 	// What it prints, and asks: [y/N] and [Y/n]; Terminal reports whether
@@ -236,18 +236,12 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if !running || read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum {
 		p.Stop(vm)
 	}
-	sp, _ := strconv.Atoi(st.Get(KeySSHPort))
-	// Never one of the VM's own forwards: its backend would refuse it.
-	if sp == 0 || !running && (p.Listening(sp) || forwarded(st)[sp]) {
-		if sp, err = p.freePort(); err != nil {
-			return none, err
-		}
-		if err := st.Set(KeySSHPort, strconv.Itoa(sp)); err != nil {
-			return none, err
-		}
+	sp, err := p.SSHPort(ctx, st, running)
+	if err != nil {
+		return none, err
 	}
 	_, up := p.PID(vm)
-	pp, err := p.port(st, KeyProxyPort, up, running)
+	pp, err := p.port(ctx, st, KeyProxyPort, up, running)
 	if err != nil {
 		return none, err
 	}
@@ -255,7 +249,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		Net: backend.NetProxy, ProxyPort: pp, ProxyUser: ProxyUser, ProxyPassword: key, Env: Env, SSHPort: sp,
 	}
 	if backend.UsesDecider(b) {
-		dp, err := p.port(st, KeyDeciderPort, up, running)
+		dp, err := p.port(ctx, st, KeyDeciderPort, up, running)
 		if err != nil {
 			return none, err
 		}
@@ -279,22 +273,51 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	return conf, p.start(st, b, conf, files, bin, caSum, lifeline)
 }
 
+// SSHPort returns the host port the VM's ssh is forwarded from, with or
+// without network policy, as its state records it: devvm chooses it,
+// rather than the backend at its start, so every VM's port forwarder
+// avoids it (UsedPorts) before the VM's backend binds it. A stopped VM
+// gets a new one when its port is now another program's, on any address,
+// or one of its own forwards, which its backend would refuse.
+func (p *Proxy) SSHPort(ctx context.Context, st *state.VM, running bool) (int, error) {
+	sp, _ := strconv.Atoi(st.Get(KeySSHPort))
+	if sp != 0 && (running || !forwarded(st)[sp] && !p.Listening(ctx, sp)) {
+		return sp, nil
+	}
+	return p.choosePort(ctx, st, KeySSHPort)
+}
+
+// choosePort chooses a free port (freePort) and records it as the VM's
+// port under key, holding devvm's ports lock throughout, so two devvm runs
+// making or starting VMs at once never choose the same one.
+func (p *Proxy) choosePort(ctx context.Context, st *state.VM, key string) (int, error) {
+	if err := os.MkdirAll(p.Dirs.Run(), 0o700); err != nil {
+		return 0, err
+	}
+	unlock, err := platform.LockFile(ctx, filepath.Join(p.Dirs.Run(), "ports.lock"))
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	n, err := p.freePort(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return n, st.Set(key, strconv.Itoa(n))
+}
+
 // port returns the VM's port under key: a new free one when it has none,
 // or when its proxy doesn't run and another program took it, unless the VM
 // runs: its backend holds the port it started with.
-func (p *Proxy) port(st *state.VM, key string, up, running bool) (int, error) {
+func (p *Proxy) port(ctx context.Context, st *state.VM, key string, up, running bool) (int, error) {
 	n, _ := strconv.Atoi(st.Get(key))
-	if up || n != 0 && !p.Listening(n) {
+	if up || n != 0 && !p.Listening(ctx, n) {
 		return n, nil
 	}
 	if running && n != 0 {
 		return 0, msg.ProxyPortTaken(strconv.Itoa(n), st.Name())
 	}
-	n, err := p.freePort()
-	if err != nil {
-		return 0, err
-	}
-	return n, st.Set(key, strconv.Itoa(n))
+	return p.choosePort(ctx, st, key)
 }
 
 // RefreshSecrets writes again the secret files of the VMs named (none:
@@ -410,16 +433,16 @@ func logged(path string, before int64, want []byte) bool {
 	return bytes.Contains(b[before:], want)
 }
 
-// freePort returns a loopback port from 20000 to 59999 nothing listens on
-// and no VM has.
-func (p *Proxy) freePort() (int, error) {
+// freePort returns a loopback port from 20000 to 59999 no program has
+// (Listening) and no VM has.
+func (p *Proxy) freePort(ctx context.Context) (int, error) {
 	used, err := UsedPorts(p.Dirs, "")
 	if err != nil {
 		return 0, err
 	}
 	for range 1000 {
 		port := 20000 + rand.IntN(40000) //nolint:gosec // a port, not a secret
-		if !used[port] && !p.Listening(port) {
+		if !used[port] && !p.Listening(ctx, port) {
 			return port, nil
 		}
 	}
@@ -486,10 +509,15 @@ func forwarded(st *state.VM) map[int]bool {
 	return out
 }
 
-// listening reports whether something accepts connections on a host
-// loopback port.
-func listening(port int) bool {
-	c, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(port), time.Second) //nolint:noctx // a moment's dial
+// listening reports whether a program has a host loopback port: one that
+// has it on any address (platform.PortInUse), even if it never accepts,
+// or one that accepts connections on it.
+func listening(ctx context.Context, port int) bool {
+	if platform.PortInUse(ctx, port) {
+		return true
+	}
+	d := net.Dialer{Timeout: time.Second}
+	c, err := d.DialContext(ctx, "tcp", "127.0.0.1:"+strconv.Itoa(port))
 	if err != nil {
 		return false
 	}

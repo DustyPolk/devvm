@@ -23,7 +23,7 @@ const (
 	KeyCheck     = "net_check"  // the last self-check's result: ok or unenforced
 	KeyProxyKey  = "proxy_key"  // the VM's proxy password
 	KeyProxySalt = "proxy_salt" // what ends the VM's placeholders
-	KeySSHPort   = "ssh_port"   // the host port of the VM's ssh, fixed while confined
+	KeySSHPort   = "ssh_port"   // the host port of the VM's ssh (Proxy.SSHPort)
 	KeyProxyPort = "proxy_port" // the host loopback port its proxy listens on
 	// On a backend with a decider (backend.Decider): the host loopback port
 	// the proxy decides on, and the token its backend proves itself with,

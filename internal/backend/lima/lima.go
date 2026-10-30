@@ -255,7 +255,7 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 	if err := l.Runner.Run(ctx, msg.Creating(vm), l.limactl(ctx, "clone", "--tty=false", src, vm, "--mount-none",
 		"--set", mounts,
 		"--set", ".ssh.forwardAgent="+strconv.FormatBool(spec.AgentForwarding),
-		"--set", ".ssh.localPort=0",
+		"--set", ".ssh.localPort="+strconv.Itoa(spec.SSHPort),
 		"--set", noForwardsSet())); err != nil {
 		return backend.Logged(msg.VMCreateFailed(vm))
 	}

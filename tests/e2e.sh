@@ -273,7 +273,7 @@ cleanup() {
   pkill -f "[_]proxy -listen .* -listen-unix $XDG_DATA_HOME/devvm/docker/" 2>/dev/null   # Docker VMs' and builds' proxies
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/dns-probe.sh" "$work/d-dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log"
+    "$work/dns-probe.sh" "$work/d-dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -569,6 +569,10 @@ check "Lima forwards nothing itself; devvm's forwarder runs, with the host key d
   [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
   pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
   grep -qxF \"\$(cut -d' ' -f2- '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_CONFIG_HOME/devvm/known_hosts'"
+# Without network policy too: so no other VM's forwarder takes it before Lima binds it.
+check "its ssh port is the one its state records, on this machine's loopback alone" bash -c "
+  sp=\$(sed -n 's/^ssh_port=//p' '$vms/$vm') && [[ -n \$sp ]] && ! grep -qx net=on '$vms/$vm' &&
+  [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && loopback_only \"\$sp\""
 perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5, ReuseAddr => 1) or die;
   while ($c = $s->accept) { print $c "host-program\n"; close $c }' 47161 &
 hostprog=$!; sleep 0.5
@@ -634,8 +638,17 @@ section "an existing VM"
 check "devvm stop stops it and its port forwarder, and drops its ssh config entry" bash -c "cd '$p' && '$D' stop </dev/null >'$work/last.log' 2>&1 &&
   [[ \$(status_of $vm) == Stopped ]] && grep -qF \"\$(m stopped vm=$vm)\" '$work/last.log' && ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
   ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config'"
-check "stopped, devvm starts it again" bash -c "[[ \$(status_of $vm) == Stopped ]] &&
-  cd '$p' && printf 'echo e2e-again\n' | '$D' >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] && grep -qx e2e-again '$work/last.log'"
+# A program here that took its ssh port while it was stopped, on 127.0.0.1 alone and accepting
+# nothing (SO_REUSEADDR, as the port's last connections may still be in TIME_WAIT): the VM gets a
+# new one, recorded, and the program keeps its own.
+old_sp=$(sed -n 's/^ssh_port=//p' "$vms/$vm")
+perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "127.0.0.1", LocalPort => shift, Listen => 1, ReuseAddr => 1) or die "$!\n"; sleep 600' "$old_sp" &
+hostprog=$!; sleep 0.5
+check "stopped, devvm starts it again, on a new ssh port when a program here has its own" bash -c "[[ -n '$old_sp' && \$(status_of $vm) == Stopped ]] && kill -0 '$hostprog' &&
+  cd '$p' && printf 'echo e2e-again\n' | '$D' >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] && grep -qx e2e-again '$work/last.log' &&
+  sp=\$(sed -n 's/^ssh_port=//p' '$vms/$vm') && [[ -n \$sp && \$sp != '$old_sp' ]] &&
+  [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && kill -0 '$hostprog'"
+kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
 # devvm ssh and code with a home of their own, so the Include line is offered for an empty one (and,
 # without a terminal, not added), and a stub code first on PATH: never your editor.
@@ -996,6 +1009,28 @@ check "devvm policy allow applies at once to the running VM's proxy, and rm take
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
   [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
 check "DNS fails at once, not after a timeout" in_vm "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
+# Lima's network's DNS (192.168.5.3) and the host's address on it, asked directly, as root could:
+# a refusal or no answer passes, an address for example.com fails.
+lima_dns_asked=$(cat <<'EOF'
+python3 - <<'PY'
+import socket, sys
+q = bytes.fromhex("123401000001000000000000076578616d706c6503636f6d0000010001")
+for h in ("192.168.5.3", "192.168.5.2"):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(3)
+    try:
+        s.sendto(q, (h, 53))
+        d = s.recv(512)
+    except OSError as e:
+        print(h, e)
+        continue
+    print(h, "rcode", d[3] & 15, "answers", int.from_bytes(d[6:8], "big"))
+    if d[3] & 15 == 0 and int.from_bytes(d[6:8], "big") > 0:
+        sys.exit("example.com answered by " + h)
+PY
+EOF
+)
+check "... and Lima's network's DNS addresses, asked directly, answer nothing" in_vm "$vm" "$lima_dns_asked"
 # A service on the host's own loopback (a devvm _proxy, which answers anything with 407): unreachable
 # directly, and refused by the VM's proxy (internal addresses need a rule naming them).
 echo listener-key > "$work/listener.auth"
@@ -1067,6 +1102,58 @@ check "devvm stop stops it and its proxy at once, and devvm starts both again" b
   [[ \$(status_of '$vm') == Stopped ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$(status_of '$vm') == Running ]] &&
   pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && grep -qx net_check=ok '$vms/$vm'"
+# macOS: the hostagent's Seatbelt profile denies it every bind but its ssh port's, so Lima forwards
+# nothing even without its ignore rules. A limactl first on PATH puts Lima's own rule (forward
+# everything) back for one start, inside the sandbox devvm starts limactl in: Lima tries the guest's
+# ports (its log says so), the sandbox refuses them, and devvm's forwarder has them.
+if [[ "$(uname -s)" == Darwin ]]; then
+  sp=$(sed -n 's/^ssh_port=//p' "$vms/$vm"); ha=$DEVVM_LIMA_HOME/$vm/ha.stderr.log
+  # ha_listens: the hostagent's TCP listeners and UDP sockets, one per line.
+  ha_listens() { lsof -nP -a -p "$(cat "$DEVVM_LIMA_HOME/$vm/ha.pid")" -iTCP -sTCP:LISTEN -iUDP 2>/dev/null | awk 'NR > 1 { print $8, $9 }'; }
+  export -f ha_listens in_vm; export vm sp ha
+  check "the hostagent's profile denies every bind but its ssh port's (TCP) and its own unix sockets'; it has no other" bash -c "
+    sb='$XDG_DATA_HOME/devvm/run/$vm.sb' && [[ -n '$sp' && \$(grep -c network-bind \"\$sb\") == 3 ]] &&
+    grep -qxF '(deny network-bind)' \"\$sb\" && grep -qxF '(allow network-bind (local tcp \"localhost:$sp\"))' \"\$sb\" &&
+    grep -qxF \"(allow network-bind (local unix-socket (subpath \\\"\$(cd '$DEVVM_LIMA_HOME/$vm' && pwd -P)\\\")))\" \"\$sb\" &&
+    bind='import socket; socket.socket().bind((\"127.0.0.1\", 47197))' && python3 -c \"\$bind\" &&
+    ! /usr/bin/sandbox-exec -f \"\$sb\" python3 -c \"\$bind\" 2>/dev/null &&
+    udp='import socket; socket.socket(socket.AF_INET, socket.SOCK_DGRAM).bind((\"127.0.0.1\", $sp))' && python3 -c \"\$udp\" &&
+    ! /usr/bin/sandbox-exec -f \"\$sb\" python3 -c \"\$udp\" 2>/dev/null &&
+    l=\$(ha_listens) && echo \"hostagent's: \$l\" && [[ \$l == 'TCP 127.0.0.1:$sp' ]] &&
+    grep -A1 '^hostResolver:' '$DEVVM_LIMA_HOME/$vm/lima.yaml' | grep -q 'enabled: false'"
+  lima_real=$(command -v limactl); mkdir -p "$work/lima-bypass"
+  cat > "$work/lima-bypass/limactl" <<EOF
+#!/bin/bash
+# e2e: Lima's own rule for this start, set where limactl start runs: inside devvm's sandbox.
+if [[ \$1 == start ]]; then "$lima_real" edit --tty=false --set '.portForwards = []' "\${@: -1}" >/dev/null 2>&1 || exit 1; fi
+exec "$lima_real" "\$@"
+EOF
+  chmod 755 "$work/lima-bypass/limactl"
+  check "with Lima's own forwards on, the sandbox refuses the hostagent a VM server's port, TCP or UDP" bash -c "cd '$n' &&
+    HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 &&
+    printf 'exit\n' | PATH='$work/lima-bypass':\$PATH HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$(status_of '$vm') == Running ]] &&
+    grep -qx 'portForwards: \[\]' '$DEVVM_LIMA_HOME/$vm/lima.yaml' && [[ \$(sed -n 's/^ssh_port=//p' '$vms/$vm') == '$sp' ]] &&
+    in_vm '$vm' \"setsid -f python3 -m http.server -b 0.0.0.0 47195 </dev/null >/dev/null 2>&1; setsid -f python3 -c 'import socket,time; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind((\\\"0.0.0.0\\\",47196)); time.sleep(600)' devvm-e2e-udp </dev/null >/dev/null 2>&1\" &&
+    refused() { grep -q 'listen tcp 127.0.0.1:47195: bind: operation not permitted' \"\$ha\" &&
+      grep -Eq 'listen udp [0-9.]+:47196: bind: operation not permitted' \"\$ha\"; } &&
+    { for i in \$(seq 20); do refused && break; sleep 1; done; refused; } && grep -q 'Forwarding TCP from 0.0.0.0:47195' \"\$ha\" &&
+    ! lima_listens tcp 47195 && ! lima_listens udp 47196 && l=\$(ha_listens) && echo \"hostagent's: \$l\" && [[ \$l == 'TCP 127.0.0.1:$sp' ]]"
+  check "... and the VM works: ssh, devvm's forwarder (on loopback alone), the proxy, the self-check" bash -c "
+    for i in \$(seq 20); do nc -z 127.0.0.1 47195 && break; sleep 1; done; nc -z 127.0.0.1 47195 && loopback_only 47195 &&
+    pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null && ! lima_listens tcp 47195 &&
+    [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] &&
+    in_vm '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com' && grep -qx net_check=ok '$vms/$vm'"
+  in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4719"; pkill -f "[d]evvm-e2e-udp"' >/dev/null 2>&1
+  check "the next start puts Lima's ignore rules back" bash -c "cd '$n' &&
+    HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+    [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
+    grep -qx net_check=ok '$vms/$vm'"
+else
+  skip "the hostagent's profile denies every bind but its ssh port's (TCP) and its own unix sockets'; it has no other" "Seatbelt is macOS's"
+  skip "with Lima's own forwards on, the sandbox refuses the hostagent a VM server's port, TCP or UDP" "Seatbelt is macOS's"
+  skip "... and the VM works: ssh, devvm's forwarder (on loopback alone), the proxy, the self-check" "Seatbelt is macOS's"
+  skip "the next start puts Lima's ignore rules back" "Seatbelt is macOS's"
+fi
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
   '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +on +lima ' &&
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&

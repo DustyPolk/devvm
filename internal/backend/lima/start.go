@@ -156,7 +156,7 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 		case backend.NetDirect:
 			return nil, env, nil
 		case backend.NetProxy:
-			p.ProxyPort = c.ProxyPort
+			p.ProxyPort, p.NoBinds = c.ProxyPort, true
 			if !forwarding {
 				agent = ""
 			}
@@ -224,10 +224,11 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts 
 	} else if !proxy && !propagates {
 		sets = append(sets, ".propagateProxyEnv=true")
 	}
-	// On Linux restrict=on drops Lima's DNS too, so lookups would time out;
-	// a resolver nothing listens on fails at once. (On macOS the sandbox
-	// makes DNS fail fast.)
-	noDNS := proxy && l.OS == "linux"
+	// Names resolve in the proxy. On Linux restrict=on drops Lima's DNS
+	// too, so lookups would time out; on macOS Lima's host resolver binds
+	// loopback ports, which the sandbox denies (seatbelt.go). A resolver
+	// nothing listens on fails at once.
+	noDNS := proxy
 	resolver := cfg.HostResolver.Enabled == nil || *cfg.HostResolver.Enabled
 	switch {
 	case noDNS && resolver:

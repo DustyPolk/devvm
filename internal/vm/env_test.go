@@ -186,7 +186,7 @@ func testProxy(t *testing.T, d paths.Dirs, home string) *netpolicy.Proxy {
 		defer mu.Unlock()
 		return args[pid], nil
 	}
-	p.Listening = func(int) bool { return false }
+	p.Listening = func(context.Context, int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
 	p.Tick = time.Millisecond
 	return p

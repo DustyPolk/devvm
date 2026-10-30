@@ -43,9 +43,9 @@ func (s *Smolvm) sshKey(vm string) string {
 }
 
 // sshForward is the host loopback port a VM's ssh is forwarded from at a
-// start that runs it: c.SSHPort when the caller chose one (network
-// policy's), else the one it had while that's free, else a new one; never
-// one of the VM's listed ports, which its forwarder takes.
+// start that runs it: c.SSHPort when the caller chose one (devvm records
+// every VM's), else the one it had while that's free, else a new one;
+// never one of the VM's listed ports, which its forwarder takes.
 func (s *Smolvm) sshForward(ctx context.Context, vm string, c backend.Confinement, r record) (int, error) {
 	if c.SSHPort > 0 {
 		if lists(r.Listed, c.SSHPort) {

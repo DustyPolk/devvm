@@ -58,7 +58,7 @@ func TestStartConfined(t *testing.T) {
 			edits: []string{
 				".ssh.localPort=2222",
 				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","NO_PROXY":"localhost","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456"}`,
-				".propagateProxyEnv=false", noForwardsSet(),
+				".propagateProxyEnv=false", ".hostResolver.enabled=false", `.dns=["127.0.0.1"]`, noForwardsSet(),
 			},
 		},
 		{
@@ -104,6 +104,14 @@ func TestStartConfined(t *testing.T) {
 			checkLimaYAML(t, l, yaml, tc.c)
 			s := startCall(t, f)
 			checkStartCall(t, l, s, tc.wrapped)
+			// Only the proxy's VMs have their binds denied: builds keep
+			// Lima's host resolver, which binds loopback ports.
+			if tc.wrapped {
+				sb, err := os.ReadFile(l.profileFile("v"))
+				if err != nil || strings.Contains(string(sb), "(deny network-bind)") != (tc.c.Net == backend.NetProxy) {
+					t.Errorf("profile (%v):\n%s", err, sb)
+				}
+			}
 			w, ok := envOf(s, "QEMU_SYSTEM_AARCH64")
 			if ok != tc.qemu || ok && w != filepath.Join(l.Dirs.Run(), "qemu", "qemu-system-aarch64") {
 				t.Errorf("QEMU_SYSTEM_AARCH64=%q (%v)", w, ok)
@@ -342,12 +350,23 @@ func TestProfile(t *testing.T) {
 	if slices.Contains(got, "(allow network-outbound (remote unix-socket))") {
 		t.Error("every unix socket allowed")
 	}
+	if strings.Contains(p.render(), "network-bind") {
+		t.Error("binds denied without NoBinds")
+	}
 	p.AgentSocket, p.ProxyPort = "", 0
 	if n := strings.Count(p.render(), "unix-socket"); n != 1 {
 		t.Errorf("%d unix-socket rules without an agent", n)
 	}
 	if strings.Contains(p.render(), "localhost:3128") {
 		t.Error("a proxy port without a proxy")
+	}
+	// NoBinds: no bind but the ssh port's and the VM's own unix sockets',
+	// after every other rule, so none allows more.
+	p.NoBinds = true
+	wantBinds := "(deny network-bind)\n(allow network-bind (local tcp \"localhost:2222\"))\n" +
+		"(allow network-bind (local unix-socket (subpath \"" + tmp + "/real/lima/vm1\")))\n"
+	if got := p.render(); !strings.HasSuffix(got, wantBinds) || strings.Count(got, "network-bind") != 3 {
+		t.Errorf("NoBinds profile:\n%s\nwant it to end\n%s", got, wantBinds)
 	}
 	// A build with the internet: everything but host loopback.
 	p = profile{Internet: true, LimaDir: "/l/vm", SSHPort: 2224}

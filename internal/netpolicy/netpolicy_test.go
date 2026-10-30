@@ -205,12 +205,46 @@ func TestFreePort(t *testing.T) {
 	if got := forwarded(st); len(got) != 0 {
 		t.Errorf("forwarded with all = %v", got)
 	}
-	p := &Proxy{Dirs: d, Listening: func(port int) bool { return port%2 == 0 }}
+	p := &Proxy{Dirs: d, Listening: func(_ context.Context, port int) bool { return port%2 == 0 }}
 	for range 200 {
-		port, err := p.freePort()
+		port, err := p.freePort(t.Context())
 		if err != nil || port < 20000 || port >= 60000 || port%2 == 0 || used[port] {
 			t.Fatalf("freePort = %d, %v", port, err)
 		}
+	}
+}
+
+// A VM's ssh port: chosen once and recorded, kept while it's free, or
+// while the VM runs on it; a stopped VM gets a new one when another
+// program has it, or it lists it to forward.
+func TestSSHPort(t *testing.T) {
+	d, st := sandbox(t, "base")
+	taken := 0
+	p := &Proxy{Dirs: d, Listening: func(_ context.Context, port int) bool { return port == taken || port%2 == 0 }}
+	sp, err := p.SSHPort(t.Context(), st, false)
+	if err != nil || sp == 0 || sp%2 == 0 || st.Get(KeySSHPort) != strconv.Itoa(sp) {
+		t.Fatalf("new: %d, %v, state %q", sp, err, st.Get(KeySSHPort))
+	}
+	if got, err := p.SSHPort(t.Context(), st, false); err != nil || got != sp {
+		t.Errorf("free: %d, %v, want %d", got, err, sp)
+	}
+	// Another program has it: kept while the VM runs (its backend has
+	// it), a new one once it's stopped.
+	taken = sp
+	if got, err := p.SSHPort(t.Context(), st, true); err != nil || got != sp {
+		t.Errorf("running: %d, %v, want %d", got, err, sp)
+	}
+	got, err := p.SSHPort(t.Context(), st, false)
+	if err != nil || got == sp || st.Get(KeySSHPort) != strconv.Itoa(got) {
+		t.Errorf("taken: %d (had %d), %v, state %q", got, sp, err, st.Get(KeySSHPort))
+	}
+	// One of its own forwards.
+	sp = got
+	if err := st.Set(keyPorts, strconv.Itoa(sp)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := p.SSHPort(t.Context(), st, false); err != nil || got == sp || st.Get(KeySSHPort) != strconv.Itoa(got) {
+		t.Errorf("forwarded: %d (had %d), %v", got, sp, err)
 	}
 }
 
@@ -290,7 +324,7 @@ func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	f := &proxies{args: map[int][]string{}}
 	p := NewProxy(d, assets.FS, "/bin/sh", store, testUI{t})
 	p.Start, p.Args, p.Tick = f.start(t), f.argsOf, time.Millisecond
-	p.Listening = func(int) bool { return false }
+	p.Listening = func(context.Context, int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
 	return p, f
 }
@@ -446,7 +480,7 @@ func TestPrepareDecider(t *testing.T) {
 	}
 	// A running VM whose proxy is gone, with the decider's port taken.
 	p.Stop(st.Name())
-	p.Listening = func(port int) bool { return strconv.Itoa(port) == dp }
+	p.Listening = func(_ context.Context, port int) bool { return strconv.Itoa(port) == dp }
 	if _, err := p.Prepare(t.Context(), b, st, true); names(err) != "proxy_port_taken port="+dp+" vm="+st.Name() {
 		t.Errorf("decider port taken: %v", names(err))
 	}
@@ -529,7 +563,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	// A running VM whose proxy is gone, with its port taken by another
 	// program.
 	p.Stop(st.Name())
-	p.Listening = func(port int) bool { return strconv.Itoa(port) == pp }
+	p.Listening = func(_ context.Context, port int) bool { return strconv.Itoa(port) == pp }
 	if _, err := p.Prepare(t.Context(), lifelined(), st, true); names(err) != "proxy_port_taken port="+pp+" vm="+st.Name() {
 		t.Errorf("port taken: %v", names(err))
 	}

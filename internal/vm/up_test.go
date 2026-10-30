@@ -42,15 +42,18 @@ func TestUp(t *testing.T) {
 	if got := staged(t, f); got["tools"] != "" || !strings.HasPrefix(got["sync.sh"], "#!/bin/bash") || got["tools.sh"] == "" {
 		t.Errorf("staged = %q", got)
 	}
-	if c, _ := start.Args[1].(backend.Confinement); c.Net != backend.NetDirect {
-		t.Errorf("Start confinement = %+v", c)
-	}
 	if len(*execs) != 1 || (*execs)[0].Path != "/bin/shell" {
 		t.Errorf("exec = %+v", *execs)
 	}
 	st, err := state.ReadVM(e.Dirs, spec.Name)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Without network policy too, its ssh port is devvm's: recorded, made
+	// with it and started on it.
+	c, _ := start.Args[1].(backend.Confinement)
+	if sp := st.Get(netpolicy.KeySSHPort); c.Net != backend.NetDirect || sp == "" || strconv.Itoa(c.SSHPort) != sp || strconv.Itoa(spec.SSHPort) != sp {
+		t.Errorf("Start confinement = %+v, VMSpec's ssh port %d, state's %q", c, spec.SSHPort, sp)
 	}
 	for k, v := range map[string]string{
 		state.KeyImage: "base", state.KeyDir: e.Dir, state.KeyBackend: "fake", KeyNet: "off", KeyCPUs: "2",

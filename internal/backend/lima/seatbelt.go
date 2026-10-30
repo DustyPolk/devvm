@@ -26,6 +26,14 @@ type profile struct {
 	AgentSocket string
 	SSHPort     int // the VM's ssh forward on host loopback
 	ProxyPort   int // devvm's proxy on host loopback; 0 for none
+	// NoBinds denies every network bind but the ssh forward's TCP port
+	// and unix sockets in LimaDir, so the hostagent forwards no guest
+	// port whatever its rules say (devvm's forwarder does). Seatbelt
+	// matches a bind by its port alone, on any address (localhost
+	// included), resolves a unix socket's path, and can't allow an
+	// ephemeral port (0): Lima's host resolver, which binds those, is
+	// off where binds are denied (startSets).
+	NoBinds bool
 }
 
 // The profile allows everything else, so the hostagent runs as usual. No
@@ -45,6 +53,11 @@ var profileTmpl = template.Must(template.New("sb").Funcs(template.FuncMap{"sb": 
 (allow network-outbound (remote ip "localhost:{{.SSHPort}}"))
 {{- with .ProxyPort}}
 (allow network-outbound (remote ip "localhost:{{.}}"))
+{{- end}}
+{{- if .NoBinds}}
+(deny network-bind)
+(allow network-bind (local tcp "localhost:{{.SSHPort}}"))
+(allow network-bind (local unix-socket (subpath {{sb .LimaDir}})))
 {{- end}}
 `))
 

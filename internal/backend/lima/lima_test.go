@@ -411,7 +411,7 @@ func TestCreateVM(t *testing.T) {
 		Name: "devvm-p-0123456789abcd", Project: "/my project", AgentDirs: []string{"/h/.claude"},
 		Tools: "/d/tools", ToolsAt: "/mnt/devvm-tools", AgentForwarding: true,
 		Size:  backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150},
-		Ports: backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}},
+		Ports: backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}}, SSHPort: 23456,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -420,7 +420,7 @@ func TestCreateVM(t *testing.T) {
 		"limactl stop devvm-img-0123456789ab",
 		`limactl clone --tty=false devvm-img-0123456789ab devvm-p-0123456789abcd --mount-none` +
 			` --set .mounts = [{"location":"/my project","writable":true},{"location":"/h/.claude","writable":false},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools","writable":false}]` +
-			` --set .ssh.forwardAgent=true --set .ssh.localPort=0 --set ` + noForwardsSet(),
+			` --set .ssh.forwardAgent=true --set .ssh.localPort=23456 --set ` + noForwardsSet(),
 		"limactl edit --tty=false devvm-p-0123456789abcd --cpus 6 --disk 150",
 	}
 	if got := f.lines(); !slices.Equal(got, want) {

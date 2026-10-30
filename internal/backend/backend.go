@@ -283,6 +283,9 @@ type VMSpec struct {
 	AgentToggle bool
 	Size        Size  // zero fields take the image's
 	Ports       Ports // which ports to forward to host loopback
+	// SSHPort is the host port the VM's ssh is forwarded from, as devvm
+	// records it (Confinement.SSHPort at each start); 0 for none yet.
+	SSHPort int
 	// DockerLayer is set when its image has the docker layer, on a backend
 	// that makes VMs for it (DockerLayerVM).
 	DockerLayer bool

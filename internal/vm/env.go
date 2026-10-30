@@ -339,6 +339,13 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	e.useAgent(mode)
 	if conf.Net != backend.NetProxy {
 		e.Proxy.Stop(vm)
+		// Its ssh port, as the proxy's confinement has it: recorded, so
+		// other VMs' forwarders never take it before its backend binds it.
+		sp, err := e.Proxy.SSHPort(ctx, st, false)
+		if err != nil {
+			return conf, err
+		}
+		conf.SSHPort = sp
 	} else {
 		p, err := e.Proxy.Prepare(ctx, b, st, false)
 		if err != nil {

@@ -158,16 +158,21 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := (devcontainers{e.Env}).record(st, o); err != nil {
 		return err
 	}
+	if n.ports != "" && n.ports != PortsAll {
+		if err := st.Set(KeyPorts, n.ports); err != nil {
+			return err
+		}
+	}
+	// Its ssh port from the start, as its starts have it: none of its
+	// listed ports, recorded above.
+	if n.spec.SSHPort, err = e.Proxy.SSHPort(ctx, st, false); err != nil {
+		return err
+	}
 	if err := b.CreateVM(ctx, chain.Key(), n.spec); err != nil {
 		return err
 	}
 	if n.spec.AgentToggle && b.Caps()[backend.FeatureAgentToggle].IsEmulated() {
 		if err := st.Set(KeyAgentToggle, "on"); err != nil {
-			return err
-		}
-	}
-	if n.ports != "" && n.ports != PortsAll {
-		if err := st.Set(KeyPorts, n.ports); err != nil {
 			return err
 		}
 	}
