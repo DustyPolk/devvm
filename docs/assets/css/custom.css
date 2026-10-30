@@ -163,7 +163,6 @@ html.dark .highlight .chroma .go {
   margin: 4rem 0 1.25rem;
 }
 
-#content > .hx\:items-start > .asciinema-player,
 #content > .hx\:items-start > .hextra-code-block {
   width: 100%;
   margin-top: 1.5rem;
@@ -372,35 +371,6 @@ html.dark .highlight .chroma .go {
    which shows as a gray band on the black background. */
 .hextra-toc .hx\:sticky.hx\:bottom-0 {
   box-shadow: none;
-}
-
-/* The recording's player (asciinema's theme="devvm"): the iTerm2 profile it was recorded in, green on
-   black with xterm's 16 colors. On .ap-player itself: the player's stylesheet loads later and sets its
-   defaults there. */
-.ap-player.asciinema-player-theme-devvm {
-  --term-color-foreground: #00ff00;
-  --term-color-background: #000000;
-  --term-color-0: #000000;
-  --term-color-1: #bb0000;
-  --term-color-2: #00bb00;
-  --term-color-3: #bbbb00;
-  --term-color-4: #0000bb;
-  --term-color-5: #bb00bb;
-  --term-color-6: #00bbbb;
-  --term-color-7: #bbbbbb;
-  --term-color-8: #555555;
-  --term-color-9: #ff5555;
-  --term-color-10: #55ff55;
-  --term-color-11: #ffff55;
-  --term-color-12: #5555ff;
-  --term-color-13: #ff55ff;
-  --term-color-14: #55ffff;
-  --term-color-15: #ffffff;
-}
-
-.asciinema-player .ap-player {
-  border: 1px solid var(--devvm-border);
-  border-radius: 0.5rem;
 }
 
 /* The sections' art (docs/assets/home/, the art shortcode): text on Departure Mono's 7x14 cell at 11px,
