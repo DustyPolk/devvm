@@ -161,11 +161,12 @@ func TestCaps(t *testing.T) {
 	caps := s.Caps()
 	for _, f := range backend.Features {
 		want := !slices.Contains([]backend.Feature{
-			backend.FeatureEgressProxy, backend.FeatureSSH, backend.FeaturePortsAll, backend.FeatureAgentToggle,
+			backend.FeatureEgressProxy, backend.FeatureSSH, backend.FeaturePorts, backend.FeaturePortsAll, backend.FeatureAgentToggle,
 		}, f)
 		none := map[backend.Feature]string{
 			backend.FeatureEgressProxy: "emulated", // reviewed
 			backend.FeatureSSH:         "emulated", // reviewed
+			backend.FeaturePorts:       "emulated", // reviewed
 			backend.FeaturePortsAll:    "emulated", // reviewed
 			backend.FeatureAgentToggle: "emulated", // reviewed
 		}[f]
@@ -185,6 +186,9 @@ func TestCaps(t *testing.T) {
 	}
 	if err := r.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{All: true}}.Features()...); err != nil {
 		t.Errorf("every port: %v", err)
+	}
+	if err := r.Require(s, "devvm-x", backend.VMSpec{Ports: backend.Ports{Ranges: []backend.PortRange{{From: 22, To: 9000}}}}.Features()...); err != nil {
+		t.Errorf("listed ports: %v", err)
 	}
 	if err := r.Require(s, "devvm-x", backend.FeatureAgentToggle); err != nil {
 		t.Errorf("agent toggle: %v", err)
@@ -211,31 +215,18 @@ func TestFormatAndKeyFiles(t *testing.T) {
 	}
 }
 
-func TestPortArgs(t *testing.T) {
-	got, err := portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8002}}})
-	if err != nil || !slices.Equal(got, []string{"5173:5173", "8000-8002:8000-8002"}) {
-		t.Errorf("ranges: %q, %v", got, err)
+// A VM's listed ports are recorded as they are, however many; every port
+// lists none.
+func TestListedAndVolume(t *testing.T) {
+	rs := []backend.PortRange{{From: 22, To: 22}, {From: 3000, To: 4000}}
+	if got := listed(backend.Ports{Ranges: rs}); !slices.Equal(got, rs) {
+		t.Errorf("ranges: %v", got)
 	}
-	if got, err := portArgs("v", backend.Ports{}); err != nil || got != nil {
-		t.Errorf("none: %q, %v", got, err)
+	if got := listed(backend.Ports{All: true, Ranges: rs}); got != nil {
+		t.Errorf("all: %v", got)
 	}
-	// Every port is its forwarder's: none of smolvm's.
-	if got, err := portArgs("v", backend.Ports{All: true}); err != nil || got != nil {
-		t.Errorf("all: %q, %v", got, err)
-	}
-	// One of smolvm's 64 is the VM's ssh.
-	if _, err := portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3062}}}); err != nil {
-		t.Errorf("63: %v", err)
-	}
-	_, err = portArgs("v", backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3060}, {From: 4000, To: 4002}}})
-	if names(err) != "smolvm_too_many_ports asked=64 max=63 vm=v" {
-		t.Errorf("too many: %v", err)
-	}
-	// Its sshd's port is the VM's own.
-	for _, r := range []backend.PortRange{{From: 22, To: 22}, {From: 20, To: 30}} {
-		if _, err := portArgs("v", backend.Ports{Ranges: []backend.PortRange{r}}); names(err) != "smolvm_port_ssh port=22 vm=v" {
-			t.Errorf("%v: %v", r, err)
-		}
+	if got := listed(backend.Ports{}); len(got) != 0 {
+		t.Errorf("none: %v", got)
 	}
 	if _, err := volume("/a:b", "/a:b", true); names(err) != "smolvm_mount_colon path=/a:b" {
 		t.Errorf("colon: %v", err)
@@ -256,9 +247,13 @@ func TestCreateVM(t *testing.T) {
 	}
 	want := "smolvm machine create --name devvm-p-0123456789abcd --label devvm.data=" + s.Dirs.Data +
 		" --from " + s.packFile("0123456789ab") + " --cpus 2 --mem 8192 --storage 100 -v /var/lib/docker" +
-		" -v /p:/p -v /h/.claude:/h/.claude:ro -v /t:/mnt/devvm-tools:ro -p 5173:5173 --ssh-agent"
+		" -v /p:/p -v /h/.claude:/h/.claude:ro -v /t:/mnt/devvm-tools:ro --ssh-agent"
 	if got := s.calls(t); !slices.Equal(got, []string{want}) {
 		t.Errorf("calls:\n%q\nwant\n%q", got, want)
+	}
+	// Its listed ports are its forwarder's: recorded, none of smolvm's.
+	if r, err := s.readRecord(spec.Name); err != nil || r.PortsAll || !slices.Equal(r.Listed, spec.Ports.Ranges) {
+		t.Errorf("record %+v, %v", r, err)
 	}
 	in, err := s.Inspect(t.Context(), spec.Name)
 	if err != nil || !in.AgentForwarding || !slices.Equal(in.AgentDirs, spec.AgentDirs) || in.Status != backend.StatusStopped ||
@@ -394,41 +389,30 @@ func TestStart(t *testing.T) {
 	}
 }
 
-// A start forwards the listed ports it's given (those in use on the host
-// left out) where the machine forwards others, and leaves them otherwise.
-func TestStartListedPorts(t *testing.T) {
+// A stopped start forwards none of a VM's listed ports through smolvm,
+// and leaves its record's list as it is: a VM without ssh forwards none,
+// warned.
+func TestStartListedNoSSH(t *testing.T) {
 	s := newSandbox(t)
 	vm := "devvm-p-0123456789abcd"
 	s.machine(t, vm, "stopped 4 8192 20 true")
-	if err := s.writeRecord(vm, record{Ports: []string{"5173:5173", "8000-8002:8000-8002"}}); err != nil {
+	listed := []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8002}}
+	if err := s.writeRecord(vm, record{Listed: listed}); err != nil {
 		t.Fatal(err)
 	}
-	ranges := func(rs ...backend.PortRange) *backend.Ports { return &backend.Ports{Ranges: rs} }
-	for _, tc := range []struct {
-		name   string
-		ports  *backend.Ports
-		update string // machine update's options; "" for none
-		record []string
-	}{
-		{"as it forwards", ranges(backend.PortRange{From: 5173, To: 5173}, backend.PortRange{From: 8000, To: 8002}), "", []string{"5173:5173", "8000-8002:8000-8002"}},
-		{"one left out", ranges(backend.PortRange{From: 8000, To: 8002}), " --remove-port 5173:5173 --remove-port 8000-8002:8000-8002 -p 8000-8002:8000-8002", []string{"8000-8002:8000-8002"}},
-		{"not given", nil, "", []string{"8000-8002:8000-8002"}},
-		{"back again", ranges(backend.PortRange{From: 5173, To: 5173}, backend.PortRange{From: 8000, To: 8002}), " --remove-port 8000-8002:8000-8002 -p 5173:5173 -p 8000-8002:8000-8002", []string{"5173:5173", "8000-8002:8000-8002"}},
-	} {
-		s.reset(t)
-		if err := s.Start(t.Context(), vm, backend.Confinement{Ports: tc.ports}); err != nil {
-			t.Fatal(err)
-		}
-		got := s.calls(t)
-		if tc.update == "" && strings.HasPrefix(got[0], "smolvm machine update") || tc.update != "" && got[0] != "smolvm machine update --name "+vm+tc.update {
-			t.Errorf("%s: %q", tc.name, got)
-		}
-		if r, err := s.readRecord(vm); err != nil || !slices.Equal(r.Ports, tc.record) {
-			t.Errorf("%s: record %q, %v", tc.name, r.Ports, err)
-		}
-		if err := s.Stop(t.Context(), vm); err != nil {
-			t.Fatal(err)
-		}
+	var warned []string
+	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := s.Start(t.Context(), vm, backend.Confinement{Ports: &backend.Ports{Ranges: listed[1:]}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(s.calls(t), "\n"); strings.Contains(got, " -p ") || strings.Contains(got, "--remove-port") {
+		t.Errorf("smolvm's forwards changed: %q", got)
+	}
+	if r, err := s.readRecord(vm); err != nil || !slices.Equal(r.Listed, listed) {
+		t.Errorf("record %+v, %v", r, err)
+	}
+	if !slices.Equal(warned, []string{"ports_no_ssh vm=" + vm}) {
+		t.Errorf("warned %q", warned)
 	}
 }
 
@@ -789,12 +773,12 @@ func TestBuildFails(t *testing.T) {
 }
 
 // Sizes change where they differ; disks only grow; ports and agent folders
-// replace what was set.
+// replace what was set, ports in devvm's record alone.
 func TestSet(t *testing.T) {
 	s := newSandbox(t)
 	vm := "devvm-a-0123456789abcd"
 	s.machine(t, vm, "stopped 4 8192 100 true")
-	if err := s.writeRecord(vm, record{AgentDirs: []string{"/h/.claude"}, Ports: []string{"3000:3000"}}); err != nil {
+	if err := s.writeRecord(vm, record{AgentDirs: []string{"/h/.claude"}, Listed: []backend.PortRange{{From: 3000, To: 3000}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 4, MemoryGiB: 4, DiskGiB: 120}); err != nil {
@@ -811,11 +795,13 @@ func TestSet(t *testing.T) {
 	}
 	want := []string{
 		"smolvm machine update --name " + vm + " --mem 4096 --storage 120",
-		"smolvm machine update --name " + vm + " --remove-port 3000:3000 -p 8000:8000",
 		"smolvm machine update --name " + vm + " --remove-volume /h/.claude:/h/.claude -v /h/.codex:/h/.codex:ro",
 	}
 	if got := s.calls(t); !slices.Equal(got, want) {
 		t.Errorf("calls:\n%q\nwant\n%q", got, want)
+	}
+	if r, err := s.readRecord(vm); err != nil || r.PortsAll || !slices.Equal(r.Listed, []backend.PortRange{{From: 8000, To: 8000}}) {
+		t.Errorf("record %+v, %v", r, err)
 	}
 	s.machine(t, vm, "running 4 4096 120 true")
 	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 2}); names(err) != "vm_not_stopped vm="+vm {

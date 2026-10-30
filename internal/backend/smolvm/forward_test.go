@@ -35,20 +35,8 @@ func TestStartForwarder(t *testing.T) {
 	if got := s.calls(t); len(got) != 1 || strings.Contains(got[0], " -p ") {
 		t.Errorf("create: %q", got)
 	}
-	// A short folder for its control socket: a test's temporary one can
-	// be too long for one.
-	short, err := os.MkdirTemp("/tmp", "dv")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(short) })
-	s.Forwards.Run = short
 	var args []string
-	s.Forwards.Detach = func(path string, a []string, out *os.File) (int, error) {
-		args = append([]string{path}, a...)
-		_, err := fmt.Fprintf(out, "devvm ports: forwarding %s's ports\n", vm)
-		return os.Getpid(), err
-	}
+	s.fakeForwarder(t, vm, &args)
 	running := false
 	s.Forwards.Args = func(int) ([]string, error) {
 		if !running {
@@ -117,24 +105,6 @@ func TestStartForwarder(t *testing.T) {
 		t.Errorf("warned %q", warned)
 	}
 
-	// Listed ports instead: smolvm's, and no forwarder.
-	if err := s.Stop(t.Context(), vm); err != nil {
-		t.Fatal(err)
-	}
-	s.reset(t)
-	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3000}}}); err != nil {
-		t.Fatal(err)
-	}
-	if r, _ := s.readRecord(vm); r.PortsAll || !slices.Equal(s.calls(t), []string{"smolvm machine update --name " + vm + " -p 3000:3000"}) {
-		t.Errorf("listed: %+v, %q", r, s.calls(t))
-	}
-	s.reset(t)
-	if err := s.SetPorts(t.Context(), vm, backend.Ports{All: true}); err != nil {
-		t.Fatal(err)
-	}
-	if r, _ := s.readRecord(vm); !r.PortsAll || !slices.Equal(s.calls(t), []string{"smolvm machine update --name " + vm + " --remove-port 3000:3000"}) {
-		t.Errorf("all again: %+v, %q", r, s.calls(t))
-	}
 	if err := s.Delete(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
@@ -142,5 +112,75 @@ func TestStartForwarder(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(s.Forwards.Dir, vm+ext)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", ext, err)
 		}
+	}
+}
+
+// fakeForwarder makes vm's forwarder one that says it forwards at once,
+// its arguments kept in args, with a short folder for its control socket:
+// a test's temporary one can be too long for one.
+func (s sandbox) fakeForwarder(t *testing.T, vm string, args *[]string) {
+	t.Helper()
+	short, err := os.MkdirTemp("/tmp", "dv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(short) })
+	s.Forwards.Run = short
+	s.Forwards.Detach = func(path string, a []string, out *os.File) (int, error) {
+		*args = append([]string{path}, a...)
+		_, err := fmt.Fprintf(out, "devvm ports: forwarding %s's ports\n", vm)
+		return os.Getpid(), err
+	}
+}
+
+// A VM's listed ports are recorded, none of smolvm's, however many: its
+// forwarder forwards them alone (-only), those this start's Confinement
+// names (a host program's left out) over the record's; with none, no
+// forwarder runs.
+func TestStartListedForwarder(t *testing.T) {
+	s := newSandbox(t)
+	vm := "devvm-l-0123456789abcd"
+	s.image(t, "0123456789ab")
+	listed := []backend.PortRange{{From: 22, To: 22}, {From: 3000, To: 3000}, {From: 8000, To: 8100}}
+	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: vm, Ports: backend.Ports{Ranges: listed}}); err != nil {
+		t.Fatal(err)
+	}
+	var args, warned []string
+	s.fakeForwarder(t, vm, &args)
+	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	c := backend.Confinement{SSH: true, Net: backend.NetDirect}
+	for _, tc := range []struct {
+		ports *backend.Ports
+		only  string // "" for no forwarder
+	}{
+		{nil, "22,3000,8000-8100"},
+		{&backend.Ports{Ranges: listed[2:]}, "8000-8100"},
+		{&backend.Ports{}, ""},
+	} {
+		args, warned = nil, nil
+		c.Ports = tc.ports
+		if err := s.Start(t.Context(), vm, c); err != nil {
+			t.Fatal(err)
+		}
+		i := slices.Index(args, "-only")
+		if tc.only == "" && args != nil || tc.only != "" && (i < 0 || i+1 >= len(args) || args[i+1] != tc.only) || len(warned) != 0 {
+			t.Errorf("only %q: forwarder %q, warned %q", tc.only, args, warned)
+		}
+		if err := s.Stop(t.Context(), vm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, call := range s.calls(t) {
+		if strings.HasPrefix(call, "smolvm machine") && strings.Contains(call, " -p ") && !strings.HasSuffix(call, ":22") {
+			t.Errorf("smolvm forwards a listed port: %q", call)
+		}
+	}
+	// Every port again: the record alone changes.
+	s.reset(t)
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{All: true}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := s.readRecord(vm); !r.PortsAll || r.Listed != nil || len(s.calls(t)) != 0 {
+		t.Errorf("all: %+v, %q", r, s.calls(t))
 	}
 }

@@ -66,34 +66,49 @@ mkdir $WORK/web
 cd $WORK/web
 
 # Listed ports: made from base's pack with everything set (a pack would
-# give it its build machine's), started, set up, then the shell.
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173,8000-8001 --cpus 2 base
+# give it its build machine's), started, set up, then the shell. smolvm
+# forwards none of its ports, only its ssh: devvm's forwarder forwards the
+# listed ports alone (47329 listens in the VM, and 47327, unlisted).
+exec sh -c 'printf "0100007F:B8E1\n0100007F:B8DF\n" > "$STUB_DIR/guest-ports"'
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports 47329,8000-8001 --cpus 2 base
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
+! stderr 'ports_'
 stub_calls
-stdout '^smolvm machine create( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --from \S+/image\.smolmachine --cpus 2 --mem \d+ --storage 100 -v /var/lib/docker -v (\S+)/web:\S+/web -v \S+/data/devvm/tools:/mnt/devvm-tools:ro -p 5173:5173 -p 8000-8001:8000-8001 --ssh-agent$'
+stdout '^smolvm machine create( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --from \S+/image\.smolmachine --cpus 2 --mem \d+ --storage 100 -v /var/lib/docker -v (\S+)/web:\S+/web -v \S+/data/devvm/tools:/mnt/devvm-tools:ro --ssh-agent$'
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --net -p [0-9]+:22$'
+! stdout ' -p (47329|8000)'
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-web-[0-9a-f]{14}$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i( -t)? -u \S+ -w \S+/web .* bash -l$'
 ! stderr 'backend_unreviewed'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log'
+stdout '^devvm ports: port 47329: forwarded$'
+stdout '^devvm ports: forwarding devvm-web-[0-9a-f]{14}''s ports$'
+! stdout 'port 47327'
 exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
 grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 
 # A listed port a program on this machine has, on any address, isn't
-# forwarded from a start that finds it so, warned: smolvm's forward would
-# share it, and take its connections.
+# forwarded from a start that finds it so, warned: the forwarder forwards
+# the rest, and smolvm none.
 listen_any TAKEN
 exec devvm stop
 exec devvm ports add $TAKEN
-exec sh -c ': > "$STUB_LOG"'
+exec sh -c 'printf "0100007F:B8E1\n0100007F:%04X\n" "$TAKEN" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"; : > "$(ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log)"'
 exec devvm
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+! stderr 'ports_forward_failed'
 stub_calls
-stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --remove-port 5173:5173 --remove-port 8000-8001:8000-8001 --remove-port '$TAKEN':'$TAKEN' -p 5173:5173 -p 8000-8001:8000-8001$'
+! stdout '^smolvm machine (create|update) .* -p '
+! stdout '--remove-port'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log'
+stdout '^devvm ports: port 47329: forwarded$'
+! stdout 'port '$TAKEN
 exec devvm ports
-stdout '^5173,8000-8001,'$TAKEN'$'
+stdout '^47329,8000-8001,'$TAKEN'$'
+rm $STUB_DIR/guest-ports
 
 # Its agent forwarding can be turned on later (emulated, reviewed): made
 # forwarding, and given no agent, a path no socket can be at.
@@ -196,11 +211,19 @@ exec devvm rm -f
 stdout '^==> deleted vm=devvm-sshd-[0-9a-f]{14}$'
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
 
-# Port 22 is the VM's ssh: refused in --ports.
-mkdir $WORK/p22
-cd $WORK/p22
-! exec devvm --backend smolvm --from $PIN --no-network-policy --ports 3000,22 base
-stderr '^devvm: smolvm_port_ssh port=22 vm=devvm-p22-[0-9a-f]{14}$'
+# Any number of listed ports, 22 among them: all the forwarder's, none of
+# smolvm's.
+mkdir $WORK/many
+cd $WORK/many
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports 22,3000-3100 base
+! stderr 'backend_unreviewed'
+stub_calls
+stdout '^smolvm machine create( --state-dir \S+)? --name devvm-many-[0-9a-f]{14} .* --ssh-agent$'
+! stdout ' -p (22|3000)'
+exec devvm ports
+stdout '^22,3000-3100$'
+exec devvm rm -f
 
 # Agent forwarding turned on or off (emulated, reviewed): a new VM is made
 # forwarding (--ssh-agent), and each start gives it the agent its choice

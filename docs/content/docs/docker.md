@@ -146,7 +146,7 @@ A VM started without ssh, or started outside devvm since (`docker start`), gets 
 
 ## Ports
 
-Emulated, and reviewed ([design](design.md#ports-on-docker)): a container's ports reach your machine only when it publishes them, which Docker fixes when it makes the container, and then only servers on its network address, never its loopback. So a VM publishes nothing, and a forwarder of devvm's on your machine forwards its ports, as [smolvm's](smolvm.md#every-port) does:
+Emulated, and reviewed ([design](design.md#ports-on-docker)): a container's ports reach your machine only when it publishes them, which Docker fixes when it makes the container, and then only servers on its network address, never its loopback. So a VM publishes nothing, and a forwarder of devvm's on your machine forwards its ports, as [smolvm's](smolvm.md#ports) does:
 
 - **What it forwards:** with every port (`--ports all`, the default), each TCP port from 1024 up that a server in the VM listens on, on its loopback or all its addresses; with a list (`--ports 5173,8000-8010`), those ports alone, however many you list, less those a program on your machine has when the VM starts (warned, `ports_taken`). To the same port on your machine's `127.0.0.1` and `::1`, within a few seconds of the server starting; the forward goes when the server does. At most 256 at once.
 - **What it never takes:** a port a program on your machine has, on any address, and a port devvm records for another VM.

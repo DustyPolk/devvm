@@ -55,7 +55,8 @@ const (
 // forwards the one agentSocket chooses: none, c.AgentSocket, or the
 // user's (SSH_AUTH_SOCK). With c.SSH its ssh is forwarded (sshForward) and
 // services.sh runs its sshd; without, the forward goes. A VM that
-// forwards every port gets its forwarder once its sshd runs (forward).
+// forwards ports gets its forwarder once its sshd runs (forward): smolvm
+// forwards none of them.
 func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) error {
 	proxy := c.Net == backend.NetProxy
 	if proxy {
@@ -105,9 +106,6 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	env := maps.Clone(c.Env)
 	for _, k := range proxyVars {
 		delete(env, k) // the proxy file's
-	}
-	if opts, err = listedPorts(vm, c, &r, opts); err != nil {
-		return err
 	}
 	// The VM's ssh: forwarded while it's asked for, its sshd run then.
 	var sshd []string
@@ -211,39 +209,34 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 			return err
 		}
 	}
-	if r.PortsAll {
-		s.forward(ctx, vm, r, c)
-	}
+	s.forward(ctx, vm, r, c)
 	return nil
 }
 
-// listedPorts returns opts with machine update's options that make a
-// stopped machine forward the listed ports c has for this start (c.Ports:
-// those a host program has left out), where they differ from what it
-// forwards (r, updated); none without c.Ports.
-func listedPorts(vm string, c backend.Confinement, r *record, opts []string) ([]string, error) {
-	if c.Ports == nil {
-		return opts, nil
+// startPorts is what a VM forwards from this start: nil for every port,
+// else its listed ports c names (those a host program has left out), or
+// its record's without them; none is empty.
+func startPorts(r record, c backend.Confinement) []backend.PortRange {
+	switch {
+	case c.Ports != nil && c.Ports.All, c.Ports == nil && r.PortsAll:
+		return nil
+	case c.Ports != nil:
+		return append([]backend.PortRange{}, c.Ports.Ranges...)
 	}
-	want, err := portArgs(vm, *c.Ports)
-	if err != nil || slices.Equal(want, r.Ports) {
-		return opts, err
-	}
-	for _, old := range r.Ports {
-		opts = append(opts, "--remove-port", old)
-	}
-	for _, w := range want {
-		opts = append(opts, "-p", w)
-	}
-	r.Ports = want
-	return opts, nil
+	return append([]backend.PortRange{}, r.Listed...)
 }
 
-// forward starts the forwarder of a VM that forwards every port, once its
-// sshd runs (forward.go): its host key read through smolvm, and never on
-// its own ssh's, proxy's or decider's port. One that can't start is
-// warned about: the VM runs on.
+// forward starts the forwarder of a VM that forwards ports, once its sshd
+// runs (forward.go): every port or its listed ones (startPorts), its host
+// key read through smolvm, and never on its own ssh's, proxy's or
+// decider's port. One that can't start is warned about: the VM runs on. A
+// VM that forwards none has its forwarder, if any, stopped.
 func (s *Smolvm) forward(ctx context.Context, vm string, r record, c backend.Confinement) {
+	only := startPorts(r, c)
+	if only != nil && len(only) == 0 {
+		s.Forwards.Stop(vm)
+		return
+	}
 	if !r.SSHUp {
 		s.Warn(msg.PortsNoSSH(vm))
 		return
@@ -260,7 +253,7 @@ func (s *Smolvm) forward(ctx context.Context, vm string, r record, c backend.Con
 		return
 	}
 	spec := vmssh.Spec{
-		User: name, Key: s.sshKey(vm), HostKey: key,
+		User: name, Key: s.sshKey(vm), HostKey: key, Only: only,
 		Reserve: []int{r.SSHPort, c.ProxyPort, deciderPort(c.Decider)},
 		Args:    []string{"-lifeline", lifeline, "-port", strconv.Itoa(r.SSHPort)},
 	}

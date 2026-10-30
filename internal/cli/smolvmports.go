@@ -48,7 +48,7 @@ func newForwarderCmd(u *ui.UI, use, short string, run func(cmd *cobra.Command) f
 }
 
 // newSmolvmPortsCmd is devvm _smolvm-ports: the port forwarder of a smolvm
-// VM that forwards every port (smolvm.ForwardMain).
+// VM that forwards ports (smolvm.ForwardMain).
 func newSmolvmPortsCmd(u *ui.UI) *cobra.Command {
 	return newForwarderCmd(u, "_smolvm-ports", "Forward a smolvm VM's ports", func(cmd *cobra.Command) forwarderMain {
 		return func(args []string, script []byte, reserved func(string) (map[int]bool, error)) error {

@@ -24,14 +24,14 @@ func TestSSHKey(t *testing.T) {
 }
 
 // A start with ssh forwards it from a host port, kept while it's free and
-// never one of the VM's own; services.sh gets the user, the VM's key and
+// never one of its listed ports; services.sh gets the user, the VM's key and
 // the names of the variables its sessions get, never their values. SSH
 // answers once services.sh ran. A start without ssh takes the forward away.
 func TestStartSSH(t *testing.T) {
 	s := newSandbox(t)
 	vm := "devvm-s-0123456789abcd"
 	s.machine(t, vm, "stopped 4 8192 20 true")
-	if err := s.writeRecord(vm, record{Ports: []string{"61022:61022"}}); err != nil {
+	if err := s.writeRecord(vm, record{Listed: []backend.PortRange{{From: 61022, To: 61022}}}); err != nil {
 		t.Fatal(err)
 	}
 	next := []int{61022, 61023}
@@ -51,6 +51,8 @@ func TestStartSSH(t *testing.T) {
 		"smolvm machine start --name " + vm,
 		"smolvm machine exec --name " + vm + " -- sh -c " + sshdProbe,
 		"smolvm machine exec --name " + vm + " -i -- sh -s -- ssh u " + pub,
+		// Its listed port's forwarder, once its sshd runs: the host key.
+		"smolvm machine exec --name " + vm + " -- cat " + vmssh.HostKeyPath,
 	}
 	if got := s.calls(t); !slices.Equal(got, want) {
 		t.Errorf("calls:\n%q\nwant\n%q", got, want)
@@ -102,7 +104,7 @@ func TestStartSSH(t *testing.T) {
 	}
 
 	// Network policy: its port, and the proxy's and Env's names for the
-	// sessions; a port that's one of the VM's own forwards is refused.
+	// sessions; a port that's one of its listed ports is refused.
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +122,7 @@ func TestStartSSH(t *testing.T) {
 	}
 	got := s.calls(t)
 	if !slices.Contains(got, "smolvm machine update --name "+vm+" --reset-allow-list --allow-cidr 100.96.0.1/32 --allow-host-pattern devvm.invalid --remove-port 61099:22 -p 40022:22") ||
-		!strings.HasSuffix(got[len(got)-1], " -i -- sh -s -- ssh u "+pub+" HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY") {
+		!strings.HasSuffix(got[len(got)-2], " -i -- sh -s -- ssh u "+pub+" HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY") {
 		t.Errorf("network policy: %q", got)
 	}
 	if strings.Contains(strings.Join(got, " "), "pw") {
@@ -183,10 +185,10 @@ func TestStartNoSSHD(t *testing.T) {
 }
 
 func TestForwards(t *testing.T) {
-	ports := []string{"5173:5173", "8000-8002:8000-8002"}
+	ports := []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8002}}
 	for p, want := range map[int]bool{5173: true, 8000: true, 8002: true, 8003: false, 22: false} {
-		if forwards(ports, p) != want {
-			t.Errorf("forwards(%d) = %v", p, !want)
+		if lists(ports, p) != want {
+			t.Errorf("lists(%d) = %v", p, !want)
 		}
 	}
 	if sshForwardSpec(61022) != "61022:22" {

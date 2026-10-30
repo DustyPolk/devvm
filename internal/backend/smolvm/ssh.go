@@ -6,7 +6,6 @@ import (
 	"net"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
@@ -30,17 +29,12 @@ import (
 //     (devvm's entry pins its options);
 //   - its guest port, 22, is forwarded from a host loopback port
 //     (sshForward): Confinement.SSHPort, or one of the backend's, kept while
-//     it stays free, never one of the VM's own forwards. It's one of the 64
-//     forwards smolvm makes;
+//     it stays free, never one of the VM's listed ports. It's the one
+//     forward smolvm makes;
 //   - SSH answers only once this start's sshd runs (record.SSHUp), so
 //     nothing reads the host keys a start is about to replace. A VM whose
 //     image has no sshd starts without ssh, warned.
-const (
-	sshGuestPort = 22
-	// userPortsMax is the most ports a project VM's user forwards: one of
-	// smolvm's is its ssh.
-	userPortsMax = maxPorts - 1
-)
+const sshGuestPort = 22
 
 // sshKey is the key devvm's ssh logs in to one VM with, beside its record,
 // made at its first start with ssh.
@@ -51,15 +45,15 @@ func (s *Smolvm) sshKey(vm string) string {
 // sshForward is the host loopback port a VM's ssh is forwarded from at a
 // start that runs it: c.SSHPort when the caller chose one (network
 // policy's), else the one it had while that's free, else a new one; never
-// one of the VM's own forwards.
+// one of the VM's listed ports, which its forwarder takes.
 func (s *Smolvm) sshForward(ctx context.Context, vm string, c backend.Confinement, r record) (int, error) {
 	if c.SSHPort > 0 {
-		if forwards(r.Ports, c.SSHPort) {
+		if lists(r.Listed, c.SSHPort) {
 			return 0, msg.SmolvmSSHPortForwarded(strconv.Itoa(c.SSHPort), vm)
 		}
 		return c.SSHPort, nil
 	}
-	if r.SSHPort > 0 && !forwards(r.Ports, r.SSHPort) && s.PortFree(ctx, r.SSHPort) {
+	if r.SSHPort > 0 && !lists(r.Listed, r.SSHPort) && s.PortFree(ctx, r.SSHPort) {
 		return r.SSHPort, nil
 	}
 	for range 20 {
@@ -67,25 +61,17 @@ func (s *Smolvm) sshForward(ctx context.Context, vm string, c backend.Confinemen
 		if err != nil {
 			return 0, err
 		}
-		if !forwards(r.Ports, p) {
+		if !lists(r.Listed, p) {
 			return p, nil
 		}
 	}
 	return 0, errors.New("smolvm: no free port on the host's loopback")
 }
 
-// forwards reports whether one of -p's values (5173:5173,
-// 8000-8002:8000-8002) forwards a host port.
-func forwards(ports []string, port int) bool {
-	for _, p := range ports {
-		host, _, _ := strings.Cut(p, ":")
-		from, to, ok := strings.Cut(host, "-")
-		if !ok {
-			to = from
-		}
-		a, err1 := strconv.Atoi(from)
-		b, err2 := strconv.Atoi(to)
-		if err1 == nil && err2 == nil && a <= port && port <= b {
+// lists reports whether one of the ranges has the port.
+func lists(rs []backend.PortRange, port int) bool {
+	for _, r := range rs {
+		if r.From <= port && port <= r.To {
 			return true
 		}
 	}

@@ -9,9 +9,9 @@
 // (--state-dir) as well.
 //
 // Network policy is emulated, reviewed (start.go); ssh for editors is
-// emulated, reviewed (ssh.go); forwarding every port is emulated,
-// reviewed (forward.go, vmssh.Forwarder); turning agent forwarding on or off later is
-// emulated, reviewed (agent.go).
+// emulated, reviewed (ssh.go); forwarding ports, every one or the listed
+// ones, is emulated, reviewed (forward.go, vmssh.Forwarder); turning agent
+// forwarding on or off later is emulated, reviewed (agent.go).
 package smolvm
 
 import (
@@ -57,9 +57,6 @@ const LabelKey = "devvm.data"
 
 // Gateway is the host as a machine reaches it.
 const Gateway = "100.96.0.1"
-
-// maxPorts is the most ports a machine forwards.
-const maxPorts = 64
 
 // Smolvm is the backend. New sets every field; tests change them.
 type Smolvm struct {
@@ -145,18 +142,20 @@ func (s *Smolvm) Name() string { return Name }
 // Caps is what smolvm has natively, egress through devvm's proxy emulated
 // and reviewed (Start: an allow list of the host, and the proxy deciding
 // each connection), ssh for editors emulated and reviewed (an sshd of
-// devvm's, ssh.go), and every port forwarded emulated and reviewed (a
-// forwarder of devvm's over that ssh, forward.go). Agent forwarding
-// turned on or off once a VM is made is emulated and reviewed (every VM
-// made forwarding, an agent chosen at each start, agent.go).
+// devvm's, ssh.go), and ports forwarded, every one or the listed ones,
+// emulated and reviewed (a forwarder of devvm's over that ssh,
+// forward.go). Agent forwarding turned on or off once a VM is made is
+// emulated and reviewed (every VM made forwarding, an agent chosen at each
+// start, agent.go).
 func (s *Smolvm) Caps() backend.Caps {
 	caps := backend.Caps{
 		backend.FeatureEgressProxy: backend.Emulated(true), backend.FeatureSSH: backend.Emulated(true),
-		backend.FeaturePortsAll: backend.Emulated(true), backend.FeatureAgentToggle: backend.Emulated(true),
+		backend.FeaturePorts: backend.Emulated(true), backend.FeaturePortsAll: backend.Emulated(true),
+		backend.FeatureAgentToggle: backend.Emulated(true),
 	}
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
-		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeaturePorts,
+		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare,
 		backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk,
 		backend.FeatureDockerLayer,
 	} {
@@ -211,13 +210,14 @@ type record struct {
 	// Forwarding is set when the machine was made forwarding an SSH
 	// agent (--ssh-agent), which smolvm fixes then; AgentOff when devvm's
 	// choice for it is none, so each start gives it no agent (agent.go).
-	Forwarding bool     `json:"forwarding,omitempty"`
-	AgentOff   bool     `json:"agent_off,omitempty"`
-	Ports      []string `json:"ports,omitempty"` // as -p has them: 5173:5173, 8000-8002:8000-8002
-	// PortsAll is set when it forwards every port: through its forwarder
-	// (forward.go), with none of smolvm's.
-	PortsAll bool              `json:"ports_all,omitempty"`
-	Env      map[string]string `json:"env,omitempty"`
+	Forwarding bool `json:"forwarding,omitempty"`
+	AgentOff   bool `json:"agent_off,omitempty"`
+	// PortsAll is set when it forwards every port, else Listed are those
+	// it forwards: through its forwarder (forward.go), with none of
+	// smolvm's.
+	PortsAll bool                `json:"ports_all,omitempty"`
+	Listed   []backend.PortRange `json:"listed_ports,omitempty"`
+	Env      map[string]string   `json:"env,omitempty"`
 	// Mediated is set once the machine started through devvm's decider:
 	// smolvm then requires one at every start, until devvm removes that.
 	Mediated bool `json:"mediated,omitempty"`
@@ -505,59 +505,28 @@ func gibCeil(g float64) string {
 	return strconv.Itoa(n)
 }
 
-// portArgs are -p's values for a project VM's ports p: each range to the
-// same ports on the host; none for all, which its forwarder forwards
-// (forward.go). More than smolvm forwards besides the VM's ssh is refused,
-// and so is the guest port its sshd has.
-func portArgs(vm string, p backend.Ports) ([]string, error) {
+// listed is the ports a VM with ports p records as listed: none for
+// every one.
+func listed(p backend.Ports) []backend.PortRange {
 	if p.All {
-		return nil, nil
+		return nil
 	}
-	var out []string
-	n := 0
-	for _, r := range p.Ranges {
-		if r.From <= sshGuestPort && sshGuestPort <= r.To {
-			return nil, msg.SmolvmPortSSH(strconv.Itoa(sshGuestPort), vm)
-		}
-		n += r.To - r.From + 1
-		if r.From == r.To {
-			out = append(out, fmt.Sprintf("%d:%d", r.From, r.From))
-		} else {
-			out = append(out, fmt.Sprintf("%d-%d:%d-%d", r.From, r.To, r.From, r.To))
-		}
-	}
-	if n > userPortsMax {
-		return nil, msg.SmolvmTooManyPorts(strconv.Itoa(n), strconv.Itoa(userPortsMax), vm)
-	}
-	return out, nil
+	return slices.Clone(p.Ranges)
 }
 
-// SetPorts changes which of a stopped VM's ports are forwarded.
+// SetPorts changes which of a stopped VM's ports its forwarder forwards
+// from its next start: every one, its listed ones, or none. Only devvm's
+// record changes: smolvm forwards none of them.
 func (s *Smolvm) SetPorts(ctx context.Context, vm string, p backend.Ports) error {
-	want, err := portArgs(vm, p)
-	if err != nil {
-		return err
-	}
 	_, r, err := s.stopped(ctx, vm)
 	if err != nil {
 		return err
 	}
-	if slices.Equal(want, r.Ports) && r.PortsAll == p.All {
+	want := listed(p)
+	if r.PortsAll == p.All && slices.Equal(r.Listed, want) {
 		return nil
 	}
-	var opts []string
-	if !slices.Equal(want, r.Ports) {
-		for _, old := range r.Ports {
-			opts = append(opts, "--remove-port", old)
-		}
-		for _, w := range want {
-			opts = append(opts, "-p", w)
-		}
-	}
-	if err := s.update(ctx, vm, opts...); err != nil {
-		return err
-	}
-	r.Ports, r.PortsAll = want, p.All
+	r.PortsAll, r.Listed = p.All, want
 	return s.writeRecord(vm, r)
 }
 

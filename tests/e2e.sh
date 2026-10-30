@@ -26,7 +26,9 @@
 #                between runs)
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
-#                packs, a project VM's mounts, size, ports (never one a program here has), no Docker
+#                packs, a project VM's mounts, size, listed ports through devvm's forwarder (a server
+#                on the VM's loopback reaching this machine, none published by smolvm, never one a
+#                program here has), no Docker
 #                without the docker layer, agent forwarding, a node VM's
 #                shared tools, agent toggling's emulation (your agent, devvm's or none from each
 #                start, devvm export's too, none reaching no agent and adding to none, a VM set to
@@ -1202,7 +1204,7 @@ rm -f "$layers/e2esmolfail.sh"
 
 section "smolvm: a base project"
 p=$(newproj smolweb); git -C "$p" init -q
-launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${S[@]}" --no-network-policy --ports 47180 --cpus 2 --memory 3 --disk 120 base
+launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${S[@]}" --no-network-policy --ports 47180,47184 --cpus 2 --memory 3 --disk 120 base
 check "devvm creates the VM from base's pack, labelled, and opens a shell in the folder as you" bash -c "
   [[ -n '$vm' && \$(smol_status '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
   grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=smolvm '$vms/$vm' && grep -qx net=off '$vms/$vm'"
@@ -1225,15 +1227,23 @@ SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e
   '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47180", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' \
   </dev/null >/dev/null 2>&1
 check "the listed port reaches this machine's loopback" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47180 && exit 0; sleep 1; done; exit 1'
+# Listeners on the VM's loopback alone: a listed port (47184), and one not listed (47185).
+for lp in 47184 47185; do SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e \
+  '$p = shift; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:$p", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { print $c "vm-$p\n"; close $c }' "$lp" \
+  </dev/null >/dev/null 2>&1; done
+check "a listed port's server on the VM's loopback alone reaches this machine's, through devvm's forwarder" bash -c '
+  for i in $(seq 20); do [[ $(nc -w 2 127.0.0.1 47184 </dev/null 2>/dev/null) == vm-47184 ]] && exit 0; sleep 1; done; exit 1'
+check "an unlisted port's doesn't" bash -c 'sleep 3; ! nc -z 127.0.0.1 47185'
 check "made ready to turn agent forwarding on later, and given none: smolvm's socket reaches no agent" bash -c "
   grep -qx agent_toggle=on '$vms/$vm' && grep -qx ssh_agent=off '$vms/$vm' &&
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add -l' </dev/null 2>&1 |
   grep -qi 'communication with agent failed\|error connecting to agent'"
-check "its process listens on its listed port (the control) and its ssh forward's, nothing else" smol_listens_only "$vm" 47180 "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
+check "smolvm publishes none of its ports: its process listens on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
+check "... and devvm's forwarder forwards the listed ones alone" bash -c "ps -axww -o command= | grep -- '[_]smolvm-ports -vm $vm ' | grep -q -- ' -only 47180,47184\$'"
 check "a running VM's new size and ports wait for its next start, and apply on restart" bash -c "cd '$p' &&
   '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
   printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
-  [[ \$('$D' ports 2>/dev/null) == 47180,47181 ]]"
+  [[ \$('$D' ports 2>/dev/null) == 47180,47184,47181 ]]"
 # smol_serve VM PORTS...: a server in the VM on each port, every address, left running.
 smol_serve() { local p; for p in "${@:2}"; do SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- perl -MIO::Socket::INET -e \
   '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:" . shift, Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' "$p" \
@@ -2055,6 +2065,23 @@ smolpa_reserved() {
   (cd "$pn" && printf 'exit\n' | "$D" >"$work/last.log" 2>&1) && grep -qx net_check=ok "$vms/$1" &&
   pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " >/dev/null; }
 check "with its proxy and decider gone, the VM listening on their ports: neither is forwarded (a port of its own is, the control); devvm starts the proxy on them again" smolpa_reserved "$vm"
+# smolpa_listed_net VM DIR: with network policy and listed ports, 22 among them (the guest port of
+# the VM's sshd): the self-check passes; smolvm publishes its ssh alone, from another port, and ssh
+# by name still reaches the VM; the forwarder forwards the listed ports alone (22 too, unless a
+# program here has it); a listed port's server answers, an unlisted one's doesn't; direct
+# connections still fail.
+smolpa_listed_net() { local vm=$1 sp
+  (cd "$2" && "$D" stop </dev/null >/dev/null 2>&1 && "$D" ports 22,47399 </dev/null >/dev/null 2>&1 &&
+    printf 'exit\n' | "$D" >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
+  grep -qx net_check=ok "$vms/$vm" || { echo "no self-check"; return 1; }
+  sp=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")
+  [[ $sp =~ ^[0-9]+$ && $sp != 22 && $sp != 47399 ]] || { echo "ssh port: ${sp:-none}"; return 1; }
+  smol_listens_only "$vm" "$sp" || return 1
+  env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$vm" true </dev/null || { echo "ssh by name failed"; return 1; }
+  pgrep -fl -- "[_]smolvm-ports -vm $vm " | grep -qE -- ' -only (22,)?47399$' || { echo "forwarder's ports"; return 1; }
+  smolpa_serve "$vm" 127.0.0.1 47399; smolpa_serve "$vm" 127.0.0.1 47400
+  smolpa_answers 47399 vm-47399 && smolpa_closed 47400 && smolnet_direct "$vm"; }
+check "with network policy and listed ports, 22 among them: the self-check passes, ssh still reaches the VM from its own port, the listed port alone is forwarded, and direct connections still fail" smolpa_listed_net "$vm" "$pn"
 check "rm -f deletes it, its proxy and its forwarder" bash -c "cd '$pn' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
   [[ -z \$(smol_status '$vm') && -z \$(smolpa_forwarder '$vm') ]] && smolpa_closed 47397"
 kill "$listener" 2>/dev/null; listener=""

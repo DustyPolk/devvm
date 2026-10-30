@@ -2004,11 +2004,6 @@ func SmolvmOldFix(fix string, version string) M {
 	return M{id: "smolvm_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
-// SmolvmPortSSH is [smolvm_port_ssh]: "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
-func SmolvmPortSSH(port string, vm string) M {
-	return M{id: "smolvm_port_ssh", vals: []val{{"port", port}, {"vm", vm}}}
-}
-
 // SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, kept stopped: look inside with smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}; the next build, or devvm gc, deletes it"
 func SmolvmScriptFailed(script string, vm string) M {
 	return M{id: "smolvm_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
@@ -2017,11 +2012,6 @@ func SmolvmScriptFailed(script string, vm string) M {
 // SmolvmSSHPortForwarded is [smolvm_ssh_port_forwarded]: "port {{.port}}, for {{.vm}}'s ssh, is one of its forwarded ports: leave it out of devvm ports"
 func SmolvmSSHPortForwarded(port string, vm string) M {
 	return M{id: "smolvm_ssh_port_forwarded", vals: []val{{"port", port}, {"vm", vm}}}
-}
-
-// SmolvmTooManyPorts is [smolvm_too_many_ports]: "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}: forward fewer with devvm ports"
-func SmolvmTooManyPorts(asked string, max string, vm string) M {
-	return M{id: "smolvm_too_many_ports", vals: []val{{"asked", asked}, {"max", max}, {"vm", vm}}}
 }
 
 // SmolvmUpdateFailed is [smolvm_update_failed]: "couldn't change {{.vm}}'s smolvm settings"
@@ -2776,10 +2766,8 @@ var specs = map[string]spec{
 	"smolvm_no_agent":                  {fields: []string{"vm"}},
 	"smolvm_old":                       {fields: []string{"version"}},
 	"smolvm_old_fix":                   {fields: []string{"fix", "version"}},
-	"smolvm_port_ssh":                  {fields: []string{"port", "vm"}},
 	"smolvm_script_failed":             {fields: []string{"script", "vm"}},
 	"smolvm_ssh_port_forwarded":        {fields: []string{"port", "vm"}},
-	"smolvm_too_many_ports":            {fields: []string{"asked", "max", "vm"}},
 	"smolvm_update_failed":             {fields: []string{"vm"}},
 	"ssh_agent_empty":                  {},
 	"ssh_agent_failed":                 {fields: []string{"reason"}},

@@ -21,6 +21,6 @@ weight: 33
 - **smolvm is experimental.**
   - Network policy is emulated, with one narrow DNS channel ([details](smolvm.md#network-policy)).
   - ssh for editors is emulated ([details](smolvm.md#ssh-for-editors)).
-  - Forwarding every port is emulated, from port 1024 up ([details](smolvm.md#every-port)).
+  - Forwarding ports, the listed ones and every one from port 1024 up, is emulated ([details](smolvm.md#ports)).
   - Changing SSH agent forwarding once a VM is made is emulated, and a VM has its agent the whole time it runs ([details](smolvm.md#ssh-agent-forwarding)).
-  - A VM can list at most 63 ports, and project paths can't contain colons ([details](smolvm.md)).
+  - Project paths can't contain colons ([details](smolvm.md#what-devvm-sets-on-a-vm)).

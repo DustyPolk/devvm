@@ -215,7 +215,7 @@ devvm ports -g none         # what new VMs forward (default: all)
 - `add` and `rm` take ports and ranges, not `all` or `none`. devvm refuses `rm` on a VM that forwards every port, because there's no list to remove from. `-g` also works with `add` and `rm`.
 - Ports are forwarded with or without [network policy](network.md). Builds forward no ports.
 
-devvm's forwarder forwards the ports by the same rules on every backend. The one exception is smolvm's listed ports, which are [smolvm's own forwards](smolvm.md#what-devvm-sets-on-a-vm).
+devvm's forwarder forwards the ports by the same rules on every backend.
 
 - **What it forwards.** When a VM forwards every port, the forwarder forwards each TCP port from 1024 up that a server in the VM listens on, on the VM's loopback or on all its addresses. When a VM lists its ports, it forwards those ports alone, however many there are, ports below 1024 included. Each port goes to the same port on this machine's `127.0.0.1` and `::1` and nowhere else, within a few seconds of the server starting, and the forward goes away when the server stops. At most 256 ports are forwarded at once.
 - **What it never takes.** The forwarder never takes a port that a program on this machine has on any address. That program keeps the port and its `localhost` connections, and the forward waits until the VM's server stops and starts again. The forwarder also never takes a port that devvm records for a VM, even while that port is free. Those are the ssh, proxy and decider ports devvm chooses for VMs, the VM's own ssh port, and other VMs' listed ports. A Lima VM without network policy has an ssh port that Lima picks and devvm doesn't record, but Lima holds that port, so the forwarder can't take it.

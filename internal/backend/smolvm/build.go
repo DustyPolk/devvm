@@ -362,7 +362,8 @@ func (s *Smolvm) imageUsers(ctx context.Context, key string) ([]string, error) {
 
 // CreateVM makes a new, stopped machine from the image's pack, with
 // everything set: a pack would give it its build machine's network, CPUs
-// and memory. Its disk is at least base's.
+// and memory. Its disk is at least base's. Its ports are its forwarder's
+// (forward.go), so smolvm forwards none of them.
 func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) error {
 	vm := spec.Name
 	if !keyPattern.MatchString(img) {
@@ -372,10 +373,6 @@ func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 		return msg.ImageMissing(img)
 	}
 	if err := s.absent(ctx, vm); err != nil {
-		return err
-	}
-	ports, err := portArgs(vm, spec.Ports)
-	if err != nil {
 		return err
 	}
 	cpus, mem, disk, err := s.baseSize()
@@ -418,9 +415,6 @@ func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	for _, v := range vols {
 		args = append(args, "-v", v)
 	}
-	for _, p := range ports {
-		args = append(args, "-p", p)
-	}
 	// Forwarding is fixed now: a VM whose forwarding may change later
 	// forwards from the start, given no agent while it's off (agent.go).
 	forwarding := spec.AgentForwarding || spec.AgentToggle
@@ -432,7 +426,8 @@ func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 	}
 	return s.writeRecord(vm, record{
 		Image: img, Project: spec.Project, AgentDirs: slices.Clone(spec.AgentDirs), Tools: spec.Tools, ToolsAt: spec.ToolsAt,
-		Forwarding: forwarding, AgentOff: forwarding && !spec.AgentForwarding, Ports: ports, PortsAll: spec.Ports.All,
+		Forwarding: forwarding, AgentOff: forwarding && !spec.AgentForwarding,
+		PortsAll: spec.Ports.All, Listed: listed(spec.Ports),
 	})
 }
 

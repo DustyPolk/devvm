@@ -176,14 +176,6 @@ other = "the smolvm backend builds only from registry images, and {{.image}} is 
 [smolvm_mount_colon]
 other = "smolvm can't mount {{.path}}: its path has a colon"
 
-[smolvm_too_many_ports]
-description = "max and asked are numbers of ports"
-other = "smolvm forwards at most {{.max}} ports, and {{.vm}} asks for {{.asked}}: forward fewer with devvm ports"
-
-[smolvm_port_ssh]
-description = "port is the guest port of the VM's sshd (22)"
-other = "port {{.port}} is {{.vm}}'s ssh, which devvm forwards itself: leave it out of devvm ports"
-
 [vm_no_ssh]
 other = "{{.vm}} was started without ssh: devvm restart starts it with it"
 
