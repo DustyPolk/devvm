@@ -98,9 +98,9 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm policy` | show the allowlist of this folder's VM, file by file ([details](../safety/network.md#changing-rules)) |
 | `devvm policy allow\|deny\|rm RULE... [-g]` | add allow or deny rules to this folder's VM's own, or remove them, at once, and with `-g`, change yours for every VM ([details](../safety/network.md#changing-rules)) |
 | `devvm log [-f] [-n N] [--blocked]` | show what this folder's VM connected to and what its network policy blocked ([details](../safety/network.md#logs)) |
-| `devvm secret set claude\|github [--stdin]`, `devvm auth claude` | save your Claude Code token or GitHub token on this machine, so that with network policy VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-tokens)) |
-| `devvm secret use\|unuse NAME` | let this folder's VM use a secret, or stop it, though a VM whose image has `claude` always uses `claude` ([details](../safety/network.md#saving-and-binding-tokens)) |
-| `devvm secret ls`, `devvm secret rm NAME` | list the secrets, whether each is saved and the VMs using it, or delete a saved one ([details](../safety/network.md#saving-and-binding-tokens)) |
+| `devvm secret set claude\|github [--stdin]`, `devvm auth claude` | save your Claude Code token or GitHub token on this machine, so that with network policy VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-secrets)) |
+| `devvm secret use\|unuse NAME` | let this folder's VM use a secret, or stop it, though a VM whose image has `claude` always uses `claude` ([details](../safety/network.md#saving-and-binding-secrets)) |
+| `devvm secret ls`, `devvm secret rm NAME` | list the secrets, whether each is saved and the VMs using it, or delete a saved one ([details](../safety/network.md#saving-and-binding-secrets)) |
 
 ## SSH
 
@@ -117,7 +117,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | | |
 | --- | --- |
 | `devvm build IMAGE` | build an image, the images under it and the shared tool images it names, unless they're built, such as `devvm build foo+bar` or `devvm build node+claude` |
-| `devvm rebuild IMAGE` | build an image again from its parent as it is, and delete the stale images no VM uses, while shared tools follow the tools lock instead ([details](../internals/images.md#rebuilding)) |
+| `devvm rebuild IMAGE` | build an image again from its parent as it is, and delete the stale images no VM uses, while shared tools follow the tools lock instead ([details](../using/images.md#rebuilding)) |
 | `devvm layer new NAME` | start a layer of your own, `~/.config/devvm/layers/NAME.sh`, with its allowlist, `NAME.policy` ([details](../using/customizing.md#your-own-layers)) |
 | `devvm images` | list the images on every backend, then the shared tool images ([details](../using/images.md#listing-images)) |
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](../using/images.md#deleting-images)) |

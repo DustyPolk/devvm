@@ -48,7 +48,7 @@ All it takes is one command, and you're ready to start coding.
 
 ## Developer ready, zero config
 
-- `devvm` detects the [project's toolchain](docs/using/images.md#shared-tools) from its files, so you write no config files and do no setup. It supports node, python, rust and go, with more to come.
+- `devvm` detects the [project's toolchain](docs/using/images.md#which-image-a-new-vm-gets) from its files, so you write no config files and do no setup. It supports node, python, rust and go, with more to come.
 - Docker runs inside the VM when you need it: `devvm node+docker`.
 - Every instance automatically sets your git identity so commits inside the VM are authored by you (or your agent).
 - The base image includes [optional tools](docs/using/customizing.md#base-image-features) such as oh-my-bash, fzf, zoxide (`z`), tree, tldr and more.
@@ -62,7 +62,7 @@ All it takes is one command, and you're ready to start coding.
 
 ## Isolated sandbox
 
-- The VM mounts your project folder at the same path. It sees nothing else from your home folder ([security model](docs/internals/security.md)).
+- The VM mounts your project folder at the same path. It sees nothing else from your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
 - `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)). With `--clone`, the VM gets a clone of its own instead.
 - With [network policy](docs/safety/network.md), the VM reaches only an allowlist of hosts, through a proxy on your machine.
 - A few habits close most of what's left, and [staying safe](docs/safety/_index.md#the-habits) lists them.

@@ -3,7 +3,7 @@ title: Staying safe
 weight: 30
 ---
 
-devvm runs installs, project code and coding agents in a VM, so code you didn't write can't read your credentials, run git hooks on this machine or reach your other projects, and with network policy it can send data only to the hosts you allow. A few habits close most of what devvm can't close on its own, so read this page before you trust a VM with a project.
+devvm runs installs, project code and coding agents in a VM, so code you didn't write can't read your credentials, run git hooks on this machine or reach your other projects. With network policy, that code can send data only to the hosts you allow. A few habits close most of what devvm can't close on its own, so read this page before you trust a VM with a project.
 
 Some of what devvm protects are your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key.
 

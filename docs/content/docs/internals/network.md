@@ -7,7 +7,7 @@ This page explains how devvm confines a VM to its proxy, what the proxy does wit
 
 ## Starting a VM with network policy
 
-When devvm starts a VM with network policy, it takes these steps in order:
+A VM's state records its choice as `net=on` or `net=off`. When devvm starts a VM with network policy, it takes these steps in order:
 
 1. It makes its CA, unless it has one with over a week left, and on macOS it keeps the CA out of Time Machine.
 2. It writes the VM's [secrets](#secrets) as the VM's proxy sees them.

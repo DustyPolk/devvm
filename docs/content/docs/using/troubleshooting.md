@@ -21,7 +21,7 @@ When an image's build fails in its script, or as the build VM starts or stops, d
 devvm limactl shell --start devvm-img-<key>
 ```
 
-`--start` starts the VM first, outside the build's confinement. On smolvm, start and open the machine with smolvm's own commands ([looking inside](../backends/smolvm.md#looking-inside)). On Docker, run `docker start devvm-img-<key>-<hash>` and then `docker exec -it devvm-img-<key>-<hash> bash` ([building images](../internals/docker.md#building-images)).
+`--start` starts the VM first, outside the build's confinement. On smolvm, start and open the machine with smolvm's own commands ([looking inside](../backends/smolvm.md#looking-inside)). On Docker, start the container and open a shell in it with Docker's own commands ([looking inside](../backends/docker.md#looking-inside)).
 
 The next build of that image deletes the VM and starts over, and `devvm gc` also deletes it. A build whose create or clone fails deletes the image, once devvm has shown the end of the log, because there's nothing in the image to look at.
 
@@ -49,7 +49,7 @@ On the VM's next launch, devvm offers in a terminal to restart it confined, and 
 
 ## A request is blocked
 
-With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm log --blocked` on this machine, or `devvm-why` in the VM. `devvm log --blocked` also shows the `devvm policy allow` command that allows each host, and the rule applies at once, to the next connection ([network policy](../safety/network.md)).
+With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm log --blocked` on this machine, or `devvm-why` in the VM. `devvm log --blocked` also shows the `devvm policy allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
 
 ## A listed port isn't forwarded
 
@@ -61,7 +61,7 @@ A Lima VM that doesn't answer over ssh within a minute of starting is stopped. R
 
 ## The folder was made again
 
-When you delete a project folder and make a new one at the same path, such as by cloning another repo there, devvm refuses the old folder's VM. Run `devvm rm` to delete the old VM, or `devvm adopt` to give it to the new folder ([everyday commands](../getting-started/commands.md)).
+When you delete a project folder and make a new one at the same path, such as by cloning another repo there, devvm refuses the old folder's VM. Run `devvm rm` to delete the old VM, or `devvm adopt` to give it to the new folder ([a folder made again](../getting-started/commands.md#a-folder-made-again)).
 
 ## An outdated VM, or newer shared tools
 
@@ -69,4 +69,4 @@ devvm warns on each launch when an image the VM was made from has changed, and i
 
 ## Docker on macOS can't get devvm's Linux build
 
-On macOS, the Docker backend runs devvm's Linux build in containers, and a release fetches it the first time a Docker VM or build needs it. When the download fails, check your connection and run devvm again. When the download doesn't match the SHA-256 that devvm has of it, devvm doesn't use it, so reinstall devvm ([requirements](../backends/docker.md)).
+On macOS, the Docker backend runs devvm's Linux build in containers, and a release fetches it the first time a Docker VM or build needs it. When the download fails, check your connection and run devvm again. When the download doesn't match the SHA-256 that devvm has of it, devvm doesn't use it, so reinstall devvm ([requirements](../backends/docker.md#requirements)).

@@ -67,7 +67,7 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 - The flags take the same values as for a new VM ([size and ports](#size-and-ports)), and devvm refuses more CPUs or memory than this machine has.
 - A stopped VM changes at once. A running VM keeps its size until it next starts, for example with `devvm restart`, and until then `devvm size` shows what the VM has now and says what changes.
 - Disks grow but never shrink, so devvm refuses a disk smaller than the VM's.
-- On the [Docker backend](../internals/docker.md#what-devvm-sets-on-a-vm), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB.
+- On the [Docker backend](../backends/docker.md#what-docker-vms-cant-do), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB.
 
 ### Disk use
 

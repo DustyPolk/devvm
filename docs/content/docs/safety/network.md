@@ -19,7 +19,7 @@ https://devvm.dev/docs/safety/network/#turning-it-on-or-off
 Turn it on? [Y/n]
 ```
 
-`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. A VM keeps its choice, which devvm records in its state as `net=on` or `net=off`. On an existing VM devvm ignores both flags and warns you.
+`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
 
 Some VMs can't have network policy. Those are VMs on a backend that can't confine a VM to its proxy, such as a [Docker](../internals/docker.md#network-policy) engine on another machine, and Docker VMs with the [docker layer](../backends/docker.md#the-docker-layer). devvm doesn't ask about those, and it makes the VM without network policy and warns you. If you pass `--network-policy` for such a VM, devvm refuses before it builds anything, because it never starts a VM you asked network policy for with an open network. For the same reason, it refuses `devvm network on` for a VM on a backend that can't confine it to its proxy.
 
@@ -103,7 +103,7 @@ Secrets stay on this machine. A VM gets a placeholder of its own for each one, a
 
 Agents' logins work the same way. When a VM's image has Codex or opencode and you're logged in on this machine, the VM gets placeholders for the login, and so do Claude Code's MCP servers' secrets ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)).
 
-### Saving and binding secrets {#saving-and-binding-tokens}
+### Saving and binding secrets
 
 | Command | What it does |
 | --- | --- |

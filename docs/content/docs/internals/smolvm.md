@@ -74,7 +74,7 @@ A VM that has been running since a start without ssh gets no entry, and `devvm s
 
 Forwarding ports, every one or only the ones you list, is emulated, and reviewed ([design](design.md#ports-on-smolvm)). smolvm's own forwards reach only servers listening on all of the VM's addresses (`0.0.0.0`), and a machine has at most 64 of them. Each one also shares a port that a program on your machine has on every address (`SO_REUSEADDR`), and takes that program's `localhost` connections. So smolvm forwards none of a VM's ports, and devvm's forwarder runs on your machine instead, by the rules that [Port forwarding](ports.md) sets out for every backend.
 
-Unlike smolvm's own forwards, devvm's forwarder also reaches servers on the VM's loopback (`127.0.0.1` or `::1`), both with every port (`--ports all`, the default) and with listed ones (`--ports 5173,8000-8010`). You can list port 22, which forwards the VM's sshd to port 22 on your machine, while ssh by name keeps the VM's own ssh port.
+Unlike smolvm's own forwards, devvm's forwarder also reaches servers on the VM's loopback (`127.0.0.1` or `::1`), both with every port (`--ports all`, the default) and with listed ones (`--ports 5173,8000-8010`).
 
 The forwarder reaches the VM over its [ssh](#ssh-for-editors), with the VM's own key and the host key devvm read through smolvm. The VM sees each forwarded connection only as one to its own loopback, and with network policy it still reaches only its proxy.
 

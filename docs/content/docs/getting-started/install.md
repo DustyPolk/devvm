@@ -22,7 +22,7 @@ The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs t
 
 Everything else is installed inside the VMs, including the toolchains, the agents, and Docker for your projects with the [docker layer](../using/images.md#built-in-layers).
 
-On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Known limits](../using/limits.md) lists.
+On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Known limits](../using/limits.md#linux-hosts) lists.
 
 ## Installing devvm
 
