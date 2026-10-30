@@ -307,6 +307,43 @@ html.dark .highlight .chroma .go {
   margin: 0 0 1rem;
 }
 
+/* What's supported: three short cards without art, under the section's heading, each a heading and a
+   sentence. One column, then three per row from 1024px. */
+#content > .hx\:items-start > .devvm-features-3 {
+  margin-top: 0;
+}
+
+@media (min-width: 1024px) {
+  #content > .hx\:items-start > .devvm-features.devvm-features-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.devvm-feature > h3 {
+  color: var(--devvm-text);
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-weight: 400;
+  font-synthesis: none;
+  margin: 0 0 0.75rem;
+}
+
+.devvm-feature > p {
+  margin: 0;
+  color: var(--devvm-text-secondary);
+  line-height: 1.75;
+}
+
+.devvm-feature > p > a {
+  color: var(--devvm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.devvm-feature > p > a:hover {
+  color: var(--devvm-accent-soft);
+}
+
 /* The art at Departure Mono's own size (11px, one screen pixel to each of the font's), or twice it where
    one column is wide enough. */
 .devvm-feature > .devvm-art {

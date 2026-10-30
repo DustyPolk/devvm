@@ -1,2 +1,3 @@
-{{- /* The home page's grid of feature cards: {{< features >}}, then {{< feature >}} shortcodes, then {{< /features >}}. */ -}}
-<div class="devvm-features">{{ .Inner }}</div>
+{{- /* The home page's grid of feature cards: {{< features >}}, then {{< feature >}} shortcodes, then {{< /features >}}.
+   {{< features columns="3" >}} puts three cards in a row on wide screens, for short cards without art. */ -}}
+<div class="devvm-features{{ if eq (.Get "columns") "3" }} devvm-features-3{{ end }}">{{ .Inner }}</div>
