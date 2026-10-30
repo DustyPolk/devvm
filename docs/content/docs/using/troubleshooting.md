@@ -3,28 +3,70 @@ title: Troubleshooting
 weight: 10
 ---
 
-This page explains where devvm logs what it runs and what happens when a run is interrupted or a build fails.
+Each section below starts with what you see, then says what to do, with a link to the details.
 
-## Build logs and interrupts
+## A command fails
 
-The output of the commands devvm runs goes to a log instead of the terminal. devvm prints its own steps, and it prints the end of the log when a step fails. `DEVVM_VERBOSE=1` prints the commands' output instead.
+devvm prints its own steps, and it sends the output of the commands it runs to a log instead of the terminal. When a step fails, devvm prints the end of the log. To see the commands' output as they run, set `DEVVM_VERBOSE=1`.
 
-Each run that runs a command has one log, `~/.local/share/devvm/logs/runs/<date>-<time>-<pid>.log`, which only you can read, and devvm keeps the newest 20. Each command appears as a `+` line with its arguments, followed by its output. A numbered step adds a `# [2/5] <step>` line first. A VM's proxy key is written as `devvm:<key>@`.
+Each run that runs a command has one log, `~/.local/share/devvm/logs/runs/<date>-<time>-<pid>.log`, which only you can read, and devvm keeps the newest 20. In the log, each command appears as a `+` line with its arguments, followed by its output, and a numbered step adds a `# [2/5] <step>` line first. A VM's proxy key is written as `devvm:<key>@`.
 
 In a terminal, a status line shows the step, how long it has run, and the log's latest line. A step that takes more than a few seconds leaves a line with its time.
 
-Ctrl+C, or closing the terminal, stops the command that's running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.
+## A build fails
 
-devvm deletes an interrupted new VM, with its state, until its first shell opens, because nothing of yours is in it yet.
-
-An interrupted build deletes the image it was building. So does a build whose create or clone fails, once devvm has shown the end of the log, because there's nothing in the image to look at.
-
-A build that fails later, in its script or as the VM starts or stops, keeps the image's VM, stopped and without a record, so you can look inside. devvm's error names the VM and says how to open a shell in it with [`devvm limactl`](../backends/lima.md#running-limactl):
+When an image's build fails in its script, or as the build VM starts or stops, devvm keeps the build VM, stopped and without a record, so you can look inside. devvm's error names the VM and says how to open a shell in it. On Lima, that's [`devvm limactl`](../backends/lima.md#running-limactl):
 
 ```sh
 devvm limactl shell --start devvm-img-<key>
 ```
 
-`--start` starts the VM first, outside the build's confinement. The next build of that image deletes the VM and starts over, and `devvm gc` also deletes it.
+`--start` starts the VM first, outside the build's confinement. On smolvm, start and open the machine with smolvm's own commands ([looking inside](../backends/smolvm.md#looking-inside)). On Docker, run `docker start devvm-img-<key>-<hash>` and then `docker exec -it devvm-img-<key>-<hash> bash` ([building images](../internals/docker.md#building-images)).
+
+The next build of that image deletes the VM and starts over, and `devvm gc` also deletes it. A build whose create or clone fails deletes the image, once devvm has shown the end of the log, because there's nothing in the image to look at.
 
 Either way, the images under it, which are already built, stay. devvm deletes and builds again any image it finds without its record, such as a failed build's or one devvm couldn't clean up after a crash or a power cut.
+
+## You pressed Ctrl+C
+
+Ctrl+C, or closing the terminal, stops the command that's running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.
+
+devvm deletes an interrupted new VM, with its state, until its first shell opens, because nothing of yours is in it yet. An interrupted build deletes the image it was building.
+
+## base can't build on Lima
+
+On Lima, base starts from a pinned, dated release of Ubuntu's cloud image. Ubuntu removes its dated releases after a few months, and once the pinned one is gone, devvm can't find it and can't build base. Check that you're online, and if you are, update devvm to a version with a newer release ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+
+## A file devvm can't read
+
+When devvm can't read one of its settings or state files, it names the file and the line. Fix the line or delete the file. [Settings and files](settings.md) lists what each file holds.
+
+## A VM shows as unenforced
+
+`devvm ls` and `devvm network` show a VM's network policy as `unenforced` when the VM has network policy but devvm didn't start it confined. That happens when it was started outside devvm, such as with `devvm limactl start`, or when it has been running since before `devvm network on`. The VM then reaches the network without its proxy.
+
+On the VM's next launch, devvm offers in a terminal to restart it confined, and if you decline, it warns and goes on. Without a terminal, devvm stops the VM instead, and the next `devvm` starts it confined ([the self-check](../internals/network.md#the-self-check)).
+
+## A request is blocked
+
+With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm log --blocked` on this machine, or `devvm-why` in the VM. `devvm log --blocked` also shows the `devvm policy allow` command that allows each host, and the rule applies at once, to the next connection ([network policy](../safety/network.md)).
+
+## A listed port isn't forwarded
+
+When a program on this machine already has a port that the VM lists, devvm warns that the VM doesn't forward it, and the VM runs on without it. Stop that program, then run `devvm restart`, or change the VM's ports with `devvm ports`, and devvm forwards the port once it's free ([ports](ports-size.md#ports)).
+
+## A VM won't boot
+
+A Lima VM that doesn't answer over ssh within a minute of starting is stopped. Read its console log before you start it again, because every start overwrites the log. The log is `serialv.log`, or another `serial*.log`, in the VM's folder in devvm's Lima home, which is `~/.local/share/devvm/lima/<vm>/` unless you set `DEVVM_LIMA_HOME` ([Lima's limits](../backends/lima.md#limits)).
+
+## The folder was made again
+
+When you delete a project folder and make a new one at the same path, such as by cloning another repo there, devvm refuses the old folder's VM. Run `devvm rm` to delete the old VM, or `devvm adopt` to give it to the new folder ([everyday commands](../getting-started/commands.md)).
+
+## An outdated VM, or newer shared tools
+
+devvm warns on each launch when an image the VM was made from has changed, and it leaves the VM as it is ([outdated VMs](images.md#outdated-vms)). It also warns when there are newer shared tools than the VM's, and `devvm update` moves the VM to them ([adding and removing tools](images.md#adding-and-removing-tools)).
+
+## Docker on macOS can't get devvm's Linux build
+
+On macOS, the Docker backend runs devvm's Linux build in containers, and a release fetches it the first time a Docker VM or build needs it. When the download fails, check your connection and run devvm again. When the download doesn't match the SHA-256 that devvm has of it, devvm doesn't use it, so reinstall devvm ([requirements](../backends/docker.md)).

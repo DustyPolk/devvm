@@ -67,6 +67,13 @@ A session carries the VM's connections through your machine only where your ssh 
 
 On [smolvm](smolvm.md#ssh-for-editors), ssh is emulated and reviewed. devvm runs the VM's sshd itself, with new host keys at each start, and a key of the VM's own is the only login. On [Docker](docker.md#ssh-for-editors), ssh is emulated and reviewed in the same way, but no sshd listens and the container publishes nothing. Each connection gets an sshd of its own, run through `docker exec`, which only those who can run `docker` can reach. The agent is forwarded only into ssh sessions and is never mounted into the container.
 
+devvm's ssh entries for VMs:
+
+- **Each entry checks the VM's own host keys,** kept in `~/.config/devvm/known_hosts`. devvm reads them from the VM through its backend once it runs, and again after each start: a VM whose Lima config changed gets new host keys when it boots, and a [smolvm](smolvm.md#ssh-for-editors) VM new ones at every start. A VM whose keys can't be read gets no entry. A host key that doesn't match is refused.
+- **Each connection is its own:** entries set `ControlMaster no`, so a session never rides on a connection another program opened. Of Lima's own ssh settings for the VM, only the address, port, user and login key are copied; Lima's turn host key checks off. On smolvm the login key is devvm's own, one per VM.
+- **Nothing else of this machine's for the VM:** entries set `ForwardX11 no`, `ForwardX11Trusted no`, `Tunnel no`, `PermitRemoteOpen none`, `AddKeysToAgent no`, `ProxyJump none`, `ProxyCommand none`, `UpdateHostKeys no` and `HashKnownHosts no`, whatever your `Host *` says. `PermitRemoteOpen` needs OpenSSH 8.7 or newer (`ssh -V`); an older ssh refuses the entries. A `RemoteForward` of yours still applies, as entries can't turn it off without refusing `ssh -R` too: keep remote forwards out of `Host *`. The VM's sshd allows only local forwarding (`-L`, `-D`, what VS Code uses), no remote forwarding, tunnels or X11, but root in the VM can change that: it's your ssh that decides.
+- **SSH agent forwarding:** on smolvm, changing it once a VM is made is emulated, and reviewed ([smolvm](smolvm.md#ssh-agent-forwarding)).
+
 ### Tokens stay on the host
 
 devvm saves tokens in the macOS Keychain, or elsewhere in files only you can read, and it never puts a token in a process's arguments ([details](../safety/network.md#saving-and-binding-tokens)). A VM uses only `claude`'s token, when its image has `claude`, and the tokens you bind to it. With network policy, a VM's tokens and agents' logins stay on your machine, and its proxy puts them only into requests for their own hosts.

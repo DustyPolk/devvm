@@ -44,3 +44,20 @@ devvm never starts a VM whose creation didn't finish, because it would start wit
 `devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Other VMs, images and the project folder stay.
 
 When the VM's image has an agent, devvm first exports the agents' history from the VM, starting it if it's stopped ([history](../using/coding-agents.md#history)). If the export fails, devvm keeps the VM. Before that, devvm checks a `--clone` VM's clone for commits this repo hasn't fetched and for uncommitted changes. The repo's remote for the VM goes with it, and devvm keeps its fetched work as local branches ([deleting the VM](../using/clone.md#deleting-the-vm)). `devvm rm -f` deletes the VM without an export or those checks.
+
+### Saved branches
+
+The local branches are named `saved/<remote>/<branch>`, after the remote. devvm never overwrites a branch. If a branch named `saved/<remote>` exists, or one under it, or one it would sit under, devvm uses `saved/<remote>-2` instead, then `-3`, and so on up to `-99`. If none of those names is free, for example because a branch is named `saved`, `devvm rm` refuses before fetching and keeps the VM. When that happens as devvm is about to remove the remote, it leaves the remote and its branches in place. Because branch names come from the VM, devvm quotes them when it shows them and skips any that git refuses as branch names.
+
+## State files
+
+devvm writes nothing into the project folder. It keeps everything in two folders:
+
+| Folder | Holds |
+| --- | --- |
+| `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`), rebuild counters (`images/rebuilds/`) and `--from` digests (`images/from-digests`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
+| `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](../backends/_index.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, the keys in devvm's SSH agent (`agent-keys`), and the [ssh config](../using/ssh.md) for VMs and their host keys (`ssh_config`, `known_hosts`) |
+
+A VM's state file records the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. The file lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
+
+Each write replaces a file whole, so a file is never left half written, and only you can read the files. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.

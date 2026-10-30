@@ -3,44 +3,53 @@ title: Coding agents
 weight: 5
 ---
 
-When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history: transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
+When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history. Transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 
 | | Mounted read-only, linked into `~` | Copied in on every launch |
 | --- | --- | --- |
-| claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude.json` ([merged](../internals/network.md#mcp-servers), without per-project entries) |
+| claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude.json` ([merged](#copies), without per-project entries) |
 | codex | `~/.codex/{prompts,skills}` | `~/.codex/{config.toml,AGENTS.md,auth.json}` |
 | opencode | the subfolders of `~/.config/opencode` (not `node_modules`) | the files in `~/.config/opencode` (not lock files), `~/.local/share/opencode/auth.json` |
 
 ## Mounts
 
-The folders that exist when devvm creates the VM are mounted read-only, at the same path as on this machine, so absolute paths in them (Claude Code's plugin paths) still work, and linked from the VM's home. This machine enforces read-only: even root in the VM can't write to them. A folder whose path has a comma isn't mounted, with a warning ([Lima's limits](../backends/lima.md#limits)).
+devvm mounts the folders that exist when it creates the VM read-only, at the same path as on this machine, and links them from the VM's home. Absolute paths in them, such as Claude Code's plugin paths, still work. This machine enforces read-only, so even root in the VM can't write to them. devvm doesn't mount a folder whose path has a comma, and it warns you ([Lima's limits](../backends/lima.md#limits)).
 
-One of these folders made or deleted on this machine later is noticed on the VM's next launch, and devvm names it. A backend changes mounts only while a VM is stopped: a stopped VM's mounts change at once; for a running one, devvm asks in a terminal to restart it now (anything running in it stops), else they change when it next starts (`devvm restart`).
+When you make or delete one of these folders on this machine later, devvm notices on the VM's next launch and names the folder. A VM's mounts change only while it's stopped. A stopped VM's mounts change at once. For a running VM, devvm asks in a terminal whether to restart it now, which stops anything running in it, and otherwise the mounts change when the VM next starts, for example with `devvm restart`.
 
 ## Copies
 
-Files are copied into the VM's home on every launch, over the VM's own. With [network policy](../internals/network.md#agents-logins-and-settings), the logins and settings files are copies with your keys and tokens taken out.
+devvm copies the files into the VM's home on every launch, over the VM's own. With [network policy](../safety/network.md), the copies of the logins and settings files have your secrets taken out, and the VM's proxy puts them into requests instead ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)).
+
+devvm merges your MCP servers from `~/.claude.json` into the VM's own, so servers added in the VM stay ([MCP servers](../internals/network.md#mcp-servers)). With network policy, devvm also replaces values under keys that look like secrets in the agents' settings files with `devvm-redacted`, and names what it replaced ([keys in settings files](../internals/network.md#keys-in-settings-files)).
 
 ### Claude Code login
 
-Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use a long-lived token instead: run `claude setup-token` on this machine, approve in the browser, then `devvm auth claude` and paste the token it printed (`sk-ant-oat01-…`, not the code the browser shows). devvm saves it with the other [secrets](../safety/network.md#saving-and-binding-tokens), and puts it in the environment of every VM whose image has `claude`, as `CLAUDE_CODE_OAUTH_TOKEN`, from its next launch. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment wins over the saved one. A token that isn't a setup token isn't saved, nor sent. With network policy the VM gets a placeholder of its own, and its proxy puts the token into requests; without it, the token itself. A `~/.claude/.credentials.json` is never copied.
+Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use a long-lived Claude Code token instead. To set it up:
+
+1. Run `claude setup-token` on this machine and approve in the browser.
+2. Run `devvm auth claude` and paste the Claude Code token that `claude setup-token` printed (`sk-ant-oat01-…`), not the code the browser shows.
+
+devvm saves the Claude Code token with the other [secrets](../safety/network.md#saving-and-binding-tokens), and it puts it in the environment of every VM whose image has `claude`, as `CLAUDE_CODE_OAUTH_TOKEN`, from the VM's next launch. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment wins over the saved one. devvm neither saves nor sends a Claude Code token that isn't a setup token. With network policy the VM gets a placeholder of its own, and its proxy puts the Claude Code token into requests, and without network policy the VM gets the Claude Code token itself. devvm never copies a `~/.claude/.credentials.json`.
 
 ### Codex and opencode logins
 
-With network policy the VM's `auth.json` holds placeholders, and its proxy holds the real keys and tokens. Without it, the VM gets the file as it is, and a VM that refreshes an OAuth login can rotate its refresh token and sign this machine out (an API key avoids this).
+With network policy, the VM's `auth.json` holds placeholders, and its proxy holds the real API keys and logins. Without network policy, the VM gets the file as it is, and a VM that refreshes an OAuth login can replace its refresh token and sign this machine out. An API key avoids this.
 
 ## History
 
-Each VM's transcripts and sessions stay in that VM. `devvm export [FILE]` saves them, and `devvm rm` saves them before deleting a VM whose image has an agent: a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, in FILE or `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. The agents' logins aren't in it: `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. A stopped VM is started for it, and stays running. The file is written only once the export is complete, so a failed export leaves no file and an existing FILE as it was. If the export fails, `devvm rm` keeps the VM; `devvm rm -f` deletes it without exporting.
+Each VM's transcripts and sessions stay in that VM. `devvm export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM whose image has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`.
+
+The agents' logins aren't in the export, which leaves out `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. devvm starts a stopped VM for the export, and the VM stays running. devvm writes the file only once the export is complete, so a failed export leaves no file and leaves an existing FILE as it was. If the export fails, `devvm rm` keeps the VM, and `devvm rm -f` deletes it without exporting.
 
 ## The VM's setup
 
 Besides the agents' config, every launch sets the VM up from this machine's settings:
 
-- its hostname: the folder's part of the VM's name;
+- its hostname, which is the folder's part of the VM's name;
 - the timezone (`TZ`, else this machine's) and, when it's UTF-8, the locale (`LC_ALL`, else `LANG`);
 - git's `user.name` and `user.email`, as git has them in the project folder;
-- telemetry off where an environment variable can't do it: Go's, and Codex's analytics and metrics;
+- telemetry off where an environment variable can't turn it off, which is Go's, and Codex's analytics and metrics;
 - `(devvm)` at the start of the prompt.
 
-With network policy it also installs devvm's CA, points apt, sudo, ssh and Docker ([its layer](images.md#built-in-layers)'s) at the proxy, adds `devvm-why` (what the proxy blocked lately), and tells the agents, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail ([Inside the VM](../safety/network.md#inside-the-vm)). Tokens go in `~/.config/devvm/env`, which login shells read.
+With network policy, the launch also installs devvm's CA, points apt, sudo, ssh and the [docker layer](images.md#built-in-layers)'s Docker at the proxy, and adds `devvm-why`, which shows what the proxy blocked lately. It also tells the agents, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail ([inside the VM](../safety/network.md#inside-the-vm)). The VM's secrets go in `~/.config/devvm/env` in the VM, which login shells read, and with network policy that file holds their placeholders.

@@ -3,30 +3,49 @@ title: Settings and files
 weight: 9
 ---
 
-This page lists the folders devvm keeps its state and settings in, and the environment variables it reads.
+devvm writes nothing into your project folders. It keeps your settings in `~/.config/devvm` and its own state in `~/.local/share/devvm`, and it reads a few environment variables. [Overview](../internals/overview.md#state-files) describes the state files in full.
 
-## Where state lives
+## Your settings
 
-devvm writes nothing into the project folder. It keeps everything in two folders:
+`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds your settings. Each file has a command that writes it, and you can also edit the files yourself.
 
-| Folder | Holds |
-| --- | --- |
-| `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`), rebuild counters (`images/rebuilds/`) and `--from` digests (`images/from-digests`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
-| `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](../backends/_index.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, the keys in devvm's SSH agent (`agent-keys`), and the [ssh config](ssh.md) for VMs and their host keys (`ssh_config`, `known_hosts`) |
+| File | What it holds | Written by |
+| --- | --- | --- |
+| `base-features` | the [features](customizing.md#choosing-features) that base gets, one name per line | `devvm setup` |
+| `backend` | the [default backend](../backends/_index.md#choosing-a-backend) for new VMs | `devvm setup` |
+| `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g` |
+| `ports` | the [ports](ports-size.md#size-and-ports) that new VMs forward | `devvm ports -g` |
+| `policy` | your [network policy](../safety/network.md) rules for every VM | `devvm policy -g` |
+| `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |
+| `features/` | your own [features](customizing.md#your-own-features) | you |
+| `agent-keys` | the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options | `devvm ssh-agent add` |
+| `ssh_config`, `known_hosts` | the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys | devvm, on each launch and stop |
 
-A VM's state file records the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. The file lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
+On Linux hosts, devvm also keeps your [secrets](../safety/network.md#saving-and-binding-tokens) in files under `~/.config/devvm/secrets/`, which only you can read. On macOS they're in the Keychain.
+
+Upgrading devvm keeps this folder as it is. Back it up to keep your settings, layers and features, and keep in mind that on Linux hosts it holds your secrets.
+
+## devvm's state
+
+`~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) holds what devvm makes and keeps for you:
+
+- each VM's state, its own allowlist and its network logs;
+- the images and their records, and the shared tools;
+- the [run logs](troubleshooting.md#a-command-fails) in `logs/runs/`;
+- the agents' history that `devvm export` and `devvm rm` save, in `exports/`;
+- devvm's own Lima home (`lima/`), where the Lima backend's VMs and images live.
 
 devvm's Lima home is its own, whatever `LIMA_HOME` says, so Lima settings meant for other VMs never reach devvm's. Set `DEVVM_LIMA_HOME` to move it, for example to a sandbox or to a shorter path.
 
-Each write replaces a file whole, so a file is never left half written, and only you can read the files. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.
+Only you can read devvm's files. When devvm can't read one, it names the file and the line ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
 
 ## Environment
 
 | | |
 | --- | --- |
-| `DEVVM_VERBOSE=1` | print the output of the commands devvm runs, instead of logging it ([details](troubleshooting.md#build-logs-and-interrupts)) |
+| `DEVVM_VERBOSE=1` | print the output of the commands devvm runs, instead of logging it ([details](troubleshooting.md#a-command-fails)) |
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](../internals/lima.md#a-lima-home-of-its-own)) |
-| `DEVVM_FROM` | the container image new VMs' and builds' base starts from when there's no `--from` ([details](from.md)) |
-| `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](../internals/images.md#versions)) |
-| `DEVVM_SECRET_SERVICE` | the Keychain service devvm saves and reads tokens in, instead of `devvm` ([details](../safety/network.md#saving-and-binding-tokens)) |
-| `CLAUDE_CODE_OAUTH_TOKEN` | the Claude token VMs' proxies put in, over a saved one ([details](../safety/network.md#secrets)) |
+| `DEVVM_FROM` | the container image that the base of new VMs and builds starts from when there's no `--from` ([details](from.md)) |
+| `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#shared-tools)) |
+| `DEVVM_SECRET_SERVICE` | the Keychain service devvm saves and reads secrets in, instead of `devvm` ([details](../safety/network.md#saving-and-binding-tokens)) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | the Claude Code token that VMs get, over a saved one ([details](coding-agents.md#claude-code-login)) |

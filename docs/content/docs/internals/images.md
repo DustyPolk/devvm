@@ -108,3 +108,33 @@ The image's own code runs as root in the build VM, so devvm treats what it write
 - `--from node:24@sha256:<digest>` pins an exact image, and is never looked up.
 
 References are read the way Docker reads them: `node:24` is Docker Hub's `library/node`, tag `24`. A first part with a dot or a port, or `localhost`, names the registry (`ghcr.io/org/image:tag`, `localhost:5000/app`). No tag is `latest`.
+
+An existing VM keeps what its base was made from: its state records it (`from=`).
+
+### Images only Docker has
+
+A `base` from an [image only Docker has](../using/from.md#images-only-docker-has) is keyed by Docker's image ID. devvm exports the image with `docker save` into the build VM's folder, where crane reads it, and checks the export is the image it looked up: it's saved by name, so if the tag moved since (a rebuild), devvm stops and asks you to run it again. devvm only asks Docker for images (`docker image inspect`, `docker info`, `docker save`); it never pulls, builds or deletes them.
+
+## Base's settings and pins
+
+`assets/base.yaml` holds base's VM settings (4 CPUs, 8 GiB of memory and a 100 GiB disk), and `assets/layers/base.sh` installs it, followed by the optional [features](../using/customizing.md) you chose.
+
+Each download in `assets/layers/base.sh` is pinned to a version and a SHA-256 at the top of the script, and the build fails if a checksum doesn't match. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com). Project VMs use the live archive, so `apt upgrade` in a VM gets the current updates.
+
+Like `assets/layers/base.sh`, each feature pins its downloads to a version and SHA-256 at the top of its script, `assets/features/<name>.sh` in the repo, built into devvm.
+
+## The docker layer
+
+The built-in `docker` layer's script is `assets/layers/docker.sh`, embedded in devvm, and its [allowlist](../safety/network.md#allowlists) is `assets/layers/docker.policy`. It installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, with its signing key's checksum and each package's version pinned at the top of the script (Alpine's own packages on `--from alpine`, unpinned). Running Docker's engine in a VM is a backend feature of its own, `docker-layer` ([features](backends.md#features)).
+
+## The share
+
+devvm builds each tool version once into a compressed, read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it in `<image>.sha256`. That folder is mounted read-only in every VM at `/mnt/devvm-tools`, and each VM mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. On [Docker](docker.md#shared-tools), devvm unpacks the images into a volume, mounts that volume instead, and links each tool's folder where its image would be mounted. A VM can't change the shared images, even as root.
+
+## Listing and cleaning up
+
+`devvm images` shows an image's `STATE` as `current`; `stale`: its key no longer matches its inputs; `unfinished`: a build that didn't finish, with no record. Its second table lists the shared tool images in the share. A tool image's `STATE` is `current`: the tools lock's version, for the C library of the base new VMs get (`--from` changes it); `in use`: another version a VM has, in its state; `unused`: neither; `not built`: the lock's version of a tool the share has others of; `not installed`: nothing of the name's is in the share.
+
+Listing never resolves the tools lock. Before there is a lock, no tool image is current, and the tool images that no VM has show no state.
+
+`devvm images rm` deletes images with their records. `devvm gc` deletes stale and unfinished images with their records, and unused tool images with their hashes. gc holds the share's lock throughout, so no tool build or `devvm update` changes the share meanwhile. A tool image is unused only when compared with the tools lock, so before there is a lock, gc deletes none. `current` is for the C library of the base that new VMs get, so after an Alpine VM is gone, its musl tool images are unused unless you give gc that `--from`.
