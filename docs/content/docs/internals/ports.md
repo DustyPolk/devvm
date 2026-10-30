@@ -23,6 +23,15 @@ When a start, or a change of a running VM's ports, finds that a program on this 
 
 The forwarder reaches the VM over the VM's ssh, with a key and a host key that devvm pins, and it asks for no forwarding into this machine. Every connection starts on this machine, and the VM opens none to it. The VM sees each forwarded connection only as one to its own loopback, and with network policy the VM still reaches only its proxy.
 
+A connection to a forwarded port, such as 5173, takes this path:
+
+```mermaid
+flowchart TD
+  browser["your browser, on this machine,<br>where every connection starts"] -- "localhost:5173" --> fwd["devvm's forwarder,<br>on this machine"]
+  fwd -- "ssh, with a key and<br>a host key devvm pins" --> sshd["the VM's sshd"]
+  sshd -- "127.0.0.1:5173,<br>its own loopback" --> server["your server, in the VM"]
+```
+
 How the forwarder logs in, and when it ends, differs by backend, as the Ports sections of [Lima](lima.md#ports), [smolvm](smolvm.md#ports) and [Docker](docker.md#ports) describe.
 
 ## Its process and files

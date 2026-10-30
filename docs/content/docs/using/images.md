@@ -8,10 +8,10 @@ Every VM is a copy of an image. An image is `base` with your choice of layers on
 ```mermaid
 flowchart TD
   ubuntu["Ubuntu's cloud image,<br>or a --from image"] --> base["base, with<br>the features you chose"]
-  base --> docker["docker: a layer on base"]
+  base --> docker["docker, a layer<br>on base"]
   base -. "a copy" .-> vm1["VM: node"]
   docker -. "a copy" .-> vm2["VM: node+docker"]
-  tools[("shared tools:<br>node, claude…")] -- "mounted read-only" --> vm1 & vm2
+  tools[("shared tools:<br>node, claude…")] -- "mounted<br>read-only" --> vm1 & vm2
 ```
 
 ## Base

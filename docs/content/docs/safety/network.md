@@ -8,15 +8,15 @@ A VM with network policy reaches only the hosts on its allowlist, through a prox
 ```mermaid
 sequenceDiagram
   participant P as The VM
-  participant X as Its proxy, on this machine
+  participant X as Its proxy,<br>on this machine
   participant H as api.github.com
-  P->>X: GET /user, with a placeholder
+  P->>X: GET /user, with<br>a placeholder
   Note over X: on the allowlist
-  X->>H: GET /user, with your GitHub token
+  X->>H: GET /user, with<br>your GitHub token
   H-->>X: the response
   X-->>P: the response
-  P->>X: CONNECT example.com:443
-  X-->>P: 403: not on the allowlist
+  P->>X: CONNECT<br>example.com:443
+  X-->>P: 403: not on<br>the allowlist
 ```
 
 This page covers what you do with network policy and what you see. [How it works › Network policy](../internals/network.md) explains how devvm confines a VM to its proxy and how the proxy handles each connection.

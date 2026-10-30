@@ -35,6 +35,22 @@ For each connection, the proxy does the following:
 - For a host with a bound secret, it replaces the placeholder in one header with the real value, as [how the proxy puts them in](#how-the-proxy-puts-them-in) describes. Everything else passes unread.
 - It logs every decision ([log files](#log-files)).
 
+A `CONNECT` tunnel meets the proxy's checks in this order:
+
+```mermaid
+flowchart TD
+  conn["CONNECT host:port from the VM"] --> pw["the VM's password?<br>no: 407"]
+  pw --> name["a host name or an address?<br>no: 400"]
+  name --> allow["on the allowlist, and not denied?<br>no: 403"]
+  allow --> floor["public and not this machine's,<br>or an address a rule names?<br>no: 403"]
+  floor --> bound{{"a bound host, on port 443?"}}
+  bound -- "no" --> sni["its TLS SNI names<br>the CONNECT host?<br>no: closed"]
+  sni -- "yes, or not TLS" --> tunnel["tunneled untouched"]
+  bound -- "yes" --> intercept["intercepted, with<br>devvm's CA"]
+  intercept --> named["each request names<br>the bound host?<br>no: 421"]
+  named --> swap["the placeholder swapped<br>for the real value"]
+```
+
 On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)). Docker's VMs can't reach the host's loopback, so on Docker the proxy also listens on a unix socket only you can reach, and a relay on the VM's own network passes the VM's connections to that socket, unread ([details](docker.md#network-policy)).
 
 ### How long a proxy runs
@@ -130,6 +146,26 @@ devvm records the result in the VM's state, as `net_check=ok` or `net_check=unen
 
 - **The VM wasn't started confined,** because it was started outside devvm or has been running since before `devvm network on`. In a terminal, devvm offers to restart the VM confined (`net_unenforced_restart`), and if you decline, it warns you and goes on (`net_unenforced`). Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell (`net_unenforced_stop`). The next `devvm` starts the VM confined.
 - **The VM was started confined, yet it gets out,** because it reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help, so devvm stops the VM and ends (`net_direct_route`).
+
+This is the check, and what devvm does when it fails:
+
+```mermaid
+flowchart TD
+  launch["every launch"] --> proc["on the process<br>devvm started?"]
+  proc -- "yes" --> direct["a direct connection<br>from the VM fails?"]
+  direct -- "yes" --> ok["net_check=ok"]
+  proc -- "no" --> un["net_check=unenforced"]
+  direct -- "no" --> un
+  un --> confined["started confined?"]
+  confined -- "yes: another<br>way out" --> route["stops the VM<br>and ends"]
+  confined -- "no" --> term["a terminal?"]
+  term -- "no" --> stop["stops the VM, no shell;<br>the next devvm starts<br>it confined"]
+  term -- "yes" --> offer["restart it confined?"]
+  offer -- "no" --> warn["warns, goes on"]
+  offer -- "yes" --> again["enforced now?"]
+  again -- "yes" --> ok2["net_check=ok"]
+  again -- "no" --> stop
+```
 
 `devvm ls` and `devvm network` show such a VM's network policy as `unenforced`. That's a VM whose last self-check failed, or a running VM that isn't on the process devvm started confined, which devvm checks on the host each time.
 
