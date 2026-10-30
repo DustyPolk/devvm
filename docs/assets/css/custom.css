@@ -738,3 +738,69 @@ html.dark .devvm-install .hextra-tabs-toggle[data-state="selected"] {
   flex-shrink: 0;
   vertical-align: baseline;
 }
+
+/* The docs' section cards (layouts/_shortcodes/section-card.html): the icon at twice its pixels, centered
+   on the title's line, dimmed as Hextra dims its cards' icons, and lime on hover. Each card's title at its
+   top, so a row's titles line up whatever their text's length. */
+.hextra-card .devvm-icon {
+  width: 24px;
+  height: 24px;
+  align-self: center;
+}
+
+html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
+  color: var(--devvm-accent);
+}
+
+.hextra-card:not(:has(img)) > div {
+  margin-top: 0;
+}
+
+/* The OS tabs' icons, a space before the name. */
+.hextra-tabs-toggle .devvm-icon {
+  margin-right: 0.4em;
+}
+
+/* Icons in tables, whose text is smaller than 16px: 12px, so each pixel stays one screen pixel. */
+.content table .devvm-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ✓ and ✗ before a table cell's word ({{< yes >}}, {{< no >}}): the check in lime, the cross muted. */
+.devvm-yes,
+.devvm-no {
+  margin-right: 0.25em;
+}
+
+.devvm-yes {
+  color: var(--devvm-accent);
+}
+
+.devvm-no {
+  color: var(--devvm-text-secondary);
+}
+
+/* The experimental badge ({{< experimental >}}): the flask and the word in Departure Mono at its 11px, in
+   the blue, in a thin rounded box that sits on the text's line. */
+.devvm-experimental {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--devvm-blue);
+  border-radius: 9999px;
+  font-family: var(--devvm-font-pixel);
+  font-size: 11px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 16px;
+  color: var(--devvm-blue);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.devvm-experimental .devvm-icon {
+  width: 12px;
+  height: 12px;
+}

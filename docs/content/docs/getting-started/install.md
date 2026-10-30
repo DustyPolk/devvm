@@ -29,22 +29,22 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 
 | You need | To check | To get it | The install script |
 | --- | --- | --- | --- |
-| macOS 13 or newer, on arm64 or x86_64 | `sw_vers` and `uname -m` | | doesn't |
-| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
-| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | doesn't |
-| Docker Desktop with Docker 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker Desktop | doesn't |
+| macOS 13 or newer, on arm64 or x86_64 | `sw_vers` and `uname -m` | | {{< no >}} doesn't |
+| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
+| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | {{< no >}} doesn't |
+| Docker Desktop with Docker 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker Desktop | {{< no >}} doesn't |
 
 {{< /os-tab >}}
 {{< os-tab name="Linux" >}}
 
 | You need | To check | To get it | The install script |
 | --- | --- | --- | --- |
-| Linux on arm64 or x86_64 | `uname -m` | | doesn't |
-| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
-| QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | offers it, with sudo |
-| Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | offers it, with sudo |
-| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | Ubuntu 22.04's has it | doesn't |
-| Docker's engine 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker's engine | doesn't |
+| Linux on arm64 or x86_64 | `uname -m` | | {{< no >}} doesn't |
+| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
+| QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | {{< yes >}} offers it, with sudo |
+| Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | {{< yes >}} offers it, with sudo |
+| OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | Ubuntu 22.04's has it | {{< no >}} doesn't |
+| Docker's engine 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker's engine | {{< no >}} doesn't |
 
 {{< /os-tab >}}
 {{< /os-tabs >}}

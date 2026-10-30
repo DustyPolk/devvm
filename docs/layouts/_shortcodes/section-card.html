@@ -1,0 +1,18 @@
+{{- /* A card for one section of the docs, on Hextra's card, inside Hextra's cards shortcode: a pixel icon
+   from assets/icons/ before the section's title, which links to it, then its one-line Markdown.
+   {{< section-card path="getting-started" icon="rocket" >}}Installing, …{{< /section-card >}}
+   The path is under docs/, and the build fails when no page has it. Hextra's card takes an icon only
+   from its own set, so ours goes in its title, where the title's flex row spaces them the same. */ -}}
+{{- $path := .Get "path" -}}
+{{- $icon := .Get "icon" -}}
+{{- if not $icon }}{{ errorf "section-card: no icon (%s)" .Position }}{{ end -}}
+{{- with site.GetPage (printf "/docs/%s" $path) -}}
+  {{- $title := printf "%s<span>%s</span>" (partial "icon.html" (dict "name" $icon "position" $.Position)) (.LinkTitle | htmlEscape) -}}
+  {{- partial "shortcodes/card" (dict
+    "page" $.Page
+    "link" .RelPermalink
+    "title" ($title | safeHTML)
+    "subtitle" (trim $.Inner "\n")) -}}
+{{- else -}}
+  {{- errorf "section-card: no page docs/%s (%s)" $path .Position -}}
+{{- end -}}

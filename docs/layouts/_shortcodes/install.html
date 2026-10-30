@@ -1,5 +1,5 @@
 {{- /* The install command in a tab per operating system, on Hextra's tabs: macOS's Homebrew, Linux's install
-   script. macOS's tab is selected, and _partials/install-os.html selects Linux's for Linux visitors.
+   script, each tab's name after its system's icon. macOS's tab is selected, and _partials/install-os.html selects Linux's for Linux visitors.
    {{< install >}}, or {{< install step="1" >}} to number its comment as a list's first step. */ -}}
 {{- $step := "" -}}
 {{- with .Get "step" }}{{ $step = printf "%s. " . }}{{ end -}}
@@ -15,8 +15,8 @@
 {{- $mac := printf "```sh\n# %sInstall devvm, and Lima with it\nbrew install w3cj/tap/devvm\n```\n\n%s" $step $macNote -}}
 {{- $linux := printf "```sh\n# %sInstall devvm and what it needs\n%s\n```\n\nThe script asks before it installs Lima, QEMU or access to `/dev/kvm`." $step $script -}}
 {{- $tabs := slice
-  (dict "id" 1 "name" "macOS" "content" $mac "selected" true)
-  (dict "id" 2 "name" "Linux" "content" $linux) -}}
+  (dict "id" 1 "name" (partial "os-tab-name.html" (dict "name" "macOS" "position" .Position)) "content" $mac "selected" true)
+  (dict "id" 2 "name" (partial "os-tab-name.html" (dict "name" "Linux" "position" .Position)) "content" $linux) -}}
 <div class="devvm-install">
 {{ partial "shortcodes/tabs" (dict "tabs" $tabs "enableSync" false "id" (printf "install-%d" .Ordinal)) }}
 {{ partial "install-os.html" . }}

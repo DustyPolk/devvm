@@ -1,0 +1,4 @@
+{{- /* A check mark before a table cell's yes, or what stands for one, such as "offers it": {{< yes >}} yes.
+   The word stays, and screen readers skip the mark. */ -}}
+<span class="devvm-yes">{{ partial "icon.html" (dict "name" "check-mark-circled" "position" .Position) }}</span>
+{{- /* Strip trailing newline. */ -}}

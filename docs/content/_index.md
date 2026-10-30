@@ -50,7 +50,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< feature title="Backends" level="3" art="backends" >}}
 
-[Lima](https://lima-vm.io/) runs the VMs by default, and [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) are experimental backends ([backends](docs/backends/_index.md)).
+[Lima](https://lima-vm.io/) runs the VMs by default, and [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) are {{< experimental >}} backends ([backends](docs/backends/_index.md)).
 
 {{< /feature >}}
 

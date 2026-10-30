@@ -3,6 +3,8 @@ title: smolvm (experimental)
 weight: 2
 ---
 
+{{< experimental >}}
+
 [smolvm](https://github.com/smol-machines/smolvm) is an experimental backend. Each project gets a microVM that runs its image as a container, with no init system, so devvm starts the VM's services itself after each start. You choose it for one VM with `--backend smolvm`, or for every new VM with `devvm setup --backend smolvm`.
 
 Network policy, `devvm ssh`, `devvm code`, `--clone`, forwarding ports and turning SSH agent forwarding on or off after a VM is made all work as they do on Lima. smolvm lacks some of these, so devvm builds them from other parts of smolvm, and [How it works › smolvm](../internals/smolvm.md) explains how.

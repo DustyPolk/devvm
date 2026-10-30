@@ -1,7 +1,7 @@
 {{- /* Markdown in a tab per operating system, on Hextra's tabs, as the install shortcode shows its commands:
    {{< os-tabs >}}{{< os-tab name="macOS" >}}…{{< /os-tab >}}{{< os-tab name="Linux" >}}…{{< /os-tab >}}{{< /os-tabs >}}.
    macOS's tab comes first and is selected, and _partials/install-os.html selects Linux's, the second, for
-   Linux visitors. */ -}}
+   Linux visitors. Each tab's name gets its system's icon from _partials/os-tab-name.html. */ -}}
 {{- $_ := .Inner -}}
 {{- $tabs := slice -}}
 {{- range $i, $tab := .Store.Get "tabs" -}}
@@ -10,7 +10,11 @@
 {{- if or (ne (len $tabs) 2) (ne (index $tabs 0).name "macOS") (ne (index $tabs 1).name "Linux") -}}
   {{- errorf "os-tabs: want a macOS tab, then a Linux tab (%s)" .Position -}}
 {{- end -}}
+{{- $named := slice -}}
+{{- range $tabs -}}
+  {{- $named = $named | append (merge . (dict "name" (partial "os-tab-name.html" (dict "name" .name "position" $.Position)))) -}}
+{{- end -}}
 <div class="devvm-install">
-{{ partial "shortcodes/tabs" (dict "tabs" $tabs "enableSync" false "id" (printf "os-tabs-%d" .Ordinal)) }}
+{{ partial "shortcodes/tabs" (dict "tabs" $named "enableSync" false "id" (printf "os-tabs-%d" .Ordinal)) }}
 {{ partial "install-os.html" . }}
 </div>

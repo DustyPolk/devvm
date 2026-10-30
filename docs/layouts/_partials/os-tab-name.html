@@ -1,0 +1,9 @@
+{{- /* A tab's name for the install and os-tabs shortcodes: the system's pixel icon, the Apple for macOS and the
+   penguin for Linux, then its name. Hextra's tabs take an icon only from Hextra's own set, so ours goes in
+   the name, as HTML. Takes name and position. */ -}}
+{{- $icons := dict "macOS" "brand-apple" "Linux" "penguin" -}}
+{{- with index $icons .name -}}
+  {{- return (safeHTML (printf "%s%s" (partial "icon.html" (dict "name" . "position" $.position)) ($.name | htmlEscape))) -}}
+{{- else -}}
+  {{- errorf "os-tab-name: no icon for %q (%s)" .name .position -}}
+{{- end -}}
