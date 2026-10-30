@@ -29,15 +29,15 @@ Test in a Lima VM with nested virtualization, which needs an M3 or newer and mac
 1. Make it from Lima's Ubuntu template, with nested virtualization, room for nested VMs, and only the repo mounted, read-only:
 
    ```sh
-   cd /tmp
+   REPO=$(pwd) && cd /tmp
    export LIMA_HOME=~/.lt-linux-go
    limactl create --name=linuxhost --tty=false --vm-type=vz --cpus=8 --memory=16 --disk=150 \
-     --containerd=none --set '.nestedVirtualization=true' --mount ~/dev/devvm-go template:ubuntu-24.04
-   limactl edit --tty=false --set '.mounts=[{"location":"'"$HOME"'/dev/devvm-go","writable":false}]' linuxhost
+     --containerd=none --set '.nestedVirtualization=true' --mount "$REPO" template:ubuntu-24.04
+   limactl edit --tty=false --set '.mounts=[{"location":"'"$REPO"'","writable":false}]' linuxhost
    limactl start --tty=false linuxhost
    ```
 
-   `--mount` alone keeps the template's home mount, hence the edit.
+   Run it from your checkout of the repo, which the VM mounts at the same path. `--mount` alone keeps the template's home mount, hence the edit.
 
 2. Inside it, install the packages, then Lima and mise from their release tarballs, each checked against its release's checksums (`SHA256SUMS`, `SHASUMS256.txt`) with `sha256sum -c`, and add yourself to the `kvm` and `docker` groups:
 
@@ -51,7 +51,7 @@ Test in a Lima VM with nested virtualization, which needs an M3 or newer and mac
 3. Copy the repo into the VM's home, so the read-only mount stays untouched, install the pinned tools and run the gate, then the end-to-end tests:
 
    ```sh
-   rsync -a --delete --exclude=.dex ~/dev/devvm-go/ ~/devvm/ && cd ~/devvm
+   rsync -a --delete /path/to/your/checkout/ ~/devvm/ && cd ~/devvm
    mise trust && mise install
    mise run fmt && mise run lint && mise run test
    tests/e2e.sh --from
