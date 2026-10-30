@@ -3,7 +3,7 @@
 These scripts turn a container image into a disk that Lima boots directly, for `--from` ([Starting from a container image](../../docs/content/docs/using/from.md)). devvm runs them in a throwaway VM booted from Ubuntu's cloud image, so the conversion doesn't need Docker.
 
 | File | What |
-|---|---|
+| --- | --- |
 | `build.sh` | runs in the build VM as root: crane pulls the image and flattens its layers, `bootify.sh` runs in a chroot of it, and `mke2fs` writes the disk. Writes the kernel, initramfs and disk Lima boots, the kernel command line, and the image's libc (which builds of the shared tools its VMs get) |
 | `bootify.sh` | in the chroot, for Debian, Ubuntu or Alpine: adds a kernel and initramfs, an init system, cloud-init, sshd and sudo, and pre-creates the Lima guest user |
 | `kernel.sh` | on arm64, turns a distro's `vmlinuz` into the uncompressed `Image` Lima's `vz` needs; elsewhere it copies it as is |

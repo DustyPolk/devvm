@@ -1,5 +1,8 @@
 # Tropes
 
+<!-- Each example's before and after are two quotes, one after the other. -->
+<!-- markdownlint-disable MD028 -->
+
 What to look for, with what `scan.sh` calls it. Each has a before and after from devvm's own docs. A hit is a candidate: fix it only if the sentence reads better without it.
 
 ## Compressed writing
@@ -24,7 +27,7 @@ Split them into two sentences, or join them with "and", "but" or "so" when one f
 
 ### Parentheticals (`paren`)
 
-Allow one short parenthetical per sentence at most, for an example or a literal value (`(macOS)`, `(`.env`, `node_modules`)`). An aside that's a clause, holds a colon or changes the meaning goes into the sentence, or into a sentence of its own.
+Allow one short parenthetical per sentence at most, for an example or a literal value (`(macOS)`, `` (`.env`, `node_modules`) ``). An aside that's a clause, holds a colon or changes the meaning goes into the sentence, or into a sentence of its own.
 
 > A copy that fails (the VM can't be reached, say) is tried again the next time you run devvm in the folder.
 

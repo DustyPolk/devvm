@@ -20,7 +20,7 @@ It returns when the VM's hostagent is gone.
 ## Files
 
 | File | What |
-|---|---|
+| --- | --- |
 | `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
 | `policy.go` | the rule syntax and matching (`ValidRule`: `devvm policy` takes only these); policy files are re-read when they change |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
@@ -44,7 +44,7 @@ devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.json
 Flags take one dash or two.
 
 | Flag | What |
-|---|---|
+| --- | --- |
 | `-listen` | the VM's proxy port, on loopback |
 | `-listen-unix` | Docker only: also listen on this unix socket, mode 600; a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
@@ -62,7 +62,7 @@ Flags take one dash or two.
 Other modes, each doing one thing and returning:
 
 | | |
-|---|---|
+| --- | --- |
 | `-init-ca DIR` | write a new CA (`ca.pem`, `ca.key`, each written whole; valid 30 days; no host name in it) into DIR unless one with over a week left is there |
 | `-login claude -login-file F -login-secrets` | print the MCP servers in `~/.claude.json` whose settings hold env values or headers |
 | `-login codex\|opencode\|claude -login-file F -login-vm` | print the VM's copy of the login file, with placeholders (`-login-salt KEY`, or `$DEVVM_LOGIN_SALT`, which keeps it out of the arguments: the VM's random salt, which ends them) |

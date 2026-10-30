@@ -162,7 +162,7 @@ EOF
 		continue
 	fi
 	words=$(printf '%s\n' "$text" | wc -w | tr -d ' ')
-	sents=$(printf '%s\n' "$text" | grep -Eo '[a-z)`][.!?]( |$)' | wc -l | tr -d ' ')
+	sents=$(printf '%s\n' "$text" | hits - '[a-z)`][.!?]( |$)' -o | wc -l | tr -d ' ')
 	printf '%-44s %6s %5s' "$f" "$words" "$sents"
 	while IFS='	' read -r name flags re; do
 		printf ' %5s' "$(printf '%s\n' "$text" | hits "$flags" "$re" -o | wc -l | tr -d ' ')"
