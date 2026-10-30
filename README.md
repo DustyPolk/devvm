@@ -22,38 +22,16 @@ Then run `devvm doctor`, which checks what devvm needs on your machine and says 
 
 ## Your first VM
 
-Go to a project folder and run one of these, depending on whether you want a coding agent in the VM:
+In a project folder, run one of these:
 
 ```sh
 cd ~/some-project
-devvm          # a VM with the folder's toolchains
+devvm          # a VM with the project's toolchain
 devvm claude   # the same, with Claude Code
 devvm codex    # the same, with Codex
 ```
 
-In a folder whose VM already exists, `devvm claude` or `devvm codex` adds the agent to that VM after asking. [Coding agents](https://devvm.dev/docs/using/coding-agents/) explains how the agents get your settings and logins.
-
-In a terminal, devvm first asks whether the new VM gets network policy. It recommends yes, which is also the answer when you press Enter:
-
-```console
-Network policy for devvm-some-project-71a99b1076d92c:
-  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
-  off: it reaches anything this machine can
-Turn it on? [Y/n]
-```
-
-The first time you run devvm, it also asks which optional extras every VM gets, such as oh-my-bash and fzf. Then it downloads Ubuntu's cloud image and builds the base image, which takes a few minutes:
-
-```console
-==> building image base (e9f517dddef1)
-    a few minutes, and Ubuntu's cloud image to download the first time
-    (details: ~/.local/share/devvm/logs/runs/20261024-090616-83541.log)
-==> image base ready
-==> creating devvm-some-project-71a99b1076d92c from base
-==> starting devvm-some-project-71a99b1076d92c
-```
-
-When the VM is ready, devvm opens a shell in it, in `~/some-project`, the same path as on your machine. The toolchains are ready at once, and commits you make in the VM carry your git name and email. Later VMs are copies of the image and start in seconds, and running `devvm` in the folder again opens a new shell in the same VM. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) explains what's in the VM and how to come back to it.
+The first time, devvm asks whether the VM gets network policy (answer yes, the default) and which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds. devvm then opens a shell in the VM, at the same path as on your machine, and running `devvm` in the folder again opens a shell in the same VM. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest, including Claude Code's token.
 
 ## Working on a clone
 

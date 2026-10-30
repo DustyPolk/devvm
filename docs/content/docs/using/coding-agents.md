@@ -5,7 +5,13 @@ weight: 6
 
 ## Supported agents
 
-devvm has three coding agents, which are Claude Code, Codex and opencode. You add one to a VM by naming it in the image. In a project folder without a VM, `devvm claude` makes the folder's VM with Claude Code on top of the [toolchains](toolchains.md) its files call for. When the folder's VM already exists, `devvm claude` adds Claude Code to it, after asking. `devvm codex` and `devvm opencode` work the same way. In the VM, you run the agent as `claude`, `codex` or `opencode`. This section is the one place that lists the agents.
+```sh
+devvm claude     # a VM with the project's toolchain and Claude Code, or Claude Code added to the folder's VM
+devvm codex      # the same, with Codex
+devvm opencode   # the same, with opencode
+```
+
+In the VM, you run the agent as `claude`, `codex` or `opencode`.
 
 | Name | Agent | What devvm adds | Allowlist with network policy |
 | --- | --- | --- | --- |

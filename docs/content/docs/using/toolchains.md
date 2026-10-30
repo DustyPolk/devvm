@@ -3,7 +3,7 @@ title: Toolchains
 weight: 2
 ---
 
-devvm has four toolchains, which are node, python, rust and go. A new VM gets the ones its folder's files call for, or the ones you name, as in `devvm node+python`, and you can add any mix of them to any image. Each section below says what a toolchain brings, which files make devvm choose it, which version files it follows, where your global installs go, and which hosts its allowlist opens under [network policy](../safety/network.md). This page is the one place that lists them.
+devvm has four toolchains: node, python, rust and go. A new VM gets the ones its folder's files call for, or the ones you name, as in `devvm node+python`. Each section below says what the toolchain brings and how devvm chooses it.
 
 ## node
 
