@@ -9,66 +9,63 @@ layout: hextra-home
 {{< /hextra/hero-badge >}}
 
 {{< hextra/hero-headline >}}
-  One Virtual Machine for every folder
+  One VM for every folder
 {{< /hextra/hero-headline >}}
 
 {{< hextra/hero-subtitle >}}
-  An isolated sandbox with your project's toolchain, ready for you or an agent to start coding.
+  A developer-friendly, isolated sandbox, ready for you or an agent to start coding. It runs on any of three backends: [Lima](https://lima-vm.io/), [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/).
 {{< /hextra/hero-subtitle >}}
 
 {{< hextra/hero-button text="Install" link="docs/install/" >}}
 {{< hextra/hero-button text="Read the docs" link="docs/" >}}
 
-One command, then you're in a shell in the VM.
+All it takes is one command, and you're ready to start coding.
 
 {{< asciinema file="home/devvm.cast" theme="devvm" autoplay="true" loop="true" >}}
 
 ## Get started
 
-Install with Homebrew, which also installs Lima:
+Install with Homebrew:
 
 ```sh
 brew install w3cj/tap/devvm
 ```
 
-Or with the install script, which checks the release's signature and offers to install what's missing:
+Or with the install script:
 
 ```sh
 curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
 ```
 
-Then run `devvm doctor` to check your machine, and `devvm` in any project folder. More details in [Installing](docs/install.md).
+Then run `devvm doctor` to check your machine, and run `devvm` in any project folder.
 
-## What you get out of the box
+[Installing](docs/install.md) has more details.
 
-### Developer Ready, Zero Config
+## How it works
 
+### Developer ready, zero config
+
+- devvm detects the [project's toolchain](docs/images.md#shared-tools) from its files, so you write no config files and do no setup. It supports node, python, rust and go, with more to come, and you can also name the tools yourself: `devvm python+claude`.
+- The base image can also include [optional tools](docs/customizing.md#base-image-features) such as oh-my-bash, fzf, zoxide (`z`), tree and tldr.
 {{< art "zero-config" >}}
 
-- `devvm` auto detects the [project's toolchain](docs/images/#shared-tools) (node, python, rust and go supported now, more to come), no config files or setup required.
-- The base image [optionally includes](docs/customizing/#base-image-features) useful tools like oh-my-bash, fzf, zoxide (z), tree and tldr and more.
+### Isolated sandbox
 
-### Isolated
-
-{{< art "isolated" >}}
-
-- Only the project folder is mounted, at the same path. Nothing else from your home folder ([security model](docs/security.md)).
-- `.git`'s hooks and config are locked, so the VM can't change what git runs on your machine ([.git protection](docs/git-protection.md)). Or `--clone` gives it a clone of its own.
+- The VM mounts your project folder at the same path, and your agents' config folders read-only. It sees nothing else from your home folder ([security model](docs/security.md)).
+- devvm locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/git-protection.md)). With `--clone`, the VM gets a clone of its own instead.
 - With [network policy](docs/network.md), the VM reaches only an allowlist of hosts, through a proxy on your machine.
+{{< art "isolated" >}}
 
 ### Ready in seconds
 
+- The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/images.md)).
+- devvm builds each toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/images.md#shared-tools)).
+- Docker runs inside the VM when you need it: `devvm node+docker`.
 {{< art "copies" >}}
-
-- The first VM builds a base image. Every later one is a copy, and starts in seconds ([images](docs/images.md)).
-- devvm detects the project's toolchain from its files, or you name it: `devvm python+claude`.
-- Toolchains are built once and shared read-only: all VMs share one copy ([Shared tools](docs/images/#shared-tools)).
-- Docker inside when you need it: `devvm node+docker`.
 
 ### Made for coding agents
 
-{{< art "agents" >}}
-
 - Claude Code, Codex and opencode get your settings, skills and MCP servers ([coding agents](docs/coding-agents.md)).
-- With network policy, their tokens stay on your machine: the proxy adds them to requests.
-- `devvm ssh` and `devvm code` open the VM in a shell or VS Code ([SSH](docs/ssh.md)).
+- With network policy, their tokens stay on your machine, because the proxy adds them to the VM's requests on the way out.
+- `devvm ssh` and `devvm code` open the VM in a shell or in VS Code ([SSH](docs/ssh.md)).
+{{< art "agents" >}}
