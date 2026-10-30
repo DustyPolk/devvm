@@ -3,15 +3,15 @@ title: .git protection
 weight: 2
 ---
 
-The project folder is read-write in the VM, so without protection anything in the VM could add a git hook, or set `core.fsmonitor`, `core.hooksPath` or `core.sshCommand` in `.git/config`, and your next git command on the host would run it. A read-only mount wouldn't hold: root in the VM can unmount it. So on macOS devvm locks those files with the user-immutable flag (`chflags uchg`), which even root in the VM can't clear.
+The project folder is read-write in the VM, so without protection anything in the VM could add a git hook, or set `core.fsmonitor`, `core.hooksPath` or `core.sshCommand` in `.git/config`, and your next git command on this machine would run it. On macOS, devvm locks the git hooks and config with a flag that even root in the VM can't clear, so nothing the VM does runs through them on this machine.
 
-It's on for every new VM. `--no-git-protect` creates one without it, and [`devvm git-protect`](#turning-it-on-or-off) changes it later.
+Every new VM gets `.git` protection. `--no-git-protect` creates a VM without it, and [`devvm git-protect`](#turning-it-on-or-off) changes it later. [How it works › .git protection](../internals/git-protection.md) lists what devvm locks and when it checks the locks again.
 
 ## What still works
 
-git in the VM can commit, branch, check out, stash, fetch and pull, and `git worktree add` works on the host. Commands that write `.git/config` fail with `Operation not permitted`, in the VM and on the host: `git config`, `git remote add`, `push -u` to a new branch, and hook installers like husky or pre-commit. So do `git worktree remove` and `prune` for the worktrees that were there when devvm locked.
+git in the VM can commit, branch, check out, stash, fetch and pull, and `git worktree add` works on this machine. Commands that write `.git/config` fail with `Operation not permitted`, in the VM and on this machine. Those are `git config`, `git remote add`, `push -u` to a new branch, and hook installers such as husky or pre-commit. `git worktree remove` and `prune` also fail for the worktrees that were there when devvm locked `.git`.
 
-To run them, unlock with the VM stopped, run them on the host, and lock again:
+To run them, stop the VM, unlock `.git`, run the commands on this machine, and lock it again:
 
 ```sh
 devvm git-protect off
@@ -21,26 +21,29 @@ devvm git-protect on
 
 ## Turning it on or off
 
-`devvm git-protect` shows the VM's protection: `on`, `strict`, `off`, or `clone` for a [`--clone`](../using/clone.md) VM, which mounts no `.git`. `devvm git-protect on`, `strict` or `off` changes it, only while the VM is stopped: a running VM could race the locks, the same reason launches lock only a stopped VM.
+`devvm git-protect` shows the VM's protection, which is `on`, `strict`, `off`, or `clone` for a [`--clone`](../using/clone.md) VM, which mounts no `.git`. `devvm git-protect on`, `strict` or `off` changes it, but only while the VM is stopped, because a running VM could race the locks. Launches lock only a stopped VM for the same reason.
 
-- `on` locks `.git` as it is now, taking it as yours: a `.git` replaced since the last lock isn't reported, and the next launches compare with this one. It reports what [a lock can't stop](../internals/git-protection.md#what-a-lock-cant-stop) and what's [not covered](#not-covered), as when the VM was made. Without a `.git` yet, it's locked on the first launch after one appears.
-- `strict` is `on`, plus [strict](#strict).
+- `on` locks `.git` as it is now and takes it as yours, so a `.git` that was replaced since the last lock isn't reported, and the next launches compare with this one. It reports what [a lock can't stop](../internals/git-protection.md#what-a-lock-cant-stop) and what's [not covered](#not-covered), as devvm did when it made the VM. If the folder has no `.git` yet, devvm locks it on the first launch after one appears.
+- `strict` is `on` plus [strict](#strict).
 - `off` takes the locks off. The VM can then change `.git` hooks and config, which run on your machine.
 
-`--no-git-protect` on an existing VM is ignored, with a warning. A `--clone` VM's protection can't be changed.
+On an existing VM, devvm ignores `--no-git-protect` and warns you. A `--clone` VM's protection can't be changed.
 
 ## Strict
 
-The VM can add a submodule at any time ([below](../internals/git-protection.md#what-a-lock-cant-stop)), and host `git status` and `git diff` read its config, so its `core.fsmonitor` would run on the host before the next launch locks it. `devvm git-protect strict` closes that: it sets `diff.ignoreSubmodules = all` in the locked `.git/config`, so host `git status` and `git diff` never look inside submodules, and no longer show their changes. `git submodule …` and `--recurse-submodules` still enter them: for a repo with submodules you don't trust, use [`--clone`](../using/clone.md).
+The VM can add a submodule at any time, and `git status` and `git diff` on this machine read the submodule's config. So the submodule's `core.fsmonitor` would run on this machine before the VM's next launch locks it. `devvm git-protect strict` closes that gap by setting `diff.ignoreSubmodules = all` in the locked `.git/config`. `git status` and `git diff` on this machine then never look inside submodules, and they don't show the submodules' changes. `git submodule …` and `--recurse-submodules` still enter them, so for a repo with submodules you don't trust, use [`--clone`](../using/clone.md).
 
 `devvm git-protect on` and `off` take `diff.ignoreSubmodules` back out.
 
 ## Not covered
 
-- **Hooks in the working tree**, such as husky's `.husky/` with `core.hooksPath=.husky` (or an absolute path into the project folder). The VM can edit them, and they run on the host. devvm warns about them when it creates the VM.
-- **What the locked files hand over to the project folder:** an `include.path` or `includeIf.*.path` that leads into it, and hooks that are symlinks into it. The VM can edit those files, and host git reads or runs them. devvm warns about them when it creates the VM, and on a launch after they change.
-- **Submodules whose git folder is outside the project:** devvm can't lock it (another project's VM may write it), and host `git status` reads its config. devvm names them when it creates the VM.
+The lock covers `.git`, and the VM can still put things elsewhere that git on this machine runs. devvm tells you about each of these, so read what it reports before you run git in the folder, and use [`--clone`](../using/clone.md) for a repo you don't trust.
+
+- **Hooks in the working tree**, such as husky's `.husky/` with `core.hooksPath=.husky`, or an absolute path into the project folder. The VM can edit them, and they run on this machine. devvm warns about them when it creates the VM.
+- **What the locked files hand over to the project folder**, which is an `include.path` or `includeIf.*.path` that leads into it, or a hook that's a symlink into it. The VM can edit those files, and git on this machine reads or runs them. devvm warns about them when it creates the VM, and on a launch after they change.
+- **Submodules whose git folder is outside the project.** devvm can't lock that folder, because another project's VM may write it, and `git status` on this machine reads its config. devvm names these submodules when it creates the VM.
+- **A replaced `.git`.** The VM can rename `.git` and put a new one in its place, or point git at another config. devvm reports this on each launch but doesn't undo it ([what a lock can't stop](../internals/git-protection.md#what-a-lock-cant-stop)).
 
 ## Linux hosts
 
-Linux has no immutable flag a user can set, so VMs on Linux hosts have no `.git` protection: the VM can change `.git` hooks and config, which run on the host. devvm says so when it creates a VM for a folder with a `.git`, and refuses `devvm git-protect on` and `strict`. [`--clone`](../using/clone.md) keeps the VM out of `.git` instead.
+Linux has no immutable flag that a user can set, so VMs on Linux hosts have no `.git` protection, and the VM can change `.git` hooks and config, which run on the host. devvm says so when it creates a VM for a folder with a `.git`, and it refuses `devvm git-protect on` and `strict`. [`--clone`](../using/clone.md) keeps the VM out of `.git` instead.

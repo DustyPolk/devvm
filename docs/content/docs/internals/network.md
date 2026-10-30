@@ -70,6 +70,45 @@ On each launch the VM's `~/.claude.json` gets this machine's settings and MCP se
 
 With network policy, the VM's copies of `~/.claude/settings.json`, `~/.codex/config.toml` and opencode's `.json`, `.jsonc` and `.toml` files have every value under a key that looks like a secret's (`*key*`, `*token*`, `*secret*`, `*password*`, `Authorization`) replaced with `devvm-redacted`, and devvm names what it replaced. Values that only point at a secret stay: an environment variable's name (`env_key = "OPENAI_API_KEY"`), `{env:X}`, `${X}`, a path. A file devvm can't read that way (a TOML multi-line string) isn't copied. An MCP server or provider that needs one of those keys in the VM has to get it another way.
 
+## VMs that can't have it
+
+A VM on a backend that can't confine it to its proxy, or a Docker VM with the docker layer, is made without network policy, with a warning (`net_off_backend` or `net_off_docker_layer`).
+
+## Policy files
+
+A VM's proxy reads these policy files, in order, as one list ([what they allow](../safety/network.md#allowlists)):
+
+| File | Rules for |
+| --- | --- |
+| `assets/layers/base.policy` (devvm's, [written out](install.md#devvms-own-files)) | every VM: OS packages, mise's version lists, GitHub |
+| `assets/shared-tools/<name>.policy` (devvm's, written out) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
+| `assets/layers/<name>.policy` (devvm's, written out) | each built-in layer in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io |
+| `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
+| `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
+| `~/.local/share/devvm/vms/<vm>.policy` | that VM only (`devvm policy`) |
+| `~/.local/share/devvm/run/<vm>.secrets.policy` | the hosts of the VM's secrets and logins, on port 443 (devvm writes it) |
+
+Each change `devvm policy` makes rewrites the file whole (through a link if it is one), so a proxy never reads half of it.
+
+## The VM's setup
+
+The VM's setup, on every launch:
+
+- installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only;
+- points what ignores the proxy variables at the proxy: apt, sudo (which keeps them), every ssh connection (a `ProxyCommand` that tunnels through the proxy, which checks the host and port against the allowlist), and, with the [docker layer](../using/images.md#built-in-layers), Docker's daemon and containers;
+- puts the VM's placeholders in `~/.config/devvm/env`, which login shells read (`CLAUDE_CODE_OAUTH_TOKEN`, `GH_TOKEN`), and git's credential helper for GitHub over HTTPS when `github` is bound;
+- adds `devvm-why` and the note before each prompt, and the notes for Claude Code and Codex ([inside the VM](../safety/network.md#inside-the-vm)).
+
+Each placeholder ends in a random value of the VM's own (its salt, not its password).
+
+## Where secrets are saved
+
+On macOS a secret is saved in the Keychain, service `devvm`, account `claude` or `github`, through `security -i` on its input, so the value is in no process's arguments. `DEVVM_SECRET_SERVICE` names another service, with letters, digits, `.`, `_` and `-` only. Elsewhere it's saved in `~/.config/devvm/secrets/<name>`, a file only you can read.
+
+## Log files
+
+Every decision (`tunnel`, `intercept`, `forward`, `blocked`) is a JSON line in `~/.local/share/devvm/logs/<vm>.jsonl`, with the time, the VM, the host and port, the method and path when seen, the rule or reason, and the names of secrets put in, never their values. The proxy's own lines (what it loaded, what failed upstream) go to `<vm>.proxy.log` next to it: an upstream error stays there, since it can name addresses the VM shouldn't learn. Both folders are yours alone, and devvm's run logs never hold a VM's password. The VM chose the hosts and paths, so `devvm log` drops control characters in them.
+
 ## devvm _proxy
 
 devvm runs the proxy as itself. Flags take one dash or two; errors end in one line, `network policy proxy: …`.

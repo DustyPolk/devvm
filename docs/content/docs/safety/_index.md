@@ -3,27 +3,38 @@ title: Staying safe
 weight: 30
 ---
 
-These pages say what devvm protects you from and what's still yours to watch.
+devvm runs installs, project code and coding agents in a VM, so code you didn't write can't read your credentials, run git hooks on this machine or reach your other projects, and with network policy it can send data only to the hosts you allow. A few habits close most of what devvm can't close on its own, so read this page before you trust a VM with a project.
+
+Some of what devvm protects are your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key.
 
 ## The habits
 
+- **Use [`--clone`](../using/clone.md) for a repo or an agent you don't trust.** The VM then works on a clone of its own instead of your folder, so nothing it writes reaches your folder or its `.git` until you fetch the VM's work and review it. It's the safest way to run a repo you don't know or an agent with its checks off.
 - **Run installs, project code and agents in the VM.** Whatever the VM writes into the project folder runs as you when a program on this machine runs it, so `npm install`, `make`, tests and agents belong in the VM ([files the VM writes](attack-vectors.md#files-the-vm-writes)).
 - **Keep [network policy](network.md) on, and keep allowlists short.** New VMs get it by default. Without it, code in the VM reaches everything this machine can, and with it, stolen data can go only to the hosts you allowed.
-- **Use [`--clone`](../using/clone.md) for a repo or an agent you don't trust.** The VM then works on a clone of its own, and nothing it writes reaches your folder until you fetch it.
 - **Review the VM's changes before you run them on this machine or merge them.** Treat its commits as an untrusted contributor's.
-- **Use fine-grained tokens, and bind only the ones a VM needs.** A VM can do whatever its tokens allow, even when it never sees them ([tokens and keys](attack-vectors.md#tokens-and-keys-the-vm-may-use)).
-- **Keep secrets out of the project folder.** The VM sees every file in it, a `.env` file included.
+- **Use a fine-grained GitHub token, and bind only the secrets a VM needs.** A VM can do whatever its secrets allow, even when it never sees them ([secrets and keys the VM may use](attack-vectors.md#secrets-and-keys-the-vm-may-use)).
+- **Keep credentials out of the project folder.** The VM sees every file in it, including a `.env` file.
 - **Leave SSH agent forwarding off,** or use [devvm's own agent](../using/ssh.md#devvms-own-agent) with only the keys the VM needs.
 
 ## What a VM can reach
 
 | | |
 | --- | --- |
-| The project folder | read and write; with `--clone`, not mounted: the VM has its own clone ([details](../using/clone.md)) |
-| `.git` hooks and config | locked (macOS); what a lock can't stop is reported, not prevented ([details](git-protection.md)); with `--clone`, out of reach |
-| Your agents' config (skills, settings, logins) | its folders read-only, its files copied; never its history ([details](../using/coding-agents.md)) |
-| The rest of your home folder, other projects | not mounted |
-| Your SSH keys | only with `devvm ssh-agent on`, while you're connected (on smolvm, while the VM runs; on Docker, in ssh sessions alone); with `devvm ssh-agent devvm`, only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding), [smolvm](../internals/smolvm.md#ssh-agent-forwarding)) |
-| The network, with network policy | allowlisted hosts only, through a proxy on this machine ([details](network.md)) |
-| Claude and GitHub tokens, Codex and opencode logins, Claude Code's MCP secrets, with network policy | kept on this machine; the proxy puts them into requests ([details](network.md#secrets)) |
-| The network, without network policy | everything this machine reaches, its own services on `localhost` included |
+| The project folder | The VM reads and writes it. With `--clone` the folder isn't mounted, and the VM has a clone of its own ([details](../using/clone.md)). |
+| `.git` hooks and config | devvm locks them on macOS, and it reports what a lock can't stop without preventing it ([details](git-protection.md)). With `--clone` they're out of reach. |
+| Your agents' config (skills, settings, logins) | The VM mounts its folders read-only and gets copies of its files, but never your agents' history ([details](../using/coding-agents.md)). |
+| The rest of your home folder, other projects | The VM doesn't mount them. |
+| Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected, though on smolvm it's while the VM runs, and on Docker it's in ssh sessions alone. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding), [smolvm](../internals/smolvm.md#ssh-agent-forwarding)). |
+| The network, with network policy | The VM reaches allowlisted hosts only, through a proxy on this machine ([details](network.md)). |
+| Your secrets, with network policy | Your GitHub token, Claude Code's token, Codex and opencode logins and Claude Code's MCP secrets stay on this machine, and the proxy puts them into requests ([details](network.md#secrets)). |
+| The network, without network policy | The VM reaches everything this machine reaches, including this machine's own services on `localhost`. |
+
+Everything here rests on the VM's boundary. On the experimental Docker backend a VM is a container, which shares a kernel with other code ([isolation](../backends/docker.md#isolation-a-container-is-not-a-vm)).
+
+## More on staying safe
+
+- [Network policy](network.md): turning it on or off, allowlists, logs and secrets.
+- [.git protection](git-protection.md): what the lock stops, what still works and what it doesn't cover.
+- [Attack vectors](attack-vectors.md): common attacks one by one, and what devvm does about each.
+- [How it works › Security model](../internals/security.md): how devvm keeps each of these promises.

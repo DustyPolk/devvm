@@ -5,6 +5,8 @@ weight: 6
 
 This page explains what devvm locks in a project's git folder, when it checks the locks again, and what they can't stop.
 
+On macOS devvm locks with the user-immutable flag (`chflags uchg`), which even root in the VM can't clear. A read-only mount wouldn't hold: root in the VM can unmount it.
+
 ## What's locked
 
 devvm locks when it creates the VM, and again on each launch that finds it stopped and on `devvm stop`, so nothing in the VM can race the locks:
