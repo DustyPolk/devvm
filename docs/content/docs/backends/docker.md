@@ -21,9 +21,20 @@ Everything else devvm promises holds on Docker too, as far as the container boun
 
 ## Requirements
 
-- Docker 29.1 or newer, with `docker` on your `PATH` and its engine running. That's Docker Desktop on macOS, or Docker's engine on Linux. Its containers run Linux, on this machine's processor.
-- On Linux, you need access to Docker's socket, which means being in the `docker` group (`sudo usermod -aG docker $USER`, then log in again). Being in that group is as good as being root on that machine.
-- On macOS, devvm also needs its own Linux build, which a release of devvm fetches by itself, checked, the first time a Docker VM needs it. A build of devvm that isn't a release fetches nothing, so build devvm for Linux and put it beside `devvm` ([details](../internals/docker.md#devvms-linux-build)).
+{{< os-tabs >}}
+{{< os-tab name="macOS" >}}
+
+- Docker Desktop with Docker 29.1 or newer, running, with `docker` on your `PATH`. Its containers run Linux, on this machine's processor.
+- devvm's own Linux build, which a release of devvm fetches by itself, checked, the first time a Docker VM needs it. A build of devvm that isn't a release fetches nothing, so build devvm for Linux and put it beside `devvm` ([details](../internals/docker.md#devvms-linux-build)).
+
+{{< /os-tab >}}
+{{< os-tab name="Linux" >}}
+
+- Docker's engine 29.1 or newer, running, with `docker` on your `PATH`. Its containers run Linux, on this machine's processor.
+- Access to Docker's socket, which means being in the `docker` group (`sudo usermod -aG docker $USER`, then log in again). Being in that group is as good as being root on that machine.
+
+{{< /os-tab >}}
+{{< /os-tabs >}}
 
 `devvm doctor --backend docker` checks these.
 

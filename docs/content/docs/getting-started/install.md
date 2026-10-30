@@ -65,7 +65,30 @@ When `devvm doctor` finds nothing missing, you're ready for [your first VM](firs
 
 ## Upgrading
 
-To upgrade devvm, run the install script again, or run `brew upgrade devvm`. Your images and VMs stay, because they live in `~/.local/share/devvm`, and your settings, layers and features stay in `~/.config/devvm`, apart from devvm itself.
+To upgrade devvm, run the command for the way you installed it:
+
+{{< os-tabs >}}
+{{< os-tab name="macOS" >}}
+
+```sh
+brew upgrade devvm
+```
+
+If you installed devvm with the install script instead, run the script again, as on Linux.
+
+{{< /os-tab >}}
+{{< os-tab name="Linux" >}}
+
+```sh
+curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
+```
+
+Running the install script again installs the newest release.
+
+{{< /os-tab >}}
+{{< /os-tabs >}}
+
+Your images and VMs stay, because they live in `~/.local/share/devvm`, and your settings, layers and features stay in `~/.config/devvm`, apart from devvm itself.
 
 Images whose inputs changed are built again the next time you use them. Existing VMs keep working, and `devvm update` moves a VM to the new shared tools. `devvm gc` deletes the copies of devvm's files that older versions wrote out, except those that a VM's proxy was started with.
 
@@ -73,7 +96,27 @@ Images whose inputs changed are built again the next time you use them. Existing
 
 1. Delete your VMs: `devvm ls`, then `devvm rm` in each folder. For a `--clone` VM, this also removes the `devvm` git remote from the repo.
 2. Delete the images: `devvm gc`, then `devvm images rm` with every name `devvm images` lists. Images built `--from` a container image need the same `--from`: `devvm --from node:24 images rm base`.
-3. Remove devvm: `rm -rf ~/.local/lib/devvm ~/.local/bin/devvm`, or `brew uninstall devvm`.
-4. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers and features, in `~/.config/devvm/layers` and `~/.config/devvm/features`, so copy them somewhere first to keep them.
-5. If you let devvm add it, remove the `Include ~/.config/devvm/ssh_config` line from `~/.ssh/config`.
-6. Saved secrets are in the macOS Keychain under the service `devvm`. On Linux, they're in `~/.config/devvm/secrets/`, which step 4 removes.
+3. Delete your saved secrets: `devvm secret rm NAME` for each one `devvm secret ls` lists. On macOS they're in the Keychain under the service `devvm`, and on Linux in `~/.config/devvm/secrets/`.
+4. Remove devvm itself, with the command for the way you installed it:
+
+   {{< os-tabs >}}
+   {{< os-tab name="macOS" >}}
+
+   ```sh
+   brew uninstall devvm
+   ```
+
+   If you installed devvm with the install script instead, remove it as on Linux.
+
+   {{< /os-tab >}}
+   {{< os-tab name="Linux" >}}
+
+   ```sh
+   rm -rf ~/.local/lib/devvm ~/.local/bin/devvm
+   ```
+
+   {{< /os-tab >}}
+   {{< /os-tabs >}}
+
+5. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers and features, in `~/.config/devvm/layers` and `~/.config/devvm/features`, so copy them somewhere first to keep them.
+6. If you let devvm add it, remove the `Include ~/.config/devvm/ssh_config` line from `~/.ssh/config`.
