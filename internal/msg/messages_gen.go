@@ -794,7 +794,7 @@ func DockerRouteLocalnet(vm string) M {
 	return M{id: "docker_route_localnet", vals: []val{{"vm", vm}}}
 }
 
-// DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
+// DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
 func DockerScriptFailed(script string, vm string) M {
 	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }

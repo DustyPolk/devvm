@@ -254,8 +254,8 @@ func Checksum(sums []byte, file string) string {
 
 // verify checks that sums, release's SHA256SUMS, is signed by Ubuntu's
 // key, with gpgv in a home of its own, so no other key counts; the key is
-// written beside them. Without gpgv it notes that only the download
-// vouches for them.
+// written beside them. Without gpgv it notes that the signature goes
+// unchecked; the pinned SHA-256 still decides.
 func (f *Finder) verify(ctx context.Context, release string, sums []byte) error {
 	if f.GPGV == "" {
 		f.Note(msg.UbuntuUnsigned())

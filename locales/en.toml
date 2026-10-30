@@ -315,7 +315,7 @@ other = "{{.path}} isn't this devvm's Linux build: reinstall devvm"
 other = "couldn't delete Docker's image {{.image}}"
 
 [docker_script_failed]
-other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
+other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
 
 [committing_image]
 other = "committing {{.vm}}"
