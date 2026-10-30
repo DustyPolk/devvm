@@ -92,6 +92,48 @@ From [Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Si
 - **Title Case Headings**: headings are sentence case.
 - **Chat leftovers**: "Here's", "Let's", "I hope this helps", "Feel free to".
 
+## Terms
+
+- **A bare "token"** (`token`): agents use "tokens" for model tokens, so name the secret instead, such as "GitHub token", "Claude Code token" or "secrets". A hit on "GitHub token" or "Claude Code token" is fine. See [SKILL.md](SKILL.md#terms) for the terms.
+
+## Messages
+
+What `scan.sh` flags in `locales/en.toml`, besides the tropes above. Status steps, which stay a few words and lowercase, are allowed hits.
+
+### Lowercase starts and missing full stops (`lower`, `end`)
+
+A message is one or two full sentences, so it starts with a capital letter and ends with a full stop or, for a question, a question mark. devvm and a template field may start a sentence as they are.
+
+> couldn't adopt this folder's VM: {{.reason}}
+
+### Clauses chained with colons, and the mechanism in the message
+
+A colon or a semicolon between clauses packs a cause, a mechanism and an action into one line. Say what happened, then the one thing to do, and leave how devvm works to the message's doc link.
+
+> {{.layer}} is a layer, installed into {{.vm}}'s disk, so it can't be removed in place: save your work outside the project folder, then devvm rm and create the VM again
+
+> You can't remove a layer from a VM. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again.
+
+> network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it
+
+> devvm stopped {{.vm}} because it reached the internet without going through its proxy. Something outside devvm may have given it another network.
+
+### Passive and noun-first messages
+
+Name who did it, as on a page: devvm, you, the VM or something else.
+
+> WARNING: {{.git}} was replaced since devvm locked it, maybe from inside the VM, and its config and hooks run on this machine: check them before running git here (and look for the old .git, renamed)
+
+> WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here.
+
+### Claims that aren't exact
+
+Shorter never means less accurate. A message says what devvm checks and what it doesn't, and how to check the rest.
+
+> gpgv isn't installed, so only the HTTPS download vouches for Ubuntu's checksums: install it to check their signature (brew install gnupg, or apt install gpgv)
+
+> gpgv isn't installed, so devvm can't check the signature on Ubuntu's checksums. devvm still checks the image against its pinned checksum. To check the signature too, run brew install gnupg, or apt install gpgv.
+
 ## Not tropes
 
 Leave these alone:

@@ -31,7 +31,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `docs/` | the docs site (Hugo + Hextra); `content/docs/cli/` is generated, never edit it |
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
-| `.agents/skills/docs-voice/` | the docs-voice skill: the prose's voice, its tropes, `scan.sh` and `facts.sh` |
+| `.agents/skills/docs-voice/` | the docs-voice skill: the voice of the prose and messages, terms, tropes, `scan.sh` and `facts.sh` |
 
 Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
 
@@ -83,9 +83,11 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 ## Messages
 
-- **Succinct and direct.** Say what is being done, or what failed and what to do. No explanations; link a docs page when more is needed.
+- **Messages use the docs voice**, only shorter: the docs-voice skill's Messages and Terms rules.
 - **Every message lives in `locales/en.toml`**, called through its generated function (`msg.NoVM(dir)`); `go generate ./internal/msg` after editing. Only go-i18n's fields (`other`, `one`, `description`); snake_case plain template fields (`{{.vm_name}}`); `one` makes it plural (`count int`). Doc links go in `internal/msg/docs.go`. A message without a caller fails the tests. `msg.M` is an `error`. Never build prose with `fmt`. VM-made values go through `msg.Shown`. A message made from an error carries it (`.Because(err)`), not only `err.Error()`.
-- An error is one line. Explain why only when the user must decide; a prompt gets at most two lines of context. Status steps are a few words, lowercase. Commands are written as devvm x, not quoted. No "please", "note that" or "simply". `[y/N]`/`[Y/n]` stay literal.
+- An error or warning is at most two sentences; a prompt gets at most two lines of context.
+- **The mechanism goes in the doc link**, not the message: every warning or error the user can act on has one.
+- Status steps stay a few words, lowercase. Commands are written as devvm x, not quoted. No "please", "note that" or "simply". `[y/N]`/`[Y/n]` stay literal.
 - Not messages: data output and text in scripts that run elsewhere.
 - **Tests check which message and with what, never its wording:** `DEVVM_MESSAGES=names` prints `no_vm dir=/x`; `devvm _msg NAME k=v…` gives e2e the text.
 
