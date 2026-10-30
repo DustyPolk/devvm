@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,8 +15,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -211,19 +214,38 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	return nil
 }
 
-// waitFile waits up to 10 seconds for a file to exist, for a background
-// command to get somewhere.
+// waitFileTimeout is how long wait_file waits. A background devvm takes
+// a dozen stub calls to get to the one that writes the file: about a
+// second alone, but over 10 under the full suite's load, when each stub
+// call (bash and its own commands) can take a second.
+const waitFileTimeout = 60 * time.Second
+
+// waitFile waits for a file to exist, for a background command to get
+// somewhere. It fails at once when every background command has ended
+// (nothing is left to write it), else after waitFileTimeout, for one that
+// hangs on the way.
 func waitFile(ts *testscript.TestScript, neg bool, args []string) {
 	if neg || len(args) != 1 {
 		ts.Fatalf("usage: wait_file FILE")
 	}
-	for range 200 {
+	deadline := time.Now().Add(waitFileTimeout)
+	for time.Now().Before(deadline) {
 		if _, err := os.Stat(ts.MkAbs(args[0])); err == nil {
 			return
 		}
+		if bg := ts.BackgroundCmds(); len(bg) > 0 && !slices.ContainsFunc(bg, running) {
+			ts.Fatalf("%s didn't appear: the background command ended", args[0])
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	ts.Fatalf("%s didn't appear", args[0])
+	ts.Fatalf("%s didn't appear in %s", args[0], waitFileTimeout)
+}
+
+// running reports whether a background command's process hasn't been
+// waited for yet. Signal 0 asks without reading the state testscript's
+// own goroutine writes when it waits.
+func running(cmd *exec.Cmd) bool {
+	return cmd.Process != nil && !errors.Is(cmd.Process.Signal(syscall.Signal(0)), os.ErrProcessDone)
 }
 
 // listenAny listens on a free port on every address, as a program on the
