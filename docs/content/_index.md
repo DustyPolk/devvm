@@ -38,7 +38,7 @@ For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your
 
 {{< feature title="Toolchains" level="3" art="toolchains" >}}
 
-devvm picks node, python, rust or go from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
+devvm picks the toolchain from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
 
 {{< /feature >}}
 
@@ -58,9 +58,13 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 ## Why use devvm? {icon="shield"}
 
+{{< beside art="blast-radius" >}}
+
 - Developers face attacks every day, such as [supply chain attacks](https://en.wikipedia.org/wiki/Supply_chain_attack), leaked secrets, [prompt injections](https://en.wikipedia.org/wiki/Prompt_injection) and rogue agents.
 - A sandbox limits the [blast radius](https://en.wikipedia.org/wiki/Blast_radius#Uses_in_software) of an attack to what's inside it.
 - You know you _should_ run your code and agents in a sandbox, but most tools need configuration and setup that's hard to get right.
+
+{{< /beside >}}
 
 {{< features >}}
 

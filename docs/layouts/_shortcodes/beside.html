@@ -1,0 +1,9 @@
+{{- /* A home page section's Markdown with art from assets/home/ beside it:
+   {{< beside art="blast-radius" >}} Markdown {{< /beside >}}. From 1024px wide, the art is to the right of
+   the text; on narrower screens, it's below. */ -}}
+{{- $art := .Get "art" -}}
+{{- if not $art }}{{ errorf "beside: no art (%s)" .Position }}{{ end -}}
+<div class="devvm-beside">
+  <div class="devvm-beside-text">{{ .Inner | .Page.RenderString (dict "display" "block") }}</div>
+  {{ partial "art.html" (dict "name" $art "position" .Position) }}
+</div>

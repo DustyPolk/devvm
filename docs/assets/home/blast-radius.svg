@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 210" role="img" aria-labelledby="art-blast-radius">
+  <title id="art-blast-radius">Without devvm, a prompt injection, leaked secrets, a supply chain attack and a rogue agent arrive on your machine one after another, and each one compromises what it reaches: the project, ~/web, then ~/.aws, ~/.ssh and another project, ~/api. With devvm, the project is in a VM, and the same four attacks land in the VM. Each one's path toward your machine ends at the VM's border, so ~/.ssh, ~/.aws and ~/api stay untouched.</title>
+  <!-- Without devvm: your machine, with nothing around the project. -->
+  <text class="m" x="7" y="11">without devvm</text>
+  <rect class="f" x="7" y="14" width="168" height="182"/>
+  <rect class="bg" x="8" y="15" width="166" height="180"/>
+  <text class="m" x="14" y="39">your machine</text>
+  <text class="t" x="21" y="81">~/web</text>
+  <text class="t" x="14" y="179">~/.ssh</text>
+  <text class="t" x="63" y="179">~/.aws</text>
+  <text class="t" x="112" y="179">~/api</text>
+  <!-- The attacks arrive one after another, and what each one reaches turns red. Each is drawn where it
+       lands, and the red over the folder it reaches, so with no motion the drawing shows the end. -->
+  <g class="threat threat-1">
+    <rect class="m" x="21" y="85" width="126" height="12"/>
+    <text class="k" x="28" y="95">prompt injection</text>
+  </g>
+  <g class="threat threat-2">
+    <rect class="m" x="21" y="99" width="112" height="12"/>
+    <text class="k" x="28" y="109">leaked secrets</text>
+  </g>
+  <g class="threat threat-3">
+    <rect class="m" x="21" y="113" width="98" height="12"/>
+    <text class="k" x="28" y="123">supply chain</text>
+  </g>
+  <g class="threat threat-4">
+    <rect class="m" x="21" y="127" width="91" height="12"/>
+    <text class="k" x="28" y="137">rogue agent</text>
+  </g>
+  <text class="r hit hit-1" x="21" y="81">~/web</text>
+  <text class="r hit hit-2" x="63" y="179">~/.aws</text>
+  <text class="r hit hit-3" x="14" y="179">~/.ssh</text>
+  <text class="r hit hit-4" x="112" y="179">~/api</text>
+  <!-- With devvm: the project in a VM on your machine. -->
+  <text class="a" x="189" y="11">with devvm</text>
+  <rect class="f" x="189" y="14" width="168" height="182"/>
+  <rect class="bg" x="190" y="15" width="166" height="180"/>
+  <text class="m" x="196" y="39">your machine</text>
+  <text class="m" x="196" y="53">VM</text>
+  <rect class="f" x="196" y="56" width="154" height="98"/>
+  <rect class="s" x="197" y="57" width="152" height="96"/>
+  <text class="t" x="203" y="81">~/web</text>
+  <text class="t" x="196" y="179">~/.ssh</text>
+  <text class="t" x="245" y="179">~/.aws</text>
+  <text class="t" x="294" y="179">~/api</text>
+  <!-- The same attacks land in the VM. Each one's path toward your machine runs down past the ones below
+       it, narrowest last, and ends at the VM's border with a cross. -->
+  <g class="threat threat-1">
+    <rect class="m" x="203" y="85" width="126" height="12"/>
+    <text class="k" x="210" y="95">prompt injection</text>
+  </g>
+  <g class="threat threat-2">
+    <rect class="m" x="203" y="99" width="112" height="12"/>
+    <text class="k" x="210" y="109">leaked secrets</text>
+  </g>
+  <g class="threat threat-3">
+    <rect class="m" x="203" y="113" width="98" height="12"/>
+    <text class="k" x="210" y="123">supply chain</text>
+  </g>
+  <g class="threat threat-4">
+    <rect class="m" x="203" y="127" width="91" height="12"/>
+    <text class="k" x="210" y="137">rogue agent</text>
+  </g>
+  <g class="hit hit-1">
+    <rect class="m" x="325" y="97" width="2" height="53"/>
+    <text class="a" x="322" y="158">×</text>
+  </g>
+  <g class="hit hit-2">
+    <rect class="m" x="311" y="111" width="2" height="39"/>
+    <text class="a" x="308" y="158">×</text>
+  </g>
+  <g class="hit hit-3">
+    <rect class="m" x="297" y="125" width="2" height="25"/>
+    <text class="a" x="294" y="158">×</text>
+  </g>
+  <g class="hit hit-4">
+    <rect class="m" x="283" y="139" width="2" height="11"/>
+    <text class="a" x="280" y="158">×</text>
+  </g>
+</svg>
