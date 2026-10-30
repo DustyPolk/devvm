@@ -1,0 +1,16 @@
+{{- /* The 404 page, in place of Hextra's: the site's navbar and footer, a VM's terminal that can't find the
+   page (assets/home/not-found.svg), Hextra's search and links to two places to start. */ -}}
+{{ define "main" }}
+  <div class="hx:mx-auto hx:flex hextra-max-page-width">
+    <main id="content" class="devvm-404 hx:w-full hx:min-w-0 hx:px-6 hx:pt-12 hx:pb-16">
+      <h1>404</h1>
+      {{ partial "art.html" (dict "name" "not-found" "position" "layouts/404.html") }}
+      <p>There's no page at this address. Search the docs, or start from one of these pages.</p>
+      <div class="devvm-404-search">{{ partial "components/search-trigger.html" (dict "icon" "") }}</div>
+      <p class="devvm-404-links">
+        {{- with site.GetPage "/docs/getting-started" }}<a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ end -}}
+        {{- with site.GetPage "/docs" }}<a href="{{ .RelPermalink }}">The docs</a>{{ end -}}
+      </p>
+    </main>
+  </div>
+{{ end }}

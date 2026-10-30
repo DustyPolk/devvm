@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 98" role="img" aria-labelledby="art-not-found">
+  <title id="art-not-found">A VM's terminal: cd ./this-page answers no such page, and the prompt waits.</title>
+  <!-- The VM: a panel with a lime edge, its name and its state. -->
+  <rect class="f" x="7" y="7" width="210" height="84"/>
+  <rect class="s" x="8" y="8" width="208" height="82"/>
+  <rect class="a" x="7" y="7" width="2" height="84"/>
+  <text class="t" x="14" y="25">devvm-docs</text>
+  <text class="a" x="182" y="25">■ up</text>
+  <rect class="f" x="9" y="33" width="207" height="1"/>
+  <!-- The terminal. -->
+  <text class="m" x="14" y="51">❯</text>
+  <text class="t" x="28" y="51">cd ./this-page</text>
+  <text class="m" x="14" y="65">no such page</text>
+  <text class="m" x="14" y="79">❯</text>
+  <text class="a blink" x="28" y="79">█</text>
+</svg>

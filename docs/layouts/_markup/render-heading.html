@@ -1,0 +1,12 @@
+{{- /* Hextra's heading, with an optional pixel icon before its text: `## Quick start {icon="rocket"}`. The icon
+   comes after the anchor is made, so the anchor is the text's alone. */ -}}
+<h{{ .Level }} data-hextra-search-id="{{ .Anchor | safeURL }}" {{- with .Attributes.class }} class="{{ . }}" {{- end }}>
+  {{- with .Attributes.icon -}}
+    {{- partial "icon.html" (dict "name" . "position" $.Position) }} {{ end -}}
+  {{- .Text | safeHTML -}}
+  {{- if gt .Level 1 -}}
+    <span class="hx:absolute hx:-mt-20" id="{{ .Anchor | safeURL }}"></span>
+    <a href="#{{ .Anchor | safeURL }}" class="subheading-anchor" aria-label="{{ (T "permalinkLabel") | default "Permalink for this section" }}"></a>
+  {{- end -}}
+</h{{ .Level }}>
+{{- /* Drop trailing newlines */ -}}

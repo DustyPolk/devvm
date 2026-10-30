@@ -19,7 +19,7 @@ layout: hextra-home
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
 {{< hextra/hero-button text="Read the docs" link="docs/" >}}
 
-## Quick start
+## Quick start {icon="rocket"}
 
 {{< install step="1" >}}
 
@@ -32,7 +32,7 @@ devvm
 
 For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
 
-## What's supported
+## What's supported {icon="view-grid"}
 
 {{< features columns="3" >}}
 
@@ -56,7 +56,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< /features >}}
 
-## Why use devvm?
+## Why use devvm? {icon="shield"}
 
 - Developers face attacks every day, such as [supply chain attacks](https://en.wikipedia.org/wiki/Supply_chain_attack), leaked secrets, [prompt injections](https://en.wikipedia.org/wiki/Prompt_injection) and rogue agents.
 - A sandbox limits the [blast radius](https://en.wikipedia.org/wiki/Blast_radius#Uses_in_software) of an attack to what's inside it.
@@ -108,7 +108,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< /features >}}
 
-## FAQ
+## FAQ {icon="speech-balloon-question"}
 
 ### What does it run on?
 
@@ -118,7 +118,7 @@ devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs Lima 
 
 Yes. devvm is open source under the [MIT license](https://github.com/w3cj/devvm/blob/main/LICENSE).
 
-## Start coding in a sandbox
+## Start coding in a sandbox {icon="prompt"}
 
 Install devvm, then run `devvm` in any project folder.
 

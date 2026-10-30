@@ -157,6 +157,16 @@ html.dark .highlight .chroma .go {
   margin: 4rem 0 1.25rem;
 }
 
+/* The home page's section headings' icons (an icon attribute on the heading, the heading render hook):
+   lime, with each icon pixel two screen pixels, as each of Departure Mono's pixels is at 22px, so their
+   lines are as heavy as the letters'. Lowered by two pixels, so the drawing is centered on the capitals. */
+#content > .hx\:items-start > h2 > .devvm-icon {
+  width: 24px;
+  height: 24px;
+  vertical-align: -4px;
+  color: var(--devvm-accent);
+}
+
 #content > .hx\:items-start > .hextra-code-block {
   width: 100%;
   margin-top: 1.5rem;
@@ -801,6 +811,144 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
 }
 
 .devvm-experimental .devvm-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* Callouts (GitHub's > [!NOTE], > [!TIP] and > [!WARNING], the blockquote alert render hook): a panel on
+   the surface color, with a line down its left side and a title in the type's color: blue for a note, the
+   soft lime for a tip and the lime for a warning. */
+.content .devvm-callout {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--devvm-surface);
+  border: 1px solid var(--devvm-border);
+  border-left: 2px solid var(--devvm-callout-color);
+  border-radius: 0.25rem;
+  color: var(--devvm-text);
+  --devvm-callout-color: var(--devvm-blue);
+}
+
+.content .devvm-callout-tip {
+  --devvm-callout-color: var(--devvm-accent-soft);
+}
+
+.content .devvm-callout-warning {
+  --devvm-callout-color: var(--devvm-accent);
+}
+
+.content .devvm-callout > p,
+.content .devvm-callout > ul {
+  margin-top: 0.5rem;
+}
+
+.content .devvm-callout > :first-child {
+  margin-top: 0;
+}
+
+.content .devvm-callout-title {
+  color: var(--devvm-callout-color);
+  font-weight: 600;
+}
+
+/* The 404 page (layouts/404.html): one centered column, the heading in Departure Mono like the home
+   page's, the art at twice its size, then the search box and the links as the home page's buttons. */
+.devvm-404 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: calc(448px + 3rem);
+  margin: 0 auto;
+  text-align: center;
+  color: var(--devvm-text-secondary);
+}
+
+.devvm-404 > h1 {
+  font-family: var(--devvm-font-pixel);
+  font-size: 55px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1.2;
+  color: var(--devvm-text);
+  margin-top: 2rem;
+}
+
+.devvm-404 > .devvm-art {
+  width: 448px;
+  margin: 1.5rem 0;
+}
+
+.devvm-404 > p {
+  line-height: 1.75;
+}
+
+.devvm-404-search {
+  width: 100%;
+  max-width: 20rem;
+  margin: 1.5rem 0;
+}
+
+/* Hextra's search box, as wide as the column and with its label at every width: Hextra shows only the
+   icon on small screens. */
+.devvm-404-search .hextra-search-trigger {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--devvm-surface);
+  border: 1px solid var(--devvm-border);
+  color: var(--devvm-text-secondary);
+  font-size: 0.875rem;
+}
+
+.devvm-404-search .hextra-search-trigger-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.devvm-404-search .hextra-search-trigger-label {
+  display: inline;
+}
+
+.devvm-404-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.devvm-404-links > a {
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-synthesis: none;
+  line-height: 1;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid var(--devvm-accent);
+  border-radius: 9999px;
+  background-color: var(--devvm-accent);
+  color: var(--devvm-bg);
+  text-shadow: 1px 0 0 currentColor;
+}
+
+.devvm-404-links > a:hover {
+  border-color: var(--devvm-accent-soft);
+  background-color: var(--devvm-accent-soft);
+}
+
+.devvm-404-links > a + a {
+  border-color: var(--devvm-border);
+  background-color: transparent;
+  color: var(--devvm-text);
+}
+
+.devvm-404-links > a + a:hover {
+  border-color: var(--devvm-accent);
+  background-color: transparent;
+  color: var(--devvm-accent);
+}
+
+/* The title's icon: 12px, so each icon pixel is one screen pixel. */
+.content .devvm-callout-title > .devvm-icon {
   width: 12px;
   height: 12px;
 }

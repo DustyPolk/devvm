@@ -1,0 +1,18 @@
+{{- /* Callouts: GitHub's alert syntax, a blockquote whose first line is [!NOTE], [!TIP] or [!WARNING], drawn
+   in the site's palette with a pixel icon. In place of Hextra's alerts. Other types fail the build. */ -}}
+{{- $types := dict
+  "note" (dict "icon" "information-circled" "title" "Note")
+  "tip" (dict "icon" "light-bulb" "title" "Tip")
+  "warning" (dict "icon" "warning" "title" "Warning")
+-}}
+{{- $type := index $types .AlertType -}}
+{{- if not $type -}}
+  {{- errorf "callout: %q isn't note, tip or warning (%s)" .AlertType .Position -}}
+{{- end -}}
+<div class="devvm-callout devvm-callout-{{ .AlertType }}">
+  <p class="devvm-callout-title">
+    {{- partial "icon.html" (dict "name" $type.icon "position" .Position) }} {{ or .AlertTitle $type.title -}}
+  </p>
+  {{- .Text -}}
+</div>
+{{- /* Drop trailing newlines */ -}}

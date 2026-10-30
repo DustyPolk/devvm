@@ -18,7 +18,12 @@ devvm codex    # the same, with Codex
 
 devvm picks the toolchain from the folder's files, such as node for `package.json` or python for `pyproject.toml` ([which image a new VM gets](../using/images.md#which-image-a-new-vm-gets)).
 
-For each new VM, devvm asks whether it gets [network policy](../safety/network.md), which limits it to the hosts you allow and keeps your secrets on your machine: answer yes, the default. The first time, it also asks which optional extras every VM gets, such as oh-my-bash and fzf, then builds the base image, which takes a few minutes once:
+For each new VM, devvm asks whether it gets network policy.
+
+> [!TIP]
+> Answer yes, the default. [Network policy](../safety/network.md) limits the VM to the hosts you allow and keeps your secrets on your machine.
+
+The first time, devvm also asks which optional extras every VM gets, such as oh-my-bash and fzf, then builds the base image, which takes a few minutes once:
 
 ```console
 ==> building image base (e9f517dddef1)

@@ -9,11 +9,12 @@ Docker is an experimental backend. Each project gets a container, made from an i
 
 ## Isolation: a container is not a VM
 
-Read this before you choose Docker. Lima and smolvm give each project a virtual machine with a kernel of its own, but Docker gives each project a container:
-
-- **On Linux, every container shares your machine's kernel.** A flaw in that kernel, or in Docker's engine, lets code in a VM reach your machine itself, and every other VM.
-- **On macOS, every container shares Docker Desktop's one VM.** A flaw there lets code in one VM reach every other VM, all your containers, and what Docker Desktop shares with them. Your Mac stays behind that VM's boundary.
-- **Root in a container is closer to root on the host** than root in a VM is. It has the same kernel's system calls, filtered by Docker's seccomp profile, and Docker's default capabilities.
+> [!WARNING]
+> Read this before you choose Docker. Lima and smolvm give each project a virtual machine with a kernel of its own, but Docker gives each project a container:
+>
+> - **On Linux, every container shares your machine's kernel.** A flaw in that kernel, or in Docker's engine, lets code in a VM reach your machine itself, and every other VM.
+> - **On macOS, every container shares Docker Desktop's one VM.** A flaw there lets code in one VM reach every other VM, all your containers, and what Docker Desktop shares with them. Your Mac stays behind that VM's boundary.
+> - **Root in a container is closer to root on the host** than root in a VM is. It has the same kernel's system calls, filtered by Docker's seccomp profile, and Docker's default capabilities.
 
 Everything else devvm promises holds on Docker too, as far as the container boundary holds: only the project folder is mounted, agents' folders are read-only, and builds run without your files. The [security model](../internals/security.md) assumes a VM's boundary, and on Docker that boundary is a container's.
 

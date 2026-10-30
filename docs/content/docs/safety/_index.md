@@ -64,7 +64,8 @@ flowchart TB
 | Your secrets, with network policy | Your GitHub token, Claude Code's token, Codex and opencode logins and Claude Code's MCP secrets stay on this machine, and the proxy puts them into requests ([details](network.md#secrets)). |
 | The network, without network policy | The VM reaches everything this machine reaches, including this machine's own services on `localhost`. |
 
-Everything here rests on the VM's boundary. On the experimental Docker backend a VM is a container, which shares a kernel with other code ([isolation](../backends/docker.md#isolation-a-container-is-not-a-vm)).
+> [!NOTE]
+> Everything here rests on the VM's boundary. On the experimental Docker backend a VM is a container, which shares a kernel with other code ([isolation](../backends/docker.md#isolation-a-container-is-not-a-vm)).
 
 ## More on staying safe
 
