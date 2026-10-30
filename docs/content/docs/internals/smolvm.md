@@ -5,6 +5,8 @@ weight: 10
 
 This page explains how devvm builds and runs VMs on smolvm, and how it emulates what smolvm lacks.
 
+devvm emulates some of the features smolvm lacks, and each emulation has been reviewed ([features](backends.md#features)). They are [network policy](#network-policy), [ssh for editors](#ssh-for-editors) (`devvm ssh`, `devvm code` and `--clone`), [forwarding ports](#ports), every one or only the ones you list, and [turning SSH agent forwarding on or off](#ssh-agent-forwarding) after a VM is made.
+
 ## Its machines
 
 On macOS, smolvm keeps every machine in your own smolvm state, because devvm can't give it a folder of its own (`--state-dir` is Linux only). devvm keeps its machines apart from yours in these ways:
@@ -27,6 +29,8 @@ Images aren't machines. Each image is a pack (`smolvm pack create --from-vm`) in
 - Base's CPUs, memory and disk come from `base.yaml`: 4 CPUs, 8 GiB of memory (half the host's memory on a small host) and a 100 GiB disk.
 
 devvm's own scripts for these steps are in `base`'s key, together with the backend, so smolvm's images are never Lima's. They are `prepare.sh`, `shims.sh` and `sshd.sh`, which installs sshd after base's scripts from the Ubuntu snapshot they pin, and keeps the snapshot's package lists for layers.
+
+When a build fails, devvm keeps its machine, stopped (`smolvm_script_failed`), so you can [look inside](../backends/smolvm.md#looking-inside).
 
 ## What devvm sets on a VM
 

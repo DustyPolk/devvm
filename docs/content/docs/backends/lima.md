@@ -3,7 +3,7 @@ title: Lima
 weight: 1
 ---
 
-[Lima](https://lima-vm.io) is devvm's default backend. Each project gets a full VM, which runs on Apple's Virtualization framework (`vz`) on macOS and on QEMU on Linux.
+[Lima](https://lima-vm.io) is devvm's default backend, so every new VM uses it unless you [choose another](_index.md#choosing-a-backend). Each project gets a full VM with a kernel of its own, which runs on Apple's Virtualization framework (`vz`) on macOS and on QEMU on Linux. [How it works › Lima](../internals/lima.md) explains how devvm sets up, confines and clones Lima's VMs.
 
 ## Requirements
 
@@ -13,6 +13,10 @@ weight: 1
 - On Linux, you also need to be able to read and write `/dev/kvm`. That means virtualization is turned on in the firmware (or nested virtualization, in a VM), and your user is in the `kvm` group.
 
 Every command that needs Lima checks these first and stops at the first one that's missing. `devvm doctor` lists them all, each with the command that installs it where there's one to run. That's Homebrew's command for Lima when you have Homebrew, your package manager's for QEMU (apt, dnf, pacman or zypper), and `sudo usermod -aG kvm $USER` for `/dev/kvm`, after which you log in again. devvm never runs them itself ([details](../getting-started/install.md#checking-what-devvm-needs)).
+
+## devvm's Lima home
+
+devvm keeps its VMs and images in a Lima home of its own, `~/.local/share/devvm/lima` (under `$XDG_DATA_HOME` when that's set), whatever `LIMA_HOME` says. Your own Lima VMs stay where they are, and Lima settings you made for them don't reach devvm's VMs. Because of this, a plain `limactl list` doesn't show devvm's VMs, so run `devvm limactl list` instead ([below](#running-limactl)). To keep devvm's VMs somewhere else, such as a sandbox or a shorter path, set `DEVVM_LIMA_HOME` to that folder.
 
 ## Running limactl
 
@@ -32,4 +36,4 @@ devvm limactl shell --start devvm-img-<key>
 - **Paths can't contain commas.** Lima and QEMU split mount options on commas, so devvm refuses to mount a project folder whose path has one, and it leaves out an agent's folder whose path has one, with a warning.
 - **Disks can grow but not shrink.**
 - **Mounts on Linux are 9p.** A 9p share mounts once per guest.
-- **A start Lima reports as failed** carries on with a warning when the VM is running but degraded, because one of Lima's boot scripts failed. A VM that doesn't answer over ssh within a minute is stopped instead, and its console log is in its Lima folder (`serial*.log`).
+- **A VM that Lima reports as failed to start** still starts, with a warning, when it's running but degraded because one of Lima's boot scripts failed. A VM that doesn't answer over ssh within a minute is stopped instead, and its console log is in its Lima folder (`serial*.log`).

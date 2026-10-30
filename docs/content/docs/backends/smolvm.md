@@ -3,9 +3,9 @@ title: smolvm (experimental)
 weight: 2
 ---
 
-[smolvm](https://github.com/smol-machines/smolvm) is an experimental backend. Each project gets a microVM that runs its image as a container, with no init system. You choose it for one VM with `--backend smolvm`, or for every new VM with `devvm setup --backend smolvm`.
+[smolvm](https://github.com/smol-machines/smolvm) is an experimental backend. Each project gets a microVM that runs its image as a container, with no init system, so devvm starts the VM's services itself after each start. You choose it for one VM with `--backend smolvm`, or for every new VM with `devvm setup --backend smolvm`.
 
-devvm emulates some of the features smolvm lacks, and each emulation has been reviewed ([features](../internals/backends.md#features)). They are [network policy](../internals/smolvm.md#network-policy), [ssh for editors](../internals/smolvm.md#ssh-for-editors) (`devvm ssh`, `devvm code` and `--clone`), [forwarding ports](../internals/smolvm.md#ports), every one or only the ones you list, and [turning SSH agent forwarding on or off](../internals/smolvm.md#ssh-agent-forwarding) after a VM is made.
+Network policy, `devvm ssh`, `devvm code`, `--clone`, forwarding ports and turning SSH agent forwarding on or off after a VM is made all work as they do on Lima. smolvm lacks some of these, so devvm builds them from other parts of smolvm, and [How it works › smolvm](../internals/smolvm.md) explains how.
 
 ## Requirements
 
@@ -14,6 +14,18 @@ devvm emulates some of the features smolvm lacks, and each emulation has been re
 
 `devvm doctor --backend smolvm` checks both, and when you have Homebrew it shows the command that installs smolvm.
 
+## What's different
+
+- **devvm's machines are next to yours.** On macOS, `smolvm machine ls` shows devvm's machines along with your own. Each of devvm's carries the label `devvm.data=<devvm's data folder>`, and devvm touches only the machines with its label.
+- **Docker in a VM works.** The [docker layer](../using/images.md#built-in-layers) runs Docker's engine in the VM, as on Lima, and you can add it to an existing VM.
+- **The SSH agent is in the VM the whole time it runs.** With [SSH agent forwarding](../using/ssh.md#agent-forwarding) on, smolvm forwards the agent into the VM for as long as the VM runs, whether or not you're connected, and not only during your ssh sessions as on Lima.
+- **Paths can't contain colons.** smolvm splits mounts on colons, so devvm refuses a folder whose path has one.
+- **Start VMs with devvm, not `smolvm machine start`.** A VM started outside devvm gets the SSH agent your shell has, whatever you chose for it, and devvm's ssh doesn't run in it. When devvm finds such a VM running, it stops the VM and says so, unless the VM uses your agent anyway, and the next devvm starts it again with its own choice.
+
 ## Looking inside
 
-When a build fails, devvm keeps its machine, stopped (`smolvm_script_failed`). To look inside, run `smolvm machine start --name devvm-img-<key>`, then `smolvm machine shell --name devvm-img-<key>`, which gives you a root shell. The next build, or `devvm gc`, deletes the machine.
+When a build fails, devvm keeps its machine, stopped. To look inside, run `smolvm machine start --name devvm-img-<key>`, then `smolvm machine shell --name devvm-img-<key>`, which gives you a root shell. The next build, or `devvm gc`, deletes the machine.
+
+## Cleaning smolvm's caches
+
+Each of devvm's smolvm images is a full pack, and `base`'s is about 450 MB. smolvm also keeps caches of its own (`~/Library/Caches/smolvm` on macOS), which `smolvm machine prune` and `smolvm pack prune` clean.

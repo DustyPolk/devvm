@@ -11,7 +11,7 @@ Lima merges `_config/default.yaml` and `_config/override.yaml` from its home int
 
 - The home is `~/.local/share/devvm/lima`, under `$XDG_DATA_HOME` when that's set, whatever `LIMA_HOME` says. Set `DEVVM_LIMA_HOME` to move it to a sandbox or a shorter path.
 - devvm refuses to start a VM while that home holds either file, and it refuses a VM that has a network devvm didn't give it.
-- Plain `limactl list` doesn't show devvm's VMs, so run `devvm limactl list` instead ([below](../backends/lima.md#running-limactl)).
+- [devvm's Lima home](../backends/lima.md#devvms-lima-home) says what that means for you.
 - devvm runs `limactl` from its own data folder. When a config is invalid, Lima writes `lima.REJECTED.yaml` into the folder it runs in, and a project folder belongs to the VM to write.
 
 devvm sets these in each VM's Lima config:

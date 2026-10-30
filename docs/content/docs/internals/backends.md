@@ -41,15 +41,17 @@ The Docker column is tested with Docker Desktop 4.94 (Docker 29.8) on an arm64 M
 | `disk` | a VM's disk size | native: grows, never shrinks | native: grows, never shrinks | none: Docker Desktop refuses a size, and Docker's containerd image store ignores it; `devvm size` shows what a VM holds ([details](docker.md#what-devvm-sets-on-a-vm)) |
 | `docker-layer` | the [docker layer](../using/images.md#built-in-layers): Docker's engine running in the VM | native | native: its daemon started after each start | emulated (reviewed) where the engine has Sysbox's runtime (Linux): the VM's container under Sysbox, a user namespace of its own, on a network of its own, with volumes for its engine and no network policy; made one in place too. None elsewhere: use a VM backend ([details](../backends/docker.md#the-docker-layer)) |
 
-The backends also differ in isolation. Lima runs a full VM for each project. smolvm runs a microVM for each project, with the image as a container inside it and no init system. Docker runs containers, not VMs. On Linux every Docker VM shares the host's kernel, and on macOS Docker Desktop runs all of them in one VM, so a kernel flaw reaches the host on Linux and every other VM on both ([details](../backends/docker.md#isolation-a-container-is-not-a-vm)). Docker's engine runs inside a Docker VM only under Sysbox, on a Linux engine. devvm never makes a container `--privileged`, because that takes its isolation away ([details](../backends/docker.md#the-docker-layer)).
-
-`.git` protection uses the host's file flags, so it works the same on every backend.
+The backends also differ in isolation, which [Backends](../backends/_index.md#comparing-the-backends) compares.
 
 ## Missing and unreviewed features
 
 When a VM needs a feature its backend lacks, devvm stops and names the VM, the feature and the backend. It never falls back to something weaker, so a VM that asks for network policy never starts with an open network. devvm does the same for a feature the backend only emulates when that emulation's review hasn't passed. Network policy is the one exception, because it's on by default: when you give neither network policy flag and the backend can't confine the VM to its proxy, devvm makes the VM without network policy and warns you ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
 
 To get the feature, use a backend that has it. A VM keeps its backend, so that means making a new VM.
+
+## Which backends a launch asks
+
+A launch asks only the backends that some VM's state names for their VMs, which it does for the [ssh config](../using/ssh.md) and the SSH agent's folder checks. A backend that no VM uses never runs during a launch, so it can't slow one down, even when it isn't running or isn't installed.
 
 ## VM names
 
