@@ -19,25 +19,38 @@ Some of what devvm protects are your secrets. A secret is a credential devvm kee
 
 ## What a VM can reach
 
-The diagram shows what a VM gets from this machine, and the table below gives the details.
+The diagram sorts what's on this machine by what a VM can do with it, and the table below gives the details.
 
 ```mermaid
-flowchart LR
-  subgraph host["This machine"]
-    folder["the project folder:<br>read-write, or a clone"]
-    tools["shared tools, agents'<br>config folders: read-only"]
-    files["agents' config files:<br>copied in"]
-    git[".git hooks and config:<br>locked on macOS"]
-    agent["your SSH agent: only<br>when you turn it on"]
-    proxy["with network policy, the<br>proxy: the only way out,<br>to allowed hosts, and it<br>puts in your secrets"]
-    home["the rest of your home<br>folder: not mounted"]
+---
+config:
+  flowchart:
+    minNodeWidth: 0
+---
+flowchart TB
+  %% Narrower nodes than other diagrams' and labels of at most 12 characters a line, so three
+  %% columns fit the page. Mermaid lays the columns out from right to left, so the last one comes first.
+  subgraph out["Out of reach"]
+    direction TB
+    home["the rest of<br>your home<br>folder"]
+    git[".git hooks<br>and config,<br>locked on<br>macOS"]
+    agent["your SSH<br>agent,<br>unless you<br>turn it on"]
+    secrets["your secrets<br>stay on this<br>machine with<br>network<br>policy"]
+    home ~~~ git ~~~ agent ~~~ secrets
   end
-  vm["The VM:<br>code and agents"]
-  folder & tools & files --> vm
-  agent -.-> vm
-  git -.- vm
-  proxy <--> vm
-  home x-.-x vm
+  subgraph copied["Read-only or copied"]
+    direction TB
+    tools["the shared<br>tools,<br>read-only"]
+    folders["your agents'<br>config<br>folders,<br>read-only"]
+    files["copies of<br>their config<br>files, minus<br>your secrets<br>with network<br>policy"]
+    tools ~~~ folders ~~~ files
+  end
+  subgraph reach["The VM reaches"]
+    direction TB
+    folder["the project<br>folder,<br>read-write,<br>or its own<br>clone with<br>--clone"]
+    hosts["with network<br>policy, the<br>hosts you<br>allow,<br>through the<br>proxy"]
+    folder ~~~ hosts
+  end
 ```
 
 | | |

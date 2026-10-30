@@ -26,8 +26,11 @@
       theme: "base",
       fontFamily: '"Departure Mono", monospace',
       fontSize: 14,
+      // Mermaid's classic look, not its neo look, which pads a decision's hexagon 70px top and bottom
+      // together. Padding 8 keeps rectangles as wide as neo's, with labels 8px from their tops.
+      look: "classic",
       // At their own size, never scaled to fit: custom.css scrolls a wide one.
-      flowchart: { useMaxWidth: false, curve: "linear", wrappingWidth: 340, nodeSpacing: 45, rankSpacing: 45 },
+      flowchart: { useMaxWidth: false, look: "classic", padding: 8, curve: "linear", wrappingWidth: 340, nodeSpacing: 45, rankSpacing: 45 },
       // Actors' boxes sized for 14px text: two rows of the font's 18px line, and a little more.
       sequence: { useMaxWidth: false, look: "classic", mirrorActors: false, height: 52, width: 140, diagramMarginX: 1, actorMargin: 45 },
       themeVariables: {
