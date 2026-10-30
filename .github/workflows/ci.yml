@@ -5,13 +5,17 @@ name: CI
 on:
   push:
     branches: [main]
-    paths: &code
+    paths:
       - "**"
       - "!docs/**"
       - "!**.md"
       - "docs/content/docs/cli/**"
   pull_request:
-    paths: *code
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**.md"
+      - "docs/content/docs/cli/**"
 
 permissions:
   contents: read

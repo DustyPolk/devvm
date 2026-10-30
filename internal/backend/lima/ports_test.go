@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -50,6 +51,8 @@ func fakeForwarders(t *testing.T, l *Lima, vm string) *[][]string {
 // deleting it removes its files.
 func TestStartForwarder(t *testing.T) {
 	l, warned := stubLima(t)
+	// Confined as on this host: macOS's sandbox-exec runs for real.
+	l.OS = runtime.GOOS
 	vm := "devvm-p-0123456789abcd"
 	writeStub(t, "instances", vm+" Stopped\n")
 	starts := fakeForwarders(t, l, vm)

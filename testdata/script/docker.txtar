@@ -159,7 +159,8 @@ exec sh -c 'cat "$VMS"/devvm-sysbox-*'
 stdout '^docker_layer=sysbox$'
 stdout '^net=off$'
 exec devvm ls
-stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +on +off +docker \(sysbox\) +\S+/sysbox$'
+[darwin] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +on +off +docker \(sysbox\) +\S+/sysbox$'
+[linux] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +off +off +docker \(sysbox\) +\S+/sysbox$'
 ! exec devvm network on
 stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
 exec devvm rm -f

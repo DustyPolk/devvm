@@ -16,6 +16,8 @@ lychee = "0.24.2"
 node = "24.22.1"
 markdownlint-cli2 = "0.24.0"
 shellcheck = "0.11.0"
+actionlint = "1.7.12"
+zizmor = "1.31.1"
 # Only for signing releases; it has no linux/arm64 build.
 minisign = { version = "0.12", os = ["macos/arm64", "linux/x64", "windows"] }
 
@@ -28,9 +30,13 @@ description = "Run every linter"
 depends = ["lint:code", "lint:docs"]
 
 [tasks."lint:code"]
-description = "Lint the Go code and shell scripts"
+description = "Lint the Go code, shell scripts and GitHub workflows"
 run = [
   "golangci-lint run",
+  # The workflows: actionlint (with shellcheck on run steps), then zizmor's
+  # security audits, offline so a run never depends on GitHub's API.
+  "actionlint",
+  "zizmor --offline .",
   # Shell scripts, found by a shebang on their first line (not the
   # testscript archives, which hold small scripts among other files).
   '''

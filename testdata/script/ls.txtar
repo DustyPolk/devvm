@@ -10,7 +10,7 @@ exec devvm ls
 cmp stdout header.txt
 ! stderr .
 stub_calls
-stdout '^limactl list --json\nsmolvm machine ls --json\n\z'
+stdout '^limactl list --json\nsmolvm machine ls( --state-dir \S+)? --json\n\z'
 
 # A folder named img-foo gives a VM named like an image: listed, while
 # the image it was made from isn't. No network policy: off.

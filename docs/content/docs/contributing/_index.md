@@ -38,6 +38,7 @@ mise installs every tool at the version pinned in `mise.toml`, checked against `
 | vale, markdownlint-cli2, lychee | linting the docs |
 | node | running markdownlint-cli2 |
 | shellcheck | linting shell scripts |
+| actionlint, zizmor | linting the GitHub workflows, and checking them for security problems |
 | minisign | signing releases |
 
 Run the tasks with `mise run <task>`:
@@ -46,7 +47,7 @@ Run the tasks with `mise run <task>`:
 | --- | --- |
 | `fmt` | formats Go code |
 | `lint` | runs `lint:code` and `lint:docs` |
-| `lint:code` | runs golangci-lint and shellcheck |
+| `lint:code` | runs golangci-lint, shellcheck, actionlint and zizmor |
 | `lint:docs` | runs the docs linters and the message link check |
 | `test` | runs the tests with the race detector and coverage |
 | `vuln` | runs govulncheck |

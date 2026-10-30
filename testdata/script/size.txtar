@@ -42,26 +42,27 @@ stderr '^devvm: size_not_gib '
 rm $CFG/size
 
 # A new VM. Running: devvm size shows what it has, and a change waits for
-# its next start.
+# its next start. It has 2 CPUs, which any host running the tests has.
 exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'echo "2 8589934592 107374182400" > "$STUB_DIR/size-$(basename "$VMS"/devvm-web-*)"'
 exec devvm size
-stdout '\Acpus=4 memory=8GiB disk=100GiB\n\z'
+stdout '\Acpus=2 memory=8GiB disk=100GiB\n\z'
 ! stderr .
 exec sh -c ': > "$STUB_LOG"'
-exec devvm size --cpus 2 --memory 3
+exec devvm size --cpus 1 --memory 3
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
 ! stdout vm_size
 stub_calls
 ! stdout 'limactl edit'
 exec sh -c 'cat "$VMS"/devvm-web-*'
-stdout '^cpus=2$'
+stdout '^cpus=1$'
 stdout '^memory=3$'
 exec devvm size
-stdout '\Acpus=4 memory=8GiB disk=100GiB\n\z'
-stderr '^size_pending size=cpus=2 memory=3GiB vm=devvm-web-[0-9a-f]{14}$'
+stdout '\Acpus=2 memory=8GiB disk=100GiB\n\z'
+stderr '^size_pending size=cpus=1 memory=3GiB vm=devvm-web-[0-9a-f]{14}$'
 # Back to what it has: nothing waits.
-exec devvm size --cpus 4 --memory 8
-stdout '^==> vm_size size=cpus=4 memory=8GiB disk=100GiB vm=devvm-web-[0-9a-f]{14}$'
+exec devvm size --cpus 2 --memory 8
+stdout '^==> vm_size size=cpus=2 memory=8GiB disk=100GiB vm=devvm-web-[0-9a-f]{14}$'
 ! stderr .
 # A smaller disk is refused, running or not, and so is more than this
 # machine has.
@@ -75,12 +76,12 @@ stderr '^devvm: cpus_not_number value="1\.5"$'
 # Stopped: changed at once, only what differs.
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
 exec sh -c ': > "$STUB_LOG"'
-exec devvm size --cpus 2 --memory 8 --disk 120GiB
-stdout '^==> vm_size size=cpus=2 memory=8GiB disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
+exec devvm size --cpus 1 --memory 8 --disk 120GiB
+stdout '^==> vm_size size=cpus=1 memory=8GiB disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 2 --disk 120$'
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 1 --disk 120$'
 exec devvm size
-stdout '\Acpus=2 memory=8GiB disk=120GiB\n\z'
+stdout '\Acpus=1 memory=8GiB disk=120GiB\n\z'
 ! stderr .
 ! exec devvm size --disk 100
 stderr '^devvm: disk_shrink have=120 vm=devvm-web-[0-9a-f]{14} want=100$'

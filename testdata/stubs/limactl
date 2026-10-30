@@ -7,7 +7,7 @@
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
 # and 100 GiB, which edit's --cpus, --memory and --disk change; edit's
 # --set .env goes into $LIMA_HOME/<name>/lima.yaml, and clone's and edit's --set .portForwards
-# and --set .ssh.localPort into its config. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# and --set .ssh.localPort into its config, which delete forgets. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
@@ -151,7 +151,7 @@ case ${1:-} in
     done
     echo "$cpus $mem $disk" > "$STUB_DIR/size-${names[0]}" ;;
   delete)
-    for n in "${names[@]}"; do set_status "$n"; done
+    for n in "${names[@]}"; do set_status "$n"; rm -f "$STUB_DIR/ports-$n.json" "$STUB_DIR/sshport-$n"; done
     [[ ! -e $STUB_DIR/delete-fails ]] || exit 1 ;;
   shell)
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/shell-agent"
