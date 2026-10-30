@@ -274,16 +274,32 @@ html.dark .highlight .chroma .go {
   color: var(--devvm-accent-soft);
 }
 
-/* The home page's feature cards (the features and feature shortcodes): one centered column, then two per
-   row from 1024px, where each card still fits its art at 364px. Black, not the surface color, so the
-   art's panels stand out; the art at the bottom, so cards in a row line up. */
+/* The home page's feature cards (the features and feature shortcodes): one centered column, then, from
+   1024px, where each card still fits its art at 364px, two columns of cards, each card as tall as its
+   content. On narrow screens the columns' boxes drop out (display: contents), and each card's order
+   style stacks the cards in the order the page lists them. Black, not the surface color, so the art's
+   panels stand out. */
 #content > .hx\:items-start > .devvm-features {
-  display: grid;
-  grid-template-columns: minmax(0, calc(728px + 3rem + 2px));
-  justify-content: center;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
-  align-self: stretch;
+  align-self: center;
+  width: 100%;
+  max-width: calc(728px + 3rem + 2px);
   margin-top: 4rem;
+}
+
+.devvm-bento-column {
+  display: contents;
+}
+
+.devvm-bento-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.devvm-bento-card > .devvm-feature {
+  flex: 1;
 }
 
 .devvm-feature {
@@ -301,13 +317,16 @@ html.dark .highlight .chroma .go {
 
 /* What's supported: three short cards without art, under the section's heading, each a heading and a
    sentence. One column, then three per row from 1024px. */
-#content > .hx\:items-start > .devvm-features-3 {
+#content > .hx\:items-start > .devvm-features.devvm-features-3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 0;
 }
 
 @media (min-width: 1024px) {
   #content > .hx\:items-start > .devvm-features.devvm-features-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: none;
   }
 }
 
@@ -351,8 +370,18 @@ html.dark .highlight .chroma .go {
 }
 
 @media (min-width: 1024px) {
-  #content > .hx\:items-start > .devvm-features {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  #content > .hx\:items-start > .devvm-features.devvm-bento {
+    flex-direction: row;
+    align-items: flex-start;
+    max-width: none;
+  }
+
+  .devvm-bento-column {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 1.5rem;
+    min-width: 0;
   }
 
   .devvm-feature > .devvm-art {

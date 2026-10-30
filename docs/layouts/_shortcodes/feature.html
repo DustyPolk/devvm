@@ -1,16 +1,21 @@
 {{- /* One card in the features grid: a heading, its Markdown, then art from assets/home/ if given.
    {{< feature title="Ready in seconds" art="copies" >}} Markdown {{< /feature >}}
-   level="3" makes the heading an h3, for cards under a section's own heading. */ -}}
+   level="3" makes the heading an h3, for cards under a section's own heading. In a two-column features
+   grid, the card goes to features, which places it in its column; in a three-column one, it shows here. */ -}}
 {{- $title := .Get "title" -}}
 {{- if not $title }}{{ errorf "feature: no title (%s)" .Position }}{{ end -}}
-<section class="devvm-feature">
-  {{- if eq (.Get "level") "3" }}
-  <h3 id="{{ $title | anchorize }}">{{ $title | .Page.RenderString }}</h3>
-  {{- else }}
-  <h2 id="{{ $title | anchorize }}">{{ $title | .Page.RenderString }}</h2>
-  {{- end }}
-  {{ .Inner | .Page.RenderString (dict "display" "block") }}
-  {{- with .Get "art" }}
-  {{ partial "art.html" (dict "name" . "position" $.Position) }}
-  {{- end }}
-</section>
+{{- $card := partial "feature-card.html" (dict
+  "title" ($title | .Page.RenderString)
+  "level" (.Get "level")
+  "body" (.Inner | .Page.RenderString (dict "display" "block"))
+  "art" (.Get "art")
+  "position" .Position) -}}
+{{- with .Parent -}}
+  {{- if eq (.Get "columns") "3" -}}
+    {{- $card -}}
+  {{- else -}}
+    {{- .Store.Add "cards" (slice $card) -}}
+  {{- end -}}
+{{- else -}}
+  {{- errorf "feature: outside features (%s)" .Position -}}
+{{- end -}}

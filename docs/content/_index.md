@@ -66,10 +66,17 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< feature title="Developer ready, zero config" art="zero-config" >}}
 
+- The base image comes with [optional extras](docs/using/customizing.md#base-image-features) that you choose, such as oh-my-bash, fzf, zoxide (`z`), tree and tldr.
 - Every VM gets your git name and email, so the commits made in it are authored by you or your agent.
 - `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-ssh-and-devvm-code)).
 - When the project has a `devcontainer.json`, devvm sets up its VM from the file's container image, ports, environment and commands ([devcontainer.json](docs/using/devcontainer.md)).
-- The base image comes with [optional extras](docs/using/customizing.md#base-image-features) that you choose, such as oh-my-bash, fzf, zoxide (`z`), tree and tldr.
+
+{{< /feature >}}
+
+{{< feature title="Ready in seconds" art="copies" >}}
+
+- The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
+- devvm builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
 
 {{< /feature >}}
 
@@ -80,13 +87,6 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
 - New VMs get [network policy](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine.
 - No sandbox closes every gap, so [what devvm doesn't protect](docs/internals/security.md#what-it-doesnt-protect) lists what's left open, and [staying safe](docs/safety/_index.md#the-habits) lists the habits that close most of it.
-
-{{< /feature >}}
-
-{{< feature title="Ready in seconds" art="copies" >}}
-
-- The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
-- devvm builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
 
 {{< /feature >}}
 

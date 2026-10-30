@@ -1,0 +1,13 @@
+{{- /* One feature card's HTML, for the feature shortcode: a heading, its rendered Markdown, then art from
+   assets/home/ if given. Takes title, level ("3" for an h3), body, art and position. */ -}}
+<section class="devvm-feature">
+  {{- if eq .level "3" }}
+  <h3 id="{{ .title | anchorize }}">{{ .title }}</h3>
+  {{- else }}
+  <h2 id="{{ .title | anchorize }}">{{ .title }}</h2>
+  {{- end }}
+  {{ .body }}
+  {{- with .art }}
+  {{ partial "art.html" (dict "name" . "position" $.position) }}
+  {{- end }}
+</section>
