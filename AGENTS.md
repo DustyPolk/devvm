@@ -51,6 +51,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `assets/shared-tools/build.sh`, or off.
 - **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`assets/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.
 - **Docs:** an easy-to-follow guide in full, joined sentences, every fact kept; write and edit prose with the docs-voice skill (Vale's `devvm.AIWords` fails on chatbot vocabulary). Every behavior change updates its page in `docs/content/docs/` in the same task. The README stays high level.
+- **Adding or changing a shared tool** updates its page: `using/toolchains.md` for a toolchain, `using/coding-agents.md`'s Supported agents for an agent.
 - **Docs by reader:** user pages (`getting-started/`, `using/`, `safety/`, `backends/`) say what devvm does and what you type, without repo paths, Go identifiers or message names; How it works (`internals/`) explains mechanisms; Contributing (`contributing/`) has repo paths and Go identifiers.
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.
 - **Ask first** before anything outward-facing (publishing, releases, repos, pushing) and before deleting anything you didn't create.

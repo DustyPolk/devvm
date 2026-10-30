@@ -12,11 +12,12 @@ The docs are in the order you'll need them: getting devvm running, using it day 
 
 ## [Using devvm](using/_index.md)
 
-- [Images and tools](using/images.md): base, devvm's docker layer and your own layers, the shared tools, which image a new VM gets, and listing and deleting images.
+- [Images and tools](using/images.md): base, devvm's docker layer and your own layers, how the shared tools work, which image a new VM gets, and listing and deleting images.
+- [Toolchains](using/toolchains.md): node, python, rust and go, what each brings and how devvm chooses it.
 - [Working on a clone](using/clone.md): `--clone`, a VM with its own clone of the repo instead of the folder mounted.
 - [Customizing images](using/customizing.md): your own layers, and the optional extras in every VM, such as oh-my-bash, fzf and CLI tools.
 - [Ports and size](using/ports-size.md): the ports a VM forwards to your machine, and its CPUs, memory and disk.
-- [Coding agents](using/coding-agents.md): the config Claude Code, Codex and opencode get in a VM, and their history.
+- [Coding agents](using/coding-agents.md): the supported agents, which are Claude Code, Codex and opencode, the config they get in a VM, and their history.
 - [SSH and editors](using/ssh.md): reaching VMs by name from ssh and editors, their host keys, and agent forwarding.
 - [devcontainer.json](using/devcontainer.md): what a new VM takes from a project's `devcontainer.json`, and what it refuses.
 - [Starting from a container image](using/from.md): `--from`, a base from `node:24`, `alpine:3` or your own image.

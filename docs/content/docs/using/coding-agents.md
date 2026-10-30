@@ -1,7 +1,23 @@
 ---
 title: Coding agents
-weight: 5
+weight: 6
 ---
+
+## Supported agents
+
+devvm has three coding agents, which are Claude Code, Codex and opencode. You add one to a VM by naming it in the image. In a project folder without a VM, `devvm claude` makes the folder's VM with Claude Code on top of the [toolchains](toolchains.md) its files call for. When the folder's VM already exists, `devvm claude` adds Claude Code to it, after asking. `devvm codex` and `devvm opencode` work the same way. In the VM, you run the agent as `claude`, `codex` or `opencode`. This section is the one place that lists the agents.
+
+| Name | Agent | What devvm adds | Allowlist with network policy |
+| --- | --- | --- | --- |
+| `claude` | Claude Code | the newest release, with its auto-update off, since the shared copy is read-only, and its telemetry off | Anthropic's API, Claude's login and Claude Code's downloads: `api.anthropic.com`, `claude.ai`, `downloads.claude.ai`, `platform.claude.com` and `mcp-proxy.anthropic.com` |
+| `codex` | Codex | the newest release, with its analytics and metrics off unless your config sets them | the OpenAI API and the ChatGPT login: `api.openai.com`, `chatgpt.com` and `auth.openai.com` |
+| `opencode` | opencode | the newest release | opencode's own service and its model catalog: `opencode.ai` and `models.dev` |
+
+Claude Code's telemetry hosts aren't on its allowlist, because blocking them costs nothing. opencode talks to the model provider you choose, so with network policy you allow that provider's API host yourself, such as `devvm policy allow api.anthropic.com` ([changing rules](../safety/network.md#changing-rules)).
+
+Agents are [shared tools](images.md#shared-tools), like the toolchains, so you can combine them with any image and with each other, as in `devvm node+claude+codex`. devvm follows each agent's newest release, because agents release several times a week, and `devvm update` moves a VM to newer versions ([adding and removing tools](images.md#adding-and-removing-tools)).
+
+## Config from this machine
 
 When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history. Transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 

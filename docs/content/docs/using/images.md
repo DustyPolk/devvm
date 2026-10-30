@@ -3,7 +3,7 @@ title: Images and tools
 weight: 1
 ---
 
-Every VM is a copy of an image. An image is `base` with your choice of layers on it, and a VM also gets the shared tools its image names, such as node or Claude Code. This page covers what each of those brings, which image a new VM gets, and how to rebuild, list and delete images. [Images and caching](../internals/images.md) explains how devvm builds, pins and caches them.
+Every VM is a copy of an image. An image is `base` with your choice of layers on it, and a VM also gets the shared tools its image names, such as node or Claude Code. This page covers what base and the layers bring, how the shared tools work, which image a new VM gets, and how to rebuild, list and delete images. [Images and caching](../internals/images.md) explains how devvm builds, pins and caches them, and [toolchains](toolchains.md) and [coding agents](coding-agents.md#supported-agents) list the shared tools.
 
 ## Base
 
@@ -36,20 +36,12 @@ On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs
 
 ## Shared tools
 
-The toolchains and coding agents are shared tools, not image layers. Any image can have them, in any mix, such as `node+python+claude` or `go+foo+codex`.
-
-| Name | Brings |
-| --- | --- |
-| node | Node 24, npm, pnpm, yarn (corepack), bun |
-| python | CPython, uv |
-| rust | rustup, cargo, the stable toolchain with `rust-src` and `rust-analyzer` |
-| go | Go |
-| claude, codex, opencode | the coding agents |
+The toolchains and coding agents are shared tools, not image layers. Any image can have them, in any mix, such as `node+python+claude` or `go+foo+codex`. [Toolchains](toolchains.md) lists node, python, rust and go, with what each brings, and [supported agents](coding-agents.md#supported-agents) lists claude, codex and opencode.
 
 devvm builds each tool version once and mounts it read-only into every VM that names it, so any mix of tools works without building anything new, and ten VMs with node share one copy of it. [mise](https://mise.jdx.dev) runs the tools:
 
 - **They work as usual.** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`) and `cargo` work from any shell, including `bash -c` from agents and from editors over SSH.
-- **A project's own version files win.** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and the `toolchain` line in `go.mod` pick their version, which installs into the VM the first time it's used.
+- **A project's own version files win.** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and the `toolchain` line in `go.mod` pick their version, which installs into the VM the first time it's used. mise also reads a `mise.toml` in the project folder, and devvm trusts it without asking, because the folder is yours.
 - **They're read-only.** A VM can't change the shared tools, even as root. The tools can't update themselves, and `rustup component add` can't change the shared toolchain.
 
 devvm doesn't pin the tools' versions, because agents like Claude Code release several times a week. It follows the newest release of each tool, and Node 24 for node. The first time a tool is needed, devvm looks up its newest release, which needs this machine to be online once. When it makes a new VM, devvm also checks for newer releases if its last check was more than a day ago, and `DEVVM_NO_TOOL_CHECK=1` turns that check off.
