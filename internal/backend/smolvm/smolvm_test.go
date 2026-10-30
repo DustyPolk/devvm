@@ -402,7 +402,8 @@ func TestStartListedNoSSH(t *testing.T) {
 	}
 	var warned []string
 	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
-	if err := s.Start(t.Context(), vm, backend.Confinement{Ports: &backend.Ports{Ranges: listed[1:]}}); err != nil {
+	free := func(_ context.Context, rs []backend.PortRange) []backend.PortRange { return rs[1:] }
+	if err := s.Start(t.Context(), vm, backend.Confinement{Free: free}); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(s.calls(t), "\n"); strings.Contains(got, " -p ") || strings.Contains(got, "--remove-port") {
@@ -787,7 +788,7 @@ func TestSet(t *testing.T) {
 	if err := s.SetSize(t.Context(), vm, backend.Size{DiskGiB: 50}); names(err) != "disk_shrink have=120 vm="+vm+" want=50" {
 		t.Errorf("shrink: %v", err)
 	}
-	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: []backend.PortRange{{From: 8000, To: 8000}}}); err != nil {
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: []backend.PortRange{{From: 8000, To: 8000}}}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetAgentDirs(t.Context(), vm, []string{"/h/.codex"}); err != nil {

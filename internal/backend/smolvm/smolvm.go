@@ -514,20 +514,34 @@ func listed(p backend.Ports) []backend.PortRange {
 	return slices.Clone(p.Ranges)
 }
 
-// SetPorts changes which of a stopped VM's ports its forwarder forwards
-// from its next start: every one, its listed ones, or none. Only devvm's
-// record changes: smolvm forwards none of them.
-func (s *Smolvm) SetPorts(ctx context.Context, vm string, p backend.Ports) error {
-	_, r, err := s.stopped(ctx, vm)
+// SetPorts changes which of a VM's ports its forwarder forwards (every
+// one, its listed ones, or none): its record, which a stopped VM forwards
+// from its next start, and a running one's forwarder, started again with
+// them. Only devvm's record changes: smolvm forwards none of them. One
+// started outside devvm since has no sshd of devvm's to forward through.
+func (s *Smolvm) SetPorts(ctx context.Context, vm string, p backend.Ports, c backend.Confinement) error {
+	m, err := s.inspect(ctx, vm)
+	if err != nil {
+		return notFound(vm, err)
+	}
+	r, err := s.readRecord(vm)
 	if err != nil {
 		return err
 	}
-	want := listed(p)
-	if r.PortsAll == p.All && slices.Equal(r.Listed, want) {
+	if want := listed(p); r.PortsAll != p.All || !slices.Equal(r.Listed, want) {
+		r.PortsAll, r.Listed = p.All, want
+		if err := s.writeRecord(vm, r); err != nil {
+			return err
+		}
+	}
+	if m.status() != backend.StatusRunning {
 		return nil
 	}
-	r.PortsAll, r.Listed = p.All, want
-	return s.writeRecord(vm, r)
+	if cur, err := s.lifeline(ctx, vm); err != nil || !runsOn(cur, r.Started) {
+		r.SSHUp = false
+	}
+	s.forward(ctx, vm, r, c)
+	return nil
 }
 
 // volume is a -v value: host path, its path in the VM, and :ro unless

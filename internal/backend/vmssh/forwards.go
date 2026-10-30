@@ -2,6 +2,7 @@ package vmssh
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -164,28 +166,46 @@ func (f Forwards) Running(vm string) bool {
 	return ok
 }
 
+// Lock holds the VM's forwarder's lock until unlock is called: whatever
+// stops its forwarder, asks which ports are free and starts the next one
+// holds it throughout, so two at once (a start and devvm ports, or two
+// devvm ports) never leave a forwarder whose pid file names another, which
+// nothing would stop. Another devvm holding it is waited for, until ctx
+// ends.
+func (f Forwards) Lock(ctx context.Context, vm string) (unlock func(), err error) {
+	if err := os.MkdirAll(f.Dir, 0o700); err != nil {
+		return nil, err
+	}
+	return platform.LockFile(ctx, f.file(vm, ".ports.lock"))
+}
+
 // Stop stops the VM's forwarder, if it runs, waiting up to two seconds for
-// it to end.
+// it to end, then killing it and waiting up to two more: a start that
+// follows finds its ports free.
 func (f Forwards) Stop(vm string) {
 	pid, ok := f.pid(vm)
 	if !ok {
 		return
 	}
-	if p, err := os.FindProcess(pid); err == nil {
-		_ = p.Signal(syscall.SIGTERM)
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return
 	}
-	for range 20 {
-		if !ProcessRuns(pid) {
-			return
+	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
+		_ = p.Signal(sig)
+		for range 20 {
+			if !ProcessRuns(pid) {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
 // Remove stops the VM's forwarder and deletes its files.
 func (f Forwards) Remove(vm string) error {
 	f.Stop(vm)
-	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log"} {
+	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log", ".ports.lock"} {
 		if err := os.Remove(f.file(vm, ext)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

@@ -14,11 +14,12 @@ import (
 // (SO_REUSEADDR). So a VM's ports get none of smolvm's forwards, and
 // devvm's forwarder instead (vmssh.Forwarder, devvm _smolvm-ports, started
 // by Start once its sshd runs): every port, or its listed ones less those
-// a host program has (Confinement.Ports). It reaches the VM's sshd on its
+// a host program has (Confinement.Free). It reaches the VM's sshd on its
 // forward on the host's loopback, smolvm's one forward, and ends when the
 // machine's process does (its lifeline, agent.pid). Which ports a VM
 // forwards is its record's (PortsAll, Listed), set by CreateVM and
-// SetPorts, which edit no forward of smolvm's.
+// SetPorts, which edit no forward of smolvm's and start a running VM's
+// forwarder again.
 
 // forwarderCmd is the hidden command that runs a VM's forwarder.
 const forwarderCmd = "_smolvm-ports"

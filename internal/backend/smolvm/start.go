@@ -213,35 +213,33 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 	return nil
 }
 
-// startPorts is what a VM forwards from this start: nil for every port,
-// else its listed ports c names (those a host program has left out), or
-// its record's without them; none is empty.
-func startPorts(r record, c backend.Confinement) []backend.PortRange {
-	switch {
-	case c.Ports != nil && c.Ports.All, c.Ports == nil && r.PortsAll:
-		return nil
-	case c.Ports != nil:
-		return append([]backend.PortRange{}, c.Ports.Ranges...)
-	}
-	return append([]backend.PortRange{}, r.Listed...)
-}
-
 // forward starts the forwarder of a VM that forwards ports, once its sshd
-// runs (forward.go): every port or its listed ones (startPorts), its host
-// key read through smolvm, and never on its own ssh's, proxy's or
-// decider's port. One that can't start is warned about: the VM runs on. A
-// VM that forwards none has its forwarder, if any, stopped.
+// runs (forward.go), after stopping any it had, holding its lock
+// throughout: every port or its listed ones (its record's as it reads
+// them then, c.Forwarded), its host key read through smolvm, and never on
+// its own ssh's, proxy's or decider's port. One that can't start is warned
+// about: the VM runs on. A VM that forwards none is left without one.
 func (s *Smolvm) forward(ctx context.Context, vm string, r record, c backend.Confinement) {
-	only := startPorts(r, c)
+	failed := func() { s.Warn(msg.PortsForwardFailed(s.Forwards.Log(vm), vm)) }
+	unlock, err := s.Forwards.Lock(ctx, vm)
+	if err != nil {
+		failed()
+		return
+	}
+	defer unlock()
+	s.Forwards.Stop(vm)
+	// Another devvm's SetPorts may have changed the ports since r was read.
+	if cur, err := s.readRecord(vm); err == nil {
+		r.PortsAll, r.Listed = cur.PortsAll, cur.Listed
+	}
+	only := c.Forwarded(ctx, backend.Ports{All: r.PortsAll, Ranges: r.Listed})
 	if only != nil && len(only) == 0 {
-		s.Forwards.Stop(vm)
 		return
 	}
 	if !r.SSHUp {
 		s.Warn(msg.PortsNoSSH(vm))
 		return
 	}
-	failed := func() { s.Warn(msg.PortsForwardFailed(s.Forwards.Log(vm), vm)) }
 	out, err := vmOutput(ctx, s.Runner, func(ctx context.Context) *exec.Cmd {
 		return s.smolvm(ctx, "machine", "exec", "--name", vm, "--", "cat", vmssh.HostKeyPath)
 	})

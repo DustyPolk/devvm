@@ -734,9 +734,6 @@ other = "--ports only applies to new VMs: devvm ports LIST"
 [size_next_start]
 other = "{{.vm}}'s new size applies when it next starts: devvm restart"
 
-[ports_next_start]
-other = "{{.vm}}'s new ports apply when it next starts: devvm restart"
-
 [add_in_place]
 description = "missing is a space-separated list of layers and tools"
 other = "{{.vm}} was made from {{.image}}. Add {{.missing}} to it in place?"
@@ -844,16 +841,16 @@ other = "every port is already forwarded"
 [ports_now]
 other = "{{.vm}} forwards {{.ports}}"
 
-[ports_pending]
-other = "{{.vm}} forwards {{.ports}} from its next start: devvm restart"
+[ports_forwarding]
+other = "{{.vm}} forwards {{.ports}} from now on: connections open to its ports were closed"
 
 [ports_default]
 other = "new VMs forward {{.ports}}"
 
 [ports_taken]
 description = "ports is a list of ports and ranges, like 5173,8000-8010; count is how many ports"
-one = "{{.vm}} doesn't forward port {{.ports}} this start: it's in use on this machine"
-other = "{{.vm}} doesn't forward ports {{.ports}} this start: they're in use on this machine"
+one = "{{.vm}} doesn't forward port {{.ports}} for now: it's in use on this machine"
+other = "{{.vm}} doesn't forward ports {{.ports}} for now: they're in use on this machine"
 
 [no_vm_ports]
 other = "no VM for {{.dir}}: devvm --ports LIST makes one that forwards only those, or -g sets what new VMs forward"

@@ -108,6 +108,15 @@ stdout '^devvm ports: port 47329: forwarded$'
 ! stdout 'port '$TAKEN
 exec devvm ports
 stdout '^47329,8000-8001,'$TAKEN'$'
+# Running: a change starts its forwarder again at once, the VM running on.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ports rm 8000-8001
+stdout '^==> ports_forwarding ports=47329,'$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout '^smolvm machine (stop|start|update)'
+exec sh -c 'ps -axww -o command= | grep "[_]smolvm-ports -vm devvm-web-"'
+stdout ' -only 47329$'
 rm $STUB_DIR/guest-ports
 
 # Its agent forwarding can be turned on later (emulated, reviewed): made

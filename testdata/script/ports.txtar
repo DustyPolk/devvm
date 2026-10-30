@@ -1,6 +1,6 @@
-# devvm ports: which ports a folder's VM forwards, changed at once for a
-# stopped VM, from its next start for a running one; with -g, what new
-# VMs forward (the ports file).
+# devvm ports: which ports a folder's VM forwards, changed at once: a
+# stopped VM's from its next start, a running one's forwarder started
+# again with them; with -g, what new VMs forward (the ports file).
 env DEVVM_MESSAGES=names
 env VMS=$XDG_DATA_HOME/devvm/vms
 env CFG=$XDG_CONFIG_HOME/devvm
@@ -37,7 +37,12 @@ exec devvm ports -g all
 ! stub_calls
 
 # A new VM gets the default. Running: devvm ports shows what it forwards,
-# and a change waits for its next start.
+# and a change starts its forwarder again with the new ports, the VM
+# running on: no stop, start or edit of Lima's. (Its hostagent here: the
+# test's runner, so the forwarder runs on. Its ports are free here, as
+# a fixed one may be a program's, which a running VM's change leaves out.)
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
+free_port P Q
 exec devvm --no-network-policy --no-git-protect base
 exec sh -c 'cat "$VMS"/devvm-web-*'
 ! stdout '^ports'
@@ -45,43 +50,46 @@ exec devvm ports
 stdout '\Aall\n\z'
 ! stderr .
 exec sh -c ': > "$STUB_LOG"'
-exec devvm ports 5173
-stderr '^devvm: ports_next_start vm=devvm-web-[0-9a-f]{14}$'
-! stdout ports_now
+exec devvm ports $P
+stdout '^==> ports_forwarding ports='$P' vm=devvm-web-[0-9a-f]{14}$'
+! stderr .
 stub_calls
-! stdout 'limactl edit'
+! stdout 'limactl (edit|stop|start)'
+exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $(basename "$VMS"/devvm-web-*) "'
+stdout ' -only '$P'$'
 exec devvm ports
-stdout '\Aall\n\z'
-stderr '^ports_pending ports=5173 vm=devvm-web-[0-9a-f]{14}$'
-# Back to what it forwards: nothing waits.
+stdout '\A'$P'\n\z'
+! stderr .
 exec devvm ports all
-stdout '^==> ports_now ports=all vm=devvm-web-[0-9a-f]{14}$'
-! stderr .
-exec devvm ports
-! stderr .
-exec devvm ports 5173
+stdout '^==> ports_forwarding ports=all vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $(basename "$VMS"/devvm-web-*) "'
+! stdout ' -only '
+# None: its forwarder stops.
+exec devvm ports none
+stdout '^==> ports_forwarding ports=none vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'vm=$(basename "$VMS"/devvm-web-*); for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]lima-ports -vm $vm " || exit 0; sleep 0.5; done; exit 1'
+exec devvm ports $P
 
 # Stopped: changed at once, in the VM's record for devvm's forwarder;
 # Lima's config is left alone (its own forwards are off).
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm ports add 8000-8010
-stdout '^==> ports_now ports=5173,8000-8010 vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> ports_now ports='$P',8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports'
-stdout '\A5173,8000-8010\n\z'
+stdout '\A'$P',8000-8010\n\z'
 exec devvm ports
-stdout '\A5173,8000-8010\n\z'
+stdout '\A'$P',8000-8010\n\z'
 ! stderr .
 exec sh -c ': > "$STUB_LOG"'
-exec devvm ports rm 5173
+exec devvm ports rm $P
 stdout '^==> ports_now ports=8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 exec devvm ports rm 8000-8010
 stdout '^==> ports_now ports=none vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^ports=none$'
-stdout '^ports_set=none$'
 ! exec devvm ports rm 5173
 stderr '^devvm: port_not_listed port=5173 ports=none$'
 ! exec devvm ports 0
@@ -102,22 +110,26 @@ exec devvm --ports none
 stderr '^devvm: ports_flag_ignored$'
 
 # A listed port a program on this machine has, on any address, isn't
-# forwarded from a start that finds it so, warned: the forwarder forwards
-# the rest. Lima's config is left alone. (Its hostagent here: the test's
-# runner, so the forwarder runs on.)
-exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
+# forwarded, warned, by a start or a running VM's change that finds it so:
+# the forwarder forwards the rest. Lima's config is left alone.
 listen_any TAKEN
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec devvm ports 5173,$TAKEN
+exec devvm ports $P,$TAKEN
+! stderr ports_taken
 exec sh -c ': > "$STUB_LOG"'
 exec devvm
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout portForwards
 exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $(basename "$VMS"/devvm-web-*) "'
-stdout ' -only 5173$'
+stdout ' -only '$P'$'
 exec devvm ports
-stdout '\A5173,'$TAKEN'\n\z'
+stdout '\A'$P','$TAKEN'\n\z'
+exec devvm ports add $Q
+stdout '^==> ports_forwarding ports='$P','$TAKEN','$Q' vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $(basename "$VMS"/devvm-web-*) "'
+stdout ' -only '$P','$Q'$'
 # Stopped, its forwarder stops too.
 exec devvm stop
 exec sh -c 'vm=$(basename "$VMS"/devvm-web-*); for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]lima-ports -vm $vm " || exit 0; sleep 0.5; done; exit 1'

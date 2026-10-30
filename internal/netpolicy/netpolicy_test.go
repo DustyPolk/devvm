@@ -184,11 +184,10 @@ func TestFreePort(t *testing.T) {
 	if err != nil || !used[23456] || !used[34567] || len(used) != 2 {
 		t.Errorf("UsedPorts = %v, %v", used, err)
 	}
-	// And the ports VMs forward, wanted or set: all and none name none.
-	for k, v := range map[string]string{keyPorts: "5173,40000-40002", keyPortsSet: "41000, bad,9-1"} {
-		if err := st.Set(k, v); err != nil {
-			t.Fatal(err)
-		}
+	// And the ports VMs forward, entries that aren't ports skipped: all
+	// and none name none.
+	if err := st.Set(keyPorts, "5173,40000-40002, 41000, bad,9-1"); err != nil {
+		t.Fatal(err)
 	}
 	used, err = UsedPorts(d, "")
 	if err != nil || len(used) != 7 || !used[5173] || !used[40000] || !used[40002] || !used[41000] {
@@ -203,7 +202,7 @@ func TestFreePort(t *testing.T) {
 	if err := st.Set(keyPorts, "all"); err != nil {
 		t.Fatal(err)
 	}
-	if got := forwarded(st); len(got) != 1 || !got[41000] {
+	if got := forwarded(st); len(got) != 0 {
 		t.Errorf("forwarded with all = %v", got)
 	}
 	p := &Proxy{Dirs: d, Listening: func(port int) bool { return port%2 == 0 }}

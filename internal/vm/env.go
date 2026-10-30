@@ -36,14 +36,13 @@ import (
 
 // Keys of a VM's state that up writes, besides state's own.
 const (
-	KeyNet      = netpolicy.KeyNet // network policy: on or off
-	KeyLibc     = "libc"           // the C library its base had, which its tools are built for
-	KeyTools    = "tools"          // its shared tool images, space-separated
-	KeyCPUs     = "cpus"           // the size asked for; unset for the image's
-	KeyMemory   = "memory"         // GiB
-	KeyDisk     = "disk"           // GiB
-	KeyPorts    = "ports"          // which ports it forwards (ParsePorts); unset for all
-	KeyPortsSet = "ports_set"      // what its backend config forwards; unset for all
+	KeyNet    = netpolicy.KeyNet // network policy: on or off
+	KeyLibc   = "libc"           // the C library its base had, which its tools are built for
+	KeyTools  = "tools"          // its shared tool images, space-separated
+	KeyCPUs   = "cpus"           // the size asked for; unset for the image's
+	KeyMemory = "memory"         // GiB
+	KeyDisk   = "disk"           // GiB
+	KeyPorts  = "ports"          // which ports it forwards (ParsePorts); unset for all
 	// KeyAgentToggle is set when its backend emulates turning its SSH agent
 	// forwarding on or off (made ready for it), which its starts rely on.
 	KeyAgentToggle = "agent_toggle"
@@ -312,7 +311,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// The ports its backend forwards at each start (every port: an
 	// emulation on some), which it got when they were set: refused now
 	// unless they may still be used.
-	for _, f := range PortsBackend(orAll(st.Get(KeyPortsSet))).Features() {
+	for _, f := range PortsBackend(orAll(st.Get(KeyPorts))).Features() {
 		if !e.Registry.Allowed(b, f) {
 			return conf, e.Registry.Require(b, vm, f)
 		}
@@ -352,10 +351,11 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// ssh for editors, where the backend has it (an emulation once it's
 	// reviewed): a VM without it starts all the same.
 	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil
-	conf.Ports = e.startPorts(ctx, st)
-	// Its host key, as its ssh config pins it, for a backend's forwarder
-	// that reaches the VM's own sshd.
-	conf.HostKey = func(ctx context.Context) (string, error) { return e.sshConfig().HostKey(ctx, b, vm) }
+	// Its listed ports less those taken, and its host key as its ssh
+	// config pins it, for a backend's forwarder that reaches the VM's own
+	// sshd.
+	f := e.forwarding(b, st)
+	conf.Free, conf.HostKey = f.Free, f.HostKey
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)

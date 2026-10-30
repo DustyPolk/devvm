@@ -1659,14 +1659,14 @@ func PortsForwardFailed(log string, vm string) M {
 	return M{id: "ports_forward_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
 
+// PortsForwarding is [ports_forwarding]: "{{.vm}} forwards {{.ports}} from now on: connections open to its ports were closed"
+func PortsForwarding(ports string, vm string) M {
+	return M{id: "ports_forwarding", vals: []val{{"ports", ports}, {"vm", vm}}}
+}
+
 // PortsListNeeded is [ports_list_needed]: "devvm ports add and rm take ports and ranges like 5173,8000-8010, not {{.value}}"
 func PortsListNeeded(value string) M {
 	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
-}
-
-// PortsNextStart is [ports_next_start]: "{{.vm}}'s new ports apply when it next starts: devvm restart"
-func PortsNextStart(vm string) M {
-	return M{id: "ports_next_start", vals: []val{{"vm", vm}}}
 }
 
 // PortsNoSSH is [ports_no_ssh]: "{{.vm}} runs without ssh, so none of its ports are forwarded"
@@ -1679,17 +1679,12 @@ func PortsNow(ports string, vm string) M {
 	return M{id: "ports_now", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
-// PortsPending is [ports_pending]: "{{.vm}} forwards {{.ports}} from its next start: devvm restart"
-func PortsPending(ports string, vm string) M {
-	return M{id: "ports_pending", vals: []val{{"ports", ports}, {"vm", vm}}}
-}
-
 // PortsRmAll is [ports_rm_all]: "every port is forwarded, so none can be removed: set the ones to keep instead, like devvm ports 5173,8000-8010"
 func PortsRmAll() M {
 	return M{id: "ports_rm_all"}
 }
 
-// PortsTaken is [ports_taken]: "{{.vm}} doesn't forward ports {{.ports}} this start: they're in use on this machine"
+// PortsTaken is [ports_taken]: "{{.vm}} doesn't forward ports {{.ports}} for now: they're in use on this machine"
 func PortsTaken(count int, ports string, vm string) M {
 	return M{id: "ports_taken", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"ports", ports}, {"vm", vm}}}
 }
@@ -2697,11 +2692,10 @@ var specs = map[string]spec{
 	"ports_failed":                     {fields: []string{"reason"}},
 	"ports_flag_ignored":               {},
 	"ports_forward_failed":             {fields: []string{"log", "vm"}},
+	"ports_forwarding":                 {fields: []string{"ports", "vm"}},
 	"ports_list_needed":                {fields: []string{"value"}},
-	"ports_next_start":                 {fields: []string{"vm"}},
 	"ports_no_ssh":                     {fields: []string{"vm"}},
 	"ports_now":                        {fields: []string{"ports", "vm"}},
-	"ports_pending":                    {fields: []string{"ports", "vm"}},
 	"ports_rm_all":                     {},
 	"ports_taken":                      {plural: true, fields: []string{"count", "ports", "vm"}},
 	"proxy_ca_failed":                  {fields: []string{"dir"}},

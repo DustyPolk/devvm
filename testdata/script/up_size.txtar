@@ -53,7 +53,6 @@ stdout '^cpus=2$'
 stdout '^memory=3$'
 stdout '^disk=120$'
 stdout '^ports=5173,8000-8010$'
-stdout '^ports_set=5173,8000-8010$'
 
 # The defaults, for what the flags leave unset; nothing for what neither
 # sets. A default of every port stores nothing.

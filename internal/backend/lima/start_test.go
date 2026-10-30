@@ -131,24 +131,21 @@ func TestStartSetsNoForwards(t *testing.T) {
 	const listed = `{"guestIPMustBeZero":false,"guestIP":"127.0.0.1","guestPortRange":[5173,5173],"hostIP":"127.0.0.1","hostPortRange":[5173,5173],"proto":"any"}`
 	l, _, _ := testLima(t, "darwin")
 	set := []string{"--set", noForwardsSet()}
-	five := &backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}}
 	for _, tc := range []struct {
 		name, cfg string
-		ports     *backend.Ports
 		want      []string
 	}{
-		{"off", `{"portForwards":[` + ignore + `]}`, nil, nil},
-		{"off, ports listed", `{"portForwards":[` + ignore + `]}`, five, nil},
-		{"Lima's own rule", `{"portForwards":[]}`, nil, set},
-		{"a listed port of Lima's", `{"portForwards":[` + listed + `,` + ignore + `]}`, five, set},
-		{"another address", `{"portForwards":[` + strings.Replace(ignore, `"::"`, `"::1"`, 1) + `]}`, nil, set},
-		{"TCP alone", `{"portForwards":[` + strings.ReplaceAll(ignore, `"any"`, `"tcp"`) + `]}`, nil, set},
+		{"off", `{"portForwards":[` + ignore + `]}`, nil},
+		{"Lima's own rule", `{"portForwards":[]}`, set},
+		{"a listed port of Lima's", `{"portForwards":[` + listed + `,` + ignore + `]}`, set},
+		{"another address", `{"portForwards":[` + strings.Replace(ignore, `"::"`, `"::1"`, 1) + `]}`, set},
+		{"TCP alone", `{"portForwards":[` + strings.ReplaceAll(ignore, `"any"`, `"tcp"`) + `]}`, set},
 	} {
 		var cfg config
 		if err := json.Unmarshal([]byte(tc.cfg), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		if got, _ := l.startSets(&cfg, backend.Confinement{Ports: tc.ports}, 0); !slices.Equal(got, tc.want) {
+		if got, _ := l.startSets(&cfg, backend.Confinement{}, 0); !slices.Equal(got, tc.want) {
 			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
 		}
 	}

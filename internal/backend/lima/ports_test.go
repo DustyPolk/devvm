@@ -97,12 +97,21 @@ func TestStartForwarder(t *testing.T) {
 		t.Error("forwarder running with its VM stopped")
 	}
 
-	// Listed ports: those this start forwards.
-	c.Ports = &backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}}
+	// Listed ports: those Free leaves this start.
+	listed := []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}
+	if err := l.SetPorts(ctx, vm, backend.Ports{Ranges: listed}, backend.Confinement{}); err != nil {
+		t.Fatal(err)
+	}
+	c.Free = func(_ context.Context, rs []backend.PortRange) []backend.PortRange {
+		if !slices.Equal(rs, listed) {
+			t.Errorf("Free asked of %v", rs)
+		}
+		return rs[1:]
+	}
 	if err := l.Start(ctx, vm, c); err != nil {
 		t.Fatal(err)
 	}
-	if got := (*starts)[len(*starts)-1]; !slices.Equal(got[len(got)-2:], []string{"-only", "5173,8000-8010"}) {
+	if got := (*starts)[len(*starts)-1]; !slices.Equal(got[len(got)-2:], []string{"-only", "8000-8010"}) {
 		t.Errorf("listed: %q", got)
 	}
 	if err := l.Stop(ctx, vm); err != nil {
@@ -110,10 +119,10 @@ func TestStartForwarder(t *testing.T) {
 	}
 
 	// None: no forwarder; a build: none either.
-	if err := l.SetPorts(ctx, vm, backend.Ports{}); err != nil {
+	if err := l.SetPorts(ctx, vm, backend.Ports{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
-	c.Ports = nil
+	c.Free = nil
 	n := len(*starts)
 	if err := l.Start(ctx, vm, c); err != nil {
 		t.Fatal(err)
@@ -121,7 +130,7 @@ func TestStartForwarder(t *testing.T) {
 	if err := l.Stop(ctx, vm); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.SetPorts(ctx, vm, backend.Ports{All: true}); err != nil {
+	if err := l.SetPorts(ctx, vm, backend.Ports{All: true}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.Start(ctx, vm, backend.Confinement{Net: backend.NetInternet}); err != nil {
@@ -149,6 +158,61 @@ func TestStartForwarder(t *testing.T) {
 		if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", f, err)
 		}
+	}
+}
+
+// A running VM's ports change at once: its forwarder starts again with
+// the new ones, those Free leaves, the old one stopped first; none stops
+// it. A stopped VM's change starts none.
+func TestSetPortsRunning(t *testing.T) {
+	l, warned := stubLima(t)
+	vm := "devvm-p-0123456789abcd"
+	writeStub(t, "instances", vm+" Stopped\n")
+	starts := fakeForwarders(t, l, vm)
+	ctx := t.Context()
+	key := func(context.Context) (string, error) { return "ssh-ed25519 AAAAkey", nil }
+	if err := l.Forwards.write(vm, backend.Ports{All: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Start(ctx, vm, backend.Confinement{HostKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	running := false
+	c := backend.Confinement{HostKey: key, ProxyPort: 30001, Free: func(_ context.Context, rs []backend.PortRange) []backend.PortRange {
+		running = l.Forwards.Running(vm)
+		return rs[:1]
+	}}
+	listed := backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8000}}}
+	if err := l.SetPorts(ctx, vm, listed, c); err != nil {
+		t.Fatal(err)
+	}
+	if running {
+		t.Error("Free asked while the old forwarder ran")
+	}
+	got := (*starts)[len(*starts)-1]
+	if len(*starts) != 2 || !slices.Equal(got[len(got)-4:], []string{"-reserve", "60022,30001", "-only", "5173"}) {
+		t.Errorf("forwarders %q", *starts)
+	}
+	if !l.Forwards.Running(vm) {
+		t.Error("no forwarder")
+	}
+	if p, err := l.Forwards.read(vm); err != nil || !slices.Equal(p.Ranges, listed.Ranges) {
+		t.Errorf("record %+v, %v", p, err)
+	}
+	if err := l.SetPorts(ctx, vm, backend.Ports{}, c); err != nil {
+		t.Fatal(err)
+	}
+	if l.Forwards.Running(vm) || len(*starts) != 2 {
+		t.Errorf("none: forwarder running %v, started %q", l.Forwards.Running(vm), *starts)
+	}
+	if err := l.Stop(ctx, vm); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.SetPorts(ctx, vm, backend.Ports{All: true}, c); err != nil {
+		t.Fatal(err)
+	}
+	if len(*starts) != 2 || len(*warned) != 0 {
+		t.Errorf("stopped: started %q, warned %q", *starts, *warned)
 	}
 }
 

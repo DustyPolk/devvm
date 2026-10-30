@@ -564,7 +564,7 @@ func TestSetPortsAgentDirsAndForwarding(t *testing.T) {
 		do   func() error
 		want string
 	}{
-		{func() error { return l.SetPorts(ctx, "v", backend.Ports{All: true}) }, ""},
+		{func() error { return l.SetPorts(ctx, "v", backend.Ports{All: true}, backend.Confinement{}) }, ""},
 		{func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/.claude"}) }, ""},
 		{
 			func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/.codex"}) },
@@ -573,7 +573,8 @@ func TestSetPortsAgentDirsAndForwarding(t *testing.T) {
 		{func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/a,b"}) }, "mount_comma path=/h/a,b"},
 		{func() error { return l.SetAgentForwarding(ctx, "v", false) }, ""},
 		{func() error { return l.SetAgentForwarding(ctx, "v", true) }, "limactl edit --tty=false v --set .ssh.forwardAgent=true"},
-		{func() error { return l.SetPorts(ctx, "r", backend.Ports{}) }, "vm_not_stopped vm=r"},
+		// A running VM's: no edit (its forwarder, ports_test.go).
+		{func() error { return l.SetPorts(ctx, "r", backend.Ports{}, backend.Confinement{}) }, ""},
 		{func() error { return l.SetAgentDirs(ctx, "r", nil) }, "vm_not_stopped vm=r"},
 		{func() error { return l.SetAgentForwarding(ctx, "r", true) }, "vm_not_stopped vm=r"},
 	}

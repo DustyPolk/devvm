@@ -100,8 +100,12 @@ type Backend interface {
 
 	// SetSize changes a stopped VM's size; zero fields are left as they are.
 	SetSize(ctx context.Context, vm string, s Size) error
-	// SetPorts changes which of a stopped VM's ports are forwarded.
-	SetPorts(ctx context.Context, vm string, p Ports) error
+	// SetPorts changes which of a VM's ports are forwarded: a stopped
+	// VM's from its next start, a running one's at once, its forwarder
+	// started again as Start starts it with c (HostKey, ProxyPort,
+	// Decider, Free) while the VM runs on. Connections open through its
+	// old forwarder end.
+	SetPorts(ctx context.Context, vm string, p Ports, c Confinement) error
 	// SetAgentDirs replaces a stopped VM's agent folder mounts.
 	SetAgentDirs(ctx context.Context, vm string, dirs []string) error
 	// SetAgentForwarding turns a stopped VM's ssh-agent forwarding on or
@@ -347,16 +351,30 @@ type Confinement struct {
 	// NoAgent is set when the VM's choice is no agent: a backend whose VM
 	// forwards one anyway (made so, for agent-toggle) gives it none.
 	NoAgent bool
-	// Ports is what a VM that lists its ports forwards from this start:
-	// the list, less the ports a program on the host has. The backend
-	// forwards these where its VM forwards others. nil leaves its ports as
-	// they are (every port, none, a build's).
-	Ports *Ports
+	// Free returns the listed ports of a VM that lists its ports less
+	// those a program on the host has, warning about those: what its
+	// forwarder forwards, asked once any forwarder it had has stopped (its
+	// own ports would read as taken). nil forwards every listed port.
+	Free func(ctx context.Context, listed []PortRange) []PortRange
 	// HostKey returns the VM's host key (TYPE BASE64) as devvm pins it
 	// for its ssh config, read once it runs: a backend whose own ssh
 	// devvm pins (Lima's) gives it to its port forwarder. nil for a
 	// build.
 	HostKey func(ctx context.Context) (string, error)
+}
+
+// Forwarded returns what the forwarder of a VM that forwards p forwards
+// with c: nil for every port, else p's listed ports less those Free leaves
+// out, empty for none.
+func (c Confinement) Forwarded(ctx context.Context, p Ports) []PortRange {
+	if p.All {
+		return nil
+	}
+	rs := append([]PortRange{}, p.Ranges...)
+	if c.Free != nil && len(rs) > 0 {
+		rs = append([]PortRange{}, c.Free(ctx, rs)...)
+	}
+	return rs
 }
 
 // Status is a VM's state as its backend reports it.

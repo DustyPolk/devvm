@@ -10,6 +10,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -141,24 +142,6 @@ func (e *Env) defaultPorts() (string, error) {
 	return ParsePorts(def)
 }
 
-// applyPorts makes a stopped VM forward the ports its state asks for, when
-// its backend config forwards others (KeyPortsSet). A running VM's wait
-// for its next start.
-func (e *Env) applyPorts(ctx context.Context, b backend.Backend, st *state.VM, running bool) error {
-	want, set := orAll(st.Get(KeyPorts)), orAll(st.Get(KeyPortsSet))
-	if want == set {
-		return nil
-	}
-	if running {
-		e.Warn(msg.PortsNextStart(st.Name()))
-		return nil
-	}
-	if err := b.SetPorts(ctx, st.Name(), PortsBackend(want)); err != nil {
-		return err
-	}
-	return st.Set(KeyPortsSet, want)
-}
-
 func orAll(ports string) string {
 	if ports == "" {
 		return PortsAll
@@ -170,35 +153,30 @@ func orAll(ports string) string {
 func (e Settings) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
 
 // Ports writes to w which ports the folder's VM forwards (all, none or a
-// list), saying so when that changes at its next start; with global,
-// what new VMs forward.
+// list); with global, what new VMs forward.
 func (e Settings) Ports(ctx context.Context, w io.Writer, global bool) error {
+	ports := ""
 	if global {
 		def, err := e.defaultPorts()
 		if err != nil {
 			return err
 		}
-		_, err = io.WriteString(w, def+"\n")
-		return err
+		ports = def
+	} else {
+		t, err := e.portsVM(ctx)
+		if err != nil {
+			return err
+		}
+		ports = orAll(t.st.Get(KeyPorts))
 	}
-	t, err := e.portsVM(ctx)
-	if err != nil {
-		return err
-	}
-	want, set := orAll(t.st.Get(KeyPorts)), orAll(t.st.Get(KeyPortsSet))
-	if _, err := io.WriteString(w, set+"\n"); err != nil {
-		return err
-	}
-	if want != set {
-		e.Note(msg.PortsPending(want, t.f.Name))
-	}
-	return nil
+	_, err := io.WriteString(w, ports+"\n")
+	return err
 }
 
-// SetPorts changes which ports the folder's VM forwards: at once when
-// it's stopped, from its next start when it runs and forwards others.
-// With c.Global, it
-// changes what new VMs forward instead.
+// SetPorts changes which ports the folder's VM forwards: a stopped VM's
+// from its next start, a running one's at once, its forwarder started
+// again while it runs on (forwarding). With c.Global, it changes what new
+// VMs forward instead.
 func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if c.Global {
 		old, err := e.defaultPorts()
@@ -231,18 +209,45 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if err != nil {
 		return err
 	}
+	running := in.Status == backend.StatusRunning
+	var conf backend.Confinement
+	if running {
+		conf = e.forwarding(b, st)
+	}
+	// Its state first: other VMs' forwarders never take its listed ports
+	// (netpolicy.UsedPorts), its new ones included before its forwarder
+	// starts with them. Put back when its backend fails.
+	old := st.Get(KeyPorts)
 	if err := st.Set(KeyPorts, ports); err != nil {
 		return err
 	}
-	running := in.Status == backend.StatusRunning
-	if err := e.applyPorts(ctx, b, st, running); err != nil {
+	if err := b.SetPorts(ctx, vm, PortsBackend(ports), conf); err != nil {
+		_ = st.Set(KeyPorts, old)
 		return err
 	}
-	// Otherwise applyPorts said it waits for the next start.
-	if orAll(st.Get(KeyPortsSet)) == ports {
+	if running {
+		e.Info(msg.PortsForwarding(ports, vm))
+	} else {
 		e.Info(msg.PortsNow(ports, vm))
 	}
 	return nil
+}
+
+// forwarding is what a running VM's forwarder starts again with when its
+// ports change: the host key its ssh config pins, its proxy's and
+// decider's ports, never forwarded, and its listed ports less those a host
+// program has (freePorts).
+func (e *Env) forwarding(b backend.Backend, st *state.VM) backend.Confinement {
+	vm := st.Name()
+	c := backend.Confinement{
+		Free:    e.freePorts(vm),
+		HostKey: func(ctx context.Context) (string, error) { return e.sshConfig().HostKey(ctx, b, vm) },
+	}
+	c.ProxyPort, _ = strconv.Atoi(st.Get(netpolicy.KeyProxyPort))
+	if p := st.Get(netpolicy.KeyDeciderPort); p != "" {
+		c.Decider = "127.0.0.1:" + p
+	}
+	return c
 }
 
 // PortsBackend returns a parsed ports value as the backend has it: "" is
@@ -267,25 +272,22 @@ func PortsBackend(v string) backend.Ports {
 	return p
 }
 
-// startPorts returns the listed ports a stopped VM forwards from this
-// start (its backend's, KeyPortsSet), less those a program on the host
-// has on any address, which a forward would share, taking that program's
-// loopback connections: they're left out, warned, until a start finds
-// them free. nil for every port or none.
-func (e *Env) startPorts(ctx context.Context, st *state.VM) *backend.Ports {
-	v := orAll(st.Get(KeyPortsSet))
-	if v == PortsAll || v == PortsNone {
-		return nil
-	}
-	free, taken := splitPorts(PortsBackend(v).Ranges, func(p int) bool { return e.PortInUse(ctx, p) })
-	if len(taken) > 0 {
-		n := 0
-		for _, r := range taken {
-			n += r.To - r.From + 1
+// freePorts is the VM's Confinement.Free: its listed ports less those a
+// program on the host has on any address, which a forward would share,
+// taking that program's loopback connections. They're left out, warned,
+// until a start or a change of its ports finds them free.
+func (e *Env) freePorts(vm string) func(context.Context, []backend.PortRange) []backend.PortRange {
+	return func(ctx context.Context, listed []backend.PortRange) []backend.PortRange {
+		free, taken := splitPorts(listed, func(p int) bool { return e.PortInUse(ctx, p) })
+		if len(taken) > 0 {
+			n := 0
+			for _, r := range taken {
+				n += r.To - r.From + 1
+			}
+			e.Warn(msg.PortsTaken(n, portsValue(taken), vm))
 		}
-		e.Warn(msg.PortsTaken(n, portsValue(taken), st.Name()))
+		return free
 	}
-	return &backend.Ports{Ranges: free}
 }
 
 // splitPorts splits ranges into the ports inUse says are free and those it

@@ -34,13 +34,12 @@ stderr '^devvm: git_protect_flag_ignored$'
 exec sh -c 'grep -c "^net=off$" "$VMS"/devvm-web-*'
 stdout '^1$'
 
-# A size or ports its state asks for: a running VM's wait for its next
-# start; a stopped one's are applied once.
-exec sh -c 'f=$(ls "$VMS"/devvm-web-*); printf "cpus=6\nports=5173\n" >> "$f"'
+# A size its state asks for: a running VM's waits for its next start; a
+# stopped one's is applied once.
+exec sh -c 'f=$(ls "$VMS"/devvm-web-*); printf "cpus=6\n" >> "$f"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
-stderr '^devvm: ports_next_start vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
 
@@ -56,10 +55,6 @@ stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 6$'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
 stdout '^ssh -F none -M .* -l stub 127\.0\.0\.1 sh -s$'
 stdout 'sh -c .*/etc/ssh/ssh_host_'
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports'
-stdout '\A5173\n\z'
-exec sh -c 'cat "$VMS"/devvm-web-*'
-stdout '^ports_set=5173$'
 # (The stub's VM gets the size its edit asked for.)
 exec sh -c 'echo "6 8589934592 107374182400" > "$STUB_DIR/size-$(basename "$VMS"/devvm-web-*)"'
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'

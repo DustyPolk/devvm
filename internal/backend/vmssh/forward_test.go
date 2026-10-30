@@ -478,6 +478,47 @@ func TestFlags(t *testing.T) {
 	}
 }
 
+// A forwarder that doesn't end on SIGTERM is killed: Stop returns with it
+// gone, so a start that follows finds its ports free.
+func TestForwardsStopKills(t *testing.T) {
+	dir := t.TempDir()
+	out, err := os.Create(filepath.Join(t.TempDir(), "out"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = out.Close() }()
+	p, err := platform.StartDetachedProcess("/bin/sh", []string{"-c", `trap "" TERM; echo ready; while :; do sleep 1; done`}, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = p.Kill() }()
+	ended := make(chan struct{})
+	go func() { _, _ = p.Wait(); close(ended) }()
+	for range 100 {
+		if b, _ := os.ReadFile(out.Name()); strings.Contains(string(b), "ready") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	f := Forwards{Dir: dir, Cmd: "_x-ports", Args: func(int) ([]string, error) {
+		select {
+		case <-ended:
+			return nil, errors.New("gone")
+		default:
+			return []string{"/devvm", "_x-ports", "-vm", "v"}, nil
+		}
+	}}
+	if err := os.WriteFile(filepath.Join(dir, "v.ports.pid"), []byte(strconv.Itoa(p.Pid)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.Stop("v")
+	select {
+	case <-ended:
+	case <-time.After(time.Second):
+		t.Error("still running after Stop")
+	}
+}
+
 // Forwards: a VM's forwarder runs devvm's hidden command with the
 // backend's flags and the forwarder's own, its host key pinned in a file
 // of its own; it's found by its pid and arguments, stopped, and its files
@@ -530,10 +571,32 @@ func TestForwards(t *testing.T) {
 		t.Error("not found by its arguments")
 	}
 	running = false
+	// Its lock: held by one at a time, waited for until the context ends;
+	// another VM's is its own.
+	unlock, err := f.Lock(t.Context(), "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	if _, err := f.Lock(ctx, "v"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("locked twice: %v", err)
+	}
+	if unlockW, err := f.Lock(t.Context(), "w"); err != nil {
+		t.Errorf("another VM's: %v", err)
+	} else {
+		unlockW()
+	}
+	unlock()
+	if unlock, err = f.Lock(t.Context(), "v"); err != nil {
+		t.Errorf("once unlocked: %v", err)
+	} else {
+		unlock()
+	}
 	if err := f.Remove("v"); err != nil {
 		t.Fatal(err)
 	}
-	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log"} {
+	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log", ".ports.lock"} {
 		if _, err := os.Stat(filepath.Join(f.Dir, "v"+ext)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", ext, err)
 		}

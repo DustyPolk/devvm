@@ -1,11 +1,13 @@
 package smolvm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -134,9 +136,9 @@ func (s sandbox) fakeForwarder(t *testing.T, vm string, args *[]string) {
 }
 
 // A VM's listed ports are recorded, none of smolvm's, however many: its
-// forwarder forwards them alone (-only), those this start's Confinement
-// names (a host program's left out) over the record's; with none, no
-// forwarder runs.
+// forwarder forwards them alone (-only), those Confinement.Free leaves (a
+// host program's left out); with none, no forwarder runs. A running VM's
+// change starts its forwarder again with the new ports.
 func TestStartListedForwarder(t *testing.T) {
 	s := newSandbox(t)
 	vm := "devvm-l-0123456789abcd"
@@ -150,15 +152,23 @@ func TestStartListedForwarder(t *testing.T) {
 	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
 	c := backend.Confinement{SSH: true, Net: backend.NetDirect}
 	for _, tc := range []struct {
-		ports *backend.Ports
-		only  string // "" for no forwarder
+		free []backend.PortRange // nil for no Free
+		only string              // "" for no forwarder
 	}{
 		{nil, "22,3000,8000-8100"},
-		{&backend.Ports{Ranges: listed[2:]}, "8000-8100"},
-		{&backend.Ports{}, ""},
+		{listed[2:], "8000-8100"},
+		{[]backend.PortRange{}, ""},
 	} {
 		args, warned = nil, nil
-		c.Ports = tc.ports
+		c.Free = nil
+		if tc.free != nil {
+			c.Free = func(_ context.Context, rs []backend.PortRange) []backend.PortRange {
+				if !slices.Equal(rs, listed) {
+					t.Errorf("Free asked of %v", rs)
+				}
+				return tc.free
+			}
+		}
 		if err := s.Start(t.Context(), vm, c); err != nil {
 			t.Fatal(err)
 		}
@@ -177,10 +187,64 @@ func TestStartListedForwarder(t *testing.T) {
 	}
 	// Every port again: the record alone changes.
 	s.reset(t)
-	if err := s.SetPorts(t.Context(), vm, backend.Ports{All: true}); err != nil {
+	args = nil
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{All: true}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := s.readRecord(vm); !r.PortsAll || r.Listed != nil || len(s.calls(t)) != 0 {
-		t.Errorf("all: %+v, %q", r, s.calls(t))
+	if r, _ := s.readRecord(vm); !r.PortsAll || r.Listed != nil || len(s.calls(t)) != 0 || args != nil {
+		t.Errorf("all: %+v, %q, forwarder %q", r, s.calls(t), args)
+	}
+
+	// Running: its forwarder starts again with the new ports at once, the
+	// VM left running; none starts none.
+	c.Free = nil
+	if err := s.Start(t.Context(), vm, c); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(args, "-only") {
+		t.Errorf("all: forwarder %q", args)
+	}
+	s.reset(t)
+	args = nil
+	c = backend.Confinement{ProxyPort: 30001, Free: func(_ context.Context, rs []backend.PortRange) []backend.PortRange { return rs[1:] }}
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: listed}, c); err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(args, "-only"); i < 0 || args[i+1] != "3000,8000-8100" || !slices.Contains(args, "61022,30001") {
+		t.Errorf("running: forwarder %q", args)
+	}
+	for _, call := range s.calls(t) {
+		if strings.Contains(call, "machine stop") || strings.Contains(call, "machine start") {
+			t.Errorf("running: %q", call)
+		}
+	}
+	args = nil
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{}, c); err != nil || args != nil {
+		t.Errorf("running, none: forwarder %q, %v", args, err)
+	}
+	// A forward given a record read before another devvm's change: the
+	// record's ports as they are now (none), so no forwarder.
+	stale, err := s.readRecord(vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale.Listed = listed
+	args = nil
+	if s.forward(t.Context(), vm, stale, c); args != nil {
+		t.Errorf("stale record: forwarder %q", args)
+	}
+	// Started outside devvm since (another lifeline): no sshd of devvm's,
+	// so no forwarder, warned; the record changes all the same.
+	other := []byte(strconv.Itoa(os.Getpid()) + "\n1")
+	if err := os.WriteFile(filepath.Join(s.stub, "smolvm-data", vm, "agent.pid"), other, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args, warned = nil, nil
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: listed}, c); err != nil || args != nil ||
+		!slices.Equal(warned, []string{"ports_no_ssh vm=" + vm}) {
+		t.Errorf("started elsewhere: forwarder %q, warned %q, %v", args, warned, err)
+	}
+	if r, _ := s.readRecord(vm); !slices.Equal(r.Listed, listed) {
+		t.Errorf("started elsewhere: record %+v", r)
 	}
 }

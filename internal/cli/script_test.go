@@ -40,6 +40,7 @@ func TestScript(t *testing.T) {
 			return sandbox(env, bin, stubs)
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
+			"free_port":     freePort,
 			"linux_release": release.serve,
 			"listen_any":    listenAny,
 			"stub_calls":    stubCalls,
@@ -235,6 +236,27 @@ func listenAny(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Check(err)
 	ts.Defer(func() { _ = l.Close() })
 	ts.Setenv(args[0], strconv.Itoa(l.Addr().(*net.TCPAddr).Port))
+}
+
+// freePort sets each VAR to a different port nothing on the host listens
+// on now, for a script that lists ports a start or a change finds free: a
+// fixed one (5173) may be a program's here.
+func freePort(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) == 0 {
+		ts.Fatalf("usage: free_port VAR...")
+	}
+	var held []net.Listener
+	defer func() {
+		for _, l := range held {
+			_ = l.Close()
+		}
+	}()
+	for _, v := range args {
+		l, err := net.Listen("tcp", ":0") //nolint:noctx,gosec // every address, so the port is free on each; closed at once
+		ts.Check(err)
+		held = append(held, l)
+		ts.Setenv(v, strconv.Itoa(l.Addr().(*net.TCPAddr).Port))
+	}
 }
 
 // stubCalls writes the calls the stubs logged to stdout, one per line.

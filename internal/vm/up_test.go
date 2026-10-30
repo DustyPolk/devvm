@@ -54,7 +54,7 @@ func TestUp(t *testing.T) {
 	}
 	for k, v := range map[string]string{
 		state.KeyImage: "base", state.KeyDir: e.Dir, state.KeyBackend: "fake", KeyNet: "off", KeyCPUs: "2",
-		KeyPorts: "none", KeyPortsSet: "none", gitprotect.KeyGitProtect: "on",
+		KeyPorts: "none", gitprotect.KeyGitProtect: "on",
 	} {
 		if got := st.Get(k); got != v {
 			t.Errorf("state %s = %q, want %q", k, got, v)

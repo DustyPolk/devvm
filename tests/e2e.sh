@@ -6,7 +6,8 @@
 #                project makes a VM from base in a project folder and checks its mounts, no Docker, every
 #                port through devvm's forwarder (never a port a program here has), ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
-#                again, restart, devvm size, devvm ports (never a listed port a program here has),
+#                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
+#                program here has),
 #                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
 #                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
@@ -28,7 +29,7 @@
 #                the smolvm backend's own section instead (experimental): base and a layer built as
 #                packs, a project VM's mounts, size, listed ports through devvm's forwarder (a server
 #                on the VM's loopback reaching this machine, none published by smolvm, never one a
-#                program here has), no Docker
+#                program here has, a running VM's changed at once), no Docker
 #                without the docker layer, agent forwarding, a node VM's
 #                shared tools, agent toggling's emulation (your agent, devvm's or none from each
 #                start, devvm export's too, none reaching no agent and adding to none, a VM set to
@@ -61,8 +62,8 @@
 #                ssh for editors', ports' and agent forwarding's emulations (nothing published or
 #                listening, pinned host keys of each VM's own, its own key alone, no forwarding out even
 #                past a hostile sshd, a VM started outside devvm, devvm ssh and code, every port and
-#                listed ports through devvm's forwarder, never a port of this machine's programs or
-#                another VM's, the agent in ssh sessions alone, a --clone VM); network policy's
+#                listed ports through devvm's forwarder, a running VM's changed at once, never a port
+#                of this machine's programs or another VM's, the agent in ssh sessions alone, a --clone VM); network policy's
 #                emulation (the VM without NET_RAW on an internal network of its own, with
 #                inhibit_ipv4, beside its relay alone, by ID; nothing but its proxy reached even as
 #                root, no outside name, no DNS query leaving its network (a capture on the engine's
@@ -378,6 +379,25 @@ host_port_kept() { local hp out r=1
   echo "$3 not forwarded again"; return 1; }
 # lima_serve VM PORTS...: a server in the VM on each port, every address, left running.
 lima_serve() { local p; for p in "${@:2}"; do in_vm "$1" "setsid -f python3 -m http.server -b 0.0.0.0 $p </dev/null >/dev/null 2>&1"; done; }
+# lima_boot VM: its boot's ID.
+lima_boot() { in_vm "$1" 'cat /proc/sys/kernel/random/boot_id'; }
+# ports_live DIR VM PORT SERVE BOOT: VM runs, listing ports without PORT, with a server in it on
+# PORT (SERVE VM PORT), which doesn't reach this machine; devvm ports add PORT says the VM forwards
+# its new ports and the server reaches this machine at once; devvm ports rm PORT closes it again.
+# The VM is never restarted: BOOT VM (its boot or start) is the same after.
+ports_live() { local b0 b1 now
+  b0=$("$5" "$2"); "$4" "$2" "$3"; sleep 3
+  ! nc -z 127.0.0.1 "$3" || { echo "$3 reached before it's listed"; return 1; }
+  (cd "$1" && "$D" ports add "$3" </dev/null >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
+  now=$(cd "$1" && "$D" ports 2>/dev/null)
+  grep -qF "$(m ports_forwarding ports="$now" vm="$2")" "$work/last.log" || { cat "$work/last.log"; return 1; }
+  for _ in $(seq 20); do nc -z 127.0.0.1 "$3" && break; sleep 1; done
+  nc -z 127.0.0.1 "$3" || { echo "$3 not forwarded once added"; return 1; }
+  (cd "$1" && "$D" ports rm "$3" </dev/null >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
+  for _ in $(seq 15); do nc -z 127.0.0.1 "$3" || break; sleep 1; done
+  ! nc -z 127.0.0.1 "$3" || { echo "$3 still forwarded once removed"; return 1; }
+  b1=$("$5" "$2"); echo "boot or start: ${b0:-none} before, ${b1:-none} after"
+  [[ -n $b0 && $b0 == "$b1" ]]; }
 # lima_listens tcp|udp PORT: Lima's own processes (limactl's hostagent) have PORT on this machine.
 lima_listens() {
   if [[ "$(uname -s)" == Darwin ]]; then
@@ -640,11 +660,14 @@ check "devvm code opens the folder over Remote-SSH (a stub code), with the agent
   [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-web $p' && \$(cat '$sc/code-agent') == '$sc/agent.sock' ]]"
 check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
-check "a running VM's new ports wait for its next start" bash -c "cd '$p' &&
-  '$D' ports 47170-47173 2>&1 | grep -qF \"\$(m ports_next_start vm=$vm)\" && [[ \$('$D' ports 2>/dev/null) == all ]]"
-check "so does its new size" bash -c "cd '$p' && '$D' size --cpus 3 2>&1 | grep -qF \"\$(m size_next_start vm=$vm)\" &&
+check "a running VM's new ports apply at once" bash -c "cd '$p' &&
+  '$D' ports 47170-47173 2>&1 | grep -qF \"\$(m ports_forwarding ports=47170-47173 vm=$vm)\" && [[ \$('$D' ports 2>/dev/null) == 47170-47173 ]] &&
+  ps -axww -o command= | grep -- '[_]lima-ports -vm $vm ' | grep -q -- ' -only 47170-47173\$'"
+check "a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted" ports_live "$p" "$vm" 47178 lima_serve lima_boot
+in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 47178"' >/dev/null 2>&1
+check "its new size waits for its next start" bash -c "cd '$p' && '$D' size --cpus 3 2>&1 | grep -qF \"\$(m size_next_start vm=$vm)\" &&
   '$D' size 2>&1 >/dev/null | grep -qF \"\$(m size_pending size=cpus=3 vm=$vm)\""
-check "and they apply on restart" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
+check "and applies on restart, its ports kept" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
   [[ \$('$D' ports 2>&1) == 47170-47173 && \$(limactl shell --workdir / $vm nproc </dev/null) == 3 &&
      \$('$D' size 2>&1) == 'cpus=3 memory=3GiB disk=120GiB' ]]"
 check "a smaller disk is refused" bash -c "cd '$p' && ! '$D' size --disk 100 </dev/null >'$work/last.log' 2>&1 &&
@@ -1240,14 +1263,16 @@ check "made ready to turn agent forwarding on later, and given none: smolvm's so
   grep -qi 'communication with agent failed\|error connecting to agent'"
 check "smolvm publishes none of its ports: its process listens on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
 check "... and devvm's forwarder forwards the listed ones alone" bash -c "ps -axww -o command= | grep -- '[_]smolvm-ports -vm $vm ' | grep -q -- ' -only 47180,47184\$'"
-check "a running VM's new size and ports wait for its next start, and apply on restart" bash -c "cd '$p' &&
-  '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
-  printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
-  [[ \$('$D' ports 2>/dev/null) == 47180,47184,47181 ]]"
 # smol_serve VM PORTS...: a server in the VM on each port, every address, left running.
 smol_serve() { local p; for p in "${@:2}"; do SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- perl -MIO::Socket::INET -e \
   '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:" . shift, Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' "$p" \
   </dev/null >/dev/null 2>&1; done; }
+check "a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted" ports_live "$p" "$vm" 47186 smol_serve smol_pid
+check "a running VM's new size waits for its next start, and applies on restart; its new ports at once" bash -c "cd '$p' &&
+  '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
+  ps -axww -o command= | grep -- '[_]smolvm-ports -vm $vm ' | grep -q -- ' -only 47180,47184,47181\$' &&
+  printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
+  [[ \$('$D' ports 2>/dev/null) == 47180,47184,47181 ]]"
 check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$p" "$vm" 47181 47180 smol_serve
 check "a smaller disk is refused" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D' size --disk 100 </dev/null >'$work/last.log' 2>&1 &&
   grep -q 'disk_shrink' '$work/last.log'"
@@ -2431,6 +2456,8 @@ d_answers() { local a b; for _ in $(seq 20); do
 d_closed() { for _ in $(seq 15); do
     if ! nc -z 127.0.0.1 "$1" 2>/dev/null && { ! h_v6 || ! nc -6 -z ::1 "$1" 2>/dev/null; }; then return 0; fi; sleep 1; done
   echo "port $1 still answers"; return 1; }
+# d_started VM: when Docker last started its container.
+d_started() { docker container inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null; }
 # d_fwd VM: its forwarder's pid. d_fwdlog VM: its log.
 d_fwd() { pgrep -f -- "[_]docker-ports -vm $1 " | head -1; }
 d_fwdlog() { cat "$XDG_DATA_HOME/devvm/docker/vms/$1.ports.log" 2>/dev/null; }
@@ -2659,6 +2686,8 @@ docker_ports() {
   check "listed ports: through the forwarder too, only those (an unlisted port isn't forwarded), nothing published" bash -c "
     [[ -n '$vm' ]] && d_answers 47521 vm-47521 && d_closed 47522 && d_unpublished '$vm' &&
     ps -axww -o command= | grep -- '[_]docker-ports -vm $vm ' | grep -q -- ' -only 47521,47180-47181\$'"
+  check "a port added to a running VM reaches this machine at once, and once removed doesn't, the container never restarted" \
+    ports_live "$pl" "$vm" 47523 d_serve_any d_started
   check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$pl" "$vm" 47181 47180 d_serve_any
   (cd "$pl" && quiet "$D" rm -f)
 }

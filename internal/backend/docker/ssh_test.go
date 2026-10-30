@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -183,11 +184,11 @@ func TestAgent(t *testing.T) {
 	}
 }
 
-// Ports: none, listed or every one, recorded on a stopped VM; a start
-// forwards them through its forwarder, once its sshd's config is written:
-// every port, or the listed ones the start names (those a host program
-// has left out), through devvm _docker-connect, for this start of its
-// container. Nothing is published.
+// Ports: none, listed or every one, recorded; a start forwards them
+// through its forwarder, once its sshd's config is written: every port,
+// or the listed ones Free leaves (those a host program has left out),
+// through devvm _docker-connect, for this start of its container, and a
+// running VM's change starts its forwarder again. Nothing is published.
 func TestPorts(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web", Ports: backend.Ports{All: true}})
@@ -240,46 +241,75 @@ func TestPorts(t *testing.T) {
 		t.Fatal(err)
 	}
 	listed := backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3000}, {From: 8000, To: 8002}}}
-	if err := s.SetPorts(t.Context(), vm, listed); err != nil {
-		t.Fatal(err)
+	args = nil
+	if err := s.SetPorts(t.Context(), vm, listed, backend.Confinement{}); err != nil || args != nil {
+		t.Fatalf("stopped: %q, %v", args, err)
 	}
 	if r, _ := s.readRecord(vm); r.PortsAll || !slices.Equal(r.Ports, listed.Ranges) {
 		t.Errorf("record: %+v", r)
 	}
-	start(backend.Confinement{SSH: true, Ports: &backend.Ports{Ranges: []backend.PortRange{{From: 8000, To: 8002}}}})
+	free := func(left []backend.PortRange) func(context.Context, []backend.PortRange) []backend.PortRange {
+		return func(context.Context, []backend.PortRange) []backend.PortRange { return left }
+	}
+	start(backend.Confinement{SSH: true, Free: free(listed.Ranges[1:])})
 	if i := slices.Index(args, "-only"); i < 0 || args[i+1] != "8000-8002" {
 		t.Errorf("listed: %q", args)
 	}
 	// All of them taken: no forwarder.
-	start(backend.Confinement{SSH: true, Ports: &backend.Ports{}})
+	start(backend.Confinement{SSH: true, Free: free(nil)})
 	if args != nil {
 		t.Errorf("none left: %q", args)
 	}
 	// Without ssh: warned, no forwarder.
-	start(backend.Confinement{Ports: &listed})
+	start(backend.Confinement{})
 	if args != nil || !slices.Contains(warned, "ports_no_ssh vm="+vm) {
 		t.Errorf("without ssh: %q, warned %q", args, warned)
 	}
 	// One that never says it forwards: warned, the VM runs on.
 	warned = nil
+	detach := s.Forwards.Detach
 	s.Forwards.Detach = func(string, []string, *os.File) (int, error) { return os.Getpid(), nil }
-	start(backend.Confinement{SSH: true, Ports: &listed})
+	start(backend.Confinement{SSH: true})
 	if !slices.Equal(warned, []string{"ports_forward_failed log=" + s.Forwards.Log(vm) + " vm=" + vm}) {
 		t.Errorf("warned %q", warned)
 	}
+	s.Forwards.Detach = detach
 	// None: nothing.
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPorts(t.Context(), vm, backend.Ports{}); err != nil {
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	warned, args = nil, nil
 	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil || args != nil || len(warned) != 0 {
 		t.Errorf("none: %q, %q, %v", args, warned, err)
 	}
-	if err := s.SetPorts(t.Context(), vm, listed); id(err) != "vm_not_stopped" {
-		t.Errorf("running: %v", err)
+	// Running: its forwarder starts again at once with the new ports and
+	// the host key its start pinned, for the same start of its container.
+	was, err := s.vm(t.Context(), vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPorts(t.Context(), vm, listed, backend.Confinement{Free: free(listed.Ranges[:1])}); err != nil {
+		t.Fatal(err)
+	}
+	now, err := s.vm(t.Context(), vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(args, "-only"); i < 0 || args[i+1] != "3000" || !slices.Contains(args, now.State.StartedAt) || len(warned) != 0 {
+		t.Errorf("running: %q, warned %q", args, warned)
+	}
+	if b, err := os.ReadFile(s.Forwards.KnownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAstub\n" {
+		t.Errorf("running: forwarder's known_hosts: %q, %v", b, err)
+	}
+	if now.status() != backend.StatusRunning || now.State.StartedAt != was.State.StartedAt {
+		t.Errorf("running: %+v", now.State)
+	}
+	args = nil
+	if err := s.SetPorts(t.Context(), vm, backend.Ports{}, backend.Confinement{}); err != nil || args != nil {
+		t.Errorf("running, none: %q, %v", args, err)
 	}
 }
 

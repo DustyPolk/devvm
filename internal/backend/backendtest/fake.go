@@ -393,10 +393,10 @@ func (f *Fake) SetSize(_ context.Context, vm string, s backend.Size) error {
 }
 
 // SetPorts records the call.
-func (f *Fake) SetPorts(_ context.Context, vm string, p backend.Ports) error {
+func (f *Fake) SetPorts(_ context.Context, vm string, p backend.Ports, c backend.Confinement) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.record("SetPorts", vm, p); err != nil {
+	if err := f.record("SetPorts", vm, p, c); err != nil {
 		return err
 	}
 	return f.change(vm, func(*backend.Instance) {})

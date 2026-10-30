@@ -137,7 +137,7 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 // launch of it does before its setup: the folder's devcontainer.json
 // compared with the one it was made from; .git checked (and on Linux, set-id
 // files) unless it's a --clone VM, which mounts neither; a stopped VM's
-// size, ports and SSH agent forwarding made what its state asks for; the
+// size and SSH agent forwarding made what its state asks for; the
 // user's agent checked for keys when the VM forwards it; then it's
 // started if it's stopped and its network policy checked (run). It
 // returns the confinement the VM runs with.
@@ -157,9 +157,6 @@ func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, erro
 		e.checkSetID(t.f.Dir)
 	}
 	if err := e.applySize(ctx, b, st, in); err != nil {
-		return backend.Confinement{}, err
-	}
-	if err := e.applyPorts(ctx, b, st, running); err != nil {
 		return backend.Confinement{}, err
 	}
 	if err := e.applyAgent(ctx, b, st, in); err != nil {

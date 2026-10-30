@@ -241,6 +241,16 @@ exec sh -c 'cat "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*.ports.log'
 stdout '^devvm ports: forwarding devvm-emu-[0-9a-f]{14}''s ports$'
 exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
 stdout ' -only 47328,9-10$'
+# Running: a change starts its forwarder again at once, for the same
+# start of its container.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ports rm 9-10
+stdout '^==> ports_forwarding ports=47328 vm=devvm-emu-[0-9a-f]{14}$'
+stub_calls
+! stdout '^docker (container )?(stop|start|create|commit|rm) '
+exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
+stdout ' -only 47328$'
+! stdout ' -only 47328,9-10$'
 
 # rm deletes its forwarder, its keys and its entry.
 exec devvm rm -f

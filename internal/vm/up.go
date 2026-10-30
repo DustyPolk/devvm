@@ -167,10 +167,8 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		}
 	}
 	if n.ports != "" && n.ports != PortsAll {
-		for _, k := range []string{KeyPorts, KeyPortsSet} {
-			if err := st.Set(k, n.ports); err != nil {
-				return err
-			}
+		if err := st.Set(KeyPorts, n.ports); err != nil {
+			return err
 		}
 	}
 	// A clone has no .git of the host's to protect, and no origin.

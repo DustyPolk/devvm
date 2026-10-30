@@ -366,7 +366,7 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 	if err := d.writeRecord(vm, r); err != nil {
 		return err
 	}
-	d.forward(vm, ct, r, c, key)
+	d.forward(ctx, vm, ct, r, c, key)
 	return nil
 }
 

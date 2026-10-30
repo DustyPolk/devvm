@@ -1,10 +1,12 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -23,9 +25,10 @@ import (
 // Docker fixes when it makes the container, and then only for servers on
 // the container's network address, never its loopback. So a VM publishes
 // nothing, and devvm's forwarder (vmssh.Forwarder, devvm _docker-ports,
-// started by Start once the VM's sshd config is written) forwards its
-// ports over its ssh (ssh.go): every one, or its listed ones less those a
-// program on the host has (Confinement.Ports). It reaches the VM's sshd
+// started by Start once the VM's sshd config is written, and again by
+// SetPorts on a running VM) forwards its ports over its ssh (ssh.go):
+// every one, or its listed ones less those a program on the host has
+// (Confinement.Free). It reaches the VM's sshd
 // through devvm _docker-connect, as ssh does, and ends once the container
 // no longer runs the start it was made for: its ID and start time, asked
 // of Docker every aliveEvery and whenever its connection ends (which a
@@ -47,35 +50,34 @@ func newForwards(d paths.Dirs, self string) vmssh.Forwards {
 	}
 }
 
-// startPorts is what a VM forwards from this start: nil for every port,
-// else its listed ports c names (those a host program has left out), or
-// its record's without them; none is empty.
-func startPorts(r record, c backend.Confinement) []backend.PortRange {
-	switch {
-	case c.Ports != nil && c.Ports.All, c.Ports == nil && r.PortsAll:
-		return nil
-	case c.Ports != nil:
-		return append([]backend.PortRange{}, c.Ports.Ranges...)
-	}
-	return append([]backend.PortRange{}, r.Ports...)
-}
-
 // forward starts the forwarder of a VM that forwards ports, once its
-// sshd's config is written: with the host key this start pinned, through
-// devvm _docker-connect, for this start of its container (ct). One that
-// can't start is warned about: the VM runs on. A VM that forwards none
-// has its forwarder, if any, stopped.
-func (d *Docker) forward(vm string, ct container, r record, c backend.Confinement, hostKey string) {
-	only := startPorts(r, c)
+// sshd's config is written, after stopping any it had, holding its lock
+// throughout: every port or its listed ones (its record's as it reads them
+// then, c.Forwarded), with the host key this start pinned, through devvm
+// _docker-connect, for this start of its container (ct). One that can't
+// start is warned about: the VM runs on. A VM that forwards none is left
+// without one.
+func (d *Docker) forward(ctx context.Context, vm string, ct container, r record, c backend.Confinement, hostKey string) {
+	failed := func() { d.Warn(msg.PortsForwardFailed(d.Forwards.Log(vm), vm)) }
+	unlock, err := d.Forwards.Lock(ctx, vm)
+	if err != nil {
+		failed()
+		return
+	}
+	defer unlock()
+	d.Forwards.Stop(vm)
+	// Another devvm's SetPorts may have changed the ports since r was read.
+	if cur, err := d.readRecord(vm); err == nil {
+		r.PortsAll, r.Ports = cur.PortsAll, cur.Ports
+	}
+	only := c.Forwarded(ctx, backend.Ports{All: r.PortsAll, Ranges: r.Ports})
 	if only != nil && len(only) == 0 {
-		d.Forwards.Stop(vm)
 		return
 	}
 	if !r.SSHUp {
 		d.Warn(msg.PortsNoSSH(vm))
 		return
 	}
-	failed := func() { d.Warn(msg.PortsForwardFailed(d.Forwards.Log(vm), vm)) }
 	t, err := d.transport(vm)
 	docker, lerr := d.LookPath("docker")
 	if err != nil || lerr != nil {
@@ -130,16 +132,34 @@ func containerRuns(ctx context.Context, docker, id, started string) bool {
 	return err == nil && strings.TrimSpace(string(out)) == "true "+started
 }
 
-// SetPorts changes which of a stopped VM's ports are forwarded, from its
-// next start: every one, its listed ones, or none.
-func (d *Docker) SetPorts(ctx context.Context, vm string, p backend.Ports) error {
-	_, r, err := d.stopped(ctx, vm)
+// SetPorts changes which of a VM's ports are forwarded (every one, its
+// listed ones, or none): its record, which a stopped VM forwards from its
+// next start, and a running one's forwarder, started again with them and
+// the host key its start pinned. One started outside devvm since has no
+// sshd of devvm's to forward through.
+func (d *Docker) SetPorts(ctx context.Context, vm string, p backend.Ports, c backend.Confinement) error {
+	ct, err := d.vm(ctx, vm)
 	if err != nil {
 		return err
 	}
-	if r.PortsAll == p.All && slices.Equal(r.Ports, p.Ranges) {
+	r, err := d.readRecord(vm)
+	if err != nil {
+		return err
+	}
+	if r.PortsAll != p.All || !slices.Equal(r.Ports, p.Ranges) {
+		r.PortsAll, r.Ports = p.All, slices.Clone(p.Ranges)
+		if err := d.writeRecord(vm, r); err != nil {
+			return err
+		}
+	}
+	if ct.status() != backend.StatusRunning {
 		return nil
 	}
-	r.PortsAll, r.Ports = p.All, slices.Clone(p.Ranges)
-	return d.writeRecord(vm, r)
+	b, _ := os.ReadFile(d.knownHosts(vm))
+	key, ok := vmssh.HostKey(bytes.TrimPrefix(b, []byte(vm+" ")))
+	if !ok || r.Started != ct.State.StartedAt {
+		r.SSHUp = false
+	}
+	d.forward(ctx, vm, ct, r, c, key)
+	return nil
 }

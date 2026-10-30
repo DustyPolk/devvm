@@ -461,32 +461,26 @@ func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 	return used, nil
 }
 
-// The keys of a VM's state that list the ports it forwards to the same
-// host port: wanted, and set in its backend (vm's KeyPorts and
-// KeyPortsSet).
-const (
-	keyPorts    = "ports"
-	keyPortsSet = "ports_set"
-)
+// keyPorts is the key of a VM's state that lists the ports it forwards to
+// the same host port (vm's KeyPorts).
+const keyPorts = "ports"
 
 // forwarded returns the host ports a VM forwards, as its state lists them
 // (5173,8000-8010); none for all or none, which name no port.
 func forwarded(st *state.VM) map[int]bool {
 	out := map[int]bool{}
-	for _, k := range []string{keyPorts, keyPortsSet} {
-		for r := range strings.SplitSeq(st.Get(k), ",") {
-			from, to, ok := strings.Cut(strings.TrimSpace(r), "-")
-			if !ok {
-				to = from
-			}
-			a, err1 := strconv.Atoi(from)
-			b, err2 := strconv.Atoi(to)
-			if err1 != nil || err2 != nil || a < 1 || b > 65535 || a > b {
-				continue
-			}
-			for n := a; n <= b; n++ {
-				out[n] = true
-			}
+	for r := range strings.SplitSeq(st.Get(keyPorts), ",") {
+		from, to, ok := strings.Cut(strings.TrimSpace(r), "-")
+		if !ok {
+			to = from
+		}
+		a, err1 := strconv.Atoi(from)
+		b, err2 := strconv.Atoi(to)
+		if err1 != nil || err2 != nil || a < 1 || b > 65535 || a > b {
+			continue
+		}
+		for n := a; n <= b; n++ {
+			out[n] = true
 		}
 	}
 	return out
