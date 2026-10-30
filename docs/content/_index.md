@@ -26,11 +26,11 @@ layout: hextra-home
 ```sh
 # 2. Go to a project folder
 cd ~/some-project
-# 3. Open its VM, with Claude Code
-devvm claude
+# 3. Open its VM
+devvm
 ```
 
-Run `devvm` alone for a VM with the project's toolchain and no agent. The first VM builds the base image, which takes a few minutes once, and [your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
+For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. The first VM builds the base image, which takes a few minutes once, and [your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
 
 ## What's supported
 
