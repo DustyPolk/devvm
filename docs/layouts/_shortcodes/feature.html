@@ -1,7 +1,8 @@
 {{- /* One card in the features grid: a heading, its Markdown, then art from assets/home/ if given.
    {{< feature title="Ready in seconds" art="copies" >}} Markdown {{< /feature >}}
    level="3" makes the heading an h3, for cards under a section's own heading. In a two-column features
-   grid, the card goes to features, which places it in its column; in a three-column one, it shows here. */ -}}
+   grid, the card goes to features, which places it in its column, or in the one column="left" or
+   column="right" names; in a three-column one, it shows here. */ -}}
 {{- $title := .Get "title" -}}
 {{- if not $title }}{{ errorf "feature: no title (%s)" .Position }}{{ end -}}
 {{- $card := partial "feature-card.html" (dict
@@ -14,7 +15,9 @@
   {{- if eq (.Get "columns") "3" -}}
     {{- $card -}}
   {{- else -}}
-    {{- .Store.Add "cards" (slice $card) -}}
+    {{- $column := $.Get "column" -}}
+    {{- if not (in (slice "" "left" "right") $column) }}{{ errorf "feature: column is left or right (%s)" $.Position }}{{ end -}}
+    {{- .Store.Add "cards" (slice (dict "html" $card "column" $column)) -}}
   {{- end -}}
 {{- else -}}
   {{- errorf "feature: outside features (%s)" .Position -}}

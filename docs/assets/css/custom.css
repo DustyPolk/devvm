@@ -275,7 +275,7 @@ html.dark .highlight .chroma .go {
 }
 
 /* The home page's feature cards (the features and feature shortcodes): one centered column, then, from
-   1024px, where each card still fits its art at 364px, two columns of cards, each card as tall as its
+   1024px, two columns of cards, each card as tall as its
    content. On narrow screens the columns' boxes drop out (display: contents), and each card's order
    style stacks the cards in the order the page lists them. Black, not the surface color, so the art's
    panels stand out. */
@@ -355,18 +355,11 @@ html.dark .highlight .chroma .go {
   color: var(--devvm-accent-soft);
 }
 
-/* The art at Departure Mono's own size (11px, one screen pixel to each of the font's), or twice it where
-   one column is wide enough. */
+/* The art as wide as its card, at whatever scale that takes. */
 .devvm-feature > .devvm-art {
-  width: 364px;
-  margin: auto auto 0;
+  width: 100%;
+  margin: auto 0 0;
   padding-top: 1.5rem;
-}
-
-@media (min-width: 52rem) {
-  .devvm-feature > .devvm-art {
-    width: 728px;
-  }
 }
 
 @media (min-width: 1024px) {
@@ -382,10 +375,6 @@ html.dark .highlight .chroma .go {
     flex-direction: column;
     gap: 1.5rem;
     min-width: 0;
-  }
-
-  .devvm-feature > .devvm-art {
-    width: 364px;
   }
 }
 

@@ -1,7 +1,7 @@
 {{- /* The home page's feature cards: {{< features >}}, then {{< feature >}} shortcodes, then {{< /features >}}.
    On wide screens, the cards go into two columns, the first, third and so on on the left and the rest on
-   the right, each card as tall as its content; on narrow screens they stack in the order written, which
-   each card's order style keeps. {{< features columns="3" >}} is a grid of three cards in a row instead,
+   the right unless a card names its column, each card as tall as its content; on narrow screens they
+   stack in the order written, which each card's order style keeps. {{< features columns="3" >}} is a grid of three cards in a row instead,
    for short cards without art. */ -}}
 {{- if eq (.Get "columns") "3" -}}
 <div class="devvm-features devvm-features-3">{{ .Inner }}</div>
@@ -9,11 +9,12 @@
 {{- $_ := .Inner -}}
 {{- $cards := .Store.Get "cards" -}}
 <div class="devvm-features devvm-bento">
-  {{- range $column := slice 0 1 }}
+  {{- range $column := slice "left" "right" }}
   <div class="devvm-bento-column">
     {{- range $i, $card := $cards }}
-    {{- if eq (mod $i 2) $column }}
-    <div class="devvm-bento-card" style="order: {{ $i }}">{{ $card }}</div>
+    {{- $in := $card.column | default (cond (eq (mod $i 2) 0) "left" "right") }}
+    {{- if eq $in $column }}
+    <div class="devvm-bento-card" style="order: {{ $i }}">{{ $card.html }}</div>
     {{- end }}
     {{- end }}
   </div>
