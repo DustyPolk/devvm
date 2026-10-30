@@ -73,13 +73,6 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< /feature >}}
 
-{{< feature title="Ready in seconds" art="copies" >}}
-
-- The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
-- devvm builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
-
-{{< /feature >}}
-
 {{< feature title="Isolated sandbox" art="isolated" >}}
 
 - The VM mounts your project folder at the same path. Apart from your agents' config, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
@@ -87,6 +80,13 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
 - New VMs get [network policy](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine.
 - No sandbox closes every gap, so [what devvm doesn't protect](docs/internals/security.md#what-it-doesnt-protect) lists what's left open, and [staying safe](docs/safety/_index.md#the-habits) lists the habits that close most of it.
+
+{{< /feature >}}
+
+{{< feature title="Ready in seconds" art="copies" >}}
+
+- The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
+- devvm builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
 
 {{< /feature >}}
 
