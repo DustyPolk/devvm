@@ -1,0 +1,7 @@
+{{- /* An SVG from assets/home/, inlined so it gets the page's fonts and colors. Takes its name and the
+   calling shortcode's position, for the error. */ -}}
+{{- with resources.Get (printf "home/%s.svg" .name) -}}
+<figure class="devvm-art not-prose">{{ .Content | safeHTML }}</figure>
+{{- else -}}
+{{- errorf "art: no docs/assets/home/%s.svg (%s)" .name .position -}}
+{{- end -}}

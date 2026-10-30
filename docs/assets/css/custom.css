@@ -153,7 +153,8 @@ html.dark .highlight .chroma .go {
   color: var(--devvm-accent-soft);
 }
 
-#content > .hx\:items-start > h2 {
+#content > .hx\:items-start > h2,
+.devvm-feature > h2 {
   color: var(--devvm-text);
   font-family: var(--devvm-font-pixel);
   font-size: 22px;
@@ -232,14 +233,16 @@ html.dark .highlight .chroma .go {
   margin: 2rem 0 0.25rem;
 }
 
-#content > .hx\:items-start > ul {
+#content > .hx\:items-start > ul,
+.devvm-feature > ul {
   max-width: 42rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-#content > .hx\:items-start > ul > li {
+#content > .hx\:items-start > ul > li,
+.devvm-feature > ul > li {
   position: relative;
   padding-left: 1.5rem;
   margin: 0.5rem 0;
@@ -247,7 +250,8 @@ html.dark .highlight .chroma .go {
   line-height: 1.75;
 }
 
-#content > .hx\:items-start > ul > li::before {
+#content > .hx\:items-start > ul > li::before,
+.devvm-feature > ul > li::before {
   content: "-";
   position: absolute;
   left: 0;
@@ -260,19 +264,77 @@ html.dark .highlight .chroma .go {
 }
 
 #content > .hx\:items-start > p > code,
-#content > .hx\:items-start > ul > li > code {
+#content > .hx\:items-start > ul > li > code,
+.devvm-feature > ul > li code {
   color: var(--devvm-accent-soft);
   font-size: 0.85em;
 }
 
-#content > .hx\:items-start > ul > li > a {
+#content > .hx\:items-start > ul > li > a,
+.devvm-feature > ul > li > a {
   color: var(--devvm-accent);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-#content > .hx\:items-start > ul > li > a:hover {
+#content > .hx\:items-start > ul > li > a:hover,
+.devvm-feature > ul > li > a:hover {
   color: var(--devvm-accent-soft);
+}
+
+/* The home page's feature cards (the features and feature shortcodes): one centered column, then two per
+   row from 1024px, where each card still fits its art at 364px. Black, not the surface color, so the
+   art's panels stand out; the art at the bottom, so cards in a row line up. */
+#content > .hx\:items-start > .devvm-features {
+  display: grid;
+  grid-template-columns: minmax(0, calc(728px + 3rem + 2px));
+  justify-content: center;
+  gap: 1.5rem;
+  align-self: stretch;
+  margin-top: 4rem;
+}
+
+.devvm-feature {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  background-color: var(--devvm-bg);
+  border: 1px solid var(--devvm-border);
+  border-radius: 0.5rem;
+}
+
+.devvm-feature > h2 {
+  margin: 0 0 1rem;
+}
+
+/* The art at Departure Mono's own size (11px, one screen pixel to each of the font's), or twice it where
+   one column is wide enough. */
+.devvm-feature > .devvm-art {
+  width: 364px;
+  margin: auto auto 0;
+  padding-top: 1.5rem;
+}
+
+@media (min-width: 52rem) {
+  .devvm-feature > .devvm-art {
+    width: 728px;
+  }
+}
+
+@media (min-width: 1024px) {
+  #content > .hx\:items-start > .devvm-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .devvm-feature > .devvm-art {
+    width: 364px;
+  }
+}
+
+/* The edit link's box at the bottom of the table of contents: Hextra gives it a #111 shadow above,
+   which shows as a gray band on the black background. */
+.hextra-toc .hx\:sticky.hx\:bottom-0 {
+  box-shadow: none;
 }
 
 /* The recording's player (asciinema's theme="devvm"): the iTerm2 profile it was recorded in, green on

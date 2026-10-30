@@ -1,7 +1,2 @@
 {{- /* An SVG from assets/home/, inlined so it gets the page's fonts and colors: {{< art "isolated" >}}. */ -}}
-{{- $name := .Get 0 -}}
-{{- with resources.Get (printf "home/%s.svg" $name) -}}
-<figure class="devvm-art not-prose">{{ .Content | safeHTML }}</figure>
-{{- else -}}
-{{- errorf "art: no docs/assets/home/%s.svg (%s)" $name .Position -}}
-{{- end -}}
+{{- partial "art.html" (dict "name" (.Get 0) "position" .Position) -}}

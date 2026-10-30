@@ -46,31 +46,39 @@ All it takes is one command, and you're ready to start coding.
 - We all know we _should_ be sandboxing our code and agents, but most tools require configs and setup that are hard to get right.
 - `devvm` ships with sensible defaults so you can start coding in a sandbox right away.
 
-## Developer ready, zero config
+{{< features >}}
+
+{{< feature title="Developer ready, zero config" art="zero-config" >}}
 
 - `devvm` detects the [project's toolchain](docs/using/images.md#which-image-a-new-vm-gets) from its files, so you write no config files and do no setup. It supports node, python, rust and go, with more to come.
 - Docker runs inside the VM when you need it: `devvm node+docker`.
 - Every instance automatically sets your git identity so commits inside the VM are authored by you (or your agent).
 - The base image includes [optional tools](docs/using/customizing.md#base-image-features) such as oh-my-bash, fzf, zoxide (`z`), tree, tldr and more.
-{{< art "zero-config" >}}
 
-## Ready in seconds
+{{< /feature >}}
+
+{{< feature title="Ready in seconds" art="copies" >}}
 
 - The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
 - `devvm` builds each toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
-{{< art "copies" >}}
 
-## Isolated sandbox
+{{< /feature >}}
+
+{{< feature title="Isolated sandbox" art="isolated" >}}
 
 - The VM mounts your project folder at the same path. It sees nothing else from your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
 - `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
 - Every new VM gets [network policy](docs/safety/network.md) by default, so it reaches only an allowlist of hosts, through a proxy on your machine.
 - A few habits close most of what's left, and [staying safe](docs/safety/_index.md#the-habits) lists them.
-{{< art "isolated" >}}
 
-## Made for coding agents
+{{< /feature >}}
+
+{{< feature title="Made for coding agents" art="agents" >}}
 
 - Claude Code, Codex and opencode get your settings, skills and MCP servers ([coding agents](docs/using/coding-agents.md)).
 - With network policy, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and the `devvm` proxy puts the real ones into its requests on the way out.
-{{< art "agents" >}}
+
+{{< /feature >}}
+
+{{< /features >}}

@@ -1,0 +1,11 @@
+{{- /* One card in the features grid: a heading, its Markdown, then art from assets/home/ if given.
+   {{< feature title="Ready in seconds" art="copies" >}} Markdown {{< /feature >}} */ -}}
+{{- $title := .Get "title" -}}
+{{- if not $title }}{{ errorf "feature: no title (%s)" .Position }}{{ end -}}
+<section class="devvm-feature">
+  <h2 id="{{ $title | anchorize }}">{{ $title | .Page.RenderString }}</h2>
+  {{ .Inner | .Page.RenderString (dict "display" "block") }}
+  {{- with .Get "art" }}
+  {{ partial "art.html" (dict "name" . "position" $.Position) }}
+  {{- end }}
+</section>
