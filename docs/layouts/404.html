@@ -8,8 +8,8 @@
       <p>There's no page at this address. Search the docs, or start from one of these pages.</p>
       <div class="devvm-404-search">{{ partial "components/search-trigger.html" (dict "icon" "") }}</div>
       <p class="devvm-404-links">
-        {{- with site.GetPage "/docs/getting-started" }}<a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ end -}}
-        {{- with site.GetPage "/docs" }}<a href="{{ .RelPermalink }}">The docs</a>{{ end -}}
+        {{- with site.GetPage "/docs/getting-started" }}<a href="{{ .RelPermalink }}">{{ partial "icon.html" (dict "name" "rocket" "position" "layouts/404.html") }}{{ .Title }}</a>{{ end -}}
+        {{- with site.GetPage "/docs" }}<a href="{{ .RelPermalink }}">{{ partial "icon.html" (dict "name" "open-book" "position" "layouts/404.html") }}The docs</a>{{ end -}}
       </p>
     </main>
   </div>

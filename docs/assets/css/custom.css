@@ -919,11 +919,15 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
   display: inline;
 }
 
+/* As wide as the two buttons, past the column's width, so they stay side by side; they wrap only where
+   the screen is narrower. */
 .devvm-404-links {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.75rem;
+  width: max-content;
+  max-width: calc(100vw - 3rem);
 }
 
 .devvm-404-links > a {
@@ -937,6 +941,14 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
   background-color: var(--devvm-accent);
   color: var(--devvm-bg);
   text-shadow: 1px 0 0 currentColor;
+}
+
+/* Their icons, at 24px as the home page's buttons have them. */
+.devvm-404-links > a > .devvm-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 0.5rem;
+  vertical-align: -3px;
 }
 
 .devvm-404-links > a:hover {
