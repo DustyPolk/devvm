@@ -8,15 +8,15 @@ You customize images with your own layers, which add what a project needs, and w
 ## Your own layers
 
 ```sh
-devvm layer new postgres    # writes ~/.config/devvm/layers/postgres.sh and postgres.policy
-$EDITOR ~/.config/devvm/layers/postgres.sh
-devvm node+postgres         # a VM with node and your layer; or devvm build postgres
+devvm layer new mailpit    # writes ~/.config/devvm/layers/mailpit.sh and mailpit.policy
+$EDITOR ~/.config/devvm/layers/mailpit.sh
+devvm node+mailpit         # a VM with node and your layer; or devvm build mailpit
 ```
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that bash runs once as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and also `NAME.policy` next to it unless that file exists. It refuses to overwrite a script that exists.
 
 - **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`docker`) or a shared tool's name (`node`, `claude` and so on).
-- Built-in layers go in the same image names as yours, as in `devvm node+docker+postgres`.
+- Built-in layers go in the same image names as yours, as in `devvm node+docker+mailpit`.
 - Put PATH changes in `~/.profile`.
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.
 - `NAME.policy` lists the hosts that VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.
@@ -25,18 +25,32 @@ A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, tha
 
 To edit layers with an agent in a VM, keep them in a repo of their own and copy them in, because devvm refuses a VM for a folder inside `~/.config/devvm` ([details](../internals/security.md#only-the-project-folder)).
 
-### Example: postgres
+### Example: mailpit
 
-This layer installs a PostgreSQL server that starts with the VM, and it makes a superuser role and a database for the VM's user, so `psql` works without options. Put these lines in `~/.config/devvm/layers/postgres.sh`, below the starter's `set -euo pipefail`:
+This layer installs [Mailpit](https://mailpit.axllent.org/), which catches the emails your app sends while you develop it, and starts it with the VM. Point your app's SMTP settings at `localhost:1025`, and read the emails at `localhost:8025` in your browser, because devvm [forwards](ports-size.md#ports) both ports to your machine. Put these lines in `~/.config/devvm/layers/mailpit.sh`, below the starter's `set -euo pipefail`:
 
 ```bash
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-client
-sudo systemctl enable --now postgresql
-sudo -u postgres createuser --superuser "$USER"
-sudo -u postgres createdb --owner "$USER" "$USER"
+mailpit_version=1.32.0
+mailpit_sha256_amd64=4b5993c978e8604c70d43927e2ad103b311bba3b1822fa0cf1d4ee4ec890a93c
+mailpit_sha256_arm64=e1e45d1dc72bd497fb262a1e4100178eee057c42c5fc36d143eb8621769e1137
+
+case "$(uname -m)" in
+  x86_64) arch=amd64 sha256=$mailpit_sha256_amd64 ;;
+  aarch64) arch=arm64 sha256=$mailpit_sha256_arm64 ;;
+  *) echo "mailpit: no build for $(uname -m)" >&2; exit 1 ;;
+esac
+devvm-fetch "https://github.com/axllent/mailpit/releases/download/v$mailpit_version/mailpit-linux-$arch.tar.gz" \
+  "$sha256" /tmp/mailpit.tar.gz
+sudo tar -xzf /tmp/mailpit.tar.gz -C /usr/local/bin mailpit
+rm /tmp/mailpit.tar.gz
+
+printf '%s\n' '[Unit]' 'Description=Mailpit' '[Service]' 'ExecStart=/usr/local/bin/mailpit' \
+  'DynamicUser=yes' '[Install]' 'WantedBy=multi-user.target' |
+  sudo tee /etc/systemd/system/mailpit.service >/dev/null
+sudo systemctl enable --now mailpit
 ```
 
-The packages come from the distribution's archive, which `base`'s allowlist has, so `postgres.policy` can stay empty. Postgres listens on port 5432 in the VM, which devvm [forwards](ports-size.md#ports) to the host like any port. On a base made `--from` an Alpine image, use `apk add` and OpenRC (`rc-update`, `rc-service`) instead.
+The version and each download's SHA-256 sit at the top, so `devvm-fetch` refuses a download that doesn't match. To update Mailpit, change all three and rebuild the image. The downloads come from GitHub's releases, which `base`'s allowlist has, so `mailpit.policy` can stay empty. On a base made `--from` an Alpine image, start it with OpenRC (`rc-update`, `rc-service`) instead of systemd.
 
 ## Base image features
 

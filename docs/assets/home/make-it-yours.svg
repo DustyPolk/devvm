@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 140" role="img" aria-labelledby="art-make-it-yours">
-  <title id="art-make-it-yours">A stack: the base image at the bottom, with your features, dotfiles and aliases, built in; your layer, postgres, on it; and on top the VM devvm-web, made with node+postgres. A container image, node:24, starts the base image with --from.</title>
+  <title id="art-make-it-yours">A stack: the base image at the bottom, with your features, dotfiles and aliases, built in; your layer, mailpit, on it; and on top the VM devvm-web, made with node+mailpit. A container image, node:24, starts the base image with --from.</title>
   <!-- The container image, into base with --from. -->
   <text class="m" x="7" y="81">container image</text>
   <rect class="f" x="7" y="98" width="63" height="14"/>
@@ -12,12 +12,12 @@
   <rect class="s" x="155" y="15" width="201" height="26"/>
   <rect class="a" x="154" y="14" width="2" height="28"/>
   <text class="t" x="161" y="32">devvm-web</text>
-  <text class="a" x="238" y="32">node+postgres</text>
+  <text class="a" x="238" y="32">node+mailpit</text>
   <!-- Your layer. -->
   <rect class="f" x="154" y="49" width="203" height="28"/>
   <rect class="s" x="155" y="50" width="201" height="26"/>
-  <text class="t" x="161" y="67">postgres</text>
-  <text class="d" x="231" y="67">your layer</text>
+  <text class="t" x="161" y="67">mailpit</text>
+  <text class="d" x="224" y="67">your layer</text>
   <!-- The base image, with your features as chips. -->
   <rect class="f" x="154" y="84" width="203" height="49"/>
   <rect class="s" x="155" y="85" width="201" height="47"/>
