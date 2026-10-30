@@ -32,6 +32,6 @@ env DEVVM_MESSAGES=names
 stderr '^devvm: usage_error reason=unknown flag: --nope$'
 
 -- nope-flag.txt --
-devvm: unknown flag: --nope: see devvm --help
+devvm: unknown flag: --nope. Run devvm --help to see the commands and flags.
 -- build-args.txt --
-devvm: accepts 1 arg(s), received 2: see devvm --help
+devvm: accepts 1 arg(s), received 2. Run devvm --help to see the commands and flags.

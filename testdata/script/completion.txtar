@@ -7,7 +7,7 @@ stdout '^#compdef devvm$'
 exec devvm completion fish
 stdout 'complete -c devvm'
 ! exec devvm completion powershell
-stderr '^devvm: invalid argument "powershell" for "devvm completion": see devvm --help$'
+stderr '^devvm: invalid argument "powershell" for "devvm completion"\. Run devvm --help to see the commands and flags\.$'
 ! stdout .
 
 # The commands users run, not the hidden ones, with image names for IMAGE.
