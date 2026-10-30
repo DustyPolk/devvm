@@ -112,9 +112,9 @@ Forwarding ports is emulated, and reviewed ([design](design.md#ports-on-docker))
 
 The forwarder reaches the VM over its [ssh](#ssh-for-editors), through `devvm _docker-connect`, with the VM's own key and its pinned host key.
 
-Which ports a VM forwards is in devvm's record for the VM, `~/.local/share/devvm/docker/vms/<vm>.json`.
+Which ports a VM forwards is in devvm's record for the VM. [Its process and files](ports.md#its-process-and-files) lists the record's path and the forwarder's log.
 
-The forwarder runs as `devvm _docker-ports`. devvm starts it after each start with ssh, and again for the same start of the container when you change a running VM's ports. No process on your machine runs the container, so the forwarder follows that start of it instead: it asks Docker every 30 s, and whenever its connection ends, and it exits once Docker no longer runs that start of the container. Its log is `~/.local/share/devvm/docker/vms/<vm>.ports.log`. A VM without ssh forwards no ports, with a warning (`ports_no_ssh`).
+devvm starts the forwarder after each start with ssh, and again for the same start of the container when you change a running VM's ports. No process on your machine runs the container, so the forwarder follows that start of it instead: it asks Docker every 30 s, and whenever its connection ends, and it exits once Docker no longer runs that start of the container. A VM without ssh forwards no ports, with a warning (`ports_no_ssh`).
 
 ## SSH agent forwarding
 

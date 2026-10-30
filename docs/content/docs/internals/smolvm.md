@@ -78,9 +78,9 @@ Unlike smolvm's own forwards, devvm's forwarder also reaches servers on the VM's
 
 The forwarder reaches the VM over its [ssh](#ssh-for-editors), with the VM's own key and the host key devvm read through smolvm. The VM sees each forwarded connection only as one to its own loopback, and with network policy it still reaches only its proxy.
 
-Which ports a VM forwards is in devvm's record for the VM, `~/.local/share/devvm/smolvm/vms/<vm>.json`, so `devvm ports` changes the record and no forward of smolvm's.
+Which ports a VM forwards is in devvm's record for the VM, so `devvm ports` changes the record and no forward of smolvm's. [Its process and files](ports.md#its-process-and-files) lists the record's path and the forwarder's log.
 
-The forwarder runs as `devvm _smolvm-ports`. It starts after the VM's sshd and ends with it. When you change a running VM's ports, devvm starts it again with the new ones, unless the VM was started outside devvm since devvm last started it. Such a VM runs no sshd of devvm's, so devvm warns about that instead (`ports_no_ssh`). A VM without ssh, because its image has no sshd, forwards no ports, with the same warning. The forwarder's log is `~/.local/share/devvm/smolvm/vms/<vm>.ports.log`.
+The forwarder starts after the VM's sshd and ends with it. When you change a running VM's ports, devvm starts it again with the new ones, unless the VM was started outside devvm since devvm last started it. Such a VM runs no sshd of devvm's, so devvm warns about that instead (`ports_no_ssh`). A VM without ssh, because its image has no sshd, forwards no ports, with the same warning.
 
 ## SSH agent forwarding
 

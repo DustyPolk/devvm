@@ -40,7 +40,7 @@ Fetching runs nothing from the VM on this machine. git only receives objects and
 
 Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd lose, starting the VM if it's stopped:
 
-1. If the clone has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches named `saved/devvm/<branch>`.
+1. If the clone has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches named `saved/devvm/<branch>`. It skips a branch whose name git on this machine refuses and names it, and that branch goes with the VM. To keep such a branch, rename it in the VM with `git branch -m` before you run `devvm rm`.
 2. If the clone has uncommitted changes, devvm lists the first 20 and asks before deleting them along with the VM.
 
 If either check finds something and there's no terminal to ask in, devvm refuses and keeps the VM.

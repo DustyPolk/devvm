@@ -41,6 +41,19 @@ On Lima, base starts from a pinned, dated release of Ubuntu's cloud image. Ubunt
 
 When devvm can't read one of its settings or state files, it names the file and the line. Fix the line or delete the file. [Settings and files](settings.md) lists what each file holds.
 
+## devvm names set-id files
+
+On a Linux host, root in a VM can set the set-user-id and set-group-id bits on files in the project folder, and those bits reach this machine, so such a file runs as its owner for anyone who runs it. devvm names these files at each launch and stop, and it names the ones that root owns apart from the rest. Those come from a Docker VM, where root writes files as this machine's root, so they run as root.
+
+- For a file that root owns, don't run it, and delete it with `sudo rm FILE`.
+- For any other file, `chmod u-s,g-s FILE` clears its bits.
+
+Either way, don't run programs from the project folder outside the VM ([what devvm doesn't protect](../internals/security.md#what-it-doesnt-protect)).
+
+## HOME isn't an absolute path
+
+devvm finds its folders from `HOME`, so it stops when `HOME` is empty or isn't an absolute path. Set `HOME` to your home folder, such as `/Users/you` on macOS or `/home/you` on Linux, and run devvm again.
+
 ## A VM shows as unenforced
 
 `devvm ls` and `devvm network` show a VM's network policy as `unenforced` when the VM has network policy but devvm didn't start it confined. That happens when it was started outside devvm, such as with `devvm limactl start`, or when it has been running since before `devvm network on`. The VM then reaches the network without its proxy.

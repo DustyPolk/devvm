@@ -36,7 +36,7 @@ Options for a new VM:
 | `--clone` | create the VM with its own clone of the repo instead of mounting the folder ([details](../using/clone.md)) |
 | `--no-git-protect` | create the VM without `.git` protection |
 | `--ssh-agent` | create the VM forwarding your SSH agent, so while you're connected, anything in it can use your keys ([details](../using/ssh.md#agent-forwarding)) |
-| `--unsafe-folder` | mount a folder that devvm refuses, such as one that is or holds your home folder ([details](../internals/security.md#only-the-project-folder)) |
+| `--unsafe-folder` | mount a folder that devvm refuses, such as one that is or holds your home folder ([details](../using/settings.md#project-folders-devvm-refuses)) |
 | `--cpus N`, `--memory GiB`, `--disk GiB` | the VM's size ([details](../using/ports-size.md#size-and-ports)) |
 | `--ports all\|none\|LIST` | which ports the VM forwards ([details](../using/ports-size.md#size-and-ports)) |
 | `--backend NAME` | the [backend](../backends/_index.md#choosing-a-backend) that runs it |
