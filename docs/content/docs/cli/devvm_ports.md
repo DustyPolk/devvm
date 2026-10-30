@@ -7,7 +7,7 @@ Show or change which ports this folder's VM forwards
 
 ## Synopsis
 
-Show which ports this folder's VM forwards to the same port on this machine's localhost: all, none, or a LIST of ports and ranges like 5173,8000-8010. devvm ports all, none or LIST changes it, at once for a stopped VM, from its next start for a running one: devvm restart. With -g, show or change what new VMs forward instead.
+Show which ports this folder's VM forwards to the same port on this machine's localhost: all, none, or a LIST of ports and ranges like 5173,8000-8010. devvm ports all, none or LIST changes it at once: a stopped VM forwards the new ports from its next start, and a running one's forwarder starts again with them, closing the connections open through it, while the VM runs on. With -g, show or change what new VMs forward instead.
 
 ```text
 devvm ports [all|none|LIST] [flags]

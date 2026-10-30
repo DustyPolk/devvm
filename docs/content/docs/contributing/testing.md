@@ -1,9 +1,9 @@
 ---
 title: Testing on other hosts
-weight: 101
+weight: 1
 ---
 
-For contributors. The everyday tests, CLI tests and end-to-end tests are in [Contributing](contributing.md#end-to-end-tests); this page is about running them on a host other than your Mac.
+For contributors. The everyday tests, CLI tests and end-to-end tests are in [Contributing](_index.md#end-to-end-tests); this page is about running them on a host other than your Mac.
 
 ## What's platform-specific
 
@@ -15,7 +15,7 @@ The same code and tests run on macOS and Linux; what differs is behind build tag
 | Mounts | virtiofs | 9p, one mount per share per guest |
 | Project VM disks | APFS copy-on-write clones of the image's | qcow2 overlays of the image's |
 | Network policy | the VM's Lima process under a macOS sandbox | QEMU's `restrict=on` and a `guestfwd` to the proxy |
-| `.git` protection | locked with `chflags` | none: devvm says so ([details](git-protection.md#linux-hosts)) |
+| `.git` protection | locked with `chflags` | none: devvm says so ([details](../safety/git-protection.md#linux-hosts)) |
 | Set-id files | dropped by virtiofs | reach the host: new VMs check for them |
 | Tokens | the Keychain | files only you can read, in `~/.config/devvm/secrets/` |
 | The CA | kept out of Time Machine | no backup to keep it out of |
@@ -67,7 +67,7 @@ Gotchas of this setup:
 
 ## Docker engines
 
-`tests/e2e.sh --backend docker` checks the [Docker backend](docker.md) on two engines, which differ in what a container reaches on the host:
+`tests/e2e.sh --backend docker` checks the [Docker backend](../backends/docker.md) on two engines, which differ in what a container reaches on the host:
 
 - **A Linux engine**, in a Lima VM e2e makes the first time and keeps: Lima home `~/.lt-e2e-go-docker` (or `$DEVVM_E2E_DOCKER_LIMA_HOME`), VM `dockerhost`, Ubuntu 26.04 with Docker's engine from Ubuntu's archive and you in its `docker` group, and only this checkout mounted, read-only. e2e builds a test build of `devvm` for it here, copies it in, and runs its own Docker checks there (`DEVVM_E2E_BIN` names the binary, as the VM has no Go). Its images stay cached in the VM's Docker; `--clean` deletes them. `limactl stop dockerhost` (with that `LIMA_HOME`) when done; `limactl delete` to start over. The checkout's path is the VM's mount: run e2e from the same one.
 - **Docker Desktop**, yours: e2e touches only what has its sandbox's label, checks that everything else is the same at the end, and deletes everything with the label then. The images bases start from, which devvm pulls by digest (Ubuntu's pinned one, `alpine:3`'s), are the exception: Docker keeps them, as it does any image devvm pulls. It builds its own images, through a proxy of devvm's, with devvm's Linux build beside the test build, as a macOS release has it. Network policy's DNS check captures DNS on the engine's own network: a container of the sandbox's, from `alpine:3`, on Desktop's host network (its VM's), `tcpdump` added from Alpine's packages, deleted at the end of the section.
@@ -90,7 +90,7 @@ DEVVM_UNREVIEWED=smolvm:ports-all devvm --backend smolvm base
 
 It's for tests only, of an emulation before its review: none needs it now, as every emulation is reviewed. It never makes a feature a backend lacks usable, and `devvm doctor` still shows the feature `unreviewed`.
 
-A test build also reads `DEVVM_LINUX_BUILD_URL` and `DEVVM_LINUX_BUILD_SHA256` in place of a release's Linux archive and its devvm's SHA-256, and then fetches devvm's [Linux build](docker.md#requirements) as a release on macOS does, whatever the host: the CLI tests serve one on a loopback port, with a matching SHA-256 and a mismatched one.
+A test build also reads `DEVVM_LINUX_BUILD_URL` and `DEVVM_LINUX_BUILD_SHA256` in place of a release's Linux archive and its devvm's SHA-256, and then fetches devvm's [Linux build](../backends/docker.md#requirements) as a release on macOS does, whatever the host: the CLI tests serve one on a loopback port, with a matching SHA-256 and a mismatched one.
 
 ## Manual checks
 

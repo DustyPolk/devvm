@@ -1,6 +1,6 @@
 ---
 title: Starting from a container image
-weight: 21
+weight: 3
 ---
 
 By default `base` starts from [Ubuntu 26.04's cloud image](images.md#ubuntus-cloud-image). `--from IMAGE` starts it from a Debian-, Ubuntu- or Alpine-based container image instead, such as `node:24`, `python:3.13`, `debian:13`, `alpine:3` or an image you built yourself.
@@ -29,7 +29,7 @@ devvm then deletes the build VM and creates `base` from the disk, booting its ke
 
 The image's own code runs as root in the build VM, so devvm treats what it writes as hostile:
 
-- The build VM is [confined](lima.md#confinement) like any build: it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `oci/` folder ([written out](install.md#installing-devvm) in `~/.local/share/devvm/assets/<hash>`), read-only, and a folder of devvm's own, writable: `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself but an [image only Docker has](#images-only-docker-has), before the VM starts.
+- The build VM is [confined](../backends/lima.md#confinement) like any build: it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `oci/` folder ([written out](../getting-started/install.md#installing-devvm) in `~/.local/share/devvm/assets/<hash>`), read-only, and a folder of devvm's own, writable: `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself but an [image only Docker has](#images-only-docker-has), before the VM starts.
 - What comes out is checked once the build VM is gone. Each file must be a regular file (a link could point Lima at a file on this machine), the kernel command line can hold only letters, digits, spaces and `=,./:_-` (it goes into Lima's config), the C library must be `gnu` or `musl`, and the disk must be raw ext4 (another format, such as qcow2, can name files on this machine as its backing file). Anything else is refused, and `base` isn't created.
 - The build VM and the temporary folder are deleted however the run ends, Ctrl+C included.
 
@@ -60,4 +60,4 @@ Such a `base` is keyed by Docker's image ID. devvm exports the image with `docke
 
 ## Backends
 
-Lima converts the image into a disk as above. [Backends](backends.md#features) lists the `from` feature for each backend.
+Lima converts the image into a disk as above. [Backends](../backends/_index.md#features) lists the `from` feature for each backend.

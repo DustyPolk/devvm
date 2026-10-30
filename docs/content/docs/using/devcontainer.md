@@ -1,6 +1,6 @@
 ---
 title: devcontainer.json
-weight: 29
+weight: 4
 ---
 
 A new VM gets what the project's `.devcontainer/devcontainer.json`, else `.devcontainer.json` at the folder's root, says, as far as devvm does it: its image, the features devvm has layers for, its ports, its environment and its commands. devvm says so in one line naming the file. `devvm --no-devcontainer` makes the VM without reading it.
@@ -44,7 +44,7 @@ Anything devvm refuses stops it in one line naming the file, before anything is 
 
 A command is a string, run with `sh -c`; an array, run as it is; or an object of named commands, each run, sorted by name. They run in the VM, as its user, in the project folder, in a login shell, never on this machine. Their output goes to the [run log](images.md#build-logs-and-interrupts).
 
-A command that fails is said in one line naming it; those after it among the ones that run once, or at that start, don't run. The VM is kept and opened: the command is the project's, not devvm's. With [network policy](network.md), commands reach only what the VM's allowlist allows, like anything else in it.
+A command that fails is said in one line naming it; those after it among the ones that run once, or at that start, don't run. The VM is kept and opened: the command is the project's, not devvm's. With [network policy](../safety/network.md), commands reach only what the VM's allowlist allows, like anything else in it.
 
 ## Variables
 
@@ -59,4 +59,4 @@ Any other `${…}` is left as it is, for the VM's shell (`${HOME}` in a command)
 
 ## Security
 
-The file is the project's, and so the VM's to change: a VM that writes it changes what the folder's next VM gets. So nothing in it runs on this machine, reaches its files or environment, adds a mount, or weakens confinement: it shapes only what runs inside a new VM ([security model](security.md#a-projects-devcontainerjson)). An `image` from it can still be anything public: its own code runs as root in the build VM, as with `--from` ([the image is untrusted](from.md#the-image-is-untrusted)).
+The file is the project's, and so the VM's to change: a VM that writes it changes what the folder's next VM gets. So nothing in it runs on this machine, reaches its files or environment, adds a mount, or weakens confinement: it shapes only what runs inside a new VM ([security model](../safety/security.md#a-projects-devcontainerjson)). An `image` from it can still be anything public: its own code runs as root in the build VM, as with `--from` ([the image is untrusted](from.md#the-image-is-untrusted)).

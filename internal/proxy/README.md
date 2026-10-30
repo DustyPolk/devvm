@@ -1,6 +1,6 @@
 # internal/proxy
 
-The network policy proxy: one process per VM with [network policy](../../docs/content/docs/network.md), on the host, run as `devvm _proxy`. Go, standard library only (depguard enforces it).
+The network policy proxy: one process per VM with [network policy](../../docs/content/docs/safety/network.md), on the host, run as `devvm _proxy`. Go, standard library only (depguard enforces it).
 
 The VM can reach nothing but this proxy (on macOS its Lima hostagent runs under a Seatbelt profile, on Linux QEMU's network is restricted, on smolvm the proxy decides each connection). Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`; the VM's proxy URL has it), and the VM's placeholders end in a random value of its own (not the password), so no other VM's or program's placeholder gets a token. It refuses to start without `-auth-file`. For each connection it:
 

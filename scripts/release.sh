@@ -28,12 +28,12 @@ if [[ $ref == HEAD ]]; then obj=HEAD; else obj=$(git rev-parse -q --verify "refs
 # A release comes from a tag the maintainer signed, not just any tag with the right name. The tag
 # object checked is the one built from: its commit is resolved once, and used for everything below.
 [[ $ref == HEAD ]] || git verify-tag "$obj" >/dev/null 2>&1 ||
-  die "tag $ref isn't signed by a key git trusts (make it with git tag -s; see docs/content/docs/maintaining.md)"
+  die "tag $ref isn't signed by a key git trusts (make it with git tag -s; see docs/content/docs/contributing/maintaining.md)"
 # And by the release signer, not just any key git trusts: its fingerprint is pinned in this checkout's
 # packaging/release-signer (one per line; # comments), never the tagged commit's, which the tag brings.
 if [[ $ref != HEAD ]]; then
   signers=$root/packaging/release-signer
-  [[ -s $signers ]] || die "no packaging/release-signer: write the tag-signing key's fingerprint there (see docs/content/docs/maintaining.md)"
+  [[ -s $signers ]] || die "no packaging/release-signer: write the tag-signing key's fingerprint there (see docs/content/docs/contributing/maintaining.md)"
   raw=$(git verify-tag --raw "$obj" 2>&1) || true
   # GPG: VALIDSIG <signing key> … <primary key>; SSH: "… key SHA256:…".
   fps=$(awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print $3; print $NF }' <<<"$raw"
@@ -56,7 +56,7 @@ key=${DEVVM_MINISIGN_KEY:-$HOME/.minisign/devvm.key}
 sign=true
 if [[ $ref == HEAD && -z ${DEVVM_MINISIGN_KEY:-} ]]; then sign=false
 else
-  [[ -n $pubkey ]] || die "no packaging/minisign.pub in $ref: create the release key first (see docs/content/docs/maintaining.md)"
+  [[ -n $pubkey ]] || die "no packaging/minisign.pub in $ref: create the release key first (see docs/content/docs/contributing/maintaining.md)"
   [[ -f $key ]] || die "no release key at $key (DEVVM_MINISIGN_KEY)"
   command -v minisign >/dev/null || die "needs minisign to sign the release (mise exec -- scripts/release.sh)"
 fi

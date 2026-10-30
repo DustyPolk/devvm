@@ -1,6 +1,6 @@
 ---
 title: Maintaining
-weight: 102
+weight: 2
 ---
 
 For maintainers: version bumps and releases. Run the scripts with mise, which puts the pinned GoReleaser and minisign on `PATH`: `mise exec -- scripts/release.sh`.
@@ -12,18 +12,18 @@ For maintainers: version bumps and releases. Run the scripts with mise, which pu
 - `mise` moves base's mise (`assets/layers/base.sh`) and devvm's host mise (`internal/tools/mise.go`) together: the host one writes the lock base's installs from.
 - The shared tools aren't pinned: holds go in `assets/shared-tools/mise.toml` (`node = "24"` stays on that major). `testdata/mise.lock` is a fixed lock for the tests.
 - `assets/layers/ubuntu-cloud.gpg` is Ubuntu's cloud image signing key (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`), from keyserver.ubuntu.com. If Ubuntu changes it, base builds stop with `ubuntu_bad_signature`: fetch the new key, check its fingerprint against Ubuntu's announcement, and replace the file (`gpg --export FPR`).
-- Edited scripts change image keys, so the affected images rebuild on next use. Build them in a sandbox of their own (`LIMA_HOME`, `DEVVM_LIMA_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`) before committing (`devvm build node+python+…`), then `devvm gc`, and run the [end-to-end tests](contributing.md#end-to-end-tests).
+- Edited scripts change image keys, so the affected images rebuild on next use. Build them in a sandbox of their own (`LIMA_HOME`, `DEVVM_LIMA_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`) before committing (`devvm build node+python+…`), then `devvm gc`, and run the [end-to-end tests](_index.md#end-to-end-tests).
 
 ## Releasing
 
 - **Once, the keys:** a minisign key for releases, `minisign -G -p packaging/minisign.pub -s ~/.minisign/devvm.key` (commit `packaging/minisign.pub`; the secret key and its password never go in the repo), and a key git signs tags with (`git config user.signingkey`, GPG, or SSH with `gpg.format ssh`) that `git tag -v` verifies on this machine. Commit its fingerprint in `packaging/release-signer`, one per line (`#` comments): the GPG fingerprint (`gpg --fingerprint`, no spaces), or the SSH key's `SHA256:…` (`ssh-keygen -lf KEY.pub`). `release.sh` refuses a tag signed by any other key, even one git trusts. To rotate, add the new key's line, tag with it, then remove the old one.
 - Bump `VERSION`, add the `CHANGELOG.md` entry, commit, then `git tag -s v<version>`.
-- `scripts/release.sh` checks the tag with `git tag -v` and its signer against this checkout's `packaging/release-signer`, then builds `dist/` from the tagged commit with GoReleaser (`.goreleaser.yaml`), in a clone of its own, so only what's committed goes in. It builds in two passes: first the Linux binaries alone (`goreleaser build --id devvm`), whose SHA-256s it takes; then the release (`goreleaser release --skip=publish`), whose macOS builds get those SHA-256s and the Linux archives' addresses (`DEVVM_RELEASE_URL`, else the GitHub release's) with `-X`, for the Linux build [Docker](docker.md#requirements) fetches. It refuses a release whose Linux binaries came out different in the second pass (Go's builds are reproducible: the same commit, Go and flags), or whose Linux archives' devvm isn't the pinned one. It checks that the binary built for this host prints the version, then signs `SHA256SUMS` with `~/.minisign/devvm.key` (or `DEVVM_MINISIGN_KEY`) and verifies it with `packaging/minisign.pub`. Nothing is published.
+- `scripts/release.sh` checks the tag with `git tag -v` and its signer against this checkout's `packaging/release-signer`, then builds `dist/` from the tagged commit with GoReleaser (`.goreleaser.yaml`), in a clone of its own, so only what's committed goes in. It builds in two passes: first the Linux binaries alone (`goreleaser build --id devvm`), whose SHA-256s it takes; then the release (`goreleaser release --skip=publish`), whose macOS builds get those SHA-256s and the Linux archives' addresses (`DEVVM_RELEASE_URL`, else the GitHub release's) with `-X`, for the Linux build [Docker](../backends/docker.md#requirements) fetches. It refuses a release whose Linux binaries came out different in the second pass (Go's builds are reproducible: the same commit, Go and flags), or whose Linux archives' devvm isn't the pinned one. It checks that the binary built for this host prints the version, then signs `SHA256SUMS` with `~/.minisign/devvm.key` (or `DEVVM_MINISIGN_KEY`) and verifies it with `packaging/minisign.pub`. Nothing is published.
 - `dist/` then holds:
 
   | File | What |
   | --- | --- |
-  | `devvm-<version>-<os>-<arch>.tar.gz` | the binary, its files (`assets/`) embedded, with `README.md`, `CHANGELOG.md` and `LICENSE`, for `darwin` and `linux`, `arm64` and `amd64`; `darwin`'s binaries carry their processor's `linux` archive's address and the SHA-256 of the devvm in it, which they fetch and check for [Docker](docker.md#requirements) |
+  | `devvm-<version>-<os>-<arch>.tar.gz` | the binary, its files (`assets/`) embedded, with `README.md`, `CHANGELOG.md` and `LICENSE`, for `darwin` and `linux`, `arm64` and `amd64`; `darwin`'s binaries carry their processor's `linux` archive's address and the SHA-256 of the devvm in it, which they fetch and check for [Docker](../backends/docker.md#requirements) |
   | `devvm-<version>.tar.gz` | the source, which the Homebrew formula builds from |
   | `SHA256SUMS`, `SHA256SUMS.minisig` | their checksums, and the signature |
   | `install.sh` | the install script, set to this release and to `packaging/minisign.pub`'s key |

@@ -1,6 +1,6 @@
 ---
 title: Network policy
-weight: 24
+weight: 2
 ---
 
 A VM with network policy reaches only an allowlist of hosts, through a proxy devvm runs on the host, and never holds your tokens. Without it, a VM reaches anything this machine can, its own services on `localhost` included.
@@ -24,7 +24,7 @@ For a VM with network policy, devvm:
 1. makes its CA, if it has none with over a week left, and keeps it out of Time Machine (macOS);
 2. writes the VM's [secrets](#secrets) as its proxy sees them;
 3. starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for it to say it's listening;
-4. starts the VM [confined](lima.md#confinement) (on smolvm, [emulated](smolvm.md#network-policy); on Docker, [emulated](docker.md#network-policy)), its proxy settings pointing at the proxy;
+4. starts the VM [confined](../backends/lima.md#confinement) (on smolvm, [emulated](../backends/smolvm.md#network-policy); on Docker, [emulated](../backends/docker.md#network-policy)), its proxy settings pointing at the proxy;
 5. runs [the self-check](#the-self-check), before the VM's setup and its shell;
 6. sets the VM up: devvm's CA, the proxy for the tools that don't read the environment, the VM's placeholders and its [agents' logins and settings](#agents-logins-and-settings) with your keys taken out.
 
@@ -32,7 +32,7 @@ A backend that can't confine a VM to its proxy is refused before anything is bui
 
 ## The proxy
 
-One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`, a hidden command. The VM reaches nothing else, so every connection it makes goes through the proxy. Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`), or gets `407`. Each VM has its own random password, in its proxy settings; the proxy reads it from a file only you can read, never from its arguments, which other users can see, and the VM's settings get it through files too ([Lima](lima.md#a-lima-home-of-its-own), [smolvm](smolvm.md#what-devvm-sets-on-a-vm)). The proxy refuses to start without one. For each connection it:
+One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`, a hidden command. The VM reaches nothing else, so every connection it makes goes through the proxy. Other programs on the host can reach the port too, so the port alone doesn't identify the VM: every request must carry the VM's password (`Proxy-Authorization`, user `devvm`), or gets `407`. Each VM has its own random password, in its proxy settings; the proxy reads it from a file only you can read, never from its arguments, which other users can see, and the VM's settings get it through files too ([Lima](../backends/lima.md#a-lima-home-of-its-own), [smolvm](../backends/smolvm.md#what-devvm-sets-on-a-vm)). The proxy refuses to start without one. For each connection it:
 
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
 - takes only host names (letters, digits, `-`, `_`, `.`) and addresses: anything else gets `400` before the policy or the log sees it;
@@ -41,7 +41,7 @@ One proxy runs per VM, on the host, listening on a loopback port: `devvm _proxy`
 - for hosts with a bound secret, swaps the placeholder in one header for the real value ([Secrets](#secrets)); everything else passes unread;
 - logs every decision.
 
-On smolvm it also decides, before smolvm makes it, each connection the VM opens: it takes over those to itself and refuses the rest ([details](smolvm.md#network-policy)). On Docker, whose VMs can't reach the host's loopback, it also listens on a unix socket only you can reach, which a relay on the VM's own network passes the VM's connections to, unread ([details](docker.md#network-policy)).
+On smolvm it also decides, before smolvm makes it, each connection the VM opens: it takes over those to itself and refuses the rest ([details](../backends/smolvm.md#network-policy)). On Docker, whose VMs can't reach the host's loopback, it also listens on a unix socket only you can reach, which a relay on the VM's own network passes the VM's connections to, unread ([details](../backends/docker.md#network-policy)).
 
 It exits when the VM's Lima hostagent does (`-lifeline`, the hostagent's pid file; on smolvm, the machine's process; on Docker, a `docker container wait` on the VM's container), or 15 minutes after starting if the hostagent never appears; `devvm stop` stops it at once. A VM that starts again gets a new proxy, on the same port. So does a running VM whose allowlist files changed, whose CA was replaced, or whose proxy is from another devvm binary.
 
@@ -53,9 +53,9 @@ A VM's proxy reads these policy files, in order, as one list:
 
 | File | Rules for |
 | --- | --- |
-| `assets/layers/base.policy` (devvm's, [written out](install.md#installing-devvm)) | every VM: OS packages, mise's version lists, GitHub |
+| `assets/layers/base.policy` (devvm's, [written out](../getting-started/install.md#installing-devvm)) | every VM: OS packages, mise's version lists, GitHub |
 | `assets/shared-tools/<name>.policy` (devvm's, written out) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
-| `assets/layers/<name>.policy` (devvm's, written out) | each [built-in layer](images.md#built-in-layers) in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io |
+| `assets/layers/<name>.policy` (devvm's, written out) | each [built-in layer](../using/images.md#built-in-layers) in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
 | `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
 | `~/.local/share/devvm/vms/<vm>.policy` | that VM only ([`devvm policy`](#changing-rules)) |
@@ -106,7 +106,7 @@ A blocked request gets `403`, naming the host, the reason and the rule that woul
 The VM's setup, on every launch:
 
 - installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only;
-- points what ignores those variables at the proxy: apt, sudo (which keeps them), every ssh connection (a `ProxyCommand` that tunnels through the proxy, which checks the host and port against the allowlist), and, with the [docker layer](images.md#built-in-layers), Docker's daemon and containers;
+- points what ignores those variables at the proxy: apt, sudo (which keeps them), every ssh connection (a `ProxyCommand` that tunnels through the proxy, which checks the host and port against the allowlist), and, with the [docker layer](../using/images.md#built-in-layers), Docker's daemon and containers;
 - puts the VM's placeholders in `~/.config/devvm/env`, which login shells read (`CLAUDE_CODE_OAUTH_TOKEN`, `GH_TOKEN`), and git's credential helper for GitHub over HTTPS when `github` is bound;
 - adds `devvm-why`, which prints what the proxy blocked lately, and a note before each prompt when something new was blocked;
 - tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
@@ -118,7 +118,7 @@ Network policy holds only while the VM runs on the Lima process devvm started co
 - **Not started confined** (started outside devvm, or running since before `devvm network on`): in a terminal, devvm offers to restart the VM confined; declined, it warns and goes on. Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell; the next `devvm` starts it confined.
 - **Confined, yet it gets out:** the VM reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help: devvm stops the VM and ends.
 
-On smolvm, the process devvm started is the machine's, through the proxy's decider; `smolvm machine start` refuses the VM without a decider, and one started with someone else's isn't confined. On Docker, it's that start of the container, on its own network alone, with nothing else on it ([details](docker.md#network-policy)).
+On smolvm, the process devvm started is the machine's, through the proxy's decider; `smolvm machine start` refuses the VM without a decider, and one started with someone else's isn't confined. On Docker, it's that start of the container, on its own network alone, with nothing else on it ([details](../backends/docker.md#network-policy)).
 
 `devvm ls` shows such a VM's network policy as `unenforced`: one whose last self-check failed, or one running that isn't on the process devvm started confined (checked on the host each time). So does `devvm network`.
 
@@ -162,7 +162,7 @@ Agents' login files stay on the host too. For a VM whose image has the agent, an
 - **Claude Code's MCP servers** (`~/.claude.json`): an HTTPS server's headers become bindings for its host (a DNS name on port 443 only); env values, plain-HTTP servers' headers, user info and secret-looking values in URLs, and secret-named or key-shaped arguments become `devvm-redacted`. The copy keeps only settings, onboarding and account state, and MCP servers; per-project entries never go.
 - **Settings files** (JSON, JSONC or Codex's TOML): values under secret-looking keys become `devvm-redacted`, except values that name where a secret is (an environment variable's name, `{env:X}`, `${X}`, a path). TOML multi-line strings are refused rather than copied unread.
 
-Which files each agent shares: [Coding agents](coding-agents.md).
+Which files each agent shares: [Coding agents](../using/coding-agents.md).
 
 ## Logs
 

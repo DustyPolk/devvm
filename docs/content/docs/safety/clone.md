@@ -1,9 +1,9 @@
 ---
 title: Working on a clone
-weight: 28
+weight: 3
 ---
 
-`devvm --clone` gives the VM its own clone of the repo instead of mounting your folder, so nothing in the VM can touch your working tree or `.git`. Use it when you don't trust what runs in the VM, such as an agent working unattended, and on Linux hosts, which have no [`.git` protection](git-protection.md#linux-hosts).
+`devvm --clone` gives the VM its own clone of the repo instead of mounting your folder, so nothing in the VM can touch your working tree or `.git`. Use it when you don't trust what runs in the VM, such as an agent working unattended, and on Linux hosts, which have no [`.git` protection](git-protection.md#linux-hosts). [Files the VM writes](attack-vectors.md#files-the-vm-writes) lists what `--clone` keeps away from this machine.
 
 ```sh
 devvm --clone              # create the VM, copy your branches into it and open a shell in its clone
@@ -13,7 +13,7 @@ git log -p main..devvm/main
 
 ## What's copied
 
-From this machine, the VM mounts only the shared tools and its [agents' config folders](coding-agents.md#mounts). Once the VM is running, devvm creates a repo in it at the same path as your folder and pushes every local branch into it. The push goes over [the VM's SSH entry](ssh.md#ssh-access-by-name), which checks the VM's pinned host keys. devvm checks out your current branch in the clone, and your shell opens there.
+From this machine, the VM mounts only the shared tools and its [agents' config folders](../using/coding-agents.md#mounts). Once the VM is running, devvm creates a repo in it at the same path as your folder and pushes every local branch into it. The push goes over [the VM's SSH entry](../using/ssh.md#ssh-access-by-name), which checks the VM's pinned host keys. devvm checks out your current branch in the clone, and your shell opens there.
 
 devvm copies only your local branches. Tags, uncommitted changes, and untracked or ignored files such as `.env` and `node_modules` stay on this machine. devvm warns you about uncommitted changes, so you can commit them and send them later with `git push devvm BRANCH`.
 
@@ -23,7 +23,7 @@ If the copy fails, for example because the VM can't be reached, devvm tries agai
 
 devvm adds a git remote for the VM to your repo. It's named `devvm`, or `devvm-<folder>` if `devvm` is already taken, or the VM's full name if both are. The remote's URL is the VM's full name followed by the clone's path, so git connects through devvm's ssh config, and fetching needs two things:
 
-- Your `~/.ssh/config` needs devvm's `Include` line ([SSH access by name](ssh.md#ssh-access-by-name)). devvm offers to add it when it creates the clone, and again when you run `devvm ssh` or `devvm code`. Until the line is there, or when devvm had no terminal to ask in, fetch with `GIT_SSH_COMMAND='ssh -F ~/.config/devvm/ssh_config' git fetch devvm`.
+- Your `~/.ssh/config` needs devvm's `Include` line ([SSH access by name](../using/ssh.md#ssh-access-by-name)). devvm offers to add it when it creates the clone, and again when you run `devvm ssh` or `devvm code`. Until the line is there, or when devvm had no terminal to ask in, fetch with `GIT_SSH_COMMAND='ssh -F ~/.config/devvm/ssh_config' git fetch devvm`.
 - The VM must be running. A stopped VM has no SSH entry, so `git fetch` fails because it can't resolve the name. Run `devvm` or `devvm ssh` in the folder first.
 
 ## Fetching the VM's work

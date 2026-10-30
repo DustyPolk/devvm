@@ -119,7 +119,7 @@ func checkDocLinks(links map[string]string, ids map[string]spec, dir string) []e
 // anchor.
 func checkDoc(dir, doc string) error {
 	page, anchor, _ := strings.Cut(doc, "#")
-	anchors, err := pageAnchors(filepath.Join(dir, filepath.FromSlash(page)+".md"))
+	anchors, err := pageAnchors(pageFile(dir, page))
 	if err != nil {
 		return err
 	}
@@ -127,6 +127,23 @@ func checkDoc(dir, doc string) error {
 		return fmt.Errorf("%s has no heading #%s", page, anchor)
 	}
 	return nil
+}
+
+// pageFile returns the Markdown file of page in dir: page.md, or a
+// section's page/_index.md, which Hugo serves at the section's address.
+func pageFile(dir, page string) string {
+	path := filepath.Join(dir, filepath.FromSlash(page))
+	if _, err := os.Stat(path + ".md"); err != nil {
+		if index := filepath.Join(path, "_index.md"); fileExists(index) {
+			return index
+		}
+	}
+	return path + ".md"
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 var (
@@ -180,10 +197,12 @@ func TestCheckDoc(t *testing.T) {
 	dir := t.TempDir()
 	page := "---\ntitle: T\n---\n\n## Where state lives\n\n### Sizes, ports & more\n\n## Custom {#short}\n\n" +
 		"```sh\n# Not a heading\n```\n"
-	if err := os.MkdirAll(filepath.Join(dir, "cli"), 0o750); err != nil {
-		t.Fatal(err)
+	for _, d := range []string{"cli", "backends"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o750); err != nil {
+			t.Fatal(err)
+		}
 	}
-	for _, p := range []string{"images.md", "cli/devvm.md"} {
+	for _, p := range []string{"images.md", "cli/devvm.md", "backends/_index.md"} {
 		if err := os.WriteFile(filepath.Join(dir, p), []byte(page), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -197,6 +216,10 @@ func TestCheckDoc(t *testing.T) {
 		{"images#sizes-ports--more", true},
 		{"images#short", true},
 		{"cli/devvm#where-state-lives", true},
+		{"backends", true},
+		{"backends#where-state-lives", true},
+		{"backends#nope", false},
+		{"cli", false},
 		{"images#custom", false},
 		{"images#not-a-heading", false},
 		{"images#nope", false},

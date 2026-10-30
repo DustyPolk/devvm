@@ -170,10 +170,10 @@ func TestStringAddsDocLink(t *testing.T) {
 
 func TestDocURL(t *testing.T) {
 	for doc, want := range map[string]string{
-		"":                         "",
-		"images":                   "https://w3cj.github.io/devvm/docs/images/",
-		"images#where-state-lives": "https://w3cj.github.io/devvm/docs/images/#where-state-lives",
-		"cli/devvm_ls":             "https://w3cj.github.io/devvm/docs/cli/devvm_ls/",
+		"":                               "",
+		"backends":                       "https://w3cj.github.io/devvm/docs/backends/",
+		"using/images#where-state-lives": "https://w3cj.github.io/devvm/docs/using/images/#where-state-lives",
+		"cli/devvm_ls":                   "https://w3cj.github.io/devvm/docs/cli/devvm_ls/",
 	} {
 		if got := docURL(doc); got != want {
 			t.Errorf("docURL(%q) = %q, want %q", doc, got, want)

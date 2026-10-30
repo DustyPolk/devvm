@@ -1,6 +1,6 @@
 ---
 title: Backends
-weight: 30
+weight: 40
 ---
 
 A backend is what runs devvm's VMs and builds their images. devvm decides what goes into a VM, such as its image, its folders, its size and its network policy, and the backend runs it. [Lima](lima.md) is the default backend, and [smolvm](smolvm.md) and [Docker](docker.md) are experimental. Docker runs containers, not VMs ([isolation](docker.md#isolation-a-container-is-not-a-vm)).
@@ -12,16 +12,16 @@ Each backend has its own images. An image's key includes its backend, so one bac
 Each backend declares how it has each feature:
 
 - **native**: the backend does it itself.
-- **emulated**: devvm builds it from other parts of the backend. devvm uses an emulation only once its review has passed, which takes a [design note](design.md#emulated-features), a threat check and end-to-end checks that prove the guarantee. Until then devvm refuses it.
+- **emulated**: devvm builds it from other parts of the backend. devvm uses an emulation only once its review has passed, which takes a [design note](../internals/design.md#emulated-features), a threat check and end-to-end checks that prove the guarantee. Until then devvm refuses it.
 - **none**: the backend can't do it.
 
 `devvm doctor` lists the features of every backend devvm has, and shows an emulation whose review hasn't passed as `unreviewed`. Docker's `build-confinement` and `egress-proxy` depend on its engine, so the Docker column shows them only once devvm has asked the engine, which `devvm doctor --backend docker` does.
 
-On Lima, forwarding ports, whether the listed ones or every one, is emulated through devvm's forwarder and reviewed, so devvm forwards ports by the same rules on every backend ([details](images.md#ports)). Everything else on Lima is Lima's own.
+On Lima, forwarding ports, whether the listed ones or every one, is emulated through devvm's forwarder and reviewed, so devvm forwards ports by the same rules on every backend ([details](../using/images.md#ports)). Everything else on Lima is Lima's own.
 
 The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac, and Linux hosts are untested. Network policy, ssh for editors, forwarding ports (the listed ones and every one) and turning agent forwarding on or off are emulated and reviewed. devvm refuses an emulation until it's reviewed.
 
-The Docker column is tested with Docker Desktop 4.94 (Docker 29.8) on an arm64 Mac and with Docker 29.1 on Ubuntu 26.04 (arm64). Docker Desktop and an engine on a Linux machine differ in what a container reaches on the host. Docker has all of its native features. devvm emulates ssh for editors, ports (the listed ones and every one) and agent forwarding, including turning it on or off, over one transport, which is `docker exec` into the container to an sshd of devvm's for each connection, and all of them are reviewed. It emulates network policy, and build confinement on Docker Desktop, through an internal network of the VM's own and a relay to devvm's proxy, and both are reviewed. It emulates the docker layer under Sysbox where a Linux engine has Sysbox, which is reviewed, and refuses what Sysbox lacks ([design](design.md#docker)).
+The Docker column is tested with Docker Desktop 4.94 (Docker 29.8) on an arm64 Mac and with Docker 29.1 on Ubuntu 26.04 (arm64). Docker Desktop and an engine on a Linux machine differ in what a container reaches on the host. Docker has all of its native features. devvm emulates ssh for editors, ports (the listed ones and every one) and agent forwarding, including turning it on or off, over one transport, which is `docker exec` into the container to an sshd of devvm's for each connection, and all of them are reviewed. It emulates network policy, and build confinement on Docker Desktop, through an internal network of the VM's own and a relay to devvm's proxy, and both are reviewed. It emulates the docker layer under Sysbox where a Linux engine has Sysbox, which is reviewed, and refuses what Sysbox lacks ([design](../internals/design.md#docker)).
 
 | Feature | What it is | Lima | smolvm (experimental) | Docker (experimental) |
 | --- | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ The Docker column is tested with Docker Desktop 4.94 (Docker 29.8) on an arm64 M
 | `cpus` | a VM's CPUs | native | native | native: a quota; BusyBox's `nproc` still counts every CPU |
 | `memory` | a VM's memory | native | native | native |
 | `disk` | a VM's disk size | native: grows, never shrinks | native: grows, never shrinks | none: Docker Desktop refuses a size, and Docker's containerd image store ignores it; `devvm size` shows what a VM holds ([details](docker.md#what-devvm-sets-on-a-vm)) |
-| `docker-layer` | the [docker layer](images.md#built-in-layers): Docker's engine running in the VM | native | native: its daemon started after each start | emulated (reviewed) where the engine has Sysbox's runtime (Linux): the VM's container under Sysbox, a user namespace of its own, on a network of its own, with volumes for its engine and no network policy; made one in place too. None elsewhere: use a VM backend ([details](docker.md#the-docker-layer)) |
+| `docker-layer` | the [docker layer](../using/images.md#built-in-layers): Docker's engine running in the VM | native | native: its daemon started after each start | emulated (reviewed) where the engine has Sysbox's runtime (Linux): the VM's container under Sysbox, a user namespace of its own, on a network of its own, with volumes for its engine and no network policy; made one in place too. None elsewhere: use a VM backend ([details](docker.md#the-docker-layer)) |
 
 The backends also differ in isolation. Lima runs a full VM for each project. smolvm runs a microVM for each project, with the image as a container inside it and no init system. Docker runs containers, not VMs. On Linux every Docker VM shares the host's kernel, and on macOS Docker Desktop runs all of them in one VM, so a kernel flaw reaches the host on Linux and every other VM on both ([details](docker.md#isolation-a-container-is-not-a-vm)). Docker's engine runs inside a Docker VM only under Sysbox, on a Linux engine. devvm never makes a container `--privileged`, because that takes its isolation away ([details](docker.md#the-docker-layer)).
 
@@ -72,8 +72,8 @@ devvm setup                  # asks, then for base's features
 devvm setup --backend NAME   # without asking; the features stay as they are
 ```
 
-In a terminal, `devvm setup` lists every backend, with the experimental ones marked, starting from the current default. The up and down keys (or `k` and `j`) move, and Enter confirms. devvm saves and prints the choice, then asks for [base's features](customizing.md#choosing-features). With `--features` alone, or without a terminal, it doesn't ask for the backend.
+In a terminal, `devvm setup` lists every backend, with the experimental ones marked, starting from the current default. The up and down keys (or `k` and `j`) move, and Enter confirms. devvm saves and prints the choice, then asks for [base's features](../using/customizing.md#choosing-features). With `--features` alone, or without a terminal, it doesn't ask for the backend.
 
 A VM's state records its backend, and the VM stays on that backend, so devvm ignores `--backend` on an existing VM. When the backend file or a VM's state names a backend devvm doesn't have, devvm stops and lists the ones it has.
 
-A launch asks only the backends that some VM's state names for their VMs, which it does for the [ssh config](ssh.md) and the SSH agent's folder checks. A backend that no VM uses never runs during a launch, so it can't slow one down, even when it isn't running or isn't installed.
+A launch asks only the backends that some VM's state names for their VMs, which it does for the [ssh config](../using/ssh.md) and the SSH agent's folder checks. A backend that no VM uses never runs during a launch, so it can't slow one down, even when it isn't running or isn't installed.

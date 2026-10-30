@@ -1,6 +1,6 @@
 ---
 title: Images and VMs
-weight: 20
+weight: 1
 ---
 
 ## Base
@@ -13,7 +13,7 @@ Each download in `assets/layers/base.sh` is pinned to a version and a SHA-256 at
 
 ### Ubuntu's cloud image
 
-On Lima, base starts from a pinned, dated release of Ubuntu 26.04's cloud image (`release-YYYYMMDD` on cloud-images.ubuntu.com). devvm pins the image's SHA-256 for arm64 and amd64 with it, in `CloudRelease`, `CloudSHA256Arm64` and `CloudSHA256Amd64` in `internal/ubuntu/ubuntu.go`. The pin moves with base's package snapshot to the newest release dated before the snapshot, as smolvm's and Docker's container image does ([maintaining](maintaining.md#updating-pinned-versions)). A release with newer packages than the snapshot's would leave apt unable to install the packages that depend on their exact versions.
+On Lima, base starts from a pinned, dated release of Ubuntu 26.04's cloud image (`release-YYYYMMDD` on cloud-images.ubuntu.com). devvm pins the image's SHA-256 for arm64 and amd64 with it, in `CloudRelease`, `CloudSHA256Arm64` and `CloudSHA256Amd64` in `internal/ubuntu/ubuntu.go`. The pin moves with base's package snapshot to the newest release dated before the snapshot, as smolvm's and Docker's container image does ([maintaining](../contributing/maintaining.md#updating-pinned-versions)). A release with newer packages than the snapshot's would leave apt unable to install the packages that depend on their exact versions.
 
 devvm checks the image before it uses it:
 
@@ -38,13 +38,13 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 
 ### Built-in layers
 
-devvm ships one layer, `docker`. You choose it like any other layer (`devvm node+docker`, `devvm build docker`), and you can add it to an existing VM in place ([adding to a VM](commands.md#adding-to-a-vm)). Its script is `assets/layers/docker.sh`, embedded in devvm, and its [allowlist](network.md#allowlists) is `assets/layers/docker.policy`. Its name is reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` of yours.
+devvm ships one layer, `docker`. You choose it like any other layer (`devvm node+docker`, `devvm build docker`), and you can add it to an existing VM in place ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Its script is `assets/layers/docker.sh`, embedded in devvm, and its [allowlist](../safety/network.md#allowlists) is `assets/layers/docker.policy`. Its name is reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` of yours.
 
 | Layer | Brings |
 | --- | --- |
 | docker | Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, its signing key's checksum and each package's version pinned at the top of the script (Alpine's own packages on `--from alpine`, unpinned); the VM's user in the `docker` group; the daemon started at each boot |
 
-A VM without the layer has no Docker. Running Docker's engine in a VM is a backend feature of its own, `docker-layer` ([features](backends.md#features)). On the [Docker backend](docker.md#the-docker-layer), the layer needs Sysbox on a Linux engine, where devvm makes a VM for it, or makes the VM again when you add the layer in place. Anywhere else, devvm refuses the layer before it changes anything, and you need a VM backend for it.
+A VM without the layer has no Docker. Running Docker's engine in a VM is a backend feature of its own, `docker-layer` ([features](../backends/_index.md#features)). On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs Sysbox on a Linux engine, where devvm makes a VM for it, or makes the VM again when you add the layer in place. Anywhere else, devvm refuses the layer before it changes anything, and you need a VM backend for it.
 
 ## Shared tools
 
@@ -58,7 +58,7 @@ The toolchains and coding agents are shared tools, not image layers. Any image c
 | go | Go |
 | claude, codex, opencode | the coding agents |
 
-devvm builds each tool version once into a compressed, read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it in `<image>.sha256`. That folder is mounted read-only in every VM at `/mnt/devvm-tools`, and each VM mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. On [Docker](docker.md#shared-tools), devvm unpacks the images into a volume, mounts that volume instead, and links each tool's folder where its image would be mounted. Any mix of tools works without building anything new, and ten VMs with node share one copy of it. [mise](https://mise.jdx.dev) runs the tools:
+devvm builds each tool version once into a compressed, read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it in `<image>.sha256`. That folder is mounted read-only in every VM at `/mnt/devvm-tools`, and each VM mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. On [Docker](../backends/docker.md#shared-tools), devvm unpacks the images into a volume, mounts that volume instead, and links each tool's folder where its image would be mounted. Any mix of tools works without building anything new, and ten VMs with node share one copy of it. [mise](https://mise.jdx.dev) runs the tools:
 
 - **They work as usual.** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`) and `cargo` work from any shell, including `bash -c` from agents and from editors over SSH.
 - **A project's own version files win.** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and the `toolchain` line in `go.mod` pick their version, which installs into the VM the first time it's used.
@@ -87,7 +87,7 @@ Shared tools aren't images, so `devvm rebuild` refuses them, because their versi
 A new VM gets the tools its image names and keeps those versions. On each launch, devvm warns when the lock has newer ones. The commands below don't change the VM's disk, because its tools are mounted from the share, so a change takes effect on that launch.
 
 - `devvm update` checks upstream for newer versions, builds what the share lacks, and moves the VM to them.
-- `devvm IMAGE` with tools the VM lacks adds them, after asking ([adding to a VM](commands.md#adding-to-a-vm)).
+- `devvm IMAGE` with tools the VM lacks adds them, after asking ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
 - `devvm remove TOOLS` takes tools out (`devvm remove python+claude`). What the VM installed itself, such as other versions or global packages, stays.
 
 ## Which image a new VM gets
@@ -116,7 +116,7 @@ If the image (base and its layers) isn't built yet, devvm builds it first, with 
 devvm builds each image in a VM of its own, and that VM then is the image:
 
 1. For base, devvm makes a new VM from [Ubuntu's cloud image](#ubuntus-cloud-image) with `base.yaml`'s settings, or, with `--from`, from a container image [converted into a disk](from.md#how-its-converted). A layer's VM is a copy of its parent image.
-2. The VM starts confined. It reaches the internet but not the host's own services on loopback, and it forwards no ports. How that's enforced depends on the backend, so see [Lima](lima.md#confinement) and [Docker](docker.md#building-images), which can't build on Docker Desktop yet.
+2. The VM starts confined. It reaches the internet but not the host's own services on loopback, and it forwards no ports. How that's enforced depends on the backend, so see [Lima](../backends/lima.md#confinement) and [Docker](../backends/docker.md#building-images), which can't build on Docker Desktop yet.
 3. The script runs. For base, that's `assets/layers/base.sh` and then the [features](customizing.md) you chose, and for a layer, it's the layer's script.
 4. The VM stops. devvm writes the image's record last, with its chain, what base started from, and its C library.
 
@@ -166,7 +166,7 @@ A key is the first 12 hex digits of a SHA-256. Each input goes into the hash wit
 | `KEY` | its key |
 | `STATE` | `current`; `stale`: its key no longer matches its inputs; `unfinished`: a build that didn't finish, with no record |
 | `SIZE` | the disk it takes, in powers of 1024 (`2.1G`). On macOS an image is a clone of its parent's disk, and the blocks they share count for both |
-| `BACKEND` | the [backend](backends.md) that has it |
+| `BACKEND` | the [backend](../backends/_index.md) that has it |
 
 The second table lists the [shared tool images](#shared-tools) in the share, by the name that image names use for them (`node` for node, pnpm and bun). The toolchains come first, then the agents, with each tool's versions newest first:
 
@@ -190,7 +190,7 @@ Listing never resolves the tools lock. Before there is a lock, no tool image is 
 
 ### Cleaning up
 
-`devvm gc` deletes three things. The first is what `devvm images` lists as stale or unfinished, on every backend, with their records. The second is the shared tool images it lists as `unused`, with their hashes. The third is the copies of devvm's own files that older versions [wrote out](install.md#installing-devvm), except those a VM's proxy was started with. gc lists them all first and, in a terminal, asks. Without a terminal, it goes ahead.
+`devvm gc` deletes three things. The first is what `devvm images` lists as stale or unfinished, on every backend, with their records. The second is the shared tool images it lists as `unused`, with their hashes. The third is the copies of devvm's own files that older versions [wrote out](../getting-started/install.md#installing-devvm), except those a VM's proxy was started with. gc lists them all first and, in a terminal, asks. Without a terminal, it goes ahead.
 
 - gc never deletes VMs. It also keeps current images, and every tool image that any VM's state lists, including a stopped VM's and that of a VM deleted outside devvm whose state is left.
 - On Linux hosts, a stale image whose disk VMs are overlays of stays, and devvm says which VMs use it.
@@ -211,17 +211,17 @@ devvm ports -g none         # what new VMs forward (default: all)
 ```
 
 - A new VM gets `--ports` (`devvm --ports 5173`). Without it, the VM gets what `devvm ports -g` set in `~/.config/devvm/ports`, a single line of `all`, `none` or a list, and without that file, it forwards every port.
-- A stopped VM changes at once. A running VM keeps what it forwards until it next starts (`devvm restart`), and until then `devvm ports` shows what it forwards now and says what it will forward.
+- A change applies at once. A stopped VM forwards the new ports from its next start. On a running VM, devvm starts its forwarder again with the new ports while the VM runs on, so a server on an added port reaches this machine within a few seconds. Connections open through the old forwarder close, so a client that was connected through it has to connect again.
 - `add` and `rm` take ports and ranges, not `all` or `none`. devvm refuses `rm` on a VM that forwards every port, because there's no list to remove from. `-g` also works with `add` and `rm`.
-- Ports are forwarded with or without [network policy](network.md). Builds forward no ports.
+- Ports are forwarded with or without [network policy](../safety/network.md). Builds forward no ports.
 
 devvm's forwarder forwards the ports by the same rules on every backend.
 
 - **What it forwards.** When a VM forwards every port, the forwarder forwards each TCP port from 1024 up that a server in the VM listens on, on the VM's loopback or on all its addresses. When a VM lists its ports, it forwards those ports alone, however many there are, ports below 1024 included. Each port goes to the same port on this machine's `127.0.0.1` and `::1` and nowhere else, within a few seconds of the server starting, and the forward goes away when the server stops. At most 256 ports are forwarded at once.
 - **What it never takes.** The forwarder never takes a port that a program on this machine has on any address. That program keeps the port and its `localhost` connections, and the forward waits until the VM's server stops and starts again. The forwarder also never takes a port that devvm records for a VM, even while that port is free. Those are the ssh, proxy and decider ports devvm chooses for VMs, the VM's own ssh port, and other VMs' listed ports. A Lima VM without network policy has an ssh port that Lima picks and devvm doesn't record, but Lima holds that port, so the forwarder can't take it.
-- **A listed port that a program on this machine has** isn't forwarded from a start that finds it in use, and devvm warns about it (`ports_taken`). The VM starts all the same, and the next start that finds the port free forwards it again.
+- **A listed port that a program on this machine has** isn't forwarded when a start, or a change of a running VM's ports, finds it in use, and devvm warns about it (`ports_taken`). The VM starts or runs on all the same, and the next start or change that finds the port free forwards it again.
 - **A program that starts on a port after it's forwarded** can still bind it on all addresses, as most servers do, and then that program's `localhost` connections reach the VM.
-- **How it works.** The forwarder reaches the VM over the VM's ssh, with a key and a host key that devvm pins, and it asks for no forwarding into this machine. Every connection starts on this machine, and the VM opens none to it. The forwarder runs as a hidden `devvm _lima-ports`, `_smolvm-ports` or `_docker-ports` process, one per VM, which devvm starts after each start of the VM and stops with `devvm stop`. Its log is `<vm>.ports.log` beside the backend's records, which on Lima are in `~/.local/share/devvm/lima-vms`. When a forwarder doesn't start, devvm warns with its log (`ports_forward_failed`), and the VM runs on.
+- **How it works.** The forwarder reaches the VM over the VM's ssh, with a key and a host key that devvm pins, and it asks for no forwarding into this machine. Every connection starts on this machine, and the VM opens none to it. The forwarder runs as a hidden `devvm _lima-ports`, `_smolvm-ports` or `_docker-ports` process, one per VM, which devvm starts after each start of the VM and again when you change a running VM's ports, and stops with `devvm stop`. Its log is `<vm>.ports.log` beside the backend's records, which on Lima are in `~/.local/share/devvm/lima-vms`. When a forwarder doesn't start, devvm warns with its log (`ports_forward_failed`), and the VM runs on.
 
 **UDP isn't forwarded, on any backend.** Run the UDP client in the VM instead, or tunnel it over a forwarded TCP port with [socat](http://www.dest-unreach.org/socat/doc/socat.html), installed on both sides. For a UDP server on port 8125 in the VM, with TCP port 9125 forwarded:
 
@@ -244,15 +244,15 @@ devvm size -g --memory 16          # the size new VMs get (default: the image's)
 devvm size -g                      # cpus=, memory= and disk= lines, empty for the image's
 ```
 
-- A new VM gets `--cpus`, `--memory` and `--disk` (`devvm --cpus 6 base`). Without them, it gets what `devvm size -g` set in `~/.config/devvm/size`, and without that, the image's size ([details](commands.md#size-and-ports)).
+- A new VM gets `--cpus`, `--memory` and `--disk` (`devvm --cpus 6 base`). Without them, it gets what `devvm size -g` set in `~/.config/devvm/size`, and without that, the image's size ([details](../getting-started/commands.md#size-and-ports)).
 - `--cpus` takes a whole number, and `--memory` and `--disk` take a size in GiB, written `16`, `16G` or `16GiB`, with decimals allowed. devvm refuses more CPUs or memory than this machine has.
 - A stopped VM changes at once. A running VM keeps its size until it next starts (`devvm restart`), and until then `devvm size` shows what the VM has now and says what changes.
 - Disks grow but never shrink, so devvm refuses a disk smaller than the VM's.
-- On [Docker](docker.md#what-devvm-sets-on-a-vm), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB.
+- On [Docker](../backends/docker.md#what-devvm-sets-on-a-vm), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB.
 
 ### Disk use
 
-A VM's disk size is how far the disk can grow, not how much space it takes. A project VM starts as a copy of its image's disk that shares the image's blocks, so a new VM takes almost nothing until it writes ([clones and overlays](lima.md#clones-and-overlays)):
+A VM's disk size is how far the disk can grow, not how much space it takes. A project VM starts as a copy of its image's disk that shares the image's blocks, so a new VM takes almost nothing until it writes ([clones and overlays](../backends/lima.md#clones-and-overlays)):
 
 - **macOS:** the copy is an APFS clone. `du` counts the shared blocks as the clone's own, so it overcounts.
 - **Linux:** the copy is a qcow2 overlay of the image's disk, which holds only the VM's changes, about 12 MB for a new VM instead of 2 GB.
@@ -264,7 +264,7 @@ devvm writes nothing into the project folder. It keeps everything in two folders
 | Folder | Holds |
 | --- | --- |
 | `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) | each VM's state (`vms/<vm-name>`), image records (`images/<key>`), rebuild counters (`images/rebuilds/`) and `--from` digests (`images/from-digests`), the shared tools, logs, and devvm's own Lima home (`lima/`) |
-| `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](backends.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, the keys in devvm's SSH agent (`agent-keys`), and the [ssh config](ssh.md) for VMs and their host keys (`ssh_config`, `known_hosts`) |
+| `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) | your settings: the base image's features (`base-features`), the size (`size`), ports (`ports`) and [backend](../backends/_index.md#choosing-a-backend) (`backend`) of new VMs, your own layers and features, the keys in devvm's SSH agent (`agent-keys`), and the [ssh config](ssh.md) for VMs and their host keys (`ssh_config`, `known_hosts`) |
 
 A VM's state file records the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. The file lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
 
@@ -286,7 +286,7 @@ devvm deletes an interrupted new VM, with its state, until its first shell opens
 
 An interrupted build deletes the image it was building. So does a build whose create or clone fails, once devvm has shown the end of the log, because there's nothing in the image to look at.
 
-A build that fails later, in its script or as the VM starts or stops, keeps the image's VM, stopped and without a record, so you can look inside. devvm's error names the VM and says how to open a shell in it with [`devvm limactl`](lima.md#running-limactl):
+A build that fails later, in its script or as the VM starts or stops, keeps the image's VM, stopped and without a record, so you can look inside. devvm's error names the VM and says how to open a shell in it with [`devvm limactl`](../backends/lima.md#running-limactl):
 
 ```sh
 devvm limactl shell --start devvm-img-<key>

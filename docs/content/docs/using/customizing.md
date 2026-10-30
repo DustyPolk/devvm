@@ -1,6 +1,6 @@
 ---
 title: Customizing images
-weight: 23
+weight: 2
 ---
 
 Your own layers and features live in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), not next to devvm's binary, so upgrading devvm keeps them.
@@ -19,11 +19,11 @@ A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, tha
 - Built-in layers go in the same image names as yours: `devvm node+docker+postgres`.
 - Put PATH changes in `~/.profile`.
 - Download with `devvm-fetch URL SHA256 OUT`, which `base` installs: it fails when the checksum doesn't match.
-- `NAME.policy` lists the hosts VMs with the layer can reach with [network policy](network.md#allowlists), one rule per line.
+- `NAME.policy` lists the hosts VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.
 - Editing the script rebuilds its image, and the ones built on it, on next use ([caching](images.md#caching)).
-- A layer can be [added to an existing VM](commands.md#adding-to-a-vm) in place, but not taken out: `devvm rm` and make the VM again.
+- A layer can be [added to an existing VM](../getting-started/commands.md#adding-to-a-vm) in place, but not taken out: `devvm rm` and make the VM again.
 
-To edit layers with an agent in a VM, keep them in a repo of their own and copy them in: devvm refuses a VM for a folder inside `~/.config/devvm` ([details](security.md#only-the-project-folder)).
+To edit layers with an agent in a VM, keep them in a repo of their own and copy them in: devvm refuses a VM for a folder inside `~/.config/devvm` ([details](../safety/security.md#only-the-project-folder)).
 
 ### Example: postgres
 
@@ -61,7 +61,7 @@ devvm setup                     # asks again, starting from the current choice
 devvm setup --features fzf,omb  # without asking; --features '' chooses none
 ```
 
-In a terminal, `devvm setup` first asks for the [default backend](backends.md#choosing-a-backend), then the features; `--features` doesn't ask for the backend. Without a terminal, `devvm setup` keeps the choice. A name that isn't a feature is refused, and nothing changes. You can also edit `base-features` yourself: an empty file chooses none, and a name without a script is skipped, with a warning.
+In a terminal, `devvm setup` first asks for the [default backend](../backends/_index.md#choosing-a-backend), then the features; `--features` doesn't ask for the backend. Without a terminal, `devvm setup` keeps the choice. A name that isn't a feature is refused, and nothing changes. You can also edit `base-features` yourself: an empty file chooses none, and a name without a script is skipped, with a warning.
 
 The chosen features are part of `base`'s [key](images.md#caching), so a new choice makes `base` and the images built on it rebuild on next use; `devvm setup` says so. The old images are then stale: [`devvm gc`](images.md#cleaning-up) deletes them.
 
