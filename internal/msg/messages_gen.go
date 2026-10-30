@@ -1359,7 +1359,7 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
-// NetAbout is [net_about]: "Network policy for {{.vm}}:\non: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\noff: it reaches anything this machine can"
+// NetAbout is [net_about]: "Network policy for {{.vm}}:\n  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\n  off: it reaches anything this machine can"
 func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }

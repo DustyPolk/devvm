@@ -13,8 +13,8 @@ A new VM gets network policy unless you turn it off. When devvm creates a VM in 
 
 ```text
 Network policy for devvm-some-project-71a99b1076d92c:
-on: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
-off: it reaches anything this machine can
+  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
+  off: it reaches anything this machine can
 https://devvm.dev/docs/safety/network/#turning-it-on-or-off
 Turn it on? [Y/n]
 ```

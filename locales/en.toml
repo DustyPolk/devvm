@@ -875,7 +875,7 @@ description = "envs (base, the toolchains, the built-in layers and the user's) a
 other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
 
 [net_about]
-other = "Network policy for {{.vm}}:\non: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\noff: it reaches anything this machine can"
+other = "Network policy for {{.vm}}:\n  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\n  off: it reaches anything this machine can"
 
 [net_ask]
 other = "Turn it on?"

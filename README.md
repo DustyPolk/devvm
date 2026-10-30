@@ -33,8 +33,8 @@ In a terminal, devvm first asks whether the new VM gets network policy. It recom
 
 ```console
 Network policy for devvm-some-project-71a99b1076d92c:
-on: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
-off: it reaches anything this machine can
+  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
+  off: it reaches anything this machine can
 Turn it on? [Y/n]
 ```
 
