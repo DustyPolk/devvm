@@ -447,7 +447,7 @@ html.dark .highlight .chroma .go {
   margin: 1.5rem 0;
   padding: 0;
   font-family: var(--devvm-font-pixel);
-  font-size: 11px;
+  font-size: 14px;
   font-synthesis: none;
 }
 
@@ -455,11 +455,11 @@ html.dark .highlight .chroma .go {
   flex: none;
 }
 
-/* Labels' lines on the font's 14px cell, not the page's line height. Mermaid measures them in the page,
-   so their boxes fit. */
+/* Labels' lines on the font's cell, 18px at 14px, not the page's line height. Mermaid measures them in
+   the page, so their boxes fit. */
 .content pre.mermaid foreignObject p {
   margin: 0;
-  line-height: 14px;
+  line-height: 18px;
 }
 
 .content pre.mermaid rect {

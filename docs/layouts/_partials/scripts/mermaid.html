@@ -14,7 +14,7 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", () => {
-    // The palette in custom.css, and Departure Mono at 11px: the home page's art.
+    // The palette in custom.css, and Departure Mono at 14px, a size larger than the home page's art for reading.
     const surface = "#0f111a";
     const border = "#20474b";
     const text = "#eeeeee";
@@ -25,17 +25,17 @@
       startOnLoad: false,
       theme: "base",
       fontFamily: '"Departure Mono", monospace',
-      fontSize: 11,
-      // At their own size, never scaled to fit, so the font's pixels stay whole: custom.css scrolls a wide one.
-      flowchart: { useMaxWidth: false, curve: "linear", wrappingWidth: 280, nodeSpacing: 35, rankSpacing: 35 },
-      // Actors' boxes sized for 11px text: two rows of the font's 14px cell, and a little more.
-      sequence: { useMaxWidth: false, look: "classic", mirrorActors: false, height: 35, width: 112, diagramMarginX: 1, actorMargin: 35 },
+      fontSize: 14,
+      // At their own size, never scaled to fit: custom.css scrolls a wide one.
+      flowchart: { useMaxWidth: false, curve: "linear", wrappingWidth: 340, nodeSpacing: 45, rankSpacing: 45 },
+      // Actors' boxes sized for 14px text: two rows of the font's 18px line, and a little more.
+      sequence: { useMaxWidth: false, look: "classic", mirrorActors: false, height: 45, width: 140, diagramMarginX: 1, actorMargin: 45 },
       themeVariables: {
         darkMode: true,
         // Flat, as the home page's art is: no shadows.
         dropShadow: "none",
         fontFamily: '"Departure Mono", monospace',
-        fontSize: "11px",
+        fontSize: "14px",
         background: "#000000",
         primaryColor: surface,
         primaryBorderColor: blue,
@@ -73,7 +73,7 @@
     // As Hextra's: only visible diagrams, as hidden ones render truncated, and the rest when shown.
     // After the fonts load, so Mermaid measures labels in Departure Mono. Mermaid names each diagram by
     // the time, the same for two drawn in one millisecond, so they're counted instead, across runs.
-    let queue = document.fonts.load('11px "Departure Mono"').catch(() => {});
+    let queue = document.fonts.load('14px "Departure Mono"').catch(() => {});
     let drawn = 0;
     const renderVisible = () => {
       queue = queue.then(() => {
