@@ -6,13 +6,15 @@ Each project folder gets a VM of its own. devvm detects the project's toolchain 
 
 ## Install
 
-devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64, with Lima 2.0 or newer. To install it with Homebrew, which also installs Lima, run:
+devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64, with Lima 2.0 or newer. Run the one command for your system.
+
+On macOS, install devvm with Homebrew, which also installs Lima:
 
 ```sh
 brew install w3cj/tap/devvm
 ```
 
-To install it with the install script instead, which offers to install what's missing, run:
+On Linux, install it with the install script, which also works on macOS and asks before it installs Lima, QEMU or access to `/dev/kvm`:
 
 ```sh
 curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash

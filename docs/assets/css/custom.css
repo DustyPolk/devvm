@@ -465,3 +465,62 @@ html.dark .highlight .chroma .go {
 .content pre.mermaid rect {
   shape-rendering: crispEdges;
 }
+
+/* The install shortcode (layouts/_shortcodes/install.html): Hextra's tabs, a tab per operating system, on
+   a blue line with the selected one in lime. */
+.devvm-install {
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
+/* No gutter for a scrollbar the two tabs never need, so their line is as wide as the code. */
+.devvm-install .hextra-scrollbar {
+  scrollbar-gutter: auto;
+}
+
+.devvm-install [role="tablist"] {
+  margin-top: 0;
+  border-color: var(--devvm-border);
+}
+
+html.dark .devvm-install .hextra-tabs-toggle {
+  color: var(--devvm-text-secondary);
+}
+
+html.dark .devvm-install .hextra-tabs-toggle:hover {
+  color: var(--devvm-text);
+  border-color: var(--devvm-border);
+}
+
+html.dark .devvm-install .hextra-tabs-toggle[data-state="selected"] {
+  color: var(--devvm-accent);
+  border-color: var(--devvm-accent);
+}
+
+.devvm-install .hextra-tabs-panel {
+  padding-top: 1rem;
+}
+
+.devvm-install .hextra-tabs-panel > p {
+  margin: 0.75rem 0 0;
+}
+
+.devvm-install .hextra-tabs-panel > p > a {
+  color: var(--devvm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.devvm-install .hextra-tabs-panel > p > a:hover {
+  color: var(--devvm-accent-soft);
+}
+
+/* On the home page, the tabs' text and its code as the page's own. */
+#content > .hx\:items-start > .devvm-install .hextra-tabs-panel > p {
+  color: var(--devvm-text-secondary);
+}
+
+#content > .hx\:items-start > .devvm-install .hextra-tabs-panel > p > code {
+  color: var(--devvm-accent-soft);
+  font-size: 0.85em;
+}

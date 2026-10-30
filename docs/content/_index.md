@@ -21,19 +21,13 @@ layout: hextra-home
 
 ## Quick start
 
+{{< install step="1" >}}
+
 ```sh
-# 1. Install devvm, and Lima with it
-brew install w3cj/tap/devvm
 # 2. Go to a project folder
 cd ~/some-project
 # 3. Open its VM, with Claude Code
 devvm claude
-```
-
-To install with the script instead, which offers to install what's missing, run:
-
-```sh
-curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
 ```
 
 Run `devvm` alone for a VM with the project's toolchain and no agent. The first VM builds the base image, which takes a few minutes once, and [your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
@@ -124,17 +118,11 @@ devvm needs Lima 2.0 or newer, which Homebrew installs along with it, and on Lin
 
 ## Install devvm
 
+{{< install >}}
+
 ```sh
-# Install devvm with Homebrew, and Lima with it
-brew install w3cj/tap/devvm
 # Check that your machine has what devvm needs
 devvm doctor
-```
-
-To install with the script instead, run:
-
-```sh
-curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
 ```
 
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}

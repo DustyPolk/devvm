@@ -1,0 +1,22 @@
+{{- /* Selects the Linux tab of the install shortcode around it for a Linux visitor, as the page loads, before
+   Hextra's tabs script runs. The browser's platform or its user agent string saying Linux is enough, so a
+   user agent set for a test (chrome --user-agent=…) selects it too. Android says Linux, but runs no devvm,
+   so it keeps macOS's tab. */ -}}
+<script>
+  (() => {
+    const group = document.currentScript.parentElement;
+    const platform = [navigator.userAgentData?.platform, navigator.platform, navigator.userAgent].join(" ");
+    if (!/linux/i.test(platform) || /android/i.test(platform)) return;
+    const select = (elements, attribute, on, off) =>
+      elements.forEach((element, i) => {
+        const selected = i === 1;
+        element.dataset.state = selected ? "selected" : "";
+        element.setAttribute(attribute, selected ? on : off);
+        if (selected) element.tabIndex = 0;
+        else if (attribute === "aria-selected") element.tabIndex = -1;
+        else element.removeAttribute("tabindex");
+      });
+    select(group.querySelectorAll("[role=tab]"), "aria-selected", "true", "false");
+    select(group.querySelectorAll("[role=tabpanel]"), "aria-hidden", "false", "true");
+  })();
+</script>
