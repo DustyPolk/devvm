@@ -23,7 +23,7 @@ devvm [IMAGE] [flags]
       --from IMAGE          the container IMAGE a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)
   -h, --help                help for devvm
       --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
-      --network-policy      create the VM with network policy: it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here (default: ask in a terminal, else off)
+      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: on, asked in a terminal)
       --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json
       --no-git-protect      create the VM without .git protection
       --no-network-policy   create the VM without network policy: it reaches anything this machine can

@@ -8,7 +8,7 @@ This page lists the common ways that code you didn't write gets to run on a deve
 ## Staying safe
 
 - **Run installs, project code and agents in the VM.** Whatever the VM writes into the project folder runs as you when a program on this machine runs it, so `npm install`, `make`, tests and agents belong in the VM ([files the VM writes](#files-the-vm-writes)).
-- **Turn on [network policy](network.md), and keep allowlists short.** Without it, code in the VM reaches everything this machine can, and with it, stolen data can go only to the hosts you allowed.
+- **Keep [network policy](network.md) on, and keep allowlists short.** New VMs get it by default. Without it, code in the VM reaches everything this machine can, and with it, stolen data can go only to the hosts you allowed.
 - **Use [`--clone`](clone.md) for a repo or an agent you don't trust.** The VM then works on a clone of its own, and nothing it writes reaches your folder until you fetch it.
 - **Review the VM's changes before you run them on this machine or merge them.** Treat its commits as an untrusted contributor's.
 - **Use fine-grained tokens, and bind only the ones a VM needs.** A VM can do whatever its tokens allow, even when it never sees them ([tokens and keys](#tokens-and-keys-the-vm-may-use)).

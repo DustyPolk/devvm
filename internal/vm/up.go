@@ -307,22 +307,26 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	return n, nil
 }
 
-// chooseNet returns whether a new VM gets network policy (asked for). Root
-// in a VM made for the docker layer (dockerVM) can change its own network,
-// so it gets none; when only its devcontainer.json's docker-in-docker
-// asked for the layer, the question is still asked, and a yes refuses it:
-// the file never takes network policy away.
+// chooseNet returns whether a new VM gets network policy (asked for, on by
+// default). A VM that can't have it is made without it, unasked and said:
+// root in a VM made for the docker layer (dockerVM), named or from a
+// devcontainer.json's docker-in-docker, can change its own network, and
+// b may not confine a VM to its proxy (egress-proxy). --network-policy on
+// such a VM is refused, here or by Require, never dropped.
 func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm string) (bool, error) {
 	switch {
-	case !dockerVM:
-		return e.Proxy.Choose(o.NetworkPolicy, o.NoNetworkPolicy, vm), nil
-	case o.NetworkPolicy:
+	case o.NoNetworkPolicy:
+		return false, nil
+	case dockerVM && o.NetworkPolicy:
 		return false, msg.NetDockerLayer(b.Name(), vm)
-	case o.dc != nil && slices.Contains(o.dc.Layers, image.DockerLayer) && !image.HasLayer(o.Image, image.DockerLayer) &&
-		e.Proxy.Choose(false, o.NoNetworkPolicy, vm):
-		return false, msg.DevcontainerDockerNet(b.Name(), o.dc.File, vm)
+	case dockerVM:
+		e.Warn(msg.NetOffDockerLayer(b.Name(), vm))
+		return false, nil
+	case !o.NetworkPolicy && !e.Registry.Allowed(b, backend.FeatureEgressProxy):
+		e.Warn(msg.NetOffBackend(b.Name(), vm))
+		return false, nil
 	}
-	return false, nil
+	return e.Proxy.Choose(o.NetworkPolicy, false, vm), nil
 }
 
 // dockerLayer chooses the runtime a new VM runs the docker layer under,

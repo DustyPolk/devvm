@@ -152,22 +152,33 @@ func TestKeyAndSalt(t *testing.T) {
 	}
 }
 
-// The flag wins; without one and without a terminal, off; in a terminal,
-// the answer.
+// The flag wins; without one and without a terminal, on; in a terminal,
+// the answer, asked yes by default ([Y/n]) after the tradeoff.
 func TestChoose(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	tty, answer, asked := false, false, 0
-	p := &Proxy{Note: func(msg.M) {}, Ask: func(msg.M) bool { asked++; return answer }, Terminal: func() bool { return tty }}
-	if !p.Choose(true, false, "vm") || p.Choose(false, true, "vm") || p.Choose(false, false, "vm") || asked != 0 {
+	var said []string
+	p := &Proxy{
+		Note:     func(m msg.M) { said = append(said, m.Names()) },
+		Confirm:  func(m msg.M) bool { asked++; said = append(said, m.Names()); return answer },
+		Terminal: func() bool { return tty },
+	}
+	if !p.Choose(true, false, "vm") || p.Choose(false, true, "vm") || !p.Choose(false, false, "vm") || asked != 0 {
 		t.Error("without a terminal: not the flags, or off")
 	}
 	tty = true
+	if p.Choose(false, true, "vm") || !p.Choose(true, false, "vm") || asked != 0 {
+		t.Error("in a terminal: a flag asked, or wasn't followed")
+	}
 	if p.Choose(false, false, "vm") || asked != 1 {
 		t.Error("no answered yes")
 	}
 	answer = true
-	if !p.Choose(false, false, "vm") || !p.Choose(true, false, "vm") || asked != 2 {
-		t.Error("yes answered no, or a flag asked")
+	if !p.Choose(false, false, "vm") || asked != 2 {
+		t.Error("yes answered no")
+	}
+	if want := "net_about vm=vm,net_ask,net_about vm=vm,net_ask"; strings.Join(said, ",") != want {
+		t.Errorf("said %v, want %s", said, want)
 	}
 }
 

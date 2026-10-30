@@ -118,6 +118,7 @@ type UI interface {
 	netpolicy.UI
 	sshagent.UI
 	Say(msg.M)
+	Ask(msg.M) bool
 	Interrupted() bool
 	Stdout() io.Writer
 	Stderr() io.Writer

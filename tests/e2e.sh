@@ -2447,9 +2447,9 @@ docker_layer() {
   s=$(newproj "$1-sysbox")
   (cd "$s" && DEVVM_MESSAGES=names "$D" "${B[@]}" --ports none docker </dev/null >"$work/last.log" 2>&1)
   vm=$(vm_of "$s"); [[ -z $vm ]] || created+=("$vm")
-  check "under Sysbox: its runtime, not privileged, said, unwarned, its engine's volumes, its own network alone, no network policy" bash -c "
+  check "under Sysbox: its runtime, not privileged, said, unwarned, its engine's volumes, its own network alone, no network policy (said)" bash -c "
     [[ -n '$vm' ]] && grep -qE '^==> docker_layer_runtime backend=docker runtime=sysbox vm=$vm\$' '$work/last.log' &&
-    ! grep -q backend_unreviewed '$work/last.log' &&
+    ! grep -q backend_unreviewed '$work/last.log' && grep -qx 'devvm: net_off_docker_layer backend=docker vm=$vm' '$work/last.log' &&
     d_layer_vm '$vm' && grep -qx docker_layer=sysbox '$vms/$vm' && grep -qx net=off '$vms/$vm' || { tail -5 '$work/last.log'; false; }"
   check "... root in it isn't root here: a user namespace of its own" in_root "$vm" \
     '! grep -qE "^ *0 +0 +4294967295\$" /proc/self/uid_map && cat /proc/self/uid_map'

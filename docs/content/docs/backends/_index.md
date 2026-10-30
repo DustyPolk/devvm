@@ -49,7 +49,7 @@ The backends also differ in isolation. Lima runs a full VM for each project. smo
 
 ## Missing and unreviewed features
 
-When a VM needs a feature its backend lacks, devvm stops and names the VM, the feature and the backend. It never falls back to something weaker, so a VM that asks for network policy never starts with an open network. devvm does the same for a feature the backend only emulates when that emulation's review hasn't passed.
+When a VM needs a feature its backend lacks, devvm stops and names the VM, the feature and the backend. It never falls back to something weaker, so a VM that asks for network policy never starts with an open network. devvm does the same for a feature the backend only emulates when that emulation's review hasn't passed. Network policy is the one exception, because it's on by default: when you give neither network policy flag and the backend can't confine the VM to its proxy, devvm makes the VM without network policy and warns you ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
 
 To get the feature, use a backend that has it. A VM keeps its backend, so that means making a new VM.
 

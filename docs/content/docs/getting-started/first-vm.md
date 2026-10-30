@@ -11,12 +11,12 @@ Run devvm in the project folder:
 
 ```sh
 cd ~/some-project
-devvm --network-policy
+devvm
 ```
 
 devvm looks at the folder's files to choose the VM's toolchains, so a folder with `package.json` gets node and one with `pyproject.toml` gets python ([which image a new VM gets](../using/images.md#which-image-a-new-vm-gets)). To choose yourself, name the image, such as `devvm node+claude` for node with Claude Code, or `devvm base` for neither.
 
-`--network-policy` limits the VM to an allowlist of hosts, through a proxy on your machine, and keeps your tokens out of the VM ([network policy](../safety/network.md)). If you leave the flag out, devvm asks, with no as the default. Turn it on unless you know you need the open network, because it's what keeps stolen data and tokens from leaving.
+A new VM gets [network policy](../safety/network.md), which limits it to an allowlist of hosts through a proxy on your machine and keeps your secrets out of the VM. Keep it on unless you know you need the open network, because it's what keeps stolen data and secrets from leaving. In a terminal devvm asks first, with yes as the default, and without a terminal it turns network policy on. `--network-policy` answers yes up front, and `--no-network-policy` makes the VM with an open network instead. On a backend that can't give a VM network policy, devvm makes the VM without it and warns you.
 
 The first time you run devvm, it asks which optional extras every VM gets, such as oh-my-bash and fzf ([choosing features](../using/customizing.md#choosing-features)). Then it builds the base image, which takes a few minutes, and downloads Ubuntu's cloud image first:
 

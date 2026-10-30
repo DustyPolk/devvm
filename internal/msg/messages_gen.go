@@ -509,11 +509,6 @@ func DevcontainerCommandFailed(command string, vm string) M {
 	return M{id: "devcontainer_command_failed", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
-// DevcontainerDockerNet is [devcontainer_docker_net]: "{{.vm}} can't have network policy with the docker layer {{.file}}'s docker-in-docker asks for on {{.backend}}: run devvm --no-devcontainer, or devvm --no-network-policy"
-func DevcontainerDockerNet(backend string, file string, vm string) M {
-	return M{id: "devcontainer_docker_net", vals: []val{{"backend", backend}, {"file", file}, {"vm", vm}}}
-}
-
 // DevcontainerDockerOutside is [devcontainer_docker_outside]: "{{.file}}: the feature {{.feature}} gives the VM this machine's Docker, which devvm never does: use docker-in-docker, or run devvm --no-devcontainer"
 func DevcontainerDockerOutside(feature string, file string) M {
 	return M{id: "devcontainer_docker_outside", vals: []val{{"feature", feature}, {"file", file}}}
@@ -1364,7 +1359,7 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
-// NetAbout is [net_about]: "With network policy, {{.vm}} reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here.\nWithout it, {{.vm}} reaches anything this machine can."
+// NetAbout is [net_about]: "Network policy for {{.vm}}:\non: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\noff: it reaches anything this machine can"
 func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }
@@ -1374,9 +1369,9 @@ func NetAlready(state string, vm string) M {
 	return M{id: "net_already", vals: []val{{"state", state}, {"vm", vm}}}
 }
 
-// NetAsk is [net_ask]: "Turn on network policy for {{.vm}}?"
-func NetAsk(vm string) M {
-	return M{id: "net_ask", vals: []val{{"vm", vm}}}
+// NetAsk is [net_ask]: "Turn it on?"
+func NetAsk() M {
+	return M{id: "net_ask"}
 }
 
 // NetDirectRoute is [net_direct_route]: "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
@@ -1392,6 +1387,16 @@ func NetDockerLayer(backend string, vm string) M {
 // NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
 func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
+}
+
+// NetOffBackend is [net_off_backend]: "Making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
+func NetOffBackend(backend string, vm string) M {
+	return M{id: "net_off_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
+}
+
+// NetOffDockerLayer is [net_off_docker_layer]: "Making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
+func NetOffDockerLayer(backend string, vm string) M {
+	return M{id: "net_off_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
 // NetOffLog is [net_off_log]: "network policy is off for {{.vm}}, so nothing new is logged: devvm network on"
@@ -2462,7 +2467,6 @@ var specs = map[string]spec{
 	"devcontainer_build":               {fields: []string{"file", "key"}},
 	"devcontainer_changed":             {fields: []string{"file", "vm"}},
 	"devcontainer_command_failed":      {fields: []string{"command", "vm"}},
-	"devcontainer_docker_net":          {fields: []string{"backend", "file", "vm"}},
 	"devcontainer_docker_outside":      {fields: []string{"feature", "file"}},
 	"devcontainer_env_name":            {fields: []string{"file", "name"}},
 	"devcontainer_feature":             {fields: []string{"feature", "file"}},
@@ -2635,10 +2639,12 @@ var specs = map[string]spec{
 	"msg_unknown":                      {fields: []string{"name"}},
 	"net_about":                        {fields: []string{"vm"}},
 	"net_already":                      {fields: []string{"state", "vm"}},
-	"net_ask":                          {fields: []string{"vm"}},
+	"net_ask":                          {},
 	"net_direct_route":                 {fields: []string{"vm"}},
 	"net_docker_layer":                 {fields: []string{"backend", "vm"}},
 	"net_flag_ignored":                 {},
+	"net_off_backend":                  {fields: []string{"backend", "vm"}},
+	"net_off_docker_layer":             {fields: []string{"backend", "vm"}},
 	"net_off_log":                      {fields: []string{"vm"}},
 	"net_off_next_start":               {fields: []string{"vm"}},
 	"net_off_policy":                   {fields: []string{"vm"}},

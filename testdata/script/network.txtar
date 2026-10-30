@@ -6,10 +6,10 @@ env DATA=$XDG_DATA_HOME/devvm
 env VMS=$XDG_DATA_HOME/devvm/vms
 env RUN=$XDG_DATA_HOME/devvm/run
 
-# Without a flag, and without a terminal to ask in: off.
+# --no-network-policy: off, with no proxy and no CA.
 mkdir $WORK/off
 cd $WORK/off
-exec devvm --no-git-protect base
+exec devvm --no-network-policy --no-git-protect base
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-off-*'
 stdout '^net=off$'
@@ -149,6 +149,16 @@ exec devvm network on
 stdout '^==> net_set_stopped state=on vm=devvm-off-[0-9a-f]{14}$'
 exec devvm network
 stdout '^on$'
+
+# Without a flag, and without a terminal to ask in: on, unasked.
+mkdir $WORK/default
+cd $WORK/default
+exec devvm --no-git-protect base
+stdout '^==> creating_from image=base vm=devvm-default-[0-9a-f]{14}$'
+! stderr 'net_about|net_ask|net_off_'
+exec sh -c 'cat "$VMS"/devvm-default-*'
+stdout '^net=on$'
+stdout '^net_check=ok$'
 
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

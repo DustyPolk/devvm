@@ -39,16 +39,18 @@ const ProxyUser = "devvm"
 func On(st *state.VM) bool { return st.Get(KeyNet) == "on" }
 
 // Choose returns whether a new VM gets network policy: what the flags say,
-// else the answer in a terminal (no by default), else off.
+// else the answer in a terminal (yes by default), else on.
 func (p *Proxy) Choose(on, off bool, vm string) bool {
 	switch {
 	case on:
 		return true
-	case off, !p.Terminal():
+	case off:
 		return false
+	case !p.Terminal():
+		return true
 	}
 	p.Note(msg.NetAbout(vm))
-	return p.Ask(msg.NetAsk(vm))
+	return p.Confirm(msg.NetAsk())
 }
 
 // Key returns the VM's own random key, made the first time it's needed. It's

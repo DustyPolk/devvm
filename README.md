@@ -24,7 +24,7 @@ $ devvm --network-policy base
 ==> starting devvm-some-project-71a99b1076d92c
 ```
 
-Then you're in a shell in the VM, in `~/some-project`. The first VM builds the base image. Later VMs are copies of it and start in seconds. With `--network-policy` the VM reaches only an allowlist of hosts, through a proxy on your machine ([network policy](https://devvm.dev/docs/safety/network/)); without a flag devvm asks. Before you trust a VM with a project, read [staying safe](https://devvm.dev/docs/safety/attack-vectors/#staying-safe).
+Then you're in a shell in the VM, in `~/some-project`. The first VM builds the base image. Later VMs are copies of it and start in seconds. The VM gets [network policy](https://devvm.dev/docs/safety/network/) by default, so it reaches only an allowlist of hosts, through a proxy on your machine, and devvm asks first in a terminal. Before you trust a VM with a project, read [staying safe](https://devvm.dev/docs/safety/attack-vectors/#staying-safe).
 
 ## Docs
 

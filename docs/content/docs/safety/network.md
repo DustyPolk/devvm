@@ -3,11 +3,23 @@ title: Network policy
 weight: 2
 ---
 
-A VM with network policy reaches only an allowlist of hosts, through a proxy devvm runs on the host, and never holds your tokens. Without it, a VM reaches anything this machine can, its own services on `localhost` included.
+A VM with network policy reaches only an allowlist of hosts, through a proxy devvm runs on the host, and never holds your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. New VMs get network policy by default. Without it, a VM reaches anything this machine can, its own services on `localhost` included.
 
 ## Turning it on or off
 
-When devvm creates a VM it asks whether to turn network policy on; the answer defaults to no. `--network-policy` or `--no-network-policy` answer up front, and without a terminal to ask in it's off. A VM keeps its choice: it's in its state, `net=on` or `net=off`. On an existing VM the flags are ignored, with a warning.
+A new VM gets network policy unless you turn it off. When devvm creates a VM in a terminal, it shows what each choice means and asks whether to turn network policy on, with yes as the default:
+
+```text
+Network policy for devvm-some-project-71a99b1076d92c:
+on: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
+off: it reaches anything this machine can
+https://devvm.dev/docs/safety/network/#turning-it-on-or-off
+Turn it on? [Y/n]
+```
+
+`--network-policy` or `--no-network-policy` answer up front, and without a terminal to ask in, network policy is on. A VM keeps its choice, which devvm records in its state as `net=on` or `net=off`. On an existing VM the flags are ignored, with a warning.
+
+Some VMs can't have network policy: those on a backend that can't confine a VM to its proxy, such as a [Docker](../backends/docker.md#network-policy) engine on another machine, and Docker VMs with the [docker layer](../backends/docker.md#the-docker-layer). devvm doesn't ask about those. It makes the VM without network policy and warns you (`net_off_backend` or `net_off_docker_layer`). If you pass `--network-policy` for such a VM, devvm refuses it, because it never gives an open network to a VM you asked network policy for.
 
 | | |
 | --- | --- |

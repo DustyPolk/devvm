@@ -146,7 +146,8 @@ stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm --backend docker --from $PIN --ports none docker
 stdout '^==> docker_layer_runtime backend=docker runtime=sysbox vm=devvm-sysbox-[0-9a-f]{14}$'
-! stdout net_about
+stderr '^devvm: net_off_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
+! stderr 'net_about|net_ask'
 ! stderr backend_unreviewed
 stub_calls
 stdout '^docker volume create --label devvm\.data=\S+ devvm-sysbox-[0-9a-f]{14}-docker$'
@@ -273,6 +274,23 @@ exec devvm --backend docker --from $PIN --no-network-policy --ports none base
 ! stderr backend_unreviewed
 stdout '^==> creating_from image=base vm=devvm-desk-[0-9a-f]{14}$'
 exec devvm rm -f
+
+# Another machine's engine can't confine a VM to its proxy: without a
+# flag, the VM is made without network policy, unasked and warned;
+# --network-policy is refused before anything is made.
+env DEVVM_DOCKER_KIND=other
+mkdir $WORK/other
+cd $WORK/other
+! exec devvm --backend docker --from $PIN --network-policy --ports none base
+stderr '^devvm: backend_lacks backend=docker feature=egress-proxy vm=devvm-other-[0-9a-f]{14}$'
+! exec sh -c 'ls -d "$STUB_DIR"/docker/containers/devvm-other-*'
+exec devvm --backend docker --from $PIN --ports none base
+stderr '^devvm: net_off_backend backend=docker vm=devvm-other-[0-9a-f]{14}$'
+! stderr 'net_about|net_ask'
+exec sh -c 'cat "$VMS"/devvm-other-*'
+stdout '^net=off$'
+exec devvm rm -f
+env DEVVM_DOCKER_KIND=desktop
 
 # A release fetches its own version's Linux build, which network policy's
 # relay runs, the first time a Docker VM needs it: from the release's Linux

@@ -52,18 +52,17 @@ type Proxy struct {
 	Listening func(ctx context.Context, port int) bool
 	// Tick is how often a start looks for the proxy to listen, ten times.
 	Tick time.Duration
-	// What it prints, and asks: [y/N] and [Y/n]; Terminal reports whether
-	// it can ask.
-	Note, Warn   func(msg.M)
-	Ask, Confirm func(msg.M) bool
-	Terminal     func() bool
+	// What it prints, and asks ([Y/n]); Terminal reports whether it can
+	// ask.
+	Note, Warn func(msg.M)
+	Confirm    func(msg.M) bool
+	Terminal   func() bool
 }
 
 // UI is where the proxies print and ask.
 type UI interface {
 	Note(msg.M)
 	Warn(msg.M)
-	Ask(msg.M) bool
 	Confirm(q ...msg.M) bool
 	StdinIsTerminal() bool
 }
@@ -78,7 +77,7 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
 		},
 		Listening: listening, Tick: 500 * time.Millisecond,
-		Note: u.Note, Warn: u.Warn, Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) },
+		Note: u.Note, Warn: u.Warn, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Terminal: u.StdinIsTerminal,
 	}
 }

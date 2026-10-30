@@ -170,43 +170,66 @@ func TestUpDevcontainerRefused(t *testing.T) {
 	}
 }
 
-// A VM made for the docker layer gets no network policy; when only its
-// devcontainer.json's docker-in-docker asked for the layer, the question is
-// still asked, and a yes refuses it.
-func TestChooseNetDockerLayer(t *testing.T) {
+// A new VM gets network policy unless it's turned off, asked yes by
+// default in a terminal. One that can't have it (made for the docker
+// layer, named or from its devcontainer.json's docker-in-docker, or on a
+// backend without egress-proxy) is made without it, unasked and warned,
+// in a terminal or not; --network-policy on it is refused, never dropped.
+func TestChooseNet(t *testing.T) {
 	dc := &devcontainer.Plan{File: ".devcontainer.json", Layers: []string{"docker"}}
+	noEgress := allNative()
+	delete(noEgress, backend.FeatureEgressProxy)
+	unreviewed := allNative()
+	unreviewed[backend.FeatureEgressProxy] = backend.Emulated(false)
 	for _, tc := range []struct {
 		name     string
 		o        Options
+		caps     backend.Caps
 		dockerVM bool
 		terminal bool
 		answer   bool
 		want     string // the error's names, else the choice
 		asked    bool
+		warned   string
 	}{
-		{"no docker layer, yes", Options{}, false, true, true, "true", true},
-		{"named, --network-policy", Options{NetworkPolicy: true, Image: "docker"}, true, true, true, "net_docker_layer backend=fake vm=v", false},
-		{"named, never asked", Options{Image: "docker"}, true, true, true, "false", false},
-		{"the file's, yes", Options{dc: dc}, true, true, true, "devcontainer_docker_net backend=fake file=.devcontainer.json vm=v", true},
-		{"the file's, no", Options{dc: dc}, true, true, false, "false", true},
-		{"the file's, --no-network-policy", Options{dc: dc, NoNetworkPolicy: true}, true, true, true, "false", false},
-		{"the file's, no terminal", Options{dc: dc}, true, false, true, "false", false},
-		{"the file's and named", Options{dc: dc, Image: "node+docker"}, true, true, true, "false", false},
+		{"no terminal", Options{}, nil, false, false, false, "true", false, ""},
+		{"yes", Options{}, nil, false, true, true, "true", true, ""},
+		{"no", Options{}, nil, false, true, false, "false", true, ""},
+		{"--network-policy", Options{NetworkPolicy: true}, nil, false, true, false, "true", false, ""},
+		{"--no-network-policy", Options{NoNetworkPolicy: true}, nil, false, false, true, "false", false, ""},
+		{"named", Options{Image: "docker"}, nil, true, true, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
+		{"named, no terminal", Options{Image: "docker"}, nil, true, false, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
+		{"named, --network-policy", Options{NetworkPolicy: true, Image: "docker"}, nil, true, true, true, "net_docker_layer backend=fake vm=v", false, ""},
+		{"named, --no-network-policy", Options{NoNetworkPolicy: true, Image: "docker"}, nil, true, true, true, "false", false, ""},
+		{"the file's", Options{dc: dc}, nil, true, true, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
+		{"the file's, no terminal", Options{dc: dc}, nil, true, false, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
+		{"the file's, --network-policy", Options{dc: dc, NetworkPolicy: true}, nil, true, true, true, "net_docker_layer backend=fake vm=v", false, ""},
+		{"no egress-proxy", Options{}, noEgress, false, true, true, "false", false, "net_off_backend backend=fake vm=v"},
+		{"no egress-proxy, no terminal", Options{}, noEgress, false, false, true, "false", false, "net_off_backend backend=fake vm=v"},
+		{"unreviewed egress-proxy", Options{}, unreviewed, false, false, true, "false", false, "net_off_backend backend=fake vm=v"},
+		// Require refuses it (backend_lacks), as the plan's test shows.
+		{"no egress-proxy, --network-policy", Options{NetworkPolicy: true}, noEgress, false, true, true, "true", false, ""},
+		{"no egress-proxy, --no-network-policy", Options{NoNetworkPolicy: true}, noEgress, false, true, true, "false", false, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			e, f, _ := upEnv(t, allNative())
-			asked := false
+			caps := tc.caps
+			if caps == nil {
+				caps = allNative()
+			}
+			e, f, _ := upEnv(t, caps)
+			asked, warned := false, ""
+			e.Warn = func(m msg.M) { warned += m.Names() }
 			e.Proxy.Terminal = func() bool { return tc.terminal }
 			e.Proxy.Note = func(msg.M) {}
-			e.Proxy.Ask = func(msg.M) bool { asked = true; return tc.answer }
+			e.Proxy.Confirm = func(msg.M) bool { asked = true; return tc.answer }
 			o := tc.o
 			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v")
 			got := fmt.Sprint(on)
 			if err != nil {
 				got = names(err)
 			}
-			if got != tc.want || asked != tc.asked {
-				t.Errorf("chooseNet = %s (asked %v), want %s (asked %v)", got, asked, tc.want, tc.asked)
+			if got != tc.want || asked != tc.asked || warned != tc.warned {
+				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (asked %v, warned %q)", got, asked, warned, tc.want, tc.asked, tc.warned)
 			}
 		})
 	}

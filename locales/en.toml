@@ -254,6 +254,14 @@ other = "{{.vm}} runs the docker layer under {{.runtime}}, on {{.backend}}: no n
 description = "backend is a backend's name (docker)"
 other = "{{.vm}} can't have network policy with the docker layer on {{.backend}}: root in it can change its own network"
 
+[net_off_docker_layer]
+description = "backend is a backend's name (docker)"
+other = "Making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
+
+[net_off_backend]
+description = "backend is a backend's name (docker)"
+other = "Making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
+
 [docker_file_sharing]
 description = "dirs is a space-separated list of host folders"
 other = "Docker Desktop mounts only folders under {{.dirs}}"
@@ -867,10 +875,10 @@ description = "envs (base, the toolchains, the built-in layers and the user's) a
 other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
 
 [net_about]
-other = "With network policy, {{.vm}} reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here.\nWithout it, {{.vm}} reaches anything this machine can."
+other = "Network policy for {{.vm}}:\non: it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\noff: it reaches anything this machine can"
 
 [net_ask]
-other = "Turn on network policy for {{.vm}}?"
+other = "Turn it on?"
 
 [net_direct_route]
 other = "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
@@ -1526,10 +1534,6 @@ other = "{{.file}}: devvm has no layer for the feature {{.feature}}: remove it, 
 
 [devcontainer_docker_outside]
 other = "{{.file}}: the feature {{.feature}} gives the VM this machine's Docker, which devvm never does: use docker-in-docker, or run devvm --no-devcontainer"
-
-[devcontainer_docker_net]
-description = "backend is a backend's name (docker)"
-other = "{{.vm}} can't have network policy with the docker layer {{.file}}'s docker-in-docker asks for on {{.backend}}: run devvm --no-devcontainer, or devvm --no-network-policy"
 
 [devcontainer_env_name]
 other = "{{.file}}: {{.name}} isn't an environment variable's name: fix it, or run devvm --no-devcontainer"

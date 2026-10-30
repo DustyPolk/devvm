@@ -33,7 +33,7 @@ Options for a new VM:
 
 | | |
 | --- | --- |
-| `--network-policy` | create the VM with [network policy](../safety/network.md): it reaches only an allowlist of hosts, through a proxy on this machine, and your tokens stay here |
+| `--network-policy` | create the VM with [network policy](../safety/network.md), the default: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine |
 | `--no-network-policy` | create the VM without network policy, so it reaches anything this machine can |
 | `--clone` | create the VM with its own clone of the repo instead of mounting the folder ([details](../safety/clone.md)) |
 | `--no-git-protect` | create the VM without `.git` protection |
@@ -47,7 +47,7 @@ Options for a new VM:
 
 A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets the VM that file describes, as far as devvm supports it. That covers its image, ports, environment and commands, and the features devvm has layers for ([`devcontainer.json`](../using/devcontainer.md)). The options you give take priority over the file.
 
-If you give neither network policy flag, devvm asks in a terminal, with no as the default. Without a terminal, the VM gets no network policy.
+If you give neither network policy flag, devvm asks in a terminal, with yes as the default, and without a terminal the VM gets network policy. When the VM can't have network policy, devvm doesn't ask. It makes the VM without network policy and warns you, which happens on a backend that can't confine the VM to its proxy and for a Docker VM with the [docker layer](../backends/docker.md#the-docker-layer). If you pass `--network-policy` for such a VM, devvm refuses it instead ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
 
 Options that take a value also work with an equals sign, such as `--cpus=N`.
 

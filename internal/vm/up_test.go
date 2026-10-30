@@ -175,6 +175,29 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	}
 }
 
+// On a backend without egress-proxy, a VM made without either flag is
+// made without network policy, warned, and --network-policy is refused.
+func TestUpWithoutEgressProxy(t *testing.T) {
+	caps := allNative()
+	delete(caps, backend.FeatureEgressProxy)
+	e, f, _ := upEnv(t, caps)
+	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=egress-proxy vm=devvm-web-") ||
+		slices.Contains(f.Methods(), "BuildImage") {
+		t.Errorf("Up --network-policy = %v, calls %q", got, f.Methods())
+	}
+	var warned []string
+	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := (Launch{e}).Up(t.Context(), Options{Image: "base"}); err != nil {
+		t.Fatalf("Up = %v", names(err))
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	st, _ := state.ReadVM(e.Dirs, spec.Name)
+	if st.Get(KeyNet) != "off" || !slices.Contains(warned, "net_off_backend backend=fake vm="+spec.Name) {
+		t.Errorf("net=%q, warned %q", st.Get(KeyNet), warned)
+	}
+}
+
 // Agents go on top of the folder's toolchains; the shared tools are built
 // from base, listed in the VM's state with base's libc, and sent to the VM
 // to mount.
