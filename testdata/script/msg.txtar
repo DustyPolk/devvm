@@ -1,16 +1,16 @@
 # devvm _msg prints a message's text.
 exec devvm _msg msg_unknown name=x
-stdout '^no message x$'
+stdout '^There''s no message x\.$'
 ! stderr .
 
 # Values are kept as given, spaces and = included.
 exec devvm _msg msg_unknown 'name=a b=c'
-stdout '^no message a b=c$'
+stdout '^There''s no message a b=c\.$'
 
 # Names mode doesn't change _msg's text.
 env DEVVM_MESSAGES=names
 exec devvm _msg msg_unknown name=x
-stdout '^no message x$'
+stdout '^There''s no message x\.$'
 
 # Its errors are messages too: an unknown message, a missing, unexpected or
 # repeated value, an argument that isn't name=value.
@@ -31,7 +31,7 @@ stderr '^devvm: usage_error reason=requires at least 1 arg\(s\), only received 0
 # Without names mode, errors are the text.
 env DEVVM_MESSAGES=
 ! exec devvm _msg nope
-stderr '^devvm: no message nope$'
+stderr '^devvm: There''s no message nope\.$'
 
 # _msg isn't in the help.
 exec devvm --help

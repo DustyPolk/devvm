@@ -6,29 +6,29 @@
 # internal/msg/docs.go. Run go generate ./internal/msg after editing.
 
 [home_not_absolute]
-other = "HOME isn't an absolute path: set it to your home folder"
+other = "HOME isn't an absolute path. Set it to your home folder."
 
 [msg_unknown]
-other = "no message {{.name}}"
+other = "There's no message {{.name}}."
 
 [msg_not_pair]
-other = "{{.arg}} is not name=value"
+other = "{{.arg}} isn't name=value."
 
 [msg_missing_value]
-other = "{{.name}} needs {{.key}}="
+other = "{{.name}} needs a {{.key}}= value."
 
 [msg_unexpected_value]
-other = "{{.name}} takes no {{.key}}="
+other = "{{.name}} takes no {{.key}}= value."
 
 [msg_repeated_value]
-other = "{{.key}}= is given twice"
+other = "{{.key}}= is given twice."
 
 [msg_bad_count]
-other = "count must be a whole number, not {{.value}}"
+other = "The count must be a whole number, not {{.value}}."
 
 [usage_error]
 description = "reason is the command-line parser's own error, in English"
-other = "{{.reason}}: see devvm --help"
+other = "{{.reason}}. Run devvm --help to see the commands and flags."
 
 [log_details]
 other = "(details: {{.file}})"
@@ -37,7 +37,7 @@ other = "(details: {{.file}})"
 other = "the end of {{.file}}:"
 
 [run_log_failed]
-other = "can't write the run log in {{.dir}}: {{.reason}}"
+other = "devvm can't write its run log in {{.dir}}: {{.reason}}."
 
 [backend_lacks]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
@@ -128,13 +128,13 @@ description = "files is a space-separated list of paths"
 other = "Lima would add {{.files}} to every VM devvm starts. Move them out of devvm's Lima home."
 
 [vm_has_networks]
-other = "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
+other = "{{.vm}} has a network that devvm didn't give it. Remove the networks from {{.file}}."
 
 [lima_home_too_long]
 other = "devvm's Lima home {{.home}} is too long for {{.vm}}'s name. Set DEVVM_LIMA_HOME to a shorter folder."
 
 [mount_comma]
-other = "Lima can't mount {{.path}}: its path has a comma"
+other = "Lima can't mount {{.path}} because its path has a comma."
 
 [smolvm_missing]
 other = "smolvm isn't installed. Install smolvm 1.32 or newer."
@@ -177,10 +177,10 @@ other = "The smolvm backend builds only from container images in a registry, and
 other = "smolvm can't mount {{.path}}, because the path has a colon."
 
 [vm_no_ssh]
-other = "{{.vm}} was started without ssh: devvm restart starts it with it"
+other = "{{.vm}} was started without ssh. Run devvm restart to start it with ssh."
 
 [vm_no_sshd]
-other = "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
+other = "{{.vm}}'s image has no sshd, so the VM runs without ssh. A VM made after you run devvm rebuild has it."
 
 [smolvm_ssh_port_forwarded]
 description = "port is a host port"
@@ -190,10 +190,10 @@ other = "Port {{.port}}, which {{.vm}}'s ssh uses, is also one of its forwarded 
 other = "{{.vm}} forwards an SSH agent, but SSH_AUTH_SOCK isn't set. Start an agent, or set SSH_AUTH_SOCK."
 
 [ports_no_ssh]
-other = "{{.vm}} runs without ssh, so none of its ports are forwarded"
+other = "{{.vm}} runs without ssh, so devvm forwards none of its ports."
 
 [ports_forward_failed]
-other = "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
+other = "Forwarding {{.vm}}'s ports didn't start. Check {{.log}} for the reason."
 
 [docker_host_unsupported]
 description = "host is Go's names for the host's system and processor (windows/amd64)"
@@ -343,10 +343,10 @@ other = "devvm couldn't unpack the shared tools into Docker's volume {{.volume}}
 
 [disk_over]
 description = "used and limit are sizes in GiB; backend is a backend's name (docker)"
-other = "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB VMs get elsewhere, and the {{.backend}} backend doesn't limit it: free some space"
+other = "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
 
 [size_disk_default_unused]
-other = "new VMs' default disk size doesn't apply to {{.vm}}: the {{.backend}} backend sets none"
+other = "The default disk size for new VMs doesn't apply to {{.vm}}, because the {{.backend}} backend doesn't size disks."
 
 [creating_from_image]
 other = "creating {{.vm}} from {{.image}}"
@@ -355,7 +355,7 @@ other = "creating {{.vm}} from {{.image}}"
 other = "packing {{.vm}} into its image"
 
 [pack_failed]
-other = "couldn't pack {{.vm}} into its image"
+other = "Packing {{.vm}} into its image failed."
 
 [image_missing]
 other = "Image {{.key}} is missing. Run devvm build to build it again."
@@ -365,17 +365,17 @@ description = "vms is a space-separated list of VM names"
 other = "Image {{.key}} can't be deleted, because these VMs use its disk: {{.vms}}."
 
 [not_an_image]
-other = "refusing to delete {{.name}}: it's not an image"
+other = "{{.name}} isn't an image, so devvm won't delete it."
 
 [vm_not_stopped]
-other = "{{.vm}} is running: stop it first"
+other = "{{.vm}} is running. Stop it first."
 
 [vm_not_running]
-other = "{{.vm}} isn't running: start it first"
+other = "{{.vm}} isn't running. Start it first."
 
 [disk_shrink]
 description = "have and want are sizes in GiB"
-other = "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
+other = "{{.vm}}'s disk is {{.have}} GiB, and a disk can't shrink to {{.want}} GiB."
 
 [starting]
 other = "starting {{.vm}}"
@@ -393,23 +393,23 @@ other = "creating {{.vm}}"
 other = "configuring {{.vm}}"
 
 [start_failed]
-other = "couldn't start {{.vm}}"
+other = "{{.vm}} didn't start."
 
 [start_no_ssh]
 description = "console is a glob of the VM's console logs"
-other = "couldn't start {{.vm}}: it doesn't answer over ssh (its console: {{.console}})"
+other = "{{.vm}} didn't start because it doesn't answer over ssh. Check its console logs, {{.console}}."
 
 [started_with_warnings]
-other = "{{.vm}} started with warnings; continuing"
+other = "{{.vm}} started with warnings, and devvm carries on."
 
 [stop_failed]
-other = "couldn't stop {{.vm}}"
+other = "{{.vm}} didn't stop."
 
 [delete_failed]
-other = "couldn't delete {{.vm}}"
+other = "Deleting {{.vm}} failed."
 
 [vm_create_failed]
-other = "couldn't create {{.vm}}"
+other = "Creating {{.vm}} failed."
 
 [lima_edit_failed]
 other = "devvm couldn't change {{.vm}}'s Lima settings."
@@ -419,7 +419,7 @@ other = "devvm won't start QEMU, because its arguments don't have exactly one -n
 
 [no_ubuntu_image]
 description = "release is the pinned dated release's folder name (release-20260101)"
-other = "couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}}: check you're online, or update devvm if Ubuntu removed it"
+other = "devvm couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}}. Check that you're online, or update devvm if Ubuntu removed the image."
 
 [ubuntu_bad_signature]
 description = "release is a dated release's folder name (release-20260101)"
@@ -434,7 +434,7 @@ other = "gpgv isn't installed, so devvm can't check the signature on Ubuntu's ch
 
 [unknown_layer]
 description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
-other = "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
+other = "There's no layer or shared tool {{.layer}}. Choose from {{.envs}} and the agents {{.agents}}."
 
 [layer_name_invalid]
 other = "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
@@ -464,7 +464,7 @@ other = "The base image has no features. To choose some, run devvm setup."
 
 [no_feature]
 description = "features is a space-separated list of names"
-other = "there's no {{.feature}} feature: choose from {{.features}}"
+other = "There's no feature {{.feature}}. Choose from {{.features}}."
 
 [base_will_rebuild]
 other = "The base image and the images built on it rebuild with these features when you next use them."
@@ -483,13 +483,13 @@ other = "experimental"
 
 [setup_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't save the settings: {{.reason}}"
+other = "Saving the settings failed: {{.reason}}."
 
 [feature_shadowed]
 other = "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
 
 [unknown_feature]
-other = "skipping feature {{.feature}}: it has no script"
+other = "devvm skips the feature {{.feature}} because it has no script."
 
 [build_failed]
 description = "reason is an error from the system, in English"
@@ -519,7 +519,7 @@ other = "{{.image}} (from {{.from}})"
 
 [bad_from]
 description = "from is quoted like a Go string when it holds control characters"
-other = "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
+other = "{{.from}} isn't a container image reference. Give --from one such as node:24, or ghcr.io/org/image@sha256:… with a digest."
 
 [from_ignored]
 other = "{{.vm}} keeps what it was made from, because --from applies only to new VMs."
@@ -537,7 +537,7 @@ other = "{{.host}} didn't answer when devvm looked up {{.from}}, so devvm uses t
 other = "{{.host}} doesn't have {{.from}}, or it's private, so devvm uses the digest it last saw."
 
 [no_digest]
-other = "devvm has no digest for {{.from}}"
+other = "devvm has no digest for {{.from}}."
 
 [docker_only]
 other = "{{.from}} is a container image only Docker has, such as one built and never pushed, or a private one. Start Docker and try again."
@@ -564,7 +564,7 @@ other = "converting {{.from}}"
 other = "Converting {{.from}} into a disk failed."
 
 [convert_bad_output]
-other = "Converting {{.from}} wrote an unexpected {{.file}}, so devvm didn't use it. The image may be hostile."
+other = "Converting {{.from}} wrote an unexpected {{.file}}, so devvm didn't use it. The container image may be hostile."
 
 [cloning_image]
 other = "cloning {{.parent}}'s image"
@@ -612,10 +612,10 @@ other = "Deleting the images failed: {{.reason}}."
 other = "deleted image {{.image}} ({{.key}})"
 
 [no_image_named]
-other = "there's no image {{.image}}: devvm images lists them"
+other = "There's no image {{.image}}. Run devvm images to list them."
 
 [no_image_named_from]
-other = "there's no image {{.image}} from {{.from}}: devvm images lists them"
+other = "There's no image {{.image}} from {{.from}}. Run devvm images to list them."
 
 [tools_not_images_rm]
 other = "{{.image}} names shared tools, and shared tools aren't images. Name the image under them, and run devvm gc to delete unused shared tool images."
@@ -667,15 +667,15 @@ other = "deleted {{.count}} old copies of devvm's files"
 
 [vm_outdated]
 description = "changed is a comma-separated list of image names"
-other = "{{.changed}} changed since this VM was made: it keeps the image it has"
+other = "{{.changed}} changed since this VM was made. The VM keeps the image it has."
 
 [up_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't open this folder's VM: {{.reason}}"
+other = "Opening this folder's VM failed: {{.reason}}."
 
 [rm_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't delete this folder's VM: {{.reason}}"
+other = "Deleting this folder's VM failed: {{.reason}}."
 
 [adopt_failed]
 description = "reason is an error from the system, in English"
@@ -683,19 +683,19 @@ other = "devvm couldn't adopt this folder's VM: {{.reason}}."
 
 [stop_vm_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't stop this folder's VM: {{.reason}}"
+other = "Stopping this folder's VM failed: {{.reason}}."
 
 [ls_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't list the VMs: {{.reason}}"
+other = "Listing the VMs failed: {{.reason}}."
 
 [bad_path]
 description = "dir is quoted like a Go string when it holds control characters"
-other = "can't mount {{.dir}} into a VM: its path has a comma or a control character"
+other = "devvm can't mount {{.dir}} into a VM because its path has a comma or a control character."
 
 [vm_name_no_room]
 description = "max is a number of characters"
-other = "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
+other = "The {{.backend}} backend's VM names have at most {{.max}} characters, which leaves no room for the folder's name."
 
 [vm_other_folder]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. Run devvm rm to delete the VM, or devvm adopt to use it here."
@@ -719,10 +719,10 @@ other = "{{.vm}} belongs to {{.dir}} now."
 other = "{{.vm}} already belongs to this folder."
 
 [no_vm]
-other = "no VM for {{.dir}}: devvm makes one"
+other = "There's no VM for {{.dir}}. Run devvm to make one."
 
 [vm_unfinished]
-other = "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes it again"
+other = "devvm didn't finish creating {{.vm}}. Run devvm rm to delete it, then devvm to make it again."
 
 [backend_flag_ignored]
 other = "--backend applies only to new VMs, so {{.vm}} stays on {{.backend}}."
@@ -734,23 +734,23 @@ other = "--network-policy and --no-network-policy apply only to new VMs. To chan
 other = "--no-git-protect applies only to new VMs. To turn off .git protection for this VM, run devvm git-protect off."
 
 [size_flags_ignored]
-other = "--cpus, --memory and --disk only apply to new VMs: devvm size --cpus N"
+other = "The --cpus, --memory and --disk flags apply only to new VMs. To resize this VM, run devvm size --cpus N."
 
 [ports_flag_ignored]
-other = "--ports only applies to new VMs: devvm ports LIST"
+other = "The --ports flag applies only to new VMs. To change this VM's ports, run devvm ports LIST."
 
 [size_next_start]
-other = "{{.vm}}'s new size applies when it next starts: devvm restart"
+other = "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 
 [add_in_place]
 description = "missing is a space-separated list of layers and tools"
 other = "devvm made {{.vm}} from {{.image}}. Add {{.missing}} to it in place?"
 
 [restart_for_mounts]
-other = "This restarts the VM to mount their config from this machine; anything running in it stops."
+other = "This restarts the VM to mount their config from this machine, and anything running in it stops."
 
 [no_terminal_confirm]
-other = "not a terminal, so devvm can't ask before adding to {{.vm}}: run devvm {{.want}} in a terminal"
+other = "devvm can't ask before adding to {{.vm}} without a terminal. Run devvm {{.want}} in a terminal."
 
 [keeping]
 other = "keeping {{.image}}"
@@ -759,7 +759,7 @@ other = "keeping {{.image}}"
 other = "adding {{.layer}}"
 
 [add_layer_failed]
-other = "adding {{.layer}} to {{.vm}} failed; it's otherwise unchanged"
+other = "Adding {{.layer}} to {{.vm}} failed, and the VM is otherwise unchanged."
 
 [vm_is_now]
 other = "{{.vm}} is now {{.image}}"
@@ -768,14 +768,14 @@ other = "{{.vm}} is now {{.image}}"
 other = "exported {{.vm}}'s agent history to {{.file}}"
 
 [rm_export_failed]
-other = "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
+other = "devvm couldn't export {{.vm}}'s agent history, so it kept the VM. Run devvm rm -f to delete it without exporting."
 
 [history_not_exported]
-other = "couldn't export {{.vm}}'s agent history"
+other = "Exporting {{.vm}}'s agent history failed."
 
 [export_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't export this folder's VM's agent history: {{.reason}}"
+other = "Exporting the agent history of this folder's VM failed: {{.reason}}."
 
 [deleted]
 other = "deleted {{.vm}}"
@@ -797,18 +797,18 @@ other = "You passed --unsafe-folder, so the VM gets read-write access to {{.dir}
 
 [cpus_not_number]
 description = "value is quoted, as given"
-other = "--cpus takes a whole number, not {{.value}}"
+other = "The --cpus flag takes a whole number, not {{.value}}."
 
 [size_not_gib]
 description = "flag is --memory or --disk; value is quoted, as given"
-other = "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
+other = "{{.flag}} takes a size in GiB, such as 16, 16G or 16GiB, not {{.value}}."
 
 [too_many_cpus]
-other = "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
+other = "This machine has {{.have}} CPUs, fewer than --cpus {{.want}} asks for."
 
 [too_much_memory]
 description = "have and want are sizes in GiB"
-other = "this machine has {{.have}} GiB of memory: --memory {{.want}} is more"
+other = "This machine has {{.have}} GiB of memory, less than --memory {{.want}} asks for."
 
 [vm_size]
 description = "size is what the VM has: cpus=4 memory=8GiB disk=100GiB"
@@ -816,63 +816,63 @@ other = "{{.vm}} has {{.size}}"
 
 [size_pending]
 description = "size is what changes: cpus=6 memory=16GiB"
-other = "{{.vm}} gets {{.size}} from its next start: devvm restart"
+other = "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply it now."
 
 [size_defaults]
 description = "size is what's set: cpus=6 memory=16GiB"
 other = "new VMs get {{.size}}"
 
 [no_vm_size]
-other = "no VM for {{.dir}}: devvm --cpus N makes one with a size, or -g sets the size new VMs get"
+other = "There's no VM for {{.dir}}. Run devvm --cpus N to make one with a size, or devvm size -g to set the size new VMs get."
 
 [size_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't show or change the size: {{.reason}}"
+other = "Showing or changing the size failed: {{.reason}}."
 
 [port_invalid]
 description = "value is quoted, as given"
-other = "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
+other = "{{.value}} isn't a port list. Use all, none, or ports and ranges such as 5173,8000-8010."
 
 [ports_list_needed]
 description = "value is quoted, as given"
-other = "devvm ports add and rm take ports and ranges like 5173,8000-8010, not {{.value}}"
+other = "devvm ports add and rm take ports and ranges, such as 5173,8000-8010, not {{.value}}."
 
 [ports_rm_all]
-other = "every port is forwarded, so none can be removed: set the ones to keep instead, like devvm ports 5173,8000-8010"
+other = "Every port is forwarded, so none can be removed. Set the ones to keep instead, as in devvm ports 5173,8000-8010."
 
 [port_not_listed]
-other = "{{.port}} isn't forwarded: the ports are {{.ports}}"
+other = "{{.port}} isn't forwarded. The forwarded ports are {{.ports}}."
 
 [ports_all_already]
-other = "every port is already forwarded"
+other = "Every port is already forwarded."
 
 [ports_now]
 other = "{{.vm}} forwards {{.ports}}"
 
 [ports_forwarding]
-other = "{{.vm}} forwards {{.ports}} from now on: connections open to its ports were closed"
+other = "From now on, {{.vm}} forwards {{.ports}}. devvm closed the connections that were open to its ports."
 
 [ports_default]
 other = "new VMs forward {{.ports}}"
 
 [ports_taken]
 description = "ports is a list of ports and ranges, like 5173,8000-8010; count is how many ports"
-one = "{{.vm}} doesn't forward port {{.ports}} for now: it's in use on this machine"
-other = "{{.vm}} doesn't forward ports {{.ports}} for now: they're in use on this machine"
+one = "{{.vm}} doesn't forward port {{.ports}} for now because it's in use on this machine."
+other = "{{.vm}} doesn't forward ports {{.ports}} for now because they're in use on this machine."
 
 [no_vm_ports]
-other = "no VM for {{.dir}}: devvm --ports LIST makes one that forwards only those, or -g sets what new VMs forward"
+other = "There's no VM for {{.dir}}. Run devvm --ports LIST to make one that forwards only those ports, or devvm ports -g to set what new VMs forward."
 
 [ports_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't show or change which ports are forwarded: {{.reason}}"
+other = "Showing or changing the forwarded ports failed: {{.reason}}."
 
 [detected]
 other = "detected a {{.found}} project"
 
 [no_image_for]
 description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
-other = "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
+other = "devvm couldn't tell which image {{.dir}} needs. Name one as devvm IMAGE, joining any of {{.envs}} and the agents {{.agents}} with +."
 
 [net_about]
 other = "Network policy for {{.vm}}:\n  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\n  off: it reaches anything this machine can"
@@ -920,11 +920,11 @@ other = "{{.vm}}'s network log is empty so far."
 other = "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
 
 [no_vm_policy]
-other = "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
+other = "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."
 
 [not_a_rule]
 description = "rule is what was typed, quoted"
-other = "not a rule: {{.rule}}"
+other = "{{.rule}} isn't a rule."
 
 [rule_added]
 other = "devvm added {{.rule}} to {{.vm}}'s rules."
@@ -951,7 +951,7 @@ other = "devvm couldn't read or change the network policy rules: {{.reason}}."
 
 [network_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't read or change this folder's VM's network policy: {{.reason}}"
+other = "Reading or changing the network policy of this folder's VM failed: {{.reason}}."
 
 [log_failed]
 description = "reason is an error from the system, in English"
@@ -976,14 +976,14 @@ other = "creating {{.vm}} from {{.image}}"
 other = "interrupted: deleting {{.vm}}, which wasn't ready yet"
 
 [ssh_remote_hint]
-other = "origin is an SSH remote, but {{.vm}} has no SSH agent, so git over SSH won't work in it: devvm ssh-agent on"
+other = "The origin remote uses SSH, but {{.vm}} has no SSH agent, so git over SSH won't work in it. Run devvm ssh-agent on to forward yours."
 
 [ssh_include_needed]
 description = "line is the Include line for ~/.ssh/config"
-other = "To reach VMs by name (ssh, VS Code Remote-SSH), ~/.ssh/config needs this line at the top:\n  {{.line}}"
+other = "To reach VMs by name with ssh or VS Code's Remote-SSH, ~/.ssh/config needs this line at the top:\n  {{.line}}"
 
 [ssh_include_yourself]
-other = "not a terminal, so not added: add it yourself"
+other = "devvm can't ask without a terminal, so it didn't add the line. Add it yourself."
 
 [add_it_now]
 other = "Add it now?"
@@ -993,119 +993,119 @@ other = "added to ~/.ssh/config"
 
 [ssh_host_info]
 description = "host is the name ssh reaches the VM by; dir is its folder there"
-other = "Connect with ssh {{.host}}, or VS Code's Remote-SSH: Connect to Host.\nThe folder in the VM: {{.dir}}"
+other = "Connect with ssh {{.host}}, or with Remote-SSH: Connect to Host in VS Code.\nThe project folder in the VM is {{.dir}}."
 
 [no_code_command]
-other = "VS Code's code command isn't on PATH: connect to {{.host}} with Remote-SSH"
+other = "VS Code's code command isn't on PATH. Connect to {{.host}} with Remote-SSH instead."
 
 [ssh_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't get this folder's VM ready for ssh: {{.reason}}"
+other = "Getting this folder's VM ready for ssh failed: {{.reason}}."
 
 [code_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't open this folder's VM in VS Code: {{.reason}}"
+other = "Opening this folder's VM in VS Code failed: {{.reason}}."
 
 [limactl_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't run limactl: {{.reason}}"
+other = "Running limactl failed: {{.reason}}."
 
 [no_ssh_agent]
-other = "no SSH agent is running, so git over SSH won't work in the VM"
+other = "No SSH agent is running, so git over SSH won't work in the VM."
 
 [ssh_agent_empty]
-other = "your SSH agent has no keys, so git over SSH won't work in the VM"
+other = "Your SSH agent has no keys, so git over SSH won't work in the VM."
 
 [load_key]
 description = "cmd is the ssh-add command that loads key"
 other = "Run {{.cmd}} now to load {{.key}} into your SSH agent?"
 
 [key_loaded]
-other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
+other = "The key is loaded. To load it automatically after a reboot, add this to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
 
 [key_loaded_keychain]
-other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
+other = "The key is loaded. To load it automatically after a reboot, add this to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
 
 [load_key_with]
-other = "load it with: {{.cmd}}"
+other = "To load your key, run {{.cmd}}."
 
 [ssh_agent_flag_ignored]
-other = "--ssh-agent only applies to new VMs: devvm ssh-agent on"
+other = "The --ssh-agent flag applies only to new VMs. To change this VM's SSH agent forwarding, run devvm ssh-agent on."
 
 [ssh_agent_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't show or change this folder's VM's SSH agent forwarding: {{.reason}}"
+other = "Showing or changing the SSH agent forwarding of this folder's VM failed: {{.reason}}."
 
 [agent_keys_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't use devvm's SSH agent: {{.reason}}"
+other = "Using devvm's SSH agent failed: {{.reason}}."
 
 [no_vm_ssh_agent]
-other = "no VM for {{.dir}}: devvm makes one, devvm --ssh-agent one that forwards your SSH agent"
+other = "There's no VM for {{.dir}}. Run devvm to make one, or devvm --ssh-agent to make one that forwards your SSH agent."
 
 [agent_already]
 description = "mode is on (the user's agent), devvm (devvm's own) or off"
 other = "SSH agent forwarding is already {{.mode}} for {{.vm}}"
 
 [agent_on_risk]
-other = "while you're connected, anything in {{.vm}} can use the keys in your SSH agent"
+other = "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 
 [agent_devvm_risk]
-other = "while you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent: devvm ssh-agent keys lists them"
+other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent keys to list them."
 
 [agent_set_running]
 description = "mode is on (the user's agent), devvm (devvm's own) or off"
-other = "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies on devvm restart"
+other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
 
 [agent_set_stopped]
 description = "mode is on (the user's agent), devvm (devvm's own) or off"
-other = "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies when the VM next starts"
+other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}, and it applies when the VM next starts."
 
 [agent_next_start]
-other = "{{.vm}}'s SSH agent forwarding changes when it next starts: devvm restart"
+other = "{{.vm}}'s SSH agent forwarding changes when it next starts. Run devvm restart to apply it now."
 
 [agent_unchosen_stop]
-other = "{{.vm}} wasn't started by devvm, so it may forward an SSH agent you didn't choose: devvm stopped it; devvm starts it again"
+other = "devvm stopped {{.vm}} because something outside devvm started it, so it may have forwarded an SSH agent you didn't choose. Run devvm to start it again."
 
 [agent_fixed]
-other = "{{.vm}} was made without SSH agent forwarding, which {{.backend}} can't add later: devvm rm, then devvm --ssh-agent"
+other = "{{.vm}} was made without SSH agent forwarding, and the {{.backend}} backend can't add it later. To add it, run devvm rm, then devvm --ssh-agent."
 
 [agent_start_failed]
-other = "couldn't start devvm's SSH agent at {{.sock}}"
+other = "devvm's SSH agent didn't start at {{.sock}}."
 
 [agent_no_keys]
-other = "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it: devvm ssh-agent add KEY_FILE"
+other = "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
 
 [agent_load_failed]
-other = "couldn't load {{.key}} into devvm's SSH agent"
+other = "Loading {{.key}} into devvm's SSH agent failed."
 
 [agent_key_changed]
-other = "{{.key}} isn't the key added to devvm's SSH agent any more, so it isn't loaded: if you replaced it, devvm ssh-agent add {{.key}}"
+other = "{{.key}} isn't the key you added to devvm's SSH agent any more, so devvm didn't load it. If you replaced it, run devvm ssh-agent add {{.key}}."
 
 [agent_key_unpinned]
-other = "{{.key}} has no fingerprint in devvm's agent keys, so it isn't loaded: devvm ssh-agent add {{.key}}"
+other = "devvm has no fingerprint recorded for {{.key}}, so it didn't load the key. Run devvm ssh-agent add {{.key}} to add it again."
 
 [agent_key_no_fingerprint]
-other = "can't read {{.key}}'s fingerprint without its passphrase (an encrypted PEM key): convert it with ssh-keygen -p -f {{.key}}"
+other = "devvm can't read the fingerprint of {{.key}} without its passphrase, because it's an encrypted PEM key. Convert it with ssh-keygen -p -f {{.key}}."
 
 [agent_key_mounted]
-other = "{{.key}} is in a folder {{.vm}} mounts, so that VM can read it: keep keys for devvm's SSH agent outside project folders"
+other = "{{.key}} is in a folder that {{.vm}} mounts, so that VM can read it. Keep keys for devvm's SSH agent outside project folders."
 
 [agent_key_not_found]
-other = "no key file {{.key}}"
+other = "There's no key file {{.key}}."
 
 [agent_lifetime_invalid]
-other = "--lifetime takes a duration (30m, 8h, 1d) or forever, not {{.value}}"
+other = "The --lifetime flag takes a duration, such as 30m, 8h or 1d, or forever, not {{.value}}."
 
 [agent_confirm_needs_askpass]
-other = "--confirm needs an ssh-askpass program to ask with, which macOS doesn't have: brew install theseal/ssh-askpass/ssh-askpass"
+other = "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't have one. Run brew install theseal/ssh-askpass/ssh-askpass to get it."
 
 [agent_holds]
 description = "keys is a space-separated list of the keys' comments"
 other = "devvm's SSH agent holds: {{.keys}}"
 
 [agent_holds_note]
-other = "VMs with devvm ssh-agent devvm can use it while you're connected; devvm loads it again after a reboot."
+other = "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
 
 [clone_needs_git]
 other = "--clone needs git, and git isn't installed on this machine."
@@ -1149,7 +1149,7 @@ description = "refs is a space-separated list of quoted branch names"
 other = "The VM has commits on {{.refs}} that this repo hasn't fetched."
 
 [no_terminal_fetch]
-other = "not a terminal: run git fetch {{.remote}} first, or devvm rm -f to delete anyway"
+other = "devvm can't ask without a terminal. Run git fetch {{.remote}} first, or devvm rm -f to delete the VM anyway."
 
 [branch_names_invalid]
 description = "refs is a space-separated list of quoted branch names"
@@ -1181,7 +1181,7 @@ other = "devvm couldn't read the clone in {{.vm}}, so it kept the VM. To delete 
 other = "The VM's clone has uncommitted changes, which will be lost:"
 
 [no_terminal_delete]
-other = "not a terminal, so can't confirm: devvm rm -f deletes anyway"
+other = "devvm can't ask you to confirm without a terminal. Run devvm rm -f to delete the VM anyway."
 
 [delete_anyway]
 other = "Delete anyway?"
@@ -1204,7 +1204,7 @@ other = "The project folder has set-id files owned by root, which run as root fo
 other = ".git protection needs macOS, so this VM can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone."
 
 [no_vm_git_protect]
-other = "no VM for {{.dir}}: devvm makes one, devvm --no-git-protect one without .git protection"
+other = "There's no VM for {{.dir}}. Run devvm to make one, or devvm --no-git-protect to make one without .git protection."
 
 [git_protect_failed]
 description = "reason is an error from the system, in English"
@@ -1334,11 +1334,11 @@ other = "The shared tools' build wrote {{.file}} as something other than a plain
 
 [newer_tools]
 description = "tools lists tools and versions: claude 2.1.295, codex 0.162.0"
-other = "newer shared tools: {{.tools}}; devvm update moves this VM to them"
+other = "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
 
 [vm_lacks]
 description = "has is a space-separated list of the VM's layers and tools"
-other = "{{.vm}} doesn't have {{.layer}}: it has {{.has}}"
+other = "{{.vm}} doesn't have {{.layer}}. It has {{.has}}."
 
 [custom_layer_remove]
 other = "You can't remove a layer from {{.vm}}. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again."
@@ -1350,36 +1350,36 @@ other = "{{.vm}} has the newest shared tools."
 other = "{{.vm}} moves to the newest shared tools on this launch."
 
 [sync_failed]
-other = "couldn't set up {{.vm}}"
+other = "Setting up {{.vm}} failed."
 
 [agent_dir_comma]
-other = "not mounting {{.path}}: Lima can't mount paths with a comma"
+other = "devvm doesn't mount {{.path}} because Lima can't mount paths with a comma."
 
 [agent_dirs_added]
 description = "dirs is a comma-separated list of folders"
-other = "new agent folders on this machine for {{.vm}}: {{.dirs}}"
+other = "This machine has new agent folders for {{.vm}}: {{.dirs}}."
 
 [agent_dirs_removed]
 description = "dirs is a comma-separated list of folders"
-other = "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
+other = "These agent folders for {{.vm}} are gone from this machine: {{.dirs}}."
 
 [update_mounts]
 other = "Updating {{.vm}}'s mounts restarts it, and anything running in it stops. Update them now?"
 
 [mounts_next_start]
-other = "{{.vm}}'s agent folder mounts change when it next starts"
+other = "{{.vm}}'s agent folder mounts change when it next starts."
 
 [mounts_updated]
 other = "updated {{.vm}}'s agent folder mounts"
 
 [no_claude_token]
-other = "no Claude token for {{.vm}}: run claude setup-token, then devvm auth claude"
+other = "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm auth claude."
 
 [claude_token_invalid]
 other = "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm auth claude."
 
 [no_github_token]
-other = "{{.vm}} uses github, but no GitHub token is saved: devvm secret set github"
+other = "{{.vm}} uses github, but no GitHub token is saved. Run devvm secret set github."
 
 [login_copy_failed]
 description = "reason is an error from the login helper, in English"
@@ -1387,10 +1387,10 @@ other = "devvm couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}."
 
 [config_redacted]
 description = "keys is a space-separated list of key paths"
-other = "{{.vm}}'s copy of {{.file}} has {{.keys}} redacted: network policy keeps keys on the host"
+other = "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because network policy keeps secrets on this machine."
 
 [config_not_copied]
-other = "couldn't read {{.file}} to take its keys out, so {{.vm}} doesn't get it"
+other = "devvm couldn't read {{.file}} to take its secrets out, so {{.vm}} doesn't get a copy."
 
 [claude_mcp_secrets_copied]
 description = "servers is a space-separated list of MCP server names"
@@ -1402,18 +1402,18 @@ other = "The network policy proxy failed: {{.reason}}."
 
 [forwarder_failed]
 description = "reason is an error from the system or the flag parser, in English"
-other = "port forwarder: {{.reason}}"
+other = "The port forwarder failed: {{.reason}}."
 
 [docker_connect_failed]
 description = "reason is an error from the system, docker or the flag parser, in English"
 other = "devvm couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}."
 
 [bad_secret_service]
-other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"
+other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'."
 
 [no_secret]
 description = "secret is the name asked for, quoted when it holds a control character"
-other = "no secret {{.secret}}"
+other = "There's no secret {{.secret}}."
 
 [secret_read_failed]
 description = "reason is an error from the system, in English"
@@ -1436,13 +1436,13 @@ other = "Paste a fine-grained GitHub token that can reach only the repos your VM
 other = "Token:"
 
 [no_token]
-other = "no token given: nothing saved"
+other = "You didn't give a secret, so devvm saved nothing."
 
 [token_quotes]
 other = "The secret you gave has a quote, a backslash or a control character, so devvm didn't save it."
 
 [not_setup_token]
-other = "that isn't a setup-token token (sk-ant-oat01-…): nothing saved; claude setup-token prints one"
+other = "That isn't a Claude Code token, which starts with sk-ant-oat01-, so devvm saved nothing. Run claude setup-token to get one."
 
 [keychain_save_failed]
 other = "devvm couldn't save the {{.secret}} secret in the Keychain."
@@ -1478,78 +1478,78 @@ other = "devvm copies opencode's {{.providers}} login into the VM unchanged."
 
 [devcontainer_using]
 description = "file is the devcontainer.json's path in the project folder"
-other = "making {{.vm}} as {{.file}} says: devvm --no-devcontainer skips it"
+other = "devvm makes {{.vm}} as {{.file}} says. To skip the file, run devvm --no-devcontainer."
 
 [no_devcontainer_flag_ignored]
-other = "--no-devcontainer only applies to new VMs"
+other = "The --no-devcontainer flag applies only to new VMs."
 
 [devcontainer_flag_wins]
 description = "key is a devcontainer.json property (image, forwardPorts), flag the devvm flag given instead (from, ports)"
-other = "{{.key}} in {{.file}} ignored: --{{.flag}} given"
+other = "devvm ignores {{.key}} in {{.file}} because you gave --{{.flag}}."
 
 [devcontainer_ignored]
 description = "keys is a space-separated list of devcontainer.json properties"
-other = "{{.file}}: devvm ignores {{.keys}}"
+other = "devvm ignores these properties in {{.file}}: {{.keys}}."
 
 [devcontainer_unknown]
 description = "keys is a space-separated list of devcontainer.json properties"
-other = "{{.file}}: unknown, ignored: {{.keys}}"
+other = "devvm doesn't know these properties in {{.file}}, so it ignores them: {{.keys}}."
 
 [devcontainer_initialize]
-other = "{{.file}}: initializeCommand never runs: it would run on this machine"
+other = "devvm never runs the initializeCommand in {{.file}}, because it would run on this machine."
 
 [devcontainer_feature_options]
 description = "features is a space-separated list of feature IDs"
-other = "{{.file}}: the options of {{.features}} are ignored"
+other = "devvm ignores the options of {{.features}} in {{.file}}."
 
 [devcontainer_ports_not_forwarded]
 description = "ports is a ports list (3000,5173)"
-other = "{{.file}}: forwardPorts {{.ports}} not all forwarded, as your ports limit them: devvm ports add {{.ports}} to forward them"
+other = "Your ports setting limits what {{.file}} can forward, so devvm doesn't forward all of forwardPorts {{.ports}}. Run devvm ports add {{.ports}} to forward them."
 
 [devcontainer_ports_ignored]
 description = "ports is a space-separated list of forwardPorts entries"
-other = "{{.file}}: forwardPorts {{.ports}} ignored: a VM's ports reach only this machine's localhost"
+other = "devvm ignores forwardPorts {{.ports}} in {{.file}}, because a VM's ports reach only this machine's localhost."
 
 [devcontainer_invalid]
-other = "{{.file}} isn't valid JSON, at line {{.line}}, column {{.column}}: fix it, or run devvm --no-devcontainer"
+other = "{{.file}} isn't valid JSON at line {{.line}}, column {{.column}}. Fix it, or run devvm --no-devcontainer."
 
 [devcontainer_bad_value]
 description = "key is a devcontainer.json property"
-other = "{{.file}}: {{.key}} isn't what devcontainer.json allows there: fix it, or run devvm --no-devcontainer"
+other = "{{.file}} has a value for {{.key}} that devcontainer.json doesn't allow. Fix it, or run devvm --no-devcontainer."
 
 [devcontainer_local_env]
 description = "variable is the variable as the file writes it, like ${localEnv:HOME}"
-other = "{{.file}} uses {{.variable}}: devvm never puts this machine's environment in a VM; remove it, or run devvm --no-devcontainer"
+other = "{{.file}} uses {{.variable}}, and devvm never puts this machine's environment in a VM. Remove it, or run devvm --no-devcontainer."
 
 [devcontainer_variable]
 description = "variable is the variable as the file writes it, like ${localWorkspaceFolder}"
-other = "{{.file}} uses {{.variable}}, which devvm doesn't fill in: remove it, or run devvm --no-devcontainer"
+other = "{{.file}} uses {{.variable}}, which devvm doesn't fill in. Remove it, or run devvm --no-devcontainer."
 
 [devcontainer_build]
 description = "key is the property that builds a container: build, dockerFile, dockerComposeFile"
-other = "{{.file}} builds its container ({{.key}}), and devvm starts only from an image: run devvm --no-devcontainer"
+other = "{{.file}} builds its container with {{.key}}, and devvm starts only from a container image. Run devvm --no-devcontainer."
 
 [devcontainer_feature]
-other = "{{.file}}: devvm has no layer for the feature {{.feature}}: remove it, or run devvm --no-devcontainer"
+other = "devvm has no layer for the feature {{.feature}} in {{.file}}. Remove it, or run devvm --no-devcontainer."
 
 [devcontainer_docker_outside]
-other = "{{.file}}: the feature {{.feature}} gives the VM this machine's Docker, which devvm never does: use docker-in-docker, or run devvm --no-devcontainer"
+other = "The feature {{.feature}} in {{.file}} gives the VM this machine's Docker, which devvm never does. Use docker-in-docker, or run devvm --no-devcontainer."
 
 [devcontainer_env_name]
-other = "{{.file}}: {{.name}} isn't an environment variable's name: fix it, or run devvm --no-devcontainer"
+other = "{{.name}} in {{.file}} isn't an environment variable's name. Fix it, or run devvm --no-devcontainer."
 
 [devcontainer_unreadable]
-other = "can't read {{.file}}: fix it, or run devvm --no-devcontainer"
+other = "devvm can't read {{.file}}. Fix it, or run devvm --no-devcontainer."
 
 [devcontainer_image_not_public]
-other = "{{.file}}: its image {{.from}} isn't public in its registry, and a project's file gets only public images: devvm --from {{.from}} uses it anyway"
+other = "The container image {{.from}} in {{.file}} isn't public in its registry, and devvm uses only public images from a project's file. Run devvm --from {{.from}} to use it anyway."
 
 [devcontainer_changed]
-other = "{{.vm}} was made from another version of {{.file}}, which never changes an existing VM: devvm rm, then devvm, makes it again"
+other = "{{.vm}} was made from another version of {{.file}}, and the file never changes an existing VM. To make the VM again, run devvm rm, then devvm."
 
 [devcontainer_new]
-other = "{{.vm}} was made without {{.file}}, which never changes an existing VM: devvm rm, then devvm, makes it again"
+other = "{{.vm}} was made without {{.file}}, and the file never changes an existing VM. To make the VM again, run devvm rm, then devvm."
 
 [devcontainer_command_failed]
 description = "command is a devcontainer.json property, with a named command's name after it"
-other = "{{.command}} failed in {{.vm}}"
+other = "{{.command}} failed in {{.vm}}."

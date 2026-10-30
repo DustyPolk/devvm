@@ -14,7 +14,7 @@ func AddItNow() M {
 	return M{id: "add_it_now"}
 }
 
-// AddLayerFailed is [add_layer_failed]: "adding {{.layer}} to {{.vm}} failed; it's otherwise unchanged"
+// AddLayerFailed is [add_layer_failed]: "Adding {{.layer}} to {{.vm}} failed, and the VM is otherwise unchanged."
 func AddLayerFailed(layer string, vm string) M {
 	return M{id: "add_layer_failed", vals: []val{{"layer", layer}, {"vm", vm}}}
 }
@@ -39,32 +39,32 @@ func AgentAlready(mode string, vm string) M {
 	return M{id: "agent_already", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// AgentConfirmNeedsAskpass is [agent_confirm_needs_askpass]: "--confirm needs an ssh-askpass program to ask with, which macOS doesn't have: brew install theseal/ssh-askpass/ssh-askpass"
+// AgentConfirmNeedsAskpass is [agent_confirm_needs_askpass]: "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't have one. Run brew install theseal/ssh-askpass/ssh-askpass to get it."
 func AgentConfirmNeedsAskpass() M {
 	return M{id: "agent_confirm_needs_askpass"}
 }
 
-// AgentDevvmRisk is [agent_devvm_risk]: "while you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent: devvm ssh-agent keys lists them"
+// AgentDevvmRisk is [agent_devvm_risk]: "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent keys to list them."
 func AgentDevvmRisk(vm string) M {
 	return M{id: "agent_devvm_risk", vals: []val{{"vm", vm}}}
 }
 
-// AgentDirComma is [agent_dir_comma]: "not mounting {{.path}}: Lima can't mount paths with a comma"
+// AgentDirComma is [agent_dir_comma]: "devvm doesn't mount {{.path}} because Lima can't mount paths with a comma."
 func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
 }
 
-// AgentDirsAdded is [agent_dirs_added]: "new agent folders on this machine for {{.vm}}: {{.dirs}}"
+// AgentDirsAdded is [agent_dirs_added]: "This machine has new agent folders for {{.vm}}: {{.dirs}}."
 func AgentDirsAdded(dirs string, vm string) M {
 	return M{id: "agent_dirs_added", vals: []val{{"dirs", dirs}, {"vm", vm}}}
 }
 
-// AgentDirsRemoved is [agent_dirs_removed]: "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
+// AgentDirsRemoved is [agent_dirs_removed]: "These agent folders for {{.vm}} are gone from this machine: {{.dirs}}."
 func AgentDirsRemoved(dirs string, vm string) M {
 	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
 }
 
-// AgentFixed is [agent_fixed]: "{{.vm}} was made without SSH agent forwarding, which {{.backend}} can't add later: devvm rm, then devvm --ssh-agent"
+// AgentFixed is [agent_fixed]: "{{.vm}} was made without SSH agent forwarding, and the {{.backend}} backend can't add it later. To add it, run devvm rm, then devvm --ssh-agent."
 func AgentFixed(backend string, vm string) M {
 	return M{id: "agent_fixed", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
@@ -74,82 +74,82 @@ func AgentHolds(keys string) M {
 	return M{id: "agent_holds", vals: []val{{"keys", keys}}}
 }
 
-// AgentHoldsNote is [agent_holds_note]: "VMs with devvm ssh-agent devvm can use it while you're connected; devvm loads it again after a reboot."
+// AgentHoldsNote is [agent_holds_note]: "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
 func AgentHoldsNote() M {
 	return M{id: "agent_holds_note"}
 }
 
-// AgentKeyChanged is [agent_key_changed]: "{{.key}} isn't the key added to devvm's SSH agent any more, so it isn't loaded: if you replaced it, devvm ssh-agent add {{.key}}"
+// AgentKeyChanged is [agent_key_changed]: "{{.key}} isn't the key you added to devvm's SSH agent any more, so devvm didn't load it. If you replaced it, run devvm ssh-agent add {{.key}}."
 func AgentKeyChanged(key string) M {
 	return M{id: "agent_key_changed", vals: []val{{"key", key}}}
 }
 
-// AgentKeyMounted is [agent_key_mounted]: "{{.key}} is in a folder {{.vm}} mounts, so that VM can read it: keep keys for devvm's SSH agent outside project folders"
+// AgentKeyMounted is [agent_key_mounted]: "{{.key}} is in a folder that {{.vm}} mounts, so that VM can read it. Keep keys for devvm's SSH agent outside project folders."
 func AgentKeyMounted(key string, vm string) M {
 	return M{id: "agent_key_mounted", vals: []val{{"key", key}, {"vm", vm}}}
 }
 
-// AgentKeyNoFingerprint is [agent_key_no_fingerprint]: "can't read {{.key}}'s fingerprint without its passphrase (an encrypted PEM key): convert it with ssh-keygen -p -f {{.key}}"
+// AgentKeyNoFingerprint is [agent_key_no_fingerprint]: "devvm can't read the fingerprint of {{.key}} without its passphrase, because it's an encrypted PEM key. Convert it with ssh-keygen -p -f {{.key}}."
 func AgentKeyNoFingerprint(key string) M {
 	return M{id: "agent_key_no_fingerprint", vals: []val{{"key", key}}}
 }
 
-// AgentKeyNotFound is [agent_key_not_found]: "no key file {{.key}}"
+// AgentKeyNotFound is [agent_key_not_found]: "There's no key file {{.key}}."
 func AgentKeyNotFound(key string) M {
 	return M{id: "agent_key_not_found", vals: []val{{"key", key}}}
 }
 
-// AgentKeyUnpinned is [agent_key_unpinned]: "{{.key}} has no fingerprint in devvm's agent keys, so it isn't loaded: devvm ssh-agent add {{.key}}"
+// AgentKeyUnpinned is [agent_key_unpinned]: "devvm has no fingerprint recorded for {{.key}}, so it didn't load the key. Run devvm ssh-agent add {{.key}} to add it again."
 func AgentKeyUnpinned(key string) M {
 	return M{id: "agent_key_unpinned", vals: []val{{"key", key}}}
 }
 
-// AgentKeysFailed is [agent_keys_failed]: "couldn't use devvm's SSH agent: {{.reason}}"
+// AgentKeysFailed is [agent_keys_failed]: "Using devvm's SSH agent failed: {{.reason}}."
 func AgentKeysFailed(reason string) M {
 	return M{id: "agent_keys_failed", vals: []val{{"reason", reason}}}
 }
 
-// AgentLifetimeInvalid is [agent_lifetime_invalid]: "--lifetime takes a duration (30m, 8h, 1d) or forever, not {{.value}}"
+// AgentLifetimeInvalid is [agent_lifetime_invalid]: "The --lifetime flag takes a duration, such as 30m, 8h or 1d, or forever, not {{.value}}."
 func AgentLifetimeInvalid(value string) M {
 	return M{id: "agent_lifetime_invalid", vals: []val{{"value", value}}}
 }
 
-// AgentLoadFailed is [agent_load_failed]: "couldn't load {{.key}} into devvm's SSH agent"
+// AgentLoadFailed is [agent_load_failed]: "Loading {{.key}} into devvm's SSH agent failed."
 func AgentLoadFailed(key string) M {
 	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
 }
 
-// AgentNextStart is [agent_next_start]: "{{.vm}}'s SSH agent forwarding changes when it next starts: devvm restart"
+// AgentNextStart is [agent_next_start]: "{{.vm}}'s SSH agent forwarding changes when it next starts. Run devvm restart to apply it now."
 func AgentNextStart(vm string) M {
 	return M{id: "agent_next_start", vals: []val{{"vm", vm}}}
 }
 
-// AgentNoKeys is [agent_no_keys]: "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it: devvm ssh-agent add KEY_FILE"
+// AgentNoKeys is [agent_no_keys]: "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
 func AgentNoKeys() M {
 	return M{id: "agent_no_keys"}
 }
 
-// AgentOnRisk is [agent_on_risk]: "while you're connected, anything in {{.vm}} can use the keys in your SSH agent"
+// AgentOnRisk is [agent_on_risk]: "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 func AgentOnRisk(vm string) M {
 	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
 }
 
-// AgentSetRunning is [agent_set_running]: "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies on devvm restart"
+// AgentSetRunning is [agent_set_running]: "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
 func AgentSetRunning(mode string, vm string) M {
 	return M{id: "agent_set_running", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// AgentSetStopped is [agent_set_stopped]: "turned SSH agent forwarding {{.mode}} for {{.vm}}; it applies when the VM next starts"
+// AgentSetStopped is [agent_set_stopped]: "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}, and it applies when the VM next starts."
 func AgentSetStopped(mode string, vm string) M {
 	return M{id: "agent_set_stopped", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// AgentStartFailed is [agent_start_failed]: "couldn't start devvm's SSH agent at {{.sock}}"
+// AgentStartFailed is [agent_start_failed]: "devvm's SSH agent didn't start at {{.sock}}."
 func AgentStartFailed(sock string) M {
 	return M{id: "agent_start_failed", vals: []val{{"sock", sock}}}
 }
 
-// AgentUnchosenStop is [agent_unchosen_stop]: "{{.vm}} wasn't started by devvm, so it may forward an SSH agent you didn't choose: devvm stopped it; devvm starts it again"
+// AgentUnchosenStop is [agent_unchosen_stop]: "devvm stopped {{.vm}} because something outside devvm started it, so it may have forwarded an SSH agent you didn't choose. Run devvm to start it again."
 func AgentUnchosenStop(vm string) M {
 	return M{id: "agent_unchosen_stop", vals: []val{{"vm", vm}}}
 }
@@ -204,17 +204,17 @@ func BackendUnreviewedUsed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed_used", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
 
-// BadFrom is [bad_from]: "--from needs a container image reference, like node:24 or ghcr.io/org/image@sha256:…, not {{.from}}"
+// BadFrom is [bad_from]: "{{.from}} isn't a container image reference. Give --from one such as node:24, or ghcr.io/org/image@sha256:… with a digest."
 func BadFrom(from string) M {
 	return M{id: "bad_from", vals: []val{{"from", from}}}
 }
 
-// BadPath is [bad_path]: "can't mount {{.dir}} into a VM: its path has a comma or a control character"
+// BadPath is [bad_path]: "devvm can't mount {{.dir}} into a VM because its path has a comma or a control character."
 func BadPath(dir string) M {
 	return M{id: "bad_path", vals: []val{{"dir", dir}}}
 }
 
-// BadSecretService is [bad_secret_service]: "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'"
+// BadSecretService is [bad_secret_service]: "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'."
 func BadSecretService() M {
 	return M{id: "bad_secret_service"}
 }
@@ -339,7 +339,7 @@ func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
 }
 
-// CodeFailed is [code_failed]: "couldn't open this folder's VM in VS Code: {{.reason}}"
+// CodeFailed is [code_failed]: "Opening this folder's VM in VS Code failed: {{.reason}}."
 func CodeFailed(reason string) M {
 	return M{id: "code_failed", vals: []val{{"reason", reason}}}
 }
@@ -354,12 +354,12 @@ func CommittingImage(vm string) M {
 	return M{id: "committing_image", vals: []val{{"vm", vm}}}
 }
 
-// ConfigNotCopied is [config_not_copied]: "couldn't read {{.file}} to take its keys out, so {{.vm}} doesn't get it"
+// ConfigNotCopied is [config_not_copied]: "devvm couldn't read {{.file}} to take its secrets out, so {{.vm}} doesn't get a copy."
 func ConfigNotCopied(file string, vm string) M {
 	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// ConfigRedacted is [config_redacted]: "{{.vm}}'s copy of {{.file}} has {{.keys}} redacted: network policy keeps keys on the host"
+// ConfigRedacted is [config_redacted]: "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because network policy keeps secrets on this machine."
 func ConfigRedacted(file string, keys string, vm string) M {
 	return M{id: "config_redacted", vals: []val{{"file", file}, {"keys", keys}, {"vm", vm}}}
 }
@@ -374,7 +374,7 @@ func Continue() M {
 	return M{id: "continue"}
 }
 
-// ConvertBadOutput is [convert_bad_output]: "Converting {{.from}} wrote an unexpected {{.file}}, so devvm didn't use it. The image may be hostile."
+// ConvertBadOutput is [convert_bad_output]: "Converting {{.from}} wrote an unexpected {{.file}}, so devvm didn't use it. The container image may be hostile."
 func ConvertBadOutput(file string, from string) M {
 	return M{id: "convert_bad_output", vals: []val{{"file", file}, {"from", from}}}
 }
@@ -399,7 +399,7 @@ func CopyingBranches() M {
 	return M{id: "copying_branches"}
 }
 
-// CpusNotNumber is [cpus_not_number]: "--cpus takes a whole number, not {{.value}}"
+// CpusNotNumber is [cpus_not_number]: "The --cpus flag takes a whole number, not {{.value}}."
 func CpusNotNumber(value string) M {
 	return M{id: "cpus_not_number", vals: []val{{"value", value}}}
 }
@@ -439,7 +439,7 @@ func DeleteAnyway() M {
 	return M{id: "delete_anyway"}
 }
 
-// DeleteFailed is [delete_failed]: "couldn't delete {{.vm}}"
+// DeleteFailed is [delete_failed]: "Deleting {{.vm}} failed."
 func DeleteFailed(vm string) M {
 	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
 }
@@ -489,117 +489,117 @@ func Detected(found string) M {
 	return M{id: "detected", vals: []val{{"found", found}}}
 }
 
-// DevcontainerBadValue is [devcontainer_bad_value]: "{{.file}}: {{.key}} isn't what devcontainer.json allows there: fix it, or run devvm --no-devcontainer"
+// DevcontainerBadValue is [devcontainer_bad_value]: "{{.file}} has a value for {{.key}} that devcontainer.json doesn't allow. Fix it, or run devvm --no-devcontainer."
 func DevcontainerBadValue(file string, key string) M {
 	return M{id: "devcontainer_bad_value", vals: []val{{"file", file}, {"key", key}}}
 }
 
-// DevcontainerBuild is [devcontainer_build]: "{{.file}} builds its container ({{.key}}), and devvm starts only from an image: run devvm --no-devcontainer"
+// DevcontainerBuild is [devcontainer_build]: "{{.file}} builds its container with {{.key}}, and devvm starts only from a container image. Run devvm --no-devcontainer."
 func DevcontainerBuild(file string, key string) M {
 	return M{id: "devcontainer_build", vals: []val{{"file", file}, {"key", key}}}
 }
 
-// DevcontainerChanged is [devcontainer_changed]: "{{.vm}} was made from another version of {{.file}}, which never changes an existing VM: devvm rm, then devvm, makes it again"
+// DevcontainerChanged is [devcontainer_changed]: "{{.vm}} was made from another version of {{.file}}, and the file never changes an existing VM. To make the VM again, run devvm rm, then devvm."
 func DevcontainerChanged(file string, vm string) M {
 	return M{id: "devcontainer_changed", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// DevcontainerCommandFailed is [devcontainer_command_failed]: "{{.command}} failed in {{.vm}}"
+// DevcontainerCommandFailed is [devcontainer_command_failed]: "{{.command}} failed in {{.vm}}."
 func DevcontainerCommandFailed(command string, vm string) M {
 	return M{id: "devcontainer_command_failed", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
-// DevcontainerDockerOutside is [devcontainer_docker_outside]: "{{.file}}: the feature {{.feature}} gives the VM this machine's Docker, which devvm never does: use docker-in-docker, or run devvm --no-devcontainer"
+// DevcontainerDockerOutside is [devcontainer_docker_outside]: "The feature {{.feature}} in {{.file}} gives the VM this machine's Docker, which devvm never does. Use docker-in-docker, or run devvm --no-devcontainer."
 func DevcontainerDockerOutside(feature string, file string) M {
 	return M{id: "devcontainer_docker_outside", vals: []val{{"feature", feature}, {"file", file}}}
 }
 
-// DevcontainerEnvName is [devcontainer_env_name]: "{{.file}}: {{.name}} isn't an environment variable's name: fix it, or run devvm --no-devcontainer"
+// DevcontainerEnvName is [devcontainer_env_name]: "{{.name}} in {{.file}} isn't an environment variable's name. Fix it, or run devvm --no-devcontainer."
 func DevcontainerEnvName(file string, name string) M {
 	return M{id: "devcontainer_env_name", vals: []val{{"file", file}, {"name", name}}}
 }
 
-// DevcontainerFeature is [devcontainer_feature]: "{{.file}}: devvm has no layer for the feature {{.feature}}: remove it, or run devvm --no-devcontainer"
+// DevcontainerFeature is [devcontainer_feature]: "devvm has no layer for the feature {{.feature}} in {{.file}}. Remove it, or run devvm --no-devcontainer."
 func DevcontainerFeature(feature string, file string) M {
 	return M{id: "devcontainer_feature", vals: []val{{"feature", feature}, {"file", file}}}
 }
 
-// DevcontainerFeatureOptions is [devcontainer_feature_options]: "{{.file}}: the options of {{.features}} are ignored"
+// DevcontainerFeatureOptions is [devcontainer_feature_options]: "devvm ignores the options of {{.features}} in {{.file}}."
 func DevcontainerFeatureOptions(features string, file string) M {
 	return M{id: "devcontainer_feature_options", vals: []val{{"features", features}, {"file", file}}}
 }
 
-// DevcontainerFlagWins is [devcontainer_flag_wins]: "{{.key}} in {{.file}} ignored: --{{.flag}} given"
+// DevcontainerFlagWins is [devcontainer_flag_wins]: "devvm ignores {{.key}} in {{.file}} because you gave --{{.flag}}."
 func DevcontainerFlagWins(file string, flag string, key string) M {
 	return M{id: "devcontainer_flag_wins", vals: []val{{"file", file}, {"flag", flag}, {"key", key}}}
 }
 
-// DevcontainerIgnored is [devcontainer_ignored]: "{{.file}}: devvm ignores {{.keys}}"
+// DevcontainerIgnored is [devcontainer_ignored]: "devvm ignores these properties in {{.file}}: {{.keys}}."
 func DevcontainerIgnored(file string, keys string) M {
 	return M{id: "devcontainer_ignored", vals: []val{{"file", file}, {"keys", keys}}}
 }
 
-// DevcontainerImageNotPublic is [devcontainer_image_not_public]: "{{.file}}: its image {{.from}} isn't public in its registry, and a project's file gets only public images: devvm --from {{.from}} uses it anyway"
+// DevcontainerImageNotPublic is [devcontainer_image_not_public]: "The container image {{.from}} in {{.file}} isn't public in its registry, and devvm uses only public images from a project's file. Run devvm --from {{.from}} to use it anyway."
 func DevcontainerImageNotPublic(file string, from string) M {
 	return M{id: "devcontainer_image_not_public", vals: []val{{"file", file}, {"from", from}}}
 }
 
-// DevcontainerInitialize is [devcontainer_initialize]: "{{.file}}: initializeCommand never runs: it would run on this machine"
+// DevcontainerInitialize is [devcontainer_initialize]: "devvm never runs the initializeCommand in {{.file}}, because it would run on this machine."
 func DevcontainerInitialize(file string) M {
 	return M{id: "devcontainer_initialize", vals: []val{{"file", file}}}
 }
 
-// DevcontainerInvalid is [devcontainer_invalid]: "{{.file}} isn't valid JSON, at line {{.line}}, column {{.column}}: fix it, or run devvm --no-devcontainer"
+// DevcontainerInvalid is [devcontainer_invalid]: "{{.file}} isn't valid JSON at line {{.line}}, column {{.column}}. Fix it, or run devvm --no-devcontainer."
 func DevcontainerInvalid(column string, file string, line string) M {
 	return M{id: "devcontainer_invalid", vals: []val{{"column", column}, {"file", file}, {"line", line}}}
 }
 
-// DevcontainerLocalEnv is [devcontainer_local_env]: "{{.file}} uses {{.variable}}: devvm never puts this machine's environment in a VM; remove it, or run devvm --no-devcontainer"
+// DevcontainerLocalEnv is [devcontainer_local_env]: "{{.file}} uses {{.variable}}, and devvm never puts this machine's environment in a VM. Remove it, or run devvm --no-devcontainer."
 func DevcontainerLocalEnv(file string, variable string) M {
 	return M{id: "devcontainer_local_env", vals: []val{{"file", file}, {"variable", variable}}}
 }
 
-// DevcontainerNew is [devcontainer_new]: "{{.vm}} was made without {{.file}}, which never changes an existing VM: devvm rm, then devvm, makes it again"
+// DevcontainerNew is [devcontainer_new]: "{{.vm}} was made without {{.file}}, and the file never changes an existing VM. To make the VM again, run devvm rm, then devvm."
 func DevcontainerNew(file string, vm string) M {
 	return M{id: "devcontainer_new", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// DevcontainerPortsIgnored is [devcontainer_ports_ignored]: "{{.file}}: forwardPorts {{.ports}} ignored: a VM's ports reach only this machine's localhost"
+// DevcontainerPortsIgnored is [devcontainer_ports_ignored]: "devvm ignores forwardPorts {{.ports}} in {{.file}}, because a VM's ports reach only this machine's localhost."
 func DevcontainerPortsIgnored(file string, ports string) M {
 	return M{id: "devcontainer_ports_ignored", vals: []val{{"file", file}, {"ports", ports}}}
 }
 
-// DevcontainerPortsNotForwarded is [devcontainer_ports_not_forwarded]: "{{.file}}: forwardPorts {{.ports}} not all forwarded, as your ports limit them: devvm ports add {{.ports}} to forward them"
+// DevcontainerPortsNotForwarded is [devcontainer_ports_not_forwarded]: "Your ports setting limits what {{.file}} can forward, so devvm doesn't forward all of forwardPorts {{.ports}}. Run devvm ports add {{.ports}} to forward them."
 func DevcontainerPortsNotForwarded(file string, ports string) M {
 	return M{id: "devcontainer_ports_not_forwarded", vals: []val{{"file", file}, {"ports", ports}}}
 }
 
-// DevcontainerUnknown is [devcontainer_unknown]: "{{.file}}: unknown, ignored: {{.keys}}"
+// DevcontainerUnknown is [devcontainer_unknown]: "devvm doesn't know these properties in {{.file}}, so it ignores them: {{.keys}}."
 func DevcontainerUnknown(file string, keys string) M {
 	return M{id: "devcontainer_unknown", vals: []val{{"file", file}, {"keys", keys}}}
 }
 
-// DevcontainerUnreadable is [devcontainer_unreadable]: "can't read {{.file}}: fix it, or run devvm --no-devcontainer"
+// DevcontainerUnreadable is [devcontainer_unreadable]: "devvm can't read {{.file}}. Fix it, or run devvm --no-devcontainer."
 func DevcontainerUnreadable(file string) M {
 	return M{id: "devcontainer_unreadable", vals: []val{{"file", file}}}
 }
 
-// DevcontainerUsing is [devcontainer_using]: "making {{.vm}} as {{.file}} says: devvm --no-devcontainer skips it"
+// DevcontainerUsing is [devcontainer_using]: "devvm makes {{.vm}} as {{.file}} says. To skip the file, run devvm --no-devcontainer."
 func DevcontainerUsing(file string, vm string) M {
 	return M{id: "devcontainer_using", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// DevcontainerVariable is [devcontainer_variable]: "{{.file}} uses {{.variable}}, which devvm doesn't fill in: remove it, or run devvm --no-devcontainer"
+// DevcontainerVariable is [devcontainer_variable]: "{{.file}} uses {{.variable}}, which devvm doesn't fill in. Remove it, or run devvm --no-devcontainer."
 func DevcontainerVariable(file string, variable string) M {
 	return M{id: "devcontainer_variable", vals: []val{{"file", file}, {"variable", variable}}}
 }
 
-// DiskOver is [disk_over]: "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB VMs get elsewhere, and the {{.backend}} backend doesn't limit it: free some space"
+// DiskOver is [disk_over]: "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
 func DiskOver(backend string, limit string, used string, vm string) M {
 	return M{id: "disk_over", vals: []val{{"backend", backend}, {"limit", limit}, {"used", used}, {"vm", vm}}}
 }
 
-// DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB and can't shrink to {{.want}} GiB"
+// DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB, and a disk can't shrink to {{.want}} GiB."
 func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
 }
@@ -844,7 +844,7 @@ func DownloadingMise(version string) M {
 	return M{id: "downloading_mise", vals: []val{{"version", version}}}
 }
 
-// ExportFailed is [export_failed]: "couldn't export this folder's VM's agent history: {{.reason}}"
+// ExportFailed is [export_failed]: "Exporting the agent history of this folder's VM failed: {{.reason}}."
 func ExportFailed(reason string) M {
 	return M{id: "export_failed", vals: []val{{"reason", reason}}}
 }
@@ -889,7 +889,7 @@ func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
 }
 
-// ForwarderFailed is [forwarder_failed]: "port forwarder: {{.reason}}"
+// ForwarderFailed is [forwarder_failed]: "The port forwarder failed: {{.reason}}."
 func ForwarderFailed(reason string) M {
 	return M{id: "forwarder_failed", vals: []val{{"reason", reason}}}
 }
@@ -1079,12 +1079,12 @@ func GithubTokenHowto() M {
 	return M{id: "github_token_howto"}
 }
 
-// HistoryNotExported is [history_not_exported]: "couldn't export {{.vm}}'s agent history"
+// HistoryNotExported is [history_not_exported]: "Exporting {{.vm}}'s agent history failed."
 func HistoryNotExported(vm string) M {
 	return M{id: "history_not_exported", vals: []val{{"vm", vm}}}
 }
 
-// HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path: set it to your home folder"
+// HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path. Set it to your home folder."
 func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
 }
@@ -1154,12 +1154,12 @@ func Kept(vm string) M {
 	return M{id: "kept", vals: []val{{"vm", vm}}}
 }
 
-// KeyLoaded is [key_loaded]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
+// KeyLoaded is [key_loaded]: "The key is loaded. To load it automatically after a reboot, add this to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
 func KeyLoaded() M {
 	return M{id: "key_loaded"}
 }
 
-// KeyLoadedKeychain is [key_loaded_keychain]: "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
+// KeyLoadedKeychain is [key_loaded_keychain]: "The key is loaded. To load it automatically after a reboot, add this to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes\n        UseKeychain yes"
 func KeyLoadedKeychain() M {
 	return M{id: "key_loaded_keychain"}
 }
@@ -1254,7 +1254,7 @@ func LimaOldFix(fix string, version string) M {
 	return M{id: "lima_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
-// LimactlFailed is [limactl_failed]: "couldn't run limactl: {{.reason}}"
+// LimactlFailed is [limactl_failed]: "Running limactl failed: {{.reason}}."
 func LimactlFailed(reason string) M {
 	return M{id: "limactl_failed", vals: []val{{"reason", reason}}}
 }
@@ -1264,7 +1264,7 @@ func LoadKey(cmd string, key string) M {
 	return M{id: "load_key", vals: []val{{"cmd", cmd}, {"key", key}}}
 }
 
-// LoadKeyWith is [load_key_with]: "load it with: {{.cmd}}"
+// LoadKeyWith is [load_key_with]: "To load your key, run {{.cmd}}."
 func LoadKeyWith(cmd string) M {
 	return M{id: "load_key_with", vals: []val{{"cmd", cmd}}}
 }
@@ -1294,7 +1294,7 @@ func LoginCopyFailed(agent string, reason string, vm string) M {
 	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
 }
 
-// LsFailed is [ls_failed]: "couldn't list the VMs: {{.reason}}"
+// LsFailed is [ls_failed]: "Listing the VMs failed: {{.reason}}."
 func LsFailed(reason string) M {
 	return M{id: "ls_failed", vals: []val{{"reason", reason}}}
 }
@@ -1314,12 +1314,12 @@ func MiseDownloadFailed(version string) M {
 	return M{id: "mise_download_failed", vals: []val{{"version", version}}}
 }
 
-// MountComma is [mount_comma]: "Lima can't mount {{.path}}: its path has a comma"
+// MountComma is [mount_comma]: "Lima can't mount {{.path}} because its path has a comma."
 func MountComma(path string) M {
 	return M{id: "mount_comma", vals: []val{{"path", path}}}
 }
 
-// MountsNextStart is [mounts_next_start]: "{{.vm}}'s agent folder mounts change when it next starts"
+// MountsNextStart is [mounts_next_start]: "{{.vm}}'s agent folder mounts change when it next starts."
 func MountsNextStart(vm string) M {
 	return M{id: "mounts_next_start", vals: []val{{"vm", vm}}}
 }
@@ -1329,32 +1329,32 @@ func MountsUpdated(vm string) M {
 	return M{id: "mounts_updated", vals: []val{{"vm", vm}}}
 }
 
-// MsgBadCount is [msg_bad_count]: "count must be a whole number, not {{.value}}"
+// MsgBadCount is [msg_bad_count]: "The count must be a whole number, not {{.value}}."
 func MsgBadCount(value string) M {
 	return M{id: "msg_bad_count", vals: []val{{"value", value}}}
 }
 
-// MsgMissingValue is [msg_missing_value]: "{{.name}} needs {{.key}}="
+// MsgMissingValue is [msg_missing_value]: "{{.name}} needs a {{.key}}= value."
 func MsgMissingValue(key string, name string) M {
 	return M{id: "msg_missing_value", vals: []val{{"key", key}, {"name", name}}}
 }
 
-// MsgNotPair is [msg_not_pair]: "{{.arg}} is not name=value"
+// MsgNotPair is [msg_not_pair]: "{{.arg}} isn't name=value."
 func MsgNotPair(arg string) M {
 	return M{id: "msg_not_pair", vals: []val{{"arg", arg}}}
 }
 
-// MsgRepeatedValue is [msg_repeated_value]: "{{.key}}= is given twice"
+// MsgRepeatedValue is [msg_repeated_value]: "{{.key}}= is given twice."
 func MsgRepeatedValue(key string) M {
 	return M{id: "msg_repeated_value", vals: []val{{"key", key}}}
 }
 
-// MsgUnexpectedValue is [msg_unexpected_value]: "{{.name}} takes no {{.key}}="
+// MsgUnexpectedValue is [msg_unexpected_value]: "{{.name}} takes no {{.key}}= value."
 func MsgUnexpectedValue(key string, name string) M {
 	return M{id: "msg_unexpected_value", vals: []val{{"key", key}, {"name", name}}}
 }
 
-// MsgUnknown is [msg_unknown]: "no message {{.name}}"
+// MsgUnknown is [msg_unknown]: "There's no message {{.name}}."
 func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
@@ -1449,57 +1449,57 @@ func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
 
-// NetworkFailed is [network_failed]: "couldn't read or change this folder's VM's network policy: {{.reason}}"
+// NetworkFailed is [network_failed]: "Reading or changing the network policy of this folder's VM failed: {{.reason}}."
 func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
 }
 
-// NewerTools is [newer_tools]: "newer shared tools: {{.tools}}; devvm update moves this VM to them"
+// NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
 func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
 }
 
-// NoClaudeToken is [no_claude_token]: "no Claude token for {{.vm}}: run claude setup-token, then devvm auth claude"
+// NoClaudeToken is [no_claude_token]: "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm auth claude."
 func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
 }
 
-// NoCodeCommand is [no_code_command]: "VS Code's code command isn't on PATH: connect to {{.host}} with Remote-SSH"
+// NoCodeCommand is [no_code_command]: "VS Code's code command isn't on PATH. Connect to {{.host}} with Remote-SSH instead."
 func NoCodeCommand(host string) M {
 	return M{id: "no_code_command", vals: []val{{"host", host}}}
 }
 
-// NoDevcontainerFlagIgnored is [no_devcontainer_flag_ignored]: "--no-devcontainer only applies to new VMs"
+// NoDevcontainerFlagIgnored is [no_devcontainer_flag_ignored]: "The --no-devcontainer flag applies only to new VMs."
 func NoDevcontainerFlagIgnored() M {
 	return M{id: "no_devcontainer_flag_ignored"}
 }
 
-// NoDigest is [no_digest]: "devvm has no digest for {{.from}}"
+// NoDigest is [no_digest]: "devvm has no digest for {{.from}}."
 func NoDigest(from string) M {
 	return M{id: "no_digest", vals: []val{{"from", from}}}
 }
 
-// NoFeature is [no_feature]: "there's no {{.feature}} feature: choose from {{.features}}"
+// NoFeature is [no_feature]: "There's no feature {{.feature}}. Choose from {{.features}}."
 func NoFeature(feature string, features string) M {
 	return M{id: "no_feature", vals: []val{{"feature", feature}, {"features", features}}}
 }
 
-// NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved: devvm secret set github"
+// NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved. Run devvm secret set github."
 func NoGithubToken(vm string) M {
 	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
 }
 
-// NoImageFor is [no_image_for]: "couldn't tell which image {{.dir}} needs: name one, devvm IMAGE, from {{.envs}} and the agents {{.agents}} (joined with +)"
+// NoImageFor is [no_image_for]: "devvm couldn't tell which image {{.dir}} needs. Name one as devvm IMAGE, joining any of {{.envs}} and the agents {{.agents}} with +."
 func NoImageFor(agents string, dir string, envs string) M {
 	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
 }
 
-// NoImageNamed is [no_image_named]: "there's no image {{.image}}: devvm images lists them"
+// NoImageNamed is [no_image_named]: "There's no image {{.image}}. Run devvm images to list them."
 func NoImageNamed(image string) M {
 	return M{id: "no_image_named", vals: []val{{"image", image}}}
 }
 
-// NoImageNamedFrom is [no_image_named_from]: "there's no image {{.image}} from {{.from}}: devvm images lists them"
+// NoImageNamedFrom is [no_image_named_from]: "There's no image {{.image}} from {{.from}}. Run devvm images to list them."
 func NoImageNamedFrom(from string, image string) M {
 	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
 }
@@ -1509,82 +1509,82 @@ func NoKVM() M {
 	return M{id: "no_kvm"}
 }
 
-// NoSecret is [no_secret]: "no secret {{.secret}}"
+// NoSecret is [no_secret]: "There's no secret {{.secret}}."
 func NoSecret(secret string) M {
 	return M{id: "no_secret", vals: []val{{"secret", secret}}}
 }
 
-// NoSSHAgent is [no_ssh_agent]: "no SSH agent is running, so git over SSH won't work in the VM"
+// NoSSHAgent is [no_ssh_agent]: "No SSH agent is running, so git over SSH won't work in the VM."
 func NoSSHAgent() M {
 	return M{id: "no_ssh_agent"}
 }
 
-// NoTerminalConfirm is [no_terminal_confirm]: "not a terminal, so devvm can't ask before adding to {{.vm}}: run devvm {{.want}} in a terminal"
+// NoTerminalConfirm is [no_terminal_confirm]: "devvm can't ask before adding to {{.vm}} without a terminal. Run devvm {{.want}} in a terminal."
 func NoTerminalConfirm(vm string, want string) M {
 	return M{id: "no_terminal_confirm", vals: []val{{"vm", vm}, {"want", want}}}
 }
 
-// NoTerminalDelete is [no_terminal_delete]: "not a terminal, so can't confirm: devvm rm -f deletes anyway"
+// NoTerminalDelete is [no_terminal_delete]: "devvm can't ask you to confirm without a terminal. Run devvm rm -f to delete the VM anyway."
 func NoTerminalDelete() M {
 	return M{id: "no_terminal_delete"}
 }
 
-// NoTerminalFetch is [no_terminal_fetch]: "not a terminal: run git fetch {{.remote}} first, or devvm rm -f to delete anyway"
+// NoTerminalFetch is [no_terminal_fetch]: "devvm can't ask without a terminal. Run git fetch {{.remote}} first, or devvm rm -f to delete the VM anyway."
 func NoTerminalFetch(remote string) M {
 	return M{id: "no_terminal_fetch", vals: []val{{"remote", remote}}}
 }
 
-// NoToken is [no_token]: "no token given: nothing saved"
+// NoToken is [no_token]: "You didn't give a secret, so devvm saved nothing."
 func NoToken() M {
 	return M{id: "no_token"}
 }
 
-// NoUbuntuImage is [no_ubuntu_image]: "couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}}: check you're online, or update devvm if Ubuntu removed it"
+// NoUbuntuImage is [no_ubuntu_image]: "devvm couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}}. Check that you're online, or update devvm if Ubuntu removed the image."
 func NoUbuntuImage(release string, url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"release", release}, {"url", url}, {"version", version}}}
 }
 
-// NoVM is [no_vm]: "no VM for {{.dir}}: devvm makes one"
+// NoVM is [no_vm]: "There's no VM for {{.dir}}. Run devvm to make one."
 func NoVM(dir string) M {
 	return M{id: "no_vm", vals: []val{{"dir", dir}}}
 }
 
-// NoVMGitProtect is [no_vm_git_protect]: "no VM for {{.dir}}: devvm makes one, devvm --no-git-protect one without .git protection"
+// NoVMGitProtect is [no_vm_git_protect]: "There's no VM for {{.dir}}. Run devvm to make one, or devvm --no-git-protect to make one without .git protection."
 func NoVMGitProtect(dir string) M {
 	return M{id: "no_vm_git_protect", vals: []val{{"dir", dir}}}
 }
 
-// NoVMPolicy is [no_vm_policy]: "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
+// NoVMPolicy is [no_vm_policy]: "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."
 func NoVMPolicy(dir string) M {
 	return M{id: "no_vm_policy", vals: []val{{"dir", dir}}}
 }
 
-// NoVMPorts is [no_vm_ports]: "no VM for {{.dir}}: devvm --ports LIST makes one that forwards only those, or -g sets what new VMs forward"
+// NoVMPorts is [no_vm_ports]: "There's no VM for {{.dir}}. Run devvm --ports LIST to make one that forwards only those ports, or devvm ports -g to set what new VMs forward."
 func NoVMPorts(dir string) M {
 	return M{id: "no_vm_ports", vals: []val{{"dir", dir}}}
 }
 
-// NoVMSize is [no_vm_size]: "no VM for {{.dir}}: devvm --cpus N makes one with a size, or -g sets the size new VMs get"
+// NoVMSize is [no_vm_size]: "There's no VM for {{.dir}}. Run devvm --cpus N to make one with a size, or devvm size -g to set the size new VMs get."
 func NoVMSize(dir string) M {
 	return M{id: "no_vm_size", vals: []val{{"dir", dir}}}
 }
 
-// NoVMSSHAgent is [no_vm_ssh_agent]: "no VM for {{.dir}}: devvm makes one, devvm --ssh-agent one that forwards your SSH agent"
+// NoVMSSHAgent is [no_vm_ssh_agent]: "There's no VM for {{.dir}}. Run devvm to make one, or devvm --ssh-agent to make one that forwards your SSH agent."
 func NoVMSSHAgent(dir string) M {
 	return M{id: "no_vm_ssh_agent", vals: []val{{"dir", dir}}}
 }
 
-// NotARule is [not_a_rule]: "not a rule: {{.rule}}"
+// NotARule is [not_a_rule]: "{{.rule}} isn't a rule."
 func NotARule(rule string) M {
 	return M{id: "not_a_rule", vals: []val{{"rule", rule}}}
 }
 
-// NotAnImage is [not_an_image]: "refusing to delete {{.name}}: it's not an image"
+// NotAnImage is [not_an_image]: "{{.name}} isn't an image, so devvm won't delete it."
 func NotAnImage(name string) M {
 	return M{id: "not_an_image", vals: []val{{"name", name}}}
 }
 
-// NotSetupToken is [not_setup_token]: "that isn't a setup-token token (sk-ant-oat01-…): nothing saved; claude setup-token prints one"
+// NotSetupToken is [not_setup_token]: "That isn't a Claude Code token, which starts with sk-ant-oat01-, so devvm saved nothing. Run claude setup-token to get one."
 func NotSetupToken() M {
 	return M{id: "not_setup_token"}
 }
@@ -1614,7 +1614,7 @@ func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
 
-// PackFailed is [pack_failed]: "couldn't pack {{.vm}} into its image"
+// PackFailed is [pack_failed]: "Packing {{.vm}} into its image failed."
 func PackFailed(vm string) M {
 	return M{id: "pack_failed", vals: []val{{"vm", vm}}}
 }
@@ -1629,17 +1629,17 @@ func PolicyFailed(reason string) M {
 	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
 }
 
-// PortInvalid is [port_invalid]: "{{.value}} isn't a port list: use all, none, or ports and ranges like 5173,8000-8010"
+// PortInvalid is [port_invalid]: "{{.value}} isn't a port list. Use all, none, or ports and ranges such as 5173,8000-8010."
 func PortInvalid(value string) M {
 	return M{id: "port_invalid", vals: []val{{"value", value}}}
 }
 
-// PortNotListed is [port_not_listed]: "{{.port}} isn't forwarded: the ports are {{.ports}}"
+// PortNotListed is [port_not_listed]: "{{.port}} isn't forwarded. The forwarded ports are {{.ports}}."
 func PortNotListed(port string, ports string) M {
 	return M{id: "port_not_listed", vals: []val{{"port", port}, {"ports", ports}}}
 }
 
-// PortsAllAlready is [ports_all_already]: "every port is already forwarded"
+// PortsAllAlready is [ports_all_already]: "Every port is already forwarded."
 func PortsAllAlready() M {
 	return M{id: "ports_all_already"}
 }
@@ -1649,32 +1649,32 @@ func PortsDefault(ports string) M {
 	return M{id: "ports_default", vals: []val{{"ports", ports}}}
 }
 
-// PortsFailed is [ports_failed]: "couldn't show or change which ports are forwarded: {{.reason}}"
+// PortsFailed is [ports_failed]: "Showing or changing the forwarded ports failed: {{.reason}}."
 func PortsFailed(reason string) M {
 	return M{id: "ports_failed", vals: []val{{"reason", reason}}}
 }
 
-// PortsFlagIgnored is [ports_flag_ignored]: "--ports only applies to new VMs: devvm ports LIST"
+// PortsFlagIgnored is [ports_flag_ignored]: "The --ports flag applies only to new VMs. To change this VM's ports, run devvm ports LIST."
 func PortsFlagIgnored() M {
 	return M{id: "ports_flag_ignored"}
 }
 
-// PortsForwardFailed is [ports_forward_failed]: "forwarding {{.vm}}'s ports didn't start: see {{.log}}"
+// PortsForwardFailed is [ports_forward_failed]: "Forwarding {{.vm}}'s ports didn't start. Check {{.log}} for the reason."
 func PortsForwardFailed(log string, vm string) M {
 	return M{id: "ports_forward_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
 
-// PortsForwarding is [ports_forwarding]: "{{.vm}} forwards {{.ports}} from now on: connections open to its ports were closed"
+// PortsForwarding is [ports_forwarding]: "From now on, {{.vm}} forwards {{.ports}}. devvm closed the connections that were open to its ports."
 func PortsForwarding(ports string, vm string) M {
 	return M{id: "ports_forwarding", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
-// PortsListNeeded is [ports_list_needed]: "devvm ports add and rm take ports and ranges like 5173,8000-8010, not {{.value}}"
+// PortsListNeeded is [ports_list_needed]: "devvm ports add and rm take ports and ranges, such as 5173,8000-8010, not {{.value}}."
 func PortsListNeeded(value string) M {
 	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
 }
 
-// PortsNoSSH is [ports_no_ssh]: "{{.vm}} runs without ssh, so none of its ports are forwarded"
+// PortsNoSSH is [ports_no_ssh]: "{{.vm}} runs without ssh, so devvm forwards none of its ports."
 func PortsNoSSH(vm string) M {
 	return M{id: "ports_no_ssh", vals: []val{{"vm", vm}}}
 }
@@ -1684,12 +1684,12 @@ func PortsNow(ports string, vm string) M {
 	return M{id: "ports_now", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
-// PortsRmAll is [ports_rm_all]: "every port is forwarded, so none can be removed: set the ones to keep instead, like devvm ports 5173,8000-8010"
+// PortsRmAll is [ports_rm_all]: "Every port is forwarded, so none can be removed. Set the ones to keep instead, as in devvm ports 5173,8000-8010."
 func PortsRmAll() M {
 	return M{id: "ports_rm_all"}
 }
 
-// PortsTaken is [ports_taken]: "{{.vm}} doesn't forward ports {{.ports}} for now: they're in use on this machine"
+// PortsTaken is [ports_taken]: "{{.vm}} doesn't forward ports {{.ports}} for now because they're in use on this machine."
 func PortsTaken(count int, ports string, vm string) M {
 	return M{id: "ports_taken", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"ports", ports}, {"vm", vm}}}
 }
@@ -1769,17 +1769,17 @@ func ResolvingTools() M {
 	return M{id: "resolving_tools"}
 }
 
-// RestartForMounts is [restart_for_mounts]: "This restarts the VM to mount their config from this machine; anything running in it stops."
+// RestartForMounts is [restart_for_mounts]: "This restarts the VM to mount their config from this machine, and anything running in it stops."
 func RestartForMounts() M {
 	return M{id: "restart_for_mounts"}
 }
 
-// RmExportFailed is [rm_export_failed]: "couldn't export {{.vm}}'s agent history, so devvm kept the VM: devvm rm -f deletes it without exporting"
+// RmExportFailed is [rm_export_failed]: "devvm couldn't export {{.vm}}'s agent history, so it kept the VM. Run devvm rm -f to delete it without exporting."
 func RmExportFailed(vm string) M {
 	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
 }
 
-// RmFailed is [rm_failed]: "couldn't delete this folder's VM: {{.reason}}"
+// RmFailed is [rm_failed]: "Deleting this folder's VM failed: {{.reason}}."
 func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
 }
@@ -1814,7 +1814,7 @@ func RuleRemovedGlobal(rule string) M {
 	return M{id: "rule_removed_global", vals: []val{{"rule", rule}}}
 }
 
-// RunLogFailed is [run_log_failed]: "can't write the run log in {{.dir}}: {{.reason}}"
+// RunLogFailed is [run_log_failed]: "devvm can't write its run log in {{.dir}}: {{.reason}}."
 func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
 }
@@ -1899,7 +1899,7 @@ func SetidRootFiles(files string) M {
 	return M{id: "setid_root_files", vals: []val{{"files", files}}}
 }
 
-// SetupFailed is [setup_failed]: "couldn't save the settings: {{.reason}}"
+// SetupFailed is [setup_failed]: "Saving the settings failed: {{.reason}}."
 func SetupFailed(reason string) M {
 	return M{id: "setup_failed", vals: []val{{"reason", reason}}}
 }
@@ -1919,32 +1919,32 @@ func SizeDefaults(size string) M {
 	return M{id: "size_defaults", vals: []val{{"size", size}}}
 }
 
-// SizeDiskDefaultUnused is [size_disk_default_unused]: "new VMs' default disk size doesn't apply to {{.vm}}: the {{.backend}} backend sets none"
+// SizeDiskDefaultUnused is [size_disk_default_unused]: "The default disk size for new VMs doesn't apply to {{.vm}}, because the {{.backend}} backend doesn't size disks."
 func SizeDiskDefaultUnused(backend string, vm string) M {
 	return M{id: "size_disk_default_unused", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// SizeFailed is [size_failed]: "couldn't show or change the size: {{.reason}}"
+// SizeFailed is [size_failed]: "Showing or changing the size failed: {{.reason}}."
 func SizeFailed(reason string) M {
 	return M{id: "size_failed", vals: []val{{"reason", reason}}}
 }
 
-// SizeFlagsIgnored is [size_flags_ignored]: "--cpus, --memory and --disk only apply to new VMs: devvm size --cpus N"
+// SizeFlagsIgnored is [size_flags_ignored]: "The --cpus, --memory and --disk flags apply only to new VMs. To resize this VM, run devvm size --cpus N."
 func SizeFlagsIgnored() M {
 	return M{id: "size_flags_ignored"}
 }
 
-// SizeNextStart is [size_next_start]: "{{.vm}}'s new size applies when it next starts: devvm restart"
+// SizeNextStart is [size_next_start]: "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 func SizeNextStart(vm string) M {
 	return M{id: "size_next_start", vals: []val{{"vm", vm}}}
 }
 
-// SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB (16, 16G or 16GiB), not {{.value}}"
+// SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB, such as 16, 16G or 16GiB, not {{.value}}."
 func SizeNotGib(flag string, value string) M {
 	return M{id: "size_not_gib", vals: []val{{"flag", flag}, {"value", value}}}
 }
 
-// SizePending is [size_pending]: "{{.vm}} gets {{.size}} from its next start: devvm restart"
+// SizePending is [size_pending]: "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply it now."
 func SizePending(size string, vm string) M {
 	return M{id: "size_pending", vals: []val{{"size", size}, {"vm", vm}}}
 }
@@ -2019,27 +2019,27 @@ func SmolvmUpdateFailed(vm string) M {
 	return M{id: "smolvm_update_failed", vals: []val{{"vm", vm}}}
 }
 
-// SSHAgentEmpty is [ssh_agent_empty]: "your SSH agent has no keys, so git over SSH won't work in the VM"
+// SSHAgentEmpty is [ssh_agent_empty]: "Your SSH agent has no keys, so git over SSH won't work in the VM."
 func SSHAgentEmpty() M {
 	return M{id: "ssh_agent_empty"}
 }
 
-// SSHAgentFailed is [ssh_agent_failed]: "couldn't show or change this folder's VM's SSH agent forwarding: {{.reason}}"
+// SSHAgentFailed is [ssh_agent_failed]: "Showing or changing the SSH agent forwarding of this folder's VM failed: {{.reason}}."
 func SSHAgentFailed(reason string) M {
 	return M{id: "ssh_agent_failed", vals: []val{{"reason", reason}}}
 }
 
-// SSHAgentFlagIgnored is [ssh_agent_flag_ignored]: "--ssh-agent only applies to new VMs: devvm ssh-agent on"
+// SSHAgentFlagIgnored is [ssh_agent_flag_ignored]: "The --ssh-agent flag applies only to new VMs. To change this VM's SSH agent forwarding, run devvm ssh-agent on."
 func SSHAgentFlagIgnored() M {
 	return M{id: "ssh_agent_flag_ignored"}
 }
 
-// SSHFailed is [ssh_failed]: "couldn't get this folder's VM ready for ssh: {{.reason}}"
+// SSHFailed is [ssh_failed]: "Getting this folder's VM ready for ssh failed: {{.reason}}."
 func SSHFailed(reason string) M {
 	return M{id: "ssh_failed", vals: []val{{"reason", reason}}}
 }
 
-// SSHHostInfo is [ssh_host_info]: "Connect with ssh {{.host}}, or VS Code's Remote-SSH: Connect to Host.\nThe folder in the VM: {{.dir}}"
+// SSHHostInfo is [ssh_host_info]: "Connect with ssh {{.host}}, or with Remote-SSH: Connect to Host in VS Code.\nThe project folder in the VM is {{.dir}}."
 func SSHHostInfo(dir string, host string) M {
 	return M{id: "ssh_host_info", vals: []val{{"dir", dir}, {"host", host}}}
 }
@@ -2049,32 +2049,32 @@ func SSHIncludeAdded() M {
 	return M{id: "ssh_include_added"}
 }
 
-// SSHIncludeNeeded is [ssh_include_needed]: "To reach VMs by name (ssh, VS Code Remote-SSH), ~/.ssh/config needs this line at the top:\n  {{.line}}"
+// SSHIncludeNeeded is [ssh_include_needed]: "To reach VMs by name with ssh or VS Code's Remote-SSH, ~/.ssh/config needs this line at the top:\n  {{.line}}"
 func SSHIncludeNeeded(line string) M {
 	return M{id: "ssh_include_needed", vals: []val{{"line", line}}}
 }
 
-// SSHIncludeYourself is [ssh_include_yourself]: "not a terminal, so not added: add it yourself"
+// SSHIncludeYourself is [ssh_include_yourself]: "devvm can't ask without a terminal, so it didn't add the line. Add it yourself."
 func SSHIncludeYourself() M {
 	return M{id: "ssh_include_yourself"}
 }
 
-// SSHRemoteHint is [ssh_remote_hint]: "origin is an SSH remote, but {{.vm}} has no SSH agent, so git over SSH won't work in it: devvm ssh-agent on"
+// SSHRemoteHint is [ssh_remote_hint]: "The origin remote uses SSH, but {{.vm}} has no SSH agent, so git over SSH won't work in it. Run devvm ssh-agent on to forward yours."
 func SSHRemoteHint(vm string) M {
 	return M{id: "ssh_remote_hint", vals: []val{{"vm", vm}}}
 }
 
-// StartFailed is [start_failed]: "couldn't start {{.vm}}"
+// StartFailed is [start_failed]: "{{.vm}} didn't start."
 func StartFailed(vm string) M {
 	return M{id: "start_failed", vals: []val{{"vm", vm}}}
 }
 
-// StartNoSSH is [start_no_ssh]: "couldn't start {{.vm}}: it doesn't answer over ssh (its console: {{.console}})"
+// StartNoSSH is [start_no_ssh]: "{{.vm}} didn't start because it doesn't answer over ssh. Check its console logs, {{.console}}."
 func StartNoSSH(console string, vm string) M {
 	return M{id: "start_no_ssh", vals: []val{{"console", console}, {"vm", vm}}}
 }
 
-// StartedWithWarnings is [started_with_warnings]: "{{.vm}} started with warnings; continuing"
+// StartedWithWarnings is [started_with_warnings]: "{{.vm}} started with warnings, and devvm carries on."
 func StartedWithWarnings(vm string) M {
 	return M{id: "started_with_warnings", vals: []val{{"vm", vm}}}
 }
@@ -2084,12 +2084,12 @@ func Starting(vm string) M {
 	return M{id: "starting", vals: []val{{"vm", vm}}}
 }
 
-// StopFailed is [stop_failed]: "couldn't stop {{.vm}}"
+// StopFailed is [stop_failed]: "{{.vm}} didn't stop."
 func StopFailed(vm string) M {
 	return M{id: "stop_failed", vals: []val{{"vm", vm}}}
 }
 
-// StopVMFailed is [stop_vm_failed]: "couldn't stop this folder's VM: {{.reason}}"
+// StopVMFailed is [stop_vm_failed]: "Stopping this folder's VM failed: {{.reason}}."
 func StopVMFailed(reason string) M {
 	return M{id: "stop_vm_failed", vals: []val{{"reason", reason}}}
 }
@@ -2104,7 +2104,7 @@ func Stopping(vm string) M {
 	return M{id: "stopping", vals: []val{{"vm", vm}}}
 }
 
-// SyncFailed is [sync_failed]: "couldn't set up {{.vm}}"
+// SyncFailed is [sync_failed]: "Setting up {{.vm}} failed."
 func SyncFailed(vm string) M {
 	return M{id: "sync_failed", vals: []val{{"vm", vm}}}
 }
@@ -2119,12 +2119,12 @@ func TokenQuotes() M {
 	return M{id: "token_quotes"}
 }
 
-// TooManyCpus is [too_many_cpus]: "this machine has {{.have}} CPUs: --cpus {{.want}} is more"
+// TooManyCpus is [too_many_cpus]: "This machine has {{.have}} CPUs, fewer than --cpus {{.want}} asks for."
 func TooManyCpus(have string, want string) M {
 	return M{id: "too_many_cpus", vals: []val{{"have", have}, {"want", want}}}
 }
 
-// TooMuchMemory is [too_much_memory]: "this machine has {{.have}} GiB of memory: --memory {{.want}} is more"
+// TooMuchMemory is [too_much_memory]: "This machine has {{.have}} GiB of memory, less than --memory {{.want}} asks for."
 func TooMuchMemory(have string, want string) M {
 	return M{id: "too_much_memory", vals: []val{{"have", have}, {"want", want}}}
 }
@@ -2234,12 +2234,12 @@ func UnfinishedImage(vm string) M {
 	return M{id: "unfinished_image", vals: []val{{"vm", vm}}}
 }
 
-// UnknownFeature is [unknown_feature]: "skipping feature {{.feature}}: it has no script"
+// UnknownFeature is [unknown_feature]: "devvm skips the feature {{.feature}} because it has no script."
 func UnknownFeature(feature string) M {
 	return M{id: "unknown_feature", vals: []val{{"feature", feature}}}
 }
 
-// UnknownLayer is [unknown_layer]: "there's no layer or tool {{.layer}}: choose from {{.envs}}, and the agents {{.agents}}"
+// UnknownLayer is [unknown_layer]: "There's no layer or shared tool {{.layer}}. Choose from {{.envs}} and the agents {{.agents}}."
 func UnknownLayer(agents string, envs string, layer string) M {
 	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
 }
@@ -2264,7 +2264,7 @@ func UnsafeFolderUsed(dir string, holds string) M {
 	return M{id: "unsafe_folder_used", vals: []val{{"dir", dir}, {"holds", holds}}}
 }
 
-// UpFailed is [up_failed]: "couldn't open this folder's VM: {{.reason}}"
+// UpFailed is [up_failed]: "Opening this folder's VM failed: {{.reason}}."
 func UpFailed(reason string) M {
 	return M{id: "up_failed", vals: []val{{"reason", reason}}}
 }
@@ -2274,7 +2274,7 @@ func UpdateMounts(vm string) M {
 	return M{id: "update_mounts", vals: []val{{"vm", vm}}}
 }
 
-// UsageError is [usage_error]: "{{.reason}}: see devvm --help"
+// UsageError is [usage_error]: "{{.reason}}. Run devvm --help to see the commands and flags."
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
 }
@@ -2289,12 +2289,12 @@ func VMAlreadyHere(vm string) M {
 	return M{id: "vm_already_here", vals: []val{{"vm", vm}}}
 }
 
-// VMCreateFailed is [vm_create_failed]: "couldn't create {{.vm}}"
+// VMCreateFailed is [vm_create_failed]: "Creating {{.vm}} failed."
 func VMCreateFailed(vm string) M {
 	return M{id: "vm_create_failed", vals: []val{{"vm", vm}}}
 }
 
-// VMHasNetworks is [vm_has_networks]: "{{.vm}} has a network devvm didn't give it: remove the networks from {{.file}}"
+// VMHasNetworks is [vm_has_networks]: "{{.vm}} has a network that devvm didn't give it. Remove the networks from {{.file}}."
 func VMHasNetworks(file string, vm string) M {
 	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
 }
@@ -2304,32 +2304,32 @@ func VMIsNow(image string, vm string) M {
 	return M{id: "vm_is_now", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
-// VMLacks is [vm_lacks]: "{{.vm}} doesn't have {{.layer}}: it has {{.has}}"
+// VMLacks is [vm_lacks]: "{{.vm}} doesn't have {{.layer}}. It has {{.has}}."
 func VMLacks(has string, layer string, vm string) M {
 	return M{id: "vm_lacks", vals: []val{{"has", has}, {"layer", layer}, {"vm", vm}}}
 }
 
-// VMNameNoRoom is [vm_name_no_room]: "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
+// VMNameNoRoom is [vm_name_no_room]: "The {{.backend}} backend's VM names have at most {{.max}} characters, which leaves no room for the folder's name."
 func VMNameNoRoom(backend string, max string) M {
 	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
 }
 
-// VMNoSSH is [vm_no_ssh]: "{{.vm}} was started without ssh: devvm restart starts it with it"
+// VMNoSSH is [vm_no_ssh]: "{{.vm}} was started without ssh. Run devvm restart to start it with ssh."
 func VMNoSSH(vm string) M {
 	return M{id: "vm_no_ssh", vals: []val{{"vm", vm}}}
 }
 
-// VMNoSshd is [vm_no_sshd]: "{{.vm}}'s image has no sshd, so it runs without ssh: a VM made after devvm rebuild has it"
+// VMNoSshd is [vm_no_sshd]: "{{.vm}}'s image has no sshd, so the VM runs without ssh. A VM made after you run devvm rebuild has it."
 func VMNoSshd(vm string) M {
 	return M{id: "vm_no_sshd", vals: []val{{"vm", vm}}}
 }
 
-// VMNotRunning is [vm_not_running]: "{{.vm}} isn't running: start it first"
+// VMNotRunning is [vm_not_running]: "{{.vm}} isn't running. Start it first."
 func VMNotRunning(vm string) M {
 	return M{id: "vm_not_running", vals: []val{{"vm", vm}}}
 }
 
-// VMNotStopped is [vm_not_stopped]: "{{.vm}} is running: stop it first"
+// VMNotStopped is [vm_not_stopped]: "{{.vm}} is running. Stop it first."
 func VMNotStopped(vm string) M {
 	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
 }
@@ -2349,7 +2349,7 @@ func VMOtherFolderRm(vm string, was string) M {
 	return M{id: "vm_other_folder_rm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made: it keeps the image it has"
+// VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made. The VM keeps the image it has."
 func VMOutdated(changed string) M {
 	return M{id: "vm_outdated", vals: []val{{"changed", changed}}}
 }
@@ -2359,7 +2359,7 @@ func VMSize(size string, vm string) M {
 	return M{id: "vm_size", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
-// VMUnfinished is [vm_unfinished]: "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes it again"
+// VMUnfinished is [vm_unfinished]: "devvm didn't finish creating {{.vm}}. Run devvm rm to delete it, then devvm to make it again."
 func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
 }

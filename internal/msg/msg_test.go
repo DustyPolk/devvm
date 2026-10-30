@@ -68,7 +68,7 @@ func TestEveryMessageRenders(t *testing.T) {
 
 func TestValuesAsGiven(t *testing.T) {
 	v := `x y $HOME "q" <b> {{.name}}`
-	if got, want := MsgUnknown(v).Text(), "no message "+v; got != want {
+	if got, want := MsgUnknown(v).Text(), "There's no message "+v+"."; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
