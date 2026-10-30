@@ -38,7 +38,7 @@ For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your
 
 {{< feature title="Toolchains" icon="code" level="3" art="toolchains" >}}
 
-devvm picks the toolchain from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
+`devvm` picks the toolchain from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
 
 {{< /feature >}}
 
@@ -63,6 +63,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 - Developers face attacks every day, such as [supply chain attacks](https://en.wikipedia.org/wiki/Supply_chain_attack), leaked secrets, [prompt injections](https://en.wikipedia.org/wiki/Prompt_injection) and rogue agents.
 - A sandbox limits the [blast radius](https://en.wikipedia.org/wiki/Blast_radius#Uses_in_software) of an attack to what's inside it.
 - You know you _should_ run your code and agents in a sandbox, but most tools need configuration and setup that's hard to get right.
+- `devvm` ships with sensible defaults so you can start coding in a sandbox with a single command
 
 {{< /beside >}}
 
@@ -80,7 +81,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 {{< feature title="Ready in seconds" icon="high-voltage" art="copies" >}}
 
 - The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
-- devvm builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
+- `devvm` builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
 
 {{< /feature >}}
 
@@ -88,7 +89,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 - The VM mounts your project folder at the same path. Apart from your agents' config, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
 - New VMs get [network policy](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine.
-- On macOS, devvm locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
+- On macOS, `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
 - No sandbox closes every gap, so [what devvm doesn't protect](docs/internals/security.md#what-it-doesnt-protect) lists what's left open, and [staying safe](docs/safety/_index.md#the-habits) lists the habits that close most of it.
 
@@ -103,10 +104,10 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< feature title="Make it yours" icon="wrench" column="right" art="make-it-yours" >}}
 
-- Your own layers are setup scripts that devvm builds into an image: `devvm layer new mailpit` starts one, and `devvm node+mailpit` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
+- Your own layers are setup scripts that `devvm` builds into an image: `devvm layer new mailpit` starts one, and `devvm node+mailpit` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
 - Your own features are scripts that run in the base image, so every VM gets your shell setup, aliases or dotfiles ([your own features](docs/using/customizing.md#your-own-features)).
 - `--from` starts the base image from a container image instead of Ubuntu's, such as `node:24` or your team's own ([starting from a container image](docs/using/from.md)).
-- When the project has a `devcontainer.json`, devvm sets up its VM from the file's container image, ports, environment and commands ([devcontainer.json](docs/using/devcontainer.md)).
+- When the project has a `devcontainer.json`, `devvm` sets up its VM from the file's container image, ports, environment and commands ([devcontainer.json](docs/using/devcontainer.md)).
 
 {{< /feature >}}
 
@@ -116,15 +117,15 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 ### What does it run on?
 
-devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs Lima 2.0 or newer, which Homebrew installs along with it, and on Linux also QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
+`devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs one of the supported [backends](docs/backends/_index.md): Lima 2.0 or newer, the default, which Homebrew installs along with devvm and which on Linux also needs QEMU and access to `/dev/kvm`, or smolvm or Docker, which are {{< experimental >}}. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
 
 ### Is it free?
 
-Yes. devvm is open source under the [MIT license](https://github.com/w3cj/devvm/blob/main/LICENSE).
+Yes. `devvm` is open source under the [MIT license](https://github.com/w3cj/devvm/blob/main/LICENSE).
 
 ## Start coding in a sandbox {icon="prompt"}
 
-Install devvm, then run `devvm` in any project folder.
+Install `devvm`, then run `devvm` in any project folder.
 
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" icon="download" >}}
 {{< hextra/hero-button text="Read the docs" link="docs/" icon="open-book" >}}
