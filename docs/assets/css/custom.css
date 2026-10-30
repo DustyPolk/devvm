@@ -133,14 +133,8 @@ html.dark .highlight .chroma .go {
 
 #content > .hx\:items-start > p {
   color: var(--devvm-text-secondary);
-  max-width: 42rem;
   margin: 1rem 0;
   line-height: 1.75;
-}
-
-/* The subtitle: as wide as the page, under the headline. */
-#content > .hx\:items-start > p.not-prose {
-  max-width: none;
 }
 
 #content > .hx\:items-start > p > a {
@@ -234,7 +228,6 @@ html.dark .highlight .chroma .go {
 
 #content > .hx\:items-start > ul,
 .devvm-feature > ul {
-  max-width: 42rem;
   margin: 0;
   padding: 0;
   list-style: none;
