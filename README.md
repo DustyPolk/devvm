@@ -31,7 +31,7 @@ devvm claude   # the same, with Claude Code
 devvm codex    # the same, with Codex
 ```
 
-The first time, devvm asks whether the VM gets network policy (answer yes, the default) and which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds. devvm then opens a shell in the VM, at the same path as on your machine, and running `devvm` in the folder again opens a shell in the same VM. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest, including Claude Code's token.
+devvm asks whether each new VM gets network policy (answer yes, the default). The first time, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds. devvm then opens a shell in the VM, at the same path as on your machine, and running `devvm` in the folder again opens a shell in the same VM. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest, including Claude Code's token.
 
 ## Working on a clone
 
