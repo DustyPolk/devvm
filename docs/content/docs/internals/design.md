@@ -1,13 +1,13 @@
 ---
 title: Design notes
-weight: 1
+weight: 12
 ---
 
 For contributors: why devvm is built the way it is, what was tried and dropped, and what's still open. How each part works is on its own page; the layout and rules are in [AGENTS.md](https://github.com/w3cj/devvm/blob/main/AGENTS.md).
 
 ## Emulated features
 
-When devvm builds a backend feature from other parts of the backend, the feature is [emulated](../backends/_index.md#features), and it gets a note here before its review. The note says what the feature is built from, the guarantee it keeps, what could break it, and which end-to-end checks prove it. The threat check comes next, and only then is the feature marked reviewed. Every feature Lima has is native except its ports, which devvm's forwarder emulates ([below](#ports-on-lima)).
+When devvm builds a backend feature from other parts of the backend, the feature is [emulated](backends.md#features), and it gets a note here before its review. The note says what the feature is built from, the guarantee it keeps, what could break it, and which end-to-end checks prove it. The threat check comes next, and only then is the feature marked reviewed. Every feature Lima has is native except its ports, which devvm's forwarder emulates ([below](#ports-on-lima)).
 
 ### Network policy on smolvm
 
@@ -127,7 +127,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 - The VM can make the forwarder dial a host loopback port that's in use and then close the connection at once without sending anything, because that's how the forwarder checks for a port held only by ended connections. This happens at most once per port every second, as the VM's listener on the port goes and comes back.
 - Servers only on the VM's other addresses, such as its network address or a container's, aren't forwarded.
 - Other users on the host reach the forwards, because they're on the host's loopback.
-- UDP isn't forwarded on any backend. [Ports](../using/images.md#ports) shows how to tunnel it over TCP.
+- UDP isn't forwarded on any backend. [Ports](../using/ports-size.md#ports) shows how to tunnel it over TCP.
 - A server that keeps a port while its forward couldn't be made, because the host had the port, isn't forwarded until it stops and starts again.
 - Linux hosts are untested.
 
@@ -257,7 +257,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 **What it's built from:**
 
 - **Lima's forwards off.** Each VM's `portForwards` holds three ignore rules, each for every guest port and protocol (`any`, which is TCP and UDP). They're on `127.0.0.1`, which Lima also matches for `::1`, on `0.0.0.0` and on `::`, which together match servers on all addresses. They come ahead of Lima's own last rule, which forwards everything. `CreateVM` sets them with `limactl clone --set`. `Start` sets them only where `limactl list` shows other rules, because an edit gives the VM new host keys at its next boot. Lima's ssh is its VM driver's forward (`ssh.localPort`), not a rule, so the ignore rules leave it alone, and they cover the guest's own ssh port like any other.
-- **The sandbox's binds (macOS, network policy).** The hostagent of a VM with network policy runs under a Seatbelt profile ([confinement](../backends/lima.md#confinement)) that denies every network bind but two kinds. It may bind the VM's ssh port over TCP, which devvm chooses and records in the VM's state (`ssh_port`), and unix sockets in the VM's Lima folder, which hold the hostagent's own socket (`ha.sock`), the VM's network (`default_ep.sock`, `default_fd.sock`) and ssh's control socket. Seatbelt matches a bind by its port alone, on any address, even when the rule names `localhost`, and it can't allow an ephemeral bind (port 0) without allowing every port. It matches a unix socket by its path with links resolved, so a link in the Lima folder doesn't let the hostagent bind a socket elsewhere. Lima's host resolver binds two ephemeral ports for its DNS server, so a VM with network policy starts with the resolver off and `127.0.0.1` as its DNS server, as on Linux, where nothing listens and lookups fail at once. The hostagent reaches the guest agent over vsock, which needs no bind. This list comes from starting a VM under a profile that reported every bind, then under one that denied the rest: Lima logs a forward it's refused (`failed to listen`) and carries on, while a refused resolver ends the start.
+- **The sandbox's binds (macOS, network policy).** The hostagent of a VM with network policy runs under a Seatbelt profile ([confinement](lima.md#confinement)) that denies every network bind but two kinds. It may bind the VM's ssh port over TCP, which devvm chooses and records in the VM's state (`ssh_port`), and unix sockets in the VM's Lima folder, which hold the hostagent's own socket (`ha.sock`), the VM's network (`default_ep.sock`, `default_fd.sock`) and ssh's control socket. Seatbelt matches a bind by its port alone, on any address, even when the rule names `localhost`, and it can't allow an ephemeral bind (port 0) without allowing every port. It matches a unix socket by its path with links resolved, so a link in the Lima folder doesn't let the hostagent bind a socket elsewhere. Lima's host resolver binds two ephemeral ports for its DNS server, so a VM with network policy starts with the resolver off and `127.0.0.1` as its DNS server, as on Linux, where nothing listens and lookups fail at once. The hostagent reaches the guest agent over vsock, which needs no bind. This list comes from starting a VM under a profile that reported every bind, then under one that denied the rest: Lima logs a forward it's refused (`failed to listen`) and carries on, while a refused resolver ends the start.
 - **Which ports.** The backend keeps a record of which ports each VM forwards, `lima-vms/<vm>.ports`, holding `all`, `none` or a list. `CreateVM` writes it, and `SetPorts` writes it without editing Lima's config, then starts a running VM's forwarder again with the new ports. A VM without a record forwards nothing, and devvm warns with `ports_forward_failed`. When the VM lists ports, the forwarder forwards the record's less those `Confinement.Free` leaves out, which are the ports a program on the host has, with a `ports_taken` warning. When none is left, no forwarder runs.
 - **The forwarder.** Lima's VMs use the forwarder that smolvm and Docker use (`vmssh.Forwarder`, `vmssh.Forwards`), and [smolvm's note](#ports-on-smolvm) says what it reads, how it listens and what its limits are. On Lima it runs as `devvm _lima-ports`. `Start` starts it detached once the VM runs, for project VMs alone, whose starts set `Confinement.HostKey` where builds' starts don't. The forwarder reaches the VM's sshd on Lima's ssh port on the host's loopback. It logs in as Lima's user with Lima's key, `_config/user` in devvm's Lima home, which every VM there authorizes. It never uses the user's agent, and it forwards nothing either way. The VM's sshd allows local forwarding alone (`base.sh`), and `-W` is local forwarding.
 - **Reserved ports.** The forwarder never takes the VM's own Lima ssh port or its proxy port, which `Start` passes as `-reserve`. It also never takes the ssh, proxy and decider ports devvm chooses and records in any VM's state, or other VMs' listed ports (`netpolicy.UsedPorts`). Every Lima VM's ssh port is one of those, with or without network policy: devvm chooses it when it makes the VM, sets it with `limactl clone --set .ssh.localPort`, and records it as the VM's `ssh_port` before the clone (`Proxy.SSHPort`). devvm chooses a port while it holds a lock (`run/ports.lock`), so two devvm commands making or starting VMs at once never choose the same one. A stopped VM gets a new one only when a program on the host has its port on any address, even one that accepts no connections, or when the VM lists it to forward, and its start then sets it with an edit. Lima binds the port only once the VM boots, a few seconds after its start, so a port Lima picked itself would be free for another VM's forwarder in that window, and Lima's own ssh, which checks no host key, would then reach the other VM (the threat check below).
@@ -473,7 +473,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 
 ## smolvm
 
-Tried with smolvm 1.32.2 on an arm64 Mac before devvm had the backend ([its column](../backends/_index.md#features), [its page](../backends/smolvm.md)). The backend has its native features, network policy, emulated ([above](#network-policy-on-smolvm)), ssh for editors, emulated ([above](#ssh-for-editors-on-smolvm)), ports forwarded, every one or the listed ones, emulated ([above](#ports-on-smolvm)), and agent toggling, emulated ([above](#ssh-agent-toggling-on-smolvm)), all reviewed.
+Tried with smolvm 1.32.2 on an arm64 Mac before devvm had the backend ([its column](backends.md#features), [its page](../backends/smolvm.md)). The backend has its native features, network policy, emulated ([above](#network-policy-on-smolvm)), ssh for editors, emulated ([above](#ssh-for-editors-on-smolvm)), ports forwarded, every one or the listed ones, emulated ([above](#ports-on-smolvm)), and agent toggling, emulated ([above](#ssh-agent-toggling-on-smolvm)), all reviewed.
 
 **Network policy.** smolvm's allow lists work per address, not per port, and DNS has its own path:
 
@@ -497,7 +497,7 @@ Tried with smolvm 1.32.2 on an arm64 Mac before devvm had the backend ([its colu
 
 ## Docker
 
-Tried with Docker 29.8 in Docker Desktop on an arm64 Mac and Docker 29.9 on Ubuntu 26.04 (arm64, rootful) before devvm had the backend ([its column](../backends/_index.md#features), [its page](../backends/docker.md)). Plain containers, unprivileged: every VM shares a kernel with the others, and on Linux with the host.
+Tried with Docker 29.8 in Docker Desktop on an arm64 Mac and Docker 29.9 on Ubuntu 26.04 (arm64, rootful) before devvm had the backend ([its column](backends.md#features), [its page](../backends/docker.md)). Plain containers, unprivileged: every VM shares a kernel with the others, and on Linux with the host.
 
 **What was tried:**
 
@@ -549,7 +549,7 @@ A new VM gets what the project's `devcontainer.json` says, as far as devvm does 
 
 **Not covered:**
 
-- **The project's own VM.** The file decides what's in it and runs commands in it from its first start: the VM is the project's ([security](../safety/security.md#what-it-doesnt-protect)). Its `image` is any public image, whose code runs as root in the build VM, as with `--from`.
+- **The project's own VM.** The file decides what's in it and runs commands in it from its first start: the VM is the project's ([security](security.md#what-it-doesnt-protect)). Its `image` is any public image, whose code runs as root in the build VM, as with `--from`.
 - **Through a host proxy** (`HTTPS_PROXY`), the lookup reaches what the proxy does: only names are checked, not what the proxy resolves them to.
 - **A name that resolves to the internet for devvm and to this machine's network for the backend's pull** (DNS rebinding) gets only content with the digest the public registry gave, which only someone who has that content can give.
 
@@ -580,7 +580,7 @@ Each tool version is one compressed EROFS image, loop-mounted read-only in each 
 
 ## Linux hosts: overlays instead of copies
 
-Lima on QEMU keeps one qcow2 disk per VM, and a clone copies it (2.0 GB for `base`). A project VM's disk is a qcow2 overlay of its image's instead ([details](../backends/lima.md#clones-and-overlays)): 196 KB new, 12 MB after booting, the same speed except fsync writes (1.8–2.5 s vs 1.2–2.1 s per GiB). Flattening one (`qemu-img rebase -b ""`) took 8 s, if it's ever needed.
+Lima on QEMU keeps one qcow2 disk per VM, and a clone copies it (2.0 GB for `base`). A project VM's disk is a qcow2 overlay of its image's instead ([details](lima.md#clones-and-overlays)): 196 KB new, 12 MB after booting, the same speed except fsync writes (1.8–2.5 s vs 1.2–2.1 s per GiB). Flattening one (`qemu-img rebase -b ""`) took 8 s, if it's ever needed.
 
 ## One binary
 
@@ -588,7 +588,7 @@ devvm's own files (`assets/` in the repo: `base.yaml`, `layers/`, `features/`, `
 
 ## devvm's own Lima home
 
-Lima merges `_config/default.yaml` and `override.yaml` of its home into every VM. In `~/.lima`, a `networks: [{vzNAT: true}]` there gave a VM with network policy a second network card with a default route around its proxy (the self-check caught it), and an extra mount went unnoticed. Hence a Lima home of devvm's own, which refuses those files and any network devvm didn't give a VM ([details](../backends/lima.md#a-lima-home-of-its-own)). The costs: plain `limactl list` doesn't show devvm's VMs, and VM names are shorter, as Lima's ssh socket path is at most 104 characters.
+Lima merges `_config/default.yaml` and `override.yaml` of its home into every VM. In `~/.lima`, a `networks: [{vzNAT: true}]` there gave a VM with network policy a second network card with a default route around its proxy (the self-check caught it), and an extra mount went unnoticed. Hence a Lima home of devvm's own, which refuses those files and any network devvm didn't give a VM ([details](lima.md#a-lima-home-of-its-own)). The costs: plain `limactl list` doesn't show devvm's VMs, and VM names are shorter, as Lima's ssh socket path is at most 104 characters.
 
 ## Failed attempts
 
@@ -613,7 +613,7 @@ Lima merges `_config/default.yaml` and `override.yaml` of its home into every VM
 
 ## Open work and risks
 
-User-facing limits are in [Known limits](../using/limits.md) and [what the security model doesn't protect](../safety/security.md#what-it-doesnt-protect).
+User-facing limits are in [Known limits](../using/limits.md) and [what the security model doesn't protect](security.md#what-it-doesnt-protect).
 
 - **`--from`:** a moved tag is noticed only at the next build, not when listing images; devvm doesn't log in to registries, so private images work only through Docker; registries over plain HTTP (`localhost:5000`) aren't supported.
 - **Alpine:** `rc-status` as a normal user shows `acpid` and `syslog` as crashed, as their pid files are root's (`sudo rc-status` is clean).

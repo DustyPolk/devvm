@@ -1,19 +1,9 @@
 ---
 title: Attack vectors
-weight: 1
+weight: 3
 ---
 
-This page lists the common ways that code you didn't write gets to run on a developer's machine or gets data off it, and what devvm does about each one. devvm stops most of them on its own, and the habits below close most of what's left.
-
-## Staying safe
-
-- **Run installs, project code and agents in the VM.** Whatever the VM writes into the project folder runs as you when a program on this machine runs it, so `npm install`, `make`, tests and agents belong in the VM ([files the VM writes](#files-the-vm-writes)).
-- **Keep [network policy](network.md) on, and keep allowlists short.** New VMs get it by default. Without it, code in the VM reaches everything this machine can, and with it, stolen data can go only to the hosts you allowed.
-- **Use [`--clone`](clone.md) for a repo or an agent you don't trust.** The VM then works on a clone of its own, and nothing it writes reaches your folder until you fetch it.
-- **Review the VM's changes before you run them on this machine or merge them.** Treat its commits as an untrusted contributor's.
-- **Use fine-grained tokens, and bind only the ones a VM needs.** A VM can do whatever its tokens allow, even when it never sees them ([tokens and keys](#tokens-and-keys-the-vm-may-use)).
-- **Keep secrets out of the project folder.** The VM sees every file in it, a `.env` file included.
-- **Leave SSH agent forwarding off,** or use [devvm's own agent](../using/ssh.md#devvms-own-agent) with only the keys the VM needs.
+This page lists the common ways that code you didn't write gets to run on a developer's machine or gets data off it, and what devvm does about each one. devvm stops most of them on its own, and the [habits](_index.md#the-habits) close most of what's left.
 
 ## How devvm handles each attack
 
@@ -26,7 +16,7 @@ The rest of this page sorts the attacks by how much of each one devvm stops:
 | [Narrowed, not closed](#narrowed-not-closed) | devvm closes part of the attack, and the entry says what's still open. |
 | [Left to you](#left-to-you) | devvm doesn't stop the attack, and the entry says what to do instead. |
 
-Some protections hold only with [network policy](network.md) or only on macOS, and each entry names its conditions. Everything here rests on the VM's boundary. On the experimental [Docker](../backends/docker.md) backend a VM is a container, which shares a kernel with other code ([isolation](../backends/docker.md#isolation-a-container-is-not-a-vm)). How devvm does each of these is in the [security model](security.md).
+Some protections hold only with [network policy](network.md) or only on macOS, and each entry names its conditions. Everything here rests on the VM's boundary. On the experimental [Docker](../backends/docker.md) backend a VM is a container, which shares a kernel with other code ([isolation](../backends/docker.md#isolation-a-container-is-not-a-vm)). How devvm does each of these is in the [security model](../internals/security.md).
 
 ## Blocked
 
@@ -47,22 +37,22 @@ Some protections hold only with [network policy](network.md) or only on macOS, a
 
 - **Sending data to the attacker's server.** Most attacks end by sending what they stole to a server the attacker runs. A VM with network policy reaches only its proxy, and the proxy allows only the hosts on the VM's allowlist. devvm leaves storage and paste sites out of the default allowlist on purpose, because they're easy ways to send data out ([allowlists](network.md#allowlists)).
 - **DNS tunnelling.** An attacker can encode data into names and look them up at a DNS server of their own. A VM sends no DNS queries of its own, because names resolve in the proxy on this machine. smolvm leaves [one narrow channel](#network).
-- **Services on this machine and your network.** Code in a VM could attack what developers leave open on `localhost`, such as databases, dev servers, Docker's API and other VMs' ports. It could also attack your router, a NAS, or a cloud provider's metadata service at `169.254.169.254`. The proxy refuses this machine's own addresses and internal ones, such as loopback, private, link-local and CGNAT ranges, unless a rule names the address ([the proxy](network.md#the-proxy)).
+- **Services on this machine and your network.** Code in a VM could attack what developers leave open on `localhost`, such as databases, dev servers, Docker's API and other VMs' ports. It could also attack your router, a NAS, or a cloud provider's metadata service at `169.254.169.254`. The proxy refuses this machine's own addresses and internal ones, such as loopback, private, link-local and CGNAT ranges, unless a rule names the address ([the proxy](../internals/network.md#the-proxy)).
 - **DNS rebinding and address tricks.** A name can resolve to a public address when it's checked and to an internal one when it's dialed, and an internal address can hide in an IPv6 or NAT64 form. The proxy resolves each name itself and dials the address it checked, and it counts a NAT64 address as the IPv4 address inside it.
-- **Going around the proxy.** Root in a VM can change its routes and firewall, but confinement is enforced outside the VM. On macOS the Lima process runs under a macOS sandbox, and on Linux QEMU's network is restricted, so nothing in the VM reaches anything but the proxy ([confinement](../backends/lima.md#confinement)). devvm catches a VM started outside devvm, or one given a second network, with [the self-check](network.md#the-self-check), and stops it. On smolvm and Docker, network policy is emulated and reviewed.
+- **Going around the proxy.** Root in a VM can change its routes and firewall, but confinement is enforced outside the VM. On macOS the Lima process runs under a macOS sandbox, and on Linux QEMU's network is restricted, so nothing in the VM reaches anything but the proxy ([confinement](../internals/lima.md#confinement)). devvm catches a VM started outside devvm, or one given a second network, with [the self-check](../internals/network.md#the-self-check), and stops it. On smolvm and Docker, network policy is emulated and reviewed.
 
 ### Spreading beyond the VM
 
 - **Your agents' config.** A rogue agent could add a hook to `~/.claude/settings.json` or a skill to `~/.claude/skills`, so that it runs the next time you use the agent on this machine. devvm mounts the agents' config folders read-only, which this machine enforces, and copies their files in on every launch, so nothing the VM changes goes back ([mounts](../using/coding-agents.md#mounts)).
 - **Other projects and other VMs.** Each project folder gets its own VM with its own disk, and a VM mounts only its own project folder. Each VM's proxy has its own password, so one VM can't use another's tokens.
-- **Images, layers and devvm itself.** Malware could try to make itself permanent by editing an image, a layer script or devvm's own files. devvm builds images with nothing from this machine mounted, and the shared tools are read-only in every VM. devvm also refuses a project folder that holds its own folders or sits inside them, so a VM can't reach the layer scripts that every build runs or the files devvm runs on this machine ([only the project folder](security.md#only-the-project-folder)).
+- **Images, layers and devvm itself.** Malware could try to make itself permanent by editing an image, a layer script or devvm's own files. devvm builds images with nothing from this machine mounted, and the shared tools are read-only in every VM. devvm also refuses a project folder that holds its own folders or sits inside them, so a VM can't reach the layer scripts that every build runs or the files devvm runs on this machine ([only the project folder](../internals/security.md#only-the-project-folder)).
 - **A folder made again.** If you delete a repo and clone another at the same path, the new folder never gets the old VM's disk or anything left in it. devvm knows a folder by its inode as well as its path, so it refuses and offers `devvm rm` or `devvm adopt` ([a folder made again](../getting-started/commands.md#a-folder-made-again)).
 - **A devcontainer.json that reaches this machine.** Other tools run a devcontainer's `initializeCommand` on the host. devvm never runs it, refuses `${localEnv:…}`, adds no mounts from the file and doesn't follow a link out of the folder ([devcontainer.json](../using/devcontainer.md#security)).
 - **Impersonating a VM.** ssh checks a VM against host keys that devvm reads through the VM's backend instead of over the network, so a program that answers on the VM's port in its place is refused ([ssh access by name](../using/ssh.md#ssh-access-by-name)).
 
 ## Kept inside the VM
 
-The attacks in this section run the attacker's code, and devvm doesn't stop that code from running. It runs in the VM, as the VM's user, who has passwordless sudo. From there it reaches the project folder, or with [`--clone`](clone.md) the VM's own clone of it, and the tokens the VM uses, which are placeholders with network policy. With network policy it reaches only the hosts on the allowlist, and without it the whole network. Everything in [Blocked](#blocked) still holds. What the code writes into the project folder can still reach you when a program on this machine runs it, which [Left to you](#files-the-vm-writes) covers.
+The attacks in this section run the attacker's code, and devvm doesn't stop that code from running. It runs in the VM, as the VM's user, who has passwordless sudo. From there it reaches the project folder, or with [`--clone`](../using/clone.md) the VM's own clone of it, and the tokens the VM uses, which are placeholders with network policy. With network policy it reaches only the hosts on the allowlist, and without it the whole network. Everything in [Blocked](#blocked) still holds. What the code writes into the project folder can still reach you when a program on this machine runs it, which [Left to you](#files-the-vm-writes) covers.
 
 ### Install and build scripts
 
@@ -77,15 +67,15 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 
 - **Typosquatting, dependency confusion and made-up names.** Attackers publish packages under names one typo away from popular ones, under a company's internal package names with a higher version, and under names that AI coding agents invent and that attackers then register. Their code runs as the scripts above do.
 - **Compromised maintainers.** A trusted package can turn malicious when its maintainer's account is taken over or a new maintainer joins with bad intent, as event-stream (2018) and xz (2024) did. Updating such a package runs its new code in the VM.
-- **Malicious images.** An image from [`--from`](../using/from.md) or from a devcontainer's `image` runs its own code as root in the build VM ([the image is untrusted](../using/from.md#the-image-is-untrusted)). devvm uses only images that the registry gives to anyone who asks anonymously, never one that only your Docker or your registry login reaches, and it confines builds so they reach the internet but not this machine's services ([read-only and confined builds](security.md#read-only-and-confined-builds)).
+- **Malicious images.** An image from [`--from`](../using/from.md) or from a devcontainer's `image` runs its own code as root in the build VM ([the image is untrusted](../internals/images.md#the-image-is-untrusted)). devvm uses only images that the registry gives to anyone who asks anonymously, never one that only your Docker or your registry login reaches, and it confines builds so they reach the internet but not this machine's services ([read-only and confined builds](../internals/security.md#read-only-and-confined-builds)).
 - **A devcontainer.json's commands and features.** A project's `postCreateCommand` and its other commands run in the VM as the VM's user, as soon as devvm makes the VM. Its features can only be devvm's own layers, so devvm never fetches or runs a feature's script. `devvm --no-devcontainer` skips the file for a project you don't trust that far ([devcontainer.json](../using/devcontainer.md)).
 
 ### Rogue agents
 
 - **Prompt injection.** Instructions hidden in a README, an issue, a code comment, a web page, a dependency's docs or an MCP tool's output can turn a coding agent against you. devvm can't tell an agent's own work from injected work, so it limits what the agent reaches instead. An attack like this needs private data, untrusted input and a way to send the data out. With network policy, the only way out is the hosts on the allowlist, which [Left to you](#the-network) covers.
-- **Agents with their checks off.** An agent run with `claude --dangerously-skip-permissions` or `codex --dangerously-bypass-approvals-and-sandbox` acts without asking, and a mistaken `rm -rf ~` or `sudo` command reaches only the VM. The project folder is still the agent's to change, so commit often, or use [`--clone`](clone.md) to keep the agent's work apart until you fetch it.
+- **Agents with their checks off.** An agent run with `claude --dangerously-skip-permissions` or `codex --dangerously-bypass-approvals-and-sandbox` acts without asking, and a mistaken `rm -rf ~` or `sudo` command reaches only the VM. The project folder is still the agent's to change, so commit often, or use [`--clone`](../using/clone.md) to keep the agent's work apart until you fetch it.
 - **Malware that stays.** Anything the attacker leaves in the VM, such as a cron job, a changed shell startup file or a backdoored program, stays in that VM and goes into no other. devvm never deletes a VM on its own, because it may hold unsaved work, so save what you need and run `devvm rm`, then make the VM again.
-- **Mining and resource abuse.** A VM's CPUs, memory and disk are capped by its size, which `devvm size` shows and changes ([size](../using/images.md#size)).
+- **Mining and resource abuse.** A VM's CPUs, memory and disk are capped by its size, which `devvm size` shows and changes ([size](../using/ports-size.md#size)).
 
 ## Narrowed, not closed
 
@@ -98,25 +88,25 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 ### Git
 
 - **Submodules with their own config.** The VM writes `.git/index` to commit, so it can add a submodule whose config sets `core.fsmonitor`. Host `git status` reads that config before devvm's next launch finds the submodule and locks it. [`devvm git-protect strict`](git-protection.md#strict) stops `git status` and `git diff` from looking inside submodules, but `git submodule` commands still enter them, so use `--clone` for a repo with submodules you don't trust.
-- **Replacing `.git`.** The VM can rename `.git` and put a new one in its place, or add a `commondir` that points git at another config. devvm reports these on each launch but doesn't prevent them, so check what it names before you run git in the folder ([what a lock can't stop](git-protection.md#what-a-lock-cant-stop)).
+- **Replacing `.git`.** The VM can rename `.git` and put a new one in its place, or add a `commondir` that points git at another config. devvm reports these on each launch but doesn't prevent them, so check what it names before you run git in the folder ([what a lock can't stop](../internals/git-protection.md#what-a-lock-cant-stop)).
 
 ### Network
 
 - **Domain fronting.** The proxy checks the host name that a TLS connection asks for, but not the `Host` inside the encrypted traffic, so a CDN that serves many sites on one address can route an allowed connection to a site that isn't allowed. The proxy reads the connections to hosts with a bound token, and it refuses a request in them that names another host.
-- **DNS from smolvm.** On the experimental [smolvm](../backends/smolvm.md#network-policy) backend, a VM's DNS answers only `devvm.invalid`, but smolvm still asks your resolver about that name, which is a narrow way out.
-- **Ports the VM listens on.** devvm forwards the VM's ports to this machine's `localhost`, so a VM could take a port that a program on this machine trusts while that port is free. devvm's forwarder never takes a port that a program on this machine already has, or one that devvm records for a VM, but a program that binds a port on all addresses after devvm forwarded it gets its `localhost` connections sent to the VM. `devvm ports` limits what a VM forwards, and `devvm ports none` forwards nothing ([ports](../using/images.md#ports)).
+- **DNS from smolvm.** On the experimental [smolvm](../internals/smolvm.md#network-policy) backend, a VM's DNS answers only `devvm.invalid`, but smolvm still asks your resolver about that name, which is a narrow way out.
+- **Ports the VM listens on.** devvm forwards the VM's ports to this machine's `localhost`, so a VM could take a port that a program on this machine trusts while that port is free. devvm's forwarder never takes a port that a program on this machine already has, or one that devvm records for a VM, but a program that binds a port on all addresses after devvm forwarded it gets its `localhost` connections sent to the VM. `devvm ports` limits what a VM forwards, and `devvm ports none` forwards nothing ([ports](../using/ports-size.md#ports)).
 - **VS Code's relays.** Over Remote-SSH, VS Code forwards ports and answers git's prompts with your GitHub sign-in. devvm turns both off in the VM's VS Code settings, but the VM can turn them back on, so turn them off in your own VS Code settings as well ([VS Code](../using/ssh.md#vs-code)).
 
 ### This machine
 
-- **Set-id files on Linux hosts.** Root in a VM can set the set-user-id bit on a file in the project folder, and on Linux hosts that bit reaches the host, so the file runs as its owner for whoever runs it. devvm names such files at each launch and stop, and the [security model](security.md#what-it-doesnt-protect) says how to clear them.
-- **The proxy's CA key.** Inside a VM, devvm's CA vouches for any site, so someone with a copy of its key and a place on your network could impersonate sites to your VMs. Only you can read the key, devvm keeps it out of Time Machine, and each CA lasts 30 days, so a copy goes stale. Keep `~/.local/share/devvm/ca` out of other backup and sync tools as well ([tokens stay on the host](security.md#tokens-stay-on-the-host)).
+- **Set-id files on Linux hosts.** Root in a VM can set the set-user-id bit on a file in the project folder, and on Linux hosts that bit reaches the host, so the file runs as its owner for whoever runs it. devvm names such files at each launch and stop, and the [security model](../internals/security.md#what-it-doesnt-protect) says how to clear them.
+- **The proxy's CA key.** Inside a VM, devvm's CA vouches for any site, so someone with a copy of its key and a place on your network could impersonate sites to your VMs. Only you can read the key, devvm keeps it out of Time Machine, and each CA lasts 30 days, so a copy goes stale. Keep `~/.local/share/devvm/ca` out of other backup and sync tools as well ([tokens stay on the host](../internals/security.md#tokens-stay-on-the-host)).
 
 ## Left to you
 
 ### Files the VM writes
 
-The VM can write anything in the project folder, and devvm locks only `.git`. Any other file there that a program on this machine runs, or reads as its config, is the VM's to change. [`--clone`](clone.md) keeps all of these away from this machine until you fetch the VM's work and review it.
+The VM can write anything in the project folder, and devvm locks only `.git`. Any other file there that a program on this machine runs, or reads as its config, is the VM's to change. [`--clone`](../using/clone.md) keeps all of these away from this machine until you fetch the VM's work and review it.
 
 - **Hooks in the working tree.** Hooks kept in the project, such as husky's `.husky/` with `core.hooksPath` pointing there, run on this machine, and so do an `include.path` or a hook symlink that leads into the folder. devvm warns about them when it makes the VM ([not covered](git-protection.md#not-covered)).
 - **Agent config in the project.** Claude Code reads a project's `.claude/settings.json`, whose hooks run commands, and `.mcp.json`, which starts MCP servers, and agents follow a project's `CLAUDE.md` and `AGENTS.md`. Running an agent on this machine in the folder after the VM has worked in it runs what the VM wrote, so run your agents in the VM.
@@ -132,7 +122,7 @@ The VM can write anything in the project folder, and devvm locks only `.git`. An
 - **What your tokens allow.** A VM can push with a GitHub token it may use and spend Claude quota. Use fine-grained tokens, and bind only the ones a VM needs.
 - **VMs without network policy.** A VM without network policy reaches everything this machine can, including its services on `localhost` and your local network. It gets the tokens it uses as they are, and those tokens still work wherever it kept them after `devvm secret unuse`, `devvm secret rm` or `devvm network on`, so rotate them if that matters.
 - **Your browser.** Programs in a VM can open URLs in this machine's browser, and a page that a VM serves on a forwarded port runs in your browser like any other. From there it can reach the internet past network policy, and your services on `localhost`.
-- **Remote forwards you add.** A `RemoteForward` in your ssh config, or an `ssh -R` you type, lets the VM connect to whatever it names on this machine. devvm can't turn those off ([ssh into VMs](security.md#ssh-into-vms)).
+- **Remote forwards you add.** A `RemoteForward` in your ssh config, or an `ssh -R` you type, lets the VM connect to whatever it names on this machine. devvm can't turn those off ([ssh into VMs](../internals/security.md#ssh-into-vms)).
 
 ### The platform
 

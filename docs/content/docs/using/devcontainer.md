@@ -1,6 +1,6 @@
 ---
 title: devcontainer.json
-weight: 4
+weight: 7
 ---
 
 A new VM gets what the project's `.devcontainer/devcontainer.json`, else `.devcontainer.json` at the folder's root, says, as far as devvm does it: its image, the features devvm has layers for, its ports, its environment and its commands. devvm says so in one line naming the file. `devvm --no-devcontainer` makes the VM without reading it.
@@ -30,7 +30,7 @@ Anything devvm refuses stops it in one line naming the file, before anything is 
 | --- | --- |
 | `image` | the VM's base starts from it, as with [`--from`](from.md), where the backend can: only an image its registry gives anyone, asked anonymously, pinned to that digest; never one only Docker has, one only your registry login reaches, or one on this machine or its network (`localhost`, or a registry whose address is loopback, private or link-local, by name or as it resolves) |
 | `features` | `ghcr.io/devcontainers/features/docker-in-docker` is devvm's [docker layer](images.md#built-in-layers), with the backend's own rules for it: on Docker, where it means no network policy, devvm doesn't ask about network policy, but makes the VM without it and warns you, and refuses the VM if you pass `--network-policy`; `node`, `python`, `rust` and `go` under `ghcr.io/devcontainers/features/` are the [shared toolchains](images.md#shared-tools). Their options are ignored, said in one line. `docker-outside-of-docker` (this machine's Docker) and every other feature are refused. No feature's script is fetched or run |
-| `forwardPorts` | numbers, `localhost:N` and `127.0.0.1:N` are forwarded as far as your ports allow ([ports](images.md#ports)): with every port forwarded, the default, they're among them; ones your ports leave out are said in one line (`devvm ports add` forwards them), never added. Other hosts' are ignored, said in one line |
+| `forwardPorts` | numbers, `localhost:N` and `127.0.0.1:N` are forwarded as far as your ports allow ([ports](ports-size.md#ports)): with every port forwarded, the default, they're among them; ones your ports leave out are said in one line (`devvm ports add` forwards them), never added. Other hosts' are ignored, said in one line |
 | `containerEnv`, `remoteEnv` | the VM's environment: login shells and the commands below get them. `remoteEnv` wins over `containerEnv`, and devvm's own variables (`LANG`, tokens) over both. A `remoteEnv` of `null` sets nothing |
 | `onCreateCommand`, `updateContentCommand`, `postCreateCommand` | run once, in that order, once the VM is made and set up ([commands](#commands)) |
 | `postStartCommand` | runs at each start: on the first launch after the VM started |
@@ -42,7 +42,7 @@ Anything devvm refuses stops it in one line naming the file, before anything is 
 
 ## Commands
 
-A command is a string, run with `sh -c`; an array, run as it is; or an object of named commands, each run, sorted by name. They run in the VM, as its user, in the project folder, in a login shell, never on this machine. Their output goes to the [run log](images.md#build-logs-and-interrupts).
+A command is a string, run with `sh -c`; an array, run as it is; or an object of named commands, each run, sorted by name. They run in the VM, as its user, in the project folder, in a login shell, never on this machine. Their output goes to the [run log](troubleshooting.md#build-logs-and-interrupts).
 
 A command that fails is said in one line naming it; those after it among the ones that run once, or at that start, don't run. The VM is kept and opened: the command is the project's, not devvm's. With [network policy](../safety/network.md), commands reach only what the VM's allowlist allows, like anything else in it.
 
@@ -59,4 +59,4 @@ Any other `${…}` is left as it is, for the VM's shell (`${HOME}` in a command)
 
 ## Security
 
-The file is the project's, and so the VM's to change: a VM that writes it changes what the folder's next VM gets. So nothing in it runs on this machine, reaches its files or environment, adds a mount, or weakens confinement: it shapes only what runs inside a new VM ([security model](../safety/security.md#a-projects-devcontainerjson)). An `image` from it can still be anything public: its own code runs as root in the build VM, as with `--from` ([the image is untrusted](from.md#the-image-is-untrusted)).
+The file is the project's, and so the VM's to change: a VM that writes it changes what the folder's next VM gets. So nothing in it runs on this machine, reaches its files or environment, adds a mount, or weakens confinement: it shapes only what runs inside a new VM ([security model](../internals/security.md#a-projects-devcontainerjson)). An `image` from it can still be anything public: its own code runs as root in the build VM, as with `--from` ([the image is untrusted](../internals/images.md#the-image-is-untrusted)).

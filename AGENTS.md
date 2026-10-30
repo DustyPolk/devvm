@@ -51,6 +51,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `assets/shared-tools/build.sh`, or off.
 - **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`assets/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.
 - **Docs:** an easy-to-follow guide in full, joined sentences, every fact kept; write and edit prose with the docs-voice skill (Vale's `devvm.AIWords` fails on chatbot vocabulary). Every behavior change updates its page in `docs/content/docs/` in the same task. The README stays high level.
+- **Docs by reader:** user pages (`getting-started/`, `using/`, `safety/`, `backends/`) say what devvm does and what you type, without repo paths, Go identifiers or message names; How it works (`internals/`) explains mechanisms; Contributing (`contributing/`) has repo paths and Go identifiers.
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.
 - **Ask first** before anything outward-facing (publishing, releases, repos, pushing) and before deleting anything you didn't create.
 - **A task that turns out wrong or incomplete** gets a proposed change (`dex edit`), not quietly something else.
@@ -74,7 +75,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 ## Backends
 
-- Every backend implements `backend.Backend` and declares `Caps` per feature: native, emulated (reviewed) or none. A new `Feature` goes in `backend.Features` and the table in `docs/content/docs/backends/_index.md`.
+- Every backend implements `backend.Backend` and declares `Caps` per feature: native, emulated (reviewed) or none. A new `Feature` goes in `backend.Features` and the table in `docs/content/docs/internals/backends.md`.
 - **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check the registry's `Review.Require(b, vm, spec.Features()...)` first; backends don't decide what a VM needs.
 - **Every emulation is refused until reviewed:** a design note in `docs/content/docs/internals/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package; what isn't (`.git` protection, the proxy) stays out.

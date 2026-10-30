@@ -38,8 +38,8 @@ When the VM is ready, devvm opens a shell in it, in `~/some-project`, the same p
 - **The project folder** is mounted read-write, so your editor on this machine and the VM see the same files. It's the only folder of yours the VM sees, and devvm locks its `.git` hooks and config so the VM can't change what git runs on your machine ([.git protection](../safety/git-protection.md)).
 - **The toolchains** are shared between VMs and read-only, so `node`, `python`, `cargo` or `go` are ready at once, and global installs go into the VM's home ([shared tools](../using/images.md#shared-tools)).
 - **Your git name and email** are set as git has them in the project folder, so commits made in the VM are yours.
-- **Ports** that a server in the VM listens on, from 1024 up, are forwarded to the same port on your machine's `localhost`, so a dev server on `:5173` opens at `localhost:5173` ([ports](../using/images.md#ports)).
-- **The VM's size** is 4 CPUs, 8 GiB of memory and a 100 GiB disk, which `devvm size` changes ([size](../using/images.md#size)).
+- **Ports** that a server in the VM listens on, from 1024 up, are forwarded to the same port on your machine's `localhost`, so a dev server on `:5173` opens at `localhost:5173` ([ports](../using/ports-size.md#ports)).
+- **The VM's size** is 4 CPUs, 8 GiB of memory and a 100 GiB disk, which `devvm size` changes ([size](../using/ports-size.md#size)).
 
 The VM's user has passwordless sudo, so you can install anything with `apt` as you would on any Ubuntu machine.
 
@@ -66,4 +66,4 @@ devvm ls       # every VM, with its image, network policy and folder
 devvm rm       # delete it, saving its agents' history first
 ```
 
-[Everyday commands](commands.md) lists the rest. Before you let an agent loose in the VM, read [staying safe](../safety/attack-vectors.md#staying-safe), which lists the habits that close most of what devvm leaves open.
+[Everyday commands](commands.md) lists the rest. Before you let an agent loose in the VM, read [staying safe](../safety/_index.md#the-habits), which lists the habits that close most of what devvm leaves open.

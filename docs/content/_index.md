@@ -62,10 +62,10 @@ All it takes is one command, and you're ready to start coding.
 
 ## Isolated sandbox
 
-- The VM mounts your project folder at the same path. It sees nothing else from your home folder ([security model](docs/safety/security.md)).
+- The VM mounts your project folder at the same path. It sees nothing else from your home folder ([security model](docs/internals/security.md)).
 - `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)). With `--clone`, the VM gets a clone of its own instead.
 - With [network policy](docs/safety/network.md), the VM reaches only an allowlist of hosts, through a proxy on your machine.
-- A few habits close most of what's left, and [staying safe](docs/safety/attack-vectors.md#staying-safe) lists them.
+- A few habits close most of what's left, and [staying safe](docs/safety/_index.md#the-habits) lists them.
 {{< art "isolated" >}}
 
 ## Made for coding agents

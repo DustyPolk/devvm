@@ -3,11 +3,11 @@ title: Coding agents
 weight: 5
 ---
 
-When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history: transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/attack-vectors.md#staying-safe) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
+When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history: transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 
 | | Mounted read-only, linked into `~` | Copied in on every launch |
 | --- | --- | --- |
-| claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude.json` ([merged](#mcp-servers), without per-project entries) |
+| claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude.json` ([merged](../internals/network.md#mcp-servers), without per-project entries) |
 | codex | `~/.codex/{prompts,skills}` | `~/.codex/{config.toml,AGENTS.md,auth.json}` |
 | opencode | the subfolders of `~/.config/opencode` (not `node_modules`) | the files in `~/.config/opencode` (not lock files), `~/.local/share/opencode/auth.json` |
 
@@ -19,7 +19,7 @@ One of these folders made or deleted on this machine later is noticed on the VM'
 
 ## Copies
 
-Files are copied into the VM's home on every launch, over the VM's own. With [network policy](../safety/network.md#agents-logins-and-settings), the logins and settings files are copies with your keys and tokens taken out.
+Files are copied into the VM's home on every launch, over the VM's own. With [network policy](../internals/network.md#agents-logins-and-settings), the logins and settings files are copies with your keys and tokens taken out.
 
 ### Claude Code login
 
@@ -28,14 +28,6 @@ Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use 
 ### Codex and opencode logins
 
 With network policy the VM's `auth.json` holds placeholders, and its proxy holds the real keys and tokens. Without it, the VM gets the file as it is, and a VM that refreshes an OAuth login can rotate its refresh token and sign this machine out (an API key avoids this).
-
-### MCP servers
-
-On each launch the VM's `~/.claude.json` gets this machine's settings and MCP servers, merged into its own: each of your servers replaces the VM's server by that name whole, servers devvm copied before that you no longer have are removed, and servers added in the VM stay. The VM keeps its own per-project entries (trust, allowed tools); yours never go in. Without network policy, the servers' env values and headers are copied as they are, and devvm names the servers that have them.
-
-### Keys in settings files
-
-With network policy, the VM's copies of `~/.claude/settings.json`, `~/.codex/config.toml` and opencode's `.json`, `.jsonc` and `.toml` files have every value under a key that looks like a secret's (`*key*`, `*token*`, `*secret*`, `*password*`, `Authorization`) replaced with `devvm-redacted`, and devvm names what it replaced. Values that only point at a secret stay: an environment variable's name (`env_key = "OPENAI_API_KEY"`), `{env:X}`, `${X}`, a path. A file devvm can't read that way (a TOML multi-line string) isn't copied. An MCP server or provider that needs one of those keys in the VM has to get it another way.
 
 ## History
 

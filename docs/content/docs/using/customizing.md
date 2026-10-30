@@ -1,6 +1,6 @@
 ---
 title: Customizing images
-weight: 2
+weight: 3
 ---
 
 Your own layers and features live in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), not next to devvm's binary, so upgrading devvm keeps them.
@@ -20,10 +20,10 @@ A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, tha
 - Put PATH changes in `~/.profile`.
 - Download with `devvm-fetch URL SHA256 OUT`, which `base` installs: it fails when the checksum doesn't match.
 - `NAME.policy` lists the hosts VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.
-- Editing the script rebuilds its image, and the ones built on it, on next use ([caching](images.md#caching)).
+- Editing the script rebuilds its image, and the ones built on it, on next use ([caching](../internals/images.md#caching)).
 - A layer can be [added to an existing VM](../getting-started/commands.md#adding-to-a-vm) in place, but not taken out: `devvm rm` and make the VM again.
 
-To edit layers with an agent in a VM, keep them in a repo of their own and copy them in: devvm refuses a VM for a folder inside `~/.config/devvm` ([details](../safety/security.md#only-the-project-folder)).
+To edit layers with an agent in a VM, keep them in a repo of their own and copy them in: devvm refuses a VM for a folder inside `~/.config/devvm` ([details](../internals/security.md#only-the-project-folder)).
 
 ### Example: postgres
 
@@ -36,7 +36,7 @@ sudo -u postgres createuser --superuser "$USER"
 sudo -u postgres createdb --owner "$USER" "$USER"
 ```
 
-The packages come from the distribution's archive, which `base`'s allowlist has, so `postgres.policy` can stay empty. Postgres listens on port 5432 in the VM, which is [forwarded](images.md#ports) to the host like any port. On a base `--from` an Alpine image, use `apk add` and OpenRC (`rc-update`, `rc-service`) instead.
+The packages come from the distribution's archive, which `base`'s allowlist has, so `postgres.policy` can stay empty. Postgres listens on port 5432 in the VM, which is [forwarded](ports-size.md#ports) to the host like any port. On a base `--from` an Alpine image, use `apk add` and OpenRC (`rc-update`, `rc-service`) instead.
 
 ## Base image features
 
@@ -63,7 +63,7 @@ devvm setup --features fzf,omb  # without asking; --features '' chooses none
 
 In a terminal, `devvm setup` first asks for the [default backend](../backends/_index.md#choosing-a-backend), then the features; `--features` doesn't ask for the backend. Without a terminal, `devvm setup` keeps the choice. A name that isn't a feature is refused, and nothing changes. You can also edit `base-features` yourself: an empty file chooses none, and a name without a script is skipped, with a warning.
 
-The chosen features are part of `base`'s [key](images.md#caching), so a new choice makes `base` and the images built on it rebuild on next use; `devvm setup` says so. The old images are then stale: [`devvm gc`](images.md#cleaning-up) deletes them.
+The chosen features are part of `base`'s [key](../internals/images.md#caching), so a new choice makes `base` and the images built on it rebuild on next use; `devvm setup` says so. The old images are then stale: [`devvm gc`](images.md#cleaning-up) deletes them.
 
 ### Your own features
 

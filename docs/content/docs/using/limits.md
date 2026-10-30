@@ -1,6 +1,6 @@
 ---
 title: Known limits
-weight: 7
+weight: 11
 ---
 
 - **Shared tools are read-only.** A tool can't update itself or add components, for example with `rustup component add` ([details](images.md#shared-tools)).
@@ -9,18 +9,18 @@ weight: 7
 - **Linux hosts** have no `.git` protection, so use `--clone` there ([details](../safety/git-protection.md#linux-hosts)).
 - **Agent folders** that you make or delete on this machine reach a running VM only after a restart, which devvm offers ([details](coding-agents.md#mounts)).
 - **With Lima,** project paths can't contain commas, folder names in VM names are cut short, and disks grow but never shrink ([details](../backends/lima.md#limits)).
-- **Ports** are forwarded over TCP only, on every backend, and forwarding every port means every port from 1024 up. You can tunnel UDP over a forwarded TCP port with socat ([details](images.md#ports)). Changing a running VM's ports closes the connections open through its forwards.
+- **Ports** are forwarded over TCP only, on every backend, and forwarding every port means every port from 1024 up. You can tunnel UDP over a forwarded TCP port with socat ([details](ports-size.md#ports)). Changing a running VM's ports closes the connections open through its forwards.
 - **Docker is experimental, and it runs containers, not VMs.**
   - On Linux a container shares the host's kernel, and on macOS it shares Docker Desktop's one VM ([details](../backends/docker.md#isolation-a-container-is-not-a-vm)).
   - A Docker VM has no disk size.
   - The docker layer runs only under Sysbox on a Linux engine, and with no network policy ([details](../backends/docker.md#the-docker-layer)).
   - Raw packet tools, firewalls and VPNs, mounting, nested virtualization and some profiling don't work in a Docker VM ([details](../backends/docker.md#what-docker-vms-cant-do)).
-  - Network policy, and build confinement on Docker Desktop, are emulated. VMs, except those with the docker layer, and Desktop's builds have no `NET_RAW`, so `tcpdump` doesn't work ([details](../backends/docker.md#network-policy)).
-  - ssh for editors, forwarding ports and SSH agent forwarding are emulated ([details](../backends/docker.md#ssh-for-editors)).
-  - A build on Docker Desktop reaches any host on ports 80 and 443 through its proxy, without an allowlist, and it reaches no other port ([details](../backends/docker.md#building-images)).
+  - Network policy, and build confinement on Docker Desktop, are emulated. VMs, except those with the docker layer, and Desktop's builds have no `NET_RAW`, so `tcpdump` doesn't work ([details](../internals/docker.md#network-policy)).
+  - ssh for editors, forwarding ports and SSH agent forwarding are emulated ([details](../internals/docker.md#ssh-for-editors)).
+  - A build on Docker Desktop reaches any host on ports 80 and 443 through its proxy, without an allowlist, and it reaches no other port ([details](../internals/docker.md#building-images)).
 - **smolvm is experimental.**
-  - Network policy is emulated, with one narrow DNS channel ([details](../backends/smolvm.md#network-policy)).
-  - ssh for editors is emulated ([details](../backends/smolvm.md#ssh-for-editors)).
-  - Forwarding ports, the listed ones and every one from port 1024 up, is emulated ([details](../backends/smolvm.md#ports)).
-  - Changing SSH agent forwarding once a VM is made is emulated, and a VM has its agent the whole time it runs ([details](../backends/smolvm.md#ssh-agent-forwarding)).
-  - Project paths can't contain colons ([details](../backends/smolvm.md#what-devvm-sets-on-a-vm)).
+  - Network policy is emulated, with one narrow DNS channel ([details](../internals/smolvm.md#network-policy)).
+  - ssh for editors is emulated ([details](../internals/smolvm.md#ssh-for-editors)).
+  - Forwarding ports, the listed ones and every one from port 1024 up, is emulated ([details](../internals/smolvm.md#ports)).
+  - Changing SSH agent forwarding once a VM is made is emulated, and a VM has its agent the whole time it runs ([details](../internals/smolvm.md#ssh-agent-forwarding)).
+  - Project paths can't contain colons ([details](../internals/smolvm.md#what-devvm-sets-on-a-vm)).
