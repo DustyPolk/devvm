@@ -1,0 +1,34 @@
+{{- /* A download on the branding page: a preview on its background, a title, then a link for each file.
+   {{< brand-asset title="On dark backgrounds" src="branding/devvm-logo-on-dark.svg" bg="dark" width="250"
+   height="86" alt="…" files="branding/devvm-logo-on-dark.svg branding/devvm-logo-on-dark.png" >}}
+   src and files are paths in docs/static/. bg is dark (black) or light (white). width and height are the
+   preview's size in CSS pixels, a whole multiple of the image's, so its pixels stay sharp; without them,
+   the preview is as wide as its tile. Each link is the file's type, and a PNG's size, which the build
+   reads from the file. The build fails when a file doesn't exist. */ -}}
+{{- $src := .Get "src" -}}
+{{- $files := split (.Get "files") " " -}}
+{{- range $files -}}
+  {{- if not (fileExists (printf "static/%s" .)) }}{{ errorf "brand-asset: no docs/static/%s (%s)" . $.Position }}{{ end -}}
+{{- end -}}
+{{- if not (fileExists (printf "static/%s" $src)) }}{{ errorf "brand-asset: no docs/static/%s (%s)" $src .Position }}{{ end -}}
+<figure class="devvm-brand-asset">
+  <div class="devvm-brand-preview devvm-brand-preview-{{ .Get "bg" | default "dark" }}">
+    <img src="{{ $src | relURL }}" alt="{{ .Get "alt" }}"
+      {{- with .Get "width" }} width="{{ . }}"{{ end }}
+      {{- with .Get "height" }} height="{{ . }}"{{ end }}
+      {{- if not (.Get "width") }} class="devvm-brand-preview-full"{{ end }}>
+  </div>
+  <figcaption>
+    <span class="devvm-brand-title">{{ .Get "title" }}</span>
+    <ul class="devvm-brand-files">
+      {{- range $files }}
+        {{- $ext := path.Ext . | strings.TrimPrefix "." }}
+        {{- $label := upper $ext }}
+        {{- if eq $ext "png" }}
+          {{- with imageConfig (printf "static/%s" .) }}{{ $label = printf "PNG %d×%d" .Width .Height }}{{ end }}
+        {{- end }}
+        <li><a href="{{ . | relURL }}" download>{{ partial "icon.html" (dict "name" "download" "position" $.Position) }}{{ $label }}</a></li>
+      {{- end }}
+    </ul>
+  </figcaption>
+</figure>

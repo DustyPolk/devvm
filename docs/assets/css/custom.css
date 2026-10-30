@@ -8,6 +8,9 @@
   --devvm-muted: #666666;
   --devvm-accent: #7fff00;
   --devvm-accent-soft: #c3e88d;
+  /* The logo's prompt on light backgrounds (static/branding/): the lime's hue at half its lightness, 4.9:1
+     on white, where the lime is 1.2:1. */
+  --devvm-accent-dark: #408000;
   /* The blue of commands (cd) in Hextra's syntax highlighting. */
   --devvm-blue: #0086b3;
   /* The red of the JustBlack theme's errors, only for what the art shows as compromised. */
@@ -1214,4 +1217,296 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
 .content .devvm-callout-title > .devvm-icon {
   width: 12px;
   height: 12px;
+}
+
+/* The footer (layouts/_partials/custom/footer.html): one link to the branding page, small and gray, on
+   the page's black above a line. */
+html.dark .hextra-footer {
+  background-color: var(--devvm-bg);
+  border-top: 1px solid var(--devvm-border);
+}
+
+.devvm-footer {
+  padding: 1.5rem 0;
+  font-size: 0.875rem;
+}
+
+.devvm-footer > a {
+  color: var(--devvm-text-secondary);
+}
+
+.devvm-footer > a:hover {
+  color: var(--devvm-accent);
+}
+
+/* The branding page (content/branding.md, layouts/branding.html): the home page's look, from the rules
+   above, as the page uses Hextra's home layout's wrapper. Its text logo in Departure Mono, at 22px, so
+   the box-drawing characters line up as the logo's. */
+.devvm-branding > div > .hextra-code-block pre,
+.devvm-branding > div > .hextra-code-block code {
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1;
+}
+
+/* Downloads (the brand-assets and brand-asset shortcodes): tiles, one per row, then two from 768px; the
+   social card's take the whole row. */
+.devvm-brand-assets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .devvm-brand-assets:not(.devvm-brand-assets-wide) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.devvm-brand-asset {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--devvm-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+/* The preview on its background, the image at its own size, pixels kept square. */
+.devvm-brand-preview {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 12rem;
+  padding: 2rem;
+}
+
+.devvm-brand-preview-dark {
+  background-color: var(--devvm-bg);
+}
+
+.devvm-brand-preview-light {
+  background-color: #ffffff;
+}
+
+.devvm-brand-preview img {
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.devvm-brand-preview img.devvm-brand-preview-full {
+  width: 100%;
+}
+
+.devvm-brand-asset > figcaption {
+  padding: 1rem 1.5rem 1.25rem;
+  background-color: var(--devvm-surface);
+  border-top: 1px solid var(--devvm-border);
+}
+
+.devvm-brand-title {
+  display: block;
+  margin-bottom: 0.75rem;
+  color: var(--devvm-text);
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-synthesis: none;
+}
+
+/* Each file's link: Departure Mono at 11px, in a thin rounded box that turns lime on hover. */
+.devvm-brand-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.devvm-brand-files a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--devvm-border);
+  border-radius: 9999px;
+  color: var(--devvm-text-secondary);
+  font-family: var(--devvm-font-pixel);
+  font-size: 11px;
+  font-synthesis: none;
+  line-height: 14px;
+}
+
+.devvm-brand-files a:hover {
+  border-color: var(--devvm-accent);
+  color: var(--devvm-accent);
+}
+
+.devvm-brand-files .devvm-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The palette (the palette shortcode): swatches, two to a row, then three from 768px and four from 1024px.
+   Each is a button that copies its hex, and says so on hover and once copied. */
+.devvm-swatches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  width: 100%;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .devvm-swatches {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .devvm-swatches {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Not the home page's list items: no dash, no indent. */
+#content > .hx\:items-start > ul.devvm-swatches > li {
+  margin: 0;
+  padding: 0;
+}
+
+#content > .hx\:items-start > ul.devvm-swatches > li::before {
+  content: none;
+}
+
+.devvm-swatch {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 0 0 0.75rem;
+  border: 1px solid var(--devvm-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background-color: var(--devvm-surface);
+  color: var(--devvm-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.devvm-swatch:hover,
+.devvm-swatch:focus-visible {
+  border-color: var(--devvm-accent);
+}
+
+.devvm-swatch-color {
+  display: block;
+  height: 4.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--devvm-border);
+}
+
+.devvm-swatch-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  color: var(--devvm-text);
+  font-family: var(--devvm-font-pixel);
+  font-size: 22px;
+  font-synthesis: none;
+  line-height: 1.2;
+}
+
+/* "copy" on hover and focus, "copied" in lime once it has. */
+.devvm-swatch-state {
+  font-size: 11px;
+  color: var(--devvm-text-secondary);
+  opacity: 0;
+}
+
+.devvm-swatch:hover .devvm-swatch-state,
+.devvm-swatch:focus-visible .devvm-swatch-state,
+.devvm-swatch[data-copied] .devvm-swatch-state {
+  opacity: 1;
+}
+
+.devvm-swatch[data-copied] .devvm-swatch-state {
+  color: var(--devvm-accent);
+}
+
+.devvm-swatch > code {
+  margin-top: 0.25rem;
+  padding: 0 0.75rem;
+  color: var(--devvm-accent-soft);
+  font-size: 0.8rem;
+}
+
+.devvm-swatch-use {
+  margin-top: 0.5rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* The fonts (the font-sample shortcode): a card each, the name in lime, then a line of text in the font. */
+.devvm-font {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--devvm-border);
+  border-radius: 0.5rem;
+  color: var(--devvm-text-secondary);
+  line-height: 1.75;
+}
+
+.devvm-font-name {
+  color: var(--devvm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.devvm-font-name:hover {
+  color: var(--devvm-accent-soft);
+}
+
+.devvm-font-sample {
+  margin: 0.5rem 0 0.75rem;
+  color: var(--devvm-text);
+  font-size: 2rem;
+  line-height: 1.3;
+}
+
+/* Departure Mono at 33px, a multiple of 11px, so its pixels stay whole. */
+.devvm-font-pixel .devvm-font-sample {
+  font-size: 33px;
+  font-synthesis: none;
+}
+
+.devvm-font-mono .devvm-font-sample {
+  font-stretch: 87.5%;
+  font-weight: 350;
+}
+
+.devvm-font > p {
+  margin: 0;
+}
+
+.devvm-font > .devvm-brand-files {
+  margin-top: 1rem;
+}
+
+.devvm-font > p > a {
+  color: var(--devvm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

@@ -1,0 +1,21 @@
+{{- /* The branding page's palette: a swatch for each color in data/palette.yaml, with its hex, read from
+   assets/css/custom.css, and its CSS variable. Clicking a swatch copies its hex (the script is in
+   layouts/branding.html). The build fails when custom.css has no such variable. */ -}}
+{{- $css := (resources.Get "css/custom.css").Content -}}
+<ul class="devvm-swatches">
+  {{- range hugo.Data.palette }}
+    {{- $var := printf "--devvm-%s" .var }}
+    {{- $found := findRESubmatch (printf `%s:\s*(#[0-9a-fA-F]{6});` $var) $css 1 }}
+    {{- if not $found }}{{ errorf "data/palette.yaml: no %s with a hex in assets/css/custom.css (%s)" $var $.Position }}{{ end }}
+    {{- $hex := index (index $found 0) 1 | lower }}
+    <li>
+      <button type="button" class="devvm-swatch" data-copy="{{ $hex }}" aria-label="{{ .name }}, {{ $hex }}: copy the hex">
+        <span class="devvm-swatch-color" style="background-color: {{ $hex | safeCSS }}"></span>
+        <span class="devvm-swatch-name">{{ .name }}<span class="devvm-swatch-state" aria-live="polite">copy</span></span>
+        <code>{{ $hex }}</code>
+        <code>{{ $var }}</code>
+        <span class="devvm-swatch-use">{{ .use }}</span>
+      </button>
+    </li>
+  {{- end }}
+</ul>

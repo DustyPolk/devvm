@@ -1,0 +1,3 @@
+{{- /* The branding page's downloads: a grid of brand-asset tiles, two to a row from 768px, or one per row
+   with wide="true". */ -}}
+<div class="devvm-brand-assets{{ if eq (.Get "wide") "true" }} devvm-brand-assets-wide{{ end }}">{{ .Inner }}</div>

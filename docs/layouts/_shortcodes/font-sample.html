@@ -1,0 +1,18 @@
+{{- /* A font on the branding page: its name, linked, a line of text in it, the Markdown inside, then, with a
+   license parameter (a path in docs/static/), a link to the license the site serves.
+   {{< font-sample name="Departure Mono" font="pixel" link="https://departuremono.com/" license="…" >}}…{{< /font-sample >}}
+   font is pixel, sans or mono: the site's CSS variable for it. */ -}}
+{{- $fonts := dict "pixel" "var(--devvm-font-pixel)" "sans" "var(--hx-font-sans)" "mono" "var(--hx-font-mono)" -}}
+{{- $font := index $fonts (.Get "font") -}}
+{{- if not $font }}{{ errorf "font-sample: font is pixel, sans or mono (%s)" .Position }}{{ end -}}
+<div class="devvm-font devvm-font-{{ .Get "font" }}">
+  <a class="devvm-font-name" href="{{ .Get "link" }}">{{ .Get "name" }}</a>
+  <p class="devvm-font-sample" style="font-family: {{ $font | safeCSS }}">One VM for every project</p>
+  {{ .Inner | .Page.RenderString (dict "display" "block") }}
+  {{- with .Get "license" }}
+    {{- if not (fileExists (printf "static/%s" .)) }}{{ errorf "font-sample: no docs/static/%s (%s)" . $.Position }}{{ end }}
+    <ul class="devvm-brand-files">
+      <li><a href="{{ . | relURL }}">{{ partial "icon.html" (dict "name" "open-book" "position" $.Position) }}License</a></li>
+    </ul>
+  {{- end }}
+</div>

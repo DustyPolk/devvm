@@ -1,0 +1,36 @@
+{{- /* The branding page (content/branding.md): Hextra's home layout, so the page gets the home page's
+   look, with a class of its own for the branding shortcodes' styles, and the script that copies a
+   swatch's hex when it's clicked. */ -}}
+{{ define "main" }}
+  <div class="hx:mx-auto hx:flex hextra-max-page-width">
+    {{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
+    <main
+      id="content"
+      class="devvm-branding hx:w-full hx:break-words hx:min-h-[calc(100vh-var(--hextra-navbar-height))] hx:min-w-0 hx:pb-8 hx:pt-8 hx:md:pt-12 hx:pl-[max(env(safe-area-inset-left),1.5rem)] hx:pr-[max(env(safe-area-inset-right),1.5rem)]"
+    >
+      <div class="hx:flex hx:flex-col hx:items-start">
+        {{ .Content }}
+      </div>
+    </main>
+  </div>
+  <script>
+    // A swatch copies its hex on click, then says "copied" for a moment.
+    document.querySelectorAll(".devvm-swatch[data-copy]").forEach((swatch) => {
+      const label = swatch.querySelector(".devvm-swatch-state");
+      swatch.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(swatch.dataset.copy);
+        } catch {
+          return;
+        }
+        swatch.dataset.copied = "";
+        label.textContent = "copied";
+        clearTimeout(swatch.copiedTimer);
+        swatch.copiedTimer = setTimeout(() => {
+          delete swatch.dataset.copied;
+          label.textContent = "copy";
+        }, 1500);
+      });
+    });
+  </script>
+{{ end }}

@@ -1,0 +1,36 @@
+# The branding page's palette (the palette shortcode), in the order it shows them: each color's CSS
+# variable in assets/css/custom.css, without its --devvm- prefix, its name and what it's for. The hex comes
+# from custom.css when the site builds, and the build fails when a variable isn't there.
+- var: bg
+  name: Black
+  use: The background.
+- var: surface
+  name: Surface
+  use: Code blocks, panels and callouts.
+- var: border
+  name: Border
+  use: Lines around cards and code blocks.
+- var: accent
+  name: Lime
+  use: The prompt, links, buttons and arrows.
+- var: accent-soft
+  name: Soft lime
+  use: Hovers, inline code and tips.
+- var: accent-dark
+  name: Dark lime
+  use: The prompt in the logo for light backgrounds.
+- var: blue
+  name: Blue
+  use: Commands, notes and experimental backends.
+- var: red
+  name: Red
+  use: Only what an attack has reached, in the home page's art.
+- var: text
+  name: Text
+  use: Headings and body text.
+- var: text-secondary
+  name: Secondary text
+  use: Paragraphs on the home page and labels.
+- var: muted
+  name: Muted
+  use: Dimmed text in the art.
