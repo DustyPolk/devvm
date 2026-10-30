@@ -1,5 +1,6 @@
 {{- /* One card in the features grid: a heading, its Markdown, then art from assets/home/ if given.
    {{< feature title="Ready in seconds" art="copies" >}} Markdown {{< /feature >}}
+   icon="rocket" puts a pixel icon from assets/icons/ before the title, in the title's color.
    level="3" makes the heading an h3, for cards under a section's own heading. In a two-column features
    grid, the card goes to features, which places it in its column, or in the one column="left" or
    column="right" names; in a three-column one, it shows here. */ -}}
@@ -7,6 +8,7 @@
 {{- if not $title }}{{ errorf "feature: no title (%s)" .Position }}{{ end -}}
 {{- $card := partial "feature-card.html" (dict
   "title" ($title | .Page.RenderString)
+  "icon" (.Get "icon")
   "level" (.Get "level")
   "body" (.Inner | .Page.RenderString (dict "display" "block"))
   "art" (.Get "art")

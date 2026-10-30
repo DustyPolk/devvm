@@ -36,19 +36,19 @@ For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your
 
 {{< features columns="3" >}}
 
-{{< feature title="Toolchains" level="3" art="toolchains" >}}
+{{< feature title="Toolchains" icon="code" level="3" art="toolchains" >}}
 
 devvm picks the toolchain from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
 
 {{< /feature >}}
 
-{{< feature title="Coding agents" level="3" art="coding-agents" >}}
+{{< feature title="Coding agents" icon="robot" level="3" art="coding-agents" >}}
 
 Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/coding-agents.md)).
 
 {{< /feature >}}
 
-{{< feature title="Backends" level="3" art="backends" >}}
+{{< feature title="Backends" icon="cube" level="3" art="backends" >}}
 
 [Lima](https://lima-vm.io/) runs the VMs by default, and [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) are {{< experimental >}} backends ([backends](docs/backends/_index.md)).
 
@@ -68,7 +68,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< features >}}
 
-{{< feature title="Developer ready, zero config" art="zero-config" >}}
+{{< feature title="Developer ready, zero config" icon="prompt" art="zero-config" >}}
 
 - The base image comes with [optional extras](docs/using/customizing.md#base-image-features) that you choose, such as oh-my-bash, fzf, zoxide (`z`), tree and tldr.
 - Every VM gets your git name and email, so the commits made in it are authored by you or your agent.
@@ -77,14 +77,14 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< /feature >}}
 
-{{< feature title="Ready in seconds" art="copies" >}}
+{{< feature title="Ready in seconds" icon="high-voltage" art="copies" >}}
 
 - The first VM builds a base image, and every later VM is a copy of it that starts in seconds ([images](docs/using/images.md)).
 - devvm builds each version of a toolchain once and shares it read-only, so all VMs use the same copy ([shared tools](docs/using/images.md#shared-tools)).
 
 {{< /feature >}}
 
-{{< feature title="Isolated sandbox" art="isolated" >}}
+{{< feature title="Isolated sandbox" icon="locked" art="isolated" >}}
 
 - The VM mounts your project folder at the same path. Apart from your agents' config, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
 - New VMs get [network policy](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine.
@@ -94,14 +94,14 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< /feature >}}
 
-{{< feature title="Made for coding agents" art="agents" >}}
+{{< feature title="Made for coding agents" icon="robot" art="agents" >}}
 
 - `devvm claude`, `devvm codex` and `devvm opencode` make a VM with that agent, which gets your settings, skills and MCP servers but never your history ([coding agents](docs/using/coding-agents.md)).
 - With network policy, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and devvm's proxy puts the real ones into its requests on the way out.
 
 {{< /feature >}}
 
-{{< feature title="Make it yours" column="right" art="make-it-yours" >}}
+{{< feature title="Make it yours" icon="wrench" column="right" art="make-it-yours" >}}
 
 - Your own layers are setup scripts that devvm builds into an image: `devvm layer new mailpit` starts one, and `devvm node+mailpit` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
 - Your own features are scripts that run in the base image, so every VM gets your shell setup, aliases or dotfiles ([your own features](docs/using/customizing.md#your-own-features)).

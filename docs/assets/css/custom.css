@@ -392,6 +392,16 @@ html.dark .highlight .chroma .go {
   margin: 0 0 0.75rem;
 }
 
+/* The feature cards' title icons (the feature shortcode's icon): in the title's own color, with each icon
+   pixel two screen pixels, as the section headings' are, lowered to center on the capitals. */
+.devvm-feature > h2 > .devvm-icon,
+.devvm-feature > h3 > .devvm-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 0.75rem;
+  vertical-align: -4px;
+}
+
 .devvm-feature > p {
   margin: 0;
   color: var(--devvm-text-secondary);

@@ -1,10 +1,13 @@
-{{- /* One feature card's HTML, for the feature shortcode: a heading, its rendered Markdown, then art from
-   assets/home/ if given. Takes title, level ("3" for an h3), body, art and position. */ -}}
+{{- /* One feature card's HTML, for the feature shortcode: a heading, with a pixel icon from assets/icons/
+   before its text if given, its rendered Markdown, then art from assets/home/ if given. Takes title, icon,
+   level ("3" for an h3), body, art and position. The heading's id comes from its title alone. */ -}}
+{{- $icon := "" -}}
+{{- with .icon }}{{ $icon = partial "icon.html" (dict "name" . "position" $.position) }}{{ end -}}
 <section class="devvm-feature">
   {{- if eq .level "3" }}
-  <h3 id="{{ .title | anchorize }}">{{ .title }}</h3>
+  <h3 id="{{ .title | anchorize }}">{{ $icon }}{{ .title }}</h3>
   {{- else }}
-  <h2 id="{{ .title | anchorize }}">{{ .title }}</h2>
+  <h2 id="{{ .title | anchorize }}">{{ $icon }}{{ .title }}</h2>
   {{- end }}
   {{ .body }}
   {{- with .art }}
