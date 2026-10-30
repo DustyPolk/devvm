@@ -533,8 +533,9 @@ html.dark .highlight .chroma .go {
    .pulse dims and brightens a lime arrow every 3 s, .pulse-2 and .pulse-3 a step later, so the pulse runs
    along it; .pulse-slow does the same every 4 s; .lit (a text's fill) and .lit-chip (a chip's opacity) light
    up for most of a 4 s loop, .lit-1 to .lit-4 one after another; .blink is a cursor, on and off every 2 s;
-   .mover is a block that travels a path: .mover-token the token's, .mover-egress the proxy's; .threat-1 to
-   .threat-4 drop in one after another and .hit-1 to .hit-4 fade in as each lands, in an 8 s story. */
+   .mover is a block that travels a path: .mover-token the token's, .mover-egress the proxy's; .attack-1 to
+   .attack-4 light up one after another, .path-1 to .path-4 draw down after each and .reach-1 to .reach-4
+   change colour as each arrives, in an 8 s story. */
 @keyframes devvm-pulse {
   0%,
   100% {
@@ -702,196 +703,288 @@ html.dark .highlight .chroma .go {
   animation: devvm-mover-egress 4s linear infinite;
 }
 
-/* Blast radius's story, 8 s: an attack drops in at 0.4, 1.6, 2.8 and 4 s, taking 0.6 s, and what it
-   reaches fades in over the next 0.4 s. All of it holds from 5 s, fades out from 6.6 s and is gone from
-   7.2 s, a rest before it starts again. Each step has its own keyframes, so that all of them end
-   together. */
-@keyframes devvm-threat-1 {
+/* Blast radius's story, 8 s, with every part in place all along: only colours change and paths draw.
+   Attack n's chip lights from gray to lime at 0.4, 1.6, 2.8 and 4 s, taking 0.4 s. Its path in the VM
+   draws itself down from 0.2 to 0.8 s after it lights, and from 0.8 to 1.2 s after, the folder it reaches
+   turns red and the cross at the VM's border turns lime. All of it holds from 5.2 s, goes back to its
+   resting colours from 6.6 s as the paths draw back up, and rests from 7.2 s before it starts again.
+   Each step has its own keyframes, so that all of them end together. The SVG draws each part in its end
+   colour, which --lit names, and --rest is its colour before its step. */
+.devvm-art .attack,
+.devvm-art .reach {
+  --rest: var(--devvm-muted);
+  --lit: var(--devvm-accent);
+}
+
+.devvm-art .reach.r {
+  --rest: var(--devvm-text);
+  --lit: var(--devvm-red);
+}
+
+.devvm-art .path {
+  transform-box: fill-box;
+  transform-origin: top;
+}
+
+@keyframes devvm-attack-1 {
   0%,
   5% {
-    opacity: 0;
-    transform: translate(0, -14px);
+    fill: var(--rest);
   }
 
-  12.5%,
+  10%,
   82.5% {
-    opacity: 1;
-    transform: translate(0, 0);
+    fill: var(--lit);
   }
 
   90%,
   100% {
-    opacity: 0;
-    transform: translate(0, 0);
+    fill: var(--rest);
   }
 }
 
-@keyframes devvm-threat-2 {
+@keyframes devvm-attack-2 {
   0%,
   20% {
-    opacity: 0;
-    transform: translate(0, -14px);
+    fill: var(--rest);
   }
 
-  27.5%,
+  25%,
   82.5% {
-    opacity: 1;
-    transform: translate(0, 0);
+    fill: var(--lit);
   }
 
   90%,
   100% {
-    opacity: 0;
-    transform: translate(0, 0);
+    fill: var(--rest);
   }
 }
 
-@keyframes devvm-threat-3 {
+@keyframes devvm-attack-3 {
   0%,
   35% {
-    opacity: 0;
-    transform: translate(0, -14px);
+    fill: var(--rest);
   }
 
-  42.5%,
+  40%,
   82.5% {
-    opacity: 1;
-    transform: translate(0, 0);
+    fill: var(--lit);
   }
 
   90%,
   100% {
-    opacity: 0;
-    transform: translate(0, 0);
+    fill: var(--rest);
   }
 }
 
-@keyframes devvm-threat-4 {
+@keyframes devvm-attack-4 {
   0%,
   50% {
-    opacity: 0;
-    transform: translate(0, -14px);
+    fill: var(--rest);
   }
 
-  57.5%,
+  55%,
   82.5% {
-    opacity: 1;
-    transform: translate(0, 0);
+    fill: var(--lit);
   }
 
   90%,
   100% {
-    opacity: 0;
-    transform: translate(0, 0);
+    fill: var(--rest);
   }
 }
 
-@keyframes devvm-hit-1 {
+@keyframes devvm-path-1 {
   0%,
-  12.5% {
-    opacity: 0;
+  7.5% {
+    transform: scaleY(0);
   }
 
-  17.5%,
+  15%,
   82.5% {
-    opacity: 1;
+    transform: scaleY(1);
   }
 
   90%,
   100% {
-    opacity: 0;
+    transform: scaleY(0);
   }
 }
 
-@keyframes devvm-hit-2 {
+@keyframes devvm-path-2 {
   0%,
-  27.5% {
-    opacity: 0;
+  22.5% {
+    transform: scaleY(0);
   }
 
-  32.5%,
+  30%,
   82.5% {
-    opacity: 1;
+    transform: scaleY(1);
   }
 
   90%,
   100% {
-    opacity: 0;
+    transform: scaleY(0);
   }
 }
 
-@keyframes devvm-hit-3 {
+@keyframes devvm-path-3 {
   0%,
-  42.5% {
-    opacity: 0;
+  37.5% {
+    transform: scaleY(0);
   }
 
-  47.5%,
+  45%,
   82.5% {
-    opacity: 1;
+    transform: scaleY(1);
   }
 
   90%,
   100% {
-    opacity: 0;
+    transform: scaleY(0);
   }
 }
 
-@keyframes devvm-hit-4 {
+@keyframes devvm-path-4 {
   0%,
-  57.5% {
-    opacity: 0;
+  52.5% {
+    transform: scaleY(0);
   }
 
-  62.5%,
+  60%,
   82.5% {
-    opacity: 1;
+    transform: scaleY(1);
   }
 
   90%,
   100% {
-    opacity: 0;
+    transform: scaleY(0);
   }
 }
 
-.devvm-art .threat,
-.devvm-art .hit {
+@keyframes devvm-reach-1 {
+  0%,
+  15% {
+    fill: var(--rest);
+  }
+
+  20%,
+  82.5% {
+    fill: var(--lit);
+  }
+
+  90%,
+  100% {
+    fill: var(--rest);
+  }
+}
+
+@keyframes devvm-reach-2 {
+  0%,
+  30% {
+    fill: var(--rest);
+  }
+
+  35%,
+  82.5% {
+    fill: var(--lit);
+  }
+
+  90%,
+  100% {
+    fill: var(--rest);
+  }
+}
+
+@keyframes devvm-reach-3 {
+  0%,
+  45% {
+    fill: var(--rest);
+  }
+
+  50%,
+  82.5% {
+    fill: var(--lit);
+  }
+
+  90%,
+  100% {
+    fill: var(--rest);
+  }
+}
+
+@keyframes devvm-reach-4 {
+  0%,
+  60% {
+    fill: var(--rest);
+  }
+
+  65%,
+  82.5% {
+    fill: var(--lit);
+  }
+
+  90%,
+  100% {
+    fill: var(--rest);
+  }
+}
+
+.devvm-art .attack,
+.devvm-art .path,
+.devvm-art .reach {
   animation-duration: 8s;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
   animation-fill-mode: both;
 }
 
-.devvm-art .threat-1 {
-  animation-name: devvm-threat-1;
+.devvm-art .attack-1 {
+  animation-name: devvm-attack-1;
 }
 
-.devvm-art .threat-2 {
-  animation-name: devvm-threat-2;
+.devvm-art .attack-2 {
+  animation-name: devvm-attack-2;
 }
 
-.devvm-art .threat-3 {
-  animation-name: devvm-threat-3;
+.devvm-art .attack-3 {
+  animation-name: devvm-attack-3;
 }
 
-.devvm-art .threat-4 {
-  animation-name: devvm-threat-4;
+.devvm-art .attack-4 {
+  animation-name: devvm-attack-4;
 }
 
-.devvm-art .hit-1 {
-  animation-name: devvm-hit-1;
+.devvm-art .path-1 {
+  animation-name: devvm-path-1;
 }
 
-.devvm-art .hit-2 {
-  animation-name: devvm-hit-2;
+.devvm-art .path-2 {
+  animation-name: devvm-path-2;
 }
 
-.devvm-art .hit-3 {
-  animation-name: devvm-hit-3;
+.devvm-art .path-3 {
+  animation-name: devvm-path-3;
 }
 
-.devvm-art .hit-4 {
-  animation-name: devvm-hit-4;
+.devvm-art .path-4 {
+  animation-name: devvm-path-4;
+}
+
+.devvm-art .reach-1 {
+  animation-name: devvm-reach-1;
+}
+
+.devvm-art .reach-2 {
+  animation-name: devvm-reach-2;
+}
+
+.devvm-art .reach-3 {
+  animation-name: devvm-reach-3;
+}
+
+.devvm-art .reach-4 {
+  animation-name: devvm-reach-4;
 }
 
 /* No motion when the visitor asks for less: everything shows as drawn, and the travelling blocks go. */
