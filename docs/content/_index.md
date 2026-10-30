@@ -66,7 +66,6 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< feature title="Developer ready, zero config" art="zero-config" >}}
 
-- Docker runs inside the VM when you need it, with `devvm node+docker`.
 - Every VM gets your git name and email, so the commits made in it are authored by you or your agent.
 - `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-ssh-and-devvm-code)).
 - When the project has a `devcontainer.json`, devvm sets up its VM from the file's container image, ports, environment and commands ([devcontainer.json](docs/using/devcontainer.md)).
