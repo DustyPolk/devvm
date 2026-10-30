@@ -18,6 +18,18 @@ On macOS, the [Docker](../backends/docker.md#requirements) backend fetches one m
 
 ## The signature and what it trusts
 
+`curl … | bash` trusts everything in the release, and Homebrew checks the source against a checksum kept outside it:
+
+```mermaid
+flowchart TD
+  subgraph release["the GitHub release"]
+    script["install.sh, with<br>the public key"] -- "checks the signature" --> sums["SHA256SUMS,<br>signed in .minisig"]
+    sums -- "checks the checksum" --> archive["the archive<br>for this machine"]
+    source["the source archive"]
+  end
+  formula["Homebrew's formula,<br>in a repository of its own"] -- "checks its checksum" --> source
+```
+
 The release's `SHA256SUMS` is signed in `SHA256SUMS.minisig`, made with the maintainer's minisign key. The key's public half is in the script and in `packaging/minisign.pub`. Without [minisign](https://jedisct1.github.io/minisign/) (`brew install minisign`), the script says so, prints the command to check the signature by hand, and checks only the checksum. A script that isn't from a release has no key, and it also checks only the checksum.
 
 The signature catches an archive or a `SHA256SUMS` that someone replaced, which the checksum alone can't. It can't catch a release that was replaced whole, because `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't trust them, because the formula's checksum lives in a repository of its own, and a replaced GitHub release wouldn't match it. You can also download `install.sh` and read it before you run it.

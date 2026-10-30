@@ -26,6 +26,22 @@ Each backend has its own images. An image's key includes its backend, so one bac
 
 ## Choosing a backend
 
+To choose, follow the comparison above:
+
+```mermaid
+flowchart TD
+  start{{"fine with an<br>experimental backend?"}} -- "no" --> lima["Lima, the default"]
+  start -- "yes" --> kernel{{"fine with a kernel<br>shared with other VMs?"}}
+  kernel -- "no" --> arm{{"an arm64 Mac,<br>or Linux?"}}
+  arm -- "yes" --> smolvm["smolvm"]
+  arm -- "no" --> lima
+  kernel -- "yes" --> layer{{"need the<br>docker layer?"}}
+  layer -- "no" --> docker["Docker"]
+  layer -- "yes" --> sysbox{{"a Linux engine<br>with Sysbox?"}}
+  sysbox -- "yes" --> dockerSysbox["Docker, without<br>network policy"]
+  sysbox -- "no" --> arm
+```
+
 A new VM gets the first of:
 
 1. `--backend`.

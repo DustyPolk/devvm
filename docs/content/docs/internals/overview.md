@@ -9,6 +9,22 @@ This page explains what devvm does, step by step, when it makes, opens, changes,
 
 When you run `devvm` in a folder that has no VM, devvm makes one in these steps:
 
+```mermaid
+flowchart TD
+  subgraph before["until the first shell opens"]
+    check["checks everything first:<br>image, size, ports,<br>network policy, SSH agent,<br>features, devcontainer.json"] --> tools["checks the shared tools<br>for newer versions, if due"]
+    tools --> build["builds the image,<br>if it isn't built"]
+    build --> state["writes the VM's state,<br>with its network choice"]
+    state --> make["makes the VM<br>from its image"]
+    make --> lock["locks .git,<br>unless --clone"]
+    lock --> start["starts its proxy,<br>then the VM"]
+    start --> self["the self-check"]
+    self --> setup["sets the VM up, then the clone<br>and devcontainer.json's commands"]
+  end
+  setup --> shell["opens the shell"]
+  before -. "interrupted" .-> undo["deletes the VM and what<br>devvm made for it,<br>and unlocks .git"]
+```
+
 1. devvm checks everything the new VM needs before it builds anything, because a build can take minutes. That covers the folder, the image, the size, the ports, the network policy choice, which it asks for when you give neither flag, the SSH agent, the backend's [features](backends.md#features) and what the folder's `devcontainer.json` says.
 2. When the image names shared tools and the [daily check](../using/images.md#shared-tools) is due, devvm checks for newer versions of them.
 3. devvm builds the image with its [shared tools](../using/images.md#shared-tools) if it isn't built yet ([building](images.md#building)).

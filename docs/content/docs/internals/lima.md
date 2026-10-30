@@ -36,6 +36,21 @@ Lima changes only a stopped VM's config, so a change you make while the VM runs 
 
 A VM with network policy reaches nothing but its proxy on the host, and even root in the VM can't get around that. Direct connections, DNS, UDP and connections to the host's own services fail at once, while forwarded ports, mounts and ssh keep working.
 
+On each host, the VM's traffic passes through one process that devvm confines:
+
+```mermaid
+flowchart TD
+  subgraph linux["Linux"]
+    vm2["the VM"] --> q["QEMU,<br>restrict=on"]
+  end
+  q -- "only to<br>192.168.5.4:3128" --> proxy["its proxy"]
+  subgraph mac["macOS"]
+    vm1["the VM"] --> ha["its Lima<br>hostagent,<br>sandboxed"]
+  end
+  ha -- "allowed" --> ok["its ssh port<br>its proxy<br>its Lima sockets<br>its SSH agent"]
+  ha -. "denied" .-> no["everything<br>else"]
+```
+
 On macOS, devvm starts the VM's Lima process, its hostagent, under a macOS sandbox. That's `sandbox-exec` with a Seatbelt profile in `~/.local/share/devvm/run/<vm>.sb`.
 
 - The profile lets the process connect to the VM's ssh port and its proxy on the host's loopback, to the unix sockets in the VM's Lima folder (ssh's control socket and the VM's network), and to the ssh agent the VM forwards, which is yours or devvm's own. It connects nowhere else, so other sockets on the host, such as Docker's, stay out of reach even if the Lima process were compromised.

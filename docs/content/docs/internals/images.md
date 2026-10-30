@@ -28,6 +28,20 @@ devvm builds images in layers and caches them, as Docker does. `base` comes firs
 
 A key is the first 12 hex digits of a SHA-256. Each input goes into the hash with its length, so different inputs never hash the same bytes. An image's record keeps its chain, which is the key of each image it's built on, from `base` up.
 
+Each key hashes its parent's, so a new key anywhere in the chain changes the key of every image above it:
+
+```mermaid
+flowchart TD
+  subgraph next["after foo.sh is edited,<br>or devvm rebuild foo"]
+    b2["base<br>key 1a2b3c4d5e6f<br>reused"] -- "its key" --> f2["foo<br>key 9a0b1c2d3e4f<br>built again"]
+    f2 -- "its key" --> fb2["foo+bar<br>key 5a6b7c8d9e0f<br>built again"]
+  end
+  subgraph built["built"]
+    b1["base<br>key 1a2b3c4d5e6f"] -- "its key" --> f1["foo<br>key 7a8b9c0d1e2f"]
+    f1 -- "its key" --> fb1["foo+bar<br>key 3a4b5c6d7e8f"]
+  end
+```
+
 This means:
 
 - When you edit a script, its layer and every layer above it rebuild the next time they're used, and the layers below are reused.

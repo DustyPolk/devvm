@@ -51,6 +51,18 @@ The Docker column is tested with Docker Desktop 4.94 (Docker 29.8) on an arm64 M
 
 ## Missing and unreviewed features
 
+devvm checks each feature an image or a VM needs this way:
+
+```mermaid
+flowchart TD
+  need["a feature the image<br>or the VM needs"] --> how{{"how the backend has it"}}
+  how -- "native" --> ok["allowed"]
+  how -- "emulated, reviewed" --> ok
+  how -- "emulated, unreviewed,<br>or none" --> np{{"network policy for a<br>new VM, without<br>--network-policy?"}}
+  np -- "no" --> refused["refused: devvm stops<br>and names the VM,<br>the feature and the backend"]
+  np -- "yes" --> warned["the VM is made<br>without network policy,<br>with a warning"]
+```
+
 Before devvm builds an image, makes or starts a VM, or changes a VM's settings, it checks that the backend has every feature the image or the VM needs. When the backend lacks one, devvm stops and names the VM, the feature and the backend (`backend_lacks`). It does the same for a feature the backend only emulates when that emulation's review hasn't passed (`backend_unreviewed`). devvm never falls back to something weaker, so a VM that asks for network policy never starts with an open network.
 
 To get the feature, use a backend that has it. A VM keeps its backend, so that means making a new VM.
