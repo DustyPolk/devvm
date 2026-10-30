@@ -19,10 +19,9 @@ sidebar:
 As text, for a terminal, a README or a code comment:
 
 ```text
-╭─────────╮
-│ ❯ devvm │
-│        ╭┤
-╰────────██
+╭──────────╮
+│ ❯ devvm ╭┤
+╰─────────██
 ```
 
 As SVG or PNG, with a transparent background:
