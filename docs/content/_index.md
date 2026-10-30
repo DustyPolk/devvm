@@ -13,7 +13,7 @@ layout: hextra-home
 {{< /hextra/hero-headline >}}
 
 {{< hextra/hero-subtitle >}}
-  An isolated sandbox with the project's toolchain, ready for you or a coding agent to start coding. devvm runs its VMs on [Lima](https://lima-vm.io/) by default, or on the experimental [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) backends.
+  An isolated sandbox with the project's toolchain, ready for you or a coding agent to start coding.
 {{< /hextra/hero-subtitle >}}
 
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
@@ -30,7 +30,7 @@ cd ~/some-project
 devvm
 ```
 
-For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. The first VM builds the base image, which takes a few minutes once, and [your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
+For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
 
 ## What's supported
 
@@ -44,13 +44,13 @@ devvm picks node, python, rust or go from the project's files, and you can combi
 
 {{< feature title="Coding agents" level="3" >}}
 
-Claude Code, Codex and opencode run in the VM with your settings, skills and MCP servers ([coding agents](docs/using/coding-agents.md)).
+Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/coding-agents.md)).
 
 {{< /feature >}}
 
 {{< feature title="Backends" level="3" >}}
 
-Lima runs the VMs by default, and smolvm and Docker are experimental backends ([backends](docs/backends/_index.md)).
+[Lima](https://lima-vm.io/) runs the VMs by default, and [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) are experimental backends ([backends](docs/backends/_index.md)).
 
 {{< /feature >}}
 
@@ -61,13 +61,11 @@ Lima runs the VMs by default, and smolvm and Docker are experimental backends ([
 - Developers face attacks every day, such as [supply chain attacks](https://en.wikipedia.org/wiki/Supply_chain_attack), leaked secrets, [prompt injections](https://en.wikipedia.org/wiki/Prompt_injection) and rogue agents.
 - A sandbox limits the [blast radius](https://en.wikipedia.org/wiki/Blast_radius#Uses_in_software) of an attack to what's inside it.
 - You know you _should_ run your code and agents in a sandbox, but most tools need configuration and setup that's hard to get right.
-- devvm comes with sensible defaults, so you can start coding in a sandbox right away.
 
 {{< features >}}
 
 {{< feature title="Developer ready, zero config" art="zero-config" >}}
 
-- devvm detects the [project's toolchain](docs/using/images.md#which-image-a-new-vm-gets) from its files, so you write no config files and do no setup.
 - Docker runs inside the VM when you need it, with `devvm node+docker`.
 - Every VM gets your git name and email, so the commits made in it are authored by you or your agent.
 - `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-ssh-and-devvm-code)).
@@ -104,26 +102,17 @@ Lima runs the VMs by default, and smolvm and Docker are experimental backends ([
 
 ## FAQ
 
-### Does it run on Linux?
+### What does it run on?
 
-Yes. devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. On Linux hosts it has a few limits, such as no `.git` protection, which [known limits](docs/using/limits.md#linux-hosts) lists.
+devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs Lima 2.0 or newer, which Homebrew installs along with it, and on Linux also QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
 
 ### Is it free?
 
 Yes. devvm is open source under the [MIT license](https://github.com/w3cj/devvm/blob/main/LICENSE).
 
-### What do I need?
+## Start coding in a sandbox
 
-devvm needs Lima 2.0 or newer, which Homebrew installs along with it, and on Linux also QEMU and access to `/dev/kvm`. `devvm doctor` checks your machine, and [installing](docs/getting-started/install.md) lists every requirement.
-
-## Install devvm
-
-{{< install >}}
-
-```sh
-# Check that your machine has what devvm needs
-devvm doctor
-```
+Install devvm, then run `devvm` in any project folder.
 
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" >}}
 {{< hextra/hero-button text="Read the docs" link="docs/" >}}
