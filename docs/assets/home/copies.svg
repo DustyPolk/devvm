@@ -7,9 +7,9 @@
   <text class="t" x="14" y="52">base</text>
   <text class="m" x="14" y="70">▓▓▓▓▓▓▓▓</text>
   <!-- The arrow, branching to each copy. -->
-  <text class="a" x="84" y="60">░▒</text>
-  <rect class="a" x="98" y="49" width="14" height="14"/>
-  <polygon class="a" points="112,42 126,56 112,70"/>
+  <text class="a pulse" x="84" y="60">░▒</text>
+  <rect class="a pulse pulse-2" x="98" y="49" width="14" height="14"/>
+  <polygon class="a pulse pulse-3" points="112,42 126,56 112,70"/>
   <rect class="m" x="126" y="27" width="2" height="58"/>
   <rect class="m" x="126" y="27" width="7" height="2"/>
   <rect class="m" x="126" y="83" width="7" height="2"/>
@@ -17,15 +17,18 @@
   <rect class="f" x="133" y="16" width="133" height="24"/>
   <rect class="s" x="134" y="17" width="131" height="22"/>
   <rect class="a" x="133" y="16" width="2" height="24"/>
-  <text x="140" y="32"><tspan class="t">devvm-web</tspan>   <tspan class="a">■ up</tspan></text>
+  <text class="t" x="140" y="32">devvm-web</text>
+  <text class="a lit lit-1" x="224" y="32">■ up</text>
   <rect class="f" x="133" y="44" width="133" height="24"/>
   <rect class="s" x="134" y="45" width="131" height="22"/>
   <rect class="a" x="133" y="44" width="2" height="24"/>
-  <text x="140" y="60"><tspan class="t">devvm-api</tspan>   <tspan class="a">■ up</tspan></text>
+  <text class="t" x="140" y="60">devvm-api</text>
+  <text class="a lit lit-2" x="224" y="60">■ up</text>
   <rect class="f" x="133" y="72" width="133" height="24"/>
   <rect class="s" x="134" y="73" width="131" height="22"/>
   <rect class="a" x="133" y="72" width="2" height="24"/>
-  <text x="140" y="88"><tspan class="t">devvm-cli</tspan>   <tspan class="a">■ up</tspan></text>
+  <text class="t" x="140" y="88">devvm-cli</text>
+  <text class="a lit lit-3" x="224" y="88">■ up</text>
   <!-- The shared tools. -->
   <rect class="f" x="7" y="112" width="42" height="14"/>
   <text class="t" x="14" y="123">node</text>

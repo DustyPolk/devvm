@@ -449,6 +449,198 @@ html.dark .highlight .chroma .go {
   shape-rendering: crispEdges;
 }
 
+/* Dashed borders (the experimental backends): 1px, on half-pixel coordinates so they stay sharp. */
+.devvm-art .dash {
+  fill: var(--devvm-surface);
+  stroke: var(--devvm-blue);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  shape-rendering: crispEdges;
+}
+
+/* The art's animations, slow and in the palette's colors, each marked by a class in the SVG:
+   .pulse dims and brightens a lime arrow every 3 s, .pulse-2 and .pulse-3 a step later, so the pulse runs
+   along it; .pulse-slow does the same every 4 s; .lit (a text's fill) and .lit-chip (a chip's opacity) light
+   up for most of a 4 s loop, .lit-1 to .lit-4 one after another; .blink is a cursor, on and off every 2 s;
+   .mover is a block that travels a path: .mover-token the token's, .mover-egress the proxy's. */
+@keyframes devvm-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes devvm-light {
+  0% {
+    fill: var(--devvm-muted);
+  }
+
+  10%,
+  70% {
+    fill: var(--devvm-accent);
+  }
+
+  85%,
+  100% {
+    fill: var(--devvm-muted);
+  }
+}
+
+@keyframes devvm-light-chip {
+  0% {
+    opacity: 0.35;
+  }
+
+  10%,
+  70% {
+    opacity: 1;
+  }
+
+  85%,
+  100% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes devvm-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The token: right along its line and under the proxy, then down past the arrow to the API. */
+@keyframes devvm-mover-token {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+
+  5% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+
+  60% {
+    transform: translate(114px, 0);
+  }
+
+  85% {
+    transform: translate(114px, 21px);
+    opacity: 1;
+  }
+
+  92%,
+  100% {
+    transform: translate(114px, 21px);
+    opacity: 0;
+  }
+}
+
+/* A request: under the proxy, down to the allowlist and back, then out along the arrow. */
+@keyframes devvm-mover-egress {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+
+  5% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+
+  20% {
+    transform: translate(43px, 0);
+  }
+
+  35% {
+    transform: translate(43px, 28px);
+  }
+
+  50% {
+    transform: translate(43px, 0);
+  }
+
+  85% {
+    transform: translate(126px, 0);
+    opacity: 1;
+  }
+
+  92%,
+  100% {
+    transform: translate(130px, 0);
+    opacity: 0;
+  }
+}
+
+.devvm-art .pulse {
+  animation: devvm-pulse 3s ease-in-out infinite;
+}
+
+.devvm-art .pulse-2 {
+  animation-delay: 0.3s;
+}
+
+.devvm-art .pulse-3 {
+  animation-delay: 0.6s;
+}
+
+.devvm-art .pulse-slow {
+  animation: devvm-pulse 4s ease-in-out infinite;
+}
+
+.devvm-art .lit {
+  animation: devvm-light 4s ease-in-out infinite both;
+}
+
+.devvm-art .lit-chip {
+  animation: devvm-light-chip 4s ease-in-out infinite both;
+}
+
+.devvm-art .lit-2 {
+  animation-delay: 0.5s;
+}
+
+.devvm-art .lit-3 {
+  animation-delay: 1s;
+}
+
+.devvm-art .lit-4 {
+  animation-delay: 1.5s;
+}
+
+.devvm-art .blink {
+  animation: devvm-blink 2s linear infinite;
+}
+
+.devvm-art .mover-token {
+  animation: devvm-mover-token 3s linear infinite;
+}
+
+.devvm-art .mover-egress {
+  animation: devvm-mover-egress 4s linear infinite;
+}
+
+/* No motion when the visitor asks for less: everything shows as drawn, and the travelling blocks go. */
+@media (prefers-reduced-motion: reduce) {
+  .devvm-art * {
+    animation: none !important;
+  }
+
+  .devvm-art .mover {
+    display: none;
+  }
+}
+
 /* Diagrams (mermaid code blocks, themed in layouts/_partials/scripts/mermaid.html): at their own size,
    centered, scrolled sideways when wider than the page. */
 .content pre.mermaid {

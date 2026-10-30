@@ -36,19 +36,19 @@ For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your
 
 {{< features columns="3" >}}
 
-{{< feature title="Toolchains" level="3" >}}
+{{< feature title="Toolchains" level="3" art="toolchains" >}}
 
 devvm picks node, python, rust or go from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
 
 {{< /feature >}}
 
-{{< feature title="Coding agents" level="3" >}}
+{{< feature title="Coding agents" level="3" art="coding-agents" >}}
 
 Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/coding-agents.md)).
 
 {{< /feature >}}
 
-{{< feature title="Backends" level="3" >}}
+{{< feature title="Backends" level="3" art="backends" >}}
 
 [Lima](https://lima-vm.io/) runs the VMs by default, and [smolvm](https://smolmachines.com/) and [Docker](https://docs.docker.com/get-started/get-docker/) are experimental backends ([backends](docs/backends/_index.md)).
 
@@ -97,7 +97,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< /feature >}}
 
-{{< feature title="Make it yours" column="right" >}}
+{{< feature title="Make it yours" column="right" art="make-it-yours" >}}
 
 - Your own layers are setup scripts that devvm builds into an image: `devvm layer new postgres` starts one, and `devvm node+postgres` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
 - Your own features are scripts that run in the base image, so every VM gets your shell setup, aliases or dotfiles ([your own features](docs/using/customizing.md#your-own-features)).

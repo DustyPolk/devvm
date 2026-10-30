@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 70" role="img" aria-labelledby="art-toolchains">
+  <title id="art-toolchains">A folder, ~/web, with package.json and pyproject.toml gets node and python: devvm reads the folder's files.</title>
+  <!-- The folder: a tab, a panel. -->
+  <rect class="f" x="7" y="0" width="35" height="7"/>
+  <rect class="f" x="7" y="7" width="112" height="56"/>
+  <rect class="s" x="8" y="8" width="110" height="54"/>
+  <text class="t" x="14" y="25">~/web</text>
+  <text class="lit lit-1" x="14" y="39">package.json</text>
+  <text class="lit lit-2" x="14" y="53">pyproject.toml</text>
+  <!-- The arrow. -->
+  <rect class="a pulse" x="126" y="40" width="14" height="4"/>
+  <polygon class="a pulse pulse-2" points="140,35 154,42 140,49"/>
+  <!-- The toolchains, as chips. -->
+  <g class="lit-chip lit-3">
+    <rect class="a" x="161" y="29" width="42" height="12"/>
+    <text class="k" x="168" y="39">node</text>
+  </g>
+  <g class="lit-chip lit-4">
+    <rect class="a" x="161" y="43" width="56" height="12"/>
+    <text class="k" x="168" y="53">python</text>
+  </g>
+</svg>

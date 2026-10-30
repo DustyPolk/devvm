@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 140" role="img" aria-labelledby="art-agents">
-  <title id="art-agents">Your agents' skills are mounted into the VM read-only, their settings and MCP servers copied in, for claude, codex and opencode. Your token stays on your machine: the VM has a placeholder, and the proxy adds the token on the way to the API.</title>
+  <title id="art-agents">Your agents' skills are mounted into the VM read-only, their settings and MCP servers copied in, for claude, codex and opencode. Your history stays on your machine. Your token stays on your machine: the VM has a placeholder, and the proxy adds the token on the way to the API.</title>
   <!-- Your machine. -->
   <text class="m" x="7" y="11">your machine</text>
   <rect class="f" x="7" y="14" width="126" height="126"/>
@@ -13,8 +13,13 @@
   <text class="m" x="140" y="39">─────ro────→</text>
   <text class="m" x="140" y="53">────copy───→</text>
   <text class="m" x="140" y="67">────copy───→</text>
-  <!-- The token: to the proxy, never the VM. -->
+  <!-- The history: never into the VM. -->
+  <text class="t" x="14" y="81">history</text>
+  <text class="d" x="70" y="81">stays</text>
+  <text class="d" x="140" y="81">────×</text>
+  <!-- The token: to the proxy, never the VM. A block travels it, under the proxy and down to the API. -->
   <rect class="a" x="63" y="103" width="91" height="4"/>
+  <rect class="t mover mover-token" x="63" y="103" width="4" height="4"/>
   <rect class="f" x="154" y="98" width="49" height="14"/>
   <text class="t" x="161" y="109">proxy</text>
   <rect class="m" x="203" y="104" width="35" height="2"/>

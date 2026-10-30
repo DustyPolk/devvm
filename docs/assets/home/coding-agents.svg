@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 70" role="img" aria-labelledby="art-coding-agents">
+  <title id="art-coding-agents">A terminal in a VM runs claude in ~/web. claude, codex and opencode are ready in it.</title>
+  <!-- The VM, a terminal in it. -->
+  <text class="m" x="7" y="11">VM</text>
+  <rect class="f" x="7" y="14" width="126" height="56"/>
+  <rect class="s" x="8" y="15" width="124" height="54"/>
+  <text class="m" x="14" y="39">~/web $</text>
+  <text class="t" x="70" y="39">claude</text>
+  <text class="a blink" x="119" y="39">█</text>
+  <!-- The agents. -->
+  <g class="lit-chip lit-1">
+    <rect class="a" x="147" y="29" width="56" height="12"/>
+    <text class="k" x="154" y="39">claude</text>
+  </g>
+  <g class="lit-chip lit-2">
+    <rect class="a" x="147" y="43" width="49" height="12"/>
+    <text class="k" x="154" y="53">codex</text>
+  </g>
+  <g class="lit-chip lit-3">
+    <rect class="a" x="147" y="57" width="70" height="12"/>
+    <text class="k" x="154" y="67">opencode</text>
+  </g>
+</svg>
