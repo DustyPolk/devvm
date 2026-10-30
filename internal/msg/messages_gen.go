@@ -24,7 +24,7 @@ func Adding(layer string) M {
 	return M{id: "adding", vals: []val{{"layer", layer}}}
 }
 
-// AdoptFailed is [adopt_failed]: "devvm couldn't adopt this folder's VM: {{.reason}}."
+// AdoptFailed is [adopt_failed]: "Adopting this folder's VM failed: {{.reason}}."
 func AdoptFailed(reason string) M {
 	return M{id: "adopt_failed", vals: []val{{"reason", reason}}}
 }
@@ -49,7 +49,7 @@ func AgentDevvmRisk(vm string) M {
 	return M{id: "agent_devvm_risk", vals: []val{{"vm", vm}}}
 }
 
-// AgentDirComma is [agent_dir_comma]: "devvm doesn't mount {{.path}} because Lima can't mount paths with a comma."
+// AgentDirComma is [agent_dir_comma]: "Lima can't mount paths with a comma, so devvm doesn't mount {{.path}}."
 func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
 }
@@ -89,7 +89,7 @@ func AgentKeyMounted(key string, vm string) M {
 	return M{id: "agent_key_mounted", vals: []val{{"key", key}, {"vm", vm}}}
 }
 
-// AgentKeyNoFingerprint is [agent_key_no_fingerprint]: "devvm can't read the fingerprint of {{.key}} without its passphrase, because it's an encrypted PEM key. Convert it with ssh-keygen -p -f {{.key}}."
+// AgentKeyNoFingerprint is [agent_key_no_fingerprint]: "{{.key}} is an encrypted PEM key, so devvm can't read its fingerprint without its passphrase. Convert it with ssh-keygen -p -f {{.key}}."
 func AgentKeyNoFingerprint(key string) M {
 	return M{id: "agent_key_no_fingerprint", vals: []val{{"key", key}}}
 }
@@ -99,7 +99,7 @@ func AgentKeyNotFound(key string) M {
 	return M{id: "agent_key_not_found", vals: []val{{"key", key}}}
 }
 
-// AgentKeyUnpinned is [agent_key_unpinned]: "devvm has no fingerprint recorded for {{.key}}, so it didn't load the key. Run devvm ssh-agent add {{.key}} to add it again."
+// AgentKeyUnpinned is [agent_key_unpinned]: "{{.key}} has no fingerprint that devvm recorded, so devvm didn't load the key. Run devvm ssh-agent add {{.key}} to add it again."
 func AgentKeyUnpinned(key string) M {
 	return M{id: "agent_key_unpinned", vals: []val{{"key", key}}}
 }
@@ -124,7 +124,7 @@ func AgentNextStart(vm string) M {
 	return M{id: "agent_next_start", vals: []val{{"vm", vm}}}
 }
 
-// AgentNoKeys is [agent_no_keys]: "devvm's SSH agent has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
+// AgentNoKeys is [agent_no_keys]: "The SSH agent devvm runs has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
 func AgentNoKeys() M {
 	return M{id: "agent_no_keys"}
 }
@@ -144,12 +144,12 @@ func AgentSetStopped(mode string, vm string) M {
 	return M{id: "agent_set_stopped", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// AgentStartFailed is [agent_start_failed]: "devvm's SSH agent didn't start at {{.sock}}."
+// AgentStartFailed is [agent_start_failed]: "The SSH agent devvm runs didn't start at {{.sock}}."
 func AgentStartFailed(sock string) M {
 	return M{id: "agent_start_failed", vals: []val{{"sock", sock}}}
 }
 
-// AgentUnchosenStop is [agent_unchosen_stop]: "devvm stopped {{.vm}} because something outside devvm started it, so it may have forwarded an SSH agent you didn't choose. Run devvm to start it again."
+// AgentUnchosenStop is [agent_unchosen_stop]: "Something outside devvm started {{.vm}}, which may have forwarded an SSH agent you didn't choose, so devvm stopped the VM. Run devvm to start it again."
 func AgentUnchosenStop(vm string) M {
 	return M{id: "agent_unchosen_stop", vals: []val{{"vm", vm}}}
 }
@@ -209,7 +209,7 @@ func BadFrom(from string) M {
 	return M{id: "bad_from", vals: []val{{"from", from}}}
 }
 
-// BadPath is [bad_path]: "devvm can't mount {{.dir}} into a VM because its path has a comma or a control character."
+// BadPath is [bad_path]: "The path {{.dir}} has a comma or a control character, so devvm can't mount it into a VM."
 func BadPath(dir string) M {
 	return M{id: "bad_path", vals: []val{{"dir", dir}}}
 }
@@ -239,7 +239,7 @@ func BaseWillRebuild() M {
 	return M{id: "base_will_rebuild"}
 }
 
-// BranchNamesInvalid is [branch_names_invalid]: "devvm skips these branches in the VM because git refuses their names: {{.refs}}."
+// BranchNamesInvalid is [branch_names_invalid]: "These branches have names git refuses, so devvm skips them in the VM: {{.refs}}."
 func BranchNamesInvalid(refs string) M {
 	return M{id: "branch_names_invalid", vals: []val{{"refs", refs}}}
 }
@@ -289,7 +289,7 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
-// CloneCheckFailed is [clone_check_failed]: "devvm couldn't read the clone in {{.vm}}, so it kept the VM. To delete it anyway, run devvm rm -f."
+// CloneCheckFailed is [clone_check_failed]: "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it anyway, run devvm rm -f."
 func CloneCheckFailed(vm string) M {
 	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
 }
@@ -329,7 +329,7 @@ func CloneReady(branch string, remote string) M {
 	return M{id: "clone_ready", vals: []val{{"branch", branch}, {"remote", remote}}}
 }
 
-// CloneSeedFailed is [clone_seed_failed]: "devvm couldn't copy the repo's branches into {{.vm}}. Run devvm again to retry."
+// CloneSeedFailed is [clone_seed_failed]: "Copying the repo's branches into {{.vm}} failed. Run devvm again to retry."
 func CloneSeedFailed(vm string) M {
 	return M{id: "clone_seed_failed", vals: []val{{"vm", vm}}}
 }
@@ -344,7 +344,7 @@ func CodeFailed(reason string) M {
 	return M{id: "code_failed", vals: []val{{"reason", reason}}}
 }
 
-// CodexLoginKept is [codex_login_kept]: "devvm copies {{.keys}} from Codex's auth.json into the VM unchanged."
+// CodexLoginKept is [codex_login_kept]: "The VM gets {{.keys}} from Codex's auth.json unchanged."
 func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
@@ -354,7 +354,7 @@ func CommittingImage(vm string) M {
 	return M{id: "committing_image", vals: []val{{"vm", vm}}}
 }
 
-// ConfigNotCopied is [config_not_copied]: "devvm couldn't read {{.file}} to take its secrets out, so {{.vm}} doesn't get a copy."
+// ConfigNotCopied is [config_not_copied]: "{{.vm}} doesn't get a copy of {{.file}}, because devvm couldn't read it to take its secrets out."
 func ConfigNotCopied(file string, vm string) M {
 	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
 }
@@ -519,22 +519,22 @@ func DevcontainerEnvName(file string, name string) M {
 	return M{id: "devcontainer_env_name", vals: []val{{"file", file}, {"name", name}}}
 }
 
-// DevcontainerFeature is [devcontainer_feature]: "devvm has no layer for the feature {{.feature}} in {{.file}}. Remove it, or run devvm --no-devcontainer."
+// DevcontainerFeature is [devcontainer_feature]: "There's no layer for the feature {{.feature}} in {{.file}}. Remove it, or run devvm --no-devcontainer."
 func DevcontainerFeature(feature string, file string) M {
 	return M{id: "devcontainer_feature", vals: []val{{"feature", feature}, {"file", file}}}
 }
 
-// DevcontainerFeatureOptions is [devcontainer_feature_options]: "devvm ignores the options of {{.features}} in {{.file}}."
+// DevcontainerFeatureOptions is [devcontainer_feature_options]: "{{.file}} gives options to {{.features}}, and devvm ignores them."
 func DevcontainerFeatureOptions(features string, file string) M {
 	return M{id: "devcontainer_feature_options", vals: []val{{"features", features}, {"file", file}}}
 }
 
-// DevcontainerFlagWins is [devcontainer_flag_wins]: "devvm ignores {{.key}} in {{.file}} because you gave --{{.flag}}."
+// DevcontainerFlagWins is [devcontainer_flag_wins]: "You gave --{{.flag}}, so devvm ignores {{.key}} in {{.file}}."
 func DevcontainerFlagWins(file string, flag string, key string) M {
 	return M{id: "devcontainer_flag_wins", vals: []val{{"file", file}, {"flag", flag}, {"key", key}}}
 }
 
-// DevcontainerIgnored is [devcontainer_ignored]: "devvm ignores these properties in {{.file}}: {{.keys}}."
+// DevcontainerIgnored is [devcontainer_ignored]: "{{.file}} has properties that devvm ignores: {{.keys}}."
 func DevcontainerIgnored(file string, keys string) M {
 	return M{id: "devcontainer_ignored", vals: []val{{"file", file}, {"keys", keys}}}
 }
@@ -544,7 +544,7 @@ func DevcontainerImageNotPublic(file string, from string) M {
 	return M{id: "devcontainer_image_not_public", vals: []val{{"file", file}, {"from", from}}}
 }
 
-// DevcontainerInitialize is [devcontainer_initialize]: "devvm never runs the initializeCommand in {{.file}}, because it would run on this machine."
+// DevcontainerInitialize is [devcontainer_initialize]: "The initializeCommand in {{.file}} never runs, because it would run on this machine."
 func DevcontainerInitialize(file string) M {
 	return M{id: "devcontainer_initialize", vals: []val{{"file", file}}}
 }
@@ -564,7 +564,7 @@ func DevcontainerNew(file string, vm string) M {
 	return M{id: "devcontainer_new", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// DevcontainerPortsIgnored is [devcontainer_ports_ignored]: "devvm ignores forwardPorts {{.ports}} in {{.file}}, because a VM's ports reach only this machine's localhost."
+// DevcontainerPortsIgnored is [devcontainer_ports_ignored]: "The forwardPorts {{.ports}} in {{.file}} have no effect, because a VM's ports reach only this machine's localhost."
 func DevcontainerPortsIgnored(file string, ports string) M {
 	return M{id: "devcontainer_ports_ignored", vals: []val{{"file", file}, {"ports", ports}}}
 }
@@ -574,12 +574,12 @@ func DevcontainerPortsNotForwarded(file string, ports string) M {
 	return M{id: "devcontainer_ports_not_forwarded", vals: []val{{"file", file}, {"ports", ports}}}
 }
 
-// DevcontainerUnknown is [devcontainer_unknown]: "devvm doesn't know these properties in {{.file}}, so it ignores them: {{.keys}}."
+// DevcontainerUnknown is [devcontainer_unknown]: "{{.file}} has properties devvm doesn't know, so devvm ignores them: {{.keys}}."
 func DevcontainerUnknown(file string, keys string) M {
 	return M{id: "devcontainer_unknown", vals: []val{{"file", file}, {"keys", keys}}}
 }
 
-// DevcontainerUnreadable is [devcontainer_unreadable]: "devvm can't read {{.file}}. Fix it, or run devvm --no-devcontainer."
+// DevcontainerUnreadable is [devcontainer_unreadable]: "Reading {{.file}} failed. Fix it, or run devvm --no-devcontainer."
 func DevcontainerUnreadable(file string) M {
 	return M{id: "devcontainer_unreadable", vals: []val{{"file", file}}}
 }
@@ -614,17 +614,17 @@ func DockerArch(engine string, host string) M {
 	return M{id: "docker_arch", vals: []val{{"engine", engine}, {"host", host}}}
 }
 
-// DockerBridgeUnreadable is [docker_bridge_unreadable]: "devvm can't read the settings of Docker's bridge {{.bridge}} for {{.vm}}."
+// DockerBridgeUnreadable is [docker_bridge_unreadable]: "Reading the settings of Docker's bridge {{.bridge}} for {{.vm}} failed."
 func DockerBridgeUnreadable(bridge string, vm string) M {
 	return M{id: "docker_bridge_unreadable", vals: []val{{"bridge", bridge}, {"vm", vm}}}
 }
 
-// DockerCommitFailed is [docker_commit_failed]: "devvm couldn't commit {{.vm}}."
+// DockerCommitFailed is [docker_commit_failed]: "Committing {{.vm}} failed."
 func DockerCommitFailed(vm string) M {
 	return M{id: "docker_commit_failed", vals: []val{{"vm", vm}}}
 }
 
-// DockerConnectFailed is [docker_connect_failed]: "devvm couldn't reach {{.vm}}'s sshd through Docker: {{.reason}}."
+// DockerConnectFailed is [docker_connect_failed]: "Reaching {{.vm}}'s sshd through Docker failed: {{.reason}}."
 func DockerConnectFailed(reason string, vm string) M {
 	return M{id: "docker_connect_failed", vals: []val{{"reason", reason}, {"vm", vm}}}
 }
@@ -654,7 +654,7 @@ func DockerEngineOther(name string, version string) M {
 	return M{id: "docker_engine_other", vals: []val{{"name", name}, {"version", version}}}
 }
 
-// DockerExportFailed is [docker_export_failed]: "devvm couldn't export {{.from}} from Docker."
+// DockerExportFailed is [docker_export_failed]: "Exporting {{.from}} from Docker failed."
 func DockerExportFailed(from string) M {
 	return M{id: "docker_export_failed", vals: []val{{"from", from}}}
 }
@@ -679,7 +679,7 @@ func DockerImageChanged(from string) M {
 	return M{id: "docker_image_changed", vals: []val{{"from", from}}}
 }
 
-// DockerImageRmFailed is [docker_image_rm_failed]: "devvm couldn't delete Docker's image {{.image}}."
+// DockerImageRmFailed is [docker_image_rm_failed]: "Deleting Docker's image {{.image}} failed."
 func DockerImageRmFailed(image string) M {
 	return M{id: "docker_image_rm_failed", vals: []val{{"image", image}}}
 }
@@ -699,7 +699,7 @@ func DockerLayerRuntime(backend string, runtime string, vm string) M {
 	return M{id: "docker_layer_runtime", vals: []val{{"backend", backend}, {"runtime", runtime}, {"vm", vm}}}
 }
 
-// DockerLinuxBuildFetchFailed is [docker_linux_build_fetch_failed]: "devvm couldn't fetch its Linux build from {{.url}}. Check the connection, then run devvm again."
+// DockerLinuxBuildFetchFailed is [docker_linux_build_fetch_failed]: "Fetching devvm's Linux build from {{.url}} failed. Check the connection, then run devvm again."
 func DockerLinuxBuildFetchFailed(url string) M {
 	return M{id: "docker_linux_build_fetch_failed", vals: []val{{"url", url}}}
 }
@@ -709,12 +709,12 @@ func DockerLinuxBuildFetching(url string) M {
 	return M{id: "docker_linux_build_fetching", vals: []val{{"url", url}}}
 }
 
-// DockerLinuxBuildMismatch is [docker_linux_build_mismatch]: "devvm's Linux build from {{.url}} doesn't match the SHA-256 this devvm has, so devvm didn't use it. Reinstall devvm."
+// DockerLinuxBuildMismatch is [docker_linux_build_mismatch]: "The Linux build of devvm from {{.url}} doesn't match the SHA-256 this devvm has, so devvm didn't use it. Reinstall devvm."
 func DockerLinuxBuildMismatch(url string) M {
 	return M{id: "docker_linux_build_mismatch", vals: []val{{"url", url}}}
 }
 
-// DockerLinuxBuildMissing is [docker_linux_build_missing]: "devvm's Linux build isn't at {{.path}}, and only a release of devvm fetches its own. Build devvm for Linux there, as this one was built, or install a release."
+// DockerLinuxBuildMissing is [docker_linux_build_missing]: "There's no Linux build of devvm at {{.path}}, and only a release of devvm fetches its own. Build devvm for Linux there, as this one was built, or install a release."
 func DockerLinuxBuildMissing(path string) M {
 	return M{id: "docker_linux_build_missing", vals: []val{{"path", path}}}
 }
@@ -734,7 +734,7 @@ func DockerMountPath(path string) M {
 	return M{id: "docker_mount_path", vals: []val{{"path", path}}}
 }
 
-// DockerNetworkFailed is [docker_network_failed]: "devvm couldn't make, change or delete Docker's network {{.name}}."
+// DockerNetworkFailed is [docker_network_failed]: "Making, changing or deleting Docker's network {{.name}} failed."
 func DockerNetworkFailed(name string) M {
 	return M{id: "docker_network_failed", vals: []val{{"name", name}}}
 }
@@ -774,12 +774,12 @@ func DockerOnly(from string) M {
 	return M{id: "docker_only", vals: []val{{"from", from}}}
 }
 
-// DockerPullFailed is [docker_pull_failed]: "devvm couldn't pull {{.image}}."
+// DockerPullFailed is [docker_pull_failed]: "Pulling {{.image}} failed."
 func DockerPullFailed(image string) M {
 	return M{id: "docker_pull_failed", vals: []val{{"image", image}}}
 }
 
-// DockerRelayImageFailed is [docker_relay_image_failed]: "devvm couldn't make the empty image that its proxy's relays run in."
+// DockerRelayImageFailed is [docker_relay_image_failed]: "Making the empty image that devvm's proxy's relays run in failed."
 func DockerRelayImageFailed() M {
 	return M{id: "docker_relay_image_failed"}
 }
@@ -799,7 +799,7 @@ func DockerScriptFailed(script string, vm string) M {
 	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// DockerSSHPath is [docker_ssh_path]: "devvm's ssh config can't name {{.path}}, because it has a quote, a backslash, a percent sign or a control character."
+// DockerSSHPath is [docker_ssh_path]: "The ssh config devvm writes can't name {{.path}}, because it has a quote, a backslash, a percent sign or a control character."
 func DockerSSHPath(path string) M {
 	return M{id: "docker_ssh_path", vals: []val{{"path", path}}}
 }
@@ -809,17 +809,17 @@ func DockerSysbox() M {
 	return M{id: "docker_sysbox"}
 }
 
-// DockerToolsFailed is [docker_tools_failed]: "devvm couldn't unpack the shared tools into Docker's volume {{.volume}}."
+// DockerToolsFailed is [docker_tools_failed]: "Unpacking the shared tools into Docker's volume {{.volume}} failed."
 func DockerToolsFailed(volume string) M {
 	return M{id: "docker_tools_failed", vals: []val{{"volume", volume}}}
 }
 
-// DockerUpdateFailed is [docker_update_failed]: "devvm couldn't change {{.vm}}'s Docker settings."
+// DockerUpdateFailed is [docker_update_failed]: "Changing {{.vm}}'s Docker settings failed."
 func DockerUpdateFailed(vm string) M {
 	return M{id: "docker_update_failed", vals: []val{{"vm", vm}}}
 }
 
-// DockerVolumeFailed is [docker_volume_failed]: "devvm couldn't make or delete Docker's volume {{.name}}."
+// DockerVolumeFailed is [docker_volume_failed]: "Making or deleting Docker's volume {{.name}} failed."
 func DockerVolumeFailed(name string) M {
 	return M{id: "docker_volume_failed", vals: []val{{"name", name}}}
 }
@@ -829,7 +829,7 @@ func DockerVolumeForeign(name string) M {
 	return M{id: "docker_volume_foreign", vals: []val{{"name", name}}}
 }
 
-// DoctorFailed is [doctor_failed]: "devvm couldn't check what it needs: {{.reason}}."
+// DoctorFailed is [doctor_failed]: "Checking what devvm needs failed: {{.reason}}."
 func DoctorFailed(reason string) M {
 	return M{id: "doctor_failed", vals: []val{{"reason", reason}}}
 }
@@ -874,7 +874,7 @@ func FetchBeforeDelete(prefix string) M {
 	return M{id: "fetch_before_delete", vals: []val{{"prefix", prefix}}}
 }
 
-// FetchFailed is [fetch_failed]: "devvm couldn't fetch the branches in {{.vm}}, so it kept the VM. Run devvm rm again to retry."
+// FetchFailed is [fetch_failed]: "Fetching the branches in {{.vm}} failed, so devvm kept the VM. Run devvm rm again to retry."
 func FetchFailed(vm string) M {
 	return M{id: "fetch_failed", vals: []val{{"vm", vm}}}
 }
@@ -969,7 +969,7 @@ func GitCommondir(git string, target string) M {
 	return M{id: "git_commondir", vals: []val{{"git", git}, {"target", target}}}
 }
 
-// GitConfigFailed is [git_config_failed]: "devvm couldn't set diff.ignoreSubmodules in {{.config}}."
+// GitConfigFailed is [git_config_failed]: "Setting diff.ignoreSubmodules in {{.config}} failed."
 func GitConfigFailed(config string) M {
 	return M{id: "git_config_failed", vals: []val{{"config", config}}}
 }
@@ -1034,7 +1034,7 @@ func GitProtectClone(vm string) M {
 	return M{id: "git_protect_clone", vals: []val{{"vm", vm}}}
 }
 
-// GitProtectFailed is [git_protect_failed]: "devvm couldn't show or change .git protection: {{.reason}}."
+// GitProtectFailed is [git_protect_failed]: "Showing or changing .git protection failed: {{.reason}}."
 func GitProtectFailed(reason string) M {
 	return M{id: "git_protect_failed", vals: []val{{"reason", reason}}}
 }
@@ -1164,7 +1164,7 @@ func KeyLoadedKeychain() M {
 	return M{id: "key_loaded_keychain"}
 }
 
-// KeychainSaveFailed is [keychain_save_failed]: "devvm couldn't save the {{.secret}} secret in the Keychain."
+// KeychainSaveFailed is [keychain_save_failed]: "Saving the {{.secret}} secret in the Keychain failed."
 func KeychainSaveFailed(secret string) M {
 	return M{id: "keychain_save_failed", vals: []val{{"secret", secret}}}
 }
@@ -1214,7 +1214,7 @@ func LimaBrokenFix(fix string) M {
 	return M{id: "lima_broken_fix", vals: []val{{"fix", fix}}}
 }
 
-// LimaEditFailed is [lima_edit_failed]: "devvm couldn't change {{.vm}}'s Lima settings."
+// LimaEditFailed is [lima_edit_failed]: "Changing {{.vm}}'s Lima settings failed."
 func LimaEditFailed(vm string) M {
 	return M{id: "lima_edit_failed", vals: []val{{"vm", vm}}}
 }
@@ -1224,7 +1224,7 @@ func LimaGlobalConfig(files string) M {
 	return M{id: "lima_global_config", vals: []val{{"files", files}}}
 }
 
-// LimaHomeTooLong is [lima_home_too_long]: "devvm's Lima home {{.home}} is too long for {{.vm}}'s name. Set DEVVM_LIMA_HOME to a shorter folder."
+// LimaHomeTooLong is [lima_home_too_long]: "The path to devvm's Lima home {{.home}} is too long for {{.vm}}'s name. Set DEVVM_LIMA_HOME to a shorter folder."
 func LimaHomeTooLong(home string, vm string) M {
 	return M{id: "lima_home_too_long", vals: []val{{"home", home}, {"vm", vm}}}
 }
@@ -1284,12 +1284,12 @@ func LogEnd(file string) M {
 	return M{id: "log_end", vals: []val{{"file", file}}}
 }
 
-// LogFailed is [log_failed]: "devvm couldn't read this folder's VM's network log: {{.reason}}."
+// LogFailed is [log_failed]: "Reading this folder's VM's network log failed: {{.reason}}."
 func LogFailed(reason string) M {
 	return M{id: "log_failed", vals: []val{{"reason", reason}}}
 }
 
-// LoginCopyFailed is [login_copy_failed]: "devvm couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}."
+// LoginCopyFailed is [login_copy_failed]: "Making {{.vm}}'s copy of {{.agent}}'s login failed: {{.reason}}."
 func LoginCopyFailed(agent string, reason string, vm string) M {
 	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
 }
@@ -1374,7 +1374,7 @@ func NetAsk() M {
 	return M{id: "net_ask"}
 }
 
-// NetDirectRoute is [net_direct_route]: "devvm stopped {{.vm}} because it reached the internet without going through its proxy. Something outside devvm may have given it another network."
+// NetDirectRoute is [net_direct_route]: "{{.vm}} reached the internet without going through its proxy, so devvm stopped it. Something outside devvm may have given it another network."
 func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
@@ -1389,12 +1389,12 @@ func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
 }
 
-// NetOffBackend is [net_off_backend]: "devvm is making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
+// NetOffBackend is [net_off_backend]: "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
 func NetOffBackend(backend string, vm string) M {
 	return M{id: "net_off_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetOffDockerLayer is [net_off_docker_layer]: "devvm is making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
+// NetOffDockerLayer is [net_off_docker_layer]: "{{.vm}} gets no network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
 func NetOffDockerLayer(backend string, vm string) M {
 	return M{id: "net_off_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
@@ -1419,7 +1419,7 @@ func NetOnOldTokens(vm string) M {
 	return M{id: "net_on_old_tokens", vals: []val{{"vm", vm}}}
 }
 
-// NetProxyDownStopped is [net_proxy_down_stopped]: "devvm stopped {{.vm}} because its network policy proxy couldn't start, and the VM doesn't run without it. devvm starts both again at the VM's next launch."
+// NetProxyDownStopped is [net_proxy_down_stopped]: "{{.vm}}'s network policy proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
 func NetProxyDownStopped(vm string) M {
 	return M{id: "net_proxy_down_stopped", vals: []val{{"vm", vm}}}
 }
@@ -1444,7 +1444,7 @@ func NetUnenforcedRestart(vm string) M {
 	return M{id: "net_unenforced_restart", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedStop is [net_unenforced_stop]: "devvm stopped {{.vm}} because it wasn't started confined to its proxy, so its network policy wasn't enforced. devvm starts it confined at its next launch."
+// NetUnenforcedStop is [net_unenforced_stop]: "{{.vm}} wasn't started confined to its proxy, so its network policy wasn't enforced and devvm stopped it. devvm starts it confined at its next launch."
 func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
@@ -1474,7 +1474,7 @@ func NoDevcontainerFlagIgnored() M {
 	return M{id: "no_devcontainer_flag_ignored"}
 }
 
-// NoDigest is [no_digest]: "devvm has no digest for {{.from}}."
+// NoDigest is [no_digest]: "{{.from}} has no digest that devvm recorded."
 func NoDigest(from string) M {
 	return M{id: "no_digest", vals: []val{{"from", from}}}
 }
@@ -1489,7 +1489,7 @@ func NoGithubToken(vm string) M {
 	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
 }
 
-// NoImageFor is [no_image_for]: "devvm couldn't tell which image {{.dir}} needs. Name one as devvm IMAGE, joining any of {{.envs}} and the agents {{.agents}} with +."
+// NoImageFor is [no_image_for]: "{{.dir}} doesn't show which image it needs. Name one as devvm IMAGE, joining any of {{.envs}} and the agents {{.agents}} with +."
 func NoImageFor(agents string, dir string, envs string) M {
 	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
 }
@@ -1519,17 +1519,17 @@ func NoSSHAgent() M {
 	return M{id: "no_ssh_agent"}
 }
 
-// NoTerminalConfirm is [no_terminal_confirm]: "devvm can't ask before adding to {{.vm}} without a terminal. Run devvm {{.want}} in a terminal."
+// NoTerminalConfirm is [no_terminal_confirm]: "Adding to {{.vm}} needs your answer, and there's no terminal to ask in. Run devvm {{.want}} in a terminal."
 func NoTerminalConfirm(vm string, want string) M {
 	return M{id: "no_terminal_confirm", vals: []val{{"vm", vm}, {"want", want}}}
 }
 
-// NoTerminalDelete is [no_terminal_delete]: "devvm can't ask you to confirm without a terminal. Run devvm rm -f to delete the VM anyway."
+// NoTerminalDelete is [no_terminal_delete]: "Deleting the VM needs your confirmation, and there's no terminal to ask in. Run devvm rm -f to delete the VM anyway."
 func NoTerminalDelete() M {
 	return M{id: "no_terminal_delete"}
 }
 
-// NoTerminalFetch is [no_terminal_fetch]: "devvm can't ask without a terminal. Run git fetch {{.remote}} first, or devvm rm -f to delete the VM anyway."
+// NoTerminalFetch is [no_terminal_fetch]: "There's no terminal to ask in. Run git fetch {{.remote}} first, or devvm rm -f to delete the VM anyway."
 func NoTerminalFetch(remote string) M {
 	return M{id: "no_terminal_fetch", vals: []val{{"remote", remote}}}
 }
@@ -1539,7 +1539,7 @@ func NoToken() M {
 	return M{id: "no_token"}
 }
 
-// NoUbuntuImage is [no_ubuntu_image]: "devvm couldn't find Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}}. Check that you're online, or update devvm if Ubuntu removed the image."
+// NoUbuntuImage is [no_ubuntu_image]: "Finding Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}} failed. Check that you're online, or update devvm if Ubuntu removed the image."
 func NoUbuntuImage(release string, url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"release", release}, {"url", url}, {"version", version}}}
 }
@@ -1609,7 +1609,7 @@ func OCIWaiting() M {
 	return M{id: "oci_waiting"}
 }
 
-// OpencodeLoginKept is [opencode_login_kept]: "devvm copies opencode's {{.providers}} login into the VM unchanged."
+// OpencodeLoginKept is [opencode_login_kept]: "The VM gets opencode's {{.providers}} login unchanged."
 func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
@@ -1624,7 +1624,7 @@ func PackingImage(vm string) M {
 	return M{id: "packing_image", vals: []val{{"vm", vm}}}
 }
 
-// PolicyFailed is [policy_failed]: "devvm couldn't read or change the network policy rules: {{.reason}}."
+// PolicyFailed is [policy_failed]: "Reading or changing the network policy rules failed: {{.reason}}."
 func PolicyFailed(reason string) M {
 	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
 }
@@ -1669,7 +1669,7 @@ func PortsForwarding(ports string, vm string) M {
 	return M{id: "ports_forwarding", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
-// PortsListNeeded is [ports_list_needed]: "devvm ports add and rm take ports and ranges, such as 5173,8000-8010, not {{.value}}."
+// PortsListNeeded is [ports_list_needed]: "{{.value}} isn't a list of ports. devvm ports add and rm take ports and ranges, such as 5173,8000-8010."
 func PortsListNeeded(value string) M {
 	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
 }
@@ -1694,7 +1694,7 @@ func PortsTaken(count int, ports string, vm string) M {
 	return M{id: "ports_taken", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"ports", ports}, {"vm", vm}}}
 }
 
-// ProxyCAFailed is [proxy_ca_failed]: "devvm couldn't create the network policy proxy's CA in {{.dir}}."
+// ProxyCAFailed is [proxy_ca_failed]: "Creating the network policy proxy's CA in {{.dir}} failed."
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
 }
@@ -1729,7 +1729,7 @@ func QEMUMissingFix(fix string, program string) M {
 	return M{id: "qemu_missing_fix", vals: []val{{"fix", fix}, {"program", program}}}
 }
 
-// QEMURefused is [qemu_refused]: "devvm won't start QEMU, because its arguments don't have exactly one -netdev user,id=net0,… for devvm to restrict."
+// QEMURefused is [qemu_refused]: "The arguments for QEMU don't have exactly one -netdev user,id=net0,… for devvm to restrict, so devvm didn't start it."
 func QEMURefused() M {
 	return M{id: "qemu_refused"}
 }
@@ -1744,12 +1744,12 @@ func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
 }
 
-// RemoteAddFailed is [remote_add_failed]: "devvm couldn't add the git remote {{.remote}}. Run devvm again to retry."
+// RemoteAddFailed is [remote_add_failed]: "Adding the git remote {{.remote}} failed. Run devvm again to retry."
 func RemoteAddFailed(remote string) M {
 	return M{id: "remote_add_failed", vals: []val{{"remote", remote}}}
 }
 
-// RemoteKept is [remote_kept]: "devvm couldn't keep the branches fetched from the git remote {{.remote}} as local branches, so it left the remote in place."
+// RemoteKept is [remote_kept]: "Keeping the branches fetched from the git remote {{.remote}} as local branches failed, so devvm left the remote in place."
 func RemoteKept(remote string) M {
 	return M{id: "remote_kept", vals: []val{{"remote", remote}}}
 }
@@ -1774,7 +1774,7 @@ func RestartForMounts() M {
 	return M{id: "restart_for_mounts"}
 }
 
-// RmExportFailed is [rm_export_failed]: "devvm couldn't export {{.vm}}'s agent history, so it kept the VM. Run devvm rm -f to delete it without exporting."
+// RmExportFailed is [rm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm -f to delete it without exporting."
 func RmExportFailed(vm string) M {
 	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
 }
@@ -1814,7 +1814,7 @@ func RuleRemovedGlobal(rule string) M {
 	return M{id: "rule_removed_global", vals: []val{{"rule", rule}}}
 }
 
-// RunLogFailed is [run_log_failed]: "devvm can't write its run log in {{.dir}}: {{.reason}}."
+// RunLogFailed is [run_log_failed]: "Writing the run log in {{.dir}} failed: {{.reason}}."
 func RunLogFailed(dir string, reason string) M {
 	return M{id: "run_log_failed", vals: []val{{"dir", dir}, {"reason", reason}}}
 }
@@ -1839,12 +1839,12 @@ func ScriptFailed(script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// SecretFailed is [secret_failed]: "devvm couldn't read or change the saved secrets: {{.reason}}."
+// SecretFailed is [secret_failed]: "Reading or changing the saved secrets failed: {{.reason}}."
 func SecretFailed(reason string) M {
 	return M{id: "secret_failed", vals: []val{{"reason", reason}}}
 }
 
-// SecretReadFailed is [secret_read_failed]: "devvm couldn't read the {{.secret}} secret: {{.reason}}."
+// SecretReadFailed is [secret_read_failed]: "Reading the {{.secret}} secret failed: {{.reason}}."
 func SecretReadFailed(reason string, secret string) M {
 	return M{id: "secret_read_failed", vals: []val{{"reason", reason}, {"secret", secret}}}
 }
@@ -1864,7 +1864,7 @@ func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
 }
 
-// SecretToTerminal is [secret_to_terminal]: "devvm doesn't print a secret to a terminal. To print it anyway, add --force."
+// SecretToTerminal is [secret_to_terminal]: "The secret wasn't printed, because the output is a terminal. To print it anyway, add --force."
 func SecretToTerminal() M {
 	return M{id: "secret_to_terminal"}
 }
@@ -2014,7 +2014,7 @@ func SmolvmSSHPortForwarded(port string, vm string) M {
 	return M{id: "smolvm_ssh_port_forwarded", vals: []val{{"port", port}, {"vm", vm}}}
 }
 
-// SmolvmUpdateFailed is [smolvm_update_failed]: "devvm couldn't change {{.vm}}'s smolvm settings."
+// SmolvmUpdateFailed is [smolvm_update_failed]: "Changing {{.vm}}'s smolvm settings failed."
 func SmolvmUpdateFailed(vm string) M {
 	return M{id: "smolvm_update_failed", vals: []val{{"vm", vm}}}
 }
@@ -2054,7 +2054,7 @@ func SSHIncludeNeeded(line string) M {
 	return M{id: "ssh_include_needed", vals: []val{{"line", line}}}
 }
 
-// SSHIncludeYourself is [ssh_include_yourself]: "devvm can't ask without a terminal, so it didn't add the line. Add it yourself."
+// SSHIncludeYourself is [ssh_include_yourself]: "There's no terminal to ask in, so devvm didn't add the line. Add it yourself."
 func SSHIncludeYourself() M {
 	return M{id: "ssh_include_yourself"}
 }
@@ -2219,7 +2219,7 @@ func UbuntuUnsigned() M {
 	return M{id: "ubuntu_unsigned"}
 }
 
-// UncommittedNotCopied is [uncommitted_not_copied]: "devvm didn't copy the uncommitted changes in {{.dir}}. To give them to the VM, commit them, then run git push {{.remote}} {{.branch}}."
+// UncommittedNotCopied is [uncommitted_not_copied]: "The uncommitted changes in {{.dir}} stay on this machine. To give them to the VM, commit them, then run git push {{.remote}} {{.branch}}."
 func UncommittedNotCopied(branch string, dir string, remote string) M {
 	return M{id: "uncommitted_not_copied", vals: []val{{"branch", branch}, {"dir", dir}, {"remote", remote}}}
 }
@@ -2234,7 +2234,7 @@ func UnfinishedImage(vm string) M {
 	return M{id: "unfinished_image", vals: []val{{"vm", vm}}}
 }
 
-// UnknownFeature is [unknown_feature]: "devvm skips the feature {{.feature}} because it has no script."
+// UnknownFeature is [unknown_feature]: "The feature {{.feature}} has no script, so devvm skips it."
 func UnknownFeature(feature string) M {
 	return M{id: "unknown_feature", vals: []val{{"feature", feature}}}
 }
@@ -2359,7 +2359,7 @@ func VMSize(size string, vm string) M {
 	return M{id: "vm_size", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
-// VMUnfinished is [vm_unfinished]: "devvm didn't finish creating {{.vm}}. Run devvm rm to delete it, then devvm to make it again."
+// VMUnfinished is [vm_unfinished]: "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."
 func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
 }

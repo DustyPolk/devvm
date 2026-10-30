@@ -18,7 +18,7 @@ cmp stdout probe
 
 # Never unrestricted: a second network is refused, and QEMU doesn't run.
 ! exec wrap/qemu-system-aarch64 -netdev user,id=net0,x=1 -netdev socket,id=net1,listen=:1234
-stderr '^devvm: devvm won''t start QEMU'
+stderr '^devvm: The arguments for QEMU don''t have exactly one -netdev user'
 ! stdout .
 
 # No real QEMU on PATH (only the wrapper's and devvm's folders, as a host

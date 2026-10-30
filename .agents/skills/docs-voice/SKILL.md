@@ -39,6 +39,7 @@ These follow their own rules and are out of scope:
 Messages use the same voice as the docs, only shorter, so the CLI reads like the docs. Each one is a table in `locales/en.toml`, and its `other` and `one` strings are what devvm prints.
 
 - **Full sentences.** Each sentence has a subject and a verb, starts with a capital letter and ends with a full stop. devvm prints errors and warnings after "devvm: ", so they read as "devvm: The VM has…".
+- **A warning or an error never starts with devvm,** because devvm prints "devvm: " before it. Lead with what failed or what it's about instead, such as "Adding the git remote devvm failed." Messages printed as information, without the prefix, may start with devvm.
 - **What happened first.** Lead with what happened, or with what you're asking, in the user's terms. Then give one action as a command, such as "run devvm rm" or "check its hooks".
 - **One idea per sentence.** Don't chain clauses with colons and semicolons.
 - **Short.** An error or a warning has at most two sentences. A prompt has at most two lines of context before its question, and it marks the answer devvm recommends with "(recommended)" when there is one.

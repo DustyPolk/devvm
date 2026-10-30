@@ -109,6 +109,14 @@ A message is one or two full sentences, so it starts with a capital letter and e
 
 > couldn't adopt this folder's VM: {{.reason}}
 
+### Warnings and errors that start with devvm
+
+devvm prints "devvm: " before every warning and error, so one that starts with devvm reads "devvm: devvm couldn't…". Lead with what failed or the thing it's about.
+
+> devvm couldn't add the git remote {{.remote}}. Run devvm again to retry.
+
+> Adding the git remote {{.remote}} failed. Run devvm again to retry.
+
 ### Clauses chained with colons, and the mechanism in the message
 
 A colon or a semicolon between clauses packs a cause, a mechanism and an action into one line. Say what happened, then the one thing to do, and leave how devvm works to the message's doc link.
