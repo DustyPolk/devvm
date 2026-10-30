@@ -679,7 +679,7 @@ other = "couldn't delete this folder's VM: {{.reason}}"
 
 [adopt_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't adopt this folder's VM: {{.reason}}"
+other = "devvm couldn't adopt this folder's VM: {{.reason}}."
 
 [stop_vm_failed]
 description = "reason is an error from the system, in English"
@@ -698,13 +698,13 @@ description = "max is a number of characters"
 other = "the {{.backend}} backend's VM names (at most {{.max}} characters) leave no room for the folder's name"
 
 [vm_other_folder]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm rm deletes it, devvm adopt uses it here"
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. Run devvm rm to delete the VM, or devvm adopt to use it here."
 
 [vm_other_folder_rm]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm rm in a terminal to confirm"
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal."
 
 [vm_other_folder_adopt]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm adopt in a terminal to confirm"
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to use it here, run devvm adopt in a terminal."
 
 [delete_other_folder_vm]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since, and may hold that project's work. Delete it?"
@@ -713,10 +713,10 @@ other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced
 other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since.\nUsing it here gives this folder that VM's files, tokens and allowlist. Use it here?"
 
 [vm_adopted]
-other = "{{.vm}} now belongs to {{.dir}}"
+other = "{{.vm}} belongs to {{.dir}} now."
 
 [vm_already_here]
-other = "{{.vm}} already belongs to this folder"
+other = "{{.vm}} already belongs to this folder."
 
 [no_vm]
 other = "no VM for {{.dir}}: devvm makes one"
@@ -731,7 +731,7 @@ other = "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
 other = "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
 
 [git_protect_flag_ignored]
-other = "--no-git-protect only applies to new VMs: devvm git-protect off"
+other = "--no-git-protect applies only to new VMs. To turn off .git protection for this VM, run devvm git-protect off."
 
 [size_flags_ignored]
 other = "--cpus, --memory and --disk only apply to new VMs: devvm size --cpus N"
@@ -787,13 +787,13 @@ other = "stopped {{.vm}}"
 other = "{{.vm}} is already stopped"
 
 [unsafe_folder]
-other = "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, --clone, or --unsafe-folder if you mean it"
+other = "{{.dir}} is or holds {{.holds}}, so the VM would get read-write access to it. Use a project folder inside {{.dir}}, use --clone, or pass --unsafe-folder if you mean it."
 
 [unsafe_folder_inside]
-other = "{{.dir}} is inside {{.inside}}, devvm's own, which the VM would get read-write: keep the project elsewhere, or --unsafe-folder if you mean it"
+other = "{{.dir}} is inside {{.inside}}, one of devvm's own folders, so the VM would get read-write access to part of it. Keep the project somewhere else, or pass --unsafe-folder if you mean it."
 
 [unsafe_folder_used]
-other = "--unsafe-folder: the VM gets {{.dir}} read-write, {{.holds}} included"
+other = "You passed --unsafe-folder, so the VM gets read-write access to {{.dir}}, which overlaps {{.holds}}."
 
 [cpus_not_number]
 description = "value is quoted, as given"
@@ -1108,55 +1108,55 @@ other = "devvm's SSH agent holds: {{.keys}}"
 other = "VMs with devvm ssh-agent devvm can use it while you're connected; devvm loads it again after a reboot."
 
 [clone_needs_git]
-other = "--clone needs git on this machine"
+other = "--clone needs git, and git isn't installed on this machine."
 
 [clone_not_top]
-other = "--clone needs the top folder of a git repo; {{.dir}} isn't one"
+other = "--clone needs the top folder of a git repo, and {{.dir}} isn't one. Run devvm --clone in the repo's top folder."
 
 [clone_no_commits]
-other = "--clone: the repo has no commits yet"
+other = "--clone needs a commit, and this repo has none yet. Make a first commit, then run devvm --clone again."
 
 [clone_detached]
-other = "--clone: HEAD is detached; check out a branch first"
+other = "--clone needs a branch checked out, and HEAD is detached. Check out a branch, then run devvm --clone again."
 
 [clone_needs_new_vm]
-other = "{{.vm}} mounts this folder; --clone needs a new VM: save any work in it, then devvm rm and devvm --clone"
+other = "{{.vm}} mounts this folder, and --clone needs a new VM. Save any work in it, then run devvm rm and devvm --clone."
 
 [copying_branches]
 other = "copying the repo's branches into the VM"
 
 [clone_seed_failed]
-other = "couldn't copy the repo's branches into {{.vm}}: run devvm again to retry"
+other = "devvm couldn't copy the repo's branches into {{.vm}}. Run devvm again to retry."
 
 [remotes_taken]
-other = "git remotes devvm, devvm-{{.slug}} and {{.vm}} are all taken: remove one and run devvm again"
+other = "This repo already has other git remotes named devvm, devvm-{{.slug}} and {{.vm}}. Remove one, then run devvm again."
 
 [remote_add_failed]
-other = "couldn't add git remote {{.remote}}: run devvm again to retry"
+other = "devvm couldn't add the git remote {{.remote}}. Run devvm again to retry."
 
 [fetch_until]
 description = "file is devvm's ssh config"
-other = "until then, fetch with: GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}"
+other = "Until ~/.ssh/config includes devvm's ssh config, fetch the VM's work with GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}."
 
 [uncommitted_not_copied]
-other = "uncommitted changes in {{.dir}} weren't copied: commit them, then git push {{.remote}} {{.branch}}"
+other = "devvm didn't copy the uncommitted changes in {{.dir}}. To give them to the VM, commit them, then run git push {{.remote}} {{.branch}}."
 
 [clone_ready]
-other = "the VM has its own clone of {{.branch}} and your other branches, without untracked or ignored files. Get its work with git fetch {{.remote}}, review it (git log -p {{.branch}}..{{.remote}}/{{.branch}}), then merge"
+other = "The VM has its own clone of your branches, without untracked or ignored files.\nTo get its work, run git fetch {{.remote}}, then review it with git log -p {{.branch}}..{{.remote}}/{{.branch}} before you merge."
 
 [unfetched_commits]
 description = "refs is a space-separated list of quoted branch names"
-other = "The VM has commits this repo hasn't fetched, on: {{.refs}}"
+other = "The VM has commits on {{.refs}} that this repo hasn't fetched."
 
 [no_terminal_fetch]
 other = "not a terminal: run git fetch {{.remote}} first, or devvm rm -f to delete anyway"
 
 [branch_names_invalid]
 description = "refs is a space-separated list of quoted branch names"
-other = "skipping the VM's branches with names git refuses: {{.refs}}"
+other = "devvm skips these branches in the VM because git refuses their names: {{.refs}}."
 
 [saved_names_taken]
-other = "no free branch names saved/{{.remote}}/* to saved/{{.remote}}-99/* in this repo; {{.vm}} is kept"
+other = "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}}. Rename or delete some of those branches, then run devvm rm again."
 
 [fetch_before_delete]
 other = "Fetch them into local branches {{.prefix}}/* before deleting?"
@@ -1166,16 +1166,16 @@ other = "fetching the VM's branches into {{.prefix}}/*"
 
 [saved_branches]
 description = "branches is a space-separated list of quoted branch names"
-other = "kept the VM's branches as local branches {{.branches}}"
+other = "devvm kept the VM's branches as the local branches {{.branches}}."
 
 [remote_kept]
-other = "couldn't keep the branches fetched from git remote {{.remote}} as local branches, so the remote stays"
+other = "devvm couldn't keep the branches fetched from the git remote {{.remote}} as local branches, so it left the remote in place."
 
 [fetch_failed]
-other = "couldn't fetch the branches in {{.vm}}; it's kept"
+other = "devvm couldn't fetch the branches in {{.vm}}, so it kept the VM. Run devvm rm again to retry."
 
 [clone_check_failed]
-other = "couldn't read the clone in {{.vm}}; it's kept: devvm rm -f deletes it anyway"
+other = "devvm couldn't read the clone in {{.vm}}, so it kept the VM. To delete it anyway, run devvm rm -f."
 
 [clone_dirty]
 other = "The VM's clone has uncommitted changes, which will be lost:"
@@ -1194,81 +1194,81 @@ other = "removed git remote {{.remote}}"
 
 [setid_files]
 description = "files is a space-separated list of paths"
-other = "set-user-id or set-group-id files in the project folder, which run as their owner for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+other = "The project folder has set-user-id or set-group-id files, which run as their owner for anyone who runs them: {{.files}}. To clear the bits, run chmod u-s,g-s FILE on each one."
 
 [setid_root_files]
 description = "files is a space-separated list of paths"
-other = "set-id files of root's in the project folder, which run as root for anyone who runs them: {{.files}}; don't run them, delete them (sudo rm FILE)"
+other = "The project folder has set-id files owned by root, which run as root for anyone who runs them: {{.files}}. Don't run them, and delete them with sudo rm FILE."
 
 [git_protect_needs_macos_new]
-other = ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine. --clone keeps a VM out of .git"
+other = ".git protection needs macOS, so this VM can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone."
 
 [no_vm_git_protect]
 other = "no VM for {{.dir}}: devvm makes one, devvm --no-git-protect one without .git protection"
 
 [git_protect_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't show or change .git protection: {{.reason}}"
+other = "devvm couldn't show or change .git protection: {{.reason}}."
 
 [git_protect_running]
-other = "{{.vm}} is running, and changing its .git protection now could race it: run devvm stop first"
+other = "{{.vm}} is running, and devvm changes .git protection only while the VM is stopped. Run devvm stop first."
 
 [git_protect_on_needs_macos]
-other = ".git protection needs macOS: --clone keeps a VM out of .git"
+other = ".git protection needs macOS. To keep a VM out of .git, use devvm --clone."
 
 [git_protect_clone]
-other = "{{.vm}} is a --clone VM: it mounts no .git to protect"
+other = "{{.vm}} is a --clone VM, so it mounts no .git to protect."
 
 [git_config_failed]
-other = "couldn't set diff.ignoreSubmodules in {{.config}}"
+other = "devvm couldn't set diff.ignoreSubmodules in {{.config}}."
 
 [git_locked]
-other = ".git hooks and config locked for {{.vm}}"
+other = "devvm locked the hooks and config in .git for {{.vm}}."
 
 [git_locked_strict]
-other = ".git hooks and config locked for {{.vm}}; host git status and diff no longer look inside submodules"
+other = "devvm locked the hooks and config in .git for {{.vm}}. git status and git diff on this machine don't look inside submodules."
 
 [git_lock_later]
-other = "no .git here yet: locked for {{.vm}} when one appears"
+other = "This folder has no .git yet. devvm locks it for {{.vm}} when one appears."
 
 [git_unlocked]
-other = ".git unlocked: {{.vm}} can change its hooks and config, which run on this machine; devvm git-protect on locks it again"
+other = "devvm unlocked .git, so {{.vm}} can change its hooks and config, which run on this machine. To lock it again, run devvm git-protect on."
 
 [git_commondir]
-other = "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"
+other = "WARNING: If you didn't make {{.git}}/commondir, check it before you run git here. It makes git read config from {{.target}}."
 
 [git_worktree_stray]
-other = "WARNING: {{.wt}}/commondir doesn't lead back to this repo, so git in that linked worktree reads config and hooks from elsewhere: if you didn't change it, check it before running git there"
+other = "WARNING: If you didn't change {{.wt}}/commondir, check it before you run git in that linked worktree. It doesn't lead back to this repo, so git there reads config and hooks from somewhere else."
 
 [git_not_locked]
-other = "WARNING: {{.path}} is a symlink or under one, so devvm can't lock it: if you didn't make it, check it before running git here"
+other = "WARNING: If you didn't make {{.path}}, check it before you run git here. It's a symlink or under one, so devvm can't lock it."
 
 [git_lock_raced]
-other = "{{.path}} moved while devvm locked it: not locked, and the lock undone where it landed; check .git"
+other = "{{.path}} moved while devvm was locking it, so devvm left it unlocked and undid the lock where it landed. Check .git before you run git here."
 
 [git_hooks_path]
-other = "core.hooksPath is {{.path}}, inside the project folder: the VM can edit those hooks, and they run on this machine"
+other = "core.hooksPath is {{.path}}, which is inside the project folder, so the VM can edit those hooks, and they run on this machine."
 
 [git_include_inside]
-other = "{{.config}} includes {{.path}}, inside the project folder: the VM can edit it, and host git reads it"
+other = "{{.config}} includes {{.path}}, which is inside the project folder, so the VM can edit that file, and git on this machine reads it."
 
 [git_hook_link_inside]
-other = "{{.hook}} links to {{.target}}, inside the project folder: the VM can edit that hook, and it runs on this machine"
+other = "{{.hook}} links to {{.target}}, which is inside the project folder, so the VM can edit that hook, and it runs on this machine."
 
 [git_replaced]
-other = "WARNING: {{.git}} was replaced since devvm locked it, maybe from inside the VM, and its config and hooks run on this machine: check them before running git here (and look for the old .git, renamed)"
+other = "WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here."
 
 [git_appeared]
-other = "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
+other = "A git repo appeared in this folder after its VM was made. If you didn't make it, check its hooks and config before you run git here."
 
 [git_embedded_new]
-other = "WARNING: a submodule with its git folder in the project appeared: {{.git}}. Host git status runs code its config names: if you didn't add it, check its config and hooks before running git here"
+other = "WARNING: A submodule appeared with its git folder at {{.git}}, inside the project. If you didn't add it, check its hooks and config before you run git here."
 
 [git_hooks_unlocked]
-other = "WARNING: {{.hooks}} has hooks but wasn't locked, so they appeared since devvm last ran, and host git runs them: if you didn't add them, check them before running git here"
+other = "WARNING: Hooks appeared in {{.hooks}}, a folder devvm hadn't locked, since devvm last ran. If you didn't add them, check them before you run git here."
 
 [git_gitdir_outside]
-other = "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"
+other = "The submodule {{.sub}} keeps its git folder outside the project, at {{.git}}, so devvm can't lock it. git status on this machine still reads its config."
 
 [tools_not_images]
 description = "tools is a space-separated list of shared tools (node claude)"

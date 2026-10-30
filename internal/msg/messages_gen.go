@@ -24,7 +24,7 @@ func Adding(layer string) M {
 	return M{id: "adding", vals: []val{{"layer", layer}}}
 }
 
-// AdoptFailed is [adopt_failed]: "couldn't adopt this folder's VM: {{.reason}}"
+// AdoptFailed is [adopt_failed]: "devvm couldn't adopt this folder's VM: {{.reason}}."
 func AdoptFailed(reason string) M {
 	return M{id: "adopt_failed", vals: []val{{"reason", reason}}}
 }
@@ -239,7 +239,7 @@ func BaseWillRebuild() M {
 	return M{id: "base_will_rebuild"}
 }
 
-// BranchNamesInvalid is [branch_names_invalid]: "skipping the VM's branches with names git refuses: {{.refs}}"
+// BranchNamesInvalid is [branch_names_invalid]: "devvm skips these branches in the VM because git refuses their names: {{.refs}}."
 func BranchNamesInvalid(refs string) M {
 	return M{id: "branch_names_invalid", vals: []val{{"refs", refs}}}
 }
@@ -289,12 +289,12 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
-// CloneCheckFailed is [clone_check_failed]: "couldn't read the clone in {{.vm}}; it's kept: devvm rm -f deletes it anyway"
+// CloneCheckFailed is [clone_check_failed]: "devvm couldn't read the clone in {{.vm}}, so it kept the VM. To delete it anyway, run devvm rm -f."
 func CloneCheckFailed(vm string) M {
 	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
 }
 
-// CloneDetached is [clone_detached]: "--clone: HEAD is detached; check out a branch first"
+// CloneDetached is [clone_detached]: "--clone needs a branch checked out, and HEAD is detached. Check out a branch, then run devvm --clone again."
 func CloneDetached() M {
 	return M{id: "clone_detached"}
 }
@@ -304,32 +304,32 @@ func CloneDirty() M {
 	return M{id: "clone_dirty"}
 }
 
-// CloneNeedsGit is [clone_needs_git]: "--clone needs git on this machine"
+// CloneNeedsGit is [clone_needs_git]: "--clone needs git, and git isn't installed on this machine."
 func CloneNeedsGit() M {
 	return M{id: "clone_needs_git"}
 }
 
-// CloneNeedsNewVM is [clone_needs_new_vm]: "{{.vm}} mounts this folder; --clone needs a new VM: save any work in it, then devvm rm and devvm --clone"
+// CloneNeedsNewVM is [clone_needs_new_vm]: "{{.vm}} mounts this folder, and --clone needs a new VM. Save any work in it, then run devvm rm and devvm --clone."
 func CloneNeedsNewVM(vm string) M {
 	return M{id: "clone_needs_new_vm", vals: []val{{"vm", vm}}}
 }
 
-// CloneNoCommits is [clone_no_commits]: "--clone: the repo has no commits yet"
+// CloneNoCommits is [clone_no_commits]: "--clone needs a commit, and this repo has none yet. Make a first commit, then run devvm --clone again."
 func CloneNoCommits() M {
 	return M{id: "clone_no_commits"}
 }
 
-// CloneNotTop is [clone_not_top]: "--clone needs the top folder of a git repo; {{.dir}} isn't one"
+// CloneNotTop is [clone_not_top]: "--clone needs the top folder of a git repo, and {{.dir}} isn't one. Run devvm --clone in the repo's top folder."
 func CloneNotTop(dir string) M {
 	return M{id: "clone_not_top", vals: []val{{"dir", dir}}}
 }
 
-// CloneReady is [clone_ready]: "the VM has its own clone of {{.branch}} and your other branches, without untracked or ignored files. Get its work with git fetch {{.remote}}, review it (git log -p {{.branch}}..{{.remote}}/{{.branch}}), then merge"
+// CloneReady is [clone_ready]: "The VM has its own clone of your branches, without untracked or ignored files.\nTo get its work, run git fetch {{.remote}}, then review it with git log -p {{.branch}}..{{.remote}}/{{.branch}} before you merge."
 func CloneReady(branch string, remote string) M {
 	return M{id: "clone_ready", vals: []val{{"branch", branch}, {"remote", remote}}}
 }
 
-// CloneSeedFailed is [clone_seed_failed]: "couldn't copy the repo's branches into {{.vm}}: run devvm again to retry"
+// CloneSeedFailed is [clone_seed_failed]: "devvm couldn't copy the repo's branches into {{.vm}}. Run devvm again to retry."
 func CloneSeedFailed(vm string) M {
 	return M{id: "clone_seed_failed", vals: []val{{"vm", vm}}}
 }
@@ -874,12 +874,12 @@ func FetchBeforeDelete(prefix string) M {
 	return M{id: "fetch_before_delete", vals: []val{{"prefix", prefix}}}
 }
 
-// FetchFailed is [fetch_failed]: "couldn't fetch the branches in {{.vm}}; it's kept"
+// FetchFailed is [fetch_failed]: "devvm couldn't fetch the branches in {{.vm}}, so it kept the VM. Run devvm rm again to retry."
 func FetchFailed(vm string) M {
 	return M{id: "fetch_failed", vals: []val{{"vm", vm}}}
 }
 
-// FetchUntil is [fetch_until]: "until then, fetch with: GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}"
+// FetchUntil is [fetch_until]: "Until ~/.ssh/config includes devvm's ssh config, fetch the VM's work with GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}."
 func FetchUntil(file string, remote string) M {
 	return M{id: "fetch_until", vals: []val{{"file", file}, {"remote", remote}}}
 }
@@ -959,117 +959,117 @@ func GCUnfinished(key string) M {
 	return M{id: "gc_unfinished", vals: []val{{"key", key}}}
 }
 
-// GitAppeared is [git_appeared]: "a git repo appeared in this folder after its VM was made: if you didn't make it, check its config and hooks before running git here"
+// GitAppeared is [git_appeared]: "A git repo appeared in this folder after its VM was made. If you didn't make it, check its hooks and config before you run git here."
 func GitAppeared() M {
 	return M{id: "git_appeared"}
 }
 
-// GitCommondir is [git_commondir]: "WARNING: {{.git}}/commondir exists, so git reads config from {{.target}}: if you didn't make it, check it before running git here"
+// GitCommondir is [git_commondir]: "WARNING: If you didn't make {{.git}}/commondir, check it before you run git here. It makes git read config from {{.target}}."
 func GitCommondir(git string, target string) M {
 	return M{id: "git_commondir", vals: []val{{"git", git}, {"target", target}}}
 }
 
-// GitConfigFailed is [git_config_failed]: "couldn't set diff.ignoreSubmodules in {{.config}}"
+// GitConfigFailed is [git_config_failed]: "devvm couldn't set diff.ignoreSubmodules in {{.config}}."
 func GitConfigFailed(config string) M {
 	return M{id: "git_config_failed", vals: []val{{"config", config}}}
 }
 
-// GitEmbeddedNew is [git_embedded_new]: "WARNING: a submodule with its git folder in the project appeared: {{.git}}. Host git status runs code its config names: if you didn't add it, check its config and hooks before running git here"
+// GitEmbeddedNew is [git_embedded_new]: "WARNING: A submodule appeared with its git folder at {{.git}}, inside the project. If you didn't add it, check its hooks and config before you run git here."
 func GitEmbeddedNew(git string) M {
 	return M{id: "git_embedded_new", vals: []val{{"git", git}}}
 }
 
-// GitGitdirOutside is [git_gitdir_outside]: "submodule {{.sub}} keeps its git folder outside the project, at {{.git}}: devvm can't lock it, and host git status reads its config"
+// GitGitdirOutside is [git_gitdir_outside]: "The submodule {{.sub}} keeps its git folder outside the project, at {{.git}}, so devvm can't lock it. git status on this machine still reads its config."
 func GitGitdirOutside(git string, sub string) M {
 	return M{id: "git_gitdir_outside", vals: []val{{"git", git}, {"sub", sub}}}
 }
 
-// GitHookLinkInside is [git_hook_link_inside]: "{{.hook}} links to {{.target}}, inside the project folder: the VM can edit that hook, and it runs on this machine"
+// GitHookLinkInside is [git_hook_link_inside]: "{{.hook}} links to {{.target}}, which is inside the project folder, so the VM can edit that hook, and it runs on this machine."
 func GitHookLinkInside(hook string, target string) M {
 	return M{id: "git_hook_link_inside", vals: []val{{"hook", hook}, {"target", target}}}
 }
 
-// GitHooksPath is [git_hooks_path]: "core.hooksPath is {{.path}}, inside the project folder: the VM can edit those hooks, and they run on this machine"
+// GitHooksPath is [git_hooks_path]: "core.hooksPath is {{.path}}, which is inside the project folder, so the VM can edit those hooks, and they run on this machine."
 func GitHooksPath(path string) M {
 	return M{id: "git_hooks_path", vals: []val{{"path", path}}}
 }
 
-// GitHooksUnlocked is [git_hooks_unlocked]: "WARNING: {{.hooks}} has hooks but wasn't locked, so they appeared since devvm last ran, and host git runs them: if you didn't add them, check them before running git here"
+// GitHooksUnlocked is [git_hooks_unlocked]: "WARNING: Hooks appeared in {{.hooks}}, a folder devvm hadn't locked, since devvm last ran. If you didn't add them, check them before you run git here."
 func GitHooksUnlocked(hooks string) M {
 	return M{id: "git_hooks_unlocked", vals: []val{{"hooks", hooks}}}
 }
 
-// GitIncludeInside is [git_include_inside]: "{{.config}} includes {{.path}}, inside the project folder: the VM can edit it, and host git reads it"
+// GitIncludeInside is [git_include_inside]: "{{.config}} includes {{.path}}, which is inside the project folder, so the VM can edit that file, and git on this machine reads it."
 func GitIncludeInside(config string, path string) M {
 	return M{id: "git_include_inside", vals: []val{{"config", config}, {"path", path}}}
 }
 
-// GitLockLater is [git_lock_later]: "no .git here yet: locked for {{.vm}} when one appears"
+// GitLockLater is [git_lock_later]: "This folder has no .git yet. devvm locks it for {{.vm}} when one appears."
 func GitLockLater(vm string) M {
 	return M{id: "git_lock_later", vals: []val{{"vm", vm}}}
 }
 
-// GitLockRaced is [git_lock_raced]: "{{.path}} moved while devvm locked it: not locked, and the lock undone where it landed; check .git"
+// GitLockRaced is [git_lock_raced]: "{{.path}} moved while devvm was locking it, so devvm left it unlocked and undid the lock where it landed. Check .git before you run git here."
 func GitLockRaced(path string) M {
 	return M{id: "git_lock_raced", vals: []val{{"path", path}}}
 }
 
-// GitLocked is [git_locked]: ".git hooks and config locked for {{.vm}}"
+// GitLocked is [git_locked]: "devvm locked the hooks and config in .git for {{.vm}}."
 func GitLocked(vm string) M {
 	return M{id: "git_locked", vals: []val{{"vm", vm}}}
 }
 
-// GitLockedStrict is [git_locked_strict]: ".git hooks and config locked for {{.vm}}; host git status and diff no longer look inside submodules"
+// GitLockedStrict is [git_locked_strict]: "devvm locked the hooks and config in .git for {{.vm}}. git status and git diff on this machine don't look inside submodules."
 func GitLockedStrict(vm string) M {
 	return M{id: "git_locked_strict", vals: []val{{"vm", vm}}}
 }
 
-// GitNotLocked is [git_not_locked]: "WARNING: {{.path}} is a symlink or under one, so devvm can't lock it: if you didn't make it, check it before running git here"
+// GitNotLocked is [git_not_locked]: "WARNING: If you didn't make {{.path}}, check it before you run git here. It's a symlink or under one, so devvm can't lock it."
 func GitNotLocked(path string) M {
 	return M{id: "git_not_locked", vals: []val{{"path", path}}}
 }
 
-// GitProtectClone is [git_protect_clone]: "{{.vm}} is a --clone VM: it mounts no .git to protect"
+// GitProtectClone is [git_protect_clone]: "{{.vm}} is a --clone VM, so it mounts no .git to protect."
 func GitProtectClone(vm string) M {
 	return M{id: "git_protect_clone", vals: []val{{"vm", vm}}}
 }
 
-// GitProtectFailed is [git_protect_failed]: "couldn't show or change .git protection: {{.reason}}"
+// GitProtectFailed is [git_protect_failed]: "devvm couldn't show or change .git protection: {{.reason}}."
 func GitProtectFailed(reason string) M {
 	return M{id: "git_protect_failed", vals: []val{{"reason", reason}}}
 }
 
-// GitProtectFlagIgnored is [git_protect_flag_ignored]: "--no-git-protect only applies to new VMs: devvm git-protect off"
+// GitProtectFlagIgnored is [git_protect_flag_ignored]: "--no-git-protect applies only to new VMs. To turn off .git protection for this VM, run devvm git-protect off."
 func GitProtectFlagIgnored() M {
 	return M{id: "git_protect_flag_ignored"}
 }
 
-// GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS: this VM can change .git hooks and config, which run on this machine. --clone keeps a VM out of .git"
+// GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS, so this VM can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone."
 func GitProtectNeedsMacosNew() M {
 	return M{id: "git_protect_needs_macos_new"}
 }
 
-// GitProtectOnNeedsMacos is [git_protect_on_needs_macos]: ".git protection needs macOS: --clone keeps a VM out of .git"
+// GitProtectOnNeedsMacos is [git_protect_on_needs_macos]: ".git protection needs macOS. To keep a VM out of .git, use devvm --clone."
 func GitProtectOnNeedsMacos() M {
 	return M{id: "git_protect_on_needs_macos"}
 }
 
-// GitProtectRunning is [git_protect_running]: "{{.vm}} is running, and changing its .git protection now could race it: run devvm stop first"
+// GitProtectRunning is [git_protect_running]: "{{.vm}} is running, and devvm changes .git protection only while the VM is stopped. Run devvm stop first."
 func GitProtectRunning(vm string) M {
 	return M{id: "git_protect_running", vals: []val{{"vm", vm}}}
 }
 
-// GitReplaced is [git_replaced]: "WARNING: {{.git}} was replaced since devvm locked it, maybe from inside the VM, and its config and hooks run on this machine: check them before running git here (and look for the old .git, renamed)"
+// GitReplaced is [git_replaced]: "WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here."
 func GitReplaced(git string) M {
 	return M{id: "git_replaced", vals: []val{{"git", git}}}
 }
 
-// GitUnlocked is [git_unlocked]: ".git unlocked: {{.vm}} can change its hooks and config, which run on this machine; devvm git-protect on locks it again"
+// GitUnlocked is [git_unlocked]: "devvm unlocked .git, so {{.vm}} can change its hooks and config, which run on this machine. To lock it again, run devvm git-protect on."
 func GitUnlocked(vm string) M {
 	return M{id: "git_unlocked", vals: []val{{"vm", vm}}}
 }
 
-// GitWorktreeStray is [git_worktree_stray]: "WARNING: {{.wt}}/commondir doesn't lead back to this repo, so git in that linked worktree reads config and hooks from elsewhere: if you didn't change it, check it before running git there"
+// GitWorktreeStray is [git_worktree_stray]: "WARNING: If you didn't change {{.wt}}/commondir, check it before you run git in that linked worktree. It doesn't lead back to this repo, so git there reads config and hooks from somewhere else."
 func GitWorktreeStray(wt string) M {
 	return M{id: "git_worktree_stray", vals: []val{{"wt", wt}}}
 }
@@ -1744,17 +1744,17 @@ func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
 }
 
-// RemoteAddFailed is [remote_add_failed]: "couldn't add git remote {{.remote}}: run devvm again to retry"
+// RemoteAddFailed is [remote_add_failed]: "devvm couldn't add the git remote {{.remote}}. Run devvm again to retry."
 func RemoteAddFailed(remote string) M {
 	return M{id: "remote_add_failed", vals: []val{{"remote", remote}}}
 }
 
-// RemoteKept is [remote_kept]: "couldn't keep the branches fetched from git remote {{.remote}} as local branches, so the remote stays"
+// RemoteKept is [remote_kept]: "devvm couldn't keep the branches fetched from the git remote {{.remote}} as local branches, so it left the remote in place."
 func RemoteKept(remote string) M {
 	return M{id: "remote_kept", vals: []val{{"remote", remote}}}
 }
 
-// RemotesTaken is [remotes_taken]: "git remotes devvm, devvm-{{.slug}} and {{.vm}} are all taken: remove one and run devvm again"
+// RemotesTaken is [remotes_taken]: "This repo already has other git remotes named devvm, devvm-{{.slug}} and {{.vm}}. Remove one, then run devvm again."
 func RemotesTaken(slug string, vm string) M {
 	return M{id: "remotes_taken", vals: []val{{"slug", slug}, {"vm", vm}}}
 }
@@ -1824,12 +1824,12 @@ func RunningScript(script string, vm string) M {
 	return M{id: "running_script", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// SavedBranches is [saved_branches]: "kept the VM's branches as local branches {{.branches}}"
+// SavedBranches is [saved_branches]: "devvm kept the VM's branches as the local branches {{.branches}}."
 func SavedBranches(branches string) M {
 	return M{id: "saved_branches", vals: []val{{"branches", branches}}}
 }
 
-// SavedNamesTaken is [saved_names_taken]: "no free branch names saved/{{.remote}}/* to saved/{{.remote}}-99/* in this repo; {{.vm}} is kept"
+// SavedNamesTaken is [saved_names_taken]: "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}}. Rename or delete some of those branches, then run devvm rm again."
 func SavedNamesTaken(remote string, vm string) M {
 	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
 }
@@ -1889,12 +1889,12 @@ func SecretWithImage(vm string) M {
 	return M{id: "secret_with_image", vals: []val{{"vm", vm}}}
 }
 
-// SetidFiles is [setid_files]: "set-user-id or set-group-id files in the project folder, which run as their owner for anyone who runs them: {{.files}}; clear with chmod u-s,g-s FILE"
+// SetidFiles is [setid_files]: "The project folder has set-user-id or set-group-id files, which run as their owner for anyone who runs them: {{.files}}. To clear the bits, run chmod u-s,g-s FILE on each one."
 func SetidFiles(files string) M {
 	return M{id: "setid_files", vals: []val{{"files", files}}}
 }
 
-// SetidRootFiles is [setid_root_files]: "set-id files of root's in the project folder, which run as root for anyone who runs them: {{.files}}; don't run them, delete them (sudo rm FILE)"
+// SetidRootFiles is [setid_root_files]: "The project folder has set-id files owned by root, which run as root for anyone who runs them: {{.files}}. Don't run them, and delete them with sudo rm FILE."
 func SetidRootFiles(files string) M {
 	return M{id: "setid_root_files", vals: []val{{"files", files}}}
 }
@@ -2219,12 +2219,12 @@ func UbuntuUnsigned() M {
 	return M{id: "ubuntu_unsigned"}
 }
 
-// UncommittedNotCopied is [uncommitted_not_copied]: "uncommitted changes in {{.dir}} weren't copied: commit them, then git push {{.remote}} {{.branch}}"
+// UncommittedNotCopied is [uncommitted_not_copied]: "devvm didn't copy the uncommitted changes in {{.dir}}. To give them to the VM, commit them, then run git push {{.remote}} {{.branch}}."
 func UncommittedNotCopied(branch string, dir string, remote string) M {
 	return M{id: "uncommitted_not_copied", vals: []val{{"branch", branch}, {"dir", dir}, {"remote", remote}}}
 }
 
-// UnfetchedCommits is [unfetched_commits]: "The VM has commits this repo hasn't fetched, on: {{.refs}}"
+// UnfetchedCommits is [unfetched_commits]: "The VM has commits on {{.refs}} that this repo hasn't fetched."
 func UnfetchedCommits(refs string) M {
 	return M{id: "unfetched_commits", vals: []val{{"refs", refs}}}
 }
@@ -2249,17 +2249,17 @@ func UnpackingTools() M {
 	return M{id: "unpacking_tools"}
 }
 
-// UnsafeFolder is [unsafe_folder]: "{{.dir}} holds {{.holds}}, which the VM would get read-write: use a project folder inside it, --clone, or --unsafe-folder if you mean it"
+// UnsafeFolder is [unsafe_folder]: "{{.dir}} is or holds {{.holds}}, so the VM would get read-write access to it. Use a project folder inside {{.dir}}, use --clone, or pass --unsafe-folder if you mean it."
 func UnsafeFolder(dir string, holds string) M {
 	return M{id: "unsafe_folder", vals: []val{{"dir", dir}, {"holds", holds}}}
 }
 
-// UnsafeFolderInside is [unsafe_folder_inside]: "{{.dir}} is inside {{.inside}}, devvm's own, which the VM would get read-write: keep the project elsewhere, or --unsafe-folder if you mean it"
+// UnsafeFolderInside is [unsafe_folder_inside]: "{{.dir}} is inside {{.inside}}, one of devvm's own folders, so the VM would get read-write access to part of it. Keep the project somewhere else, or pass --unsafe-folder if you mean it."
 func UnsafeFolderInside(dir string, inside string) M {
 	return M{id: "unsafe_folder_inside", vals: []val{{"dir", dir}, {"inside", inside}}}
 }
 
-// UnsafeFolderUsed is [unsafe_folder_used]: "--unsafe-folder: the VM gets {{.dir}} read-write, {{.holds}} included"
+// UnsafeFolderUsed is [unsafe_folder_used]: "You passed --unsafe-folder, so the VM gets read-write access to {{.dir}}, which overlaps {{.holds}}."
 func UnsafeFolderUsed(dir string, holds string) M {
 	return M{id: "unsafe_folder_used", vals: []val{{"dir", dir}, {"holds", holds}}}
 }
@@ -2279,12 +2279,12 @@ func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
 }
 
-// VMAdopted is [vm_adopted]: "{{.vm}} now belongs to {{.dir}}"
+// VMAdopted is [vm_adopted]: "{{.vm}} belongs to {{.dir}} now."
 func VMAdopted(dir string, vm string) M {
 	return M{id: "vm_adopted", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
-// VMAlreadyHere is [vm_already_here]: "{{.vm}} already belongs to this folder"
+// VMAlreadyHere is [vm_already_here]: "{{.vm}} already belongs to this folder."
 func VMAlreadyHere(vm string) M {
 	return M{id: "vm_already_here", vals: []val{{"vm", vm}}}
 }
@@ -2334,17 +2334,17 @@ func VMNotStopped(vm string) M {
 	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
 }
 
-// VMOtherFolder is [vm_other_folder]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: devvm rm deletes it, devvm adopt uses it here"
+// VMOtherFolder is [vm_other_folder]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. Run devvm rm to delete the VM, or devvm adopt to use it here."
 func VMOtherFolder(vm string, was string) M {
 	return M{id: "vm_other_folder", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm adopt in a terminal to confirm"
+// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to use it here, run devvm adopt in a terminal."
 func VMOtherFolderAdopt(vm string, was string) M {
 	return M{id: "vm_other_folder_adopt", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOtherFolderRm is [vm_other_folder_rm]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since: run devvm rm in a terminal to confirm"
+// VMOtherFolderRm is [vm_other_folder_rm]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal."
 func VMOtherFolderRm(vm string, was string) M {
 	return M{id: "vm_other_folder_rm", vals: []val{{"vm", vm}, {"was", was}}}
 }
