@@ -27,6 +27,24 @@ Agents are [shared tools](images.md#shared-tools), like the toolchains, so you c
 
 When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history. Transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 
+```mermaid
+flowchart TD
+  subgraph host["This machine"]
+    folders["config folders:<br>skills, plugins…"]
+    files["config files<br>and logins"]
+    history["your history"]
+  end
+  subgraph guest["The VM"]
+    links["linked into ~"]
+    copies["copies in ~"]
+    own["its own history"]
+  end
+  folders -- "mounted<br>read-only" --> links
+  files -- "copied on every<br>launch, with network<br>policy without<br>your secrets" --> copies
+  history -. "never<br>copied" .-x own
+  own -- "devvm export,<br>devvm rm" --> export["a .tar.gz<br>on this machine"]
+```
+
 | | Mounted read-only, linked into `~` | Copied in on every launch |
 | --- | --- | --- |
 | claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude.json` ([merged](#copies), without per-project entries) |

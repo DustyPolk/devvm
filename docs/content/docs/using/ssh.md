@@ -43,6 +43,14 @@ The VM can change that file back, so for a VM you don't trust, also set the thre
 
 SSH agent forwarding is off by default. While it's on and you're connected, anything in the VM, coding agents included, can *use* the agent's keys, for example to push or to log in to servers. It can't copy them. Turn it on for one VM when you need git over SSH there.
 
+```mermaid
+flowchart TD
+  choice{{"devvm ssh-agent"}}
+  choice -- "off, the default" --> off["no agent:<br>git over SSH fails"]
+  choice -- "on" --> on["your agent, while<br>you're connected,<br>or on smolvm while<br>the VM runs"]
+  choice -- "devvm" --> own["devvm's own agent,<br>with only the keys<br>you added"]
+```
+
 - `devvm --ssh-agent` creates the VM forwarding your agent. `devvm ssh-agent on`, `devvm` or `off` changes it for an existing VM from its next start, which for a running VM is `devvm restart`, and `devvm ssh-agent` shows it. On smolvm, the VM has the agent the whole time it runs, not only while you're connected ([smolvm](../internals/smolvm.md#ssh-agent-forwarding)).
 - The choice applies to devvm's shells and to the ssh entries alike, both as the VM's current start was made with, so a change reaches neither until the VM next starts, whichever folder devvm runs from. For a VM started outside devvm, such as with `limactl start`, they follow the current choice. When forwarding is off, an entry says `ForwardAgent no`, whatever your own `Host *` settings say, and none of devvm's own connections to the VM carry your agent.
 - With forwarding off, git over SSH in the VM fails. devvm says so when it creates a VM for a repo whose `origin` is an SSH URL. Use an HTTPS remote with a GitHub token instead, or turn forwarding on.

@@ -24,6 +24,22 @@ The settings devvm supports are the container image to start from, the features 
 - **What you give on the command line wins.** `--from` wins over `image`, which wins over `$DEVVM_FROM`, and `--ports` wins over `forwardPorts`, and devvm says so in one line for each. The layers that IMAGE names go on top of the features' layers, as in `devvm claude`, and with a `devcontainer.json`, a folder whose toolchain devvm can't tell gets `base`.
 - **An existing VM never changes.** Its state records the file's SHA-256. When the file differs from it on a launch, or is gone, or has appeared since, devvm warns once, and running `devvm rm` and then `devvm` makes the VM again from the file as it is. devvm doesn't check a VM made with `--no-devcontainer`.
 
+A new VM takes each of these from the first place that sets it.
+
+```mermaid
+flowchart TD
+  subgraph ports["Its ports"]
+    direction TB
+    flag["--ports"] -- "or else" --> fwd["forwardPorts, as far<br>as your ports allow"]
+  end
+  subgraph base["Its base starts from"]
+    direction TB
+    from["--from"] -- "or else" --> image["the file's image"]
+    image -- "or else" --> env["$DEVVM_FROM"]
+    env -- "or else" --> ubuntu["Ubuntu's cloud image"]
+  end
+```
+
 When devvm refuses something in the file, it stops with one line that names the file, before it makes anything. For invalid JSON, it names the line and column.
 
 ## Properties

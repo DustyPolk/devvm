@@ -19,6 +19,27 @@ Some of what devvm protects are your secrets. A secret is a credential devvm kee
 
 ## What a VM can reach
 
+The diagram shows what a VM gets from this machine, and the table below gives the details.
+
+```mermaid
+flowchart LR
+  subgraph host["This machine"]
+    folder["the project folder:<br>read-write, or a clone"]
+    tools["shared tools, agents'<br>config folders: read-only"]
+    files["agents' config files:<br>copied in"]
+    git[".git hooks and config:<br>locked on macOS"]
+    agent["your SSH agent: only<br>when you turn it on"]
+    proxy["with network policy, the<br>proxy: the only way out,<br>to allowed hosts, and it<br>puts in your secrets"]
+    home["the rest of your home<br>folder: not mounted"]
+  end
+  vm["The VM:<br>code and agents"]
+  folder & tools & files --> vm
+  agent -.-> vm
+  git -.- vm
+  proxy <--> vm
+  home x-.-x vm
+```
+
 | | |
 | --- | --- |
 | The project folder | The VM reads and writes it. With `--clone` the folder isn't mounted, and the VM has a clone of its own ([details](../using/clone.md)). |

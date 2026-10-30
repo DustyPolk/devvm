@@ -35,6 +35,20 @@ devvm codex    # the same, with Codex
 
 devvm makes a new VM from its image, building the image first if it isn't built yet, then starts the VM and opens a shell in it in devvm's place, so devvm ends when the shell does. The VM mounts only the project folder, read-write, and the shared tools and its [agents' config folders](../using/coding-agents.md), read-only, or with `--clone` it gets its own clone of the repo instead of the folder. [Overview](../internals/overview.md) has each step devvm takes for a new VM and an existing one.
 
+A VM is running or stopped from the time devvm makes it until you delete it.
+
+```mermaid
+flowchart TD
+  none(["no VM"]) -- "devvm" --> running(["running"])
+  running -- "devvm restart" --> running
+  running -- "devvm stop" --> stopped(["stopped"])
+  stopped -- "devvm,<br>devvm restart" --> running
+  running -- "devvm rm" --> deleted(["deleted"])
+  stopped -- "devvm rm" --> deleted
+  outdated@{ shape: braces, label: "When its image changes, a VM<br>is outdated, and it keeps<br>its image until devvm rm." }
+  running ~~~ outdated
+```
+
 Options for a new VM:
 
 | | |
