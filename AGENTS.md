@@ -37,7 +37,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 ## Tasks
 
-`mise run <task>`: `fmt`; `lint` (Go, shellcheck, docs, `TestDocLinks`); `test` (`-race`, in a throwaway `HOME`; needs a C compiler); `vuln`; `deadcode` (what it lists waits for a caller in Pending, or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/devvm/`); `e2e`.
+`mise run <task>`: `fmt`; `lint` (Go, shellcheck, docs, `TestDocLinks`); `test` (`-race`, in a throwaway `HOME`; needs a C compiler); `vuln`; `deadcode` (lists only `backendtest`, which tests use; anything else gets a caller or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/devvm/`); `e2e`.
 
 ## Rules
 
@@ -50,7 +50,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Pin every download** in `assets/`'s `layers/`, `features/`, `shared-tools/build.sh`, `oci/build.sh`: `<tool>_version` and `<tool>_sha256_arm64`/`_amd64` at the top, fetched with `devvm-fetch` (`oci/build.sh`: `sha256sum`). No `curl | sh`, no "latest". Upstream-checked exceptions: shared tools (`MISE_LOCKED=1`), Ubuntu's signed `SHA256SUMS`, Lima in `install.sh`. Go checks a download's SHA-256 before use.
 - **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `assets/shared-tools/build.sh`, or off.
 - **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`assets/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.
-- **Docs:** an easy-to-follow guide in full, joined sentences, every fact kept; write and edit prose with the docs-voice skill (Vale's `devvm.AIWords` fails on chatbot vocabulary). Every behavior change updates its page in `docs/content/docs/` in the same task; a page's parts not ported yet come with their tasks. The README stays high level.
+- **Docs:** an easy-to-follow guide in full, joined sentences, every fact kept; write and edit prose with the docs-voice skill (Vale's `devvm.AIWords` fails on chatbot vocabulary). Every behavior change updates its page in `docs/content/docs/` in the same task. The README stays high level.
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.
 - **Ask first** before anything outward-facing (publishing, releases, repos, pushing) and before deleting anything you didn't create.
 - **A task that turns out wrong or incomplete** gets a proposed change (`dex edit`), not quietly something else.
@@ -69,7 +69,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
 - **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars (reassign: no package sets another's); the one exception is `internal/proxy`'s globals (set by `Main`).
 - **The structure test** (`internal/structure`, in `mise run test`) holds types to 24 methods, bans `func init`, allows only constants' kin as package vars and checks the package layers: see [Contributing](docs/content/docs/contributing/_index.md#the-structure-test) before raising a limit or listing an exception.
-- **A command exists only once it's ported;** `TestReferenceIsCurrent` fails on a stale CLI reference.
+- **The CLI reference is generated:** `TestReferenceIsCurrent` fails on a stale one (`mise run cli-docs`).
 - `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
 
 ## Backends
@@ -131,95 +131,4 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **One commit when each task is complete**, its Docs and Review subtasks included. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, `chore`. Then `dex complete <id> --commit <sha>`.
 - **Don't commit or `dex complete` until the gate passes**, with whatever `mise run fmt` changed in the commit.
 - **Dex task IDs never go in commit messages, code comments or docs.**
-- **AGENTS.md stays short:** one line per path, rule or porting entry. Inventories (functions, messages, test names, converted cases) go in the commit message and the `dex complete` result, not here.
-
-## Porting
-
-The only place in the repo that mentions the bash devvm. It lives at `/Users/me/dev/devvm`; commit `5efc65f` is the spec (its bats tests and `tests/e2e.sh` define the behavior). Never change it.
-
-- Copy only what a task needs (`git -C /Users/me/dev/devvm show 5efc65f:<path>`) and list it below. Rewritten code isn't listed: each task's commit and dex result say what it ported.
-- Bats cases become testscript or Go table tests in the task that ports them; update the table. e2e sections come with the task that needs them.
-- Bash fixes copied later are listed with their bash commit. Nothing else in the repo mentions the bash devvm or the port. This section goes when the port is done.
-- No migrations from the bash's files or older state.
-
-Copied (here ← there):
-- `LICENSE`, `.shellcheckrc` ← same paths; `assets/layers/*`, `assets/shared-tools/*.policy`, `assets/guest/tools.sh` ← `layers/*`, `tools/*.policy`, `guest/tools.sh`; `assets/layers/base.sh` edited: sshd's forwarding, comment
-- `assets/base.yaml`, `assets/shared-tools/mise.toml`, `assets/shared-tools/build.sh`, `assets/guest/sync.sh` ← `base.yaml`, `tools/mise.toml`, `tools/build.sh`, `guest/sync.sh`; edited: comment
-- `.agents/skills/security-audit/`, `skills-lock.json` ← the bash repo's untracked files
-- `testdata/mise.lock`, `testdata/stubs/tmutil` ← `tests/fixtures/`, `tests/stubs/`
-- `testdata/stubs/{gpgv,mise}` ← `tests/stubs/`; edited: comment
-- `testdata/stubs/{limactl,qemu-img,security}` ← `tests/stubs/`, adapted
-- `testdata/stubs/docker` ← `tests/stubs/`
-- `assets/oci/{bootify,kernel,try}.sh` ← `oci/`; `assets/oci/build.sh`, `assets/oci/README.md` ← `oci/`, edited: comment, docs link
-- `internal/proxy/` ← `devvm-proxy/` (`main.go` → `proxy.go`), adapted: `Main(args, IO)`, no `-connect`
-- `tests/e2e.sh` ← same, adapted: framework, `images`, `project` (relaunch, restart, rm, `.git` reports, agent folders), `clone`, `tools` (node half, `update`, `remove`), `network` (self-check on relaunch), `from` (no image only Docker has: it would build one in the user's Docker)
-- `assets/features/*` ← `features/*`
-- `VERSION`, `scripts/release.sh` ← same, adapted: GoReleaser in a clone of the commit; `scripts/bump.sh` ← same, adapted: the host mise in `internal/tools/mise.go`; `packaging/homebrew/devvm.rb` ← same, adapted: builds with Go
-- `install.sh` ← same, adapted: the host's archive, older versions in use kept
-- `SECURITY.md` ← same, adapted: docs site links, `--ignore-missing`
-
-Docs (page ← bash page, all rewritten, partly):
-- `images.md`, `commands.md`, `security.md`, `git-protection.md`, `coding-agents.md`, `ssh.md`, `clone.md`, `from.md` ← same names
-- `lima.md` ← `network.md`, `security.md`, `design.md`, `limits.md`
-- `network.md` ← `network.md`, `devvm-proxy/README.md`
-- `customizing.md` ← `customizing.md`
-- `testing.md` ← same name (with the platform table, the Linux host as verified, manual checks)
-- README "Quickstart" ← README usage
-- `install.md` ← same name (with requirements and checking them)
-- `maintaining.md` ← same name
-- `design.md` ← same name (with emulation design notes; dropped: the per-tool layers it replaced, fixes along the way, platform test history, the Go-only build)
-- `limits.md` ← same name (a summary linking each page; dropped: mise's shared installs as experimental, no longer)
-- `_index.md` ← `docs/README.md`
-
-Bats files (pending cases, by task):
-
-| File | Pending |
-| --- | --- |
-| `build`, `bump`, `cli`, `delete`, `from`, `guest`, `images`, `install`, `layers`, `lint`, `messages`, `network`, `oci`, `ports`, `project`, `release`, `size`, `tools` | none |
-
-Dropped: `build_proxy` (two), `json_str` (`encoding/json`), the claude-token, features-file, pre-folder-check and pre-git-protection migrations.
-
-Deliberate changes from the bash:
-- A failed network self-check stops the VM, existing VMs included; a failed start stops the proxy it started.
-- A running network-policy VM whose proxy can't start again (port taken, start failed) is stopped (`net_proxy_down_stopped`); `proxy_port_taken` no longer asks to stop it.
-- A failed build keeps its stopped VM for inspection; a failed create or clone deletes the partial instance. `script_failed` suggests `devvm limactl shell --start` (no `lima_home=`).
-- Rebuild warns about and keeps an image in use (`image_in_use`). Build VMs are always confined (no `.confined`, `build_vm_unconfined`, `unconfine`).
-- The proxy is in the binary (no `build_proxy`, `tool_intact`); `devvm _qemu connect` replaces `-connect`; log prefix `devvm proxy: `; `dial` refuses ports outside 1–65535; placeholders keep `devvm-proxy-managed`; its password and the login salt are in no process's arguments.
-- New image keys, no parity: length-prefixed fields, the backend in base's key, a missing script hashed as missing.
-- VM state is written before the clone, so a failed clone leaves nothing that starts. Slugs are cut per character; a too-long Lima home is `vm_name_no_room`, before anything.
-- New VMs on Linux are checked for set-id files. Unsafe-folder paths resolve as far as they exist. VM-made values are Go-quoted, not stripped.
-- The QEMU wrapper also refuses `-nic`, `-net` other than none, `-readconfig`, and an option as `-netdev`'s value.
-- Sync stages in memory (no temp folder). Agent folder changes are `agent_dirs_added`/`_removed`; `mounts_next_start` replaces `mounts_on_restart`. Placeholders, tokens and host settings go in single-quoted, not `%q`.
-- Host keys are kept only as a key type and base64; a linked `~/.ssh/config` is written through its link. A VM whose host keys are read is shown at most 64 KiB, for 30 s.
-- An existing VM without state or `net=` is `vm_unfinished` before anything; rm deletes it without an export. `--backend` on one warns. `size_next_start`/`ports_next_start` replace `*_on_restart`. A VM whose `.git` protection was never set up gets it as new. `adopt` clears `git_inode`, so the next launch locks `.git` as appeared.
-- `--clone`: host git pushes and fetches through devvm's ssh config (pinned host keys), not Lima's; rm fetches unfetched branches into new local `saved/<remote>[-N]/*` branches, keeps the remote's fetched-only work there too, then `git remote remove`s it; a failed copy is retried on the next launch (`clone_seed_failed`); `fetch_failed`, `clone_check_failed`, `remote_add_failed` keep the VM.
-- `--from`: `from_lookup_failed`/`from_cached` are `from_unreachable`, `from_not_found` and `from_cached_*` (no nested message); a registry still failing (5xx, 429) after retries is unreachable; `building_image_from` replaces `building_image`'s `from=`; Lima sets the converted disk with `--set .images` on `base.yaml` (no `lima.yaml`) and the build VM's mounts with `--set .mounts`; `from_ignored` on restart, update and remove too; a missing `--from` value is cobra's `usage_error`.
-- `ls`: a BACKEND column, VMs from every backend sorted by name, `-` for what a VM's state lacks (an unset GIT isn't `on`), a tab-aligned table; a backend that can't list fails it (`ls_failed`, or its check's message) only when a VM's state names it.
-- `log`: `--follow`/`--lines` long names; `--blocked` refuses `-f`/`-n` (not ignored); `net_off_log` on stderr; an empty log is `log_empty` too (`-f` waits on it); lines that aren't events are skipped; `--blocked` is a tab-aligned table, `-` for refused requests, IPv6 hosts bracketed.
-- `policy`: `allow`/`deny`/`rm` subcommands with `-g`/`--global`; rules are the proxy's own syntax (`proxy.ValidRule`), all checked before any is added, `allow !RULE` refused; duplicates and `rm` match in any case, comments aside; files rewritten whole, through a link; `rule_added*`/`rule_removed*`/`rule_present` replace `policy_changed`/`removed`; `rm` on a missing file warns per rule (no `no_rules`); `net_off_policy` on edits too; `state.VMNames` skips `<vm>.policy`.
-- `net_direct_route` doesn't name the Lima config. `DEVVM_SECRET_SERVICE` is checked for reads too. A failed tools resolve is `tools_need_resolve` with the log's end. e2e's sandbox and service differ from the bash's: its rebuilds and gc delete every stale image in its Lima home, and gc every unused tool image.
-- Features: each runs as a `running_script` step (no `adding_feature`); none chosen is `base_features_none`; feature names that aren't layer-like are skipped in the listing and make `base-features` unreadable.
-- `help` is Cobra's (`devvm help COMMAND`, per-command help); `devvm completion bash|zsh|fish` is new; `--version` has no `-v`; the version is set at build time, else Go's build info (no `VERSION` file read).
-- Host checks are each backend's `Problems`: a command stops at the first (none listed under it); `doctor` checks the new VMs' backend (`--backend`), adds a features table, Lima's global configs (`lima-config`) and `qemu-img`, `*_fix` messages carry the fix, `doctor_ok` names the backend.
-- `network`: no argument prints `ls`'s value (`unenforced` too); an unchanged one is `net_already`; `on` needs the backend's egress proxy first; a running VM turned off stays on its proxy until it next starts (`net_off_next_start`); `Confined` means started with the proxy, and `net_unenforced*` say "wasn't started confined"; a bad argument is cobra's `usage_error`.
-- `secret`: `ls` (and `devvm secret`) is a table of every secret, SAVED and USED BY; set, rm, use and unuse rewrite running proxies' bindings (no touch); `secret_saved`/`_keychain`, `secret_removed`, `secret_used`/`_unused` replace `secret_saved keychain=`, `removed`, `secret_bound`; `unuse claude` on an image with claude is `secret_with_image`; control characters are refused too; `use` warns when no token is saved; bad names are cobra's `usage_error`.
-- `ssh-agent`: an unchanged mode is `agent_already`; a stopped VM's forwarding changes at its next launch (`agent_set_*`, no `agent_off`), a running one's warns `agent_next_start` (was `agent_on_restart`); a new VM without forwarding carries no agent from the start; `agent_key_unpinned` names no older devvm; a missing key is `agent_key_not_found`, a bad lifetime `agent_lifetime_invalid` (no usage); `keys` shows the default lifetime beside other options.
-- `layer`: `devvm layer` alone is its help, a missing or extra NAME cobra's `usage_error` (no `usage_layer`); `layer_created` is one line; the script is linked into place whole, never over one that appeared.
-- `ports`: `add`/`rm` subcommands with `-g`/`--global` anywhere; a running VM's pending ports are `ports_pending` on stderr (no `next_start` on stdout); `add`/`rm` of all or none is `ports_list_needed`, other bad usage cobra's `usage_error` (no `usage_ports`); `-g` refuses a hand-edited ports file too; a change checks the backend's port forwarding first.
-- `size`: its own `--cpus`/`--memory`/`--disk` and `-g`/`--global`; a running VM's pending size is `size_pending` on stderr (no `next_start` on stdout); a running VM's unchanged size is `vm_size` too; `size_defaults` shows sizes as `vm_size` does; `-g` refuses a hand-edited size file too; a change checks the backend's features first; `no_vm_size`/`size_failed` (no `usage_size`, `usage_size_flag`, `size_change_failed`: cobra's `usage_error`, `lima_edit_failed`).
-- `git-protect`: a `--clone` VM shows `clone` and refuses changes (`git_protect_clone`); a never-set-up VM shows what its next launch sets; strict counts as on for launches and rm; strict that can't set `diff.ignoreSubmodules` fails (`git_config_failed`); `git_locked*`/`git_unlocked`/`git_lock_later` name the VM; a bad mode is cobra's `usage_error` (no `usage_git_protect`).
-- `images`: two tab-aligned tables, `-` for what's missing: images on every backend (a BACKEND column; FROM a column, not `image_from`; STATE `unfinished` for `(unfinished)`/`(unknown)`), then tool images (NAME, TOOL, VERSION, SIZE, VMS counted per image from VMs' `tools=`, STATE; the lock's unbuilt version a `not built` row, not `newer:`); never resolves the lock; no custom layer rows, share total or section messages; `images rm` resolves every name before deleting, an unfinished one is `deleted_unfinished_build`, `deleted_image` names the key, `no_image_named`/`_from` point to devvm images; bad usage is cobra's `usage_error`.
-- `gc`: deletes what `images` lists as stale or unfinished (every backend) and as `unused`: tool images any VM's state lists stay (a VM deleted outside devvm's too), none without a lock (never resolves); a stale image an overlay uses is listed, then kept with `image_in_use` (no `keeping_stale`); no `.tmp` files (tool builds write outside the share); `gc_images`/`gc_image`/`gc_unfinished`/`gc_tools` replace `stale_images`/`unused_tools`; `images` adds `images_stale_note`/`images_unused` on stderr.
-- `setup`: `--features LIST` chooses without asking (in the features' run order; an unknown name is `no_feature`, nothing saved) and `--backend NAME` saves the default backend (`default_backend`; alone, features untouched); in a terminal with neither, it asks for the backend (`backend_help`, experimental ones marked), then the features; the pickers start from the current choice, an unreadable `base-features` is `setup_failed`; `base_will_rebuild` compares the chosen lists, only in setup (not a first build's choice); `gc_old_hint` when any image record exists.
-- `export`: needs a finished VM made for this folder (`vm_unfinished`, `vm_other_folder`); the tarball is written beside its file (mode 600) and renamed in once complete, so a failure leaves none and replaces nothing; `history_not_exported`/`export_failed` for export, `rm_export_failed` for rm's.
-- `stop`: needs a finished VM made for this folder (`no_vm`, `vm_other_folder`, `vm_unfinished`); stops its proxy at once; `stopped`, or `already_stopped` (checked all the same, not an error); a `--clone` VM's folder isn't checked; `git_protect_running` names it.
-- `ssh`/`code`: a launch without its shell (`launch`, then setup: a stopped VM's pending size and ports applied, the user's agent checked, `sync` run so VS Code's Machine settings are set again, a `--clone` VM's clone made); they need a finished VM made for this folder and the backend's `ssh`; `code` gets the environment devvm started with (its `SSH_AUTH_SOCK`); `ssh_host_info` is two lines naming the host and folder; `ssh_failed`/`code_failed`.
-- `limactl`: runs in devvm's place (exec), every argument passed on (`devvm help limactl` is devvm's); no `limactl` is `lima_missing`, a failed exec `limactl_failed`.
-- Releases: per-platform archives (the binary, its files embedded, with README, CHANGELOG, LICENSE) and a source tarball from GoReleaser; the formula builds from source and installs the binary alone; release.sh checks the host's binary prints the version; `--head` takes `DEVVM_MINISIGN_PUB`; the scripts' text isn't messages, nor is `install.sh`'s (it runs before devvm is there); `release.sh --head` needs `install.sh` too.
-- `install.sh`: the host's archive (`devvm-<v>-<os>-<arch>`, Apple silicon's under Rosetta), the binary with README, CHANGELOG, LICENSE; an older version a running process names (a VM's proxy, QEMU) is kept for a later install; commands in its text aren't quoted.
-
-Pending in code:
-- deadcode's list: `backendtest` (tests').
-- `log_ref`, `see_log`/`see_output` come with their callers.
-
-Bash fixes copied: none yet.
+- **AGENTS.md stays short:** one line per path or rule. Inventories (functions, messages, test names) go in the commit message and the `dex complete` result, not here.
