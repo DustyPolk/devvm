@@ -4,7 +4,7 @@ package msg
 
 import "strconv"
 
-// AddInPlace is [add_in_place]: "{{.vm}} was made from {{.image}}. Add {{.missing}} to it in place?"
+// AddInPlace is [add_in_place]: "devvm made {{.vm}} from {{.image}}. Add {{.missing}} to it in place?"
 func AddInPlace(image string, missing string, vm string) M {
 	return M{id: "add_in_place", vals: []val{{"image", image}, {"missing", missing}, {"vm", vm}}}
 }
@@ -29,7 +29,7 @@ func AdoptFailed(reason string) M {
 	return M{id: "adopt_failed", vals: []val{{"reason", reason}}}
 }
 
-// AdoptVM is [adopt_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since.\nUsing it here gives this folder that VM's files, tokens and allowlist. Use it here?"
+// AdoptVM is [adopt_vm]: "This folder's VM, {{.vm}}, was made for an earlier folder at {{.was}}, which was deleted or replaced.\nUse that VM here, with its files, secrets and allowlist?"
 func AdoptVM(vm string, was string) M {
 	return M{id: "adopt_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
@@ -274,17 +274,17 @@ func CheckingTools() M {
 	return M{id: "checking_tools"}
 }
 
-// ClaudeMcpSecretsCopied is [claude_mcp_secrets_copied]: "{{.vm}} has no network policy, so Claude Code's MCP servers' env values and headers ({{.servers}}) are copied into it as they are"
+// ClaudeMcpSecretsCopied is [claude_mcp_secrets_copied]: "{{.vm}} has no network policy, so devvm copies the env values and headers of Claude Code's MCP servers {{.servers}} into it unchanged."
 func ClaudeMcpSecretsCopied(servers string, vm string) M {
 	return M{id: "claude_mcp_secrets_copied", vals: []val{{"servers", servers}, {"vm", vm}}}
 }
 
-// ClaudeTokenHowto is [claude_token_howto]: "Run claude setup-token on this machine and approve in the browser.\nPaste the token it prints (sk-ant-oat01-…), not the code the browser shows."
+// ClaudeTokenHowto is [claude_token_howto]: "Run claude setup-token on this machine and approve it in the browser.\nThen paste the Claude Code token it prints, which starts with sk-ant-oat01-, not the code the browser shows."
 func ClaudeTokenHowto() M {
 	return M{id: "claude_token_howto"}
 }
 
-// ClaudeTokenInvalid is [claude_token_invalid]: "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token, then devvm auth claude"
+// ClaudeTokenInvalid is [claude_token_invalid]: "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm auth claude."
 func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
@@ -344,7 +344,7 @@ func CodeFailed(reason string) M {
 	return M{id: "code_failed", vals: []val{{"reason", reason}}}
 }
 
-// CodexLoginKept is [codex_login_kept]: "Codex's auth.json {{.keys}} is copied into the VM as it is"
+// CodexLoginKept is [codex_login_kept]: "devvm copies {{.keys}} from Codex's auth.json into the VM unchanged."
 func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
@@ -369,7 +369,7 @@ func Configuring(vm string) M {
 	return M{id: "configuring", vals: []val{{"vm", vm}}}
 }
 
-// Continue is [continue]: "continue?"
+// Continue is [continue]: "Continue?"
 func Continue() M {
 	return M{id: "continue"}
 }
@@ -444,7 +444,7 @@ func DeleteFailed(vm string) M {
 	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
 }
 
-// DeleteOtherFolderVM is [delete_other_folder_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since, and may hold that project's work. Delete it?"
+// DeleteOtherFolderVM is [delete_other_folder_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
 func DeleteOtherFolderVM(vm string, was string) M {
 	return M{id: "delete_other_folder_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
@@ -864,12 +864,12 @@ func FeatureShadowed(feature string, file string) M {
 	return M{id: "feature_shadowed", vals: []val{{"feature", feature}, {"file", file}}}
 }
 
-// FeaturesHelp is [features_help]: "Base image features (up/down to move, space to toggle, enter to confirm):"
+// FeaturesHelp is [features_help]: "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
 func FeaturesHelp() M {
 	return M{id: "features_help"}
 }
 
-// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before deleting?"
+// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before devvm deletes the VM?"
 func FetchBeforeDelete(prefix string) M {
 	return M{id: "fetch_before_delete", vals: []val{{"prefix", prefix}}}
 }
@@ -924,7 +924,7 @@ func GCAssets(count int) M {
 	return M{id: "gc_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
-// GCConfirm is [gc_confirm]: "delete them? VMs aren't touched"
+// GCConfirm is [gc_confirm]: "Your VMs stay as they are. Delete these?"
 func GCConfirm() M {
 	return M{id: "gc_confirm"}
 }
@@ -1074,7 +1074,7 @@ func GitWorktreeStray(wt string) M {
 	return M{id: "git_worktree_stray", vals: []val{{"wt", wt}}}
 }
 
-// GithubTokenHowto is [github_token_howto]: "Paste a GitHub token: a fine-grained one, scoped to the repos VMs need."
+// GithubTokenHowto is [github_token_howto]: "Paste a fine-grained GitHub token that can reach only the repos your VMs need."
 func GithubTokenHowto() M {
 	return M{id: "github_token_howto"}
 }
@@ -1164,7 +1164,7 @@ func KeyLoadedKeychain() M {
 	return M{id: "key_loaded_keychain"}
 }
 
-// KeychainSaveFailed is [keychain_save_failed]: "couldn't save {{.secret}} in the Keychain"
+// KeychainSaveFailed is [keychain_save_failed]: "devvm couldn't save the {{.secret}} secret in the Keychain."
 func KeychainSaveFailed(secret string) M {
 	return M{id: "keychain_save_failed", vals: []val{{"secret", secret}}}
 }
@@ -1259,7 +1259,7 @@ func LimactlFailed(reason string) M {
 	return M{id: "limactl_failed", vals: []val{{"reason", reason}}}
 }
 
-// LoadKey is [load_key]: "Load {{.key}} into the agent now ({{.cmd}})?"
+// LoadKey is [load_key]: "Run {{.cmd}} now to load {{.key}} into your SSH agent?"
 func LoadKey(cmd string, key string) M {
 	return M{id: "load_key", vals: []val{{"cmd", cmd}, {"key", key}}}
 }
@@ -1274,7 +1274,7 @@ func LogDetails(file string) M {
 	return M{id: "log_details", vals: []val{{"file", file}}}
 }
 
-// LogEmpty is [log_empty]: "nothing logged for {{.vm}} yet"
+// LogEmpty is [log_empty]: "{{.vm}}'s network log is empty so far."
 func LogEmpty(vm string) M {
 	return M{id: "log_empty", vals: []val{{"vm", vm}}}
 }
@@ -1284,12 +1284,12 @@ func LogEnd(file string) M {
 	return M{id: "log_end", vals: []val{{"file", file}}}
 }
 
-// LogFailed is [log_failed]: "couldn't read this folder's VM's network log: {{.reason}}"
+// LogFailed is [log_failed]: "devvm couldn't read this folder's VM's network log: {{.reason}}."
 func LogFailed(reason string) M {
 	return M{id: "log_failed", vals: []val{{"reason", reason}}}
 }
 
-// LoginCopyFailed is [login_copy_failed]: "couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}"
+// LoginCopyFailed is [login_copy_failed]: "devvm couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}."
 func LoginCopyFailed(agent string, reason string, vm string) M {
 	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
 }
@@ -1364,7 +1364,7 @@ func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }
 
-// NetAlready is [net_already]: "network policy is already {{.state}} for {{.vm}}"
+// NetAlready is [net_already]: "Network policy is already {{.state}} for {{.vm}}."
 func NetAlready(state string, vm string) M {
 	return M{id: "net_already", vals: []val{{"state", state}, {"vm", vm}}}
 }
@@ -1374,77 +1374,77 @@ func NetAsk() M {
 	return M{id: "net_ask"}
 }
 
-// NetDirectRoute is [net_direct_route]: "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
+// NetDirectRoute is [net_direct_route]: "devvm stopped {{.vm}} because it reached the internet without going through its proxy. Something outside devvm may have given it another network."
 func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
-// NetDockerLayer is [net_docker_layer]: "{{.vm}} can't have network policy with the docker layer on {{.backend}}: root in it can change its own network"
+// NetDockerLayer is [net_docker_layer]: "{{.vm}} can't have network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
 func NetDockerLayer(backend string, vm string) M {
 	return M{id: "net_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
+// NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy apply only to new VMs. To change this VM's network policy, run devvm network on or devvm network off."
 func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
 }
 
-// NetOffBackend is [net_off_backend]: "Making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
+// NetOffBackend is [net_off_backend]: "devvm is making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
 func NetOffBackend(backend string, vm string) M {
 	return M{id: "net_off_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetOffDockerLayer is [net_off_docker_layer]: "Making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
+// NetOffDockerLayer is [net_off_docker_layer]: "devvm is making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
 func NetOffDockerLayer(backend string, vm string) M {
 	return M{id: "net_off_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetOffLog is [net_off_log]: "network policy is off for {{.vm}}, so nothing new is logged: devvm network on"
+// NetOffLog is [net_off_log]: "Network policy is off for {{.vm}}, so devvm logs nothing new for it. To turn it on, run devvm network on."
 func NetOffLog(vm string) M {
 	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
 }
 
-// NetOffNextStart is [net_off_next_start]: "{{.vm}} stays on its proxy until it next starts, when network policy turns off: devvm restart"
+// NetOffNextStart is [net_off_next_start]: "{{.vm}} keeps using its proxy until it next starts, and then its network policy is off. To turn it off now, run devvm restart."
 func NetOffNextStart(vm string) M {
 	return M{id: "net_off_next_start", vals: []val{{"vm", vm}}}
 }
 
-// NetOffPolicy is [net_off_policy]: "network policy is off for {{.vm}}, so its rules don't apply: devvm network on"
+// NetOffPolicy is [net_off_policy]: "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
 func NetOffPolicy(vm string) M {
 	return M{id: "net_off_policy", vals: []val{{"vm", vm}}}
 }
 
-// NetOnOldTokens is [net_on_old_tokens]: "tokens copied into {{.vm}} while network policy was off still work wherever it kept them: rotate them if that matters"
+// NetOnOldTokens is [net_on_old_tokens]: "The secrets {{.vm}} got while network policy was off still work wherever it kept them. Rotate them if that matters."
 func NetOnOldTokens(vm string) M {
 	return M{id: "net_on_old_tokens", vals: []val{{"vm", vm}}}
 }
 
-// NetProxyDownStopped is [net_proxy_down_stopped]: "stopped {{.vm}}: its network policy proxy couldn't start, and it doesn't run without one; devvm starts both again"
+// NetProxyDownStopped is [net_proxy_down_stopped]: "devvm stopped {{.vm}} because its network policy proxy couldn't start, and the VM doesn't run without it. devvm starts both again at the VM's next launch."
 func NetProxyDownStopped(vm string) M {
 	return M{id: "net_proxy_down_stopped", vals: []val{{"vm", vm}}}
 }
 
-// NetSetRunning is [net_set_running]: "turned network policy {{.state}} for {{.vm}}; it applies on devvm restart"
+// NetSetRunning is [net_set_running]: "devvm turned network policy {{.state}} for {{.vm}}. It applies when you run devvm restart."
 func NetSetRunning(state string, vm string) M {
 	return M{id: "net_set_running", vals: []val{{"state", state}, {"vm", vm}}}
 }
 
-// NetSetStopped is [net_set_stopped]: "turned network policy {{.state}} for {{.vm}}; it applies when the VM next starts"
+// NetSetStopped is [net_set_stopped]: "devvm turned network policy {{.state}} for {{.vm}}. It applies when the VM next starts."
 func NetSetStopped(state string, vm string) M {
 	return M{id: "net_set_stopped", vals: []val{{"state", state}, {"vm", vm}}}
 }
 
-// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly: it wasn't started confined, so its network policy isn't enforced until devvm starts it again"
+// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
 func NetUnenforced(vm string) M {
 	return M{id: "net_unenforced", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} wasn't started confined, so its network policy isn't enforced. Restart it confined?"
+// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} wasn't started confined to its proxy, so its network policy isn't enforced. Restart it confined?"
 func NetUnenforcedRestart(vm string) M {
 	return M{id: "net_unenforced_restart", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedStop is [net_unenforced_stop]: "network policy isn't enforced for {{.vm}}: it wasn't started confined, so devvm stopped it; devvm starts it again confined"
+// NetUnenforcedStop is [net_unenforced_stop]: "devvm stopped {{.vm}} because it wasn't started confined to its proxy, so its network policy wasn't enforced. devvm starts it confined at its next launch."
 func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
@@ -1609,7 +1609,7 @@ func OCIWaiting() M {
 	return M{id: "oci_waiting"}
 }
 
-// OpencodeLoginKept is [opencode_login_kept]: "opencode's {{.providers}} login is copied into the VM as it is"
+// OpencodeLoginKept is [opencode_login_kept]: "devvm copies opencode's {{.providers}} login into the VM unchanged."
 func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
@@ -1624,7 +1624,7 @@ func PackingImage(vm string) M {
 	return M{id: "packing_image", vals: []val{{"vm", vm}}}
 }
 
-// PolicyFailed is [policy_failed]: "couldn't read or change the network policy rules: {{.reason}}"
+// PolicyFailed is [policy_failed]: "devvm couldn't read or change the network policy rules: {{.reason}}."
 func PolicyFailed(reason string) M {
 	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
 }
@@ -1694,22 +1694,22 @@ func PortsTaken(count int, ports string, vm string) M {
 	return M{id: "ports_taken", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"ports", ports}, {"vm", vm}}}
 }
 
-// ProxyCAFailed is [proxy_ca_failed]: "couldn't create the network policy proxy's CA in {{.dir}}"
+// ProxyCAFailed is [proxy_ca_failed]: "devvm couldn't create the network policy proxy's CA in {{.dir}}."
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
 }
 
-// ProxyFailed is [proxy_failed]: "network policy proxy: {{.reason}}"
+// ProxyFailed is [proxy_failed]: "The network policy proxy failed: {{.reason}}."
 func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
 
-// ProxyPortTaken is [proxy_port_taken]: "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: devvm picks another port when it next starts {{.vm}}"
+// ProxyPortTaken is [proxy_port_taken]: "Another program took port {{.port}}, which {{.vm}}'s network goes through. devvm picks another port when it next starts {{.vm}}."
 func ProxyPortTaken(port string, vm string) M {
 	return M{id: "proxy_port_taken", vals: []val{{"port", port}, {"vm", vm}}}
 }
 
-// ProxyStartFailed is [proxy_start_failed]: "the network policy proxy didn't start for {{.vm}}: see {{.log}}"
+// ProxyStartFailed is [proxy_start_failed]: "{{.vm}}'s network policy proxy didn't start. Check {{.log}} for why."
 func ProxyStartFailed(log string, vm string) M {
 	return M{id: "proxy_start_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
@@ -1784,32 +1784,32 @@ func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
 }
 
-// RuleAdded is [rule_added]: "added {{.rule}} for {{.vm}}"
+// RuleAdded is [rule_added]: "devvm added {{.rule}} to {{.vm}}'s rules."
 func RuleAdded(rule string, vm string) M {
 	return M{id: "rule_added", vals: []val{{"rule", rule}, {"vm", vm}}}
 }
 
-// RuleAddedGlobal is [rule_added_global]: "added {{.rule}} for every VM"
+// RuleAddedGlobal is [rule_added_global]: "devvm added {{.rule}} to every VM's rules."
 func RuleAddedGlobal(rule string) M {
 	return M{id: "rule_added_global", vals: []val{{"rule", rule}}}
 }
 
-// RuleMissing is [rule_missing]: "{{.rule}} isn't in {{.file}}"
+// RuleMissing is [rule_missing]: "{{.rule}} isn't in {{.file}}."
 func RuleMissing(file string, rule string) M {
 	return M{id: "rule_missing", vals: []val{{"file", file}, {"rule", rule}}}
 }
 
-// RulePresent is [rule_present]: "{{.rule}} is already in {{.file}}"
+// RulePresent is [rule_present]: "{{.rule}} is already in {{.file}}."
 func RulePresent(file string, rule string) M {
 	return M{id: "rule_present", vals: []val{{"file", file}, {"rule", rule}}}
 }
 
-// RuleRemoved is [rule_removed]: "removed {{.rule}} for {{.vm}}"
+// RuleRemoved is [rule_removed]: "devvm removed {{.rule}} from {{.vm}}'s rules."
 func RuleRemoved(rule string, vm string) M {
 	return M{id: "rule_removed", vals: []val{{"rule", rule}, {"vm", vm}}}
 }
 
-// RuleRemovedGlobal is [rule_removed_global]: "removed {{.rule}} for every VM"
+// RuleRemovedGlobal is [rule_removed_global]: "devvm removed {{.rule}} from every VM's rules."
 func RuleRemovedGlobal(rule string) M {
 	return M{id: "rule_removed_global", vals: []val{{"rule", rule}}}
 }
@@ -1839,52 +1839,52 @@ func ScriptFailed(script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
-// SecretFailed is [secret_failed]: "couldn't read or change the saved tokens: {{.reason}}"
+// SecretFailed is [secret_failed]: "devvm couldn't read or change the saved secrets: {{.reason}}."
 func SecretFailed(reason string) M {
 	return M{id: "secret_failed", vals: []val{{"reason", reason}}}
 }
 
-// SecretReadFailed is [secret_read_failed]: "couldn't read {{.secret}}: {{.reason}}"
+// SecretReadFailed is [secret_read_failed]: "devvm couldn't read the {{.secret}} secret: {{.reason}}."
 func SecretReadFailed(reason string, secret string) M {
 	return M{id: "secret_read_failed", vals: []val{{"reason", reason}, {"secret", secret}}}
 }
 
-// SecretRemoved is [secret_removed]: "removed {{.secret}}"
+// SecretRemoved is [secret_removed]: "devvm deleted the {{.secret}} secret."
 func SecretRemoved(secret string) M {
 	return M{id: "secret_removed", vals: []val{{"secret", secret}}}
 }
 
-// SecretSaved is [secret_saved]: "saved {{.secret}} in {{.file}}"
+// SecretSaved is [secret_saved]: "devvm saved the {{.secret}} secret in {{.file}}."
 func SecretSaved(file string, secret string) M {
 	return M{id: "secret_saved", vals: []val{{"file", file}, {"secret", secret}}}
 }
 
-// SecretSavedKeychain is [secret_saved_keychain]: "saved {{.secret}} in the Keychain"
+// SecretSavedKeychain is [secret_saved_keychain]: "devvm saved the {{.secret}} secret in the Keychain."
 func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
 }
 
-// SecretToTerminal is [secret_to_terminal]: "refusing to print a secret to a terminal: --force to do it anyway"
+// SecretToTerminal is [secret_to_terminal]: "devvm doesn't print a secret to a terminal. To print it anyway, add --force."
 func SecretToTerminal() M {
 	return M{id: "secret_to_terminal"}
 }
 
-// SecretUnuseCopied is [secret_unuse_copied]: "network policy is off for {{.vm}}, so it got the real {{.secret}} token, which still works wherever it kept it: rotate it if that matters"
+// SecretUnuseCopied is [secret_unuse_copied]: "Network policy is off for {{.vm}}, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
 func SecretUnuseCopied(secret string, vm string) M {
 	return M{id: "secret_unuse_copied", vals: []val{{"secret", secret}, {"vm", vm}}}
 }
 
-// SecretUnused is [secret_unused]: "{{.vm}} no longer uses {{.secret}}"
+// SecretUnused is [secret_unused]: "{{.vm}} doesn't use the {{.secret}} secret any more."
 func SecretUnused(secret string, vm string) M {
 	return M{id: "secret_unused", vals: []val{{"secret", secret}, {"vm", vm}}}
 }
 
-// SecretUsed is [secret_used]: "{{.vm}} uses {{.secret}} from its next launch"
+// SecretUsed is [secret_used]: "{{.vm}} uses the {{.secret}} secret from its next launch."
 func SecretUsed(secret string, vm string) M {
 	return M{id: "secret_used", vals: []val{{"secret", secret}, {"vm", vm}}}
 }
 
-// SecretWithImage is [secret_with_image]: "{{.vm}}'s image has claude, so it always uses the Claude token"
+// SecretWithImage is [secret_with_image]: "{{.vm}}'s image has claude, so the VM always uses the Claude Code token."
 func SecretWithImage(vm string) M {
 	return M{id: "secret_with_image", vals: []val{{"vm", vm}}}
 }
@@ -2114,7 +2114,7 @@ func TokenPrompt() M {
 	return M{id: "token_prompt"}
 }
 
-// TokenQuotes is [token_quotes]: "the token has a quote, backslash or control character: nothing saved"
+// TokenQuotes is [token_quotes]: "The secret you gave has a quote, a backslash or a control character, so devvm didn't save it."
 func TokenQuotes() M {
 	return M{id: "token_quotes"}
 }
@@ -2269,7 +2269,7 @@ func UpFailed(reason string) M {
 	return M{id: "up_failed", vals: []val{{"reason", reason}}}
 }
 
-// UpdateMounts is [update_mounts]: "Update {{.vm}}'s mounts now? It restarts, and anything running in it stops."
+// UpdateMounts is [update_mounts]: "Updating {{.vm}}'s mounts restarts it, and anything running in it stops. Update them now?"
 func UpdateMounts(vm string) M {
 	return M{id: "update_mounts", vals: []val{{"vm", vm}}}
 }

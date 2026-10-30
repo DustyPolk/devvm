@@ -252,15 +252,15 @@ other = "{{.vm}} runs the docker layer under {{.runtime}}, on {{.backend}}: no n
 
 [net_docker_layer]
 description = "backend is a backend's name (docker)"
-other = "{{.vm}} can't have network policy with the docker layer on {{.backend}}: root in it can change its own network"
+other = "{{.vm}} can't have network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
 
 [net_off_docker_layer]
 description = "backend is a backend's name (docker)"
-other = "Making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
+other = "devvm is making {{.vm}} without network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
 
 [net_off_backend]
 description = "backend is a backend's name (docker)"
-other = "Making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
+other = "devvm is making {{.vm}} without network policy, because the {{.backend}} backend can't confine it to its proxy here."
 
 [docker_file_sharing]
 description = "dirs is a space-separated list of host folders"
@@ -453,7 +453,7 @@ description = "reason is an error from the system, in English"
 other = "couldn't create the layer: {{.reason}}"
 
 [features_help]
-other = "Base image features (up/down to move, space to toggle, enter to confirm):"
+other = "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
 
 [base_features]
 description = "features is a space-separated list of names"
@@ -586,7 +586,7 @@ description = "above is a space-separated list of image names"
 other = "rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}\nthey're built again when they're next needed; VMs keep the images they have"
 
 [continue]
-other = "continue?"
+other = "Continue?"
 
 [nothing_changed]
 other = "nothing changed"
@@ -648,7 +648,7 @@ one = "{{.count}} unused tool image ({{.size}})"
 other = "{{.count}} unused tool images ({{.size}})"
 
 [gc_confirm]
-other = "delete them? VMs aren't touched"
+other = "Your VMs stay as they are. Delete these?"
 
 [nothing_deleted]
 other = "nothing deleted"
@@ -707,10 +707,10 @@ other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted o
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to use it here, run devvm adopt in a terminal."
 
 [delete_other_folder_vm]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since, and may hold that project's work. Delete it?"
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
 
 [adopt_vm]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, deleted or replaced since.\nUsing it here gives this folder that VM's files, tokens and allowlist. Use it here?"
+other = "This folder's VM, {{.vm}}, was made for an earlier folder at {{.was}}, which was deleted or replaced.\nUse that VM here, with its files, secrets and allowlist?"
 
 [vm_adopted]
 other = "{{.vm}} belongs to {{.dir}} now."
@@ -728,7 +728,7 @@ other = "{{.vm}}'s creation didn't finish: devvm rm deletes it, and devvm makes 
 other = "--backend only applies to new VMs: {{.vm}} stays on {{.backend}}"
 
 [net_flag_ignored]
-other = "--network-policy and --no-network-policy only apply to new VMs: devvm network on or off"
+other = "--network-policy and --no-network-policy apply only to new VMs. To change this VM's network policy, run devvm network on or devvm network off."
 
 [git_protect_flag_ignored]
 other = "--no-git-protect applies only to new VMs. To turn off .git protection for this VM, run devvm git-protect off."
@@ -744,7 +744,7 @@ other = "{{.vm}}'s new size applies when it next starts: devvm restart"
 
 [add_in_place]
 description = "missing is a space-separated list of layers and tools"
-other = "{{.vm}} was made from {{.image}}. Add {{.missing}} to it in place?"
+other = "devvm made {{.vm}} from {{.image}}. Add {{.missing}} to it in place?"
 
 [restart_for_mounts]
 other = "This restarts the VM to mount their config from this machine; anything running in it stops."
@@ -881,43 +881,43 @@ other = "Network policy for {{.vm}}:\non: it reaches only the hosts you allow, a
 other = "Turn it on?"
 
 [net_direct_route]
-other = "network policy isn't enforced for {{.vm}}: devvm started it confined, but it reaches the internet without its proxy (a network devvm didn't set up?), so devvm stopped it"
+other = "devvm stopped {{.vm}} because it reached the internet without going through its proxy. Something outside devvm may have given it another network."
 
 [net_unenforced_stop]
-other = "network policy isn't enforced for {{.vm}}: it wasn't started confined, so devvm stopped it; devvm starts it again confined"
+other = "devvm stopped {{.vm}} because it wasn't started confined to its proxy, so its network policy wasn't enforced. devvm starts it confined at its next launch."
 
 [net_unenforced_restart]
-other = "{{.vm}} wasn't started confined, so its network policy isn't enforced. Restart it confined?"
+other = "{{.vm}} wasn't started confined to its proxy, so its network policy isn't enforced. Restart it confined?"
 
 [net_unenforced]
-other = "WARNING: {{.vm}} reaches the network directly: it wasn't started confined, so its network policy isn't enforced until devvm starts it again"
+other = "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
 
 [net_off_next_start]
-other = "{{.vm}} stays on its proxy until it next starts, when network policy turns off: devvm restart"
+other = "{{.vm}} keeps using its proxy until it next starts, and then its network policy is off. To turn it off now, run devvm restart."
 
 [net_already]
 description = "state is on or off"
-other = "network policy is already {{.state}} for {{.vm}}"
+other = "Network policy is already {{.state}} for {{.vm}}."
 
 [net_set_running]
 description = "state is on or off"
-other = "turned network policy {{.state}} for {{.vm}}; it applies on devvm restart"
+other = "devvm turned network policy {{.state}} for {{.vm}}. It applies when you run devvm restart."
 
 [net_set_stopped]
 description = "state is on or off"
-other = "turned network policy {{.state}} for {{.vm}}; it applies when the VM next starts"
+other = "devvm turned network policy {{.state}} for {{.vm}}. It applies when the VM next starts."
 
 [net_on_old_tokens]
-other = "tokens copied into {{.vm}} while network policy was off still work wherever it kept them: rotate them if that matters"
+other = "The secrets {{.vm}} got while network policy was off still work wherever it kept them. Rotate them if that matters."
 
 [net_off_log]
-other = "network policy is off for {{.vm}}, so nothing new is logged: devvm network on"
+other = "Network policy is off for {{.vm}}, so devvm logs nothing new for it. To turn it on, run devvm network on."
 
 [log_empty]
-other = "nothing logged for {{.vm}} yet"
+other = "{{.vm}}'s network log is empty so far."
 
 [net_off_policy]
-other = "network policy is off for {{.vm}}, so its rules don't apply: devvm network on"
+other = "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
 
 [no_vm_policy]
 other = "no VM for {{.dir}}: devvm makes one, or -g changes every VM's rules"
@@ -927,27 +927,27 @@ description = "rule is what was typed, quoted"
 other = "not a rule: {{.rule}}"
 
 [rule_added]
-other = "added {{.rule}} for {{.vm}}"
+other = "devvm added {{.rule}} to {{.vm}}'s rules."
 
 [rule_added_global]
-other = "added {{.rule}} for every VM"
+other = "devvm added {{.rule}} to every VM's rules."
 
 [rule_present]
-other = "{{.rule}} is already in {{.file}}"
+other = "{{.rule}} is already in {{.file}}."
 
 [rule_removed]
-other = "removed {{.rule}} for {{.vm}}"
+other = "devvm removed {{.rule}} from {{.vm}}'s rules."
 
 [rule_removed_global]
-other = "removed {{.rule}} for every VM"
+other = "devvm removed {{.rule}} from every VM's rules."
 
 [rule_missing]
 description = "rule is what was typed, quoted"
-other = "{{.rule}} isn't in {{.file}}"
+other = "{{.rule}} isn't in {{.file}}."
 
 [policy_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't read or change the network policy rules: {{.reason}}"
+other = "devvm couldn't read or change the network policy rules: {{.reason}}."
 
 [network_failed]
 description = "reason is an error from the system, in English"
@@ -955,19 +955,19 @@ other = "couldn't read or change this folder's VM's network policy: {{.reason}}"
 
 [log_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't read this folder's VM's network log: {{.reason}}"
+other = "devvm couldn't read this folder's VM's network log: {{.reason}}."
 
 [proxy_ca_failed]
-other = "couldn't create the network policy proxy's CA in {{.dir}}"
+other = "devvm couldn't create the network policy proxy's CA in {{.dir}}."
 
 [proxy_port_taken]
-other = "port {{.port}}, which {{.vm}}'s network goes through, is taken by another program: devvm picks another port when it next starts {{.vm}}"
+other = "Another program took port {{.port}}, which {{.vm}}'s network goes through. devvm picks another port when it next starts {{.vm}}."
 
 [net_proxy_down_stopped]
-other = "stopped {{.vm}}: its network policy proxy couldn't start, and it doesn't run without one; devvm starts both again"
+other = "devvm stopped {{.vm}} because its network policy proxy couldn't start, and the VM doesn't run without it. devvm starts both again at the VM's next launch."
 
 [proxy_start_failed]
-other = "the network policy proxy didn't start for {{.vm}}: see {{.log}}"
+other = "{{.vm}}'s network policy proxy didn't start. Check {{.log}} for why."
 
 [creating_from]
 other = "creating {{.vm}} from {{.image}}"
@@ -1018,7 +1018,7 @@ other = "your SSH agent has no keys, so git over SSH won't work in the VM"
 
 [load_key]
 description = "cmd is the ssh-add command that loads key"
-other = "Load {{.key}} into the agent now ({{.cmd}})?"
+other = "Run {{.cmd}} now to load {{.key}} into your SSH agent?"
 
 [key_loaded]
 other = "loaded. To load it automatically after a reboot, add to ~/.ssh/config:\n      Host *\n        AddKeysToAgent yes"
@@ -1159,7 +1159,7 @@ other = "devvm skips these branches in the VM because git refuses their names: {
 other = "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}}. Rename or delete some of those branches, then run devvm rm again."
 
 [fetch_before_delete]
-other = "Fetch them into local branches {{.prefix}}/* before deleting?"
+other = "Fetch them into local branches {{.prefix}}/* before devvm deletes the VM?"
 
 [fetching]
 other = "fetching the VM's branches into {{.prefix}}/*"
@@ -1364,7 +1364,7 @@ description = "dirs is a comma-separated list of folders"
 other = "agent folders gone from this machine for {{.vm}}: {{.dirs}}"
 
 [update_mounts]
-other = "Update {{.vm}}'s mounts now? It restarts, and anything running in it stops."
+other = "Updating {{.vm}}'s mounts restarts it, and anything running in it stops. Update them now?"
 
 [mounts_next_start]
 other = "{{.vm}}'s agent folder mounts change when it next starts"
@@ -1376,14 +1376,14 @@ other = "updated {{.vm}}'s agent folder mounts"
 other = "no Claude token for {{.vm}}: run claude setup-token, then devvm auth claude"
 
 [claude_token_invalid]
-other = "the Claude token isn't a setup-token token (sk-ant-oat01-…): run claude setup-token, then devvm auth claude"
+other = "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm auth claude."
 
 [no_github_token]
 other = "{{.vm}} uses github, but no GitHub token is saved: devvm secret set github"
 
 [login_copy_failed]
 description = "reason is an error from the login helper, in English"
-other = "couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}"
+other = "devvm couldn't make {{.vm}}'s copy of {{.agent}}'s login: {{.reason}}."
 
 [config_redacted]
 description = "keys is a space-separated list of key paths"
@@ -1394,11 +1394,11 @@ other = "couldn't read {{.file}} to take its keys out, so {{.vm}} doesn't get it
 
 [claude_mcp_secrets_copied]
 description = "servers is a space-separated list of MCP server names"
-other = "{{.vm}} has no network policy, so Claude Code's MCP servers' env values and headers ({{.servers}}) are copied into it as they are"
+other = "{{.vm}} has no network policy, so devvm copies the env values and headers of Claude Code's MCP servers {{.servers}} into it unchanged."
 
 [proxy_failed]
 description = "reason is an error from the system or the flag parser, in English"
-other = "network policy proxy: {{.reason}}"
+other = "The network policy proxy failed: {{.reason}}."
 
 [forwarder_failed]
 description = "reason is an error from the system or the flag parser, in English"
@@ -1417,20 +1417,20 @@ other = "no secret {{.secret}}"
 
 [secret_read_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't read {{.secret}}: {{.reason}}"
+other = "devvm couldn't read the {{.secret}} secret: {{.reason}}."
 
 [secret_to_terminal]
-other = "refusing to print a secret to a terminal: --force to do it anyway"
+other = "devvm doesn't print a secret to a terminal. To print it anyway, add --force."
 
 [secret_failed]
 description = "reason is an error from the system, in English"
-other = "couldn't read or change the saved tokens: {{.reason}}"
+other = "devvm couldn't read or change the saved secrets: {{.reason}}."
 
 [claude_token_howto]
-other = "Run claude setup-token on this machine and approve in the browser.\nPaste the token it prints (sk-ant-oat01-…), not the code the browser shows."
+other = "Run claude setup-token on this machine and approve it in the browser.\nThen paste the Claude Code token it prints, which starts with sk-ant-oat01-, not the code the browser shows."
 
 [github_token_howto]
-other = "Paste a GitHub token: a fine-grained one, scoped to the repos VMs need."
+other = "Paste a fine-grained GitHub token that can reach only the repos your VMs need."
 
 [token_prompt]
 other = "Token:"
@@ -1439,42 +1439,42 @@ other = "Token:"
 other = "no token given: nothing saved"
 
 [token_quotes]
-other = "the token has a quote, backslash or control character: nothing saved"
+other = "The secret you gave has a quote, a backslash or a control character, so devvm didn't save it."
 
 [not_setup_token]
 other = "that isn't a setup-token token (sk-ant-oat01-…): nothing saved; claude setup-token prints one"
 
 [keychain_save_failed]
-other = "couldn't save {{.secret}} in the Keychain"
+other = "devvm couldn't save the {{.secret}} secret in the Keychain."
 
 [secret_saved_keychain]
-other = "saved {{.secret}} in the Keychain"
+other = "devvm saved the {{.secret}} secret in the Keychain."
 
 [secret_saved]
-other = "saved {{.secret}} in {{.file}}"
+other = "devvm saved the {{.secret}} secret in {{.file}}."
 
 [secret_removed]
-other = "removed {{.secret}}"
+other = "devvm deleted the {{.secret}} secret."
 
 [secret_used]
-other = "{{.vm}} uses {{.secret}} from its next launch"
+other = "{{.vm}} uses the {{.secret}} secret from its next launch."
 
 [secret_unused]
-other = "{{.vm}} no longer uses {{.secret}}"
+other = "{{.vm}} doesn't use the {{.secret}} secret any more."
 
 [secret_with_image]
-other = "{{.vm}}'s image has claude, so it always uses the Claude token"
+other = "{{.vm}}'s image has claude, so the VM always uses the Claude Code token."
 
 [secret_unuse_copied]
-other = "network policy is off for {{.vm}}, so it got the real {{.secret}} token, which still works wherever it kept it: rotate it if that matters"
+other = "Network policy is off for {{.vm}}, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
 
 [codex_login_kept]
 description = "keys lists auth.json's top-level keys, comma-separated"
-other = "Codex's auth.json {{.keys}} is copied into the VM as it is"
+other = "devvm copies {{.keys}} from Codex's auth.json into the VM unchanged."
 
 [opencode_login_kept]
 description = "providers lists opencode's login providers, comma-separated"
-other = "opencode's {{.providers}} login is copied into the VM as it is"
+other = "devvm copies opencode's {{.providers}} login into the VM unchanged."
 
 [devcontainer_using]
 description = "file is the devcontainer.json's path in the project folder"
