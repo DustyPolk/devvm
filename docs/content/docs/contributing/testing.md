@@ -113,6 +113,16 @@ stderr '^devvm: too_many_cpus have=2 want=3$'
 
 To go back to the large host later in the same script, set the large values again, because an empty value leaves the machine's own. The fake host covers only size and free space. What differs between operating systems, such as Lima's disk floors on Linux, ports already in use, Docker on `PATH`, or tmpfs and 9p mounts, still differs, and the Linux CI job is what catches it.
 
+## Any time zone
+
+The tests pass in any time zone and on any date, because a test that compares times counts them from an instant it parsed or fixed, or works in UTC, and never sets `time.Local`. A testscript that needs an old file uses a date far in the past, such as `touch -t 202001010000`, and one that needs a file that stays new uses a date far in the future, such as an export named `20991231-235959`, so the scripts keep passing as the calendar moves on. CI runs `mise run test` in UTC on macOS and Linux, and a third job runs it on Linux with `TZ=America/Los_Angeles`, which has daylight saving time, so a test that only passes in one zone fails in CI and not only on a laptop. To check a change the same way, run the tests with another zone, including one with an odd offset or a half-hour DST change:
+
+```sh
+TZ=America/Los_Angeles mise run test
+TZ=Pacific/Chatham mise run test
+TZ=Australia/Lord_Howe mise run test
+```
+
 ## Manual checks
 
 What `tests/e2e.sh` leaves out, as it would change something of yours or needs something it doesn't have:

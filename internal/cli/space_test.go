@@ -137,15 +137,19 @@ func TestExports(t *testing.T) {
 	if len(es) != 2 || es[0].VM != "devvm-a-12345612345612" || es[1].VM != "devvm-b-12345612345612" {
 		t.Fatalf("exports = %+v", es)
 	}
-	now := time.Date(2026, 3, 31, 0, 0, 0, 0, time.Local)
-	if got := olderThan(es, 30*24*time.Hour, now); len(got) != 1 || got[0].VM != "devvm-a-12345612345612" {
-		t.Errorf("olderThan 30d = %+v", got)
+	// Now is counted from b's parsed date, so the zone the test runs in
+	// doesn't matter: exactly 30d after b both are that old, a second
+	// short only a.
+	age := 30 * 24 * time.Hour
+	boundary := es[1].At.Add(age)
+	if got := olderThan(es, age, boundary); len(got) != 2 {
+		t.Errorf("olderThan 30d, at b's 30d = %+v", got)
 	}
-	if got := olderThan(es, 0, now); len(got) != 2 {
+	if got := olderThan(es, age, boundary.Add(-time.Second)); len(got) != 1 || got[0].VM != "devvm-a-12345612345612" {
+		t.Errorf("olderThan 30d, a second short = %+v", got)
+	}
+	if got := olderThan(es, 0, boundary); len(got) != 2 {
 		t.Errorf("olderThan 0 = %+v", got)
-	}
-	if got := olderThan(es, 30*24*time.Hour, time.Date(2026, 3, 31, 0, 0, 0, 0, time.Local).Add(-time.Second)); len(got) != 1 {
-		t.Errorf("olderThan, a second short = %+v", got)
 	}
 }
 

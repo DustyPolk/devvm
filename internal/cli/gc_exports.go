@@ -41,6 +41,13 @@ func exports(d paths.Dirs) ([]savedExport, error) {
 		if m == nil || !e.Type().IsRegular() {
 			continue
 		}
+		// The name has no zone: it's the host's wall clock when the export
+		// was written (devvm export names it in local time), so it's read
+		// in local time too and shown as written. An age is elapsed time
+		// from that instant (30d is 720 hours), so across a DST change an
+		// export reaches it an hour before or after the same wall-clock
+		// time 30 days on, and on a host moved to another zone it's off by
+		// the zones' difference.
 		at, err := time.ParseInLocation("20060102-150405", m[2], time.Local)
 		if err != nil {
 			continue

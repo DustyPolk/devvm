@@ -26,10 +26,15 @@ concurrency:
 
 jobs:
   check:
+    # The tests run in UTC, then again on Linux in a zone with DST, so a
+    # test that depends on the zone fails here, not only on a laptop.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - { os: ubuntu-latest, tz: UTC }
+          - { os: macos-latest, tz: UTC }
+          - { os: ubuntu-latest, tz: America/Los_Angeles }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,4 +44,7 @@ jobs:
         with:
           version: 2026.10.18
       - run: mise run lint
+        if: matrix.tz == 'UTC'
       - run: mise run test
+        env:
+          TZ: ${{ matrix.tz }}
