@@ -85,7 +85,7 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 		return nil
 	}
 	spec := backend.ToolsSpec{Net: backend.NetInternet}
-	if err := rv.Require(b, label(todo), spec.Features()...); err != nil {
+	if err := rv.Require(b, Label(todo), spec.Features()...); err != nil {
 		return err
 	}
 	unlock, err := t.LockShare(ctx)
@@ -121,7 +121,7 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	if len(build) == 0 {
 		return nil
 	}
-	t.Info(msg.BuildingTools(label(build)))
+	t.Info(msg.BuildingTools(Label(build)))
 	t.LogNote()
 	return t.batch(ctx, b, base, tg.Format, lock, build)
 }

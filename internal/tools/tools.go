@@ -324,8 +324,8 @@ func split(files []string) (tools, versions []string) {
 	return tools, versions
 }
 
-// label lists tool files as "node 24.21.0, bun 1.4.2".
-func label(files []string) string {
+// Label lists tool files as "node 24.21.0, bun 1.4.2".
+func Label(files []string) string {
 	var out []string
 	for _, f := range files {
 		tool, v, _ := image.ParseToolFile(f)

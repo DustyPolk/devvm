@@ -601,7 +601,7 @@ func TestBuild(t *testing.T) {
 	if filepath.Dir(spec.Out) != e.Dirs.Data || !strings.HasPrefix(filepath.Base(spec.Out), "tools-build.") {
 		t.Errorf("the build's folder is %s", spec.Out)
 	}
-	want := "==> building_tools tools=" + label([]string{all[0], all[2], all[3]})
+	want := "==> building_tools tools=" + Label([]string{all[0], all[2], all[3]})
 	if !slices.Contains(*e.said, want) {
 		t.Errorf("said %q, want %q", *e.said, want)
 	}
@@ -943,6 +943,17 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("Update again = %q, %v, %v", again, changed, err)
 	}
 	if !slices.Contains(*e.said, "==> tools_newest vm="+vm) {
+		t.Errorf("said %q", *e.said)
+	}
+	// The newest, but gone from the share: built again.
+	if err := os.Remove(filepath.Join(e.Dirs.Tools(), files[0])); err != nil {
+		t.Fatal(err)
+	}
+	*e.said = nil
+	if again, changed, err := e.Update(t.Context(), build, vm, "go", files, gnuT); err != nil || changed || !slices.Equal(again, files) {
+		t.Errorf("Update gone = %q, %v, %v", again, changed, err)
+	}
+	if !slices.Contains(*e.said, "==> building_tools tools=go 9.9.9") || !slices.Contains(*e.said, "==> tools_newest vm="+vm) || !e.Built(files[0]) {
 		t.Errorf("said %q", *e.said)
 	}
 	t.Setenv("MISE_STUB_FAIL", "1")

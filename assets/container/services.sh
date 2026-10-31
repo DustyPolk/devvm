@@ -3,7 +3,8 @@
 # Lima: an image run as a container (smolvm's machines, Docker's containers) runs no init system.
 # Its /dev has no loop devices, which the shared tools' images are mounted with, so they're made
 # first, unless DEVVM_LOOP is off (Docker's containers, whose tools are folders, linked); then the
-# tools are mounted or linked (devvm-tools, once assets/guest/sync.sh installed it), the VM's sshd
+# tools are mounted or linked (devvm-tools, once assets/guest/sync.sh installed it; one that fails
+# is the launch's to report), the VM's sshd
 # started when it's asked for, and Docker's daemon started in the background where the VM has it
 # (the docker layer), unless DEVVM_DOCKERD is off (Docker's containers not made for it can't run it).
 # A pid file whose process isn't dockerd (one an image kept, or a start before this one) doesn't
@@ -26,7 +27,8 @@ if [ "${DEVVM_LOOP:-}" != off ]; then
   done
   [ -e /dev/loop-control ] || mknod -m 660 /dev/loop-control c 10 237
 fi
-if [ -x /usr/local/sbin/devvm-tools ] && [ -d /mnt/devvm-tools ]; then /usr/local/sbin/devvm-tools; fi
+# A tool it can't mount doesn't stop the start: the launch's setup runs devvm-tools again and fails.
+if [ -x /usr/local/sbin/devvm-tools ] && [ -d /mnt/devvm-tools ]; then /usr/local/sbin/devvm-tools || true; fi
 if [ "${1:-}" = ssh ]; then
   user=$2 key=$3
   shift 3

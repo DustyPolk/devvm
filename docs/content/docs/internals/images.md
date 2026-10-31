@@ -142,6 +142,10 @@ Each tool image is named `<tool>-<version>-<key>.erofs`. Its key hashes the tool
 
 devvm builds each tool version once into a compressed, read-only image (EROFS) in `~/.local/share/devvm/tools`, with its hash next to it in `<image>.sha256`. That folder is mounted read-only in every VM at `/mnt/devvm-tools`, and each VM mounts the images its tools need at `/opt/devvm/tools/<tool>/<version>`, at boot and on every launch. On [Docker](docker.md#shared-tools), devvm unpacks the images into a volume, mounts that volume instead, and links each tool's folder where its image would be mounted. A VM can't change the shared images, even as root.
 
+A tool that doesn't mount fails the launch (`tools_unmounted`). mise's `auto_install` stays on for a project's own version files, so without this check a tool that isn't mounted would download into the VM on first use without a word. The VM's mount script, `devvm-tools`, tries every image in the VM's list. It leaves out the empty mount point of one that fails, lists each failed image in `/run/devvm/tools-unmounted` and exits non-zero, which fails the launch's setup. devvm then reads the first 16 KiB of that list from the VM, and it counts only a whole line that is one of the VM's own tool images from its state, so the error shows devvm's own names, never the VM's text. devvm reads the list with a command of its own because the setup's output goes straight to the run log, and a pipe for reading it would keep devvm waiting on any process that the setup left running.
+
+At boot the same failure fails only the `devvm-tools` service, and the boot goes on. smolvm's machines and Docker's containers run no init system, so devvm mounts their tools at each start, and a failure there also lets the start go on. In every case, the launch's setup runs the mount script again and stops on the failure.
+
 ## Listing and cleaning up
 
 [Listing images](../using/images.md#listing-images) describes the columns of `devvm images`. An `unfinished` image is a build that didn't finish, so it has no record. A tool image's `STATE` compares it with the tools lock and with the VMs' state:

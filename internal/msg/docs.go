@@ -277,6 +277,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"delete_failed":                    "using/troubleshooting#a-command-fails",
 	"vm_create_failed":                 "using/troubleshooting#a-command-fails",
 	"sync_failed":                      "using/troubleshooting#a-command-fails",
+	"tools_unmounted":                  "using/troubleshooting#a-shared-tool-doesnt-mount",
 	"pack_failed":                      "using/troubleshooting#a-build-fails",
 	"devcontainer_ports_not_forwarded": "using/devcontainer#properties",
 	"size_pending":                     "using/ports-size#size",

@@ -1,6 +1,6 @@
 # What assets/guest/sync.sh sets up in a VM, its pieces run here: the prompt,
 # what the proxy blocked, the merge of Claude Code's settings, and VS
-# Code's settings.
+# Code's settings; and assets/guest/tools.sh, which mounts the shared tools.
 exec bash snippets.sh $DEVVM_REPO/assets/guest/sync.sh
 
 # The prompt starts with (devvm), after a theme that rebuilds PS1 before
@@ -36,6 +36,15 @@ cp vsc-comments.json $HOME/.vscode-server/data/Machine/settings.json
 exec bash vsc.sh
 stderr 'isn''t plain JSON'
 cmp $HOME/.vscode-server/data/Machine/settings.json vsc-comments.json
+
+# devvm-tools (assets/guest/tools.sh) tries every image in the VM's list:
+# it mounts or links the ones it can, and says why for each it can't
+# (missing from the share, a loop device or mount that fails, a link that
+# fails), leaving no empty mount point of theirs; then it lists them in
+# its report, a line each, and fails. With all of them there, it succeeds
+# and leaves no report.
+exec bash tools-test.sh $DEVVM_REPO/assets/guest/tools.sh
+cmp stdout tools.want
 
 -- snippets.sh --
 # Each piece of sync.sh ($1) into a file of its own.
@@ -90,6 +99,53 @@ jq -c '.mcpServers | keys' "$v"
 {"theme":"dark","projects":{"/p":{"trust":true}},"mcpServers":{"mine":{"command":"vm-only"},"gh":{"url":"https://x","headers":{"Authorization":"PLACEHOLDER"}},"new":{"command":"n"}}}
 ["gh","new"]
 ["gh","new"]
+-- tools-test.sh --
+# tools.sh ($1) with its folders under t/, and the commands it mounts with
+# stubbed: losetup fails for bad-loop.erofs, mount for bad-mount.erofs (at mnt/1) and
+# ln for bad-link-1-k.erofs.
+export d=$PWD/t
+mkdir -p "$d/share/py-1-k.erofs" "$d/share/bad-link-1-k.erofs" "$d/etc"
+touch "$d/share/node-1-k.erofs" "$d/share/bad-loop.erofs" "$d/share/bad-mount.erofs"
+from='share=/mnt/devvm-tools root=/opt/devvm/tools list=/etc/devvm/tools report=/run/devvm/tools-unmounted'
+grep -qx "$from" "$1" || { echo "no folders line in $1" >&2; exit 1; }
+sed "s|^$from\$|share=$d/share root=$d/opt list=$d/etc/tools report=$d/run/tools-unmounted|" "$1" > tools.sh
+mountpoint() { return 1; }
+losetup() { case $* in *bad-loop*) return 1 ;; -d*) echo "losetup $*" ;; *) echo /dev/loop0 ;; esac; }
+mount() { t=${*: -1}; [[ $t != */mnt/1 ]] || return 32; echo "mount ${t#"$d"/}"; }
+ln() { case $* in *bad-link*) return 1 ;; esac; command ln "$@"; }
+findmnt() { :; }
+export -f mountpoint losetup mount ln findmnt
+printf '%s\n' "node-1-k.erofs node 1" "gone-1-k.erofs gone 1" "bad-loop.erofs loop 1" \
+  "bad-mount.erofs mnt 1" "py-1-k.erofs python 1" "bad-link-1-k.erofs lnk 1" > "$d/etc/tools"
+bash tools.sh 2>&1; echo "exit $?"
+sed 's/^/report: /' "$d/run/tools-unmounted"
+cd "$d/opt" && for m in */1; do [[ ! -e $m ]] || echo "there $m"; done
+[[ "$(readlink python/1)" == "$d/share/py-1-k.erofs" ]] && echo "python/1 linked"
+printf '%s\n' "node-1-k.erofs node 1" "py-1-k.erofs python 1" > "$d/etc/tools"
+bash ../../tools.sh 2>&1; echo "exit $?"
+[[ -e $d/run/tools-unmounted ]] || echo "no report"
+-- tools.want --
+mount opt/node/1
+devvm-tools: gone-1-k.erofs is missing from the share
+devvm-tools: can't mount bad-loop.erofs
+devvm-tools: can't mount bad-mount.erofs
+losetup -d /dev/loop0
+devvm-tools: can't link bad-link-1-k.erofs
+devvm-tools: unmounted gone-1-k.erofs
+devvm-tools: unmounted bad-loop.erofs
+devvm-tools: unmounted bad-mount.erofs
+devvm-tools: unmounted bad-link-1-k.erofs
+exit 1
+report: gone-1-k.erofs
+report: bad-loop.erofs
+report: bad-mount.erofs
+report: bad-link-1-k.erofs
+there node/1
+there python/1
+python/1 linked
+mount opt/node/1
+exit 0
+no report
 -- vsc-mine.json --
 {"editor.fontSize": 14, "remote.autoForwardPorts": true}
 -- vsc-comments.json --

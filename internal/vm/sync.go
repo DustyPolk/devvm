@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -50,9 +51,48 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if bad := e.unmounted(ctx, b, vm, files); len(bad) > 0 {
+			return backend.Logged(msg.ToolsUnmounted(tools.Label(bad), vm))
+		}
 		return backend.Logged(msg.SyncFailed(vm))
 	}
 	return nil
+}
+
+// unmountedFile is where devvm-tools (guest/tools.sh) lists the tool
+// images it couldn't mount or link on its last run, a line each.
+const unmountedFile = "/run/devvm/tools-unmounted"
+
+// unmountedMax caps how much of unmountedFile devvm reads.
+const unmountedMax = 16 << 10
+
+// unmounted returns the VM's tool files (files, from its state) that its
+// devvm-tools last said it couldn't mount, read after a failed setup.
+func (e syncer) unmounted(ctx context.Context, b backend.Backend, vm string, files []string) []string {
+	out := &capped{max: unmountedMax}
+	if err := b.Exec(ctx, vm, []string{"cat", unmountedFile}, backend.ExecOpts{Stdout: out, Stderr: io.Discard}); err != nil {
+		return nil
+	}
+	return reported(files, out.Bytes())
+}
+
+// reported returns the files that a report from the VM lists, in its
+// order, each once. The VM writes the report, so only a whole line that
+// is one of files counts: what's returned is always devvm's own value,
+// never the VM's text.
+func reported(files []string, report []byte) []string {
+	var bad []string
+	for line := range bytes.Lines(report) {
+		f, ok := bytes.CutSuffix(line, []byte("\n"))
+		if !ok {
+			continue // cut short
+		}
+		i := slices.Index(files, string(f))
+		if i >= 0 && !slices.Contains(bad, files[i]) {
+			bad = append(bad, files[i])
+		}
+	}
+	return bad
 }
 
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.

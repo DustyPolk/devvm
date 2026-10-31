@@ -54,7 +54,7 @@ func (t VMs) Newer(ctx context.Context, imageName string, have []string, tg Targ
 	var newer []string
 	for _, f := range files {
 		if !slices.Contains(have, f) {
-			newer = append(newer, label([]string{f}))
+			newer = append(newer, Label([]string{f}))
 		}
 	}
 	return newer, nil
@@ -76,7 +76,8 @@ func (t VMs) WarnNewer(ctx context.Context, imageName string, have []string, tg 
 
 // Update moves a VM to the newest shared tools for its image name: it
 // checks upstream first (unless there's no lock yet: resolving it is
-// checking), has build build what the share lacks of them, and returns the
+// checking), has build build what the share lacks of them (the VM's own,
+// when they're the newest and one is gone from the share), and returns the
 // VM's new tool files. changed is false when they were the newest already.
 func (t VMs) Update(ctx context.Context, build func(context.Context, []string) error, vm, imageName string, have []string, tg Target) (files []string, changed bool, err error) {
 	versions := Versions(t)
@@ -86,12 +87,12 @@ func (t VMs) Update(ctx context.Context, build func(context.Context, []string) e
 	if files, err = versions.Files(ctx, image.ToolsOf(imageName), tg); err != nil {
 		return nil, false, err
 	}
+	if err := build(ctx, files); err != nil {
+		return nil, false, err
+	}
 	if slices.Equal(files, have) {
 		t.Info(msg.ToolsNewest(vm))
 		return files, false, nil
-	}
-	if err := build(ctx, files); err != nil {
-		return nil, false, err
 	}
 	t.Info(msg.ToolsSwitch(vm))
 	return files, true, nil

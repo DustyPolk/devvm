@@ -2209,6 +2209,11 @@ func ToolsSwitch(vm string) M {
 	return M{id: "tools_switch", vals: []val{{"vm", vm}}}
 }
 
+// ToolsUnmounted is [tools_unmounted]: "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm update to build the missing ones."
+func ToolsUnmounted(tools string, vm string) M {
+	return M{id: "tools_unmounted", vals: []val{{"tools", tools}, {"vm", vm}}}
+}
+
 // UbuntuBadSignature is [ubuntu_bad_signature]: "Ubuntu's checksums for {{.release}} at {{.url}} don't have a valid signature from Ubuntu's cloud image key, so devvm didn't use them."
 func UbuntuBadSignature(release string, url string) M {
 	return M{id: "ubuntu_bad_signature", vals: []val{{"release", release}, {"url", url}}}
@@ -2812,6 +2817,7 @@ var specs = map[string]spec{
 	"tools_not_images_rm":              {fields: []string{"image"}},
 	"tools_resolve_failed":             {},
 	"tools_switch":                     {fields: []string{"vm"}},
+	"tools_unmounted":                  {fields: []string{"tools", "vm"}},
 	"ubuntu_bad_signature":             {fields: []string{"release", "url"}},
 	"ubuntu_checksum_unpinned":         {fields: []string{"file", "release", "url"}},
 	"ubuntu_unsigned":                  {},

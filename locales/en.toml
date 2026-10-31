@@ -1356,6 +1356,10 @@ other = "{{.vm}} moves to the newest shared tools on this launch."
 [sync_failed]
 other = "Setting up {{.vm}} failed."
 
+[tools_unmounted]
+description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
+other = "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm update to build the missing ones."
+
 [agent_dir_comma]
 other = "Lima can't mount paths with a comma, so devvm doesn't mount {{.path}}."
 

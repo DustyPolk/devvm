@@ -931,6 +931,20 @@ check "an .nvmrc picks its own version, installed into the VM" in_vm "$vm" "cd $
 check "the tools are mounted at boot" bash -c "limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
   limactl shell --workdir / $vm bash -lc 'node -v' </dev/null | grep -qx v$(lockv node)"
 limactl stop "$vm" >/dev/null 2>&1   # two VMs at once starve a nested Linux host
+# A tool image gone from the share stops the launch, named, and mise downloads nothing in its place;
+# back in the share, the next launch mounts it.
+nodef=$(sed -n 's/^tools=//p' "$vms/$vm" | tr ' ' '\n' | grep '^node-')
+mv "$share/$nodef" "$work/$nodef"
+check "a tool missing from the share stops the launch, named, and isn't downloaded" bash -c "cd '$t' &&
+  ! printf 'node -v\n' | '$D' --no-network-policy --no-git-protect >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m tools_unmounted 'tools=node $(lockv node)' vm=$vm | head -1)\" '$work/last.log' &&
+  ! grep -qx v$(lockv node) '$work/last.log' &&
+  limactl shell --workdir / $vm bash -lc '! mountpoint -q /opt/devvm/tools/node/$(lockv node) && [[ ! -e ~/.local/share/mise/installs/node/$(lockv node) ]]' </dev/null"
+mv "$work/$nodef" "$share/$nodef"
+check "back in the share, the next launch mounts it" bash -c "cd '$t' &&
+  printf 'node -v\n' | '$D' --no-network-policy --no-git-protect >'$work/last.log' 2>&1 && grep -qx v$(lockv node) '$work/last.log' &&
+  limactl shell --workdir / $vm bash -lc '[[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]]' </dev/null"
+limactl stop "$vm" >/dev/null 2>&1
 files_before=$(find "$share" -name '*.erofs' | wc -l)
 t2=$(newproj tools2); echo '{}' > "$t2/package.json"
 launch "$t2" 'node -v' --no-network-policy --no-git-protect

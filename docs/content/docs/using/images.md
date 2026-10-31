@@ -52,6 +52,7 @@ devvm builds each tool version once and mounts it read-only into every VM that n
 - **They work as usual.** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`) and `cargo` work from any shell, including `bash -c` from agents and from editors over SSH.
 - **A project's own version files win.** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and the `toolchain` line in `go.mod` pick their version, which installs into the VM the first time it's used. mise also reads a `mise.toml` in the project folder, and devvm trusts it without asking, because the folder is yours.
 - **They're read-only.** A VM can't change the shared tools, even as root. The tools can't update themselves, and `rustup component add` can't change the shared toolchain.
+- **They're mounted, or the launch stops.** When one of a VM's tools is missing or the VM can't mount it, devvm stops the launch and names the tool, and the VM never downloads its own copy in its place ([a shared tool doesn't mount](troubleshooting.md#a-shared-tool-doesnt-mount)). Only the versions that a project's own version files pick install into the VM.
 
 devvm doesn't pin the tools' versions, because agents like Claude Code release several times a week. It follows the newest release of each tool, and Node 24 for node. The first time a tool is needed, devvm looks up its newest release, which needs this machine to be online once. When it makes a new VM, devvm also checks for newer releases if its last check was more than a day ago, and `DEVVM_NO_TOOL_CHECK=1` turns that check off.
 
@@ -59,7 +60,7 @@ devvm doesn't pin the tools' versions, because agents like Claude Code release s
 
 A new VM gets the tools its image names and keeps those versions. On each launch, devvm warns when there are newer ones. The commands below don't change the VM's disk, because its tools are mounted, so a change takes effect on that launch.
 
-- `devvm update` checks upstream for newer versions, builds what's missing, and moves the VM to them.
+- `devvm update` checks upstream for newer versions, builds what's missing, and moves the VM to them. When the VM already has the newest versions, it builds any of them that are missing.
 - `devvm IMAGE` with tools the VM lacks adds them, after asking ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
 - `devvm remove TOOLS` takes tools out, as in `devvm remove python+claude`. What the VM installed itself, such as other versions or global packages, stays.
 

@@ -43,6 +43,7 @@ fi
 # versions to use. /etc/mise is mise's system config: the user's own (~/.config/mise) comes first.
 cmp -s "$s/tools.sh" /usr/local/sbin/devvm-tools 2>/dev/null || sudo install -D -m 755 "$s/tools.sh" /usr/local/sbin/devvm-tools
 cmp -s "$s/tools" /etc/devvm/tools 2>/dev/null || sudo install -D -m 644 "$s/tools" /etc/devvm/tools
+# A tool it can't mount fails the setup, and devvm names it from /run/devvm/tools-unmounted.
 sudo /usr/local/sbin/devvm-tools
 {
   echo '[tools]'

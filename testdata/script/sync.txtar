@@ -97,6 +97,31 @@ exec sh -c 'ls -A "$TMPDIR"'
 ! stdout .
 rm $STUB_DIR/shell-fails
 
+# A shared tool the VM couldn't mount stops the launch, named by the VM's
+# own tool list: a line naming any other file doesn't count, and with
+# none left it's the setup that failed.
+exec bash $WORK/unmounted.sh '' ../../etc/passwd
+! exec devvm --no-network-policy --no-git-protect
+stderr '^devvm: tools_unmounted tools=claude [0-9][0-9.]* vm=devvm-fails-[0-9a-f]{14}$'
+exec bash $WORK/unmounted.sh claude-9.9.9-000000000000.erofs
+! exec devvm --no-network-policy --no-git-protect
+stderr '^devvm: sync_failed vm=devvm-fails-[0-9a-f]{14}$'
+rm $STUB_DIR/sync-fails-with
+exec devvm --no-network-policy --no-git-protect
+! stderr 'tools_unmounted|sync_failed'
+
+-- unmounted.sh --
+# The report tools.sh writes when it fails, listing each file named ('' for
+# the VM's first tool image) after lines of its own, and with a last line
+# cut short.
+first=$(sed -n 's/^tools=//p' "$DATA"/vms/devvm-fails-*)
+{
+  echo "devvm-tools: can't mount something"
+  printf '%s\n' "${first%% *} and more"
+  for f in "$@"; do echo "${f:-${first%% *}}"; done
+  printf '%s' "${first%% *}"
+} > "$STUB_DIR/sync-fails-with"
+
 -- settings.json --
 {"env":{"ANTHROPIC_API_KEY":"testfake-settings"},"theme":"dark"}
 -- claude.json --
