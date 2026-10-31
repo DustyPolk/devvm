@@ -7,7 +7,7 @@ Delete stale images and unused tool images
 
 ## Synopsis
 
-Delete what devvm images lists as stale or unfinished, on every backend, with their records, the shared tool images it lists as unused, and the copies of devvm's own files older versions wrote out. It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays.
+Delete what devvm images lists as stale or unfinished, on every backend, with their records, the shared tool images it lists as unused, the copies of devvm's own files older versions wrote out, and the older versions of the mise devvm runs on this machine. It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays.
 
 ```text
 devvm gc [flags]

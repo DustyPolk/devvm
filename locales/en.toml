@@ -703,6 +703,14 @@ other = "deleted {{.count}} unused tool images"
 one = "{{.count}} old copy of devvm's files is left from an earlier version."
 other = "{{.count}} old copies of devvm's files are left from earlier versions."
 
+[gc_mise]
+one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
+other = "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."
+
+[deleted_mise]
+one = "deleted {{.count}} older version of devvm's mise"
+other = "deleted {{.count}} older versions of devvm's mise"
+
 [deleted_assets]
 one = "deleted {{.count}} old copy of devvm's files"
 other = "deleted {{.count}} old copies of devvm's files"

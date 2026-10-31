@@ -361,6 +361,10 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	oldMise, err := tools.Versions{Env: e.b.Tools}.StaleMise()
+	if err != nil {
+		return nil, err
+	}
 	left, err := e.leftovers()
 	if err != nil {
 		return nil, err
@@ -370,7 +374,7 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 		spaceRow{What: "exports", Count: exports.count, Size: exports.size, Sized: true, Kept: keptOnlyCopy, Rest: "delete them"},
 		spaceRow{What: "network logs", Count: logs.count, Size: logs.size, Sized: true, Kept: keptLog, Rest: "devvm rm"},
 		spaceRow{What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog, Rest: "the newest 20 stay"},
-		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, Rest: "-"},
+		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, GC: dirsSize(oldMise), Rest: "-"},
 		spaceRow{What: "devvm's files", Count: assets.count, Size: assets.size, Sized: true, Kept: keptRemade, GC: stale, Rest: "-"},
 		left,
 		spaceRow{What: "state", Count: 1, Size: max(other, 0), Sized: true, Kept: keptState, Rest: "-"},

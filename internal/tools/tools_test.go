@@ -959,6 +959,37 @@ func TestListTargets(t *testing.T) {
 	}
 }
 
+// Only older versions of devvm's mise are stale: never this devvm's, nor
+// one that changed in the last hour (another devvm downloading it), nor
+// a file.
+func TestStaleMise(t *testing.T) {
+	e := newEnv(t)
+	old := time.Now().Add(-2 * time.Hour)
+	for _, v := range []string{miseVersion, "2020.1.1", "2099.1.1"} {
+		dir := filepath.Join(e.Dirs.Mise(), v)
+		write(t, filepath.Join(dir, "mise"), []byte("x"))
+		if v != "2099.1.1" {
+			if err := os.Chtimes(dir, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	write(t, filepath.Join(e.Dirs.Mise(), "notes"), []byte("x"))
+	got, err := e.StaleMise()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{filepath.Join(e.Dirs.Mise(), "2020.1.1")}; !slices.Equal(got, want) {
+		t.Errorf("StaleMise = %v, want %v", got, want)
+	}
+	if err := os.RemoveAll(e.Dirs.Mise()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := e.StaleMise(); err != nil || got != nil {
+		t.Errorf("StaleMise without a folder = %v, %v", got, err)
+	}
+}
+
 func TestCompareVersions(t *testing.T) {
 	for _, c := range []struct {
 		a, b string

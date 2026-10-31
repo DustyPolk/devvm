@@ -509,6 +509,11 @@ func DeletedImage(image string, key string) M {
 	return M{id: "deleted_image", vals: []val{{"image", image}, {"key", key}}}
 }
 
+// DeletedMise is [deleted_mise]: "deleted {{.count}} older versions of devvm's mise"
+func DeletedMise(count int) M {
+	return M{id: "deleted_mise", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // DeletedOldImage is [deleted_old_image]: "deleted the old image {{.image}} ({{.key}})"
 func DeletedOldImage(image string, key string) M {
 	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
@@ -1042,6 +1047,11 @@ func GCImage(image string, key string) M {
 // GCImages is [gc_images]: "Stale and unfinished images:"
 func GCImages() M {
 	return M{id: "gc_images"}
+}
+
+// GCMise is [gc_mise]: "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."
+func GCMise(count int, size string) M {
+	return M{id: "gc_mise", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
 // GCOldHint is [gc_old_hint]: "After they rebuild, run devvm gc to delete the old ones."
@@ -2667,6 +2677,7 @@ var specs = map[string]spec{
 	"deleted":                          {fields: []string{"vm"}},
 	"deleted_assets":                   {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
+	"deleted_mise":                     {plural: true, fields: []string{"count"}},
 	"deleted_old_image":                {fields: []string{"image", "key"}},
 	"deleted_tools":                    {plural: true, fields: []string{"count"}},
 	"deleted_unfinished_build":         {fields: []string{"key"}},
@@ -2774,6 +2785,7 @@ var specs = map[string]spec{
 	"gc_failed":                        {fields: []string{"reason"}},
 	"gc_image":                         {fields: []string{"image", "key"}},
 	"gc_images":                        {},
+	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
 	"gc_old_hint":                      {},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
