@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,6 +29,11 @@ type gcOpts struct {
 	// toolNames when there are any.
 	tools     bool
 	toolNames []string
+	// exports is --exports: also the exports, only those older than
+	// --older-than when it's given.
+	exports   bool
+	olderThan string
+	age       time.Duration
 }
 
 // newGCCmd is devvm gc.
@@ -42,7 +48,9 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"With --backend, only that backend's images, its current ones too, and its unused tool " +
 			"images; without it, every backend's, whatever the default backend is. With --tools, also " +
 			"the current tool images no VM has, on every backend and C library, or only those of the " +
-			"TOOLs named (node, claude). It lists them first, and in a terminal asks. VMs are never " +
+			"TOOLs named (node, claude). With --exports, also the agents' history devvm export and " +
+			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
+			"(30d, 2w, 12h). It lists them first, and in a terminal asks. VMs are never " +
 			"deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or " +
 			"Docker image a VM was made from.",
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
@@ -53,12 +61,24 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
+	c.Flags().BoolVar(&o.exports, "exports", false, "also delete the saved exports of agents' history")
+	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --exports, only those older than `AGE`: 30d, 2w or 12h")
 	return c
 }
 
 // checkArgs takes tool names, by the names images have them by, only
-// with --tools.
-func (o gcOpts) checkArgs(args []string) error {
+// with --tools, and an age only with --exports.
+func (o *gcOpts) checkArgs(args []string) error {
+	if o.olderThan != "" {
+		if !o.exports {
+			return msg.GCOlderThanNeedsExports()
+		}
+		age, err := state.ParseAge(o.olderThan)
+		if err != nil {
+			return msg.GCBadAge(o.olderThan)
+		}
+		o.age = age
+	}
 	if len(args) > 0 && !o.tools {
 		return msg.GCNamesNeedTools(args[0])
 	}
@@ -75,6 +95,7 @@ type gcPlan struct {
 	images  []listedImage  // stale and unfinished images, each with its backend's
 	tools   []tools.Listed // unused tool images
 	current []tools.Listed // with --tools, current tool images no VM has
+	exports []savedExport  // with --exports, the exports old enough
 	assets  []string       // old copies of devvm's files no VM's proxy was started with
 	mise    []string       // older versions of devvm's own mise
 	share   tools.Share    // where the tool images are
@@ -124,6 +145,13 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	if o.tools {
 		p.current = p.share.NoVM(ts, o.toolNames)
 	}
+	if o.exports {
+		es, err := exports(b.Dirs)
+		if err != nil {
+			return p, err
+		}
+		p.exports = olderThan(es, o.age, time.Now())
+	}
 	if o.only != "" {
 		target, err := toolTargets(u, b)
 		if err != nil {
@@ -168,7 +196,7 @@ func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (strin
 }
 
 func (p gcPlan) empty() bool {
-	return len(p.images)+len(p.tools)+len(p.current)+len(p.assets)+len(p.mise) == 0
+	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.assets)+len(p.mise) == 0
 }
 
 // show lists what gc deletes.
@@ -195,6 +223,12 @@ func (p gcPlan) show(u *ui.UI) {
 	if len(p.mise) > 0 {
 		u.Say(msg.GCMise(len(p.mise), humanSize(dirsSize(p.mise))))
 	}
+	if len(p.exports) > 0 {
+		u.Say(msg.GCExports(len(p.exports), humanSize(exportsSize(p.exports))))
+		for _, e := range p.exports {
+			u.Say(msg.GCExport(exportDate(e.At), humanSize(e.Size), e.VM))
+		}
+	}
 }
 
 // run deletes what's planned.
@@ -213,6 +247,12 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 	}
 	if len(p.mise) > 0 {
 		u.Info(msg.DeletedMise(len(p.mise)))
+	}
+	if err := removeAll(exportPaths(p.exports)); err != nil {
+		return err
+	}
+	if len(p.exports) > 0 {
+		u.Info(msg.DeletedExports(len(p.exports)))
 	}
 	if len(p.tools) > 0 {
 		if err := p.share.Delete(toolFiles(p.tools)); err != nil {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
@@ -110,6 +111,40 @@ func TestLeftoverFiles(t *testing.T) {
 	got := leftoverFiles(d, "devvm-a-1")
 	if len(got) != 3 || strings.Contains(strings.Join(got, " "), "devvm-a-12") {
 		t.Errorf("leftoverFiles = %v", got)
+	}
+}
+
+// Exports: only plain files named as devvm names them, oldest first; the
+// age filter keeps those at least that old.
+func TestExports(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	if err := os.MkdirAll(d.Exports(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{
+		"devvm-b-12345612345612-20260301-000000.tar.gz", "devvm-a-12345612345612-20260101-120000.tar.gz",
+		".devvm-export-1", "notes.tar.gz", "devvm-c-1234-20260101-000000.tar.gz",
+	} {
+		if err := os.WriteFile(filepath.Join(d.Exports(), f), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	es, err := exports(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(es) != 2 || es[0].VM != "devvm-a-12345612345612" || es[1].VM != "devvm-b-12345612345612" {
+		t.Fatalf("exports = %+v", es)
+	}
+	now := time.Date(2026, 3, 31, 0, 0, 0, 0, time.Local)
+	if got := olderThan(es, 30*24*time.Hour, now); len(got) != 1 || got[0].VM != "devvm-a-12345612345612" {
+		t.Errorf("olderThan 30d = %+v", got)
+	}
+	if got := olderThan(es, 0, now); len(got) != 2 {
+		t.Errorf("olderThan 0 = %+v", got)
+	}
+	if got := olderThan(es, 30*24*time.Hour, time.Date(2026, 3, 31, 0, 0, 0, 0, time.Local).Add(-time.Second)); len(got) != 1 {
+		t.Errorf("olderThan, a second short = %+v", got)
 	}
 }
 

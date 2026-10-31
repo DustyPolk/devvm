@@ -504,6 +504,11 @@ func DeletedAssets(count int) M {
 	return M{id: "deleted_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// DeletedExports is [deleted_exports]: "deleted {{.count}} exports"
+func DeletedExports(count int) M {
+	return M{id: "deleted_exports", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // DeletedImage is [deleted_image]: "deleted image {{.image}} ({{.key}})"
 func DeletedImage(image string, key string) M {
 	return M{id: "deleted_image", vals: []val{{"image", image}, {"key", key}}}
@@ -1034,9 +1039,24 @@ func GCAssets(count int) M {
 	return M{id: "gc_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// GCBadAge is [gc_bad_age]: "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
+func GCBadAge(age string) M {
+	return M{id: "gc_bad_age", vals: []val{{"age", age}}}
+}
+
 // GCConfirm is [gc_confirm]: "Your VMs stay as they are. Delete these?"
 func GCConfirm() M {
 	return M{id: "gc_confirm"}
+}
+
+// GCExport is [gc_export]: "  {{.vm}}, {{.date}} ({{.size}})"
+func GCExport(date string, size string, vm string) M {
+	return M{id: "gc_export", vals: []val{{"date", date}, {"size", size}, {"vm", vm}}}
+}
+
+// GCExports is [gc_exports]: "{{.count}} exports of agents' history ({{.size}}), the only copy of a deleted VM's:"
+func GCExports(count int, size string) M {
+	return M{id: "gc_exports", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
 // GCFailed is [gc_failed]: "Cleaning up failed: {{.reason}}."
@@ -1067,6 +1087,11 @@ func GCNamesNeedTools(tool string) M {
 // GCOldHint is [gc_old_hint]: "After they rebuild, run devvm gc to delete the old ones."
 func GCOldHint() M {
 	return M{id: "gc_old_hint"}
+}
+
+// GCOlderThanNeedsExports is [gc_older_than_needs_exports]: "--older-than goes with --exports. Run devvm gc --exports --older-than AGE."
+func GCOlderThanNeedsExports() M {
+	return M{id: "gc_older_than_needs_exports"}
 }
 
 // GCTools is [gc_tools]: "{{.count}} shared tool images are unused ({{.size}})."
@@ -2696,6 +2721,7 @@ var specs = map[string]spec{
 	"delete_parent_vm":                 {fields: []string{"dir", "vm"}},
 	"deleted":                          {fields: []string{"vm"}},
 	"deleted_assets":                   {plural: true, fields: []string{"count"}},
+	"deleted_exports":                  {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
 	"deleted_old_image":                {fields: []string{"image", "key"}},
@@ -2802,13 +2828,17 @@ var specs = map[string]spec{
 	"from_not_found":                   {fields: []string{"from", "host"}},
 	"from_unreachable":                 {fields: []string{"from", "host"}},
 	"gc_assets":                        {plural: true, fields: []string{"count"}},
+	"gc_bad_age":                       {fields: []string{"age"}},
 	"gc_confirm":                       {},
+	"gc_export":                        {fields: []string{"date", "size", "vm"}},
+	"gc_exports":                       {plural: true, fields: []string{"count", "size"}},
 	"gc_failed":                        {fields: []string{"reason"}},
 	"gc_image":                         {fields: []string{"image", "key"}},
 	"gc_images":                        {},
 	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
 	"gc_names_need_tools":              {fields: []string{"tool"}},
 	"gc_old_hint":                      {},
+	"gc_older_than_needs_exports":      {},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},

@@ -718,6 +718,24 @@ other = "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.t
 [gc_unknown_tool]
 other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."
 
+[gc_exports]
+one = "{{.count}} export of agents' history ({{.size}}), the only copy of a deleted VM's:"
+other = "{{.count}} exports of agents' history ({{.size}}), the only copy of a deleted VM's:"
+
+[gc_export]
+description = "date is when devvm wrote it, as 2026-10-27 23:23"
+other = "  {{.vm}}, {{.date}} ({{.size}})"
+
+[deleted_exports]
+one = "deleted {{.count}} export"
+other = "deleted {{.count}} exports"
+
+[gc_older_than_needs_exports]
+other = "--older-than goes with --exports. Run devvm gc --exports --older-than AGE."
+
+[gc_bad_age]
+other = "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
+
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
 other = "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."

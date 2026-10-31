@@ -7,7 +7,7 @@ Delete stale images and unused tool images
 
 ## Synopsis
 
-Delete what devvm images lists as stale or unfinished, on every backend, with their records, the shared tool images it lists as unused, the copies of devvm's own files older versions wrote out, and the older versions of the mise devvm runs on this machine. With --backend, only that backend's images, its current ones too, and its unused tool images; without it, every backend's, whatever the default backend is. With --tools, also the current tool images no VM has, on every backend and C library, or only those of the TOOLs named (node, claude). It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or Docker image a VM was made from.
+Delete what devvm images lists as stale or unfinished, on every backend, with their records, the shared tool images it lists as unused, the copies of devvm's own files older versions wrote out, and the older versions of the mise devvm runs on this machine. With --backend, only that backend's images, its current ones too, and its unused tool images; without it, every backend's, whatever the default backend is. With --tools, also the current tool images no VM has, on every backend and C library, or only those of the TOOLs named (node, claude). With --exports, also the agents' history devvm export and devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than (30d, 2w, 12h). It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or Docker image a VM was made from.
 
 ```text
 devvm gc [--tools [TOOL...]] [flags]
@@ -16,8 +16,10 @@ devvm gc [--tools [TOOL...]] [flags]
 ## Options
 
 ```text
-  -h, --help    help for gc
-      --tools   also delete the current shared tool images no VM has; with TOOL names, only theirs
+      --exports          also delete the saved exports of agents' history
+  -h, --help             help for gc
+      --older-than AGE   with --exports, only those older than AGE: 30d, 2w or 12h
+      --tools            also delete the current shared tool images no VM has; with TOOL names, only theirs
 ```
 
 ## Options inherited from parent commands

@@ -337,7 +337,7 @@ func formatBackend(reg *backend.Registry, format string) string {
 // backends, and its other state. Each file is counted once.
 func (e spaceEnv) dataRows() ([]spaceRow, error) {
 	d := e.b.Dirs
-	exports, err := filesIn(d.Exports(), func(n string) bool { return strings.HasSuffix(n, ".tar.gz") })
+	es, err := exports(d)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +371,7 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 	}
 	other := otherState(d) - left.Size
 	return nonEmpty(
-		spaceRow{What: "exports", Count: exports.count, Size: exports.size, Sized: true, Kept: keptOnlyCopy, Rest: "delete them"},
+		spaceRow{What: "exports", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --exports"},
 		spaceRow{What: "network logs", Count: logs.count, Size: logs.size, Sized: true, Kept: keptLog, Rest: "devvm rm"},
 		spaceRow{What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog, Rest: "the newest 20 stay"},
 		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, GC: dirsSize(oldMise), Rest: "-"},

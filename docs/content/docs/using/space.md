@@ -35,7 +35,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `tools/` | the [shared tools](images.md#shared-tools), one read-only image per tool version, each with its checksum beside it in a `.sha256` file and what it's built for in a `.target` file | `devvm gc` deletes the versions that no VM has and that aren't the current ones, and `devvm gc --tools` also the current ones that no VM has |
 | `mise.lock`, `mise.lock.toml`, `mise.lock.checked` | the tools lock, which holds the tools' versions and their checksums, the config it was resolved from, and when devvm last checked upstream for newer versions | devvm replaces them when it checks again |
 | `mise/<version>` | the mise that devvm runs on this machine to resolve the tools lock, one folder per mise version | `devvm gc` deletes the folders of older versions, which an upgrade of devvm leaves |
-| `exports/` | the agents' [history](coding-agents.md#history) that `devvm export` and `devvm rm` save, one `.tar.gz` per export | nothing deletes them, so you delete the ones you don't need |
+| `exports/` | the agents' [history](coding-agents.md#history) that `devvm export` and `devvm rm` save, one `.tar.gz` per export | `devvm gc --exports` deletes them, or with `--older-than 30d` those that old, and nothing else does |
 | `logs/runs/` | the [run logs](troubleshooting.md#a-command-fails), one per devvm run that runs a command | devvm keeps the newest 20 |
 | `logs/<vm>.jsonl`, `logs/<vm>.proxy.log` | a VM's network log, which holds its proxy's decisions, and its proxy's own output | `devvm rm` deletes them with the VM |
 | `ca/` | the certificate authority that VMs trust for their proxy | devvm makes a new one when the old one has less than a week of its 30 days left |
@@ -56,7 +56,7 @@ Each tool version is built once for each kind of VM that uses it, so `tools/` ca
 
 ### Exports
 
-`devvm rm` saves the history of a VM whose image has an agent before it deletes the VM, so each export in `exports/` can be the only copy of that VM's transcripts and sessions. devvm never deletes an export. To free the space, delete the files you don't need, which are named `<vm>-<date>-<time>.tar.gz`.
+`devvm rm` saves the history of a VM whose image has an agent before it deletes the VM, so each export in `exports/` can be the only copy of that VM's transcripts and sessions. devvm deletes an export only when you ask it to. `devvm gc --exports` lists the exports, which are named `<vm>-<date>-<time>.tar.gz`, by their VM and date, then deletes them after asking in a terminal, and `devvm gc --exports --older-than 30d` deletes only those written 30 days ago or more. gc leaves anything else in the folder alone, such as an export that `devvm export` is still writing.
 
 ### Leftovers of a VM deleted outside devvm
 
