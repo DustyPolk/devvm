@@ -1516,10 +1516,13 @@ EOF
     { for i in \$(seq 20); do refused && break; sleep 1; done; refused; } && grep -q 'Forwarding TCP from 0.0.0.0:47195' \"\$ha\" &&
     ! lima_listens tcp 47195 && ! lima_listens udp 47196 && l=\$(ha_listens) && echo \"hostagent's: \$l\" && [[ \$l == 'TCP 127.0.0.1:$sp' ]]"
   check "... and the VM works: ssh, devvm's forwarder (on loopback alone), the proxy, the self-check" bash -c "
-    for i in \$(seq 20); do nc -z 127.0.0.1 47195 && break; sleep 1; done; nc -z 127.0.0.1 47195 && loopback_only 47195 &&
-    pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null && ! lima_listens tcp 47195 &&
-    [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] &&
-    in_vm '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com' && grep -qx net_check=ok '$vms/$vm'"
+    for i in \$(seq 20); do nc -z 127.0.0.1 47195 && break; sleep 1; done; nc -z 127.0.0.1 47195 &&
+    { loopback_only 47195 || { echo 'not on loopback alone:'; lsof -nP -iTCP:47195 -sTCP:LISTEN; false; }; } &&
+    { pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null || { echo 'no forwarder'; false; }; } &&
+    { ! lima_listens tcp 47195 || { echo 'limactl listens'; false; }; } &&
+    { [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] || { echo 'ssh failed'; false; }; } &&
+    { in_vm '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com' || { echo 'the proxy failed'; false; }; } &&
+    { grep -qx net_check=ok '$vms/$vm' || { echo 'no self-check:'; grep '^net' '$vms/$vm'; false; }; }"
   in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4719"; pkill -f "[d]evvm-e2e-udp"' >/dev/null 2>&1
   check "the next start puts Lima's ignore rules back" bash -c "cd '$n' &&
     HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
