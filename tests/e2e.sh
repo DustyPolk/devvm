@@ -197,7 +197,7 @@ smol_json() { SMOLVM_USAGE=0 smolvm machine ls --json 2>/dev/null | awk '
 smol_ls() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 == want { print $1, $2 }'; }
 smol_others() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 != want { print $1, $3 }'; }
 smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
-export -f smol_json smol_ls smol_status
+export -f smol_json smol_ls smol_others smol_status
 # The Docker backend's: only what has the sandbox's label ($dlabel). dns is its names' hash of the data
 # folder (devvm-$dns:KEY images, devvm-img-KEY-$dns build containers).
 dlabel=label=devvm.data=$XDG_DATA_HOME/devvm
