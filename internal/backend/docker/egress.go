@@ -641,7 +641,15 @@ func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (conte
 		return fail(err)
 	}
 	starter := backend.ProxyStarter{Self: e.d.Self, Spawn: e.d.Spawn, Tick: e.d.Tick}
-	if proxy, err = starter.Start(name, dir, filepath.Join(dir, "lifeline"), upstream, "-listen-unix", sock); err != nil {
+	extra := []string{"-listen-unix", sock}
+	if e.d.engineKind() != kindDesktop {
+		// Without a company proxy, a Linux engine's build is on Docker's own
+		// network, reaching internal addresses directly, so names this
+		// machine can't resolve go on to the company proxy; Desktop's builds
+		// are kept off this machine's own.
+		extra = append(extra, "-upstream-unresolved")
+	}
+	if proxy, err = starter.Start(name, dir, filepath.Join(dir, "lifeline"), upstream, extra...); err != nil {
 		return fail(err)
 	}
 	env := buildEnv()

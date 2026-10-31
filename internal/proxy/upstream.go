@@ -36,6 +36,7 @@ type upstream struct {
 
 var (
 	upstreamFile = ""      // -upstream: HTTPS_PROXY=, HTTP_PROXY= and NO_PROXY= lines (devvm writes it, mode 600)
+	upUnresolved = false   // -upstream-unresolved: names the host can't resolve go upstream even when only ** allows them
 	upHTTPS      *upstream // tunnels and the connections that put secrets in; nil: direct
 	upHTTP       *upstream // plain HTTP requests; nil: direct
 	noProxy      []noProxyRule
@@ -235,7 +236,8 @@ var errUnresolved = errors.New("this machine can't resolve it, and only ** allow
 // internal or denied (the upstream may connect to any of them). A name the host can't resolve
 // (common behind a company proxy) goes upstream unjudged only when the policy names it, as itself
 // or under *.domain: one that only ** allows is refused (errUnresolved), so ** alone never sends
-// the company proxy a name it may resolve to its own network's hosts.
+// the company proxy a name it may resolve to its own network's hosts. With -upstream-unresolved
+// (a build whose VM reaches internal addresses anyway), any such name goes upstream.
 func floorUpstream(ctx context.Context, host string, port int) error {
 	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
 		_, err := resolve(ctx, host, port)
@@ -248,7 +250,7 @@ func floorUpstream(ctx context.Context, host string, port int) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if !pol.byName(host, port) {
+		if !upUnresolved && !pol.byName(host, port) {
 			return errUnresolved
 		}
 		return nil

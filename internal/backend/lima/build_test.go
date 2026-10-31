@@ -203,7 +203,8 @@ func TestBuildImageHostProxy(t *testing.T) {
 			}
 			p := strings.Join((*spawned)[0], " ")
 			dir := filepath.Join(l.Dirs.Run(), "builds", inst)
-			if !strings.Contains(p, " -lifeline "+l.haPIDFile(inst)+" ") || !strings.HasSuffix(p, " -upstream "+filepath.Join(dir, "upstream")) ||
+			if !strings.Contains(p, " -lifeline "+l.haPIDFile(inst)+" ") || !strings.Contains(p, " -upstream-unresolved") ||
+				!strings.HasSuffix(p, " -upstream "+filepath.Join(dir, "upstream")) ||
 				strings.Contains(p, "pa55") {
 				t.Errorf("the build's proxy: %s", p)
 			}

@@ -80,6 +80,7 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&caKeyF, "cakey", "", "CA private key (PEM)")
 	fs.StringVar(&upstreamCAFile, "upstream-cas", "", "CA certificates (PEM) trusted for the proxy's own TLS connections, besides the system's (secrets.go)")
 	fs.StringVar(&upstreamFile, "upstream", "", "file of the host's HTTPS_PROXY=, HTTP_PROXY= and NO_PROXY= lines: reach allowed hosts through that proxy (upstream.go)")
+	fs.BoolVar(&upUnresolved, "upstream-unresolved", false, "with -upstream: send names the host can't resolve there even when only ** allows them (a build that reaches internal addresses anyway)")
 	fs.StringVar(&initCADir, "init-ca", "", "write a new CA (ca.pem, ca.key) into this directory unless one is there, and exit")
 	fs.StringVar(&loginKind, "login", "", "codex, opencode or claude: work on that agent's login file (logins.go), with -login-file and one of the next three")
 	fs.StringVar(&loginFile, "login-file", "", "the agent's login file on the host")

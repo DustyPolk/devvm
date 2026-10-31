@@ -80,7 +80,7 @@ When this machine reaches the internet only through a company proxy and nothing 
 
 When devvm says that `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes.
 
-Builds behind a company proxy go through a proxy of devvm's, which allows any host but refuses a name that this machine can't look up. So when an image build fails to reach a host behind a company proxy, check that this machine resolves the host's name, as `host github.com` shows. If it doesn't, ask your IT team for a DNS server that resolves outside names.
+Builds behind a company proxy go through a proxy of devvm's, which allows any host. On Docker Desktop, that proxy refuses a name that this machine can't look up, so when a build on Docker Desktop fails to reach a host behind a company proxy, check that this machine resolves the host's name, as `host github.com` shows. If it doesn't, ask your IT team for a DNS server that resolves outside names. Builds on Lima and on a Linux Docker engine send such names on to the company proxy.
 
 ## TLS errors behind a company proxy
 

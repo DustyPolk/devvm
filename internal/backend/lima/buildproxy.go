@@ -72,7 +72,9 @@ func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend
 	}
 	dir := filepath.Join(l.Dirs.Run(), "builds", vm)
 	starter := backend.ProxyStarter{Self: l.Self, Spawn: l.Spawn, Tick: l.Tick}
-	p, err := starter.Start(vm, dir, l.haPIDFile(vm), up)
+	// The build VM reaches internal addresses directly anyway, so names this
+	// machine can't resolve go on to the company proxy.
+	p, err := starter.Start(vm, dir, l.haPIDFile(vm), up, "-upstream-unresolved")
 	if err != nil {
 		return c, backend.HostProxy{}, none, err
 	}

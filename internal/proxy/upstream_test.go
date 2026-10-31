@@ -344,6 +344,28 @@ func TestUpstreamUnresolved(t *testing.T) {
 	if code != http.StatusForbidden || strings.Contains(strings.Join(f.requests(), "\n"), "only-star") {
 		t.Errorf("plain HTTP: %d, the upstream saw %q", code, f.requests())
 	}
+	// -upstream-unresolved (a build's proxy): ** sends it upstream; a denied name stays refused.
+	upUnresolved = true
+	t.Cleanup(func() { upUnresolved = false })
+	for _, tc := range []struct {
+		target string
+		code   int
+	}{
+		{"only-star.test:443", http.StatusOK},
+		{"denied.wild.test:443", http.StatusForbidden},
+	} {
+		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
+		must(t, err)
+		fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", tc.target, tc.target)
+		resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: http.MethodConnect})
+		if err != nil || resp.StatusCode != tc.code {
+			t.Errorf("-upstream-unresolved %s: %v %v, want %d", tc.target, resp, err, tc.code)
+		}
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		_ = c.Close()
+	}
 }
 
 // The upstream's answer to CONNECT is read only so far: headers that never end fail the tunnel.
