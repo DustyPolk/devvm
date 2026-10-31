@@ -168,7 +168,7 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 | `-f`, `--follow` | then each new one as it happens, until Ctrl+C |
 | `--blocked` | the blocks instead, one row per host and port, by when last blocked: `LAST`, `COUNT`, `HOST` and `ALLOW WITH`, the `devvm policy allow` command that allows it |
 
-`ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. A VM without network policy logs nothing new, and `devvm log` says so. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
+`ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. A VM without network policy logs nothing new, and `devvm log` says so. The proxy keeps each VM's log to its last 10 to 20 MiB by starting a new file once the current one reaches 10 MiB and keeping one older file, which `devvm log` reads too. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
 
 ## Not covered
 

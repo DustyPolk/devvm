@@ -108,7 +108,10 @@ func (e Net) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	}
 	l := netpolicy.NewLog(e.Dirs, vm)
 	// Its proxy makes the log as it starts: following an empty one waits.
-	if fi, err := os.Stat(l.Path); errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow {
+	// One it just rotated is empty, with its events in the old one.
+	fi, err := os.Stat(l.Path)
+	_, oerr := os.Stat(l.Old())
+	if errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow && errors.Is(oerr, os.ErrNotExist) {
 		e.Info(msg.LogEmpty(vm))
 		return nil
 	}

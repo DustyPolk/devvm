@@ -212,6 +212,10 @@ The proxy writes every decision (`tunnel`, `intercept`, `forward` or `blocked`) 
 
 The proxy's own lines, such as what it loaded and what failed upstream, go to `<vm>.proxy.log` next to it. An upstream error stays there, because it can name addresses that the VM shouldn't learn. Only you can read both folders, and devvm's run logs never hold a VM's password. The VM chose the hosts and paths, so `devvm log` drops control characters in them.
 
+The proxy is the only program that writes either log, and it rotates each one before a line would take it past 10 MiB, so a VM that runs for months keeps at most about 20 MiB of each. A line never spans two files, and lines from connections at the same time are written one after another, so a rotation loses none and splits none. It renames `<vm>.jsonl` to `<vm>.jsonl.1`, which replaces the one that was there, and starts a new `<vm>.jsonl`. `<vm>.proxy.log` is also the proxy process's output, where its last error goes when it stops, so the proxy copies it to `<vm>.proxy.log.1` and empties it instead, and that error still reaches the current file. Every log file and its `.1` file is readable only by you (mode 600).
+
+`devvm log` reads `<vm>.jsonl.1` before `<vm>.jsonl`, so the history it shows and the blocks that `devvm log --blocked` counts carry on across a rotation. `devvm log -f` reads the renamed file to its end and then follows the new one from its start. `devvm rm` deletes the `.1` files with the rest of the VM's logs.
+
 ## devvm _proxy
 
 devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, and its errors end in one line, `network policy proxy: …`.
@@ -222,7 +226,8 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | `-listen-unix` | also listen on this unix socket, only you can reach (mode 600); a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
 | `-policy` | the policy files, comma-separated |
-| `-log` | the JSON-lines event log (default: standard output) |
+| `-log` | the JSON-lines event log (default: standard output), [rotated](#log-files) past 10 MiB |
+| `-proxy-log` | the file that the proxy's output goes to, which is its own log, rotated past 10 MiB by copying |
 | `-lifeline` | the hostagent's pid file: exit when that process is gone |
 | `-auth-file` | a file holding the VM's password; required |
 | `-ca`, `-cakey` | devvm's CA, for interception |

@@ -127,6 +127,135 @@ func TestWriteLogFollow(t *testing.T) {
 	}
 }
 
+// A log the proxy rotated: <log>.1's events come first, so the history
+// is continuous; the blocks count both files'.
+func TestWriteLogRotated(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "vm.jsonl")
+	if err := os.WriteFile(path+".1", []byte(event(1)+event(2)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(event(3)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l := &Log{Path: path}
+	for n, want := range map[int]string{50: shown(1) + shown(2) + shown(3), 2: shown(2) + shown(3)} {
+		var b bytes.Buffer
+		if err := l.Write(t.Context(), &b, n, false); err != nil || b.String() != want {
+			t.Errorf("n=%d: %q, %v; want %q", n, b.String(), err, want)
+		}
+	}
+	var b bytes.Buffer
+	if err := l.WriteBlocked(&b); err != nil || !strings.Contains(b.String(), "T3    3      a.test:443") {
+		t.Errorf("WriteBlocked: %q, %v", b.String(), err)
+	}
+	// Just rotated, before the next event: the old file's.
+	if err := os.Rename(path, path+".1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b.Reset()
+	if err := l.Write(t.Context(), &b, 50, false); err != nil || b.String() != shown(3) {
+		t.Errorf("just rotated: %q, %v", b.String(), err)
+	}
+}
+
+// devvm log -f goes on across a rotation: the renamed log is read to its
+// end, then the new one from its start.
+func TestWriteLogFollowRotated(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "vm.jsonl")
+	if err := os.WriteFile(path, []byte(event(1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // the test's own file
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	var out syncBuffer
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	l := &Log{Path: path, Tick: 5 * time.Millisecond}
+	go func() { done <- l.Write(ctx, &out, 50, true) }()
+	wait := func(want string) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); out.String() != want; {
+			if time.Now().After(deadline) {
+				t.Fatalf("followed: %q; want %q", out.String(), want)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	wait(shown(1))
+	// The proxy rotates as the proxy does: the last line goes to the
+	// renamed file, then the new one starts.
+	for i, step := range []func() error{
+		func() error { _, err := f.WriteString(event(2)); return err },
+		func() error { return os.Rename(path, path+".1") },
+		func() error { _, err := f.WriteString(event(3)); return err },
+		func() error {
+			nf, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // the test's own file
+			if err != nil {
+				return err
+			}
+			_ = f.Close()
+			f = nf
+			_, err = f.WriteString(event(4))
+			return err
+		},
+	} {
+		if err := step(); err != nil {
+			t.Fatalf("step %d: %v", i, err)
+		}
+	}
+	wait(shown(1) + shown(2) + shown(3) + shown(4))
+	if _, err := f.WriteString(event(5)); err != nil {
+		t.Fatal(err)
+	}
+	wait(shown(1) + shown(2) + shown(3) + shown(4) + shown(5))
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A start looks for the proxy's line after what the log had: in the log,
+// or, when the proxy rotated it as it started, in the rest of <log>.1 and
+// the new log.
+func TestLogged(t *testing.T) {
+	t.Parallel()
+	want := []byte("listening on 127.0.0.1:1 for vm")
+	long := strings.Repeat("earlier\n", 10)
+	for _, c := range []struct {
+		old, log string
+		before   int
+		ok       bool
+	}{
+		{"", "before\nlistening on 127.0.0.1:1 for vm\n", 7, true},
+		{"", "listening on 127.0.0.1:1 for vm\nafter\n", 32, false}, // an earlier start's
+		{"before\nlistening on 127.0.0.1:1 for vm\n", "x\n", 7, true},
+		{long, "listening on 127.0.0.1:1 for vm\n", len(long), true},
+		{"listening on 127.0.0.1:1 for vm\n", "x\n", 32, false}, // before what the log had
+		{"before\n", "x\n", 7, false},
+	} {
+		path := filepath.Join(t.TempDir(), "vm.proxy.log")
+		if c.old != "" {
+			if err := os.WriteFile(path+".1", []byte(c.old), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(path, []byte(c.log), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := logged(path, int64(c.before), want); got != c.ok {
+			t.Errorf(".1 %q, log %q: %v, want %v", c.old, c.log, got, c.ok)
+		}
+	}
+}
+
 func TestWriteBlocked(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")

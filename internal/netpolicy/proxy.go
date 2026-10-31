@@ -465,7 +465,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	ca := p.Dirs.CA()
 	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
 	args := append([]string{
-		"_proxy", "-listen", addr, "-vm", vm, "-policy", files, "-log", EventLog(p.Dirs, vm), "-lifeline", lifeline,
+		"_proxy", "-listen", addr, "-vm", vm, "-policy", files, "-log", EventLog(p.Dirs, vm), "-proxy-log", logPath, "-lifeline", lifeline,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
 		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth,
 	}, decider...)
@@ -498,13 +498,22 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	return msg.ProxyStartFailed(logPath, vm)
 }
 
-// logged reports whether a log has want after its first before bytes.
+// logged reports whether a log has want after its first before bytes. A
+// log shorter than that was rotated (copied to <log>.1, then emptied), so
+// the rest of <log>.1 and the whole log count.
 func logged(path string, before int64, want []byte) bool {
 	b, err := os.ReadFile(path) //nolint:gosec // devvm's own log
-	if err != nil || int64(len(b)) < before {
+	if err != nil {
 		return false
 	}
-	return bytes.Contains(b[before:], want)
+	if int64(len(b)) >= before {
+		return bytes.Contains(b[before:], want)
+	}
+	if bytes.Contains(b, want) {
+		return true
+	}
+	old, err := os.ReadFile(path + ".1") //nolint:gosec // devvm's own log
+	return err == nil && int64(len(old)) >= before && bytes.Contains(old[before:], want)
 }
 
 // freePort returns a loopback port from 20000 to 59999 no program has

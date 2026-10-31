@@ -1,0 +1,133 @@
+package proxy
+
+import (
+	"errors"
+	"io"
+	"os"
+	"sync"
+)
+
+// logLimit is how large the event log and the proxy's own log grow
+// before they're rotated: the log becomes <log>.1, replacing the one
+// there, and a new one starts. One old file each is kept.
+var logLimit int64 = 10 << 20
+
+// rotating is a log file the proxy rotates once it's past logLimit. Each
+// Write is one whole line (record's and logger's are), and a line never
+// spans two files: the log rotates before the Write that would take it
+// past the limit. Writes are serialized, so none is lost or split by a
+// rotation.
+//
+// The event log (-log) is the proxy's alone: it's renamed to <log>.1 and
+// a new one is opened, which devvm log -f follows by name. The proxy's
+// own log (-proxy-log) is also the proxy process's stdout and stderr,
+// which devvm opened, where its last error and any crash go: that file
+// is copied to <log>.1 and emptied instead, so those writes, appended to
+// the same file, reach the current log.
+type rotating struct {
+	mu   sync.Mutex
+	path string
+	// w is where lines go: the file itself (renamed logs), or the
+	// stderr the proxy was given, which appends to path (copied logs).
+	w    io.Writer
+	f    *os.File // the event log's open file; nil for a copied log
+	size int64
+}
+
+// openRotating opens the event log at path for appending, the user's
+// alone, whatever mode it had.
+func openRotating(path string) (*rotating, error) {
+	r := &rotating{path: path}
+	if err := r.open(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// copyRotating rotates path, which w appends to (the proxy's stderr), by
+// copying.
+func copyRotating(path string, w io.Writer) (*rotating, error) {
+	if err := os.Chmod(path, 0o600); err != nil {
+		return nil, err
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	return &rotating{path: path, w: w, size: fi.Size()}, nil
+}
+
+func (r *rotating) open() error {
+	f, err := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	fi, err := f.Stat()
+	if err == nil {
+		err = f.Chmod(0o600)
+	}
+	if err != nil {
+		_ = f.Close()
+		return err
+	}
+	r.f, r.w, r.size = f, f, fi.Size()
+	return nil
+}
+
+func (r *rotating) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.size > 0 && r.size+int64(len(p)) > logLimit {
+		// A failed rotation keeps writing to the log as it is: a line
+		// kept beats a log of the right size.
+		_ = r.rotate()
+	}
+	n, err := r.w.Write(p)
+	r.size += int64(n)
+	return n, err
+}
+
+// rotate makes the log <log>.1 and starts a new one.
+func (r *rotating) rotate() error {
+	if r.f == nil {
+		return r.copyOut()
+	}
+	// A log deleted while the proxy writes it starts again too.
+	if err := os.Rename(r.path, r.path+".1"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	old := r.f
+	if err := r.open(); err != nil {
+		// The renamed file still takes the lines.
+		return err
+	}
+	_ = old.Close()
+	return nil
+}
+
+// copyOut copies the log to <log>.1, the user's alone and written whole,
+// then empties it.
+func (r *rotating) copyOut() error {
+	data, err := os.ReadFile(r.path)
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(r.path+".1", data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Truncate(r.path, 0); err != nil {
+		return err
+	}
+	r.size = 0
+	return nil
+}
+
+// Close closes the event log's file.
+func (r *rotating) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.f == nil {
+		return nil
+	}
+	return r.f.Close()
+}

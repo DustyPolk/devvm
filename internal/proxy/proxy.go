@@ -52,6 +52,7 @@ var (
 	vmName    = "vm"
 	policies  = ""
 	logPath   = ""
+	proxyLog  = ""
 	lifeline  = ""
 	caFile    = ""
 	caKeyF    = ""
@@ -74,7 +75,8 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&relayTo, "relay-to", "", "with -relay: the proxy's unix socket")
 	fs.StringVar(&vmName, "vm", "vm", "VM name, for logs")
 	fs.StringVar(&policies, "policy", "", "policy files, comma-separated (missing files have no rules)")
-	fs.StringVar(&logPath, "log", "", "JSON-lines event log (default: stdout)")
+	fs.StringVar(&logPath, "log", "", "JSON-lines event log (default: stdout), rotated past 10 MiB (rotate.go)")
+	fs.StringVar(&proxyLog, "proxy-log", "", "the file stderr appends to: the proxy's own log, rotated past 10 MiB by copying (rotate.go)")
 	fs.StringVar(&lifeline, "lifeline", "", "pid file of the VM's hostagent: exit when that process is gone")
 	fs.StringVar(&caFile, "ca", "", "CA certificate for interception (PEM); with -cakey")
 	fs.StringVar(&caKeyF, "cakey", "", "CA private key (PEM)")
@@ -725,12 +727,19 @@ func Main(args []string, std IO) error {
 	}
 	logOut = std.Stdout
 	if logPath != "" {
-		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := openRotating(logPath)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = f.Close() }()
 		logOut = f
+	}
+	if proxyLog != "" {
+		f, err := copyRotating(proxyLog, std.Stderr)
+		if err != nil {
+			return err
+		}
+		logger.SetOutput(f)
 	}
 	var files []string
 	for f := range strings.SplitSeq(policies, ",") {

@@ -402,6 +402,7 @@ func intercept(ctx context.Context, client net.Conn, host string, port int, e Ev
 		Protocols:         new(http.Protocols),
 		IdleTimeout:       10 * time.Minute,
 		ReadHeaderTimeout: 30 * time.Second,
+		ErrorLog:          logger,
 	}
 	// TLS is already done here, so the server sees plain HTTP/1.1, or HTTP/2 with prior knowledge.
 	srv.Protocols.SetHTTP1(true)
@@ -470,6 +471,7 @@ func forwarder(scheme, target, host string, port int) http.Handler {
 	}
 	return &httputil.ReverseProxy{
 		Transport:     tr,
+		ErrorLog:      logger,
 		FlushInterval: -1, // stream (SSE) instead of buffering
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme, pr.Out.URL.Host = scheme, target

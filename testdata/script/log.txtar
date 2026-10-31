@@ -38,6 +38,18 @@ cmp stdout $WORK/blocked.txt
 ! exec devvm log --blocked -f
 stderr '^devvm: usage_error reason='
 
+# A log its proxy rotated: the old file's events come first, so the
+# history and the blocks are the same; one just rotated isn't empty.
+exec sh -c 'l=$(echo "$LOGS"/devvm-net-*.jsonl) && head -n 5 "$WORK/events.jsonl" > "$l.1" && tail -n +6 "$WORK/events.jsonl" > "$l"'
+exec devvm log
+cmp stdout $WORK/log.txt
+exec devvm log --blocked
+cmp stdout $WORK/blocked.txt
+exec sh -c 'l=$(echo "$LOGS"/devvm-net-*.jsonl) && cp "$WORK/events.jsonl" "$l.1" && : > "$l"'
+exec devvm log -n 1
+stdout '\A2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist\n\z'
+exec sh -c 'rm "$LOGS"/devvm-net-*.jsonl.1'
+
 # A host and reason from the VM with control characters: dropped.
 exec sh -c 'cp "$WORK/evil.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
 exec devvm log --blocked

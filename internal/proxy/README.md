@@ -28,6 +28,7 @@ It returns when the VM's hostagent is gone.
 | `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `upstream.go` | `-upstream`: a company proxy that allowed requests go through (`CONNECT` by name for tunnels and interception, absolute form for plain HTTP), `NO_PROXY`, and the floor for names it resolves (`floorUpstream`) |
+| `rotate.go` | the logs' rotation past `logLimit` (10 MiB): the event log renamed to `<log>.1`, the proxy's own log, which is also its stderr, copied there and emptied |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
 | `redact.go` | agents' settings files (`settings.json`, `config.toml`, opencode's config) for VMs with network policy: values under secret-looking keys replaced |
 | `*_test.go` | unit tests, and fuzz targets for policy rules (`FuzzParseRule`), request targets (`FuzzRequest`), ClientHellos (`FuzzClientHello`) and the decider's preludes (`FuzzPrelude`) |
@@ -37,7 +38,7 @@ It returns when the VM's hostagent is gone.
 `internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and data on its `Stdout`, the proxy's own log lines on its `Stderr`), warns through it about logins copied as they are (`IO.Kept`, `secrets.LoginKept`), and ends an error with its `Die`. The package itself prints nothing.
 
 ```text
-devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -lifeline HA.pid \
+devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -proxy-log PROXY.log -lifeline HA.pid \
   -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY \
   [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] [-listen-unix SOCKET] \
   [-upstream-cas CAS.pem] [-upstream UPSTREAM]
@@ -51,7 +52,8 @@ Flags take one dash or two.
 | `-listen-unix` | Docker only: also listen on this unix socket, mode 600; a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
 | `-policy` | the policy files, comma-separated, in order; a missing file has no rules |
-| `-log` | the JSON-lines event log; default stdout |
+| `-log` | the JSON-lines event log, mode 600, rotated past 10 MiB; default stdout |
+| `-proxy-log` | the file the proxy's stderr appends to (devvm opens it for the process): the proxy's own log lines, and its HTTP servers' errors, go through it and rotate past 10 MiB by copying, so the last error, written to stderr after `Main` returns, reaches the current file |
 | `-lifeline` | the hostagent's pid file: return when that process is gone |
 | `-ca`, `-cakey` | devvm's CA, for interception |
 | `-secrets` | the VM's secret bindings (JSON, no values), re-read when they change |

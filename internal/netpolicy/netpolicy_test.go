@@ -408,7 +408,7 @@ func TestPrepare(t *testing.T) {
 	for _, want := range []string{
 		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() + " -policy " + written + "/layers/base.policy," +
 			written + "/shared-tools/node.policy,",
-		" -log " + d.Logs() + "/" + st.Name() + ".jsonl -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
+		" -log " + d.Logs() + "/" + st.Name() + ".jsonl -proxy-log " + d.Logs() + "/" + st.Name() + ".proxy.log -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
 		" -secrets " + d.Run() + "/" + st.Name() + ".secrets.json -secret-cmd /bin/sh -auth-file " + d.Run() + "/" + st.Name() + ".proxy.auth",
 	} {
 		if !strings.Contains(args, want) {

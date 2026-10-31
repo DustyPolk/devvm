@@ -34,16 +34,20 @@ func NewLog(d paths.Dirs, vm string) *Log {
 	return &Log{Path: EventLog(d, vm), Tick: 250 * time.Millisecond}
 }
 
-// Write writes the log's last n events to w, one line each (FormatEvent).
-// With follow it then writes each new one, until ctx ends. Lines that
-// aren't events are skipped.
+// Old is the log's previous file, which the proxy renamed it to when it
+// rotated it: its older events.
+func (l *Log) Old() string { return l.Path + ".1" }
+
+// Write writes the log's last n events to w, one line each (FormatEvent),
+// the previous file's (Old) first. With follow it then writes each new
+// one, until ctx ends, and goes on in the new log when the proxy rotates
+// it. Lines that aren't events are skipped.
 func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error {
 	f, err := os.Open(l.Path)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	r := bufio.NewReader(f)
 	var last []string
 	keep := func(l string) {
 		if s, ok := FormatEvent(l); ok && n > 0 {
@@ -53,6 +57,11 @@ func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error 
 			last = append(last, s)
 		}
 	}
+	// The log is open first, so a rotation now leaves it as Old: read once.
+	if err := l.readOld(f, keep); err != nil {
+		return err
+	}
+	r := bufio.NewReader(f)
 	var read int64
 	partial, err := readLines(r, &read, keep)
 	if err != nil {
@@ -69,6 +78,8 @@ func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error 
 	if !follow {
 		return nil
 	}
+	fl := follower{l: l, f: f, r: r, read: read, partial: partial, w: w}
+	defer func() { _ = fl.f.Close() }()
 	t := time.NewTicker(l.Tick)
 	defer t.Stop()
 	for {
@@ -77,29 +88,110 @@ func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error 
 			return nil
 		case <-t.C:
 		}
-		// A log made shorter (emptied) is read again from its start.
-		if fi, err := f.Stat(); err == nil && fi.Size() < read {
-			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return err
-			}
-			r.Reset(f)
-			read, partial = 0, ""
-		}
-		var werr error
-		rest, err := readLines(r, &read, func(l string) {
-			if s, ok := FormatEvent(partial + l); ok && werr == nil {
-				_, werr = fmt.Fprintln(w, s)
-			}
-			partial = ""
-		})
-		if err != nil {
+		if err := fl.next(); err != nil {
 			return err
 		}
-		if werr != nil {
-			return werr
-		}
-		partial += rest
 	}
+}
+
+// readOld calls line for each line of Old, unless it's cur, the log
+// already open.
+func (l *Log) readOld(cur *os.File, line func(string)) error {
+	old, err := os.Open(l.Old())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	defer func() { _ = old.Close() }()
+	if a, err := old.Stat(); err == nil {
+		if b, err := cur.Stat(); err == nil && os.SameFile(a, b) {
+			return nil
+		}
+	}
+	var read int64
+	rest, err := readLines(bufio.NewReader(old), &read, line)
+	if err != nil {
+		return err
+	}
+	line(rest)
+	return nil
+}
+
+// follower writes each new event of a followed log.
+type follower struct {
+	l       *Log
+	f       *os.File
+	r       *bufio.Reader
+	read    int64
+	partial string // a line still being written
+	w       io.Writer
+}
+
+// next writes the events written since the last call. A log made shorter
+// (emptied) is read again from its start. A log the proxy rotated is read
+// to its end, then the new one from its start.
+func (fl *follower) next() error {
+	if fi, err := fl.f.Stat(); err == nil && fi.Size() < fl.read {
+		if _, err := fl.f.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		fl.r.Reset(fl.f)
+		fl.read, fl.partial = 0, ""
+	}
+	// Whether the log was renamed, checked before its end is read, so no
+	// line written to it after is missed.
+	nf := fl.rotated()
+	if err := fl.drain(); err != nil {
+		if nf != nil {
+			_ = nf.Close()
+		}
+		return err
+	}
+	if nf == nil {
+		return nil
+	}
+	_ = fl.f.Close()
+	fl.f, fl.read, fl.partial = nf, 0, ""
+	fl.r.Reset(nf)
+	return fl.drain()
+}
+
+// rotated returns the log's new file, open, when the proxy has renamed
+// the one being read.
+func (fl *follower) rotated() *os.File {
+	cur, err := fl.f.Stat()
+	if err != nil {
+		return nil
+	}
+	nf, err := os.Open(fl.l.Path)
+	if err != nil {
+		return nil
+	}
+	if fi, err := nf.Stat(); err != nil || os.SameFile(cur, fi) {
+		_ = nf.Close()
+		return nil
+	}
+	return nf
+}
+
+// drain writes the whole lines the log has after what was read.
+func (fl *follower) drain() error {
+	var werr error
+	rest, err := readLines(fl.r, &fl.read, func(l string) {
+		if s, ok := FormatEvent(fl.partial + l); ok && werr == nil {
+			_, werr = fmt.Fprintln(fl.w, s)
+		}
+		fl.partial = ""
+	})
+	if err != nil {
+		return err
+	}
+	if werr != nil {
+		return werr
+	}
+	fl.partial += rest
+	return nil
 }
 
 // readLines calls line for each whole line r has (without its newline),
@@ -163,7 +255,7 @@ func oneLine(s string) string {
 	}, s)
 }
 
-// WriteBlocked writes the log's blocks to w as a table, one row per host
+// WriteBlocked writes the log's blocks (Old's too) to w as a table, one row per host
 // and port, by when it was last blocked: the last time, how many times,
 // and the devvm policy allow command that allows it. A request refused
 // whatever the allowlist says, or a host the policy doesn't take, gets -
@@ -201,6 +293,9 @@ func (l *Log) WriteBlocked(w io.Writer) error {
 		}
 		r.count++
 		r.last = oneLine(e.Time)
+	}
+	if err := l.readOld(f, add); err != nil {
+		return err
 	}
 	rest, err := readLines(bufio.NewReader(f), &read, add)
 	if err != nil {

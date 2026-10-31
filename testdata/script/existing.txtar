@@ -96,13 +96,13 @@ stub_calls
 ! stdout 'limactl (start|stop)'
 
 # rm: base has no agents, so nothing is exported; only this VM is
-# deleted, with its state, logs, host keys and ssh config entry, and .git's
+# deleted, with its state, logs (the rotated ones too), host keys and ssh config entry, and .git's
 # locks taken off.
 mkdir $WORK/api
 cd $WORK/api
 exec devvm --no-network-policy base
 cd $WORK/web
-exec sh -c 'touch "$XDG_DATA_HOME/devvm/logs/$(basename "$VMS"/devvm-web-*).jsonl"'
+exec sh -c 'l="$XDG_DATA_HOME/devvm/logs/$(basename "$VMS"/devvm-web-*)" && touch "$l.jsonl" "$l.jsonl.1" "$l.proxy.log" "$l.proxy.log.1"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm rm
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
