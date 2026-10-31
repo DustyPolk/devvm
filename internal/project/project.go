@@ -138,6 +138,22 @@ func (u Unsafe) Inside(dir string) string {
 	return ""
 }
 
+// Parents returns the folders dir, a physical path, is inside, nearest
+// first, whose VM a command in dir may use: up to the home folder (home,
+// resolved) and the root, both left out, as is everything above home
+// when dir is home or in it.
+func Parents(dir, home string) []string {
+	home = physical(home)
+	if dir == home {
+		return nil
+	}
+	var ps []string
+	for p := filepath.Dir(dir); p != home && filepath.Dir(p) != p; p = filepath.Dir(p) {
+		ps = append(ps, p)
+	}
+	return ps
+}
+
 // physical returns path with its symlinks resolved, as far as it exists:
 // a folder devvm hasn't made yet is where it will be.
 func physical(path string) string {

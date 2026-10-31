@@ -9,18 +9,19 @@ import (
 )
 
 // SSH gets the folder's VM ready for ssh and editors (reach), then says
-// the name they reach it by and its folder.
+// the name they reach it by and the folder to open (shellDir).
 func (e Launch) SSH(ctx context.Context) error {
 	host, t, err := e.reach(ctx)
 	if err != nil {
 		return err
 	}
-	e.Say(msg.SSHHostInfo(t.f.Dir, host))
+	e.Say(msg.SSHHostInfo(t.shellDir(ctx, e.LogWriter()), host))
 	return nil
 }
 
 // Code gets the folder's VM ready for ssh and editors (reach), then opens
-// its folder in VS Code over Remote-SSH, in devvm's place, with the
+// the folder its shell would open in (shellDir) in VS Code over
+// Remote-SSH, in devvm's place, with the
 // environment devvm started with: the SSH agent devvm's own connections
 // use isn't the editor's.
 func (e Launch) Code(ctx context.Context) error {
@@ -34,7 +35,7 @@ func (e Launch) Code(ctx context.Context) error {
 	}
 	return e.Exec(backend.Command{
 		Path: path,
-		Args: []string{"code", "--remote", "ssh-remote+" + host, t.f.Dir},
+		Args: []string{"code", "--remote", "ssh-remote+" + host, t.shellDir(ctx, e.LogWriter())},
 		Env:  e.Environ,
 	})
 }

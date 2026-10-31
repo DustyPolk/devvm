@@ -187,28 +187,114 @@ type found struct {
 	// flagIgnored is set when --backend named another backend than the
 	// VM's.
 	flagIgnored bool
+	// sub is the folder devvm runs in when the VM is a parent folder's
+	// (f.Dir), and so mounts it at the same path; "" when it's this
+	// folder's own.
+	sub string
+	// repo is, for a parent folder's VM, the nearest folder from sub up,
+	// below f.Dir, with a .git of its own; "" when none has one.
+	repo string
 }
 
 // find finds the folder's VM, which needn't exist, with the backend that
-// has it or would make it (flag is --backend). The VM's name fits a new
-// VM's backend; a VM that exists keeps the backend its state records.
+// has it or would make it (flag is --backend). When the folder has none,
+// it's the nearest parent folder's VM, if one has one (lookup), said in
+// an info line first. A folder with a repo of its own below the parent's
+// (found.repo) never gets the parent's VM here: only up offers it.
 func (e *Env) find(ctx context.Context, flag string) (*found, error) {
-	first, err := e.Registry.For(e.Dirs, new(state.VM), flag)
+	t, parent, err := e.lookup(ctx, flag, true)
 	if err != nil {
 		return nil, err
 	}
-	f, err := project.New(e.Dir, first.Backend.NameMax())
+	if parent != nil && parent.repo == "" {
+		e.Info(msg.UsingParentVM(parent.f.Dir, parent.f.Name))
+		return parent, nil
+	}
+	return t, nil
+}
+
+// lookup finds the folder's own VM, which needn't exist, as find does;
+// with parents, when it has neither state nor a VM, also the nearest parent
+// folder's (project.Parents, stopping before home and the root) that its
+// backend has and that was made for that folder (sameFolder), else nil.
+// The VMs' names fit a new VM's backend; a VM that exists keeps the
+// backend its state records.
+func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *found, error) {
+	first, err := e.Registry.For(e.Dirs, new(state.VM), flag)
+	if err != nil {
+		return nil, nil, err
+	}
+	nameMax := first.Backend.NameMax()
+	f, err := project.New(e.Dir, nameMax)
 	if bad, ok := errors.AsType[*project.BadPathError](err); ok {
-		return nil, msg.BadPath(msg.Shown(bad.Dir))
+		return nil, nil, msg.BadPath(msg.Shown(bad.Dir))
 	} else if errors.Is(err, project.ErrNoRoom) {
-		return nil, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(first.Backend.NameMax()))
+		return nil, nil, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
 	} else if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	st, err := state.ReadVM(e.Dirs, f.Name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	// A folder with state of its own has a VM, even one its backend has
+	// lost: never a parent's in its place.
+	t, err := e.inspect(ctx, f, st, flag)
+	if err != nil || t.exists || st.Exists() || !parents {
+		return t, nil, err
+	}
+	p, err := e.parentVM(ctx, nameMax, flag)
+	if err != nil {
+		return nil, nil, err
+	}
+	return t, p, nil
+}
+
+// parentVM finds the nearest parent folder's VM for lookup, else nil,
+// with the nearest folder below it with a .git of its own (repo), the
+// folder devvm runs in included.
+func (e *Env) parentVM(ctx context.Context, nameMax int, flag string) (*found, error) {
+	repo := ""
+	if hasGit(e.Dir) {
+		repo = e.Dir
+	}
+	for _, dir := range project.Parents(e.Dir, e.Home) {
+		pf, err := project.New(dir, nameMax)
+		if err != nil {
+			continue // a folder no VM can be made for
+		}
+		pst, err := state.ReadVM(e.Dirs, pf.Name)
+		if err != nil {
+			return nil, err
+		}
+		if pst.Exists() && e.sameFolder(pf, pst) {
+			p, err := e.inspect(ctx, pf, pst, flag)
+			if err != nil {
+				return nil, err
+			}
+			if p.exists {
+				p.sub, p.repo = e.Dir, repo
+				return p, nil
+			}
+		}
+		if repo == "" && hasGit(dir) {
+			repo = dir
+		}
+	}
+	return nil, nil
+}
+
+// hasGit reports whether dir has a .git of its own: a repo, or a
+// worktree's or submodule's .git file.
+func hasGit(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
+// inspect finds the VM for folder f, whose state is st, on the backend
+// its state records, else a new VM's (flag is --backend). One that
+// exists gets devvm's connections carrying its SSH agent.
+func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM, flag string) (*found, error) {
 	choice, err := e.Registry.For(e.Dirs, st, flag)
 	if err != nil {
 		return nil, err

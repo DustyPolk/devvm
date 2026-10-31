@@ -37,6 +37,7 @@ type Options struct {
 	From            string // --from, or its default: the container image a new VM's base starts from
 	FromSet         bool   // --from was given, not its default
 	NoDevcontainer  bool   // --no-devcontainer: a new VM ignores the folder's devcontainer.json
+	Here            bool   // --here: a new VM for this folder, without a parent folder's VM asked about
 	// dc is what the folder's devcontainer.json says a new VM gets
 	// (devcontainers.prepare); nil without one.
 	dc *devcontainer.Plan
@@ -51,8 +52,10 @@ type Launch struct{ *Env }
 // its image (built if it isn't), with only the folder mounted, .git
 // protected, started; with --clone, nothing mounted but its own clone of
 // the repo (seedClone). A VM that exists is opened as it is, with what's
-// changed since checked (open). On success it doesn't return: the shell
-// takes devvm's place.
+// changed since checked (open). When the folder has none but a parent
+// folder has one, that one is opened in this folder, after asking in a
+// terminal (useParent), unless --here or --clone. On success it doesn't return: the
+// shell takes devvm's place.
 func (e Launch) Up(ctx context.Context, o Options) error {
 	if err := from.Check(o.From); err != nil {
 		return err
@@ -67,9 +70,13 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 			return err
 		}
 	}
-	t, err := e.find(ctx, o.Backend)
+	// --clone asks for a new VM of the folder's own: as --here.
+	t, parent, err := e.lookup(ctx, o.Backend, !o.Here && !o.Clone)
 	if err != nil {
 		return err
+	}
+	if parent != nil && useParent(e.Env, parent) {
+		t = parent
 	}
 	if !t.exists {
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
@@ -78,6 +85,22 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		return err
 	}
 	return e.open(ctx, o, t)
+}
+
+// useParent reports whether up opens the parent folder's VM p in this
+// folder: asked in a terminal ([Y/n]; no makes a new VM for this folder),
+// else yes, said in an info line. Below a repo of its own (p.repo), the
+// default is the new VM: [y/N] in a terminal, else no.
+func useParent(e *Env, p *found) bool {
+	// A repo of its own below the parent's: a new VM unless asked for.
+	if p.repo != "" {
+		return e.Terminal() && e.Ask(msg.UseParentVMRepo(p.sub, p.f.Dir, p.repo, p.f.Name))
+	}
+	if !e.Terminal() {
+		e.Info(msg.UsingParentVM(p.f.Dir, p.f.Name))
+		return true
+	}
+	return e.Confirm(msg.UseParentVM(p.sub, p.f.Dir, p.f.Name))
 }
 
 // newVM is what create checked and chose for a new VM before building

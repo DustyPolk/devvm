@@ -11,7 +11,7 @@ All of it rests on the VM's boundary. On the experimental [Docker](../backends/d
 
 ### Only the project folder
 
-A VM mounts its project folder read-write at the same path. The only other things it mounts from the host are the shared tools and its [agents' config folders](../using/coding-agents.md#mounts), both read-only, so it never mounts your home folder, which Lima's own templates do. A [`--clone`](../using/clone.md) VM doesn't mount the project folder either. It has its own clone, and its work reaches the repo only when you fetch it.
+A VM mounts its project folder read-write at the same path. The only other things it mounts from the host are the shared tools and its [agents' config folders](../using/coding-agents.md#mounts), both read-only, so it never mounts your home folder, which Lima's own templates do. A [`--clone`](../using/clone.md) VM doesn't mount the project folder either. It has its own clone, and its work reaches the repo only when you fetch it. When you run devvm in a subfolder and it uses the project folder's VM, that VM mounts nothing more than it already did ([a subfolder's VM](overview.md#a-subfolders-vm)).
 
 devvm refuses a project folder that would hand the VM more than the project:
 

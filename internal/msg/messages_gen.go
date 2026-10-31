@@ -464,6 +464,11 @@ func DeleteOtherFolderVM(vm string, was string) M {
 	return M{id: "delete_other_folder_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
+// DeleteParentVM is [delete_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hold that project's work. Delete it?"
+func DeleteParentVM(dir string, vm string) M {
+	return M{id: "delete_parent_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // Deleted is [deleted]: "deleted {{.vm}}"
 func Deleted(vm string) M {
 	return M{id: "deleted", vals: []val{{"vm", vm}}}
@@ -1824,6 +1829,11 @@ func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
 }
 
+// RmParentVM is [rm_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal to confirm."
+func RmParentVM(dir string, vm string) M {
+	return M{id: "rm_parent_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // RuleAdded is [rule_added]: "devvm added {{.rule}} to {{.vm}}'s rules."
 func RuleAdded(rule string, vm string) M {
 	return M{id: "rule_added", vals: []val{{"rule", rule}, {"vm", vm}}}
@@ -2324,6 +2334,21 @@ func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
 }
 
+// UseParentVM is [use_parent_vm]: "{{.parent}} has a VM, {{.vm}}, and {{.dir}} is inside it.\nOpen {{.vm}} here instead of making a new VM for this folder?"
+func UseParentVM(dir string, parent string, vm string) M {
+	return M{id: "use_parent_vm", vals: []val{{"dir", dir}, {"parent", parent}, {"vm", vm}}}
+}
+
+// UseParentVMRepo is [use_parent_vm_repo]: "{{.repo}} is a git repo of its own, inside {{.parent}}, which has a VM, {{.vm}}.\nOpen {{.vm}} in {{.dir}} instead of making a new VM for this folder?"
+func UseParentVMRepo(dir string, parent string, repo string, vm string) M {
+	return M{id: "use_parent_vm_repo", vals: []val{{"dir", dir}, {"parent", parent}, {"repo", repo}, {"vm", vm}}}
+}
+
+// UsingParentVM is [using_parent_vm]: "using {{.vm}}, made for {{.dir}}"
+func UsingParentVM(dir string, vm string) M {
+	return M{id: "using_parent_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // VMAdopted is [vm_adopted]: "{{.vm}} belongs to {{.dir}} now."
 func VMAdopted(dir string, vm string) M {
 	return M{id: "vm_adopted", vals: []val{{"dir", dir}, {"vm", vm}}}
@@ -2503,6 +2528,7 @@ var specs = map[string]spec{
 	"delete_anyway":                    {},
 	"delete_failed":                    {fields: []string{"vm"}},
 	"delete_other_folder_vm":           {fields: []string{"vm", "was"}},
+	"delete_parent_vm":                 {fields: []string{"dir", "vm"}},
 	"deleted":                          {fields: []string{"vm"}},
 	"deleted_assets":                   {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
@@ -2775,6 +2801,7 @@ var specs = map[string]spec{
 	"restart_for_mounts":               {},
 	"rm_export_failed":                 {fields: []string{"vm"}},
 	"rm_failed":                        {fields: []string{"reason"}},
+	"rm_parent_vm":                     {fields: []string{"dir", "vm"}},
 	"rule_added":                       {fields: []string{"rule", "vm"}},
 	"rule_added_global":                {fields: []string{"rule"}},
 	"rule_missing":                     {fields: []string{"file", "rule"}},
@@ -2875,6 +2902,9 @@ var specs = map[string]spec{
 	"up_failed":                        {fields: []string{"reason"}},
 	"update_mounts":                    {fields: []string{"vm"}},
 	"usage_error":                      {fields: []string{"reason"}},
+	"use_parent_vm":                    {fields: []string{"dir", "parent", "vm"}},
+	"use_parent_vm_repo":               {fields: []string{"dir", "parent", "repo", "vm"}},
+	"using_parent_vm":                  {fields: []string{"dir", "vm"}},
 	"vm_adopted":                       {fields: []string{"dir", "vm"}},
 	"vm_already_here":                  {fields: []string{"vm"}},
 	"vm_create_failed":                 {fields: []string{"vm"}},

@@ -52,8 +52,8 @@ mkdir $WORK/My_App.v2
 cd $WORK/My_App.v2
 exec devvm --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-my-app-v2-[0-9a-f]{14}$'
-mkdir '$WORK/My App'
-cd '$WORK/My App'
+mkdir $WORK/'My App'
+cd $WORK/'My App'
 exec devvm --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-my-app-[0-9a-f]{14}$'
 mkdir $WORK/a-very-long-folder-name-for-a-project

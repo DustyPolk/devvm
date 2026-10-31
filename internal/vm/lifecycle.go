@@ -52,11 +52,15 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 
 // Adopt gives the folder the VM made for an earlier folder at its path,
 // after asking: its files, tokens and allowlist. Its .git is locked as
-// new at its next launch.
+// new at its next launch. Only the VM named for this path is adopted,
+// never a parent folder's.
 func (e Lifecycle) Adopt(ctx context.Context) error {
-	t, err := e.findExisting(ctx, "")
+	t, _, err := e.lookup(ctx, "", false)
 	if err != nil {
 		return err
+	}
+	if !t.exists {
+		return msg.NoVM(t.f.Dir)
 	}
 	vm, st := t.f.Name, t.st
 	if e.sameFolder(t.f, st) {
@@ -87,13 +91,25 @@ func (e Lifecycle) Adopt(ctx context.Context) error {
 // force: an export that fails keeps it. A --clone VM's branches the repo
 // lacks and uncommitted changes are checked first (cloneRmCheck), unless
 // force. A VM made for an earlier folder at this path is deleted only
-// after asking, without either (its folder is gone), force or not.
+// after asking, without either (its folder is gone), force or not. A
+// parent folder's VM, found from a subfolder, is deleted only after
+// asking too, and never without a terminal.
 func (e Lifecycle) Rm(ctx context.Context, force bool) error {
 	t, err := e.findExisting(ctx, "")
 	if err != nil {
 		return err
 	}
 	vm, st := t.f.Name, t.st
+	// A parent folder's VM is deleted only after asking, -f or not; -f
+	// still skips the checks below.
+	if t.sub != "" {
+		if !e.Terminal() {
+			return msg.RmParentVM(t.f.Dir, vm)
+		}
+		if !e.Ask(msg.DeleteParentVM(t.f.Dir, vm)) {
+			return nil
+		}
+	}
 	if !e.sameFolder(t.f, st) {
 		was := st.Get(state.KeyDir)
 		if !e.Terminal() {

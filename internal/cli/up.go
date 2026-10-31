@@ -54,6 +54,7 @@ type upFlags struct {
 	clone          bool
 	sshAgent       bool
 	noDevcontainer bool
+	here           bool
 }
 
 func addUpFlags(cmd *cobra.Command, uf *upFlags) {
@@ -63,6 +64,7 @@ func addUpFlags(cmd *cobra.Command, uf *upFlags) {
 	f.BoolVar(&uf.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
 	f.BoolVar(&uf.sshAgent, "ssh-agent", false, "create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)")
 	f.BoolVar(&uf.noDevcontainer, "no-devcontainer", false, "create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json")
+	f.BoolVar(&uf.here, "here", false, "create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM")
 }
 
 // options are what the global flags ask of up.
@@ -77,7 +79,7 @@ func (g *globals) options() vm.Options {
 func up(ctx context.Context, u *ui.UI, g *globals, uf *upFlags, args []string) error {
 	o := g.options()
 	o.UnsafeFolder, o.NoGitProtect, o.Clone, o.SSHAgent = uf.unsafeFolder, uf.noGitProtect, uf.clone, uf.sshAgent
-	o.NoDevcontainer = uf.noDevcontainer
+	o.NoDevcontainer, o.Here = uf.noDevcontainer, uf.here
 	if len(args) > 0 {
 		o.Image = args[0]
 	}

@@ -49,6 +49,12 @@ devvm adds a git remote for the VM to your repo. It's named `devvm`, or `devvm-<
 
 Fetching runs nothing from the VM on this machine. git only receives objects and updates the `devvm/*` branches, or creates new `saved/devvm/*` branches when `devvm rm` does the fetch. The commits themselves are untrusted, though, so treat them as you would a contributor's branch and review them before you merge them, check them out or run anything they change.
 
+## Subfolders
+
+When you run devvm in a subfolder of the repo's folder, devvm uses the `--clone` VM as it uses any parent folder's VM, asking first in a terminal ([a subfolder](../getting-started/commands.md#a-subfolder)). The clone is at the repo folder's path, so the subfolder's path in the VM is the same subfolder in the clone. When the clone has that subfolder, the shell opens there, and `devvm ssh` and `devvm code` give it as the folder to open. When the clone lacks it, for example because the subfolder is untracked or ignored and so never copied, they use the clone's top folder instead.
+
+`devvm --clone` in a subfolder never uses a parent folder's VM. It makes a new `--clone` VM for the subfolder without asking, as `devvm --here` does, so the subfolder must be the top folder of a repo of its own.
+
 ## Deleting the VM
 
 Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd lose, starting the VM if it's stopped:

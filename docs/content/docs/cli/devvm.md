@@ -7,7 +7,7 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking.
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking. In a folder without a VM of its own, inside one that has a VM, devvm asks whether to open that VM in this folder instead of creating one, and opens it without asking when there's no terminal. --here and --clone create the new VM without asking.
 
 ```text
 devvm [IMAGE] [flags]
@@ -22,6 +22,7 @@ devvm [IMAGE] [flags]
       --disk GiB            a new VM's disk in GiB, at least the image's (default: the size file's, else the image's)
       --from IMAGE          the container IMAGE a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)
   -h, --help                help for devvm
+      --here                create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM
       --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
       --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: on, asked in a terminal)
       --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json

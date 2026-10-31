@@ -140,6 +140,37 @@ func TestUnsafe(t *testing.T) {
 	}
 }
 
+// Parents lists the folders a folder is inside, nearest first, stopping
+// before the home folder (given through a symlink too) and the root.
+func TestParents(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(root, "home")
+	mkdirs(t, home)
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(home, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		dir, home string
+		want      []string
+	}{
+		{filepath.Join(home, "app", "src", "lib"), home, []string{filepath.Join(home, "app", "src"), filepath.Join(home, "app")}},
+		{filepath.Join(home, "app", "src"), link, []string{filepath.Join(home, "app")}},
+		{filepath.Join(home, "app"), home, nil},
+		{home, home, nil},
+		{"/srv/app/src", home, []string{"/srv/app", "/srv"}},
+		{"/srv", home, nil},
+		{"/", home, nil},
+	} {
+		if got := Parents(tc.dir, tc.home); !slices.Equal(got, tc.want) {
+			t.Errorf("Parents(%s, %s) = %q, want %q", tc.dir, tc.home, got, tc.want)
+		}
+	}
+}
+
 func touch(t *testing.T, paths ...string) {
 	t.Helper()
 	for _, p := range paths {

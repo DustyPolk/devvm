@@ -3,6 +3,7 @@ package vm
 import (
 	"bytes"
 	"context"
+	"io"
 	"slices"
 	"strings"
 
@@ -126,11 +127,32 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err != nil {
 		return err
 	}
-	cmd, err := e.setUp(ctx, b, st, t.f, conf)
+	if err := e.setUpVM(ctx, b, st, t.f, conf); err != nil {
+		return err
+	}
+	cmd, err := b.Shell(ctx, vm, t.shellDir(ctx, e.LogWriter()))
 	if err != nil {
 		return err
 	}
 	return e.Exec(cmd)
+}
+
+// shellDir is the folder in a running VM that its shell and editors open
+// in: its project folder, else, for a parent folder's VM, the folder devvm
+// runs in (t.sub), at the same path in the VM. A --clone VM's clone is at
+// the parent's path: it's the subfolder when the clone has it, else the
+// clone's top. The check's errors go to log.
+func (t *found) shellDir(ctx context.Context, log io.Writer) string {
+	if t.sub == "" {
+		return t.f.Dir
+	}
+	if isClone(t.st) {
+		err := t.b.Exec(ctx, t.f.Name, []string{"test", "-d", t.sub}, backend.ExecOpts{Stderr: log})
+		if err != nil {
+			return t.f.Dir
+		}
+	}
+	return t.sub
 }
 
 // launch takes a VM that exists, made for this folder, through what each

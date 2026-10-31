@@ -3,7 +3,8 @@
 #   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
-#                project makes a VM from base in a project folder and checks its mounts, no Docker, every
+#                project makes a VM from base in a project folder, opens it from a subfolder in that
+#                subfolder, and checks its mounts, no Docker, every
 #                port through devvm's forwarder (never a port a program here has), ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
@@ -605,6 +606,12 @@ launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy --cpus 2 --memory 3 --
 check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
   grep -qx image=base '$vms/$vm' && grep -qx net=off '$vms/$vm' && grep -qx 'dir=$p' '$vms/$vm'"
+# Without a terminal, devvm in a subfolder opens the folder's VM there, says so, and makes none.
+mkdir -p "$p/src/lib"
+check "devvm in a subfolder opens the folder's VM in the subfolder" bash -c "
+  cd '$p/src/lib' && printf 'pwd\n' | '$D' >'$work/last.log' 2>&1 &&
+  grep -qx '$p/src/lib' '$work/last.log' && grep -qF \"\$(m using_parent_vm dir='$p' vm='$vm')\" '$work/last.log' &&
+  ! grep -qE '^dir=$p/src(/lib)?\$' '$vms'/*"
 check "it gets --cpus, --memory and --disk" in_vm "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"

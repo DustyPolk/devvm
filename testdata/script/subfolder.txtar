@@ -1,0 +1,99 @@
+# devvm in a subfolder of a folder with a VM: without a terminal it opens
+# that VM in the subfolder, saying so; --here and --clone make the
+# subfolder its own; stop acts on the parent's VM, naming it first; rm
+# refuses it without a terminal. adopt doesn't look upward, and nothing
+# does from a repo of its own below the parent's folder.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+mkdir $WORK/app/src/lib
+cd $WORK/app
+exec git init -q
+exec devvm --no-network-policy base
+
+# The parent's VM, its shell in the subfolder.
+cd $WORK/app/src/lib
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+! stdout creating
+stub_calls
+! stdout 'limactl (clone|create)'
+stdout '^limactl shell --workdir /\S*/app/src/lib devvm-app-[0-9a-f]{14}\n\z'
+exec sh -c 'ls "$VMS" | wc -l'
+stdout '^ *1$'
+
+# adopt is for this path's VM only.
+! exec devvm adopt
+stderr '^devvm: no_vm dir=/\S*/app/src/lib$'
+
+# stop: the parent's, named first.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm stop
+stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}\n==> stopped vm=devvm-app-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-app-[0-9a-f]{14}$'
+
+# --here: a new VM for the subfolder, nothing asked; then it's the
+# subfolder's own.
+cd $WORK/app/src
+exec devvm --here --no-network-policy base
+stdout '^==> creating_from image=base vm=devvm-src-[0-9a-f]{14}$'
+! stdout using_parent_vm
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+! stdout using_parent_vm
+stub_calls
+stdout '^limactl shell --workdir /\S*/app/src devvm-src-[0-9a-f]{14}\n\z'
+
+# The nearest folder with a VM wins.
+cd $WORK/app/src/lib
+exec devvm stop
+stdout '^==> using_parent_vm dir=/\S*/app/src vm=devvm-src-[0-9a-f]{14}$'
+
+# A repo of its own below the parent's folder: other commands find no VM,
+# and without a terminal devvm makes the subfolder's own.
+mkdir $WORK/app/tool/bin
+cd $WORK/app/tool
+exec git init -q
+cd $WORK/app/tool/bin
+! exec devvm stop
+stderr '^devvm: no_vm dir=/\S*/app/tool/bin$'
+! stdout using_parent_vm
+exec devvm --no-network-policy base
+stdout '^==> creating_from image=base vm=devvm-bin-[0-9a-f]{14}$'
+! stdout using_parent_vm
+exec devvm rm -f
+
+# --clone: a new VM for the subfolder's own repo, as --here, nothing
+# asked.
+mkdir $WORK/app/repo
+cd $WORK/app/repo
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+exec devvm --clone --no-network-policy base
+stdout '^==> creating_from image=base vm=devvm-repo-[0-9a-f]{14}$'
+! stdout using_parent_vm
+exec devvm rm -f
+
+# rm: never a parent's without asking. Without a terminal it's refused,
+# -f or not, and nothing is deleted; in the parent's folder it goes.
+cd $WORK/app/src
+exec devvm rm
+cd $WORK/app/src/lib
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm rm -f
+stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+stderr '^devvm: rm_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl delete'
+exec sh -c 'ls "$VMS" | wc -l'
+stdout '^ *1$'
+cd $WORK/app
+exec devvm rm
+stdout '^==> deleted vm=devvm-app-[0-9a-f]{14}$'
+exec ls $VMS
+! stdout .
+cd $WORK/app/src/lib
+! exec devvm rm
+stderr '^devvm: no_vm dir=/\S*/app/src/lib$'

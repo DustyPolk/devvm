@@ -91,4 +91,6 @@ devvm ls       # list every VM
 devvm rm       # delete it, saving its agents' history first
 ```
 
+The VM also covers the folders inside the project folder, because it mounts the whole folder. When you run `devvm` in a subfolder such as `~/some-project/src`, which has no VM of its own, devvm asks whether to open the project's VM there. If you answer yes, which is the default, the shell opens in `~/some-project/src` in the project's VM. If you answer no, devvm makes a new VM for the subfolder alone. Without a terminal to ask in, devvm opens the project's VM and says so. `devvm --here` makes the subfolder's own VM without asking, and once the subfolder has one, devvm always opens that VM there. A subfolder that is a git repo of its own counts as a separate project, so there the default answer is a new VM, and without a terminal devvm makes one ([a subfolder](commands.md#a-subfolder)).
+
 [Everyday commands](commands.md) lists the rest. Before you let an agent loose in the VM, read [staying safe](../safety/_index.md#the-habits).

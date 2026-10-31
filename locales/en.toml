@@ -721,6 +721,14 @@ other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted o
 [vm_other_folder_adopt]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to use it here, run devvm adopt in a terminal."
 
+[rm_parent_vm]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal to confirm."
+
+[delete_parent_vm]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hold that project's work. Delete it?"
+
 [delete_other_folder_vm]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
 
@@ -735,6 +743,18 @@ other = "{{.vm}} already belongs to this folder."
 
 [no_vm]
 other = "There's no VM for {{.dir}}. Run devvm to make one."
+
+[use_parent_vm_repo]
+description = "dir is the folder devvm runs in; repo, dir itself or a folder it's inside, has a .git of its own; parent, a folder repo is inside, has the VM vm"
+other = "{{.repo}} is a git repo of its own, inside {{.parent}}, which has a VM, {{.vm}}.\nOpen {{.vm}} in {{.dir}} instead of making a new VM for this folder?"
+
+[use_parent_vm]
+description = "dir is the folder devvm runs in; parent is a folder it's inside, whose VM is vm"
+other = "{{.parent}} has a VM, {{.vm}}, and {{.dir}} is inside it.\nOpen {{.vm}} here instead of making a new VM for this folder?"
+
+[using_parent_vm]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
+other = "using {{.vm}}, made for {{.dir}}"
 
 [vm_unfinished]
 other = "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."

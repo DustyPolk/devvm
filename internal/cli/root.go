@@ -29,7 +29,9 @@ func NewRoot(u *ui.UI) *cobra.Command {
 			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets " +
 			"what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists " +
 			"is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that " +
-			"in place, after asking.",
+			"in place, after asking. In a folder without a VM of its own, inside one that has a VM, devvm " +
+			"asks whether to open that VM in this folder instead of creating one, and opens it without " +
+			"asking when there's no terminal. --here and --clone create the new VM without asking.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.MaximumNArgs(1),
