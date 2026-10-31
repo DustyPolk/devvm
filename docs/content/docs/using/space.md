@@ -29,7 +29,7 @@ devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's sh
 
 ## devvm's data folder
 
-devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it. Everything in it is devvm's own, and devvm makes all of it again when it's needed, except the exports, which are the only copy of a deleted VM's agent history.
+devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it, and whenever devvm writes into the folders that hold history, logs, keys and secrets, which are `exports/`, `logs/`, `logs/runs/`, `run/`, `ca/` and the settings folder's `secrets/`, it makes them only yours again, whatever mode they had. Everything in it is devvm's own, and devvm makes all of it again when it's needed, except the exports, which are the only copy of a deleted VM's agent history.
 
 | Path | What it is | How it's cleaned up |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `mise/<version>` | the mise that devvm runs on this machine to resolve the tools lock, one folder per mise version | `devvm gc` deletes the folders of older versions, which an upgrade of devvm leaves |
 | `exports/` | the agents' [history](coding-agents.md#history) that `devvm export` and `devvm rm` save, one `.tar.gz` per export | `devvm gc --exports` deletes them, or with `--older-than 30d` those that old, and nothing else does |
 | `logs/runs/` | the [run logs](troubleshooting.md#a-command-fails), one per devvm run that runs a command | devvm keeps the newest 20 |
-| `logs/<vm>.jsonl`, `logs/<vm>.proxy.log` | a VM's network log, which holds its proxy's decisions, and its proxy's own output | `devvm rm` deletes them with the VM |
+| `logs/<vm>.jsonl`, `logs/<vm>.proxy.log` | a VM's network log, which holds its proxy's decisions, and its proxy's own output. Before a log would grow past 10 MiB, the proxy moves it to the same name with `.1` added, replacing the older one, so each log takes at most about 20 MiB, and `devvm log` reads both | `devvm rm` deletes them with the VM, `.1` files included |
 | `ca/` | the certificate authority that VMs trust for their proxy | devvm makes a new one when the old one has less than a week of its 30 days left |
 | `assets/<hash>` | devvm's own files, written out where a program needs them at a path, one folder per version of devvm's files | `devvm gc` deletes the folders of older versions, except one that a running VM's proxy was started with |
 | `run/` | files for running VMs and for builds, such as sandbox profiles, proxy pids and the ports lock | devvm deletes a VM's files when it deletes the VM |

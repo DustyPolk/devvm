@@ -1,6 +1,6 @@
 ---
 title: devvm space set
-weight: 39
+weight: 40
 ---
 
 Change the retention settings: what devvm deletes on its own
