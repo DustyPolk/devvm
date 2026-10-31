@@ -6,7 +6,7 @@ The VM can reach nothing but this proxy. On macOS its Lima hostagent runs under 
 
 - answers `407` without the VM's password;
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
-- resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address;
+- resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address; through a company proxy (`-upstream`), which resolves names itself, it refuses a name only when the host's resolver answers with such an address;
 - requires a TLS ClientHello in a tunnel to name the CONNECT host (SNI);
 - for hosts with a bound secret, swaps the placeholder in one header for the real value: it intercepts their `:443` tunnels, and does the same for absolute-form `https://` requests (everything else passes unread);
 - logs every decision as JSON lines.
@@ -27,6 +27,7 @@ It returns when the VM's hostagent is gone.
 | `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
 | `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
+| `upstream.go` | `-upstream`: a company proxy that allowed requests go through (`CONNECT` by name for tunnels and interception, absolute form for plain HTTP), `NO_PROXY`, and the floor for names it resolves (`floorUpstream`) |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
 | `redact.go` | agents' settings files (`settings.json`, `config.toml`, opencode's config) for VMs with network policy: values under secret-looking keys replaced |
 | `*_test.go` | unit tests, and fuzz targets for policy rules (`FuzzParseRule`), request targets (`FuzzRequest`), ClientHellos (`FuzzClientHello`) and the decider's preludes (`FuzzPrelude`) |
@@ -38,7 +39,8 @@ It returns when the VM's hostagent is gone.
 ```text
 devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -lifeline HA.pid \
   -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY \
-  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] [-listen-unix SOCKET]
+  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] [-listen-unix SOCKET] \
+  [-upstream-cas CAS.pem] [-upstream UPSTREAM]
 ```
 
 Flags take one dash or two.
@@ -54,6 +56,8 @@ Flags take one dash or two.
 | `-ca`, `-cakey` | devvm's CA, for interception |
 | `-secrets` | the VM's secret bindings (JSON, no values), re-read when they change |
 | `-secret-cmd` | the `devvm` binary, run as `devvm secret get NAME` for a value |
+| `-upstream-cas` | a file of CA certificates (PEM) the proxy's own TLS connections trust besides the system's |
+| `-upstream` | a file (mode 600) of the host's `HTTPS_PROXY=`, `HTTP_PROXY=` and `NO_PROXY=` lines: allowed requests go through that company proxy, which gets host names, and its credentials only in its own `Proxy-Authorization` (in a file because a process's arguments are visible to other users); logs name it by `host:port` |
 | `-auth-file` | a file (mode 600) with the VM's key: requests need it as the proxy password, user `devvm` (in a file because a process's arguments are visible to other users) |
 | `-decider` | smolvm only: also decide each connection the VM opens, on this loopback address |
 | `-decider-to` | with `-decider`: the proxy's address in the VM, the only destination taken over |

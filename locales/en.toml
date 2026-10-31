@@ -1064,6 +1064,17 @@ other = "{{.vm}}'s network policy proxy couldn't start, so devvm stopped the VM,
 [proxy_start_failed]
 other = "{{.vm}}'s network policy proxy didn't start. Check {{.log}} for why."
 
+[proxy_stop_failed]
+other = "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
+
+[upstream_proxy_scheme]
+description = "setting is HTTPS_PROXY or HTTP_PROXY; scheme is the URL's, such as https:// or socks5://"
+other = "{{.setting}} names a {{.scheme}} proxy, and network policy goes only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+
+[upstream_proxy_invalid]
+description = "setting is HTTPS_PROXY, HTTP_PROXY or NO_PROXY"
+other = "{{.setting}} isn't a proxy setting devvm can read. Set it as http://host:port, or unset it."
+
 [creating_from]
 other = "creating {{.vm}} from {{.image}}"
 

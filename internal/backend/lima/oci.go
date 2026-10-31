@@ -13,6 +13,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -134,7 +135,15 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 	if len(trust.Data) > 0 {
 		args = append(args, filepath.Join(guest, "ca.sh"))
 	}
-	if err := l.Runner.Run(ctx, msg.Converting(f.Ref), l.limactl(ctx, args...)); err != nil {
+	cmd := l.limactl(ctx, args...)
+	// With the host's proxy, its variables come first on the input
+	// (buildproxy.go), and the script runs with its arguments after them.
+	if pre := proxyExports(buildProxy(l.Getenv)); pre != nil {
+		at := slices.Index(args, "bash") + 1
+		cmd = l.limactl(ctx, slices.Concat(args[:at], []string{"-s", "--"}, args[at:])...)
+		cmd.Stdin = bytes.NewReader(append(pre, "exec bash \"$@\"\n"...))
+	}
+	if err := l.Runner.Run(ctx, msg.Converting(f.Ref), cmd); err != nil {
 		return nil, backend.Logged(msg.ConvertFailed(f.Ref))
 	}
 	if err := l.delete(ctx, OCIVM); err != nil {

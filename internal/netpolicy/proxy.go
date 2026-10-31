@@ -51,8 +51,14 @@ type Proxy struct {
 	InitCA func(dir string) error
 	// Listening reports whether a program has a host loopback port.
 	Listening func(ctx context.Context, port int) bool
-	// Tick is how often a start looks for the proxy to listen, ten times.
+	// Tick is how often a start looks for the proxy to listen, ten times;
+	// a stop waits four Ticks for each signal to end it.
 	Tick time.Duration
+	// Signal sends a process a signal (Stop's).
+	Signal func(pid int, sig syscall.Signal) error
+	// Getenv reads devvm's environment: the host's proxy settings, which a
+	// VM's proxy goes through (backend.ReadHostProxy).
+	Getenv func(string) string
 	// What it prints, and asks ([Y/n]); Terminal reports whether it can
 	// ask.
 	Note, Warn func(msg.M)
@@ -77,7 +83,7 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 		InitCA: func(dir string) error {
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
 		},
-		Listening: listening, Tick: 500 * time.Millisecond,
+		Listening: listening, Tick: 500 * time.Millisecond, Signal: signal, Getenv: os.Getenv,
 		Note: u.Note, Warn: u.Warn, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Terminal: u.StdinIsTerminal,
 	}
@@ -152,20 +158,28 @@ func signal(pid int, sig syscall.Signal) error {
 	return proc.Signal(sig)
 }
 
-// Stop stops the VM's proxy, if it runs, waiting up to two seconds for it
-// to end.
-func (p *Proxy) Stop(vm string) {
+// Stop stops the VM's proxy, if it runs: SIGTERM, then after two seconds
+// SIGKILL, waiting up to two more for it to end. It reports whether no
+// proxy of the VM's runs then.
+func (p *Proxy) Stop(vm string) bool {
 	pid, ok := p.PID(vm)
 	if !ok {
-		return
+		return true
 	}
-	_ = signal(pid, syscall.SIGTERM)
-	for range 10 {
-		if !alive(pid) {
-			return
+	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
+		_ = p.Signal(pid, sig)
+		for range 20 {
+			if !alive(pid) {
+				return true
+			}
+			time.Sleep(p.Tick / 5)
 		}
-		time.Sleep(200 * time.Millisecond)
+		// Still the VM's proxy, not a process given its pid since.
+		if _, ok := p.PID(vm); !ok {
+			return true
+		}
 	}
+	return false
 }
 
 // Forget removes what a VM of this name left behind when it was deleted
@@ -239,10 +253,17 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err != nil {
 		return none, err
 	}
-	upstream, _ := os.ReadFile(p.run(vm, ".cas"))
-	if !running || read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum ||
-		!bytes.Equal(upstream, cas.Bundle()) {
-		p.Stop(vm)
+	// The company proxy it goes through, from devvm's environment: one
+	// whose settings changed starts again too.
+	upstream, err := backend.ReadHostProxy(p.Getenv).Upstream()
+	if err != nil {
+		return none, err
+	}
+	if !running || p.stale(vm, files, bin, caSum, cas.Bundle(), upstream) {
+		// Never the old one kept: it would go on with what it started with.
+		if !p.Stop(vm) {
+			return none, msg.ProxyStopFailed(vm)
+		}
 	}
 	sp, err := p.SSHPort(ctx, st, running)
 	if err != nil {
@@ -278,10 +299,22 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if up {
 		return conf, nil
 	}
-	if err := p.writeUpstream(vm, cas); err != nil {
+	if err := p.writeUpstream(vm, cas.Bundle(), upstream); err != nil {
 		return none, err
 	}
 	return conf, p.start(st, b, conf, files, bin, caSum, lifeline)
+}
+
+// stale reports whether the VM's proxy started with other settings than
+// these: its allowlist files (tools added or removed), devvm's binary (an
+// upgrade), devvm's CA (replaced, so it mints certificates the VM no
+// longer trusts after its next setup), the user's CAs, or the company
+// proxy it goes through.
+func (p *Proxy) stale(vm, files, bin, caSum string, cas, upstream []byte) bool {
+	oldCAs, _ := os.ReadFile(p.run(vm, ".cas"))
+	oldUp, _ := os.ReadFile(p.run(vm, ".upstream"))
+	return read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum ||
+		!bytes.Equal(oldCAs, cas) || !bytes.Equal(oldUp, upstream)
 }
 
 // SSHPort returns the host port the VM's ssh is forwarded from, with or
@@ -361,17 +394,26 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 	return nil
 }
 
-// writeUpstream writes the user's CAs where the VM's proxy reads them
-// (-upstream-cas) as it starts, or removes the file for none.
-func (p *Proxy) writeUpstream(vm string, cas trust.CAs) error {
-	f := p.run(vm, ".cas")
-	if len(cas) == 0 {
-		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
+// writeUpstream writes the user's CAs (-upstream-cas) and the company
+// proxy (-upstream, its password with it, so owner-only) where the VM's
+// proxy reads them as it starts, or removes each file for none.
+func (p *Proxy) writeUpstream(vm string, cas, upstream []byte) error {
+	for _, f := range []struct {
+		ext  string
+		data []byte
+	}{{".cas", cas}, {".upstream", upstream}} {
+		path := p.run(vm, f.ext)
+		if len(f.data) == 0 {
+			if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			continue
+		}
+		if err := writeFile(path, f.data); err != nil {
 			return err
 		}
-		return nil
 	}
-	return writeFile(f, cas.Bundle())
+	return nil
 }
 
 // start starts the VM's proxy as conf has it, and waits for it to listen.
@@ -424,8 +466,10 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
 		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth,
 	}, decider...)
-	if _, err := os.Stat(p.run(vm, ".cas")); err == nil {
-		args = append(args, "-upstream-cas", p.run(vm, ".cas"))
+	for _, f := range [][2]string{{".cas", "-upstream-cas"}, {".upstream", "-upstream"}} {
+		if _, err := os.Stat(p.run(vm, f[0])); err == nil {
+			args = append(args, f[1], p.run(vm, f[0]))
+		}
 	}
 	pid, err := p.Start(p.Self, args, out)
 	if err != nil {

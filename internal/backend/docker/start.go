@@ -148,6 +148,21 @@ func hostname(vm string) string {
 	return vm
 }
 
+// noClientProxy are container create's options that keep the proxies in
+// the Docker client's config (~/.docker/config.json's proxies, password
+// and all) out of a container's configuration: the client sets them in
+// every container it makes unless the command sets them itself, and a
+// commit keeps them, so a build's image would hold them, and a VM's
+// processes could read them. devvm sets them empty instead; its own
+// commands get the proxy they need (egress.go).
+func noClientProxy() []string {
+	var out []string
+	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "FTP_PROXY", "NO_PROXY", "ALL_PROXY"} {
+		out = append(out, "-e", k+"=", "-e", strings.ToLower(k)+"=")
+	}
+	return out
+}
+
 // create makes a container of devvm's from an image: labelled, running
 // Docker's init (tini) with a sleep under it, as root, sized, with the
 // config's network, mounts and environment.
@@ -157,6 +172,7 @@ func (d *Docker) create(ctx context.Context, step msg.M, name, image string, lab
 		args = append(args, "--label", k+"="+labels[k])
 	}
 	args = append(args, "--init", "--user", "0:0", "--entrypoint", "sleep")
+	args = append(args, noClientProxy()...)
 	args = append(args, sizeArgs(cpus, memGiB)...)
 	args = append(args, c.args()...)
 	if err := d.Runner.Run(ctx, step, d.docker(ctx, append(args, image, "infinity")...)); err != nil {

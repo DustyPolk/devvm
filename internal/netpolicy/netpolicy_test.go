@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -264,8 +265,10 @@ func TestSSHPort(t *testing.T) {
 type proxies struct {
 	mu    sync.Mutex
 	quiet bool
-	args  map[int][]string
-	n     int
+	// stubborn proxies ignore SIGTERM.
+	stubborn bool
+	args     map[int][]string
+	n        int
 }
 
 func (f *proxies) start(t *testing.T) func(string, []string, *os.File) (int, error) {
@@ -273,6 +276,9 @@ func (f *proxies) start(t *testing.T) func(string, []string, *os.File) (int, err
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")
+		if f.stubborn {
+			cmd = exec.CommandContext(t.Context(), "sh", "-c", `trap "" TERM; exec sleep 30`)
+		}
 		if f.quiet {
 			cmd = exec.CommandContext(t.Context(), "true")
 		}
@@ -335,6 +341,7 @@ func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	f := &proxies{args: map[int][]string{}}
 	p := NewProxy(d, assets.FS, "/bin/sh", store, testUI{t})
 	p.Start, p.Args, p.Tick = f.start(t), f.argsOf, time.Millisecond
+	p.Getenv = func(string) string { return "" } // not the host's proxy settings
 	p.Listening = func(context.Context, int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
 	return p, f
@@ -581,6 +588,89 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	// Stopped, it moves.
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil || st.Get(KeyProxyPort) == pp {
 		t.Errorf("stopped with its port taken: %v, port %s", err, st.Get(KeyProxyPort))
+	}
+}
+
+// The company proxy in devvm's environment goes to the VM's proxy in a
+// file, the user's alone, never in its arguments; a change starts it
+// again, and one it can't go through is refused.
+func TestPrepareUpstream(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, f := testProxy(t, d)
+	const corp = "http://corp:pa55@proxy.corp:8080" //nolint:gosec // a fake company proxy's fake password
+	env := map[string]string{"https_proxy": corp, "NO_PROXY": ".corp.example"}
+	p.Getenv = func(k string) string { return env[k] }
+	prepare := func(running bool) error {
+		t.Helper()
+		_, err := p.Prepare(t.Context(), lifelined(), st, running)
+		return err
+	}
+	if err := prepare(false); err != nil {
+		t.Fatal(names(err))
+	}
+	file := filepath.Join(d.Run(), st.Name()+".proxy.upstream")
+	pid, _ := p.PID(st.Name())
+	args := strings.Join(f.args[pid], " ")
+	if !strings.Contains(args, " -upstream "+file) || strings.Contains(args, "pa55") {
+		t.Errorf("the proxy's arguments %q: want -upstream %s, and no password", args, file)
+	}
+	b, err := os.ReadFile(file) //nolint:gosec // the test's own folder
+	if want := "HTTPS_PROXY=" + corp + "\nHTTP_PROXY=\nNO_PROXY=.corp.example\n"; err != nil || string(b) != want {
+		t.Errorf("upstream file = %q, %v; want %q", b, err, want)
+	}
+	if fi, err := os.Stat(file); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("upstream file mode: %v %v", fi, err)
+	}
+	// Running, the same settings keep it; others start it again.
+	if err := prepare(true); err != nil || f.count() != 1 {
+		t.Errorf("unchanged: %v, %d starts", names(err), f.count())
+	}
+	env["HTTP_PROXY"] = "proxy.corp:3128"
+	if err := prepare(true); err != nil || f.count() != 2 {
+		t.Errorf("changed: %v, %d starts", names(err), f.count())
+	}
+	// None: no file, no flag.
+	env = map[string]string{}
+	if err := prepare(true); err != nil || f.count() != 3 {
+		t.Fatalf("none: %v, %d starts", names(err), f.count())
+	}
+	pid, _ = p.PID(st.Name())
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) || strings.Contains(strings.Join(f.args[pid], " "), "-upstream ") {
+		t.Errorf("without a company proxy: %v, %q", err, f.args[pid])
+	}
+	for _, c := range []struct{ env, value, want string }{
+		{"HTTPS_PROXY", "https://corp:pa55@proxy.corp", "upstream_proxy_scheme scheme=https:// setting=HTTPS_PROXY"},
+		{"http_proxy", "socks5://proxy.corp:1080", "upstream_proxy_scheme scheme=socks5:// setting=HTTP_PROXY"},
+		{"HTTPS_PROXY", "http://proxy.corp:http", "upstream_proxy_invalid setting=HTTPS_PROXY"},
+	} {
+		env = map[string]string{c.env: c.value}
+		if err := prepare(false); names(err) != c.want {
+			t.Errorf("%s=%s: %v, want %s", c.env, c.value, names(err), c.want)
+		}
+	}
+}
+
+// A proxy that needs starting again is stopped, killed if SIGTERM doesn't
+// end it; one that won't end fails the start, never kept with its old
+// settings.
+func TestPrepareStopsTheOldProxy(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, f := testProxy(t, d)
+	p.Tick = 20 * time.Millisecond
+	f.stubborn = true
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(names(err))
+	}
+	old, _ := p.PID(st.Name())
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(names(err))
+	}
+	if pid, ok := p.PID(st.Name()); !ok || pid == old || alive(old) {
+		t.Errorf("the old proxy %d: alive %v; now %d", old, alive(old), pid)
+	}
+	p.Signal = func(int, syscall.Signal) error { return nil } // signals that never arrive
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); names(err) != "proxy_stop_failed vm="+st.Name() {
+		t.Errorf("a proxy that won't stop: %v", names(err))
 	}
 }
 

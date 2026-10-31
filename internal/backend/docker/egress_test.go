@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -408,6 +409,82 @@ func TestBuildOnDesktop(t *testing.T) {
 		t.Errorf("no network: %s, detached %v", c, s.detached)
 	}
 }
+
+// Behind the host's proxy: on a Linux engine a build's commands get its
+// variables from an env file, removed afterwards, and sudo keeps them while
+// the scripts run; on Docker Desktop the build's proxy goes through it,
+// told in a file. The password is in no argument either way.
+func TestBuildHostProxy(t *testing.T) {
+	const corp = "http://corp:pa55@proxy.corp:8080" //nolint:gosec // a fake company proxy's fake password
+	env := map[string]string{"HTTPS_PROXY": corp, "NO_PROXY": ".corp"}
+	s := newSandbox(t)
+	s.Getenv = func(k string) string { return env[k] }
+	inst := s.buildName(baseKey)
+	dir := filepath.Join(s.Dirs.Docker(), "builds", inst)
+	var seen []byte
+	s.Runner = peekRunner{func() {
+		if b, err := os.ReadFile(filepath.Join(dir, "host-proxy.env")); err == nil { //nolint:gosec // the test's own folder
+			seen = b
+		}
+	}}
+	if _, err := s.BuildImage(t.Context(), backend.ImageSpec{
+		Image: "base", Key: baseKey, Net: backend.NetInternet,
+		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\n# base\n")}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := "HTTPS_PROXY=" + corp + "\nhttps_proxy=" + corp + "\nNO_PROXY=.corp\nno_proxy=.corp\n"; string(seen) != want {
+		t.Errorf("env file = %q, want %q", seen, want)
+	}
+	calls := s.calls(t)
+	inOrder(t, calls,
+		"docker exec -u 0 "+inst+" sh -c printf '%s\\n' '"+sudoKeep+"' > /etc/sudoers.d/devvm-build-proxy",
+		"docker exec --env-file "+filepath.Join(dir, "host-proxy.env")+" -i -u u ",
+		"docker exec -u 0 "+inst+" sh -c rm -f /etc/sudoers.d/devvm-build-proxy",
+		"docker container commit ",
+	)
+	for _, c := range calls {
+		if strings.Contains(c, "pa55") {
+			t.Errorf("the password in an argument: %s", c)
+		}
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the env file's folder stayed: %v", err)
+	}
+
+	d := newSandbox(t)
+	d.Kind = kindDesktop
+	d.Getenv = func(k string) string { return env[k] }
+	if ps := d.Problems(t.Context()); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if _, err := d.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet}); err != nil {
+		t.Fatal(err)
+	}
+	p := d.detached[0]
+	up := filepath.Join(d.Dirs.Docker(), "builds", d.buildName(baseKey), "upstream")
+	if i := slices.Index(p, "-upstream"); i < 0 || p[i+1] != up || strings.Contains(strings.Join(p, " "), "pa55") {
+		t.Errorf("Desktop's build proxy: %v", p)
+	}
+	// One the proxy can't go through is refused before anything's made.
+	env["HTTPS_PROXY"] = "socks5://proxy.corp:1080"
+	d.reset(t)
+	_, err := d.BuildImage(t.Context(), backend.ImageSpec{Image: "node", Key: nodeKey, Parent: baseKey, Net: backend.NetInternet})
+	var m msg.M
+	if !errors.As(err, &m) || m.Names() != "upstream_proxy_scheme scheme=socks5:// setting=HTTPS_PROXY" {
+		t.Errorf("socks5: %v", err)
+	}
+}
+
+// peekRunner runs commands as execRunner does, calling peek before each.
+type peekRunner struct{ peek func() }
+
+func (p peekRunner) Run(ctx context.Context, m msg.M, cmd *exec.Cmd) error {
+	p.peek()
+	return execRunner{}.Run(ctx, m, cmd)
+}
+func (p peekRunner) Output(cmd *exec.Cmd) ([]byte, error) { p.peek(); return cmd.Output() }
+func (p peekRunner) Attach(cmd *exec.Cmd) error           { p.peek(); return cmd.Run() }
 
 // A build whose proxy doesn't say it listens stops, naming its log, and
 // leaves nothing.

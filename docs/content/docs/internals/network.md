@@ -53,11 +53,28 @@ flowchart TD
 
 On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)). Docker's VMs can't reach the host's loopback, so on Docker the proxy also listens on a unix socket only you can reach, and a relay on the VM's own network passes the VM's connections to that socket, unread ([details](docker.md#network-policy)).
 
+### Through a company proxy
+
+When devvm starts a VM's proxy, it reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from its own environment, each in capitals first and then in lowercase, as Go's clients do. It writes them to `~/.local/share/devvm/run/<vm>.proxy.upstream`, a file only you can read, and passes the file's path with `-upstream`, so the company proxy's password is in no process's arguments. devvm checks the settings first: a proxy URL is `http://user:password@host:port`, or `host:port` alone, and a proxy without a port is on port 80. devvm refuses an `https://` or `socks5://` proxy (`upstream_proxy_scheme`) and a setting it can't read (`upstream_proxy_invalid`), so a VM with network policy doesn't start until you change it.
+
+The proxy decides each request as it does without a company proxy, by the host name the VM asked for, and only then picks the way out:
+
+- A host that `NO_PROXY` names, `localhost`, a name under `.localhost` and a loopback or unspecified address go directly, through the checks above.
+- A tunnel, and the connection the proxy makes to a bound host to put a secret in, go through `HTTPS_PROXY`'s proxy. The proxy sends `CONNECT host:port` with the name the VM asked for, and `Proxy-Authorization: Basic` from the URL's user and password, and it reads the answer. Anything but `200` refuses the VM's request, naming the company proxy by its host and port. Over that tunnel, the proxy's TLS connection to a bound host checks the server's certificate against the system's roots and the [CAs in your CA folder](#a-companys-ca), as it does directly.
+- A plain HTTP request goes to `HTTP_PROXY`'s proxy in absolute form, with its `Proxy-Authorization` in place of the VM's. The company proxy's address in the request has no password, so no error the proxy logs holds one.
+- Without `HTTPS_PROXY` or `HTTP_PROXY`, those requests go directly.
+
+`NO_PROXY` is a comma-separated list, which the proxy reads as Go's clients read it. In it, `*` matches every host, and an address or a CIDR matches addresses. A name matches itself and its subdomains, while a name with a leading `.` or `*.` matches only its subdomains. Any entry can end in a port, which limits it to that port.
+
+The company proxy resolves the names it's sent, so the proxy can't hold it to the addresses it checked, and the floor changes for those requests. An address in the VM's request is checked as before, and a host whose last label is all digits or starts with `0x`, such as `127.1`, gets `400`, because a company proxy may read it as an address. For a name, the proxy asks this machine's resolver, for at most three seconds, and refuses the request when any answer is internal or denied, unless a rule names the address. A name this machine can't resolve, which is common behind a company proxy, goes to the company proxy unchecked. [The design note](design.md#a-company-proxy) explains what that leaves open.
+
+The event log's `upstream` field names the company proxy, by host and port, for each tunnel and request that went through it, and `devvm log` adds `through host:port` to the line. The proxy's own log names both company proxies by host and port when it starts. Neither holds the user or the password.
+
 ### How long a proxy runs
 
 The proxy exits when the VM's Lima hostagent does, which it learns from the hostagent's pid file (`-lifeline`). On smolvm it watches the machine's process instead, and on Docker a `docker container wait` on the VM's container. If the hostagent never appears, the proxy exits 15 minutes after it started, and `devvm stop` stops it at once.
 
-A VM that starts again gets a new proxy on the same port. A running VM also gets a new proxy when its allowlist files changed, when its CA was replaced, when its proxy is from another devvm binary, or when the [CAs in your CA folder](#a-companys-ca) changed.
+A VM that starts again gets a new proxy on the same port. A running VM also gets a new proxy when its allowlist files changed, when its CA was replaced, when its proxy is from another devvm binary, when the [CAs in your CA folder](#a-companys-ca) changed, or when the [company proxy](#through-a-company-proxy) settings in devvm's environment differ from the ones the proxy started with. To start a new proxy, devvm stops the old one with `SIGTERM`, and with `SIGKILL` when it's still running two seconds later. If it still runs two seconds after that, devvm stops with `proxy_stop_failed` and starts nothing, because the old proxy would go on with its old settings.
 
 devvm counts a proxy as started only once the proxy says it's listening on the VM's port and is still running, because a program that took the port first would otherwise get the VM's traffic. If the proxy doesn't start, devvm stops and names the proxy's log (`proxy_start_failed`). When a stopped VM's port was taken by another program, devvm chooses a new free port. A running VM's backend holds the port it started with, so when a running VM's proxy is gone and another program took its port, devvm can't start the proxy again (`proxy_port_taken`). devvm then stops the VM (`net_proxy_down_stopped`), and it does the same when the proxy fails to start for any other reason, because a VM with network policy never runs on without its proxy. The next `devvm` starts both.
 
@@ -210,6 +227,7 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | `-auth-file` | a file holding the VM's password; required |
 | `-ca`, `-cakey` | devvm's CA, for interception |
 | `-upstream-cas` | a file of CA certificates (PEM) that the proxy's own TLS connections trust besides the system's |
+| `-upstream` | a file of `HTTPS_PROXY=`, `HTTP_PROXY=` and `NO_PROXY=` lines (mode 600): reach allowed hosts through that company proxy |
 | `-secrets` | the VM's secret bindings, read again when they change |
 | `-secret-cmd` | the program run as `PROGRAM secret get NAME` for a value |
 | `-decider` | also decide each connection the VM opens, on this loopback address (smolvm's mediated egress) |

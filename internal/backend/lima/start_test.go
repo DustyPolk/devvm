@@ -72,15 +72,16 @@ func TestStartConfined(t *testing.T) {
 		},
 		{
 			name: "macOS, a build with no network", os: "darwin", c: backend.Confinement{Net: backend.NetNone, SSHPort: 2223}, wrapped: true,
-			edits: []string{".ssh.localPort=2223", noForwardsSet()},
+			edits: []string{".ssh.localPort=2223", ".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{
 			name: "Linux, a build with no network", os: "linux", c: backend.Confinement{Net: backend.NetNone}, qemu: true,
-			edits: []string{noForwardsSet()},
+			edits: []string{".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{
+			// Not the host's proxy settings: its image would keep them.
 			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet},
-			edits: []string{noForwardsSet()},
+			edits: []string{".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}, edits: []string{noForwardsSet()}},
 	} {

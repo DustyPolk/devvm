@@ -16,6 +16,7 @@ func TestFormatEvent(t *testing.T) {
 	for _, c := range []struct{ line, want string }{
 		{`{"time":"T","event":"tunnel","host":"ok.test","port":443,"rule":"ok.test"}`, "T  allowed  ok.test:443  rule ok.test"},
 		{`{"time":"T","event":"intercept","host":"a.test","port":443,"rule":"a.test"}`, "T  allowed  a.test:443  rule a.test, decrypted"},
+		{`{"time":"T","event":"tunnel","host":"a.test","port":443,"rule":"a.test","upstream":"proxy.corp:8080"}`, "T  allowed  a.test:443  rule a.test, through proxy.corp:8080"},
 		{`{"time":"T","event":"forward","host":"a.test","port":443,"method":"GET","path":"/x","secrets":["a","b"]}`, "T  allowed  a.test:443  GET /x, token: a,b"},
 		{`{"time":"T","event":"blocked","host":"b.test","port":22,"reason":"no"}`, "T  BLOCKED  b.test:22  no"},
 		{`{"time":"T","event":"blocked","host":"::1","port":80,"reason":"no"}`, "T  BLOCKED  [::1]:80  no"},

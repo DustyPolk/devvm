@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -436,17 +437,39 @@ func mintsCredential(host, method, p string) string {
 	return ""
 }
 
-// forwarder: a streaming reverse proxy to scheme://target, dialing through the floor, putting
-// secrets in (HTTPS only), and logging each request. The bindings are read for every request, so
-// `devvm secret unuse` applies to connections already open.
+// forwarder: a streaming reverse proxy to scheme://target, dialing through the floor (or through
+// the upstream), putting secrets in (HTTPS only), and logging each request. The bindings are read
+// for every request, so `devvm secret unuse` applies to connections already open. HTTPS goes over
+// TLS with the system's roots and the user's CAs, through an upstream's CONNECT tunnel when one
+// applies; plain HTTP through an upstream is sent to it in absolute form, with its credentials.
 func forwarder(scheme, target, host string, port int) http.Handler {
 	tlsConf := &tls.Config{RootCAs: upstreamCAs, ServerName: host}
+	tr := &http.Transport{
+		DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return dialOut(ctx, host, port) },
+		TLSClientConfig: tlsConf, ForceAttemptHTTP2: true,
+		IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second,
+	}
+	up := upstreamFor(host, port, scheme == "http")
+	if scheme == "http" {
+		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) { return dial(ctx, host, port) }
+		if up != nil {
+			// The upstream connects to what the request line names: the host that was checked,
+			// in its canonical form, never the VM's spelling of it.
+			if target = net.JoinHostPort(host, fmt.Sprint(port)); port == 80 {
+				target = host
+				if strings.Contains(host, ":") {
+					target = "[" + host + "]"
+				}
+			}
+			// No credentials in the URL: they go in the request's header (Rewrite), so no error
+			// the transport makes can hold them.
+			u := &url.URL{Scheme: "http", Host: up.addr}
+			tr.Proxy = func(*http.Request) (*url.URL, error) { return u, nil }
+			tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) { return up.dialUpstream(ctx) }
+		}
+	}
 	return &httputil.ReverseProxy{
-		Transport: &http.Transport{
-			DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return dial(ctx, host, port) },
-			TLSClientConfig: tlsConf, ForceAttemptHTTP2: true,
-			IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second,
-		},
+		Transport:     tr,
 		FlushInterval: -1, // stream (SSE) instead of buffering
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme, pr.Out.URL.Host = scheme, target
@@ -459,6 +482,13 @@ func forwarder(scheme, target, host string, port int) http.Handler {
 			pr.Out.Header.Del("Proxy-Authorization")
 			pr.Out.Header.Del("Proxy-Connection")
 			e := Event{Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent()}
+			if up != nil {
+				e.Upstream = up.addr
+				// Only plain HTTP carries them, to the upstream itself; HTTPS's go in the CONNECT.
+				if scheme == "http" && up.auth != "" {
+					pr.Out.Header.Set("Proxy-Authorization", up.auth)
+				}
+			}
 			if scheme == "https" && interceptPorts[port] { // secrets only ever go over TLS, to :443
 				if bs := bindingsFor(host); len(bs) > 0 {
 					e.Secrets = inject(pr.Out.Header, bs)

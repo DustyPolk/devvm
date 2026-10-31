@@ -106,6 +106,22 @@ A blocked request gets `403`, and the response names the host, the reason and th
 
 In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
 
+## Behind a company proxy
+
+When this machine reaches the internet only through a company proxy, the VM's proxy sends the requests it allows through that proxy. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, or their lowercase forms, from the shell you run it in. It passes them to the VM's proxy when the proxy starts, and when you run devvm again with different settings, devvm starts the VM's proxy again with the new ones. So run devvm from a shell that has your company's proxy settings, and after you change them, run devvm again in the folder or `devvm restart`.
+
+The VM's proxy still decides each request by the host name the VM asked for, against the same allowlists, and only then passes it on. It sends tunnels, which carry HTTPS and the requests it puts your secrets into, through `HTTPS_PROXY`'s proxy, and plain HTTP requests through `HTTP_PROXY`'s. It reaches the hosts that `NO_PROXY` names directly, and also `localhost` and loopback addresses. In `NO_PROXY`, `example.com` matches that host and its subdomains, `.example.com` matches only its subdomains, an address or a CIDR matches addresses, any entry can end in a port, and `*` matches every host. `devvm log` adds `through host:port` to each request that went through the company proxy.
+
+The company proxy needs an `http://` address, such as `http://user:password@proxy.example.com:8080`, and a proxy without a port is on port 80. devvm doesn't start a VM with network policy while `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, and it tells you which setting to change. The company proxy's password stays on this machine. The VM never gets it, and devvm writes it into no log, no image and no process's arguments.
+
+The company proxy sees the name and port of every host the VM reaches, and if it inspects TLS, the [CA you add for it](../using/settings.md#a-companys-ca) also lets it read the traffic. The company proxy also looks up each name itself, so the VM's proxy can't check every address a name leads to. It still refuses an address that's this machine's own or internal, unless a rule names it, and it refuses a name when this machine's lookup gives an internal or denied address for it. A name that this machine can't look up goes to the company proxy unchecked, so under a name you allow, a VM can reach whatever the company proxy reaches, such as hosts on your company's network.
+
+### Without network policy
+
+A Lima VM without network policy gets your proxy settings in its environment when it starts and uses the company proxy directly, while smolvm and Docker VMs don't get them.
+
+Images never keep your proxy settings. When devvm builds an image on Lima or on a Linux Docker engine, the build's commands get the settings from your shell while they run, and devvm writes them into no file of the image. On Docker Desktop, a build goes through a proxy of devvm's, which goes through your company proxy, and smolvm builds don't get your proxy settings at all. The Docker client puts the proxies in `~/.docker/config.json` into every container it makes, so devvm makes its containers with those settings empty.
+
 ## Secrets
 
 Secrets stay on this machine. A VM gets a placeholder of its own for each one, and its proxy puts the real value into requests for that secret's hosts, in one header:

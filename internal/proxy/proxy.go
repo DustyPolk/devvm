@@ -79,6 +79,7 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&caFile, "ca", "", "CA certificate for interception (PEM); with -cakey")
 	fs.StringVar(&caKeyF, "cakey", "", "CA private key (PEM)")
 	fs.StringVar(&upstreamCAFile, "upstream-cas", "", "CA certificates (PEM) trusted for the proxy's own TLS connections, besides the system's (secrets.go)")
+	fs.StringVar(&upstreamFile, "upstream", "", "file of the host's HTTPS_PROXY=, HTTP_PROXY= and NO_PROXY= lines: reach allowed hosts through that proxy (upstream.go)")
 	fs.StringVar(&initCADir, "init-ca", "", "write a new CA (ca.pem, ca.key) into this directory unless one is there, and exit")
 	fs.StringVar(&loginKind, "login", "", "codex, opencode or claude: work on that agent's login file (logins.go), with -login-file and one of the next three")
 	fs.StringVar(&loginFile, "login-file", "", "the agent's login file on the host")
@@ -140,6 +141,8 @@ type Event struct {
 	Agent   string   `json:"agent,omitempty"`
 	Secrets []string `json:"secrets,omitempty"` // names of secrets put in, never values
 	Refused bool     `json:"refused,omitempty"` // blocked whatever the allowlist says: no rule allows it
+	// The company proxy it went through (-upstream), as host:port: never its credentials.
+	Upstream string `json:"upstream,omitempty"`
 }
 
 // A block and its number (the first is 1), for /blocked/new.
@@ -343,6 +346,13 @@ func hostOK(h string) bool {
 	if h == "" || len(h) > 253 {
 		return false
 	}
+	// An address in a shorthand netip doesn't read (127.1, 2130706433, 0x7f000001, 10.1): no name
+	// ends in such a label, and a company proxy or resolver that reads it as inet_aton does would
+	// reach an address the floor never judged.
+	last := h[strings.LastIndexByte(strings.TrimSuffix(h, "."), '.')+1:]
+	if last = strings.TrimSuffix(last, "."); strings.HasPrefix(last, "0x") || strings.Trim(last, "0123456789") == "" {
+		return false
+	}
 	for _, c := range h {
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '_' && c != '.' {
 			return false
@@ -393,13 +403,18 @@ func AllowRule(host string, port int) (string, bool) {
 	return ruleFor(host, port), true
 }
 
-// check runs the policy and the floor; on success it returns the rule that allowed host:port.
-func check(ctx context.Context, host string, port int) (string, string) {
+// check runs the policy and the floor; on success it returns the rule that allowed host:port. plain
+// is a plain HTTP request, which goes through HTTP_PROXY's upstream rather than HTTPS_PROXY's.
+func check(ctx context.Context, host string, port int, plain bool) (string, string) {
 	ok, why := pol.decide(host, port)
 	if !ok {
 		return "", why
 	}
-	if _, err := resolve(ctx, host, port); err != nil {
+	floor := func() error { _, err := resolve(ctx, host, port); return err }
+	if upstreamFor(host, port, plain) != nil {
+		floor = func() error { return floorUpstream(ctx, host, port) }
+	}
+	if err := floor(); err != nil {
 		if errors.Is(err, errFloor) {
 			return "", "it " + err.Error() + "; allow the address itself to reach it"
 		}
@@ -415,13 +430,16 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: "CONNECT"}
-	rule, why := check(r.Context(), host, port)
+	rule, why := check(r.Context(), host, port, false)
 	if why != "" {
 		e.Reason = why
 		block(w, e)
 		return
 	}
 	e.Rule = rule
+	if up := upstreamFor(host, port, false); up != nil {
+		e.Upstream = up.addr
+	}
 	if bs := bindingsFor(host); interceptPorts[port] && len(bs) > 0 && caCert != nil {
 		client, buf, err := http.NewResponseController(w).Hijack()
 		if err != nil {
@@ -431,7 +449,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		intercept(r.Context(), bufConn{client, buf.Reader}, host, port, e)
 		return
 	}
-	up, err := dial(r.Context(), host, port)
+	up, err := dialOut(r.Context(), host, port)
 	if err != nil {
 		e.Reason = "connect failed: " + err.Error()
 		block(w, e)
@@ -458,7 +476,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 	_, _ = up.Write(first)
 	go func() {
 		_, _ = io.Copy(up, buf.Reader) // also drains anything bufio already read
-		if t, ok := up.(*net.TCPConn); ok {
+		if t, ok := up.(interface{ CloseWrite() error }); ok {
 			_ = t.CloseWrite()
 		}
 	}()
@@ -472,6 +490,14 @@ type bufConn struct {
 }
 
 func (c bufConn) Read(b []byte) (int, error) { return c.r.Read(b) }
+
+// CloseWrite half-closes the connection underneath, when it can.
+func (c bufConn) CloseWrite() error {
+	if t, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return t.CloseWrite()
+	}
+	return nil
+}
 
 func sniMatches(sni, host string) bool {
 	if _, err := netip.ParseAddr(host); err == nil {
@@ -520,7 +546,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
-	if _, why := check(r.Context(), host, port); why != "" {
+	if _, why := check(r.Context(), host, port, scheme == "http"); why != "" {
 		e.Reason = why
 		block(w, e)
 		return
@@ -673,6 +699,12 @@ func Main(args []string, std IO) error {
 		if err := loadUpstreamCAs(upstreamCAFile); err != nil {
 			return err
 		}
+	}
+	if upstreamFile != "" {
+		if err := loadUpstream(upstreamFile); err != nil {
+			return err
+		}
+		logf("%s", upstreamNames())
 	}
 	// Without a password any program on the host could use the proxy, and the VM's tokens with it.
 	if authFile == "" {

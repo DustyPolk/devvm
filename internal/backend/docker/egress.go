@@ -602,10 +602,11 @@ func (e egress) forget(ctx context.Context, vm string) error {
 // failed build's, kept, keeps its proxy's logs (proxy.log, events.jsonl)
 // in its folder.
 func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (context.Context, string, string, func(context.Context), error) {
-	if n != backend.NetInternet || e.d.engineKind() != kindDesktop {
-		return ctx, netMode(n), "", func(context.Context) {}, nil
-	}
 	dir := filepath.Join(e.d.Dirs.Docker(), "builds", name)
+	if n != backend.NetInternet || e.d.engineKind() != kindDesktop {
+		ctx, done, err := e.hostProxyEnv(ctx, dir, n)
+		return ctx, netMode(n), "", done, err
+	}
 	var proxy *os.Process
 	done := func(ctx context.Context) {
 		stopProxy(proxy)
@@ -617,7 +618,7 @@ func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (conte
 			_ = e.d.Runner.Run(ctx, msg.M{}, e.d.docker(ctx, "network", "disconnect", "-f", netName(name), name))
 		}
 		_ = e.removeNetwork(ctx, netName(name))
-		for _, f := range []string{"auth", "env", "policy", "lifeline"} {
+		for _, f := range []string{"auth", "env", "policy", "lifeline", "upstream"} {
 			_ = os.Remove(filepath.Join(dir, f))
 		}
 		if !kept {
@@ -639,7 +640,12 @@ func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (conte
 	if err != nil {
 		return fail(err)
 	}
-	if proxy, err = e.buildProxy(name, dir, password); err != nil {
+	// The host's proxy, which devvm's goes through.
+	upstream, err := backend.ReadHostProxy(e.d.Getenv).Upstream()
+	if err != nil {
+		return fail(err)
+	}
+	if proxy, err = e.buildProxy(name, dir, password, upstream); err != nil {
 		return fail(err)
 	}
 	env := buildEnv()
@@ -673,13 +679,42 @@ func buildCaps(name, netw string) []string {
 	return nil
 }
 
+// hostProxyEnv readies a build (its files in dir) on a Linux engine's
+// network, n: with the internet and a proxy on the host, the returned
+// context's commands get the host's proxy variables, from an env file
+// (never in the container's own configuration, which its image would
+// keep). done removes the file.
+func (e egress) hostProxyEnv(ctx context.Context, dir string, n backend.Net) (context.Context, func(context.Context), error) {
+	none := func(context.Context) {}
+	env := backend.ReadHostProxy(e.d.Getenv).Env()
+	if n != backend.NetInternet || len(env) == 0 {
+		return ctx, none, nil
+	}
+	var lines []byte
+	for _, kv := range env {
+		if strings.ContainsAny(kv, "\r\n") {
+			return ctx, none, msg.UpstreamProxyInvalid(strings.ToUpper(kv[:strings.IndexByte(kv, '=')]))
+		}
+		lines = append(lines, kv+"\n"...)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ctx, none, err
+	}
+	f := filepath.Join(dir, "host-proxy.env")
+	if err := writeOwn(f, lines); err != nil {
+		return ctx, none, err
+	}
+	return withExecEnv(ctx, f), func(context.Context) { _ = os.RemoveAll(dir) }, nil
+}
+
 // buildProxy starts devvm's proxy on the host for a build (name), its
 // files in dir, with password: any host on ports 80 and 443 but the
 // host's own and internal addresses; on its socket, and on a loopback
-// port of its own nothing uses. It returns the process once it says it
-// listens and still runs. It ends with the build's container (its
+// port of its own nothing uses; through the host's proxy (upstream, the
+// proxy's -upstream file; nil for none). It returns the process once it
+// says it listens and still runs. It ends with the build's container (its
 // lifeline, in dir), or when the build is done with it (stopProxy).
-func (e egress) buildProxy(name, dir, password string) (*os.Process, error) {
+func (e egress) buildProxy(name, dir, password string, upstream []byte) (*os.Process, error) {
 	auth, policy, logPath := filepath.Join(dir, "auth"), filepath.Join(dir, "policy"), filepath.Join(dir, "proxy.log")
 	if err := writeOwn(auth, []byte(password+"\n")); err != nil {
 		return nil, err
@@ -699,6 +734,13 @@ func (e egress) buildProxy(name, dir, password string) (*os.Process, error) {
 	args := []string{
 		"_proxy", "-listen", "127.0.0.1:0", "-listen-unix", sock, "-vm", name, "-policy", policy,
 		"-log", filepath.Join(dir, "events.jsonl"), "-auth-file", auth, "-lifeline", filepath.Join(dir, "lifeline"),
+	}
+	if upstream != nil {
+		f := filepath.Join(dir, "upstream")
+		if err := writeOwn(f, upstream); err != nil {
+			return nil, err
+		}
+		args = append(args, "-upstream", f)
 	}
 	p, err := e.d.Spawn(e.d.Self, args, out)
 	if err != nil {

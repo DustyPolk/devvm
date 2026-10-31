@@ -80,6 +80,12 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	if !spec.Trust.None() {
 		steps += 2
 	}
+	// The host's proxy, for the scripts' commands only (buildproxy.go).
+	hp := buildProxy(l.Getenv)
+	sudoOn, sudoOff := sudoScripts(hp)
+	if !hp.None() {
+		steps += 2
+	}
 	if spec.From != nil {
 		steps += ociSteps
 		if !spec.Trust.None() {
@@ -147,16 +153,20 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		}
 		return backend.Built{}, err
 	}
-	if err := l.runScript(ctx, inst, spec.Trust.Add, true); err != nil {
-		return failed(err)
-	}
-	for _, s := range spec.Scripts {
-		if err := l.runScript(ctx, inst, s, false); err != nil {
+	for _, s := range []backend.Script{spec.Trust.Add, sudoOn} {
+		if err := l.runScript(ctx, inst, s, true); err != nil {
 			return failed(err)
 		}
 	}
-	if err := l.runScript(ctx, inst, spec.Trust.Remove, true); err != nil {
-		return failed(err)
+	for _, s := range spec.Scripts {
+		if err := l.runScript(ctx, inst, withProxy(hp, s), false); err != nil {
+			return failed(err)
+		}
+	}
+	for _, s := range []backend.Script{sudoOff, spec.Trust.Remove} {
+		if err := l.runScript(ctx, inst, s, true); err != nil {
+			return failed(err)
+		}
 	}
 	// Flushed first: a guest that ignores Lima's stop request is stopped
 	// hard.

@@ -74,6 +74,12 @@ On the VM's next launch, devvm offers in a terminal to restart it confined, and 
 
 With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm log --blocked` on this machine, or `devvm-why` in the VM. `devvm log --blocked` also shows the `devvm policy allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
 
+## Behind a company proxy
+
+When this machine reaches the internet only through a company proxy and nothing in a VM or a build gets through, check that the shell you run devvm in has the proxy settings, as `env | grep -i _proxy` shows. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from that shell, so set them there, then run devvm again in the folder, which starts the VM's proxy again with them ([network policy behind a company proxy](../safety/network.md#behind-a-company-proxy)). A shell without the settings, such as an editor's terminal that didn't load your profile, starts the VM's proxy without them.
+
+When devvm says that `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes. On macOS, image builds can't reach this machine's loopback, so a proxy on `localhost`, such as one a VPN client runs, works for VMs with network policy but not for builds on Lima.
+
 ## TLS errors behind a company proxy
 
 When apt, `npm install`, `pip install`, `git clone` over HTTPS or an image's build fails with an error such as `certificate verify failed`, `self-signed certificate in certificate chain` or `unable to get local issuer certificate`, the network you're on may inspect TLS. Ask your IT team for the CA's certificate, or export it from this machine's store, such as Keychain Access on macOS. Put it in `~/.config/devvm/ca` and open the VM again ([a company's CA](settings.md#a-companys-ca)).

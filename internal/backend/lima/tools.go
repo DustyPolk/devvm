@@ -71,7 +71,8 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		return err
 	}
 	cmd := l.limactl(ctx, append([]string{"shell", "--workdir", "/", ToolsVM, "bash", "-s", "--"}, spec.Args...)...)
-	cmd.Stdin = bytes.NewReader(spec.Script.Data)
+	// The host's proxy for its commands, never written into the VM.
+	cmd.Stdin = bytes.NewReader(withProxy(buildProxy(l.Getenv), spec.Script).Data)
 	if err := l.Runner.Run(ctx, msg.BuildingToolsIn(ToolsVM), cmd); err != nil {
 		return backend.Logged(msg.ToolsBuildFailed())
 	}

@@ -141,6 +141,9 @@ func FormatEvent(line string) (string, bool) {
 	if len(e.Secrets) > 0 {
 		d += ", token: " + strings.Join(e.Secrets, ",")
 	}
+	if e.Upstream != "" {
+		d += ", through " + e.Upstream
+	}
 	return fmt.Sprintf("%s  %-7s  %s  %s", oneLine(e.Time), what, hostPort(e), oneLine(d)), true
 }
 

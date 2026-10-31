@@ -217,11 +217,16 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts 
 			fill = proxy && c.ProxyUser != ""
 		}
 	}
-	// Not the host's own proxy settings.
+	// The host's own proxy settings only for a VM on Lima's own network:
+	// Lima writes them into the guest's /etc/environment, which a build
+	// VM's image would keep, password and all (its scripts get them on
+	// their input instead: buildproxy.go), and a VM with network policy
+	// goes through devvm's proxy.
+	direct := c.Net == backend.NetDirect
 	propagates := cfg.PropagateProxyEnv == nil || *cfg.PropagateProxyEnv
-	if proxy && propagates {
+	if !direct && propagates {
 		sets = append(sets, ".propagateProxyEnv=false")
-	} else if !proxy && !propagates {
+	} else if direct && !propagates {
 		sets = append(sets, ".propagateProxyEnv=true")
 	}
 	// Names resolve in the proxy. On Linux restrict=on drops Lima's DNS

@@ -1,0 +1,54 @@
+package backend
+
+import (
+	"errors"
+	"slices"
+	"testing"
+
+	"github.com/w3cj/devvm/internal/msg"
+)
+
+// corpProxy is a fake company proxy, with a fake password.
+const corpProxy = "http://u:p@proxy.corp:8080" //nolint:gosec // a test's fake credential
+
+func TestHostProxy(t *testing.T) {
+	env := map[string]string{
+		"HTTPS_PROXY": corpProxy, "https_proxy": "http://other:1",
+		"http_proxy": "proxy.corp:3128", "no_proxy": "localhost,.corp",
+	}
+	h := ReadHostProxy(func(k string) string { return env[k] })
+	if h != (HostProxy{HTTPS: corpProxy, HTTP: "proxy.corp:3128", NoProxy: "localhost,.corp"}) {
+		t.Errorf("read %+v (capitals first, then lowercase)", h)
+	}
+	b, err := h.Upstream()
+	if want := "HTTPS_PROXY=" + corpProxy + "\nHTTP_PROXY=proxy.corp:3128\nNO_PROXY=localhost,.corp\n"; err != nil || string(b) != want {
+		t.Errorf("Upstream = %q, %v", b, err)
+	}
+	if got, want := h.Env(), []string{
+		"HTTP_PROXY=proxy.corp:3128", "http_proxy=proxy.corp:3128", "HTTPS_PROXY=" + corpProxy,
+		"https_proxy=" + corpProxy, "NO_PROXY=localhost,.corp", "no_proxy=localhost,.corp",
+	}; !slices.Equal(got, want) {
+		t.Errorf("Env = %q", got)
+	}
+	// NO_PROXY alone is no proxy.
+	none := HostProxy{NoProxy: "*"}
+	if b, err := none.Upstream(); !none.None() || b != nil || err != nil || none.Env() != nil {
+		t.Errorf("none: %q %v %q", b, err, none.Env())
+	}
+	for _, c := range []struct {
+		h    HostProxy
+		want string
+	}{
+		{HostProxy{HTTPS: "https://proxy.corp"}, "upstream_proxy_scheme scheme=https:// setting=HTTPS_PROXY"},
+		{HostProxy{HTTP: "SOCKS5://proxy.corp:1080"}, "upstream_proxy_scheme scheme=socks5:// setting=HTTP_PROXY"},
+		{HostProxy{HTTPS: "http://proxy.corp:x"}, "upstream_proxy_invalid setting=HTTPS_PROXY"},
+		{HostProxy{HTTPS: "http://proxy.corp\nX=1"}, "upstream_proxy_invalid setting=HTTPS_PROXY"},
+		{HostProxy{HTTPS: "proxy.corp:8080", NoProxy: "a\nHTTPS_PROXY=x"}, "upstream_proxy_invalid setting=NO_PROXY"},
+	} {
+		_, err := c.h.Upstream()
+		var m msg.M
+		if !errors.As(err, &m) || m.Names() != c.want {
+			t.Errorf("%+v: %v, want %s", c.h, err, c.want)
+		}
+	}
+}

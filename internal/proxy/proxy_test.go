@@ -161,7 +161,7 @@ func TestFloor(t *testing.T) {
 	if a, err := resolve(t.Context(), "10.9.8.7", 443); err != nil || len(a) != 1 {
 		t.Errorf("an address rule should pass the floor: %v %v", a, err)
 	}
-	if _, why := check(t.Context(), "localhost", 443); why == "" {
+	if _, why := check(t.Context(), "localhost", 443, false); why == "" {
 		t.Error("localhost passed the floor through '**'")
 	}
 }
@@ -176,7 +176,7 @@ func TestAddressDenyAppliesToNames(t *testing.T) {
 	if pol.addrAllowed(netip.MustParseAddr("127.0.0.1"), 8080) {
 		t.Error("addrAllowed ignores the deny")
 	}
-	if _, why := check(t.Context(), "localhost", 8080); why == "" {
+	if _, why := check(t.Context(), "localhost", 8080, false); why == "" {
 		t.Error("localhost, which resolves to denied addresses, passed")
 	}
 	pol = writePolicy(t, "**\n!1.1.1.1\n")
@@ -250,9 +250,15 @@ func TestOddHostsRefused(t *testing.T) {
 			t.Errorf("%q: %d %q (want 400, no allow command)", strings.SplitN(req, "\r\n", 2)[0], code, body)
 		}
 	}
-	for _, ok := range []string{"example.com", "a-b.c_d.test", "10.0.0.1", "[fd00::1]", "localhost"} {
+	for _, ok := range []string{"example.com", "a-b.c_d.test", "10.0.0.1", "[fd00::1]", "localhost", "1password.com", "x.0xyz.dev"} {
 		if !hostOK(ok) {
 			t.Errorf("hostOK(%q) = false", ok)
+		}
+	}
+	// Addresses in shorthand, which a company proxy may read as inet_aton does: never names.
+	for _, bad := range []string{"127.1", "2130706433", "0x7f000001", "10.1", "127.0.1.", "a.0x7f"} {
+		if hostOK(bad) {
+			t.Errorf("hostOK(%q) = true", bad)
 		}
 	}
 }

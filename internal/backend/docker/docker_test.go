@@ -407,6 +407,11 @@ func TestReport(t *testing.T) {
 	}
 }
 
+// noProxyArgs are container create's options that keep the Docker client's
+// proxies out of every container devvm makes.
+const noProxyArgs = "-e HTTP_PROXY= -e http_proxy= -e HTTPS_PROXY= -e https_proxy= -e FTP_PROXY= -e ftp_proxy=" +
+	" -e NO_PROXY= -e no_proxy= -e ALL_PROXY= -e all_proxy="
+
 // Base: Ubuntu's image pulled by digest, a labelled container from it,
 // prepared (the host's gid too, on Linux), its scripts run between the
 // stand-ins, sshd, then committed and deleted.
@@ -427,7 +432,7 @@ func TestBuildBase(t *testing.T) {
 	want := []string{
 		"docker image pull " + pinned,
 		"docker container create --name " + inst + " --label devvm.data=" + s.Dirs.Data + " --label devvm.key=" + baseKey +
-			" --label devvm.kind=build --init --user 0:0 --entrypoint sleep --cpus 4 --memory 8192m --memory-swap 8192m" +
+			" --label devvm.kind=build --init --user 0:0 --entrypoint sleep " + noProxyArgs + " --cpus 4 --memory 8192m --memory-swap 8192m" +
 			" --hostname devvm-build --network bridge " + pinned + " infinity",
 		"docker container start " + inst,
 		"docker exec -i -u 0 " + inst + " sh -s -- u 501 1000",
@@ -570,7 +575,7 @@ func TestCreateVM(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "docker container create --name " + vm + " --label devvm.data=" + s.Dirs.Data + " --label devvm.config=" + cfg.hash() +
-		" --label devvm.kind=vm --init --user 0:0 --entrypoint sleep --cpus 2 --memory 8192m --memory-swap 8192m" +
+		" --label devvm.kind=vm --init --user 0:0 --entrypoint sleep " + noProxyArgs + " --cpus 2 --memory 8192m --memory-swap 8192m" +
 		" --hostname web --network bridge --mount type=bind,src=/p/web,dst=/p/web --mount type=bind,src=/h/.claude,dst=/h/.claude,readonly" +
 		" --mount type=volume,src=" + s.toolsVolume() + ",dst=/mnt/devvm-tools,readonly --mount type=volume,src=" + vm + "-home,dst=/home/u.guest --cap-drop NET_RAW " +
 		s.imageRef(baseKey) + " infinity"

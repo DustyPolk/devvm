@@ -1794,6 +1794,11 @@ func ProxyStartFailed(log string, vm string) M {
 	return M{id: "proxy_start_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
 
+// ProxyStopFailed is [proxy_stop_failed]: "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
+func ProxyStopFailed(vm string) M {
+	return M{id: "proxy_stop_failed", vals: []val{{"vm", vm}}}
+}
+
 // PullingImage is [pulling_image]: "pulling {{.image}}"
 func PullingImage(image string) M {
 	return M{id: "pulling_image", vals: []val{{"image", image}}}
@@ -2379,6 +2384,16 @@ func UpdateMounts(vm string) M {
 	return M{id: "update_mounts", vals: []val{{"vm", vm}}}
 }
 
+// UpstreamProxyInvalid is [upstream_proxy_invalid]: "{{.setting}} isn't a proxy setting devvm can read. Set it as http://host:port, or unset it."
+func UpstreamProxyInvalid(setting string) M {
+	return M{id: "upstream_proxy_invalid", vals: []val{{"setting", setting}}}
+}
+
+// UpstreamProxyScheme is [upstream_proxy_scheme]: "{{.setting}} names a {{.scheme}} proxy, and network policy goes only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+func UpstreamProxyScheme(scheme string, setting string) M {
+	return M{id: "upstream_proxy_scheme", vals: []val{{"scheme", scheme}, {"setting", setting}}}
+}
+
 // UsageError is [usage_error]: "{{.reason}}. Run devvm --help to see the commands and flags."
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
@@ -2854,6 +2869,7 @@ var specs = map[string]spec{
 	"proxy_failed":                     {fields: []string{"reason"}},
 	"proxy_port_taken":                 {fields: []string{"port", "vm"}},
 	"proxy_start_failed":               {fields: []string{"log", "vm"}},
+	"proxy_stop_failed":                {fields: []string{"vm"}},
 	"pulling_image":                    {fields: []string{"image"}},
 	"qemu_missing":                     {fields: []string{"program"}},
 	"qemu_missing_fix":                 {fields: []string{"fix", "program"}},
@@ -2971,6 +2987,8 @@ var specs = map[string]spec{
 	"unsafe_folder_used":               {fields: []string{"dir", "holds"}},
 	"up_failed":                        {fields: []string{"reason"}},
 	"update_mounts":                    {fields: []string{"vm"}},
+	"upstream_proxy_invalid":           {fields: []string{"setting"}},
+	"upstream_proxy_scheme":            {fields: []string{"scheme", "setting"}},
 	"usage_error":                      {fields: []string{"reason"}},
 	"use_parent_vm":                    {fields: []string{"dir", "parent", "vm"}},
 	"use_parent_vm_repo":               {fields: []string{"dir", "parent", "repo", "vm"}},

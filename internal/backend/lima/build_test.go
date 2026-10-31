@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -137,7 +138,7 @@ func TestBuildImageLayer(t *testing.T) {
 	checkLines(t, f.lines(), []string{
 		"limactl stop devvm-img-" + baseKey,
 		"limactl clone --tty=false --mount-none devvm-img-" + baseKey + " " + inst,
-		"limactl edit --tty=false " + inst + " --set .portForwards = ",
+		"limactl edit --tty=false " + inst + " --set .propagateProxyEnv=false --set .portForwards = ",
 		"limactl start --tty=false " + inst,
 		"limactl shell " + inst + " bash -s",
 		"limactl shell --workdir / " + inst + " sync",
@@ -145,6 +146,59 @@ func TestBuildImageLayer(t *testing.T) {
 	})
 	if fi, err := os.Stat(l.disk(inst)); err != nil || fi.Mode().Perm()&0o222 != 0 {
 		t.Errorf("the image's disk: %v, %v", fi.Mode(), err)
+	}
+}
+
+// Behind the host's proxy, a build's scripts get its variables on their
+// input, a loopback proxy as the guest reaches the host, and sudo keeps
+// them while the scripts run: the proxy is in no argument, and the build
+// VM gets none of the host's settings itself.
+func TestBuildImageHostProxy(t *testing.T) {
+	l, f := buildLima(t, "linux", "Running")
+	env := map[string]string{"HTTPS_PROXY": "http://corp:pa55@127.0.0.1:3128", "no_proxy": ".corp"} //nolint:gosec // a fake company proxy's fake password
+	l.Getenv = func(k string) string { return env[k] }
+	inst := "devvm-img-" + layerKey
+	writeTestFile(t, l.disk(inst), "qcow2")
+	if _, err := l.BuildImage(t.Context(), backend.ImageSpec{
+		Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
+		Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var scripts []string
+	for _, c := range f.calls {
+		if strings.Contains(c.line(), "pa55") || strings.Contains(strings.Join(c.env, " "), "pa55") {
+			t.Errorf("the proxy's password is in a command: %s", c.line())
+		}
+		if strings.HasPrefix(c.line(), "limactl shell") && c.stdin != "" {
+			scripts = append(scripts, c.line()+"\n"+c.stdin)
+		}
+	}
+	want := []string{
+		"limactl shell --workdir / " + inst + " sudo sh -s\nprintf '%s\\n' '" + sudoKeepProxy + "' > /etc/sudoers.d/devvm-build-proxy && chmod 440 /etc/sudoers.d/devvm-build-proxy\n",
+		"limactl shell " + inst + " bash -s\nexport HTTPS_PROXY='http://corp:pa55@host.lima.internal:3128' https_proxy='http://corp:pa55@host.lima.internal:3128'" +
+			" NO_PROXY='.corp' no_proxy='.corp'\n#!/bin/bash\necho foo\n",
+		"limactl shell --workdir / " + inst + " sudo sh -s\nrm -f /etc/sudoers.d/devvm-build-proxy\n",
+	}
+	if !slices.Equal(scripts, want) {
+		t.Errorf("scripts:\n%s\nwant:\n%s", strings.Join(scripts, "\n--\n"), strings.Join(want, "\n--\n"))
+	}
+	if !slices.ContainsFunc(f.lines(), func(l string) bool { return strings.Contains(l, ".propagateProxyEnv=false") }) {
+		t.Error("the build VM gets the host's proxy settings from Lima")
+	}
+}
+
+func TestGuestProxyURL(t *testing.T) {
+	for raw, want := range map[string]string{ //nolint:gosec // fake company proxies' fake passwords
+		"http://u:p@localhost:3128": "http://u:p@host.lima.internal:3128",
+		"127.0.0.1:8080":            "http://host.lima.internal:8080",
+		"http://[::1]":              "http://host.lima.internal",
+		"http://proxy.corp:8080":    "http://proxy.corp:8080",
+		"socks5://127.0.0.1:1080":   "socks5://127.0.0.1:1080",
+	} {
+		if got := guestProxyURL(raw); got != want {
+			t.Errorf("guestProxyURL(%q) = %q, want %q", raw, got, want)
+		}
 	}
 }
 

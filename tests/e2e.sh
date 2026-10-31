@@ -262,6 +262,7 @@ cleanup() {
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
+  [[ -z ${corp:-} ]] || kill "$corp" 2>/dev/null   # the company proxy's stand-in
   [[ -z ${hostprog:-} ]] || kill "$hostprog" 2>/dev/null
   [[ -z ${ca_server:-} ]] || kill "$ca_server" 2>/dev/null
   [[ -z ${cad:-} ]] || rm -rf "$cad" "$cafolder"   # the run's own CA, and devvm's CA folder in the sandbox
@@ -276,7 +277,8 @@ cleanup() {
   pkill -f "[_]proxy -listen .* -listen-unix $XDG_DATA_HOME/devvm/docker/" 2>/dev/null   # Docker VMs' and builds' proxies
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/dns-probe.sh" "$work/d-dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass"
+    "$work/dns-probe.sh" "$work/d-dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
+    "$work/corp.auth" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -603,6 +605,26 @@ else
 fi
 rm -rf "$cafolder"
 rm -f "$layers/e2ejava.sh"
+
+# The host's proxy: a build's commands get its settings, sudo keeping them, and its image keeps
+# none of them (Lima writes the settings it propagates into the guest's /etc/environment). The
+# proxy is a closed port with a password of this run's, and NO_PROXY=* keeps every tool off it, as
+# the layer needs no network. Its disk and Lima's files for it are read whole, free space included.
+pxpass=e2e-proxy-pw-$$-$(date +%s)
+pxtoken=e2e-proxy-seen-$$-$(date +%s)
+printf '#!/bin/bash\nset -euo pipefail\n%s\necho %s\n' \
+  '[[ $HTTPS_PROXY == *e2e-proxy-pw-* && $http_proxy == *e2e-proxy-pw-* && $(sudo printenv HTTPS_PROXY) == *e2e-proxy-pw-* ]]' \
+  "$pxtoken" > "$layers/e2eproxy.sh"
+check "a build's commands get the host's proxy settings" bash -c "
+  env HTTPS_PROXY='http://corp:$pxpass@127.0.0.1:9' HTTP_PROXY='http://corp:$pxpass@127.0.0.1:9' NO_PROXY='*' \
+    '$D' build e2eproxy </dev/null >'$work/last.log' 2>&1 &&
+  grep -qx '$pxtoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+owned e2eproxy
+kp=$(keys_of e2eproxy | head -1)
+check "its image keeps none of them: not its disk, Lima's files for it or devvm's logs" bash -c "
+  [[ -n '$kp' && -d '$LIMA_HOME/devvm-img-$kp' ]] &&
+  ! LC_ALL=C grep -rqaF -D skip '$pxpass' '$LIMA_HOME/devvm-img-$kp' '$XDG_DATA_HOME/devvm/logs'"
+rm -f "$layers/e2eproxy.sh"
 
 # A failed script keeps its image's VM, stopped and without a record, for inspection.
 printf '#!/bin/bash\nexit 3\n' > "$layers/e2efail.sh"
@@ -1198,6 +1220,39 @@ check "the host's loopback services are unreachable, directly or through the pro
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://192.168.5.2:18765/' </dev/null) == 403 ]] &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} --noproxy \"\" -x \"\$HTTP_PROXY\" http://127.0.0.1:18765/' </dev/null) == 403 ]]"
 kill "$listener" 2>/dev/null; listener=""
+# A company proxy: a devvm _proxy of this run's, with a password of its own, allowing any host. The
+# VM's next launch with HTTPS_PROXY and HTTP_PROXY in devvm's environment starts its proxy again
+# through it, which sends an allowed host there by name, and refuses one the VM's policy doesn't
+# allow before it gets there. The launch after, without them, starts it again going directly.
+corppw=e2e-corp-pw-$$-$(date +%s)
+echo "$corppw" > "$work/corp.auth"; printf '**\n' > "$work/corp.policy"; : > "$work/corp.jsonl"
+"$D" _proxy -listen 127.0.0.1:18766 -vm e2e-corp -auth-file "$work/corp.auth" -policy "$work/corp.policy" \
+  -log "$work/corp.jsonl" >"$work/corp.log" 2>&1 &
+corp=$!
+sleep 1
+corpurl="http://devvm:$corppw@127.0.0.1:18766"
+check "behind a company proxy, an allowed host goes through it by name, and a blocked one never reaches it" bash -c "
+  (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' \
+    '$D' >'$work/last.log' 2>&1) &&
+  grep -q -- ' -upstream ' <(ps -axww -o command= | grep -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') &&
+  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
+  grep -q '\"event\":\"tunnel\",\"host\":\"github.com\",\"port\":443' '$work/corp.jsonl' &&
+  grep '\"host\":\"github.com\"' '$events' | grep -q '\"upstream\":\"127.0.0.1:18766\"' &&
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://example.com' </dev/null 2>&1 | grep -q 403 &&
+  ! grep -q '\"host\":\"example.com\"' '$work/corp.jsonl'"
+check "the company proxy's password is in no process's arguments, log or VM" bash -c "
+  ! ps -axww -o command= | grep -qF '$corppw' &&
+  ! grep -rqF '$corppw' '$XDG_DATA_HOME/devvm/logs' &&
+  ! limactl shell --workdir / $vm sudo grep -rqsF '$corppw' /etc /home /root </dev/null &&
+  ! limactl shell --workdir / $vm bash -lc env </dev/null | grep -qF '$corppw'"
+check "without them, the next launch starts the VM's proxy again, going directly" bash -c "
+  (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy \
+    '$D' >'$work/last.log' 2>&1) &&
+  ! grep -q -- ' -upstream ' <(ps -axww -o command= | grep -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') &&
+  n0=\$(grep -c . '$work/corp.jsonl') &&
+  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
+  [[ \$(grep -c . '$work/corp.jsonl') == \"\$n0\" ]]"
+kill "$corp" 2>/dev/null; corp=""
 check "the proxy refuses anything on the host without the VM's password" bash -c "
   [[ \$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:$pp http://devvm.proxy/blocked) == 407 ]]"
 check "the token never reaches the VM" bash -c "

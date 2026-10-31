@@ -1,8 +1,10 @@
 package lima
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -36,9 +38,10 @@ func (testUI) Interrupted() bool                                         { retur
 
 // call is a command the fake runner was given.
 type call struct {
-	argv []string // the program's base name, then its arguments
-	env  []string
-	dir  string
+	argv  []string // the program's base name, then its arguments
+	env   []string
+	dir   string
+	stdin string // what a script fed on its input got
 }
 
 func (c call) line() string { return strings.Join(c.argv, " ") }
@@ -59,6 +62,10 @@ func (f *fakeRunner) record(cmd *exec.Cmd) error {
 	defer f.mu.Unlock()
 	argv := append([]string{filepath.Base(cmd.Path)}, cmd.Args[1:]...)
 	c := call{argv: argv, env: cmd.Env, dir: cmd.Dir}
+	if r, ok := cmd.Stdin.(*bytes.Reader); ok {
+		b, _ := io.ReadAll(r)
+		c.stdin = string(b)
+	}
 	f.calls = append(f.calls, c)
 	if f.do != nil {
 		f.do(c)
