@@ -932,6 +932,44 @@ func TestDevvmCacheVolumes(t *testing.T) {
 	}
 }
 
+// Leftovers names what Forget deletes of a gone VM's, as the engine has
+// it: its networks, its volumes and its commit, and nothing it lacks;
+// someone else's volume by one of those names fails it, as it does Forget.
+func TestLeftovers(t *testing.T) {
+	s := newSandbox(t)
+	const gone = "devvm-gone-12345612345612"
+	commit := s.commitRef(gone, 1)
+	for _, o := range []string{"volumes/" + homeVolume(gone), "volumes/" + gone + "-docker", "networks/" + netName(gone), "images/" + commit} {
+		dir := filepath.Join(s.stub, "docker", o)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "labels"), []byte(LabelKey+"="+s.Data+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.writeRecord(gone, record{Image: "0123456789ab", Commit: commit}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Leftovers(t.Context(), gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []backend.Leftover{
+		{Kind: backend.LeftoverNetwork, Name: netName(gone)},
+		{Kind: backend.LeftoverVolume, Name: homeVolume(gone)},
+		{Kind: backend.LeftoverVolume, Name: gone + "-docker"},
+		{Kind: backend.LeftoverImage, Name: commit},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("Leftovers = %+v, want %+v", got, want)
+	}
+	s.touch(t, "docker-foreign-"+homeVolume(gone))
+	if _, err := s.Leftovers(t.Context(), gone); id(err) != "docker_volume_foreign" {
+		t.Errorf("someone else's volume: %v, want docker_volume_foreign", err)
+	}
+}
+
 // Commands in a VM run as its user with a login's environment; a shell
 // gets a terminal when devvm has one; without ssh, through docker exec.
 func TestExecAndShell(t *testing.T) {

@@ -41,6 +41,34 @@ type Forgetter interface {
 	Forget(ctx context.Context, vm string) error
 }
 
+// LeftoverKind is the kind of a backend's own resource that Forget
+// deletes.
+type LeftoverKind int
+
+// The kinds of Leftover.
+const (
+	LeftoverContainer LeftoverKind = iota // a container of the VM's besides the VM, such as Docker's relay
+	LeftoverNetwork
+	LeftoverVolume
+	LeftoverImage
+)
+
+// Leftover is one of a backend's own resources that Forget deletes.
+type Leftover struct {
+	Kind LeftoverKind
+	Name string
+}
+
+// LeftoverLister is a Forgetter whose Forget deletes resources of the
+// backend's own, such as Docker's volumes, which it names first, so
+// devvm gc --orphans lists each before it asks.
+type LeftoverLister interface {
+	// Leftovers are the resources Forget deletes for vm, as the backend
+	// has them now. One Forget would refuse (someone else's by that name)
+	// fails it.
+	Leftovers(ctx context.Context, vm string) ([]Leftover, error)
+}
+
 // Stray is a VM with devvm's label that this devvm has no state for: one
 // made by a devvm with another data folder (a sandbox's, a test's), or
 // one whose state is gone.

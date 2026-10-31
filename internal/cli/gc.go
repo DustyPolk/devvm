@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
@@ -288,6 +289,9 @@ func (p gcPlan) showOrphans(u *ui.UI) {
 		u.Say(msg.GCOrphans(len(orphans)))
 		for _, o := range orphans {
 			u.Say(msg.GCOrphan(o.Backend, o.Dir, o.Name))
+			for _, l := range o.Leaves {
+				u.Say(orphanLeftover(l))
+			}
 		}
 	}
 	for _, b := range p.orphans.Unknown {
@@ -299,6 +303,21 @@ func (p gcPlan) showOrphans(u *ui.UI) {
 	for _, n := range p.orphans.Recent {
 		u.Note(msg.GCOrphanRecent(n))
 	}
+}
+
+// orphanLeftover is the line naming one of the backend's own resources
+// that gc --orphans deletes with a VM's state.
+func orphanLeftover(l backend.Leftover) msg.M {
+	switch l.Kind {
+	case backend.LeftoverContainer:
+		return msg.GCOrphanContainer(l.Name)
+	case backend.LeftoverNetwork:
+		return msg.GCOrphanNetwork(l.Name)
+	case backend.LeftoverImage:
+		return msg.GCOrphanImage(l.Name)
+	case backend.LeftoverVolume: // below
+	}
+	return msg.GCOrphanVolume(l.Name)
 }
 
 // show lists what gc deletes.

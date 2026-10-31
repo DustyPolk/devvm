@@ -748,6 +748,22 @@ other = "What devvm keeps for {{.count}} VMs their backend no longer has:"
 description = "dir is the VM's project folder"
 other = "  {{.vm}} ({{.backend}}), for {{.dir}}"
 
+[gc_orphan_volume]
+description = "volume is a volume of the backend's (Docker's) that gc --orphans deletes with the VM above it, such as its home folder's"
+other = "    volume {{.volume}}"
+
+[gc_orphan_network]
+description = "network is a network of the backend's (Docker's) that gc --orphans deletes with the VM above it"
+other = "    network {{.network}}"
+
+[gc_orphan_container]
+description = "container is a container of the backend's besides the VM, such as Docker's relay, that gc --orphans deletes with the VM above it"
+other = "    container {{.container}}"
+
+[gc_orphan_image]
+description = "image is the image the VM above it last committed its changes to, which gc --orphans deletes with it"
+other = "    image {{.image}}"
+
 [forgot_orphan]
 other = "deleted what devvm kept for {{.vm}}"
 

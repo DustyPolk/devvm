@@ -31,6 +31,9 @@ type Orphan struct {
 	Name, Backend string
 	Dir           string    // its project folder
 	Changed       time.Time // when its state last changed
+	// Leaves are its backend's own resources that Forget deletes with it
+	// (backend.LeftoverLister), such as its Docker volumes.
+	Leaves []backend.Leftover
 }
 
 // LeftoverReport is what Find found.
@@ -98,9 +101,25 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 			r.Recent = append(r.Recent, n)
 			continue
 		}
-		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Get(state.KeyDir), Changed: fi.ModTime()})
+		leaves, err := leftoversOf(ctx, b, n)
+		if err != nil {
+			return r, err
+		}
+		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Get(state.KeyDir), Changed: fi.ModTime(), Leaves: leaves})
 	}
 	return r, nil
+}
+
+// leftoversOf are the resources of b's own that Forget deletes for vm;
+// none for a backend that keeps none (not a backend.LeftoverLister).
+func leftoversOf(ctx context.Context, b backend.Backend, vm string) ([]backend.Leftover, error) {
+	l, ok := b.(backend.LeftoverLister)
+	if !ok {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, leftoverAsk)
+	defer cancel()
+	return l.Leftovers(ctx, vm)
 }
 
 func (r *LeftoverReport) unknown(b string) {

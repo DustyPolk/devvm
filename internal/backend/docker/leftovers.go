@@ -8,12 +8,14 @@ import (
 	"os"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 var (
-	_ backend.Locator     = (*Docker)(nil)
-	_ backend.Forgetter   = (*Docker)(nil)
-	_ backend.StrayFinder = (*Docker)(nil)
+	_ backend.Locator        = (*Docker)(nil)
+	_ backend.Forgetter      = (*Docker)(nil)
+	_ backend.LeftoverLister = (*Docker)(nil)
+	_ backend.StrayFinder    = (*Docker)(nil)
 )
 
 // Location is the engine this run's docker reaches (Docker Desktop's, a
@@ -68,6 +70,48 @@ func (d *Docker) Forget(ctx context.Context, vm string) error {
 		return d.removeImage(ctx, r.Commit)
 	}
 	return nil
+}
+
+// Leftovers are what Forget deletes of Docker's own for a VM, as the
+// engine has them now: its relay, its networks and volumes, and the image
+// its last change was committed to. Someone else's by one of those names
+// fails it, as it does Forget.
+func (d *Docker) Leftovers(ctx context.Context, vm string) ([]backend.Leftover, error) {
+	var out []backend.Leftover
+	relay := relayName(vm)
+	if _, err := d.inspect(ctx, relay); err == nil {
+		out = append(out, backend.Leftover{Kind: backend.LeftoverContainer, Name: relay})
+	} else if errors.Is(err, errForeign) {
+		return nil, msg.DockerContainerForeign(relay)
+	} else if !errors.Is(err, backend.ErrNotFound) {
+		return nil, err
+	}
+	for _, n := range []string{netName(vm), layerNetName(vm)} {
+		if _, err := (egress{d}).network(ctx, n); err == nil {
+			out = append(out, backend.Leftover{Kind: backend.LeftoverNetwork, Name: n})
+		} else if errors.Is(err, errForeign) {
+			return nil, msg.DockerNetworkForeign(n)
+		} else if !errors.Is(err, backend.ErrNotFound) {
+			return nil, err
+		}
+	}
+	for _, v := range append([]string{homeVolume(vm), cloneVolume(vm)}, engineVolumes(vm)...) {
+		if ok, err := d.volumeExists(ctx, v); err != nil {
+			return nil, err
+		} else if ok {
+			out = append(out, backend.Leftover{Kind: backend.LeftoverVolume, Name: v})
+		}
+	}
+	r, err := d.readRecord(vm)
+	if err != nil || r.Commit == "" {
+		return out, err
+	}
+	if _, err := d.inspectImage(ctx, r.Commit); err == nil {
+		out = append(out, backend.Leftover{Kind: backend.LeftoverImage, Name: r.Commit})
+	} else if !errors.Is(err, backend.ErrNotFound) {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Strays are the VMs' containers with this devvm's label that it has no

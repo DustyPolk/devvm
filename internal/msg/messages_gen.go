@@ -1134,14 +1134,34 @@ func GCOrphan(backend string, dir string, vm string) M {
 	return M{id: "gc_orphan", vals: []val{{"backend", backend}, {"dir", dir}, {"vm", vm}}}
 }
 
+// GCOrphanContainer is [gc_orphan_container]: "    container {{.container}}"
+func GCOrphanContainer(container string) M {
+	return M{id: "gc_orphan_container", vals: []val{{"container", container}}}
+}
+
 // GCOrphanElsewhere is [gc_orphan_elsewhere]: "{{.vm}} was made in another Lima home, HOME or Docker engine than this run's, so its state stays."
 func GCOrphanElsewhere(vm string) M {
 	return M{id: "gc_orphan_elsewhere", vals: []val{{"vm", vm}}}
 }
 
+// GCOrphanImage is [gc_orphan_image]: "    image {{.image}}"
+func GCOrphanImage(image string) M {
+	return M{id: "gc_orphan_image", vals: []val{{"image", image}}}
+}
+
+// GCOrphanNetwork is [gc_orphan_network]: "    network {{.network}}"
+func GCOrphanNetwork(network string) M {
+	return M{id: "gc_orphan_network", vals: []val{{"network", network}}}
+}
+
 // GCOrphanRecent is [gc_orphan_recent]: "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
 func GCOrphanRecent(vm string) M {
 	return M{id: "gc_orphan_recent", vals: []val{{"vm", vm}}}
+}
+
+// GCOrphanVolume is [gc_orphan_volume]: "    volume {{.volume}}"
+func GCOrphanVolume(volume string) M {
+	return M{id: "gc_orphan_volume", vals: []val{{"volume", volume}}}
 }
 
 // GCOrphans is [gc_orphans]: "What devvm keeps for {{.count}} VMs their backend no longer has:"
@@ -2947,8 +2967,12 @@ var specs = map[string]spec{
 	"gc_old_hint":                      {},
 	"gc_older_than_needs_exports":      {},
 	"gc_orphan":                        {fields: []string{"backend", "dir", "vm"}},
+	"gc_orphan_container":              {fields: []string{"container"}},
 	"gc_orphan_elsewhere":              {fields: []string{"vm"}},
+	"gc_orphan_image":                  {fields: []string{"image"}},
+	"gc_orphan_network":                {fields: []string{"network"}},
 	"gc_orphan_recent":                 {fields: []string{"vm"}},
+	"gc_orphan_volume":                 {fields: []string{"volume"}},
 	"gc_orphans":                       {plural: true, fields: []string{"count"}},
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},

@@ -21,10 +21,13 @@ exec sh -c 'printf "image=base\ndir=/p/moved\nbackend=lima\nnet=off\nbackend_at=
 exec sh -c 'printf "image=base\ndir=/p/norec\nbackend=lima\nnet=off\n" > "$VMS/devvm-norec-12345612345612"'
 exec sh -c 'cd "$DATA" && for v in live gone; do echo x > logs/devvm-$v-12345612345612.jsonl; echo x > run/devvm-$v-12345612345612.sb; echo x > lima-vms/devvm-$v-12345612345612.ports; done'
 exec sh -c 'cd "$VMS" && touch -t 202001010000 devvm-live-* devvm-gone-* devvm-moved-* devvm-norec-*'
-# A Docker VM whose container docker rm deleted, its home volume left.
+# A Docker VM whose container docker rm deleted, its home volume, its
+# network and the commit of its last change left: gc names each before
+# it asks.
 exec sh -c 'printf "image=base\ndir=/p/dock\nbackend=docker\nnet=off\n" > "$VMS/devvm-dock-12345612345612" && touch -t 202001010000 "$VMS/devvm-dock-12345612345612"'
-mkdir $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home
-exec sh -c 'echo "devvm.data=$DATA" > "$STUB_DIR/docker/volumes/devvm-dock-12345612345612-home/labels"'
+mkdir $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home $STUB_DIR/docker/networks/devvm-dock-12345612345612-net $STUB_DIR/docker/images/devvm-x:devvm-dock-12345612345612-1 $DATA/docker/vms
+exec sh -c 'for d in volumes/devvm-dock-12345612345612-home networks/devvm-dock-12345612345612-net images/devvm-x:devvm-dock-12345612345612-1; do echo "devvm.data=$DATA" > "$STUB_DIR/docker/$d/labels"; done'
+exec sh -c 'echo "{\"image\":\"0123456789ab\",\"commit\":\"devvm-x:devvm-dock-12345612345612-1\"}" > "$DATA/docker/vms/devvm-dock-12345612345612.json"'
 # A VM of a backend this devvm doesn't have (a newer devvm's), which
 # can't be asked; a smolvm VM whose machine is gone.
 exec sh -c 'printf "image=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/devvm-other-12345612345612" && touch -t 202001010000 "$VMS/devvm-other-12345612345612"'
@@ -38,7 +41,8 @@ exec sh -c ': > "$STUB_LOG"'
 exec devvm gc --orphans
 stdout '^gc_orphans count=3$'
 stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345612$'
-stdout '^gc_orphan backend=docker dir=/p/dock vm=devvm-dock-12345612345612$'
+stdout '^gc_orphan backend=docker dir=/p/dock vm=devvm-dock-12345612345612\ngc_orphan_network network=devvm-dock-12345612345612-net\ngc_orphan_volume volume=devvm-dock-12345612345612-home\ngc_orphan_image image=devvm-x:devvm-dock-12345612345612-1$'
+stdout -count=3 '^gc_orphan_'
 stdout '^gc_orphan backend=smolvm dir=/p/smol vm=devvm-smol-12345612345612$'
 stderr '^gc_orphans_unknown backend=nope$'
 stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345612$'
@@ -55,6 +59,8 @@ stdout '^==> forgot_orphan vm=devvm-dock-12345612345612$'
 ! exists $DATA/lima-vms/devvm-gone-12345612345612.ports
 ! exists $VMS/devvm-dock-12345612345612
 ! exists $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home
+! exists $STUB_DIR/docker/networks/devvm-dock-12345612345612-net
+! exists $STUB_DIR/docker/images/devvm-x:devvm-dock-12345612345612-1
 exists $VMS/devvm-live-12345612345612
 exists $DATA/logs/devvm-live-12345612345612.jsonl
 exists $DATA/run/devvm-live-12345612345612.sb
