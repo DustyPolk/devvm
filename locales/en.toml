@@ -777,6 +777,28 @@ other = "Your own entries in {{.backend}}'s cache stay. Delete these?"
 one = "deleted {{.count}} entry of {{.backend}}'s cache"
 other = "deleted {{.count}} entries of {{.backend}}'s cache"
 
+[retention_deleted]
+other = "retention deleted {{.exports}} exports, {{.tools}} shared tool images no VM has, and what devvm kept for {{.orphans}} VMs gone from their backend"
+
+[retention_off]
+other = "no retention setting is on"
+
+[retention_busy]
+other = "Another devvm is applying the retention settings. Run devvm gc --retention again once it's done."
+
+[retention_unreadable]
+other = "The retention settings can't be read, so devvm applies none. Fix the line it names, or run devvm space set KEY= to turn one off."
+
+[retention_failed]
+other = "Applying the retention settings failed. Run devvm gc --retention to see why."
+
+[retention_bad]
+description = "reason is why, in English, such as unknown key \"x\" or an age's form"
+other = "That retention setting is refused, and nothing changed: {{.reason}}."
+
+[retention_saved]
+other = "saved the retention settings in {{.file}}"
+
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
 other = "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."

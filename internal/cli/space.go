@@ -79,6 +79,32 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&asJSON, "json", false, "print it as JSON, for scripts")
+	c.AddCommand(&cobra.Command{
+		Use:   "set KEY=VALUE...",
+		Short: "Change the retention settings: what devvm deletes on its own",
+		Long: "Change the retention settings, each KEY=VALUE, and KEY= to turn one off: logs.runs (the run " +
+			"logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or " +
+			"beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had " +
+			"for that long deleted) and orphans.age (what devvm keeps for VMs gone from their backend for " +
+			"that long, deleted by devvm gc --retention). Ages are 30d, 2w or 12h. Every setting is off " +
+			"unless set. A bad key or value is refused, and nothing is written. devvm applies them once a " +
+			"day, and devvm gc --retention at once; they never delete a VM, an image or a tool any VM has.",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			dirs, err := paths.FromEnv()
+			if err == nil {
+				_, err = state.SetRetention(dirs, args)
+				if err != nil {
+					if _, corrupt := errors.AsType[*state.CorruptError](err); !corrupt {
+						err = msg.RetentionBad(err.Error())
+					}
+				}
+			}
+			fail(u, err, msg.SpaceFailed)
+			u.Info(msg.RetentionSaved(dirs.Retention()))
+			return nil
+		},
+	})
 	return c
 }
 
@@ -92,6 +118,19 @@ type spaceRow struct {
 	Kept    string `json:"kept"`  // one of the kept constants
 	GC      int64  `json:"gc"`    // what devvm gc frees of it now
 	Rest    string `json:"rest"`  // what frees the rest
+	// Retain is the retention setting that applies to it, as written, ""
+	// when there's none or it's off; RetainFrees what it would free now.
+	Retain      string `json:"retain,omitempty"`
+	RetainFrees int64  `json:"retain_frees,omitempty"`
+}
+
+// retainCell is how the RETAIN column shows a row's setting: off, or its
+// value and what it would free now.
+func (s spaceRow) retainCell() string {
+	if s.Retain == "" {
+		return ""
+	}
+	return s.Retain + " (" + humanSize(s.RetainFrees) + ")"
 }
 
 // cacheRow is one of a backend's own caches.
@@ -132,6 +171,8 @@ type spaceEnv struct {
 	inUse map[string]int
 	// vms is each backend's VMs, by name, for those that answered.
 	vms map[string]map[string]bool
+	ret state.Retention // the retention settings
+	now time.Time
 }
 
 // space reads what devvm keeps. Nothing it runs changes anything, and
@@ -151,7 +192,11 @@ func space(ctx context.Context, u *ui.UI, g *globals) (spaceReport, error) {
 	if err != nil {
 		return r, err
 	}
-	e := spaceEnv{u: u, b: b, reg: reg, inUse: inUse, vms: map[string]map[string]bool{}}
+	ret, err := state.ReadRetention(b.Dirs)
+	if err != nil {
+		return r, err
+	}
+	e := spaceEnv{u: u, b: b, reg: reg, inUse: inUse, vms: map[string]map[string]bool{}, ret: ret, now: time.Now()}
 	used, err := state.Backends(b.Dirs)
 	if err != nil {
 		return r, err
@@ -279,7 +324,7 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 		key := be + " " + libc
 		row, ok := byKey[key]
 		if !ok {
-			row = &spaceRow{What: "tools " + cmp.Or(libc, "-"), Backend: be, Sized: true, Kept: keptRemade, Rest: "gc --tools"}
+			row = &spaceRow{What: "tools " + cmp.Or(libc, "-"), Backend: be, Sized: true, Kept: keptRemade, Rest: "gc --tools", Retain: e.ret.Raw[state.RetainToolsAge]}
 			byKey[key] = row
 			keys = append(keys, key)
 		}
@@ -288,6 +333,9 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 		if t.State == tools.StateUnused {
 			row.GC += t.Size
 		}
+		if e.ret.ToolsAge > 0 && e.idleFor(t) >= e.ret.ToolsAge {
+			row.RetainFrees += t.Size
+		}
 	}
 	slices.Sort(keys)
 	rows := make([]spaceRow, 0, len(keys))
@@ -295,6 +343,20 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 		rows = append(rows, *byKey[k])
 	}
 	return rows, nil
+}
+
+// idleFor is how long a current tool image has had no VM, as retention
+// recorded it (Share.Idle); 0 when it hasn't, or a VM has it. It changes
+// nothing.
+func (e spaceEnv) idleFor(t tools.Listed) time.Duration {
+	if t.State != tools.StateCurrent || t.VMs > 0 {
+		return 0
+	}
+	fi, err := os.Stat(filepath.Join(e.b.Dirs.Tools(), t.File+".idle"))
+	if err != nil {
+		return 0
+	}
+	return max(e.now.Sub(fi.ModTime()), 0)
 }
 
 // listTools lists the share as devvm images and devvm gc do: current for
@@ -404,10 +466,19 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 		return nil, err
 	}
 	other := otherState(d) - left.Size
+	exportsRow := spaceRow{
+		What: "exports", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --exports",
+		Retain: e.retainOf(state.RetainExportsAge, state.RetainExportsCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
+	}
+	runsRow := spaceRow{
+		What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog,
+		Rest: "the newest " + strconv.Itoa(cmp.Or(e.ret.RunLogs, 20)) + " stay", Retain: e.retainOf(state.RetainRunLogs),
+		RetainFrees: oldestBeyond(d.RunLogs(), e.ret.RunLogs),
+	}
 	return nonEmpty(
-		spaceRow{What: "exports", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --exports"},
+		exportsRow,
 		spaceRow{What: "network logs", Count: logs.count, Size: logs.size, Sized: true, Kept: keptLog, Rest: "devvm rm"},
-		spaceRow{What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog, Rest: "the newest 20 stay"},
+		runsRow,
 		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, GC: dirsSize(oldMise), Rest: "-"},
 		spaceRow{What: "devvm's files", Count: assets.count, Size: assets.size, Sized: true, Kept: keptRemade, GC: stale, Rest: "-"},
 		left,
@@ -436,7 +507,7 @@ func (e spaceEnv) staleAssets() (int64, error) {
 // longer has them: their state, run and backend files. Their logs are
 // network logs'. A VM whose backend didn't answer is never one.
 func (e spaceEnv) leftovers() (spaceRow, error) {
-	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans"}
+	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans", Retain: e.retainOf(state.RetainOrphansAge)}
 	names, err := state.VMNames(e.b.Dirs)
 	if err != nil {
 		return row, err
@@ -451,11 +522,52 @@ func (e spaceEnv) leftovers() (spaceRow, error) {
 			continue
 		}
 		row.Count++
+		var n64 int64
 		for _, f := range leftoverFiles(e.b.Dirs, n) {
-			row.Size += du(f)
+			n64 += du(f)
+		}
+		row.Size += n64
+		if fi, err := os.Stat(e.b.Dirs.VMState(n)); err == nil && e.ret.OrphansAge > 0 && e.now.Sub(fi.ModTime()) >= e.ret.OrphansAge {
+			row.RetainFrees += n64
 		}
 	}
 	return row, nil
+}
+
+// oldestBeyond is the disk the run logs in dir take beyond the newest
+// keep, which the next run deletes; 0 when keep is 0 (off). Their names
+// sort by when they were written.
+func oldestBeyond(dir string, keep int) int64 {
+	if keep == 0 {
+		return 0
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	var logs []string
+	for _, e := range entries {
+		if e.Type().IsRegular() && strings.HasSuffix(e.Name(), ".log") {
+			logs = append(logs, e.Name())
+		}
+	}
+	var n int64
+	for i := 0; i < len(logs)-keep; i++ {
+		n += du(filepath.Join(dir, logs[i]))
+	}
+	return n
+}
+
+// retainOf is the retention settings of these keys that are on, as
+// written: 30d, or 30d, 5 for two.
+func (e spaceEnv) retainOf(keys ...string) string {
+	var on []string
+	for _, k := range keys {
+		if v := e.ret.Raw[k]; v != "" {
+			on = append(on, v)
+		}
+	}
+	return strings.Join(on, ", ")
 }
 
 // leftoverFiles are the files devvm keeps for a VM besides its logs: its
@@ -548,11 +660,11 @@ func writeSpace(out io.Writer, r spaceReport) error {
 		}
 		return humanSize(n)
 	}
-	row("WHAT", "BACKEND", "COUNT", "SIZE", "KEPT", "GC", "FREED BY")
+	row("WHAT", "BACKEND", "COUNT", "SIZE", "KEPT", "GC", "FREED BY", "RETAIN")
 	for _, s := range r.Rows {
-		row(s.What, s.Backend, strconv.Itoa(s.Count), size(s.Size, s.Sized), s.Kept, gc(s.GC), s.Rest)
+		row(s.What, s.Backend, strconv.Itoa(s.Count), size(s.Size, s.Sized), s.Kept, gc(s.GC), s.Rest, s.retainCell())
 	}
-	row("total", "", "", humanSize(r.Total), "", gc(r.GC), "")
+	row("total", "", "", humanSize(r.Total), "", gc(r.GC), "", "")
 	if err := w.Flush(); err != nil {
 		return err
 	}

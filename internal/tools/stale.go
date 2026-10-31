@@ -33,6 +33,47 @@ func (t Share) NoVM(ls []Listed, names []string) []Listed {
 	return out
 }
 
+// idleExt is the file beside a current tool image no VM has, made when
+// retention first finds it so: how long it's been idle.
+const idleExt = ".idle"
+
+// Idle keeps the record of how long each current tool image of a List
+// has had no VM, and returns those idle for age or longer (by now), as
+// NoVM picks them: a VM listing it again drops its record. Callers
+// deleting them hold the share's lock from before the List.
+func (t Share) Idle(ls []Listed, age time.Duration, now time.Time) ([]Listed, error) {
+	noVM := map[string]bool{}
+	for _, l := range t.NoVM(ls, nil) {
+		noVM[l.File] = true
+	}
+	var out []Listed
+	for _, l := range ls {
+		if !l.Built || l.File == "" {
+			continue
+		}
+		p := filepath.Join(t.Dirs.Tools(), l.File+idleExt)
+		if !noVM[l.File] {
+			if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return nil, err
+			}
+			continue
+		}
+		fi, err := os.Stat(p)
+		if errors.Is(err, fs.ErrNotExist) {
+			if err := writeNew(p, ""); err != nil {
+				return nil, err
+			}
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		if since := now.Sub(fi.ModTime()); since >= age && since >= 0 {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
 // miseRecent is how long a folder of devvm's own mise is left alone after
 // it changed: another devvm may be downloading into it.
 const miseRecent = time.Hour

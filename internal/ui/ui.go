@@ -61,6 +61,7 @@ type UI struct {
 		path  string
 		f     *os.File
 		noted bool
+		keep  int // run logs kept, the newest; keepLogs when 0
 	}
 	status struct {
 		sync.Mutex

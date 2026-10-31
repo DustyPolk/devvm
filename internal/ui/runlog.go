@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -54,8 +55,16 @@ func (u *UI) openLog() *os.File {
 		u.Die(msg.RunLogFailed(dir, err.Error()).Because(err))
 	}
 	u.log.f, u.log.path = f, f.Name()
-	pruneLogs(dir, keepLogs)
+	pruneLogs(dir, cmp.Or(u.log.keep, keepLogs))
 	return f
+}
+
+// KeepRunLogs sets how many run logs are kept, the newest (retention's
+// logs.runs); 0 is the default, keepLogs.
+func (u *UI) KeepRunLogs(n int) {
+	u.log.Lock()
+	defer u.log.Unlock()
+	u.log.keep = max(n, 0)
 }
 
 func createLog(dir string, now time.Time, pid int) (*os.File, error) {

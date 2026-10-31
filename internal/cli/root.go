@@ -34,7 +34,12 @@ func NewRoot(u *ui.UI) *cobra.Command {
 			"asking when there's no terminal. --here and --clone create the new VM without asking.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          cobra.MaximumNArgs(1),
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if !skipsRetention(cmd) {
+				autoRetain(cmd.Context(), u)
+			}
+		},
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return up(cmd.Context(), u, g, uf, args)
 		},

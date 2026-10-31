@@ -41,6 +41,8 @@ type gcOpts struct {
 	// caches is --caches: then devvm's share of the backends' own
 	// caches, each backend asked for apart, only in a terminal.
 	caches bool
+	// retention is --retention: then the retention settings, at once.
+	retention bool
 }
 
 // newGCCmd is devvm gc.
@@ -61,7 +63,8 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"does, for each VM whose backend answers that it no longer has it. With --caches, then " +
 			"what devvm's builds put in the backends' own caches that nothing of devvm's needs (Lima's " +
 			"Ubuntu downloads, smolvm's disks of devvm's packs, Docker volumes of devvm's no VM has), " +
-			"each backend listed and asked for apart, and only in a terminal. It lists them first, and in a terminal asks. VMs are never " +
+			"each backend listed and asked for apart, and only in a terminal. With --retention, then " +
+			"the retention settings at once. It lists them first, and in a terminal asks. VMs are never " +
 			"deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or " +
 			"Docker image a VM was made from.",
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
@@ -76,6 +79,7 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --exports, only those older than `AGE`: 30d, 2w or 12h")
 	c.Flags().BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has, as devvm rm does")
 	c.Flags().BoolVar(&o.caches, "caches", false, "then free devvm's share of the backends' own caches, asking for each backend; only in a terminal")
+	c.Flags().BoolVar(&o.retention, "retention", false, "then apply the retention settings now, which devvm otherwise does once a day")
 	return c
 }
 
@@ -127,16 +131,16 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 		return err
 	}
 	b.From = g.fromRef()
-	unlock, err := b.Tools.LockShare(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	if o.caches && !u.StdinIsTerminal() {
 		return msg.GCCachesNeedTerminal()
 	}
-	if err := gcRun(ctx, u, b, o); err != nil {
+	if err := gcLocked(ctx, u, b, o); err != nil {
 		return err
+	}
+	if o.retention {
+		if err := gcRetention(ctx, u, b); err != nil {
+			return err
+		}
 	}
 	if o.caches {
 		return gcCaches(ctx, u, b, o.only)
@@ -144,8 +148,43 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 	return nil
 }
 
-// gcRun is gc's run but the backends' caches: it lists what it deletes,
-// asks in a terminal, and deletes it.
+// gcLocked is gcRun holding the share's lock throughout.
+func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) error {
+	unlock, err := b.Tools.LockShare(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return gcRun(ctx, u, b, o)
+}
+
+// gcRetention applies the retention settings now, the VMs' leftovers
+// included, saying what it deleted in one line.
+func gcRetention(ctx context.Context, u *ui.UI, b *build.Env) error {
+	r, err := state.ReadRetention(b.Dirs)
+	if err != nil {
+		return err
+	}
+	if r.Off() {
+		u.Info(msg.RetentionOff())
+		return nil
+	}
+	unlock, ok := lockRetention(b.Dirs)
+	if !ok {
+		return msg.RetentionBusy()
+	}
+	defer unlock()
+	done, err := retain(ctx, u, b, r, true)
+	touchRetention(b.Dirs)
+	if err != nil {
+		return err
+	}
+	u.Info(done.report())
+	return nil
+}
+
+// gcRun is gc's run but the backends' caches and retention: it lists what
+// it deletes, asks in a terminal, and deletes it.
 func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) error {
 	p, err := planGC(ctx, u, b, o)
 	if err != nil {

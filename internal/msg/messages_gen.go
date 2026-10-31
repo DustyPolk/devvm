@@ -2009,6 +2009,41 @@ func RestartForMounts() M {
 	return M{id: "restart_for_mounts"}
 }
 
+// RetentionBad is [retention_bad]: "That retention setting is refused, and nothing changed: {{.reason}}."
+func RetentionBad(reason string) M {
+	return M{id: "retention_bad", vals: []val{{"reason", reason}}}
+}
+
+// RetentionBusy is [retention_busy]: "Another devvm is applying the retention settings. Run devvm gc --retention again once it's done."
+func RetentionBusy() M {
+	return M{id: "retention_busy"}
+}
+
+// RetentionDeleted is [retention_deleted]: "retention deleted {{.exports}} exports, {{.tools}} shared tool images no VM has, and what devvm kept for {{.orphans}} VMs gone from their backend"
+func RetentionDeleted(exports string, orphans string, tools string) M {
+	return M{id: "retention_deleted", vals: []val{{"exports", exports}, {"orphans", orphans}, {"tools", tools}}}
+}
+
+// RetentionFailed is [retention_failed]: "Applying the retention settings failed. Run devvm gc --retention to see why."
+func RetentionFailed() M {
+	return M{id: "retention_failed"}
+}
+
+// RetentionOff is [retention_off]: "no retention setting is on"
+func RetentionOff() M {
+	return M{id: "retention_off"}
+}
+
+// RetentionSaved is [retention_saved]: "saved the retention settings in {{.file}}"
+func RetentionSaved(file string) M {
+	return M{id: "retention_saved", vals: []val{{"file", file}}}
+}
+
+// RetentionUnreadable is [retention_unreadable]: "The retention settings can't be read, so devvm applies none. Fix the line it names, or run devvm space set KEY= to turn one off."
+func RetentionUnreadable() M {
+	return M{id: "retention_unreadable"}
+}
+
 // RmExportFailed is [rm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm -f to delete it without exporting."
 func RmExportFailed(vm string) M {
 	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
@@ -3082,6 +3117,13 @@ var specs = map[string]spec{
 	"removed_remote":                   {fields: []string{"remote"}},
 	"resolving_tools":                  {},
 	"restart_for_mounts":               {},
+	"retention_bad":                    {fields: []string{"reason"}},
+	"retention_busy":                   {},
+	"retention_deleted":                {fields: []string{"exports", "orphans", "tools"}},
+	"retention_failed":                 {},
+	"retention_off":                    {},
+	"retention_saved":                  {fields: []string{"file"}},
+	"retention_unreadable":             {},
 	"rm_export_failed":                 {fields: []string{"vm"}},
 	"rm_failed":                        {fields: []string{"reason"}},
 	"rm_parent_vm":                     {fields: []string{"dir", "vm"}},

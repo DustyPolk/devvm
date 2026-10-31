@@ -15,6 +15,7 @@ devvm writes nothing into your project folders. It keeps your settings in `~/.co
 | `backend` | the [default backend](../backends/_index.md#choosing-a-backend) for new VMs | `devvm setup` |
 | `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g`, `devvm setup` |
 | `ports` | the [ports](ports-size.md#size-and-ports) that new VMs forward | `devvm ports -g` |
+| `retention` | what devvm deletes on its own, and after how long ([retention](#retention)) | `devvm space set` |
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm policy -g` |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
@@ -25,6 +26,22 @@ devvm writes nothing into your project folders. It keeps your settings in `~/.co
 On Linux hosts, devvm also keeps your [secrets](../safety/network.md#saving-and-binding-secrets) in files under `~/.config/devvm/secrets/`, which only you can read. On macOS they're in the Keychain.
 
 Upgrading devvm keeps this folder as it is. Back it up to keep your settings, layers and features, and keep in mind that on Linux hosts it holds your secrets.
+
+## Retention
+
+devvm keeps what it makes until you delete it, and the retention settings tell it to delete some of it on its own. Every setting is off until you set it, so first run `devvm space` to see what each one would free: its `RETAIN` column shows each setting that's on, beside the row it applies to, with what it would delete now ([devvm space](space.md#devvm-space)).
+
+`devvm space set KEY=VALUE...` sets them, and `devvm space set KEY=` turns one off, for example `devvm space set exports.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know and writes nothing. The settings are `key=value` lines in `~/.config/devvm/retention`, and when a line can't be read, devvm names the file and the line and applies none of them.
+
+| Key | What devvm deletes |
+| --- | --- |
+| `logs.runs` | the [run logs](troubleshooting.md#a-command-fails) beyond the newest this many, which is 20 when it's off |
+| `exports.age` | the [exports](coding-agents.md#history) written this long ago or more, such as `90d` |
+| `exports.count` | the exports beyond the newest this many |
+| `tools.unused-age` | the current shared tools that no VM has had for this long, counted from when devvm first found that no VM has them |
+| `orphans.age` | what devvm keeps for VMs that their backend no longer has, once their state hasn't changed for this long, as `devvm gc --orphans` does |
+
+Ages are a whole number of days, weeks or hours, such as `30d`, `2w` or `12h`. devvm applies the settings at the start of a command, at most once a day, except for `orphans.age`, which needs to ask each backend about its VMs, so only `devvm gc --retention` applies it. `devvm gc --retention` applies all of them at once. When it deletes something, devvm says what in one line. Retention never deletes a VM, an image, a shared tool that any VM's state lists, or anything in the backends' own caches, which only `devvm gc --caches` frees. When two devvms start at once, only one of them applies the settings.
 
 ## A company's CA
 

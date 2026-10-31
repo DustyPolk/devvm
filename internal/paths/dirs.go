@@ -169,6 +169,14 @@ func (d Dirs) AgentKeys() string { return filepath.Join(d.Config, "agent-keys") 
 // Backend holds the default backend for new VMs.
 func (d Dirs) Backend() string { return filepath.Join(d.Config, "backend") }
 
+// Retention holds the retention settings: what devvm deletes on its own,
+// and after how long.
+func (d Dirs) Retention() string { return filepath.Join(d.Config, "retention") }
+
+// RetentionRun is touched when retention last ran, and held (a folder)
+// while it runs.
+func (d Dirs) RetentionRun() string { return filepath.Join(d.Data, "retention.run") }
+
 // Layers holds the user's own layers.
 func (d Dirs) Layers() string { return filepath.Join(d.Config, "layers") }
 

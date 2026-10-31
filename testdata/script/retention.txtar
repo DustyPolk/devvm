@@ -1,0 +1,77 @@
+# Retention: every setting off unless devvm space set sets it; a bad key or
+# value refused before the file is written; devvm's commands apply the
+# settings once a day, devvm gc --retention at once, each deleting only
+# what its settings name, never a VM nor a tool any VM's state lists.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env EXPORTS=$XDG_DATA_HOME/devvm/exports
+env SHARE=$XDG_DATA_HOME/devvm/tools
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+mkdir $EXPORTS
+exec sh -c 'cd "$EXPORTS" && for f in devvm-old-12345612345612-20200101-000000 devvm-new-abcdefabcdefab-20991231-235959; do echo x > $f.tar.gz; done'
+
+# No file: nothing is deleted, by a command or gc --retention.
+exec devvm space
+exec devvm gc --retention
+stdout '^==> retention_off$'
+exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
+! exists $DATA/retention.run
+
+# Bad keys and values are refused, and nothing is written.
+! exec devvm space set exports.age=30
+stderr '^devvm: retention_bad '
+! exec devvm space set logs.network.size=10M
+stderr '^devvm: retention_bad '
+! exists $XDG_CONFIG_HOME/devvm/retention
+
+# Set: devvm space shows each beside its row, with what it would free.
+exec devvm space set exports.age=30d tools.unused-age=1d
+stdout '^==> retention_saved file=\S+/retention$'
+exec cat $XDG_CONFIG_HOME/devvm/retention
+cmp stdout want-retention
+exec devvm space
+stdout '^exports +- +2 +\S+ +only copy +- +gc --exports +30d \(\S+\)$'
+stdout 'RETAIN'
+
+# The next command applies it, once: the old export goes, the new stays.
+exec devvm ls
+stderr '^retention_deleted exports=1 orphans=0 tools=0$'
+! exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
+exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.tar.gz
+exists $DATA/retention.run
+exec sh -c 'echo x > "$EXPORTS/devvm-old-12345612345612-20200101-000001.tar.gz"'
+exec devvm ls
+! stderr retention_deleted
+exists $EXPORTS/devvm-old-12345612345612-20200101-000001.tar.gz
+
+# A day later (or a clock that went back) it applies again.
+exec touch -t 202001010000 $DATA/retention.run
+exec devvm ls
+stderr '^retention_deleted exports=1 '
+
+# Tools: a current build no VM has is recorded idle, deleted a day later;
+# one a VM's state lists stays.
+exec devvm build claude
+exec devvm build codex
+mkdir $VMS
+exec sh -c 'printf "image=claude\ndir=/p\nbackend=lima\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
+exec sh -c 'cd "$SHARE" && touch -t 202001010000 *.sha256'
+exec devvm gc --retention
+stdout '^==> retention_deleted exports=0 orphans=0 tools=0$'
+exec sh -c 'ls "$SHARE"/codex-*.erofs.idle'
+! exec sh -c 'ls "$SHARE"/claude-*.erofs.idle'
+exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.idle'
+exec devvm gc --retention
+stdout '^==> retention_deleted exports=0 orphans=0 tools=1$'
+exec sh -c 'ls "$SHARE"'
+! stdout codex
+stdout '^claude-'
+
+# KEY= turns a setting off.
+exec devvm space set exports.age= tools.unused-age=
+! exists $XDG_CONFIG_HOME/devvm/retention
+
+-- want-retention --
+exports.age=30d
+tools.unused-age=1d

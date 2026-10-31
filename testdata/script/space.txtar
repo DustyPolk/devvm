@@ -9,9 +9,9 @@ env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Nothing yet: devvm's state and the total.
 exec devvm space
-stdout '^WHAT +BACKEND +COUNT +SIZE +KEPT +GC +FREED BY\n'
-stdout '^state +- +1 +\S+ +state +- +-\n'
-stdout '^total +- +- +\S+ +- +- +-\n'
+stdout '^WHAT +BACKEND +COUNT +SIZE +KEPT +GC +FREED BY +RETAIN\n'
+stdout '^state +- +1 +\S+ +state +- +- +-\n'
+stdout '^total +- +- +\S+ +- +- +- +-\n'
 ! stdout '^images'
 ! stderr .
 
@@ -33,16 +33,16 @@ exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar
 exec sh -c 'echo x > "$DATA/logs/devvm-p-12345612345612.jsonl" && echo x > "$DATA/logs/devvm-gone-12345612345612.proxy.log"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm space
-stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm$'
-stdout '^images +lima +2 +\S+ +remade +\S+ +gc --backend lima$'
-stdout '^tools gnu +lima +\d+ +\S+ +remade +- +gc --tools$'
-stdout '^tools - +- +1 +\S+ +remade +\S+ +gc --tools$'
-stdout '^exports +- +1 +\S+ +only copy +- +gc --exports$'
-stdout '^network logs +- +2 +\S+ +log +- +devvm rm$'
-stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay$'
+stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm +-$'
+stdout '^images +lima +2 +\S+ +remade +\S+ +gc --backend lima +-$'
+stdout '^tools gnu +lima +\d+ +\S+ +remade +- +gc --tools +-$'
+stdout '^tools - +- +1 +\S+ +remade +\S+ +gc --tools +-$'
+stdout '^exports +- +1 +\S+ +only copy +- +gc --exports +-$'
+stdout '^network logs +- +2 +\S+ +log +- +devvm rm +-$'
+stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay +-$'
 stdout '^mise +- +1 +'
-stdout '^leftover state +- +1 +\S+ +leftover +- +gc --orphans$'
-stdout '^total +- +- +\S+ +- +\S+ +-$'
+stdout '^leftover state +- +1 +\S+ +leftover +- +gc --orphans +-$'
+stdout '^total +- +- +\S+ +- +\S+ +- +-$'
 ! stderr .
 stub_calls
 ! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'

@@ -288,7 +288,7 @@ func (t Share) Delete(files []string) error {
 	}
 	for _, f := range files {
 		p := filepath.Join(t.Dirs.Tools(), f)
-		for _, name := range []string{p, p + ".sha256", p + targetExt} {
+		for _, name := range []string{p, p + ".sha256", p + targetExt, p + idleExt} {
 			if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}

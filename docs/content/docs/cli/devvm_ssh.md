@@ -1,6 +1,6 @@
 ---
 title: devvm ssh
-weight: 39
+weight: 40
 ---
 
 Get this folder's VM ready for ssh and editors, and show its host name

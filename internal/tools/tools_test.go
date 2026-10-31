@@ -1000,6 +1000,41 @@ func TestNoVM(t *testing.T) {
 	}
 }
 
+// Idle records when a current tool image first has no VM and returns it
+// once that's age ago; a VM listing it again drops the record; a record
+// in the future (a clock that went back) deletes nothing.
+func TestIdle(t *testing.T) {
+	e := newEnv(t)
+	old := time.Now().Add(-2 * time.Hour)
+	l := Listed{Name: "go", File: "go-1-0123456789ab.erofs", Built: true, State: StateCurrent}
+	write(t, filepath.Join(e.Dirs.Tools(), l.File+".sha256"), []byte("x\n"))
+	if err := os.Chtimes(filepath.Join(e.Dirs.Tools(), l.File+".sha256"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	idle := filepath.Join(e.Dirs.Tools(), l.File+idleExt)
+	if got, err := e.Idle([]Listed{l}, 24*time.Hour, now); err != nil || len(got) != 0 {
+		t.Fatalf("first look: %v, %v", got, err)
+	}
+	if _, err := os.Stat(idle); err != nil {
+		t.Fatalf("no record: %v", err)
+	}
+	if got, _ := e.Idle([]Listed{l}, 24*time.Hour, now.Add(25*time.Hour)); len(got) != 1 {
+		t.Errorf("a day later: %v", got)
+	}
+	if got, _ := e.Idle([]Listed{l}, 24*time.Hour, now.Add(-25*time.Hour)); len(got) != 0 {
+		t.Errorf("a clock that went back: %v", got)
+	}
+	used := l
+	used.VMs = 1
+	if got, _ := e.Idle([]Listed{used}, 24*time.Hour, now.Add(25*time.Hour)); len(got) != 0 {
+		t.Errorf("a VM's: %v", got)
+	}
+	if _, err := os.Stat(idle); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a VM's keeps its record: %v", err)
+	}
+}
+
 // Only older versions of devvm's mise are stale: never this devvm's, nor
 // one that changed in the last hour (another devvm downloading it), nor
 // a file.

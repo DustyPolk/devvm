@@ -17,6 +17,7 @@ devvm, the tools it runs and its backends keep files on this machine outside you
 | `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
 | `GC` | what `devvm gc` frees of it now |
 | `FREED BY` | what frees the rest, such as `devvm rm`, or `gc --backend lima`, which deletes all of a backend's images |
+| `RETAIN` | the [retention setting](settings.md#retention) that applies to the row when it's on, such as `30d`, with what it would delete now in brackets, and `-` when none is on |
 
 Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. A shared tool's build shows `-` as its backend when devvm can't tell which backend it's for. When a backend that one of your VMs uses doesn't answer, devvm says so, and its VMs and images aren't counted.
 
@@ -49,6 +50,8 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `lima-vms/` | what the Lima backend sets on each VM: which ports it forwards, and its port forwarder's files | `devvm rm` deletes a VM's files with the VM |
 | `smolvm/` | the smolvm backend's images, which are packs, and what it sets on each VM | see [smolvm](#smolvm) |
 | `docker/` | what the Docker backend sets on each VM, the shared tools it unpacked, and devvm's Linux build | see [Docker](#docker) |
+
+The [retention settings](settings.md#retention), which are all off until you set them, make devvm delete some of these on its own: `logs.runs` keeps that many run logs instead of 20, `exports.age` and `exports.count` delete old exports, `tools.unused-age` deletes current shared tools that no VM has had for that long, and `orphans.age` forgets VMs that their backend no longer has. Retention also writes `retention.run` in the data folder, when it last ran, and keeps a `.idle` file beside each current shared tool that no VM has, which records since when.
 
 A build also makes a temporary folder in the data folder, `tools-build.<random>` for the shared tools, and devvm deletes it when the build ends, even after a failure or Ctrl+C.
 
