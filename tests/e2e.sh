@@ -20,6 +20,13 @@
 #                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
 #                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
 #                stops its proxy
+#     --only desktop
+#                base with the desktop feature, and a VM with network policy whose desktop devvm
+#                desktop serves on this machine's loopback alone: a wrong password refused, the
+#                password let in, the VM's server on its user's own socket and no TCP port, the
+#                clipboard off, the password in no file, log or process's arguments, no way out of the
+#                VM; root's own server in its place (no password) still behind devvm's, the viewer's
+#                clipboard never reaching it; --clipboard
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python, the docker layer and claude) and alpine:3
 #                (musl tools, the docker layer on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
@@ -93,7 +100,7 @@
 # $DEVVM_E2E_BIN, a test build of it, where there's no Go: the docker host VM).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project clone gc tools network from"
+sections_all="images project clone gc tools network desktop from"
 usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm | --backend docker [--engine linux|desktop]]  (sections: $sections_all)" >&2; exit 2; }
 clean=false sel="images project clone gc tools network" backend=lima engines=""
 while (( $# )); do
@@ -151,9 +158,11 @@ else
       { echo "e2e: couldn't build devvm for Linux" >&2; exit 1; }
   fi
 fi
-# The features are in base's key, so only a run with from (which checks them) builds them; every
+# The features are in base's key, so only a run with from (which checks them) builds them all; desktop,
+# and the smolvm and Docker backends' sections, which check devvm desktop, build desktop alone; every
 # other selection shares one smaller base.
 if want from; then for f in "$root"/assets/features/*.sh; do basename "$f" .sh; done > "$XDG_CONFIG_HOME/devvm/base-features"
+elif want desktop || [[ $backend != lima ]]; then echo desktop > "$XDG_CONFIG_HOME/devvm/base-features"
 else : > "$XDG_CONFIG_HOME/devvm/base-features"; fi
 D=$src/devvm
 # The digest of Ubuntu's container image smolvm's and Docker's base start from, as devvm pins it.
@@ -271,6 +280,7 @@ cleanup() {
   ps_unwatch
   [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null
   [[ -z ${fake:-} ]] || kill "$fake" 2>/dev/null
+  [[ -z ${desk:-} ]] || kill "$desk" 2>/dev/null   # a devvm desktop
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
   pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
@@ -469,6 +479,51 @@ loopback_only() { local addrs
   [[ -n $addrs ]] && ! grep -qvE "^(127\.0\.0\.1|\[::1\]):$1\$" <<<"$addrs"
 }
 export -f loopback_only
+# desktop_serve DIR [ARGS...]: devvm desktop --no-open ARGS in DIR, in the background ($desk, its
+# output in $work/desktop.log), until it says where the VM's desktop is: its address ($desk_addr,
+# 127.0.0.1:PORT), port ($desk_port) and password ($desk_pw). desktop_end ends it with Ctrl+C.
+desk=""
+desktop_serve() {
+  local d=$1 i; shift
+  desk_addr="" desk_port="" desk_pw=""
+  (cd "$d" && DEVVM_MESSAGES=names exec "$D" desktop --no-open "$@" </dev/null >"$work/desktop.log" 2>&1) &
+  desk=$!
+  for i in $(seq 240); do
+    grep -q '^desktop_ready ' "$work/desktop.log" && break
+    kill -0 "$desk" 2>/dev/null || break
+    sleep 1
+  done
+  desk_addr=$(sed -n 's/^desktop_ready address=\([^ ]*\) .*/\1/p' "$work/desktop.log")
+  desk_pw=$(sed -n 's/^desktop_ready .*password=\([a-z0-9]*\) .*/\1/p' "$work/desktop.log")
+  desk_port=${desk_addr##*:}
+  [[ -n $desk_addr && -n $desk_pw ]]
+}
+desktop_end() { [[ -z $desk ]] || { kill -INT "$desk" 2>/dev/null; wait "$desk" 2>/dev/null; desk=""; }; }
+# desktop_view [VAR=VALUE...]: TestE2EDesktop on the desktop devvm desktop serves: a wrong password
+# refused, the password let in (with DEVVM_E2E_CLIPBOARD, a clipboard and a key event sent).
+desktop_view() {
+  (cd "$root" && env DEVVM_E2E_DESKTOP="$desk_addr" DEVVM_E2E_PASSWORD="$desk_pw" "$@" CGO_ENABLED=0 \
+    "${gocmd[@]}" test -count=1 -v -run '^TestE2EDesktop$' ./internal/desktop) >"$work/view.log" 2>&1
+  cat "$work/view.log"; grep -q -- '--- PASS: TestE2EDesktop' "$work/view.log"
+}
+# desktop_in_vm: what's checked in a VM whose desktop runs, as its user: its Xvnc has its socket in a
+# folder of the user's own (0700), the socket 0600, none of its sockets listening on TCP, and the
+# clipboard off.
+desktop_in_vm='set -e
+d=/run/devvm-desktop pid=$(cat /run/devvm-desktop/xvnc.pid)
+[ "$(cat "/proc/$pid/comm")" = Xvnc ]
+[ "$(stat -c %a "$d")" = 700 ] && [ "$(stat -c %a "$d/vnc.sock")" = 600 ] && [ "$(stat -c %U "$d/vnc.sock")" = "$(id -un)" ]
+for f in "/proc/$pid/fd/"*; do
+  l=$(readlink "$f" 2>/dev/null) || continue
+  case $l in socket:*) i=${l#socket:[}; i=${i%]}
+    if awk -v i="$i" "\$4 == \"0A\" && \$10 == i { f = 1 } END { exit !f }" /proc/net/tcp /proc/net/tcp6 2>/dev/null; then
+      echo "Xvnc listens on TCP"; exit 1; fi ;;
+  esac
+done
+for p in AcceptCutText SendCutText; do [ "$(DISPLAY=:1 XAUTHORITY="$HOME/.Xauthority" vncconfig -get "$p")" = off ]; done'
+# desktop_secret: the password, read from the input, is in no file of the VM's (run as root there),
+# its fixed folders searched. Never on a command line: sudo would log it in the VM's journal.
+desktop_secret='read -r pw && [ -n "$pw" ] && ! grep -rlsF -D skip -- "$pw" /home /root /etc /run /tmp /var/log /usr/local'
 # watch_sees RUN VM DIR BY [NESTED [DELETES]]: a watcher in the VM on DIR and a subfolder, as a dev
 # server's (RUN VM CMD runs CMD there: in_vm, in_smol, in_d), sees a file changed in each, one made
 # and one deleted, by this machine (BY host) or the VM (BY vm), each within 5 s; with NESTED no,
@@ -1493,6 +1548,77 @@ check "rm -f deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh'
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 fi
 
+if want desktop; then
+section "desktop"
+# A base VM with network policy, base having the desktop feature: devvm desktop serves its desktop
+# on this machine's loopback alone, a viewer checked against its password here; the VM's server
+# listens on a socket of its user's alone, never a port, and gets no way out. Then root in the VM
+# replaces the server with one that asks for no password and records what reaches it: a viewer
+# still needs the password, and its clipboard still never reaches the VM.
+p=$(newproj desk)
+launch "$p" exit --network-policy --no-git-protect base
+ps_watch
+desktop_serve "$p"
+ps_unwatch
+check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone, its port and password kept" bash -c "
+  [[ -n '$vm' && -n '$desk_port' ]] && loopback_only '$desk_port' &&
+  grep -qx 'desktop_port=$desk_port' '$vms/$vm' && grep -qx 'desktop_password=$desk_pw' '$vms/$vm'"
+check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
+check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_vm "$vm" "$desktop_in_vm"
+check "the password is in no file of the VM's" bash -c 'printf "%s\n" "$1" | limactl shell --workdir / "$2" sudo sh -c "$3"' \
+  _ "$desk_pw" "$vm" "$desktop_secret"
+check "... nor any run log, nor any host process's arguments while devvm desktop started" bash -c "
+  [[ -s '$work/ps.log' ]] && ! grep -rlF '$desk_pw' '$XDG_DATA_HOME/devvm/logs' && ! grep -F '$desk_pw' '$work/ps.log'"
+check "with network policy, the VM still reaches only its proxy, and not the desktop's port here" bash -c "
+  grep -qx net_check=ok '$vms/$vm' &&
+  ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
+  ! limactl shell --workdir / $vm timeout 5 bash -c '</dev/tcp/host.lima.internal/$desk_port' </dev/null"
+# Root's own server in its place: no password, its socket anyone's, everything that reaches it
+# recorded in /tmp/devvm-e2e-rfb.bin, each connection counted.
+cat > "$p/fake-rfb.py" <<'P'
+import os, socket
+p = "/run/devvm-desktop/vnc.sock"
+if os.path.exists(p):
+    os.unlink(p)
+s = socket.socket(socket.AF_UNIX)
+s.bind(p)
+os.chmod(p, 0o666)
+s.listen(4)
+n = 0
+while True:
+    c, _ = s.accept()
+    n += 1
+    open("/tmp/devvm-e2e-rfb.count", "w").write(str(n))
+    c.sendall(b"RFB 003.008\n"); c.recv(12); c.sendall(b"\x01\x01"); c.recv(1); c.sendall(b"\0\0\0\0")
+    c.recv(1)
+    c.sendall(b"\0\x01\0\x01" + b"\0" * 16 + b"\0\0\0\0")
+    data = b""
+    while True:
+        b = c.recv(4096)
+        if not b:
+            break
+        data += b
+    open("/tmp/devvm-e2e-rfb.bin", "wb").write(data)
+    c.close()
+P
+in_vm "$vm" "sudo pkill -x Xvnc; sleep 1; sudo rm -f /tmp/devvm-e2e-rfb.*; sudo setsid -f python3 '$p/fake-rfb.py' </dev/null >/dev/null 2>&1; sleep 1" >/dev/null 2>&1
+check "root's own server, without a password: a viewer with a wrong one is still refused, the password let in" \
+  desktop_view DEVVM_E2E_CLIPBOARD=devvm-e2e-clip
+check "... the refused viewer never reached the VM, nor the viewer's clipboard: only its key event did" bash -c "sleep 1
+  limactl shell --workdir / $vm sh -c '[ \"\$(cat /tmp/devvm-e2e-rfb.count)\" = 1 ] &&
+    od -An -tx1 /tmp/devvm-e2e-rfb.bin | tr -d \" \\n\" | grep -q 040100000000006b &&
+    ! grep -q devvm-e2e-clip /tmp/devvm-e2e-rfb.bin' </dev/null"
+desktop_end
+check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
+in_vm "$vm" "sudo pkill -f '[f]ake-rfb.py'; sudo rm -f /run/devvm-desktop/vnc.sock /tmp/devvm-e2e-rfb.*" >/dev/null 2>&1
+desktop_serve "$p" --clipboard
+check "devvm desktop --clipboard starts its server again, on the same port, the clipboard on" bash -c "
+  [[ -n '$desk_port' && '$desk_port' == \$(sed -n 's/^desktop_port=//p' '$vms/$vm') ]] &&
+  limactl shell --workdir / $vm bash -lc 'DISPLAY=:1 XAUTHORITY=\$HOME/.Xauthority vncconfig -get AcceptCutText | grep -qx on' </dev/null"
+check "... and a viewer with the password gets it" desktop_view
+desktop_end
+fi
+
 if want from; then
 section "--from"
 # Registry images need no Docker: these run with a docker that's installed but not running (it
@@ -1688,6 +1814,16 @@ check "hostname is the folder" in_smol "$vm" '[[ $(hostname) == smolweb ]]'
 check "Exec's arguments, folder, input and user reach the VM as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/smolvm |
   grep -q -- '--- PASS: TestE2EExecQuoting'"
+# Its desktop (base has the desktop feature), with no init system: devvm desktop starts it.
+desktop_serve "$p"
+check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone" bash -c "[[ -n '$desk_port' ]] && loopback_only '$desk_port'"
+check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
+check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_smol "$vm" "$desktop_in_vm"
+check "the password is in no file of the VM's nor any run log" bash -c '
+  printf "%s\n" "$1" | SMOLVM_USAGE=0 smolvm machine exec --name "$2" -i -- sh -c "$3" && ! grep -rlF "$1" "$4"' \
+  _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs"
+desktop_end
+check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
 check "without the docker layer, it has no Docker" in_smol "$vm" '! command -v dockerd && ! command -v docker && [[ ! -e /run/docker.pid ]]'
 check "SSH agent forwarding is off: the agent devvm's commands get, if any, reaches nothing" in_smol "$vm" \
   '[[ -z ${SSH_AUTH_SOCK:-} ]] || ssh-add -l 2>&1 | grep -qi "communication with agent failed\|error connecting to agent"'
@@ -3000,6 +3136,21 @@ docker_ssh() {
   check "ssh devvm-$1 reaches it, as the VM's user, with the environment devvm's commands get" bash -c "
     out=\$(dsh devvm-$1 'id -un; hostname; echo \$BASH_ENV') && [[ \$out == '$me'\$'\n''$1'\$'\n'/etc/profile.d/devvm-tools.sh ]] || { echo \"\$out\"; false; }"
   check "... each connection an sshd of its own, gone with it" bash -c "dsh devvm-$1 true && sleep 1 && ! d_procs '$vm' | grep -q sshd"
+  # Its desktop (base has the desktop feature), with no init system: devvm desktop starts it.
+  desktop_serve "$q"
+  check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone, its container publishing nothing" bash -c "
+    [[ -n '$desk_port' ]] && loopback_only '$desk_port' && d_unpublished '$vm'"
+  if command -v go >/dev/null || command -v mise >/dev/null; then
+    check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
+  else
+    skip "a viewer with a wrong password is refused, one with the password gets the VM's desktop" "no Go here: the Docker Desktop run checks it"
+  fi
+  check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_d "$vm" "$desktop_in_vm"
+  check "the password is in no file of the VM's nor any run log" bash -c '
+    printf "%s\n" "$1" | docker exec -i -u 0 "$2" sh -c "$3" && ! grep -rlF "$1" "$4"' \
+    _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs"
+  desktop_end
+  check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
   check "agent forwarding stays off, whatever Host * says; ssh -A forwards it (the control)" bash -c "
     SSH_AUTH_SOCK='$sc/agent.sock' ssh -F '$sc/config' devvm-$1 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null &&
     SSH_AUTH_SOCK='$sc/agent.sock' ssh -A -F '$sc/config' devvm-$1 'test -S \"\${SSH_AUTH_SOCK:-}\"' </dev/null"

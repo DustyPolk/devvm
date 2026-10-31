@@ -1,0 +1,96 @@
+# devvm desktop: the folder's VM launched as devvm ssh does (started when
+# it's stopped, set up, in devvm's ssh config), its desktop feature's
+# devvm-desktop started, clipboard off unless asked for, then its desktop
+# served on this machine's 127.0.0.1 with the VM's password, both kept in
+# its state, until Ctrl+C or the VM stops. A VM without the feature is
+# refused, and on macOS Screen Sharing (a stub open) gets the address.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# No VM.
+mkdir $WORK/desk
+cd $WORK/desk
+! exec devvm desktop
+stderr '^devvm: no_vm dir=\S*/desk$'
+! exec devvm desktop now
+stderr '^devvm: usage_error '
+
+# A VM without the desktop feature: refused, nothing served.
+exec devvm --no-network-policy --no-git-protect base
+cp $WORK/no-feature $STUB_DIR/shell-fails-on
+! exec devvm desktop --no-open
+stderr '^devvm: desktop_no_feature vm=devvm-desk-[0-9a-f]{14}$'
+! stdout desktop_ready
+exec sh -c 'cat "$VMS"/devvm-desk-*'
+! stdout 'desktop_(port|password)='
+rm $STUB_DIR/shell-fails-on
+
+# A stopped VM: started, its desktop started with the clipboard off, and
+# served on a port of 127.0.0.1 until Ctrl+C.
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-desk-*)"'
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm desktop --no-open &d&
+exec sh $WORK/waitfor 'grep -q "^desktop_port=" "$VMS"/devvm-desk-* && nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$VMS"/devvm-desk-*)"'
+kill -INT d
+wait d
+stdout '^==> starting vm=devvm-desk-[0-9a-f]{14}$'
+stdout '^desktop_ready address=127\.0\.0\.1:[0-9]+ password=[a-z2-9]{8} vm=devvm-desk-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl start --tty=false devvm-desk-[0-9a-f]{14}$'
+stdout 'exec ''/usr/local/bin/devvm-desktop'' ''start'' ''off''$'
+! stdout '^open '
+exec sh -c 'grep "^desktop_" "$VMS"/devvm-desk-*'
+stdout '^desktop_password=[a-z2-9]{8}$'
+stdout '^desktop_port=[0-9]+$'
+cp stdout $WORK/state1
+
+# A running VM, the clipboard asked for: the same password and port. On
+# macOS, Screen Sharing gets the address; one that doesn't open is warned
+# about.
+exec sh -c ': > "$STUB_LOG"'
+! exec devvm desktop --clipboard &d&
+exec sh $WORK/waitfor 'nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$WORK/state1")"'
+[darwin] exec sh $WORK/waitfor 'grep -q "^open " "$STUB_LOG"'
+kill -INT d
+wait d
+! stdout starting
+stub_calls
+stdout 'exec ''/usr/local/bin/devvm-desktop'' ''start'' ''on''$'
+[darwin] stdout '^open vnc://127\.0\.0\.1:[0-9]+$'
+[!darwin] ! stdout '^open '
+exec sh -c 'grep "^desktop_" "$VMS"/devvm-desk-*'
+cmp stdout $WORK/state1
+[darwin] exec sh -c ': > "$STUB_DIR/open-fails" && : > "$STUB_LOG"'
+[darwin] ! exec devvm desktop &d&
+[darwin] exec sh $WORK/waitfor 'grep -q "^open " "$STUB_LOG"'
+[darwin] exec sleep 0.5
+[darwin] kill -INT d
+[darwin] wait d
+[darwin] stderr '^devvm: desktop_open_failed url=vnc://127\.0\.0\.1:[0-9]+$'
+[darwin] rm $STUB_DIR/open-fails
+
+# The VM stops: so does devvm desktop, saying so.
+exec devvm desktop --no-open &d&
+exec sh $WORK/waitfor 'nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$WORK/state1")"'
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-desk-*)"'
+wait d
+stdout '^==> desktop_vm_stopped vm=devvm-desk-[0-9a-f]{14}$'
+
+# Its desktop doesn't start: said, with the run log.
+cp $WORK/start-fails $STUB_DIR/shell-fails-on
+! exec devvm desktop --no-open
+stderr 'desktop_start_failed vm=devvm-desk-[0-9a-f]{14}'
+rm $STUB_DIR/shell-fails-on
+
+-- waitfor --
+# waitfor CMD: CMD every 0.1 s until it succeeds, for 90 s at most.
+i=0
+until sh -c "$1"; do
+  i=$((i + 1))
+  [ "$i" -lt 900 ] || exit 1
+  sleep 0.1
+done
+-- no-feature --
+'test' '-x' '/usr/local/bin/devvm-desktop'
+-- start-fails --
+/usr/local/bin/devvm-desktop' 'start'

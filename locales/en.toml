@@ -1112,6 +1112,27 @@ other = "Getting this folder's VM ready for ssh failed: {{.reason}}."
 description = "reason is an error from the system, in English"
 other = "Opening this folder's VM in VS Code failed: {{.reason}}."
 
+[desktop_failed]
+description = "reason is an error from the system, in English"
+other = "Opening this folder's VM's desktop failed: {{.reason}}."
+
+[desktop_no_feature]
+other = "{{.vm}} has no desktop. Choose the desktop feature with devvm setup, then make the VM again with devvm rm and devvm."
+
+[desktop_start_failed]
+other = "{{.vm}}'s desktop didn't start."
+
+[desktop_ready]
+description = "address is the desktop's on this machine (127.0.0.1:PORT); password is the one a VNC viewer asks for"
+other = "{{.vm}}'s desktop is at vnc://{{.address}}, with the password {{.password}}.\nIt stays there until you press Ctrl+C."
+
+[desktop_open_failed]
+description = "url is the desktop's address (vnc://127.0.0.1:PORT)"
+other = "Screen Sharing didn't open. Open {{.url}} in a VNC viewer instead."
+
+[desktop_vm_stopped]
+other = "{{.vm}} stopped, and its desktop with it."
+
 [limactl_failed]
 description = "reason is an error from the system, in English"
 other = "Running limactl failed: {{.reason}}."

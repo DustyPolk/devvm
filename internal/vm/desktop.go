@@ -1,0 +1,250 @@
+package vm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"math/rand/v2"
+	"net"
+	"os/exec"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/desktop"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// KeyDesktopPassword is the VM's desktop's password (desktop.NewPassword),
+// made the first time devvm desktop runs and kept with the VM's state,
+// never sent to the VM: devvm's relay checks it.
+const KeyDesktopPassword = "desktop_password"
+
+// KeyDesktopPort is the host loopback port devvm desktop serves the VM's
+// desktop on, kept so a viewer finds it at the same address each time.
+const KeyDesktopPort = netpolicy.KeyDesktopPort
+
+// DesktopOptions is how devvm desktop opens the VM's desktop.
+type DesktopOptions struct {
+	// Clipboard shares the clipboard both ways: this machine's reaches
+	// the VM, and the VM's this machine.
+	Clipboard bool
+	// NoOpen doesn't open Screen Sharing on macOS: the address and
+	// password are only shown.
+	NoOpen bool
+}
+
+// How long a viewer's handshake may take, how long a wrong password holds
+// the next check, and how often devvm desktop checks the VM still runs.
+const (
+	desktopTimeout   = 15 * time.Second
+	desktopFailDelay = time.Second
+	desktopEvery     = 5 * time.Second
+)
+
+// Desktop is devvm desktop: the folder's VM's desktop on this machine.
+type Desktop struct{ *Env }
+
+// Open gets the folder's VM ready as devvm ssh does (ready), starts its
+// desktop (the desktop feature's devvm-desktop), and serves it on this
+// machine's loopback through devvm's relay (desktop.Relay), each viewer
+// checked against the VM's password before anything reaches the VM, until
+// ctx ends (Ctrl+C) or the VM stops. On macOS it opens the address in
+// Screen Sharing, unless NoOpen.
+func (e Desktop) Open(ctx context.Context, o DesktopOptions) error {
+	t, err := ready(ctx, Launch(e))
+	if err != nil {
+		return err
+	}
+	vm, b, log := t.f.Name, t.b, e.LogWriter()
+	logs := backend.ExecOpts{Stdout: log, Stderr: log}
+	if err := b.Exec(ctx, vm, []string{"test", "-x", desktop.Command}, logs); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return msg.DesktopNoFeature(vm)
+	}
+	password, err := desktopPassword(t.st)
+	if err != nil {
+		return err
+	}
+	clip := "off"
+	if o.Clipboard {
+		clip = "on"
+	}
+	if err := b.Exec(ctx, vm, []string{desktop.Command, "start", clip}, logs); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return backend.Logged(msg.DesktopStartFailed(vm))
+	}
+	l, err := e.listener(ctx, t.st)
+	if err != nil {
+		return err
+	}
+	addr := l.Addr().String()
+	r := &desktop.Relay{
+		Password: password, Clipboard: o.Clipboard, Dial: e.dial(vm),
+		Logf:    func(f string, args ...any) { _, _ = fmt.Fprintf(log, "devvm desktop: "+f+"\n", args...) },
+		Timeout: desktopTimeout, FailDelay: desktopFailDelay,
+	}
+	e.Say(msg.DesktopReady(addr, password, vm))
+	if url := "vnc://" + addr; e.OS == "darwin" && !o.NoOpen {
+		if err := e.OpenURL(ctx, url); err != nil {
+			e.Warn(msg.DesktopOpenFailed(url))
+		}
+	}
+	return e.serve(ctx, r, l, b, vm)
+}
+
+// serve serves the relay on l until ctx ends or the VM stops, which it
+// says.
+func (e Desktop) serve(ctx context.Context, r *desktop.Relay, l net.Listener, b backend.Backend, vm string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopped := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(desktopEvery):
+			}
+			if in, err := b.Inspect(ctx, vm); ctx.Err() == nil && (err != nil || in.Status != backend.StatusRunning) {
+				close(stopped)
+				cancel()
+				return
+			}
+		}
+	}()
+	err := r.Serve(ctx, l)
+	select {
+	case <-stopped:
+		e.Info(msg.DesktopVMStopped(vm))
+	default:
+	}
+	return err
+}
+
+// desktopPassword returns the VM's desktop's password, made and kept the
+// first time.
+func desktopPassword(st *state.VM) (string, error) {
+	if p := st.Get(KeyDesktopPassword); desktop.ValidPassword(p) {
+		return p, nil
+	}
+	p, err := desktop.NewPassword()
+	if err != nil {
+		return "", err
+	}
+	return p, st.Set(KeyDesktopPassword, p)
+}
+
+// listener listens on this machine's loopback (127.0.0.1 alone)
+// for the VM's desktop: on the port it had, while no program has it, else
+// on a new one from 20000 to 59999 that no program and no VM has, which
+// it keeps.
+func (e Desktop) listener(ctx context.Context, st *state.VM) (net.Listener, error) {
+	if p, err := strconv.Atoi(st.Get(KeyDesktopPort)); err == nil && p > 0 && p < 65536 {
+		if l, err := platform.ListenLoopback(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(p))); err == nil {
+			return l, nil
+		}
+	}
+	used, err := netpolicy.UsedPorts(e.Dirs, "")
+	if err != nil {
+		return nil, err
+	}
+	for range 100 {
+		p := 20000 + rand.IntN(40000) //nolint:gosec // a port, not a secret
+		if used[p] {
+			continue
+		}
+		l, err := platform.ListenLoopback(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+		if err != nil {
+			continue
+		}
+		if err := st.Set(KeyDesktopPort, strconv.Itoa(p)); err != nil {
+			_ = l.Close()
+			return nil, err
+		}
+		return l, nil
+	}
+	return nil, errors.New("no free port on 127.0.0.1")
+}
+
+// dial connects to the VM's desktop socket over the VM's ssh, as
+// devvm's ssh config has it (its host key pinned), for as long as ctx
+// lasts: a channel to the socket (ssh -W), with no session, agent or
+// forwarding.
+func (e Desktop) dial(vm string) func(ctx context.Context) (io.ReadWriteCloser, error) {
+	return func(ctx context.Context) (io.ReadWriteCloser, error) {
+		cmd := exec.CommandContext(ctx, "ssh", desktopSSHArgs(e.Dirs.SSHConfig(), vm)...) //nolint:gosec // devvm's own arguments
+		cmd.Stderr = e.LogWriter()
+		in, err := cmd.StdinPipe()
+		if err != nil {
+			return nil, err
+		}
+		out, err := cmd.StdoutPipe()
+		if err != nil {
+			return nil, err
+		}
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		return &sshChannel{cmd: cmd, in: in, out: out}, nil
+	}
+}
+
+// desktopSSHArgs are ssh's arguments for a channel to the VM's desktop
+// socket: devvm's ssh config's entry for the VM, with nothing of the
+// user's agent, no session and nothing forwarded either way.
+func desktopSSHArgs(config, vm string) []string {
+	return []string{
+		"-F", config, "-T",
+		"-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none",
+		"-o", "IdentityAgent=none", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
+		"-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no",
+		"-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR",
+		"-W", desktop.Socket, vm,
+	}
+}
+
+// sshChannel is an ssh -W process as a connection.
+type sshChannel struct {
+	cmd  *exec.Cmd
+	in   io.WriteCloser
+	out  io.ReadCloser
+	once sync.Once
+}
+
+func (c *sshChannel) Read(p []byte) (int, error)  { return c.out.Read(p) }
+func (c *sshChannel) Write(p []byte) (int, error) { return c.in.Write(p) }
+
+// channelClose is how long a channel's ssh gets to end on its own once its
+// input is closed (ssh sends the end of the channel, and the VM's sshd
+// closes the socket) before it's killed.
+const channelClose = 2 * time.Second
+
+// Close ends the channel and its ssh, once: its input closed first, so
+// the VM's sshd ends its side, then killed if it hasn't ended.
+func (c *sshChannel) Close() error {
+	c.once.Do(func() {
+		_ = c.in.Close()
+		done := make(chan struct{})
+		go func() {
+			_ = c.cmd.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(channelClose):
+			_ = c.cmd.Process.Kill()
+			<-done
+		}
+	})
+	return nil
+}

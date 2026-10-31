@@ -46,7 +46,7 @@ stdout '^gc_image image=base key='
 
 # A name that isn't a feature changes nothing.
 ! exec devvm setup --features fzf,nope
-stderr '^devvm: no_feature feature=nope features=cli-tools fzf omb$'
+stderr '^devvm: no_feature feature=nope features=cli-tools desktop fzf omb$'
 ! stdout base_features
 exec devvm setup
 stdout '^==> base_features_none$'

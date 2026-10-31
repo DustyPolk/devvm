@@ -532,7 +532,7 @@ func (p *Proxy) freePort(ctx context.Context) (int, error) {
 	return 0, errors.New("no free port on 127.0.0.1")
 }
 
-// UsedPorts returns the ssh, proxy and decider ports VMs have, and the
+// UsedPorts returns the ssh, proxy, decider and desktop ports VMs have, and the
 // ports they list to forward, but self's (a VM's name, or ""): what a new
 // one avoids, and what a VM's port forwarder never takes (smolvm's,
 // Docker's), self being that VM.
@@ -552,7 +552,7 @@ func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 		if err != nil {
 			continue // not a VM's state
 		}
-		for _, k := range []string{KeySSHPort, KeyProxyPort, KeyDeciderPort} {
+		for _, k := range []string{KeySSHPort, KeyProxyPort, KeyDeciderPort, KeyDesktopPort} {
 			if n, err := strconv.Atoi(st.Get(k)); err == nil {
 				used[n] = true
 			}

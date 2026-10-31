@@ -1,6 +1,6 @@
 ---
 title: devvm ls
-weight: 17
+weight: 18
 ---
 
 List the project VMs

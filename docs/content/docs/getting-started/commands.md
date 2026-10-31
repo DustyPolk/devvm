@@ -146,6 +146,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm ssh-agent keys` | list the keys devvm's own agent holds, then those added to it ([details](../using/ssh.md#devvms-own-agent)) |
 | `devvm ssh` | get this folder's VM ready for ssh and editors, and show the name they reach it by, such as `devvm-website` ([details](../using/ssh.md#devvm-ssh-and-devvm-code)) |
 | `devvm code` | the same, then open its folder in VS Code over Remote-SSH ([VS Code](../using/ssh.md#vs-code)) |
+| `devvm desktop [--clipboard] [--no-open]` | serve this folder's VM's desktop on `127.0.0.1` with its password until Ctrl+C, and open it in Screen Sharing on macOS ([details](../using/desktop.md)) |
 
 ## Images
 

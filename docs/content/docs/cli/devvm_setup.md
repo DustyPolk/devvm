@@ -1,6 +1,6 @@
 ---
 title: devvm setup
-weight: 36
+weight: 37
 ---
 
 Choose the default backend, base's features and new VMs' size

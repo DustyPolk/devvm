@@ -1,6 +1,6 @@
 ---
 title: devvm git-protect
-weight: 10
+weight: 11
 ---
 
 Show or change .git protection for this folder's VM

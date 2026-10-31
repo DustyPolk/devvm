@@ -1,6 +1,6 @@
 ---
 title: Settings and files
-weight: 10
+weight: 11
 ---
 
 devvm writes nothing into your project folders. It keeps your settings in `~/.config/devvm` and its own state in `~/.local/share/devvm`, and it reads a few environment variables. [Overview](../internals/overview.md#state-files) describes the state files in full.

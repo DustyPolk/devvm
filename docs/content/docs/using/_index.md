@@ -12,6 +12,7 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [Ports and size](ports-size.md): the ports a VM forwards to your machine, and its CPUs, memory and disk.
 - [Coding agents](coding-agents.md): the supported agents, which are Claude Code, Codex and opencode, the config they get in a VM, their logins, and their history.
 - [SSH and editors](ssh.md): reaching VMs by name from ssh and VS Code, and forwarding your SSH agent.
+- [A VM's desktop](desktop.md): the `desktop` feature, and opening a VM's desktop in Screen Sharing with `devvm desktop`.
 - [devcontainer.json](devcontainer.md): what a new VM takes from a project's `devcontainer.json`, and what devvm refuses.
 - [Starting from a container image](from.md): `--from`, which starts base from `node:24`, `alpine:3` or your own image.
 - [Settings and files](settings.md): your settings and the commands that write them, devvm's state, and the environment variables devvm reads.

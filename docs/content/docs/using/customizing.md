@@ -61,10 +61,11 @@ Features are optional extras that devvm builds into [`base`](images.md#base) aft
 | `omb` | [oh-my-bash](https://ohmybash.github.io/): a themed prompt, completions and aliases, with auto-update off |
 | `fzf` | fuzzy Ctrl-R history and Ctrl-T file search |
 | `cli-tools` | bat, fd, eza, zoxide (`z`), btop, tree, tldr |
+| `desktop` | an Xfce desktop, which [`devvm desktop`](desktop.md) opens in Screen Sharing, about 370 MB |
 
 ### Choosing features
 
-The first time devvm builds anything, it asks which features `base` gets, with every one chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature. devvm prints the choice and saves it in `~/.config/devvm/base-features`, one name per line, in the order they run.
+The first time devvm builds anything, it asks which features `base` gets, with every one but `desktop` chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature but `desktop`. devvm prints the choice and saves it in `~/.config/devvm/base-features`, one name per line, in the order they run.
 
 To change the choice:
 

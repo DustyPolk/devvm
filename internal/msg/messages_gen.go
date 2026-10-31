@@ -529,6 +529,36 @@ func Deleting(vm string) M {
 	return M{id: "deleting", vals: []val{{"vm", vm}}}
 }
 
+// DesktopFailed is [desktop_failed]: "Opening this folder's VM's desktop failed: {{.reason}}."
+func DesktopFailed(reason string) M {
+	return M{id: "desktop_failed", vals: []val{{"reason", reason}}}
+}
+
+// DesktopNoFeature is [desktop_no_feature]: "{{.vm}} has no desktop. Choose the desktop feature with devvm setup, then make the VM again with devvm rm and devvm."
+func DesktopNoFeature(vm string) M {
+	return M{id: "desktop_no_feature", vals: []val{{"vm", vm}}}
+}
+
+// DesktopOpenFailed is [desktop_open_failed]: "Screen Sharing didn't open. Open {{.url}} in a VNC viewer instead."
+func DesktopOpenFailed(url string) M {
+	return M{id: "desktop_open_failed", vals: []val{{"url", url}}}
+}
+
+// DesktopReady is [desktop_ready]: "{{.vm}}'s desktop is at vnc://{{.address}}, with the password {{.password}}.\nIt stays there until you press Ctrl+C."
+func DesktopReady(address string, password string, vm string) M {
+	return M{id: "desktop_ready", vals: []val{{"address", address}, {"password", password}, {"vm", vm}}}
+}
+
+// DesktopStartFailed is [desktop_start_failed]: "{{.vm}}'s desktop didn't start."
+func DesktopStartFailed(vm string) M {
+	return M{id: "desktop_start_failed", vals: []val{{"vm", vm}}}
+}
+
+// DesktopVMStopped is [desktop_vm_stopped]: "{{.vm}} stopped, and its desktop with it."
+func DesktopVMStopped(vm string) M {
+	return M{id: "desktop_vm_stopped", vals: []val{{"vm", vm}}}
+}
+
 // Detected is [detected]: "detected a {{.found}} project"
 func Detected(found string) M {
 	return M{id: "detected", vals: []val{{"found", found}}}
@@ -2616,6 +2646,12 @@ var specs = map[string]spec{
 	"deleted_tools":                    {plural: true, fields: []string{"count"}},
 	"deleted_unfinished_build":         {fields: []string{"key"}},
 	"deleting":                         {fields: []string{"vm"}},
+	"desktop_failed":                   {fields: []string{"reason"}},
+	"desktop_no_feature":               {fields: []string{"vm"}},
+	"desktop_open_failed":              {fields: []string{"url"}},
+	"desktop_ready":                    {fields: []string{"address", "password", "vm"}},
+	"desktop_start_failed":             {fields: []string{"vm"}},
+	"desktop_vm_stopped":               {fields: []string{"vm"}},
 	"detected":                         {fields: []string{"found"}},
 	"devcontainer_bad_value":           {fields: []string{"file", "key"}},
 	"devcontainer_build":               {fields: []string{"file", "key"}},

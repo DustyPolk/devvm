@@ -73,13 +73,17 @@ func (b *Env) FeatureScript(name string) (backend.Script, error) {
 	return s, err
 }
 
+// desktopFeature is devvm's desktop feature, which only a choice adds: it
+// makes base several hundred MB bigger, for a window few VMs open.
+const desktopFeature = "desktop"
+
 // chosenFeatures returns the features chosen for base: the base-features
-// file's, or until there is one, every feature.
+// file's, or until there is one, every feature but desktop.
 func (b *Env) chosenFeatures() ([]string, error) {
 	chosen, err := state.ReadBaseFeatures(b.Dirs)
 	if errors.Is(err, fs.ErrNotExist) {
 		all, _ := b.Features()
-		return all, nil
+		return slices.DeleteFunc(all, func(f string) bool { return f == desktopFeature }), nil
 	}
 	return chosen, err
 }

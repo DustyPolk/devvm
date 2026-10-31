@@ -72,6 +72,9 @@ type Env struct {
 	Protector func(dir string) *gitprotect.Protector
 	// Exec runs the shell in devvm's place; it returns only on failure.
 	Exec func(backend.Command) error
+	// OpenURL opens a URL with macOS's open (devvm desktop's vnc://, in
+	// Screen Sharing).
+	OpenURL func(ctx context.Context, url string) error
 	// Environ is the environment devvm started with, the SSH agent
 	// included: the editor's, which devvm's own connections don't change.
 	Environ []string
@@ -148,7 +151,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, u, reg.Host),
 		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, home, u.Warn), u),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
-		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, Environ: os.Environ(),
+		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
 		Info:   u.Info, Warn: u.Warn, Note: u.Note, Say: u.Say,
@@ -181,6 +184,11 @@ func execShell(cmd backend.Command) error {
 		}
 	}
 	return platform.Exec(cmd.Path, cmd.Args, cmd.Env)
+}
+
+// openURL opens url with macOS's open.
+func openURL(ctx context.Context, url string) error {
+	return exec.CommandContext(ctx, "open", url).Run() //nolint:gosec // devvm's own vnc://127.0.0.1:PORT
 }
 
 // found is the folder's VM as devvm finds it.

@@ -30,6 +30,9 @@ const (
 	// new at each start.
 	KeyDeciderPort  = "decider_port"
 	KeyDeciderToken = "decider_token"
+	// The host loopback port devvm desktop serves the VM's desktop on,
+	// which no VM's ssh, proxy or forwards take.
+	KeyDesktopPort = "desktop_port"
 )
 
 // ProxyUser is the user in a VM's proxy URL; the VM's key is the password.

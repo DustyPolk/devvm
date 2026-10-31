@@ -41,6 +41,7 @@ devvm [IMAGE] [flags]
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm code](devvm_code.md): Open this folder's VM in VS Code over Remote-SSH
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
+- [devvm desktop](devvm_desktop.md): Open this folder's VM's desktop in a VNC viewer
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
 - [devvm export](devvm_export.md): Save this folder's VM's agent history to a .tar.gz
 - [devvm gc](devvm_gc.md): Delete stale images and unused tool images

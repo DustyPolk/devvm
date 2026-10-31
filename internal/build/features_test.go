@@ -109,6 +109,36 @@ func TestChooseFeatures(t *testing.T) {
 	}
 }
 
+// devvm's desktop feature is the one feature not chosen until it's
+// chosen: unchosen, base's key leaves it out, and the picker starts with
+// it off; once chosen, it's kept.
+func TestDesktopUntilChosen(t *testing.T) {
+	b := featureEnv(t)
+	write(t, filepath.Join(assetsDir(b), "features", "desktop.sh"), "#!/bin/bash\n# a desktop\n")
+	if err := os.Remove(b.Dirs.BaseFeatures()); err != nil {
+		t.Fatal(err)
+	}
+	if features, _ := b.Features(); !slices.Equal(features, []string{"desktop", "fzf", "omb", "mine"}) {
+		t.Fatalf("Features() = %q", features)
+	}
+	in, err := b.Inputs()
+	if err != nil || !slices.Equal(in.BaseFeatures, []string{"fzf", "omb", "mine"}) {
+		t.Errorf("unchosen: %q, %v", in.BaseFeatures, err)
+	}
+	if _, err := (Choice{b}).PickFeatures(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := state.ReadBaseFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"fzf", "omb", "mine"}) {
+		t.Errorf("picked from the start: %q, %v", got, err)
+	}
+	if _, err := (Choice{b}).SetFeatures([]string{"desktop", "omb"}); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := b.Inputs(); err != nil || !slices.Equal(in.BaseFeatures, []string{"desktop", "omb"}) {
+		t.Errorf("chosen: %q, %v", in.BaseFeatures, err)
+	}
+}
+
 // PickFeatures starts from the current choice (kept by the test's Pick),
 // dropping names without a script; every feature until there's one.
 func TestPickFeatures(t *testing.T) {
