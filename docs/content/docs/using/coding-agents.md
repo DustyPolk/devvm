@@ -78,7 +78,7 @@ With network policy, the VM's `auth.json` holds placeholders, and its proxy hold
 
 ## History
 
-Each VM's transcripts and sessions stay in that VM. `devvm export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM whose image has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`.
+Each VM's transcripts and sessions stay in that VM. `devvm export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM whose image has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. devvm never deletes an export, so the exports stay until you delete them, and after `devvm rm` an export is the only copy of that VM's history.
 
 The agents' logins aren't in the export, which leaves out `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. devvm starts a stopped VM for the export, and the VM stays running. devvm writes the file only once the export is complete, so a failed export leaves no file and leaves an existing FILE as it was. Only you can read the file, and devvm makes the exports folder yours alone each time it writes one there, whatever its mode was before. When FILE is in a folder of your own, that folder keeps its mode. If the export fails, `devvm rm` keeps the VM, and `devvm rm -f` deletes it without exporting.
 

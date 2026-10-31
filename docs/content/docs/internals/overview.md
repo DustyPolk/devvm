@@ -104,14 +104,18 @@ devvm writes nothing into the project folder. It keeps your settings in `~/.conf
 | `images/rebuilds/` | the [rebuild counters](images.md#rebuilding) |
 | `images/from-digests` | the [digests](images.md#digests) of the container images that `--from` bases start from |
 | `tools/`, `mise.lock`, `mise/` | the [shared tools](images.md#the-share), the tools lock and devvm's own mise |
+| `mise.lock.toml`, `mise.lock.checked` | the `mise.toml` the tools lock was resolved from, and when devvm last [checked](images.md#versions) for newer versions |
 | `assets/<hash>` | devvm's own files, [written out](install.md#devvms-own-files) where a path is needed |
-| `bin/`, `ca/` | the binaries devvm builds for this machine, such as the proxy, and the certificate authority that VMs trust for the proxy |
+| `ca/` | the certificate authority that VMs trust for the proxy |
+| `oci-build.lock` | the lock a Lima build of a base [from a container image](images.md#how-its-converted) holds, a folder with its devvm's pid |
 | `run/` | files for running VMs, such as sandbox profiles, proxy pids and the QEMU wrapper |
 | `logs/`, `logs/runs/` | each VM's network log and proxy log, and the [run logs](../using/troubleshooting.md#a-command-fails) |
 | `exports/` | the agents' history that `devvm export` and `devvm rm` save |
 | `agent.sock` | the socket of [devvm's own SSH agent](../using/ssh.md#devvms-own-agent) |
 | `lima/` | devvm's own [Lima home](lima.md#a-lima-home-of-its-own), unless `DEVVM_LIMA_HOME` moves it |
 | `lima-vms/`, `smolvm/`, `docker/` | each backend's own files, such as the ports each Lima VM forwards, what smolvm and Docker set on each VM, and smolvm's images |
+
+[What devvm keeps on this machine](../using/space.md) says how each of these is cleaned up, and lists what the backends keep outside this folder.
 
 A VM's state file records the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. The file lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
 

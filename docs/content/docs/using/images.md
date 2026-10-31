@@ -55,7 +55,7 @@ The `nix` layer works on Lima and smolvm, on a base from Ubuntu, Debian or Alpin
 
 The toolchains and coding agents are shared tools, not image layers. Any image can have them, in any mix, such as `node+python+claude` or `go+foo+codex`. [Toolchains](toolchains.md) lists node, python, rust and go, with what each brings, and [supported agents](coding-agents.md#supported-agents) lists claude, codex and opencode.
 
-devvm builds each tool version once and mounts it read-only into every VM that names it, so any mix of tools works without building anything new, and ten VMs with node share one copy of it. [mise](https://mise.jdx.dev) runs the tools:
+devvm builds each tool version once and mounts it read-only into every VM that names it, so any mix of tools works without building anything new, and ten VMs with node share one copy of it. The builds are in `~/.local/share/devvm/tools`. Each backend and each C library gets a build of its own, so when a Lima VM and a smolvm VM both have node 24, or an Alpine VM has it too, `devvm images` lists more than one build of that version ([what devvm keeps](space.md#shared-tools)). [mise](https://mise.jdx.dev) runs the tools:
 
 - **They work as usual.** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`) and `cargo` work from any shell, including `bash -c` from agents and from editors over SSH.
 - **A project's own version files win.** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and the `toolchain` line in `go.mod` pick their version, which installs into the VM the first time it's used. mise also reads a `mise.toml` in the project folder, and devvm trusts it without asking, because the folder is yours.

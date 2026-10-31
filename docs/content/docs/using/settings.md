@@ -60,6 +60,8 @@ A CA in the folder can read every TLS connection a VM makes, as it can this mach
 - the agents' history that `devvm export` and `devvm rm` save, in `exports/`;
 - devvm's own Lima home (`lima/`), where the Lima backend's VMs and images live.
 
+[What devvm keeps on this machine](space.md) lists everything in this folder, with how each is cleaned up.
+
 devvm's Lima home is its own, whatever `LIMA_HOME` says, so Lima settings meant for other VMs never reach devvm's. Set `DEVVM_LIMA_HOME` to move it, for example to a sandbox or to a shorter path.
 
 Only you can read devvm's files. When devvm can't read one, it names the file and the line ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).

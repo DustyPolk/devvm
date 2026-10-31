@@ -16,5 +16,6 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [devcontainer.json](devcontainer.md): what a new VM takes from a project's `devcontainer.json`, and what devvm refuses.
 - [Starting from a container image](from.md): `--from`, which starts base from `node:24`, `alpine:3` or your own image.
 - [Settings and files](settings.md): your settings and the commands that write them, devvm's state, and the environment variables devvm reads.
+- [What devvm keeps on this machine](space.md): everything devvm, its tools and its backends keep outside your project folders, and how each is cleaned up.
 - [Troubleshooting](troubleshooting.md): what to do when a command or a build fails, a request is blocked, or a VM won't start.
 - [Known limits](limits.md): what devvm can't do, in one list.
