@@ -40,6 +40,7 @@ const (
 
 // engine is Docker's engine as docker info has it: the fields devvm reads.
 type engine struct {
+	ID              string   `json:"ID"`
 	ServerVersion   string   `json:"ServerVersion"`
 	OSType          string   `json:"OSType"`
 	Architecture    string   `json:"Architecture"`

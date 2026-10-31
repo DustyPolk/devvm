@@ -1004,6 +1004,11 @@ func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
 }
 
+// ForgotOrphan is [forgot_orphan]: "deleted what devvm kept for {{.vm}}"
+func ForgotOrphan(vm string) M {
+	return M{id: "forgot_orphan", vals: []val{{"vm", vm}}}
+}
+
 // ForwarderFailed is [forwarder_failed]: "The port forwarder failed: {{.reason}}."
 func ForwarderFailed(reason string) M {
 	return M{id: "forwarder_failed", vals: []val{{"reason", reason}}}
@@ -1092,6 +1097,31 @@ func GCOldHint() M {
 // GCOlderThanNeedsExports is [gc_older_than_needs_exports]: "--older-than goes with --exports. Run devvm gc --exports --older-than AGE."
 func GCOlderThanNeedsExports() M {
 	return M{id: "gc_older_than_needs_exports"}
+}
+
+// GCOrphan is [gc_orphan]: "  {{.vm}} ({{.backend}}), for {{.dir}}"
+func GCOrphan(backend string, dir string, vm string) M {
+	return M{id: "gc_orphan", vals: []val{{"backend", backend}, {"dir", dir}, {"vm", vm}}}
+}
+
+// GCOrphanElsewhere is [gc_orphan_elsewhere]: "{{.vm}} was made in another Lima home, HOME or Docker engine than this run's, so its state stays."
+func GCOrphanElsewhere(vm string) M {
+	return M{id: "gc_orphan_elsewhere", vals: []val{{"vm", vm}}}
+}
+
+// GCOrphanRecent is [gc_orphan_recent]: "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
+func GCOrphanRecent(vm string) M {
+	return M{id: "gc_orphan_recent", vals: []val{{"vm", vm}}}
+}
+
+// GCOrphans is [gc_orphans]: "What devvm keeps for {{.count}} VMs their backend no longer has:"
+func GCOrphans(count int) M {
+	return M{id: "gc_orphans", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// GCOrphansUnknown is [gc_orphans_unknown]: "{{.backend}} didn't answer, so devvm gc --orphans leaves its VMs' state alone."
+func GCOrphansUnknown(backend string) M {
+	return M{id: "gc_orphans_unknown", vals: []val{{"backend", backend}}}
 }
 
 // GCTools is [gc_tools]: "{{.count}} shared tool images are unused ({{.size}})."
@@ -2234,6 +2264,11 @@ func SpaceFailed(reason string) M {
 	return M{id: "space_failed", vals: []val{{"reason", reason}}}
 }
 
+// SpaceStray is [space_stray]: "{{.backend}} has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
+func SpaceStray(backend string, data string, vm string) M {
+	return M{id: "space_stray", vals: []val{{"backend", backend}, {"data", data}, {"vm", vm}}}
+}
+
 // SSHAgentEmpty is [ssh_agent_empty]: "Your SSH agent has no keys, so git over SSH won't work in the VM."
 func SSHAgentEmpty() M {
 	return M{id: "ssh_agent_empty"}
@@ -2821,6 +2856,7 @@ var specs = map[string]spec{
 	"fetch_failed":                     {fields: []string{"vm"}},
 	"fetch_until":                      {fields: []string{"file", "remote"}},
 	"fetching":                         {fields: []string{"prefix"}},
+	"forgot_orphan":                    {fields: []string{"vm"}},
 	"forwarder_failed":                 {fields: []string{"reason"}},
 	"from_cached_not_found":            {fields: []string{"from", "host"}},
 	"from_cached_unreachable":          {fields: []string{"from", "host"}},
@@ -2839,6 +2875,11 @@ var specs = map[string]spec{
 	"gc_names_need_tools":              {fields: []string{"tool"}},
 	"gc_old_hint":                      {},
 	"gc_older_than_needs_exports":      {},
+	"gc_orphan":                        {fields: []string{"backend", "dir", "vm"}},
+	"gc_orphan_elsewhere":              {fields: []string{"vm"}},
+	"gc_orphan_recent":                 {fields: []string{"vm"}},
+	"gc_orphans":                       {plural: true, fields: []string{"count"}},
+	"gc_orphans_unknown":               {fields: []string{"backend"}},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
@@ -3067,6 +3108,7 @@ var specs = map[string]spec{
 	"space_backend_unknown":            {fields: []string{"backend"}},
 	"space_caches_note":                {},
 	"space_failed":                     {fields: []string{"reason"}},
+	"space_stray":                      {fields: []string{"backend", "data", "vm"}},
 	"ssh_agent_empty":                  {},
 	"ssh_agent_failed":                 {fields: []string{"reason"}},
 	"ssh_agent_flag_ignored":           {},

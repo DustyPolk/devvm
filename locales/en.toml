@@ -666,6 +666,10 @@ other = "Reading what devvm keeps failed: {{.reason}}."
 [space_backend_unknown]
 other = "{{.backend}} didn't answer, so its VMs and images aren't counted."
 
+[space_stray]
+description = "data is the data folder in the VM's label: another devvm's, or this one's"
+other = "{{.backend}} has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
+
 [space_caches_note]
 other = "The backends' caches can also hold your own downloads, so devvm counts them apart."
 
@@ -735,6 +739,26 @@ other = "--older-than goes with --exports. Run devvm gc --exports --older-than A
 
 [gc_bad_age]
 other = "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
+
+[gc_orphans]
+one = "What devvm keeps for {{.count}} VM its backend no longer has:"
+other = "What devvm keeps for {{.count}} VMs their backend no longer has:"
+
+[gc_orphan]
+description = "dir is the VM's project folder"
+other = "  {{.vm}} ({{.backend}}), for {{.dir}}"
+
+[forgot_orphan]
+other = "deleted what devvm kept for {{.vm}}"
+
+[gc_orphans_unknown]
+other = "{{.backend}} didn't answer, so devvm gc --orphans leaves its VMs' state alone."
+
+[gc_orphan_elsewhere]
+other = "{{.vm}} was made in another Lima home, HOME or Docker engine than this run's, so its state stays."
+
+[gc_orphan_recent]
+other = "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
 
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."

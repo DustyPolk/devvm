@@ -219,6 +219,14 @@ func (e Lifecycle) delete(ctx context.Context, t *found) error {
 		}
 	}
 	e.Info(msg.Deleted(vm))
+	return e.forget(ctx, t)
+}
+
+// forget deletes what devvm keeps for a VM its backend no longer has: its
+// clone's remote or .git's locks, its proxy and its rules, run files,
+// state and logs, its host keys and its ssh config entry.
+func (e Lifecycle) forget(ctx context.Context, t *found) error {
+	vm := t.f.Name
 	if isClone(t.st) {
 		clones(e).removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
 	} else if m := t.st.Get(gitprotect.KeyGitProtect); m == gitprotect.On || m == gitprotect.Strict {

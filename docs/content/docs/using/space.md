@@ -62,6 +62,18 @@ Each tool version is built once for each kind of VM that uses it, so `tools/` ca
 
 When you delete a VM with its backend's own command instead of `devvm rm`, such as `limactl delete`, `smolvm machine delete` or `docker rm`, devvm still keeps the VM's state, its logs, its files in `run/` and its backend's folder, its ssh config entry and its host keys, and `docker rm` leaves the VM's volumes and networks in Docker. `devvm gc` also keeps the shared tools that the VM's state names. `devvm rm` deletes these only together with the VM, so once the VM is gone it says the folder has no VM.
 
+`devvm gc --orphans` deletes what devvm keeps for such a VM, as `devvm rm` does after it deletes a VM. That includes the VM's Docker volumes, which hold its home folder, and for a `--clone` VM the `devvm` remote in your repo. gc first asks each VM's backend whether it still has the VM, lists the VMs it would forget with their project folders, and in a terminal asks. It never deletes a VM, and it leaves a VM's state alone in these cases, saying why:
+
+- **The backend doesn't answer**, for example because it isn't installed or Docker isn't running. When a backend that one of your VMs uses can't list its images, gc stops before it deletes anything.
+- **The VM was made elsewhere.** devvm records where each new VM's backend keeps it: the Lima home, which `DEVVM_LIMA_HOME` moves, your home folder for smolvm on macOS, or the Docker engine that `DOCKER_HOST` or `DOCKER_CONTEXT` chooses. When this run looks somewhere else, the VM may still exist there. A VM whose state doesn't record it counts as made in the backend's default place, so while `DEVVM_LIMA_HOME`, `DOCKER_HOST` or `DOCKER_CONTEXT` is set, gc leaves such a VM alone.
+- **Its state changed in the last hour,** because the VM may still be being made.
+
+Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `devvm space` counts the state of VMs that their backend doesn't list as `leftover state`.
+
+### VMs devvm has no state for
+
+A VM can also be the other way around: the backend has it, with devvm's label, but devvm has no state for it. Usually it belongs to another devvm, such as one run with another `XDG_DATA_HOME` for a test or a sandbox, which on macOS shares your smolvm machines. `devvm space` names each one, with the data folder its label names, and devvm never deletes it, because the other devvm may still use it. To delete one yourself, run `smolvm machine delete --name NAME` for smolvm, `devvm limactl delete NAME` for Lima, or `docker rm -f NAME` for Docker, followed by `docker volume rm NAME-home`.
+
 ## Your settings
 
 `~/.config/devvm` holds your settings, your own layers and features, your company's CA certificates, the ssh config for running VMs and their host keys, and on Linux hosts your secrets. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.

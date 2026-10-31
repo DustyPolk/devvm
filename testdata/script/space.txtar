@@ -41,7 +41,7 @@ stdout '^exports +- +1 +\S+ +only copy +- +gc --exports$'
 stdout '^network logs +- +2 +\S+ +log +- +devvm rm$'
 stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay$'
 stdout '^mise +- +1 +'
-stdout '^leftover state +- +1 +\S+ +leftover +- +-$'
+stdout '^leftover state +- +1 +\S+ +leftover +- +gc --orphans$'
 stdout '^total +- +- +\S+ +- +\S+ +-$'
 ! stderr .
 stub_calls

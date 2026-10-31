@@ -7,7 +7,7 @@ Delete stale images and unused tool images
 
 ## Synopsis
 
-Delete what devvm images lists as stale or unfinished, on every backend, with their records, the shared tool images it lists as unused, the copies of devvm's own files older versions wrote out, and the older versions of the mise devvm runs on this machine. With --backend, only that backend's images, its current ones too, and its unused tool images; without it, every backend's, whatever the default backend is. With --tools, also the current tool images no VM has, on every backend and C library, or only those of the TOOLs named (node, claude). With --exports, also the agents' history devvm export and devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than (30d, 2w, 12h). It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or Docker image a VM was made from.
+Delete what devvm images lists as stale or unfinished, on every backend, with their records, the shared tool images it lists as unused, the copies of devvm's own files older versions wrote out, and the older versions of the mise devvm runs on this machine. With --backend, only that backend's images, its current ones too, and its unused tool images; without it, every backend's, whatever the default backend is. With --tools, also the current tool images no VM has, on every backend and C library, or only those of the TOOLs named (node, claude). With --exports, also the agents' history devvm export and devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than (30d, 2w, 12h). With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm does, for each VM whose backend answers that it no longer has it. It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or Docker image a VM was made from.
 
 ```text
 devvm gc [--tools [TOOL...]] [flags]
@@ -19,6 +19,7 @@ devvm gc [--tools [TOOL...]] [flags]
       --exports          also delete the saved exports of agents' history
   -h, --help             help for gc
       --older-than AGE   with --exports, only those older than AGE: 30d, 2w or 12h
+      --orphans          also delete what devvm keeps for VMs their backend no longer has, as devvm rm does
       --tools            also delete the current shared tool images no VM has; with TOOL names, only theirs
 ```
 

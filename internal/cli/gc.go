@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // gcOpts are what devvm gc is asked for besides its default run, which
@@ -34,6 +35,9 @@ type gcOpts struct {
 	exports   bool
 	olderThan string
 	age       time.Duration
+	// orphans is --orphans: also what devvm keeps for VMs their backend
+	// no longer has.
+	orphans bool
 }
 
 // newGCCmd is devvm gc.
@@ -50,7 +54,8 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"the current tool images no VM has, on every backend and C library, or only those of the " +
 			"TOOLs named (node, claude). With --exports, also the agents' history devvm export and " +
 			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
-			"(30d, 2w, 12h). It lists them first, and in a terminal asks. VMs are never " +
+			"(30d, 2w, 12h). With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm " +
+			"does, for each VM whose backend answers that it no longer has it. It lists them first, and in a terminal asks. VMs are never " +
 			"deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or " +
 			"Docker image a VM was made from.",
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
@@ -63,6 +68,7 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
 	c.Flags().BoolVar(&o.exports, "exports", false, "also delete the saved exports of agents' history")
 	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --exports, only those older than `AGE`: 30d, 2w or 12h")
+	c.Flags().BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has, as devvm rm does")
 	return c
 }
 
@@ -96,9 +102,13 @@ type gcPlan struct {
 	tools   []tools.Listed // unused tool images
 	current []tools.Listed // with --tools, current tool images no VM has
 	exports []savedExport  // with --exports, the exports old enough
-	assets  []string       // old copies of devvm's files no VM's proxy was started with
-	mise    []string       // older versions of devvm's own mise
-	share   tools.Share    // where the tool images are
+	// with --orphans, the VMs their backend no longer has, and what
+	// forgets them
+	orphans   vm.LeftoverReport
+	leftovers vm.Leftovers
+	assets    []string    // old copies of devvm's files no VM's proxy was started with
+	mise      []string    // older versions of devvm's own mise
+	share     tools.Share // where the tool images are
 }
 
 // gc lists what's stale or unused, asks in a terminal, and deletes it. It
@@ -120,6 +130,7 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 		return err
 	}
 	if p.empty() {
+		p.showOrphans(u)
 		u.Info(msg.NothingToClean())
 		return nil
 	}
@@ -151,6 +162,16 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 			return p, err
 		}
 		p.exports = olderThan(es, o.age, time.Now())
+	}
+	if o.orphans {
+		env, err := newEnv(u)
+		if err != nil {
+			return p, err
+		}
+		p.leftovers = vm.Leftovers{Env: env}
+		if p.orphans, err = p.leftovers.Find(ctx); err != nil {
+			return p, err
+		}
 	}
 	if o.only != "" {
 		target, err := toolTargets(u, b)
@@ -196,11 +217,32 @@ func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (strin
 }
 
 func (p gcPlan) empty() bool {
-	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.assets)+len(p.mise) == 0
+	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.assets)+len(p.mise) == 0
+}
+
+// showOrphans lists the VMs gc --orphans forgets, then says which it
+// leaves alone and why.
+func (p gcPlan) showOrphans(u *ui.UI) {
+	if orphans := p.orphans.Orphans; len(orphans) > 0 {
+		u.Say(msg.GCOrphans(len(orphans)))
+		for _, o := range orphans {
+			u.Say(msg.GCOrphan(o.Backend, o.Dir, o.Name))
+		}
+	}
+	for _, b := range p.orphans.Unknown {
+		u.Note(msg.GCOrphansUnknown(b))
+	}
+	for _, n := range p.orphans.Elsewhere {
+		u.Note(msg.GCOrphanElsewhere(n))
+	}
+	for _, n := range p.orphans.Recent {
+		u.Note(msg.GCOrphanRecent(n))
+	}
 }
 
 // show lists what gc deletes.
 func (p gcPlan) show(u *ui.UI) {
+	p.showOrphans(u)
 	if len(p.images) > 0 {
 		u.Say(msg.GCImages())
 		for _, l := range p.images {
@@ -233,6 +275,12 @@ func (p gcPlan) show(u *ui.UI) {
 
 // run deletes what's planned.
 func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
+	for _, o := range p.orphans.Orphans {
+		if err := p.leftovers.Forget(ctx, o); err != nil {
+			return err
+		}
+		u.Info(msg.ForgotOrphan(o.Name))
+	}
 	if err := deleteStale(ctx, u, p.images); err != nil {
 		return err
 	}

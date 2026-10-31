@@ -61,6 +61,9 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 			for _, b := range r.Unknown {
 				u.Note(msg.SpaceBackendUnknown(b))
 			}
+			for _, s := range r.Strays {
+				u.Note(msg.SpaceStray(s.Backend, s.Data, s.Name))
+			}
 			if asJSON {
 				enc := json.NewEncoder(u.Stdout())
 				enc.SetIndent("", "  ")
@@ -108,6 +111,16 @@ type spaceReport struct {
 	GC      int64      `json:"gc"`
 	Caches  []cacheRow `json:"backends"`
 	Unknown []string   `json:"unknown,omitempty"` // backends that didn't answer
+	// Strays are VMs with devvm's label it has no state for: another
+	// devvm's, or this one's whose state is gone. devvm never deletes them.
+	Strays []strayVM `json:"strays,omitempty"`
+}
+
+// strayVM is a VM with devvm's label that this devvm has no state for.
+type strayVM struct {
+	Backend string `json:"backend"`
+	Name    string `json:"name"`
+	Data    string `json:"data"` // the data folder its label names
 }
 
 // spaceEnv is what devvm space reads: devvm's folders, its backends and
@@ -153,6 +166,7 @@ func space(ctx context.Context, u *ui.UI, g *globals) (spaceReport, error) {
 		}
 		r.Rows = append(r.Rows, rows...)
 		r.Caches = append(r.Caches, caches...)
+		r.Strays = append(r.Strays, strays(ctx, be)...)
 	}
 	toolRows, err := e.toolRows(ctx)
 	if err != nil {
@@ -217,6 +231,26 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 		caches = append(caches, cacheRow{Backend: be.Name(), Name: c.Name, Path: c.Path, Count: c.Count, Size: c.Size, Sized: c.Sized})
 	}
 	return nonEmpty(vmRow, imgRow), caches, true
+}
+
+// strays are a backend's VMs with devvm's label that this devvm has no
+// state for; none when it can't say.
+func strays(ctx context.Context, be backend.Backend) []strayVM {
+	f, ok := be.(backend.StrayFinder)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, spaceTimeout)
+	defer cancel()
+	ss, err := f.Strays(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make([]strayVM, 0, len(ss))
+	for _, s := range ss {
+		out = append(out, strayVM{Backend: be.Name(), Name: s.Name, Data: s.Data})
+	}
+	return out
 }
 
 // nonEmpty returns the rows that have something.
@@ -402,7 +436,7 @@ func (e spaceEnv) staleAssets() (int64, error) {
 // longer has them: their state, run and backend files. Their logs are
 // network logs'. A VM whose backend didn't answer is never one.
 func (e spaceEnv) leftovers() (spaceRow, error) {
-	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "-"}
+	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans"}
 	names, err := state.VMNames(e.b.Dirs)
 	if err != nil {
 		return row, err

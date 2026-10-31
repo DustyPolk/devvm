@@ -1,0 +1,79 @@
+# gc --orphans: what devvm keeps for a VM its backend, asked, no longer
+# has (deleted outside devvm), deleted as devvm rm does after its delete.
+# Never a VM that exists, one whose backend doesn't answer, one made in
+# another Lima home, nor one whose state changed in the last hour (it may
+# be being made). Never part of gc's default run.
+env DEVVM_MESSAGES=names
+env DEVVM_DOCKER_KIND=linux
+env DATA=$XDG_DATA_HOME/devvm
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+mkdir $VMS $DATA/logs $DATA/run $DATA/lima-vms
+# This run's Lima home, as a VM's state records it.
+exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | shasum -a 256 | cut -c1-16 > at'
+# A Lima VM that exists, and one limactl deleted, with its logs, run and
+# port files; one made in another Lima home, and one that doesn't say
+# where it was made while this run's home isn't the default; one being
+# made.
+exec sh -c 'echo devvm-live-12345612345612 >> "$STUB_DIR/instances"'
+exec sh -c 'for v in live gone new; do printf "image=base\ndir=/p/$v\nbackend=lima\nnet=off\nbackend_at=%s\n" "$(cat at)" > "$VMS/devvm-$v-12345612345612"; done'
+exec sh -c 'printf "image=base\ndir=/p/moved\nbackend=lima\nnet=off\nbackend_at=0000000000000000\n" > "$VMS/devvm-moved-12345612345612"'
+exec sh -c 'printf "image=base\ndir=/p/norec\nbackend=lima\nnet=off\n" > "$VMS/devvm-norec-12345612345612"'
+exec sh -c 'cd "$DATA" && for v in live gone; do echo x > logs/devvm-$v-12345612345612.jsonl; echo x > run/devvm-$v-12345612345612.sb; echo x > lima-vms/devvm-$v-12345612345612.ports; done'
+exec sh -c 'cd "$VMS" && touch -t 202001010000 devvm-live-* devvm-gone-* devvm-moved-* devvm-norec-*'
+# A Docker VM whose container docker rm deleted, its home volume left.
+exec sh -c 'printf "image=base\ndir=/p/dock\nbackend=docker\nnet=off\n" > "$VMS/devvm-dock-12345612345612" && touch -t 202001010000 "$VMS/devvm-dock-12345612345612"'
+mkdir $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home
+exec sh -c 'echo "devvm.data=$DATA" > "$STUB_DIR/docker/volumes/devvm-dock-12345612345612-home/labels"'
+# A VM of a backend this devvm doesn't have (a newer devvm's), which
+# can't be asked; a smolvm VM whose machine is gone.
+exec sh -c 'printf "image=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/devvm-other-12345612345612" && touch -t 202001010000 "$VMS/devvm-other-12345612345612"'
+exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
+
+# The default run leaves them.
+exec devvm gc
+exists $VMS/devvm-gone-12345612345612
+
+exec sh -c ': > "$STUB_LOG"'
+exec devvm gc --orphans
+stdout '^gc_orphans count=3$'
+stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345612$'
+stdout '^gc_orphan backend=docker dir=/p/dock vm=devvm-dock-12345612345612$'
+stdout '^gc_orphan backend=smolvm dir=/p/smol vm=devvm-smol-12345612345612$'
+stderr '^gc_orphans_unknown backend=nope$'
+stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345612$'
+stderr '^gc_orphan_elsewhere vm=devvm-norec-12345612345612$'
+stderr '^gc_orphan_recent vm=devvm-new-12345612345612$'
+stdout '^==> forgot_orphan vm=devvm-gone-12345612345612$'
+stdout '^==> forgot_orphan vm=devvm-dock-12345612345612$'
+
+# Gone: the orphans' state, logs, run and port files, the Docker one's
+# volume. Left: everything else's.
+! exists $VMS/devvm-gone-12345612345612
+! exists $DATA/logs/devvm-gone-12345612345612.jsonl
+! exists $DATA/run/devvm-gone-12345612345612.sb
+! exists $DATA/lima-vms/devvm-gone-12345612345612.ports
+! exists $VMS/devvm-dock-12345612345612
+! exists $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home
+exists $VMS/devvm-live-12345612345612
+exists $DATA/logs/devvm-live-12345612345612.jsonl
+exists $DATA/run/devvm-live-12345612345612.sb
+exists $DATA/lima-vms/devvm-live-12345612345612.ports
+exists $VMS/devvm-moved-12345612345612
+exists $VMS/devvm-new-12345612345612
+exists $VMS/devvm-norec-12345612345612
+exists $VMS/devvm-other-12345612345612
+! exists $VMS/devvm-smol-12345612345612
+exec sh -c 'grep -c . "$STUB_DIR/instances"'
+stdout '^1$'
+stub_calls
+! stdout 'limactl delete|machine delete|container rm|docker rm '
+
+# When a backend a VM's state names doesn't answer, gc stops before it
+# deletes anything.
+exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
+exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
+! exec devvm gc --orphans
+stderr '^devvm: gc_failed '
+exists $VMS/devvm-smol-12345612345612
+exists $VMS/devvm-moved-12345612345612

@@ -30,6 +30,7 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 exec sh -c 'cat "$DATA"/vms/devvm-web-*'
 stdout '^image=node\+claude$'
 stdout '^libc=gnu$'
+stdout '^backend_at=[0-9a-f]{16}$'
 stdout '^tools=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
 # Each image in the share with its hash and what it's built for; nothing
 # left of the build.

@@ -171,6 +171,11 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
+	if at, _ := backend.LocationOf(b); at != "" {
+		if err := st.Set(KeyBackendAt, at); err != nil {
+			return err
+		}
+	}
 	// What a VM by this name deleted some other way left: its proxy, its
 	// own rules, its run files.
 	if err := e.Proxy.Forget(vm); err != nil {

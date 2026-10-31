@@ -37,13 +37,16 @@ import (
 
 // Keys of a VM's state that up writes, besides state's own.
 const (
-	KeyNet    = netpolicy.KeyNet // network policy: on or off
-	KeyLibc   = "libc"           // the C library its base had, which its tools are built for
-	KeyTools  = "tools"          // its shared tool images, space-separated
-	KeyCPUs   = "cpus"           // the size asked for; unset for the image's
-	KeyMemory = "memory"         // GiB
-	KeyDisk   = "disk"           // GiB
-	KeyPorts  = "ports"          // which ports it forwards (ParsePorts); unset for all
+	KeyNet   = netpolicy.KeyNet // network policy: on or off
+	KeyLibc  = "libc"           // the C library its base had, which its tools are built for
+	KeyTools = "tools"          // its shared tool images, space-separated
+	// KeyBackendAt is where its backend kept it when it was made
+	// (backend.LocationOf): unset on a backend whose VMs can't move.
+	KeyBackendAt = "backend_at"
+	KeyCPUs      = "cpus"   // the size asked for; unset for the image's
+	KeyMemory    = "memory" // GiB
+	KeyDisk      = "disk"   // GiB
+	KeyPorts     = "ports"  // which ports it forwards (ParsePorts); unset for all
 	// KeyAgentToggle is set when its backend emulates turning its SSH agent
 	// forwarding on or off (made ready for it), which its starts rely on.
 	KeyAgentToggle = "agent_toggle"
