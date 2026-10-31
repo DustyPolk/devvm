@@ -274,9 +274,24 @@ func BuildingToolsIn(vm string) M {
 	return M{id: "building_tools_in", vals: []val{{"vm", vm}}}
 }
 
+// CAFolderLink is [ca_folder_link]: "{{.dir}}, devvm's CA folder, is a link, and devvm doesn't follow it. Replace it with a folder that holds copies of the CA certificates."
+func CAFolderLink(dir string) M {
+	return M{id: "ca_folder_link", vals: []val{{"dir", dir}}}
+}
+
+// CAFolderUnreadable is [ca_folder_unreadable]: "{{.dir}}, devvm's CA folder, can't be read. Check that it's a folder you can read."
+func CAFolderUnreadable(dir string) M {
+	return M{id: "ca_folder_unreadable", vals: []val{{"dir", dir}}}
+}
+
 // CAInvalid is [ca_invalid]: "{{.file}} holds a certificate that devvm can't read. Replace it with the CA's certificate in PEM."
 func CAInvalid(file string) M {
 	return M{id: "ca_invalid", vals: []val{{"file", file}}}
+}
+
+// CALink is [ca_link]: "{{.file}} is a link, and devvm doesn't follow links in its CA folder. Replace it with a copy of the CA's certificate."
+func CALink(file string) M {
+	return M{id: "ca_link", vals: []val{{"file", file}}}
 }
 
 // CANotCA is [ca_not_ca]: "{{.file}} holds a certificate that isn't a CA's, and VMs trust only CA certificates. Take the file out of devvm's CA folder."
@@ -287,6 +302,11 @@ func CANotCA(file string) M {
 // CANotCertificate is [ca_not_certificate]: "{{.file}} holds something other than certificates, such as a private key, and devvm sends only CA certificates to VMs. Take the file out of devvm's CA folder."
 func CANotCertificate(file string) M {
 	return M{id: "ca_not_certificate", vals: []val{{"file", file}}}
+}
+
+// CAUnreadable is [ca_unreadable]: "{{.file}} in devvm's CA folder can't be read. Fix it, or take it out of the folder."
+func CAUnreadable(file string) M {
+	return M{id: "ca_unreadable", vals: []val{{"file", file}}}
 }
 
 // CheckingTools is [checking_tools]: "checking for newer shared tools"
@@ -2530,9 +2550,13 @@ var specs = map[string]spec{
 	"building_image_from":              {fields: []string{"from", "image", "key"}},
 	"building_tools":                   {fields: []string{"tools"}},
 	"building_tools_in":                {fields: []string{"vm"}},
+	"ca_folder_link":                   {fields: []string{"dir"}},
+	"ca_folder_unreadable":             {fields: []string{"dir"}},
 	"ca_invalid":                       {fields: []string{"file"}},
+	"ca_link":                          {fields: []string{"file"}},
 	"ca_not_ca":                        {fields: []string{"file"}},
 	"ca_not_certificate":               {fields: []string{"file"}},
+	"ca_unreadable":                    {fields: []string{"file"}},
 	"checking_tools":                   {},
 	"claude_mcp_secrets_copied":        {fields: []string{"servers", "vm"}},
 	"claude_token_howto":               {},

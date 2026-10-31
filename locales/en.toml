@@ -1036,6 +1036,22 @@ other = "{{.file}} holds a certificate that isn't a CA's, and VMs trust only CA 
 [ca_invalid]
 other = "{{.file}} holds a certificate that devvm can't read. Replace it with the CA's certificate in PEM."
 
+[ca_link]
+description = "file is a .pem or .crt file in devvm's CA folder"
+other = "{{.file}} is a link, and devvm doesn't follow links in its CA folder. Replace it with a copy of the CA's certificate."
+
+[ca_folder_link]
+description = "dir is devvm's CA folder"
+other = "{{.dir}}, devvm's CA folder, is a link, and devvm doesn't follow it. Replace it with a folder that holds copies of the CA certificates."
+
+[ca_unreadable]
+description = "file is a .pem or .crt file in devvm's CA folder; the error says why"
+other = "{{.file}} in devvm's CA folder can't be read. Fix it, or take it out of the folder."
+
+[ca_folder_unreadable]
+description = "dir is devvm's CA folder; the error says why"
+other = "{{.dir}}, devvm's CA folder, can't be read. Check that it's a folder you can read."
+
 [doctor_proxy_ca]
 other = "HTTPS_PROXY is set, and {{.dir}} has no CA certificates. If the proxy inspects TLS, put its CA's certificate there."
 

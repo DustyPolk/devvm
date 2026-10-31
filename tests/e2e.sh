@@ -565,6 +565,45 @@ check "its image keeps none of them" bash -c "[[ -n '$kc' ]] &&
 limactl delete -f devvm-e2e-cacheck >/dev/null 2>&1
 rm -f "$layers/e2eca.sh"
 
+# Java's cacerts: ca-certificates-java's hook adds the CAs a build trusts (debian:devvm-extra-N.pem)
+# to it, and it's told of each one devvm takes out again, so the image's cacerts keeps none. A
+# project VM on that image gets the CA in cacerts at its launch, and drops it at the launch after
+# it's removed from devvm's CA folder.
+e2e_ca
+mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+jtoken=e2e-java-ca-$$-$(date +%s)
+jlist='keytool -list -cacerts -storepass changeit 2>/dev/null | grep -i "^debian:devvm-extra-"'
+jnone="keytool -list -cacerts -storepass changeit >/dev/null 2>&1 && ! { $jlist; }"
+printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
+  'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends default-jre-headless ca-certificates-java >/dev/null' \
+  "$jlist" "$jtoken" > "$layers/e2ejava.sh"
+check "a layer that installs Java has the CAs in Java's cacerts while it builds" bash -c "'$D' build e2ejava </dev/null >'$work/last.log' 2>&1 &&
+  grep -qx '$jtoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+owned e2ejava
+kj=$(keys_of e2ejava | head -1)
+created+=(devvm-e2e-javacheck)
+check "its image's cacerts keeps none of them" bash -c "[[ -n '$kj' ]] &&
+  limactl clone --tty=false --mount-none devvm-img-$kj devvm-e2e-javacheck >/dev/null 2>&1 &&
+  limactl start --tty=false devvm-e2e-javacheck >/dev/null 2>&1 &&
+  limactl shell --workdir / devvm-e2e-javacheck bash -c '$jnone' </dev/null"
+limactl delete -f devvm-e2e-javacheck >/dev/null 2>&1
+if [[ -n $kj ]]; then
+  pj=$(newproj e2ejava)
+  launch "$pj" 'exit' --no-network-policy e2ejava
+  check "a project VM with Java has the CA in cacerts" bash -c "[[ -n '$vm' ]] &&
+    limactl shell --workdir / '$vm' bash -c '$jlist' </dev/null"
+  rm -rf "$cafolder"
+  check "removed from devvm's CA folder, it's gone from cacerts from the VM's next launch" bash -c "[[ -n '$vm' ]] &&
+    cd '$pj' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+    limactl shell --workdir / '$vm' bash -c '$jnone' </dev/null"
+  [[ -z $vm ]] || (cd "$pj" && "$D" rm -f </dev/null >/dev/null 2>&1)
+else
+  skip "a project VM with Java has the CA in cacerts" "the Java layer didn't build"
+  skip "removed from devvm's CA folder, it's gone from cacerts from the VM's next launch" "the Java layer didn't build"
+fi
+rm -rf "$cafolder"
+rm -f "$layers/e2ejava.sh"
+
 # A failed script keeps its image's VM, stopped and without a record, for inspection.
 printf '#!/bin/bash\nexit 3\n' > "$layers/e2efail.sh"
 DEVVM_MESSAGES=names "$D" build e2efail </dev/null >"$work/fail.log" 2>&1; rc=$?

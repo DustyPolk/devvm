@@ -21,10 +21,15 @@ bundle=$r/etc/ssl/certs/ca-certificates.crt
 one=$r/etc/ssl/devvm.pem
 keep=$r/var/lib/devvm-ca
 
-changed=false
+hooks=$r/etc/ca-certificates/update.d
+
+changed=false removed=""
 for f in "$dir"/devvm-*.crt; do
   [ -e "$f" ] || continue
-  if [ -z "$src" ] || [ ! -f "$src/${f##*/}" ]; then rm -f "$f"; changed=true; fi
+  if [ -z "$src" ] || [ ! -f "$src/${f##*/}" ]; then
+    rm -f "$f"
+    changed=true removed="$removed ${f##*/}"
+  fi
 done
 if [ -n "$src" ]; then
   for f in "$src"/devvm-*.crt; do
@@ -44,6 +49,18 @@ if command -v update-ca-certificates >/dev/null 2>&1; then
   # Its warnings (openssl rehash skipping the bundle file) are noise; a failure still stops this.
   if $changed || [ -d "$keep" ]; then
     update-ca-certificates --fresh >/dev/null 2>&1 || update-ca-certificates >/dev/null 2>&1
+  fi
+  # update-ca-certificates tells its hooks (Java's cacerts, Mono's store) only of the CAs it links,
+  # never of a file gone from $dir, so each hook gets the removed ones as Debian's would: a
+  # "-/etc/ssl/certs/NAME.pem" line each on stdin. Hooks that rebuild from the bundle read no input.
+  # run-parts' names only: no dots.
+  if [ -n "$removed" ]; then
+    for h in "$hooks"/*; do
+      case ${h##*/} in *[!A-Za-z0-9_-]*) continue ;; esac
+      [ -f "$h" ] && [ -x "$h" ] || continue
+      for n in $removed; do echo "-/etc/ssl/certs/${n%.crt}.pem"; done | "$h" >/dev/null 2>&1 ||
+        echo "devvm: $h failed removing devvm's CAs" >&2
+    done
   fi
   rm -rf "$keep"   # a bundle kept from before the package came is the package's now
 elif $any; then

@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"os/exec"
@@ -122,6 +123,76 @@ func TestRead(t *testing.T) {
 }
 
 func slicesJoin(parts ...[]byte) []byte { return bytes.Join(parts, nil) }
+
+// Links are never followed: a file that's a link (into a project folder,
+// whose VM could write it), a dangling one, or a CA folder that's a link
+// fail the read, named. So do a file and a folder it can't read, with
+// the error carried.
+func TestReadRefuses(t *testing.T) {
+	a := cert(t, "a", true)
+	elsewhere := t.TempDir()
+	write(t, elsewhere, "project.pem", a)
+	link := func(target, name string) func(t *testing.T, dir string) {
+		return func(t *testing.T, dir string) {
+			if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	cases := []struct {
+		name   string
+		folder bool // the CA folder itself, else a file in it
+		setup  func(t *testing.T, dir string)
+		want   string // the message's names, %s the path
+		cause  bool   // it carries an error
+	}{
+		{"a file's link", false, link(filepath.Join(elsewhere, "project.pem"), "a.pem"), "ca_link file=%s/a.pem", false},
+		{"a dangling link", false, link(filepath.Join(elsewhere, "gone.pem"), "a.crt"), "ca_link file=%s/a.crt", false},
+		{"an unreadable file", false, func(t *testing.T, dir string) {
+			write(t, dir, "a.pem", a)
+			if err := os.Chmod(filepath.Join(dir, "a.pem"), 0); err != nil {
+				t.Fatal(err)
+			}
+		}, "ca_unreadable file=%s/a.pem", true},
+		{"an unreadable folder", true, func(t *testing.T, dir string) {
+			if err := os.Chmod(dir, 0); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // the test's own folder
+		}, "ca_folder_unreadable dir=%s", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if os.Geteuid() == 0 && c.cause {
+				t.Skip("root reads anything")
+			}
+			dir := filepath.Join(t.TempDir(), "ca")
+			if err := os.Mkdir(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			c.setup(t, dir)
+			_, err := Read(dir)
+			var m msg.M
+			if !errors.As(err, &m) || m.Names() != fmt.Sprintf(c.want, dir) {
+				t.Fatalf("err = %v, want %s", err, fmt.Sprintf(c.want, dir))
+			}
+			if got := errors.Unwrap(m) != nil; got != c.cause {
+				t.Errorf("carries an error: %v, want %v", got, c.cause)
+			}
+		})
+	}
+	// The folder a link: refused, even to a folder of good CAs.
+	parent := t.TempDir()
+	if err := os.Symlink(elsewhere, filepath.Join(parent, "ca")); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(parent, "ca")
+	_, err := Read(dir)
+	var m msg.M
+	if !errors.As(err, &m) || m.Names() != "ca_folder_link dir="+dir {
+		t.Errorf("a linked folder: %v", err)
+	}
+}
 
 // Only what's parsed leaves: text around a certificate isn't sent.
 func TestReadSendsOnlyTheCertificate(t *testing.T) {
@@ -330,5 +401,59 @@ func TestCAShUpdate(t *testing.T) {
 	}
 	if exists(filepath.Join(root, "usr", "local", "share", "ca-certificates", "devvm-extra-1.crt")) {
 		t.Error("devvm-extra-1.crt stayed")
+	}
+}
+
+// update-ca-certificates tells its hooks nothing of a removed file, so
+// ca.sh tells each one (run-parts' names only) of the CAs it removed, a
+// "-/etc/ssl/certs/NAME.pem" line each, as Debian's does; a CA added or
+// kept tells them nothing, and a hook that fails stops nothing.
+func TestCAShHooks(t *testing.T) {
+	root, src, stubs := t.TempDir(), t.TempDir(), t.TempDir()
+	write(t, stubs, "update-ca-certificates", []byte("#!/bin/sh\n"))
+	hooks := filepath.Join(root, "etc", "ca-certificates", "update.d")
+	log := filepath.Join(t.TempDir(), "hooks")
+	if err := os.MkdirAll(hooks, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"jks-keystore":     "sed 's/^/jks /' >> " + log,
+		"mono-keystore":    "sed 's/^/mono /' >> " + log + "; exit 1",
+		"skipped.dpkg-old": "sed 's/^/old /' >> " + log,
+	} {
+		write(t, hooks, name, []byte("#!/bin/sh\n"+body+"\n"))
+	}
+	for _, d := range []string{stubs, hooks} {
+		es, err := os.ReadDir(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range es {
+			if err := os.Chmod(filepath.Join(d, e.Name()), 0o700); err != nil { //nolint:gosec // stubs the test runs
+				t.Fatal(err)
+			}
+		}
+	}
+	got := func() string {
+		b, _ := os.ReadFile(log) //nolint:gosec // the test's own file
+		return string(b)
+	}
+	write(t, src, "devvm-extra-0.crt", []byte("ZERO\n"))
+	write(t, src, "devvm-proxy.crt", []byte("PROXY\n"))
+	caSh(t, root, stubs, src)
+	if got() != "" {
+		t.Errorf("hooks told of an add: %q", got())
+	}
+	if err := os.Remove(filepath.Join(src, "devvm-extra-0.crt")); err != nil {
+		t.Fatal(err)
+	}
+	caSh(t, root, stubs, src)
+	if want := "jks -/etc/ssl/certs/devvm-extra-0.pem\nmono -/etc/ssl/certs/devvm-extra-0.pem\n"; got() != want {
+		t.Errorf("hooks got %q, want %q", got(), want)
+	}
+	caSh(t, root, stubs)
+	if want := "jks -/etc/ssl/certs/devvm-extra-0.pem\nmono -/etc/ssl/certs/devvm-extra-0.pem\n" +
+		"jks -/etc/ssl/certs/devvm-proxy.pem\nmono -/etc/ssl/certs/devvm-proxy.pem\n"; got() != want {
+		t.Errorf("hooks after removing all got %q, want %q", got(), want)
 	}
 }

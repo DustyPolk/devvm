@@ -63,13 +63,22 @@ type CAs [][]byte
 // name, then in their order in the file, each once; none when dir is
 // missing or has none. A file holding anything but certificates (a
 // private key), one devvm can't parse, or a certificate that isn't a CA's
-// (BasicConstraints) fails it: nothing of the folder is used then.
+// (BasicConstraints) fails it: nothing of the folder is used then. So
+// does a link, the folder's or a file's: one into a project folder would
+// let that project's VM choose a CA every VM, build and proxy trusts. A
+// file or folder it can't read fails it too, named.
 func Read(dir string) (CAs, error) {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
+	switch fi, err := os.Lstat(dir); {
+	case errors.Is(err, fs.ErrNotExist):
 		return nil, nil
-	} else if err != nil {
-		return nil, err
+	case err != nil:
+		return nil, msg.CAFolderUnreadable(dir).Because(err)
+	case fi.Mode()&fs.ModeSymlink != 0:
+		return nil, msg.CAFolderLink(dir)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, msg.CAFolderUnreadable(dir).Because(err)
 	}
 	var cas CAs
 	for _, e := range entries {
@@ -78,16 +87,12 @@ func Read(dir string) (CAs, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		fi, err := os.Stat(path)
+		data, ok, err := readFile(path)
 		if err != nil {
 			return nil, err
 		}
-		if !fi.Mode().IsRegular() {
+		if !ok {
 			continue
-		}
-		data, err := os.ReadFile(path) //nolint:gosec // the user's own CA folder
-		if err != nil {
-			return nil, err
 		}
 		got, err := parse(path, data)
 		if err != nil {
@@ -100,6 +105,25 @@ func Read(dir string) (CAs, error) {
 		}
 	}
 	return cas, nil
+}
+
+// readFile returns the data of a file in the CA folder, never following a
+// link; false for what isn't a file (a folder), which Read skips.
+func readFile(path string) ([]byte, bool, error) {
+	fi, err := os.Lstat(path)
+	switch {
+	case err != nil:
+		return nil, false, msg.CAUnreadable(path).Because(err)
+	case fi.Mode()&fs.ModeSymlink != 0:
+		return nil, false, msg.CALink(path)
+	case !fi.Mode().IsRegular():
+		return nil, false, nil
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // the user's own CA folder
+	if err != nil {
+		return nil, false, msg.CAUnreadable(path).Because(err)
+	}
+	return data, true, nil
 }
 
 // parse returns the CA certificates in file's data, PEM again.
