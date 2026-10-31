@@ -54,7 +54,7 @@ type Env struct {
 	Terminal        func() bool
 	LogNote         func()
 	// FreeSpace returns the free space on the volume holding a path
-	// (platform.FreeSpace), checked before each build; nil checks none.
+	// (platform.Host's), checked before each build; nil checks none.
 	FreeSpace func(path string) (uint64, error)
 
 	looked bool // From's digest was looked up in this run

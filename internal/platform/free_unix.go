@@ -10,10 +10,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// FreeSpace returns the free space, in bytes, that an unprivileged user
+// freeSpace returns the free space, in bytes, that an unprivileged user
 // can write on the volume holding path: the volume of its nearest folder
 // that exists, when path doesn't yet.
-func FreeSpace(path string) (uint64, error) {
+func freeSpace(path string) (uint64, error) {
 	path = filepath.Clean(path)
 	for {
 		var st unix.Statfs_t

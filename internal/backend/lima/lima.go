@@ -111,8 +111,8 @@ var (
 )
 
 // New returns the Lima backend for devvm's folders and its own files
-// (assets), on u.
-func New(d paths.Dirs, assets fs.FS, u UI) *Lima {
+// (assets), on u, sizing base to host.
+func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Lima {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -122,7 +122,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Lima {
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
-		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: platform.Memory, CPUs: runtime.NumCPU,
+		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },

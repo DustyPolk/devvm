@@ -29,7 +29,7 @@ stdout '^cpus=2$'
 stdout '^memory=2\.5$'
 ! stdout disk
 ! exec devvm size -g --cpus 9999
-stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
+stderr '^devvm: too_many_cpus have=8 want=9999$'
 ! exec devvm size -g --memory 16M
 stderr '^devvm: size_not_gib flag=--memory value="16M"$'
 ! stub_calls
@@ -69,7 +69,7 @@ stdout '^==> vm_size size=cpus=2 memory=8GiB disk=100GiB vm=devvm-web-[0-9a-f]{1
 ! exec devvm size --disk 50
 stderr '^devvm: disk_shrink have=100 vm=devvm-web-[0-9a-f]{14} want=50$'
 ! exec devvm size --cpus 9999
-stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
+stderr '^devvm: too_many_cpus have=8 want=9999$'
 ! exec devvm size --cpus 1.5
 stderr '^devvm: cpus_not_number value="1\.5"$'
 

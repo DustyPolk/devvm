@@ -92,7 +92,7 @@ type Env struct {
 	// registry gives anyone (from.Lookup.Public).
 	PublicImage func(ctx context.Context, ref string) (string, error)
 	// FreeSpace returns the free space on the volume holding a path
-	// (platform.FreeSpace), checked before a new VM and each build; nil
+	// (the registry's Host), checked before a new VM and each build; nil
 	// checks none.
 	FreeSpace func(path string) (uint64, error)
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
@@ -145,10 +145,10 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 	}
 	home := os.Getenv("HOME")
 	e := &Env{
-		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, u),
+		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, u, reg.Host),
 		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, home, u.Warn), u),
 		Dir:   wd, Home: home, OS: runtime.GOOS,
-		Host: ThisHost, Exec: execShell, Environ: os.Environ(),
+		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
 		Info:   u.Info, Warn: u.Warn, Note: u.Note, Say: u.Say,
@@ -156,7 +156,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
 		Stdout:      u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: platform.FreeSpace,
+		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
 	e.Agent = sshagent.New(d, e.mounts, u)

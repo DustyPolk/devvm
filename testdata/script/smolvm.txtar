@@ -24,7 +24,7 @@ rm $STUB_DIR/smolvm-version
 exec devvm --backend smolvm --from $PIN build base
 stdout '^==> building_image_from from=ubuntu:26.04@sha256:a+ image=base key=[0-9a-f]{12}$'
 stub_calls
-stdout '^smolvm machine create( --state-dir \S+)? --name devvm-img-([0-9a-f]{12}) --label devvm\.data=\S+/data/devvm --cpus 4 --mem \d+ --storage 100 -v /var/lib/docker --net --image ubuntu:26\.04@sha256:a+$'
+stdout '^smolvm machine create( --state-dir \S+)? --name devvm-img-([0-9a-f]{12}) --label devvm\.data=\S+/data/devvm --cpus 4 --mem 8192 --storage 100 -v /var/lib/docker --net --image ubuntu:26\.04@sha256:a+$'
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-img-[0-9a-f]{12}$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-img-[0-9a-f]{12} -i -- sh -s -- \S+ \d+$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-img-[0-9a-f]{12} -i -- sh -s -- on$'

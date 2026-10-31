@@ -1,0 +1,46 @@
+# A small host, as the test build fakes one (2 CPUs, 7 GiB of memory and
+# 1 GiB free, below GitHub's smallest runner): doctor warns about each, a
+# build refuses the disk, base is fitted to the host on Lima and smolvm,
+# and sizes past the host are refused. Registries are never reached: the
+# pinned image needs no lookup, and HTTPS_PROXY points at nothing.
+env DEVVM_MESSAGES=names
+env DEVVM_TEST_CPUS=2
+env DEVVM_TEST_MEMORY_GIB=7
+env DEVVM_TEST_FREE_GIB=1
+env HTTPS_PROXY=http://127.0.0.1:9
+env https_proxy=http://127.0.0.1:9
+env PIN=ubuntu:26.04@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+# doctor warns, and passes.
+exec devvm doctor
+stdout '^doctor_ok backend=lima version=\S+$'
+stderr '^devvm: disk_low_warning dir=\S+ free=1\.0 need=[0-9]+$'
+stderr '^devvm: host_memory_low have=7 want=8$'
+stderr '^devvm: host_cpus_few have=2 want=4$'
+
+# A build needs more free space than that.
+! exec devvm build base
+stderr '^devvm: disk_low dir=\S+ free=1\.0 name=base need=[0-9]+$'
+stub_calls
+! stdout 'limactl create'
+
+# With room, base gets the host's 2 CPUs and half its memory, on Lima and
+# on smolvm.
+env DEVVM_TEST_FREE_GIB=500
+exec devvm build base
+stdout '^==> base_fitted cpus=2 memory=3\.5$'
+stub_calls
+stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} .* --cpus=2 --memory=3\.5 \S+/base\.yaml$'
+exec devvm --backend smolvm --from $PIN build base
+stdout '^==> base_fitted cpus=2 memory=3\.5$'
+stub_calls
+stdout '^smolvm machine create( --state-dir \S+)? --name devvm-img-[0-9a-f]{12} --label devvm\.data=\S+ --cpus 2 --mem 3584 '
+
+# Sizes past the host: more CPUs than it has, or more memory than leaves
+# it 2 GiB.
+! exec devvm size -g --cpus 3
+stderr '^devvm: too_many_cpus have=2 want=3$'
+! exec devvm size -g --memory 6
+stderr '^devvm: too_much_memory have=7 max=5 want=6$'
+exec devvm size -g --cpus 2 --memory 5
+stdout '^==> size_defaults size=cpus=2 memory=5GiB$'

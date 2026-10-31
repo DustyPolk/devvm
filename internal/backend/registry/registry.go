@@ -11,11 +11,13 @@ import (
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/backend/smolvm"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 )
 
 // unreviewed is "allowed" only in the builds tests make (tests/e2e.sh, the
 // CLI tests), set with -ldflags -X: only there does DEVVM_UNREVIEWED let
-// unreviewed emulations through. Releases never set it.
+// unreviewed emulations through, and do the host's overrides
+// (platform.NewHost) count. Releases never set it.
 var unreviewed = ""
 
 // linuxURL and linuxSHA256 are set in a release's macOS builds, with
@@ -42,24 +44,38 @@ type UI interface {
 // engine (linux, desktop, other), and DEVVM_DOCKER_PROC_SYS where its host's
 // /proc/sys is, for the CLI tests' stand-in engine; and
 // DEVVM_LINUX_BUILD_URL with DEVVM_LINUX_BUILD_SHA256 stand in for a
-// release's Linux build, fetched as on macOS whatever the host.
+// release's Linux build, fetched as on macOS whatever the host. The
+// registry's Host is Host's.
 func New(d paths.Dirs, assets fs.FS, u UI) (*backend.Registry, error) {
 	return newFor(d, assets, u, unreviewed, os.Getenv)
+}
+
+// Host returns the host devvm runs on, as this build reads it: a test
+// build's counts the environment's overrides (platform.TestCPUs and the
+// rest), a release's never does.
+func Host() platform.Host { return hostFor(unreviewed, os.Getenv) }
+
+// hostFor is Host for a build whose unreviewed is build, reading the
+// environment with getenv.
+func hostFor(build string, getenv func(string) string) platform.Host {
+	return platform.NewHost(build == "allowed", getenv)
 }
 
 // newFor is New for a build whose unreviewed is build, reading the
 // environment with getenv.
 func newFor(d paths.Dirs, assets fs.FS, u UI, build string, getenv func(string) string) (*backend.Registry, error) {
+	host := hostFor(build, getenv)
 	dk := docker.New(d, assets, u)
 	dk.LinuxURL, dk.LinuxSHA256 = linuxURL, linuxSHA256
 	if build == "allowed" && getenv("DEVVM_LINUX_BUILD_URL") != "" {
 		dk.LinuxURL, dk.LinuxSHA256 = getenv("DEVVM_LINUX_BUILD_URL"), getenv("DEVVM_LINUX_BUILD_SHA256")
 		dk.LinuxOS = "darwin"
 	}
-	r, err := backend.NewRegistry(lima.New(d, assets, u), smolvm.New(d, assets, u), dk)
+	r, err := backend.NewRegistry(lima.New(d, assets, u, host), smolvm.New(d, assets, u, host), dk)
 	if err != nil {
 		return nil, err
 	}
+	r.Host = host
 	if build == "allowed" {
 		r.Unreviewed = backend.ParseUnreviewed(getenv("DEVVM_UNREVIEWED"))
 		dk.Kind = getenv("DEVVM_DOCKER_KIND")

@@ -19,6 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -65,7 +66,7 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 		write(t, filepath.Join(root, "shared-tools", name), string(data))
 	}
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
-	tl := tools.New(d, os.DirFS(root), quietUI{})
+	tl := tools.New(d, os.DirFS(root), quietUI{}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {

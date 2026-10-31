@@ -76,7 +76,7 @@ type Env struct {
 	// AddCleanup adds to the run's cleanup stack.
 	AddCleanup func(f func(context.Context)) (remove func())
 	// FreeSpace returns the free space on the volume holding a path
-	// (platform.FreeSpace), checked before a build; nil checks none.
+	// (platform.Host's), checked before a build; nil checks none.
 	FreeSpace func(path string) (uint64, error)
 
 	// The host's mise: its download's URL (a format taking the version
@@ -109,8 +109,8 @@ type UI interface {
 }
 
 // New returns the shared tools in devvm's folders, with devvm's own files
-// (assets), on u.
-func New(d paths.Dirs, assets fs.FS, u UI) *Env {
+// (assets), on u, checking host's free space before a build.
+func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Env {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -123,7 +123,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Env {
 		ShareWait: time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
-		FreeSpace: platform.FreeSpace,
+		FreeSpace: host.FreeSpace,
 	}
 }
 

@@ -14,7 +14,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -86,7 +85,7 @@ func builder(u *ui.UI, flag string) (*build.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newBuilder(u, dirs, c.Backend, reg.Review, tools.New(dirs, assets.FS, u), ""), nil
+	return newBuilder(u, dirs, c.Backend, reg.Review, tools.New(dirs, assets.FS, u, reg.Host), ""), nil
 }
 
 // newBuilder returns what builds images on be, its features checked
@@ -96,7 +95,7 @@ func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review
 	return &build.Env{
 		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef,
 		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
-		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote, FreeSpace: platform.FreeSpace,
+		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote, FreeSpace: registry.Host().FreeSpace,
 	}
 }
 

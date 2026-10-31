@@ -92,6 +92,27 @@ It's for tests only, of an emulation before its review: none needs it now, as ev
 
 A test build also reads `DEVVM_LINUX_BUILD_URL` and `DEVVM_LINUX_BUILD_SHA256` in place of a release's Linux archive and its devvm's SHA-256, and then fetches devvm's [Linux build](../backends/docker.md#requirements) as a release on macOS does, whatever the host: the CLI tests serve one on a loopback port, with a matching SHA-256 and a mismatched one.
 
+## A host of any size
+
+devvm reads this machine's CPUs, its memory and the free space on its disks when it fits base to the host, checks a size you give it, checks free space before a build or a new VM, and warns in `devvm doctor`. All of these reads go through `platform.Host`, so the CLI tests can stand in for a host of any size and pass the same way on a large Mac and on a small CI runner. In a test build, three environment variables replace what `platform.Host` reads:
+
+| Variable | Replaces |
+| --- | --- |
+| `DEVVM_TEST_CPUS` | the number of CPUs |
+| `DEVVM_TEST_MEMORY_GIB` | the memory, in GiB |
+| `DEVVM_TEST_FREE_GIB` | the free space in GiB, on every disk |
+
+A test build is the same one as for `DEVVM_UNREVIEWED`, and a release ignores all three, so no variable can make devvm see more free space or more memory than this machine has. Each one that isn't set leaves the machine's own value. `internal/cli/script_test.go` sets a large host in every script: 8 CPUs, 16 GiB of memory and 500 GiB free, which is more than base asks for and more than any build checks for. A script that tests a small host sets its own values with `env`, as `small_host.txtar` does with 2 CPUs, 7 GiB and 1 GiB free:
+
+```txtar
+env DEVVM_TEST_CPUS=2
+env DEVVM_TEST_MEMORY_GIB=7
+! exec devvm size -g --cpus 3
+stderr '^devvm: too_many_cpus have=2 want=3$'
+```
+
+To go back to the large host later in the same script, set the large values again, because an empty value leaves the machine's own. The fake host covers only size and free space. What differs between operating systems, such as Lima's disk floors on Linux, ports already in use, Docker on `PATH`, or tmpfs and 9p mounts, still differs, and the Linux CI job is what catches it.
+
 ## Manual checks
 
 What `tests/e2e.sh` leaves out, as it would change something of yours or needs something it doesn't have:

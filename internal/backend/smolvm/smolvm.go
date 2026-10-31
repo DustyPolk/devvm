@@ -117,8 +117,8 @@ var (
 )
 
 // New returns the smolvm backend for devvm's folders and its own files
-// (assets), on u.
-func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
+// (assets), on u, sizing base to host.
+func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Smolvm {
 	kvm := os.Getenv("DEVVM_KVM")
 	if kvm == "" {
 		kvm = "/dev/kvm"
@@ -131,7 +131,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 	}
 	return &Smolvm{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
-		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory, CPUs: runtime.NumCPU,
+		Getenv: os.Getenv, User: user.Current, Memory: host.Memory, CPUs: host.CPUs,
 		KVM:      kvm,
 		Terminal: u.StdinIsTerminal,
 		FreePort: freePort, PortFree: platform.PortFree,

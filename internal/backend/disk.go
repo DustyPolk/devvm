@@ -54,7 +54,7 @@ type Storage interface {
 
 // Space checks the host's free space before a step that writes disks.
 // Free returns the free space on the volume holding a path
-// (platform.FreeSpace); with Free nil nothing is checked.
+// (platform.Host's); with Free nil nothing is checked.
 type Space struct {
 	Free func(path string) (uint64, error)
 }

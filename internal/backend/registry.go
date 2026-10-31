@@ -8,6 +8,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -16,9 +17,11 @@ import (
 const Default = "lima"
 
 // Registry is the backends devvm has, by name, and the review their
-// features are checked against.
+// features are checked against. Host is the host they run on, whose CPUs,
+// memory and free space every check of them reads.
 type Registry struct {
 	Review
+	Host   platform.Host
 	byName map[string]Backend
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 )
 
 // Lima's targets: build.sh's own format.
@@ -118,7 +119,7 @@ func newEnv(t *testing.T) env {
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
-	tl := New(d, os.DirFS(root), quietUI{})
+	tl := New(d, os.DirFS(root), quietUI{}, platform.Host{})
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
 	tl.Getenv = func(k string) string {

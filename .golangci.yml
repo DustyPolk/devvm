@@ -84,6 +84,8 @@ linters:
           msg: print through internal/ui.
         - pattern: ^context\.(Background|TODO)$
           msg: take the caller's ctx; a fresh one only where it must outlive it, with a nolint saying why.
+        - pattern: ^(runtime\.NumCPU|unix\.(Statfs|Fstatfs|Sysinfo|SysctlUint64)|syscall\.(Statfs|Fstatfs|Sysinfo))$
+          msg: read the host's CPUs, memory and free space through platform.Host, which test builds can override.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -108,6 +110,9 @@ linters:
       - path: ^internal/ui/
         linters: [forbidigo]
         text: fmt\.Print|os\.(Stdout|Stderr)|context\.(Background|TODO)
+      - path: ^internal/platform/
+        linters: [forbidigo]
+        text: runtime\.NumCPU|unix\.|syscall\.
     paths:
       - ^\.agents/
 

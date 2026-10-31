@@ -10,6 +10,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 )
 
 // TestE2EExecQuoting checks, on a real running machine, that what Exec
@@ -26,7 +27,7 @@ func TestE2EExecQuoting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(d, assets.FS, testUI{})
+	s := New(d, assets.FS, testUI{}, platform.Host{})
 	args := []string{
 		"a b", "  two  spaces ", `"double"`, "'single'", `it's`, "$HOME", "${HOME}", "$(id -u)", "`id -u`",
 		"a\nb", "tab\there", "*", "?", "[ab]", "/*", "~", "~root", `back\slash`, `\n`, "", "-n", "--",

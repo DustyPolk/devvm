@@ -19,7 +19,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
@@ -48,8 +47,8 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			fail(u, err, msg.DoctorFailed)
 			d := doctor{
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
-				Free: platform.FreeSpace,
-				Host: vm.ThisHost,
+				Free: reg.Host.FreeSpace,
+				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
 			}
 			err = d.run(cmd.Context(), u, reg.All(), b, fixes)
 			if m, ok := errors.AsType[msg.M](err); ok {

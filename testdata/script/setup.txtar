@@ -74,9 +74,9 @@ exec devvm setup --memory 3
 stdout '^==> size_defaults size=cpus=2 memory=3GiB disk=120GiB$'
 cmp $XDG_CONFIG_HOME/devvm/size size3.txt
 ! exec devvm setup --cpus 9999
-stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
+stderr '^devvm: too_many_cpus have=8 want=9999$'
 ! exec devvm setup --memory 99999
-stderr '^devvm: too_much_memory have=[0-9]+ max=[0-9.]+ want=99999$'
+stderr '^devvm: too_much_memory have=16 max=14 want=99999$'
 ! exec devvm setup --cpus 1.5
 stderr '^devvm: cpus_not_number value="1\.5"$'
 cmp $XDG_CONFIG_HOME/devvm/size size3.txt

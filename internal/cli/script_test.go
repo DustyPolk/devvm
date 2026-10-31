@@ -24,6 +24,7 @@ import (
 
 	"github.com/rogpeppe/go-internal/testscript"
 
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -197,6 +198,11 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	}
 	env.Setenv("DEVVM_KVM", kvm)
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
+	// A large host, whatever runs the tests: a script that tests a small
+	// one sets its own.
+	for name, v := range fakeHost() {
+		env.Setenv(name, v)
+	}
 	// The stub smolvm's machines run on this process, which outlives each
 	// command, as smolvm's own does.
 	env.Setenv("SMOLVM_STUB_PID", strconv.Itoa(os.Getpid()))
@@ -212,6 +218,17 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	env.Setenv("DEVVM_REPO", repo) // for the repo's own scripts (scripts/, assets/)
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil
+}
+
+// fakeHost is the host the test build reads in every script
+// (platform.Host's overrides): twice the CPUs and memory base asks for,
+// and more free space than any build checks for.
+func fakeHost() map[string]string {
+	return map[string]string{
+		platform.TestCPUs:      "8",
+		platform.TestMemoryGiB: "16",
+		platform.TestFreeGiB:   "500",
+	}
 }
 
 // waitFileTimeout is how long wait_file waits. A background devvm takes

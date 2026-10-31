@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"math"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -97,13 +96,14 @@ func (h Host) memoryBytes() uint64 {
 	return uint64(h.MemoryGiB) << 30
 }
 
-// ThisHost returns this machine's CPUs and memory.
-func ThisHost() (Host, error) {
-	mem, err := platform.Memory()
+// ThisHost returns the CPUs and memory of h, this machine as devvm reads
+// it.
+func ThisHost(h platform.Host) (Host, error) {
+	mem, err := h.Memory()
 	if err != nil {
 		return Host{}, err
 	}
-	return Host{CPUs: runtime.NumCPU(), MemoryGiB: int(mem >> 30)}, nil
+	return Host{CPUs: h.CPUs(), MemoryGiB: int(mem >> 30)}, nil
 }
 
 // Check refuses a parsed size the host can't give: more CPUs than it has,

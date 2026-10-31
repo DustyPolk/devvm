@@ -128,6 +128,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
 | `DEVVM_UBUNTU_URL` | `ubuntu/`, with the pinned dated release |
 | `DEVVM_KVM` | `stub/kvm`, a file standing in for Linux's `/dev/kvm` |
+| `DEVVM_TEST_CPUS`, `DEVVM_TEST_MEMORY_GIB`, `DEVVM_TEST_FREE_GIB` | 8, 16 and 500: a large host, whatever runs the tests ([details](testing.md#a-host-of-any-size)) |
 | `DEVVM_HOST_MISE` | the `mise` stub, which resolves the shared tools in place of devvm's own mise |
 | `MISE_STUB_LOCK` | `testdata/mise.lock`, the lock the `mise` stub writes |
 | `DEVVM_BIN` | the folder of the built `devvm`, alone |

@@ -84,7 +84,7 @@ func newSetup(u *ui.UI) setup {
 		terminal: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
 		pickOne:  u.PickOne,
 		answer:   u.Answer,
-		host:     vm.ThisHost,
+		host:     func() (vm.Host, error) { return vm.ThisHost(registry.Host()) },
 	}
 }
 
