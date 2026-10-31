@@ -218,6 +218,9 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err := os.MkdirAll(ca, 0o700); err != nil {
 		return none, err
 	}
+	if err := os.Chmod(ca, 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+		return none, err
+	}
 	if err := p.InitCA(ca); err != nil {
 		return none, msg.ProxyCAFailed(ca)
 	}

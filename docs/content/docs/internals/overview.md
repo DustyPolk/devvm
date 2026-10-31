@@ -115,4 +115,4 @@ devvm writes nothing into the project folder. It keeps your settings in `~/.conf
 
 A VM's state file records the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. The file lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
 
-Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600) and its folders mode 700. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.
+Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600) and its folders mode 700. The folders that hold history, logs, keys or secrets (`exports/`, `logs/`, `logs/runs/`, `run/`, `ca/` and `~/.config/devvm/secrets/`) are set to mode 700 again whenever devvm writes an export, a log, a key or a secret into them, whatever mode they had before. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.

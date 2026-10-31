@@ -104,12 +104,36 @@ func TestExport(t *testing.T) {
 		}
 		return nil
 	}
+	// An exports folder an older devvm made open to others.
+	if err := os.MkdirAll(e.Dirs.Exports(), 0o755); err != nil { //nolint:gosec // the test's own folder
+		t.Fatal(err)
+	}
+	if err := os.Chmod(e.Dirs.Exports(), 0o755); err != nil { //nolint:gosec // the test's own folder
+		t.Fatal(err)
+	}
 	if err := lc.Export(t.Context(), ""); err != nil {
 		t.Fatal(names(err))
 	}
 	es, _ := os.ReadDir(e.Dirs.Exports())
 	if len(es) != 1 || !strings.HasPrefix(es[0].Name(), vm+"-") || !strings.HasSuffix(es[0].Name(), ".tar.gz") {
 		t.Fatalf("exports %v", es)
+	}
+	for path, mode := range map[string]os.FileMode{e.Dirs.Exports(): 0o700, filepath.Join(e.Dirs.Exports(), es[0].Name()): 0o600} {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != mode {
+			t.Errorf("%s: %v, want %v (%v)", path, fi.Mode().Perm(), mode, err)
+		}
+	}
+
+	// A folder of the user's keeps its mode.
+	mine := t.TempDir()
+	if err := os.Chmod(mine, 0o755); err != nil { //nolint:gosec // the test's own folder
+		t.Fatal(err)
+	}
+	if err := lc.Export(t.Context(), filepath.Join(mine, "h.tar.gz")); err != nil {
+		t.Fatal(names(err))
+	}
+	if fi, _ := os.Stat(mine); fi.Mode().Perm() != 0o755 {
+		t.Errorf("the user's folder: %v", fi.Mode().Perm())
 	}
 
 	dir := filepath.Join(t.TempDir(), "new")

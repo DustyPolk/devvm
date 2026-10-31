@@ -364,6 +364,15 @@ func TestPrepare(t *testing.T) {
 	var excluded []string
 	p.OS = "darwin"
 	p.ExcludeFromBackup = func(_ context.Context, dir string) error { excluded = append(excluded, dir); return nil }
+	// Folders an older devvm left open to others are the user's alone after.
+	for _, dir := range []string{d.Run(), d.Logs(), d.CA()} {
+		if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // the test's own folder
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil { //nolint:gosec // the test's own folder
+			t.Fatal(err)
+		}
+	}
 	conf, err := p.Prepare(t.Context(), lima, st, false)
 	if err != nil {
 		t.Fatal(names(err))

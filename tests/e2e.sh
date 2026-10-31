@@ -1050,9 +1050,11 @@ check "export starts the stopped VM and saves its agents' history to a file, wit
   HOME='$ah' '$D' export '$work/export/h.tar.gz' </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   tar -tzf '$work/export/h.tar.gz' > '$work/export.list' &&
   grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list'"
-check "rm exports its agents' history, without their logins, then deletes it" bash -c "cd '$a' && HOME='$ah' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
-  ! limactl list -q | grep -qx $vm && f=\$(ls '$XDG_DATA_HOME'/devvm/exports/$vm-*.tar.gz) && tar -tzf \"\$f\" > '$work/export.list' &&
-  grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list'"
+check "rm exports its agents' history, without their logins, only yours to read, then deletes it" bash -c "ex='$XDG_DATA_HOME/devvm/exports' &&
+  mkdir -p \"\$ex\" && chmod 755 \"\$ex\" && cd '$a' && HOME='$ah' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
+  ! limactl list -q | grep -qx $vm && f=\$(ls \"\$ex\"/$vm-*.tar.gz) && tar -tzf \"\$f\" > '$work/export.list' &&
+  grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list' &&
+  [[ \$(stat -c %a \"\$ex\" 2>/dev/null || stat -f %Lp \"\$ex\") == 700 ]] && [[ \$(stat -c %a \"\$f\" 2>/dev/null || stat -f %Lp \"\$f\") == 600 ]]"
 
 section "SSH agents"
 # A home of its own, without keys. A throwaway agent with a throwaway key stands for yours; devvm's

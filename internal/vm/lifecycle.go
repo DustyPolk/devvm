@@ -158,7 +158,9 @@ func (e Lifecycle) exportFile(vm string) string {
 // tarball at file, starting the VM if it's stopped; failed is the error
 // when its tar fails. Their logins aren't in it. It's written next to
 // file and renamed into place once complete, so a failed export leaves
-// nothing and replaces nothing.
+// nothing and replaces nothing. The file is the user's alone (600), and
+// so is the exports folder, whatever mode it had; a folder of the user's
+// keeps its own.
 func (e Lifecycle) export(ctx context.Context, t *found, file string, failed error) error {
 	vm, b := t.f.Name, t.b
 	if err := e.ensureRunning(ctx, t); err != nil {
@@ -166,6 +168,11 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 	}
 	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 		return err
+	}
+	if filepath.Dir(file) == e.Dirs.Exports() {
+		if err := os.Chmod(e.Dirs.Exports(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+			return err
+		}
 	}
 	out, err := os.CreateTemp(filepath.Dir(file), ".devvm-export-*")
 	if err != nil {
