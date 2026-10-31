@@ -148,7 +148,9 @@ func hostname(vm string) string {
 	return vm
 }
 
-// noClientProxy are container create's options that keep the proxies in
+// noClientProxy are container create's and run's options, given to every
+// container devvm makes (VMs, builds, relays, the tools' unpacking), that
+// keep the proxies in
 // the Docker client's config (~/.docker/config.json's proxies, password
 // and all) out of a container's configuration: the client sets them in
 // every container it makes unless the command sets them itself, and a

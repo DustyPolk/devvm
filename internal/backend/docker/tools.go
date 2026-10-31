@@ -218,8 +218,9 @@ func (d *Docker) unpack(ctx context.Context, img, dir string, add, drop []string
 		"container", "run", "--rm", "-i", "--name", name,
 		"--label", LabelKey + "=" + d.Data, "--label", kindLabel + "=" + kindTools,
 		"--network", "none", "--user", "0:0", "--entrypoint", "sh",
-		"--mount", src, "--mount", volume(d.toolsVolume(), storeAt, true), img, "-s", "--", shareAt, storeAt,
 	}
+	args = append(args, noClientProxy()...)
+	args = append(args, "--mount", src, "--mount", volume(d.toolsVolume(), storeAt, true), img, "-s", "--", shareAt, storeAt)
 	for _, f := range add {
 		args = append(args, "+"+f)
 	}

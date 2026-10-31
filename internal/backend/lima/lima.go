@@ -48,8 +48,14 @@ type Lima struct {
 	// OS and Arch are the host's, as Go names them: how VMs are confined
 	// (Seatbelt on darwin, QEMU on linux) and which QEMU Lima runs.
 	OS, Arch string
-	// Self is devvm's binary, which the QEMU wrapper runs.
+	// Self is devvm's binary, which the QEMU wrapper and a build's proxy
+	// run.
 	Self string
+	// Spawn starts a build's proxy, a process that can outlive devvm,
+	// and returns it (platform.StartDetachedProcess); Tick is how often
+	// it's looked at while it starts, ten times at most.
+	Spawn func(path string, args []string, out *os.File) (*os.Process, error)
+	Tick  time.Duration
 	// Assets holds devvm's own files (assets.FS): base.yaml, oci/.
 	Assets fs.FS
 	// SSHTimeout is how long a degraded start waits for ssh.
@@ -115,7 +121,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Lima {
 	}
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Self: self, Assets: assets, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
+		Self: self, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
 		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: platform.Memory, CPUs: runtime.NumCPU,
 		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
 		DockerRunning: from.DockerRunning,

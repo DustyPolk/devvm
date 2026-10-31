@@ -149,6 +149,15 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 	if agent == "" {
 		agent = l.Getenv("SSH_AUTH_SOCK")
 	}
+	// A VM on Lima's own network gets the host's proxy settings from Lima
+	// (propagateProxyEnv), which limactl otherwise runs without.
+	if c.Net == backend.NetDirect {
+		for _, k := range limaProxyVars() {
+			if v := l.Getenv(k); v != "" {
+				env = append(env, k+"="+v)
+			}
+		}
+	}
 	switch l.OS {
 	case "darwin":
 		p := profile{LimaDir: l.Dirs.LimaVM(vm), SSHPort: sshPort}
@@ -164,7 +173,8 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 		case backend.NetNone:
 			p.AgentSocket = agent
 		case backend.NetInternet:
-			p.Internet = true
+			// A build's own proxy, behind a company proxy (buildproxy.go).
+			p.Internet, p.ProxyPort = true, c.ProxyPort
 		}
 		if err := writeProfile(l.profileFile(vm), p); err != nil {
 			return nil, nil, err

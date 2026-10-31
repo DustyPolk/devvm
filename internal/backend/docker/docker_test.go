@@ -803,6 +803,7 @@ func TestTools(t *testing.T) {
 	}
 	if c, ok := has(calls, "docker container run --rm -i --name "+s.unpackName()); !ok ||
 		!strings.Contains(c, " --network none ") || !strings.Contains(c, "--mount type=bind,src="+out+",dst=/mnt/devvm-share,readonly") ||
+		!strings.Contains(c, " "+strings.Join(noClientProxy(), " ")+" ") ||
 		!strings.HasSuffix(c, " "+s.imageRef(baseKey)+" -s -- /mnt/devvm-share /mnt/devvm-store +"+file) {
 		t.Errorf("unpacking: %q", c)
 	}

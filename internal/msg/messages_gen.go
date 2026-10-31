@@ -2389,7 +2389,7 @@ func UpstreamProxyInvalid(setting string) M {
 	return M{id: "upstream_proxy_invalid", vals: []val{{"setting", setting}}}
 }
 
-// UpstreamProxyScheme is [upstream_proxy_scheme]: "{{.setting}} names a {{.scheme}} proxy, and network policy goes only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+// UpstreamProxyScheme is [upstream_proxy_scheme]: "{{.setting}} names a {{.scheme}} proxy, and network policy and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
 func UpstreamProxyScheme(scheme string, setting string) M {
 	return M{id: "upstream_proxy_scheme", vals: []val{{"scheme", scheme}, {"setting", setting}}}
 }

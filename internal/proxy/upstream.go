@@ -11,10 +11,12 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -225,10 +227,15 @@ func upstreamFor(host string, port int, plain bool) *upstream {
 
 // --- through it ---
 
+// errUnresolved is floorUpstream's refusal of a name the host can't resolve that only ** allows.
+var errUnresolved = errors.New("this machine can't resolve it, and only ** allows it; allow the name itself to reach it through the company proxy")
+
 // floorUpstream is the floor for a host sent upstream, which resolves it: an address is judged as
 // ever; a name by what the host's resolver answers, if it answers, refusing it when any answer is
 // internal or denied (the upstream may connect to any of them). A name the host can't resolve
-// (common behind a company proxy) goes upstream unjudged.
+// (common behind a company proxy) goes upstream unjudged only when the policy names it, as itself
+// or under *.domain: one that only ** allows is refused (errUnresolved), so ** alone never sends
+// the company proxy a name it may resolve to its own network's hosts.
 func floorUpstream(ctx context.Context, host string, port int) error {
 	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
 		_, err := resolve(ctx, host, port)
@@ -238,6 +245,12 @@ func floorUpstream(ctx context.Context, host string, port int) error {
 	defer cancel()
 	ips, err := net.DefaultResolver.LookupNetIP(lctx, "ip", host)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !pol.byName(host, port) {
+			return errUnresolved
+		}
 		return nil
 	}
 	for _, a := range ips {
@@ -280,7 +293,9 @@ func (u *upstream) connect(ctx context.Context, host string, port int) (net.Conn
 		_ = c.Close()
 		return nil, fmt.Errorf("the upstream proxy %s: %w", u.addr, err)
 	}
-	br := bufio.NewReader(c)
+	// The upstream's answer is read only as far as maxConnectReply: one that never ends its
+	// headers fails rather than fill memory.
+	br := bufio.NewReader(io.LimitReader(c, maxConnectReply))
 	resp, err := http.ReadResponse(br, &http.Request{Method: http.MethodConnect})
 	if err != nil {
 		_ = c.Close()
@@ -296,11 +311,18 @@ func (u *upstream) connect(ctx context.Context, host string, port int) (net.Conn
 		return nil, ctx.Err()
 	}
 	_ = c.SetDeadline(time.Time{})
-	if br.Buffered() > 0 {
-		return bufConn{c, br}, nil
+	if n := br.Buffered(); n > 0 {
+		// What came after the answer is the tunnel's: read before the rest, which the limit
+		// doesn't cover.
+		rest, _ := br.Peek(n)
+		return bufConn{c, bufio.NewReader(io.MultiReader(bytes.NewReader(bytes.Clone(rest)), c))}, nil
 	}
 	return c, nil
 }
+
+// maxConnectReply is as much of an upstream's answer to CONNECT as is read: its status line and
+// headers.
+const maxConnectReply = 64 << 10
 
 // dialOut connects to host:port for a tunnel or a TLS connection: through the upstream when one
 // applies, else directly to an address the floor allows.

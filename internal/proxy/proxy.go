@@ -418,6 +418,9 @@ func check(ctx context.Context, host string, port int, plain bool) (string, stri
 		if errors.Is(err, errFloor) {
 			return "", "it " + err.Error() + "; allow the address itself to reach it"
 		}
+		if errors.Is(err, errUnresolved) {
+			return "", err.Error()
+		}
 		return "", "can't resolve it: " + err.Error()
 	}
 	return why, ""

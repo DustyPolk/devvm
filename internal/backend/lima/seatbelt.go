@@ -25,7 +25,7 @@ type profile struct {
 	// "" for none.
 	AgentSocket string
 	SSHPort     int // the VM's ssh forward on host loopback
-	ProxyPort   int // devvm's proxy on host loopback; 0 for none
+	ProxyPort   int // devvm's proxy on host loopback, the VM's or a build's; 0 for none
 	// NoBinds denies every network bind but the ssh forward's TCP port
 	// and unix sockets in LimaDir, so the hostagent forwards no guest
 	// port whatever its rules say (devvm's forwarder does). Seatbelt

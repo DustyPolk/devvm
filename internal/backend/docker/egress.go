@@ -28,12 +28,13 @@ package docker
 // of devvm's on the host for it alone, allowing any host on ports 80 and
 // 443 but the host's own and internal addresses (the proxy's floor), which
 // its commands are told of in an env file (execEnv), never in their
-// arguments.
+// arguments. So does a build on any engine behind a company proxy: the
+// build's proxy goes through it, and the build gets only its own proxy's
+// address and password, never the company proxy's.
 
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -49,8 +50,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -343,7 +342,7 @@ func (e egress) startRelay(ctx context.Context, name string, port int) (string, 
 		"--pids-limit", "64", "--memory", "128m", "--memory-swap", "128m", "--user", user,
 		"--mount", binMount,
 	}
-	args = append(append(args, sock...), "--entrypoint", relayBin, img,
+	args = append(append(append(args, noClientProxy()...), sock...), "--entrypoint", relayBin, img,
 		"_proxy", "-relay", "0.0.0.0:"+strconv.Itoa(port), "-relay-to", relaySock)
 	if err := e.d.Runner.Run(ctx, msg.M{}, e.d.docker(ctx, args...)); err != nil {
 		return "", backend.Logged(msg.StartFailed(relay))
@@ -593,23 +592,25 @@ func (e egress) forget(ctx context.Context, vm string) error {
 	return os.RemoveAll(filepath.Dir(proxySocket(e.d.Dirs, vm)))
 }
 
-// buildNet readies the network of a build's container (name) with n: on
-// Docker Desktop with NetInternet, a network of its own, its relay and a
-// proxy of devvm's for it (buildProxy), whose settings the returned
-// context's commands get; else Docker's own (netMode). lifeline is where
-// the proxy's lifeline goes once the container runs (follow), "" for
-// none; done undoes the rest, the container left, off the network: a
-// failed build's, kept, keeps its proxy's logs (proxy.log, events.jsonl)
-// in its folder.
+// buildNet readies the network of a build's container (name) with n: with
+// NetInternet on Docker Desktop, or behind a company proxy (the host's
+// HTTPS_PROXY or HTTP_PROXY) on any engine, a network of its own, its
+// relay and a proxy of devvm's for it (backend.ProxyStarter), through the
+// company proxy, whose address with the build's own password the returned
+// context's commands get; else Docker's own (netMode), and no proxy.
+// lifeline is where the proxy's lifeline goes once the container runs
+// (follow), "" for none; done undoes the rest, the container left, off
+// the network: a failed build's, kept, keeps its proxy's logs (proxy.log,
+// events.jsonl) in its folder.
 func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (context.Context, string, string, func(context.Context), error) {
 	dir := filepath.Join(e.d.Dirs.Docker(), "builds", name)
-	if n != backend.NetInternet || e.d.engineKind() != kindDesktop {
-		ctx, done, err := e.hostProxyEnv(ctx, dir, n)
-		return ctx, netMode(n), "", done, err
+	host := backend.ReadHostProxy(e.d.Getenv)
+	if n != backend.NetInternet || e.d.engineKind() != kindDesktop && host.None() {
+		return ctx, netMode(n), "", func(context.Context) {}, nil
 	}
-	var proxy *os.Process
+	var proxy *backend.BuildProxy
 	done := func(ctx context.Context) {
-		stopProxy(proxy)
+		proxy.Stop()
 		_ = e.d.removeIfThere(ctx, relayName(name))
 		// A failed build's container, kept, keeps its proxy's logs too.
 		_, err := e.d.inspect(ctx, name)
@@ -630,27 +631,22 @@ func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (conte
 		done(ctx)
 		return ctx, "", "", func(context.Context) {}, err
 	}
-	if err := os.RemoveAll(dir); err != nil {
-		return fail(err)
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fail(err)
-	}
-	password, err := randomHex(32)
-	if err != nil {
-		return fail(err)
-	}
 	// The host's proxy, which devvm's goes through.
-	upstream, err := backend.ReadHostProxy(e.d.Getenv).Upstream()
+	upstream, err := host.Upstream()
 	if err != nil {
 		return fail(err)
 	}
-	if proxy, err = e.buildProxy(name, dir, password, upstream); err != nil {
+	sock := proxySocket(e.d.Dirs, name)
+	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
+		return fail(err)
+	}
+	starter := backend.ProxyStarter{Self: e.d.Self, Spawn: e.d.Spawn, Tick: e.d.Tick}
+	if proxy, err = starter.Start(name, dir, filepath.Join(dir, "lifeline"), upstream, "-listen-unix", sock); err != nil {
 		return fail(err)
 	}
 	env := buildEnv()
 	for _, k := range proxyVars() {
-		env[k] = proxyURL(buildPort, password)
+		env[k] = proxyURL(buildPort, proxy.Password)
 	}
 	var lines []byte
 	for _, k := range slices.Sorted(maps.Keys(env)) {
@@ -677,102 +673,6 @@ func buildCaps(name, netw string) []string {
 		return []string{"NET_RAW"}
 	}
 	return nil
-}
-
-// hostProxyEnv readies a build (its files in dir) on a Linux engine's
-// network, n: with the internet and a proxy on the host, the returned
-// context's commands get the host's proxy variables, from an env file
-// (never in the container's own configuration, which its image would
-// keep). done removes the file.
-func (e egress) hostProxyEnv(ctx context.Context, dir string, n backend.Net) (context.Context, func(context.Context), error) {
-	none := func(context.Context) {}
-	env := backend.ReadHostProxy(e.d.Getenv).Env()
-	if n != backend.NetInternet || len(env) == 0 {
-		return ctx, none, nil
-	}
-	var lines []byte
-	for _, kv := range env {
-		if strings.ContainsAny(kv, "\r\n") {
-			return ctx, none, msg.UpstreamProxyInvalid(strings.ToUpper(kv[:strings.IndexByte(kv, '=')]))
-		}
-		lines = append(lines, kv+"\n"...)
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return ctx, none, err
-	}
-	f := filepath.Join(dir, "host-proxy.env")
-	if err := writeOwn(f, lines); err != nil {
-		return ctx, none, err
-	}
-	return withExecEnv(ctx, f), func(context.Context) { _ = os.RemoveAll(dir) }, nil
-}
-
-// buildProxy starts devvm's proxy on the host for a build (name), its
-// files in dir, with password: any host on ports 80 and 443 but the
-// host's own and internal addresses; on its socket, and on a loopback
-// port of its own nothing uses; through the host's proxy (upstream, the
-// proxy's -upstream file; nil for none). It returns the process once it
-// says it listens and still runs. It ends with the build's container (its
-// lifeline, in dir), or when the build is done with it (stopProxy).
-func (e egress) buildProxy(name, dir, password string, upstream []byte) (*os.Process, error) {
-	auth, policy, logPath := filepath.Join(dir, "auth"), filepath.Join(dir, "policy"), filepath.Join(dir, "proxy.log")
-	if err := writeOwn(auth, []byte(password+"\n")); err != nil {
-		return nil, err
-	}
-	if err := writeOwn(policy, []byte("# a build on Docker Desktop: any host, not this machine's own or internal addresses\n**\n")); err != nil {
-		return nil, err
-	}
-	sock := proxySocket(e.d.Dirs, name)
-	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
-		return nil, err
-	}
-	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = out.Close() }()
-	args := []string{
-		"_proxy", "-listen", "127.0.0.1:0", "-listen-unix", sock, "-vm", name, "-policy", policy,
-		"-log", filepath.Join(dir, "events.jsonl"), "-auth-file", auth, "-lifeline", filepath.Join(dir, "lifeline"),
-	}
-	if upstream != nil {
-		f := filepath.Join(dir, "upstream")
-		if err := writeOwn(f, upstream); err != nil {
-			return nil, err
-		}
-		args = append(args, "-upstream", f)
-	}
-	p, err := e.d.Spawn(e.d.Self, args, out)
-	if err != nil {
-		return nil, err
-	}
-	for range 10 {
-		b, _ := os.ReadFile(logPath) //nolint:gosec // devvm's own log
-		if strings.Contains(string(b), "listening on 127.0.0.1:") && p.Signal(syscall.Signal(0)) == nil {
-			return p, nil
-		}
-		time.Sleep(e.d.Tick)
-	}
-	stopProxy(p)
-	return nil, msg.ProxyStartFailed(logPath, name)
-}
-
-// stopProxy stops a build's proxy, the process buildProxy started (nil
-// for none): through that process, which devvm hasn't waited for, so the
-// signal reaches it alone, never another process given its pid since.
-func stopProxy(p *os.Process) {
-	if p != nil {
-		_ = p.Signal(syscall.SIGTERM)
-	}
-}
-
-// randomHex is n random bytes, as hex.
-func randomHex(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
 }
 
 // writeOwn writes a file whole, the user's alone (mode 600).

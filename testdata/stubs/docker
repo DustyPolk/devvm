@@ -22,12 +22,16 @@
 # Networks are folders in $STUB_DIR/docker/networks/NAME (labels, internal, inhibit, ipv6), which network
 # create, rm, connect and disconnect keep up to date (a container's networks file lists its own);
 # network inspect answers with the running containers on one as its members. An exec that writes
-# devvm's block in /etc/environment keeps its input as $STUB_DIR/environment.
+# devvm's block in /etc/environment keeps its input as $STUB_DIR/environment. Every container create
+# and run is also appended to $STUB_DIR/containers-made, which nothing empties.
 set -euo pipefail
 echo "docker $*" >> "$STUB_LOG"
 store=$STUB_DIR/docker
 mkdir -p "$store/containers" "$store/images" "$store/volumes" "$store/networks"
 cmd="${1:-} ${2:-}"
+case "$cmd" in
+  "container create"|"container run") echo "docker $*" >> "$STUB_DIR/containers-made" ;;
+esac
 case "$cmd" in
   "info "*)
     [[ ! -e "$STUB_DIR/docker-down" ]] || { echo "failed to connect to the docker API" >&2; exit 1; }

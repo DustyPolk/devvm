@@ -80,10 +80,13 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	if !spec.Trust.None() {
 		steps += 2
 	}
-	// The host's proxy, for the scripts' commands only (buildproxy.go).
-	hp := buildProxy(l.Getenv)
-	sudoOn, sudoOff := sudoScripts(hp)
-	if !hp.None() {
+	// The company proxy, which the build reaches through a proxy of
+	// devvm's (buildproxy.go): checked before anything is made.
+	host, _, err := buildUpstream(l.Getenv, spec.Net)
+	if err != nil {
+		return backend.Built{}, err
+	}
+	if !host.None() {
 		steps += 2
 	}
 	if spec.From != nil {
@@ -137,8 +140,13 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 	}
 	created.Store(true)
+	// Its proxy ends with it, or with the run.
+	conf, hp, proxyDone, err := buildProxy(ctx, l, inst, spec.Net)
+	if err != nil {
+		return backend.Built{}, err
+	}
 	// A failed start leaves it stopped, with its console logs.
-	if err := l.Start(ctx, inst, backend.Confinement{Net: spec.Net}); err != nil {
+	if err := l.Start(ctx, inst, conf); err != nil {
 		return backend.Built{}, err
 	}
 	if conv != nil {
@@ -153,20 +161,8 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		}
 		return backend.Built{}, err
 	}
-	for _, s := range []backend.Script{spec.Trust.Add, sudoOn} {
-		if err := l.runScript(ctx, inst, s, true); err != nil {
-			return failed(err)
-		}
-	}
-	for _, s := range spec.Scripts {
-		if err := l.runScript(ctx, inst, withProxy(hp, s), false); err != nil {
-			return failed(err)
-		}
-	}
-	for _, s := range []backend.Script{sudoOff, spec.Trust.Remove} {
-		if err := l.runScript(ctx, inst, s, true); err != nil {
-			return failed(err)
-		}
+	if err := buildScripts(ctx, l, inst, spec, hp); err != nil {
+		return failed(err)
 	}
 	// Flushed first: a guest that ignores Lima's stop request is stopped
 	// hard.
@@ -176,6 +172,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	if err := l.stop(ctx, inst); err != nil {
 		return backend.Built{}, err
 	}
+	proxyDone(true)
 	if l.overlays() {
 		// Project VMs' disks are overlays of this one: it never changes
 		// again.
@@ -187,6 +184,29 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	}
 	remove()
 	return built, nil
+}
+
+// buildScripts runs a build's scripts in its VM (inst), in order: the
+// user's CAs added and sudo told to keep the build's proxy (hp) as root,
+// spec's scripts with hp's variables, then both taken out again.
+func buildScripts(ctx context.Context, l *Lima, inst string, spec backend.ImageSpec, hp backend.HostProxy) error {
+	sudoOn, sudoOff := sudoScripts(hp)
+	for _, s := range []backend.Script{spec.Trust.Add, sudoOn} {
+		if err := l.runScript(ctx, inst, s, true); err != nil {
+			return err
+		}
+	}
+	for _, s := range spec.Scripts {
+		if err := l.runScript(ctx, inst, withProxy(hp, s), false); err != nil {
+			return err
+		}
+	}
+	for _, s := range []backend.Script{sudoOff, spec.Trust.Remove} {
+		if err := l.runScript(ctx, inst, s, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // limaImage is an entry in a Lima config's images: a disk image, or a

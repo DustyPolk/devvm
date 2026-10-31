@@ -47,7 +47,7 @@ The scripts run as that user, with stand-ins for `systemctl` and `rc-update` whi
 
 How devvm confines a build depends on the engine:
 
-- **On Linux,** a build container is on Docker's default network, which reaches the internet but not your machine's loopback. It does reach your machine's servers that listen on every address.
+- **On Linux,** a build container is on Docker's default network, which reaches the internet but not your machine's loopback. It does reach your machine's servers that listen on every address. Behind a company proxy (`HTTPS_PROXY` or `HTTP_PROXY` in devvm's environment), a build gets what a build on Docker Desktop gets instead, below, so that it reaches the company proxy only through devvm's proxy, which alone has the company proxy's password ([a company proxy](design.md#a-company-proxy)). Such a build needs devvm's Linux build for its relay, as network policy does.
 - **On Docker Desktop,** Desktop's default network reaches your Mac's loopback (`host.docker.internal`), so devvm confines a build through a proxy of its own. This is emulated, and reviewed ([design](design.md#build-confinement-on-docker-desktop)). A build container gets what a VM with [network policy](#network-policy) gets, for the build alone: an internal network of its own, no `NET_RAW`, a relay, and devvm's proxy on your Mac. That proxy allows any host on ports 80 and 443 but your Mac's own addresses and internal ones (its [floor](network.md#the-proxy)), and it reaches no other port.
 - **On other engines,** devvm can't tell that a build is confined, so it refuses the build in one line (`backend_lacks ... feature=build-confinement`). It still uses an image that's already built.
 

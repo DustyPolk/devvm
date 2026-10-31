@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -153,52 +155,143 @@ func TestBuildImageLayer(t *testing.T) {
 // input, a loopback proxy as the guest reaches the host, and sudo keeps
 // them while the scripts run: the proxy is in no argument, and the build
 // VM gets none of the host's settings itself.
+// fakeProxy makes l's build proxies sleeps that say they listen on port
+// 40000, recording each one's arguments in spawned; stopped gets each one's
+// end.
+func fakeProxy(t *testing.T, l *Lima) (spawned *[][]string, stopped chan error) {
+	t.Helper()
+	spawned, stopped = &[][]string{}, make(chan error, 4)
+	l.Spawn = func(path string, args []string, out *os.File) (*os.Process, error) {
+		*spawned = append(*spawned, append([]string{path}, args...))
+		p := exec.CommandContext(t.Context(), "sleep", "60")
+		if err := p.Start(); err != nil {
+			return nil, err
+		}
+		go func() { stopped <- p.Wait() }()
+		t.Cleanup(func() { _ = p.Process.Kill() })
+		_, _ = out.WriteString("devvm proxy: listening on 127.0.0.1:40000 for x\n")
+		return p.Process, nil
+	}
+	return spawned, stopped
+}
+
+// Behind a company proxy, a build goes through a proxy of devvm's, which
+// alone has the company proxy's address and password (its -upstream
+// file): the build's scripts get that proxy's address on Lima's host
+// address with the build's own password, sudo keeps it, and on macOS the
+// build VM's sandbox allows its port. The proxy stops once the build is
+// done, and its folder goes.
 func TestBuildImageHostProxy(t *testing.T) {
-	l, f := buildLima(t, "linux", "Running")
-	env := map[string]string{"HTTPS_PROXY": "http://corp:pa55@127.0.0.1:3128", "no_proxy": ".corp"} //nolint:gosec // a fake company proxy's fake password
-	l.Getenv = func(k string) string { return env[k] }
-	inst := "devvm-img-" + layerKey
-	writeTestFile(t, l.disk(inst), "qcow2")
-	if _, err := l.BuildImage(t.Context(), backend.ImageSpec{
-		Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	var scripts []string
-	for _, c := range f.calls {
-		if strings.Contains(c.line(), "pa55") || strings.Contains(strings.Join(c.env, " "), "pa55") {
-			t.Errorf("the proxy's password is in a command: %s", c.line())
-		}
-		if strings.HasPrefix(c.line(), "limactl shell") && c.stdin != "" {
-			scripts = append(scripts, c.line()+"\n"+c.stdin)
-		}
-	}
-	want := []string{
-		"limactl shell --workdir / " + inst + " sudo sh -s\nprintf '%s\\n' '" + sudoKeepProxy + "' > /etc/sudoers.d/devvm-build-proxy && chmod 440 /etc/sudoers.d/devvm-build-proxy\n",
-		"limactl shell " + inst + " bash -s\nexport HTTPS_PROXY='http://corp:pa55@host.lima.internal:3128' https_proxy='http://corp:pa55@host.lima.internal:3128'" +
-			" NO_PROXY='.corp' no_proxy='.corp'\n#!/bin/bash\necho foo\n",
-		"limactl shell --workdir / " + inst + " sudo sh -s\nrm -f /etc/sudoers.d/devvm-build-proxy\n",
-	}
-	if !slices.Equal(scripts, want) {
-		t.Errorf("scripts:\n%s\nwant:\n%s", strings.Join(scripts, "\n--\n"), strings.Join(want, "\n--\n"))
-	}
-	if !slices.ContainsFunc(f.lines(), func(l string) bool { return strings.Contains(l, ".propagateProxyEnv=false") }) {
-		t.Error("the build VM gets the host's proxy settings from Lima")
+	for _, goos := range []string{"linux", "darwin"} {
+		t.Run(goos, func(t *testing.T) {
+			l, f := buildLima(t, goos, "Running")
+			env := map[string]string{"HTTPS_PROXY": "http://corp:pa55@127.0.0.1:3128", "no_proxy": ".corp"} //nolint:gosec // a fake company proxy's fake password
+			l.Getenv = func(k string) string { return env[k] }
+			// limactl runs without it too: Lima logs what it reads.
+			t.Setenv("HTTPS_PROXY", env["HTTPS_PROXY"])
+			spawned, stopped := fakeProxy(t, l)
+			inst := "devvm-img-" + layerKey
+			writeTestFile(t, l.disk(inst), "qcow2")
+			if _, err := l.BuildImage(t.Context(), backend.ImageSpec{
+				Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
+				Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if len(*spawned) != 1 {
+				t.Fatalf("proxies: %v", *spawned)
+			}
+			p := strings.Join((*spawned)[0], " ")
+			dir := filepath.Join(l.Dirs.Run(), "builds", inst)
+			if !strings.Contains(p, " -lifeline "+l.haPIDFile(inst)+" ") || !strings.HasSuffix(p, " -upstream "+filepath.Join(dir, "upstream")) ||
+				strings.Contains(p, "pa55") {
+				t.Errorf("the build's proxy: %s", p)
+			}
+			select {
+			case err := <-stopped:
+				t.Logf("the build's proxy stopped: %v", err)
+			case <-time.After(2 * time.Second):
+				t.Error("the build's proxy wasn't stopped")
+			}
+			if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("its folder stayed: %v", err)
+			}
+			var scripts []string
+			for _, c := range f.calls {
+				if strings.Contains(c.line(), "pa55") || strings.Contains(strings.Join(c.env, " "), "pa55") || strings.Contains(c.stdin, "pa55") {
+					t.Errorf("the company proxy's password reaches the build VM: %s", c.line())
+				}
+				if strings.HasPrefix(c.line(), "limactl shell") && c.stdin != "" {
+					scripts = append(scripts, c.line()+"\n"+c.stdin)
+				}
+			}
+			if len(scripts) != 3 || !strings.HasPrefix(scripts[1], "limactl shell "+inst+" bash -s\nexport HTTPS_PROXY='http://devvm:") ||
+				!strings.Contains(scripts[1], "@192.168.5.2:40000' https_proxy='http://devvm:") ||
+				!strings.HasSuffix(scripts[1], "@192.168.5.2:40000' NO_PROXY='.corp' no_proxy='.corp'\n#!/bin/bash\necho foo\n") {
+				t.Errorf("scripts:\n%s", strings.Join(scripts, "\n--\n"))
+			}
+			if want := "limactl shell --workdir / " + inst + " sudo sh -s\nprintf '%s\\n' '" + sudoKeepProxy +
+				"' > /etc/sudoers.d/devvm-build-proxy && chmod 440 /etc/sudoers.d/devvm-build-proxy\n"; len(scripts) == 3 && scripts[0] != want {
+				t.Errorf("sudo: %s", scripts[0])
+			}
+			if !slices.ContainsFunc(f.lines(), func(l string) bool { return strings.Contains(l, ".propagateProxyEnv=false") }) {
+				t.Error("the build VM gets the host's proxy settings from Lima")
+			}
+			if goos == "darwin" {
+				b, err := os.ReadFile(l.profileFile(inst))
+				if err != nil || !strings.Contains(string(b), `(deny network-outbound (remote ip "localhost:*"))`) ||
+					!strings.HasSuffix(strings.TrimSpace(string(b)), `(allow network-outbound (remote ip "localhost:40000"))`) {
+					t.Errorf("profile: %s %v", b, err)
+				}
+			}
+		})
 	}
 }
 
-func TestGuestProxyURL(t *testing.T) {
-	for raw, want := range map[string]string{ //nolint:gosec // fake company proxies' fake passwords
-		"http://u:p@localhost:3128": "http://u:p@host.lima.internal:3128",
-		"127.0.0.1:8080":            "http://host.lima.internal:8080",
-		"http://[::1]":              "http://host.lima.internal",
-		"http://proxy.corp:8080":    "http://proxy.corp:8080",
-		"socks5://127.0.0.1:1080":   "socks5://127.0.0.1:1080",
-	} {
-		if got := guestProxyURL(raw); got != want {
-			t.Errorf("guestProxyURL(%q) = %q, want %q", raw, got, want)
+// Only a VM on Lima's own network starts with the host's proxy settings in
+// limactl's environment, for propagateProxyEnv.
+func TestConfineProxyEnv(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		l, _, _ := testLima(t, goos)
+		l.Getenv = func(k string) string {
+			return map[string]string{"HTTPS_PROXY": "http://u:p@proxy.corp:8080", "no_proxy": ".corp"}[k] //nolint:gosec // a fake proxy's fake password
 		}
+		_, env, err := l.confine("vm", backend.Confinement{Net: backend.NetDirect}, 0, false)
+		if err != nil || !slices.Contains(env, "HTTPS_PROXY=http://u:p@proxy.corp:8080") || !slices.Contains(env, "no_proxy=.corp") {
+			t.Errorf("%s NetDirect: %v %v", goos, env, err)
+		}
+		_, env, err = l.confine("vm", backend.Confinement{Net: backend.NetInternet}, 2222, false)
+		if err != nil || slices.ContainsFunc(env, func(e string) bool { return strings.Contains(strings.ToLower(e), "_proxy=") }) {
+			t.Errorf("%s NetInternet: %v %v", goos, env, err)
+		}
+	}
+	t.Setenv("HTTPS_PROXY", "http://u:p@proxy.corp:8080")
+	t.Setenv("http_proxy", "http://u:p@proxy.corp:8080")
+	l, _, _ := testLima(t, "darwin")
+	if cmd := l.limactl(t.Context(), "list"); slices.ContainsFunc(cmd.Env, func(e string) bool { return strings.Contains(e, "proxy.corp") }) {
+		t.Errorf("limactl's environment keeps the host's proxy: %v", cmd.Env)
+	}
+}
+
+// A company proxy the build's proxy can't go through is refused before
+// anything is made; without one, a build starts no proxy.
+func TestBuildImageHostProxyRefused(t *testing.T) {
+	l, f := buildLima(t, "linux", "Running")
+	l.Getenv = func(k string) string { return map[string]string{"HTTPS_PROXY": "socks5://proxy.corp:1080"}[k] }
+	_, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet})
+	if m, ok := errors.AsType[msg.M](err); !ok || m.Names() != "upstream_proxy_scheme scheme=socks5:// setting=HTTPS_PROXY" {
+		t.Errorf("BuildImage = %v", err)
+	}
+	if slices.ContainsFunc(f.lines(), func(l string) bool { return strings.HasPrefix(l, "limactl clone") }) {
+		t.Errorf("made something: %v", f.lines())
+	}
+	// A build without the internet starts none either.
+	l, _ = buildLima(t, "linux", "Running")
+	l.Getenv = func(k string) string { return map[string]string{"HTTPS_PROXY": "http://proxy.corp:8080"}[k] }
+	spawned, _ := fakeProxy(t, l)
+	writeTestFile(t, l.disk("devvm-img-"+layerKey), "qcow2")
+	if _, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetNone}); err != nil || len(*spawned) != 0 {
+		t.Errorf("NetNone: %v, %v", err, *spawned)
 	}
 }
 

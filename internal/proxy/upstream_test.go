@@ -285,6 +285,113 @@ func TestUpstreamTunnel(t *testing.T) {
 	}
 }
 
+// A name this machine can't resolve goes upstream only when the policy names it, as itself or
+// under *.domain; one that only ** allows is refused before the upstream sees it. (.test names
+// never resolve.)
+func TestUpstreamUnresolved(t *testing.T) {
+	echo, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	must(t, err)
+	t.Cleanup(func() { _ = echo.Close() })
+	go func() {
+		for {
+			c, err := echo.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	f := newFakeUpstream(t, echo.Addr().String(), http.StatusOK)
+	useUpstream(t, f, "")
+	out := logs(t)
+	pol = writePolicy(t, "**\nnamed.test\n*.wild.test\n!denied.wild.test\n")
+	proxy := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(proxy.Close)
+	for _, tc := range []struct {
+		target string
+		code   int
+	}{
+		{"named.test:443", http.StatusOK},
+		{"a.wild.test:443", http.StatusOK},
+		{"only-star.test:443", http.StatusForbidden},
+		{"wild.test:443", http.StatusForbidden}, // *.wild.test names its subdomains alone
+		{"denied.wild.test:443", http.StatusForbidden},
+		{"named.test:8443", http.StatusForbidden}, // named for 443 and 80 only
+	} {
+		// Only the answer: an open tunnel waits for a ClientHello.
+		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
+		must(t, err)
+		fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", tc.target, tc.target)
+		resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: http.MethodConnect})
+		if err != nil || resp.StatusCode != tc.code {
+			t.Errorf("%s: %v %v, want %d", tc.target, resp, err, tc.code)
+		}
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		_ = c.Close()
+	}
+	seen := strings.Join(f.requests(), "\n")
+	if !strings.Contains(seen, "CONNECT named.test:443 ") || !strings.Contains(seen, "CONNECT a.wild.test:443 ") ||
+		strings.Contains(seen, "only-star") || strings.Contains(seen, "CONNECT wild.test") || strings.Contains(seen, "denied") {
+		t.Errorf("the upstream saw %q", f.requests())
+	}
+	if !strings.Contains(out.String(), "only ** allows it") {
+		t.Errorf("the refusal isn't logged: %s", out.String())
+	}
+	// Plain HTTP the same.
+	code, _ := roundTrip(t, proxy.Listener.Addr().String(), "GET http://only-star.test/ HTTP/1.1\r\nHost: only-star.test\r\n\r\n")
+	if code != http.StatusForbidden || strings.Contains(strings.Join(f.requests(), "\n"), "only-star") {
+		t.Errorf("plain HTTP: %d, the upstream saw %q", code, f.requests())
+	}
+}
+
+// The upstream's answer to CONNECT is read only so far: headers that never end fail the tunnel.
+// What follows an answer that ends is the tunnel's, past the limit too.
+func TestUpstreamConnectReplyLimit(t *testing.T) {
+	serve := func(answer func(net.Conn)) *upstream {
+		ln, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
+		must(t, err)
+		t.Cleanup(func() { _ = ln.Close() })
+		go func() {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+			if _, err := http.ReadRequest(bufio.NewReader(c)); err != nil {
+				return
+			}
+			answer(c)
+		}()
+		return &upstream{addr: ln.Addr().String()}
+	}
+	endless := serve(func(c net.Conn) {
+		_, _ = io.WriteString(c, "HTTP/1.1 200 OK\r\n")
+		line := "X-Pad: " + strings.Repeat("a", 1000) + "\r\n"
+		for range 200 {
+			if _, err := io.WriteString(c, line); err != nil {
+				return
+			}
+		}
+	})
+	if c, err := endless.connect(t.Context(), "a.test", 443); err == nil {
+		_ = c.Close()
+		t.Error("an answer past the limit was taken")
+	}
+	big := strings.Repeat("t", 2*maxConnectReply)
+	tunnel := serve(func(c net.Conn) {
+		_, _ = io.WriteString(c, "HTTP/1.1 200 Connection established\r\n\r\n"+big)
+	})
+	c, err := tunnel.connect(t.Context(), "a.test", 443)
+	must(t, err)
+	defer c.Close()
+	got, err := io.ReadAll(c)
+	if err != nil || string(got) != big {
+		t.Errorf("the tunnel's data: %d bytes, %v; want %d", len(got), err, len(big))
+	}
+}
+
 // NO_PROXY's hosts are reached directly: the upstream never sees them.
 func TestUpstreamNoProxyDirect(t *testing.T) {
 	f := newFakeUpstream(t, "127.0.0.1:9", http.StatusOK)

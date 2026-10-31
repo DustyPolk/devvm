@@ -36,17 +36,22 @@ rm $STUB_DIR/docker-denied
 # base.yaml's size, prepared, its scripts run between the stand-ins, then
 # committed as devvm's image and deleted. Every container devvm makes sets
 # the proxy variables empty, so the Docker client's own proxies stay out.
+# Without a company proxy, the build is on Docker's own network, with no
+# proxy of devvm's (from here on, until the company proxy's own case at the
+# end: its builds need devvm's Linux build).
+env HTTPS_PROXY=
+env https_proxy=
 exec devvm --backend docker --from $PIN build base
 stdout '^==> building_image_from from=ubuntu:26\.04@sha256:a+ image=base key=[0-9a-f]{12}$'
 stub_calls
 stdout '^docker image pull ubuntu:26\.04@sha256:a+$'
 stdout '^docker container create --name devvm-img-[0-9a-f]{12}-[0-9a-f]{8} --label devvm\.data=\S+/data/devvm --label devvm\.key=[0-9a-f]{12} --label devvm\.kind=build --init --user 0:0 --entrypoint sleep -e HTTP_PROXY= -e http_proxy= -e HTTPS_PROXY= -e https_proxy= -e FTP_PROXY= -e ftp_proxy= -e NO_PROXY= -e no_proxy= -e ALL_PROXY= -e all_proxy= --cpus 4 --memory \d+m --memory-swap \d+m --hostname devvm-build --network bridge ubuntu:26\.04@sha256:a+ infinity$'
 stdout '^docker container start devvm-img-[0-9a-f]{12}-[0-9a-f]{8}$'
-# HTTPS_PROXY is set, so the build's commands get it from an env file.
-stdout '^docker exec -i -u 0 --env-file \S+/host-proxy\.env devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- \S+ \d+( \d+)?$'
-stdout '^docker exec -i -u 0 --env-file \S+/host-proxy\.env devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- on$'
-stdout '^docker exec --env-file \S+/host-proxy\.env -i -u \S+ -w / .* devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -c .* sh bash -s$'
-stdout '^docker exec -i -u 0 --env-file \S+/host-proxy\.env devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- off$'
+stdout '^docker exec -i -u 0 devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- \S+ \d+( \d+)?$'
+stdout '^docker exec -i -u 0 devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- on$'
+stdout '^docker exec -i -u \S+ -w / .* devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -c .* sh bash -s$'
+stdout '^docker exec -i -u 0 devvm-img-[0-9a-f]{12}-[0-9a-f]{8} sh -s -- off$'
+! stdout 'env-file|-proxy '
 stdout '^docker container commit --change LABEL devvm\.kind=image --change LABEL devvm\.key=[0-9a-f]{12} devvm-img-[0-9a-f]{12}-[0-9a-f]{8} devvm-[0-9a-f]{8}:[0-9a-f]{12}$'
 stdout '^docker container rm -f -v devvm-img-[0-9a-f]{12}-[0-9a-f]{8}$'
 ! stdout limactl
@@ -325,3 +330,30 @@ stdout '^docker container create --name devvm-fetch-[0-9a-f]{14}-proxy .* --moun
 ! stdout docker_linux_build_fetching
 stderr '^devvm: net_direct_route vm=devvm-fetch-[0-9a-f]{14}$'
 exec devvm rm -f
+
+# Behind a company proxy, a Linux engine's build goes through a proxy of
+# devvm's on its own network, as on Docker Desktop: its commands get that
+# proxy's address and a password made for the build, never the company
+# proxy's, which is in no command and nothing left behind.
+env DEVVM_DOCKER_KIND=linux
+env HTTPS_PROXY=http://corp:c0rp-pa55@127.0.0.1:9
+env https_proxy=
+exec devvm layer new corp
+exec sh -c ': > "$STUB_LOG"'
+exec devvm --backend docker build corp
+stub_calls
+stdout '^docker network create --internal .* devvm-img-[0-9a-f]{12}-[0-9a-f]{8}-net$'
+stdout '^docker container create --name devvm-img-[0-9a-f]{12}-[0-9a-f]{8}-proxy '
+stdout '^docker container create --name devvm-img-[0-9a-f]{12}-[0-9a-f]{8} .* --network devvm-img-[0-9a-f]{12}-[0-9a-f]{8}-net '
+stdout '^docker exec --env-file \S+/builds/devvm-img-[0-9a-f]{12}-[0-9a-f]{8}/env -i -u '
+! stdout c0rp-pa55
+exec sh -c 'grep -rl c0rp-pa55 "$XDG_DATA_HOME" "$STUB_DIR" || true'
+! stdout .
+
+# Every container devvm made in this script, VMs, builds and relays, set
+# each proxy variable empty.
+exec sh -c 'grep -c . "$STUB_DIR/containers-made"; grep -vF -- "-e HTTP_PROXY= -e http_proxy= -e HTTPS_PROXY= -e https_proxy= -e FTP_PROXY= -e ftp_proxy= -e NO_PROXY= -e no_proxy= -e ALL_PROXY= -e all_proxy= " "$STUB_DIR/containers-made" || true'
+stdout '^[1-9][0-9]*$'
+! stdout '^docker '
+exec sh -c 'grep -c -- "-proxy " "$STUB_DIR/containers-made"'
+! stdout '^0$'

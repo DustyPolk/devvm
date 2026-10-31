@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
@@ -152,6 +153,8 @@ func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
 	var warned []string
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"
 	l.Getenv = func(string) string { return "" }
+	l.Spawn = func(string, []string, *os.File) (*os.Process, error) { return nil, errors.New("no build proxy here") }
+	l.Tick = time.Millisecond
 	l.MacOS = func() string { return "26.0" }
 	l.KVM = filepath.Join(t.TempDir(), "kvm")
 	if err := os.WriteFile(l.KVM, nil, 0o600); err != nil {

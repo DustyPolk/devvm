@@ -359,6 +359,19 @@ launch() {
   vm=$(vm_of "$d"); [[ -z $vm ]] || created+=("$vm")
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
+# corp_start: a company proxy of this run's ($corp): a devvm _proxy on 127.0.0.1:18766 with a
+# password of its own ($work/corp.auth), allowing any host, its events in $work/corp.jsonl;
+# $corpurl is its address with the password. corp_stop ends it.
+corp_start() {
+  corppw=e2e-corp-pw-$$-$(date +%s)
+  echo "$corppw" > "$work/corp.auth"; printf '**\n' > "$work/corp.policy"; : > "$work/corp.jsonl"
+  "$D" _proxy -listen 127.0.0.1:18766 -vm e2e-corp -auth-file "$work/corp.auth" -policy "$work/corp.policy" \
+    -log "$work/corp.jsonl" >"$work/corp.log" 2>&1 &
+  corp=$!
+  sleep 1
+  corpurl="http://devvm:$corppw@127.0.0.1:18766"
+}
+corp_stop() { [[ -z ${corp:-} ]] || kill "$corp" 2>/dev/null; corp=""; }
 # e2e_ca: a throwaway CA of this run's in $cad (ca.pem), and a server certificate it signed for
 # host.lima.internal (srv.pem, srv.key): never a certificate of yours. ca_serve PORT: an HTTPS server
 # on this machine with it, on every address ($ca_server). $cafolder is devvm's CA folder.
@@ -679,19 +692,24 @@ fi
 rm -rf "$cafolder"
 rm -f "$layers/e2ejava.sh"
 
-# The host's proxy: a build's commands get its settings, sudo keeping them, and its image keeps
-# none of them (Lima writes the settings it propagates into the guest's /etc/environment). The
-# proxy is a closed port with a password of this run's, and NO_PROXY=* keeps every tool off it, as
-# the layer needs no network. Its disk and Lima's files for it are read whole, free space included.
+# The host's proxy: a build goes through a proxy of devvm's for it alone, which alone has the
+# host's settings. The build's commands get only that proxy's address with a password of the
+# build's, sudo keeping them, and its image keeps none of it (Lima writes the settings it
+# propagates into the guest's /etc/environment). The host's proxy is a closed port with a password
+# of this run's, and NO_PROXY=* keeps every tool off the proxies, as the layer needs no network.
+# Its disk and Lima's files for it are read whole, free space included.
 pxpass=e2e-proxy-pw-$$-$(date +%s)
 pxtoken=e2e-proxy-seen-$$-$(date +%s)
-printf '#!/bin/bash\nset -euo pipefail\n%s\necho %s\n' \
-  '[[ $HTTPS_PROXY == *e2e-proxy-pw-* && $http_proxy == *e2e-proxy-pw-* && $(sudo printenv HTTPS_PROXY) == *e2e-proxy-pw-* ]]' \
+printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
+  '[[ $HTTPS_PROXY == http://devvm:*@192.168.5.2:* && $http_proxy == "$HTTPS_PROXY" && $(sudo printenv HTTPS_PROXY) == "$HTTPS_PROXY" ]]' \
+  '[[ $HTTPS_PROXY != *e2e-proxy-pw-* && $NO_PROXY == "*" ]]' \
   "$pxtoken" > "$layers/e2eproxy.sh"
-check "a build's commands get the host's proxy settings" bash -c "
+check "a build's commands get a proxy of devvm's for the build, never the host's own settings" bash -c "
   env HTTPS_PROXY='http://corp:$pxpass@127.0.0.1:9' HTTP_PROXY='http://corp:$pxpass@127.0.0.1:9' NO_PROXY='*' \
     '$D' build e2eproxy </dev/null >'$work/last.log' 2>&1 &&
-  grep -qx '$pxtoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+  grep -qx '$pxtoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log &&
+  ! ps -axww -o command= | grep -q -- '[_]proxy -listen 127.0.0.1:0 -vm devvm-img-' &&
+  [[ -z \$(ls -A '$XDG_DATA_HOME/devvm/run/builds' 2>/dev/null) ]]"
 owned e2eproxy
 kp=$(keys_of e2eproxy | head -1)
 check "its image keeps none of them: not its disk, Lima's files for it or devvm's logs" bash -c "
@@ -1304,13 +1322,7 @@ kill "$listener" 2>/dev/null; listener=""
 # VM's next launch with HTTPS_PROXY and HTTP_PROXY in devvm's environment starts its proxy again
 # through it, which sends an allowed host there by name, and refuses one the VM's policy doesn't
 # allow before it gets there. The launch after, without them, starts it again going directly.
-corppw=e2e-corp-pw-$$-$(date +%s)
-echo "$corppw" > "$work/corp.auth"; printf '**\n' > "$work/corp.policy"; : > "$work/corp.jsonl"
-"$D" _proxy -listen 127.0.0.1:18766 -vm e2e-corp -auth-file "$work/corp.auth" -policy "$work/corp.policy" \
-  -log "$work/corp.jsonl" >"$work/corp.log" 2>&1 &
-corp=$!
-sleep 1
-corpurl="http://devvm:$corppw@127.0.0.1:18766"
+corp_start
 check "behind a company proxy, an allowed host goes through it by name, and a blocked one never reaches it" bash -c "
   (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' \
     '$D' >'$work/last.log' 2>&1) &&
@@ -1333,7 +1345,7 @@ check "without them, the next launch starts the VM's proxy again, going directly
   n0=\$(grep -c . '$work/corp.jsonl') &&
   limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
   [[ \$(grep -c . '$work/corp.jsonl') == \"\$n0\" ]]"
-kill "$corp" 2>/dev/null; corp=""
+corp_stop
 check "the proxy refuses anything on the host without the VM's password" bash -c "
   [[ \$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:$pp http://devvm.proxy/blocked) == 407 ]]"
 check "the token never reaches the VM" bash -c "
@@ -1526,6 +1538,42 @@ check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '
 check "and the build VM and its temporary folders are gone" bash -c "
   ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
 # An image only Docker has (built, never pushed) isn't checked: making one would change Docker's images.
+
+# Behind a company proxy with a password (corp_start), a --from conversion (an Alpine release no
+# other check uses, so it's converted each run) and the builds on it go through a proxy of devvm's
+# for each build, which alone goes through the company proxy: the registry, base's and its
+# features' downloads and a layer's own all reach it, while nothing a build runs sees its password,
+# and no converted disk, image or log keeps it. The layer prints what its commands, and sudo's,
+# have of the proxy settings; the password is read from its file, never written into a check.
+corp_start
+printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\n%s\n' \
+  'echo "e2e-env: $(env | grep -i "_proxy=" | sort | tr "\n" " ")"' \
+  'echo "e2e-sudo: $(sudo env | grep -i "_proxy=" | sort | tr "\n" " ")"' \
+  'curl -fsS -m 30 -o /dev/null https://github.com' > "$layers/e2ecorp.sh"
+check "behind a company proxy, --from's conversion and the builds on it reach it through devvm's own proxies" bash -c "
+  HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' PATH='$work/nodocker':\"\$PATH\" '$D' --from alpine:3.21 build e2ecorp \
+    </dev/null >'$work/last.log' 2>&1 &&
+  grep -q '\"event\":\"tunnel\",\"host\":\"[a-z0-9.-]*docker\.io\"' '$work/corp.jsonl' &&
+  grep -q '\"host\":\"dl-cdn\.alpinelinux\.org\"' '$work/corp.jsonl' &&
+  grep -q '\"event\":\"tunnel\",\"host\":\"github\.com\"' '$work/corp.jsonl'"
+owned e2ecorp
+kac=$(sed -n 's/^chain=base=\([0-9a-f]*\) e2ecorp=.*$/\1/p' "$images"/* 2>/dev/null | head -1)
+[[ -z $kac ]] || created+=("devvm-img-$kac")
+kcl=$(keys_of e2ecorp | head -1)
+check "what the builds' commands and sudo have is devvm's proxy for the build, with a password of its own" bash -c "
+  log=\$(grep -l '^e2e-env: ' '$XDG_DATA_HOME'/devvm/logs/runs/*.log | tail -1) && [[ -n \$log ]] &&
+  grep -qE '^e2e-env: .*HTTPS_PROXY=http://devvm:[0-9a-f]{64}@192\.168\.5\.2:[0-9]+ ' \"\$log\" &&
+  grep -qE '^e2e-sudo: .*HTTPS_PROXY=http://devvm:[0-9a-f]{64}@192\.168\.5\.2:[0-9]+ ' \"\$log\" &&
+  ! grep -qF ':18766' \"\$log\""
+check "the company proxy's password is in no converted disk, image, log, build file or process's arguments" bash -c "
+  [[ -n '$kac' && -n '$kcl' && -d '$LIMA_HOME/devvm-img-$kac' && -d '$LIMA_HOME/devvm-img-$kcl' ]] &&
+  ! LC_ALL=C grep -rqaF -D skip -f '$work/corp.auth' '$LIMA_HOME/devvm-img-$kac' '$LIMA_HOME/devvm-img-$kcl' \
+    '$XDG_DATA_HOME/devvm/logs' '$XDG_DATA_HOME/devvm/run' &&
+  ! ps -axww -o command= | grep -qFf '$work/corp.auth' &&
+  [[ -z \$(ls -A '$XDG_DATA_HOME/devvm/run/builds' 2>/dev/null) ]] &&
+  ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
+corp_stop
+rm -f "$layers/e2ecorp.sh"
 fi
 
 if want smolvm; then

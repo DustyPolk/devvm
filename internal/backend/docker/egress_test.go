@@ -16,7 +16,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -193,33 +192,6 @@ func TestVMCapDrop(t *testing.T) {
 	}
 }
 
-// A build's proxy is stopped through the process devvm started: one still
-// running ends; one that has ended and been waited for is left alone (no
-// signal reaches a process given its pid since); none is nothing.
-func TestStopProxy(t *testing.T) {
-	p := exec.CommandContext(t.Context(), "sleep", "60")
-	if err := p.Start(); err != nil {
-		t.Fatal(err)
-	}
-	exited := make(chan error, 1)
-	go func() { exited <- p.Wait() }()
-	stopProxy(p.Process)
-	select {
-	case err := <-exited:
-		if ee, ok := errors.AsType[*exec.ExitError](err); !ok || ee.Sys().(syscall.WaitStatus).Signal() != syscall.SIGTERM {
-			t.Errorf("ended: %v, want by SIGTERM", err)
-		}
-	case <-time.After(2 * time.Second):
-		_ = p.Process.Kill()
-		t.Fatal("not stopped")
-	}
-	if err := p.Process.Signal(syscall.SIGTERM); !errors.Is(err, os.ErrProcessDone) {
-		t.Errorf("a signal to the ended process: %v, want it refused as done", err)
-	}
-	stopProxy(p.Process)
-	stopProxy(nil)
-}
-
 // Started without it again: Docker's default network alone, its relay and
 // network gone, nothing of the proxy in /etc/environment, not confined;
 // Delete takes what a start through it left.
@@ -372,9 +344,10 @@ func TestBuildOnDesktop(t *testing.T) {
 	p := s.detached[0]
 	dir := filepath.Join(s.Dirs.Docker(), "builds", inst)
 	wantProxy := []string{
-		"/devvm", "_proxy", "-listen", "127.0.0.1:0", "-listen-unix", proxySocket(s.Dirs, inst), "-vm", inst,
+		"/devvm", "_proxy", "-listen", "127.0.0.1:0", "-vm", inst,
 		"-policy", filepath.Join(dir, "policy"), "-log", filepath.Join(dir, "events.jsonl"),
 		"-auth-file", filepath.Join(dir, "auth"), "-lifeline", filepath.Join(dir, "lifeline"),
+		"-listen-unix", proxySocket(s.Dirs, inst),
 	}
 	if !slices.Equal(p, wantProxy) {
 		t.Errorf("proxy: %v\nwant %v", p, wantProxy)
@@ -417,13 +390,16 @@ func TestBuildOnDesktop(t *testing.T) {
 func TestBuildHostProxy(t *testing.T) {
 	const corp = "http://corp:pa55@proxy.corp:8080" //nolint:gosec // a fake company proxy's fake password
 	env := map[string]string{"HTTPS_PROXY": corp, "NO_PROXY": ".corp"}
+	// A Linux engine's build behind it goes through a proxy of devvm's, on
+	// a network of its own, as on Docker Desktop: its commands get that
+	// proxy's address and password, never the company proxy's.
 	s := newSandbox(t)
 	s.Getenv = func(k string) string { return env[k] }
 	inst := s.buildName(baseKey)
 	dir := filepath.Join(s.Dirs.Docker(), "builds", inst)
 	var seen []byte
 	s.Runner = peekRunner{func() {
-		if b, err := os.ReadFile(filepath.Join(dir, "host-proxy.env")); err == nil { //nolint:gosec // the test's own folder
+		if b, err := os.ReadFile(filepath.Join(dir, "env")); err == nil { //nolint:gosec // the test's own folder
 			seen = b
 		}
 	}}
@@ -433,23 +409,42 @@ func TestBuildHostProxy(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if want := "HTTPS_PROXY=" + corp + "\nhttps_proxy=" + corp + "\nNO_PROXY=.corp\nno_proxy=.corp\n"; string(seen) != want {
-		t.Errorf("env file = %q, want %q", seen, want)
+	if !strings.HasPrefix(string(seen), "HTTPS_PROXY=http://devvm:") || !strings.Contains(string(seen), "@devvm-proxy:3128\n") ||
+		strings.Contains(string(seen), "pa55") {
+		t.Errorf("env file = %q, want the build proxy's address alone", seen)
 	}
 	calls := s.calls(t)
-	inOrder(t, calls,
+	got := inOrder(t, calls,
+		"docker container create --name "+inst+"-proxy ",
+		"docker container create --name "+inst+" ",
 		"docker exec -u 0 "+inst+" sh -c printf '%s\\n' '"+sudoKeep+"' > /etc/sudoers.d/devvm-build-proxy",
-		"docker exec --env-file "+filepath.Join(dir, "host-proxy.env")+" -i -u u ",
+		"docker exec --env-file "+filepath.Join(dir, "env")+" -i -u u ",
 		"docker exec -u 0 "+inst+" sh -c rm -f /etc/sudoers.d/devvm-build-proxy",
 		"docker container commit ",
 	)
+	if !strings.Contains(got[1], " --network "+inst+"-net ") {
+		t.Errorf("build container: %s", got[1])
+	}
 	for _, c := range calls {
 		if strings.Contains(c, "pa55") {
 			t.Errorf("the password in an argument: %s", c)
 		}
 	}
+	if p := s.detached[0]; !slices.Contains(p, "-upstream") || strings.Contains(strings.Join(p, " "), "pa55") {
+		t.Errorf("the build's proxy: %v", p)
+	}
 	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the env file's folder stayed: %v", err)
+		t.Errorf("the build's folder stayed: %v", err)
+	}
+	// Without a company proxy, a Linux engine's build is on Docker's own
+	// network, with no proxy of devvm's.
+	plain := newSandbox(t)
+	if _, err := plain.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet}); err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := has(plain.calls(t), "docker container create --name "+plain.buildName(baseKey)+" "); !ok || !strings.Contains(c, " --network bridge ") ||
+		len(plain.detached) != 0 {
+		t.Errorf("without a company proxy: %s %v", c, plain.detached)
 	}
 
 	d := newSandbox(t)

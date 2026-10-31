@@ -190,6 +190,18 @@ func (p *policy) decide(host string, port int) (bool, string) {
 	return false, "not on the allowlist"
 }
 
+// byName: an allow rule that names host, as itself or under *.domain, for port: one that's more
+// than **, which allows any host.
+func (p *policy) byName(host string, port int) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	for _, r := range p.all() {
+		if !r.deny && r.host != "**" && r.portOK(port) && r.matchHost(host) {
+			return true
+		}
+	}
+	return false
+}
+
 // addrAllowed: an explicit address rule for a (needed to pass the floor), and no deny for it.
 func (p *policy) addrAllowed(a netip.Addr, port int) bool {
 	if p.addrDenied(a, port) {

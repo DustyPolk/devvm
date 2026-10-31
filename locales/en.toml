@@ -1069,7 +1069,7 @@ other = "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it 
 
 [upstream_proxy_scheme]
 description = "setting is HTTPS_PROXY or HTTP_PROXY; scheme is the URL's, such as https:// or socks5://"
-other = "{{.setting}} names a {{.scheme}} proxy, and network policy goes only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+other = "{{.setting}} names a {{.scheme}} proxy, and network policy and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
 
 [upstream_proxy_invalid]
 description = "setting is HTTPS_PROXY, HTTP_PROXY or NO_PROXY"

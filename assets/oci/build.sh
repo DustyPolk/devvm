@@ -79,9 +79,14 @@ chroot_run() {
     policy=$r/usr/sbin/policy-rc.d
     mkdir -p "$r/usr/sbin"; printf '#!/bin/sh\nexit 101\n' > "$policy"; chmod 755 "$policy"
   fi
-  local rc=0
+  # Of this script's environment, only the build's proxy, which devvm made for this build alone
+  # (never the company proxy's own settings), for the downloads behind a company proxy.
+  local rc=0 v proxy=()
+  for v in HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy; do
+    [[ -z ${!v:-} ]] || proxy+=("$v=${!v}")
+  done
   chroot "$r" /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root \
-    LC_ALL=C.UTF-8 "$@" || rc=$?
+    LC_ALL=C.UTF-8 ${proxy[@]+"${proxy[@]}"} "$@" || rc=$?
   [[ -z $policy ]] || rm -f "$policy"
   for m in dev/pts dev sys proc; do umount -l "$r/$m"; done
   return $rc
@@ -124,7 +129,8 @@ main() {
   # On this VM's own disk, as root: Linux names, case and ownership survive.
   tar -xpf rootfs.tar -C root --numeric-owner
   rm rootfs.tar
-  os=$(chroot root /bin/sh -c '. /etc/os-release && echo "$ID ${ID_LIKE:-}"' 2>/dev/null) ||
+  # The image's own shell, with nothing of this script's environment.
+  os=$(env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin chroot root /bin/sh -c '. /etc/os-release && echo "$ID ${ID_LIKE:-}"' 2>/dev/null) ||
     die "'$name' has no shell or /etc/os-release, so it can't become a VM"
   libc=$(libc_for "$os") || die "'$name' is based on '${os%% *}'; devvm needs a Debian, Ubuntu or Alpine based image"
   echo "==> making $name bootable"

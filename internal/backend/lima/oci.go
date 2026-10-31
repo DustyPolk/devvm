@@ -116,8 +116,13 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 	if _, err := l.createFromUbuntu(ctx, OCIVM, size, "--set", mounts); err != nil {
 		return nil, err
 	}
-	// crane pulls from the registry.
-	if err := l.Start(ctx, OCIVM, backend.Confinement{Net: backend.NetInternet}); err != nil {
+	// crane pulls from the registry, behind a company proxy through a
+	// proxy of devvm's (buildproxy.go).
+	conf, hp, proxyDone, err := buildProxy(ctx, l, OCIVM, backend.NetInternet)
+	if err != nil {
+		return nil, err
+	}
+	if err := l.Start(ctx, OCIVM, conf); err != nil {
 		return nil, err
 	}
 	if err := l.runScript(ctx, OCIVM, trust, true); err != nil {
@@ -136,9 +141,9 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 		args = append(args, filepath.Join(guest, "ca.sh"))
 	}
 	cmd := l.limactl(ctx, args...)
-	// With the host's proxy, its variables come first on the input
-	// (buildproxy.go), and the script runs with its arguments after them.
-	if pre := proxyExports(buildProxy(l.Getenv)); pre != nil {
+	// With the build's proxy, its variables come first on the input, and
+	// the script runs with its arguments after them.
+	if pre := proxyExports(hp); pre != nil {
 		at := slices.Index(args, "bash") + 1
 		cmd = l.limactl(ctx, slices.Concat(args[:at], []string{"-s", "--"}, args[at:])...)
 		cmd.Stdin = bytes.NewReader(append(pre, "exec bash \"$@\"\n"...))
@@ -149,6 +154,7 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 	if err := l.delete(ctx, OCIVM); err != nil {
 		return nil, err
 	}
+	proxyDone(true)
 	// The build VM is gone, so nothing changes them now.
 	c := &converted{dir: vmOut}
 	if c.libc, c.cmdline, err = checkConverted(vmOut, f.Ref); err != nil {

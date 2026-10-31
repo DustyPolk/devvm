@@ -63,7 +63,7 @@ On Linux, Lima starts QEMU through a wrapper that devvm writes (`~/.local/share/
 
 A process can't leave its sandbox, so devvm records the hostagent it started (`~/.local/share/devvm/run/<vm>.started`) and checks that the VM still runs on it ([the self-check](network.md#the-self-check)). A VM started another way, such as with `limactl start`, runs unconfined, and `devvm ls` shows it as `unenforced`. The VM's proxy follows the hostagent's pid file (`ha.pid` in the VM's Lima folder) and exits with it.
 
-Builds are also confined, because they run code devvm didn't write. On macOS a build's Lima process runs under a profile that reaches either the internet but not the host's loopback, where other VMs' proxies and dev servers listen, or nothing at all. On Linux only a build with no network is confined. QEMU can't keep the internet while dropping the host's loopback, so other builds reach services on the host's `localhost`. Builds forward no ports.
+Builds are also confined, because they run code devvm didn't write. On macOS a build's Lima process runs under a profile that reaches either the internet but not the host's loopback, where other VMs' proxies and dev servers listen, or nothing at all. Behind a company proxy, a build with the internet also reaches one port of the host's loopback, its own proxy's ([a company proxy](design.md#a-company-proxy)). On Linux only a build with no network is confined. QEMU can't keep the internet while dropping the host's loopback, so other builds reach services on the host's `localhost`. Builds forward no ports.
 
 `sandbox-exec` is deprecated. If macOS drops it, devvm needs another way to confine the hostagent, and until then the self-check catches a VM that runs unconfined.
 

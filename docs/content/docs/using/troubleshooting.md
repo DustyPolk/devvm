@@ -78,7 +78,9 @@ With network policy, a VM reaches only the hosts on its allowlist. To see what t
 
 When this machine reaches the internet only through a company proxy and nothing in a VM or a build gets through, check that the shell you run devvm in has the proxy settings, as `env | grep -i _proxy` shows. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from that shell, so set them there, then run devvm again in the folder, which starts the VM's proxy again with them ([network policy behind a company proxy](../safety/network.md#behind-a-company-proxy)). A shell without the settings, such as an editor's terminal that didn't load your profile, starts the VM's proxy without them.
 
-When devvm says that `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes. On macOS, image builds can't reach this machine's loopback, so a proxy on `localhost`, such as one a VPN client runs, works for VMs with network policy but not for builds on Lima.
+When devvm says that `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes.
+
+Builds behind a company proxy go through a proxy of devvm's, which allows any host but refuses a name that this machine can't look up. So when an image build fails to reach a host behind a company proxy, check that this machine resolves the host's name, as `host github.com` shows. If it doesn't, ask your IT team for a DNS server that resolves outside names.
 
 ## TLS errors behind a company proxy
 

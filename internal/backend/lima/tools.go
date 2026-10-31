@@ -64,21 +64,27 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		"--set", mounts, base, ToolsVM)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(ToolsVM))
 	}
-	if err := l.Start(ctx, ToolsVM, backend.Confinement{Net: spec.Net}); err != nil {
+	// Behind a company proxy, through a proxy of devvm's (buildproxy.go).
+	conf, hp, proxyDone, err := buildProxy(ctx, l, ToolsVM, spec.Net)
+	if err != nil {
+		return err
+	}
+	if err := l.Start(ctx, ToolsVM, conf); err != nil {
 		return err
 	}
 	if err := l.runScript(ctx, ToolsVM, spec.Trust.Add, true); err != nil {
 		return err
 	}
 	cmd := l.limactl(ctx, append([]string{"shell", "--workdir", "/", ToolsVM, "bash", "-s", "--"}, spec.Args...)...)
-	// The host's proxy for its commands, never written into the VM.
-	cmd.Stdin = bytes.NewReader(withProxy(buildProxy(l.Getenv), spec.Script).Data)
+	// The build's proxy for its commands, never written into the VM.
+	cmd.Stdin = bytes.NewReader(withProxy(hp, spec.Script).Data)
 	if err := l.Runner.Run(ctx, msg.BuildingToolsIn(ToolsVM), cmd); err != nil {
 		return backend.Logged(msg.ToolsBuildFailed())
 	}
 	if err := l.delete(ctx, ToolsVM); err != nil {
 		return err
 	}
+	proxyDone(true)
 	done()
 	return nil
 }

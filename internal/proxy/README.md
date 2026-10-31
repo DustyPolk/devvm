@@ -6,7 +6,7 @@ The VM can reach nothing but this proxy. On macOS its Lima hostagent runs under 
 
 - answers `407` without the VM's password;
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
-- resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address; through a company proxy (`-upstream`), which resolves names itself, it refuses a name only when the host's resolver answers with such an address;
+- resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address; through a company proxy (`-upstream`), which resolves names itself, it refuses a name when the host's resolver answers with such an address, and a name the host can't resolve when only `**` allows it, and it reads at most 64 KiB of the company proxy's answer to `CONNECT`;
 - requires a TLS ClientHello in a tunnel to name the CONNECT host (SNI);
 - for hosts with a bound secret, swaps the placeholder in one header for the real value: it intercepts their `:443` tunnels, and does the same for absolute-form `https://` requests (everything else passes unread);
 - logs every decision as JSON lines.
