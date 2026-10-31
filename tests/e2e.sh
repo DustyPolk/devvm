@@ -4,7 +4,8 @@
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
 #                project makes a VM from base in a project folder, opens it from a subfolder in that
-#                subfolder, and checks its mounts, no Docker, every
+#                subfolder, and checks its mounts, a file watcher in it (the VM's edits seen, none
+#                of this machine's: Lima's mounts pass on no file events), no Docker, every
 #                port through devvm's forwarder (never a port a program here has), ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
@@ -28,8 +29,8 @@
 #                between runs)
 #     --backend smolvm
 #                the smolvm backend's own section instead (experimental): base and a layer built as
-#                packs, a project VM's mounts, size, listed ports through devvm's forwarder (a server
-#                on the VM's loopback reaching this machine, none published by smolvm, never one a
+#                packs, a project VM's mounts, a file watcher in it seeing this machine's edits (no
+#                deletions), size, listed ports through devvm's forwarder (a server on the VM's loopback reaching this machine, none published by smolvm, never one a
 #                program here has, a running VM's changed at once), no Docker
 #                without the docker layer, agent forwarding, a node VM's
 #                shared tools, agent toggling's emulation (your agent, devvm's or none from each
@@ -48,7 +49,8 @@
 #                the Docker backend's own section instead (experimental), state under
 #                /tmp/devvm-go-e2e-docker. On Linux, on this machine's engine: base and a layer built by
 #                committing containers, confined (no host loopback-only server reached, one on every
-#                address reached), a failed build kept, a project VM's mounts, its files the host user's
+#                address reached), a failed build kept, a project VM's mounts, a file watcher in it
+#                seeing this machine's edits (on Desktop, no deletions), its files the host user's
 #                (uid and gid), its home a volume of its own, size, no Docker inside, what it lacks
 #                refused in one line, agent folders added and removed (its container made again from a
 #                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume;
@@ -454,6 +456,77 @@ loopback_only() { local addrs
   [[ -n $addrs ]] && ! grep -qvE "^(127\.0\.0\.1|\[::1\]):$1\$" <<<"$addrs"
 }
 export -f loopback_only
+# watch_sees RUN VM DIR BY [NESTED [DELETES]]: a watcher in the VM on DIR and a subfolder, as a dev
+# server's (RUN VM CMD runs CMD there: in_vm, in_smol, in_d), sees a file changed in each, one made
+# and one deleted, by this machine (BY host) or the VM (BY vm), each within 5 s; with NESTED no,
+# never the subfolder's (9p's limit); with DELETES no, not the deletion (smolvm's and Docker
+# Desktop's limit). The watcher is perl (every base has it) calling inotify itself, so the
+# test VM needs nothing added. It prints its events, and writes them to a file in a folder of
+# DIR's it doesn't watch too, as smolvm's exec passes output on only at the end, and 9p shows this
+# machine a file the VM writes only later; they're in $work/watch.out after. watch_misses RUN VM
+# DIR: the watcher sees none of this machine's (Lima's limit: polling).
+watch_pl='use strict; use IO::Handle;
+my %nr = (x86_64 => [294, 254], aarch64 => [26, 27]);
+chomp(my $m = qx(uname -m));
+my ($init, $add) = @{$nr{$m} or die "no inotify syscalls for $m\n"};
+my $fd = syscall($init, 0); $fd >= 0 or die "inotify_init1: $!\n";
+my $log = shift @ARGV; open(my $lf, ">>", $log) or die "$log: $!\n";
+sub out { print STDOUT @_; print $lf @_ }
+my ($top, %rel) = ($ARGV[0]);
+for my $dir (@ARGV) {
+  my $wd = syscall($add, $fd, $dir, 0x2 | 0x4 | 0x8 | 0x40 | 0x80 | 0x100 | 0x200);
+  $wd >= 0 or die "inotify_add_watch $dir: $!\n";
+  $rel{$wd} = $dir eq $top ? "" : substr($dir, length($top) + 1) . "/";
+}
+open(my $in, "<&=", $fd) or die "inotify fd: $!\n";
+STDOUT->autoflush(1); $lf->autoflush(1); alarm 120;
+my %name = (0x2 => "MODIFY", 0x4 => "ATTRIB", 0x8 => "CLOSE_WRITE", 0x40 => "MOVED_FROM", 0x80 => "MOVED_TO", 0x100 => "CREATE", 0x200 => "DELETE");
+out("ready\n");
+while (sysread($in, my $buf, 65536)) {
+  for (my $i = 0; $i + 16 <= length $buf; ) {
+    my ($wd, $mask, undef, $len) = unpack("iIII", substr($buf, $i, 16));
+    my $f = $rel{$wd} . unpack("Z*", substr($buf, $i + 16, $len));
+    for my $bit (sort { $a <=> $b } keys %name) { out("$name{$bit} $f\n") if $mask & $bit }
+    $i += 16 + $len;
+  }
+}'
+# watch_events: what the watcher printed and wrote so far, each line once.
+watch_events() { cat "$watch_log" "$work/watch.stream" 2>/dev/null | awk '!seen[$0]++'; }
+watch_saw() { local end=$((SECONDS + 5))
+  while (( SECONDS <= end )); do watch_events | grep -qE "^$1\$" && return 0; sleep 0.2; done
+  echo "nothing for $1 within 5 s" >> "$work/watch.missed"; return 1; }
+# watch_do RUN VM BY CMD: CMD on this machine (BY host) or in the VM.
+watch_do() { if [[ $3 == host ]]; then bash -c "$4"; else "$1" "$2" "$4" >/dev/null; fi; }
+watch_sees() { local w r=1
+  watch_log=$3/.e2e-watch/events
+  mkdir -p "$3/e2e-sub" "$3/.e2e-watch" && printf '%s\n' "$watch_pl" > "$3/.e2e-watch/watch.pl" && : > "$watch_log" &&
+    echo before > "$3/watched.txt" && echo before > "$3/e2e-sub/nested.txt" || return 1
+  : > "$work/watch.missed"
+  "$1" "$2" "LC_ALL=C exec perl '$3/.e2e-watch/watch.pl' '$watch_log' '$3' '$3/e2e-sub'" > "$work/watch.stream" 2>&1 &
+  w=$!
+  for _ in $(seq 60); do watch_events | grep -qx ready && break; sleep 0.5; done
+  if watch_events | grep -qx ready; then
+    r=0   # each one tried, so the output shows them all
+    # A change may come as a new file (smolvm's): either way, a watcher looks at the file again.
+    watch_do "$1" "$2" "$4" "echo after >> '$3/watched.txt'"; watch_saw '(MODIFY|CLOSE_WRITE|CREATE) watched.txt' || r=1
+    watch_do "$1" "$2" "$4" "echo after >> '$3/e2e-sub/nested.txt'"
+    if [[ ${5:-yes} == yes ]]; then watch_saw '(MODIFY|CLOSE_WRITE|CREATE) e2e-sub/nested.txt' || r=1; fi
+    watch_do "$1" "$2" "$4" "echo made > '$3/made.txt'"; watch_saw '(CREATE|MOVED_TO) made.txt' || r=1
+    watch_do "$1" "$2" "$4" "rm '$3/made.txt'"
+    if [[ ${6:-yes} == yes ]]; then watch_saw '(DELETE|MOVED_FROM) made.txt' || r=1
+    else sleep 5; ! watch_events | grep -qE '^(DELETE|MOVED_FROM) made.txt$' || { echo "the deletion was seen" >> "$work/watch.missed"; r=1; }; fi
+    # NESTED no: the subfolder's change is never seen, even after the rest.
+    if [[ ${5:-yes} == no ]] && watch_events | grep -q ' e2e-sub/'; then
+      echo "the subfolder's change was seen" >> "$work/watch.missed"; r=1
+    fi
+  fi
+  "$1" "$2" "pkill -f '[.]e2e-watch/watch[.]pl'" >/dev/null 2>&1
+  kill "$w" 2>/dev/null; wait "$w" 2>/dev/null
+  watch_events > "$work/watch.out"
+  echo "the watcher saw:"; cat "$work/watch.out" "$work/watch.missed"   # what it missed last
+  rm -rf "$3/.e2e-watch" "$3/watched.txt" "$3/made.txt" "$3/e2e-sub"
+  return "$r"; }
+watch_misses() { watch_sees "$1" "$2" "$3" host; grep -qx ready "$work/watch.out" && ! grep -qvx ready "$work/watch.out"; }
 
 if $clean; then
   section "cleaning cached images"
@@ -679,6 +752,13 @@ check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
   grep -Eq '^$vm +Running +base +(on|off) +off +lima +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
+# On Linux hosts the mount is 9p, whose subfolders' events reach no watcher, even the VM's own.
+if [[ "$(uname -s)" == Darwin ]]; then
+  check "a watcher in the VM sees files changed, made and deleted in the VM" watch_sees in_vm "$vm" "$p" vm
+else
+  check "a watcher in the VM sees files changed, made and deleted in the VM, but not in a subfolder (9p)" watch_sees in_vm "$vm" "$p" vm no
+fi
+check "... but none changed, made or deleted on this machine (Lima's mounts pass on no file events: polling)" watch_misses in_vm "$vm" "$p"
 # Only the project folder and the shared tools: the VM's own mounts list holds nothing else (in a
 # nested Linux test host, the guest's home has the host's path, so looking for files there proves
 # nothing).
@@ -1549,6 +1629,8 @@ check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Run
 check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
   in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -c \"\$1\" </dev/null; }
   in_smol 'echo from-vm > $p/vm.txt' && grep -qx from-vm '$p/vm.txt' && [[ \$(stat -f %Su '$p/vm.txt' 2>/dev/null || stat -c %U '$p/vm.txt') == '$me' ]]"
+# smolvm's virtiofs passes on changes and new files, but no deletions.
+check "a watcher in the VM sees files changed and made on this machine, but not deleted" watch_sees in_smol "$vm" "$p" host yes no
 check "the shared tools are read-only, even for root" bash -c "! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- touch /mnt/devvm-tools/x </dev/null 2>/dev/null"
 check "hostname is the folder" in_smol "$vm" '[[ $(hostname) == smolweb ]]'
 check "Exec's arguments, folder, input and user reach the VM as given" bash -c "cd '$root' &&
@@ -2475,6 +2557,12 @@ docker_project() {
   check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
     docker exec -u '$me' '$vm' sh -c 'echo from-vm > \"$p/vm.txt\"' </dev/null && grep -qx from-vm '$p/vm.txt'"
   check "... yours on this machine (and your group on Linux)" owner_is_me "$p/vm.txt"
+  # Docker Desktop's file sharing passes on changes and new files, but no deletions.
+  if $d_desktop; then
+    check "a watcher in the VM sees files changed and made on this machine, but not deleted (Desktop)" watch_sees in_d "$vm" "$p" host yes no
+  else
+    check "a watcher in the VM sees files changed, made and deleted on this machine" watch_sees in_d "$vm" "$p" host
+  fi
   check "its home is a volume of its own, the shared tools one read-only, even for root" bash -c "
     mounted '$vm' /home/$me.guest volume true && mounted '$vm' /mnt/devvm-tools volume false && d_vol '$vm-home' &&
     ! docker exec -u 0 '$vm' touch /mnt/devvm-tools/x </dev/null 2>/dev/null"

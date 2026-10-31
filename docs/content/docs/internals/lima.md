@@ -32,6 +32,8 @@ devvm sets these in each VM's Lima config:
 
 Lima changes only a stopped VM's config, so a change you make while the VM runs applies at its next start.
 
+devvm leaves Lima's `mountInotify` off, so file watchers in the VM see only the changes made in the VM ([file watchers](../backends/lima.md#file-watchers)). With it on, Lima's hostagent watches the project folder on the host and, for each change there, changes the file's times in the guest as root, which raises an inotify event for the guest's watchers. The hostagent can't tell the VM's own writes from the host's, so it does this to every file the VM writes too, and on macOS the guest then sees such a file as root's for a moment. A command that writes a file and then changes its mode fails in that moment, and in a test on macOS, `git init` in the project folder failed 13 times in 30 with it on and never with it off. Lima also passes on no deletions, and it marks the setting as experimental.
+
 ## Confinement
 
 A VM with network policy reaches nothing but its proxy on the host, and even root in the VM can't get around that. Direct connections, DNS, UDP and connections to the host's own services fail at once, while forwarded ports, mounts and ssh keep working.

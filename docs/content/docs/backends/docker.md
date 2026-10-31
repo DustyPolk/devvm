@@ -55,6 +55,8 @@ Don't run an unfiltered `docker container prune` or `docker system prune` yourse
 
 Docker Desktop mounts only folders under the ones its settings list, in Settings > Resources > File sharing. By default those are `/Users`, `/Volumes`, `/private`, `/tmp` and `/var/folders`. devvm refuses a project or agent folder outside them, when it can read Desktop's settings, so add the folder there first.
 
+A dev server or a file watcher in the VM sees the files you change or make on this machine, as Desktop's file sharing passes those changes on, but it doesn't see the files you delete here. A watcher that needs deletions can poll the project folder instead, with the settings on the [Lima page](lima.md#file-watchers). On a Linux engine, a watcher sees every change, deletions included.
+
 ## What Docker VMs can't do
 
 A Docker VM is a container with Docker's default capabilities less `NET_RAW`, no devices added, and Docker's seccomp profile. So these don't work in one (one with the [docker layer](#the-docker-layer) has `NET_RAW` and `NET_ADMIN` in its own namespaces, and still none of the devices):

@@ -42,10 +42,27 @@ devvm limactl shell --start devvm-img-<key>
 - It runs from devvm's data folder, as devvm's own `limactl` commands do, so give files by their absolute path.
 - A VM you start this way, with `devvm limactl start` or `shell --start`, runs unconfined, without its network policy, and `devvm ls` shows it as `unenforced` ([confinement](../internals/lima.md#confinement)). Start project VMs with devvm.
 
+## File watchers
+
+A dev server or a watcher that runs in the VM, such as Vite, webpack, `tsc --watch` or nodemon, learns about changed files from the VM's kernel. The kernel sees every change made in the VM, so a file that a coding agent or a command in the VM's shell writes reaches the watcher at once. Lima's mounts don't pass on the changes you make on this machine, though, so a watcher in the VM misses a file you save in your editor here, and the dev server doesn't reload. On Linux the project folder is a 9p mount, and there a watcher also misses the VM's own changes in the folder's subfolders, and sees only those to files at the top of the folder.
+
+To have a watcher see your edits, set it to poll the project folder, which costs some CPU in a large project:
+
+| Tool | Setting |
+| --- | --- |
+| chokidar, and tools built on it | `CHOKIDAR_USEPOLLING=1` |
+| Vite | `server.watch.usePolling: true` in `vite.config` |
+| webpack | `watchOptions.poll` in `webpack.config.js`, or `WATCHPACK_POLLING=true` |
+| nodemon | `nodemon --legacy-watch` |
+| `tsc --watch` | `"watchOptions": { "watchFile": "fixedPollingInterval" }` in `tsconfig.json` |
+| cargo watch | `cargo watch --poll` |
+
+Set the variables in the VM's shell or in your project's scripts, before the tool starts. Leave Lima's own file event setting, `mountInotify`, off, because with it on, commands in the VM that write to the project folder, such as `git init`, fail at random ([details](../internals/lima.md#what-devvm-sets-on-a-vm)).
+
 ## Limits
 
 - **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has at most 104 characters. A long Lima home leaves less room for the name, so set `DEVVM_LIMA_HOME` to a shorter folder if devvm says the home is too long.
 - **Paths can't contain commas.** Lima and QEMU split mount options on commas, so devvm refuses to mount a project folder whose path has one, and it leaves out an agent's folder whose path has one, with a warning.
 - **Disks can grow but not shrink.**
-- **Mounts on Linux are 9p.** A 9p share mounts once per guest.
+- **Mounts on Linux are 9p.** A 9p share mounts once per guest, and file watchers in the VM miss changes in its subfolders ([file watchers](#file-watchers)).
 - **A VM that Lima reports as failed to start** still starts, with a warning, when it's running but degraded because one of Lima's boot scripts failed. A VM that doesn't answer over ssh within a minute is stopped instead, and its console log is in its Lima folder (`serial*.log`).
