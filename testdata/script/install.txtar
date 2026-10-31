@@ -144,16 +144,39 @@ stderr '^install: --version needs a version$'
 ! exec bash main.sh --no-deps --version '1.2.3/../x'
 stderr '^install: not a devvm version: ''1.2.3/../x''$'
 
-# Homebrew's devvm: the script stops before downloading anything, terminal
-# or not; --force installs a second copy.
-env BREW_DEVVM=1
+# Homebrew's devvm, a keg in the Cellar next to the brew on PATH: the
+# script stops before downloading anything, terminal or not, without
+# running brew; --force installs a second copy.
+mkdir Cellar/devvm/0.0.9
 ! exec bash main.sh --no-deps --version 0.1.0
 stderr '^install: Homebrew installed devvm: run brew upgrade devvm to upgrade it, or brew uninstall devvm first to use this script \(--force installs a second copy\)$'
 ! stdout downloading
 ! exists prefix/bin/devvm
+! exists ran
 exec bash main.sh --no-deps --version 0.1.0 --force
 stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
-env BREW_DEVVM=
+rm Cellar/devvm/0.0.9
+# An empty rack isn't a keg.
+exec bash main.sh --no-deps --version 0.1.0
+stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
+# HOMEBREW_CELLAR's, HOMEBREW_PREFIX's and a usual prefix's Cellar.
+mkdir cellar/devvm/0.0.9 hbprefix/Cellar/devvm/0.0.9 usual/Cellar/devvm/0.0.9
+env HOMEBREW_CELLAR=$WORK/cellar
+! exec bash main.sh --no-deps --version 0.1.0
+stderr '^install: Homebrew installed devvm'
+env HOMEBREW_CELLAR=
+env HOMEBREW_PREFIX=$WORK/hbprefix
+! exec bash main.sh --no-deps --version 0.1.0
+stderr '^install: Homebrew installed devvm'
+env HOMEBREW_PREFIX=
+env BREW_PREFIXES=$WORK/usual
+! exec bash main.sh --no-deps --version 0.1.0
+stderr '^install: Homebrew installed devvm'
+# No brew on PATH: no check.
+exec bash nobrew.sh --no-deps --version 0.1.0
+stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
+env BREW_PREFIXES=
+! exists ran
 
 # devvm itself, installed: its files are in it, and its own check (the
 # sandbox's stubs) finds nothing missing; devvm doctor runs after it.
@@ -171,6 +194,9 @@ rm -rf "$WORK/prefix" "$WORK/repo" "$WORK/dl" "$WORK/build" "$WORK/ran"
 # shellcheck source=/dev/null
 DEVVM_INSTALL_TEST=1 source "$DEVVM_REPO/install.sh"
 prefix=$WORK/prefix repo_url=file://$WORK/repo protos="=https,file"
+# Homebrew's usual prefixes: only $BREW_PREFIXES, never this host's.
+brew_prefixes=()
+[[ -z ${BREW_PREFIXES:-} ]] || brew_prefixes=("$BREW_PREFIXES")
 mkdir -p "$WORK/dl"
 tmp=$(mktemp -d "$WORK/dl/t.XXXXXX")
 [[ $prefix == "$WORK/"* ]] || exit 1
@@ -395,6 +421,12 @@ sudo usermod -aG kvm me
 . "$WORK/lib.sh"
 release 0.1.0
 main "$@"
+-- nobrew.sh --
+# main.sh without a brew on PATH.
+. "$WORK/lib.sh"
+release 0.1.0
+command() { if [[ $1 == -v && $2 == brew ]]; then return 1; fi; builtin command "$@"; }
+main "$@"
 -- real.sh --
 # The devvm the tests built, alone, as a release.
 . "$WORK/lib.sh"
@@ -416,9 +448,8 @@ while (($#)); do case $1 in -x) sig=$2; shift ;; -P) key=$2; shift ;; esac; shif
 [[ "$(cat "$sig")" == "good $key" ]]
 -- bin/brew --
 #!/bin/sh
-# Stand-in for Homebrew: devvm is installed when $BREW_DEVVM is set; any
-# other command logs to $WORK/ran.
-if [ "$*" = "list --formula devvm" ]; then [ -n "$BREW_DEVVM" ]; exit; fi
+# Stand-in for Homebrew: every command logs to $WORK/ran. Its Cellar is
+# $WORK/Cellar, so a devvm keg is a folder in $WORK/Cellar/devvm.
 echo "brew $*" >> "$WORK/ran"
 -- bin/sudo --
 #!/bin/sh

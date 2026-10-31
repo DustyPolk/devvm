@@ -83,14 +83,28 @@ check_host() {
   command -v tar >/dev/null || die "needs tar"
 }
 
+# Where Homebrew installs, when neither the brew on PATH nor HOMEBREW_CELLAR/HOMEBREW_PREFIX has a
+# Cellar with devvm (tests set their own).
+brew_prefixes=(/opt/homebrew /usr/local /home/linuxbrew/.linuxbrew)
+
 # check_brew: stops when Homebrew installed devvm, as a second copy would leave the one first on PATH
-# running and brew upgrade updating the other. --force installs anyway. Only brew's exit status is
-# read, never its output.
+# running and brew upgrade updating the other. --force installs anyway. It never runs brew, which can
+# download its own Ruby: it looks for a devvm keg (Cellar/devvm/<version>) in the Cellar next to the
+# brew on PATH, in HOMEBREW_CELLAR and HOMEBREW_PREFIX's, and in brew_prefixes'.
 check_brew() {
+  local b cellars=() c k
   ! $force || return 0
-  command -v brew >/dev/null || return 0
-  HOMEBREW_NO_AUTO_UPDATE=1 brew list --formula devvm >/dev/null 2>&1 </dev/null || return 0
-  die "Homebrew installed devvm: run brew upgrade devvm to upgrade it, or brew uninstall devvm first to use this script (--force installs a second copy)"
+  b=$(command -v brew) || return 0
+  [[ -z ${HOMEBREW_CELLAR:-} ]] || cellars+=("$HOMEBREW_CELLAR")
+  [[ -z ${HOMEBREW_PREFIX:-} ]] || cellars+=("$HOMEBREW_PREFIX/Cellar")
+  cellars+=("$(dirname -- "$b")/../Cellar")
+  for c in ${brew_prefixes[@]+"${brew_prefixes[@]}"}; do cellars+=("$c/Cellar"); done
+  for c in "${cellars[@]}"; do
+    for k in "$c"/devvm/*; do
+      [[ -d $k ]] || continue
+      die "Homebrew installed devvm: run brew upgrade devvm to upgrade it, or brew uninstall devvm first to use this script (--force installs a second copy)"
+    done
+  done
 }
 
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
@@ -209,7 +223,7 @@ path_hint() {
   esac
   hash -r
   first=$(command -v devvm) || return 0
-  [[ "$(readlink -f "$first")" != "$(readlink -f "$prefix/bin/devvm")" ]] || return 0
+  [[ "$(readlink -f -- "$first")" != "$(readlink -f -- "$prefix/bin/devvm")" ]] || return 0
   warn "another devvm comes first on your PATH: $first"
   echo "  remove it, or put $prefix/bin before its folder in PATH" >&2
 }
