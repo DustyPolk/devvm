@@ -588,7 +588,8 @@ func TestStartConfined(t *testing.T) {
 			t.Errorf("%+v: started", bad)
 		}
 	}
-	// Made by an older devvm: the proxy's variables in its environment go.
+	// The proxy's variables in a machine's environment go: the proxy's
+	// URL is only ever in its file.
 	if err := s.writeRecord(vm, record{Env: map[string]string{"HTTPS_PROXY": "http://devvm:old@100.96.0.1:1"}}); err != nil { //nolint:gosec // the test's own password
 		t.Fatal(err)
 	}

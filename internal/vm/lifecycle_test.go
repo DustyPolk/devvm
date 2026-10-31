@@ -104,7 +104,8 @@ func TestExport(t *testing.T) {
 		}
 		return nil
 	}
-	// An exports folder an older devvm made open to others.
+	// An exports folder open to others is the user's alone after an
+	// export.
 	if err := os.MkdirAll(e.Dirs.Exports(), 0o755); err != nil { //nolint:gosec // the test's own folder
 		t.Fatal(err)
 	}

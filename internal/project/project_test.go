@@ -118,7 +118,7 @@ func TestUnsafe(t *testing.T) {
 		{filepath.Join(root, "data"), u.Data, ""},
 		{filepath.Join(root, "config"), u.Config, ""},
 		{filepath.Join(u.Config, "layers"), "", u.Config},
-		{filepath.Join(u.Data, "bin"), "", u.Data},
+		{filepath.Join(u.Data, "mise"), "", u.Data},
 		{filepath.Join(u.Lima, "x"), "", u.Data},
 		{filepath.Join(u.Home, "proj"), "", ""},
 		{u.Home + "-sibling", "", ""},

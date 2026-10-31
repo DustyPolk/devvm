@@ -364,7 +364,8 @@ func TestPrepare(t *testing.T) {
 	var excluded []string
 	p.OS = "darwin"
 	p.ExcludeFromBackup = func(_ context.Context, dir string) error { excluded = append(excluded, dir); return nil }
-	// Folders an older devvm left open to others are the user's alone after.
+	// The run, logs and CA folders are the user's alone after, whatever
+	// mode they had.
 	for _, dir := range []string{d.Run(), d.Logs(), d.CA()} {
 		if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // the test's own folder
 			t.Fatal(err)

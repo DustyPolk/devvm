@@ -106,9 +106,6 @@ func (d Dirs) RunLogs() string { return filepath.Join(d.Logs(), "runs") }
 // folder per version of them, named by their hash.
 func (d Dirs) Assets() string { return filepath.Join(d.Data, "assets") }
 
-// Bin holds the binaries devvm builds for the host (the proxy).
-func (d Dirs) Bin() string { return filepath.Join(d.Data, "bin") }
-
 // CA holds the certificate authority VMs trust for the proxy.
 func (d Dirs) CA() string { return filepath.Join(d.Data, "ca") }
 
