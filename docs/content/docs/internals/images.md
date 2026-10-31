@@ -86,7 +86,7 @@ devvm fits base's CPUs and memory to the host with one rule that every backend u
 - **smolvm** sets the fitted size on base's build machine and on every VM you give no size, because a pack would otherwise give a VM its build machine's CPUs and memory.
 - **Docker** fits to the engine's machine, as `docker info` reports its CPUs and memory, for base's build container and every VM you give no size. Until devvm has read `docker info`, base gets `base.yaml`'s size.
 
-A size you set with `--cpus`, `--memory` or `devvm size -g` replaces the fitted one. The fitted size isn't in image keys, because the host's size doesn't change what an image holds.
+A size you set with `--cpus`, `--memory` or `devvm size -g` replaces the fitted one. devvm checks that size against the same rule, so it refuses more memory than the host's whole GiB less 2, or half of them on a host of 4 GiB or less, and the fitted memory always passes ([size](../using/ports-size.md#size-and-ports)). The fitted size isn't in image keys, because the host's size doesn't change what an image holds.
 
 ## The docker layer
 

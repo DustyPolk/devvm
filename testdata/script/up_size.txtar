@@ -18,7 +18,7 @@ stderr '^devvm: size_not_gib flag=--disk value="lots"$'
 ! exec devvm --no-network-policy --cpus 9999 base
 stderr '^devvm: too_many_cpus have=[0-9]+ want=9999$'
 ! exec devvm --no-network-policy --memory 99999 base
-stderr '^devvm: too_much_memory have=[0-9]+ want=99999$'
+stderr '^devvm: too_much_memory have=[0-9]+ max=[0-9.]+ want=99999$'
 ! exec devvm --no-network-policy --disk 50GiB base
 stderr '^devvm: disk_shrink have=100 vm=devvm-sized-[0-9a-f]{14} want=50$'
 ! exec devvm --no-network-policy --ports 0 base

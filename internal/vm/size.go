@@ -88,6 +88,14 @@ type Host struct {
 	MemoryGiB int // whole GiB, rounded down
 }
 
+// memoryBytes is the host's whole GiB in bytes, 0 for 0 or less.
+func (h Host) memoryBytes() uint64 {
+	if h.MemoryGiB <= 0 {
+		return 0
+	}
+	return uint64(h.MemoryGiB) << 30
+}
+
 // ThisHost returns this machine's CPUs and memory.
 func ThisHost() (Host, error) {
 	mem, err := platform.Memory()
@@ -97,7 +105,9 @@ func ThisHost() (Host, error) {
 	return Host{CPUs: runtime.NumCPU(), MemoryGiB: int(mem >> 30)}, nil
 }
 
-// Check refuses a parsed size the host can't give, or a disk smaller than
+// Check refuses a parsed size the host can't give: more CPUs than it has,
+// or more memory than backend.MaxMemory allows, which keeps memory for
+// the host as base's fitting does. It also refuses a disk smaller than
 // minDisk GiB (the image's, which can't shrink; 0 for no limit). vm names
 // the VM for the disk's refusal.
 func (s Size) Check(h Host, minDisk float64, vm string) error {
@@ -105,8 +115,8 @@ func (s Size) Check(h Host, minDisk float64, vm string) error {
 	if b.CPUs > h.CPUs {
 		return msg.TooManyCpus(strconv.Itoa(h.CPUs), s.CPUs)
 	}
-	if b.MemoryGiB > float64(h.MemoryGiB) {
-		return msg.TooMuchMemory(strconv.Itoa(h.MemoryGiB), s.Memory)
+	if most := backend.MaxMemory(h.memoryBytes()); b.MemoryGiB > most {
+		return msg.TooMuchMemory(strconv.Itoa(h.MemoryGiB), strconv.FormatFloat(most, 'g', -1, 64), s.Memory)
 	}
 	if b.DiskGiB > 0 && b.DiskGiB < minDisk {
 		return msg.DiskShrink(strconv.FormatFloat(minDisk, 'g', -1, 64), vm, s.Disk)

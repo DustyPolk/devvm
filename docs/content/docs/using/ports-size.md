@@ -11,7 +11,8 @@ A new VM gets its image's size unless you set one with `--cpus`, `--memory` and 
 
 - `--cpus` takes a whole number. `--memory` and `--disk` take a size in GiB, written `16`, `16G` or `16GiB`, and decimals are allowed.
 - What the flags leave unset comes from `~/.config/devvm/size` when that file sets it, with one `cpus=`, `memory=` or `disk=` line each. `devvm size -g` writes that file.
-- devvm refuses more CPUs or memory than this machine has, and a disk smaller than the image's, because disks can't shrink. It refuses them before it builds anything.
+- devvm refuses more CPUs than this machine has, and a disk smaller than the image's, because disks can't shrink. It refuses them before it builds anything.
+- devvm also refuses more memory than a VM can have, because a VM that asks for all of this machine's memory doesn't start. A VM can have this machine's memory less 2 GiB, counted in whole GiB, so 6 GiB on an 8 GiB machine. On a machine with 4 GiB or less, it can have half, so 2 GiB on a 4 GiB machine. When you ask for more, devvm says how much memory this machine has and the most you can give a VM, so you can run the command again with that.
 
 A new VM forwards every TCP port from 1024 up that it listens on, unless `--ports` says otherwise, as in `devvm --ports 5173`.
 
@@ -64,7 +65,7 @@ devvm size -g --memory 16          # the size new VMs get (default: the image's)
 devvm size -g                      # cpus=, memory= and disk= lines, empty for the image's
 ```
 
-- The flags take the same values as for a new VM ([size and ports](#size-and-ports)), and devvm refuses more CPUs or memory than this machine has.
+- The flags take the same values as for a new VM and have the same limits, so devvm refuses more CPUs than this machine has and more memory than a VM can have ([size and ports](#size-and-ports)). `devvm size -g` checks a default size in the same way when you set it. A VM that already has more memory keeps it and still starts, because devvm checks a size only when you set one.
 - A stopped VM changes at once. A running VM keeps its size until it next starts, for example with `devvm restart`, and until then `devvm size` shows what the VM has now and says what changes.
 - Disks grow but never shrink, so devvm refuses a disk smaller than the VM's.
 - On the [Docker backend](../backends/docker.md#what-docker-vms-cant-do), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB.

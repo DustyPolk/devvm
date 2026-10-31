@@ -39,3 +39,30 @@ func TestFitMemory(t *testing.T) {
 		}
 	}
 }
+
+// The most a VM may ask for: the host's whole GiB less 2, or half of them
+// on a host of 4 GiB or less. Whatever FitMemory gives is allowed.
+func TestMaxMemory(t *testing.T) {
+	for _, c := range []struct {
+		hostBytes uint64
+		max       float64
+	}{
+		{32 * gib, 30},
+		{8*gib + gib/2, 6},
+		{8 * gib, 6},
+		{5 * gib, 3},
+		{4 * gib, 2},
+		{3 * gib, 1.5},
+		{1 * gib, 0.5},
+		{0, 0},
+	} {
+		if got := MaxMemory(c.hostBytes); got != c.max {
+			t.Errorf("MaxMemory(%d) = %v, want %v", c.hostBytes, got, c.max)
+		}
+		for _, want := range []float64{0.5, 1, 2, 3.5, 6, 8, 64} {
+			if fit := FitMemory(want, c.hostBytes); fit > MaxMemory(c.hostBytes) {
+				t.Errorf("FitMemory(%v, %d) = %v, more than MaxMemory's %v", want, c.hostBytes, fit, MaxMemory(c.hostBytes))
+			}
+		}
+	}
+}

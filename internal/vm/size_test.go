@@ -69,14 +69,34 @@ func TestSizeCheck(t *testing.T) {
 		err string
 	}{
 		{Size{CPUs: "16"}, "too_many_cpus have=8 want=16"},
-		{Size{Memory: "64"}, "too_much_memory have=32 want=64"},
-		{Size{Memory: "32.5"}, "too_much_memory have=32 want=32.5"},
+		{Size{Memory: "64"}, "too_much_memory have=32 max=30 want=64"},
+		{Size{Memory: "32"}, "too_much_memory have=32 max=30 want=32"},
+		{Size{Memory: "30.5"}, "too_much_memory have=32 max=30 want=30.5"},
 		{Size{Disk: "50"}, "disk_shrink have=100 vm=v want=50"},
-		{Size{CPUs: "8", Memory: "32", Disk: "200"}, ""},
+		{Size{CPUs: "8", Memory: "30", Disk: "200"}, ""},
 		{Size{}, ""},
 	} {
 		if err := tc.s.Check(h, 100, "v"); names(err) != tc.err {
 			t.Errorf("Check(%+v) = %v, want %s", tc.s, names(err), tc.err)
+		}
+	}
+	// The memory a VM may have keeps 2 GiB for the host, or half of it on
+	// a host of 4 GiB or less.
+	for _, tc := range []struct {
+		host int
+		mem  string
+		err  string
+	}{
+		{8, "8", "too_much_memory have=8 max=6 want=8"},
+		{8, "7", "too_much_memory have=8 max=6 want=7"},
+		{8, "6", ""},
+		{4, "2", ""},
+		{4, "3", "too_much_memory have=4 max=2 want=3"},
+		{3, "1.5", ""},
+		{3, "2", "too_much_memory have=3 max=1.5 want=2"},
+	} {
+		if err := (Size{Memory: tc.mem}).Check(Host{CPUs: 8, MemoryGiB: tc.host}, 0, "v"); names(err) != tc.err {
+			t.Errorf("Check(memory %s on %d GiB) = %v, want %q", tc.mem, tc.host, names(err), tc.err)
 		}
 	}
 	if b := (Size{CPUs: "2", Memory: "1.5", Disk: "120"}).Backend(); b != (backend.Size{CPUs: 2, MemoryGiB: 1.5, DiskGiB: 120}) {

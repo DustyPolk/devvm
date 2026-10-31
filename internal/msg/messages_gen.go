@@ -2129,9 +2129,9 @@ func TooManyCpus(have string, want string) M {
 	return M{id: "too_many_cpus", vals: []val{{"have", have}, {"want", want}}}
 }
 
-// TooMuchMemory is [too_much_memory]: "This machine has {{.have}} GiB of memory, less than --memory {{.want}} asks for."
-func TooMuchMemory(have string, want string) M {
-	return M{id: "too_much_memory", vals: []val{{"have", have}, {"want", want}}}
+// TooMuchMemory is [too_much_memory]: "This machine has {{.have}} GiB of memory, so a VM can have at most {{.max}} GiB, and --memory {{.want}} asks for more."
+func TooMuchMemory(have string, max string, want string) M {
+	return M{id: "too_much_memory", vals: []val{{"have", have}, {"max", max}, {"want", want}}}
 }
 
 // ToolBadOutput is [tool_bad_output]: "The shared tools' build wrote {{.file}} as something other than a plain file, so devvm didn't use it."
@@ -2796,7 +2796,7 @@ var specs = map[string]spec{
 	"token_prompt":                     {},
 	"token_quotes":                     {},
 	"too_many_cpus":                    {fields: []string{"have", "want"}},
-	"too_much_memory":                  {fields: []string{"have", "want"}},
+	"too_much_memory":                  {fields: []string{"have", "max", "want"}},
 	"tool_bad_output":                  {fields: []string{"file"}},
 	"tool_bad_version":                 {fields: []string{"tool", "version"}},
 	"tool_no_download":                 {fields: []string{"tool", "version"}},

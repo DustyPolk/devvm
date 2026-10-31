@@ -811,8 +811,8 @@ other = "{{.flag}} takes a size in GiB, such as 16, 16G or 16GiB, not {{.value}}
 other = "This machine has {{.have}} CPUs, fewer than --cpus {{.want}} asks for."
 
 [too_much_memory]
-description = "have and want are sizes in GiB"
-other = "This machine has {{.have}} GiB of memory, less than --memory {{.want}} asks for."
+description = "have, max and want are sizes in GiB; max is the most a VM can have"
+other = "This machine has {{.have}} GiB of memory, so a VM can have at most {{.max}} GiB, and --memory {{.want}} asks for more."
 
 [vm_size]
 description = "size is what the VM has: cpus=4 memory=8GiB disk=100GiB"
