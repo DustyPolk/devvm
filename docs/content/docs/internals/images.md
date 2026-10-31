@@ -112,7 +112,7 @@ devvm refuses a reference it can't read (`bad_from`). When it can't reach the re
 
 The container image's own code runs as root in the build VM, so devvm treats what it writes as hostile:
 
-- The build VM is [confined](lima.md#confinement) like any build, so it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `oci/` folder ([written out](install.md#devvms-own-files) in `~/.local/share/devvm/assets/<hash>`), read-only, and one writable folder of devvm's own, `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself except an [image only Docker has](#images-only-docker-has), before the VM starts.
+- The build VM is [confined](lima.md#confinement) like any build, so it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `oci/` folder ([written out](install.md#devvms-own-files) in `~/.local/share/devvm/assets/<hash>`), read-only, with devvm's `guest/` folder beside it, also read-only, when there are [company CAs](#a-companys-ca-in-builds), and one writable folder of devvm's own, `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself except an [image only Docker has](#images-only-docker-has), before the VM starts.
 - devvm checks what comes out once the build VM is gone. Each file must be a regular file, because a link could point Lima at a file on this machine. The kernel command line can hold only letters, digits, spaces and `=,./:_-`, because it goes into Lima's config. The C library must be `gnu` or `musl`. The disk must be raw ext4, because another format, such as qcow2, can name a file on this machine as its backing file. devvm refuses anything else (`convert_bad_output`), and it doesn't create `base`.
 - devvm deletes the build VM and the temporary folder however the run ends, Ctrl+C included.
 
@@ -137,6 +137,21 @@ devvm builds the tool images that an image name needs together with the image (`
 Each tool image is named `<tool>-<version>-<key>.erofs`. Its key hashes the tool's entry in the tools lock (its version, its downloads and their checksums), `assets/shared-tools/build.sh` and the C library the image is built for. A new version, a new download or an edited build script builds the image again, and a base with a different C library, such as Alpine's musl, gets an image of its own. When the lock has no download of a tool for the VM's platform, devvm doesn't build it and says to try again later (`tool_unbuilt`).
 
 `devvm rebuild` refuses shared tools, because they aren't images and their versions come from the lock (`tools_not_images`).
+
+## A company's CA in builds
+
+Build VMs trust the CA certificates in `~/.config/devvm/ca` ([a company's CA](../using/settings.md#a-companys-ca)) while they build, and images never keep them. [Network policy](network.md#a-companys-ca) describes how devvm reads them and how `assets/guest/ca.sh` installs them.
+
+A build's `ImageSpec.Trust` holds two scripts made from `ca.sh`, which run as root: `Add`, which writes the certificates from heredocs to a temporary folder and installs them, and `Remove`, which is `ca.sh` without a folder. Each script of the build also gets `trust.Env` exported at its start, so its tools find the CAs, and nothing of that is written in the VM. Each backend runs `Add` before anything in the build VM downloads, and `Remove` once the scripts are done, before the VM stops:
+
+- **Lima:** `Add` runs right after the start, through `sudo sh`, then base's or the layer's scripts, then `Remove`, before the final `sync` and the stop.
+- **Lima with `--from`:** the conversion's build VM, which is deleted afterwards, also runs `Add`. `oci/build.sh` gets `ca.sh`, from devvm's `guest/` folder mounted read-only, and runs it in the image's chroot with the CAs before `bootify.sh` and without them after it, so that Alpine's `apk` reaches its HTTPS mirrors. The converted base then builds as Lima's does.
+- **smolvm and Docker:** `Add` runs right after the start, before `prepare.sh`, whose downloads come first in a container image (`apk` over HTTPS on Alpine), and `Remove` runs after `sshd.sh`, before the stand-ins go and the machine is packed or the container committed.
+- **Shared tools:** `ToolsSpec.Trust.Add` runs before `build.sh` on every backend. devvm deletes the build VM and keeps only its output folder, so it needs no `Remove`.
+
+An image is therefore the same with or without CAs, which is why its key holds none of them, and a tool image's key stays its lock entry, `build.sh` and the C library. When there are CAs, the build's numbered steps include the two scripts. A layer script that copies the system's bundle elsewhere keeps that copy.
+
+**End-to-end checks** (`tests/e2e.sh`, `images`): a layer built with a test CA in the folder trusts it while its script runs, keeps its key once the folder is emptied, and a copy of its image booted without devvm has none of devvm's CA files. The smolvm and Docker sections check the same build, and Docker's also checks a container of the committed image.
 
 ## The share
 

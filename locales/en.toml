@@ -964,6 +964,18 @@ other = "Reading this folder's VM's network log failed: {{.reason}}."
 [proxy_ca_failed]
 other = "Creating the network policy proxy's CA in {{.dir}} failed."
 
+[ca_not_certificate]
+other = "{{.file}} holds something other than certificates, such as a private key, and devvm sends only CA certificates to VMs. Take the file out of devvm's CA folder."
+
+[ca_not_ca]
+other = "{{.file}} holds a certificate that isn't a CA's, and VMs trust only CA certificates. Take the file out of devvm's CA folder."
+
+[ca_invalid]
+other = "{{.file}} holds a certificate that devvm can't read. Replace it with the CA's certificate in PEM."
+
+[doctor_proxy_ca]
+other = "HTTPS_PROXY is set, and {{.dir}} has no CA certificates. If the proxy inspects TLS, put its CA's certificate there."
+
 [proxy_port_taken]
 other = "Another program took port {{.port}}, which {{.vm}}'s network goes through. devvm picks another port when it next starts {{.vm}}."
 

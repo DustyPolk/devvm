@@ -1,0 +1,98 @@
+# The user's CAs (a company's): every *.pem and *.crt in devvm's CA
+# folder reaches a VM's setup, only the certificates parsed out of it; a
+# file holding anything else fails the launch, naming it; devvm doctor
+# says where a proxy that inspects TLS needs its CA.
+env DEVVM_MESSAGES=names
+env CAS=$XDG_CONFIG_HOME/devvm/ca
+
+# No folder: nothing sent but ca.sh, and every VM's environment points
+# tools at the CAs all the same, set when it's made: its start edits
+# nothing.
+mkdir $WORK/none
+cd $WORK/none
+exec devvm --no-network-policy --no-git-protect base
+exec tar -tf $STUB_DIR/sync.tar
+stdout '^ca\.sh$'
+! stdout '^ca/'
+stub_calls
+stdout '^limactl clone --tty=false \S+ devvm-none-[0-9a-f]{14} .* --set \.env = \{"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem","PIP_CERT":"/etc/ssl/certs/ca-certificates\.crt","REQUESTS_CA_BUNDLE":"/etc/ssl/certs/ca-certificates\.crt","SSL_CERT_FILE":"/etc/ssl/certs/ca-certificates\.crt","UV_SYSTEM_CERTS":"1"\}$'
+! stdout 'limactl edit --tty=false devvm-none'
+
+# A CA, in a file with text around it, and a file of another name, left
+# alone: the certificate alone is sent.
+mkdir $CAS
+cp $WORK/company.pem $CAS/company.pem
+cp $WORK/notes.txt $CAS/notes.txt
+mkdir $WORK/one
+cd $WORK/one
+exec devvm --no-network-policy --no-git-protect base
+exec tar -tf $STUB_DIR/sync.tar
+stdout '^ca/devvm-extra-1\.crt$'
+! stdout '^ca/devvm-extra-2'
+exec tar -xOf $STUB_DIR/sync.tar ca/devvm-extra-1.crt
+cmp stdout $WORK/ca-only.pem
+
+# A private key fails the launch, naming the file; so does a certificate
+# that isn't a CA's.
+cp $WORK/key.pem $CAS/key.pem
+mkdir $WORK/key
+cd $WORK/key
+! exec devvm --no-network-policy --no-git-protect base
+stderr '^devvm: ca_not_certificate file=\S*/config/devvm/ca/key\.pem$'
+rm $CAS/key.pem
+cp $WORK/leaf.pem $CAS/leaf.crt
+! exec devvm --no-network-policy --no-git-protect base
+stderr '^devvm: ca_not_ca file=\S*/config/devvm/ca/leaf\.crt$'
+rm $CAS/leaf.crt
+
+# doctor: with HTTPS_PROXY set and no CA in the folder, a line saying so.
+exec devvm doctor
+! stdout doctor_proxy_ca
+env HTTPS_PROXY=http://proxy.example:3128
+exec devvm doctor
+! stdout doctor_proxy_ca
+rm $CAS/company.pem
+exec devvm doctor
+stdout '^doctor_proxy_ca dir=\S*/config/devvm/ca$'
+env HTTPS_PROXY=
+
+-- company.pem --
+# Company root, exported from the host's store
+-----BEGIN CERTIFICATE-----
+MIIBVjCB/aADAgECAhQ2DjUE5GCuu3ghlAaTzuuBTKpHPzAKBggqhkjOPQQDAjAY
+MRYwFAYDVQQDDA1kZXZ2bSB0ZXN0IENBMCAXDTI2MTAzMTAwNDM1MloYDzIxMjYx
+MDA3MDA0MzUyWjAYMRYwFAYDVQQDDA1kZXZ2bSB0ZXN0IENBMFkwEwYHKoZIzj0C
+AQYIKoZIzj0DAQcDQgAEXBvNefEBySKRQIYneFCwVPU9XeTIb9BQmqWNOzHUUZ14
+yJRSOti9OaVDmBkNGfc8s9Y6EH+kO0OUh7d/ZobZaKMjMCEwDwYDVR0TAQH/BAUw
+AwEB/zAOBgNVHQ8BAf8EBAMCAgQwCgYIKoZIzj0EAwIDSAAwRQIgEzyH5x1Z+iba
+nf2OXZ+UmygJuhGk1Wbhqk3OSSCAPKYCIQCSBQAoZ0blPVefpXNe9FNJEicksKlE
+Ak+ibQllnrw4LA==
+-----END CERTIFICATE-----
+private notes after it
+-- ca-only.pem --
+-----BEGIN CERTIFICATE-----
+MIIBVjCB/aADAgECAhQ2DjUE5GCuu3ghlAaTzuuBTKpHPzAKBggqhkjOPQQDAjAY
+MRYwFAYDVQQDDA1kZXZ2bSB0ZXN0IENBMCAXDTI2MTAzMTAwNDM1MloYDzIxMjYx
+MDA3MDA0MzUyWjAYMRYwFAYDVQQDDA1kZXZ2bSB0ZXN0IENBMFkwEwYHKoZIzj0C
+AQYIKoZIzj0DAQcDQgAEXBvNefEBySKRQIYneFCwVPU9XeTIb9BQmqWNOzHUUZ14
+yJRSOti9OaVDmBkNGfc8s9Y6EH+kO0OUh7d/ZobZaKMjMCEwDwYDVR0TAQH/BAUw
+AwEB/zAOBgNVHQ8BAf8EBAMCAgQwCgYIKoZIzj0EAwIDSAAwRQIgEzyH5x1Z+iba
+nf2OXZ+UmygJuhGk1Wbhqk3OSSCAPKYCIQCSBQAoZ0blPVefpXNe9FNJEicksKlE
+Ak+ibQllnrw4LA==
+-----END CERTIFICATE-----
+-- notes.txt --
+not read
+-- key.pem --
+-----BEGIN PRIVATE KEY-----
+bm90IGEgcmVhbCBrZXk=
+-----END PRIVATE KEY-----
+-- leaf.pem --
+-----BEGIN CERTIFICATE-----
+MIIBLzCB1aADAgECAhQXr0UE++pou69U5JDtjV1zFBCNNzAKBggqhkjOPQQDAjAP
+MQ0wCwYDVQQDDARsZWFmMCAXDTI2MTAzMTAwNDM1MloYDzIxMjYxMDA3MDA0MzUy
+WjAPMQ0wCwYDVQQDDARsZWFmMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES69N
+XrRKTXz5vBBJ55BJiCdDmSzO1oaNuhb3MWhJgqatEHisX2GRzGPyfLyKGSQFWb8N
+UcvUhwEkgidSRuw75aMNMAswCQYDVR0TBAIwADAKBggqhkjOPQQDAgNJADBGAiEA
+0xsMLZD1kLX0H8ik71fAVBLk+viVIhMhpL0PCo3wKK8CIQDYyLf0V4RtpXG+GMy5
+3b0vAUwkAt/bJaI4N9lb0LZZLg==
+-----END CERTIFICATE-----

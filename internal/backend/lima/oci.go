@@ -49,8 +49,11 @@ type converted struct {
 // root in that VM, so everything it writes is untrusted: it gets only a
 // subfolder of devvm's temporary folder, and what comes out is checked
 // before Lima sees it. One conversion runs at a time. The build VM and
-// the folder go however the run ends.
-func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size) (*converted, error) {
+// the folder go however the run ends. With the user's CAs (trust, a
+// build's Trust.Add), the build VM trusts them, and build.sh has the
+// image's chroot trust them while bootify.sh runs, with devvm's guest
+// folder (ca.sh) mounted read-only too.
+func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, trust backend.Script) (*converted, error) {
 	if f.Digest == "" {
 		return nil, msg.NoDigest(f.Ref)
 	}
@@ -100,8 +103,12 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size) 
 	if err != nil {
 		return nil, err
 	}
-	oci := filepath.Join(assets, "oci")
-	mounts, err := mountsSet([]mount{{Location: vmOut, Writable: ptr(true)}, {Location: oci, Writable: ptr(false)}})
+	oci, guest := filepath.Join(assets, "oci"), filepath.Join(assets, "guest")
+	ms := []mount{{Location: vmOut, Writable: ptr(true)}, {Location: oci, Writable: ptr(false)}}
+	if len(trust.Data) > 0 {
+		ms = append(ms, mount{Location: guest, Writable: ptr(false)})
+	}
+	mounts, err := mountsSet(ms)
 	if err != nil {
 		return nil, err
 	}
@@ -112,14 +119,22 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size) 
 	if err := l.Start(ctx, OCIVM, backend.Confinement{Net: backend.NetInternet}); err != nil {
 		return nil, err
 	}
+	if err := l.runScript(ctx, OCIVM, trust, true); err != nil {
+		return nil, err
+	}
 	u, err := user.Current()
 	if err != nil {
 		return nil, err
 	}
 	script := filepath.Join(oci, "build.sh")
-	if err := l.Runner.Run(ctx, msg.Converting(f.Ref), l.limactl(ctx, "shell", "--workdir", "/", OCIVM,
-		"sudo", "bash", script, oci, vmOut, ref, f.Ref, u.Username, strconv.Itoa(os.Getuid()),
-		"/home/"+u.Username+".guest", convertedSize)); err != nil {
+	args := []string{
+		"shell", "--workdir", "/", OCIVM, "sudo", "bash", script, oci, vmOut, ref, f.Ref, u.Username,
+		strconv.Itoa(os.Getuid()), "/home/" + u.Username + ".guest", convertedSize,
+	}
+	if len(trust.Data) > 0 {
+		args = append(args, filepath.Join(guest, "ca.sh"))
+	}
+	if err := l.Runner.Run(ctx, msg.Converting(f.Ref), l.limactl(ctx, args...)); err != nil {
 		return nil, backend.Logged(msg.ConvertFailed(f.Ref))
 	}
 	if err := l.delete(ctx, OCIVM); err != nil {

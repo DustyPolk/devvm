@@ -32,7 +32,7 @@ stdout '^home/\.claude/settings\.json$'
 stdout '^home/\.codex/auth\.json$'
 stdout '^home/\.codex/config\.toml$'
 stdout '^claude\.json$'
-! stdout 'history|projects|ca\.pem'
+! stdout 'history|projects|^ca/'
 exec tar -xOf $STUB_DIR/sync.tar home/.claude/settings.json
 stdout testfake-settings
 exec tar -xOf $STUB_DIR/sync.tar claude.json
@@ -74,7 +74,7 @@ stderr '^devvm: config_not_copied file=\S*/home/\.codex/config\.toml vm=devvm-ne
 ! stderr claude_mcp_secrets_copied
 exec tar -tf $STUB_DIR/sync.tar
 ! stdout '^home/\.codex/config\.toml$'
-exec tar -xOf $STUB_DIR/sync.tar ca.pem
+exec tar -xOf $STUB_DIR/sync.tar ca/devvm-proxy.crt
 cmp stdout $DATA/ca/ca.pem
 exec sh -c 'tar -xOf "$STUB_DIR/sync.tar" home/.claude/settings.json home/.codex/auth.json claude.json env'
 ! stdout testfake

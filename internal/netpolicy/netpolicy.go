@@ -116,13 +116,11 @@ func PolicyFiles(d paths.Dirs, assets, vm, img string) []string {
 func VMPolicyFile(d paths.Dirs, vm string) string { return d.VMState(vm) + ".policy" }
 
 // Env is the guest environment a VM with network policy gets besides the
-// proxy's address: no proxy for the VM itself, Node told to use the proxy
-// variables, and the CA for tools that don't read the system's store.
+// proxy's address: no proxy for the VM itself, and Node told to use the
+// proxy variables. Tools find the proxy's CA as every VM finds the user's
+// (trust.Env).
 var Env = map[string]string{
-	"NO_PROXY":            "localhost,127.0.0.1,::1",
-	"no_proxy":            "localhost,127.0.0.1,::1",
-	"NODE_USE_ENV_PROXY":  "1",
-	"NODE_EXTRA_CA_CERTS": "/usr/local/share/ca-certificates/devvm-proxy.crt",
-	"REQUESTS_CA_BUNDLE":  "/etc/ssl/certs/ca-certificates.crt",
-	"UV_SYSTEM_CERTS":     "1",
+	"NO_PROXY":           "localhost,127.0.0.1,::1",
+	"no_proxy":           "localhost,127.0.0.1,::1",
+	"NODE_USE_ENV_PROXY": "1",
 }

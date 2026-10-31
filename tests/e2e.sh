@@ -262,6 +262,8 @@ cleanup() {
   rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${hostprog:-} ]] || kill "$hostprog" 2>/dev/null
+  [[ -z ${ca_server:-} ]] || kill "$ca_server" 2>/dev/null
+  [[ -z ${cad:-} ]] || rm -rf "$cad" "$cafolder"   # the run's own CA, and devvm's CA folder in the sandbox
   ps_unwatch
   [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null
   [[ -z ${fake:-} ]] || kill "$fake" 2>/dev/null
@@ -352,6 +354,38 @@ launch() {
   vm=$(vm_of "$d"); [[ -z $vm ]] || created+=("$vm")
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
+# e2e_ca: a throwaway CA of this run's in $cad (ca.pem), and a server certificate it signed for
+# host.lima.internal (srv.pem, srv.key): never a certificate of yours. ca_serve PORT: an HTTPS server
+# on this machine with it, on every address ($ca_server). $cafolder is devvm's CA folder.
+cad=$work/e2e-ca cafolder=$XDG_CONFIG_HOME/devvm/ca ca_server=""
+e2e_ca() {
+  [[ ! -f $cad/srv.pem ]] || return 0
+  rm -rf "$cad"; mkdir -p "$cad"
+  printf '%s\n' '[req]' 'distinguished_name = dn' 'prompt = no' '[dn]' 'CN = devvm e2e CA' \
+    '[ca]' 'basicConstraints = critical,CA:TRUE' 'keyUsage = critical,keyCertSign,cRLSign' 'subjectKeyIdentifier = hash' \
+    '[srv]' 'basicConstraints = CA:FALSE' 'subjectAltName = DNS:host.lima.internal,DNS:localhost,IP:127.0.0.1' \
+    'extendedKeyUsage = serverAuth' 'subjectKeyIdentifier = hash' 'authorityKeyIdentifier = keyid' > "$cad/openssl.cnf"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 2 -config "$cad/openssl.cnf" -extensions ca \
+    -keyout "$cad/ca.key" -out "$cad/ca.pem" >/dev/null 2>&1 &&
+  openssl req -new -newkey rsa:2048 -nodes -config "$cad/openssl.cnf" -subj /CN=host.lima.internal \
+    -keyout "$cad/srv.key" -out "$cad/srv.csr" >/dev/null 2>&1 &&
+  openssl x509 -req -days 2 -in "$cad/srv.csr" -CA "$cad/ca.pem" -CAkey "$cad/ca.key" -CAcreateserial \
+    -extfile "$cad/openssl.cnf" -extensions srv -out "$cad/srv.pem" >/dev/null 2>&1
+}
+ca_serve() {
+  [[ -z $ca_server ]] || return 0
+  # -www reads nothing from its input.
+  openssl s_server -accept "$1" -cert "$cad/srv.pem" -key "$cad/srv.key" -www -quiet </dev/null >/dev/null 2>&1 &
+  ca_server=$!; sleep 0.5
+}
+# ca_gone VM: the running VM has none of devvm's CA files, and the run's CA isn't in its system's
+# bundle: what an image keeps.
+ca_gone() {
+  limactl shell --workdir / "$1" sh -c '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 &&
+    [ ! -e /etc/ssl/devvm.pem ] && [ ! -e /var/lib/devvm-ca ] && ! grep -qF "$1" /etc/ssl/certs/ca-certificates.crt' \
+    _ "$(sed -n 4p "$cad/ca.pem")" </dev/null
+}
+export -f ca_gone; export cad
 # host_port_kept DIR VM PORT CONTROL SERVE: a program on this machine has PORT, which VM lists, on
 # every address (with SO_REUSEADDR, as most servers do, so its ended connections don't hold the port
 # on Linux once it's gone): the VM's next start leaves it out, warned, and with servers in the
@@ -507,6 +541,29 @@ check "images rm deletes an image by name, with its record, not base" bash -c "
   [[ -n '$kf' ]] && '$D' images rm e2efix </dev/null >/dev/null 2>&1 &&
   [[ -z \$(status_of devvm-img-$kf) ]] && [[ ! -e '$images/$kf' ]] && [[ \$(status_of devvm-img-$kb) == Stopped ]]"
 
+# The user's CAs: a build trusts them while its scripts run, with the variables for tools that don't
+# read the system's store, and its image keeps none of them, so its key is the same without them. A
+# copy of the image, booted without devvm (no setup), shows what the image holds.
+e2e_ca
+mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+catoken=e2e-ca-trusted-$$-$(date +%s)
+printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
+  '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt ]]' \
+  'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /etc/ssl/devvm.pem' "$catoken" > "$layers/e2eca.sh"
+check "a build trusts the CAs in devvm's CA folder while its scripts run" bash -c "'$D' build e2eca </dev/null >'$work/last.log' 2>&1 &&
+  grep -qx '$catoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+owned e2eca
+kc=$(keys_of e2eca | head -1)
+rm -rf "$cafolder"
+check "its key is the same without them: nothing to build" bash -c "[[ -n '$kc' ]] && out=\$('$D' build e2eca </dev/null 2>&1) &&
+  ! grep -qF \"\$(m building_image image=e2eca key=$kc)\" <<<\"\$out\" && [[ \$(keys_of e2eca) == '$kc' ]]"
+created+=(devvm-e2e-cacheck)
+check "its image keeps none of them" bash -c "[[ -n '$kc' ]] &&
+  limactl clone --tty=false --mount-none devvm-img-$kc devvm-e2e-cacheck >/dev/null 2>&1 &&
+  limactl start --tty=false devvm-e2e-cacheck >/dev/null 2>&1 && ca_gone devvm-e2e-cacheck"
+limactl delete -f devvm-e2e-cacheck >/dev/null 2>&1
+rm -f "$layers/e2eca.sh"
+
 # A failed script keeps its image's VM, stopped and without a record, for inspection.
 printf '#!/bin/bash\nexit 3\n' > "$layers/e2efail.sh"
 DEVVM_MESSAGES=names "$D" build e2efail </dev/null >"$work/fail.log" 2>&1; rc=$?
@@ -590,6 +647,26 @@ in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4716"; pkill -f "[d]evvm-e2e-udp
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
   grep -q -- '--- PASS: TestE2EExecQuoting'"
+
+section "a company's CA"
+# The run's CA, in devvm's CA folder: the running VM trusts it from its next launch, in its system's
+# store, so an HTTPS server here it signed is trusted; a file there that isn't a certificate fails
+# the launch; emptied, the next launch takes it out again.
+e2e_ca; ca_serve 47195
+mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+check "a CA in devvm's CA folder is trusted in the VM from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+  limactl shell --workdir / $vm sh -c 'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /usr/local/share/ca-certificates/devvm-extra-1.crt &&
+    cmp -s /etc/ssl/devvm.pem /usr/local/share/ca-certificates/devvm-extra-1.crt && curl -sSf -o /dev/null https://host.lima.internal:47195/' </dev/null"
+check "the VM's environment points tools that don't read the system's store at it" in_vm "$vm" \
+  '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt && $REQUESTS_CA_BUNDLE == $SSL_CERT_FILE && $PIP_CERT == $SSL_CERT_FILE ]]'
+printf 'not a certificate\n' > "$cafolder/notes.pem"
+check "a file there that isn't a certificate fails the launch, naming it" bash -c "cd '$p' &&
+  ! printf 'exit\n' | DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
+  grep -qx 'devvm: ca_not_certificate file=$cafolder/notes.pem' '$work/last.log'"
+rm -rf "$cafolder"
+check "emptied, the VM trusts it no more from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+  limactl shell --workdir / $vm sh -c '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 && [ ! -s /etc/ssl/devvm.pem ] &&
+    ! curl -sSf -o /dev/null https://host.lima.internal:47195/' </dev/null"
 
 section "ssh by name"
 # An ~/.ssh/config of its own, set up as the docs say, with a Host * that forwards the agent: yours
@@ -924,6 +1001,14 @@ check "each tool is a read-only image from the share" in_vm "$vm" \
   "[[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]] && ! touch /opt/devvm/tools/node/$(lockv node)/x 2>/dev/null"
 check "the share is read-only even for root" bash -c "limactl shell --workdir / $vm sudo touch /mnt/devvm-tools/x </dev/null 2>&1 | grep -q 'Read-only file system'"
 check "npm i -g installs into the VM's home" in_vm "$vm" "npm i -g cowsay@1.6.0 >/dev/null 2>&1 && [[ \$(command -v cowsay) == \$HOME/.npm-global/bin/cowsay ]]"
+# Node reads its own CA list, and NODE_EXTRA_CA_CERTS: a CA in devvm's CA folder, from the VM's
+# next launch, makes an HTTPS server here it signed trusted.
+e2e_ca; ca_serve 47195
+mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+(cd "$t" && printf 'exit\n' | "$D" >"$work/last.log" 2>&1)
+check "node trusts a CA in devvm's CA folder" in_vm "$vm" \
+  'node -e "fetch(\"https://host.lima.internal:47195/\").then(r => process.exit(r.ok ? 0 : 1), e => { console.error(e); process.exit(1) })"'
+rm -rf "$cafolder"
 # ssh with a command runs a non-login, non-interactive shell, as editors and agents' tools do.
 check "a non-login shell finds the tools too" bash -c "ssh -F '$LIMA_HOME/$vm/ssh.config' lima-$vm 'node -v' </dev/null"
 # The checks above pass with a download of the locked version too: these tell the share's from one.
@@ -1327,6 +1412,20 @@ check "rebuild makes a new one and deletes the stale one, not base" bash -c "'$D
 owned e2esmol
 check "images rm deletes it" bash -c "'$D' ${S[*]} images rm e2esmol </dev/null >/dev/null 2>&1 && [[ -z \$(keys_of e2esmol) ]]"
 rm -f "$fixture"
+# The user's CAs: trusted while a build's scripts run, and removed before the machine is packed (the
+# run log shows ca.sh ran after the script).
+e2e_ca
+mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+catoken=e2e-smol-ca-$$-$(date +%s)
+printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
+  '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt ]]' \
+  'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /etc/ssl/devvm.pem' "$catoken" > "$layers/e2esmolca.sh"
+check "a build trusts the CAs in devvm's CA folder while its scripts run, then takes them out" bash -c "
+  DEVVM_MESSAGES=names '$D' ${S[*]} build e2esmolca </dev/null >'$work/last.log' 2>&1 &&
+  f=\$(grep -lx '$catoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log | tail -1) && [[ -n \$f ]] &&
+  [[ \$(grep -oE 'running_script script=(ca|e2esmolca)\.sh' \"\$f\" | sed 's/.*=//' | paste -sd' ' -) == 'ca.sh e2esmolca.sh ca.sh' ]]"
+owned e2esmolca
+rm -rf "$cafolder" "$layers/e2esmolca.sh"
 printf '#!/bin/bash\nexit 3\n' > "$layers/e2esmolfail.sh"
 DEVVM_MESSAGES=names "$D" "${S[@]}" build e2esmolfail </dev/null >"$work/fail.log" 2>&1; rc=$?
 kx=$(sed -n 's/^==> building_image image=e2esmolfail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
@@ -3239,6 +3338,24 @@ EOF
   owned e2edock
   check "images rm deletes it" bash -c "'$D' ${B[*]} images rm e2edock </dev/null >/dev/null 2>&1 && [[ -z \$(keys_of e2edock) ]]"
   rm -f "$fixture"
+  # The user's CAs: trusted while a build's scripts run, kept by no image (a container of the image,
+  # the sandbox's, with no network, shows what it holds).
+  e2e_ca
+  mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+  catoken=e2e-dock-ca-$$-$(date +%s)
+  printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
+    '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt ]]' \
+    'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /etc/ssl/devvm.pem' "$catoken" > "$layers/e2edockca.sh"
+  check "a build trusts the CAs in devvm's CA folder while its scripts run" bash -c "'$D' ${B[*]} build e2edockca </dev/null >'$work/last.log' 2>&1 &&
+    grep -qx '$catoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
+  owned e2edockca
+  kc=$(keys_of e2edockca | head -1)
+  rm -rf "$cafolder"
+  check "its image keeps none of them" bash -c "[[ -n '$kc' ]] && d_img 'devvm-$dns:$kc' &&
+    docker run --rm --network none --label 'devvm.data=$XDG_DATA_HOME/devvm' --entrypoint sh 'devvm-$dns:$kc' -c \
+      '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 && [ ! -e /etc/ssl/devvm.pem ] && [ ! -e /var/lib/devvm-ca ] &&
+       ! grep -qF \"\$1\" /etc/ssl/certs/ca-certificates.crt' _ '$(sed -n 4p "$cad/ca.pem")'"
+  rm -f "$layers/e2edockca.sh"
   printf '#!/bin/bash\nexit 3\n' > "$layers/e2edockfail.sh"
   DEVVM_MESSAGES=names "$D" "${B[@]}" build e2edockfail </dev/null >"$work/fail.log" 2>&1; rc=$?
   kx=$(sed -n 's/^==> building_image image=e2edockfail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")

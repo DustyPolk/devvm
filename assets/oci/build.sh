@@ -2,9 +2,11 @@
 # Turns a container image into the three files Lima boots directly, in a throwaway VM booted from
 # Ubuntu's cloud image, as root. No Docker: crane pulls the image and flattens its
 # layers, bootify.sh adds what a container lacks in a chroot, and mke2fs writes the disk.
-#   build.sh OCI_DIR OUT IMAGE NAME USER_NAME USER_UID USER_HOME SIZE
+#   build.sh OCI_DIR OUT IMAGE NAME USER_NAME USER_UID USER_HOME SIZE [CA_SH]
 # IMAGE is a registry reference, pulled for this VM's architecture, or - for OUT/image.tar (from
 # `docker save`, for an image only Docker has); NAME is what the user called it, for messages.
+# CA_SH is devvm's guest/ca.sh when this VM trusts the user's CAs: the image's chroot trusts them
+# too while bootify.sh runs, and keeps none of them.
 # Writes, in OUT:
 #   disk.raw  ext4 filesystem of the image's root (the whole disk, no partition table)
 #   kernel    uncompressed kernel (Virtualization.framework won't take a compressed one)
@@ -110,7 +112,7 @@ make_disk() {
 }
 
 main() {
-  oci=$1 out=$2 image=$3 name=$4 user_name=$5 user_uid=$6 user_home=$7 size=$8
+  oci=$1 out=$2 image=$3 name=$4 user_name=$5 user_uid=$6 user_home=$7 size=$8 ca_sh=${9:-}
   local work=/var/tmp/devvm-oci os libc
   for c in curl sha256sum tar chroot mount mke2fs truncate; do
     command -v "$c" >/dev/null || die "the build VM has no $c"
@@ -127,7 +129,15 @@ main() {
   libc=$(libc_for "$os") || die "'$name' is based on '${os%% *}'; devvm needs a Debian, Ubuntu or Alpine based image"
   echo "==> making $name bootable"
   mkdir -p root/tmp/devvm; cp "$oci/bootify.sh" root/tmp/devvm/
+  # The user's CAs, which this VM trusts, for bootify.sh's downloads, then gone from the image again.
+  if [[ -n $ca_sh ]]; then
+    mkdir -p root/tmp/devvm/ca
+    cp /usr/local/share/ca-certificates/devvm-*.crt root/tmp/devvm/ca/
+    cp "$ca_sh" root/tmp/devvm/ca.sh
+    chroot_run root sh /tmp/devvm/ca.sh /tmp/devvm/ca
+  fi
   chroot_run root USER_NAME="$user_name" USER_UID="$user_uid" USER_HOME="$user_home" sh /tmp/devvm/bootify.sh
+  [[ -z $ca_sh ]] || chroot_run root sh /tmp/devvm/ca.sh
   rm -rf root/tmp/devvm
   echo "==> writing disk, kernel and initrd"
   make_disk root

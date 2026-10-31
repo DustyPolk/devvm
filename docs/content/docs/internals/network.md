@@ -57,7 +57,7 @@ On smolvm the proxy also decides each connection the VM opens, before smolvm mak
 
 The proxy exits when the VM's Lima hostagent does, which it learns from the hostagent's pid file (`-lifeline`). On smolvm it watches the machine's process instead, and on Docker a `docker container wait` on the VM's container. If the hostagent never appears, the proxy exits 15 minutes after it started, and `devvm stop` stops it at once.
 
-A VM that starts again gets a new proxy on the same port. A running VM also gets a new proxy when its allowlist files changed, when its CA was replaced, or when its proxy is from another devvm binary.
+A VM that starts again gets a new proxy on the same port. A running VM also gets a new proxy when its allowlist files changed, when its CA was replaced, when its proxy is from another devvm binary, or when the [CAs in your CA folder](#a-companys-ca) changed.
 
 devvm counts a proxy as started only once the proxy says it's listening on the VM's port and is still running, because a program that took the port first would otherwise get the VM's traffic. If the proxy doesn't start, devvm stops and names the proxy's log (`proxy_start_failed`). When a stopped VM's port was taken by another program, devvm chooses a new free port. A running VM's backend holds the port it started with, so when a running VM's proxy is gone and another program took its port, devvm can't start the proxy again (`proxy_port_taken`). devvm then stops the VM (`net_proxy_down_stopped`), and it does the same when the proxy fails to start for any other reason, because a VM with network policy never runs on without its proxy. The next `devvm` starts both.
 
@@ -87,6 +87,20 @@ On every launch, the VM's setup does the following:
 - It adds `devvm-why`, the note before each prompt, and the notes for Claude Code and Codex ([inside the VM](../safety/network.md#inside-the-vm)).
 
 Each placeholder ends in a random value of the VM's own, its salt, which isn't its password.
+
+## A company's CA
+
+The CA certificates in `~/.config/devvm/ca` ([a company's CA](../using/settings.md#a-companys-ca)) reach every project VM, with network policy or without, and the VM's proxy. Builds trust them too, as [Images and caching](images.md#a-companys-ca-in-builds) describes.
+
+**Reading them.** `trust.Read` reads the folder's `*.pem` and `*.crt` files at each launch, each build and each proxy start, and nothing outside the folder. It decodes every PEM block and refuses a block that isn't `CERTIFICATE` (`ca_not_certificate`), a certificate that `crypto/x509` can't parse (`ca_invalid`) and a certificate without CA basic constraints (`ca_not_ca`). It also refuses a file with no certificate in it. It tells a private key apart by its PEM type, not by the file's name, and a refusal fails the whole launch or build. What leaves the host is each certificate encoded again from its parsed bytes, once each, so the text around a block never does.
+
+**Installing them.** `assets/guest/ca.sh DIR` runs as root and makes devvm's CAs in `/usr/local/share/ca-certificates` exactly DIR's `devvm-*.crt` files: the proxy's `devvm-proxy.crt` and the user's `devvm-extra-N.crt`. When anything changed, it runs `update-ca-certificates --fresh`, so a CA that went leaves neither the bundle nor its hashed link. It also writes them all to `/etc/ssl/devvm.pem`, for Node. In a system without `update-ca-certificates`, such as a container image before its `ca-certificates` package, it adds them to `/etc/ssl/certs/ca-certificates.crt` itself. It keeps the bundle as it was in `/var/lib/devvm-ca`, or a mark that there was none, and puts it back once they go, and a package that arrives in between makes the bundle again from the same folder. Run without DIR, `ca.sh` removes every one of devvm's files. Its unit tests run it in a folder that stands for `/` (`DEVVM_CA_ROOT`).
+
+**Project VMs.** The setup that devvm sends at each launch carries `ca.sh` and the certificates in `ca/`, and `sync.sh` runs it, so a change applies at the next launch and a running VM needs no restart. Every project VM starts with `trust.Env` in its environment, whatever its network policy and whether there are CAs or not, so adding a CA changes nothing that its backend sets at a start. On Lima, the clone that makes the VM sets the environment too (`VMSpec.Env`), so a start without network policy needs no `limactl edit` and the VM keeps its host keys. The variables are `NODE_EXTRA_CA_CERTS=/etc/ssl/devvm.pem`, which is empty when there are none (Node warns only about a missing file), `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` and `PIP_CERT`, set to the system's bundle, and `UV_SYSTEM_CERTS=1`.
+
+**The proxy.** `netpolicy.Proxy.Prepare` reads the folder too, and writes the bundle to the VM's `run/<vm>.proxy.cas`, which `devvm _proxy -upstream-cas` adds to the system's roots for the proxy's own TLS connections. A VM can't change that file or the folder, so the proxy's roots grow only by what you put there. A proxy whose bundle differs from the folder's starts again, as one whose CA was replaced does.
+
+**End-to-end checks** (`tests/e2e.sh`): in `project`, a VM trusts a test CA from its next launch (`openssl verify` against the system's bundle, and curl reaching an HTTPS server on the host that the CA signed), has the variables, fails its launch on a file that isn't a certificate, and trusts the CA no more once the folder is emptied; in `tools`, Node fetches from that server.
 
 ## Secrets
 
@@ -195,6 +209,7 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | `-lifeline` | the hostagent's pid file: exit when that process is gone |
 | `-auth-file` | a file holding the VM's password; required |
 | `-ca`, `-cakey` | devvm's CA, for interception |
+| `-upstream-cas` | a file of CA certificates (PEM) that the proxy's own TLS connections trust besides the system's |
 | `-secrets` | the VM's secret bindings, read again when they change |
 | `-secret-cmd` | the program run as `PROGRAM secret get NAME` for a value |
 | `-decider` | also decide each connection the VM opens, on this loopback address (smolvm's mediated egress) |

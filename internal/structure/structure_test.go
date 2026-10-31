@@ -29,7 +29,7 @@ func devvm() rules {
 			"internal/backend/smolvm.Smolvm":    {71, "a backend: backend.Backend's 28 methods and smolvm's own"},
 			"internal/backend/docker.Docker":    {80, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
 			"internal/backend/backendtest.Fake": {35, "backend.Backend's 28 methods and what tests ask of it"},
-			"internal/paths.Dirs":               {37, "one method per folder or file devvm uses: a list"},
+			"internal/paths.Dirs":               {38, "one method per folder or file devvm uses: a list"},
 			"internal/ui.UI":                    {40, "the one terminal: messages, prompts, status line, run log, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
@@ -61,6 +61,7 @@ func devvm() rules {
 			"internal/state.sizeKeys":                table,
 			"internal/state.imageKeys":               table,
 			"internal/tools.miseSHA256":              table,
+			"internal/trust.Env":                     table,
 			"internal/vm.agentDirsOf":                table,
 			"internal/vm.agentFilesOf":               table,
 			"internal/vm.historyPaths":               table,
@@ -95,7 +96,7 @@ func devvm() rules {
 				from: []string{"internal/backend/..."},
 				to: []string{
 					"internal/vm", "internal/build", "internal/tools", "internal/netpolicy", "internal/secrets",
-					"internal/project", "internal/gitprotect", "internal/sshconfig", "internal/sshagent",
+					"internal/project", "internal/gitprotect", "internal/sshconfig", "internal/sshagent", "internal/trust",
 				},
 			},
 			{

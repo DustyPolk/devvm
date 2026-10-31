@@ -32,6 +32,7 @@ import (
 	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/trust"
 )
 
 // Keys of a VM's state that up writes, besides state's own.
@@ -356,6 +357,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		p.AgentSocket, p.NoAgent = conf.AgentSocket, conf.NoAgent
 		conf = p
 	}
+	// Tools pointed at the CAs devvm adds, with network policy or
+	// without, whether there are any or not.
+	conf.Env = trust.GuestEnv(conf.Env)
 	// ssh for editors, where the backend has it (an emulation once it's
 	// reviewed): a VM without it starts all the same.
 	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil

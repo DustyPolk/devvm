@@ -83,8 +83,13 @@ func (d *Docker) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	// A failure leaves it to the cleanup, which runs once the caller has
 	// shown the run log's end.
 	done := d.AddCleanup(func(ctx context.Context) { _ = d.removeIfThere(ctx, name) })
-	// Its steps: create, start, the script, delete, the unpacking.
-	ctx = d.WithSteps(ctx, 5)
+	// Its steps: create, start, the script (the user's CAs before it),
+	// delete, the unpacking.
+	steps := 5
+	if !spec.Trust.None() {
+		steps++
+	}
+	ctx = d.WithSteps(ctx, steps)
 	e := egress{d}
 	ctx, netw, lifeline, undoNet, err := e.buildNet(ctx, name, spec.Net)
 	if err != nil {
@@ -96,6 +101,9 @@ func (d *Docker) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		return err
 	}
 	if err := e.startBuild(ctx, name, lifeline); err != nil {
+		return err
+	}
+	if err := d.runScript(ctx, name, spec.Trust.Add, true); err != nil {
 		return err
 	}
 	if err := e.buildSudo(ctx, name, true); err != nil {

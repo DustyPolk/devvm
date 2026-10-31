@@ -20,6 +20,7 @@ import (
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/trust"
 )
 
 // syncCmd unpacks what the host sends into a folder of its own in the VM,
@@ -32,7 +33,8 @@ type syncer struct{ *Env }
 // sync sets up a running VM on every launch: devvm's guest/sync.sh runs in it,
 // with what it needs sent over as a tar stream, staged in memory (it holds
 // credentials): the host's settings, the agents' config, the VM's tokens
-// or their placeholders, and its shared tools. With network policy its
+// or their placeholders, its shared tools, and the user's CAs (trust.Read:
+// a folder of them that holds anything else fails it). With network policy its
 // proxy's address, devvm's CA, the logins' copies with placeholders, and
 // the agents' settings files with their keys taken out.
 func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug string, files []string, conf backend.Confinement) error {
@@ -100,12 +102,21 @@ func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []st
 	vm, img, net := st.Name(), st.Get(state.KeyImage), netpolicy.On(st)
 	store := e.Proxy.Secrets
 	s := &stage{}
-	for _, name := range []string{"sync.sh", "tools.sh"} {
+	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh"} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err
 		}
 		s.put(name, 0o755, data)
+	}
+	// The user's CAs, every VM's: only the certificates parsed out of
+	// their files.
+	cas, err := trust.Read(e.Dirs.TrustedCAs())
+	if err != nil {
+		return nil, err
+	}
+	for i, c := range cas {
+		s.put("ca/"+trust.Name(i), 0o644, c)
 	}
 	s.put("tools", 0o644, tools.Mounts(files))
 	s.put("host_home", 0o644, []byte(e.Home+"\n"))
@@ -230,7 +241,7 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) e
 	if err != nil {
 		return err
 	}
-	s.put("ca.pem", 0o644, ca)
+	s.put("ca/devvm-proxy.crt", 0o644, ca)
 	for _, kind := range store.Logins(img) {
 		data, err := store.VMLogin(kind, salt)
 		if err != nil {

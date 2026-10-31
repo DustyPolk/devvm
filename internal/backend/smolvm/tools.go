@@ -54,8 +54,13 @@ func (s *Smolvm) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	// A failure leaves it to the cleanup, which runs once the caller has
 	// shown the run log's end.
 	done := s.AddCleanup(func(ctx context.Context) { _ = s.removeIfThere(ctx, ToolsVM) })
-	// Its steps: create, start, the script, plain.sh, delete.
-	ctx = s.WithSteps(ctx, 5)
+	// Its steps: create, start, the script (the user's CAs before it),
+	// plain.sh, delete.
+	steps := 5
+	if !spec.Trust.None() {
+		steps++
+	}
+	ctx = s.WithSteps(ctx, steps)
 	if err := s.Runner.Run(ctx, msg.CloningImage("base"), s.smolvm(ctx, "machine", "create", "--name", ToolsVM,
 		"--label", LabelKey+"="+s.Dirs.Data, "--from", s.packFile(spec.Base),
 		"--cpus", strconv.Itoa(cpus), "--mem", mib(mem), "--storage", gibCeil(disk), "-v", out)); err != nil {
@@ -65,6 +70,9 @@ func (s *Smolvm) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		return err
 	}
 	if err := s.Start(ctx, ToolsVM, backend.Confinement{Net: spec.Net}); err != nil {
+		return err
+	}
+	if err := s.runScript(ctx, ToolsVM, spec.Trust.Add, true); err != nil {
 		return err
 	}
 	plainScript, err := s.script("plain.sh")

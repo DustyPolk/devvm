@@ -78,6 +78,7 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&lifeline, "lifeline", "", "pid file of the VM's hostagent: exit when that process is gone")
 	fs.StringVar(&caFile, "ca", "", "CA certificate for interception (PEM); with -cakey")
 	fs.StringVar(&caKeyF, "cakey", "", "CA private key (PEM)")
+	fs.StringVar(&upstreamCAFile, "upstream-cas", "", "CA certificates (PEM) trusted for the proxy's own TLS connections, besides the system's (secrets.go)")
 	fs.StringVar(&initCADir, "init-ca", "", "write a new CA (ca.pem, ca.key) into this directory unless one is there, and exit")
 	fs.StringVar(&loginKind, "login", "", "codex, opencode or claude: work on that agent's login file (logins.go), with -login-file and one of the next three")
 	fs.StringVar(&loginFile, "login-file", "", "the agent's login file on the host")
@@ -665,6 +666,11 @@ func Main(args []string, std IO) error {
 	}
 	if caFile != "" {
 		if err := loadCA(caFile, caKeyF); err != nil {
+			return err
+		}
+	}
+	if upstreamCAFile != "" {
+		if err := loadUpstreamCAs(upstreamCAFile); err != nil {
 			return err
 		}
 	}

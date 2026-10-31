@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -89,6 +90,9 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	if spec.Parent == "" {
 		steps += 2
 	}
+	if !spec.Trust.None() {
+		steps += 2 // the user's CAs added before the rest, and removed
+	}
 	ctx = s.WithSteps(ctx, steps)
 	built := backend.Built{}
 	args := []string{
@@ -130,6 +134,9 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		}
 		return backend.Built{}, err
 	}
+	if err := s.runScript(ctx, inst, spec.Trust.Add, true); err != nil {
+		return failed(err)
+	}
 	if spec.Parent == "" {
 		if err := s.rootScript(ctx, inst, "prepare.sh", name, uid); err != nil {
 			return failed(err)
@@ -145,7 +152,7 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		return failed(err)
 	}
 	for _, sc := range spec.Scripts {
-		if err := s.runScript(ctx, inst, sc); err != nil {
+		if err := s.runScript(ctx, inst, sc, false); err != nil {
 			return failed(err)
 		}
 	}
@@ -153,6 +160,9 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		if err := s.rootScript(ctx, inst, "sshd.sh"); err != nil {
 			return failed(err)
 		}
+	}
+	if err := s.runScript(ctx, inst, spec.Trust.Remove, true); err != nil {
+		return failed(err)
 	}
 	if err := s.rootScript(ctx, inst, "shims.sh", "off"); err != nil {
 		return failed(err)
@@ -204,13 +214,23 @@ func (s *Smolvm) rootScript(ctx context.Context, vm, name string, args ...string
 	return nil
 }
 
-// runScript runs a script in the machine as its user, fed to bash.
-func (s *Smolvm) runScript(ctx context.Context, vm string, sc backend.Script) error {
-	args, err := s.userArgs(vm, "", true, false, []string{"bash", "-s"})
-	if err != nil {
-		return err
+// runScript runs a script in the machine as its user, fed to bash, or
+// with root as root, fed to sh: a build's Trust scripts, of which an empty
+// one isn't run.
+func (s *Smolvm) runScript(ctx context.Context, vm string, sc backend.Script, root bool) error {
+	var cmd *exec.Cmd
+	if root {
+		if len(sc.Data) == 0 {
+			return nil
+		}
+		cmd = s.asRoot(ctx, vm)
+	} else {
+		args, err := s.userArgs(vm, "", true, false, []string{"bash", "-s"})
+		if err != nil {
+			return err
+		}
+		cmd = s.smolvm(ctx, args...)
 	}
-	cmd := s.smolvm(ctx, args...)
 	cmd.Stdin = bytes.NewReader(sc.Data)
 	if err := s.Runner.Run(ctx, msg.RunningScript(sc.Name, vm), cmd); err != nil {
 		return backend.Logged(msg.SmolvmScriptFailed(sc.Name, vm))

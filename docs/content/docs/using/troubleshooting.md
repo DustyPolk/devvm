@@ -64,6 +64,12 @@ On the VM's next launch, devvm offers in a terminal to restart it confined, and 
 
 With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm log --blocked` on this machine, or `devvm-why` in the VM. `devvm log --blocked` also shows the `devvm policy allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
 
+## TLS errors behind a company proxy
+
+When apt, `npm install`, `pip install`, `git clone` over HTTPS or an image's build fails with an error such as `certificate verify failed`, `self-signed certificate in certificate chain` or `unable to get local issuer certificate`, the network you're on may inspect TLS. Ask your IT team for the CA's certificate, or export it from this machine's store, such as Keychain Access on macOS. Put it in `~/.config/devvm/ca` and open the VM again ([a company's CA](settings.md#a-companys-ca)).
+
+`devvm doctor` says so when `HTTPS_PROXY` is set and the folder has no CA certificates. Many proxies don't inspect TLS, so that line isn't a problem in itself. When devvm refuses a file in the folder, it names the file, and you take out anything that isn't a CA certificate, such as a private key or a server's certificate.
+
 ## A listed port isn't forwarded
 
 When a program on this machine already has a port that the VM lists, devvm warns that the VM doesn't forward it, and the VM runs on without it. Stop that program, then run `devvm restart`, or change the VM's ports with `devvm ports`, and devvm forwards the port once it's free ([ports](ports-size.md#ports)).

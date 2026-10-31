@@ -78,7 +78,7 @@ stdout '^smolvm machine create( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} 
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --net -p [0-9]+:22$'
 ! stdout ' -p (47329|8000)'
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-web-[0-9a-f]{14}$'
-stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i( -t)? -u \S+ -w \S+/web .* bash -l$'
 ! stderr 'backend_unreviewed'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log'
@@ -191,7 +191,7 @@ exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173 base
 ! stderr 'backend_unreviewed'
 stub_calls
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} --net -p [0-9]+:22$'
-stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
 exec sh -c 'ls -l "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
 stdout '^-rw-------\S* '
 grep '^Host devvm-sshd devvm-sshd-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config

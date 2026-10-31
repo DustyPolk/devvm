@@ -27,7 +27,7 @@ stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 [darwin] ! stderr git_protect_needs_macos_new
 [linux] stderr '^devvm: git_protect_needs_macos_new$'
 stub_calls
-stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=[1-9][0-9]+ --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"0\.0\.0\.0","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"::","guestPortRange":\[1,65535\],"proto":"any","ignore":true\}\]$'
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=[1-9][0-9]+ --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"0\.0\.0\.0","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"::","guestPortRange":\[1,65535\],"proto":"any","ignore":true\}\] --set \.env = \{"NODE_EXTRA_CA_CERTS":.*\}$'
 ! stdout 'limactl edit --tty=false devvm-web'
 ! stdout 'devvm-tools-build'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}\nlimactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n'

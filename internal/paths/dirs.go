@@ -178,6 +178,10 @@ func (d Dirs) Features() string { return filepath.Join(d.Config, "features") }
 // Policy holds the user's network policy rules for every VM.
 func (d Dirs) Policy() string { return filepath.Join(d.Config, "policy") }
 
+// TrustedCAs holds the user's own CA certificates (a company's), which
+// VMs and builds trust besides their systems' (internal/trust).
+func (d Dirs) TrustedCAs() string { return filepath.Join(d.Config, "ca") }
+
 // Secrets holds secrets' values on hosts without a Keychain, one file each.
 func (d Dirs) Secrets() string { return filepath.Join(d.Config, "secrets") }
 

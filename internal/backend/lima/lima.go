@@ -253,12 +253,19 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 		}
 	}
 	// --mount-none: the image's own mounts (the template's home folder)
-	// would otherwise stay. Lima applies --set after it.
-	if err := l.Runner.Run(ctx, msg.Creating(vm), l.limactl(ctx, "clone", "--tty=false", src, vm, "--mount-none",
+	// would otherwise stay. Lima applies --set after it. Its environment
+	// too, so a start without network policy edits nothing (Start).
+	args := []string{
+		"clone", "--tty=false", src, vm, "--mount-none",
 		"--set", mounts,
-		"--set", ".ssh.forwardAgent="+strconv.FormatBool(spec.AgentForwarding),
-		"--set", ".ssh.localPort="+strconv.Itoa(spec.SSHPort),
-		"--set", noForwardsSet())); err != nil {
+		"--set", ".ssh.forwardAgent=" + strconv.FormatBool(spec.AgentForwarding),
+		"--set", ".ssh.localPort=" + strconv.Itoa(spec.SSHPort),
+		"--set", noForwardsSet(),
+	}
+	if len(spec.Env) > 0 {
+		args = append(args, "--set", ".env = "+yqJSON(spec.Env))
+	}
+	if err := l.Runner.Run(ctx, msg.Creating(vm), l.limactl(ctx, args...)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(vm))
 	}
 	if err := l.Forwards.write(vm, spec.Ports); err != nil {

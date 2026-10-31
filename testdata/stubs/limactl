@@ -5,9 +5,9 @@
 # Stopped), which create, clone, start, stop and delete keep up to date. A
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
-# and 100 GiB, which edit's --cpus, --memory and --disk change; edit's
-# --set .env goes into $LIMA_HOME/<name>/lima.yaml, and clone's and edit's --set .portForwards
-# and --set .ssh.localPort into its config, which delete forgets. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# and 100 GiB, which edit's --cpus, --memory and --disk change; clone's and edit's
+# --set .env goes into $LIMA_HOME/<name>/lima.yaml, and their --set .portForwards
+# and --set .ssh.localPort into its config (list shows lima.yaml's env too), which delete forgets. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
@@ -110,6 +110,15 @@ if [[ ${1:-} == clone || ${1:-} == edit ]]; then
     if [[ ${args[i]} == --set && ${args[i + 1]} == ".ssh.localPort="* ]]; then
       echo "${args[i + 1]#.ssh.localPort=}" > "$STUB_DIR/sshport-$target"
     fi
+    # The environment goes into the VM's lima.yaml, an env: line of its own.
+    v=${args[i + 1]}
+    if [[ ${args[i]} == --set && ($v == ".env = "* || $v == "del(.env)") ]]; then
+      y="$LIMA_HOME/$target/lima.yaml"
+      mkdir -p "$(dirname "$y")"
+      { [[ ! -f $y ]] || grep -v '^env:' "$y" || true
+        [[ $v == "del(.env)" ]] || echo "env: ${v#.env = }"; } > "$y.new"
+      mv "$y.new" "$y"
+    fi
   done
 fi
 case ${1:-} in
@@ -140,15 +149,6 @@ case ${1:-} in
         --cpus) cpus=$v ;;
         --memory) mem=$(awk -v g="$v" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
         --disk) disk=$(awk -v g="$v" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
-        --set)
-          # The environment goes into the VM's lima.yaml, an env: line of its own.
-          if [[ $v == ".env = "* || $v == "del(.env)" ]]; then
-            y="$LIMA_HOME/${names[0]}/lima.yaml"
-            mkdir -p "$(dirname "$y")"
-            { [[ ! -f $y ]] || grep -v '^env:' "$y" || true
-              [[ $v == "del(.env)" ]] || echo "env: ${v#.env = }"; } > "$y.new"
-            mv "$y.new" "$y"
-          fi ;;
       esac
     done
     echo "$cpus $mem $disk" > "$STUB_DIR/size-${names[0]}" ;;
@@ -205,6 +205,10 @@ while read -r n st; do
   sp=$(cat "$STUB_DIR/sshport-$n" 2>/dev/null || true)
   if [[ -n $sp && $cfg == '{}' ]]; then cfg="{\"ssh\":{\"localPort\":$sp}}"
   elif [[ -n $sp ]]; then cfg="{\"ssh\":{\"localPort\":$sp},${cfg#\{}"; fi
+  # Its environment, as its lima.yaml has it.
+  ev=$(sed -n 's/^env: //p' "$LIMA_HOME/$n/lima.yaml" 2>/dev/null || true)
+  if [[ -n $ev && $cfg == '{}' ]]; then cfg="{\"env\":$ev}"
+  elif [[ -n $ev ]]; then cfg="{\"env\":$ev,${cfg#\{}"; fi
   printf '{"name":"%s","status":"%s","dir":"%s","cpus":%s,"memory":%s,"disk":%s,"sshLocalPort":60022,"sshConfigFile":"%s","config":%s}\n' \
     "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$LIMA_HOME/$n/ssh.config" "$cfg"
 done < "$inst"

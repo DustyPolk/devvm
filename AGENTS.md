@@ -16,6 +16,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/devcontainer/` | a project's devcontainer.json (pure): finding it, JSONC, mapping it to a new VM's plan, refusals |
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
+| `internal/trust/` | the user's CAs (`~/.config/devvm/ca`): read and checked, sent to VMs, build VMs' `Trust` scripts, the guest environment |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
 | `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `registry/` (every backend's), `lima/`, `smolvm/`, `docker/` (both experimental), `vmssh/` (their ssh: VMs' keys, the port forwarder) |
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |

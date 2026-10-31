@@ -96,7 +96,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the VM has CA files for the tools that don't read the system's store. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
@@ -155,3 +155,5 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 ## Not covered
 
 Anything an allowed host accepts can carry data out, including whatever your secrets allow, such as pushes and API calls.
+
+A [company CA](../using/settings.md#a-companys-ca) that you put in `~/.config/devvm/ca` can read the TLS traffic of every VM, with network policy or without, as it can this machine's, and the proxy trusts it for its own connections. Only that folder adds CAs to the proxy: nothing a VM sends can.

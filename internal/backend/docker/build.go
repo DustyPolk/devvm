@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os/exec"
 	"regexp"
 	"slices"
 	"strconv"
@@ -60,6 +61,9 @@ func (d *Docker) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	steps := 7 + len(spec.Scripts)
 	if spec.Parent == "" {
 		steps += 3
+	}
+	if !spec.Trust.None() {
+		steps += 2 // the user's CAs added before the rest, and removed
 	}
 	ctx = d.WithSteps(ctx, steps)
 	built := backend.Built{}
@@ -171,6 +175,9 @@ func checkBuildNet(caps backend.Caps, name string, n backend.Net) error {
 // base's C library ("" above base).
 func (d *Docker) runBuild(ctx context.Context, inst string, spec backend.ImageSpec, name, uid, gid string) (string, error) {
 	libc := ""
+	if err := d.runScript(ctx, inst, spec.Trust.Add, true); err != nil {
+		return "", err
+	}
 	if spec.Parent == "" {
 		args := []string{name, uid}
 		if d.OS == "linux" {
@@ -194,7 +201,7 @@ func (d *Docker) runBuild(ctx context.Context, inst string, spec backend.ImageSp
 		return "", err
 	}
 	for _, sc := range spec.Scripts {
-		if err := d.runScript(ctx, inst, sc); err != nil {
+		if err := d.runScript(ctx, inst, sc, false); err != nil {
 			return "", err
 		}
 	}
@@ -202,6 +209,9 @@ func (d *Docker) runBuild(ctx context.Context, inst string, spec backend.ImageSp
 		if err := d.rootScript(ctx, inst, "sshd.sh"); err != nil {
 			return "", err
 		}
+	}
+	if err := d.runScript(ctx, inst, spec.Trust.Remove, true); err != nil {
+		return "", err
 	}
 	if err := e.buildSudo(ctx, inst, false); err != nil {
 		return "", err
@@ -248,13 +258,23 @@ func (d *Docker) rootScript(ctx context.Context, name, script string, args ...st
 	return nil
 }
 
-// runScript runs a script in the container as the VM's user, fed to bash.
-func (d *Docker) runScript(ctx context.Context, name string, sc backend.Script) error {
-	args, err := d.userArgs(ctx, name, "", true, false, []string{"bash", "-s"})
-	if err != nil {
-		return err
+// runScript runs a script in the container as the VM's user, fed to bash,
+// or with root as root, fed to sh: a build's Trust scripts, of which an
+// empty one isn't run.
+func (d *Docker) runScript(ctx context.Context, name string, sc backend.Script, root bool) error {
+	var cmd *exec.Cmd
+	if root {
+		if len(sc.Data) == 0 {
+			return nil
+		}
+		cmd = d.asRoot(ctx, name, nil)
+	} else {
+		args, err := d.userArgs(ctx, name, "", true, false, []string{"bash", "-s"})
+		if err != nil {
+			return err
+		}
+		cmd = d.docker(ctx, args...)
 	}
-	cmd := d.docker(ctx, args...)
 	cmd.Stdin = bytes.NewReader(sc.Data)
 	if err := d.Runner.Run(ctx, msg.RunningScript(sc.Name, name), cmd); err != nil {
 		return backend.Logged(msg.DockerScriptFailed(sc.Name, name))

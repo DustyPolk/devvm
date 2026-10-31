@@ -269,6 +269,21 @@ func BuildingToolsIn(vm string) M {
 	return M{id: "building_tools_in", vals: []val{{"vm", vm}}}
 }
 
+// CAInvalid is [ca_invalid]: "{{.file}} holds a certificate that devvm can't read. Replace it with the CA's certificate in PEM."
+func CAInvalid(file string) M {
+	return M{id: "ca_invalid", vals: []val{{"file", file}}}
+}
+
+// CANotCA is [ca_not_ca]: "{{.file}} holds a certificate that isn't a CA's, and VMs trust only CA certificates. Take the file out of devvm's CA folder."
+func CANotCA(file string) M {
+	return M{id: "ca_not_ca", vals: []val{{"file", file}}}
+}
+
+// CANotCertificate is [ca_not_certificate]: "{{.file}} holds something other than certificates, such as a private key, and devvm sends only CA certificates to VMs. Take the file out of devvm's CA folder."
+func CANotCertificate(file string) M {
+	return M{id: "ca_not_certificate", vals: []val{{"file", file}}}
+}
+
 // CheckingTools is [checking_tools]: "checking for newer shared tools"
 func CheckingTools() M {
 	return M{id: "checking_tools"}
@@ -842,6 +857,11 @@ func DoctorFailed(reason string) M {
 // DoctorOK is [doctor_ok]: "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 func DoctorOK(backend string, version string) M {
 	return M{id: "doctor_ok", vals: []val{{"backend", backend}, {"version", version}}}
+}
+
+// DoctorProxyCA is [doctor_proxy_ca]: "HTTPS_PROXY is set, and {{.dir}} has no CA certificates. If the proxy inspects TLS, put its CA's certificate there."
+func DoctorProxyCA(dir string) M {
+	return M{id: "doctor_proxy_ca", vals: []val{{"dir", dir}}}
 }
 
 // DownloadingMise is [downloading_mise]: "downloading mise {{.version}}"
@@ -2429,6 +2449,9 @@ var specs = map[string]spec{
 	"building_image_from":              {fields: []string{"from", "image", "key"}},
 	"building_tools":                   {fields: []string{"tools"}},
 	"building_tools_in":                {fields: []string{"vm"}},
+	"ca_invalid":                       {fields: []string{"file"}},
+	"ca_not_ca":                        {fields: []string{"file"}},
+	"ca_not_certificate":               {fields: []string{"file"}},
 	"checking_tools":                   {},
 	"claude_mcp_secrets_copied":        {fields: []string{"servers", "vm"}},
 	"claude_token_howto":               {},
@@ -2544,6 +2567,7 @@ var specs = map[string]spec{
 	"docker_volume_foreign":            {fields: []string{"name"}},
 	"doctor_failed":                    {fields: []string{"reason"}},
 	"doctor_ok":                        {fields: []string{"backend", "version"}},
+	"doctor_proxy_ca":                  {fields: []string{"dir"}},
 	"downloading_mise":                 {fields: []string{"version"}},
 	"export_failed":                    {fields: []string{"reason"}},
 	"exported":                         {fields: []string{"file", "vm"}},

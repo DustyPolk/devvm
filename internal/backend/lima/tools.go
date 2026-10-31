@@ -53,13 +53,21 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	// A failure leaves it to the cleanup, which runs once the caller has
 	// shown the run log's end.
 	done := l.AddCleanup(func(ctx context.Context) { _ = l.deleteIfThere(ctx, ToolsVM) })
-	// Its steps: clone, configure and start, the script, delete.
-	ctx = l.WithSteps(ctx, 5)
+	// Its steps: clone, configure and start, the script (the user's CAs
+	// before it), delete.
+	steps := 5
+	if !spec.Trust.None() {
+		steps++
+	}
+	ctx = l.WithSteps(ctx, steps)
 	if err := l.Runner.Run(ctx, msg.CloningImage("base"), l.limactl(ctx, "clone", "--tty=false", "--mount-none",
 		"--set", mounts, base, ToolsVM)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(ToolsVM))
 	}
 	if err := l.Start(ctx, ToolsVM, backend.Confinement{Net: spec.Net}); err != nil {
+		return err
+	}
+	if err := l.runScript(ctx, ToolsVM, spec.Trust.Add, true); err != nil {
 		return err
 	}
 	cmd := l.limactl(ctx, append([]string{"shell", "--workdir", "/", ToolsVM, "bash", "-s", "--"}, spec.Args...)...)

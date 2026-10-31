@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/trust"
 )
 
 // shareTries is how many times the share's lock is tried, ShareWait apart,
@@ -163,9 +164,19 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base, format string
 	for i, f := range files {
 		args = append(args, tools[i], versions[i], f)
 	}
+	// The user's CAs, trusted in the build VM, which is deleted: a tool
+	// image's key holds none of them.
+	cas, err := trust.Read(t.Dirs.TrustedCAs())
+	if err != nil {
+		return err
+	}
+	ca, err := cas.Build(t.Assets)
+	if err != nil {
+		return err
+	}
 	spec := backend.ToolsSpec{
 		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: format, Net: backend.NetInternet,
-		Script: backend.Script{Name: "build.sh", Data: script},
+		Script: cas.Script(backend.Script{Name: "build.sh", Data: script}), Trust: ca,
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {
 		return err

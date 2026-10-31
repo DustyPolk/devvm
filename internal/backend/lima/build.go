@@ -77,8 +77,14 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	// each script, stop; with --from, the conversion's first, and an
 	// image only Docker has its export.
 	steps := 4 + len(spec.Scripts)
+	if !spec.Trust.None() {
+		steps += 2
+	}
 	if spec.From != nil {
 		steps += ociSteps
+		if !spec.Trust.None() {
+			steps++
+		}
 		if !strings.Contains(spec.From.Digest, "@") {
 			steps++
 		}
@@ -101,7 +107,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 			}
 			built = backend.Built{Origin: img.String(), Libc: "gnu"}
 		} else {
-			if conv, err = l.convert(ctx, spec.From, size); err != nil {
+			if conv, err = l.convert(ctx, spec.From, size, spec.Trust.Add); err != nil {
 				return backend.Built{}, err
 			}
 			// base.yaml's settings, booting the converted disk.
@@ -140,10 +146,16 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		}
 		return backend.Built{}, err
 	}
+	if err := l.runScript(ctx, inst, spec.Trust.Add, true); err != nil {
+		return failed(err)
+	}
 	for _, s := range spec.Scripts {
-		if err := l.runScript(ctx, inst, s); err != nil {
+		if err := l.runScript(ctx, inst, s, false); err != nil {
 			return failed(err)
 		}
+	}
+	if err := l.runScript(ctx, inst, spec.Trust.Remove, true); err != nil {
+		return failed(err)
 	}
 	// Flushed first: a guest that ignores Lima's stop request is stopped
 	// hard.
@@ -225,9 +237,17 @@ func limaArch(goarch string) string {
 	return goarch
 }
 
-// runScript runs a script in the VM, fed to bash on its standard input.
-func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script) error {
+// runScript runs a script in the VM, fed on its standard input to bash as
+// the VM's user, or with root to sh as root: a build's Trust scripts, of
+// which an empty one isn't run.
+func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script, root bool) error {
 	cmd := l.limactl(ctx, "shell", vm, "bash", "-s")
+	if root {
+		if len(s.Data) == 0 {
+			return nil
+		}
+		cmd = l.limactl(ctx, "shell", "--workdir", "/", vm, "sudo", "sh", "-s")
+	}
 	cmd.Stdin = bytes.NewReader(s.Data)
 	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
 		return backend.Logged(msg.ScriptFailed(s.Name, vm))

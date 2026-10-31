@@ -19,6 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/trust"
 )
 
 // Options is what up was asked for.
@@ -274,6 +275,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	n.spec = backend.VMSpec{
 		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
 		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: PortsBackend(n.ports),
+		Env: trust.GuestEnv(nil),
 	}
 	layerNeeds, err := e.dockerLayer(b, &n)
 	if err != nil {

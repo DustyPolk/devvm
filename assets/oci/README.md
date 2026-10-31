@@ -4,7 +4,7 @@ These scripts turn a container image into a disk that Lima boots directly, for `
 
 | File | What |
 | --- | --- |
-| `build.sh` | runs in the build VM as root: crane pulls the image and flattens its layers, `bootify.sh` runs in a chroot of it, and `mke2fs` writes the disk. Writes the kernel, initramfs and disk Lima boots, the kernel command line, and the image's libc (which builds of the shared tools its VMs get) |
+| `build.sh` | runs in the build VM as root: crane pulls the image and flattens its layers, `bootify.sh` runs in a chroot of it, and `mke2fs` writes the disk. Writes the kernel, initramfs and disk Lima boots, the kernel command line, and the image's libc (which builds of the shared tools its VMs get). When the build VM trusts your company's CAs, it's given `guest/ca.sh`, which it runs in the chroot so `bootify.sh`'s downloads trust them too, and runs again afterwards so the image keeps none of them |
 | `bootify.sh` | in the chroot, for Debian, Ubuntu or Alpine: adds a kernel and initramfs, an init system, cloud-init, sshd and sudo, and pre-creates the Lima guest user |
 | `kernel.sh` | on arm64, turns a distro's `vmlinuz` into the uncompressed `Image` Lima's `vz` needs; elsewhere it copies it as is |
 | `try.sh OUTDIR NAME` | boots a converted image as a throwaway Lima VM and runs the checks devvm relies on: init system, cloud-init, user, sudo, a writable host mount and port forwarding. macOS only (`vz`). The VM is left running: `limactl delete -f NAME` |

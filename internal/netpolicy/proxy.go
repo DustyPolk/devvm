@@ -27,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/trust"
 )
 
 // Proxy starts and stops VMs' proxies: devvm _proxy, one per VM, in the
@@ -232,7 +233,15 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	files := strings.Join(policies, ",")
 	bin, _ := image.SHA256File(p.Self)
 	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))
-	if !running || read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum {
+	// The user's CAs, which it trusts for its own connections: one whose
+	// folder changed starts again too.
+	cas, err := trust.Read(p.Dirs.TrustedCAs())
+	if err != nil {
+		return none, err
+	}
+	upstream, _ := os.ReadFile(p.run(vm, ".cas"))
+	if !running || read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum ||
+		!bytes.Equal(upstream, cas.Bundle()) {
 		p.Stop(vm)
 	}
 	sp, err := p.SSHPort(ctx, st, running)
@@ -268,6 +277,9 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	}
 	if up {
 		return conf, nil
+	}
+	if err := p.writeUpstream(vm, cas); err != nil {
+		return none, err
 	}
 	return conf, p.start(st, b, conf, files, bin, caSum, lifeline)
 }
@@ -349,6 +361,19 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 	return nil
 }
 
+// writeUpstream writes the user's CAs where the VM's proxy reads them
+// (-upstream-cas) as it starts, or removes the file for none.
+func (p *Proxy) writeUpstream(vm string, cas trust.CAs) error {
+	f := p.run(vm, ".cas")
+	if len(cas) == 0 {
+		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	return writeFile(f, cas.Bundle())
+}
+
 // start starts the VM's proxy as conf has it, and waits for it to listen.
 func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement, files, bin, caSum, lifeline string) error {
 	vm := st.Name()
@@ -399,6 +424,9 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
 		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth,
 	}, decider...)
+	if _, err := os.Stat(p.run(vm, ".cas")); err == nil {
+		args = append(args, "-upstream-cas", p.run(vm, ".cas"))
+	}
 	pid, err := p.Start(p.Self, args, out)
 	if err != nil {
 		return err

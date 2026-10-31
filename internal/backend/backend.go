@@ -231,7 +231,19 @@ type ImageSpec struct {
 
 	MemoryGiB float64 // memory while building; 0 for the backend's default
 	Net       Net     // the network the build gets: NetInternet or NetNone
+	// Trust is the user's CAs for the build VM: added before anything in
+	// it downloads, base's preparation included, and removed once its
+	// scripts are done, before it stops.
+	Trust Trust
 }
+
+// Trust is how a build VM trusts the user's own CAs while it builds: Add
+// installs them and Remove takes them out again, so the image doesn't
+// keep them; both are run as root, fed to sh. Empty scripts for none.
+type Trust struct{ Add, Remove Script }
+
+// None reports whether there are no CAs to trust.
+func (t Trust) None() bool { return len(t.Add.Data) == 0 }
 
 // From is the container image base starts from (--from).
 type From struct {
@@ -255,6 +267,9 @@ type ToolsSpec struct {
 	Args   []string
 	Format string // the images' format: the backend's ToolFormat
 	Net    Net    // the network the build gets: NetInternet or NetNone
+	// Trust is the user's CAs for the build VM: added before the script
+	// runs (Remove isn't needed: the VM is deleted, only Out is kept).
+	Trust Trust
 }
 
 // Built is what a build reports, for the image's record.
@@ -289,6 +304,10 @@ type VMSpec struct {
 	// DockerLayer is set when its image has the docker layer, on a backend
 	// that makes VMs for it (DockerLayerVM).
 	DockerLayer bool
+	// Env is the guest environment a start without network policy gives
+	// it (Confinement.Env): a backend that keeps it in the VM's config
+	// sets it at create, so the first start changes nothing.
+	Env map[string]string
 }
 
 // Size is a VM's CPUs, memory and disk. Zero is unset.

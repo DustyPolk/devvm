@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -30,7 +32,8 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			"get what's missing: devvm never installs it. The docker backend also says which engine it uses, and on " +
 			"Docker Desktop which folders it shares. Then list each backend's features (native, emulated, " +
 			"unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which " +
-			"only --from with an image only Docker has needs. Fails when something is missing.",
+			"only --from with an image only Docker has needs. When HTTPS_PROXY is set and ~/.config/devvm/ca has no CA " +
+			"certificates, it says that a proxy that inspects TLS needs its CA there. Fails when something is missing.",
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -51,6 +54,7 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			} else {
 				u.Say(msg.DockerMissing())
 			}
+			sayProxyCA(u)
 			if len(problems) == 0 {
 				if r, ok := b.(backend.Reporter); ok {
 					for _, m := range r.Report(cmd.Context()) {
@@ -69,6 +73,27 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&fixes, "fixes", false, "print only what's missing, for scripts: a KEY<tab>FIX<tab>MESSAGE line each, FIX being a command or empty; succeeds either way")
 	return cmd
+}
+
+// sayProxyCA says, when HTTPS_PROXY is set and devvm's CA folder has no
+// CAs, that a proxy that inspects TLS needs its CA there: not a problem,
+// as most proxies don't. A folder devvm would refuse is warned about.
+func sayProxyCA(u *ui.UI) {
+	if os.Getenv("HTTPS_PROXY") == "" && os.Getenv("https_proxy") == "" {
+		return
+	}
+	dirs, err := paths.FromEnv()
+	if err != nil {
+		return
+	}
+	cas, err := trust.Read(dirs.TrustedCAs())
+	var m msg.M
+	switch {
+	case errors.As(err, &m):
+		u.Warn(m)
+	case err == nil && len(cas) == 0:
+		u.Say(msg.DoctorProxyCA(dirs.TrustedCAs()))
+	}
 }
 
 // doctorBackend returns devvm's backends and the one new VMs get: flag's

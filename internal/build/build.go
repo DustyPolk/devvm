@@ -25,6 +25,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/trust"
 )
 
 // Env is what images on one backend are built with, shared by Builds,
@@ -311,6 +312,18 @@ func (b Builds) build(ctx context.Context, name string) error {
 			return err
 		}
 		spec.Scripts = append(spec.Scripts, features...)
+	}
+	// The user's CAs, trusted while it builds: the image keeps none of
+	// them, so its key holds none.
+	cas, err := trust.Read(b.Dirs.TrustedCAs())
+	if err != nil {
+		return err
+	}
+	if spec.Trust, err = cas.Build(b.Assets); err != nil {
+		return err
+	}
+	for i, s := range spec.Scripts {
+		spec.Scripts[i] = cas.Script(s)
 	}
 
 	switch {

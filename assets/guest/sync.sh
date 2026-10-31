@@ -7,7 +7,9 @@
 #                policy, MCP servers' env values and headers are placeholders)
 #   env          exports (LANG, CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN: placeholders with network policy),
 #                installed as ~/.config/devvm/env
-#   ca.pem       the proxy's CA, when network policy is on
+#   ca/          the CAs the VM trusts besides its system's, one certificate per file: devvm-proxy.crt,
+#                the proxy's, when network policy is on; devvm-extra-N.crt, the user's own; ca.sh
+#                installs them
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
 #                and DEVVM_PROXY (the proxy URL when network policy is on, else empty)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
@@ -300,19 +302,11 @@ if command -v dockerd >/dev/null; then
   fi
 fi
 
-# The proxy's CA (network policy on): the proxy shows its own certificates for hosts where it puts
-# tokens in. Trusted only in this VM.
-crt=/usr/local/share/ca-certificates/devvm-proxy.crt
-if [[ -f "$s/ca.pem" ]]; then
-  if ! sudo cmp -s "$s/ca.pem" "$crt"; then
-    sudo install -m 644 "$s/ca.pem" "$crt"
-    # Its warnings (openssl rehash skipping the bundle file) are noise; a failure still stops this.
-    sudo update-ca-certificates >/dev/null 2>&1
-  fi
-elif [[ -f "$crt" ]]; then
-  sudo rm -f "$crt"
-  sudo update-ca-certificates --fresh >/dev/null 2>&1
-fi
+# The CAs this VM trusts besides its system's, those in ca/ (ca.sh): the proxy's (network policy
+# on), which shows its own certificates for hosts where it puts tokens in, and the user's own from
+# the host's ~/.config/devvm/ca. Trusted only in this VM.
+mkdir -p "$s/ca"
+sudo sh "$s/ca.sh" "$s/ca"
 
 # GitHub over HTTPS with the token from ~/.config/devvm/env (a placeholder with network policy).
 if [[ -n "${DEVVM_GITHUB:-}" ]]; then

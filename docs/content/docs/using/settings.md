@@ -18,12 +18,37 @@ devvm writes nothing into your project folders. It keeps your settings in `~/.co
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm policy -g` |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
+| `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
 | `agent-keys` | the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options | `devvm ssh-agent add` |
 | `ssh_config`, `known_hosts` | the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys | devvm, on each launch and stop |
 
 On Linux hosts, devvm also keeps your [secrets](../safety/network.md#saving-and-binding-secrets) in files under `~/.config/devvm/secrets/`, which only you can read. On macOS they're in the Keychain.
 
 Upgrading devvm keeps this folder as it is. Back it up to keep your settings, layers and features, and keep in mind that on Linux hosts it holds your secrets.
+
+## A company's CA
+
+Some company networks inspect TLS through a proxy, such as Zscaler or Netskope, that shows its own certificates, signed by the company's certificate authority (CA). This machine trusts that CA, but VMs and the VMs that devvm builds images in don't, so their TLS connections fail. To make them trust it, put the CA's certificate in `~/.config/devvm/ca`:
+
+```sh
+mkdir -p ~/.config/devvm/ca
+cp company-root.pem ~/.config/devvm/ca/
+```
+
+devvm reads every `*.pem` and `*.crt` file in that folder each time you open a VM and each time it builds an image, and it leaves other files alone. A file can hold one certificate or several, in PEM, the text form that starts with `-----BEGIN CERTIFICATE-----`. devvm accepts only CA certificates. When a file holds anything else, such as a private key, a certificate devvm can't read or a certificate that isn't a CA's, devvm refuses the whole folder and names the file. It sends only the certificates it read out of a file, never the rest of the file.
+
+Every project VM trusts these CAs in its system's store from its next launch, and so does every VM that devvm builds an image or shared tools in. devvm takes them out of a build VM before the image is finished, so images never keep them, and adding or removing a CA rebuilds nothing. A layer script of yours that copies the system's CA bundle somewhere else does keep that copy. With [network policy](../safety/network.md), the VM's proxy also trusts them for the connections it makes itself. When you take a certificate out of the folder, VMs stop trusting it at their next launch.
+
+Most tools read the system's store, among them apt, apk, curl, git and Python's `ssl` module. For those that don't, every VM's environment points them at it:
+
+| Variable | Value | For |
+| --- | --- | --- |
+| `NODE_EXTRA_CA_CERTS` | `/etc/ssl/devvm.pem`, which holds only devvm's CAs and is empty when there are none | Node, npm and Bun |
+| `SSL_CERT_FILE` | `/etc/ssl/certs/ca-certificates.crt`, the system's bundle | Go programs, and Rust programs that read the system's roots |
+| `REQUESTS_CA_BUNDLE`, `PIP_CERT` | the system's bundle | Python's `requests` and pip, which use their own CA list otherwise |
+| `UV_SYSTEM_CERTS` | `1` | uv |
+
+A CA in the folder can read every TLS connection a VM makes, as it can this machine's, so put only CAs there that you trust as much as this machine does. [Network policy](../internals/network.md#a-companys-ca) explains how the CAs reach VMs, and [Images and caching](../internals/images.md#a-companys-ca-in-builds) how builds use them.
 
 ## devvm's state
 
