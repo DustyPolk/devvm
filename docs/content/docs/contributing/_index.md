@@ -270,10 +270,11 @@ stderr 'msg_unknown name=nope$'
 
 Only `internal/ui` adds color, through a `style` for each stream that `onTerminal` makes, and `colorOn` decides each one: `NO_COLOR` or `DEVVM_MESSAGES=names` turns it off, then `FORCE_COLOR` or `CLICOLOR_FORCE` (but `0`) turns it on, then `TERM=dumb` turns it off, and otherwise the stream gets color only when it's a terminal. Names mode stays plain in a terminal too, so end-to-end checks that run devvm under `script` read the names as they are. A `UI` from `New`, as tests make, has no terminal, so it's plain unless `FORCE_COLOR` or `CLICOLOR_FORCE` is set, which is how cli's tests get a colored one.
 
-The colors are SGR codes from the 16 base colors only, which the theme maps to its own shades. devvm uses no bright colors (90–97), because Solarized maps them to greys and bright black is Solarized Dark's background, and it uses no backgrounds, 256 colors or truecolor. The codes go on labels, links and log text, never on a message's own text:
+The colors are SGR codes from the 16 base colors only, which the theme maps to its own shades. devvm uses no bright colors (90–97), because Solarized maps them to greys and bright black is Solarized Dark's background, and it uses no backgrounds, 256 colors or truecolor. The codes go on labels, links, log text and a message's values, never on the template's own words:
 
+- A message's values are bold (`1`), on the status line and in prompts too. `msg.M.Segments` renders the template with each value between two private-use runes, `U+E000` and `U+E001`, after dropping those runes from the values, so a value can't start or end a marking of its own. It returns the text cut into segments, each one the template's words or a value, beside the doc link. Joined, the segments are `Text`, and `String`, `Line` and names mode don't change. Values a VM made still go through `msg.Shown` first, so their control characters are quoted, bold or not. The log end that `DieLogged` prints uses `Line`, because bold inside dim would cancel it.
 - `Die`'s `devvm:` label is bold red (`1;31`), and `Warn`'s is bold yellow (`1;33`).
-- A doc link is underlined blue (`4;34`). `msg.M.Parts` gives a message's text and its doc link apart, so `ui` colors the link alone.
+- A doc link is underlined blue (`4;34`). `msg.M.Segments` gives the doc link apart from the text, so `ui` colors the link alone.
 - `Info`'s `==>` is bold (`1`).
 - The run log's end that `DieLogged` prints, with its `---` lines, and the log text on the status line are dim (`2`).
 - The done mark that a slow step leaves is green (`32`).

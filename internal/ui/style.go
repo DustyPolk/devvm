@@ -63,14 +63,45 @@ func (s style) paintLines(code, text string) string {
 	return b.String()
 }
 
-// message renders m as devvm prints it: its text, then its doc link,
-// colored, on a line of its own.
+// message renders m as devvm prints it: its text, its values bold, then
+// its doc link, colored, on a line of its own.
 func (s style) message(m msg.M) string {
-	text, link := m.Parts()
-	if link == "" {
-		return text
+	segs, link := m.Segments()
+	var b strings.Builder
+	for _, seg := range segs {
+		if seg.Value {
+			b.WriteString(s.paintLines(sgrBold, seg.Text))
+		} else {
+			b.WriteString(seg.Text)
+		}
 	}
-	return text + "\n" + s.paint(sgrLink, link)
+	if link != "" {
+		b.WriteString("\n" + s.paint(sgrLink, link))
+	}
+	return b.String()
+}
+
+// valueParts is m on one line, as Line has it, in parts: its values bold.
+func valueParts(m msg.M) []part {
+	segs, _ := m.Segments()
+	parts := make([]part, 0, len(segs))
+	for _, seg := range segs {
+		p := part{text: seg.Text}
+		if seg.Value {
+			p.code = sgrBold
+		}
+		parts = append(parts, p)
+	}
+	return parts
+}
+
+// plainText is the parts' text, unpainted.
+func plainText(parts []part) string {
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(p.text)
+	}
+	return b.String()
 }
 
 // labelled renders m with a "devvm: " label, painted with code, before

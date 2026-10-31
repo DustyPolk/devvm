@@ -177,10 +177,13 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 		return u.run(cmd)
 	}
 	f := u.openLog()
-	label := strings.Join(cmd.Args[:min(2, len(cmd.Args))], " ")
+	label := []part{{text: strings.Join(cmd.Args[:min(2, len(cmd.Args))], " ")}}
 	logLine := ""
 	if step.ID() != "" {
-		label, logLine = count(ctx, step.Line())
+		var counted string
+		counted, logLine = count(ctx, step.Line())
+		// The count before the step, then the step, its values bold.
+		label = append([]part{{text: strings.TrimSuffix(counted, step.Line())}}, valueParts(step)...)
 	}
 	_, _ = f.WriteString(logLine + redact("+ "+strings.Join(cmd.Args, " ")) + "\n")
 	cmd.Stdout, cmd.Stderr = f, f

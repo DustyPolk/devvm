@@ -22,7 +22,7 @@ const doneAfter = 3 * time.Second
 
 type statusLine struct {
 	u       *UI
-	label   string
+	label   []part // its values bold
 	start   time.Time
 	stopped chan struct{}
 	ended   chan struct{}
@@ -39,11 +39,11 @@ func (u *UI) Status(label msg.M) (stop func()) {
 	if u.verbose() || !u.stderrTTY {
 		return func() {}
 	}
-	s := u.startStatus(label.Line())
+	s := u.startStatus(valueParts(label))
 	return s.stop
 }
 
-func (u *UI) startStatus(label string) *statusLine {
+func (u *UI) startStatus(label []part) *statusLine {
 	u.stopStatus()
 	s := &statusLine{u: u, label: label, start: time.Now(), stopped: make(chan struct{}), ended: make(chan struct{})}
 	u.status.Lock()
@@ -83,10 +83,11 @@ func (s *statusLine) run() {
 func (s *statusLine) draw() {
 	frames := glyphs(s.u.getenv)[1:]
 	s.cols = s.u.width()
-	text, log := statusText(s.label, int(time.Since(s.start).Seconds()), lastLine(s.u.logPath()), s.cols)
-	line, drawn := s.u.errStyle.fit([]part{
-		{"    " + frames[s.frame%len(frames)] + " " + text, ""}, {log, sgrDim},
-	}, s.cols-1)
+	secs := int(time.Since(s.start).Seconds())
+	_, log := statusText(plainText(s.label), secs, lastLine(s.u.logPath()), s.cols)
+	parts := append([]part{{"    " + frames[s.frame%len(frames)] + " ", ""}}, s.label...)
+	parts = append(parts, part{" " + duration(secs), ""}, part{log, sgrDim})
+	line, drawn := s.u.errStyle.fit(parts, s.cols-1)
 	s.frame++
 	// No line wrapping while it draws: a resize between reading the width
 	// and drawing would wrap.
@@ -131,9 +132,10 @@ func glyphs(getenv func(string) string) []string {
 }
 
 // doneLine is what a step that took a while leaves behind, its mark green
-// in a terminal.
-func (u *UI) doneLine(label string, secs int) string {
-	return "    " + u.errStyle.paint(sgrDone, glyphs(u.getenv)[0]) + " " + label + " (" + duration(secs) + ")\n"
+// and its label's values bold in a terminal.
+func (u *UI) doneLine(label []part, secs int) string {
+	l, _ := u.errStyle.fit(label, len(plainText(label)))
+	return "    " + u.errStyle.paint(sgrDone, glyphs(u.getenv)[0]) + " " + l + " (" + duration(secs) + ")\n"
 }
 
 // duration is 5s, or 2m05s from a minute.

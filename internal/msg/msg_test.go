@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -57,6 +58,16 @@ func TestEveryMessageRenders(t *testing.T) {
 					if f != "count" && !strings.Contains(text, "v_"+f) {
 						t.Errorf("%s in %s: %q doesn't show %s", id, tag, text, f)
 					}
+				}
+				// Its segments join to the same text, each field a value.
+				vals, joined := values(m.segmentsIn(b, tag.String()))
+				for _, f := range s.fields {
+					if f != "count" && !slices.Contains(vals, "v_"+f) {
+						t.Errorf("%s in %s: segments %q have no value %s", id, tag, vals, f)
+					}
+				}
+				if joined != text {
+					t.Errorf("%s in %s: segments join to %q, want %q", id, tag, joined, text)
 				}
 			}
 			if !s.plural {

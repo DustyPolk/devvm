@@ -45,9 +45,22 @@ func TestColorOn(t *testing.T) {
 func TestMessagesColored(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "")
 	linked := msg.PortsNoSSH("v")
-	text, link := linked.Parts()
-	if link == "" || strings.Contains(text, link) {
-		t.Fatalf("ports_no_ssh: want a doc link apart from the text, got %q, %q", text, link)
+	plainText, link := linked.Parts()
+	if link == "" || strings.Contains(plainText, link) {
+		t.Fatalf("ports_no_ssh: want a doc link apart from the text, got %q, %q", plainText, link)
+	}
+	// Its value bold, the rest as it is.
+	var text string
+	segs, _ := linked.Segments()
+	for _, s := range segs {
+		if s.Value {
+			text += "\033[1m" + s.Text + "\033[0m"
+		} else {
+			text += s.Text
+		}
+	}
+	if !strings.Contains(text, "\033[1mv\033[0m") || plain(text) != plainText {
+		t.Fatalf("ports_no_ssh's value: %q", text)
 	}
 	for _, tc := range []struct {
 		name          string
@@ -73,7 +86,7 @@ func TestMessagesColored(t *testing.T) {
 			t.Errorf("%s plain: %q", tc.name, got)
 		}
 	}
-	if plain(text+"\n\033[4;34m"+link+"\033[0m") != linked.String() {
+	if plainText+"\n"+link != linked.String() {
 		t.Errorf("String: %q", linked.String())
 	}
 }
@@ -136,12 +149,47 @@ func TestColoredStatusLineFits(t *testing.T) {
 	}
 }
 
+// A status line's values are bold, and it's cut on its plain text, a
+// value included, with the value's code closed.
+func TestStatusLineValuesBold(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "")
+	u, _, errOut := testUI(t, "")
+	u.stderrTTY, u.errStyle = true, style{true}
+	u.getenv = env{"LC_ALL": "C"}.get
+	m := msg.PortsNoSSH("a-long-vm-name")
+	for _, cols := range []int{80, 12} {
+		errOut.Reset()
+		u.termWidth = func() int { return cols }
+		u.Status(m)()
+		got := errOut.String()
+		text, _, _ := strings.Cut(strings.TrimPrefix(got, "\r\033[K\033[?7l"), "\033[?7h")
+		if n := utf8.RuneCountInString(plain(text)); n > cols-1 {
+			t.Errorf("%d columns: %d runes: %q", cols, n, text)
+		}
+		want := "\033[1ma-long-vm-name\033[0m"
+		if cols == 12 {
+			want = "\033[1ma-lon\033[0m" // 11 columns: "    | " and 5 runes of the value
+		}
+		if !strings.Contains(text, want) {
+			t.Errorf("%d columns: no %q in %q", cols, want, text)
+		}
+	}
+	// Plain, it's the same text.
+	u.errStyle = style{}
+	u.termWidth = func() int { return 80 }
+	errOut.Reset()
+	u.Status(m)()
+	if !strings.Contains(errOut.String(), "    | "+m.Line()+" 0s") {
+		t.Errorf("plain: %q", errOut.String())
+	}
+}
+
 func TestDoneMarkGreen(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, "")
 	u.getenv = env{"LC_ALL": "C"}.get
 	u.errStyle = style{true}
-	if got, want := u.doneLine("starting x", 5), "    \033[32mok\033[0m starting x (5s)\n"; got != want {
+	if got, want := u.doneLine([]part{{"starting ", ""}, {"x", sgrBold}}, 5), "    \033[32mok\033[0m starting \033[1mx\033[0m (5s)\n"; got != want {
 		t.Errorf("doneLine: got %q, want %q", got, want)
 	}
 }

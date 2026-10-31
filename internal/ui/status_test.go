@@ -93,7 +93,7 @@ func TestGlyphs(t *testing.T) {
 	}
 	u, _, _ := testUI(t, "")
 	u.getenv = env{"LC_ALL": "C"}.get
-	if got, want := u.doneLine("[1/2] starting x", 75), "    ok [1/2] starting x (1m15s)\n"; got != want {
+	if got, want := u.doneLine([]part{{"[1/2] starting x", ""}}, 75), "    ok [1/2] starting x (1m15s)\n"; got != want {
 		t.Errorf("doneLine: got %q, want %q", got, want)
 	}
 }
