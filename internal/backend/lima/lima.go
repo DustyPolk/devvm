@@ -142,6 +142,25 @@ func (l *Lima) KeyFiles() map[string][]byte {
 // (backend.Storage).
 func (l *Lima) DiskDirs() []string { return []string{l.Dirs.Lima} }
 
+// Floors is the free space Lima's steps want (backend.Storage), measured
+// with statfs on macOS (vz, APFS) in the e2e sandbox. Base took 1.1 GiB
+// at its peak with Ubuntu's cloud image already in Lima's cache; the
+// download adds up to 0.9 GiB, and every feature took base's disk from
+// 2.6 to 5.1 GiB (du). The docker layer took 0.6 GiB, a VM up to 0.1 GiB
+// with its first launch, and shared tools builds 0.35 GiB at their peak
+// for claude, 2.1 for rust and 5.9 for all ten. On Linux hosts (QEMU, not
+// measured here) an image's and a tools build VM's disks start as full
+// copies of their parent's (2.0 GB as qcow2 without features), while a
+// VM's is an overlay of its image's.
+func (l *Lima) Floors() backend.Floors {
+	f := backend.Floors{Base: 8 << 30, Image: 2 << 30, VM: 2 << 30, Tools: 3 << 30, PerTool: 512 << 20}
+	if l.overlays() {
+		f.Image += 6 << 30
+		f.Tools += 6 << 30
+	}
+	return f
+}
+
 // Caps is what Lima has: everything, natively, but its ports, which
 // devvm's forwarder forwards (ports.go).
 func (l *Lima) Caps() backend.Caps {

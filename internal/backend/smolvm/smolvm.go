@@ -207,6 +207,16 @@ func (s *Smolvm) DiskDirs() []string {
 	return dirs
 }
 
+// Floors is the free space smolvm's steps want (backend.Storage),
+// measured with statfs on macOS in the e2e sandbox. Most of each step's
+// peak is gone when it ends: base took 1.9 GiB at its peak (0.3 kept),
+// the docker layer 2.3 (0.4 kept), and making a docker VM 2.2 at its
+// first start (8 MB kept). Shared tools builds took 0.55 GiB for node,
+// pnpm and bun, and 5.6 GiB for the other seven.
+func (s *Smolvm) Floors() backend.Floors {
+	return backend.Floors{Base: 4 << 30, Image: 4 << 30, VM: 4 << 30, Tools: 4 << 30, PerTool: 512 << 20}
+}
+
 // ToolFormat is uncompressed EROFS (plain.sh), as smolvm's kernel mounts
 // no other: its name changes with the script.
 func (s *Smolvm) ToolFormat() string {

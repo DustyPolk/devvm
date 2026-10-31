@@ -334,7 +334,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
 	// Room for the VM, before anything is built or made; each build checks
 	// its own.
-	if err := (backend.Space{Free: e.FreeSpace}).Check(b, vm, backend.FreeVM); err != nil {
+	if err := (backend.Space{Free: e.FreeSpace}).Check(b, vm, func(f backend.Floors) uint64 { return f.VM }); err != nil {
 		return newVM{}, err
 	}
 	return n, nil

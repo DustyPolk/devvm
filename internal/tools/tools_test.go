@@ -719,26 +719,43 @@ func TestBuildRefuses(t *testing.T) {
 	e.noLeftovers(t)
 }
 
-// Below the free space a tools build wants, on the backend's disks or in
-// devvm's data folder, where the images come out, nothing is built.
+// Below the free space a tools build wants, on the backend's disks (its
+// floors for one tool: 3 GiB and 1 more) or in devvm's data folder, where
+// the images come out (backend.ToolImages: 1 GiB for one), nothing is
+// built. A backend whose disks aren't the host's has only the data
+// folder checked.
 func TestBuildRefusesLowSpace(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	all := e.files(t, "node")
-	for _, low := range []string{"/lima", e.Dirs.Data} {
+	for _, tc := range []struct {
+		name   string
+		stored bool
+		low    string
+		free   uint64
+		want   string // the message's names, "" for none
+	}{
+		{"the backend's disk", true, "/lima", 4<<30 - 1, "disk_low dir=/lima free=3.9 name=" + Label(all) + " need=4"},
+		{"the data folder", true, e.Dirs.Data, 1<<30 - 1, "disk_low dir=" + e.Dirs.Data + " free=0.9 name=" + Label(all) + " need=1"},
+		{"not the host's disks", false, e.Dirs.Data, 1<<30 - 1, "disk_low dir=" + e.Dirs.Data + " free=0.9 name=" + Label(all) + " need=1"},
+	} {
 		f := fake()
-		e.FreeSpace = func(dir string) (uint64, error) {
-			if dir == low {
-				return backend.FreeTools - 1, nil
-			}
-			return backend.FreeTools, nil
+		var b backend.Backend = f
+		if tc.stored {
+			b = stored{f, []string{"/lima"}}
 		}
-		err := e.Build(t.Context(), backend.Review{}, stored{f, []string{"/lima"}}, baseKey, gnuT, all)
-		if got := names(err); !strings.HasPrefix(got, "disk_low dir="+low+" ") || !strings.HasSuffix(got, " need=8") {
-			t.Errorf("%s low: Build = %v", low, got)
+		e.FreeSpace = func(dir string) (uint64, error) {
+			if dir == tc.low {
+				return tc.free, nil
+			}
+			return 100 << 30, nil
+		}
+		err := e.Build(t.Context(), backend.Review{}, b, baseKey, gnuT, all)
+		if got := names(err); got != tc.want {
+			t.Errorf("%s low: Build = %v, want %s", tc.name, got, tc.want)
 		}
 		if len(f.Calls()) > 0 {
-			t.Errorf("%s low: calls = %q", low, f.Methods())
+			t.Errorf("%s low: calls = %q", tc.name, f.Methods())
 		}
 		e.noLeftovers(t)
 	}
@@ -751,6 +768,10 @@ type stored struct {
 }
 
 func (s stored) DiskDirs() []string { return s.dirs }
+
+func (s stored) Floors() backend.Floors {
+	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
+}
 
 // Another devvm holding the share is waited for, then given up on.
 func TestLockShare(t *testing.T) {

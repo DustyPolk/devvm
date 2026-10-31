@@ -8,46 +8,48 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// The free space devvm wants on the host before each step that writes
-// disks, with a margin over what the step was measured to take. Measured
-// read-only on macOS (Lima vz, APFS) in the e2e sandbox's Lima home, as
-// allocated size (du -k, as platform.DiskUsage counts: blocks, not a
-// sparse disk's length), and on a Linux host (QEMU, qcow2) as the docs'
-// design notes record it. Each wants checking on a fresh e2e run.
-const (
-	// FreeBase is what building base wants. Base's disk took 2.6-2.9 GiB
-	// without features and 5.1 GiB with every feature (the e2e --from
-	// tier), 2.0 GB as qcow2 on QEMU. Lima also keeps Ubuntu's cloud image
-	// in its cache (not measured), and a --from base first converts its
-	// image in a throwaway VM of its own (another base-sized disk). About
-	// twice the largest.
-	FreeBase uint64 = 12 << 30
-	// FreeImage is what building any other image wants. On APFS a layer
-	// is a clone of its parent and takes only what its script writes (an
-	// image built two minutes after base came to 3.2 GiB against base's
-	// 2.9 GiB, twice in the sandbox), but on QEMU a clone copies the
-	// parent's whole disk (up to base's 5.1 GiB with every feature), then
-	// the layer's installs.
-	FreeImage uint64 = 8 << 30
-	// FreeTools is what building shared tool images wants. Ten tools took
-	// 0.85 GB as images and 1.5 GB installed in the build VM, which is a
-	// clone of base: free on APFS, a full copy of base's disk on QEMU (up
-	// to 5.1 GiB).
-	FreeTools uint64 = 8 << 30
-	// FreeVM is what making a VM wants. A new VM takes almost nothing (an
-	// APFS clone of its image, a 12 MB qcow2 overlay on QEMU after its first
-	// boot), then grows with its setup and the project's own installs, which
-	// a few GiB covers.
-	FreeVM uint64 = 4 << 30
-)
+// Floors is the free space, in bytes, a backend wants on its disks before
+// each step that writes them, with a margin over what the step was
+// measured to take. Each backend's are its own, measured with statfs
+// before, during and after each step (not du, which counts a clone's
+// shared blocks again).
+type Floors struct {
+	Base  uint64 // building base
+	Image uint64 // building any other image
+	VM    uint64 // making a VM, with its first launch
+	// Tools and PerTool are what a shared tools build wants: Tools, and
+	// PerTool more for each tool it builds.
+	Tools, PerTool uint64
+}
+
+// ForTools is what building n shared tool images wants.
+func (f Floors) ForTools(n int) uint64 { return f.Tools + count(n)*f.PerTool }
+
+// count is n, a number of tools, as a uint64; none when negative.
+func count(n int) uint64 {
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
+}
+
+// ToolImages is the free space building n shared tool images wants in
+// devvm's data folder, where the images come out on every backend: the
+// images alone, measured with statfs (the folder on its own tmpfs in
+// Docker's e2e run: 184 MB for claude, 194 MB for node, pnpm and bun).
+// Ten tools came to 1.5 GiB as images on Lima, rust alone, the largest,
+// to 0.6 GiB, and seven to 2.6 GiB uncompressed for smolvm, whose own
+// floors are checked on that disk too.
+func ToolImages(n int) uint64 { return 512<<20 + count(n)*(256<<20) }
 
 // Storage is a backend whose images and VMs are files on the host's own
 // disks. DiskDirs returns a folder on each volume it writes them to,
-// made or not. A backend whose disks are elsewhere (Docker's, in its
-// engine's storage) doesn't implement it, and its free space isn't
-// checked.
+// made or not, and Floors the free space it wants on them. A backend
+// whose disks are elsewhere (Docker's, in its engine's storage) doesn't
+// implement it, and its free space isn't checked.
 type Storage interface {
 	DiskDirs() []string
+	Floors() Floors
 }
 
 // Space checks the host's free space before a step that writes disks.
@@ -57,12 +59,27 @@ type Space struct {
 	Free func(path string) (uint64, error)
 }
 
-// Check refuses when a volume b writes to, or one of extra (folders the
-// step writes to itself), has less than need bytes free (disk_low, for
-// what: the image or VM the step makes). A system devvm can't read free
-// space on isn't checked.
-func (s Space) Check(b Backend, what string, need uint64, extra ...string) error {
-	dir, free, err := s.lowest(b, extra)
+// Check refuses when a volume b writes to has less free than need
+// returns from b's floors (disk_low, for what: the image, tools or VM the
+// step makes). A backend that isn't Storage, or a system devvm can't
+// read free space on, isn't checked.
+func (s Space) Check(b Backend, what string, need func(Floors) uint64) error {
+	st, ok := b.(Storage)
+	if !ok {
+		return nil
+	}
+	return s.check(st.DiskDirs(), what, need(st.Floors()))
+}
+
+// CheckDir refuses when the volume holding dir, a folder the step writes
+// to itself, has less than need bytes free.
+func (s Space) CheckDir(dir, what string, need uint64) error {
+	return s.check([]string{dir}, what, need)
+}
+
+func (s Space) check(dirs []string, what string, need uint64) error {
+	need = wholeGiB(need)
+	dir, free, err := s.lowest(dirs)
 	if err != nil || dir == "" || free >= need {
 		return err
 	}
@@ -70,26 +87,27 @@ func (s Space) Check(b Backend, what string, need uint64, extra ...string) error
 }
 
 // Warning is doctor's warning when a volume b writes to has less free
-// than building base wants; false when it has enough, or can't be read.
+// than building base wants there; false when it has enough, or can't be
+// read.
 func (s Space) Warning(b Backend) (msg.M, bool) {
-	dir, free, err := s.lowest(b, nil)
-	if err != nil || dir == "" || free >= FreeBase {
+	st, ok := b.(Storage)
+	if !ok {
 		return msg.M{}, false
 	}
-	return msg.DiskLowWarning(dir, GiB(free), strconv.FormatUint(FreeBase>>30, 10)), true
+	need := wholeGiB(st.Floors().Base)
+	dir, free, err := s.lowest(st.DiskDirs())
+	if err != nil || dir == "" || free >= need {
+		return msg.M{}, false
+	}
+	return msg.DiskLowWarning(dir, GiB(free), strconv.FormatUint(need>>30, 10)), true
 }
 
-// lowest returns the folder, of b's and extra, on the volume with the
-// least free space, and that space; "" when none is checked.
-func (s Space) lowest(b Backend, extra []string) (string, uint64, error) {
+// lowest returns the folder, of dirs, on the volume with the least free
+// space, and that space; "" when none is checked.
+func (s Space) lowest(dirs []string) (string, uint64, error) {
 	if s.Free == nil {
 		return "", 0, nil
 	}
-	var dirs []string
-	if st, ok := b.(Storage); ok {
-		dirs = st.DiskDirs()
-	}
-	dirs = append(dirs, extra...)
 	low, lowFree := "", uint64(math.MaxUint64)
 	for _, d := range dirs {
 		free, err := s.Free(d)
@@ -105,6 +123,9 @@ func (s Space) lowest(b Backend, extra []string) (string, uint64, error) {
 	}
 	return low, lowFree, nil
 }
+
+// wholeGiB rounds a size up to whole GiB, which the messages show.
+func wholeGiB(n uint64) uint64 { return (n + 1<<30 - 1) >> 30 << 30 }
 
 // GiB shows a size in bytes as GiB, to one decimal, rounded down: free
 // space just short of a floor never shows as the floor.

@@ -198,6 +198,18 @@ func isMsg(err error, id string) bool {
 // Lima runs on devvm's own Lima home (DEVVM_LIMA_HOME, never LIMA_HOME),
 // from devvm's data folder, never the caller's: Lima writes
 // lima.REJECTED.yaml into the folder it runs in.
+// On Linux hosts an image's and a tools build's disks start as full
+// copies of their parent's, so those floors are higher; a VM's is an
+// overlay, so its floor is the same.
+func TestFloors(t *testing.T) {
+	mac, _, _ := testLima(t, "darwin")
+	linux, _, _ := testLima(t, "linux")
+	m, l := mac.Floors(), linux.Floors()
+	if l.Image <= m.Image || l.Tools <= m.Tools || l.VM != m.VM || l.Base != m.Base || l.PerTool != m.PerTool {
+		t.Errorf("macOS %+v, Linux %+v", m, l)
+	}
+}
+
 func TestLimactlUsesDevvmsHomeAndFolder(t *testing.T) {
 	l, _ := stubLima(t)
 	t.Chdir(t.TempDir())

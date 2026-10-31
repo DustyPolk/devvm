@@ -330,9 +330,9 @@ func (b Builds) build(ctx context.Context, name string) error {
 		spec.Scripts[i] = cas.Script(s)
 	}
 	// Before anything of this image is made; its parent is built.
-	need := backend.FreeImage
+	need := func(f backend.Floors) uint64 { return f.Image }
 	if name == image.Base {
-		need = backend.FreeBase
+		need = func(f backend.Floors) uint64 { return f.Base }
 	}
 	if err := (backend.Space{Free: b.FreeSpace}).Check(b.Backend, name, need); err != nil {
 		return err

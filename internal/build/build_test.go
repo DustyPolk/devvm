@@ -354,13 +354,17 @@ type stored struct {
 
 func (s stored) DiskDirs() []string { return s.dirs }
 
+func (s stored) Floors() backend.Floors {
+	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
+}
+
 // Below the free space building base wants, or another image, nothing of
 // it is made: the backend is only asked which images it has.
 func TestBuildRefusesLowSpace(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	b, f := testEnv(t)
 	b.Backend = stored{f, []string{"/lima"}}
-	free := backend.FreeBase - 1
+	free := uint64(12<<30 - 1)
 	b.FreeSpace = func(dir string) (uint64, error) {
 		if dir != "/lima" {
 			t.Errorf("checked %s", dir)
@@ -373,11 +377,11 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images"}) {
 		t.Errorf("calls = %q", ms)
 	}
-	free = backend.FreeBase
+	free = 12 << 30
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
-	free = backend.FreeImage - 1
+	free = 8<<30 - 1
 	n := len(f.Calls())
 	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || err.Error() != "disk_low dir=/lima free=7.9 name=foo need=8" {
 		t.Errorf("Build of foo with %d free = %v", free, err)

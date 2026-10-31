@@ -29,7 +29,7 @@ Either way, the images under it, which are already built, stay. devvm deletes an
 
 ## Not enough free space
 
-Before each build and each new VM, devvm checks the free space on the disk that will hold it, and it refuses when there's less than the step needs: 12 GiB for base, 8 GiB for another image or for shared tool images, and 4 GiB for a VM ([free space](ports-size.md#free-space)). The message says which folder's disk it checked, how much is free and how much the step needs. Nothing has been built or made yet, so you can make room and run the same command again:
+Before each build and each new VM, devvm checks the free space on the disk that will hold it, and it refuses when there's less than the step needs. With Lima on macOS, that's 8 GiB for base, 2 GiB for another image or a VM, and from 4 GiB for one shared tool to 8 GiB for all ten, and [free space](ports-size.md#free-space) gives the numbers for Linux hosts and smolvm. The message says which folder's disk it checked, how much is free and how much the step needs. Nothing has been built or made yet, so you can make room and run the same command again:
 
 - `devvm gc` deletes stale and unfinished images and unused shared tool images ([cleaning up](images.md#cleaning-up)).
 - `devvm images` lists the images and shared tool images with the space each takes, and `devvm images rm` deletes those you don't need ([deleting images](images.md#deleting-images)).

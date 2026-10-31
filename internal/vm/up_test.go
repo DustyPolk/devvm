@@ -283,6 +283,10 @@ type stored struct {
 
 func (s stored) DiskDirs() []string { return s.dirs }
 
+func (s stored) Floors() backend.Floors {
+	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
+}
+
 // Below the free space a new VM wants, nothing is built or made, and the
 // VM has no state; with enough for the VM but not base, base's build is
 // refused before it starts.
@@ -297,8 +301,8 @@ func TestUpRefusesLowSpace(t *testing.T) {
 		free uint64
 		want string
 	}{
-		{backend.FreeVM - 1, "disk_low dir=" + e.Dirs.Lima + " free=3.9 name=devvm-web-"},
-		{backend.FreeBase - 1, "disk_low dir=" + e.Dirs.Lima + " free=11.9 name=base need=12"},
+		{4<<30 - 1, "disk_low dir=" + e.Dirs.Lima + " free=3.9 name=devvm-web-"},
+		{12<<30 - 1, "disk_low dir=" + e.Dirs.Lima + " free=11.9 name=base need=12"},
 	} {
 		e.FreeSpace = func(string) (uint64, error) { return tc.free, nil }
 		err := Launch{e}.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})

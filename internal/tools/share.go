@@ -123,8 +123,12 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 		return nil
 	}
 	// The build VM is the backend's; the images come out into devvm's data
-	// folder, whatever the backend.
-	if err := (backend.Space{Free: t.FreeSpace}).Check(b, Label(build), backend.FreeTools, t.Dirs.Data); err != nil {
+	// folder, whatever the backend. Both grow with the tools built.
+	space, label := backend.Space{Free: t.FreeSpace}, Label(build)
+	if err := space.Check(b, label, func(f backend.Floors) uint64 { return f.ForTools(len(build)) }); err != nil {
+		return err
+	}
+	if err := space.CheckDir(t.Dirs.Data, label, backend.ToolImages(len(build))); err != nil {
 		return err
 	}
 	t.Info(msg.BuildingTools(Label(build)))
