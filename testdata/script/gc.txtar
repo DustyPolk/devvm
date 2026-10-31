@@ -86,11 +86,12 @@ exists $ASSETS/.tmp-123
 exec sh -c 'ls "$ASSETS" | grep -cx "[0-9a-f]\{16\}"'
 stdout '^2$'
 
-# Again: nothing left, and devvm images has nothing to say.
+# Again: nothing left, and devvm images says only the total.
 exec devvm gc
 stdout '^==> nothing_to_clean$'
 exec devvm images
-! stderr .
+stderr '^images_total size=\S+$'
+! stderr 'images_stale_note|images_unused'
 
 -- foo.sh --
 #!/bin/bash

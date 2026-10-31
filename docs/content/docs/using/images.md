@@ -138,11 +138,12 @@ The second table lists the [shared tools](#shared-tools) that devvm has built, b
 | --- | --- |
 | `NAME` | `node`, `python`, `rust`, `go`, `claude`, `codex` or `opencode` |
 | `TOOL`, `VERSION` | the tool and its version |
+| `BACKEND`, `LIBC` | the backend and the C library (`gnu`, or `musl` for an Alpine base) that this build is for, because each gets a build of its own, or `-` when devvm can't tell |
 | `SIZE` | the disk it takes |
 | `VMS` | how many VMs have it |
 | `STATE` | `current` for the version new VMs get, `in use` for another version a VM has, `unused` for neither, `not built` for the current version of a tool devvm has other versions of, and `not installed` when devvm has no version of it |
 
-After the tables, devvm says on stderr how many images are stale or unfinished and how much disk the unused tools take, when there are any.
+After the tables, devvm says on stderr how many images are stale or unfinished and how much disk the unused tools take, when there are any. It ends with the disk that the images and shared tools take together, and `devvm space` shows the rest of what devvm keeps ([what devvm keeps](space.md#devvm-space)).
 
 ### Deleting images
 

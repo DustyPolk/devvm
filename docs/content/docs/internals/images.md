@@ -183,4 +183,6 @@ At boot the same failure fails only the `devvm-tools` service, and the boot goes
 
 Listing never resolves the tools lock. Before there is a lock, no tool image is current, and the tool images that no VM has show no state.
 
+A tool image's name doesn't say which backend and C library it's built for, so each build writes `<image>.target` beside it in the share, with its C library and its backend's format. `BACKEND` comes from that format, matched to the backend that has it, or to one with a format of the same kind (`plain-`, `dir-`) when the backend's script has changed since. An image without that file takes the target it's current for, else that of a VM whose state lists it, and otherwise shows `-`.
+
 `devvm images rm` deletes images with their records. `devvm gc` deletes stale and unfinished images with their records, and unused tool images with their hashes. gc holds the share's lock throughout, so no tool build or `devvm update` changes the share meanwhile. A tool image is unused only when compared with the tools lock, so before there is a lock, gc deletes none. Because `current` is for the C library of the base that new VMs get, the musl tool images of an Alpine VM are unused once it's gone, unless you give gc that `--from`.

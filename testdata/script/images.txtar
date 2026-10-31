@@ -1,6 +1,7 @@
 # images: the images on every backend, by name, unfinished builds last,
 # each with what its base started from, its digest, key, state, size and
-# backend; then the shared tool images by the name images have them by.
+# backend; then the shared tool images by the name images have them by,
+# each with the backend and C library it's built for; then the total.
 # Project VMs aren't images. Listing never resolves the tools lock.
 env DEVVM_MESSAGES=names
 env IMAGES=$XDG_DATA_HOME/devvm/images
@@ -9,10 +10,11 @@ env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Nothing built: the headers, and every name not installed.
 exec devvm images
-stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\nNAME +TOOL +VERSION +SIZE +VMS +STATE\n'
-stdout '^node +- +- +- +- +not installed$'
-stdout '^opencode +- +- +- +- +not installed$'
-! stderr .
+stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\nNAME +TOOL +VERSION +BACKEND +LIBC +SIZE +VMS +STATE\n'
+stdout '^node +- +- +- +- +- +- +not installed$'
+stdout '^opencode +- +- +- +- +- +- +not installed$'
+stderr '^images_total size=0B$'
+! stderr images_unused
 stub_calls
 stdout '^limactl list --json\nsmolvm machine ls( --state-dir \S+)? --json\n\z'
 
@@ -36,11 +38,14 @@ stdout '^foo +ubuntu .* +stale +'
 exec devvm build claude
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
 mkdir $VMS
-exec sh -c 'printf "image=claude\ndir=/p\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
+exec sh -c 'printf "image=claude\ndir=/p\nbackend=smolvm\nlibc=musl\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm images
-stdout '^go +go +1\.27\.2 +- +- +not built\ngo +go +1\.20\.0 +\S+ +1 +in use\ngo +go +1\.9\.0 +\S+ +0 +unused\n'
-stdout '^claude +claude +2\.1\.295 +\S+ +1 +current$'
+# The lock's go isn't built; the old go has the backend and C library of
+# the VM that has it, the oldest none; claude's build says its own.
+stdout '^go +go +1\.27\.2 +- +- +- +- +not built\ngo +go +1\.20\.0 +smolvm +musl +\S+ +1 +in use\ngo +go +1\.9\.0 +- +- +\S+ +0 +unused\n'
+stdout '^claude +claude +2\.1\.295 +lima +gnu +\S+ +1 +current$'
+stderr '^images_total size=\S+$'
 stdout '^node +- '
 stub_calls
 ! stdout mise

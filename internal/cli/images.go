@@ -30,8 +30,9 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "List the images on every backend, by name: what each one's base started from and its " +
 			"digest, its key, whether it's current, stale (its inputs changed since) or unfinished (a " +
 			"build that didn't finish), the disk it takes and its backend. Then the shared tool images, " +
-			"by the name images have them by: each version, the disk it takes, how many VMs use it, and " +
-			"whether it's the tools lock's version, in use, unused, or the lock's and not built yet.",
+			"by the name images have them by: each version, the backend and C library it's built for, the " +
+			"disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, " +
+			"or the lock's and not built yet. Then what they take in all.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			b, err := builder(u, g.backend)
@@ -42,7 +43,9 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 				imgs, ts, err = listImages(cmd.Context(), u, b)
 			}
 			fail(u, err, msg.ImagesFailed)
-			if err := writeImages(u.Stdout(), imgs, ts); err != nil {
+			target, err := toolTargets(u, b)
+			fail(u, err, msg.ImagesFailed)
+			if err := writeImages(u.Stdout(), imgs, ts, target); err != nil {
 				return err
 			}
 			if n := len(staleImages(imgs)); n > 0 {
@@ -51,6 +54,7 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			if size := toolsSize(tools.Unused(ts)); size > 0 {
 				u.Note(msg.ImagesUnused(humanSize(size)))
 			}
+			u.Note(msg.ImagesTotal(humanSize(imagesSize(imgs) + toolsSize(ts))))
 			return nil
 		},
 	}
@@ -106,6 +110,29 @@ func staleImages(imgs []listedImage) []listedImage {
 		}
 	}
 	return out
+}
+
+// imagesSize is the disk the images take, those whose size is known.
+func imagesSize(imgs []listedImage) int64 {
+	var n int64
+	for _, l := range imgs {
+		n += l.Size
+	}
+	return n
+}
+
+// toolTargets returns what tells the backend and C library a tool image
+// is built for (toolTarget): its record, else a VM's that has it.
+func toolTargets(u *ui.UI, b *build.Env) (func(tools.Listed) (string, string), error) {
+	reg, err := registry.New(b.Dirs, b.Assets, u)
+	if err != nil {
+		return nil, err
+	}
+	vms, err := vmToolTargets(b.Dirs)
+	if err != nil {
+		return nil, err
+	}
+	return func(t tools.Listed) (string, string) { return toolTarget(reg, t, vms) }, nil
 }
 
 // toolsSize is the disk the tool images take.
@@ -169,9 +196,10 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Env) ([]listedImage, []t
 	return imgs, ts, err
 }
 
-// writeImages writes the images, then the shared tools, to out as tables,
-// each with a header; a value one lacks is -.
-func writeImages(out io.Writer, imgs []listedImage, ts []tools.Listed) error {
+// writeImages writes the images, then the shared tools with the backend
+// and C library each is built for (target), to out as tables, each with a
+// header; a value one lacks is -.
+func writeImages(out io.Writer, imgs []listedImage, ts []tools.Listed, target func(tools.Listed) (be, libc string)) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	row := func(vals ...string) {
 		for i, v := range vals {
@@ -191,13 +219,14 @@ func writeImages(out io.Writer, imgs []listedImage, ts []tools.Listed) error {
 		return err
 	}
 	_, _ = fmt.Fprintln(out)
-	row("NAME", "TOOL", "VERSION", "SIZE", "VMS", "STATE")
+	row("NAME", "TOOL", "VERSION", "BACKEND", "LIBC", "SIZE", "VMS", "STATE")
 	for _, t := range ts {
-		size, vms := "", ""
+		size, vms, be, libc := "", "", "", ""
 		if t.Built {
 			size, vms = humanSize(t.Size), strconv.Itoa(t.VMs)
+			be, libc = target(t)
 		}
-		row(t.Name, t.Tool, t.Version, size, vms, t.State)
+		row(t.Name, t.Tool, t.Version, be, libc, size, vms, t.State)
 	}
 	return w.Flush()
 }

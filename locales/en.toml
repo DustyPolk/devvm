@@ -653,6 +653,9 @@ other = "{{.count}} images are stale or unfinished. Run devvm gc to delete them.
 
 [images_unused]
 other = "Unused shared tool images take {{.size}}. Run devvm gc to free it."
+
+[images_total]
+other = "These images and shared tools take {{.size}}. Run devvm space to see everything devvm keeps."
 [reading_space]
 other = "reading what devvm keeps"
 

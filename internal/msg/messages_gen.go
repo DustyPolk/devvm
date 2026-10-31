@@ -1239,6 +1239,11 @@ func ImagesStaleNote(count int) M {
 	return M{id: "images_stale_note", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// ImagesTotal is [images_total]: "These images and shared tools take {{.size}}. Run devvm space to see everything devvm keeps."
+func ImagesTotal(size string) M {
+	return M{id: "images_total", vals: []val{{"size", size}}}
+}
+
 // ImagesUnused is [images_unused]: "Unused shared tool images take {{.size}}. Run devvm gc to free it."
 func ImagesUnused(size string) M {
 	return M{id: "images_unused", vals: []val{{"size", size}}}
@@ -2808,6 +2813,7 @@ var specs = map[string]spec{
 	"images_failed":                    {fields: []string{"reason"}},
 	"images_rm_failed":                 {fields: []string{"reason"}},
 	"images_stale_note":                {plural: true, fields: []string{"count"}},
+	"images_total":                     {fields: []string{"size"}},
 	"images_unused":                    {fields: []string{"size"}},
 	"interrupted_image":                {fields: []string{"vm"}},
 	"interrupted_vm":                   {fields: []string{"vm"}},
