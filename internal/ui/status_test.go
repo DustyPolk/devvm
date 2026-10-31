@@ -35,7 +35,8 @@ func TestStatusText(t *testing.T) {
 		// No control characters from the log, C1 in UTF-8 included.
 		{"x", 1, "a\033[2Jb\302\233c", 80, "x 1s  a[2Jbc"},
 	} {
-		if got := statusText(tc.label, tc.secs, tc.logLine, tc.cols); got != tc.want {
+		if text, log := statusText(tc.label, tc.secs, tc.logLine, tc.cols); text+log != tc.want {
+			got := text + log
 			t.Errorf("statusText(%q, %d, %q, %d) = %q, want %q", tc.label, tc.secs, tc.logLine, tc.cols, got, tc.want)
 		}
 	}

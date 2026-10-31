@@ -1,0 +1,147 @@
+package ui
+
+import (
+	"regexp"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
+	"github.com/w3cj/devvm/internal/msg"
+)
+
+// sgr matches the SGR codes devvm prints.
+var sgr = regexp.MustCompile("\033\\[[0-9;]*m")
+
+func plain(s string) string { return sgr.ReplaceAllString(s, "") }
+
+func TestColorOn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		env      env
+		terminal bool
+		want     bool
+	}{
+		{env{}, true, true},
+		{env{}, false, false},
+		{env{"TERM": "xterm-256color"}, true, true},
+		{env{"TERM": "dumb"}, true, false},
+		{env{"NO_COLOR": "1"}, true, false},
+		{env{"NO_COLOR": ""}, true, true}, // set but empty: not set
+		{env{"FORCE_COLOR": "1"}, false, true},
+		{env{"CLICOLOR_FORCE": "1"}, false, true},
+		{env{"FORCE_COLOR": "1", "TERM": "dumb"}, false, true},
+		{env{"FORCE_COLOR": "0"}, false, false},
+		{env{"CLICOLOR_FORCE": "0"}, true, true},
+		{env{"FORCE_COLOR": "1", "NO_COLOR": "1"}, true, false},
+		{env{"DEVVM_MESSAGES": "names"}, true, false},
+		{env{"DEVVM_MESSAGES": "names", "FORCE_COLOR": "1"}, true, false},
+	} {
+		if got := colorOn(tc.env.get, tc.terminal); got != tc.want {
+			t.Errorf("colorOn(%v, terminal %v) = %v, want %v", tc.env, tc.terminal, got, tc.want)
+		}
+	}
+}
+
+func TestMessagesColored(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "")
+	linked := msg.PortsNoSSH("v")
+	text, link := linked.Parts()
+	if link == "" || strings.Contains(text, link) {
+		t.Fatalf("ports_no_ssh: want a doc link apart from the text, got %q, %q", text, link)
+	}
+	for _, tc := range []struct {
+		name          string
+		print         func(*UI, msg.M)
+		stdout, stder string
+	}{
+		{"say", (*UI).Say, text + "\n\033[4;34m" + link + "\033[0m\n", ""},
+		{"info", (*UI).Info, "\033[1m==>\033[0m " + text + "\n\033[4;34m" + link + "\033[0m\n", ""},
+		{"note", (*UI).Note, "", text + "\n\033[4;34m" + link + "\033[0m\n"},
+		{"warn", (*UI).Warn, "", "\033[1;33mdevvm:\033[0m " + text + "\n\033[1;33mdevvm:\033[0m \033[4;34m" + link + "\033[0m\n"},
+		{"die", func(u *UI, m msg.M) { exitCode(func() { u.Die(m) }) }, "", "\033[1;31mdevvm:\033[0m " + text + "\n\033[1;31mdevvm:\033[0m \033[4;34m" + link + "\033[0m\n"},
+	} {
+		u, out, errOut := testUI(t, "")
+		u.outStyle, u.errStyle = style{true}, style{true}
+		tc.print(u, linked)
+		if out.String() != tc.stdout || errOut.String() != tc.stder {
+			t.Errorf("%s colored: stdout %q, stderr %q; want %q, %q", tc.name, out, errOut, tc.stdout, tc.stder)
+		}
+		// Plain, it's the same text without the codes.
+		u, out, errOut = testUI(t, "")
+		tc.print(u, linked)
+		if got := out.String() + errOut.String(); got != plain(tc.stdout+tc.stder) {
+			t.Errorf("%s plain: %q", tc.name, got)
+		}
+	}
+	if plain(text+"\n\033[4;34m"+link+"\033[0m") != linked.String() {
+		t.Errorf("String: %q", linked.String())
+	}
+}
+
+func TestNamesModeStaysPlain(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	m := msg.PortsNoSSH("v")
+	if text, link := m.Parts(); text != m.Names() || link != "" || m.String() != m.Names() {
+		t.Errorf("names mode: Parts %q, %q, String %q", text, link, m.String())
+	}
+	// A terminal in names mode gets no color, so e2e's checks of a terminal
+	// read the names as they are.
+	if colorOn(env{"DEVVM_MESSAGES": "names"}.get, true) {
+		t.Error("names mode in a terminal: want no color")
+	}
+}
+
+func TestDieLoggedColored(t *testing.T) {
+	u, _, errOut := testUI(t, "")
+	u.errStyle = style{true}
+	if err := u.logged(t.Context(), msg.M{}, "sh", "-c", "printf 'one\\n\\033[31mtwo\\n'"); err != nil {
+		t.Fatal(err)
+	}
+	exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) })
+	got := errOut.String()
+	// Each line of the log's end dim, the log's own codes dropped; then the
+	// message, its label red.
+	head := "\033[2m--- " + msg.LogEnd(u.logPath()).Line() + "\033[0m\n"
+	want := "\033[2mone\033[0m\n\033[2m[31mtwo\033[0m\n\033[2m---\033[0m\n" +
+		"\033[1;31mdevvm:\033[0m msg_unknown name=x\n"
+	if !strings.HasPrefix(got, head) || !strings.HasSuffix(got, want) {
+		t.Errorf("DieLogged colored:\n%q\nwant it to end\n%q", got, want)
+	}
+}
+
+func TestColoredStatusLineFits(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	u.stderrTTY, u.errStyle = true, style{true}
+	u.termWidth = func() int { return 40 }
+	u.getenv = env{"LC_ALL": "C"}.get
+	if err := u.logged(t.Context(), msg.MsgUnknown("x"), "sh", "-c", "echo "+strings.Repeat("progress", 10)+"; sleep 0.5"); err != nil {
+		t.Fatal(err)
+	}
+	got := errOut.String()
+	if !strings.Contains(got, "\033[2m  progress") {
+		t.Errorf("status line: want the log's line dim: %q", got)
+	}
+	// The plain text fits in the width, whatever the codes add.
+	for line := range strings.SplitSeq(got, "\033[?7l") {
+		text, _, _ := strings.Cut(line, "\033[?7h")
+		if n := utf8.RuneCountInString(plain(text)); n > 39 {
+			t.Errorf("wider than the terminal: %d runes: %q", n, text)
+		}
+	}
+	// What fit counts the plain text, so clearing covers the line drawn.
+	line, n := u.errStyle.fit([]part{{strings.Repeat("a", 30), ""}, {strings.Repeat("b", 30), sgrDim}}, 39)
+	if n != 39 || plain(line) != strings.Repeat("a", 30)+strings.Repeat("b", 9) || clearLine(n, 40) != "\r\033[K" {
+		t.Errorf("fit: %q, %d", line, n)
+	}
+}
+
+func TestDoneMarkGreen(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	u.getenv = env{"LC_ALL": "C"}.get
+	u.errStyle = style{true}
+	if got, want := u.doneLine("starting x", 5), "    \033[32mok\033[0m starting x (5s)\n"; got != want {
+		t.Errorf("doneLine: got %q, want %q", got, want)
+	}
+}

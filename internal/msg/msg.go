@@ -64,13 +64,21 @@ func (m M) ID() string { return m.id }
 // String returns the message as devvm prints it: its text, then its doc
 // link on a line of its own. With DEVVM_MESSAGES=names, its names instead.
 func (m M) String() string {
+	text, link := m.Parts()
+	if link != "" {
+		return text + "\n" + link
+	}
+	return text
+}
+
+// Parts returns what String joins, apart, so a terminal can color the
+// link: the message's text and its doc link ("" when it has none). With
+// DEVVM_MESSAGES=names, its names and no link.
+func (m M) Parts() (text, link string) {
 	if namesMode() {
-		return m.Names()
+		return m.Names(), ""
 	}
-	if u := m.DocURL(); u != "" {
-		return m.Text() + "\n" + u
-	}
-	return m.Text()
+	return m.Text(), m.DocURL()
 }
 
 // Line returns the message on one line, without its doc link: its text, or

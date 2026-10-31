@@ -32,6 +32,9 @@ type UI struct {
 	stdin          *bufio.Reader
 
 	stdinTTY, stdoutTTY, stderrTTY bool
+	// outStyle and errStyle color what goes to stdout and stderr, each on
+	// only as colorOn decides for that stream.
+	outStyle, errStyle style
 	// termWidth is the terminal's width in columns, 0 when unknown.
 	termWidth func() int
 	// readPassword reads a line from the terminal without echoing it.
@@ -85,6 +88,7 @@ func New(stdin io.Reader, stdout, stderr io.Writer) *UI {
 func onTerminal() *UI {
 	u := New(os.Stdin, os.Stdout, os.Stderr)
 	u.stdinTTY, u.stdoutTTY, u.stderrTTY = isTerminal(os.Stdin), isTerminal(os.Stdout), isTerminal(os.Stderr)
+	u.outStyle, u.errStyle = style{colorOn(u.getenv, u.stdoutTTY)}, style{colorOn(u.getenv, u.stderrTTY)}
 	u.termWidth = func() int {
 		w, _, err := term.GetSize(fd(os.Stderr))
 		if err != nil {
@@ -142,16 +146,20 @@ func (u *UI) write(w io.Writer, s string) {
 }
 
 // Say prints the message to stdout.
-func (u *UI) Say(m msg.M) { u.write(u.stdout, m.String()+"\n") }
+func (u *UI) Say(m msg.M) { u.write(u.stdout, u.outStyle.message(m)+"\n") }
 
-// Info prints "==> " and the message to stdout: what devvm did.
-func (u *UI) Info(m msg.M) { u.write(u.stdout, "==> "+m.String()+"\n") }
+// Info prints "==> " (bold in a terminal) and the message to stdout: what
+// devvm did.
+func (u *UI) Info(m msg.M) {
+	u.write(u.stdout, u.outStyle.paint(sgrBold, "==>")+" "+u.outStyle.message(m)+"\n")
+}
 
 // Note prints the message to stderr.
-func (u *UI) Note(m msg.M) { u.write(u.stderr, m.String()+"\n") }
+func (u *UI) Note(m msg.M) { u.write(u.stderr, u.errStyle.message(m)+"\n") }
 
-// Warn prints the message to stderr, with "devvm: " before each line.
-func (u *UI) Warn(m msg.M) { u.write(u.stderr, prefixLines("devvm: ", m.String())) }
+// Warn prints the message to stderr, with "devvm: " before each line,
+// yellow in a terminal.
+func (u *UI) Warn(m msg.M) { u.write(u.stderr, u.errStyle.labelled(sgrWarn, m)) }
 
 func prefixLines(prefix, s string) string {
 	var b strings.Builder
@@ -161,21 +169,23 @@ func prefixLines(prefix, s string) string {
 	return b.String()
 }
 
-// Die prints the message like Warn and ends the run with exit code 1: it
-// panics, and Main runs the cleanups and returns 1. Once the run is
-// interrupted it prints nothing, as the failure is the interrupt's.
+// Die prints the message like Warn, its label red in a terminal, and ends
+// the run with exit code 1: it panics, and Main runs the cleanups and
+// returns 1. Once the run is interrupted it prints nothing, as the failure
+// is the interrupt's.
 func (u *UI) Die(m msg.M) {
 	if !u.Interrupted() {
-		u.Warn(m)
+		u.write(u.stderr, u.errStyle.labelled(sgrError, m))
 	}
 	exit(1)
 }
 
 // DieLogged is Die after printing the last 25 lines of the run's log, if it
-// has one, without control characters.
+// has one, without control characters, dim in a terminal.
 func (u *UI) DieLogged(m msg.M) {
 	if path := u.logPath(); path != "" && !u.Interrupted() {
-		u.write(u.stderr, "--- "+msg.LogEnd(path).Line()+"\n"+printable(tailLines(path, 25))+"---\n")
+		tail := "--- " + msg.LogEnd(path).Line() + "\n" + printable(tailLines(path, 25)) + "---\n"
+		u.write(u.stderr, u.errStyle.paintLines(sgrDim, tail))
 	}
 	u.Die(m)
 }
@@ -184,7 +194,7 @@ func (u *UI) DieLogged(m msg.M) {
 // starting with y. No answer at all (the end of input) ends the run with
 // exit code 1, so nothing goes ahead unanswered.
 func (u *UI) Ask(m msg.M) bool {
-	a := u.answer(m.String() + " [y/N] ")
+	a := u.answer(u.errStyle.message(m) + " [y/N] ")
 	return strings.HasPrefix(a, "y") || strings.HasPrefix(a, "Y")
 }
 
@@ -194,7 +204,7 @@ func (u *UI) Ask(m msg.M) bool {
 func (u *UI) Confirm(q ...msg.M) bool {
 	prompt := "[Y/n] "
 	if len(q) > 0 {
-		prompt = q[0].String() + " " + prompt
+		prompt = u.errStyle.message(q[0]) + " " + prompt
 	}
 	a := u.answer(prompt)
 	return !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N")
@@ -204,7 +214,7 @@ func (u *UI) Confirm(q ...msg.M) bool {
 // the spaces around it, "" for Enter. No answer at all ends the run like
 // Ask.
 func (u *UI) Answer(prompt msg.M) string {
-	return strings.TrimSpace(u.answer(prompt.String() + " "))
+	return strings.TrimSpace(u.answer(u.errStyle.message(prompt) + " "))
 }
 
 // readTerminal reads a line from the terminal without echoing it. A
@@ -227,7 +237,7 @@ func (u *UI) Secret(prompt msg.M) string {
 	if !u.stdinTTY {
 		return u.Line()
 	}
-	u.write(u.stderr, prompt.String()+" ")
+	u.write(u.stderr, u.errStyle.message(prompt)+" ")
 	v, err := u.readPassword()
 	u.write(u.stderr, "\n")
 	if err != nil {

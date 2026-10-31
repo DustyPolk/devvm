@@ -266,6 +266,22 @@ stderr 'msg_unknown name=nope$'
 
 `devvm _msg NAME key=value…` prints a message's text (never its names), for end-to-end tests that look for it in a VM's output. It's hidden from the help.
 
+### Colors
+
+Only `internal/ui` adds color, through a `style` for each stream that `onTerminal` makes, and `colorOn` decides each one: `NO_COLOR` or `DEVVM_MESSAGES=names` turns it off, then `FORCE_COLOR` or `CLICOLOR_FORCE` (but `0`) turns it on, then `TERM=dumb` turns it off, and otherwise the stream gets color only when it's a terminal. Names mode stays plain in a terminal too, so end-to-end checks that run devvm under `script` read the names as they are. A `UI` from `New`, as tests make, is plain.
+
+The colors are SGR codes from the 16 base colors only, which the theme maps to its own shades. devvm uses no bright colors (90–97), because Solarized maps them to greys and bright black is Solarized Dark's background, and it uses no backgrounds, 256 colors or truecolor. The codes go on labels, links and log text, never on a message's own text:
+
+- `Die`'s `devvm:` label is bold red (`1;31`), and `Warn`'s is bold yellow (`1;33`).
+- A doc link is underlined blue (`4;34`). `msg.M.Parts` gives a message's text and its doc link apart, so `ui` colors the link alone.
+- `Info`'s `==>` is bold (`1`).
+- The run log's end that `DieLogged` prints, with its `---` lines, and the log text on the status line are dim (`2`).
+- The done mark that a slow step leaves is green (`32`).
+
+The codes are added after `printable` and `msg.Shown`, so they're the only ones devvm prints. The status line cuts and counts its plain text with `style.fit` before painting it, so it still fits the terminal's width and clears the right number of rows. The run log is never colored.
+
+`mise run test` unsets `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`, and `tests/e2e.sh` unsets the last two, so your own settings never change what they check.
+
 ### Translations
 
 A translation is `locales/<language>.toml` (`de.toml`) with the same tables, `one` and `other` translated (and the language's other plural forms, such as `few`), loaded by go-i18n the same way. Doc links are the same in every language: the docs site is English. devvm picks the language from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set (`de_DE.UTF-8` is German); `C` and `POSIX` are English. A message missing from a translation is shown in English.

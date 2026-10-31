@@ -166,6 +166,13 @@ func TestStringAddsDocLink(t *testing.T) {
 	if got := m.Line(); got != m.Text() {
 		t.Errorf("Line: got %q, want the text without the link", got)
 	}
+	if text, link := m.Parts(); text != m.Text() || link != m.DocURL() {
+		t.Errorf("Parts: got %q, %q, want the text and the link apart", text, link)
+	}
+	t.Setenv("DEVVM_MESSAGES", "names")
+	if text, link := m.Parts(); text != m.Names() || link != "" {
+		t.Errorf("Parts in names mode: got %q, %q, want the names and no link", text, link)
+	}
 }
 
 func TestDocURL(t *testing.T) {

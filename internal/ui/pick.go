@@ -65,7 +65,7 @@ func (u *UI) pick(help msg.M, choices []Choice, one bool) {
 		return
 	}
 	// In raw mode a line ends with \r\n; the cursor is hidden meanwhile.
-	u.write(u.stdout, strings.ReplaceAll(help.String(), "\n", "\r\n")+"\r\n\033[?25l")
+	u.write(u.stdout, strings.ReplaceAll(u.outStyle.message(help), "\n", "\r\n")+"\r\n\033[?25l")
 	ok := u.pickLoop(u.stdin, choices, one)
 	u.write(u.stdout, "\033[?25h")
 	restore()

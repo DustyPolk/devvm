@@ -111,7 +111,7 @@ func (u *UI) LogNote() {
 	u.log.noted = true
 	u.log.Unlock()
 	if !noted {
-		u.write(u.stdout, "    "+msg.LogDetails(path).String()+"\n")
+		u.write(u.stdout, "    "+u.outStyle.message(msg.LogDetails(path))+"\n")
 	}
 }
 

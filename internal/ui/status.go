@@ -83,14 +83,15 @@ func (s *statusLine) run() {
 func (s *statusLine) draw() {
 	frames := glyphs(s.u.getenv)[1:]
 	s.cols = s.u.width()
-	text := "    " + frames[s.frame%len(frames)] + " " +
-		statusText(s.label, int(time.Since(s.start).Seconds()), lastLine(s.u.logPath()), s.cols)
-	text = truncate(text, s.cols-1)
+	text, log := statusText(s.label, int(time.Since(s.start).Seconds()), lastLine(s.u.logPath()), s.cols)
+	line, drawn := s.u.errStyle.fit([]part{
+		{"    " + frames[s.frame%len(frames)] + " " + text, ""}, {log, sgrDim},
+	}, s.cols-1)
 	s.frame++
 	// No line wrapping while it draws: a resize between reading the width
 	// and drawing would wrap.
-	s.u.write(s.u.stderr, clearLine(s.drawn, s.cols)+"\033[?7l"+text+"\033[?7h")
-	s.drawn = utf8.RuneCountInString(text)
+	s.u.write(s.u.stderr, clearLine(s.drawn, s.cols)+"\033[?7l"+line+"\033[?7h")
+	s.drawn = drawn
 }
 
 func (s *statusLine) stop() {
@@ -129,9 +130,10 @@ func glyphs(getenv func(string) string) []string {
 	return []string{"ok", "|", "/", "-", `\`}
 }
 
-// doneLine is what a step that took a while leaves behind.
+// doneLine is what a step that took a while leaves behind, its mark green
+// in a terminal.
 func (u *UI) doneLine(label string, secs int) string {
-	return "    " + glyphs(u.getenv)[0] + " " + label + " (" + duration(secs) + ")\n"
+	return "    " + u.errStyle.paint(sgrDone, glyphs(u.getenv)[0]) + " " + label + " (" + duration(secs) + ")\n"
 }
 
 // duration is 5s, or 2m05s from a minute.
@@ -142,20 +144,20 @@ func duration(secs int) string {
 	return fmt.Sprintf("%dm%02ds", secs/60, secs%60)
 }
 
-// statusText is the label and time, then as much of the log's latest line
-// (its last carriage-return segment, without control characters) as fits in
-// cols.
-func statusText(label string, secs int, logLine string, cols int) string {
-	text := label + " " + duration(secs)
+// statusText is the label and time, then apart, so it can be dimmed, as
+// much of the log's latest line (its last carriage-return segment, without
+// control characters) as fits in cols, after two spaces.
+func statusText(label string, secs int, logLine string, cols int) (text, log string) {
+	text = label + " " + duration(secs)
 	if i := strings.LastIndexByte(logLine, '\r'); i >= 0 {
 		logLine = logLine[i+1:]
 	}
 	logLine = oneLine(logLine)
 	room := cols - utf8.RuneCountInString(text) - 9
 	if room >= 10 && logLine != "" {
-		text += "  " + truncate(logLine, room)
+		log = "  " + truncate(logLine, room)
 	}
-	return text
+	return text, log
 }
 
 func truncate(s string, n int) string {

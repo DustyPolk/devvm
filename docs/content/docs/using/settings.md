@@ -92,10 +92,23 @@ When devvm refuses a folder, make the VM in a project folder inside it, or keep 
 > [!WARNING]
 > If you mean to give the VM the whole folder, pass `--unsafe-folder` when you make the VM, and devvm warns you that the VM gets read-write access to it ([only the project folder](../internals/security.md#only-the-project-folder)).
 
+## Colors
+
+In a terminal, devvm colors the labels and links around its messages, while the messages' own text stays in your terminal's usual color. An error's `devvm:` label is red and a warning's is yellow, a doc link is blue and underlined, and the `==>` before what devvm did is bold. When a step fails, the end of the run log that devvm prints is dim, and so is the log's latest line on the status line. The mark a slow step leaves when it's done is green.
+
+devvm uses only your terminal's 16 base colors, so your theme picks shades that read well on its background, light or dark. It never sets a background color.
+
+devvm decides for standard output and standard error apart, and colors one only when it's a terminal, so output you pipe or redirect to a file stays plain. The run log is never colored. You can change that with these environment variables, the first that applies deciding:
+
+- `NO_COLOR`, set to anything, turns colors off.
+- `FORCE_COLOR` or `CLICOLOR_FORCE`, set to anything but `0`, turns them on even when the output isn't a terminal.
+- `TERM=dumb` turns them off.
+
 ## Environment
 
 | | |
 | --- | --- |
+| `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE` | turn devvm's colors off, or on when the output isn't a terminal ([details](#colors)) |
 | `DEVVM_VERBOSE=1` | print the output of the commands devvm runs, instead of logging it ([details](troubleshooting.md#a-command-fails)) |
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](../internals/lima.md#a-lima-home-of-its-own)) |
 | `DEVVM_FROM` | the container image that the base of new VMs and builds starts from when there's no `--from` ([details](from.md)) |

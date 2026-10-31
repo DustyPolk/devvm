@@ -64,13 +64,13 @@ run = [
 description = "Run the unit and CLI tests"
 env = { CGO_ENABLED = "1" }
 # Tests get a throwaway HOME and XDG folders, so none can reach the real ones,
-# and no SSH agent.
+# no SSH agent, and no color settings of your own.
 run = '''
 GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" GOPATH="$(go env GOPATH)"
 export GOCACHE GOMODCACHE GOPATH
 home="$(mktemp -d "${TMPDIR:-/tmp}/devvm-test.XXXXXX")"
 trap 'rm -rf "$home"' EXIT
-unset SSH_AUTH_SOCK
+unset SSH_AUTH_SOCK NO_COLOR FORCE_COLOR CLICOLOR_FORCE
 HOME="$home" XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
   gotestsum -- -race -cover ./...
 '''
