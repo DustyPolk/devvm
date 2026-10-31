@@ -129,6 +129,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"too_many_cpus":                    "using/ports-size#size-and-ports",
 	"too_much_memory":                  "using/ports-size#size-and-ports",
 	"port_invalid":                     "using/ports-size#size-and-ports",
+	"devvm_other_first":                "getting-started/install#one-devvm",
 	"ports_list_needed":                "using/ports-size#ports",
 	"ports_rm_all":                     "using/ports-size#ports",
 	"ports_taken":                      "using/troubleshooting#a-listed-port-isnt-forwarded",

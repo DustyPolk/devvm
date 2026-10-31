@@ -4,6 +4,7 @@
 #   ... | bash -s -- --yes            answer yes to every question
 #   ... | bash -s -- --version 0.1.0  a given release (also DEVVM_VERSION)
 #   ... | bash -s -- --no-deps        devvm only
+#   ... | bash -s -- --force          install even when Homebrew installed devvm
 # devvm (its binary, with its README, changelog and license) goes in ~/.local/lib/devvm/<version>,
 # linked from ~/.local/bin/devvm (DEVVM_PREFIX instead of ~/.local). It never needs sudo; installing
 # QEMU or joining the kvm group does, and asks first.
@@ -19,7 +20,7 @@ repo_url=${DEVVM_REPO_URL:-https://github.com/w3cj/devvm}
 # Lima, when neither it nor Homebrew is there: its latest release, checked against its SHA256SUMS.
 lima_url=${DEVVM_LIMA_URL:-https://github.com/lima-vm/lima}
 
-yes=false deps=true version=${DEVVM_VERSION:-}
+yes=false deps=true force=false version=${DEVVM_VERSION:-}
 # Downloads and redirects over HTTPS only (tests add file).
 protos="=https"
 fetch() { curl --proto "$protos" --proto-redir "$protos" -fsSL "$@"; }
@@ -29,10 +30,11 @@ tmp="" # downloads, deleted on exit
 usage() {
   cat <<EOF
 Install or upgrade devvm ($repo_url), then offer to install what it needs.
-usage: install.sh [--yes] [--version VERSION] [--no-deps]
+usage: install.sh [--yes] [--version VERSION] [--no-deps] [--force]
   --yes        answer yes to every question
   --version    install that release instead of the latest (also DEVVM_VERSION)
   --no-deps    install devvm only
+  --force      install even when Homebrew installed devvm, leaving two copies
 devvm goes in $prefix/lib/devvm/<version>, linked from $prefix/bin/devvm (DEVVM_PREFIX changes $prefix).
 EOF
 }
@@ -79,6 +81,16 @@ check_host() {
   platform >/dev/null
   command -v curl >/dev/null || die "needs curl"
   command -v tar >/dev/null || die "needs tar"
+}
+
+# check_brew: stops when Homebrew installed devvm, as a second copy would leave the one first on PATH
+# running and brew upgrade updating the other. --force installs anyway. Only brew's exit status is
+# read, never its output.
+check_brew() {
+  ! $force || return 0
+  command -v brew >/dev/null || return 0
+  HOMEBREW_NO_AUTO_UPDATE=1 brew list --formula devvm >/dev/null 2>&1 </dev/null || return 0
+  die "Homebrew installed devvm: run brew upgrade devvm to upgrade it, or brew uninstall devvm first to use this script (--force installs a second copy)"
 }
 
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
@@ -182,15 +194,24 @@ install_devvm() {
   say "installed devvm $v: $prefix/bin/devvm"
 }
 
+# path_hint: how to add the prefix's bin to PATH when it's missing; when it's there but another devvm
+# comes first, a warning naming it. Paths are only resolved, never run.
 path_hint() {
+  local first
   case ":$PATH:" in
     *":$prefix/bin:"*) ;;
     *)
       echo
       echo "$prefix/bin isn't on your PATH. Add it, in ~/.zshrc or ~/.bashrc:"
       echo "  export PATH=\"$prefix/bin:\$PATH\""
+      return 0
       ;;
   esac
+  hash -r
+  first=$(command -v devvm) || return 0
+  [[ "$(readlink -f "$first")" != "$(readlink -f "$prefix/bin/devvm")" ]] || return 0
+  warn "another devvm comes first on your PATH: $first"
+  echo "  remove it, or put $prefix/bin before its folder in PATH" >&2
 }
 
 # Lima's latest release archive into the prefix (bin/limactl, share/lima), checked against the
@@ -280,6 +301,7 @@ main() {
     case $1 in
       -y | --yes) yes=true ;;
       --no-deps) deps=false ;;
+      --force) force=true ;;
       --version)
         [[ -n ${2:-} ]] || die "--version needs a version"
         version=$2
@@ -294,6 +316,7 @@ main() {
     shift
   done
   check_host
+  check_brew
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
   local v

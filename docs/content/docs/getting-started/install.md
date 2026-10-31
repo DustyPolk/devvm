@@ -16,9 +16,18 @@ The install script needs `curl` and `tar`, and it never needs sudo for devvm its
 - `--yes`: answer yes to every question.
 - `--version 0.1.0`: install that release. `DEVVM_VERSION=0.1.0` does the same.
 - `--no-deps`: install devvm only.
+- `--force`: install even when Homebrew installed devvm, which leaves you with two copies ([One devvm](#one-devvm)).
 - `DEVVM_PREFIX=/some/dir`: install under that folder instead of `~/.local`.
 
 The script checks the download's checksum and signature before it installs anything, as [Installing and updating](../internals/install.md) explains.
+
+### One devvm
+
+Install devvm one way, with Homebrew or with the install script, but not both. With two copies, the one that comes first on your `PATH` is the one that runs, and `brew upgrade devvm` may update the one you don't run. So when Homebrew installed devvm, the install script stops before it downloads anything and says to run `brew upgrade devvm` instead, or `brew uninstall devvm` first if you want to use the script. It stops whether or not it runs in a terminal, and `--force` installs a second copy anyway.
+
+To switch from one way to the other, remove devvm with the command for the way you installed it, as step 4 of [Uninstalling](#uninstalling) shows, and then install it the other way. Your images, VMs and settings stay, because they don't live with devvm.
+
+After it installs devvm, the script warns when another devvm comes before `~/.local/bin` on your `PATH`. The warning names that copy's path and says to remove it, or to put `~/.local/bin` before its folder in `PATH`. `devvm doctor` warns the same way when the devvm first on your `PATH` isn't the one you ran, naming both, and the warning doesn't make it fail.
 
 ## Requirements
 
@@ -59,7 +68,7 @@ On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Know
 
 devvm never installs anything on this machine itself. Every command that needs the backend checks it first, and stops at the first thing that's missing.
 
-`devvm doctor` checks the backend new VMs get, or another one with `--backend NAME`. It lists everything that backend lacks, each with what to do, which is the command that installs it when there's one to run. It also lists what each backend can do, which it calls the backend's [features](../internals/backends.md#features), and whether Docker is installed. Then it says devvm has everything it needs, or it fails.
+`devvm doctor` checks the backend new VMs get, or another one with `--backend NAME`. It lists everything that backend lacks, each with what to do, which is the command that installs it when there's one to run. It also lists what each backend can do, which it calls the backend's [features](../internals/backends.md#features), and whether Docker is installed, and it warns when another devvm comes first on your `PATH` ([One devvm](#one-devvm)). Then it says devvm has everything it needs, or it fails.
 
 When `devvm doctor` finds nothing missing, you're ready for [your first VM](first-vm.md). Before you make it, read [staying safe](../safety/_index.md#the-habits), which lists the habits that close most of what devvm leaves open.
 

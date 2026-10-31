@@ -90,10 +90,20 @@ env UN=
 stderr '^install: lima-2.3.0-\S+.tar.gz doesn''t match its checksum: not installed$'
 ! exists prefix/bin/limactl
 
-# The PATH hint, only when the prefix's bin isn't on PATH.
+# The PATH hint, only when the prefix's bin isn't on PATH; on it, nothing
+# when the devvm first on PATH is the one installed, by any link.
 exec bash path_hint.sh
 stdout '^  export PATH="\S+/prefix/bin:\$PATH"$'
 stdout '^on PATH: $'
+stdout '^linked: $'
+! stderr .
+
+# Another devvm before it on PATH: a warning naming it, never run.
+exec bash path_hint.sh other
+stderr '^install: another devvm comes first on your PATH: \S+/other/devvm$'
+stderr '^  remove it, or put \S+/prefix/bin before its folder in PATH$'
+! stderr 'isn''t on your PATH'
+! exists other-ran
 
 # The fixes devvm suggests run once allowed; what it can't fix is shown.
 exec bash deps.sh yes 'qemu\tsudo apt-get install -y qemu-system-arm\tQEMU not found\nkvm\t\t/dev/kvm not found: turn on virtualization\nlima\tbrew install lima\tLima not found\n'
@@ -126,13 +136,24 @@ exec bash main.sh --no-deps --version v0.1.0
 stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
 stdout 'isn''t on your PATH'
 exec bash main.sh --help
-stdout '^usage: install.sh \[--yes\] \[--version VERSION\] \[--no-deps\]$'
+stdout '^usage: install.sh \[--yes\] \[--version VERSION\] \[--no-deps\] \[--force\]$'
 ! exec bash main.sh --nope
 stderr '^install: unknown option: --nope \(see --help\)$'
 ! exec bash main.sh --version
 stderr '^install: --version needs a version$'
 ! exec bash main.sh --no-deps --version '1.2.3/../x'
 stderr '^install: not a devvm version: ''1.2.3/../x''$'
+
+# Homebrew's devvm: the script stops before downloading anything, terminal
+# or not; --force installs a second copy.
+env BREW_DEVVM=1
+! exec bash main.sh --no-deps --version 0.1.0
+stderr '^install: Homebrew installed devvm: run brew upgrade devvm to upgrade it, or brew uninstall devvm first to use this script \(--force installs a second copy\)$'
+! stdout downloading
+! exists prefix/bin/devvm
+exec bash main.sh --no-deps --version 0.1.0 --force
+stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
+env BREW_DEVVM=
 
 # devvm itself, installed: its files are in it, and its own check (the
 # sandbox's stubs) finds nothing missing.
@@ -324,9 +345,24 @@ esac
 install_lima_tarball
 echo "limactl says $("$prefix/bin/limactl")"
 -- path_hint.sh --
+# path_hint.sh [other]: the hint off PATH, then on it, after an install;
+# other: a devvm that logs being run, before it on PATH.
 . "$WORK/lib.sh"
+release 0.1.0
+install_devvm 0.1.0 >/dev/null 2>&1
+rm -rf "$WORK/other" "$WORK/other-ran" "$WORK/links"
+if [[ ${1:-} == other ]]; then
+  mkdir -p "$WORK/other"
+  printf '#!/bin/sh\ntouch "$WORK/other-ran"\n' > "$WORK/other/devvm"
+  chmod 755 "$WORK/other/devvm"
+  PATH="$WORK/other:$prefix/bin:$PATH" path_hint
+  exit
+fi
 path_hint
 echo "on PATH: $(PATH="$prefix/bin:$PATH" path_hint)"
+mkdir -p "$WORK/links"
+ln -s "$prefix/lib/devvm/0.1.0/devvm" "$WORK/links/devvm"
+echo "linked: $(PATH="$WORK/links:$prefix/bin:$PATH" path_hint)"
 -- deps.sh --
 # deps.sh ANSWER LINES: install_deps with a devvm whose doctor --fixes
 # prints LINES (printf's format) and whose doctor prints "checked"; the
@@ -376,6 +412,9 @@ while (($#)); do case $1 in -x) sig=$2; shift ;; -P) key=$2; shift ;; esac; shif
 [[ "$(cat "$sig")" == "good $key" ]]
 -- bin/brew --
 #!/bin/sh
+# Stand-in for Homebrew: devvm is installed when $BREW_DEVVM is set; any
+# other command logs to $WORK/ran.
+if [ "$*" = "list --formula devvm" ]; then [ -n "$BREW_DEVVM" ]; exit; fi
 echo "brew $*" >> "$WORK/ran"
 -- bin/sudo --
 #!/bin/sh

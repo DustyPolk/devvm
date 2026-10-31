@@ -7,12 +7,16 @@ This page explains what devvm's install script downloads and checks, what `devvm
 
 ## The install script
 
-The script installs the release it comes with, or the one that `--version` names, in four steps:
+The script installs the release it comes with, or the one that `--version` names. Before it downloads anything, it checks whether Homebrew installed devvm, which it does when `brew` is on `PATH`: it runs `brew list --formula devvm` with no input, discards its output and reads only its exit status. When Homebrew has devvm, the script stops with an error that says to run `brew upgrade devvm`, or `brew uninstall devvm` first, and exits with status 1, in a terminal or without one. `--force` skips this check. Then it installs in four steps:
 
 1. It downloads the archive for this machine and the release's `SHA256SUMS`, over HTTPS only. The archive is `devvm-<version>-<os>-<arch>.tar.gz`, where the OS is `darwin` or `linux` and the processor is `arm64` or `amd64`. On Apple silicon, the script picks `arm64` even when it runs under Rosetta.
 2. It checks the signature of `SHA256SUMS`, then the archive's checksum, as [the signature](#the-signature-and-what-it-trusts) describes. When either check fails, it installs nothing.
 3. It puts devvm, which is one binary with its README, changelog and license, in `~/.local/lib/devvm/<version>`, and links `~/.local/bin/devvm` to it. When `~/.local/bin` isn't on `PATH`, the script says how to add it.
 4. Unless you pass `--no-deps`, it runs `devvm doctor --fixes` and offers the [fixes](#devvm-doctor---fixes) that devvm reports, asking before each one. Then it runs `devvm doctor`.
+
+At the end, when `~/.local/bin` is on `PATH`, the script looks up which devvm `PATH` finds first with `command -v devvm`. It resolves that path's links and those of `~/.local/bin/devvm` with `readlink -f`, and when they differ it warns, naming the other copy's path and saying to remove it or to put `~/.local/bin` first. It only looks the other copy up and never runs it. When `~/.local/bin` isn't on `PATH`, the script prints only how to add it, so you don't get both.
+
+`devvm doctor` makes the same check without `--fixes`. It looks up `devvm` on `PATH`, resolves its links and those of the running binary, and when they differ it prints a warning naming both. It skips the check when no devvm is on `PATH`. The warning doesn't change its exit status, and `--fixes` never prints it, so the install script doesn't offer it as a fix.
 
 On macOS, the [Docker](../backends/docker.md#requirements) backend fetches one more file the first time a Docker VM or build needs it. That file is the same release's Linux archive, and devvm checks the devvm in it against the SHA-256 that the installed devvm has of it before using it. Homebrew's devvm already has its Linux build, which Homebrew builds from source.
 

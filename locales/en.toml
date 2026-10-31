@@ -116,6 +116,10 @@ other = "Docker is installed, so --from can use container images only Docker has
 [docker_missing]
 other = "Docker isn't installed. Only --from with a container image only Docker has needs it."
 
+[devvm_other_first]
+description = "first and self are paths of devvm binaries, their links resolved"
+other = "Another devvm comes first on PATH, so devvm runs {{.first}} instead of this one at {{.self}}. Uninstall one of them."
+
 [doctor_ok]
 other = "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 

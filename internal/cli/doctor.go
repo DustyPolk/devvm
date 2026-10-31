@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -40,6 +42,9 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			}
 			if err := writeFeatures(u.Stdout(), reg.All()); err != nil {
 				return err
+			}
+			if m, ok := (onPath{LookPath: exec.LookPath, Executable: os.Executable}).other(); ok {
+				u.Warn(m)
 			}
 			if _, err := exec.LookPath("docker"); err == nil {
 				u.Say(msg.DockerFound())
@@ -82,6 +87,33 @@ func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, e
 		return nil, nil, err
 	}
 	return reg, c.Backend, nil
+}
+
+// onPath finds the devvm first on PATH; tests set its fields.
+type onPath struct {
+	LookPath   func(file string) (string, error)
+	Executable func() (string, error)
+}
+
+// other returns a warning when the devvm first on PATH isn't this binary,
+// both with their links resolved; none when devvm isn't on PATH or either
+// can't be found.
+func (p onPath) other() (msg.M, bool) {
+	first, err := p.LookPath("devvm")
+	if err != nil {
+		return msg.M{}, false
+	}
+	if first, err = filepath.EvalSymlinks(first); err != nil {
+		return msg.M{}, false
+	}
+	self, err := p.Executable()
+	if err != nil {
+		return msg.M{}, false
+	}
+	if self, err = filepath.EvalSymlinks(self); err != nil || self == first {
+		return msg.M{}, false
+	}
+	return msg.DevvmOtherFirst(first, self), true
 }
 
 // writeFixes writes a KEY<tab>FIX<tab>MESSAGE line for each problem, the

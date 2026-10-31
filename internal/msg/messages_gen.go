@@ -594,6 +594,11 @@ func DevcontainerVariable(file string, variable string) M {
 	return M{id: "devcontainer_variable", vals: []val{{"file", file}, {"variable", variable}}}
 }
 
+// DevvmOtherFirst is [devvm_other_first]: "Another devvm comes first on PATH, so devvm runs {{.first}} instead of this one at {{.self}}. Uninstall one of them."
+func DevvmOtherFirst(first string, self string) M {
+	return M{id: "devvm_other_first", vals: []val{{"first", first}, {"self", self}}}
+}
+
 // DiskOver is [disk_over]: "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
 func DiskOver(backend string, limit string, used string, vm string) M {
 	return M{id: "disk_over", vals: []val{{"backend", backend}, {"limit", limit}, {"used", used}, {"vm", vm}}}
@@ -2484,6 +2489,7 @@ var specs = map[string]spec{
 	"devcontainer_unreadable":          {fields: []string{"file"}},
 	"devcontainer_using":               {fields: []string{"file", "vm"}},
 	"devcontainer_variable":            {fields: []string{"file", "variable"}},
+	"devvm_other_first":                {fields: []string{"first", "self"}},
 	"disk_over":                        {fields: []string{"backend", "limit", "used", "vm"}},
 	"disk_shrink":                      {fields: []string{"have", "vm", "want"}},
 	"docker_access":                    {fields: []string{"fix"}},
