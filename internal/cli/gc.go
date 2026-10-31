@@ -67,7 +67,8 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"each backend listed and asked for apart, and only in a terminal. With --retention, then " +
 			"the retention settings at once. It lists them first, and in a terminal asks. VMs are never " +
 			"deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or " +
-			"Docker image a VM was made from.",
+			"Docker image a VM was made from. A backend a VM uses that can't list its images is " +
+			"skipped with a warning, everything of its left alone, and gc goes on with the others.",
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.only, o.toolNames = g.backend, args
@@ -121,6 +122,9 @@ type gcPlan struct {
 	assets    []string    // old copies of devvm's files no VM's proxy was started with
 	mise      []string    // older versions of devvm's own mise
 	share     tools.Share // where the tool images are
+	// skipped are the backends a VM uses that couldn't list their
+	// images: gc leaves everything of theirs alone.
+	skipped map[string]bool
 }
 
 // gc lists what's stale or unused, asks in a terminal, and deletes it. It
@@ -135,7 +139,8 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 	if o.caches && !u.StdinIsTerminal() {
 		return msg.GCCachesNeedTerminal()
 	}
-	if err := gcLocked(ctx, u, b, o); err != nil {
+	skipped, err := gcLocked(ctx, u, b, o)
+	if err != nil {
 		return err
 	}
 	if o.retention {
@@ -144,16 +149,16 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 		}
 	}
 	if o.caches {
-		return gcCaches(ctx, u, b, o.only)
+		return gcCaches(ctx, u, b, o.only, skipped)
 	}
 	return nil
 }
 
 // gcLocked is gcRun holding the share's lock throughout.
-func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) error {
+func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bool, error) {
 	unlock, err := b.Tools.LockShare(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer unlock()
 	return gcRun(ctx, u, b, o)
@@ -185,23 +190,24 @@ func gcRetention(ctx context.Context, u *ui.UI, b *build.Env) error {
 }
 
 // gcRun is gc's run but the backends' caches and retention: it lists what
-// it deletes, asks in a terminal, and deletes it.
-func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) error {
+// it deletes, asks in a terminal, and deletes it. It returns the backends
+// it skipped, as they couldn't list their images.
+func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bool, error) {
 	p, err := planGC(ctx, u, b, o)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if p.empty() {
 		p.showOrphans(u)
 		u.Info(msg.NothingToClean())
-		return nil
+		return p.skipped, nil
 	}
 	p.show(u)
 	if u.StdinIsTerminal() && !u.Confirm(msg.GCConfirm()) {
 		u.Info(msg.NothingDeleted())
-		return nil
+		return p.skipped, nil
 	}
-	return p.run(ctx, u)
+	return p.skipped, p.run(ctx, u)
 }
 
 // planGC gathers what gc deletes: an old copy of devvm's files only when
@@ -210,13 +216,17 @@ func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) error {
 // tool images, and nothing that isn't a backend's.
 func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, error) {
 	p := gcPlan{share: tools.Share{Env: b.Tools}}
-	imgs, ts, err := listImages(ctx, u, b)
+	l, err := listImages(ctx, u, b)
 	if err != nil {
 		return p, err
 	}
+	imgs, ts := l.images, l.tools
 	p.images, p.tools = staleImages(imgs), tools.Unused(ts)
 	if o.tools {
 		p.current = p.share.NoVM(ts, o.toolNames)
+	}
+	if err := p.skip(u, b, l.unlisted); err != nil {
+		return p, err
 	}
 	if o.exports {
 		es, err := exports(b.Dirs)
@@ -234,6 +244,7 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 		if p.orphans, err = p.leftovers.Find(ctx); err != nil {
 			return p, err
 		}
+		p.orphans = withoutSkipped(p.orphans, p.skipped)
 	}
 	if o.only != "" {
 		target, err := toolTargets(u, b)
@@ -253,6 +264,50 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	}
 	p.mise, err = tools.Versions{Env: b.Tools}.StaleMise()
 	return p, err
+}
+
+// skip warns for each backend a VM uses that couldn't list its images and
+// leaves out its shared tool images, and those whose backend devvm can't
+// tell, which may be its: gc carries on with the other backends.
+func (p *gcPlan) skip(u *ui.UI, b *build.Env, unlisted []unlisted) error {
+	if len(unlisted) == 0 {
+		return nil
+	}
+	p.skipped = map[string]bool{}
+	for _, s := range unlisted {
+		u.Warn(msg.GCBackendSkipped(s.backend).Because(s.err))
+		p.skipped[s.backend] = true
+	}
+	target, err := toolTargets(u, b)
+	if err != nil {
+		return err
+	}
+	keep := func(ts []tools.Listed) []tools.Listed {
+		var out []tools.Listed
+		for _, t := range ts {
+			if be, _ := target(t); be != "" && !p.skipped[be] {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	p.tools, p.current = keep(p.tools), keep(p.current)
+	return nil
+}
+
+// withoutSkipped moves the orphans of a skipped backend to the backends
+// that couldn't be asked, so their state stays.
+func withoutSkipped(r vm.LeftoverReport, skipped map[string]bool) vm.LeftoverReport {
+	var orphans []vm.Orphan
+	for _, o := range r.Orphans {
+		if !skipped[o.Backend] {
+			orphans = append(orphans, o)
+		} else if !slices.Contains(r.Unknown, o.Backend) {
+			r.Unknown = append(r.Unknown, o.Backend)
+		}
+	}
+	r.Orphans = orphans
+	return r
 }
 
 // backendImages are a backend's images, current or not.

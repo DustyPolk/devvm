@@ -1,0 +1,46 @@
+# A backend a VM uses that can't list its images: gc warns, leaves
+# everything of that backend's alone (its images, its shared tool images
+# and those whose backend devvm can't tell, its VMs' leftovers), and goes
+# on with the other backends, succeeding. devvm images still fails.
+env DEVVM_MESSAGES=names
+env SHARE=$XDG_DATA_HOME/devvm/tools
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# foo on Lima, made stale.
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+exec devvm build foo
+exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
+
+# Unused tool images: one recorded as smolvm's, one as Lima's, one
+# nobody can tell; claude's build makes the lock, so they're unused.
+exec devvm build claude
+exec sh -c 'cd "$SHARE" && for v in 1.1.0 1.2.0 1.3.0; do echo x > go-$v-0123456789ab.erofs; done'
+exec sh -c 'printf "libc=gnu\nformat=plain-0123456789ab\n" > "$SHARE/go-1.1.0-0123456789ab.erofs.target"'
+exec sh -c 'printf "libc=gnu\nformat=\n" > "$SHARE/go-1.2.0-0123456789ab.erofs.target"'
+
+# A smolvm VM whose machine is gone, so smolvm is used; then smolvm
+# stops answering.
+mkdir $VMS
+exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
+exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
+
+exec devvm gc --orphans
+stderr '^devvm: gc_backend_skipped backend=smolvm$'
+stderr '^gc_orphans_unknown backend=smolvm$'
+! stderr gc_failed
+stdout '^gc_image image=foo key=[0-9a-f]{12}$'
+stdout '^gc_tools count=1 '
+! stdout '^gc_orphan'
+exists $VMS/devvm-smol-12345612345612
+exists $SHARE/go-1.1.0-0123456789ab.erofs
+! exists $SHARE/go-1.2.0-0123456789ab.erofs
+exists $SHARE/go-1.3.0-0123456789ab.erofs
+
+# devvm images lists every backend's or none.
+! exec devvm images
+stderr '^devvm: images_failed '
+
+-- foo.sh --
+#!/bin/bash
+echo foo

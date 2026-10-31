@@ -112,6 +112,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"retention_failed":                 "using/settings#retention",
 	"retention_bad":                    "using/settings#retention",
 	"gc_caches_need_terminal":          "using/space#the-backends-caches",
+	"gc_backend_skipped":               "using/images#cleaning-up",
 	"gc_orphans_unknown":               "using/space#leftovers-of-a-vm-deleted-outside-devvm",
 	"gc_orphan_elsewhere":              "using/space#leftovers-of-a-vm-deleted-outside-devvm",
 	"gc_orphan_recent":                 "using/space#leftovers-of-a-vm-deleted-outside-devvm",

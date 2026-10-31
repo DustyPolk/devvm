@@ -767,6 +767,10 @@ other = "    image {{.image}}"
 [forgot_orphan]
 other = "deleted what devvm kept for {{.vm}}"
 
+[gc_backend_skipped]
+description = "backend is a backend a VM's state names, which couldn't list its images; gc goes on with the other backends"
+other = "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
+
 [gc_orphans_unknown]
 other = "{{.backend}} didn't answer, so devvm gc --orphans leaves its VMs' state alone."
 

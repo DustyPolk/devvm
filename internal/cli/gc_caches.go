@@ -14,15 +14,16 @@ import (
 // --caches): what each backend can tell only devvm's builds put there and
 // no image or VM of devvm's needs. It lists each backend's apart and asks
 // for each; it never runs a backend's own prune, which reaches the user's
-// own entries too. With only, that backend alone.
-func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, only string) error {
+// own entries too. With only, that backend alone; never one gc skipped,
+// as it couldn't list its images.
+func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, only string, skipped map[string]bool) error {
 	reg, err := registry.New(b.Dirs, b.Assets, u)
 	if err != nil {
 		return err
 	}
 	for _, be := range reg.All() {
 		c, ok := be.(backend.CacheCleaner)
-		if !ok || (only != "" && be.Name() != only) {
+		if !ok || (only != "" && be.Name() != only) || skipped[be.Name()] {
 			continue
 		}
 		entries, ok := cacheEntries(ctx, be, c)

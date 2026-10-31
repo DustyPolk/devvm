@@ -1054,6 +1054,11 @@ func GCAssets(count int) M {
 	return M{id: "gc_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// GCBackendSkipped is [gc_backend_skipped]: "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
+func GCBackendSkipped(backend string) M {
+	return M{id: "gc_backend_skipped", vals: []val{{"backend", backend}}}
+}
+
 // GCBadAge is [gc_bad_age]: "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
 func GCBadAge(age string) M {
 	return M{id: "gc_bad_age", vals: []val{{"age", age}}}
@@ -2951,6 +2956,7 @@ var specs = map[string]spec{
 	"from_not_found":                   {fields: []string{"from", "host"}},
 	"from_unreachable":                 {fields: []string{"from", "host"}},
 	"gc_assets":                        {plural: true, fields: []string{"count"}},
+	"gc_backend_skipped":               {fields: []string{"backend"}},
 	"gc_bad_age":                       {fields: []string{"age"}},
 	"gc_cache":                         {plural: true, fields: []string{"backend", "count", "size"}},
 	"gc_cache_confirm":                 {fields: []string{"backend"}},

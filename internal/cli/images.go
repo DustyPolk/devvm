@@ -36,7 +36,10 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			var ts []tools.Listed
 			if err == nil {
 				b.From = g.fromRef()
-				imgs, ts, err = listImages(cmd.Context(), u, b)
+				var l imageListing
+				if l, err = listImages(cmd.Context(), u, b); err == nil {
+					imgs, ts, err = l.images, l.tools, l.failUnlisted()
+				}
 			}
 			fail(u, err, msg.ImagesFailed)
 			target, err := toolTargets(u, b)
@@ -140,56 +143,82 @@ func toolsSize(ts []tools.Listed) int64 {
 	return n
 }
 
+// unlisted is a backend a VM's state names that couldn't list its images,
+// and why: its Check's error, else its listing's.
+type unlisted struct {
+	backend string
+	err     error
+}
+
+// imageListing is what listImages found: the images on every backend
+// that listed them, the shared tools, and the backends a VM uses that
+// couldn't list.
+type imageListing struct {
+	images   []listedImage
+	tools    []tools.Listed
+	unlisted []unlisted
+}
+
 // listImages lists the images on every backend, and the shared tools for
 // the base new VMs get on b (its backend and From). A backend that can't
-// list fails it only when a VM's state names that backend.
-func listImages(ctx context.Context, u *ui.UI, b *build.Env) ([]listedImage, []tools.Listed, error) {
+// list is left out, and named in unlisted when a VM's state names it.
+func listImages(ctx context.Context, u *ui.UI, b *build.Env) (imageListing, error) {
 	defer u.Status(msg.ReadingImages())()
+	var out imageListing
 	if err := from.Check(b.From); err != nil {
-		return nil, nil, err
+		return out, err
 	}
 	reg, err := registry.New(b.Dirs, b.Assets, u)
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
-	var imgs []listedImage
 	for _, be := range reg.All() {
 		on := build.Images{Env: newBuilder(u, b.Dirs, be, reg.Review, b.Tools, "")}
 		ls, err := on.Listing(ctx)
 		if err != nil {
 			if used, uerr := state.Backends(b.Dirs); uerr != nil {
-				return nil, nil, uerr
+				return out, uerr
 			} else if !used[be.Name()] {
 				continue
 			}
 			if cerr := be.Check(ctx); cerr != nil {
-				return nil, nil, cerr
+				err = cerr
 			}
-			return nil, nil, err
+			out.unlisted = append(out.unlisted, unlisted{backend: be.Name(), err: err})
+			continue
 		}
 		for _, l := range ls {
-			imgs = append(imgs, listedImage{Listed: l, Backend: be.Name(), images: on})
+			out.images = append(out.images, listedImage{Listed: l, Backend: be.Name(), images: on})
 		}
 	}
 	// Current for the default backend's new VMs, or any backend's.
 	tg, err := b.ToolTarget()
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 	tgs := []tools.Target{tg}
 	for _, be := range reg.All() {
 		t, err := newBuilder(u, b.Dirs, be, reg.Review, b.Tools, b.From).ToolTarget()
 		if err != nil {
-			return nil, nil, err
+			return out, err
 		}
 		tgs = append(tgs, t)
 	}
 	inUse, err := vm.ToolsInUse(b.Dirs)
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
-	ts, err := tools.Share{Env: b.Tools}.List(tgs, inUse)
-	return imgs, ts, err
+	out.tools, err = tools.Share{Env: b.Tools}.List(tgs, inUse)
+	return out, err
+}
+
+// failUnlisted is the error of the first backend a VM uses that couldn't
+// list its images, for devvm images, which lists every backend's or none.
+func (l imageListing) failUnlisted() error {
+	if len(l.unlisted) > 0 {
+		return l.unlisted[0].err
+	}
+	return nil
 }
 
 // writeImages writes the images, then the shared tools with the backend
