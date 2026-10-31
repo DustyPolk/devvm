@@ -1,17 +1,14 @@
 package cli
 
 import (
-	"cmp"
-	"fmt"
-	"io"
-	"strings"
-	"text/tabwriter"
-
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/registry"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -35,7 +32,7 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 				ls, err = listVMs(cmd, u, dirs)
 			}
 			fail(u, err, msg.LsFailed)
-			if err := writeList(u.Stdout(), ls); err != nil {
+			if err := writeList(u.Table(), ls); err != nil {
 				return err
 			}
 			for _, l := range ls {
@@ -56,23 +53,51 @@ func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error)
 	return vm.List(cmd.Context(), dirs, reg)
 }
 
-// writeList writes the VMs to out as a table, a header first; a value a
-// VM lacks is -.
-func writeList(out io.Writer, ls []vm.Listed) error {
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	row := func(vals ...string) {
-		for i, v := range vals {
-			vals[i] = cmp.Or(v, "-")
-		}
-		_, _ = fmt.Fprintln(w, strings.Join(vals, "\t"))
-	}
-	row("NAME", "STATUS", "IMAGE", "GIT", "NET", "BACKEND", "FOLDER")
+// writeList writes the VMs as a table, a header first; a value a VM lacks
+// is -. A VM's status, .git protection and network policy are colored by
+// what they mean.
+func writeList(tab *ui.Table, ls []vm.Listed) error {
+	tab.Header("NAME", "STATUS", "IMAGE", "GIT", "NET", "BACKEND", "FOLDER")
 	for _, l := range ls {
 		backend := l.Backend
 		if l.DockerLayer != "" {
 			backend += " (" + l.DockerLayer + ")"
 		}
-		row(l.Name, l.Status, l.Image, l.Git, l.Net, backend, l.Folder)
+		tab.Row(cell(l.Name), cellAs(l.Status, vmStatuses), cell(l.Image), cellAs(l.Git, gitModes),
+			cellAs(l.Net, netModes), cell(backend), cell(l.Folder))
 	}
-	return w.Flush()
+	return tab.Flush()
+}
+
+// vmStatuses, gitModes and netModes color devvm ls's STATUS, GIT and NET
+// columns: a status other than running or stopped (Broken) is red, and so
+// is a network policy that isn't enforced.
+func vmStatuses(s string) ui.Role {
+	switch backend.Status(s) {
+	case backend.StatusRunning:
+		return ui.Good
+	case backend.StatusStopped:
+		return ui.Attention
+	case "":
+		return ui.Plain
+	}
+	return ui.Bad
+}
+
+func gitModes(s string) ui.Role {
+	switch s {
+	case gitprotect.On, gitprotect.Strict, vm.ModeClone:
+		return ui.Good
+	}
+	return ui.Plain
+}
+
+func netModes(s string) ui.Role {
+	switch s {
+	case "on":
+		return ui.Good
+	case netpolicy.CheckUnenforced:
+		return ui.Bad
+	}
+	return ui.Plain
 }

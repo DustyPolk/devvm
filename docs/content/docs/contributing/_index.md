@@ -268,7 +268,7 @@ stderr 'msg_unknown name=nope$'
 
 ### Colors
 
-Only `internal/ui` adds color, through a `style` for each stream that `onTerminal` makes, and `colorOn` decides each one: `NO_COLOR` or `DEVVM_MESSAGES=names` turns it off, then `FORCE_COLOR` or `CLICOLOR_FORCE` (but `0`) turns it on, then `TERM=dumb` turns it off, and otherwise the stream gets color only when it's a terminal. Names mode stays plain in a terminal too, so end-to-end checks that run devvm under `script` read the names as they are. A `UI` from `New`, as tests make, is plain.
+Only `internal/ui` adds color, through a `style` for each stream that `onTerminal` makes, and `colorOn` decides each one: `NO_COLOR` or `DEVVM_MESSAGES=names` turns it off, then `FORCE_COLOR` or `CLICOLOR_FORCE` (but `0`) turns it on, then `TERM=dumb` turns it off, and otherwise the stream gets color only when it's a terminal. Names mode stays plain in a terminal too, so end-to-end checks that run devvm under `script` read the names as they are. A `UI` from `New`, as tests make, has no terminal, so it's plain unless `FORCE_COLOR` or `CLICOLOR_FORCE` is set, which is how cli's tests get a colored one.
 
 The colors are SGR codes from the 16 base colors only, which the theme maps to its own shades. devvm uses no bright colors (90–97), because Solarized maps them to greys and bright black is Solarized Dark's background, and it uses no backgrounds, 256 colors or truecolor. The codes go on labels, links and log text, never on a message's own text:
 
@@ -279,6 +279,15 @@ The colors are SGR codes from the 16 base colors only, which the theme maps to i
 - The done mark that a slow step leaves is green (`32`).
 
 The codes are added after `printable` and `msg.Shown`, so they're the only ones devvm prints. The status line cuts and counts its plain text with `style.fit` before painting it, so it still fits the terminal's width and clears the right number of rows. The run log is never colored.
+
+Tables on `Stdout()` are colored as stdout is. A command gets a `ui.Table` from `u.Table()` and adds a header, rows of `ui.Cell`s and a totals row, and cli never reads the environment itself. Each cell has a `ui.Role`: `Good` is green (`32`), `Attention` yellow (`33`), `Bad` red (`31`), `Secondary` dim (`2`), and `Plain` stays in the default color, while the header and totals rows are bold. `Table` pads each cell on its plain text before painting it, because `text/tabwriter` counts the codes' bytes as width, and a plain table is byte for byte what `text/tabwriter` writes with a padding of 2 (`TestTableLikeTabwriter`). The roles for each table's values are next to the code that writes it:
+
+- devvm images: `current` is good, `stale`, `unfinished`, `unused` and `not built` need attention, and digests and keys are secondary.
+- devvm ls: `Running` and the `.git` protections `on`, `strict` and `clone` are good, `Stopped` needs attention, and any other status, such as `Broken`, is bad, as is the network policy `unenforced`, while `on` is good.
+- devvm space: `only copy` and `leftover` in KEPT need attention.
+- devvm doctor: `native` is good, `emulated` needs attention, and `unreviewed` and `none` are bad.
+
+`doctor --fixes` lines and devvm space `--json` are for scripts and stay plain.
 
 `mise run test` unsets `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`, and `tests/e2e.sh` unsets the last two, so your own settings never change what they check.
 

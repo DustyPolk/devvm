@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -84,7 +83,7 @@ func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b back
 	if fixes {
 		return writeFixes(u.Stdout(), problems)
 	}
-	if err := writeFeatures(u.Stdout(), all); err != nil {
+	if err := writeFeatures(u.Table(), all); err != nil {
 		return err
 	}
 	if m, ok := d.Path.other(); ok {
@@ -212,20 +211,32 @@ func writeFixes(w io.Writer, problems []backend.Problem) error {
 }
 
 // writeFeatures writes a table of every feature, with a column for each
-// backend saying how it has it.
-func writeFeatures(w io.Writer, bs []backend.Backend) error {
-	t := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	row := []string{"FEATURE"}
+// backend saying how it has it: native green, emulated yellow, unreviewed
+// and none red.
+func writeFeatures(tab *ui.Table, bs []backend.Backend) error {
+	header := []string{"FEATURE"}
 	for _, b := range bs {
-		row = append(row, strings.ToUpper(b.Name()))
+		header = append(header, strings.ToUpper(b.Name()))
 	}
-	_, _ = fmt.Fprintln(t, strings.Join(row, "\t"))
+	tab.Header(header...)
 	for _, f := range backend.Features {
-		row = []string{string(f)}
+		row := []ui.Cell{cell(string(f))}
 		for _, b := range bs {
-			row = append(row, b.Caps()[f].String())
+			row = append(row, supportCell(b.Caps()[f]))
 		}
-		_, _ = fmt.Fprintln(t, strings.Join(row, "\t"))
+		tab.Row(row...)
 	}
-	return t.Flush()
+	return tab.Flush()
+}
+
+// supportCell is how a backend has a feature, colored by what it means.
+func supportCell(s backend.Support) ui.Cell {
+	role := ui.Bad
+	switch {
+	case s.IsNative():
+		role = ui.Good
+	case s.Usable():
+		role = ui.Attention
+	}
+	return ui.Cell{Text: s.String(), Role: role}
 }

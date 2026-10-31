@@ -5,15 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -69,7 +66,7 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(r)
 			}
-			if err := writeSpace(u.Stdout(), r); err != nil {
+			if err := writeSpace(u.Table(), r); err != nil {
 				return err
 			}
 			if len(r.Caches) > 0 {
@@ -638,16 +635,10 @@ func du(path string) int64 {
 	return n
 }
 
-// writeSpace writes devvm space's tables to out: devvm's own with a
-// total, then the backends' caches; a value one lacks is -.
-func writeSpace(out io.Writer, r spaceReport) error {
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	row := func(vals ...string) {
-		for i, v := range vals {
-			vals[i] = cmp.Or(v, "-")
-		}
-		_, _ = fmt.Fprintln(w, strings.Join(vals, "\t"))
-	}
+// writeSpace writes devvm space's tables: devvm's own with a total, bold,
+// then the backends' caches; a value one lacks is -. What devvm keeps only
+// copy of, and leftovers, are yellow.
+func writeSpace(tab *ui.Table, r spaceReport) error {
 	size := func(n int64, sized bool) string {
 		if !sized {
 			return ""
@@ -660,21 +651,29 @@ func writeSpace(out io.Writer, r spaceReport) error {
 		}
 		return humanSize(n)
 	}
-	row("WHAT", "BACKEND", "COUNT", "SIZE", "KEPT", "GC", "FREED BY", "RETAIN")
+	tab.Header("WHAT", "BACKEND", "COUNT", "SIZE", "KEPT", "GC", "FREED BY", "RETAIN")
 	for _, s := range r.Rows {
-		row(s.What, s.Backend, strconv.Itoa(s.Count), size(s.Size, s.Sized), s.Kept, gc(s.GC), s.Rest, s.retainCell())
+		tab.Row(cell(s.What), cell(s.Backend), cell(strconv.Itoa(s.Count)), cell(size(s.Size, s.Sized)),
+			cellAs(s.Kept, keptRoles), cell(gc(s.GC)), cell(s.Rest), cell(s.retainCell()))
 	}
-	row("total", "", "", humanSize(r.Total), "", gc(r.GC), "", "")
-	if err := w.Flush(); err != nil {
+	tab.Total(cell("total"), cell(""), cell(""), cell(humanSize(r.Total)), cell(""), cell(gc(r.GC)), cell(""), cell(""))
+	if len(r.Caches) == 0 {
+		return tab.Flush()
+	}
+	if err := tab.Break(); err != nil {
 		return err
 	}
-	if len(r.Caches) == 0 {
-		return nil
-	}
-	_, _ = fmt.Fprintln(out)
-	row("BACKEND", "CACHE", "COUNT", "SIZE", "PATH")
+	tab.Header("BACKEND", "CACHE", "COUNT", "SIZE", "PATH")
 	for _, c := range r.Caches {
-		row(c.Backend, c.Name, strconv.Itoa(c.Count), size(c.Size, c.Sized), c.Path)
+		tab.Row(cell(c.Backend), cell(c.Name), cell(strconv.Itoa(c.Count)), cell(size(c.Size, c.Sized)), cell(c.Path))
 	}
-	return w.Flush()
+	return tab.Flush()
+}
+
+// keptRoles colors devvm space's KEPT column.
+func keptRoles(s string) ui.Role {
+	if s == keptOnlyCopy || s == keptLeftover {
+		return ui.Attention
+	}
+	return ui.Plain
 }

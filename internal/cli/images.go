@@ -3,11 +3,7 @@ package cli
 import (
 	"cmp"
 	"context"
-	"fmt"
-	"io"
 	"strconv"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -45,7 +41,7 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			fail(u, err, msg.ImagesFailed)
 			target, err := toolTargets(u, b)
 			fail(u, err, msg.ImagesFailed)
-			if err := writeImages(u.Stdout(), imgs, ts, target); err != nil {
+			if err := writeImages(u.Table(), imgs, ts, target); err != nil {
 				return err
 			}
 			if n := len(staleImages(imgs)); n > 0 {
@@ -197,38 +193,62 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Env) ([]listedImage, []t
 }
 
 // writeImages writes the images, then the shared tools with the backend
-// and C library each is built for (target), to out as tables, each with a
-// header; a value one lacks is -.
-func writeImages(out io.Writer, imgs []listedImage, ts []tools.Listed, target func(tools.Listed) (be, libc string)) error {
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	row := func(vals ...string) {
-		for i, v := range vals {
-			vals[i] = cmp.Or(v, "-")
-		}
-		_, _ = fmt.Fprintln(w, strings.Join(vals, "\t"))
-	}
-	row("IMAGE", "FROM", "DIGEST", "KEY", "STATE", "SIZE", "BACKEND")
+// and C library each is built for (target), as tables, each with a header;
+// a value one lacks is -. States are colored by what they mean, digests
+// and keys dim.
+func writeImages(tab *ui.Table, imgs []listedImage, ts []tools.Listed, target func(tools.Listed) (be, libc string)) error {
+	tab.Header("IMAGE", "FROM", "DIGEST", "KEY", "STATE", "SIZE", "BACKEND")
 	for _, l := range imgs {
 		size := ""
 		if l.Sized {
 			size = humanSize(l.Size)
 		}
-		row(l.Name, l.Origin, l.DigestID, l.Key, l.State, size, l.Backend)
+		tab.Row(cell(l.Name), cell(l.Origin), dim(l.DigestID), dim(l.Key), cellAs(l.State, imageStates), cell(size), cell(l.Backend))
 	}
-	if err := w.Flush(); err != nil {
+	if err := tab.Break(); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(out)
-	row("NAME", "TOOL", "VERSION", "BACKEND", "LIBC", "SIZE", "VMS", "STATE")
+	tab.Header("NAME", "TOOL", "VERSION", "BACKEND", "LIBC", "SIZE", "VMS", "STATE")
 	for _, t := range ts {
 		size, vms, be, libc := "", "", "", ""
 		if t.Built {
 			size, vms = humanSize(t.Size), strconv.Itoa(t.VMs)
 			be, libc = target(t)
 		}
-		row(t.Name, t.Tool, t.Version, be, libc, size, vms, t.State)
+		tab.Row(cell(t.Name), cell(t.Tool), cell(t.Version), cell(be), cell(libc), cell(size), cell(vms), cellAs(t.State, toolStates))
 	}
-	return w.Flush()
+	return tab.Flush()
+}
+
+// imageStates and toolStates color devvm images' STATE columns.
+func imageStates(s string) ui.Role {
+	switch s {
+	case build.StateCurrent:
+		return ui.Good
+	case build.StateStale, build.StateUnfinished:
+		return ui.Attention
+	}
+	return ui.Plain
+}
+
+func toolStates(s string) ui.Role {
+	switch s {
+	case tools.StateCurrent:
+		return ui.Good
+	case tools.StateUnused, tools.StateNotBuilt:
+		return ui.Attention
+	}
+	return ui.Plain
+}
+
+// cell is a table cell for v, - when it's empty; dim, one in the
+// Secondary role; cellAs, one in the role roles gives its value.
+func cell(v string) ui.Cell { return ui.Cell{Text: cmp.Or(v, "-")} }
+
+func dim(v string) ui.Cell { return ui.Cell{Text: cmp.Or(v, "-"), Role: ui.Secondary} }
+
+func cellAs(v string, roles func(string) ui.Role) ui.Cell {
+	return ui.Cell{Text: cmp.Or(v, "-"), Role: roles(v)}
 }
 
 // humanSize writes a size in bytes as du -h does, in powers of 1024: 0B,

@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 func fakeRegistry(t *testing.T) *backend.Registry {
@@ -150,7 +151,6 @@ func TestExports(t *testing.T) {
 
 // The table: rows, a total, and the caches apart; what a row lacks is -.
 func TestWriteSpace(t *testing.T) {
-	var b strings.Builder
 	r := spaceReport{
 		Rows: []spaceRow{
 			{What: "images", Backend: "lima", Count: 2, Size: 2048, Sized: true, Kept: keptRemade, GC: 1024, Rest: "gc --backend lima"},
@@ -161,9 +161,7 @@ func TestWriteSpace(t *testing.T) {
 		GC:     1024,
 		Caches: []cacheRow{{Backend: "lima", Name: "download cache", Count: 1, Size: 1 << 30, Sized: true, Path: "/c/lima"}},
 	}
-	if err := writeSpace(&b, r); err != nil {
-		t.Fatal(err)
-	}
+	got, colored := tables(t, func(tab *ui.Table) error { return writeSpace(tab, r) })
 	want := "WHAT     BACKEND  COUNT  SIZE  KEPT       GC    FREED BY           RETAIN\n" +
 		"images   lima     2      2.0K  remade     1.0K  gc --backend lima  -\n" +
 		"VMs      docker   1      -     only copy  -     devvm rm           -\n" +
@@ -172,7 +170,8 @@ func TestWriteSpace(t *testing.T) {
 		"\n" +
 		"BACKEND  CACHE           COUNT  SIZE  PATH\n" +
 		"lima     download cache  1      1.0G  /c/lima\n"
-	if b.String() != want {
-		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
+	wantCodes(t, colored, "\033[1mWHAT\033[0m", "\033[1mtotal\033[0m", "\033[1m2.0K\033[0m", "\033[33monly copy\033[0m", "  remade  ", "\033[1mBACKEND\033[0m")
 }

@@ -73,13 +73,15 @@ type UI struct {
 }
 
 // New returns a UI on these streams, none of them a terminal, with its run
-// log in devvm's data folder.
+// log in devvm's data folder. They're colored only when FORCE_COLOR or
+// CLICOLOR_FORCE says so.
 func New(stdin io.Reader, stdout, stderr io.Writer) *UI {
 	u := &UI{
 		stdout: stdout, stderr: stderr, stdin: bufio.NewReader(stdin),
 		termWidth: func() int { return 0 }, rawInput: rawTerminal,
 		getenv: os.Getenv, runLogs: runLogs, interruptGrace: time.Second,
 	}
+	u.outStyle, u.errStyle = style{colorOn(u.getenv, false)}, style{colorOn(u.getenv, false)}
 	u.readPassword = u.readTerminal
 	return u
 }

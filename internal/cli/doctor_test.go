@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -20,13 +21,10 @@ import (
 func TestWriteFeatures(t *testing.T) {
 	a := backendtest.New("lima", backend.Caps{backend.FeatureSSH: backend.Native, backend.FeatureDisk: backend.Native})
 	b := backendtest.New("vmx", backend.Caps{backend.FeatureSSH: backend.Emulated(true), backend.FeatureDisk: backend.Emulated(false)})
-	var out strings.Builder
-	if err := writeFeatures(&out, []backend.Backend{a, b}); err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	out, colored := tables(t, func(tab *ui.Table) error { return writeFeatures(tab, []backend.Backend{a, b}) })
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
 	if len(lines) != len(backend.Features)+1 {
-		t.Fatalf("%d lines:\n%s", len(lines), out.String())
+		t.Fatalf("%d lines:\n%s", len(lines), out)
 	}
 	for _, want := range []string{"FEATURE LIMA VMX", "ssh native emulated", "disk native unreviewed", "cpus none none"} {
 		found := false
@@ -34,9 +32,11 @@ func TestWriteFeatures(t *testing.T) {
 			found = found || strings.Join(strings.Fields(l), " ") == want
 		}
 		if !found {
-			t.Errorf("no line %q in\n%s", want, out.String())
+			t.Errorf("no line %q in\n%s", want, out)
 		}
 	}
+	wantCodes(t, colored, "\033[1mFEATURE\033[0m", "\033[32mnative\033[0m", "\033[33memulated\033[0m",
+		"\033[31munreviewed\033[0m", "\033[31mnone\033[0m")
 }
 
 // doctor warns when the devvm first on PATH isn't this one, links

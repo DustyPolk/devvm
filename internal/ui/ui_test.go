@@ -22,6 +22,7 @@ func testUI(t *testing.T, in string) (u *UI, out, errOut *bytes.Buffer) {
 	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
 	u = New(strings.NewReader(in), out, errOut)
 	u.getenv = env{}.get
+	u.outStyle, u.errStyle = style{}, style{} // whatever FORCE_COLOR says
 	logs := filepath.Join(t.TempDir(), "logs", "runs")
 	u.runLogs = func() (string, error) { return logs, nil }
 	u.readPassword = func() (string, error) { return "", errors.New("no terminal") }

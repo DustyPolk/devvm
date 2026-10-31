@@ -1,16 +1,15 @@
 package cli
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // The tool table: each build's backend and C library, and - for what a
 // row lacks, a tool that isn't built included.
 func TestWriteImagesTools(t *testing.T) {
-	var b strings.Builder
 	ts := []tools.Listed{
 		{Name: "node", Tool: "node", Version: "24.22.2", File: "a", Built: true, Size: 4096, VMs: 1, State: tools.StateCurrent},
 		{Name: "node", Tool: "node", Version: "24.22.2", File: "b", Built: true, Size: 4096, State: tools.StateCurrent},
@@ -22,17 +21,16 @@ func TestWriteImagesTools(t *testing.T) {
 		}
 		return "", ""
 	}
-	if err := writeImages(&b, nil, ts, target); err != nil {
-		t.Fatal(err)
-	}
+	got, colored := tables(t, func(tab *ui.Table) error { return writeImages(tab, nil, ts, target) })
 	want := "IMAGE  FROM  DIGEST  KEY  STATE  SIZE  BACKEND\n\n" +
 		"NAME  TOOL  VERSION  BACKEND  LIBC  SIZE  VMS  STATE\n" +
 		"node  node  24.22.2  lima     gnu   4.0K  1    current\n" +
 		"node  node  24.22.2  -        -     4.0K  0    current\n" +
 		"go    go    1.27.2   -        -     -     -    not built\n"
-	if b.String() != want {
-		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
+	wantCodes(t, colored, "\033[32mcurrent\033[0m", "\033[33mnot built\033[0m")
 }
 
 func TestHumanSize(t *testing.T) {
