@@ -7,7 +7,7 @@ This page covers the ports a VM forwards to this machine and the CPUs, memory an
 
 ## Size and ports
 
-A new VM gets its image's size unless you set one with `--cpus`, `--memory` and `--disk`, as in `devvm --cpus 6 base`. For `base` that's 4 CPUs, 8 GiB of memory and a 100 GiB disk. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory.
+A new VM gets its image's size unless you set one with `--cpus`, `--memory` and `--disk`, as in `devvm --cpus 6 base`. For `base` that's 4 CPUs, 8 GiB of memory and a 100 GiB disk. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory. When devvm builds base on such a machine, it says how many CPUs and how much memory base gets, and `devvm size -g` sets the size that new VMs get instead.
 
 - `--cpus` takes a whole number. `--memory` and `--disk` take a size in GiB, written `16`, `16G` or `16GiB`, and decimals are allowed.
 - What the flags leave unset comes from `~/.config/devvm/size` when that file sets it, with one `cpus=`, `memory=` or `disk=` line each. `devvm size -g` and `devvm setup` write that file ([choosing new VMs' size](#choosing-new-vms-size)).

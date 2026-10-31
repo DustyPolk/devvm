@@ -39,6 +39,7 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 | You need | To check | To get it | The install script |
 | --- | --- | --- | --- |
 | macOS 13 or newer, on arm64 or x86_64 | `sw_vers` and `uname -m` | | {{< no >}} doesn't |
+| 8 GiB of memory and 4 CPUs, recommended | `sysctl hw.memsize hw.ncpu` | | {{< no >}} doesn't |
 | Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
 | OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | {{< no >}} doesn't |
 | Docker Desktop with Docker 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker Desktop | {{< no >}} doesn't |
@@ -49,6 +50,7 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 | You need | To check | To get it | The install script |
 | --- | --- | --- | --- |
 | Linux on arm64 or x86_64 | `uname -m` | | {{< no >}} doesn't |
+| 8 GiB of memory and 4 CPUs, recommended | `free -g` and `nproc` | | {{< no >}} doesn't |
 | Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
 | QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | {{< yes >}} offers it, with sudo |
 | Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | {{< yes >}} offers it, with sudo |
@@ -60,6 +62,8 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 
 The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only the [Docker backend](../backends/docker.md#requirements) and `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) need it. The experimental [smolvm](../backends/smolvm.md#requirements) backend has requirements of its own.
 
+devvm also runs on a smaller machine, because it fits base to the machine. Base asks for 4 CPUs and 8 GiB of memory. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory, which is 4 GiB on an 8 GiB machine. The VMs made from base get the same unless you give them a size, as [size and ports](../using/ports-size.md#size-and-ports) explains. When devvm builds base on such a machine, it says how many CPUs and how much memory base gets. `devvm size -g` sets the size that new VMs get instead, and `devvm doctor` warns when this machine has less than 8 GiB of memory or fewer than 4 CPUs.
+
 Your first VM needs about 12 GiB of free disk space, because devvm builds the base image first and then the VM's own image and shared tools. Each VM then grows its own disk as you work in it, and the disk never shrinks. devvm checks the free space before each build and each new VM, and refuses when it's low ([free space](../using/ports-size.md#free-space)).
 
 Everything else is installed inside the VMs, including the toolchains, the agents, and Docker for your projects with the [docker layer](../using/images.md#built-in-layers).
@@ -70,7 +74,7 @@ On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Know
 
 devvm never installs anything on this machine itself. Every command that needs the backend checks it first, and stops at the first thing that's missing.
 
-`devvm doctor` checks the backend new VMs get, or another one with `--backend NAME`. It lists everything that backend lacks, each with what to do, which is the command that installs it when there's one to run. It also lists what each backend can do, which it calls the backend's [features](../internals/backends.md#features), and whether Docker is installed, and it warns when another devvm comes first on your `PATH` ([One devvm](#one-devvm)). Then it says devvm has everything it needs, or it fails.
+`devvm doctor` checks the backend new VMs get, or another one with `--backend NAME`. It lists everything that backend lacks, each with what to do, which is the command that installs it when there's one to run. It also lists what each backend can do, which it calls the backend's [features](../internals/backends.md#features), and whether Docker is installed. It warns when another devvm comes first on your `PATH` ([One devvm](#one-devvm)), when the disk that devvm's images and VMs go on has less free space than building base needs, and when this machine has less than the 8 GiB of memory or the 4 CPUs that devvm recommends ([Requirements](#requirements)). Then it says devvm has everything it needs, or it fails. The warnings never make it fail, so a small machine with everything installed passes.
 
 When `devvm doctor` finds nothing missing, you're ready for [your first VM](first-vm.md). Before you make it, read [staying safe](../safety/_index.md#the-habits), which lists the habits that close most of what devvm leaves open.
 

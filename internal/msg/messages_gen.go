@@ -234,6 +234,11 @@ func BaseFeaturesNone() M {
 	return M{id: "base_features_none"}
 }
 
+// BaseFitted is [base_fitted]: "This machine has less than base asks for, so base and its VMs get {{.cpus}} CPUs and {{.memory}} GiB of memory unless you give them a size. devvm size -g sets the size new VMs get."
+func BaseFitted(cpus string, memory string) M {
+	return M{id: "base_fitted", vals: []val{{"cpus", cpus}, {"memory", memory}}}
+}
+
 // BaseWillRebuild is [base_will_rebuild]: "The base image and the images built on it rebuild with these features when you next use them."
 func BaseWillRebuild() M {
 	return M{id: "base_will_rebuild"}
@@ -1132,6 +1137,16 @@ func HistoryNotExported(vm string) M {
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path. Set it to your home folder."
 func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
+}
+
+// HostCpusFew is [host_cpus_few]: "This machine has {{.have}} CPUs, fewer than the {{.want}} devvm recommends, so a VM gets all of them unless you give it a size."
+func HostCpusFew(have string, want string) M {
+	return M{id: "host_cpus_few", vals: []val{{"have", have}, {"want", want}}}
+}
+
+// HostMemoryLow is [host_memory_low]: "This machine has {{.have}} GiB of memory, less than the {{.want}} GiB devvm recommends, so a VM gets half of it unless you give it a size."
+func HostMemoryLow(have string, want string) M {
+	return M{id: "host_memory_low", vals: []val{{"have", have}, {"want", want}}}
 }
 
 // ImageFrom is [image_from]: "{{.image}} (from {{.from}})"
@@ -2497,6 +2512,7 @@ var specs = map[string]spec{
 	"base_build_time":                  {},
 	"base_features":                    {fields: []string{"features"}},
 	"base_features_none":               {},
+	"base_fitted":                      {fields: []string{"cpus", "memory"}},
 	"base_will_rebuild":                {},
 	"branch_names_invalid":             {fields: []string{"refs"}},
 	"build_failed":                     {fields: []string{"image", "reason"}},
@@ -2677,6 +2693,8 @@ var specs = map[string]spec{
 	"github_token_howto":               {},
 	"history_not_exported":             {fields: []string{"vm"}},
 	"home_not_absolute":                {},
+	"host_cpus_few":                    {fields: []string{"have", "want"}},
+	"host_memory_low":                  {fields: []string{"have", "want"}},
 	"image_from":                       {fields: []string{"from", "image"}},
 	"image_in_use":                     {fields: []string{"key", "vms"}},
 	"image_leftover":                   {fields: []string{"image", "key"}},

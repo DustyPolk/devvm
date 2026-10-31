@@ -25,6 +25,16 @@ func FitMemory(wantGiB float64, hostBytes uint64) float64 {
 	return h / 2
 }
 
+// Fitted is got's CPUs and memory, base's as fitted to the host, when
+// either is less than want's, base.yaml's; zero when the host gave base
+// all it asks for.
+func Fitted(want, got Size) Size {
+	if got.CPUs < want.CPUs || got.MemoryGiB < want.MemoryGiB {
+		return Size{CPUs: got.CPUs, MemoryGiB: got.MemoryGiB}
+	}
+	return Size{}
+}
+
 // MaxMemory is the most memory in GiB a VM may ask for on a host with
 // hostBytes, by FitMemory's rule: the host's whole GiB less 2, or half of
 // them on a host of 4 GiB or less, where that's more.

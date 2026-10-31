@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newDoctorCmd is devvm doctor.
@@ -34,52 +37,102 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			"Docker Desktop which folders it shares. Then list each backend's features (native, emulated, " +
 			"unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which " +
 			"only --from with an image only Docker has needs. When HTTPS_PROXY is set and ~/.config/devvm/ca has no CA " +
-			"certificates, it says that a proxy that inspects TLS needs its CA there. It warns when the disk the " +
-			"backend's images and VMs go on has less free space than building base needs. Fails when something is " +
-			"missing, but not for low space.",
+			"certificates, it says that a proxy that inspects TLS needs its CA there. It warns when another devvm " +
+			"comes first on PATH, when the disk the backend's images and VMs go on has less free space than building " +
+			"base needs, and when this machine has less than 8 GiB of memory or fewer than 4 CPUs. Fails when " +
+			"something is missing, but not for any of these warnings.",
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			reg, b, err := doctorBackend(u, g.backend)
 			fail(u, err, msg.DoctorFailed)
-			problems := b.Problems(cmd.Context())
-			if fixes {
-				return writeFixes(u.Stdout(), problems)
+			d := doctor{
+				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
+				Free: platform.FreeSpace,
+				Host: vm.ThisHost,
 			}
-			if err := writeFeatures(u.Stdout(), reg.All()); err != nil {
-				return err
+			err = d.run(cmd.Context(), u, reg.All(), b, fixes)
+			if m, ok := errors.AsType[msg.M](err); ok {
+				u.Die(m)
 			}
-			if m, ok := (onPath{LookPath: exec.LookPath, Executable: os.Executable}).other(); ok {
-				u.Warn(m)
-			}
-			if _, err := exec.LookPath("docker"); err == nil {
-				u.Say(msg.DockerFound())
-			} else {
-				u.Say(msg.DockerMissing())
-			}
-			sayProxyCA(u)
-			// Low free space is a warning: doctor's exit status stays the problems'.
-			if m, low := (backend.Space{Free: platform.FreeSpace}).Warning(b); low {
-				u.Warn(m)
-			}
-			if len(problems) == 0 {
-				if r, ok := b.(backend.Reporter); ok {
-					for _, m := range r.Report(cmd.Context()) {
-						u.Say(m)
-					}
-				}
-				u.Say(msg.DoctorOK(b.Name(), devvmVersion()))
-				return nil
-			}
-			for _, p := range problems[:len(problems)-1] {
-				u.Warn(p.Msg)
-			}
-			u.Die(problems[len(problems)-1].Msg)
-			return nil
+			return err
 		},
 	}
 	cmd.Flags().BoolVar(&fixes, "fixes", false, "print only what's missing, for scripts: a KEY<tab>FIX<tab>MESSAGE line each, FIX being a command or empty; succeeds either way")
 	return cmd
+}
+
+// The host devvm recommends: base asks for 4 CPUs and 8 GiB.
+const (
+	recommendedCPUs      = 4
+	recommendedMemoryGiB = 8
+)
+
+// doctor is devvm doctor's checks of this machine; tests set its fields.
+type doctor struct {
+	Path onPath
+	Free func(path string) (uint64, error) // free bytes on path's volume
+	Host func() (vm.Host, error)
+}
+
+// run checks b, the backend new VMs get, and lists all's features. It
+// returns the last problem's message when b has problems, having warned
+// the others. With fixes, it writes only the problems' lines, and
+// succeeds. Warnings (another devvm on PATH, low free space, a small
+// host) never change what it returns.
+func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b backend.Backend, fixes bool) error {
+	problems := b.Problems(ctx)
+	if fixes {
+		return writeFixes(u.Stdout(), problems)
+	}
+	if err := writeFeatures(u.Stdout(), all); err != nil {
+		return err
+	}
+	if m, ok := d.Path.other(); ok {
+		u.Warn(m)
+	}
+	if _, err := exec.LookPath("docker"); err == nil {
+		u.Say(msg.DockerFound())
+	} else {
+		u.Say(msg.DockerMissing())
+	}
+	sayProxyCA(u)
+	if m, low := (backend.Space{Free: d.Free}).Warning(b); low {
+		u.Warn(m)
+	}
+	for _, m := range smallHost(d.Host) {
+		u.Warn(m)
+	}
+	if len(problems) == 0 {
+		if r, ok := b.(backend.Reporter); ok {
+			for _, m := range r.Report(ctx) {
+				u.Say(m)
+			}
+		}
+		u.Say(msg.DoctorOK(b.Name(), devvmVersion()))
+		return nil
+	}
+	for _, p := range problems[:len(problems)-1] {
+		u.Warn(p.Msg)
+	}
+	return problems[len(problems)-1].Msg
+}
+
+// smallHost returns a warning for each way this machine is below the host
+// devvm recommends: less memory, fewer CPUs. None when host can't say.
+func smallHost(host func() (vm.Host, error)) []msg.M {
+	h, err := host()
+	if err != nil {
+		return nil
+	}
+	var ms []msg.M
+	if h.MemoryGiB > 0 && h.MemoryGiB < recommendedMemoryGiB {
+		ms = append(ms, msg.HostMemoryLow(strconv.Itoa(h.MemoryGiB), strconv.Itoa(recommendedMemoryGiB)))
+	}
+	if h.CPUs > 0 && h.CPUs < recommendedCPUs {
+		ms = append(ms, msg.HostCpusFew(strconv.Itoa(h.CPUs), strconv.Itoa(recommendedCPUs)))
+	}
+	return ms
 }
 
 // sayProxyCA says, when HTTPS_PROXY is set and devvm's CA folder has no

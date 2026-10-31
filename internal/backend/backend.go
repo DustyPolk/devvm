@@ -272,10 +272,15 @@ type ToolsSpec struct {
 	Trust Trust
 }
 
-// Built is what a build reports, for the image's record.
+// Built is what a build reports, for the image's record and the build's
+// output.
 type Built struct {
 	Origin string // what base started from: the Ubuntu image (URL sha256:DIGEST) or From's digest; "" above base
 	Libc   string // base's C library: gnu, or musl (Alpine); "" above base
+	// Fitted is base's CPUs and memory when fitting them to the host made
+	// either less than base.yaml's (Fitted); zero when it didn't, and
+	// above base.
+	Fitted Size
 }
 
 // VMSpec is a VM to create from an image. Mounts are at the same path in

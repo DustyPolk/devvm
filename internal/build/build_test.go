@@ -305,6 +305,34 @@ func TestBuildKeepsTheLibc(t *testing.T) {
 	}
 }
 
+// A build says once what base got when the backend fitted it to the host,
+// and says nothing about it when it didn't.
+func TestBuildSaysFitted(t *testing.T) {
+	for _, c := range []struct {
+		fitted backend.Size
+		want   []string
+	}{
+		{backend.Size{}, nil},
+		{backend.Size{CPUs: 2, MemoryGiB: 4}, []string{"base_fitted cpus=2 memory=4"}},
+		{backend.Size{CPUs: 4, MemoryGiB: 3.5}, []string{"base_fitted cpus=4 memory=3.5"}},
+	} {
+		b, f := testEnv(t)
+		f.Built.Fitted = c.fitted
+		var got []string
+		b.Info = func(m msg.M) {
+			if m.ID() == "base_fitted" {
+				got = append(got, m.Names())
+			}
+		}
+		if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("fitted %+v: said %q, want %q", c.fitted, got, c.want)
+		}
+	}
+}
+
 // A backend that can't build, or not confined, is refused before anything
 // is built.
 func TestBuildRequires(t *testing.T) {

@@ -256,6 +256,8 @@ install_deps() {
     < <(PATH="$prefix/bin:$PATH" "$devvm" doctor --fixes || true)
   ((${#fixes[@]})) || {
     say "everything devvm needs is installed"
+    # Its warnings (a small machine, low free space) aren't fixes.
+    PATH="$prefix/bin:$PATH" "$devvm" doctor || true
     return 0
   }
   $yes || { : </dev/tty; } 2>/dev/null ||

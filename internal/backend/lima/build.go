@@ -93,7 +93,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	var built backend.Built
 	var conv *converted
 	if spec.Parent == "" {
-		size, err := l.buildSize()
+		want, size, err := l.buildSize()
 		if err != nil {
 			return backend.Built{}, err
 		}
@@ -125,6 +125,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 			}
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
 		}
+		built.Fitted = backend.Fitted(want, size)
 	} else if err := l.Runner.Run(ctx, msg.CloningImage(image.Parent(spec.Image)),
 		l.limactl(ctx, "clone", "--tty=false", "--mount-none", parent, inst)); err != nil {
 		return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
@@ -274,35 +275,34 @@ var (
 	memoryLine = regexp.MustCompile(`(?m)^memory:\s*([0-9.]+)GiB\s*$`)
 )
 
-// buildSize is base's CPUs and memory: base.yaml's, fitted to the host
-// (backend.FitCPUs, backend.FitMemory), so a host with fewer CPUs gets
-// its own count and one that base.yaml's memory would leave less than 2
-// GiB gets half its memory. Images built from base, and their VMs, keep
-// them.
-func (l *Lima) buildSize() (backend.Size, error) {
+// buildSize is base's CPUs and memory: base.yaml's (want), and got, them
+// fitted to the host (backend.FitCPUs, backend.FitMemory), so a host with
+// fewer CPUs gets its own count and one that base.yaml's memory would
+// leave less than 2 GiB gets half its memory. Images built from base, and
+// their VMs, keep got.
+func (l *Lima) buildSize() (want, got backend.Size, err error) {
 	data, err := fs.ReadFile(l.Assets, "base.yaml")
 	if err != nil {
-		return backend.Size{}, err
+		return want, got, err
 	}
 	c := cpusLine.FindSubmatch(data)
 	if c == nil {
-		return backend.Size{}, errors.New("lima: base.yaml sets no CPUs")
+		return want, got, errors.New("lima: base.yaml sets no CPUs")
 	}
-	cpus, err := strconv.Atoi(string(c[1]))
-	if err != nil {
-		return backend.Size{}, err
+	if want.CPUs, err = strconv.Atoi(string(c[1])); err != nil {
+		return want, got, err
 	}
 	m := memoryLine.FindSubmatch(data)
 	if m == nil {
-		return backend.Size{}, errors.New("lima: base.yaml sets no memory in GiB")
+		return want, got, errors.New("lima: base.yaml sets no memory in GiB")
 	}
-	mem, err := strconv.ParseFloat(string(m[1]), 64)
-	if err != nil {
-		return backend.Size{}, err
+	if want.MemoryGiB, err = strconv.ParseFloat(string(m[1]), 64); err != nil {
+		return want, got, err
 	}
 	host, err := l.Memory()
 	if err != nil {
-		return backend.Size{}, err
+		return want, got, err
 	}
-	return backend.Size{CPUs: backend.FitCPUs(cpus, l.CPUs()), MemoryGiB: backend.FitMemory(mem, host)}, nil
+	got = backend.Size{CPUs: backend.FitCPUs(want.CPUs, l.CPUs()), MemoryGiB: backend.FitMemory(want.MemoryGiB, host)}
+	return want, got, nil
 }

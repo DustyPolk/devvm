@@ -229,7 +229,7 @@ exec devvm --backend smolvm --from $PIN --no-network-policy --ports 22,3000-3100
 ! stderr 'backend_unreviewed'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-many-[0-9a-f]{14} .* --ssh-agent$'
-! stdout ' -p (22|3000)'
+! stdout ' -p (22|3000):'
 exec devvm ports
 stdout '^22,3000-3100$'
 exec devvm rm -f

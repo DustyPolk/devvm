@@ -156,10 +156,13 @@ stdout '^==> installed devvm 0.1.0: \S+/prefix/bin/devvm$'
 env BREW_DEVVM=
 
 # devvm itself, installed: its files are in it, and its own check (the
-# sandbox's stubs) finds nothing missing.
+# sandbox's stubs) finds nothing missing; devvm doctor runs after it.
+env DEVVM_MESSAGES=names
 exec bash real.sh
 stdout '^fzf$'
 stdout '^==> everything devvm needs is installed$'
+stdout '^doctor_ok backend=lima '
+env DEVVM_MESSAGES=
 
 -- lib.sh --
 # Sourced by each case: install.sh's functions, set to install into
@@ -382,6 +385,7 @@ esac
 install_deps "$WORK/fake/devvm"
 -- deps-none.want --
 ==> everything devvm needs is installed
+checked
 -- ran-fixes.want --
 sudo apt-get install -y qemu-system-arm
 brew install lima

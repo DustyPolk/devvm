@@ -347,15 +347,19 @@ func TestBaseSize(t *testing.T) {
 		eng       *engine
 		cpus      int
 		mem, disk float64
+		fitted    backend.Size // what base's build reports
 	}{
-		{nil, 4, 8, 100},
-		{&engine{NCPU: 16, MemTotal: 64 << 30}, 4, 8, 100},
-		{&engine{NCPU: 2, MemTotal: 8 << 30}, 2, 4, 100},
+		{nil, 4, 8, 100, backend.Size{}},
+		{&engine{NCPU: 16, MemTotal: 64 << 30}, 4, 8, 100, backend.Size{}},
+		{&engine{NCPU: 2, MemTotal: 8 << 30}, 2, 4, 100, backend.Size{CPUs: 2, MemoryGiB: 4}},
 	} {
 		d := &Docker{Assets: assets.FS, eng: c.eng}
 		cpus, mem, disk, err := d.baseSize()
 		if err != nil || cpus != c.cpus || mem != c.mem || disk != c.disk {
 			t.Errorf("engine %+v: baseSize = %d, %v, %v, %v; want %d, %v, %v", c.eng, cpus, mem, disk, err, c.cpus, c.mem, c.disk)
+		}
+		if f, err := fitted(d.Assets, cpus, mem); err != nil || f != c.fitted {
+			t.Errorf("engine %+v: fitted = %+v, %v; want %+v", c.eng, f, err, c.fitted)
 		}
 	}
 }

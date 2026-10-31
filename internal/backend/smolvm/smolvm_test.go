@@ -762,11 +762,19 @@ func TestBuildBase(t *testing.T) {
 // On a host of 2 CPUs and 8 GiB, base's build machine and a VM given no
 // size get 2 CPUs and 4 GiB; a VM's own CPUs still win.
 func TestSmallHost(t *testing.T) {
+	big := newSandbox(t)
+	if built, err := big.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: "0123456789ab", Net: backend.NetInternet}); err != nil || built.Fitted != (backend.Size{}) {
+		t.Errorf("on a big host: fitted %+v, %v; want none", built.Fitted, err)
+	}
 	s := newSandbox(t)
 	s.CPUs = func() int { return 2 }
 	s.Memory = func() (uint64, error) { return 8 << 30, nil }
-	if _, err := s.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: "0123456789ab", Net: backend.NetInternet}); err != nil {
+	built, err := s.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: "0123456789ab", Net: backend.NetInternet})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if want := (backend.Size{CPUs: 2, MemoryGiB: 4}); built.Fitted != want {
+		t.Errorf("fitted %+v, want %+v", built.Fitted, want)
 	}
 	if got := s.calls(t); len(got) == 0 || !strings.Contains(got[0], "machine create ") || !strings.Contains(got[0], " --cpus 2 --mem 4096 ") {
 		t.Errorf("calls:\n%s\nwant base made with --cpus 2 --mem 4096", strings.Join(got, "\n"))

@@ -226,13 +226,23 @@ func TestBuildImageRefuses(t *testing.T) {
 	}
 }
 
-// On a host of 2 CPUs and 8 GiB, base gets 2 CPUs and 4 GiB.
+// On a host of 2 CPUs and 8 GiB, base gets 2 CPUs and 4 GiB, and the
+// build reports them as fitted; on a 16 GiB host of 8 CPUs, nothing is.
 func TestBuildImageSmallHost(t *testing.T) {
+	l, _ := buildLima(t, "darwin", "")
+	built, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet})
+	if err != nil || built.Fitted != (backend.Size{}) {
+		t.Errorf("on a big host: fitted %+v, %v; want none", built.Fitted, err)
+	}
 	l, f := buildLima(t, "darwin", "")
 	l.CPUs = func() int { return 2 }
 	l.Memory = func() (uint64, error) { return 8 * gib, nil }
-	if _, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet}); err != nil {
+	built, err = l.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if want := (backend.Size{CPUs: 2, MemoryGiB: 4}); built.Fitted != want {
+		t.Errorf("fitted %+v, want %+v", built.Fitted, want)
 	}
 	lines := f.lines()
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "limactl create ") || !strings.Contains(lines[0], " --cpus=2 --memory=4 ") {

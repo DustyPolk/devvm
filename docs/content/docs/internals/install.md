@@ -12,7 +12,7 @@ The script installs the release it comes with, or the one that `--version` names
 1. It downloads the archive for this machine and the release's `SHA256SUMS`, over HTTPS only. The archive is `devvm-<version>-<os>-<arch>.tar.gz`, where the OS is `darwin` or `linux` and the processor is `arm64` or `amd64`. On Apple silicon, the script picks `arm64` even when it runs under Rosetta.
 2. It checks the signature of `SHA256SUMS`, then the archive's checksum, as [the signature](#the-signature-and-what-it-trusts) describes. When either check fails, it installs nothing.
 3. It puts devvm, which is one binary with its README, changelog and license, in `~/.local/lib/devvm/<version>`, and links `~/.local/bin/devvm` to it. When `~/.local/bin` isn't on `PATH`, the script says how to add it.
-4. Unless you pass `--no-deps`, it runs `devvm doctor --fixes` and offers the [fixes](#devvm-doctor---fixes) that devvm reports, asking before each one. Then it runs `devvm doctor`.
+4. Unless you pass `--no-deps`, it runs `devvm doctor --fixes` and offers the [fixes](#devvm-doctor---fixes) that devvm reports, asking before each one. Then it runs `devvm doctor`, which shows doctor's warnings too, even when nothing is missing.
 
 At the end, when `~/.local/bin` is on `PATH`, the script looks up which devvm `PATH` finds first with `command -v devvm`. It resolves that path's links and those of `~/.local/bin/devvm` with `readlink -f`, and when they differ it warns, naming the other copy's path and saying to remove it or to put `~/.local/bin` first. It only looks the other copy up and never runs it. When `~/.local/bin` isn't on `PATH`, the script prints only how to add it, so you don't get both.
 
@@ -40,7 +40,7 @@ The signature catches an archive or a `SHA256SUMS` that someone replaced, which 
 
 ## devvm doctor --fixes
 
-`devvm doctor --fixes` prints only what's missing, one line each, for scripts such as the install script. Each line is `KEY<tab>FIX<tab>MESSAGE`, where `FIX` is a command, or empty when there's none to run, for example when virtualization is turned off in the firmware. The command succeeds either way. These are the keys:
+`devvm doctor --fixes` prints only what's missing, one line each, for scripts such as the install script. Each line is `KEY<tab>FIX<tab>MESSAGE`, where `FIX` is a command, or empty when there's none to run, for example when virtualization is turned off in the firmware. The command succeeds either way. Doctor's warnings have no keys, because there's nothing for a script to fix, so `--fixes` never prints them. They're about another devvm on `PATH`, low free space, and a machine with less than 8 GiB of memory or fewer than 4 CPUs. These are the keys:
 
 | Key | Missing | Fix |
 | --- | --- | --- |

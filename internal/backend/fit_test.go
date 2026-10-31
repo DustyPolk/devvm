@@ -66,3 +66,22 @@ func TestMaxMemory(t *testing.T) {
 		}
 	}
 }
+
+// What a build reports as fitted: the CPUs and memory base got when
+// either is less than base.yaml's, never its disk; nothing otherwise.
+func TestFitted(t *testing.T) {
+	want := Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}
+	for _, c := range []struct {
+		got, fitted Size
+	}{
+		{want, Size{}},
+		{Size{CPUs: 4, MemoryGiB: 8}, Size{}},
+		{Size{CPUs: 2, MemoryGiB: 8, DiskGiB: 100}, Size{CPUs: 2, MemoryGiB: 8}},
+		{Size{CPUs: 4, MemoryGiB: 4, DiskGiB: 100}, Size{CPUs: 4, MemoryGiB: 4}},
+		{Size{CPUs: 2, MemoryGiB: 3.5}, Size{CPUs: 2, MemoryGiB: 3.5}},
+	} {
+		if got := Fitted(want, c.got); got != c.fitted {
+			t.Errorf("Fitted(%+v, %+v) = %+v, want %+v", want, c.got, got, c.fitted)
+		}
+	}
+}

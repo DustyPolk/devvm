@@ -110,6 +110,9 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 			return backend.Built{}, err
 		}
 		built.Origin = origin
+		if built.Fitted, err = fitted(s.Assets, cpus, mem); err != nil {
+			return backend.Built{}, err
+		}
 		args = append(args, "--image", ref)
 		step = msg.CreatingFromImage(ref, inst)
 	} else {
@@ -461,9 +464,23 @@ var (
 // CPUs, memory and disk, as Lima's base has them, its CPUs and memory
 // fitted to the host (backend.FitCPUs, backend.FitMemory).
 func (s *Smolvm) baseSize() (cpus int, mem, disk float64, err error) {
-	data, err := fs.ReadFile(s.Assets, "base.yaml")
+	want, err := baseYAML(s.Assets)
 	if err != nil {
 		return 0, 0, 0, err
+	}
+	host, err := s.Memory()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return backend.FitCPUs(want.CPUs, s.CPUs()), backend.FitMemory(want.MemoryGiB, host), want.DiskGiB, nil
+}
+
+// baseYAML is base.yaml's CPUs, memory and disk in assets, not fitted to
+// the host.
+func baseYAML(assets fs.FS) (backend.Size, error) {
+	data, err := fs.ReadFile(assets, "base.yaml")
+	if err != nil {
+		return backend.Size{}, err
 	}
 	get := func(re *regexp.Regexp) (float64, error) {
 		m := re.FindSubmatch(data)
@@ -472,19 +489,24 @@ func (s *Smolvm) baseSize() (cpus int, mem, disk float64, err error) {
 		}
 		return strconv.ParseFloat(string(m[1]), 64)
 	}
+	var want backend.Size
 	c, err := get(cpusLine)
 	if err != nil {
-		return 0, 0, 0, err
+		return backend.Size{}, err
 	}
-	if mem, err = get(memoryLine); err != nil {
-		return 0, 0, 0, err
+	want.CPUs = int(c)
+	if want.MemoryGiB, err = get(memoryLine); err != nil {
+		return backend.Size{}, err
 	}
-	if disk, err = get(diskLine); err != nil {
-		return 0, 0, 0, err
+	if want.DiskGiB, err = get(diskLine); err != nil {
+		return backend.Size{}, err
 	}
-	host, err := s.Memory()
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return backend.FitCPUs(int(c), s.CPUs()), backend.FitMemory(mem, host), disk, nil
+	return want, nil
+}
+
+// fitted is what base's build reports as fitted, for the CPUs and
+// memory it gets (backend.Fitted) and assets' base.yaml.
+func fitted(assets fs.FS, cpus int, mem float64) (backend.Size, error) {
+	want, err := baseYAML(assets)
+	return backend.Fitted(want, backend.Size{CPUs: cpus, MemoryGiB: mem}), err
 }

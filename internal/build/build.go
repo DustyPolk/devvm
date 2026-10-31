@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -366,8 +367,17 @@ func (b Builds) build(ctx context.Context, name string) error {
 	if err := state.WriteImage(b.Dirs, key, rec); err != nil {
 		return err
 	}
+	b.sayFitted(out.Fitted)
 	b.Info(msg.ImageReady(name))
 	return nil
+}
+
+// sayFitted says what base got when the backend fitted it to the host
+// (backend.Built's Fitted); nothing when it didn't.
+func (b Builds) sayFitted(f backend.Size) {
+	if f != (backend.Size{}) {
+		b.Info(msg.BaseFitted(strconv.Itoa(f.CPUs), strconv.FormatFloat(f.MemoryGiB, 'g', -1, 64)))
+	}
 }
 
 // built reports whether the image with key is built: the backend has it,

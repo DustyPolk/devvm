@@ -74,6 +74,9 @@ func (d *Docker) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 			return backend.Built{}, err
 		}
 		built.Origin, step = origin, msg.CreatingFromImage(ref, inst)
+		if built.Fitted, err = fitted(d.Assets, cpus, mem); err != nil {
+			return backend.Built{}, err
+		}
 	}
 	labels := map[string]string{kindLabel: kindBuild, keyLabel: spec.Key}
 	ctx, netw, lifeline, done, err := egress{d}.buildNet(ctx, inst, spec.Net)
@@ -395,9 +398,24 @@ var (
 // fitted to the engine's machine (backend.FitCPUs, backend.FitMemory) once
 // Problems has read them.
 func (d *Docker) baseSize() (cpus int, mem, disk float64, err error) {
-	data, err := fs.ReadFile(d.Assets, "base.yaml")
+	want, err := baseYAML(d.Assets)
 	if err != nil {
 		return 0, 0, 0, err
+	}
+	mem = want.MemoryGiB
+	hostCPUs, hostMem := d.engineSize()
+	if hostMem > 0 {
+		mem = backend.FitMemory(mem, uint64(hostMem))
+	}
+	return backend.FitCPUs(want.CPUs, hostCPUs), mem, want.DiskGiB, nil
+}
+
+// baseYAML is base.yaml's CPUs, memory and disk in assets, not fitted to
+// the engine's machine.
+func baseYAML(assets fs.FS) (backend.Size, error) {
+	data, err := fs.ReadFile(assets, "base.yaml")
+	if err != nil {
+		return backend.Size{}, err
 	}
 	get := func(re *regexp.Regexp) (float64, error) {
 		m := re.FindSubmatch(data)
@@ -406,21 +424,26 @@ func (d *Docker) baseSize() (cpus int, mem, disk float64, err error) {
 		}
 		return strconv.ParseFloat(string(m[1]), 64)
 	}
+	var want backend.Size
 	c, err := get(cpusLine)
 	if err != nil {
-		return 0, 0, 0, err
+		return backend.Size{}, err
 	}
-	if mem, err = get(memoryLine); err != nil {
-		return 0, 0, 0, err
+	want.CPUs = int(c)
+	if want.MemoryGiB, err = get(memoryLine); err != nil {
+		return backend.Size{}, err
 	}
-	if disk, err = get(diskLine); err != nil {
-		return 0, 0, 0, err
+	if want.DiskGiB, err = get(diskLine); err != nil {
+		return backend.Size{}, err
 	}
-	hostCPUs, hostMem := d.engineSize()
-	if hostMem > 0 {
-		mem = backend.FitMemory(mem, uint64(hostMem))
-	}
-	return backend.FitCPUs(int(c), hostCPUs), mem, disk, nil
+	return want, nil
+}
+
+// fitted is what base's build reports as fitted, for the CPUs and
+// memory it gets (backend.Fitted) and assets' base.yaml.
+func fitted(assets fs.FS, cpus int, mem float64) (backend.Size, error) {
+	want, err := baseYAML(assets)
+	return backend.Fitted(want, backend.Size{CPUs: cpus, MemoryGiB: mem}), err
 }
 
 // sizeArgs are docker's options that set CPUs and memory (without swap);
