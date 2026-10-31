@@ -193,6 +193,9 @@ func TestDetect(t *testing.T) {
 		{"Pipfile", "python"},
 		{"Cargo.toml", "rust"},
 		{"go.mod", "go"},
+		{"flake.nix", "nix"},
+		{"shell.nix", "nix"},
+		{"devenv.nix", "nix"},
 	} {
 		p := filepath.Join(d, tc.file)
 		touch(t, p)
@@ -209,6 +212,45 @@ func TestDetect(t *testing.T) {
 		filepath.Join(d, "sub", "Cargo.toml"))
 	if got := Detect(d); !slices.Equal(got, []string{"node", "python", "go"}) {
 		t.Errorf("Detect = %v", got)
+	}
+	touch(t, filepath.Join(d, "flake.nix"))
+	if got := Detect(d); !slices.Equal(got, []string{"node", "python", "go", "nix"}) {
+		t.Errorf("Detect with flake.nix = %v", got)
+	}
+}
+
+// A default.nix calls for nix only when it makes a shell, and only as a
+// regular file.
+func TestDetectDefaultNix(t *testing.T) {
+	d := t.TempDir()
+	p := filepath.Join(d, "default.nix")
+	for _, tc := range []struct {
+		body string
+		want []string
+	}{
+		{"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell { packages = [ pkgs.hello ]; }", []string{"nix"}},
+		{"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShellNoCC { }", []string{"nix"}},
+		{"{ pkgs ? import <nixpkgs> {} }: pkgs.callPackage ./package.nix { }", nil},
+	} {
+		if err := os.WriteFile(p, []byte(tc.body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := Detect(d); !slices.Equal(got, tc.want) {
+			t.Errorf("Detect with default.nix %q = %v, want %v", tc.body, got, tc.want)
+		}
+	}
+	shell := filepath.Join(t.TempDir(), "shell.nix")
+	if err := os.WriteFile(shell, []byte("pkgs.mkShell { }"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(shell, p); err != nil {
+		t.Fatal(err)
+	}
+	if got := Detect(d); got != nil {
+		t.Errorf("Detect with a linked default.nix = %v", got)
 	}
 }
 

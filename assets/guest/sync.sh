@@ -196,6 +196,20 @@ docker_proxies() {   # docker_proxies CONFIG [sudo]: set (or remove) the proxy f
   ${as[@]+"${as[@]}"} cp "$tmp" "$c"
   rm -f "$tmp"
 }
+# nix-daemon (the nix layer) does Nix's downloads, and systemd gives it nothing of /etc/environment: a
+# drop-in with the proxy, removed when network policy is off.
+nix_dropin=/etc/systemd/system/nix-daemon.service.d/devvm-proxy.conf
+nix_before=$(cat "$nix_dropin" 2>/dev/null || true)
+if [[ -n "${DEVVM_PROXY:-}" ]] && $systemd && [[ -x /nix/var/nix/profiles/default/bin/nix-daemon ]]; then
+  sudo mkdir -p "$(dirname "$nix_dropin")"
+  printf '[Service]\nEnvironment="http_proxy=%s" "https_proxy=%s" "no_proxy=localhost,127.0.0.1"\n' \
+    "$DEVVM_PROXY" "$DEVVM_PROXY" | sudo tee "$nix_dropin" >/dev/null
+else
+  sudo rm -f "$nix_dropin"
+fi
+if [[ "$nix_before" != "$(cat "$nix_dropin" 2>/dev/null || true)" ]]; then
+  sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
+fi
 dropin=/etc/systemd/system/docker.service.d/devvm-proxy.conf
 $systemd || dropin=/etc/conf.d/docker   # OpenRC: a block in Docker's own settings
 # conf_block FILE [CONTENT]: replace (or remove) devvm's block in a root-owned FILE.

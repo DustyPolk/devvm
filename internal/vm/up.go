@@ -370,7 +370,7 @@ func (e creation) dockerLayer(b backend.Backend, n *newVM) ([]backend.Feature, e
 	if !made || !image.HasLayer(n.img, image.DockerLayer) {
 		return backend.ImageFeatures(n.img), nil
 	}
-	mode, need, err := dockerLayers{e.Env}.choice(dl, n.spec.Name)
+	mode, need, err := dockerLayers{e.Env}.choice(dl, n.spec.Name, n.img)
 	if err != nil {
 		return nil, err
 	}

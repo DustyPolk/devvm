@@ -632,7 +632,7 @@ Each tool version is one compressed EROFS image, loop-mounted read-only in each 
 - **Why images, not a shared folder:** tools run from a virtiofs folder were about 3× slower warm (`node -e 0` 38 ms, `claude --version` 30 ms), the Mac's case-insensitive disk collided 33 file names in Python's terminfo, and mise's version links failed in a read-only folder.
 - **Why not per-tool layers:** an image chain for every mix of languages and agents repeats each agent's files in every mix.
 - **Why a tool that doesn't mount fails the launch:** mise would otherwise download the same version into the VM on first use, which gives that VM a private copy, a download nobody asked for, and one that network policy may block, all without a word ([how](images.md#the-share)).
-- **Instead of Nix:** Nix and NixOS were weighed and rejected: NixOS breaks prebuilt binaries, and a hidden Nix shows through read-only-store errors.
+- **Instead of Nix:** Nix and NixOS were weighed as the way to deliver the shared tools and rejected, because NixOS breaks prebuilt binaries, and a Nix hidden under the tools shows through in read-only-store errors. The [`nix` layer](images.md#the-nix-layer) is separate, and you choose it. It gives a project that uses Nix a Nix of its own in its VM, with its own store and daemon, and the shared tools stay as they are beside it.
 
 ## Linux hosts: overlays instead of copies
 

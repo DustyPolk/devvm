@@ -15,7 +15,7 @@ devvm node+mailpit         # a VM with node and your layer; or devvm build mailp
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that bash runs once as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and also `NAME.policy` next to it unless that file exists. It refuses to overwrite a script that exists.
 
-- **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`docker`) or a shared tool's name (`node`, `claude` and so on).
+- **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`docker` or `nix`) or a shared tool's name (`node`, `claude` and so on).
 - Built-in layers go in the same image names as yours, as in `devvm node+docker+mailpit`.
 - Put PATH changes in `~/.profile`.
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.

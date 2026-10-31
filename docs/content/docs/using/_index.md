@@ -5,7 +5,7 @@ weight: 20
 
 These pages cover what you change as you work, such as the images VMs are made from, their ports and size, your coding agents, and the editors you connect with.
 
-- [Images and tools](images.md): base, the docker layer and your own layers, how the shared tools work, which image a new VM gets, and rebuilding, listing and deleting images.
+- [Images and tools](images.md): base, the docker and nix layers and your own layers, how the shared tools work, which image a new VM gets, and rebuilding, listing and deleting images.
 - [Toolchains](toolchains.md): node, python, rust and go, with what each brings, the files that choose it, its version files, its global installs and its allowlist.
 - [Working on a clone](clone.md): `--clone`, which gives a VM its own clone of the repo instead of mounting the folder.
 - [Customizing images](customizing.md): your own layers, and the optional features in every VM, such as oh-my-bash and fzf.

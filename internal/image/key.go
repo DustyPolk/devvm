@@ -118,9 +118,12 @@ func LayerName(name string) bool {
 // DockerLayer is the built-in layer with Docker's engine.
 const DockerLayer = "docker"
 
+// NixLayer is the built-in layer with Nix, direnv and nix-direnv.
+const NixLayer = "nix"
+
 // Builtins are the layers devvm ships, layers/<name>.sh in its own files:
 // chosen like the user's, whose layers can't take their names.
-var Builtins = []string{DockerLayer}
+var Builtins = []string{DockerLayer, NixLayer}
 
 // HasLayer reports whether an image's name has the layer.
 func HasLayer(name, layer string) bool { return slices.Contains(strings.Split(name, "+"), layer) }

@@ -86,7 +86,7 @@ A VM's proxy reads these policy files, in this order, as one list. [Allowlists](
 | --- | --- |
 | `assets/layers/base.policy` (devvm's, [written out](install.md#devvms-own-files)) | every VM: OS packages, mise's version lists, GitHub |
 | `assets/shared-tools/<name>.policy` (devvm's, written out) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
-| `assets/layers/<name>.policy` (devvm's, written out) | each built-in layer in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io |
+| `assets/layers/<name>.policy` (devvm's, written out) | each built-in layer in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io, and `nix`'s has Nix's binary cache, channels and flake registry |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
 | `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
 | `~/.local/share/devvm/vms/<vm>.policy` | that VM only (`devvm policy`) |
@@ -99,7 +99,7 @@ Each change that `devvm policy` makes rewrites the file whole, through a link if
 On every launch, the VM's setup does the following:
 
 - It installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only.
-- It points the programs that ignore the proxy variables at the proxy. Those are apt, sudo (which keeps the variables), every ssh connection and, with the [docker layer](../using/images.md#built-in-layers), Docker's daemon and containers. An ssh connection gets a `ProxyCommand` that tunnels through the proxy, and the proxy checks its host and port against the allowlist.
+- It points the programs that ignore the proxy variables at the proxy. Those are apt, sudo (which keeps the variables), every ssh connection, Docker's daemon and containers with the [docker layer](../using/images.md#docker), and Nix's daemon with the [nix layer](images.md#the-nix-layer). Under systemd, each daemon gets a drop-in, `devvm-proxy.conf`, that holds the VM's own proxy address and nothing else, and on OpenRC Docker's settings in `/etc/conf.d/docker` get a block instead. When network policy is off, the setup removes them, and it restarts a daemon whose settings changed. An ssh connection gets a `ProxyCommand` that tunnels through the proxy, and the proxy checks its host and port against the allowlist.
 - It puts the VM's placeholders in `~/.config/devvm/env`, which login shells read, as `CLAUDE_CODE_OAUTH_TOKEN` and `GH_TOKEN`. When `github` is bound, it also sets up git's credential helper for GitHub over HTTPS.
 - It adds `devvm-why`, the note before each prompt, and the notes for Claude Code and Codex ([inside the VM](../safety/network.md#inside-the-vm)).
 

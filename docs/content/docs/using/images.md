@@ -37,11 +37,19 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 
 ### Built-in layers
 
-devvm ships one layer, `docker`. It installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker.
+devvm ships two layers, `docker` and `nix`. You choose them like any other layer, as in `devvm node+docker` or `devvm build nix`, and you can also add them to an existing VM in place ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
 
-You choose it like any other layer, as in `devvm node+docker` or `devvm build docker`, and you can also add it to an existing VM in place ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Its name is reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` of yours. The hosts that Docker needs are in the layer's own [allowlist](../safety/network.md#allowlists).
+#### docker
+
+The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker.
 
 On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs Sysbox on a Linux engine, where devvm makes a VM for it, or makes the VM again when you add the layer in place. Anywhere else on that backend, devvm refuses the layer before it changes anything, and you need a VM backend for it.
+
+#### nix
+
+The `nix` layer installs [Nix](https://nixos.org) with flakes and the `nix` command turned on, and [direnv](https://direnv.net) with [nix-direnv](https://github.com/nix-community/nix-direnv), so a project's `flake.nix`, `shell.nix` or `devenv.nix` can supply its toolchain. Each VM has a Nix store and daemon of its own, which no other VM and nothing on this machine shares. [Nix projects](toolchains.md#nix-projects) explains how a flake's dev shell and the shared tools work together.
+
+The `nix` layer needs Lima. devvm refuses it on the smolvm and Docker backends, and on a base made `--from` an image that doesn't run systemd.
 
 ## Shared tools
 
@@ -70,8 +78,8 @@ A new VM gets the tools its image names and keeps those versions. On each launch
 flowchart TD
   run["devvm, or devvm IMAGE"] --> named{{"names a toolchain,<br>a layer or base?"}}
   named -- "yes" --> order
-  named -- "no: nothing,<br>or only agents" --> detect{{"toolchain files<br>in the folder?"}}
-  detect -- "yes" --> found["those toolchains,<br>agents on top"] --> order
+  named -- "no: nothing,<br>or only agents" --> detect{{"toolchain or Nix files<br>in the folder?"}}
+  detect -- "yes" --> found["those toolchains and nix,<br>agents on top"] --> order
   detect -- "no" --> other{{"agents named, or<br>a devcontainer.json?"}}
   other -- "yes" --> order
   other -- "no" --> list["devvm lists the choices"]
@@ -88,7 +96,7 @@ flowchart TD
 | rust | `Cargo.toml` |
 | go | `go.mod` |
 
-If more than one toolchain matches, they all go in, in that order, so `package.json` and `pyproject.toml` give `node+python`. In a folder with none of these files, devvm doesn't guess, and lists what there is to choose from instead.
+If more than one toolchain matches, they all go in, in that order, so `package.json` and `pyproject.toml` give `node+python`. A Nix project's files also call for the [`nix` layer](#nix), which goes after the toolchains, so `package.json` and `flake.nix` give `node+nix`. Those files are `flake.nix`, `shell.nix` and `devenv.nix`, and a `default.nix` that makes a shell with `mkShell`. In a folder with none of these files, devvm doesn't guess, and lists what there is to choose from instead.
 
 Agents go on top of the folder's toolchains. `devvm claude` in a folder with `package.json` makes a `node+claude` VM, and it makes a `claude` VM (base and Claude) when nothing is detected. Naming a toolchain or a layer skips detection, as in `devvm python+claude`, and so does `devvm base`.
 

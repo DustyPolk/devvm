@@ -72,6 +72,10 @@ env DEVVM_DOCKER_KIND=desktop
 ! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
 stderr '^devvm: docker_layer_needs_vm vm=devvm-web-[0-9a-f]{14}$'
 env DEVVM_DOCKER_KIND=linux
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none nix
+stderr '^devvm: backend_lacks backend=docker feature=nix-layer vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm --backend docker --from $PIN build nix
+stderr '^devvm: backend_lacks backend=docker feature=nix-layer vm=\S+$'
 stub_calls
 ! stdout 'container create'
 ! exists $VMS

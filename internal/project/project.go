@@ -9,6 +9,7 @@ import (
 	"crypto/sha1" //nolint:gosec // names, not security: 56 bits tell folders apart
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -170,28 +171,54 @@ func physical(path string) string {
 }
 
 // markers are the files in a folder's top level that call for each
-// toolchain, in the order Detect lists them: the same mix always gives the
-// same image.
+// toolchain, and for the nix layer, in the order Detect lists them: the
+// same mix always gives the same image.
 var markers = []struct {
-	toolchain string
-	files     []string
+	part  string
+	files []string
 }{
 	{"node", []string{"package.json", "bun.lock", "bun.lockb"}},
 	{"python", []string{"pyproject.toml", "requirements.txt", "uv.lock", "setup.py", "Pipfile"}},
 	{"rust", []string{"Cargo.toml"}},
 	{"go", []string{"go.mod"}},
+	// The nix layer, after the toolchains: a Nix project's own files.
+	{"nix", []string{"flake.nix", "shell.nix", "devenv.nix"}},
 }
 
-// Detect returns the toolchains whose marker files are in dir's top level,
-// in a fixed order.
+// nixShellMax is how much of a default.nix nixShell reads.
+const nixShellMax = 64 << 10
+
+// nixShell reports whether dir's default.nix makes a shell (mkShell, or
+// mkShellNoCC), as one for nix-shell does; most build a package instead.
+func nixShell(dir string) bool {
+	p := filepath.Join(dir, "default.nix")
+	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+	f, err := os.Open(p) //nolint:gosec // a regular file in the project folder, read
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	data, _ := io.ReadAll(io.LimitReader(f, nixShellMax))
+	return strings.Contains(string(data), "mkShell")
+}
+
+// Detect returns the toolchains and the nix layer whose marker files are
+// in dir's top level, in a fixed order: nix also for a default.nix that
+// makes a shell.
 func Detect(dir string) []string {
 	var found []string
 	for _, m := range markers {
+		hit := m.part == "nix" && nixShell(dir)
 		for _, f := range m.files {
 			if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
-				found = append(found, m.toolchain)
+				hit = true
 				break
 			}
+		}
+		if hit {
+			found = append(found, m.part)
 		}
 	}
 	return found

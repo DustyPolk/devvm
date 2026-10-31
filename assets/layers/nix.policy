@@ -1,0 +1,5 @@
+# nix: Nix's binary cache, and its channels and flake registry (channels redirect to releases.nixos.org).
+# GitHub, where flakes' inputs mostly come from, is in base's policy.
+cache.nixos.org
+channels.nixos.org
+releases.nixos.org

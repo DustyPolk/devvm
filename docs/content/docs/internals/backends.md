@@ -38,6 +38,7 @@ devvm uses an emulation only once its review has passed, and until then it refus
 | `memory` | a VM's memory | native | native | native |
 | `disk` | a VM's disk size | native: it grows but never shrinks | native: it grows but never shrinks | none: Docker Desktop refuses a size, and Docker's containerd image store ignores it. `devvm size` shows what a VM holds ([details](docker.md#what-devvm-sets-on-a-vm)) |
 | `docker-layer` | the [docker layer](../using/images.md#built-in-layers): Docker's engine running in the VM | native | native: devvm starts its daemon after each start | emulated (reviewed) where the engine has Sysbox's runtime (Linux): the VM's container runs under Sysbox, in a user namespace of its own, on a network of its own, with volumes for its engine and without network policy, and devvm can also make an existing VM one in place. None elsewhere, so use a VM backend ([details](docker.md#the-docker-layer)) |
+| `nix-layer` | the [nix layer](../using/images.md#nix): Nix's daemon and its store in the VM, started by systemd | native ([details](images.md#the-nix-layer)) | none: its VMs have no init system to start the daemon | none: its VMs have no init system to start the daemon |
 
 The backends also differ in isolation, which [Backends](../backends/_index.md#comparing-the-backends) compares.
 

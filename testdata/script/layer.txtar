@@ -13,7 +13,7 @@ grep '^# Hosts a VM with the pg layer can reach' $LAYERS/pg.policy
 exec devvm __complete build p
 stdout '^pg$'
 ! exec devvm build nope
-stderr '^devvm: unknown_layer agents=.* envs=base node python rust go docker pg layer=nope$'
+stderr '^devvm: unknown_layer agents=.* envs=base node python rust go docker nix pg layer=nope$'
 
 # An existing script is kept; an existing allowlist is kept for a new script.
 ! exec devvm layer new pg
@@ -31,6 +31,9 @@ stderr '^devvm: layer_name_reserved layer=base$'
 ! exec devvm layer new docker
 stderr '^devvm: layer_name_reserved layer=docker$'
 ! exists $LAYERS/docker.sh
+! exec devvm layer new nix
+stderr '^devvm: layer_name_reserved layer=nix$'
+! exists $LAYERS/nix.sh
 ! exec devvm layer new My_DB
 stderr '^devvm: layer_name_invalid layer=My_DB$'
 ! exec devvm layer new ../x

@@ -56,7 +56,7 @@ The VM's proxy reads several policy files, in order, as one list:
 
 - devvm's own rules for every VM, which allow OS packages, mise's version lists and GitHub;
 - devvm's rules for each shared tool in the VM's image (`node`, `claude` and the others), which allow its registries, downloads and APIs;
-- devvm's rules for each [built-in layer](../using/images.md#built-in-layers) in the VM's image, so the `docker` layer allows Docker's packages and the container registries Docker Hub and ghcr.io;
+- devvm's rules for each [built-in layer](../using/images.md#built-in-layers) in the VM's image, so the `docker` layer allows Docker's packages and the container registries Docker Hub and ghcr.io, and the `nix` layer allows Nix's binary cache, channels and flake registry;
 - `~/.config/devvm/layers/<name>.policy`, for each of your own layers in the VM's image;
 - `~/.config/devvm/policy`, your own rules for every VM, which `devvm policy -g` changes;
 - `~/.local/share/devvm/vms/<vm>.policy`, the rules for that VM only, which [`devvm policy`](#changing-rules) changes;
@@ -105,6 +105,12 @@ A blocked request gets `403`, and the response names the host, the reason and th
 - `/ca.pem` is devvm's CA certificate, never its key.
 
 In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
+
+### Nix
+
+In a VM with the [`nix` layer](../using/images.md#nix), Nix's daemon makes most of Nix's downloads, and devvm also points it at the proxy, so its downloads go through the same allowlists. The layer's allowlist has `cache.nixos.org` for Nix's binary cache, and `channels.nixos.org` and `releases.nixos.org` for its channels and flake registry, and GitHub, where most flakes' inputs come from, is in devvm's rules for every VM.
+
+When a package isn't in the binary cache, Nix builds it from source, and the build downloads its sources from their own hosts, such as `ftpmirror.gnu.org`. The proxy blocks those hosts until you allow them, so the build fails, and the error, `devvm-why` and `devvm log --blocked` name the host and the `devvm policy allow` command that allows it.
 
 ## Behind a company proxy
 

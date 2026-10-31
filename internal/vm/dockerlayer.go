@@ -17,15 +17,15 @@ import (
 type dockerLayers struct{ *Env }
 
 // choice is the runtime a VM with the docker layer runs it under on a
-// backend that makes VMs for it (dl), and the feature that needs
-// (docker-layer, refused by Require while unreviewed); the backend's
-// refusal where it can't run it.
-func (e dockerLayers) choice(dl backend.DockerLayerVM, vm string) (string, []backend.Feature, error) {
+// backend that makes VMs for it (dl), and the features its layers (img)
+// need (docker-layer, refused by Require while unreviewed, and any
+// other's); the backend's refusal where it can't run it.
+func (e dockerLayers) choice(dl backend.DockerLayerVM, vm, img string) (string, []backend.Feature, error) {
 	rt, err := dl.DockerLayer(vm)
 	if err != nil {
 		return "", nil, err
 	}
-	return rt, []backend.Feature{backend.FeatureDockerLayer}, nil
+	return rt, backend.ImageFeatures(img), nil
 }
 
 // say says which runtime runs a VM's docker layer; nothing for "".
@@ -45,7 +45,7 @@ func (e dockerLayers) inPlace(b backend.Backend, st *state.VM, added string) (st
 	if !made || !image.HasLayer(added, image.DockerLayer) {
 		return "", backend.ImageFeatures(added), nil
 	}
-	mode, need, err := e.choice(dl, st.Name())
+	mode, need, err := e.choice(dl, st.Name(), added)
 	if err == nil && netpolicy.On(st) {
 		err = msg.NetDockerLayer(b.Name(), st.Name())
 	}

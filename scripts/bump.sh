@@ -1,10 +1,10 @@
 #!/bin/bash
-# Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, features/*.sh,
+# Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh), internal/tools/mise.go (devvm's host mise) and
 # internal/ubuntu/ubuntu.go (Ubuntu's container and cloud images).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
-# Tools: apt docker mise rustup crane omb eza tealdeer
+# Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer
 #   apt: base's package snapshot, Ubuntu's container image smolvm's and Docker's base start from, and
 #        Ubuntu's cloud image Lima's base starts from
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
@@ -15,7 +15,7 @@
 # `devvm gc`.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all="apt docker mise rustup crane omb eza tealdeer"
+all="apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer"
 
 check=false
 if [[ ${1:-} == --check ]]; then check=true; shift; fi
@@ -192,6 +192,39 @@ bump_docker() {
     echo "            (Docker's signing key changed: check it before committing)"
     set_var $f docker_gpg_sha256 "$sha"
   fi
+}
+
+# Nix's release tarball for the nix layer: the version nixos.org's installer fetches, with the SHA-256s
+# Nix publishes next to each tarball. Nix's newer releases come with another installer
+# (artifacts.nixos.org): when nixos.org's no longer names a tarball, this says so, and the layer's pins
+# change shape.
+bump_nix() {
+  local f=assets/layers/nix.sh cur new u
+  cur=$(get $f nix_version)
+  new=$(fetch https://nixos.org/nix/install | sed -n 's|^ *path=[0-9a-z]*/nix-\([0-9.]*\)-x86_64-linux\.tar\.xz$|\1|p' | head -1)
+  [[ -n $new ]] || { echo "bump: nixos.org's installer names no nix-VERSION-x86_64-linux.tar.xz: see the layer's pins" >&2; exit 1; }
+  report nix "$cur" "$new" || return 0
+  u="https://releases.nixos.org/nix/nix-$new/nix-$new"
+  pin3 $f nix "$new" "$(fetch "$u-aarch64-linux.tar.xz.sha256" | cut -c1-64)" "$(fetch "$u-x86_64-linux.tar.xz.sha256" | cut -c1-64)"
+}
+
+bump_direnv() {
+  local f=assets/layers/nix.sh cur new u
+  cur=$(get $f direnv_version); new=$(gh_latest direnv/direnv); new=${new#v}
+  report direnv "$cur" "$new" || return 0
+  echo "            (checksums computed from the downloads)"
+  u="https://github.com/direnv/direnv/releases/download/v$new"
+  pin3 $f direnv "$new" "$(sha_of "$u/direnv.linux-arm64")" "$(sha_of "$u/direnv.linux-amd64")"
+}
+
+# nix-direnv: one script (direnvrc) at the release's tag.
+bump_nix-direnv() {
+  local f=assets/layers/nix.sh cur new
+  cur=$(get $f nix_direnv_version); new=$(gh_latest nix-community/nix-direnv); new=${new#v}
+  report nix-direnv "$cur" "$new" || return 0
+  echo "            (checksum computed from the download)"
+  set_var $f nix_direnv_version "$new"
+  set_var $f nix_direnv_sha256 "$(sha_of "https://raw.githubusercontent.com/nix-community/nix-direnv/$new/direnvrc")"
 }
 
 # mise in base, and on the host (devvm's host mise, the same version: it writes the lock base's mise

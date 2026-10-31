@@ -257,7 +257,7 @@ func TestCapsByEngine(t *testing.T) {
 				t.Errorf("build confinement %s, egress proxy %s, kind %s; want %s, %s, %s", caps[backend.FeatureBuildConfinement],
 					caps[backend.FeatureEgressProxy], s.engineKind(), c.confinement, c.egress, c.kind)
 			}
-			for _, f := range []backend.Feature{backend.FeatureDisk, backend.FeatureDockerLayer} {
+			for _, f := range []backend.Feature{backend.FeatureDisk, backend.FeatureDockerLayer, backend.FeatureNixLayer} {
 				if s.Caps()[f] != backend.None {
 					t.Errorf("%s = %s, want none", f, s.Caps()[f])
 				}

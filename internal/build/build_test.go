@@ -130,16 +130,16 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	// layer's is the built-in one, listed once.
 	write(t, filepath.Join(b.Dirs.Layers(), "node.sh"), "")
 	write(t, filepath.Join(b.Dirs.Layers(), "docker.sh"), "")
-	if got, want := b.Layers(), []string{"base", "bar", "docker", "foo"}; !slices.Equal(got, want) {
+	if got, want := b.Layers(), []string{"base", "bar", "docker", "foo", "nix"}; !slices.Equal(got, want) {
 		t.Errorf("Layers() = %q, want %q", got, want)
 	}
-	if got, want := b.Environments(), []string{"base", "node", "python", "rust", "go", "bar", "docker", "foo"}; !slices.Equal(got, want) {
+	if got, want := b.Environments(), []string{"base", "node", "python", "rust", "go", "bar", "docker", "foo", "nix"}; !slices.Equal(got, want) {
 		t.Errorf("Environments() = %q, want %q", got, want)
 	}
-	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("claude codex opencode", "base node python rust go bar docker foo", "stray").Error() {
+	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("claude codex opencode", "base node python rust go bar docker foo nix", "stray").Error() {
 		t.Errorf("CheckLayers(stray) = %v", err)
 	}
-	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "node+foo+claude", "go", "docker", "node+docker"} {
+	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "node+foo+claude", "go", "docker", "node+docker", "nix", "node+nix+claude"} {
 		if err := b.CheckLayers(ok); err != nil {
 			t.Errorf("CheckLayers(%q): %v", ok, err)
 		}

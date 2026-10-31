@@ -19,7 +19,11 @@
 #                VM and checks its shared tools, update and remove; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
 #                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
-#                stops its proxy
+#                stops its proxy; nix builds the nix layer behind a company proxy (no proxy left in its
+#                image), makes a node+nix VM of a flake project with network policy and checks Nix's
+#                pins, store and trust, nix-daemon's proxy, nix run nixpkgs#hello, sudo nix, the
+#                flake's dev shell through direnv before the shared node, a blocked download named, and
+#                network off
 #     --only desktop
 #                base with the desktop feature, and a VM with network policy whose desktop devvm
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
@@ -100,9 +104,9 @@
 # $DEVVM_E2E_BIN, a test build of it, where there's no Go: the docker host VM).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project clone gc tools network desktop from"
+sections_all="images project clone gc tools network desktop nix from"
 usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm | --backend docker [--engine linux|desktop]]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network" backend=lima engines=""
+clean=false sel="images project clone gc tools network nix" backend=lima engines=""
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
@@ -1617,6 +1621,78 @@ check "devvm desktop --clipboard starts its server again, on the same port, the 
   limactl shell --workdir / $vm bash -lc 'DISPLAY=:1 XAUTHORITY=\$HOME/.Xauthority vncconfig -get AcceptCutText | grep -qx on' </dev/null"
 check "... and a viewer with the password gets it" desktop_view
 desktop_end
+fi
+
+if want nix; then
+section "the nix layer"
+# Behind a company proxy, the layer's script (as a layer of the run's own, so it builds each run) gets
+# its build proxy's settings, which Nix's installer would write into nix-daemon's: none is anywhere
+# on its disk.
+corp_start
+cp "$root/assets/layers/nix.sh" "$layers/e2enix.sh"
+check "built behind a company proxy, the layer leaves no proxy settings for nix-daemon in its image" bash -c "
+  env HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' '$D' build e2enix </dev/null >'$work/last.log' 2>&1 &&
+  k=\$(keys_of e2enix | head -1) && [[ -n \$k && -d '$LIMA_HOME/devvm-img-'\$k ]] &&
+  grep -q 'releases\.nixos\.org' '$work/corp.jsonl' &&
+  ! LC_ALL=C grep -rqaF -D skip -e 'Environment=http_proxy=' -e 'Environment=https_proxy=' -e '$corppw' '$LIMA_HOME/devvm-img-'\$k"
+owned e2enix
+corp_stop
+rm -f "$layers/e2enix.sh"
+# A node project with a flake: node+nix, with network policy. The flake's dev shell has a node of its
+# own, from nixpkgs at a pinned revision (nixos-26.05's), cached by Nix's servers.
+nixpkgs_rev=6f06d204d8f2d8761d9da78778745974a3216381
+x=$(newproj nixflake); echo '{}' > "$x/package.json"; echo 'use flake' > "$x/.envrc"
+cat > "$x/flake.nix" <<EOF
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/$nixpkgs_rev";
+  outputs = { self, nixpkgs }: {
+    devShells = nixpkgs.lib.genAttrs [ "aarch64-linux" "x86_64-linux" ] (s: let pkgs = nixpkgs.legacyPackages.\${s}; in {
+      default = pkgs.mkShellNoCC { packages = [ (pkgs.writeShellScriptBin "node" "echo e2e-flake-node") ]; };
+    });
+  };
+}
+EOF
+launch "$x" exit --network-policy --no-git-protect
+export -f in_vm
+nv=$(sed -n 's/^nix_version=//p' "$root/assets/layers/nix.sh")
+dv=$(sed -n 's/^direnv_version=//p' "$root/assets/layers/nix.sh")
+check "a flake.nix and a package.json: a node+nix VM with network policy, Nix and direnv at their pins" bash -c "
+  [[ -n '$vm' ]] && grep -qF \"\$(m detected found=node+nix)\" '$work/last.log' && grep -qx image=node+nix '$vms/$vm' &&
+  grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  in_vm '$vm' '[[ \$(nix --version) == \"nix (Nix) $nv\" && \$(direnv version) == $dv ]]'"
+check "Nix's store is root's, builds are sandboxed, only root is trusted, and the user's own caches are ignored" in_vm "$vm" '
+  [[ -z $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -quit) ]] &&
+  [[ $(nix config show sandbox) == true && $(nix config show sandbox-fallback) == false ]] &&
+  [[ $(nix config show trusted-users) == root ]] &&
+  nix store info --option substituters https://example.invalid 2>&1 | grep -q "ignoring untrusted substituter"'
+check "nix-daemon gets the VM's proxy alone, in devvm's drop-in" in_vm "$vm" '
+  [[ $(ls /etc/systemd/system/nix-daemon.service.d) == devvm-proxy.conf ]] &&
+  e=$(systemctl show nix-daemon.service -p Environment --value) &&
+  [[ $e == "http_proxy=$HTTP_PROXY https_proxy=$HTTP_PROXY no_proxy=localhost,127.0.0.1" ]]'
+check "nix run nixpkgs#hello works with network policy, from Nix's cache" in_vm "$vm" \
+  'nix run nixpkgs#hello 2>/tmp/hello.err | grep -qx "Hello, world!" && grep -q "from .https://cache.nixos.org" /tmp/hello.err'
+check "sudo nix finds Nix, and so does a command over ssh" bash -c "
+  in_vm '$vm' 'sudo nix --version' | grep -qx 'nix (Nix) $nv' &&
+  ssh -F '$LIMA_HOME/$vm/ssh.config' lima-$vm 'nix --version' </dev/null | grep -qx 'nix (Nix) $nv'"
+# An interactive shell, its commands on its input, as a terminal's: direnv's and mise's hooks run
+# before each prompt.
+printf '%s\n' "cd $x" 'direnv allow' 'cd /' "cd $x" 'echo "e2e-a=$(node -v)"' 'true' 'echo "e2e-b=$(node -v)"' \
+  'cd /' 'echo "e2e-c=$(node -v)"' | limactl shell --workdir / "$vm" bash -i >"$work/nix-shell.log" 2>&1
+check "the flake's dev shell, through direnv, comes before the shared node, prompt after prompt, and goes" bash -c "
+  grep -qx 'e2e-a=e2e-flake-node' '$work/nix-shell.log' && grep -qx 'e2e-b=e2e-flake-node' '$work/nix-shell.log' &&
+  grep -qx 'e2e-c=v$(lockv node)' '$work/nix-shell.log'"
+check "nix-direnv's cache is in the VM's home, not the project folder" bash -c "
+  [[ ! -e '$x/.direnv' && -f '$x/flake.lock' ]] && in_vm '$vm' 'ls -d ~/.cache/direnv/layouts/*/flake-profile-*' >/dev/null"
+# A download only the daemon makes (a fixed-output fetch) from a host the policy doesn't allow:
+# refused by the proxy, and named by devvm-why.
+nix_fetch='derivation { name = "e2e"; system = builtins.currentSystem; builder = "builtin:fetchurl"; url = "https://example.com/devvm-e2e"; outputHashMode = "flat"; outputHashAlgo = "sha256"; outputHash = "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="; }'
+check "a download from a host that isn't allowed fails, and devvm-why names it" in_vm "$vm" "
+  ! nix build --no-link --impure --expr '$nix_fetch' 2>/tmp/fetch.err && grep -q 'response 403' /tmp/fetch.err &&
+  devvm-why | grep -q 'devvm policy allow example.com'"
+check "devvm network off: from the next start, nix-daemon gets no proxy" bash -c "cd '$x' &&
+  '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
+  in_vm '$vm' '[[ -z \$(ls -A /etc/systemd/system/nix-daemon.service.d 2>/dev/null) && -z \$(systemctl show nix-daemon.service -p Environment --value) ]]'"
+limactl stop "$vm" >/dev/null 2>&1
 fi
 
 if want from; then

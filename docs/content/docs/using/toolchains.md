@@ -3,7 +3,7 @@ title: Toolchains
 weight: 2
 ---
 
-devvm has four toolchains: node, python, rust and go. A new VM gets the ones its folder's files call for, or the ones you name, as in `devvm node+python`. Each section below says what the toolchain brings and how devvm chooses it.
+devvm has four toolchains: node, python, rust and go. A new VM gets the ones its folder's files call for, or the ones you name, as in `devvm node+python`. Each section below says what the toolchain brings and how devvm chooses it. A project that gets its toolchain from Nix uses the `nix` layer, which [Nix projects](#nix-projects) covers.
 
 ## node
 
@@ -40,6 +40,17 @@ go brings the newest Go release, and devvm turns Go's telemetry off in the VM.
 - **Versions.** The `toolchain` line in a project's `go.mod` picks its Go version, and Go itself downloads that version into the VM the first time it's used.
 - **Global installs.** `go install` installs into `~/go/bin` in the VM, which is on the `PATH`.
 - **Allowlist.** With network policy, the VM can reach Go's module proxy, its checksum database and Go's downloads, which are `proxy.golang.org`, `sum.golang.org`, `go.dev` and `dl.google.com`.
+
+## Nix projects
+
+A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. devvm chooses it for a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`. It goes after the toolchains the folder calls for, so a folder with `package.json` and `flake.nix` gets `node+nix`, and you can also name it, as in `devvm nix`.
+
+- **Dev shells.** Put `use flake` (or `use nix` for a `shell.nix`) in the project's `.envrc` and run `direnv allow` in the VM once. From then on, each shell that changes into the folder loads the dev shell, and leaving the folder unloads it. This works in your terminal and in the terminals of editors connected over SSH.
+- **The flake's tools come first.** While the dev shell is loaded, its tools are ahead of the shared tools on the `PATH`, so a flake's `node` wins over the shared node, and the shared tools come back when you leave the folder.
+- **Files in the project.** nix-direnv keeps its cache of the dev shell in your home in the VM, so the project gets no `.direnv` folder. Nix itself writes a `flake.lock` next to a `flake.nix` that has none, and in a git repository it marks that file to be added, as it does on any machine.
+- **One store per VM.** Each VM has its own Nix store, so a package one VM downloads or builds isn't in another's. `nix run nixpkgs#hello` works in any VM with the layer.
+- **Trust.** Only root is a trusted Nix user, so the VM's user can't add caches or signing keys of their own, and Nix ignores `--option substituters` from them. `sudo nix` works. Nix builds every package in its sandbox, and a build fails rather than run without it.
+- **Allowlist.** With network policy, the VM can reach Nix's binary cache and its channels and flake registry, which are `cache.nixos.org`, `channels.nixos.org` and `releases.nixos.org`, and GitHub, where most flakes' inputs come from. A package that isn't in the cache builds from source, which downloads its sources from their own hosts, and those are blocked until you allow them ([Nix with network policy](../safety/network.md#nix)).
 
 ## How toolchains are shared and updated
 

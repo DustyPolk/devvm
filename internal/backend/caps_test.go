@@ -82,7 +82,7 @@ func TestEveryFeatureIsListed(t *testing.T) {
 		}
 		seen[f] = true
 	}
-	if len(seen) != 17 {
+	if len(seen) != 18 {
 		t.Errorf("%d features; a new one goes in Features and on the backends page", len(seen))
 	}
 }
@@ -99,6 +99,12 @@ func TestFeaturesNeeded(t *testing.T) {
 			"base --from, offline, sized", backend.ImageSpec{From: &backend.From{Ref: "x"}, MemoryGiB: 4, Net: backend.NetNone}.Features(),
 			f(backend.FeatureBuildImage, backend.FeatureFrom, backend.FeatureMemory, backend.FeatureBuildConfinement),
 		},
+		{
+			"the nix layer", backend.ImageSpec{Image: "node+nix", Net: backend.NetInternet}.Features(),
+			f(backend.FeatureBuildImage, backend.FeatureNixLayer, backend.FeatureBuildConfinement),
+		},
+		{"a VM of docker and nix", backend.ImageFeatures("docker+nix+claude"), f(backend.FeatureDockerLayer, backend.FeatureNixLayer)},
+		{"a VM of neither", backend.ImageFeatures("node+nixos"), nil},
 		{"a --clone VM forwarding nothing", backend.VMSpec{Name: "v"}.Features(), f(backend.FeatureClone)},
 		{"a VM with everything", backend.VMSpec{
 			Name: "v", Project: "/p", AgentDirs: []string{"/h/.claude"}, Tools: "/t", ToolsAt: "/opt/devvm",

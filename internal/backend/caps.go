@@ -31,6 +31,7 @@ const (
 	FeatureMemory           Feature = "memory"            // setting a VM's memory
 	FeatureDisk             Feature = "disk"              // setting a VM's disk size
 	FeatureDockerLayer      Feature = "docker-layer"      // the docker layer: Docker's engine running in the VM
+	FeatureNixLayer         Feature = "nix-layer"         // the nix layer: Nix's daemon and store in the VM
 )
 
 // Features is every feature, in the backends page's order.
@@ -39,7 +40,7 @@ var Features = []Feature{
 	FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
 	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeaturePortsAll,
 	FeatureAgentForwarding, FeatureAgentToggle,
-	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer,
+	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer, FeatureNixLayer,
 }
 
 // Support is how a backend has a feature: natively, emulated (usable only
@@ -156,16 +157,26 @@ func (s ImageSpec) Features() []Feature {
 	if s.MemoryGiB > 0 {
 		fs = append(fs, FeatureMemory)
 	}
+	// A backend without nix-layer can't run the layer's script either: its
+	// installer needs the daemon's init system.
+	if image.HasLayer(s.Image, image.NixLayer) {
+		fs = append(fs, FeatureNixLayer)
+	}
 	return append(fs, s.Net.Features()...)
 }
 
 // ImageFeatures returns what a VM of the image (layers joined with +)
-// needs for its layers: docker-layer when it has the docker layer.
+// needs for its layers: docker-layer when it has the docker layer,
+// nix-layer when it has the nix layer.
 func ImageFeatures(img string) []Feature {
+	var fs []Feature
 	if image.HasLayer(img, image.DockerLayer) {
-		return []Feature{FeatureDockerLayer}
+		fs = append(fs, FeatureDockerLayer)
 	}
-	return nil
+	if image.HasLayer(img, image.NixLayer) {
+		fs = append(fs, FeatureNixLayer)
+	}
+	return fs
 }
 
 // DockerLayerVM is a backend whose VMs run the docker layer only when made

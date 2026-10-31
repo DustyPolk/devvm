@@ -23,7 +23,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		Long: "Open a shell in this folder's VM, at the same path, creating the VM first. A new VM " +
 			"gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: " +
 			"node+python+docker+claude), " +
-			"else the toolchains the folder's files call for, with any agents IMAGE names on top, built " +
+			"else the toolchains (and the nix layer) the folder's files call for, with any agents IMAGE names on top, built " +
 			"if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and " +
 			"its .git hooks and config are locked against changes from the VM (macOS); with --clone, " +
 			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets " +
