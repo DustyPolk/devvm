@@ -16,7 +16,7 @@ devvm, the tools it runs and its backends keep files on this machine outside you
 | `COUNT`, `SIZE` | how many there are and the disk they take, in powers of 1024 (`2.1G`) |
 | `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
 | `GC` | what `devvm gc` frees of it now |
-| `FREED BY` | what frees the rest, such as `devvm rm` or `devvm images rm` |
+| `FREED BY` | what frees the rest, such as `devvm rm`, or `gc --backend lima`, which deletes all of a backend's images |
 
 Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. A shared tool's build shows `-` as its backend when devvm can't tell which backend it's for. When a backend that one of your VMs uses doesn't answer, devvm says so, and its VMs and images aren't counted.
 
@@ -68,19 +68,19 @@ When you delete a VM with its backend's own command instead of `devvm rm`, such 
 
 ## Lima
 
-The Lima backend's VMs and images are in devvm's Lima home, `~/.local/share/devvm/lima`. Each image is a stopped VM named `devvm-img-<key>`, and each project VM is a clone of one. On macOS a clone's disk shares its image's blocks until the VM writes them, so `du` counts those blocks twice. On Linux hosts a VM's disk is an overlay of its image's. `devvm rm` deletes a VM, and `devvm gc` and `devvm images rm` delete images.
+The Lima backend's VMs and images are in devvm's Lima home, `~/.local/share/devvm/lima`. Each image is a stopped VM named `devvm-img-<key>`, and each project VM is a clone of one. On macOS a clone's disk shares its image's blocks until the VM writes them, so `du` counts those blocks twice. On Linux hosts a VM's disk is an overlay of its image's. `devvm rm` deletes a VM, `devvm gc` and `devvm images rm` delete images, and `devvm gc --backend lima` deletes all of them.
 
 Lima keeps a download cache of its own, `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux. When devvm builds base, Lima downloads Ubuntu's cloud image into that cache, which is 600 to 900 MB for each release, and on macOS it also keeps a copy converted to a raw disk, which takes about 2.4 GB more. The cache is Lima's and it isn't in devvm's Lima home, so your own Lima VMs' downloads share it. devvm never deletes anything in it. `limactl prune` deletes the whole cache, your own downloads included, and Lima downloads what a VM needs again the next time it makes one.
 
 ## smolvm
 
-The smolvm backend keeps each image as a pack in `~/.local/share/devvm/smolvm/images/<key>`, and base's is about 450 MB. A VM is a smolvm machine made from its image's pack. The machine reads the pack when its disk grows, so devvm doesn't delete an image that a VM was made from. `smolvm/vms/` holds what devvm sets on each VM. `devvm rm` deletes a VM, and `devvm gc` and `devvm images rm` delete images.
+The smolvm backend keeps each image as a pack in `~/.local/share/devvm/smolvm/images/<key>`, and base's is about 450 MB. A VM is a smolvm machine made from its image's pack. The machine reads the pack when its disk grows, so devvm doesn't delete an image that a VM was made from. `smolvm/vms/` holds what devvm sets on each VM. `devvm rm` deletes a VM, `devvm gc` and `devvm images rm` delete images, and `devvm gc --backend smolvm` deletes all of them but those a VM was made from.
 
 On macOS, smolvm keeps every machine, devvm's and your own, in its own folders under `~/Library/Caches/smolvm`, and devvm marks its machines with a label. That folder also holds smolvm's caches, which grow with every pack that a machine is made from. smolvm unpacks a pack's disk once, which takes 1 to 3 GB, and keeps it for the next machine made from that pack. Those copies stay after devvm deletes the pack. Because the folder also holds the machines' own disks, never delete it by hand. [Cleaning smolvm's caches](../backends/smolvm.md#cleaning-smolvms-caches) says what smolvm's own commands clean. On Linux, smolvm's state and caches belong to devvm alone, in `~/.local/share/devvm/smolvm/state`.
 
 ## Docker
 
-The Docker backend keeps its VMs and images in Docker's engine. Each VM is a container with a volume for its home, and a `--clone` VM has another for its clone. devvm's images are Docker images named `devvm-<hash>:<key>`. The shared tools are unpacked into a volume, `devvm-tools-<hash>`. Network policy and the docker layer add networks, and the docker layer adds volumes for the VM's own engine. Everything devvm makes there has the label `devvm.data=<devvm's data folder>` ([what you'll see in Docker](../backends/docker.md#what-youll-see-in-docker)). `devvm rm` deletes a VM's container, volumes and networks, and `devvm gc` and `devvm images rm` delete images.
+The Docker backend keeps its VMs and images in Docker's engine. Each VM is a container with a volume for its home, and a `--clone` VM has another for its clone. devvm's images are Docker images named `devvm-<hash>:<key>`. The shared tools are unpacked into a volume, `devvm-tools-<hash>`. Network policy and the docker layer add networks, and the docker layer adds volumes for the VM's own engine. Everything devvm makes there has the label `devvm.data=<devvm's data folder>` ([what you'll see in Docker](../backends/docker.md#what-youll-see-in-docker)). `devvm rm` deletes a VM's container, volumes and networks, `devvm gc` and `devvm images rm` delete images, and `devvm gc --backend docker` deletes all of them but those a VM was made from.
 
 Docker also keeps the container image that base starts from, which it pulls as it would any image you pull. devvm doesn't delete it, because it isn't labelled and you may use it.
 

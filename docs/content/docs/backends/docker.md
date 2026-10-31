@@ -106,6 +106,10 @@ Then reload the profile with `sudo apparmor_parser -r /etc/apparmor.d/fusermount
 
 This is checked with Sysbox 0.7.1 on Ubuntu 26.04 (arm64, kernel 7.0, Docker 29.1).
 
+## Cleaning up
+
+`devvm gc --backend docker` deletes all of devvm's Docker images, except one that a VM was made from, and the shared tools built for Docker that no VM has and that aren't current ([cleaning up](../using/images.md#cleaning-up)). It acts only on what has devvm's label, never on your own containers, images or volumes, and it never prunes.
+
 ## Looking inside
 
 When a build fails, devvm keeps its container, stopped. To look inside, run `docker start devvm-img-<key>-<hash>`, then `docker exec -it devvm-img-<key>-<hash> bash`. `devvm gc` deletes the container.

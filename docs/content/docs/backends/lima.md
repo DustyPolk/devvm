@@ -59,6 +59,10 @@ To have a watcher see your edits, set it to poll the project folder, which costs
 
 Set the variables in the VM's shell or in your project's scripts, before the tool starts. Leave Lima's own file event setting, `mountInotify`, off, because with it on, commands in the VM that write to the project folder, such as `git init`, fail at random ([details](../internals/lima.md#what-devvm-sets-on-a-vm)).
 
+## Cleaning up
+
+`devvm gc --backend lima` deletes all of devvm's Lima images, except on Linux hosts one whose disk VMs use, and the shared tools built for Lima that no VM has and that aren't current, and it leaves your VMs as they are ([cleaning up](../using/images.md#cleaning-up)). Lima also keeps a download cache of its own, which holds Ubuntu's cloud images that devvm's builds downloaded, and which your own Lima VMs share ([what devvm keeps](../using/space.md#lima)).
+
 ## Limits
 
 - **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has at most 104 characters. A long Lima home leaves less room for the name, so set `DEVVM_LIMA_HOME` to a shorter folder if devvm says the home is too long.

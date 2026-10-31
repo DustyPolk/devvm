@@ -202,7 +202,7 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 		vmRow.Size += n
 		vmRow.Sized = vmRow.Sized && sized
 	}
-	imgRow := spaceRow{What: "images", Backend: be.Name(), Count: len(ls), Sized: true, Kept: keptRemade, Rest: "devvm images rm"}
+	imgRow := spaceRow{What: "images", Backend: be.Name(), Count: len(ls), Sized: true, Kept: keptRemade, Rest: "gc --backend " + be.Name()}
 	for _, l := range ls {
 		imgRow.Size += l.Size
 		imgRow.Sized = imgRow.Sized && l.Sized

@@ -34,7 +34,7 @@ exec sh -c 'echo x > "$DATA/logs/devvm-p-12345612345612.jsonl" && echo x > "$DAT
 exec sh -c ': > "$STUB_LOG"'
 exec devvm space
 stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm$'
-stdout '^images +lima +2 +\S+ +remade +\S+ +devvm images rm$'
+stdout '^images +lima +2 +\S+ +remade +\S+ +gc --backend lima$'
 stdout '^tools gnu +lima +\d+ +\S+ +remade +- +-$'
 stdout '^tools - +- +1 +\S+ +remade +\S+ +-$'
 stdout '^exports +- +1 +\S+ +only copy +- +delete them$'

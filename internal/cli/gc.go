@@ -23,8 +23,10 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "Delete what devvm images lists as stale or unfinished, on every backend, with their " +
 			"records, the shared tool images it lists as unused, the copies of devvm's own files " +
 			"older versions wrote out, and the older versions of the mise devvm runs on this machine. " +
-			"It lists them first, and in a terminal asks. VMs are never deleted; on Linux hosts, an " +
-			"image whose disk VMs use stays.",
+			"With --backend, only that backend's images, its current ones too, and its unused tool " +
+			"images; without it, every backend's, whatever the default backend is. It lists them first, " +
+			"and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use " +
+			"stays, and so does a smolvm or Docker image a VM was made from.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			fail(u, gc(cmd.Context(), u, g), msg.GCFailed)
@@ -56,7 +58,7 @@ func gc(ctx context.Context, u *ui.UI, g *globals) error {
 		return err
 	}
 	defer unlock()
-	p, err := planGC(ctx, u, b)
+	p, err := planGC(ctx, u, b, g.backend)
 	if err != nil {
 		return err
 	}
@@ -74,13 +76,24 @@ func gc(ctx context.Context, u *ui.UI, g *globals) error {
 
 // planGC gathers what gc deletes: an old copy of devvm's files only when
 // no VM's proxy was started with its policy files (netpolicy.AssetsInUse).
-func planGC(ctx context.Context, u *ui.UI, b *build.Env) (gcPlan, error) {
+// With only (--backend, never the default backend file), it gathers that
+// backend's images, current or not, and its unused tool images, and
+// nothing that isn't a backend's.
+func planGC(ctx context.Context, u *ui.UI, b *build.Env, only string) (gcPlan, error) {
 	p := gcPlan{share: tools.Share{Env: b.Tools}}
 	imgs, ts, err := listImages(ctx, u, b)
 	if err != nil {
 		return p, err
 	}
 	p.images, p.tools = staleImages(imgs), tools.Unused(ts)
+	if only != "" {
+		target, err := toolTargets(u, b)
+		if err != nil {
+			return p, err
+		}
+		p.images, p.tools = backendImages(imgs, only), backendTools(p.tools, only, target)
+		return p, nil
+	}
 	current, err := state.AssetsHash(b.Assets)
 	if err != nil {
 		return p, err
@@ -90,6 +103,29 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env) (gcPlan, error) {
 	}
 	p.mise, err = tools.Versions{Env: b.Tools}.StaleMise()
 	return p, err
+}
+
+// backendImages are a backend's images, current or not.
+func backendImages(imgs []listedImage, be string) []listedImage {
+	var out []listedImage
+	for _, l := range imgs {
+		if l.Backend == be {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// backendTools are the tool images built for a backend, as target tells;
+// one whose backend devvm can't tell is never one.
+func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (string, string)) []tools.Listed {
+	var out []tools.Listed
+	for _, t := range ts {
+		if b, _ := target(t); b == be {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func (p gcPlan) empty() bool {
