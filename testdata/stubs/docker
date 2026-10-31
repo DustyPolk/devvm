@@ -242,6 +242,11 @@ case "$cmd" in
     grep -vx "${args[0]}" "$c/networks" > "$c/networks.new" || true; mv "$c/networks.new" "$c/networks"; exit 0 ;;
   "volume create")
     mkdir -p "$V/${args[0]}"; printf '%s\n' ${labels[@]+"${labels[@]}"} > "$V/${args[0]}/labels"; exit 0 ;;
+  "volume ls")
+    for d in "$V"/*; do
+      [[ -d $d ]] && ! foreign "$(basename "$d")" && matches "$d" ${filters[@]+"${filters[@]}"} && basename "$d"
+    done
+    exit 0 ;;
   "volume inspect")
     [[ -d $V/${args[0]} ]] || missing volume "${args[0]}"
     if foreign "${args[0]}"; then echo '{"devvm.data":"/elsewhere"}'; else json_labels "$V/${args[0]}"; fi

@@ -158,6 +158,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm images` | list the images on every backend, then the shared tool images ([details](../using/images.md#listing-images)) |
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](../using/images.md#deleting-images)) |
 | `devvm gc` | delete the stale and unfinished images and the tool images no VM uses, after listing them, and never a VM ([details](../using/images.md#cleaning-up)) |
+| `devvm space [--json]` | show what devvm keeps on this machine, the disk each kind takes, and what frees it ([details](../using/space.md#devvm-space)) |
 
 With `--backend NAME`, these commands build or delete on that backend instead of the one new VMs get. With `--from IMAGE`, they work on a base made from that container image ([details](../using/from.md)).
 

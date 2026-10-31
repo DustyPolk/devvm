@@ -111,7 +111,7 @@ func TestHiddenCommandsAreLeftOut(t *testing.T) {
 		"devvm_ports.md", "devvm_ports_add.md", "devvm_ports_rm.md", "devvm_rebuild.md",
 		"devvm_remove.md", "devvm_restart.md", "devvm_rm.md", "devvm_secret.md", "devvm_secret_ls.md", "devvm_secret_rm.md",
 		"devvm_secret_set.md", "devvm_secret_unuse.md", "devvm_secret_use.md",
-		"devvm_setup.md", "devvm_size.md", "devvm_ssh-agent.md", "devvm_ssh-agent_add.md", "devvm_ssh-agent_keys.md", "devvm_ssh.md", "devvm_stop.md", "devvm_update.md",
+		"devvm_setup.md", "devvm_size.md", "devvm_space.md", "devvm_ssh-agent.md", "devvm_ssh-agent_add.md", "devvm_ssh-agent_keys.md", "devvm_ssh.md", "devvm_stop.md", "devvm_update.md",
 	}
 	if !slices.Equal(names, want) {
 		t.Errorf("files = %v, want %v", names, want)

@@ -866,6 +866,33 @@ func TestDiskUsed(t *testing.T) {
 	}
 }
 
+// Usage: a VM is its container and its own volumes; devvm's other
+// volumes are counted apart, and someone else's never.
+func TestUsage(t *testing.T) {
+	s := newSandbox(t)
+	s.createVM(t, backend.VMSpec{Project: "/p/web"})
+	vols := filepath.Join(s.stub, "docker", "volumes")
+	for _, v := range []string{"devvm-gone-12345612345612-home", "theirs"} {
+		if err := os.MkdirAll(filepath.Join(vols, v), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(vols, v, "labels"), []byte(LabelKey+"="+s.Data+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.touch(t, "docker-foreign-theirs")
+	u, err := s.Usage(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.VMs[vm] != 1048576+1500000000 {
+		t.Errorf("VMs = %v", u.VMs)
+	}
+	if len(u.Caches) != 1 || u.Caches[0].Count != 1 || u.Caches[0].Size != 1500000000 {
+		t.Errorf("Caches = %+v", u.Caches)
+	}
+}
+
 // Commands in a VM run as its user with a login's environment; a shell
 // gets a terminal when devvm has one; without ssh, through docker exec.
 func TestExecAndShell(t *testing.T) {

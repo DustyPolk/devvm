@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -563,6 +565,9 @@ func (e env) checkHashes(t *testing.T, files []string) {
 		if err != nil || !fi.Mode().IsRegular() || string(read(t, p+".sha256")) != sum+"\n" {
 			t.Errorf("%s's hash isn't recorded", f)
 		}
+		if tg, ok := (Share{e.Env}).readTarget(f); !ok || tg != gnuT {
+			t.Errorf("%s's target: %+v %v, want %+v", f, tg, ok, gnuT)
+		}
 	}
 }
 
@@ -910,6 +915,47 @@ func TestList(t *testing.T) {
 	}
 	if c := e.calls(t); c != "" {
 		t.Errorf("List ran %s", c)
+	}
+}
+
+// What a tool image is built for comes from the record its build left
+// beside it, else from the target it's current for; one with neither, or
+// a record that can't be read, has none. Delete deletes the record too.
+func TestListTargets(t *testing.T) {
+	e := newEnv(t)
+	e.locked(t, fixture(t))
+	goCur := e.files(t, "go")[0]
+	recorded, bare, bad := "go-1.20.0-0123456789ab.erofs", "go-1.9.0-0123456789ab.erofs", "go-1.8.0-0123456789ab.erofs"
+	musl := Target{Libc: "musl", Format: "plain-0123456789ab"}
+	for _, f := range []string{goCur, recorded, bare, bad} {
+		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
+	}
+	write(t, filepath.Join(e.Dirs.Tools(), recorded+targetExt), []byte(musl.record()))
+	write(t, filepath.Join(e.Dirs.Tools(), bad+targetExt), []byte("libc=other\n"))
+	ls, err := e.List([]Target{gnuT}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, l := range ls {
+		if l.Built {
+			got[l.File] = fmt.Sprintf("%v %s %s", l.Targeted, l.Target.Libc, l.Target.Format)
+		}
+	}
+	want := map[string]string{
+		goCur:    fmt.Sprintf("true %s %s", gnuT.Libc, gnuT.Format),
+		recorded: "true musl plain-0123456789ab",
+		bare:     "false  ",
+		bad:      "false  ",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("targets: got %v, want %v", got, want)
+	}
+	if err := e.Delete([]string{recorded}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(e.Dirs.Tools(), recorded+targetExt)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Delete left the record: %v", err)
 	}
 }
 

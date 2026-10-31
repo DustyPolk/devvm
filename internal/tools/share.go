@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -133,12 +134,12 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	}
 	t.Info(msg.BuildingTools(Label(build)))
 	t.LogNote()
-	return t.batch(ctx, b, base, tg.Format, lock, build)
+	return t.batch(ctx, b, base, tg, lock, build)
 }
 
 // batch builds these tool images in one throwaway VM with a folder of its
-// own, then moves them into the share.
-func (t Share) batch(ctx context.Context, b backend.Backend, base, format string, lock Lock, files []string) error {
+// own, for tg, then moves them into the share.
+func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Target, lock Lock, files []string) error {
 	out, err := os.MkdirTemp(t.Dirs.Data, "tools-build.")
 	if err != nil {
 		return err
@@ -184,7 +185,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base, format string
 		return err
 	}
 	spec := backend.ToolsSpec{
-		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: format, Net: backend.NetInternet,
+		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: tg.Format, Net: backend.NetInternet,
 		Script: cas.Script(backend.Script{Name: "build.sh", Data: script}), Trust: ca,
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {
@@ -207,22 +208,60 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base, format string
 		if err := os.Rename(src, dst); err != nil {
 			return err
 		}
-		if err := os.Remove(dst + ".sha256"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := writeNew(dst+".sha256", sum+"\n"); err != nil {
 			return err
 		}
-		h, err := os.OpenFile(dst+".sha256", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the share, devvm's own
-		if err != nil {
-			return err
-		}
-		_, err = h.WriteString(sum + "\n")
-		if cerr := h.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
+		if err := writeNew(dst+targetExt, tg.record()); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// targetExt is the file beside a tool image naming what it's built for
+// (Target.record): its file name doesn't say.
+const targetExt = ".target"
+
+// record is a target as its file beside a tool image has it.
+func (tg Target) record() string { return "libc=" + tg.Libc + "\nformat=" + tg.Format + "\n" }
+
+// readTarget reads what a tool image in the share is built for; ok is
+// false when there's no record (one built before they were kept) or it
+// can't be read.
+func (t Share) readTarget(file string) (tg Target, ok bool) {
+	data, err := os.ReadFile(filepath.Join(t.Dirs.Tools(), file+targetExt)) //nolint:gosec // the share, devvm's own
+	if err != nil {
+		return Target{}, false
+	}
+	libc, format := "", ""
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if v, found := strings.CutPrefix(line, "libc="); found {
+			libc = v
+		} else if v, found := strings.CutPrefix(line, "format="); found {
+			format = v
+		}
+	}
+	if libc != "gnu" && libc != "musl" {
+		return Target{}, false
+	}
+	return Target{Libc: libc, Format: format}, true
+}
+
+// writeNew writes a file in the share afresh: one there is removed first,
+// so it's never written through a link.
+func writeNew(path, data string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	h, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the share, devvm's own
+	if err != nil {
+		return err
+	}
+	_, err = h.WriteString(data)
+	if cerr := h.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // Unused returns the tool images of a List that it calls unused: neither
@@ -249,7 +288,7 @@ func (t Share) Delete(files []string) error {
 	}
 	for _, f := range files {
 		p := filepath.Join(t.Dirs.Tools(), f)
-		for _, name := range []string{p, p + ".sha256"} {
+		for _, name := range []string{p, p + ".sha256", p + targetExt} {
 			if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}

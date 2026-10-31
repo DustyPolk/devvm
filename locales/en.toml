@@ -653,6 +653,18 @@ other = "{{.count}} images are stale or unfinished. Run devvm gc to delete them.
 
 [images_unused]
 other = "Unused shared tool images take {{.size}}. Run devvm gc to free it."
+[reading_space]
+other = "reading what devvm keeps"
+
+[space_failed]
+description = "reason is an error from the system, in English"
+other = "Reading what devvm keeps failed: {{.reason}}."
+
+[space_backend_unknown]
+other = "{{.backend}} didn't answer, so its VMs and images aren't counted."
+
+[space_caches_note]
+other = "The backends' caches can also hold your own downloads, so devvm counts them apart."
 
 [gc_failed]
 description = "reason is an error from the system, in English"

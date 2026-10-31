@@ -43,6 +43,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm secret use](devvm_secret_use.md): Let this folder's VM use a token
 - [devvm setup](devvm_setup.md): Choose the default backend, base's features and new VMs' size
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
+- [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh](devvm_ssh.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm ssh-agent add](devvm_ssh-agent_add.md): Load a key into devvm's own SSH agent

@@ -25,9 +25,9 @@ func devvm() rules {
 		// its methods do, as vm's Launch, Lifecycle, Settings and Net.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/backend/lima.Lima":        {68, "a backend: backend.Backend's 28 methods, KeyFiles, DiskDirs, Floors and Lima's own"},
-			"internal/backend/smolvm.Smolvm":    {73, "a backend: backend.Backend's 28 methods, DiskDirs, Floors and smolvm's own"},
-			"internal/backend/docker.Docker":    {80, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
+			"internal/backend/lima.Lima":        {69, "a backend: backend.Backend's 28 methods, KeyFiles, DiskDirs, Floors, Usage and Lima's own"},
+			"internal/backend/smolvm.Smolvm":    {74, "a backend: backend.Backend's 28 methods, DiskDirs, Floors, Usage and smolvm's own"},
+			"internal/backend/docker.Docker":    {81, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
 			"internal/backend/backendtest.Fake": {35, "backend.Backend's 28 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {38, "one method per folder or file devvm uses: a list"},
 			"internal/ui.UI":                    {41, "the one terminal: messages, prompts, status line, run log, cleanups, signals"},

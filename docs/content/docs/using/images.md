@@ -160,4 +160,4 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 - On Linux hosts, a stale image whose disk VMs are overlays of stays, and devvm says which VMs use it.
 - After an Alpine VM is gone, the shared tools built for Alpine are unused, unless you give gc that `--from`.
 
-[Images and caching](../internals/images.md#listing-and-cleaning-up) has the details of what counts as current and unused.
+[Images and caching](../internals/images.md#listing-and-cleaning-up) has the details of what counts as current and unused. To see what gc would free before you run it, and what takes the rest of the space, run `devvm space` ([what devvm keeps](space.md#devvm-space)).

@@ -1854,6 +1854,11 @@ func ReadingImages() M {
 	return M{id: "reading_images"}
 }
 
+// ReadingSpace is [reading_space]: "reading what devvm keeps"
+func ReadingSpace() M {
+	return M{id: "reading_space"}
+}
+
 // RebuildReplaces is [rebuild_replaces]: "Rebuilding {{.image}} replaces it and deletes the images built on it: {{.above}}.\ndevvm builds them again when they're next needed, and VMs keep the images they have."
 func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
@@ -2152,6 +2157,21 @@ func SmolvmSSHPortForwarded(port string, vm string) M {
 // SmolvmUpdateFailed is [smolvm_update_failed]: "Changing {{.vm}}'s smolvm settings failed."
 func SmolvmUpdateFailed(vm string) M {
 	return M{id: "smolvm_update_failed", vals: []val{{"vm", vm}}}
+}
+
+// SpaceBackendUnknown is [space_backend_unknown]: "{{.backend}} didn't answer, so its VMs and images aren't counted."
+func SpaceBackendUnknown(backend string) M {
+	return M{id: "space_backend_unknown", vals: []val{{"backend", backend}}}
+}
+
+// SpaceCachesNote is [space_caches_note]: "The backends' caches can also hold your own downloads, so devvm counts them apart."
+func SpaceCachesNote() M {
+	return M{id: "space_caches_note"}
+}
+
+// SpaceFailed is [space_failed]: "Reading what devvm keeps failed: {{.reason}}."
+func SpaceFailed(reason string) M {
+	return M{id: "space_failed", vals: []val{{"reason", reason}}}
 }
 
 // SSHAgentEmpty is [ssh_agent_empty]: "Your SSH agent has no keys, so git over SSH won't work in the VM."
@@ -2911,6 +2931,7 @@ var specs = map[string]spec{
 	"qemu_missing_fix":                 {fields: []string{"fix", "program"}},
 	"qemu_refused":                     {},
 	"reading_images":                   {},
+	"reading_space":                    {},
 	"rebuild_replaces":                 {fields: []string{"above", "image"}},
 	"remote_add_failed":                {fields: []string{"remote"}},
 	"remote_kept":                      {fields: []string{"remote"}},
@@ -2971,6 +2992,9 @@ var specs = map[string]spec{
 	"smolvm_script_failed":             {fields: []string{"script", "vm"}},
 	"smolvm_ssh_port_forwarded":        {fields: []string{"port", "vm"}},
 	"smolvm_update_failed":             {fields: []string{"vm"}},
+	"space_backend_unknown":            {fields: []string{"backend"}},
+	"space_caches_note":                {},
+	"space_failed":                     {fields: []string{"reason"}},
 	"ssh_agent_empty":                  {},
 	"ssh_agent_failed":                 {fields: []string{"reason"}},
 	"ssh_agent_flag_ignored":           {},

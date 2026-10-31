@@ -5,6 +5,25 @@ weight: 11
 
 devvm, the tools it runs and its backends keep files on this machine outside your project folders. This page lists each of them: what it is, who makes it, where it is, whether devvm can make it again, and how it's cleaned up. Most of it is in devvm's data folder, `~/.local/share/devvm`, and devvm can make all of that again except your exports. The backends' own caches hold more, and they can also hold your own downloads.
 
+## devvm space
+
+`devvm space` shows what devvm keeps on this machine, on every backend, and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives each backend 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts. The first table has a row for each kind of thing devvm has, followed by a total:
+
+| Column | |
+| --- | --- |
+| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `exports`, `network logs`, `run logs`, `mise`, `devvm's files` for the copies of devvm's own files, `leftover state` for what devvm keeps of VMs that their backend no longer has, and `state` for the rest of devvm's data folder |
+| `BACKEND` | the backend that has them, for VMs, images and shared tools |
+| `COUNT`, `SIZE` | how many there are and the disk they take, in powers of 1024 (`2.1G`) |
+| `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
+| `GC` | what `devvm gc` frees of it now |
+| `FREED BY` | what frees the rest, such as `devvm rm` or `devvm images rm` |
+
+Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. A shared tool's build shows `-` as its backend when devvm can't tell which backend it's for. When a backend that one of your VMs uses doesn't answer, devvm says so, and its VMs and images aren't counted.
+
+### The backends' caches
+
+The second table lists the caches that belong to the backends, with the backend, what each cache holds, how many entries it has, its size and where it is. These are Lima's download cache, smolvm's caches on macOS and the Docker volumes with devvm's label that aren't one VM's own, such as the shared tools' volume. devvm's builds fill them, but Lima's and smolvm's caches can also hold your own downloads, so they aren't in the total. The sections below say what each one holds.
+
 ## devvm's data folder
 
 devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it. Everything in it is devvm's own, and devvm makes all of it again when it's needed, except the exports, which are the only copy of a deleted VM's agent history.

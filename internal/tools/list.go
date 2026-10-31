@@ -35,6 +35,10 @@ type Listed struct {
 	// State is one of the State constants; "" for an image the VMs don't
 	// list when there's no lock to tell whether it's current.
 	State string
+	// Target is what it's built for, when Targeted: from the record its
+	// build left beside it, else the target it's current for.
+	Target   Target
+	Targeted bool
 }
 
 // ReadLock reads the tools lock as it is, never resolving it: nil when
@@ -83,14 +87,16 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 		}
 		for _, tool := range image.GroupTools(name) {
 			// A tool the lock lacks has none.
-			var currents []string
+			currents := map[string]Target{}
 			current := ""
 			for i, tg := range tgs {
 				if lock == nil {
 					break
 				}
 				if f, _ := t.File(lock, tool, tg); f != "" {
-					currents = append(currents, f)
+					if _, ok := currents[f]; !ok {
+						currents[f] = tg
+					}
 					if i == 0 {
 						current = f
 					}
@@ -112,8 +118,13 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 					return nil, err
 				}
 				l := Listed{Name: name, Tool: tool, Version: v, File: f, Built: true, Size: size, VMs: inUse[f]}
+				cur, isCurrent := currents[f]
+				l.Target, l.Targeted = t.readTarget(f)
+				if !l.Targeted && isCurrent {
+					l.Target, l.Targeted = cur, true
+				}
 				switch {
-				case slices.Contains(currents, f):
+				case isCurrent:
 					l.State = StateCurrent
 				case l.VMs > 0:
 					l.State = StateInUse

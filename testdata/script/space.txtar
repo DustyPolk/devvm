@@ -1,0 +1,73 @@
+# space: each kind of thing devvm keeps, on every backend, with its count,
+# size, whether devvm makes it again, what gc frees of it now and what
+# frees the rest, then a total; the backends' caches apart. It changes
+# nothing: no backend command but listings.
+env DEVVM_MESSAGES=names
+env DATA=$XDG_DATA_HOME/devvm
+env SHARE=$XDG_DATA_HOME/devvm/tools
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# Nothing yet: devvm's state and the total.
+exec devvm space
+stdout '^WHAT +BACKEND +COUNT +SIZE +KEPT +GC +FREED BY\n'
+stdout '^state +- +1 +\S+ +state +- +-\n'
+stdout '^total +- +- +\S+ +- +- +-\n'
+! stdout '^images'
+! stderr .
+
+# base and foo, then foo is stale; claude's tools, current, an old go a VM
+# has and one nothing has; a Lima VM, and the state of one Lima no longer
+# has; an export, network and run logs.
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
+exec devvm build foo
+exec devvm build claude
+exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
+exec sh -c 'cd "$SHARE" && echo x > go-1.20.0-0123456789ab.erofs && echo x > go-1.9.0-0123456789ab.erofs'
+mkdir $VMS
+exec sh -c 'printf "image=go\ndir=/p\nbackend=lima\nlibc=gnu\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
+exec sh -c 'printf "image=go\ndir=/q\nbackend=lima\nlibc=gnu\n" > "$VMS/devvm-gone-12345612345612"'
+exec sh -c 'echo devvm-p-12345612345612 >> "$STUB_DIR/instances"'
+mkdir $DATA/exports $DATA/logs $DATA/mise/2026.1.1
+exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
+exec sh -c 'echo x > "$DATA/logs/devvm-p-12345612345612.jsonl" && echo x > "$DATA/logs/devvm-gone-12345612345612.proxy.log"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm space
+stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm$'
+stdout '^images +lima +2 +\S+ +remade +\S+ +devvm images rm$'
+stdout '^tools gnu +lima +\d+ +\S+ +remade +- +-$'
+stdout '^tools - +- +1 +\S+ +remade +\S+ +-$'
+stdout '^exports +- +1 +\S+ +only copy +- +delete them$'
+stdout '^network logs +- +2 +\S+ +log +- +devvm rm$'
+stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay$'
+stdout '^mise +- +1 +'
+stdout '^leftover state +- +1 +\S+ +leftover +- +-$'
+stdout '^total +- +- +\S+ +- +\S+ +-$'
+! stderr .
+stub_calls
+! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'
+
+# --json, for scripts.
+exec devvm space --json
+stdout '"what": "leftover state"'
+stdout '"kept": "only copy"'
+stdout '"total": \d+'
+
+# A backend a VM's state names that doesn't answer is named, and its VMs
+# are never leftovers.
+exec sh -c 'printf "image=base\ndir=/s\nbackend=smolvm\n" > "$VMS/devvm-s-12345612345612"'
+exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
+exec devvm space
+stderr '^space_backend_unknown backend=smolvm$'
+stdout '^leftover state +- +1 '
+
+# Lima's download cache, which every Lima home shares: shown apart.
+[darwin] mkdir $HOME/Library/Caches/lima/download/by-url-sha256/0123
+[darwin] exec sh -c 'echo x > "$HOME/Library/Caches/lima/download/by-url-sha256/0123/data"'
+[darwin] exec devvm space
+[darwin] stdout '^BACKEND +CACHE +COUNT +SIZE +PATH\nlima +download cache +1 +\S+ +\S+/Library/Caches/lima\n'
+[darwin] stderr '^space_caches_note$'
+
+-- foo.sh --
+#!/bin/bash
+echo foo
