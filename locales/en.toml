@@ -703,6 +703,21 @@ other = "deleted {{.count}} unused tool images"
 one = "{{.count}} old copy of devvm's files is left from an earlier version."
 other = "{{.count}} old copies of devvm's files are left from earlier versions."
 
+[gc_tools_no_vm]
+description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
+one = "{{.count}} current shared tool image no VM has ({{.size}}): {{.tools}}."
+other = "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}."
+
+[deleted_tools_no_vm]
+one = "deleted {{.count}} tool image no VM had"
+other = "deleted {{.count}} tool images no VM had"
+
+[gc_names_need_tools]
+other = "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.tool}}."
+
+[gc_unknown_tool]
+other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."
+
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
 other = "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."

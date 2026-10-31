@@ -245,7 +245,7 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 		key := be + " " + libc
 		row, ok := byKey[key]
 		if !ok {
-			row = &spaceRow{What: "tools " + cmp.Or(libc, "-"), Backend: be, Sized: true, Kept: keptRemade, Rest: "-"}
+			row = &spaceRow{What: "tools " + cmp.Or(libc, "-"), Backend: be, Sized: true, Kept: keptRemade, Rest: "gc --tools"}
 			byKey[key] = row
 			keys = append(keys, key)
 		}

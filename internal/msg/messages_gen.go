@@ -524,6 +524,11 @@ func DeletedTools(count int) M {
 	return M{id: "deleted_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// DeletedToolsNoVM is [deleted_tools_no_vm]: "deleted {{.count}} tool images no VM had"
+func DeletedToolsNoVM(count int) M {
+	return M{id: "deleted_tools_no_vm", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // DeletedUnfinishedBuild is [deleted_unfinished_build]: "deleted {{.key}}, left over from a failed build"
 func DeletedUnfinishedBuild(key string) M {
 	return M{id: "deleted_unfinished_build", vals: []val{{"key", key}}}
@@ -1054,6 +1059,11 @@ func GCMise(count int, size string) M {
 	return M{id: "gc_mise", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
+// GCNamesNeedTools is [gc_names_need_tools]: "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.tool}}."
+func GCNamesNeedTools(tool string) M {
+	return M{id: "gc_names_need_tools", vals: []val{{"tool", tool}}}
+}
+
 // GCOldHint is [gc_old_hint]: "After they rebuild, run devvm gc to delete the old ones."
 func GCOldHint() M {
 	return M{id: "gc_old_hint"}
@@ -1064,9 +1074,19 @@ func GCTools(count int, size string) M {
 	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
+// GCToolsNoVM is [gc_tools_no_vm]: "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}."
+func GCToolsNoVM(count int, size string, tools string) M {
+	return M{id: "gc_tools_no_vm", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}, {"tools", tools}}}
+}
+
 // GCUnfinished is [gc_unfinished]: "  {{.key}}, left over from a failed build"
 func GCUnfinished(key string) M {
 	return M{id: "gc_unfinished", vals: []val{{"key", key}}}
+}
+
+// GCUnknownTool is [gc_unknown_tool]: "There's no shared tool named {{.tool}}. The names are {{.tools}}."
+func GCUnknownTool(tool string, tools string) M {
+	return M{id: "gc_unknown_tool", vals: []val{{"tool", tool}, {"tools", tools}}}
 }
 
 // GitAppeared is [git_appeared]: "A git repo appeared in this folder after its VM was made. If you didn't make it, check its hooks and config before you run git here."
@@ -2680,6 +2700,7 @@ var specs = map[string]spec{
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
 	"deleted_old_image":                {fields: []string{"image", "key"}},
 	"deleted_tools":                    {plural: true, fields: []string{"count"}},
+	"deleted_tools_no_vm":              {plural: true, fields: []string{"count"}},
 	"deleted_unfinished_build":         {fields: []string{"key"}},
 	"deleting":                         {fields: []string{"vm"}},
 	"desktop_failed":                   {fields: []string{"reason"}},
@@ -2786,9 +2807,12 @@ var specs = map[string]spec{
 	"gc_image":                         {fields: []string{"image", "key"}},
 	"gc_images":                        {},
 	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
+	"gc_names_need_tools":              {fields: []string{"tool"}},
 	"gc_old_hint":                      {},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
+	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
+	"gc_unknown_tool":                  {fields: []string{"tool", "tools"}},
 	"git_appeared":                     {},
 	"git_commondir":                    {fields: []string{"git", "target"}},
 	"git_config_failed":                {fields: []string{"config"}},

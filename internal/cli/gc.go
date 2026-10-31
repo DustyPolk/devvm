@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
@@ -15,39 +18,72 @@ import (
 	"github.com/w3cj/devvm/internal/ui"
 )
 
+// gcOpts are what devvm gc is asked for besides its default run, which
+// each option adds to.
+type gcOpts struct {
+	// only is --backend as passed (never the default backend file): that
+	// backend alone.
+	only string
+	// tools is --tools: also the current tool images no VM has, of
+	// toolNames when there are any.
+	tools     bool
+	toolNames []string
+}
+
 // newGCCmd is devvm gc.
 func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
-	return &cobra.Command{
-		Use:   "gc",
+	var o gcOpts
+	c := &cobra.Command{
+		Use:   "gc [--tools [TOOL...]]",
 		Short: "Delete stale images and unused tool images",
 		Long: "Delete what devvm images lists as stale or unfinished, on every backend, with their " +
 			"records, the shared tool images it lists as unused, the copies of devvm's own files " +
 			"older versions wrote out, and the older versions of the mise devvm runs on this machine. " +
 			"With --backend, only that backend's images, its current ones too, and its unused tool " +
-			"images; without it, every backend's, whatever the default backend is. It lists them first, " +
-			"and in a terminal asks. VMs are never deleted; on Linux hosts, an image whose disk VMs use " +
-			"stays, and so does a smolvm or Docker image a VM was made from.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			fail(u, gc(cmd.Context(), u, g), msg.GCFailed)
+			"images; without it, every backend's, whatever the default backend is. With --tools, also " +
+			"the current tool images no VM has, on every backend and C library, or only those of the " +
+			"TOOLs named (node, claude). It lists them first, and in a terminal asks. VMs are never " +
+			"deleted; on Linux hosts, an image whose disk VMs use stays, and so does a smolvm or " +
+			"Docker image a VM was made from.",
+		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.only, o.toolNames = g.backend, args
+			fail(u, gc(cmd.Context(), u, g, o), msg.GCFailed)
 			return nil
 		},
 	}
+	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
+	return c
+}
+
+// checkArgs takes tool names, by the names images have them by, only
+// with --tools.
+func (o gcOpts) checkArgs(args []string) error {
+	if len(args) > 0 && !o.tools {
+		return msg.GCNamesNeedTools(args[0])
+	}
+	for _, a := range args {
+		if !slices.Contains(image.Toolchains, a) && !slices.Contains(image.Agents, a) {
+			return msg.GCUnknownTool(a, strings.Join(slices.Concat(image.Toolchains, image.Agents), " "))
+		}
+	}
+	return nil
 }
 
 // gcPlan is what devvm gc deletes, gathered before it asks.
 type gcPlan struct {
-	images []listedImage  // stale and unfinished images, each with its backend's
-	tools  []tools.Listed // unused tool images
-	assets []string       // old copies of devvm's files no VM's proxy was started with
-	mise   []string       // older versions of devvm's own mise
-	share  tools.Share    // where the tool images are
+	images  []listedImage  // stale and unfinished images, each with its backend's
+	tools   []tools.Listed // unused tool images
+	current []tools.Listed // with --tools, current tool images no VM has
+	assets  []string       // old copies of devvm's files no VM's proxy was started with
+	mise    []string       // older versions of devvm's own mise
+	share   tools.Share    // where the tool images are
 }
 
 // gc lists what's stale or unused, asks in a terminal, and deletes it. It
 // holds the share's lock throughout, so no build moves a tool image in
 // and no update swaps the lock meanwhile.
-func gc(ctx context.Context, u *ui.UI, g *globals) error {
+func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 	b, err := builder(u, g.backend)
 	if err != nil {
 		return err
@@ -58,7 +94,7 @@ func gc(ctx context.Context, u *ui.UI, g *globals) error {
 		return err
 	}
 	defer unlock()
-	p, err := planGC(ctx, u, b, g.backend)
+	p, err := planGC(ctx, u, b, o)
 	if err != nil {
 		return err
 	}
@@ -76,22 +112,25 @@ func gc(ctx context.Context, u *ui.UI, g *globals) error {
 
 // planGC gathers what gc deletes: an old copy of devvm's files only when
 // no VM's proxy was started with its policy files (netpolicy.AssetsInUse).
-// With only (--backend, never the default backend file), it gathers that
-// backend's images, current or not, and its unused tool images, and
-// nothing that isn't a backend's.
-func planGC(ctx context.Context, u *ui.UI, b *build.Env, only string) (gcPlan, error) {
+// With o.only, it gathers that backend's images, current or not, and its
+// tool images, and nothing that isn't a backend's.
+func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, error) {
 	p := gcPlan{share: tools.Share{Env: b.Tools}}
 	imgs, ts, err := listImages(ctx, u, b)
 	if err != nil {
 		return p, err
 	}
 	p.images, p.tools = staleImages(imgs), tools.Unused(ts)
-	if only != "" {
+	if o.tools {
+		p.current = p.share.NoVM(ts, o.toolNames)
+	}
+	if o.only != "" {
 		target, err := toolTargets(u, b)
 		if err != nil {
 			return p, err
 		}
-		p.images, p.tools = backendImages(imgs, only), backendTools(p.tools, only, target)
+		p.images = backendImages(imgs, o.only)
+		p.tools, p.current = backendTools(p.tools, o.only, target), backendTools(p.current, o.only, target)
 		return p, nil
 	}
 	current, err := state.AssetsHash(b.Assets)
@@ -129,7 +168,7 @@ func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (strin
 }
 
 func (p gcPlan) empty() bool {
-	return len(p.images)+len(p.tools)+len(p.assets)+len(p.mise) == 0
+	return len(p.images)+len(p.tools)+len(p.current)+len(p.assets)+len(p.mise) == 0
 }
 
 // show lists what gc deletes.
@@ -146,6 +185,9 @@ func (p gcPlan) show(u *ui.UI) {
 	}
 	if len(p.tools) > 0 {
 		u.Say(msg.GCTools(len(p.tools), humanSize(toolsSize(p.tools))))
+	}
+	if len(p.current) > 0 {
+		u.Say(msg.GCToolsNoVM(len(p.current), humanSize(toolsSize(p.current)), tools.Label(toolFiles(p.current))))
 	}
 	if len(p.assets) > 0 {
 		u.Say(msg.GCAssets(len(p.assets)))
@@ -172,18 +214,28 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 	if len(p.mise) > 0 {
 		u.Info(msg.DeletedMise(len(p.mise)))
 	}
-	if len(p.tools) == 0 {
-		return nil
+	if len(p.tools) > 0 {
+		if err := p.share.Delete(toolFiles(p.tools)); err != nil {
+			return err
+		}
+		u.Info(msg.DeletedTools(len(p.tools)))
 	}
-	files := make([]string, 0, len(p.tools))
-	for _, t := range p.tools {
+	if len(p.current) > 0 {
+		if err := p.share.Delete(toolFiles(p.current)); err != nil {
+			return err
+		}
+		u.Info(msg.DeletedToolsNoVM(len(p.current)))
+	}
+	return nil
+}
+
+// toolFiles are these tool images' files in the share.
+func toolFiles(ts []tools.Listed) []string {
+	files := make([]string, 0, len(ts))
+	for _, t := range ts {
 		files = append(files, t.File)
 	}
-	if err := p.share.Delete(files); err != nil {
-		return err
-	}
-	u.Info(msg.DeletedTools(len(files)))
-	return nil
+	return files
 }
 
 // removeAll deletes these files and folders.

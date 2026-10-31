@@ -959,6 +959,47 @@ func TestListTargets(t *testing.T) {
 	}
 }
 
+// NoVM: current tool images no VM lists, of the names asked for, built
+// over an hour ago; never one a VM lists, one that isn't current, or one
+// whose hash is missing.
+func TestNoVM(t *testing.T) {
+	e := newEnv(t)
+	old := time.Now().Add(-2 * time.Hour)
+	ls := []Listed{
+		{Name: "node", File: "node-1-0123456789ab.erofs", State: StateCurrent},
+		{Name: "node", File: "bun-1-0123456789ab.erofs", State: StateCurrent, VMs: 1},
+		{Name: "go", File: "go-1-0123456789ab.erofs", State: StateCurrent},
+		{Name: "go", File: "go-2-0123456789ab.erofs", State: StateUnused},
+		{Name: "claude", File: "claude-1-0123456789ab.erofs", State: StateCurrent},
+		{Name: "codex", File: "codex-1-0123456789ab.erofs", State: StateCurrent},
+	}
+	for _, l := range ls {
+		if l.Name == "codex" {
+			continue // no hash
+		}
+		p := filepath.Join(e.Dirs.Tools(), l.File+".sha256")
+		write(t, p, []byte("x\n"))
+		if l.Name != "claude" { // claude: built just now
+			if err := os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	files := func(ls []Listed) []string {
+		var out []string
+		for _, l := range ls {
+			out = append(out, l.File)
+		}
+		return out
+	}
+	if got := files(e.NoVM(ls, nil)); !slices.Equal(got, []string{"node-1-0123456789ab.erofs", "go-1-0123456789ab.erofs"}) {
+		t.Errorf("NoVM = %v", got)
+	}
+	if got := files(e.NoVM(ls, []string{"go"})); !slices.Equal(got, []string{"go-1-0123456789ab.erofs"}) {
+		t.Errorf("NoVM(go) = %v", got)
+	}
+}
+
 // Only older versions of devvm's mise are stale: never this devvm's, nor
 // one that changed in the last hour (another devvm downloading it), nor
 // a file.

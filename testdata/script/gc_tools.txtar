@@ -1,0 +1,44 @@
+# gc --tools: also the current tool images no VM's state lists, on every
+# backend and C library, or only the named tools'; never one a VM's state
+# lists (a stopped VM's, or one deleted outside devvm), nor one built in
+# the last hour. Never a VM.
+env DEVVM_MESSAGES=names
+env SHARE=$XDG_DATA_HOME/devvm/tools
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# Names go only with --tools, and only images' names for tools.
+! exec devvm gc node
+stderr '^devvm: gc_names_need_tools tool=node$'
+! exec devvm gc --tools nope
+stderr '^devvm: gc_unknown_tool tool=nope '
+
+# node (node, pnpm, bun), claude and codex, all current. A VM deleted
+# outside devvm still lists claude in its state; codex was built just now.
+exec devvm build node
+exec devvm build claude
+exec devvm build codex
+mkdir $VMS
+exec sh -c 'printf "image=claude\ndir=/p\nbackend=lima\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
+exec sh -c 'cd "$SHARE" && touch -t 202001010000 node-*.sha256 pnpm-*.sha256 bun-*.sha256 claude-*.sha256'
+
+# Plain gc keeps every current one.
+exec devvm gc
+stdout '^==> nothing_to_clean$'
+
+# --tools claude: claude is a VM's, so nothing.
+exec devvm gc --tools claude
+stdout '^==> nothing_to_clean$'
+
+# --tools: node's three, not claude's (a VM's) nor codex's (just built).
+exec devvm gc --tools
+stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
+stdout '^==> deleted_tools_no_vm count=3$'
+exec sh -c 'cd "$SHARE" && ls *.erofs'
+! stdout '^(node|pnpm|bun)-'
+stdout '^claude-'
+stdout '^codex-'
+! exists $SHARE/.lock
+
+# A VM that names node later builds it again.
+exec devvm build node
+exec sh -c 'cd "$SHARE" && ls node-*.erofs'
