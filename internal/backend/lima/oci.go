@@ -50,7 +50,7 @@ type converted struct {
 // subfolder of devvm's temporary folder, and what comes out is checked
 // before Lima sees it. One conversion runs at a time. The build VM and
 // the folder go however the run ends.
-func (l *Lima) convert(ctx context.Context, f *backend.From, mem float64) (*converted, error) {
+func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size) (*converted, error) {
 	if f.Digest == "" {
 		return nil, msg.NoDigest(f.Ref)
 	}
@@ -105,7 +105,7 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, mem float64) (*conv
 	if err != nil {
 		return nil, err
 	}
-	if _, err := l.createFromUbuntu(ctx, OCIVM, mem, "--set", mounts); err != nil {
+	if _, err := l.createFromUbuntu(ctx, OCIVM, size, "--set", mounts); err != nil {
 		return nil, err
 	}
 	// crane pulls from the registry.

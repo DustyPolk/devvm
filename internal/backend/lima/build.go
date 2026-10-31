@@ -87,37 +87,34 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	var built backend.Built
 	var conv *converted
 	if spec.Parent == "" {
-		mem := spec.MemoryGiB
-		if mem == 0 {
-			var err error
-			if mem, err = l.buildMemory(); err != nil {
-				return backend.Built{}, err
-			}
+		size, err := l.buildSize()
+		if err != nil {
+			return backend.Built{}, err
+		}
+		if spec.MemoryGiB > 0 {
+			size.MemoryGiB = spec.MemoryGiB
 		}
 		if spec.From == nil {
-			img, err := l.createFromUbuntu(ctx, inst, mem)
+			img, err := l.createFromUbuntu(ctx, inst, size)
 			if err != nil {
 				return backend.Built{}, err
 			}
 			built = backend.Built{Origin: img.String(), Libc: "gnu"}
 		} else {
-			var err error
-			if conv, err = l.convert(ctx, spec.From, mem); err != nil {
+			if conv, err = l.convert(ctx, spec.From, size); err != nil {
 				return backend.Built{}, err
 			}
 			// base.yaml's settings, booting the converted disk.
-			images := yqJSON([]limaImage{{
+			images := []limaImage{{
 				Location: filepath.Join(conv.dir, "disk.raw"), Arch: limaArch(l.Arch),
 				Kernel: &limaKernel{Location: filepath.Join(conv.dir, "kernel"), Cmdline: conv.cmdline},
 				Initrd: &limaFile{Location: filepath.Join(conv.dir, "initrd")},
-			}})
+			}}
 			assets, err := l.assets()
 			if err != nil {
 				return backend.Built{}, err
 			}
-			if err := l.Runner.Run(ctx, msg.Creating(inst), l.limactl(ctx, "create", "--tty=false",
-				"--mount-none", "--name="+inst, "--set", ".images = "+images,
-				"--memory="+gibString(mem), filepath.Join(assets, "base.yaml"))); err != nil {
+			if err := l.Runner.Run(ctx, msg.Creating(inst), l.limactl(ctx, createArgs(inst, images, size, assets)...)); err != nil {
 				return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 			}
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
@@ -191,8 +188,8 @@ type limaFile struct {
 // createFromUbuntu creates a VM from Ubuntu's newest cloud image, with
 // base.yaml's settings and nothing from the host mounted, or the mounts a
 // --set in opts gives it (--set applies after --mount-none). It returns
-// the image it used.
-func (l *Lima) createFromUbuntu(ctx context.Context, vm string, mem float64, opts ...string) (ubuntu.Image, error) {
+// the image it used. It gets size's CPUs and memory (buildSize's).
+func (l *Lima) createFromUbuntu(ctx context.Context, vm string, size backend.Size, opts ...string) (ubuntu.Image, error) {
 	img, err := l.Ubuntu(ctx)
 	if err != nil {
 		return ubuntu.Image{}, err
@@ -201,13 +198,20 @@ func (l *Lima) createFromUbuntu(ctx context.Context, vm string, mem float64, opt
 	if err != nil {
 		return ubuntu.Image{}, err
 	}
-	images := yqJSON([]limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}})
-	args := append([]string{"create", "--tty=false", "--mount-none", "--name=" + vm, "--set", ".images = " + images}, opts...)
-	args = append(args, "--memory="+gibString(mem), filepath.Join(assets, "base.yaml"))
-	if err := l.Runner.Run(ctx, msg.CreatingFromUbuntu(vm), l.limactl(ctx, args...)); err != nil {
+	images := []limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}}
+	if err := l.Runner.Run(ctx, msg.CreatingFromUbuntu(vm), l.limactl(ctx, createArgs(vm, images, size, assets, opts...)...)); err != nil {
 		return ubuntu.Image{}, backend.Logged(msg.VMCreateFailed(vm))
 	}
 	return img, nil
+}
+
+// createArgs are limactl create's arguments for a VM booting images, with
+// nothing from the host mounted but what opts' --set gives it, size's CPUs
+// and memory, and the rest of base.yaml's settings (from devvm's files,
+// written out in assets).
+func createArgs(vm string, images []limaImage, size backend.Size, assets string, opts ...string) []string {
+	args := append([]string{"create", "--tty=false", "--mount-none", "--name=" + vm, "--set", ".images = " + yqJSON(images)}, opts...)
+	return append(args, "--cpus="+strconv.Itoa(size.CPUs), "--memory="+gibString(size.MemoryGiB), filepath.Join(assets, "base.yaml"))
 }
 
 // limaArch is Lima's name for a Go architecture.
@@ -245,37 +249,40 @@ func (l *Lima) unfinished(ctx context.Context, inst string) {
 	_ = l.delete(ctx, inst)
 }
 
-var memoryLine = regexp.MustCompile(`(?m)^memory:\s*([0-9.]+)GiB\s*$`)
+var (
+	cpusLine   = regexp.MustCompile(`(?m)^cpus:\s*([0-9]+)\s*$`)
+	memoryLine = regexp.MustCompile(`(?m)^memory:\s*([0-9.]+)GiB\s*$`)
+)
 
-// buildMemory is base's memory in GiB: base.yaml's, or half the host's
-// when that would leave the host less than 2 GiB (a VM asking for all of
-// it doesn't start). Images built from base, and their VMs, keep it.
-func (l *Lima) buildMemory() (float64, error) {
+// buildSize is base's CPUs and memory: base.yaml's, fitted to the host
+// (backend.FitCPUs, backend.FitMemory), so a host with fewer CPUs gets
+// its own count and one that base.yaml's memory would leave less than 2
+// GiB gets half its memory. Images built from base, and their VMs, keep
+// them.
+func (l *Lima) buildSize() (backend.Size, error) {
 	data, err := fs.ReadFile(l.Assets, "base.yaml")
 	if err != nil {
-		return 0, err
+		return backend.Size{}, err
+	}
+	c := cpusLine.FindSubmatch(data)
+	if c == nil {
+		return backend.Size{}, errors.New("lima: base.yaml sets no CPUs")
+	}
+	cpus, err := strconv.Atoi(string(c[1]))
+	if err != nil {
+		return backend.Size{}, err
 	}
 	m := memoryLine.FindSubmatch(data)
 	if m == nil {
-		return 0, errors.New("lima: base.yaml sets no memory in GiB")
+		return backend.Size{}, errors.New("lima: base.yaml sets no memory in GiB")
 	}
-	want, err := strconv.ParseFloat(string(m[1]), 64)
+	mem, err := strconv.ParseFloat(string(m[1]), 64)
 	if err != nil {
-		return 0, err
+		return backend.Size{}, err
 	}
 	host, err := l.Memory()
 	if err != nil {
-		return 0, err
+		return backend.Size{}, err
 	}
-	return fitMemory(want, host), nil
-}
-
-// fitMemory is want GiB, or half the host's whole GiB when want would
-// leave it less than 2.
-func fitMemory(want float64, hostBytes uint64) float64 {
-	h := float64(hostBytes / gib)
-	if want+2 <= h {
-		return want
-	}
-	return h / 2
+	return backend.Size{CPUs: backend.FitCPUs(cpus, l.CPUs()), MemoryGiB: backend.FitMemory(mem, host)}, nil
 }

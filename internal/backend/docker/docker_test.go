@@ -340,6 +340,26 @@ func TestRecent(t *testing.T) {
 	}
 }
 
+// base's size, fitted to the engine's machine once Problems has read it:
+// base.yaml's until then.
+func TestBaseSize(t *testing.T) {
+	for _, c := range []struct {
+		eng       *engine
+		cpus      int
+		mem, disk float64
+	}{
+		{nil, 4, 8, 100},
+		{&engine{NCPU: 16, MemTotal: 64 << 30}, 4, 8, 100},
+		{&engine{NCPU: 2, MemTotal: 8 << 30}, 2, 4, 100},
+	} {
+		d := &Docker{Assets: assets.FS, eng: c.eng}
+		cpus, mem, disk, err := d.baseSize()
+		if err != nil || cpus != c.cpus || mem != c.mem || disk != c.disk {
+			t.Errorf("engine %+v: baseSize = %d, %v, %v, %v; want %d, %v, %v", c.eng, cpus, mem, disk, err, c.cpus, c.mem, c.disk)
+		}
+	}
+}
+
 // doctor's report: which engine, and on Docker Desktop which folders it
 // shares (its settings', or its defaults when they don't say).
 func TestReport(t *testing.T) {

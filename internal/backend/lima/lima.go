@@ -63,6 +63,8 @@ type Lima struct {
 	Ubuntu func(ctx context.Context) (ubuntu.Image, error)
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
+	// CPUs returns the host's CPU count.
+	CPUs func() int
 	// MacOS returns macOS's version, "" when unknown.
 	MacOS func() string
 	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
@@ -111,7 +113,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Lima {
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Assets: assets, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
-		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: platform.Memory,
+		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: platform.Memory, CPUs: runtime.NumCPU,
 		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },

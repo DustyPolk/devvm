@@ -32,6 +32,7 @@ func buildLima(t *testing.T, os string, parentStatus string) (*Lima, *fakeRunner
 		return ubuntu.Image{URL: "https://example.com/r/ubuntu.img", Digest: "sha256:1111"}, nil
 	}
 	l.Memory = func() (uint64, error) { return 16 * gib, nil }
+	l.CPUs = func() int { return 8 }
 	l.Info = func(msg.M) {}
 	list := ""
 	if parentStatus != "" {
@@ -104,7 +105,7 @@ func TestBuildImageBase(t *testing.T) {
 	checkLines(t, f.lines(), []string{
 		"limactl create --tty=false --mount-none --name=" + inst +
 			` --set .images = [{"location":"https://example.com/r/ubuntu.img","arch":"aarch64","digest":"sha256:1111"}]` +
-			" --memory=8 " + filepath.Join(assetsDir(t, l), "base.yaml"),
+			" --cpus=4 --memory=8 " + filepath.Join(assetsDir(t, l), "base.yaml"),
 		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
 		"sandbox-exec -f " + l.profileFile(inst) + " ",
 		"limactl shell " + inst + " bash -s",
@@ -187,6 +188,7 @@ func TestBuildImageRefuses(t *testing.T) {
 		"an existing image":  func(s *backend.ImageSpec) { s.Key = baseKey; s.Parent = "" },
 		"no Ubuntu image":    func(*backend.ImageSpec) {},
 		"no memory in GiB":   func(*backend.ImageSpec) {},
+		"no CPUs":            func(*backend.ImageSpec) {},
 		"no host memory":     func(*backend.ImageSpec) {},
 		"a missing base.yml": func(*backend.ImageSpec) {},
 	} {
@@ -202,7 +204,9 @@ func TestBuildImageRefuses(t *testing.T) {
 					return ubuntu.Image{}, msg.NoUbuntuImage("release-20260101", "x", "26.04")
 				}
 			case "no memory in GiB":
-				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("memory: 8G\n")}}
+				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("cpus: 4\nmemory: 8G\n")}}
+			case "no CPUs":
+				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("memory: 8GiB\n")}}
 			case "no host memory":
 				l.Memory = func() (uint64, error) { return 0, errors.ErrUnsupported }
 			case "a missing base.yml":
@@ -222,13 +226,17 @@ func TestBuildImageRefuses(t *testing.T) {
 	}
 }
 
-// base's memory: base.yaml's, or half the host's when that leaves it less
-// than 2 GiB.
-func TestFitMemory(t *testing.T) {
-	for host, want := range map[uint64]float64{16: 8, 10: 8, 8: 4, 7: 3.5} {
-		if got := fitMemory(8, host*gib+gib/2); got != want {
-			t.Errorf("fitMemory(8, %d GiB) = %v, want %v", host, got, want)
-		}
+// On a host of 2 CPUs and 8 GiB, base gets 2 CPUs and 4 GiB.
+func TestBuildImageSmallHost(t *testing.T) {
+	l, f := buildLima(t, "darwin", "")
+	l.CPUs = func() int { return 2 }
+	l.Memory = func() (uint64, error) { return 8 * gib, nil }
+	if _, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet}); err != nil {
+		t.Fatal(err)
+	}
+	lines := f.lines()
+	if len(lines) == 0 || !strings.HasPrefix(lines[0], "limactl create ") || !strings.Contains(lines[0], " --cpus=2 --memory=4 ") {
+		t.Errorf("calls:\n%s\nwant base created with --cpus=2 --memory=4", strings.Join(lines, "\n"))
 	}
 }
 

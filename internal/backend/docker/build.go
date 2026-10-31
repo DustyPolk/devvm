@@ -371,8 +371,9 @@ var (
 )
 
 // baseSize is what images and VMs get unless told otherwise: base.yaml's
-// CPUs, memory and disk, as Lima's base has them; the memory halved when
-// it would leave the engine's machine less than 2 GiB.
+// CPUs, memory and disk, as Lima's base has them, its CPUs and memory
+// fitted to the engine's machine (backend.FitCPUs, backend.FitMemory) once
+// Problems has read them.
 func (d *Docker) baseSize() (cpus int, mem, disk float64, err error) {
 	data, err := fs.ReadFile(d.Assets, "base.yaml")
 	if err != nil {
@@ -395,10 +396,11 @@ func (d *Docker) baseSize() (cpus int, mem, disk float64, err error) {
 	if disk, err = get(diskLine); err != nil {
 		return 0, 0, 0, err
 	}
-	if host := float64(d.engineMemory() / gib); host > 0 && mem+2 > host {
-		mem = host / 2
+	hostCPUs, hostMem := d.engineSize()
+	if hostMem > 0 {
+		mem = backend.FitMemory(mem, uint64(hostMem))
 	}
-	return int(c), mem, disk, nil
+	return backend.FitCPUs(int(c), hostCPUs), mem, disk, nil
 }
 
 // sizeArgs are docker's options that set CPUs and memory (without swap);

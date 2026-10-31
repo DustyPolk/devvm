@@ -72,8 +72,8 @@ func newSandbox(t *testing.T) sandbox {
 		Dirs: d, Runner: execRunner{}, OS: "darwin", Arch: "arm64", Assets: assets.FS,
 		Getenv: func(string) string { return "" },
 		User:   func() (*user.User, error) { return &user.User{Username: "u", Uid: "501"}, nil },
-		Memory: func() (uint64, error) { return 64 << 30, nil },
-		KVM:    "/dev/kvm", Terminal: func() bool { return false },
+		Memory: func() (uint64, error) { return 64 << 30, nil }, CPUs: func() int { return 8 },
+		KVM: "/dev/kvm", Terminal: func() bool { return false },
 		FreePort: func(context.Context) (int, error) { return 61022, nil }, PortFree: func(context.Context, int) bool { return true },
 		Info: func(msg.M) {}, Warn: func(msg.M) {},
 		WithSteps: testUI{}.WithSteps, AddCleanup: testUI{}.AddCleanup, Interrupted: testUI{}.Interrupted,
@@ -742,6 +742,30 @@ func TestBuildBase(t *testing.T) {
 	}
 	if _, err := os.Stat(s.Dirs.SmolvmImage("0123456789ab")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("still there: %v", err)
+	}
+}
+
+// On a host of 2 CPUs and 8 GiB, base's build machine and a VM given no
+// size get 2 CPUs and 4 GiB; a VM's own CPUs still win.
+func TestSmallHost(t *testing.T) {
+	s := newSandbox(t)
+	s.CPUs = func() int { return 2 }
+	s.Memory = func() (uint64, error) { return 8 << 30, nil }
+	if _, err := s.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: "0123456789ab", Net: backend.NetInternet}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.calls(t); len(got) == 0 || !strings.Contains(got[0], "machine create ") || !strings.Contains(got[0], " --cpus 2 --mem 4096 ") {
+		t.Errorf("calls:\n%s\nwant base made with --cpus 2 --mem 4096", strings.Join(got, "\n"))
+	}
+	for vm, size := range map[string]backend.Size{"devvm-p-0123456789abcd": {}, "devvm-q-0123456789abcd": {CPUs: 1}} {
+		if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: vm, Size: size}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := s.calls(t)
+	got = got[max(0, len(got)-2):]
+	if len(got) != 2 || !strings.Contains(got[0]+got[1], " --cpus 2 --mem 4096 ") || !strings.Contains(got[0]+got[1], " --cpus 1 --mem 4096 ") {
+		t.Errorf("calls:\n%s\nwant --cpus 2 and --cpus 1, each with --mem 4096", strings.Join(got, "\n"))
 	}
 }
 

@@ -14,7 +14,7 @@ devvm builds each image in a VM of its own, and that VM then is the image:
 3. The script runs. For base, that's `assets/layers/base.sh` and then the [features](../using/customizing.md) you chose, and for a layer, it's the layer's script.
 4. The VM stops. devvm writes the image's record last, with its chain, what base started from, and its C library.
 
-Nothing from the host is mounted into a build, because layer scripts run third-party installers, which mustn't see your files. base gets `base.yaml`'s memory, or half the host's memory when `base.yaml`'s would leave the host less than 2 GiB. The images built on base, and their VMs, keep that amount.
+Nothing from the host is mounted into a build, because layer scripts run third-party installers, which mustn't see your files. base gets `base.yaml`'s CPUs, or as many as the host has when it has fewer. It gets `base.yaml`'s memory, or half the host's memory when `base.yaml`'s would leave the host less than 2 GiB. The images built on base, and their VMs, keep that size ([base's size](#bases-size)).
 
 ## Keys and caching
 
@@ -74,9 +74,19 @@ The pinned release and its SHA-256 are part of base's key, so a new pin rebuilds
 
 ## Base's settings and pins
 
-`assets/base.yaml` holds base's VM settings, which are 4 CPUs, 8 GiB of memory and a 100 GiB disk. `assets/layers/base.sh` installs base, and the optional [features](../using/customizing.md) you chose follow it.
+`assets/base.yaml` holds base's VM settings, which are 4 CPUs, 8 GiB of memory and a 100 GiB disk, and devvm fits the CPUs and memory to the host ([base's size](#bases-size)). `assets/layers/base.sh` installs base, and the optional [features](../using/customizing.md) you chose follow it.
 
 Each download in `assets/layers/base.sh` is pinned to a version and a SHA-256 at the top of the script, and the build fails if a checksum doesn't match. Each feature pins its downloads in the same way, at the top of its script, `assets/features/<name>.sh` in the repo, which is built into devvm. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and project VMs use the live archive ([base](../using/images.md#base)).
+
+## Base's size
+
+devvm fits base's CPUs and memory to the host with one rule that every backend uses. Base gets `base.yaml`'s 4 CPUs, or the host's count when the host has fewer. Docker refuses a `--cpus` above its machine's count, and a Lima `vz` VM given more CPUs than the Mac has can start so slowly that its ssh never comes up, as [Lima's issue](https://github.com/lima-vm/lima/issues/1621) reports. Base gets `base.yaml`'s 8 GiB of memory, or half the host's whole GiB when 8 GiB would leave the host less than 2 GiB, because a VM asking for all of the host's memory doesn't start.
+
+- **Lima** passes the fitted size to `limactl create` as `--cpus` and `--memory`, for base and for the VM that converts a `--from` image. The images built on base are clones of it, so they and their VMs keep that size.
+- **smolvm** sets the fitted size on base's build machine and on every VM you give no size, because a pack would otherwise give a VM its build machine's CPUs and memory.
+- **Docker** fits to the engine's machine, as `docker info` reports its CPUs and memory, for base's build container and every VM you give no size. Until devvm has read `docker info`, base gets `base.yaml`'s size.
+
+A size you set with `--cpus`, `--memory` or `devvm size -g` replaces the fitted one. The fitted size isn't in image keys, because the host's size doesn't change what an image holds.
 
 ## The docker layer
 

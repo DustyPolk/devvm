@@ -74,6 +74,8 @@ type Smolvm struct {
 	User func() (*user.User, error)
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
+	// CPUs returns the host's CPU count.
+	CPUs func() int
 	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
 	KVM string
 	// Terminal reports whether devvm's input is a terminal (a shell gets
@@ -126,7 +128,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Smolvm {
 	}
 	return &Smolvm{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
-		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory,
+		Getenv: os.Getenv, User: user.Current, Memory: platform.Memory, CPUs: runtime.NumCPU,
 		KVM:      kvm,
 		Terminal: u.StdinIsTerminal,
 		FreePort: freePort, PortFree: platform.PortFree,

@@ -46,6 +46,7 @@ type engine struct {
 	OperatingSystem string   `json:"OperatingSystem"`
 	Name            string   `json:"Name"`
 	MemTotal        int64    `json:"MemTotal"`
+	NCPU            int      `json:"NCPU"`
 	SecurityOptions []string `json:"SecurityOptions"`
 	// Runtimes are the container runtimes it has, by name: sysbox-runc
 	// where Sysbox is installed.
@@ -152,15 +153,15 @@ func (d *Docker) engineKind() string {
 	return d.eng.kind
 }
 
-// engineMemory is the memory the engine's machine has, in bytes; 0 until
-// Problems looked.
-func (d *Docker) engineMemory() int64 {
+// engineSize is the CPUs and memory (in bytes) the engine's machine has;
+// 0 until Problems looked.
+func (d *Docker) engineSize() (cpus int, mem int64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.eng == nil {
-		return 0
+		return 0, 0
 	}
-	return d.eng.MemTotal
+	return d.eng.NCPU, d.eng.MemTotal
 }
 
 // recent reports whether a version is 29.1 or newer.

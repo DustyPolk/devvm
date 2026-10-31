@@ -437,12 +437,9 @@ var (
 	diskLine   = regexp.MustCompile(`(?m)^disk:\s*([0-9.]+)GiB\s*$`)
 )
 
-// gib is a GiB in bytes.
-const gib = 1 << 30
-
 // baseSize is what images and VMs get unless told otherwise: base.yaml's
-// CPUs, memory and disk, as Lima's base has them; the memory halved when
-// it would leave the host less than 2 GiB.
+// CPUs, memory and disk, as Lima's base has them, its CPUs and memory
+// fitted to the host (backend.FitCPUs, backend.FitMemory).
 func (s *Smolvm) baseSize() (cpus int, mem, disk float64, err error) {
 	data, err := fs.ReadFile(s.Assets, "base.yaml")
 	if err != nil {
@@ -469,8 +466,5 @@ func (s *Smolvm) baseSize() (cpus int, mem, disk float64, err error) {
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	if h := float64(host / gib); mem+2 > h {
-		mem = h / 2
-	}
-	return int(c), mem, disk, nil
+	return backend.FitCPUs(int(c), s.CPUs()), backend.FitMemory(mem, host), disk, nil
 }

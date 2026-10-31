@@ -43,7 +43,7 @@ Docker's engine is yours, and Docker Desktop's especially, so devvm marks and na
 
 Before `assets/layers/base.sh` runs, devvm adds what Ubuntu's cloud image has and a container lacks: `sudo`, CA certificates, `bash` and the VM's user, and on Alpine also OpenRC and ssh's client. After base's scripts, it adds `sshd` without host keys. These are the same scripts as on [smolvm](smolvm.md#building-images), and they're in `base`'s key. The user has your name and uid, and on Linux your group's id too, so the files it makes in the project folder are yours. Its home is `/home/<you>.guest`.
 
-The scripts run as that user, with stand-ins for `systemctl` and `rc-update` while they run, because containers run no init system. Base's CPUs and memory come from `base.yaml`: 4 CPUs and 8 GiB (half the engine's memory on a small one).
+The scripts run as that user, with stand-ins for `systemctl` and `rc-update` while they run, because containers run no init system. Base's CPUs and memory come from `base.yaml`, which sets 4 CPUs and 8 GiB. When the engine's machine has fewer than 4 CPUs, base and the VMs you give no size get as many CPUs as it has, and when 8 GiB would leave it less than 2 GiB, they get half of its memory ([base's size](images.md#bases-size)).
 
 How devvm confines a build depends on the engine:
 

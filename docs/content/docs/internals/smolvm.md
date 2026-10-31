@@ -25,7 +25,7 @@ The VM's user has your user name and uid, as on Lima, with its home at `/home/<y
 
 The scripts run as that user, with stand-ins for `systemctl` and `rc-update` while they run. Base's services are enabled the Lima way, and devvm starts them itself ([below](#no-init-system)). The stand-ins are gone before the image is packed.
 
-Builds use smolvm's default network, which reaches the internet but not the host's loopback. A pack keeps its build machine's network, CPUs and memory, so devvm sets all three on every VM it makes. Base's CPUs, memory and disk come from `base.yaml`: 4 CPUs, 8 GiB of memory (half the host's memory on a small host) and a 100 GiB disk.
+Builds use smolvm's default network, which reaches the internet but not the host's loopback. A pack keeps its build machine's network, CPUs and memory, so devvm sets all three on every VM it makes. Base's CPUs, memory and disk come from `base.yaml`, which sets 4 CPUs, 8 GiB of memory and a 100 GiB disk. On a host with fewer than 4 CPUs, base and the VMs you give no size get as many CPUs as the host has, and when 8 GiB would leave the host less than 2 GiB, they get half of its memory ([base's size](images.md#bases-size)).
 
 devvm's own scripts for these steps are in `base`'s key, together with the backend, so smolvm's images are never Lima's. They are `prepare.sh`, `shims.sh` and `sshd.sh`. `sshd.sh` installs sshd after base's scripts, from the Ubuntu snapshot they pin, and keeps the snapshot's package lists for layers.
 
