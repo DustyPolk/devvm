@@ -1240,11 +1240,12 @@ check "behind a company proxy, an allowed host goes through it by name, and a bl
   grep '\"host\":\"github.com\"' '$events' | grep -q '\"upstream\":\"127.0.0.1:18766\"' &&
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://example.com' </dev/null 2>&1 | grep -q 403 &&
   ! grep -q '\"host\":\"example.com\"' '$work/corp.jsonl'"
+# The password is read from its file, never written into the check: its own arguments would hold it.
 check "the company proxy's password is in no process's arguments, log or VM" bash -c "
-  ! ps -axww -o command= | grep -qF '$corppw' &&
-  ! grep -rqF '$corppw' '$XDG_DATA_HOME/devvm/logs' &&
-  ! limactl shell --workdir / $vm sudo grep -rqsF '$corppw' /etc /home /root </dev/null &&
-  ! limactl shell --workdir / $vm bash -lc env </dev/null | grep -qF '$corppw'"
+  ! ps -axww -o command= | grep -qFf '$work/corp.auth' &&
+  ! grep -rqFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' &&
+  ! limactl shell --workdir / $vm sudo grep -rqsFf /dev/stdin /etc /home /root <'$work/corp.auth' &&
+  ! limactl shell --workdir / $vm bash -lc env </dev/null | grep -qFf '$work/corp.auth'"
 check "without them, the next launch starts the VM's proxy again, going directly" bash -c "
   (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy \
     '$D' >'$work/last.log' 2>&1) &&
@@ -3361,7 +3362,7 @@ docker_netpolicy() {
     [[ \$(d_state '$vm') == exited && \$(d_state '$vm-proxy') == exited ]] && dn_gone '$vm'"
   check "devvm network off: its next start is on Docker's default network alone, without a relay, network or proxy, nor proxy settings" bash -c "cd '$np' &&
     ${NU[*]} '$D' network off </dev/null >/dev/null 2>&1 && dn_launch '$np' && [[ \$('$D' network) == off && \$(dn_nets '$vm') == bridge ]] &&
-    [[ -z \$(d_state '$vm-proxy') ]] && ! d_net '$vm-net' && [[ -z \$(dn_proxy '$vm') ]] && ! in_root '$vm' 'grep -q devvm-proxy /etc/environment'"
+    [[ -z \$(d_state '$vm-proxy') ]] && ! d_net '$vm-net' && [[ -z \$(dn_proxy '$vm') ]] && ! in_root '$vm' 'grep -qiE \"^(https?|no|all)_proxy=\" /etc/environment'"
   check "... where the direct probes get out (their control)" dn_open "$vm"
   check "... and the capture sees its lookup leave (the DNS check's control)" dn_dns_left "$vm"
   check "... and ping works as the VM's user, without NET_RAW (ICMP datagram sockets)" dn_ping "$vm"
