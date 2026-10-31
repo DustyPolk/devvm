@@ -32,8 +32,9 @@
 #                VM; root's own server in its place (no password) still behind devvm's, the viewer's
 #                clipboard never reaching it; --clipboard
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
-#                from node:24 (Debian 12, with node, python, the docker layer and claude) and alpine:3
-#                (musl tools, the docker layer on OpenRC), each with every feature, and builds base from ubuntu:26.04, with a
+#                from node:24 (Debian 12, with node, python, the docker and nix layers and claude) and
+#                alpine:3 (musl tools, the docker layer on OpenRC, the nix layer's daemon an OpenRC service,
+#                through the proxy once network policy is on), each with every feature, and builds base from ubuntu:26.04, with a
 #                docker that isn't running
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
@@ -1708,6 +1709,7 @@ printf '#!/bin/sh\necho "docker $*" >> "%s"\necho "Cannot connect to the Docker 
   "$work/docker-calls" > "$work/nodocker/docker"
 chmod 755 "$work/nodocker/docker"
 nd() { PATH="$work/nodocker:$PATH" "$@"; }
+export -f nd in_vm; export work
 [[ -f $lock ]] || quiet "$D" _refresh-tools   # the tools' versions, for lockv
 # from_record REF: base's record for that --from.
 from_record() { grep -lx "from=$1" "$images"/* 2>/dev/null | xargs grep -lx name=base 2>/dev/null | head -1; }
@@ -1715,8 +1717,10 @@ export -f from_record
 
 f=$(newproj fromdocker); echo '{}' > "$f/package.json"
 fh=$work/from-home; mkdir -p "$fh"   # the claude VM's: no agent config of yours
-HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy node+python+docker+claude   # node:24 is Debian 12
-check "a node+python+docker+claude VM from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
+HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy node+python+docker+nix+claude   # node:24 is Debian 12
+# A build in Nix's sandbox, which fails without it (the nix layer's sandbox-fallback = false).
+nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
+check "a node+python+docker+nix+claude VM from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
   grep -qx from=node:24 '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
   grep -qE '^digest=node@sha256:[0-9a-f]{64}$' \"\$(from_record node:24)\""
@@ -1727,11 +1731,15 @@ check "python, python3 and claude are the locked versions" in_vm "$vm" \
 check "an interactive shell starts without errors" bash -c "out=\$(limactl shell --workdir / $vm bash -ic true </dev/null 2>&1) && ! grep -iE 'error|unknown option|not found' <<<\"\$out\""
 check "the docker layer's Docker runs in it (Docker's Debian repository), for the VM's user too" in_vm "$vm" \
   'sudo docker run --rm hello-world | grep -q Hello && id -nG | grep -qw docker'
+check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a build in Nix's sandbox" in_vm "$vm" "
+  systemctl is-active --quiet nix-daemon.socket && nix run nixpkgs#hello | grep -qx 'Hello, world!' &&
+  nix build --no-link --impure --expr '$nix_built'"
 (cd "$f" && HOME=$fh quiet "$D" rm -f)
 
-# Alpine: apk, OpenRC and musl, so its own (musl) tool images; the docker layer from Alpine's packages.
+# Alpine: apk, OpenRC and musl, so its own (musl) tool images; the docker layer from Alpine's packages;
+# the nix layer's daemon as an OpenRC service of devvm's.
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
-nd launch "$al" exit --from alpine:3 --no-network-policy node+docker
+nd launch "$al" exit --from alpine:3 --no-network-policy node+docker+nix
 check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$vms/$vm' && grep -qx libc=musl \"\$(from_record alpine:3)\""
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
@@ -1739,6 +1747,16 @@ check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker r
 check "and every feature" in_vm "$vm" 'eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 # As root: syslog's and acpid's pid files are root-only, so a user's rc-status calls them crashed.
 check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/dev/null)" ]]'
+check "the nix layer's Nix runs in it (OpenRC, musl): nix run nixpkgs#hello, and a build in Nix's sandbox" in_vm "$vm" "
+  sudo rc-service nix-daemon status >/dev/null && nix run nixpkgs#hello | grep -qx 'Hello, world!' &&
+  nix build --no-link --impure --expr '$nix_built'"
+# With network policy, OpenRC's service reads the proxy from its settings: a download only the daemon
+# makes, from a host that isn't allowed, gets the proxy's 403.
+nix_fetch='derivation { name = "e2e"; system = builtins.currentSystem; builder = "builtin:fetchurl"; url = "https://example.com/devvm-e2e"; outputHashMode = "flat"; outputHashAlgo = "sha256"; outputHash = "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="; }'
+check "devvm network on: after devvm restart, its nix-daemon goes through the proxy" bash -c "cd '$al' &&
+  nd '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | nd '$D' restart >'$work/last.log' 2>&1 &&
+  grep -qx net_check=ok '$vms/$vm' && in_vm '$vm' 'sudo grep -q \"^export http_proxy=http://devvm:\" /etc/conf.d/nix-daemon &&
+    ! nix build --no-link --impure --expr '\''$nix_fetch'\'' 2>/tmp/fetch.err && grep -q \"response 403\" /tmp/fetch.err'"
 (cd "$al" && quiet "$D" rm -f)
 
 # Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.

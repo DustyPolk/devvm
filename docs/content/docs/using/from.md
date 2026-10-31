@@ -39,8 +39,8 @@ If the image's tag moves to another image while devvm builds, for example becaus
 - **Debian, Ubuntu and Alpine** and the distributions based on them. devvm refuses any other, and an image without a shell or `/etc/os-release`.
 - **This machine's architecture.** devvm refuses an image without an arm64 build (or amd64), and names the ones it has.
 - **Alpine** uses OpenRC and musl, so its VMs get musl builds of the shared tools, built apart from the others.
-- **Pinned packages where the distribution has snapshots.** While `base` builds, apt's packages come from a dated snapshot, as for Ubuntu's image. Debian 12 (and so `node:24`) and Ubuntu before 26.04 on arm64 have none, and Alpine's packages, including the [docker layer](images.md#built-in-layers)'s, come from its repositories. These build with unpinned packages, and devvm warns you.
-- **Tested.** The end-to-end tests make VMs from `node:24` (Debian 12, with node, python and claude) and `alpine:3`, and build `base` from `ubuntu:26.04`.
+- **Pinned packages where the distribution has snapshots.** While `base` builds, apt's packages come from a dated snapshot, as for Ubuntu's image. Debian 12 (and so `node:24`) and Ubuntu before 26.04 on arm64 have none, and Alpine's packages, including the [docker layer](images.md#docker)'s and the [nix layer](images.md#nix)'s, come from its repositories. These build with unpinned packages, and devvm warns you.
+- **Tested.** The end-to-end tests make VMs from `node:24` (Debian 12, with node, python, claude and the docker and nix layers) and `alpine:3` (with node and the docker and nix layers), and build `base` from `ubuntu:26.04`.
 
 ## Backends
 

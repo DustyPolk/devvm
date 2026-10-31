@@ -216,6 +216,7 @@ else
 fi
 if [[ "$nix_before" != "$(cat "$nix_conf" 2>/dev/null || true)" ]]; then
   if $systemd; then sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
+  elif [[ -x $nixd && -e /run/openrc/softlevel ]]; then sudo rc-service nix-daemon restart >/dev/null
   elif [[ -x $nixd ]]; then
     # No init system (smolvm, Docker): stopped, then started as assets/container/services.sh starts it.
     sudo sh -c 'pid=$(cat /run/nix-daemon.pid 2>/dev/null || true)

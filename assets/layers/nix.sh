@@ -18,11 +18,12 @@ nix_direnv_sha256=856e8d0b5247b9edc88d9377b8333a97a2363cc69abaa7760fb857609d597e
 case $(uname -m) in aarch64) a=arm64 n=aarch64 ;; x86_64) a=amd64 n=x86_64 ;; esac
 sha() { local v="${1}_sha256_$a"; echo "${!v}"; }
 
-# Nix's daemon starts with systemd, or with no init system (smolvm, Docker) after each start
-# (assets/container/services.sh). OpenRC isn't set up for it yet.
-if [[ ! -d /run/systemd/system && -d /run/openrc ]]; then
-  echo "devvm: the nix layer doesn't run on OpenRC yet" >&2
-  exit 1
+# Alpine (--from alpine): GNU tar needs xz for the tarball (base has shadow's groupadd and useradd,
+# which the installer uses). Its packages come from the release's repositories: not pinned. Nix's
+# own binaries are static or linked against its store's C library, so they run on musl.
+if command -v apk >/dev/null; then
+  sudo apk add --no-cache xz
+  echo "devvm: Alpine's packages aren't pinned" >&2
 fi
 
 # Nix from its release tarball, whose installer copies the tarball's store in (downloading nothing),
@@ -49,11 +50,27 @@ if [[ -n $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -qui
   echo "devvm: Nix's store isn't root's after its install" >&2
   exit 1
 fi
-# Running now too, for a VM it's added to in place: systemd started it; with no init system, devvm
-# starts it after each start (assets/container/services.sh), and here, with its settings
-# (/etc/conf.d/nix-daemon, guest/sync.sh's: the proxy under network policy).
+# Running now too, for a VM it's added to in place: systemd started it; OpenRC (Alpine) gets a service
+# of devvm's, started at each boot and now; with no init system, devvm starts it after each start
+# (assets/container/services.sh), and here. Without systemd, its settings are /etc/conf.d/nix-daemon
+# (guest/sync.sh's: the proxy under network policy), which OpenRC reads for its service.
 if [[ -d /run/systemd/system ]]; then
   sudo systemctl is-active --quiet nix-daemon.socket
+elif [[ -d /run/openrc ]]; then
+  sudo tee /etc/init.d/nix-daemon >/dev/null <<'RC'
+#!/sbin/openrc-run
+description="Nix's daemon"
+command=/nix/var/nix/profiles/default/bin/nix-daemon
+command_args=--daemon
+command_background=true
+pidfile=/run/nix-daemon.pid
+output_log=/var/log/nix-daemon.log
+error_log=/var/log/nix-daemon.log
+depend() { need localmount; after net; }
+RC
+  sudo chmod 755 /etc/init.d/nix-daemon
+  sudo rc-update add nix-daemon default
+  sudo rc-service nix-daemon start
 else
   sudo sh -c '[ ! -f /etc/conf.d/nix-daemon ] || . /etc/conf.d/nix-daemon
     mkdir -p /var/log
