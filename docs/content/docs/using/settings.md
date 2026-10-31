@@ -13,7 +13,7 @@ devvm writes nothing into your project folders. It keeps your settings in `~/.co
 | --- | --- | --- |
 | `base-features` | the [features](customizing.md#choosing-features) that base gets, one name per line | `devvm setup` |
 | `backend` | the [default backend](../backends/_index.md#choosing-a-backend) for new VMs | `devvm setup` |
-| `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g` |
+| `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g`, `devvm setup` |
 | `ports` | the [ports](ports-size.md#size-and-ports) that new VMs forward | `devvm ports -g` |
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm policy -g` |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |

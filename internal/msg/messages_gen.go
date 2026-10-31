@@ -1964,6 +1964,11 @@ func ShareWaiting(dir string) M {
 	return M{id: "share_waiting", vals: []val{{"dir", dir}}}
 }
 
+// SizeCpusPrompt is [size_cpus_prompt]: "CPUs for new VMs [{{.cpus}}]:"
+func SizeCpusPrompt(cpus string) M {
+	return M{id: "size_cpus_prompt", vals: []val{{"cpus", cpus}}}
+}
+
 // SizeDefaults is [size_defaults]: "new VMs get {{.size}}"
 func SizeDefaults(size string) M {
 	return M{id: "size_defaults", vals: []val{{"size", size}}}
@@ -1984,6 +1989,11 @@ func SizeFlagsIgnored() M {
 	return M{id: "size_flags_ignored"}
 }
 
+// SizeMemoryPrompt is [size_memory_prompt]: "Memory for new VMs in GiB [{{.memory}}]:"
+func SizeMemoryPrompt(memory string) M {
+	return M{id: "size_memory_prompt", vals: []val{{"memory", memory}}}
+}
+
 // SizeNextStart is [size_next_start]: "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 func SizeNextStart(vm string) M {
 	return M{id: "size_next_start", vals: []val{{"vm", vm}}}
@@ -1997,6 +2007,11 @@ func SizeNotGib(flag string, value string) M {
 // SizePending is [size_pending]: "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply it now."
 func SizePending(size string, vm string) M {
 	return M{id: "size_pending", vals: []val{{"size", size}, {"vm", vm}}}
+}
+
+// SizeQuestion is [size_question]: "This machine has {{.have_cpus}} CPUs and {{.have_memory}} GiB of memory. Type the CPUs and memory new VMs get, or press Enter to keep the size in brackets."
+func SizeQuestion(haveCpus string, haveMemory string) M {
+	return M{id: "size_question", vals: []val{{"have_cpus", haveCpus}, {"have_memory", haveMemory}}}
 }
 
 // SmolvmBroken is [smolvm_broken]: "smolvm is installed, but smolvm --version fails. Reinstall smolvm."
@@ -2828,13 +2843,16 @@ var specs = map[string]spec{
 	"setup_failed":                     {fields: []string{"reason"}},
 	"share_lock_held":                  {fields: []string{"dir"}},
 	"share_waiting":                    {fields: []string{"dir"}},
+	"size_cpus_prompt":                 {fields: []string{"cpus"}},
 	"size_defaults":                    {fields: []string{"size"}},
 	"size_disk_default_unused":         {fields: []string{"backend", "vm"}},
 	"size_failed":                      {fields: []string{"reason"}},
 	"size_flags_ignored":               {},
+	"size_memory_prompt":               {fields: []string{"memory"}},
 	"size_next_start":                  {fields: []string{"vm"}},
 	"size_not_gib":                     {fields: []string{"flag", "value"}},
 	"size_pending":                     {fields: []string{"size", "vm"}},
+	"size_question":                    {fields: []string{"have_cpus", "have_memory"}},
 	"smolvm_broken":                    {},
 	"smolvm_broken_fix":                {fields: []string{"fix"}},
 	"smolvm_from_registry_only":        {fields: []string{"image"}},

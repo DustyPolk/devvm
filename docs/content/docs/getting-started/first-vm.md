@@ -18,6 +18,8 @@ devvm codex    # the same, with Codex
 
 devvm picks the toolchain from the folder's files, such as node for `package.json` or python for `pyproject.toml` ([which image a new VM gets](../using/images.md#which-image-a-new-vm-gets)).
 
+The first time, devvm asks for the CPUs and memory that new VMs get. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)).
+
 For each new VM, devvm asks whether it gets network policy.
 
 > [!TIP]
@@ -38,7 +40,9 @@ Later VMs start in seconds.
 
 ```mermaid
 flowchart TD
-  run["devvm in a project folder"] --> net["asks: network policy?"]
+  run["devvm in a project folder"] --> first{{"the first time?"}}
+  first -- "yes" --> size["asks: how many CPUs and how much memory?"] --> net
+  first -- "no" --> net["asks: network policy?"]
   net --> built{{"base built?"}}
   built -- "no, the first time" --> extras["asks: which extras?"] --> build["builds base, a few minutes"] --> copy
   built -- "yes" --> copy["copies the image into a new VM"]

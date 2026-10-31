@@ -10,7 +10,7 @@ This page covers the ports a VM forwards to this machine and the CPUs, memory an
 A new VM gets its image's size unless you set one with `--cpus`, `--memory` and `--disk`, as in `devvm --cpus 6 base`. For `base` that's 4 CPUs, 8 GiB of memory and a 100 GiB disk. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory.
 
 - `--cpus` takes a whole number. `--memory` and `--disk` take a size in GiB, written `16`, `16G` or `16GiB`, and decimals are allowed.
-- What the flags leave unset comes from `~/.config/devvm/size` when that file sets it, with one `cpus=`, `memory=` or `disk=` line each. `devvm size -g` writes that file.
+- What the flags leave unset comes from `~/.config/devvm/size` when that file sets it, with one `cpus=`, `memory=` or `disk=` line each. `devvm size -g` and `devvm setup` write that file ([choosing new VMs' size](#choosing-new-vms-size)).
 - devvm refuses more CPUs than this machine has, and a disk smaller than the image's, because disks can't shrink. It refuses them before it builds anything.
 - devvm also refuses more memory than a VM can have, because a VM that asks for all of this machine's memory doesn't start. A VM can have this machine's memory less 2 GiB, counted in whole GiB, so 6 GiB on an 8 GiB machine. On a machine with 4 GiB or less, it can have half, so 2 GiB on a 4 GiB machine. When you ask for more, devvm says how much memory this machine has and the most you can give a VM, so you can run the command again with that.
 
@@ -69,6 +69,21 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 - A stopped VM changes at once. A running VM keeps its size until it next starts, for example with `devvm restart`, and until then `devvm size` shows what the VM has now and says what changes.
 - Disks grow but never shrink, so devvm refuses a disk smaller than the VM's.
 - On the [Docker backend](../backends/docker.md#what-docker-vms-cant-do), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB.
+
+### Choosing new VMs' size
+
+devvm asks for the CPUs and memory that new VMs get on your first run, before it asks which features base gets, and again whenever you run `devvm setup`:
+
+```sh
+devvm setup                         # asks for the backend, base's features, then the CPUs and memory
+devvm setup --cpus 6 --memory 16    # without asking; the backend and features stay as they are
+```
+
+Before the two questions, devvm says how many CPUs and how much memory this machine has. Each question shows in brackets the value new VMs get now. That's what `devvm size -g` saved, or else base's own size fitted to this machine: 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them ([size and ports](#size-and-ports)). Press Enter to keep the value, or type another one. devvm checks what you type as it checks `--cpus` and `--memory`, and when this machine can't give it, devvm says why and asks again.
+
+devvm saves only the values you type, in the same file as `devvm size -g`, and keeps a saved disk size as it is. When you keep both values, devvm saves nothing, so new VMs go on getting the image's size. Either way, devvm prints the size new VMs get. A new size changes only the VMs made after it, and nothing is rebuilt, so existing VMs keep their size until you change it with `devvm size`.
+
+The first run asks only in a terminal, and only when no size is saved and you didn't give `--cpus` or `--memory`. It asks once, because that run also chooses base's features, and devvm asks only before they're chosen. Without a terminal, devvm asks nothing, and new VMs get the image's size. `devvm setup` asks only in a terminal and only when you give it no flags. `--cpus` and `--memory` on `devvm setup` take the same values as on `devvm size -g` and have the same limits, and with only them, devvm asks nothing else.
 
 ### Disk use
 

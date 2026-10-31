@@ -97,11 +97,13 @@ type Env struct {
 	FreeSpace func(path string) (uint64, error)
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
 	// asks which features base gets (build.Env.Pick); Terminal reports
-	// whether it can ask.
+	// whether it can ask, Interactive whether someone can also see the
+	// question (stdout's a terminal too); Answer asks for a value.
 	Info, Warn, Note, Say func(msg.M)
 	Ask, Confirm          func(msg.M) bool
+	Answer                func(msg.M) string
 	PickFeatures          func([]build.Feature) []build.Feature
-	Terminal              func() bool
+	Terminal, Interactive func() bool
 	// Stdout is where data output goes.
 	Stdout io.Writer
 	// The run log: LogNote says where it is, once a run; LogWriter is
@@ -124,6 +126,8 @@ type UI interface {
 	sshagent.UI
 	Say(msg.M)
 	Ask(msg.M) bool
+	Answer(msg.M) string
+	StdoutIsTerminal() bool
 	Interrupted() bool
 	Stdout() io.Writer
 	Stderr() io.Writer
@@ -148,8 +152,9 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
 		Info:   u.Info, Warn: u.Warn, Note: u.Note, Say: u.Say,
-		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Terminal: u.StdinIsTerminal,
-		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
+		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Answer: u.Answer, Terminal: u.StdinIsTerminal,
+		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
+		Stdout:      u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: platform.FreeSpace,
 	}

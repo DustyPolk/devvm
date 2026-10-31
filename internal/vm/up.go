@@ -254,6 +254,9 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err := (devcontainers{e.Env}).prepare(ctx, o, vm, f.Dir); err != nil {
 		return newVM{}, err
 	}
+	if err := e.firstRunSize(size); err != nil {
+		return newVM{}, err
+	}
 	// Defaults are checked again: the files may be edited by hand.
 	def, err := e.defaultSize()
 	if err != nil {

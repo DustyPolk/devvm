@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // asked is what setup's backend picker was shown.
@@ -22,9 +23,10 @@ type asked struct {
 
 // setupSandbox points devvm's folders at a temporary HOME, with a feature
 // of the user's, and returns a setup that sees a terminal (or not) and
-// picks the backend answer names, the folders, and what the picker was
-// shown: nil until it's asked.
-func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs, func() *asked) {
+// picks the backend answer names, keeping the size with Enter, on a host
+// of 8 CPUs and 32 GiB; the folders; what the picker was shown, nil until
+// it's asked; and the size prompts shown.
+func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs, func() *asked, *[]string) {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
 	home := t.TempDir()
@@ -43,6 +45,7 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 		t.Fatal(err)
 	}
 	var a *asked
+	var sized []string
 	u, _, _ := testUI()
 	s := setup{
 		ui:       u,
@@ -54,8 +57,10 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 			a = &asked{help.String(), slices.Clone(cs)}
 			return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == answer })
 		},
+		answer: func(m msg.M) string { sized = append(sized, m.Names()); return "" },
+		host:   func() (vm.Host, error) { return vm.Host{CPUs: 8, MemoryGiB: 32}, nil },
 	}
-	return s, d, func() *asked { return a }
+	return s, d, func() *asked { return a }, &sized
 }
 
 // readBackend is the default backend file's name, "" without one.
@@ -92,14 +97,24 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 		{name: "--features", terminal: true, features: &none, current: "lima", want: "lima", chosen: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, d, shown := setupSandbox(t, tc.terminal, "smolvm")
+			s, d, shown, sized := setupSandbox(t, tc.terminal, "smolvm")
 			if tc.current != "" {
 				if err := state.WriteBackend(d, tc.current); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if err := s.run(tc.features, tc.flag); err != nil {
+			if err := s.run(setupChoice{features: tc.features, backend: tc.flag}); err != nil {
 				t.Fatal(err)
+			}
+			wantSized := []string(nil)
+			if tc.ask {
+				wantSized = []string{"size_cpus_prompt cpus=4", "size_memory_prompt memory=8"}
+			}
+			if !slices.Equal(*sized, wantSized) {
+				t.Errorf("size prompts %q, want %q", *sized, wantSized)
+			}
+			if _, err := os.Stat(d.Size()); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("Enter wrote the size file: %v", err)
 			}
 			if a := shown(); (a != nil) != tc.ask {
 				t.Fatalf("asked %v, want %v", a != nil, tc.ask)

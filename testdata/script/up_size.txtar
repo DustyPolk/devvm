@@ -82,6 +82,17 @@ stdout '\Aall\nnone\n\z'
 exec sh -c 'cat "$VMS"/devvm-all-*'
 ! stdout 'ports|cpus|memory|disk'
 
+# The first run, before base's features are chosen, asks for new VMs'
+# size only in a terminal: without one it asks nothing and saves none.
+mkdir $WORK/first
+cd $WORK/first
+rm $XDG_CONFIG_HOME/devvm/base-features
+exec devvm --no-network-policy base
+! stdout 'size_question|size_defaults'
+! stderr 'size_'
+! exists $XDG_CONFIG_HOME/devvm/size
+exists $XDG_CONFIG_HOME/devvm/base-features
+
 -- bad-size --
 memory=1$(touch x)
 -- bad-ports --

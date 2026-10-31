@@ -13,6 +13,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -174,8 +175,11 @@ func (s Size) fields() [][2]string {
 
 // defaultSize reads the size new VMs get, checked: the file may have
 // been edited by hand.
-func (e *Env) defaultSize() (Size, error) {
-	def, err := state.ReadSize(e.Dirs)
+func (e *Env) defaultSize() (Size, error) { return readDefaultSize(e.Dirs) }
+
+// readDefaultSize is defaultSize from d's size file.
+func readDefaultSize(d paths.Dirs) (Size, error) {
+	def, err := state.ReadSize(d)
 	if err != nil {
 		return Size{}, err
 	}
@@ -291,19 +295,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 		return err
 	}
 	if global {
-		old, err := e.defaultSize()
-		if err != nil {
-			return err
-		}
-		if err := s.Check(host, 0, ""); err != nil {
-			return err
-		}
-		def := s.Or(old)
-		if err := state.WriteSize(e.Dirs, state.Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}); err != nil {
-			return err
-		}
-		e.Info(msg.SizeDefaults(SizeText(def.Backend())))
-		return nil
+		return SizeChoice{Dirs: e.Dirs, Assets: e.Assets, Host: host, Info: e.Info}.Set(s)
 	}
 	t, err := e.folderVM(ctx, msg.NoVMSize)
 	if err != nil {
@@ -344,7 +336,11 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 // BaseDisk returns the disk size in GiB that base.yaml in assets, devvm's
 // own files, gives base, and so every image and new VM (disks can't
 // shrink); 0 when it sets none.
-func BaseDisk(assets fs.FS) float64 {
+func BaseDisk(assets fs.FS) float64 { return baseSetting(assets, "disk") }
+
+// baseSetting returns the number base.yaml in assets sets for key (cpus,
+// memory or disk, the last two in GiB); 0 when it sets none.
+func baseSetting(assets fs.FS, key string) float64 {
 	f, err := assets.Open("base.yaml")
 	if err != nil {
 		return 0
@@ -352,7 +348,7 @@ func BaseDisk(assets fs.FS) float64 {
 	defer func() { _ = f.Close() }()
 	s := bufio.NewScanner(f)
 	for s.Scan() {
-		if v, ok := strings.CutPrefix(s.Text(), "disk:"); ok {
+		if v, ok := strings.CutPrefix(s.Text(), key+":"); ok {
 			g, _ := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(v), "GiB"), 64)
 			return g
 		}

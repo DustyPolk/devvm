@@ -857,6 +857,18 @@ other = "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply 
 description = "size is what's set: cpus=6 memory=16GiB"
 other = "new VMs get {{.size}}"
 
+[size_question]
+description = "have_cpus and have_memory are this machine's CPUs and memory in GiB"
+other = "This machine has {{.have_cpus}} CPUs and {{.have_memory}} GiB of memory. Type the CPUs and memory new VMs get, or press Enter to keep the size in brackets."
+
+[size_cpus_prompt]
+description = "cpus is what new VMs get unless you type another number"
+other = "CPUs for new VMs [{{.cpus}}]:"
+
+[size_memory_prompt]
+description = "memory is in GiB, what new VMs get unless you type another size"
+other = "Memory for new VMs in GiB [{{.memory}}]:"
+
 [no_vm_size]
 other = "There's no VM for {{.dir}}. Run devvm --cpus N to make one with a size, or devvm size -g to set the size new VMs get."
 

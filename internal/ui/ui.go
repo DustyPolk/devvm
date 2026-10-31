@@ -199,6 +199,13 @@ func (u *UI) Confirm(q ...msg.M) bool {
 	return !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N")
 }
 
+// Answer asks for a value: it prints the prompt and reads a line, without
+// the spaces around it, "" for Enter. No answer at all ends the run like
+// Ask.
+func (u *UI) Answer(prompt msg.M) string {
+	return strings.TrimSpace(u.answer(prompt.String() + " "))
+}
+
 // readTerminal reads a line from the terminal without echoing it. A
 // cleanup puts the terminal back if the run ends meanwhile.
 func (u *UI) readTerminal() (string, error) {
