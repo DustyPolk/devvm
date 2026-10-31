@@ -686,7 +686,7 @@ check "devvm images lists base and the fixture, current, with Ubuntu's release, 
   out=\$('$D' images </dev/null 2>/dev/null) &&
   grep -qE '^base +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kb +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
   grep -qE '^e2efix +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kf +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
-  grep -qE '^NAME +TOOL +VERSION +SIZE +VMS +STATE$' <<<\"\$out\""
+  grep -qE '^NAME +TOOL +VERSION +BACKEND +LIBC +SIZE +VMS +STATE$' <<<\"\$out\""
 check "images rm deletes an image by name, with its record, not base" bash -c "
   [[ -n '$kf' ]] && '$D' images rm e2efix </dev/null >/dev/null 2>&1 &&
   [[ -z \$(status_of devvm-img-$kf) ]] && [[ ! -e '$images/$kf' ]] && [[ \$(status_of devvm-img-$kb) == Stopped ]]"
