@@ -1212,6 +1212,15 @@ else
   skip "gc deletes a tool image no VM uses, with its hash" "no tools lock yet"
 fi
 check "gc again finds nothing to clean up" bash -c "'$D' gc </dev/null 2>&1 | grep -qxF \"==> \$(m nothing_to_clean)\""
+check "space lists the Lima VM and images, and changes nothing" bash -c "'$D' space </dev/null 2>/dev/null >'$work/last.log' &&
+  grep -qE '^VMs +lima +[0-9]+ ' '$work/last.log' && grep -qE '^images +lima +[0-9]+ ' '$work/last.log' &&
+  [[ \$(status_of $vm) == Running && -f '$vms/$vm' ]]"
+# The img-* VM deleted outside devvm, its state an hour old: gc --orphans forgets what devvm kept.
+quiet limactl delete -f "$vm"
+touch -t 202001010000 "$vms/$vm"
+check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c "'$D' gc --orphans </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$vms/$vm' ]] &&
+  ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg' ]]"
 rm -f "$gfix" "$share/$old" "$share/$old.sha256"
 (cd "$g" && quiet "$D" rm -f)
 fi
