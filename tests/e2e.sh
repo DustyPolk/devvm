@@ -926,7 +926,17 @@ check "the share is read-only even for root" bash -c "limactl shell --workdir / 
 check "npm i -g installs into the VM's home" in_vm "$vm" "npm i -g cowsay@1.6.0 >/dev/null 2>&1 && [[ \$(command -v cowsay) == \$HOME/.npm-global/bin/cowsay ]]"
 # ssh with a command runs a non-login, non-interactive shell, as editors and agents' tools do.
 check "a non-login shell finds the tools too" bash -c "ssh -F '$LIMA_HOME/$vm/ssh.config' lima-$vm 'node -v' </dev/null"
+# The checks above pass with a download of the locked version too: these tell the share's from one.
+# Before the .nvmrc check, which installs into ~/.local/share/mise/installs on purpose.
+for tool in node pnpm bun; do
+  check "$tool runs from the share, not a download" in_vm "$vm" \
+    "p=\$(readlink -f \"\$(mise which $tool)\") && [[ \$p == /opt/devvm/tools/$tool/$(lockv "$tool")/* ]] || { echo \"\$p\"; false; }"
+done
+check "mise installed none of node, pnpm and bun into the VM" in_vm "$vm" \
+  "[[ ! -e ~/.local/share/mise/installs/node && ! -e ~/.local/share/mise/installs/pnpm && ! -e ~/.local/share/mise/installs/bun ]]"
 check "an .nvmrc picks its own version, installed into the VM" in_vm "$vm" "cd $t && echo 22.20.0 > .nvmrc && [[ \$(node -v) == v22.20.0 ]]; r=\$?; rm .nvmrc; exit \$r"
+check "with the .nvmrc gone, node runs from the share again" in_vm "$vm" \
+  "for d in $t ~; do p=\$(cd \"\$d\" && readlink -f \"\$(mise which node)\") && [[ \$p == /opt/devvm/tools/node/$(lockv node)/* ]] || { echo \"\$d: \$p\"; exit 1; }; done"
 # Started without devvm (so no setup): the boot itself mounts them.
 check "the tools are mounted at boot" bash -c "limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
   limactl shell --workdir / $vm bash -lc 'node -v' </dev/null | grep -qx v$(lockv node)"
