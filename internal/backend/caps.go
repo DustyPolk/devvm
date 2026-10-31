@@ -157,8 +157,8 @@ func (s ImageSpec) Features() []Feature {
 	if s.MemoryGiB > 0 {
 		fs = append(fs, FeatureMemory)
 	}
-	// A backend without nix-layer can't run the layer's script either: its
-	// installer needs the daemon's init system.
+	// A backend without nix-layer can't build the layer either: Nix
+	// couldn't sandbox a build in its VMs.
 	if image.HasLayer(s.Image, image.NixLayer) {
 		fs = append(fs, FeatureNixLayer)
 	}

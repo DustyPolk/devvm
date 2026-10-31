@@ -228,7 +228,9 @@ func (d *Docker) Name() string { return Name }
 // (listed and every one) and agent forwarding (and turning it on or off)
 // are emulated over docker exec, and reviewed. The docker layer is
 // emulated under Sysbox where a Linux engine of this machine's has it, and reviewed
-// (dockerlayer.go). The rest are none.
+// (dockerlayer.go). The rest are none: the nix layer among them, because
+// its containers can't make the kernel namespaces Nix's build sandbox
+// needs, and devvm's Nix builds nothing outside it.
 func (d *Docker) Caps() backend.Caps {
 	caps := backend.Caps{
 		backend.FeatureSSH: backend.Emulated(true), backend.FeaturePorts: backend.Emulated(true),

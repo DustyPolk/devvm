@@ -70,6 +70,7 @@ A Docker VM is a container with Docker's default capabilities less `NET_RAW`, no
 - **Nested virtualization** (QEMU with KVM, Android emulators, Firecracker), because there's no `/dev/kvm`.
 - **Some profiling:** `perf` and eBPF tools, whose system calls the seccomp profile refuses. `strace` and `gdb` work.
 - **Docker inside**, and with it Kubernetes in Docker (kind, k3d), except under Sysbox on a Linux engine ([below](#the-docker-layer)).
+- **The [nix layer](../using/images.md#nix)**, because Nix builds packages in a sandbox made of kernel namespaces that the container can't make, and devvm's Nix builds nothing outside it. devvm refuses the layer before it builds or makes anything.
 
 Use a VM backend (Lima or smolvm) for any of these.
 

@@ -196,19 +196,37 @@ docker_proxies() {   # docker_proxies CONFIG [sudo]: set (or remove) the proxy f
   ${as[@]+"${as[@]}"} cp "$tmp" "$c"
   rm -f "$tmp"
 }
-# nix-daemon (the nix layer) does Nix's downloads, and systemd gives it nothing of /etc/environment: a
-# drop-in with the proxy, removed when network policy is off.
-nix_dropin=/etc/systemd/system/nix-daemon.service.d/devvm-proxy.conf
-nix_before=$(cat "$nix_dropin" 2>/dev/null || true)
-if [[ -n "${DEVVM_PROXY:-}" ]] && $systemd && [[ -x /nix/var/nix/profiles/default/bin/nix-daemon ]]; then
-  sudo mkdir -p "$(dirname "$nix_dropin")"
-  printf '[Service]\nEnvironment="http_proxy=%s" "https_proxy=%s" "no_proxy=localhost,127.0.0.1"\n' \
-    "$DEVVM_PROXY" "$DEVVM_PROXY" | sudo tee "$nix_dropin" >/dev/null
+# nix-daemon (the nix layer) does Nix's downloads, and gets nothing of /etc/environment: under systemd
+# a drop-in with the proxy, else its settings file, devvm's alone (services.sh reads it), both removed
+# when network policy is off.
+nixd=/nix/var/nix/profiles/default/bin/nix-daemon
+nix_conf=/etc/systemd/system/nix-daemon.service.d/devvm-proxy.conf
+$systemd || nix_conf=/etc/conf.d/nix-daemon
+nix_before=$(cat "$nix_conf" 2>/dev/null || true)
+if [[ -n "${DEVVM_PROXY:-}" && -x $nixd ]]; then
+  sudo mkdir -p "$(dirname "$nix_conf")"
+  if $systemd; then
+    printf '[Service]\nEnvironment="http_proxy=%s" "https_proxy=%s" "no_proxy=localhost,127.0.0.1"\n' \
+      "$DEVVM_PROXY" "$DEVVM_PROXY"
+  else
+    printf 'export http_proxy=%s https_proxy=%s no_proxy=localhost,127.0.0.1\n' "$DEVVM_PROXY" "$DEVVM_PROXY"
+  fi | sudo tee "$nix_conf" >/dev/null
 else
-  sudo rm -f "$nix_dropin"
+  sudo rm -f "$nix_conf"
 fi
-if [[ "$nix_before" != "$(cat "$nix_dropin" 2>/dev/null || true)" ]]; then
-  sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
+if [[ "$nix_before" != "$(cat "$nix_conf" 2>/dev/null || true)" ]]; then
+  if $systemd; then sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
+  elif [[ -x $nixd ]]; then
+    # No init system (smolvm, Docker): stopped, then started as assets/container/services.sh starts it.
+    sudo sh -c 'pid=$(cat /run/nix-daemon.pid 2>/dev/null || true)
+      if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = nix-daemon ] && kill "$pid"; then
+        i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
+      fi
+      [ ! -f /etc/conf.d/nix-daemon ] || . /etc/conf.d/nix-daemon
+      mkdir -p /var/log
+      nohup /nix/var/nix/profiles/default/bin/nix-daemon --daemon >/var/log/nix-daemon.log 2>&1 </dev/null &
+      echo $! > /run/nix-daemon.pid'
+  fi
 fi
 dropin=/etc/systemd/system/docker.service.d/devvm-proxy.conf
 $systemd || dropin=/etc/conf.d/docker   # OpenRC: a block in Docker's own settings

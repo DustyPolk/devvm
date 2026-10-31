@@ -18,14 +18,15 @@ nix_direnv_sha256=856e8d0b5247b9edc88d9377b8333a97a2363cc69abaa7760fb857609d597e
 case $(uname -m) in aarch64) a=arm64 n=aarch64 ;; x86_64) a=amd64 n=x86_64 ;; esac
 sha() { local v="${1}_sha256_$a"; echo "${!v}"; }
 
-# Nix's daemon needs an init system that starts it: systemd here (devvm's other bases come later).
-if [[ ! -d /run/systemd/system ]]; then
-  echo "devvm: the nix layer needs systemd, which this VM's base doesn't run" >&2
+# Nix's daemon starts with systemd, or with no init system (smolvm, Docker) after each start
+# (assets/container/services.sh). OpenRC isn't set up for it yet.
+if [[ ! -d /run/systemd/system && -d /run/openrc ]]; then
+  echo "devvm: the nix layer doesn't run on OpenRC yet" >&2
   exit 1
 fi
 
 # Nix from its release tarball, whose installer copies the tarball's store in (downloading nothing),
-# makes the build users (nixbld) and starts nix-daemon. Its settings: flakes and the nix command on;
+# makes the build users (nixbld) and, with systemd, starts nix-daemon. Its settings: flakes and the nix command on;
 # only root trusted, so the VM's user can't choose other caches (substituters) or keys; and builds
 # fail where the kernel can't sandbox them, rather than run unsandboxed without a word.
 devvm-fetch "https://releases.nixos.org/nix/nix-$nix_version/nix-$nix_version-$n-linux.tar.xz" "$(sha nix)" /tmp/nix.tar.xz
@@ -48,7 +49,17 @@ if [[ -n $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -qui
   echo "devvm: Nix's store isn't root's after its install" >&2
   exit 1
 fi
-sudo systemctl is-active --quiet nix-daemon.socket
+# Running now too, for a VM it's added to in place: systemd started it; with no init system, devvm
+# starts it after each start (assets/container/services.sh), and here, with its settings
+# (/etc/conf.d/nix-daemon, guest/sync.sh's: the proxy under network policy).
+if [[ -d /run/systemd/system ]]; then
+  sudo systemctl is-active --quiet nix-daemon.socket
+else
+  sudo sh -c '[ ! -f /etc/conf.d/nix-daemon ] || . /etc/conf.d/nix-daemon
+    mkdir -p /var/log
+    nohup /nix/var/nix/profiles/default/bin/nix-daemon --daemon >/var/log/nix-daemon.log 2>&1 </dev/null &
+    echo $! > /run/nix-daemon.pid'
+fi
 
 # sudo nix: sudo's secure_path, with Nix's default profile last.
 sp=$(sudo sed -n 's/^Defaults[[:space:]]\{1,\}secure_path[[:space:]]*=[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' /etc/sudoers | tail -1)

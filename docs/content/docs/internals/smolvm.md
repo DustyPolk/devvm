@@ -99,6 +99,7 @@ A machine runs its image as a container, and nothing starts at boot. After each 
 - It makes the loop devices that the shared tools are mounted with, because `/dev` has none, and then mounts the tools.
 - It starts the VM's [sshd](#ssh-for-editors) with new host keys, logging to `/var/log/devvm-sshd.log`.
 - In a VM with the [docker layer](../using/images.md#built-in-layers), it starts Docker's daemon in the background, logging to `/var/log/dockerd.log`. The layer's script also starts the daemon when you add the layer to a running VM. devvm's setup restarts it the same way when a launch changes the VM's [network policy](../safety/network.md) settings, which on Alpine the daemon reads from `/etc/conf.d/docker`.
+- In a VM with the [nix layer](images.md#the-nix-layer), it starts Nix's daemon in the background, logging to `/var/log/nix-daemon.log`, with its pid in `/run/nix-daemon.pid`. The daemon reads its settings from `/etc/conf.d/nix-daemon`, which devvm's setup writes with the VM's proxy when network policy is on and removes when it's off, and the setup restarts the daemon when that file changes. The layer's script also starts the daemon when you add the layer to a running VM.
 
 devvm's commands in a VM, such as its setup and your shell, run as the VM's user with the environment a login would give: `HOME`, `USER`, and `/etc/environment`, which smolvm doesn't read.
 

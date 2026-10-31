@@ -20,6 +20,7 @@ Network policy, `devvm ssh`, `devvm code`, `--clone`, forwarding ports and turni
 
 - **devvm's machines are next to yours.** On macOS, `smolvm machine ls` shows devvm's machines along with your own. Each of devvm's carries the label `devvm.data=<devvm's data folder>`, and devvm touches only the machines with its label.
 - **Docker in a VM works.** The [docker layer](../using/images.md#built-in-layers) runs Docker's engine in the VM, as on Lima, and you can add it to an existing VM.
+- **Nix works.** The [nix layer](../using/images.md#nix) runs Nix's daemon in the VM, with each build in Nix's sandbox, as on Lima.
 - **The SSH agent is in the VM the whole time it runs.** With [SSH agent forwarding](../using/ssh.md#agent-forwarding) on, smolvm forwards the agent into the VM for as long as the VM runs, whether or not you're connected, and not only during your ssh sessions as on Lima.
 - **File watchers see your edits, but not your deletions.** A dev server or a file watcher in the VM sees the files you change or make on this machine, as on Docker Desktop, but not the files you delete here. A watcher that needs deletions can poll the project folder instead, with the settings on the [Lima page](lima.md#file-watchers).
 - **Paths can't contain colons.** smolvm splits mounts on colons, so devvm refuses a folder whose path has one.

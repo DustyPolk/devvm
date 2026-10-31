@@ -49,7 +49,7 @@ On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs
 
 The `nix` layer installs [Nix](https://nixos.org) with flakes and the `nix` command turned on, and [direnv](https://direnv.net) with [nix-direnv](https://github.com/nix-community/nix-direnv), so a project's `flake.nix`, `shell.nix` or `devenv.nix` can supply its toolchain. Each VM has a Nix store and daemon of its own, which no other VM and nothing on this machine shares. [Nix projects](toolchains.md#nix-projects) explains how a flake's dev shell and the shared tools work together.
 
-The `nix` layer needs Lima. devvm refuses it on the smolvm and Docker backends, and on a base made `--from` an image that doesn't run systemd.
+The `nix` layer works on Lima and smolvm. devvm refuses it on the Docker backend, whose containers can't make the sandbox that Nix builds packages in ([what Docker VMs can't do](../backends/docker.md#what-docker-vms-cant-do)), and on a base made `--from` an image that runs OpenRC, such as Alpine.
 
 ## Shared tools
 

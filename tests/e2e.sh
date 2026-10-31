@@ -53,7 +53,8 @@
 #                (a docker VM: nothing but the proxy, Docker's pulls through it, DNS kept on this
 #                machine, failing closed, the policy, ssh opening no way out), every port's (servers on the VM's loopback or all its addresses
 #                reach this machine's loopback alone, never a port of this machine's or devvm's, no
-#                way out with network policy),
+#                way out with network policy), the nix layer (nix-daemon started after each start,
+#                with the VM's proxy and then without, nix run nixpkgs#hello, a sandboxed build),
 #                and that no machine without the sandbox's label is touched. Its machines share your
 #                smolvm (macOS): it deletes only those it made, with the sandbox's label.
 #     --backend docker [--engine linux|desktop]
@@ -63,7 +64,7 @@
 #                address reached), a failed build kept, a project VM's mounts, a file watcher in it
 #                seeing this machine's edits (on Desktop, no deletions), its files the host user's
 #                (uid and gid), its home a volume of its own, size, no Docker inside, what it lacks
-#                refused in one line, agent folders added and removed (its container made again from a
+#                (a disk size, the nix layer) refused in one line, agent folders added and removed (its container made again from a
 #                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume;
 #                the docker layer under Sysbox (an emulation, reviewed; refused on an engine without
 #                it, on Docker Desktop saying to use a VM backend): a user namespace of its own, every
@@ -1671,6 +1672,8 @@ check "nix-daemon gets the VM's proxy alone, in devvm's drop-in" in_vm "$vm" '
   [[ $e == "http_proxy=$HTTP_PROXY https_proxy=$HTTP_PROXY no_proxy=localhost,127.0.0.1" ]]'
 check "nix run nixpkgs#hello works with network policy, from Nix's cache" in_vm "$vm" \
   'nix run nixpkgs#hello 2>/tmp/hello.err | grep -qx "Hello, world!" && grep -q "from .https://cache.nixos.org" /tmp/hello.err'
+nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
+check "a build runs in Nix's sandbox, which it would fail without" in_vm "$vm" "nix build --no-link --impure --expr '$nix_built'"
 check "sudo nix finds Nix, and so does a command over ssh" bash -c "
   in_vm '$vm' 'sudo nix --version' | grep -qx 'nix (Nix) $nv' &&
   ssh -F '$LIMA_HOME/$vm/ssh.config' lima-$vm 'nix --version' </dev/null | grep -qx 'nix (Nix) $nv'"
@@ -2782,6 +2785,26 @@ check "the tools build left no machine behind" bash -c "[[ -z \$(smol_status dev
 check "restarted, the tools are mounted again" bash -c "cd '$t' && printf 'node -v\n' | '$D' restart 2>&1 | grep -qx v$(lockv node)"
 (cd "$t" && quiet "$D" rm -f)
 
+section "smolvm: the nix layer"
+# No init system: devvm starts nix-daemon after each start, with the VM's proxy under network policy
+# (in its settings file), and Nix's builds run in its sandbox, which they'd fail without.
+export -f in_smol; export me
+nx=$(newproj smolnix)
+launch "$nx" exit "${S[@]}" --network-policy --ports none --no-git-protect nix
+nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
+check "a nix VM with network policy: nix-daemon runs, with the VM's proxy" bash -c "
+  [[ -n '$vm' ]] && grep -qx image=nix '$vms/$vm' && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  in_smol '$vm' '[[ \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
+    sudo grep -qx \"export http_proxy=\$HTTP_PROXY https_proxy=\$HTTP_PROXY no_proxy=localhost,127.0.0.1\" /etc/conf.d/nix-daemon'"
+check "nix run nixpkgs#hello works through the proxy, and a build runs in Nix's sandbox" in_smol "$vm" "
+  nix run nixpkgs#hello | grep -qx 'Hello, world!' && [[ \$(nix config show sandbox-fallback) == false ]] &&
+  nix build --no-link --impure --expr '$nix_built'"
+check "devvm network off: after devvm restart, nix-daemon runs again without the proxy" bash -c "cd '$nx' &&
+  '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
+  in_smol '$vm' '[[ ! -e /etc/conf.d/nix-daemon && \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
+    ! sudo grep -qa _proxy=http /proc/\$(cat /run/nix-daemon.pid)/environ'"
+(cd "$nx" && quiet "$D" rm -f)
+
 check "no machine without the sandbox's label was touched" bash -c "[[ \"\$(smol_others)\" == '$others_before' ]]"
 fi
 
@@ -2839,6 +2862,8 @@ docker_project() {
     [[ \$(d_state $vm) == exited ]] && printf 'cat /var/tmp/e2e-kept\n' | '$D' 2>&1 | grep -qx kept && [[ \$(d_state $vm) == running ]]"
   q=$(newproj "$1-no")
   check "a disk size is refused in one line, nothing made" refused "$q" disk --no-network-policy --ports none --disk 200 base
+  # Its containers can't make the namespaces Nix's build sandbox needs.
+  check "the nix layer is refused in one line, nothing made" refused "$q" nix-layer --no-network-policy --ports none nix
   check "rm deletes its container, its home volume and its state" bash -c "cd '$p' && '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
     [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/docker/vms/$vm.json' ]]"
 }

@@ -162,7 +162,7 @@ func (s *Smolvm) Caps() backend.Caps {
 		backend.FeatureBuildImage, backend.FeatureBuildConfinement, backend.FeatureFrom, backend.FeatureClone,
 		backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare,
 		backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk,
-		backend.FeatureDockerLayer,
+		backend.FeatureDockerLayer, backend.FeatureNixLayer,
 	} {
 		caps[f] = backend.Native
 	}

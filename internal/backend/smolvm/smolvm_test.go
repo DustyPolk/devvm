@@ -162,7 +162,6 @@ func TestCaps(t *testing.T) {
 	for _, f := range backend.Features {
 		want := !slices.Contains([]backend.Feature{
 			backend.FeatureEgressProxy, backend.FeatureSSH, backend.FeaturePorts, backend.FeaturePortsAll, backend.FeatureAgentToggle,
-			backend.FeatureNixLayer,
 		}, f)
 		none := map[backend.Feature]string{
 			backend.FeatureEgressProxy: "emulated", // reviewed

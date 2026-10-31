@@ -5,8 +5,9 @@
 # first, unless DEVVM_LOOP is off (Docker's containers, whose tools are folders, linked); then the
 # tools are mounted or linked (devvm-tools, once assets/guest/sync.sh installed it; one that fails
 # is the launch's to report), the VM's sshd
-# started when it's asked for, and Docker's daemon started in the background where the VM has it
-# (the docker layer), unless DEVVM_DOCKERD is off (Docker's containers not made for it can't run it).
+# started when it's asked for, Nix's daemon started in the background where the VM has it (the nix
+# layer), and Docker's where the VM has it (the docker layer), unless DEVVM_DOCKERD is off (Docker's
+# containers not made for it can't run it).
 # A pid file whose process isn't dockerd (one an image kept, or a start before this one) doesn't
 # count, and Docker's run folder goes before dockerd starts, as a boot would leave it.
 #   services.sh [ssh USER KEY [VAR...]]
@@ -98,6 +99,19 @@ if [ "${1:-}" = ssh ]; then
   umask 022
   "$sshd" -t -f "$conf"
   [ "${DEVVM_SSHD:-}" = inetd ] || "$sshd" -f "$conf" -E /var/log/devvm-sshd.log
+fi
+# Nix's daemon where the VM has it (the nix layer), with its settings (/etc/conf.d/nix-daemon:
+# guest/sync.sh's proxy under network policy), unless it runs; its pid file counts as Docker's does.
+nixd=/nix/var/nix/profiles/default/bin/nix-daemon
+pid=$(cat /run/nix-daemon.pid 2>/dev/null || true)
+if [ -x "$nixd" ] && ! { [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = nix-daemon ]; }; then
+  (
+    # shellcheck source=/dev/null
+    [ ! -f /etc/conf.d/nix-daemon ] || . /etc/conf.d/nix-daemon
+    mkdir -p /var/log
+    nohup "$nixd" --daemon >/var/log/nix-daemon.log 2>&1 </dev/null &
+    echo $! > /run/nix-daemon.pid
+  )
 fi
 pid=$(cat /run/docker.pid 2>/dev/null || true)
 if [ "${DEVVM_DOCKERD:-}" != off ] && command -v dockerd >/dev/null 2>&1 &&
