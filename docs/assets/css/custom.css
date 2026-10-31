@@ -24,8 +24,8 @@
   /* Hextra's dark background. */
   --hx-color-dark: var(--devvm-bg);
 
-  /* Hextra's navbar: its 3.5rem, and 30px more for the logo. */
-  --hextra-navbar-height: calc(3.5rem + 30px);
+  /* Hextra's navbar: its 3.5rem, and 8px more, so the 43px logo has about 10px above and below it. */
+  --hextra-navbar-height: calc(3.5rem + 8px);
 
   /* Fonts: Instrument Sans for text, Martian Mono for code, Departure Mono for the home page's hero. */
   --hx-font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
