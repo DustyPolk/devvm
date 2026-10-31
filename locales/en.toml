@@ -760,6 +760,23 @@ other = "{{.vm}} was made in another Lima home, HOME or Docker engine than this 
 [gc_orphan_recent]
 other = "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
 
+[gc_caches_need_terminal]
+other = "--caches asks before it frees each backend's cache, so it runs only in a terminal. Run devvm gc --caches in one."
+
+[gc_cache]
+one = "{{.count}} entry of {{.backend}}'s own cache that devvm's builds put there and nothing of devvm's needs ({{.size}}):"
+other = "{{.count}} entries of {{.backend}}'s own cache that devvm's builds put there and nothing of devvm's needs ({{.size}}):"
+
+[gc_cache_entry]
+other = "  {{.what}} ({{.size}})"
+
+[gc_cache_confirm]
+other = "Your own entries in {{.backend}}'s cache stay. Delete these?"
+
+[deleted_cache]
+one = "deleted {{.count}} entry of {{.backend}}'s cache"
+other = "deleted {{.count}} entries of {{.backend}}'s cache"
+
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
 other = "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."

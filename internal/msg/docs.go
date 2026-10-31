@@ -106,6 +106,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"layer_exists":                     "using/customizing#your-own-layers",
 	"images_stale_note":                "using/images#cleaning-up",
 	"images_unused":                    "using/images#cleaning-up",
+	"gc_caches_need_terminal":          "using/space#the-backends-caches",
 	"gc_orphans_unknown":               "using/space#leftovers-of-a-vm-deleted-outside-devvm",
 	"gc_orphan_elsewhere":              "using/space#leftovers-of-a-vm-deleted-outside-devvm",
 	"gc_orphan_recent":                 "using/space#leftovers-of-a-vm-deleted-outside-devvm",

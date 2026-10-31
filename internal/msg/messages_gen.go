@@ -504,6 +504,11 @@ func DeletedAssets(count int) M {
 	return M{id: "deleted_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// DeletedCache is [deleted_cache]: "deleted {{.count}} entries of {{.backend}}'s cache"
+func DeletedCache(backend string, count int) M {
+	return M{id: "deleted_cache", plural: true, count: count, vals: []val{{"backend", backend}, {"count", strconv.Itoa(count)}}}
+}
+
 // DeletedExports is [deleted_exports]: "deleted {{.count}} exports"
 func DeletedExports(count int) M {
 	return M{id: "deleted_exports", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
@@ -1047,6 +1052,26 @@ func GCAssets(count int) M {
 // GCBadAge is [gc_bad_age]: "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
 func GCBadAge(age string) M {
 	return M{id: "gc_bad_age", vals: []val{{"age", age}}}
+}
+
+// GCCache is [gc_cache]: "{{.count}} entries of {{.backend}}'s own cache that devvm's builds put there and nothing of devvm's needs ({{.size}}):"
+func GCCache(backend string, count int, size string) M {
+	return M{id: "gc_cache", plural: true, count: count, vals: []val{{"backend", backend}, {"count", strconv.Itoa(count)}, {"size", size}}}
+}
+
+// GCCacheConfirm is [gc_cache_confirm]: "Your own entries in {{.backend}}'s cache stay. Delete these?"
+func GCCacheConfirm(backend string) M {
+	return M{id: "gc_cache_confirm", vals: []val{{"backend", backend}}}
+}
+
+// GCCacheEntry is [gc_cache_entry]: "  {{.what}} ({{.size}})"
+func GCCacheEntry(size string, what string) M {
+	return M{id: "gc_cache_entry", vals: []val{{"size", size}, {"what", what}}}
+}
+
+// GCCachesNeedTerminal is [gc_caches_need_terminal]: "--caches asks before it frees each backend's cache, so it runs only in a terminal. Run devvm gc --caches in one."
+func GCCachesNeedTerminal() M {
+	return M{id: "gc_caches_need_terminal"}
 }
 
 // GCConfirm is [gc_confirm]: "Your VMs stay as they are. Delete these?"
@@ -2756,6 +2781,7 @@ var specs = map[string]spec{
 	"delete_parent_vm":                 {fields: []string{"dir", "vm"}},
 	"deleted":                          {fields: []string{"vm"}},
 	"deleted_assets":                   {plural: true, fields: []string{"count"}},
+	"deleted_cache":                    {plural: true, fields: []string{"backend", "count"}},
 	"deleted_exports":                  {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
@@ -2865,6 +2891,10 @@ var specs = map[string]spec{
 	"from_unreachable":                 {fields: []string{"from", "host"}},
 	"gc_assets":                        {plural: true, fields: []string{"count"}},
 	"gc_bad_age":                       {fields: []string{"age"}},
+	"gc_cache":                         {plural: true, fields: []string{"backend", "count", "size"}},
+	"gc_cache_confirm":                 {fields: []string{"backend"}},
+	"gc_cache_entry":                   {fields: []string{"size", "what"}},
+	"gc_caches_need_terminal":          {},
 	"gc_confirm":                       {},
 	"gc_export":                        {fields: []string{"date", "size", "vm"}},
 	"gc_exports":                       {plural: true, fields: []string{"count", "size"}},

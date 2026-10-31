@@ -61,7 +61,7 @@ Set the variables in the VM's shell or in your project's scripts, before the too
 
 ## Cleaning up
 
-`devvm gc --backend lima` deletes all of devvm's Lima images, except on Linux hosts one whose disk VMs use, and the shared tools built for Lima that no VM has and that aren't current, and it leaves your VMs as they are ([cleaning up](../using/images.md#cleaning-up)). Lima also keeps a download cache of its own, which holds Ubuntu's cloud images that devvm's builds downloaded, and which your own Lima VMs share ([what devvm keeps](../using/space.md#lima)).
+`devvm gc --backend lima` deletes all of devvm's Lima images, except on Linux hosts one whose disk VMs use, and the shared tools built for Lima that no VM has and that aren't current, and it leaves your VMs as they are ([cleaning up](../using/images.md#cleaning-up)). Lima also keeps a download cache of its own, which holds Ubuntu's cloud images that devvm's builds downloaded, and which your own Lima VMs share. `devvm gc --caches` deletes the cloud images that devvm downloads and that no image of devvm's names, after listing them and asking, and devvm never runs `limactl prune`, which empties the whole cache ([what devvm keeps](../using/space.md#lima)).
 
 ## Limits
 

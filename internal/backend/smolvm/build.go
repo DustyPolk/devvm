@@ -264,7 +264,10 @@ func (s *Smolvm) packInto(ctx context.Context, vm, key string) error {
 		_ = os.RemoveAll(tmp)
 		return backend.Logged(msg.PackFailed(vm))
 	}
-	return os.Rename(tmp, dir)
+	if err := os.Rename(tmp, dir); err != nil {
+		return err
+	}
+	return packCache{s}.record(key)
 }
 
 // unfinished deletes an image's build machine that didn't finish: on an

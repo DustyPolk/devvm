@@ -893,6 +893,45 @@ func TestUsage(t *testing.T) {
 	}
 }
 
+// devvm's share of Docker: its labelled volumes no VM has, never a VM's
+// own, the tools', one of a VM being made (it has state), nor anyone
+// else's.
+func TestDevvmCacheVolumes(t *testing.T) {
+	s := newSandbox(t)
+	s.createVM(t, backend.VMSpec{Project: "/p/web"})
+	vols := filepath.Join(s.stub, "docker", "volumes")
+	for _, v := range []string{"devvm-gone-12345612345612-home", "devvm-new-12345612345612-home", "theirs", s.toolsVolume()} {
+		if err := os.MkdirAll(filepath.Join(vols, v), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(vols, v, "labels"), []byte(LabelKey+"="+s.Data+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.touch(t, "docker-foreign-theirs")
+	if err := os.MkdirAll(s.Dirs.VMs(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.Dirs.VMState("devvm-new-12345612345612"), []byte("backend=docker\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.DevvmCache(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "devvm-gone-12345612345612-home" {
+		t.Fatalf("DevvmCache = %+v", got)
+	}
+	if err := s.DeleteCache(t.Context(), append(got, backend.CacheEntry{Name: homeVolume(vm)})); err != nil {
+		t.Fatal(err)
+	}
+	for v, want := range map[string]bool{"devvm-gone-12345612345612-home": false, homeVolume(vm): true, "theirs": true, s.toolsVolume(): true, "devvm-new-12345612345612-home": true} {
+		if _, err := os.Stat(filepath.Join(vols, v)); (err == nil) != want {
+			t.Errorf("%s: there %v, want %v", v, err == nil, want)
+		}
+	}
+}
+
 // Commands in a VM run as its user with a login's environment; a shell
 // gets a terminal when devvm has one; without ssh, through docker exec.
 func TestExecAndShell(t *testing.T) {

@@ -1,0 +1,19 @@
+# gc --caches asks for each backend before it frees anything of the
+# backends' own caches, so without a terminal it refuses, before gc
+# deletes anything else. The default run never touches the caches.
+env DEVVM_MESSAGES=names
+
+[darwin] mkdir $HOME/Library/Caches/lima/download/by-url-sha256/0123
+[darwin] exec sh -c 'echo x > "$HOME/Library/Caches/lima/download/by-url-sha256/0123/data"'
+mkdir $XDG_DATA_HOME/devvm/mise/2020.1.1
+exec touch -t 202001010000 $XDG_DATA_HOME/devvm/mise/2020.1.1
+
+! exec devvm gc --caches
+stderr '^devvm: gc_caches_need_terminal$'
+! stdout .
+exists $XDG_DATA_HOME/devvm/mise/2020.1.1
+[darwin] exists $HOME/Library/Caches/lima/download/by-url-sha256/0123/data
+
+exec devvm gc
+stdout '^==> deleted_mise count=1$'
+[darwin] exists $HOME/Library/Caches/lima/download/by-url-sha256/0123/data
