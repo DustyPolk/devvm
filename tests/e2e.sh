@@ -755,6 +755,8 @@ section "a base project"
 p=$(newproj web); git -C "$p" init -q
 # The shell devvm opens reads its commands from devvm's input: these, then it ends.
 launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy --cpus 2 --memory 3 --disk 120 base
+# The launch's output, for the .git protection checks: the checks before them overwrite last.log.
+cp "$work/last.log" "$work/web-launch.log"
 check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
   grep -qx image=base '$vms/$vm' && grep -qx net=off '$vms/$vm' && grep -qx 'dir=$p' '$vms/$vm'"
@@ -867,7 +869,7 @@ check "the entry turns off X11, tunnels and adding keys to an agent, whatever Ho
 section ".git protection"
 if [[ "$(uname -s)" != Darwin ]]; then
   check "off on Linux (no chflags), and says so" bash -c "grep -qx git_protect=off '$vms/$vm' &&
-    grep -qF \"\$(m git_protect_needs_macos_new)\" '$work/last.log'"
+    grep -qF \"\$(m git_protect_needs_macos_new)\" '$work/web-launch.log'"
 else
   check "hooks and config are locked" bash -c "ls -lOd '$p/.git/config' | grep -q uchg && ls -lOd '$p/.git/hooks' | grep -q uchg &&
     grep -qx git_protect=on '$vms/$vm'"
