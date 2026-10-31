@@ -618,6 +618,7 @@ User-facing limits are in [Known limits](../using/limits.md) and [what the secur
 
 - **`--from`:** a moved tag is noticed only at the next build, not when listing images; devvm doesn't log in to registries, so private images work only through Docker; registries over plain HTTP (`localhost:5000`) aren't supported.
 - **Alpine:** `rc-status` as a normal user shows `acpid` and `syslog` as crashed, as their pid files are root's (`sudo rc-status` is clean).
+- **Free-space floors:** the free space devvm wants before each build and new VM ([free space](../using/ports-size.md#free-space)) is set in `internal/backend/disk.go`, where each constant's comment gives what it was measured from. Those numbers come from images an earlier e2e run left in its sandbox on macOS and from the qcow2 sizes above, so they want checking against a fresh e2e run on both host systems. A `--from` base converts its image in the host's temporary folder, which devvm doesn't check, because on Linux that's often a small tmpfs.
 - **x86_64 hosts** are untested on real hardware; on Intel Macs, `--from`'s kernel is untested with `vz`.
 - **Linux hosts:** the QEMU wrapper depends on the shape of Lima's `-netdev user,id=net0,…` argument. If Lima changes it, the wrapper refuses to start QEMU rather than run it unrestricted.
 - **Network policy, not built:**

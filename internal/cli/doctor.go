@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
@@ -33,7 +34,9 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			"Docker Desktop which folders it shares. Then list each backend's features (native, emulated, " +
 			"unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which " +
 			"only --from with an image only Docker has needs. When HTTPS_PROXY is set and ~/.config/devvm/ca has no CA " +
-			"certificates, it says that a proxy that inspects TLS needs its CA there. Fails when something is missing.",
+			"certificates, it says that a proxy that inspects TLS needs its CA there. It warns when the disk the " +
+			"backend's images and VMs go on has less free space than building base needs. Fails when something is " +
+			"missing, but not for low space.",
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -55,6 +58,10 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 				u.Say(msg.DockerMissing())
 			}
 			sayProxyCA(u)
+			// Low free space is a warning: doctor's exit status stays the problems'.
+			if m, low := (backend.Space{Free: platform.FreeSpace}).Warning(b); low {
+				u.Warn(m)
+			}
 			if len(problems) == 0 {
 				if r, ok := b.(backend.Reporter); ok {
 					for _, m := range r.Report(cmd.Context()) {

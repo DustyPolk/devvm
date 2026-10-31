@@ -99,7 +99,10 @@ type UI interface {
 	Interrupted() bool
 }
 
-var _ backend.Backend = (*Lima)(nil)
+var (
+	_ backend.Backend = (*Lima)(nil)
+	_ backend.Storage = (*Lima)(nil)
+)
 
 // New returns the Lima backend for devvm's folders and its own files
 // (assets), on u.
@@ -134,6 +137,10 @@ func (l *Lima) assets() (string, error) { return state.WriteAssets(l.Dirs, l.Ass
 func (l *Lima) KeyFiles() map[string][]byte {
 	return map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
 }
+
+// DiskDirs is devvm's Lima home, which holds every image's and VM's disk
+// (backend.Storage).
+func (l *Lima) DiskDirs() []string { return []string{l.Dirs.Lima} }
 
 // Caps is what Lima has: everything, natively, but its ports, which
 // devvm's forwarder forwards (ports.go).

@@ -215,6 +215,20 @@ func TestFormatAndKeyFiles(t *testing.T) {
 	}
 }
 
+// Its disks are in devvm's smolvm folder, and on macOS also under the
+// user's home folder, where smolvm keeps machines.
+func TestDiskDirs(t *testing.T) {
+	s := newSandbox(t)
+	s.Getenv = func(k string) string { return map[string]string{"HOME": "/Users/u"}[k] }
+	if got := s.DiskDirs(); !slices.Equal(got, []string{s.Dirs.Smolvm(), "/Users/u"}) {
+		t.Errorf("macOS: DiskDirs = %q", got)
+	}
+	s.OS = "linux"
+	if got := s.DiskDirs(); !slices.Equal(got, []string{s.Dirs.Smolvm()}) {
+		t.Errorf("Linux: DiskDirs = %q", got)
+	}
+}
+
 // A VM's listed ports are recorded as they are, however many; every port
 // lists none.
 func TestListedAndVolume(t *testing.T) {

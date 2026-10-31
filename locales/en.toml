@@ -349,6 +349,17 @@ other = "Unpacking the shared tools into Docker's volume {{.volume}} failed."
 description = "used and limit are sizes in GiB; backend is a backend's name (docker)"
 other = "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
 
+[disk_low]
+description = "free and need are sizes in GiB; name is the image, shared tools or VM being made"
+other = "{{.name}} needs {{.need}} GiB free on the disk holding {{.dir}}, which has {{.free}} GiB: devvm gc deletes stale images, and devvm images and devvm ls show what else you could delete"
+
+[disk_low_warning]
+description = "free and need are sizes in GiB"
+other = "the disk holding {{.dir}} has {{.free}} GiB free, less than the {{.need}} GiB building base needs: devvm gc deletes stale images"
+
+[disk_free_unknown]
+other = "couldn't read the free space on the disk holding {{.dir}}"
+
 [size_disk_default_unused]
 other = "The default disk size for new VMs doesn't apply to {{.vm}}, because the {{.backend}} backend doesn't size disks."
 

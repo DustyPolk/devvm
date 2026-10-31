@@ -614,6 +614,21 @@ func DevvmOtherFirst(first string, self string) M {
 	return M{id: "devvm_other_first", vals: []val{{"first", first}, {"self", self}}}
 }
 
+// DiskFreeUnknown is [disk_free_unknown]: "couldn't read the free space on the disk holding {{.dir}}"
+func DiskFreeUnknown(dir string) M {
+	return M{id: "disk_free_unknown", vals: []val{{"dir", dir}}}
+}
+
+// DiskLow is [disk_low]: "{{.name}} needs {{.need}} GiB free on the disk holding {{.dir}}, which has {{.free}} GiB: devvm gc deletes stale images, and devvm images and devvm ls show what else you could delete"
+func DiskLow(dir string, free string, name string, need string) M {
+	return M{id: "disk_low", vals: []val{{"dir", dir}, {"free", free}, {"name", name}, {"need", need}}}
+}
+
+// DiskLowWarning is [disk_low_warning]: "the disk holding {{.dir}} has {{.free}} GiB free, less than the {{.need}} GiB building base needs: devvm gc deletes stale images"
+func DiskLowWarning(dir string, free string, need string) M {
+	return M{id: "disk_low_warning", vals: []val{{"dir", dir}, {"free", free}, {"need", need}}}
+}
+
 // DiskOver is [disk_over]: "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
 func DiskOver(backend string, limit string, used string, vm string) M {
 	return M{id: "disk_over", vals: []val{{"backend", backend}, {"limit", limit}, {"used", used}, {"vm", vm}}}
@@ -2518,6 +2533,9 @@ var specs = map[string]spec{
 	"devcontainer_using":               {fields: []string{"file", "vm"}},
 	"devcontainer_variable":            {fields: []string{"file", "variable"}},
 	"devvm_other_first":                {fields: []string{"first", "self"}},
+	"disk_free_unknown":                {fields: []string{"dir"}},
+	"disk_low":                         {fields: []string{"dir", "free", "name", "need"}},
+	"disk_low_warning":                 {fields: []string{"dir", "free", "need"}},
 	"disk_over":                        {fields: []string{"backend", "limit", "used", "vm"}},
 	"disk_shrink":                      {fields: []string{"have", "vm", "want"}},
 	"docker_access":                    {fields: []string{"fix"}},

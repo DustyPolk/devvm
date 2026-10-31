@@ -66,6 +66,7 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	}
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	tl := tools.New(d, os.DirFS(root), quietUI{})
+	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Getenv = func(k string) string {
 		if k == "DEVVM_HOST_MISE" {
 			return filepath.Join(repo, "testdata", "stubs", "mise")
@@ -314,6 +315,54 @@ func TestBuildRequires(t *testing.T) {
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {
 		t.Error("built anyway")
+	}
+}
+
+// stored is a fake whose disks are in dirs (backend.Storage).
+type stored struct {
+	*backendtest.Fake
+	dirs []string
+}
+
+func (s stored) DiskDirs() []string { return s.dirs }
+
+// Below the free space building base wants, or another image, nothing of
+// it is made: the backend is only asked which images it has.
+func TestBuildRefusesLowSpace(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	b, f := testEnv(t)
+	b.Backend = stored{f, []string{"/lima"}}
+	free := backend.FreeBase - 1
+	b.FreeSpace = func(dir string) (uint64, error) {
+		if dir != "/lima" {
+			t.Errorf("checked %s", dir)
+		}
+		return free, nil
+	}
+	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || err.Error() != "disk_low dir=/lima free=11.9 name=base need=12" {
+		t.Errorf("Build with %d free = %v", free, err)
+	}
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images"}) {
+		t.Errorf("calls = %q", ms)
+	}
+	free = backend.FreeBase
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+		t.Fatal(err)
+	}
+	free = backend.FreeImage - 1
+	n := len(f.Calls())
+	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || err.Error() != "disk_low dir=/lima free=7.9 name=foo need=8" {
+		t.Errorf("Build of foo with %d free = %v", free, err)
+	}
+	if slices.Contains(f.Methods()[n:], "BuildImage") {
+		t.Errorf("built anyway: %q", f.Methods()[n:])
+	}
+	key, err := b.Key("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := state.ReadImage(b.Dirs, key); err == nil {
+		t.Error("foo has a record")
 	}
 }
 

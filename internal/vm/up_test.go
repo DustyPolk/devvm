@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -271,6 +272,45 @@ func TestUpRequires(t *testing.T) {
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") || len(*execs) > 0 {
 		t.Errorf("calls = %q, execs %+v", ms, *execs)
+	}
+}
+
+// stored is a fake whose disks are in dirs (backend.Storage).
+type stored struct {
+	*backendtest.Fake
+	dirs []string
+}
+
+func (s stored) DiskDirs() []string { return s.dirs }
+
+// Below the free space a new VM wants, nothing is built or made, and the
+// VM has no state; with enough for the VM but not base, base's build is
+// refused before it starts.
+func TestUpRefusesLowSpace(t *testing.T) {
+	e, f, execs := upEnv(t, allNative())
+	reg, err := backend.NewRegistry(stored{f, []string{e.Dirs.Lima}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Registry = reg
+	for _, tc := range []struct {
+		free uint64
+		want string
+	}{
+		{backend.FreeVM - 1, "disk_low dir=" + e.Dirs.Lima + " free=3.9 name=devvm-web-"},
+		{backend.FreeBase - 1, "disk_low dir=" + e.Dirs.Lima + " free=11.9 name=base need=12"},
+	} {
+		e.FreeSpace = func(string) (uint64, error) { return tc.free, nil }
+		err := Launch{e}.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})
+		if got := names(err); !strings.HasPrefix(got, tc.want) {
+			t.Errorf("with %d free: Up = %v, want %s…", tc.free, got, tc.want)
+		}
+		if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") || len(*execs) > 0 {
+			t.Errorf("with %d free: calls = %q, execs %+v", tc.free, ms, *execs)
+		}
+		if vms, _ := os.ReadDir(e.Dirs.VMs()); len(vms) > 0 {
+			t.Errorf("with %d free: a VM's state is left", tc.free)
+		}
 	}
 }
 

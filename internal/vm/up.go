@@ -306,6 +306,11 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	// Ready for devvm ssh-agent to change later, where it may be changed
 	// (an emulation once it's reviewed); otherwise fixed when it's made.
 	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
+	// Room for the VM, before anything is built or made; each build checks
+	// its own.
+	if err := (backend.Space{Free: e.FreeSpace}).Check(b, vm, backend.FreeVM); err != nil {
+		return newVM{}, err
+	}
 	return n, nil
 }
 

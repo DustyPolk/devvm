@@ -128,6 +128,7 @@ func newEnv(t *testing.T) env {
 		return ""
 	}
 	tl.ShareWait = time.Millisecond
+	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Info = func(m msg.M) { said = append(said, "==> "+m.Names()) }
 	tl.Warn = func(m msg.M) { said = append(said, "devvm: "+m.Names()) }
 	tl.Detach = func(path string, args []string, out *os.File) (int, error) {
@@ -717,6 +718,39 @@ func TestBuildRefuses(t *testing.T) {
 	}
 	e.noLeftovers(t)
 }
+
+// Below the free space a tools build wants, on the backend's disks or in
+// devvm's data folder, where the images come out, nothing is built.
+func TestBuildRefusesLowSpace(t *testing.T) {
+	e := newEnv(t)
+	e.locked(t, fixture(t))
+	all := e.files(t, "node")
+	for _, low := range []string{"/lima", e.Dirs.Data} {
+		f := fake()
+		e.FreeSpace = func(dir string) (uint64, error) {
+			if dir == low {
+				return backend.FreeTools - 1, nil
+			}
+			return backend.FreeTools, nil
+		}
+		err := e.Build(t.Context(), backend.Review{}, stored{f, []string{"/lima"}}, baseKey, gnuT, all)
+		if got := names(err); !strings.HasPrefix(got, "disk_low dir="+low+" ") || !strings.HasSuffix(got, " need=8") {
+			t.Errorf("%s low: Build = %v", low, got)
+		}
+		if len(f.Calls()) > 0 {
+			t.Errorf("%s low: calls = %q", low, f.Methods())
+		}
+		e.noLeftovers(t)
+	}
+}
+
+// stored is a fake whose disks are in dirs (backend.Storage).
+type stored struct {
+	*backendtest.Fake
+	dirs []string
+}
+
+func (s stored) DiskDirs() []string { return s.dirs }
 
 // Another devvm holding the share is waited for, then given up on.
 func TestLockShare(t *testing.T) {

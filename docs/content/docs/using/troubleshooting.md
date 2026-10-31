@@ -27,6 +27,16 @@ The next build of that image deletes the VM and starts over, and `devvm gc` also
 
 Either way, the images under it, which are already built, stay. devvm deletes and builds again any image it finds without its record, such as a failed build's or one devvm couldn't clean up after a crash or a power cut.
 
+## Not enough free space
+
+Before each build and each new VM, devvm checks the free space on the disk that will hold it, and it refuses when there's less than the step needs: 12 GiB for base, 8 GiB for another image or for shared tool images, and 4 GiB for a VM ([free space](ports-size.md#free-space)). The message says which folder's disk it checked, how much is free and how much the step needs. Nothing has been built or made yet, so you can make room and run the same command again:
+
+- `devvm gc` deletes stale and unfinished images and unused shared tool images ([cleaning up](images.md#cleaning-up)).
+- `devvm images` lists the images and shared tool images with the space each takes, and `devvm images rm` deletes those you don't need ([deleting images](images.md#deleting-images)).
+- `devvm ls` lists your VMs, and `devvm rm` deletes one. devvm never deletes a VM to make room, because a VM may hold work you haven't saved.
+
+When devvm says it couldn't read the free space, the error after the message says why, such as a folder it can't reach.
+
 ## You pressed Ctrl+C
 
 Ctrl+C, or closing the terminal, stops the command that's running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.

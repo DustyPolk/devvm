@@ -76,3 +76,20 @@ A VM's disk size is how far the disk can grow, not how much space it takes. A pr
 
 - **macOS:** the copy is an APFS clone. `du` counts the shared blocks as the clone's own, so it overcounts.
 - **Linux:** the copy is a qcow2 overlay of the image's disk, which holds only the VM's changes, about 12 MB for a new VM instead of 2 GB.
+
+### Free space
+
+Before devvm builds an image or makes a VM, it checks the free space on the disk that will hold it, and it refuses to start the step when there's less free than the step needs:
+
+| Step | Free space it needs |
+| --- | --- |
+| building `base` | 12 GiB |
+| building any other image | 8 GiB |
+| building shared tool images | 8 GiB |
+| making a VM | 4 GiB |
+
+Each build checks again before it starts, so the first VM on a machine, which builds base, needs 12 GiB free. The numbers leave a margin over what each step takes. base takes 3 to 5 GiB, depending on its features. On macOS, an image built on another and a new VM take only what they write, but on Linux hosts an image starts as a full copy of its parent's disk. A VM then grows as you work in it, and its disk never shrinks.
+
+devvm checks the disk that holds the backend's images and VMs. On Lima, that's the disk of devvm's Lima home. On smolvm, it's the disk of devvm's data folder, and on macOS also that of your home folder, where smolvm keeps its machines. Shared tool images come out into devvm's data folder on every backend, so a tools build also checks that folder's disk. The Docker backend keeps its images and VMs in the engine's own storage, which on Docker Desktop is a disk inside Desktop's VM, so devvm doesn't check free space for them.
+
+`devvm doctor` also warns when that disk has less free space than building base needs, but the warning doesn't make doctor fail. When devvm refuses, see [Not enough free space](troubleshooting.md#not-enough-free-space) for how to make room.

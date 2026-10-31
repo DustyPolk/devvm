@@ -7,7 +7,7 @@ Check what devvm needs on this machine
 
 ## Synopsis
 
-Check what the backend new VMs get (--backend for another) needs on this machine, and say how to get what's missing: devvm never installs it. The docker backend also says which engine it uses, and on Docker Desktop which folders it shares. Then list each backend's features (native, emulated, unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which only --from with an image only Docker has needs. When HTTPS_PROXY is set and ~/.config/devvm/ca has no CA certificates, it says that a proxy that inspects TLS needs its CA there. Fails when something is missing.
+Check what the backend new VMs get (--backend for another) needs on this machine, and say how to get what's missing: devvm never installs it. The docker backend also says which engine it uses, and on Docker Desktop which folders it shares. Then list each backend's features (native, emulated, unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which only --from with an image only Docker has needs. When HTTPS_PROXY is set and ~/.config/devvm/ca has no CA certificates, it says that a proxy that inspects TLS needs its CA there. It warns when the disk the backend's images and VMs go on has less free space than building base needs. Fails when something is missing, but not for low space.
 
 ```text
 devvm doctor [flags]

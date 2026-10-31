@@ -91,6 +91,10 @@ type Env struct {
 	// PublicImage pins an image a devcontainer.json names to the digest its
 	// registry gives anyone (from.Lookup.Public).
 	PublicImage func(ctx context.Context, ref string) (string, error)
+	// FreeSpace returns the free space on the volume holding a path
+	// (platform.FreeSpace), checked before a new VM and each build; nil
+	// checks none.
+	FreeSpace func(path string) (uint64, error)
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
 	// asks which features base gets (build.Env.Pick); Terminal reports
 	// whether it can ask.
@@ -147,7 +151,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Terminal: u.StdinIsTerminal,
 		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public,
+		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: platform.FreeSpace,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
 	e.Agent = sshagent.New(d, e.mounts, u)
@@ -160,7 +164,7 @@ func (e *Env) builder(b backend.Backend, fromRef string) *build.Env {
 	return &build.Env{
 		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
-		Terminal: e.Terminal, LogNote: e.LogNote,
+		Terminal: e.Terminal, LogNote: e.LogNote, FreeSpace: e.FreeSpace,
 	}
 }
 

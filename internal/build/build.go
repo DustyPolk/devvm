@@ -52,6 +52,9 @@ type Env struct {
 	Pick            func([]Feature) []Feature
 	Terminal        func() bool
 	LogNote         func()
+	// FreeSpace returns the free space on the volume holding a path
+	// (platform.FreeSpace), checked before each build; nil checks none.
+	FreeSpace func(path string) (uint64, error)
 
 	looked bool // From's digest was looked up in this run
 }
@@ -324,6 +327,14 @@ func (b Builds) build(ctx context.Context, name string) error {
 	}
 	for i, s := range spec.Scripts {
 		spec.Scripts[i] = cas.Script(s)
+	}
+	// Before anything of this image is made; its parent is built.
+	need := backend.FreeImage
+	if name == image.Base {
+		need = backend.FreeBase
+	}
+	if err := (backend.Space{Free: b.FreeSpace}).Check(b.Backend, name, need); err != nil {
+		return err
 	}
 
 	switch {

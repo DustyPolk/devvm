@@ -60,6 +60,7 @@ Docker Desktop mounts only folders under the ones its settings list, in Settings
 A Docker VM is a container with Docker's default capabilities less `NET_RAW`, no devices added, and Docker's seccomp profile. So these don't work in one (one with the [docker layer](#the-docker-layer) has `NET_RAW` and `NET_ADMIN` in its own namespaces, and still none of the devices):
 
 - **A disk size.** devvm refuses a VM that asks for one, and a default disk size you set (`devvm size -g --disk`) doesn't apply to Docker VMs, which devvm tells you. `devvm size` shows what a VM holds.
+- **A free-space check on the engine's disk.** Before a build or a new VM, devvm doesn't check the engine's free space, but a tools build checks the disk of devvm's data folder, where the tool images come out ([free space](../using/ports-size.md#free-space)).
 - **Paths with a comma or a quote.** Docker reads mounts as CSV, so devvm refuses a folder whose path has one.
 - **Raw packet tools** (`tcpdump`, `nmap`'s raw scans, `arping`), because there's no `NET_RAW`. `ping` works.
 - **Firewalls, routes and VPN clients** (`iptables`, `ip route`, WireGuard, OpenVPN), because there's no `NET_ADMIN` and no `/dev/net/tun`.

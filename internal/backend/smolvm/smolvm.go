@@ -111,7 +111,10 @@ type UI interface {
 	Interrupted() bool
 }
 
-var _ backend.Backend = (*Smolvm)(nil)
+var (
+	_ backend.Backend = (*Smolvm)(nil)
+	_ backend.Storage = (*Smolvm)(nil)
+)
 
 // New returns the smolvm backend for devvm's folders and its own files
 // (assets), on u.
@@ -191,6 +194,17 @@ func (s *Smolvm) KeyFiles() map[string][]byte {
 		files["container/"+n], _ = s.containerScript(n)
 	}
 	return files
+}
+
+// DiskDirs is devvm's smolvm folder, which holds the images' packs and, on
+// Linux, smolvm's state with the machines; on macOS smolvm keeps machines
+// under the user's home folder (backend.Storage).
+func (s *Smolvm) DiskDirs() []string {
+	dirs := []string{s.Dirs.Smolvm()}
+	if home := s.Getenv("HOME"); s.OS != "linux" && home != "" {
+		dirs = append(dirs, home)
+	}
+	return dirs
 }
 
 // ToolFormat is uncompressed EROFS (plain.sh), as smolvm's kernel mounts

@@ -75,6 +75,9 @@ type Env struct {
 	LoggedCmd func(ctx context.Context, step msg.M, cmd *exec.Cmd) error
 	// AddCleanup adds to the run's cleanup stack.
 	AddCleanup func(f func(context.Context)) (remove func())
+	// FreeSpace returns the free space on the volume holding a path
+	// (platform.FreeSpace), checked before a build; nil checks none.
+	FreeSpace func(path string) (uint64, error)
 
 	// The host's mise: its download's URL (a format taking the version
 	// and platform) and checksums, by platform.
@@ -120,6 +123,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Env {
 		ShareWait: time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
+		FreeSpace: platform.FreeSpace,
 	}
 }
 

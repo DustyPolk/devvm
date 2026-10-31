@@ -30,4 +30,4 @@ When a build fails, devvm keeps its machine, stopped. To look inside, run `smolv
 
 ## Cleaning smolvm's caches
 
-Each of devvm's smolvm images is a full pack, and `base`'s is about 450 MB. smolvm also keeps caches of its own (`~/Library/Caches/smolvm` on macOS), which `smolvm machine prune` and `smolvm pack prune` clean.
+Each of devvm's smolvm images is a full pack, and `base`'s is about 450 MB. smolvm also keeps caches of its own (`~/Library/Caches/smolvm` on macOS), which `smolvm machine prune` and `smolvm pack prune` clean. Before a build or a new VM, devvm checks the free space on the disk of its data folder, and on macOS also on that of your home folder, where smolvm keeps machines ([free space](../using/ports-size.md#free-space)).

@@ -122,6 +122,11 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	if len(build) == 0 {
 		return nil
 	}
+	// The build VM is the backend's; the images come out into devvm's data
+	// folder, whatever the backend.
+	if err := (backend.Space{Free: t.FreeSpace}).Check(b, Label(build), backend.FreeTools, t.Dirs.Data); err != nil {
+		return err
+	}
 	t.Info(msg.BuildingTools(Label(build)))
 	t.LogNote()
 	return t.batch(ctx, b, base, tg.Format, lock, build)
