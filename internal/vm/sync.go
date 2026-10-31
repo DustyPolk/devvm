@@ -68,11 +68,22 @@ const unmountedFile = "/run/devvm/tools-unmounted"
 // unmountedMax caps how much of unmountedFile devvm reads.
 const unmountedMax = 16 << 10
 
+// unmountedWait bounds reading unmountedFile: root in the VM can make the
+// read hang, and a failed setup's error shouldn't wait on it.
+const unmountedWait = 10 * time.Second
+
 // unmounted returns the VM's tool files (files, from its state) that its
 // devvm-tools last said it couldn't mount, read after a failed setup.
 func (e syncer) unmounted(ctx context.Context, b backend.Backend, vm string, files []string) []string {
+	return readUnmounted(ctx, b, vm, files, unmountedWait)
+}
+
+// readUnmounted is unmounted, giving up after wait: then no tool counts.
+func readUnmounted(ctx context.Context, b backend.Backend, vm string, files []string, wait time.Duration) []string {
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
 	out := &capped{max: unmountedMax}
-	if err := b.Exec(ctx, vm, []string{"cat", unmountedFile}, backend.ExecOpts{Stdout: out, Stderr: io.Discard}); err != nil {
+	if err := b.Exec(ctx, vm, []string{"cat", unmountedFile}, backend.ExecOpts{Stdout: out, Stderr: io.Discard}); err != nil || ctx.Err() != nil {
 		return nil
 	}
 	return reported(files, out.Bytes())

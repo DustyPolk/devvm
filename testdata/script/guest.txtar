@@ -3,6 +3,12 @@
 # Code's settings; and assets/guest/tools.sh, which mounts the shared tools.
 exec bash snippets.sh $DEVVM_REPO/assets/guest/sync.sh
 
+# devvm reads devvm-tools' report after a failed setup, so the setup's
+# first command removes an older report (from boot): a failure before
+# devvm-tools runs isn't taken for an unmounted tool.
+exec bash first-cmd.sh $DEVVM_REPO/assets/guest/sync.sh
+stdout '^sudo rm -f /run/devvm/tools-unmounted$'
+
 # The prompt starts with (devvm), after a theme that rebuilds PS1 before
 # each prompt; with no theme, once.
 exec bash prompt-test.sh
@@ -53,6 +59,9 @@ awk '/^_devvm_blocked\(\) \{/ { on = 1 } on && /^EOF$/ { exit } on' "$1" > block
 awk '/^merge_claude_json\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$1" > merge.sh
 awk '/^vsc=~\/.vscode-server/ { on = 1 } on && /^# Codex has no env-var/ { exit } on' "$1" > vsc.sh
 for f in prompt.sh blocked.sh merge.sh vsc.sh; do [[ -s $f ]] || { echo "no $f in $1" >&2; exit 1; }; done
+-- first-cmd.sh --
+# The first command of a script ($1) after its set line, past comments.
+awk 'on && !/^#/ { print; exit } /^set -euo pipefail$/ { on = 1 }' "$1"
 -- prompt-test.sh --
 # Two prompts, the way bash runs PROMPT_COMMAND (an array of commands on
 # bash 5.1+, else a string).

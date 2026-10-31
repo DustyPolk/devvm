@@ -14,6 +14,8 @@
 #                and DEVVM_PROXY (the proxy URL when network policy is on, else empty)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 set -euo pipefail
+# devvm reads devvm-tools' report when this setup fails, so an older one (from boot) goes first.
+sudo rm -f /run/devvm/tools-unmounted
 s=$(cd "$(dirname "$0")" && pwd)
 host_home=$(cat "$s/host_home")
 
