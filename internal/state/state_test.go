@@ -22,6 +22,34 @@ func testDirs(t *testing.T) paths.Dirs {
 	}
 }
 
+// The data and config folders are made, or made the user's alone whatever
+// mode they had, and what's in them keeps its own mode.
+func TestMakePrivate(t *testing.T) {
+	d := testDirs(t)
+	if err := os.MkdirAll(filepath.Join(d.Config, "layers"), 0o755); err != nil { //nolint:gosec // the test's own folder
+		t.Fatal(err)
+	}
+	if err := os.Chmod(d.Config, 0o777); err != nil { //nolint:gosec // the test's own folder
+		t.Fatal(err)
+	}
+	if err := MakePrivate(d); err != nil {
+		t.Fatal(err)
+	}
+	for dir, want := range map[string]fs.FileMode{d.Data: 0o700, d.Config: 0o700, filepath.Join(d.Config, "layers"): 0o755} {
+		if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, want %v (%v)", dir, fi.Mode().Perm(), want, err)
+		}
+	}
+	// One that can't be made fails.
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := MakePrivate(paths.Dirs{Data: filepath.Join(file, "devvm"), Config: d.Config}); err == nil {
+		t.Error("a data folder under a file was made")
+	}
+}
+
 func write(t *testing.T, path, data string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -81,7 +81,7 @@ A CA in the folder can read every TLS connection a VM makes, as it can this mach
 
 devvm's Lima home is its own, whatever `LIMA_HOME` says, so Lima settings meant for other VMs never reach devvm's. Set `DEVVM_LIMA_HOME` to move it, for example to a sandbox or to a shorter path.
 
-Only you can read devvm's files. When devvm can't read one, it names the file and the line ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
+Only you can read devvm's files. Each time devvm runs, it makes `~/.config/devvm` and `~/.local/share/devvm` yours alone (mode 700), whatever mode they had, so nothing in them is open to others even when a file or folder inside has a wider mode. When devvm can't read one, it names the file and the line ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
 
 ## Project folders devvm refuses
 

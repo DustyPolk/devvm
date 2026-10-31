@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/w3cj/devvm/internal/paths"
 )
 
 // CorruptError is a state file devvm can't read: edited by hand, or damaged.
@@ -107,6 +109,21 @@ func checkPair(key, val string, validKey func(string) bool) error {
 	}
 	if strings.ContainsAny(val, "\n\r") {
 		return fmt.Errorf("state value for %s has a line break", key)
+	}
+	return nil
+}
+
+// MakePrivate makes devvm's data and config folders, and makes both the
+// user's alone (mode 700) whatever mode they had, so nothing beneath them
+// is open to others.
+func MakePrivate(d paths.Dirs) error {
+	for _, dir := range []string{d.Data, d.Config} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+			return err
+		}
 	}
 	return nil
 }

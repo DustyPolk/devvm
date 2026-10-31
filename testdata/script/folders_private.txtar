@@ -1,0 +1,20 @@
+# Every run makes devvm's data and settings folders the user's alone,
+# whatever mode they had, and leaves what's in them as it is.
+mkdir $XDG_CONFIG_HOME/devvm/layers
+chmod 0755 $XDG_CONFIG_HOME/devvm
+chmod 0755 $XDG_CONFIG_HOME/devvm/layers
+! exists $XDG_DATA_HOME/devvm
+exec devvm version
+! stderr .
+exec sh -c 'ls -ld "$XDG_DATA_HOME/devvm" "$XDG_CONFIG_HOME/devvm" "$XDG_CONFIG_HOME/devvm/layers"'
+stdout -count=2 '^drwx------[@.+]? '
+stdout '^drwxr-xr-x[@.+]? .*/layers$'
+
+# A folder that can't be made is warned about, and the command goes on.
+env DEVVM_MESSAGES=names
+env XDG_DATA_HOME=$WORK/file
+exec devvm version
+stderr '^devvm: folders_not_private config='$XDG_CONFIG_HOME/devvm' data=.*/file/devvm$'
+stdout .
+
+-- file --

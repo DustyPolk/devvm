@@ -106,6 +106,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"layer_exists":                     "using/customizing#your-own-layers",
 	"images_stale_note":                "using/images#cleaning-up",
 	"images_unused":                    "using/images#cleaning-up",
+	"folders_not_private":              "using/space#devvms-data-folder",
 	"retention_busy":                   "using/settings#retention",
 	"retention_unreadable":             "using/settings#retention",
 	"retention_failed":                 "using/settings#retention",

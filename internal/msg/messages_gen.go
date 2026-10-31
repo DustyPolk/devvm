@@ -1009,6 +1009,11 @@ func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
 }
 
+// FoldersNotPrivate is [folders_not_private]: "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
+func FoldersNotPrivate(config string, data string) M {
+	return M{id: "folders_not_private", vals: []val{{"config", config}, {"data", data}}}
+}
+
 // ForgotOrphan is [forgot_orphan]: "deleted what devvm kept for {{.vm}}"
 func ForgotOrphan(vm string) M {
 	return M{id: "forgot_orphan", vals: []val{{"vm", vm}}}
@@ -2917,6 +2922,7 @@ var specs = map[string]spec{
 	"fetch_failed":                     {fields: []string{"vm"}},
 	"fetch_until":                      {fields: []string{"file", "remote"}},
 	"fetching":                         {fields: []string{"prefix"}},
+	"folders_not_private":              {fields: []string{"config", "data"}},
 	"forgot_orphan":                    {fields: []string{"vm"}},
 	"forwarder_failed":                 {fields: []string{"reason"}},
 	"from_cached_not_found":            {fields: []string{"from", "host"}},

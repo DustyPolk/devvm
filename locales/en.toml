@@ -786,6 +786,10 @@ other = "no retention setting is on"
 [retention_busy]
 other = "Another devvm is applying the retention settings. Run devvm gc --retention again once it's done."
 
+[folders_not_private]
+description = "data is devvm's data folder and config its settings folder, which devvm makes mode 700 on every run"
+other = "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
+
 [retention_unreadable]
 other = "The retention settings can't be read, so devvm applies none. Fix the line it names, or run devvm space set KEY= to turn one off."
 

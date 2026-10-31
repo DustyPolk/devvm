@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -35,6 +37,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			makePrivate(u)
 			if !skipsRetention(cmd) {
 				autoRetain(cmd.Context(), u)
 			}
@@ -53,6 +56,19 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		newAuthCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	return root
+}
+
+// makePrivate makes devvm's data and settings folders the user's alone on
+// every run, whatever mode they had. Without a HOME there are no folders,
+// and the command says so itself.
+func makePrivate(u *ui.UI) {
+	d, err := paths.FromEnv()
+	if err != nil {
+		return
+	}
+	if err := state.MakePrivate(d); err != nil {
+		u.Warn(msg.FoldersNotPrivate(d.Config, d.Data).Because(err))
+	}
 }
 
 // Execute runs devvm with args on u and returns its exit code. A command's
