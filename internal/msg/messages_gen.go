@@ -2464,6 +2464,16 @@ func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
 }
 
+// WidenParentVM is [widen_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside, and {{.cmd}} gives it more access. Change it?"
+func WidenParentVM(cmd string, dir string, vm string) M {
+	return M{id: "widen_parent_vm", vals: []val{{"cmd", cmd}, {"dir", dir}, {"vm", vm}}}
+}
+
+// WidenParentVMRefused is [widen_parent_vm_refused]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it more access, run {{.cmd}} in {{.dir}}, or here in a terminal to confirm."
+func WidenParentVMRefused(cmd string, dir string, vm string) M {
+	return M{id: "widen_parent_vm_refused", vals: []val{{"cmd", cmd}, {"dir", dir}, {"vm", vm}}}
+}
+
 // specs describes every message, by ID.
 var specs = map[string]spec{
 	"add_in_place":                     {fields: []string{"image", "missing", "vm"}},
@@ -2958,4 +2968,6 @@ var specs = map[string]spec{
 	"vm_outdated":                      {fields: []string{"changed"}},
 	"vm_size":                          {fields: []string{"size", "vm"}},
 	"vm_unfinished":                    {fields: []string{"vm"}},
+	"widen_parent_vm":                  {fields: []string{"cmd", "dir", "vm"}},
+	"widen_parent_vm_refused":          {fields: []string{"cmd", "dir", "vm"}},
 }

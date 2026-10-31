@@ -102,6 +102,11 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	if !use && secrets.FromImage(st, name) {
 		return msg.SecretWithImage(vm)
 	}
+	if use {
+		if ok, err := t.widen(e.Env, "devvm secret use"); !ok {
+			return err
+		}
+	}
 	if err := secrets.Bind(st, name, use); err != nil {
 		return err
 	}

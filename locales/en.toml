@@ -741,6 +741,14 @@ other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete i
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
 other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hold that project's work. Delete it?"
 
+[widen_parent_vm]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside; cmd is the command that gives vm more access, such as devvm network off"
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and {{.cmd}} gives it more access. Change it?"
+
+[widen_parent_vm_refused]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside; cmd is the command that gives vm more access, such as devvm network off"
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it more access, run {{.cmd}} in {{.dir}}, or here in a terminal to confirm."
+
 [delete_other_folder_vm]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
 

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -52,6 +54,11 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	if st.Get(KeyNet) == to {
 		e.Info(msg.NetAlready(to, vm))
 		return nil
+	}
+	if !on {
+		if ok, err := t.widen(e.Env, "devvm network off"); !ok {
+			return err
+		}
 	}
 	in, err := b.Inspect(ctx, vm)
 	if err != nil {
@@ -130,6 +137,19 @@ func (e Net) policyVM(ctx context.Context, noVM func(dir string) msg.M) (*found,
 	return t, nil
 }
 
+// widensPolicy returns the command, when a change to a VM's own rules gives
+// it more access: adding allows, or removing a deny (a rule with its !);
+// else "".
+func widensPolicy(rules []string, deny, remove bool) string {
+	switch {
+	case !remove && !deny:
+		return "devvm policy allow"
+	case remove && slices.ContainsFunc(rules, func(r string) bool { return strings.HasPrefix(strings.TrimSpace(r), "!") }):
+		return "devvm policy rm"
+	}
+	return ""
+}
+
 // Policy writes the folder's VM's allowlist to w: each policy file its
 // proxy reads that has rules, in order.
 func (e Net) Policy(ctx context.Context, w io.Writer) error {
@@ -154,6 +174,11 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 		t, err := e.policyVM(ctx, msg.NoVMPolicy)
 		if err != nil {
 			return err
+		}
+		if cmd := widensPolicy(rules, deny, remove); cmd != "" {
+			if ok, err := t.widen(e.Env, cmd); !ok {
+				return err
+			}
 		}
 		vm = t.f.Name
 		file = netpolicy.VMPolicyFile(e.Dirs, vm)

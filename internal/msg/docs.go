@@ -118,6 +118,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"use_parent_vm":                    "getting-started/commands#a-subfolder",
 	"using_parent_vm":                  "getting-started/commands#a-subfolder",
 	"rm_parent_vm":                     "getting-started/commands#a-subfolder",
+	"widen_parent_vm_refused":          "getting-started/commands#a-subfolder",
 	"use_parent_vm_repo":               "getting-started/commands#a-subfolder",
 	"no_terminal_confirm":              "getting-started/commands#adding-to-a-vm",
 	"add_layer_failed":                 "getting-started/commands#adding-to-a-vm",

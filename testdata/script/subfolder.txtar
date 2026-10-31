@@ -2,7 +2,8 @@
 # that VM in the subfolder, saying so; --here and --clone make the
 # subfolder its own; stop acts on the parent's VM, naming it first; rm
 # refuses it without a terminal. adopt doesn't look upward, and nothing
-# does from a repo of its own below the parent's folder.
+# does from a repo of its own below the parent's folder. Commands that
+# give the parent's VM more access are refused without a terminal.
 env DEVVM_MESSAGES=names
 env VMS=$XDG_DATA_HOME/devvm/vms
 mkdir $WORK/app/src/lib
@@ -81,13 +82,32 @@ exec devvm rm -f
 cd $WORK/app/src
 exec devvm rm
 cd $WORK/app/src/lib
+
+# Commands that give a parent's VM more access are refused without a
+# terminal, naming the VM and its folder, and change nothing.
+! exec devvm secret use github
+stderr '^devvm: widen_parent_vm_refused cmd=devvm secret use dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm ssh-agent on
+stderr '^devvm: widen_parent_vm_refused cmd=devvm ssh-agent on dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+exec devvm ssh-agent
+stdout '^off$'
+! exec devvm policy allow example.com
+stderr '^devvm: widen_parent_vm_refused cmd=devvm policy allow dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+exec devvm policy deny bad.example.com
+stdout 'rule_added'
+! exec devvm policy rm '!bad.example.com'
+stderr '^devvm: widen_parent_vm_refused cmd=devvm policy rm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+exec devvm policy
+stdout '!bad.example.com'
+! stdout '^example.com'
+
 exec sh -c ': > "$STUB_LOG"'
 ! exec devvm rm -f
 stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 stderr '^devvm: rm_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl delete'
-exec sh -c 'ls "$VMS" | wc -l'
+exec sh -c 'ls "$VMS" | grep -v "\.policy$" | wc -l'
 stdout '^ *1$'
 cd $WORK/app
 exec devvm rm

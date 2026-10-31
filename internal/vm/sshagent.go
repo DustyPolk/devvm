@@ -50,6 +50,9 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		if err := e.Registry.Require(b, vm, backend.FeatureAgentForwarding); err != nil {
 			return err
 		}
+		if ok, err := t.widen(e.Env, "devvm ssh-agent "+mode); !ok {
+			return err
+		}
 	}
 	if mode == sshagent.Devvm {
 		if err := e.Agent.Ensure(ctx); err != nil {

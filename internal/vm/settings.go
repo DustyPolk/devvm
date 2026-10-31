@@ -44,6 +44,11 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 		return msg.GitProtectClone(vm)
 	}
 	p := e.Protector(t.f.Dir)
+	if mode == gitprotect.Off && p.Mode(t.st) != gitprotect.Off {
+		if ok, err := t.widen(e.Env, "devvm git-protect off"); !ok {
+			return err
+		}
+	}
 	// Elsewhere there are no locks to race.
 	if p.OS == "darwin" {
 		in, err := t.b.Inspect(ctx, vm)

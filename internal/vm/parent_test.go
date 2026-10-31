@@ -10,7 +10,11 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -78,9 +82,16 @@ func TestLookupParents(t *testing.T) {
 	if dir, _ := lookupVM(t, e); dir != "" {
 		t.Errorf("from src with its state alone: %q, want its own", dir)
 	}
-	f.Instances[own.f.Name] = in
-	// One made for an earlier folder at its path is passed over.
+	// The nearest parent with state stops the search when its backend has
+	// lost its VM: no VM, never web's.
 	e.Dir = lib
+	delete(f.Instances, own.f.Name)
+	if dir, _ := lookupVM(t, e); dir != "" {
+		t.Errorf("past a parent's lost VM: %q, want none", dir)
+	}
+	f.Instances[own.f.Name] = in
+	// And when its VM was made for an earlier folder at its path (a VM can
+	// replace a nested folder through its mount): no VM, never web's.
 	for _, n := range vmNames(t, e) {
 		st, err := state.ReadVM(e.Dirs, n)
 		if err != nil {
@@ -92,8 +103,11 @@ func TestLookupParents(t *testing.T) {
 			}
 		}
 	}
-	if dir, _ := lookupVM(t, e); dir != web {
-		t.Errorf("past another folder's VM: %q, want web's", dir)
+	if dir, _ := lookupVM(t, e); dir != "" {
+		t.Errorf("past another folder's VM: %q, want none", dir)
+	}
+	if _, err := e.findExisting(t.Context(), ""); names(err) != "no_vm dir="+lib {
+		t.Errorf("findExisting past another folder's VM = %v, want no_vm", names(err))
 	}
 	// Never the home folder's, or one above it.
 	e.Home = web
@@ -268,6 +282,131 @@ func TestCommandsInSubfolder(t *testing.T) {
 	if n := len(vmNames(t, e)); n != 0 {
 		t.Errorf("%d VMs after rm", n)
 	}
+}
+
+// Commands that give a parent folder's VM more access, run from a
+// subfolder: refused without a terminal, asked in one ([y/N]), a no
+// changing nothing. The same commands in the parent folder, or ones that
+// take access away, ask nothing.
+func TestWidenParentVM(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	f.ExecFunc = noDirect
+	web := e.Dir
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	vm := st.Name()
+	if err := (Net{e}).SetNetwork(t.Context(), true); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := st.Set(gitprotect.KeyGitProtect, gitprotect.On); err != nil {
+		t.Fatal(err)
+	}
+	subfolder(t, e, web, "src")
+	n, s := Net{e}, Settings{e}
+	cases := []struct {
+		cmd     string
+		do      func() error
+		changed func() bool
+	}{
+		{
+			"devvm network off", func() error { return n.SetNetwork(t.Context(), false) },
+			func() bool { return reread(t, e, vm).Get(KeyNet) == "off" },
+		},
+		{
+			"devvm secret use", func() error { return n.SecretUse(t.Context(), "github", true) },
+			func() bool { return slices.Contains(secrets.Names(reread(t, e, vm)), "github") },
+		},
+		{
+			"devvm ssh-agent on", func() error { return s.SetSSHAgent(t.Context(), sshagent.On) },
+			func() bool { return sshagent.Mode(reread(t, e, vm)) == sshagent.On },
+		},
+		{
+			"devvm policy allow", func() error { return n.PolicyChange(t.Context(), []string{"example.com"}, false, false, false) },
+			func() bool { return policyHas(t, e, vm, "example.com") },
+		},
+		{
+			"devvm git-protect off", func() error { return s.SetGitProtect(t.Context(), gitprotect.Off) },
+			func() bool { return reread(t, e, vm).Get(gitprotect.KeyGitProtect) == gitprotect.Off },
+		},
+	}
+	for _, c := range cases {
+		e.Terminal = func() bool { return false }
+		want := "widen_parent_vm_refused cmd=" + c.cmd + " dir=" + web + " vm=" + vm
+		if err := c.do(); names(err) != want {
+			t.Errorf("%s without a terminal = %v, want %s", c.cmd, names(err), want)
+		}
+		asked := answers(t, e, false)
+		if err := c.do(); err != nil {
+			t.Errorf("%s, answered no: %v", c.cmd, names(err))
+		}
+		if want := "widen_parent_vm cmd=" + c.cmd + " dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
+			t.Errorf("%s asked %q, want %q", c.cmd, *asked, want)
+		}
+		if c.changed() {
+			t.Errorf("%s changed the VM", c.cmd)
+		}
+		if c.cmd == "devvm git-protect off" {
+			continue // a running VM's locks don't change on macOS
+		}
+		answers(t, e, true)
+		if err := c.do(); err != nil {
+			t.Errorf("%s, answered yes: %v", c.cmd, names(err))
+		}
+		if !c.changed() {
+			t.Errorf("%s, answered yes, didn't change the VM", c.cmd)
+		}
+	}
+	// Taking access away asks nothing, and so does policy rm of an allow;
+	// rm of a deny asks.
+	asked := answers(t, e, false)
+	if err := n.SetNetwork(t.Context(), true); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, true, false, false); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := n.PolicyChange(t.Context(), []string{"example.com"}, false, true, false); err != nil {
+		t.Fatal(names(err))
+	}
+	if len(*asked) != 0 {
+		t.Errorf("asked %q", *asked)
+	}
+	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, false, true, false); err != nil {
+		t.Fatal(names(err))
+	}
+	if want := "widen_parent_vm cmd=devvm policy rm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
+		t.Errorf("policy rm of a deny asked %q", *asked)
+	}
+	if !policyHas(t, e, vm, "!bad.example.com") {
+		t.Error("policy rm of a deny, answered no, removed it")
+	}
+	// In the parent folder itself, nothing asks.
+	e.Dir = web
+	e.Terminal = func() bool { return false }
+	if err := n.SetNetwork(t.Context(), false); err != nil {
+		t.Errorf("network off in the VM's own folder: %v", names(err))
+	}
+}
+
+// reread is vm's state as it is now.
+func reread(t *testing.T, e *Env, vm string) *state.VM {
+	t.Helper()
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// policyHas reports whether vm's own policy file has rule.
+func policyHas(t *testing.T, e *Env, vm, rule string) bool {
+	t.Helper()
+	data, err := os.ReadFile(netpolicy.VMPolicyFile(e.Dirs, vm))
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	return slices.Contains(strings.Fields(string(data)), rule)
 }
 
 // A subfolder in a repo of its own below the parent's folder (it, or a

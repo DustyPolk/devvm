@@ -219,9 +219,10 @@ func (e *Env) find(ctx context.Context, flag string) (*found, error) {
 }
 
 // lookup finds the folder's own VM, which needn't exist, as find does;
-// with parents, when it has neither state nor a VM, also the nearest parent
-// folder's (project.Parents, stopping before home and the root) that its
-// backend has and that was made for that folder (sameFolder), else nil.
+// with parents, when it has neither state nor a VM, also the VM of the
+// nearest parent folder with state of its own (project.Parents, stopping
+// before home and the root) when its backend has it and it was made for
+// that folder (sameFolder), else nil.
 // The VMs' names fit a new VM's backend; a VM that exists keeps the
 // backend its state records.
 func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *found, error) {
@@ -255,9 +256,13 @@ func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *f
 	return t, p, nil
 }
 
-// parentVM finds the nearest parent folder's VM for lookup, else nil,
-// with the nearest folder below it with a .git of its own (repo), the
-// folder devvm runs in included.
+// parentVM finds the VM of the nearest parent folder with state of its own
+// for lookup, else nil, with the nearest folder below it with a .git of
+// its own (repo), the folder devvm runs in included. Only folders without
+// state are passed over: the search stops at the first with state, which
+// gives nil unless its backend has its VM and it was made for that folder.
+// A VM in an outer folder can replace a nested folder through its mount,
+// and devvm then never skips the nested folder's VM for the outer one's.
 func (e *Env) parentVM(ctx context.Context, nameMax int, flag string) (*found, error) {
 	repo := ""
 	if hasGit(e.Dir) {
@@ -272,19 +277,21 @@ func (e *Env) parentVM(ctx context.Context, nameMax int, flag string) (*found, e
 		if err != nil {
 			return nil, err
 		}
-		if pst.Exists() && e.sameFolder(pf, pst) {
-			p, err := e.inspect(ctx, pf, pst, flag)
-			if err != nil {
-				return nil, err
+		if !pst.Exists() {
+			if repo == "" && hasGit(dir) {
+				repo = dir
 			}
-			if p.exists {
-				p.sub, p.repo = e.Dir, repo
-				return p, nil
-			}
+			continue
 		}
-		if repo == "" && hasGit(dir) {
-			repo = dir
+		if !e.sameFolder(pf, pst) {
+			return nil, nil
 		}
+		p, err := e.inspect(ctx, pf, pst, flag)
+		if err != nil || !p.exists {
+			return nil, err
+		}
+		p.sub, p.repo = e.Dir, repo
+		return p, nil
 	}
 	return nil, nil
 }
@@ -381,6 +388,20 @@ func (e *Env) checkFolder(f project.Folder, st *state.VM) error {
 		return msg.VMOtherFolder(f.Name, st.Get(state.KeyDir))
 	}
 	return nil
+}
+
+// widen is asked, with e's prompts, before a command that gives the VM more
+// access (cmd, as devvm network off) changes it: true for the folder's own
+// VM. A parent folder's VM, found from a subfolder, changes only after
+// asking, [y/N], and never without a terminal.
+func (t *found) widen(e *Env, cmd string) (bool, error) {
+	if t.sub == "" {
+		return true, nil
+	}
+	if !e.Terminal() {
+		return false, msg.WidenParentVMRefused(cmd, t.f.Dir, t.f.Name)
+	}
+	return e.Ask(msg.WidenParentVM(cmd, t.f.Dir, t.f.Name)), nil
 }
 
 // sameFolder reports whether the VM was made for this folder: its path,
