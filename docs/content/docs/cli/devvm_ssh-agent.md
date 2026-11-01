@@ -7,10 +7,19 @@ Show or change SSH agent forwarding for this folder's VM
 
 ## Synopsis
 
-Show whether this folder's VM forwards an SSH agent: off (the default), on (yours) or devvm (devvm's own, which holds only the keys added to it with devvm ssh-agent add). Then, once a key is added, it lists the keys devvm's own agent holds, as ssh-add -l does, loading those it lacks first, and each key added to it: its file, its fingerprint and how it's loaded. devvm ssh-agent on, devvm or off changes the VM's forwarding from its next start: devvm restart. While it's on and you're connected, anything in the VM can use the agent's keys.
+Show whether this folder's VM forwards an SSH agent, which is off, on for yours, or devvm for devvm's own with only the keys you added to it, and then those keys. devvm ssh-agent on, devvm or off changes it from the VM's next start, such as with devvm restart. While forwarding is on and you're connected, anything in the VM can use the agent's keys.
 
 ```text
 devvm ssh-agent [on|devvm|off] [flags]
+```
+
+## Examples
+
+```text
+  devvm ssh-agent                        # show the VM's agent forwarding
+  devvm ssh-agent add ~/.ssh/deploy_key  # load a key into devvm's own agent
+  devvm ssh-agent devvm                  # forward devvm's own agent from the VM's next start
+  devvm ssh-agent off                    # stop forwarding an agent
 ```
 
 ## Options
@@ -23,9 +32,13 @@ devvm ssh-agent [on|devvm|off] [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm ssh-agent](../using/ssh.md#agent-forwarding) explains it in full.
 
 ## See also
 

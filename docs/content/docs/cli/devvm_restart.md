@@ -7,10 +7,16 @@ Restart this folder's VM and open a shell in it
 
 ## Synopsis
 
-Stop this folder's VM, then start it and open a shell in it as devvm does: what applies only when it starts (agent folder mounts, size, ports) applies.
+Stop this folder's VM, then start it and open a shell in it as devvm does. Changes that apply only when a VM starts, such as a new size or an agent's folders, apply then.
 
 ```text
 devvm restart [flags]
+```
+
+## Examples
+
+```text
+  devvm restart  # restart this folder's VM and open a shell in it
 ```
 
 ## Options
@@ -22,9 +28,13 @@ devvm restart [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm restart](../getting-started/commands.md#restarting-and-stopping) explains it in full.
 
 ## See also
 

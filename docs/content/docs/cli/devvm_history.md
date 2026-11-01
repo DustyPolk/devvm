@@ -7,10 +7,17 @@ List the saved exports of agents' history
 
 ## Synopsis
 
-List the exports of agents' history in ~/.local/share/devvm/exports, which devvm history export and devvm rm write there, oldest first: each one's file, the VM it's of, that VM's folder, when it was written and its size. Exports written to a file of your own aren't listed. It changes nothing and starts no VM.
+List the exports of agents' history that devvm history export and devvm rm saved in ~/.local/share/devvm/exports, oldest first. It changes nothing and starts no VM.
 
 ```text
 devvm history [flags]
+```
+
+## Examples
+
+```text
+  devvm history         # list the saved exports
+  devvm history export  # save this folder's VM's agent history
 ```
 
 ## Options
@@ -23,9 +30,13 @@ devvm history [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm history](../using/coding-agents.md#history) explains it in full.
 
 ## See also
 

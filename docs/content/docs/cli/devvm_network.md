@@ -7,10 +7,20 @@ Show or change the network policy of this folder's VM
 
 ## Synopsis
 
-Show the network policy of this folder's VM, on, off or unenforced (on, but not confined: started outside devvm, or before it was turned on), then its allowlist: each policy file that has rules, in order (its image's, yours for every VM, the VM's own, its secrets' hosts), and the rules in it. devvm network on or off changes the VM's network policy from its next start: devvm restart. Secrets the VM got while it was off still work once it's on. With -g, show or change whether new VMs get network policy instead: ask (in a terminal, and on without one), on or off. devvm's --network-policy and --no-network-policy still choose for one new VM.
+Show the network policy of this folder's VM, which is on, off or unenforced, and then its allowlist, file by file. devvm network on or off changes it from the VM's next start, such as with devvm restart. With -g, show or change whether new VMs get network policy instead: ask, on or off.
 
 ```text
 devvm network [on|off] [flags]
+```
+
+## Examples
+
+```text
+  devvm network                    # show the VM's network policy and allowlist
+  devvm network allow example.com  # let the VM reach example.com
+  devvm network log --blocked      # list what the VM's network policy blocked
+  devvm network off                # turn network policy off from the VM's next start
+  devvm network -g on              # give every new VM network policy without asking
 ```
 
 ## Options
@@ -24,9 +34,13 @@ devvm network [on|off] [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm network](../safety/network.md#turning-it-on-or-off) explains it in full.
 
 ## See also
 

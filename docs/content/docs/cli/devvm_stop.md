@@ -7,10 +7,16 @@ Stop this folder's VM
 
 ## Synopsis
 
-Stop this folder's VM and its network policy proxy. Once it's stopped, its .git is locked again and checked, as on a launch that finds it stopped, and its ssh config entry goes.
+Stop this folder's VM and its network policy proxy. devvm, devvm restart or a command that needs the VM running starts it again.
 
 ```text
 devvm stop [flags]
+```
+
+## Examples
+
+```text
+  devvm stop  # stop this folder's VM
 ```
 
 ## Options
@@ -22,9 +28,13 @@ devvm stop [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm stop](../getting-started/commands.md#restarting-and-stopping) explains it in full.
 
 ## See also
 

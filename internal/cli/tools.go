@@ -20,9 +20,13 @@ func newToolsCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tools",
 		Short: "Show this folder's VM's shared tools",
-		Long: "Show the shared tools of this folder's VM: each tool's version, and the newer version devvm's " +
-			"tools lock has, if any, with whether it's built. devvm tools update moves the VM to the newer ones. " +
+		Long: "Show the shared tools of this folder's VM, each with its version and any newer version in devvm's tools lock. " +
 			"It changes nothing, starts no VM and doesn't go online.",
+		Example: examples(
+			"devvm tools", "show the VM's shared tools",
+			"devvm tools add python claude", "add python and Claude Code to the VM",
+			"devvm tools update", "move the VM to the newest versions",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var ts []tools.VMTool
@@ -88,11 +92,13 @@ func newToolsAddCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "add TOOL...",
 		Short: "Add shared tools to this folder's VM, then open a shell in it",
-		Long: "Add shared tools to this folder's VM, each TOOL a separate word (devvm tools add python claude), " +
-			"then open a shell in it: node, python, rust, go, claude, codex or opencode. devvm builds the ones " +
-			"the share lacks, and nothing in the VM's disk changes, because its tools are mounted. A new agent's " +
-			"config folders are mounted too, which needs the VM to start again: devvm asks before restarting a " +
-			"running VM. Layers can't be added: only a new VM gets one.",
+		Long: "Add shared tools to this folder's VM, then open a shell in it. " +
+			"TOOL is node, python, rust, go, claude, codex or opencode, each a separate word. " +
+			"devvm builds any of them that aren't built, and for a new agent in a running VM it asks before restarting the VM.",
+		Example: examples(
+			"devvm tools add claude", "add Claude Code to the VM",
+			"devvm tools add python codex", "add python and Codex",
+		),
 		Args: toolNames("add"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Add(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
@@ -106,9 +112,12 @@ func newToolsRmCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rm TOOL...",
 		Short: "Take shared tools out of this folder's VM, then open a shell in it",
-		Long: "Take shared tools out of this folder's VM, each TOOL a separate word (devvm tools rm python claude), " +
-			"then open a shell in it. They're not mounted in it any more; what the VM installed itself stays. Your " +
-			"layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.",
+		Long: "Take shared tools out of this folder's VM, each TOOL a separate word, then open a shell in it. " +
+			"What the VM installed itself stays.",
+		Example: examples(
+			"devvm tools rm python", "take python out of the VM",
+			"devvm tools rm python claude", "take out python and Claude Code",
+		),
 		Args: toolNames("rm"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Remove(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
@@ -122,9 +131,11 @@ func newToolsUpdateCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "update",
 		Short: "Move this folder's VM to the newest shared tools, then open a shell in it",
-		Long: "Check for newer versions of the shared tools (node, python, rust, go, the agents), build " +
-			"them, and move this folder's VM to them, then open a shell in it. Nothing in the VM's disk " +
-			"changes: its tools are mounted from the share.",
+		Long: "Check for newer versions of the shared tools, build them, and move this folder's VM to them, " +
+			"then open a shell in it. Nothing in the VM's disk changes, because its tools are mounted.",
+		Example: examples(
+			"devvm tools update", "move the VM to the newest shared tools",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), vm.Options{}) }, msg.UpFailed)

@@ -7,10 +7,19 @@ Show or change this folder's VM's size
 
 ## Synopsis
 
-Show this folder's VM's CPUs, memory and disk, and what changes when it next starts. --cpus, --memory and --disk change them, at once for a stopped VM, from its next start for a running one: devvm restart. A disk only grows. With -g, show or change the size new VMs get instead; what it leaves unset is the image's.
+Show this folder's VM's CPUs, memory and disk, or change them with --cpus, --memory and --disk. A stopped VM changes at once, and a running VM changes when it next starts, such as with devvm restart. With -g, show or change the size new VMs get instead.
 
 ```text
 devvm size [flags]
+```
+
+## Examples
+
+```text
+  devvm size                       # show the VM's size
+  devvm size --cpus 6 --memory 16  # give it 6 CPUs and 16 GiB of memory
+  devvm size --disk 200            # grow its disk to 200 GiB
+  devvm size -g --memory 16        # give new VMs 16 GiB of memory
 ```
 
 ## Options
@@ -21,15 +30,19 @@ devvm size [flags]
   -g, --global       show or change the size new VMs get instead
   -h, --help         help for size
       --json         print it as one JSON object, for scripts
-      --memory GiB   the VM's memory in GiB: 16, 16G or 16GiB
+      --memory GiB   the VM's memory in GiB, such as 16 or 16G
 ```
 
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm size](../using/ports-size.md#size) explains it in full.
 
 ## See also
 

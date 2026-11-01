@@ -21,13 +21,16 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "network [on|off]",
 		Short: "Show or change the network policy of this folder's VM",
-		Long: "Show the network policy of this folder's VM, on, off or unenforced (on, but not confined: " +
-			"started outside devvm, or before it was turned on), then its allowlist: each policy file that " +
-			"has rules, in order (its image's, yours for every VM, the VM's own, its secrets' hosts), and " +
-			"the rules in it. devvm network on or off changes the VM's network policy from its next start: " +
-			"devvm restart. Secrets the VM got while it was off still work once it's on. With -g, show or " +
-			"change whether new VMs get network policy instead: ask (in a terminal, and on without one), " +
-			"on or off. devvm's --network-policy and --no-network-policy still choose for one new VM.",
+		Long: "Show the network policy of this folder's VM, which is on, off or unenforced, and then its allowlist, file by file. " +
+			"devvm network on or off changes it from the VM's next start, such as with devvm restart. " +
+			"With -g, show or change whether new VMs get network policy instead: ask, on or off.",
+		Example: examples(
+			"devvm network", "show the VM's network policy and allowlist",
+			"devvm network allow example.com", "let the VM reach example.com",
+			"devvm network log --blocked", "list what the VM's network policy blocked",
+			"devvm network off", "turn network policy off from the VM's next start",
+			"devvm network -g on", "give every new VM network policy without asking",
+		),
 		Args: showsOnly(func(cmd *cobra.Command, args []string) error {
 			if err := maxArgs(1)(cmd, args); err != nil || len(args) == 0 {
 				return err
@@ -124,12 +127,13 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 
 // newNetworkRuleCmds are devvm network allow, deny and rm RULE... [-g].
 func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
-	sub := func(use, short, long string, deny, remove bool) *cobra.Command {
+	sub := func(use, short, long, example string, deny, remove bool) *cobra.Command {
 		var global bool
 		c := &cobra.Command{
-			Use:   use + " RULE...",
-			Short: short,
-			Long:  long,
+			Use:     use + " RULE...",
+			Short:   short,
+			Long:    long,
+			Example: example,
 			Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
 				if remove {
 					return nil // as written, a deny with its !
@@ -151,17 +155,29 @@ func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
 		c.Flags().BoolVarP(&global, "global", "g", false, "change your rules for every VM instead")
 		return c
 	}
-	rules := " RULE is a host (example.com), any subdomain of one (*.example.com), any host (**), an " +
-		"address or CIDR (10.0.0.5, fd00::/8), each with an optional port (example.com:8443, " +
-		"[fd00::1]:22); without a port, 443 and 80."
+	rules := " RULE is a host, *.host for its subdomains, ** for any host, or an address or CIDR, " +
+		"and with a port, such as example.com:8443, it matches only that port instead of 443 and 80."
 	return []*cobra.Command{
 		sub("allow", "Allow hosts for this folder's VM", "Add RULEs to the allowlist of this folder's VM, "+
-			"or with -g of every VM. They apply at once, to the next connection."+rules, false, false),
+			"or with -g of every VM, from the next connection on."+rules,
+			examples(
+				"devvm network allow example.com", "let the VM reach example.com",
+				"devvm network allow '*.example.com'", "and any of its subdomains",
+				"devvm network allow 10.0.0.5:5432", "one port of one address",
+				"devvm network allow -g pypi.org", "let every VM reach pypi.org",
+			), false, false),
 		sub("deny", "Deny hosts for this folder's VM", "Add RULEs as denies to this folder's VM's rules, "+
-			"or with -g every VM's: a deny beats any allow. They apply at once, to the next connection."+rules,
-			true, false),
-		sub("rm", "Remove rules from this folder's VM", "Remove RULEs, as written (a deny with its !), from "+
-			"this folder's VM's own rules, or with -g yours for every VM. They apply at once.", false, true),
+			"or with -g every VM's, from the next connection on, and a deny beats any allow."+rules,
+			examples(
+				"devvm network deny example.com", "keep the VM from reaching example.com",
+				"devvm network deny -g '*.example.com'", "keep every VM from its subdomains",
+			), true, false),
+		sub("rm", "Remove rules from this folder's VM", "Remove RULEs, as written with a deny's !, from "+
+			"this folder's VM's own rules, or with -g yours for every VM. The change applies at once.",
+			examples(
+				"devvm network rm example.com", "remove an allow",
+				"devvm network rm '!example.com'", "remove a deny",
+			), false, true),
 	}
 }
 
@@ -173,11 +189,15 @@ func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "log",
 		Short: "Show what this folder's VM connected to and what its network policy blocked",
-		Long: "Show the network log of this folder's VM, which has network policy: one line per connection " +
-			"or request its proxy allowed or blocked, oldest first, with the time, the host and port, and " +
-			"the rule that allowed it, the request and the secrets put in, or why it was blocked. " +
+		Long: "Show the network log of this folder's VM, which it keeps only with network policy, with one line per connection " +
+			"or request its proxy allowed or blocked, oldest first. " +
 			"--blocked lists the blocks instead, one row per host and port, with the devvm network allow " +
 			"command that allows each.",
+		Example: examples(
+			"devvm network log", "show the last 50 connections and requests",
+			"devvm network log --follow", "keep showing new ones until Ctrl+C",
+			"devvm network log --blocked", "list the blocks, with the command that allows each",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.Lines = int(min(lines, 1<<31-1))
@@ -190,7 +210,7 @@ func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.UintVarP(&lines, "lines", "n", 50, "show the last `N` connections and requests")
-	f.BoolVar(&o.Follow, "follow", false, "keep showing each new one as it happens, until interrupted")
+	f.BoolVar(&o.Follow, "follow", false, "keep showing new ones as they happen, until interrupted")
 	f.BoolVar(&o.Blocked, "blocked", false, "list the blocks by host and port, with the command that allows each")
 	jsonFlag(cmd, &asJSON)
 	exclusive(cmd, "blocked", "follow")

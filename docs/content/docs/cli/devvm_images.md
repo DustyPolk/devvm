@@ -7,16 +7,24 @@ List the images and the shared tools
 
 ## Synopsis
 
-List the images on every backend, by name: what each one's base started from and its digest, its key, whether it's current, stale (its inputs changed since) or unfinished (a build that didn't finish), the disk it takes and its backend. Then the shared tool images, by the name images have them by: each version, the backend and C library it's built for, the disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, or the lock's and not built yet. Then what they take in all, and what the shared Nix cache takes of its cap. With --backend, only that backend's images and shared tool images.
+List the images on every backend, with whether each is current, stale or unfinished and the disk it takes, then the shared tools devvm has built, with how many VMs have each. It ends with what they take in all.
 
 ```text
 devvm images [flags]
 ```
 
+## Examples
+
+```text
+  devvm images                 # list the images and the shared tools
+  devvm images --backend lima  # only the lima backend's
+  devvm images --json          # the same lists as JSON, for scripts
+```
+
 ## Options
 
 ```text
-      --backend NAME   the NAME of the only backend to act on (default: every backend)
+      --backend NAME   act only on the backend NAME (default: every backend)
   -h, --help           help for images
       --json           print it as one JSON object, for scripts
 ```
@@ -24,9 +32,13 @@ devvm images [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm images](../using/images.md#listing-images) explains it in full.
 
 ## See also
 

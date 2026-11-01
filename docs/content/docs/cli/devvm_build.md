@@ -7,26 +7,38 @@ Build an image and the images under it, unless they're built
 
 ## Synopsis
 
-Build an image and the images under it, unless they're built, and the shared tool images it names that aren't. IMAGE is base, or layers (devvm's docker and nix, your own) joined with +, bottom first (foo+bar is bar on foo on base), with any shared tools (node+foo+claude).
+Build an image, the images under it and the shared tools it names, unless they're built. IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base, with any shared tools, such as node+foo+claude.
 
 ```text
 devvm build IMAGE [flags]
 ```
 
+## Examples
+
+```text
+  devvm build node+claude            # build base and the node and Claude Code tools
+  devvm build foo+bar                # build base, foo and foo+bar
+  devvm build base --backend smolvm  # build base on the smolvm backend
+```
+
 ## Options
 
 ```text
-      --backend NAME   the NAME of the backend to use (default: devvm setup --backend, else lima)
-      --from IMAGE     the container IMAGE the base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM)
+      --backend NAME   the backend NAME to use (default: devvm setup's, else lima)
+      --from IMAGE     the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
   -h, --help           help for build
 ```
 
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm build](../using/images.md#layers) explains it in full.
 
 ## See also
 

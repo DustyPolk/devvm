@@ -9,6 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // write replaces the Markdown pages in dir with root's reference. dir is
@@ -53,7 +55,8 @@ func generate(root *cobra.Command) (map[string][]byte, error) {
 		if err := doc.GenMarkdownCustom(c, &md, func(s string) string { return s }); err != nil {
 			return nil, err
 		}
-		page := fmt.Sprintf("---\ntitle: %s\nweight: %d\n---\n\n%s", c.CommandPath(), i+1, tidy(md.String()))
+		body := withDocs(tidy(md.String()), c.CommandPath(), msg.CommandDoc(c.CommandPath()))
+		page := fmt.Sprintf("---\ntitle: %s\nweight: %d\n---\n\n%s", c.CommandPath(), i+1, body)
 		files[fileName(c)] = []byte(page)
 		fmt.Fprintf(&index, "- [%s](%s): %s\n", c.CommandPath(), fileName(c), c.Short)
 	}
@@ -90,6 +93,25 @@ func tidy(md string) string {
 		}
 	}
 	return strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+}
+
+// withDocs adds a Docs section to a tidied page, before See also, linking
+// to doc ("page#anchor", as msg has it) on the site; a page without a doc
+// is left as it is.
+func withDocs(md, path, doc string) string {
+	if doc == "" {
+		return md
+	}
+	page, anchor, _ := strings.Cut(doc, "#")
+	target := "../" + page + ".md"
+	if anchor != "" {
+		target += "#" + anchor
+	}
+	section := "## Docs\n\n[The docs page for " + path + "](" + target + ") explains it in full.\n\n"
+	if before, after, ok := strings.Cut(md, "## See also\n"); ok {
+		return before + section + "## See also\n" + after
+	}
+	return md + "\n" + section[:len(section)-1]
 }
 
 // available returns c and the commands under it users can run, depth

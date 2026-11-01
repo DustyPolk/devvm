@@ -82,13 +82,43 @@ func TestEveryMessageIsUsed(t *testing.T) {
 	}
 }
 
-// TestDocLinks checks every doc link in docs.go: its key is a message in
-// locales/en.toml, and its page and anchor exist in docs/content/docs.
-// mise run lint runs it.
+// TestDocLinks checks every doc link in docs.go: a message's key is a
+// message in locales/en.toml, a command's is devvm's path, and its page
+// and anchor exist in docs/content/docs. mise run lint runs it.
 func TestDocLinks(t *testing.T) {
-	for _, err := range checkDocLinks(docs, specs, filepath.Join(root, "docs", "content", "docs")) {
+	dir := filepath.Join(root, "docs", "content", "docs")
+	for _, err := range checkDocLinks(docs, specs, dir) {
 		t.Error(err)
 	}
+	for _, err := range checkCommandDocs(commandDocs, dir) {
+		t.Error(err)
+	}
+}
+
+var commandRe = regexp.MustCompile(`^devvm( [a-z][a-z-]*)*$`)
+
+// checkCommandDocs checks links (command path to "page#anchor") against
+// the pages in dir. Which commands need one is internal/cli's to check.
+func checkCommandDocs(links map[string]string, dir string) []error {
+	var errs []error
+	for _, path := range slices.Sorted(maps.Keys(links)) {
+		doc := links[path]
+		var err error
+		switch {
+		case !commandRe.MatchString(path):
+			err = errors.New("not a command's path")
+		case !docRe.MatchString(doc):
+			err = errors.New("not page#anchor")
+		case strings.HasPrefix(doc, "internals/"), strings.HasPrefix(doc, "contributing/"):
+			err = errors.New("not a user page")
+		default:
+			err = checkDoc(dir, doc)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("commandDocs[%q] = %q: %w", path, doc, err))
+		}
+	}
+	return errs
 }
 
 var docRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_/-]*(#[a-z0-9][a-z0-9_-]*)?$`)
@@ -253,6 +283,40 @@ func TestCheckDocLinks(t *testing.T) {
 		`docs["gone"] = "images#nope": images has no heading #nope`,
 		`docs["missing"] = "images": no such message in locales/en.toml`,
 		`docs["url"] = "https://example.com": not page#anchor`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestCheckCommandDocs(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "images.md"), []byte("## Where state lives\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "internals"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "internals", "x.md"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	links := map[string]string{
+		"devvm":           "images",
+		"devvm images rm": "images#where-state-lives",
+		"devvm gc":        "images#nope",
+		"images":          "images",
+		"devvm stop":      "internals/x",
+		"devvm ls":        "https://example.com",
+	}
+	var got []string
+	for _, err := range checkCommandDocs(links, dir) {
+		got = append(got, err.Error())
+	}
+	want := []string{
+		`commandDocs["devvm gc"] = "images#nope": images has no heading #nope`,
+		`commandDocs["devvm ls"] = "https://example.com": not page#anchor`,
+		`commandDocs["devvm stop"] = "internals/x": not a user page`,
+		`commandDocs["images"] = "images": not a command's path`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)

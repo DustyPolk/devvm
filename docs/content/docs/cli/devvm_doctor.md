@@ -7,26 +7,38 @@ Check what devvm needs on this machine
 
 ## Synopsis
 
-Check what the backend new VMs get (--backend for another) needs on this machine, and say how to get what's missing: devvm never installs it. The docker backend also says which engine it uses, and on Docker Desktop which folders it shares. Then list each backend's features (native, emulated, unreviewed: emulated but refused until reviewed, or none) and whether Docker is installed, which only --from with an image only Docker has needs. When HTTPS_PROXY is set and ~/.config/devvm/ca has no CA certificates, it says that a proxy that inspects TLS needs its CA there. It warns when another devvm comes first on PATH, when the disk the backend's images and VMs go on has less free space than building base needs, and when this machine has less than 8 GiB of memory or fewer than 4 CPUs. Fails when something is missing, but not for any of these warnings.
+Check what the backend new VMs get needs on this machine, and say how to get what's missing, because devvm never installs it itself. Then list what each backend can do. doctor fails when something is missing, but never for a warning, such as one about low free space.
 
 ```text
 devvm doctor [flags]
 ```
 
+## Examples
+
+```text
+  devvm doctor                   # check the backend new VMs get
+  devvm doctor --backend docker  # check the docker backend
+  devvm doctor --json            # the same as JSON, for scripts
+```
+
 ## Options
 
 ```text
-      --backend NAME   the NAME of the backend to use (default: devvm setup --backend, else lima)
+      --backend NAME   the backend NAME to use (default: devvm setup's, else lima)
   -h, --help           help for doctor
-      --json           print what it found as one JSON object, for scripts, and nothing else; succeeds whatever is missing
+      --json           print what it found as JSON, and succeed whatever is missing
 ```
 
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm doctor](../getting-started/install.md#checking-what-devvm-needs) explains it in full.
 
 ## See also
 

@@ -3,14 +3,20 @@ title: devvm layer
 weight: 15
 ---
 
-Your own image layers
+Make image layers of your own
 
 ## Synopsis
 
-Your own image layers: scripts in ~/.config/devvm/layers that an image runs on top of base, named in images like the shared tools and devvm's built-in layers (node+docker+NAME).
+Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base. An image names them as it names the shared tools and devvm's built-in layers, such as node+docker+NAME.
 
 ```text
 devvm layer [flags]
+```
+
+## Examples
+
+```text
+  devvm layer new mailpit  # start a layer named mailpit
 ```
 
 ## Options
@@ -22,9 +28,13 @@ devvm layer [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm layer](../using/customizing.md#your-own-layers) explains it in full.
 
 ## See also
 

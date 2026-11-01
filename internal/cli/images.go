@@ -28,13 +28,14 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "images",
 		Short: "List the images and the shared tools",
-		Long: "List the images on every backend, by name: what each one's base started from and its " +
-			"digest, its key, whether it's current, stale (its inputs changed since) or unfinished (a " +
-			"build that didn't finish), the disk it takes and its backend. Then the shared tool images, " +
-			"by the name images have them by: each version, the backend and C library it's built for, the " +
-			"disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, " +
-			"or the lock's and not built yet. Then what they take in all, and what the shared Nix cache " +
-			"takes of its cap. With --backend, only that backend's images and shared tool images.",
+		Long: "List the images on every backend, with whether each is current, stale or unfinished and the disk it takes, " +
+			"then the shared tools devvm has built, with how many VMs have each. " +
+			"It ends with what they take in all.",
+		Example: examples(
+			"devvm images", "list the images and the shared tools",
+			"devvm images --backend lima", "only the lima backend's",
+			"devvm images --json", "the same lists as JSON, for scripts",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			b, err := builder(u, only)
@@ -83,12 +84,14 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "rm IMAGE|KEY...",
 		Short: "Delete images, by name or by key",
-		Long: "Delete images, with their records: each by its name (base, foo+bar), or by the key " +
-			"devvm images shows, for a stale or unfinished one; with --from, a name is its image on a base " +
-			"from that container image. Every one must be built, or nothing is " +
-			"deleted. VMs made from an image keep working, except on Linux hosts, where an image whose " +
-			"disk VMs use is refused. Shared tools aren't images. It asks first in a terminal; --force " +
-			"deletes without asking, which it needs without a terminal.",
+		Long: "Delete images, each by its name or by the key devvm images shows, after asking in a terminal. " +
+			"Every one must be built, or devvm deletes nothing. " +
+			"VMs made from an image keep working, except on Linux hosts, where devvm refuses an image whose disk VMs use.",
+		Example: examples(
+			"devvm images rm foo+bar", "delete the foo+bar image, after asking",
+			"devvm images rm 7a76021c46ef", "delete a stale image by its key",
+			"devvm images rm base --from node:24", "delete base made from node:24",
+		),
 		Args: minArgs(1),
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			dirs, err := paths.FromEnv()

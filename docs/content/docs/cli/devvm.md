@@ -7,35 +7,48 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains (and the nix layer) the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks is refused, naming the devvm tools add command that adds its shared tools, as only a new VM gets a layer. In a folder without a VM of its own, inside one that has a VM, devvm asks whether to open that VM in this folder instead of creating one, and opens it without asking when there's no terminal. --here and --clone create the new VM without asking.
+Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. A new VM gets IMAGE, such as node+claude, or else the toolchains the folder's files call for with any agents IMAGE names, and devvm builds the image first if it isn't built. The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.
 
 ```text
 devvm [IMAGE] [flags]
 ```
 
+## Examples
+
+```text
+  devvm              # open this folder's VM, creating it with the toolchains the folder needs
+  devvm node+claude  # create the VM with node and Claude Code
+  devvm --clone      # create the VM with its own clone of this repo
+  devvm ls           # list every VM
+```
+
 ## Options
 
 ```text
-      --backend NAME        the NAME of the backend to use (default: devvm setup --backend, else lima)
-      --clone               create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from
+      --backend NAME        the backend NAME to use (default: devvm setup's, else lima)
+      --clone               create the VM with its own clone of this repo instead of mounting the folder
       --cpus N              the N CPUs the VM gets (default: devvm size -g, else the image's)
       --disk GiB            the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
-      --from IMAGE          the container IMAGE the base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM)
+      --from IMAGE          the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
   -h, --help                help for devvm
-      --here                create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM
-      --memory GiB          the VM's memory in GiB: 16, 16G or 16GiB (default: devvm size -g, else the image's)
-      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g, else asked in a terminal, and on without one)
-      --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json
+      --here                create a VM for this folder even when a folder it's inside has one
+      --memory GiB          the VM's memory in GiB, such as 16 or 16G (default: devvm size -g, else the image's)
+      --network-policy      create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)
+      --no-devcontainer     create the VM without reading the folder's devcontainer.json
       --no-git-protect      create the VM without .git protection
-      --no-input            never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-      --no-network-policy   create the VM without network policy: it reaches anything this machine can
-      --ports PORTS         which PORTS the VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: devvm ports -g, else all)
-      --ssh-agent           create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)
-      --ssh-config          add devvm's Include line to ~/.ssh/config without asking, when it's missing
-      --unsafe-folder       mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway
-  -v, --verbose             show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input            never ask, and fail where devvm would ask, naming the flag that answers it
+      --no-network-policy   create the VM without network policy
+      --ports PORTS         the PORTS the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)
+      --ssh-agent           create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected
+      --ssh-config          add devvm's Include line to ~/.ssh/config without asking
+      --unsafe-folder       mount a folder devvm refuses, such as your home folder
+  -v, --verbose             show the output of the commands devvm runs instead of a status line
       --version             print devvm's version
 ```
+
+## Docs
+
+[The docs page for devvm](../getting-started/commands.md) explains it in full.
 
 ## See also
 
@@ -50,14 +63,14 @@ devvm [IMAGE] [flags]
 - [devvm history](devvm_history.md): List the saved exports of agents' history
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
-- [devvm layer](devvm_layer.md): Your own image layers
-- [devvm limactl](devvm_limactl.md): Run Lima's limactl on devvm's own Lima home
+- [devvm layer](devvm_layer.md): Make image layers of your own
+- [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
-- [devvm retention](devvm_retention.md): Show or change the retention settings: what devvm deletes on its own
+- [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
 - [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy

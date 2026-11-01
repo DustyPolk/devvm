@@ -25,9 +25,14 @@ func newBuildCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
-		Long: "Build an image and the images under it, unless they're built, and the shared tool " +
-			"images it names that aren't. IMAGE is base, or layers (devvm's docker and nix, your own) joined with +, bottom first " +
-			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
+		Long: "Build an image, the images under it and the shared tools it names, unless they're built. " +
+			"IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base, " +
+			"with any shared tools, such as node+foo+claude.",
+		Example: examples(
+			"devvm build node+claude", "build base and the node and Claude Code tools",
+			"devvm build foo+bar", "build base, foo and foo+bar",
+			"devvm build base --backend smolvm", "build base on the smolvm backend",
+		),
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Build)
@@ -43,10 +48,13 @@ func newRebuildCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rebuild IMAGE",
 		Short: "Build an image again, and delete the old one",
-		Long: "Build an image again, from its parent as it is, and delete the stale images " +
-			"no VM uses, the old one and those built on it among them. When images are built on it, it asks " +
-			"first in a terminal; --force goes ahead without asking, which it needs without a terminal. " +
-			"Shared tools aren't images: their versions come from the tools lock.",
+		Long: "Build an image again from its parent as it is, then delete the stale images " +
+			"no VM uses, the old one and those built on it among them. " +
+			"When images are built on it, devvm asks first in a terminal.",
+		Example: examples(
+			"devvm rebuild foo", "build foo again with the newest packages",
+			"devvm rebuild base --force", "rebuild base without asking, as a script must",
+		),
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Rebuild)

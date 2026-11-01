@@ -7,10 +7,17 @@ Deny hosts for this folder's VM
 
 ## Synopsis
 
-Add RULEs as denies to this folder's VM's rules, or with -g every VM's: a deny beats any allow. They apply at once, to the next connection. RULE is a host (example.com), any subdomain of one (*.example.com), any host (**), an address or CIDR (10.0.0.5, fd00::/8), each with an optional port (example.com:8443, [fd00::1]:22); without a port, 443 and 80.
+Add RULEs as denies to this folder's VM's rules, or with -g every VM's, from the next connection on, and a deny beats any allow. RULE is a host, *.host for its subdomains, ** for any host, or an address or CIDR, and with a port, such as example.com:8443, it matches only that port instead of 443 and 80.
 
 ```text
 devvm network deny RULE... [flags]
+```
+
+## Examples
+
+```text
+  devvm network deny example.com         # keep the VM from reaching example.com
+  devvm network deny -g '*.example.com'  # keep every VM from its subdomains
 ```
 
 ## Options
@@ -23,9 +30,13 @@ devvm network deny RULE... [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm network deny](../safety/network.md#changing-rules) explains it in full.
 
 ## See also
 

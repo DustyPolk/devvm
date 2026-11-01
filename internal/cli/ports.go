@@ -33,11 +33,15 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ports [all|none|LIST]",
 		Short: "Show or change which ports this folder's VM forwards",
-		Long: "Show which ports this folder's VM forwards to the same port on this machine's localhost: " +
-			"all, none, or a LIST of ports and ranges like 5173,8000-8010. devvm ports all, none or LIST " +
-			"changes it at once: a stopped VM forwards the new ports from its next start, and a running one's " +
-			"forwarder starts again with them, closing the connections open through it, while the VM runs on. " +
+		Long: "Show which ports this folder's VM forwards to the same port on this machine's localhost, " +
+			"or change them at once to all, none or a LIST of ports and ranges like 5173,8000-8010. " +
 			"With -g, show or change what new VMs forward instead.",
+		Example: examples(
+			"devvm ports", "show what the VM forwards",
+			"devvm ports 5173,8000-8010", "forward only these ports and ranges",
+			"devvm ports none", "forward nothing",
+			"devvm ports -g none", "make new VMs forward nothing",
+		),
 		Args: showsOnly(cobra.MatchAll(maxArgs(1), func(_ *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return nil
@@ -61,11 +65,12 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 	}
 	cmd.Flags().BoolVarP(&global, "global", "g", false, "show or change what new VMs forward instead")
 	jsonFlag(cmd, &asJSON)
-	sub := func(op, short, long string) *cobra.Command {
+	sub := func(op, short, long, example string) *cobra.Command {
 		c := &cobra.Command{
-			Use:   op + " LIST",
-			Short: short,
-			Long:  long,
+			Use:     op + " LIST",
+			Short:   short,
+			Long:    long,
+			Example: example,
 			Args: cobra.MatchAll(exactArgs(1), func(_ *cobra.Command, args []string) error {
 				_, err := vm.ParsePortList(args[0])
 				return err
@@ -78,12 +83,20 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 		return c
 	}
 	cmd.AddCommand(
-		sub("add", "Forward more ports from this folder's VM", "Add LIST's ports and ranges (5173,8000-8010) "+
+		sub("add", "Forward more ports from this folder's VM", "Add LIST's ports and ranges, such as 5173,8000-8010, "+
 			"to those this folder's VM forwards, or with -g to those new VMs forward. A VM that forwards "+
-			"every port keeps doing so."),
+			"every port keeps doing so.",
+			examples(
+				"devvm ports add 5432", "forward one more port",
+				"devvm ports add 8000-8010", "forward a range",
+			)),
 		sub("rm", "Stop forwarding some ports from this folder's VM", "Remove LIST's ports and ranges, each "+
 			"as listed, from those this folder's VM forwards, or with -g from those new VMs forward. Removing "+
-			"the last leaves none."),
+			"the last leaves none.",
+			examples(
+				"devvm ports rm 5173", "stop forwarding one port",
+				"devvm ports rm -g 5173", "stop new VMs forwarding it",
+			)),
 	)
 	return cmd
 }

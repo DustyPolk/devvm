@@ -376,13 +376,19 @@ The site is [Hugo](https://gohugo.io) with the [Hextra](https://imfing.github.io
 
 ### The CLI reference
 
-The [CLI reference](../cli/_index.md) in `docs/content/docs/cli/` is generated from devvm's commands with Cobra's docs generator, and checked in. Don't edit it: change the command's `Use`, `Short`, `Long` or flags, then run:
+The [CLI reference](../cli/_index.md) in `docs/content/docs/cli/` is generated from devvm's commands with Cobra's docs generator, and checked in. Don't edit it: change the command's `Use`, `Short`, `Long`, `Example` or flags, or its docs page in `internal/msg/docs.go`, then run:
 
 ```sh
 mise run cli-docs
 ```
 
-It runs `internal/cli/docgen`, which replaces every page in that folder: `_index.md`, listing the commands, and a page per command named after its path (`devvm_build.md`), with `title` and `weight` front matter and links to the other pages as files. Hidden commands (`_msg`, `_qemu`) and Cobra's help command are left out. The pages carry no dates, so the same commands give the same files.
+It runs `internal/cli/docgen`, which replaces every page in that folder: `_index.md`, listing the commands, and a page per command named after its path (`devvm_build.md`), with `title` and `weight` front matter and links to the other pages as files. Each page has the command's examples, and a Docs section before See also that links to the command's docs page on the site. Hidden commands (`_msg`, `_qemu`) and Cobra's help command are left out. The pages carry no dates, so the same commands give the same files.
+
+### A command's help
+
+Every command's help, which its reference page also shows, has the same shape. `Short` is an action in sentence case without a full stop, such as `List the project VMs`. `Long` is one to three short sentences on what the command does, and the rules and edge cases go on its docs page. `Example` comes from `examples` in `internal/cli/help.go`, which takes each command line with a short comment and lines the comments up, the most common invocation first. A flag's description is short, and its long explanation goes on the page.
+
+`addDocs` in `internal/cli/help.go` gives the root Cobra's usage template with a Docs section at the end, which shows the address of the command's page from `commandDocs` in `internal/msg/docs.go`, one user page per command path, such as `devvm network allow`. The root's help also ends with the issue tracker, `msg.IssuesURL`. `TestDocLinks` checks that each page and heading in `commandDocs` exists and is a user page. `commandGroups` in the same file lists the root's sections, in order, with the commands in each, and `addGroups` adds each group that has a command and sets its commands' `GroupID`, so a group whose commands don't exist yet, such as Links between VMs, stays out of the help. Cobra lists a group's commands in alphabetical order, and `help` goes in Cobra's own Additional Commands.
 
 The tests fail when the checked-in pages are stale: `TestReferenceIsCurrent` in `internal/cli/docgen` generates the reference into a temporary folder and compares it with `docs/content/docs/cli/`. `mise run docs` regenerates it before serving the site.
 

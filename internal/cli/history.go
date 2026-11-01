@@ -25,10 +25,12 @@ func newHistoryCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "history",
 		Short: "List the saved exports of agents' history",
-		Long: "List the exports of agents' history in ~/.local/share/devvm/exports, which devvm history export " +
-			"and devvm rm write there, oldest first: each one's file, the VM it's of, that VM's folder, when " +
-			"it was written and its size. Exports written to a file of your own aren't listed. It changes " +
-			"nothing and starts no VM.",
+		Long: "List the exports of agents' history that devvm history export and devvm rm saved in " +
+			"~/.local/share/devvm/exports, oldest first. It changes nothing and starts no VM.",
+		Example: examples(
+			"devvm history", "list the saved exports",
+			"devvm history export", "save this folder's VM's agent history",
+		),
 		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error {
 			d, err := paths.FromEnv()
@@ -86,9 +88,13 @@ func newHistoryExportCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "export [FILE]",
 		Short: "Save this folder's VM's agent history to a .tar.gz",
-		Long: "Save this folder's VM's agent history (transcripts and sessions, without the agents' " +
-			"logins) to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. A stopped " +
-			"VM is started for it. FILE is replaced only once the export is complete.",
+		Long: "Save the history of this folder's VM's agents, their transcripts and sessions without their logins, " +
+			"to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. " +
+			"devvm starts a stopped VM for it.",
+		Example: examples(
+			"devvm history export", "save it in ~/.local/share/devvm/exports",
+			"devvm history export ~/claude.tar.gz", "save it to a file of your own",
+		),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {

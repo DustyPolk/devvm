@@ -34,11 +34,14 @@ func newSecretCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret",
 		Short: "List the secrets kept on this machine, for VMs to use",
-		Long: "List the secrets devvm keeps on this machine, whether each is saved, and the VMs using it: " +
-			"claude, the Claude Code token every VM whose image has claude uses, and github, the GitHub " +
-			"token of the VMs it's bound to. With network policy a VM gets a placeholder, and its proxy " +
-			"puts the secret into requests for the secret's hosts. Without network policy, the VM gets the " +
-			"secret itself.",
+		Long: "List the secrets devvm keeps on this machine, claude for the Claude Code token and github for a GitHub token, " +
+			"with whether each is saved and the VMs using it. " +
+			"A VM with network policy gets a placeholder, and its proxy puts the secret into requests for the secret's hosts.",
+		Example: examples(
+			"devvm secret", "list the secrets and the VMs using each",
+			"devvm secret set github", "save a GitHub token, asking for it",
+			"devvm secret use github", "let this folder's VM use it",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u, asJSON) },
 	}
@@ -53,17 +56,20 @@ func newSecretSetCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set NAME",
 		Short: "Save the Claude Code token or GitHub token on this machine",
-		Long: "Save a secret on this machine, claude (the Claude Code token that claude setup-token prints) " +
-			"or github (a GitHub token), in the macOS Keychain, else in ~/.config/devvm/secrets/NAME, a file " +
-			"only you can read. It asks for the token without showing it, and --stdin reads a line instead. " +
-			"Proxies that are running put the new token in at once.",
+		Long: "Save a secret on this machine, claude for the Claude Code token that claude setup-token prints " +
+			"or github for a GitHub token. devvm asks for it without showing it, and --stdin reads a line instead. " +
+			"Proxies that are running put the new value in at once.",
+		Example: examples(
+			"devvm secret set claude", "save the Claude Code token, asking for it",
+			"gh auth token | devvm secret set github --stdin", "save GitHub CLI's token without asking",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			saveSecret(cmd, u, args[0], stdin)
 			return nil
 		},
 	}
 	oneSecret(cmd)
-	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the token from a line of input, without asking")
+	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the secret from a line of input, without asking")
 	return cmd
 }
 
@@ -90,9 +96,13 @@ func newSecretRmCmd(u *ui.UI) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "rm NAME",
-		Short: "Delete a saved token",
-		Long: "Delete a saved token, after asking in a terminal; --force deletes it without asking, which it " +
-			"needs without a terminal. Proxies running stop putting it in at once; what a VM did with it stays done.",
+		Short: "Delete a saved secret",
+		Long: "Delete a saved secret, after asking in a terminal. " +
+			"Proxies that are running stop putting it in at once, but what a VM did with it stays done.",
+		Example: examples(
+			"devvm secret rm github", "delete the GitHub token, after asking",
+			"devvm secret rm github --force", "delete it without asking, as a script must",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ok, err := confirmed(u, force, "devvm secret rm", func() bool { return u.Ask(msg.SecretRmConfirm(args[0])) })
 			fail(u, err, msg.SecretFailed)
@@ -151,18 +161,22 @@ func listSecrets(cmd *cobra.Command, u *ui.UI, asJSON bool) error {
 
 // newSecretUseCmd is devvm secret use (use) or unuse.
 func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
-	short, long := "Let this folder's VM use a token", "Let this folder's VM use a token: "+
-		"its proxy puts it in at once, and the VM gets its placeholder (the token, without network policy) "+
-		"from its next launch."
+	short, long := "Let this folder's VM use a secret", "Let this folder's VM use a secret. "+
+		"Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch, "+
+		"or the secret itself without network policy."
+	example := examples("devvm secret use github", "let the VM use your GitHub token")
 	if !use {
-		short, long = "Stop this folder's VM using a token", "Stop this folder's VM using a token: "+
-			"its proxy stops putting it in at once. Without network policy the VM got the token itself, "+
-			"which still works wherever it kept it. A VM whose image has claude always uses claude."
+		short, long = "Stop this folder's VM using a secret", "Stop this folder's VM using a secret, "+
+			"which its proxy stops putting in at once. "+
+			"A VM without network policy got the secret itself, which still works wherever it kept it. "+
+			"A VM whose image has claude always uses claude."
+		example = examples("devvm secret unuse github", "stop the VM using your GitHub token")
 	}
 	cmd := &cobra.Command{
-		Use:   name + " NAME",
-		Short: short,
-		Long:  long,
+		Use:     name + " NAME",
+		Short:   short,
+		Long:    long,
+		Example: example,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
 			return nil

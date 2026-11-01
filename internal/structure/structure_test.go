@@ -51,6 +51,7 @@ func devvm() rules {
 			"internal/image.Builtins":                table,
 			"internal/image.Reserved":                table,
 			"internal/msg.docs":                      table,
+			"internal/msg.commandDocs":               table,
 			"internal/msg/gen.taken":                 table,
 			"internal/msg/gen.initialisms":           table,
 			"internal/netpolicy.Env":                 table,

@@ -14,10 +14,14 @@ func newDesktopCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "desktop",
 		Short: "Open this folder's VM's desktop in a VNC viewer",
-		Long: "Get this folder's VM ready as devvm host does, start the desktop of its desktop feature, and " +
-			"serve it on this machine's 127.0.0.1 alone, with a password of the VM's own, until you press " +
-			"Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm " +
-			"shows. The clipboard isn't shared unless you add --clipboard.",
+		Long: "Start the desktop of this folder's VM, which needs base's desktop feature, and serve it on " +
+			"this machine's 127.0.0.1 with a password of the VM's own until you press Ctrl+C or the VM stops. " +
+			"On macOS, Screen Sharing opens it and asks for the password, which devvm shows.",
+		Example: examples(
+			"devvm desktop", "open the VM's desktop in Screen Sharing",
+			"devvm desktop --clipboard", "the same, sharing the clipboard both ways",
+			"devvm desktop --no-open", "show the address and password for a VNC viewer of your own",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Desktop{Env: env}.Open(cmd.Context(), o) }, msg.DesktopFailed)
@@ -25,7 +29,7 @@ func newDesktopCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	f := c.Flags()
-	f.BoolVar(&o.Clipboard, "clipboard", false, "share the clipboard both ways: this machine's reaches the VM, and the VM's this machine")
+	f.BoolVar(&o.Clipboard, "clipboard", false, "share the clipboard between this machine and the VM, both ways")
 	f.BoolVar(&o.NoOpen, "no-open", false, "show the address and password without opening Screen Sharing")
 	return c
 }

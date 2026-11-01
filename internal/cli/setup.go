@@ -30,14 +30,15 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Choose the default backend, base's features, and new VMs' size and network policy",
-		Long: "Choose the backend new VMs get by default (lima, or docker and smolvm, both experimental), " +
-			"then the optional features the base image gets: omb (oh-my-bash), fzf, cli-tools, desktop, " +
-			"and your own in ~/.config/devvm/features. In a terminal it asks for both, starting from the " +
-			"current choices, then for the CPUs and memory new VMs get, as devvm size -g sets them, and " +
-			"for the network policy new VMs get: ask (each new VM asks, and gets it without a terminal), " +
-			"on or off. --backend and --features each choose without asking anything, and what they leave " +
-			"out stays as it is. A new choice of features makes base and the images built on it rebuild " +
-			"when next used. The size and network policy change only the VMs made after them.",
+		Long: "Choose the backend new VMs get by default, the features base gets, and new VMs' CPUs, memory and network policy. " +
+			"In a terminal devvm asks for each, starting from the current choice, and --backend and --features choose without asking. " +
+			"A new choice of features rebuilds base and the images on it when they're next used.",
+		Example: examples(
+			"devvm setup", "answer every question",
+			"devvm setup --backend smolvm", "make smolvm the default backend, without asking",
+			"devvm setup --features omb,fzf", "give base oh-my-bash and fzf, without asking",
+			"devvm setup --features none", "give base no features",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if cmd.Flags().Changed("features") {
@@ -48,8 +49,8 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&features, "features", "", "the `LIST` of features base gets, without asking: fzf,omb, or none")
-	f.StringVar(&c.backend, "backend", "", "the `NAME` of the backend new VMs get by default")
+	f.StringVar(&features, "features", "", "the `LIST` of features base gets, such as fzf,omb, or none")
+	f.StringVar(&c.backend, "backend", "", "the backend `NAME` new VMs get by default")
 	return cmd
 }
 

@@ -7,10 +7,17 @@ Save this folder's VM's agent history to a .tar.gz
 
 ## Synopsis
 
-Save this folder's VM's agent history (transcripts and sessions, without the agents' logins) to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. A stopped VM is started for it. FILE is replaced only once the export is complete.
+Save the history of this folder's VM's agents, their transcripts and sessions without their logins, to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. devvm starts a stopped VM for it.
 
 ```text
 devvm history export [FILE] [flags]
+```
+
+## Examples
+
+```text
+  devvm history export                  # save it in ~/.local/share/devvm/exports
+  devvm history export ~/claude.tar.gz  # save it to a file of your own
 ```
 
 ## Options
@@ -22,9 +29,13 @@ devvm history export [FILE] [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm history export](../using/coding-agents.md#history) explains it in full.
 
 ## See also
 

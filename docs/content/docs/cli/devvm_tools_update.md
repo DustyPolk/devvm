@@ -7,10 +7,16 @@ Move this folder's VM to the newest shared tools, then open a shell in it
 
 ## Synopsis
 
-Check for newer versions of the shared tools (node, python, rust, go, the agents), build them, and move this folder's VM to them, then open a shell in it. Nothing in the VM's disk changes: its tools are mounted from the share.
+Check for newer versions of the shared tools, build them, and move this folder's VM to them, then open a shell in it. Nothing in the VM's disk changes, because its tools are mounted.
 
 ```text
 devvm tools update [flags]
+```
+
+## Examples
+
+```text
+  devvm tools update  # move the VM to the newest shared tools
 ```
 
 ## Options
@@ -22,9 +28,13 @@ devvm tools update [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm tools update](../using/toolchains.md#adding-and-removing-tools) explains it in full.
 
 ## See also
 

@@ -7,10 +7,18 @@ Show or change .git protection for this folder's VM
 
 ## Synopsis
 
-Show whether this folder's VM can change the parts of .git that run code on this machine: on (the default on macOS: hooks and config locked), strict (on, and host git status and diff stay out of submodules), off, or clone for a --clone VM. devvm git-protect on, strict or off changes it while the VM is stopped; on and strict lock .git as it is now. Locks need macOS.
+Show this folder's VM's .git protection, which locks the git hooks and config that run code on this machine, as on, strict, off, or clone for a --clone VM. devvm git-protect on, strict or off changes it while the VM is stopped.
 
 ```text
 devvm git-protect [on|strict|off] [flags]
+```
+
+## Examples
+
+```text
+  devvm git-protect                    # show the VM's .git protection
+  devvm stop && devvm git-protect off  # unlock .git, which needs the VM stopped
+  devvm git-protect on                 # lock .git again as it is now
 ```
 
 ## Options
@@ -23,9 +31,13 @@ devvm git-protect [on|strict|off] [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm git-protect](../safety/git-protection.md#turning-it-on-or-off) explains it in full.
 
 ## See also
 

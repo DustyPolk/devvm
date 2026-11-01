@@ -150,6 +150,24 @@ func TestTidy(t *testing.T) {
 	}
 }
 
+func TestWithDocs(t *testing.T) {
+	for _, tc := range []struct{ md, doc, want string }{
+		{
+			"Short\n\n## See also\n\n- x\n", "using/ssh#vs-code",
+			"Short\n\n## Docs\n\n[The docs page for devvm x](../using/ssh.md#vs-code) explains it in full.\n\n## See also\n\n- x\n",
+		},
+		{
+			"Short\n", "using/desktop",
+			"Short\n\n## Docs\n\n[The docs page for devvm x](../using/desktop.md) explains it in full.\n",
+		},
+		{"Short\n", "", "Short\n"},
+	} {
+		if got := withDocs(tc.md, "devvm x", tc.doc); got != tc.want {
+			t.Errorf("withDocs(%q, %q):\n%s\nwant:\n%s", tc.md, tc.doc, got, tc.want)
+		}
+	}
+}
+
 // find returns root's subcommand name.
 func find(t *testing.T, root *cobra.Command, name string) *cobra.Command {
 	t.Helper()

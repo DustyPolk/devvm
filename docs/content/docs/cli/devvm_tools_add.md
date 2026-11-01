@@ -7,10 +7,17 @@ Add shared tools to this folder's VM, then open a shell in it
 
 ## Synopsis
 
-Add shared tools to this folder's VM, each TOOL a separate word (devvm tools add python claude), then open a shell in it: node, python, rust, go, claude, codex or opencode. devvm builds the ones the share lacks, and nothing in the VM's disk changes, because its tools are mounted. A new agent's config folders are mounted too, which needs the VM to start again: devvm asks before restarting a running VM. Layers can't be added: only a new VM gets one.
+Add shared tools to this folder's VM, then open a shell in it. TOOL is node, python, rust, go, claude, codex or opencode, each a separate word. devvm builds any of them that aren't built, and for a new agent in a running VM it asks before restarting the VM.
 
 ```text
 devvm tools add TOOL... [flags]
+```
+
+## Examples
+
+```text
+  devvm tools add claude        # add Claude Code to the VM
+  devvm tools add python codex  # add python and Codex
 ```
 
 ## Options
@@ -22,9 +29,13 @@ devvm tools add TOOL... [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm tools add](../using/toolchains.md#adding-and-removing-tools) explains it in full.
 
 ## See also
 

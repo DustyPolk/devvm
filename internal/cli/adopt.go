@@ -14,10 +14,13 @@ func newAdoptCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "adopt",
 		Short: "Use the VM made for an earlier folder at this path here",
-		Long: "A VM belongs to the folder it was made for: its path, and the folder itself. When that " +
-			"folder was deleted and a new one made at the same path, devvm won't use the VM for it; " +
-			"adopt gives it to this folder, with its files, tokens and allowlist, after asking in a " +
-			"terminal. --force gives it without asking, which it needs without a terminal.",
+		Long: "Give this folder the VM made for an earlier folder at the same path, with its files, secrets and allowlist. " +
+			"devvm refuses that VM in a folder made again, until you adopt it or delete it with devvm rm. " +
+			"devvm asks first in a terminal.",
+		Example: examples(
+			"devvm adopt", "give this folder the VM, after asking",
+			"devvm adopt --force", "give it without asking, as a script must",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Adopt(cmd.Context(), force) }, msg.AdoptFailed)

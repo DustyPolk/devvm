@@ -23,18 +23,16 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "devvm [IMAGE]",
 		Short: "Open a shell in this folder's VM, creating it first",
-		Long: "Open a shell in this folder's VM, at the same path, creating the VM first. A new VM " +
-			"gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: " +
-			"node+python+docker+claude), " +
-			"else the toolchains (and the nix layer) the folder's files call for, with any agents IMAGE names on top, built " +
-			"if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and " +
-			"its .git hooks and config are locked against changes from the VM (macOS); with --clone, " +
-			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets " +
-			"what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists " +
-			"is started if it's stopped and opened as it is; an IMAGE that names what it lacks is refused, " +
-			"naming the devvm tools add command that adds its shared tools, as only a new VM gets a layer. In a folder without a VM of its own, inside one that has a VM, devvm " +
-			"asks whether to open that VM in this folder instead of creating one, and opens it without " +
-			"asking when there's no terminal. --here and --clone create the new VM without asking.",
+		Long: "Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. " +
+			"A new VM gets IMAGE, such as node+claude, or else the toolchains the folder's files call for with any agents IMAGE names, " +
+			"and devvm builds the image first if it isn't built. " +
+			"The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.",
+		Example: examples(
+			"devvm", "open this folder's VM, creating it with the toolchains the folder needs",
+			"devvm node+claude", "create the VM with node and Claude Code",
+			"devvm --clone", "create the VM with its own clone of this repo",
+			"devvm ls", "list every VM",
+		),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
@@ -59,8 +57,8 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SuggestionsMinimumDistance: suggestDistance,
 	}
 	root.SetOut(u.Stdout())
-	root.PersistentFlags().BoolVarP(&fl.Verbose, "verbose", "v", false, "show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line")
-	root.PersistentFlags().BoolVar(&fl.NoInput, "no-input", false, "never ask anything: a question devvm would ask fails instead, naming the flag that answers it")
+	root.PersistentFlags().BoolVarP(&fl.Verbose, "verbose", "v", false, "show the output of the commands devvm runs instead of a status line")
+	root.PersistentFlags().BoolVar(&fl.NoInput, "no-input", false, "never ask, and fail where devvm would ask, naming the flag that answers it")
 	addUpFlags(root, uf)
 	addVersion(root)
 	root.AddCommand(newBuildCmd(u), newRebuildCmd(u), newImagesCmd(u), newGCCmd(u), newSpaceCmd(u), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
@@ -69,6 +67,8 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	addCompletions(root, u)
 	checkCommands(root)
 	addHelp(root)
+	addGroups(root)
+	addDocs(root)
 	return root
 }
 

@@ -3,29 +3,40 @@ title: devvm secret rm
 weight: 32
 ---
 
-Delete a saved token
+Delete a saved secret
 
 ## Synopsis
 
-Delete a saved token, after asking in a terminal; --force deletes it without asking, which it needs without a terminal. Proxies running stop putting it in at once; what a VM did with it stays done.
+Delete a saved secret, after asking in a terminal. Proxies that are running stop putting it in at once, but what a VM did with it stays done.
 
 ```text
 devvm secret rm NAME [flags]
 ```
 
+## Examples
+
+```text
+  devvm secret rm github          # delete the GitHub token, after asking
+  devvm secret rm github --force  # delete it without asking, as a script must
+```
+
 ## Options
 
 ```text
-  -f, --force   don't ask to confirm, which a command that deletes needs without a terminal
+  -f, --force   don't ask to confirm, which devvm needs without a terminal
   -h, --help    help for rm
 ```
 
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm secret rm](../safety/network.md#saving-and-binding-secrets) explains it in full.
 
 ## See also
 

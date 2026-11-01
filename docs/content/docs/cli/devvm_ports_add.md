@@ -7,10 +7,17 @@ Forward more ports from this folder's VM
 
 ## Synopsis
 
-Add LIST's ports and ranges (5173,8000-8010) to those this folder's VM forwards, or with -g to those new VMs forward. A VM that forwards every port keeps doing so.
+Add LIST's ports and ranges, such as 5173,8000-8010, to those this folder's VM forwards, or with -g to those new VMs forward. A VM that forwards every port keeps doing so.
 
 ```text
 devvm ports add LIST [flags]
+```
+
+## Examples
+
+```text
+  devvm ports add 5432       # forward one more port
+  devvm ports add 8000-8010  # forward a range
 ```
 
 ## Options
@@ -23,9 +30,13 @@ devvm ports add LIST [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm ports add](../using/ports-size.md#ports) explains it in full.
 
 ## See also
 

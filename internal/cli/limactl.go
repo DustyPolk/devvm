@@ -14,12 +14,14 @@ import (
 func newLimactlCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "limactl [ARGS...]",
-		Short: "Run Lima's limactl on devvm's own Lima home",
+		Short: "Run Lima's limactl for debugging, which starts VMs without network policy",
 		Long: "Run limactl with ARGS on devvm's own Lima home, where the lima backend's VMs and images live, " +
-			"in devvm's place: its input, output and exit code are limactl's, and every argument is passed " +
-			"on, flags and --help included. It runs in devvm's data folder, " +
-			"so give it files by absolute path. A VM started this way runs unconfined, without its " +
-			"network policy (devvm ls shows it unenforced): start VMs with devvm.",
+			"passing on every argument, --help included. " +
+			"A VM started this way runs without its network policy, so start VMs with devvm.",
+		Example: examples(
+			"devvm limactl list", "list the lima backend's VMs and images",
+			"devvm limactl shell devvm-website-71a99b1076d92c", "open a shell in a running VM through Lima",
+		),
 		DisableFlagParsing:    true,
 		DisableFlagsInUseLine: true,
 		RunE: func(_ *cobra.Command, args []string) error {

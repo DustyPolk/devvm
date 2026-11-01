@@ -19,9 +19,9 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm images rm](devvm_images_rm.md): Delete images, by name or by key
-- [devvm layer](devvm_layer.md): Your own image layers
+- [devvm layer](devvm_layer.md): Make image layers of your own
 - [devvm layer new](devvm_layer_new.md): Start a layer of your own
-- [devvm limactl](devvm_limactl.md): Run Lima's limactl on devvm's own Lima home
+- [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
 - [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM
@@ -33,13 +33,13 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm ports rm](devvm_ports_rm.md): Stop forwarding some ports from this folder's VM
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
-- [devvm retention](devvm_retention.md): Show or change the retention settings: what devvm deletes on its own
+- [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
-- [devvm secret rm](devvm_secret_rm.md): Delete a saved token
+- [devvm secret rm](devvm_secret_rm.md): Delete a saved secret
 - [devvm secret set](devvm_secret_set.md): Save the Claude Code token or GitHub token on this machine
-- [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a token
-- [devvm secret use](devvm_secret_use.md): Let this folder's VM use a token
+- [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a secret
+- [devvm secret use](devvm_secret_use.md): Let this folder's VM use a secret
 - [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes

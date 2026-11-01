@@ -15,29 +15,29 @@ import (
 // addBackendFlag adds --backend, the backend a command uses: a new VM's,
 // or the one it builds, deletes or checks on.
 func addBackendFlag(f *pflag.FlagSet, p *string) {
-	f.StringVar(p, "backend", "", "the `NAME` of the backend to use (default: devvm setup --backend, else lima)")
+	f.StringVar(p, "backend", "", "the backend `NAME` to use (default: devvm setup's, else lima)")
 }
 
 // addBackendFilterFlag adds --backend as a filter: a command that acts on
 // every backend acts on that one alone.
 func addBackendFilterFlag(f *pflag.FlagSet, p *string) {
-	f.StringVar(p, "backend", "", "the `NAME` of the only backend to act on (default: every backend)")
+	f.StringVar(p, "backend", "", "act only on the backend `NAME` (default: every backend)")
 }
 
 // addFromFlag adds --from, the container image a base starts from.
 func addFromFlag(f *pflag.FlagSet, p *string) {
-	f.StringVar(p, "from", "", "the container `IMAGE` the base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM)")
+	f.StringVar(p, "from", "", "the container `IMAGE` base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)")
 }
 
 // addForceFlag adds -f/--force, which only skips a confirmation.
 func addForceFlag(f *pflag.FlagSet, p *bool) {
-	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which a command that deletes needs without a terminal")
+	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which devvm needs without a terminal")
 }
 
 // addSSHConfigFlag adds --ssh-config, which answers the question whether
 // to add devvm's Include line to ~/.ssh/config.
 func addSSHConfigFlag(f *pflag.FlagSet, p *bool) {
-	f.BoolVar(p, "ssh-config", false, "add devvm's Include line to ~/.ssh/config without asking, when it's missing")
+	f.BoolVar(p, "ssh-config", false, "add devvm's Include line to ~/.ssh/config without asking")
 }
 
 // confirmed is whether a destructive command (command, as typed) goes

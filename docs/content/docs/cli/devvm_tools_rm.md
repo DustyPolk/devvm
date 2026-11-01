@@ -7,10 +7,17 @@ Take shared tools out of this folder's VM, then open a shell in it
 
 ## Synopsis
 
-Take shared tools out of this folder's VM, each TOOL a separate word (devvm tools rm python claude), then open a shell in it. They're not mounted in it any more; what the VM installed itself stays. Your layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.
+Take shared tools out of this folder's VM, each TOOL a separate word, then open a shell in it. What the VM installed itself stays.
 
 ```text
 devvm tools rm TOOL... [flags]
+```
+
+## Examples
+
+```text
+  devvm tools rm python         # take python out of the VM
+  devvm tools rm python claude  # take out python and Claude Code
 ```
 
 ## Options
@@ -22,9 +29,13 @@ devvm tools rm TOOL... [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm tools rm](../using/toolchains.md#adding-and-removing-tools) explains it in full.
 
 ## See also
 

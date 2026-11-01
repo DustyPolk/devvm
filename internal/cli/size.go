@@ -21,10 +21,15 @@ func newSizeCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "size",
 		Short: "Show or change this folder's VM's size",
-		Long: "Show this folder's VM's CPUs, memory and disk, and what changes when it next starts. " +
-			"--cpus, --memory and --disk change them, at once for a stopped VM, from its next start for " +
-			"a running one: devvm restart. A disk only grows. With -g, show or change the size new VMs " +
-			"get instead; what it leaves unset is the image's.",
+		Long: "Show this folder's VM's CPUs, memory and disk, or change them with --cpus, --memory and --disk. " +
+			"A stopped VM changes at once, and a running VM changes when it next starts, such as with devvm restart. " +
+			"With -g, show or change the size new VMs get instead.",
+		Example: examples(
+			"devvm size", "show the VM's size",
+			"devvm size --cpus 6 --memory 16", "give it 6 CPUs and 16 GiB of memory",
+			"devvm size --disk 200", "grow its disk to 200 GiB",
+			"devvm size -g --memory 16", "give new VMs 16 GiB of memory",
+		),
 		Args: showsOnly(noArgs, "cpus", "memory", "disk"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var shown vm.SizeShown
@@ -50,7 +55,7 @@ func newSizeCmd(u *ui.UI) *cobra.Command {
 	f := cmd.Flags()
 	f.BoolVarP(&global, "global", "g", false, "show or change the size new VMs get instead")
 	f.StringVar(&s.CPUs, "cpus", "", "the `N` CPUs the VM gets")
-	f.StringVar(&s.Memory, "memory", "", "the VM's memory in `GiB`: 16, 16G or 16GiB")
+	f.StringVar(&s.Memory, "memory", "", "the VM's memory in `GiB`, such as 16 or 16G")
 	f.StringVar(&s.Disk, "disk", "", "the VM's disk in `GiB`, at least what it has")
 	jsonFlag(cmd, &asJSON)
 	return cmd

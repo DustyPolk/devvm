@@ -13,6 +13,13 @@ Remove LIST's ports and ranges, each as listed, from those this folder's VM forw
 devvm ports rm LIST [flags]
 ```
 
+## Examples
+
+```text
+  devvm ports rm 5173     # stop forwarding one port
+  devvm ports rm -g 5173  # stop new VMs forwarding it
+```
+
 ## Options
 
 ```text
@@ -23,9 +30,13 @@ devvm ports rm LIST [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm ports rm](../using/ports-size.md#ports) explains it in full.
 
 ## See also
 

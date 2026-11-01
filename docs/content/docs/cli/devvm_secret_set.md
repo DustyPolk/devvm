@@ -7,25 +7,36 @@ Save the Claude Code token or GitHub token on this machine
 
 ## Synopsis
 
-Save a secret on this machine, claude (the Claude Code token that claude setup-token prints) or github (a GitHub token), in the macOS Keychain, else in ~/.config/devvm/secrets/NAME, a file only you can read. It asks for the token without showing it, and --stdin reads a line instead. Proxies that are running put the new token in at once.
+Save a secret on this machine, claude for the Claude Code token that claude setup-token prints or github for a GitHub token. devvm asks for it without showing it, and --stdin reads a line instead. Proxies that are running put the new value in at once.
 
 ```text
 devvm secret set NAME [flags]
+```
+
+## Examples
+
+```text
+  devvm secret set claude                          # save the Claude Code token, asking for it
+  gh auth token | devvm secret set github --stdin  # save GitHub CLI's token without asking
 ```
 
 ## Options
 
 ```text
   -h, --help    help for set
-      --stdin   read the token from a line of input, without asking
+      --stdin   read the secret from a line of input, without asking
 ```
 
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm secret set](../safety/network.md#saving-and-binding-secrets) explains it in full.
 
 ## See also
 

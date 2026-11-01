@@ -13,8 +13,11 @@ func newStopCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
 		Short: "Stop this folder's VM",
-		Long: "Stop this folder's VM and its network policy proxy. Once it's stopped, its .git is locked " +
-			"again and checked, as on a launch that finds it stopped, and its ssh config entry goes.",
+		Long: "Stop this folder's VM and its network policy proxy. " +
+			"devvm, devvm restart or a command that needs the VM running starts it again.",
+		Example: examples(
+			"devvm stop", "stop this folder's VM",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Stop(cmd.Context()) }, msg.StopVMFailed)

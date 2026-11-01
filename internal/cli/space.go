@@ -50,11 +50,14 @@ func newSpaceCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "space",
 		Short: "Show what devvm keeps on this machine and the space it takes",
-		Long: "Show each kind of thing devvm keeps on this machine, on every backend, with how many there " +
-			"are, the disk they take, whether devvm can make them again, what devvm gc frees of them now " +
-			"and what frees the rest, then a total. The backends' own caches come last and apart, because " +
-			"they can also hold your own downloads. With --backend, only that backend's VMs, images, " +
-			"shared tool images and caches. It changes nothing and starts no VM.",
+		Long: "Show each kind of thing devvm keeps on this machine, on every backend, with the disk it takes, " +
+			"what devvm gc frees of it now and what frees the rest, then the backends' own caches apart. " +
+			"It changes nothing and starts no VM.",
+		Example: examples(
+			"devvm space", "show what devvm keeps and what frees it",
+			"devvm space --backend smolvm", "only the smolvm backend's",
+			"devvm space --json", "the same as JSON, for scripts",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			r, err := space(cmd.Context(), u, only)

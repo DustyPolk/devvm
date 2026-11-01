@@ -7,16 +7,24 @@ Open this folder's VM's desktop in a VNC viewer
 
 ## Synopsis
 
-Get this folder's VM ready as devvm host does, start the desktop of its desktop feature, and serve it on this machine's 127.0.0.1 alone, with a password of the VM's own, until you press Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm shows. The clipboard isn't shared unless you add --clipboard.
+Start the desktop of this folder's VM, which needs base's desktop feature, and serve it on this machine's 127.0.0.1 with a password of the VM's own until you press Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm shows.
 
 ```text
 devvm desktop [flags]
 ```
 
+## Examples
+
+```text
+  devvm desktop              # open the VM's desktop in Screen Sharing
+  devvm desktop --clipboard  # the same, sharing the clipboard both ways
+  devvm desktop --no-open    # show the address and password for a VNC viewer of your own
+```
+
 ## Options
 
 ```text
-      --clipboard   share the clipboard both ways: this machine's reaches the VM, and the VM's this machine
+      --clipboard   share the clipboard between this machine and the VM, both ways
   -h, --help        help for desktop
       --no-open     show the address and password without opening Screen Sharing
 ```
@@ -24,9 +32,13 @@ devvm desktop [flags]
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm desktop](../using/desktop.md) explains it in full.
 
 ## See also
 

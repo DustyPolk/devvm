@@ -7,25 +7,36 @@ Get this folder's VM ready for ssh and editors, and show its host name
 
 ## Synopsis
 
-Get this folder's VM ready for ssh and editors as devvm does before opening a shell: checked, started if it's stopped, its network policy checked, set up and in devvm's ssh config. Then show the host name ssh and VS Code's Remote-SSH reach it by (devvm-website, for a folder named website). Without the Include line in ~/.ssh/config, devvm offers to add it, and --ssh-config adds it without asking.
+Get this folder's VM ready for ssh and editors as devvm does before it opens a shell, starting the VM if it's stopped. Then show the host name that ssh and VS Code's Remote-SSH reach it by, such as devvm-website for a folder named website.
 
 ```text
 devvm host [flags]
+```
+
+## Examples
+
+```text
+  devvm host         # get the VM ready and show its host name
+  ssh devvm-website  # then connect by that name, for a folder named website
 ```
 
 ## Options
 
 ```text
   -h, --help         help for host
-      --ssh-config   add devvm's Include line to ~/.ssh/config without asking, when it's missing
+      --ssh-config   add devvm's Include line to ~/.ssh/config without asking
 ```
 
 ## Options inherited from parent commands
 
 ```text
-      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
-  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
 ```
+
+## Docs
+
+[The docs page for devvm host](../using/ssh.md#devvm-host-and-devvm-code) explains it in full.
 
 ## See also
 

@@ -22,10 +22,13 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "completion SHELL",
 		Short: "Print the shell completion script for bash, zsh or fish",
-		Long: "Print the script that completes devvm's commands, flags and image names in SHELL: bash, " +
-			"zsh or fish. Load it from your shell's startup file: source <(devvm completion bash) in " +
-			"~/.bashrc (it needs the bash-completion package), source <(devvm completion zsh) in ~/.zshrc " +
-			"(after compinit), devvm completion fish | source in ~/.config/fish/config.fish.",
+		Long: "Print the script that completes devvm's commands, flags and image names in SHELL, which is bash, zsh or fish. " +
+			"Load it from your shell's startup file.",
+		Example: examples(
+			"source <(devvm completion bash)", "in ~/.bashrc, with the bash-completion package installed",
+			"source <(devvm completion zsh)", "in ~/.zshrc, after compinit",
+			"devvm completion fish | source", "in ~/.config/fish/config.fish",
+		),
 		Args:      exactArgs(1),
 		ValidArgs: shells,
 		RunE: func(cmd *cobra.Command, args []string) error {

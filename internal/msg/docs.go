@@ -369,3 +369,67 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"layer_name_command":               "using/customizing#your-own-layers",
 	"layer_is_command":                 "using/customizing#your-own-layers",
 }
+
+// IssuesURL is devvm's issue tracker, which the root's help ends with.
+const IssuesURL = "https://github.com/w3cj/devvm/issues"
+
+// commandDocs links each command users can run, by its path, to the user
+// page that covers it, as docs does: "page#anchor". A command's help ends
+// with the page's address, and its CLI reference page links to it.
+// TestDocLinks checks every entry.
+var commandDocs = map[string]string{
+	"devvm":                "getting-started/commands",
+	"devvm restart":        "getting-started/commands#restarting-and-stopping",
+	"devvm stop":           "getting-started/commands#restarting-and-stopping",
+	"devvm rm":             "getting-started/commands#deleting-a-vm",
+	"devvm adopt":          "getting-started/commands#a-folder-made-again",
+	"devvm ls":             "getting-started/commands#listing-vms",
+	"devvm code":           "using/ssh#vs-code",
+	"devvm desktop":        "using/desktop",
+	"devvm host":           "using/ssh#devvm-host-and-devvm-code",
+	"devvm history":        "using/coding-agents#history",
+	"devvm history export": "using/coding-agents#history",
+	"devvm tools":          "using/toolchains#adding-and-removing-tools",
+	"devvm tools add":      "using/toolchains#adding-and-removing-tools",
+	"devvm tools rm":       "using/toolchains#adding-and-removing-tools",
+	"devvm tools update":   "using/toolchains#adding-and-removing-tools",
+	"devvm size":           "using/ports-size#size",
+	"devvm ports":          "using/ports-size#ports",
+	"devvm ports add":      "using/ports-size#ports",
+	"devvm ports rm":       "using/ports-size#ports",
+	"devvm network":        "safety/network#turning-it-on-or-off",
+	"devvm network allow":  "safety/network#changing-rules",
+	"devvm network deny":   "safety/network#changing-rules",
+	"devvm network rm":     "safety/network#changing-rules",
+	"devvm network log":    "safety/network#logs",
+	"devvm ssh-agent":      "using/ssh#agent-forwarding",
+	"devvm ssh-agent add":  "using/ssh#devvms-own-agent",
+	"devvm ssh-agent rm":   "using/ssh#devvms-own-agent",
+	"devvm git-protect":    "safety/git-protection#turning-it-on-or-off",
+	"devvm secret":         "safety/network#saving-and-binding-secrets",
+	"devvm secret set":     "safety/network#saving-and-binding-secrets",
+	"devvm secret rm":      "safety/network#saving-and-binding-secrets",
+	"devvm secret use":     "safety/network#saving-and-binding-secrets",
+	"devvm secret unuse":   "safety/network#saving-and-binding-secrets",
+	"devvm images":         "using/images#listing-images",
+	"devvm images rm":      "using/images#deleting-images",
+	"devvm build":          "using/images#layers",
+	"devvm rebuild":        "using/images#rebuilding",
+	"devvm layer":          "using/customizing#your-own-layers",
+	"devvm layer new":      "using/customizing#your-own-layers",
+	"devvm space":          "using/space#devvm-space",
+	"devvm gc":             "using/images#cleaning-up",
+	"devvm retention":      "using/settings#retention",
+	"devvm setup":          "using/settings#devvm-setup",
+	"devvm doctor":         "getting-started/install#checking-what-devvm-needs",
+	"devvm completion":     "getting-started/commands#shell-completion",
+	"devvm limactl":        "backends/lima#running-limactl",
+}
+
+// CommandDoc returns the "page#anchor" of the docs page for the command
+// at path (devvm network allow), or "" when it has none.
+func CommandDoc(path string) string { return commandDocs[path] }
+
+// CommandDocURL returns the address of the docs page for the command at
+// path, or "" when it has none.
+func CommandDocURL(path string) string { return docURL(commandDocs[path]) }

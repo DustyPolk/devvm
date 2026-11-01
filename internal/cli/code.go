@@ -15,8 +15,11 @@ func newCodeCmd(u *ui.UI) *cobra.Command {
 		Use:   "code",
 		Short: "Open this folder's VM in VS Code over Remote-SSH",
 		Long: "Get this folder's VM ready as devvm host does, then open its folder in VS Code over Remote-SSH, " +
-			"with VS Code's code command. The VM's VS Code settings turn off forwarding its ports to this " +
-			"machine and answering git's sign-in prompts with your GitHub sign-in.",
+			"with VS Code's code command.",
+		Example: examples(
+			"devvm code", "open this folder's VM in VS Code",
+			"devvm code --ssh-config", "the same, adding devvm's Include line to ~/.ssh/config without asking",
+		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error {
