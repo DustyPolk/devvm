@@ -58,6 +58,8 @@ run = [
   # Message links: every doc link in internal/msg/docs.go is a message and
   # a page and heading in docs/content/docs.
   "go test ./internal/msg -run '^TestDocLinks$'",
+  # Command lines: every devvm command line in the repo is one of devvm's.
+  "go test ./internal/cli -run '^TestCommandLines$'",
 ]
 
 [tasks.test]

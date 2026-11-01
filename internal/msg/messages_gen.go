@@ -1204,7 +1204,7 @@ func GCOldHint() M {
 	return M{id: "gc_old_hint"}
 }
 
-// GCOlderThanNeedsHistory is [gc_older_than_needs_history]: "--older-than goes with --history. Run devvm gc --history --older-than AGE."
+// GCOlderThanNeedsHistory is [gc_older_than_needs_history]: "--older-than goes with --history. Run devvm gc --history --older-than DURATION."
 func GCOlderThanNeedsHistory() M {
 	return M{id: "gc_older_than_needs_history"}
 }
@@ -2004,7 +2004,7 @@ func NoVMPolicy(dir string) M {
 	return M{id: "no_vm_policy", vals: []val{{"dir", dir}}}
 }
 
-// NoVMPorts is [no_vm_ports]: "There's no VM for {{.dir}}. Run devvm --ports LIST to make one that forwards only those ports, or devvm ports -g to set what new VMs forward."
+// NoVMPorts is [no_vm_ports]: "There's no VM for {{.dir}}. Run devvm --ports PORTS to make one that forwards only those ports, or devvm ports -g to set what new VMs forward."
 func NoVMPorts(dir string) M {
 	return M{id: "no_vm_ports", vals: []val{{"dir", dir}}}
 }

@@ -364,7 +364,7 @@ else
 fi
 
 # Tell agents why the network may fail, and what to do about it.
-note="Network access in this VM goes through an allowlist (devvm network policy). If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`."
+note="Network access in this VM goes through an allowlist (devvm's network policy). If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`."
 for f in ~/.claude/CLAUDE.md ~/.codex/AGENTS.md; do
   [[ -d "$(dirname "$f")" ]] || continue
   [[ -f "$f" ]] && sed -i '/^<!-- devvm-proxy -->/,/^<!-- \/devvm-proxy -->/d' "$f"

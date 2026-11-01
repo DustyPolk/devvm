@@ -65,7 +65,7 @@ Work through this list for each new command, in order, then run [the review](#re
 
 ## Changing a command
 
-A rename, a new flag or a changed argument follows the same steps for what changed. Then search the whole repo for the old form and fix every use of it: the docs, `locales/en.toml`, Go strings and comments, `testdata/script/`, `tests/e2e.sh`, `install.sh`, `README.md`, `AGENTS.md`, the scripts in `assets/` and the skills. An old name gets no alias, and the docs describe only the command as it is.
+A rename, a new flag or a changed argument follows the same steps for what changed. Then search the whole repo for the old form and fix every use of it: the docs, `locales/en.toml`, Go strings and comments, `testdata/script/`, `tests/e2e.sh`, `install.sh`, `README.md`, `AGENTS.md`, the scripts in `assets/` and the skills. `TestCommandLines` fails on most old forms, a command, a flag or a placeholder that's gone, but it reads only a sentence's command and flags, so read the prose around each change too. An old name gets no alias, and the docs describe only the command as it is.
 
 ## Reviewing a command
 

@@ -875,7 +875,7 @@ one = "deleted {{.count}} export of agents' history"
 other = "deleted {{.count}} exports of agents' history"
 
 [gc_older_than_needs_history]
-other = "--older-than goes with --history. Run devvm gc --history --older-than AGE."
+other = "--older-than goes with --history. Run devvm gc --history --older-than DURATION."
 
 [gc_orphans]
 one = "What devvm keeps for {{.count}} VM its backend no longer has:"
@@ -1231,7 +1231,7 @@ one = "{{.vm}} doesn't forward port {{.ports}} for now because it's in use on th
 other = "{{.vm}} doesn't forward ports {{.ports}} for now because they're in use on this machine."
 
 [no_vm_ports]
-other = "There's no VM for {{.dir}}. Run devvm --ports LIST to make one that forwards only those ports, or devvm ports -g to set what new VMs forward."
+other = "There's no VM for {{.dir}}. Run devvm --ports PORTS to make one that forwards only those ports, or devvm ports -g to set what new VMs forward."
 
 [ports_failed]
 description = "reason is an error from the system, in English"
