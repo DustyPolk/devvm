@@ -29,9 +29,11 @@ stdout '^==> nothing_to_clean$'
 exec devvm gc --tools claude
 stdout '^==> nothing_to_clean$'
 
-# --tools: node's three, not claude's (a VM's) nor codex's (just built).
+# --tools: node's three, not claude's (a VM's) nor codex's (just built),
+# which it names with the list.
 exec devvm gc --tools
 stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
+stdout '^==> gc_tools_recent count=1 tools=codex \S+$'
 stdout '^==> deleted_tools_no_vm count=3$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
 ! stdout '^(node|pnpm|bun)-'
@@ -39,6 +41,53 @@ stdout '^claude-'
 stdout '^codex-'
 ! exists $SHARE/.lock
 
+# Only codex is left of them: gc names it in place of nothing_to_clean.
+exec devvm gc --tools
+stdout '^==> gc_tools_recent count=1 tools=codex \S+$'
+! stdout 'nothing_to_clean|deleted_'
+
+# Plain gc never names it, and --force goes only with --tools.
+exec devvm gc
+stdout '^==> nothing_to_clean$'
+! stdout gc_tools_recent
+! exec devvm gc --force
+stderr '^devvm: gc_force_needs_tools$'
+
 # A VM that names node later builds it again.
 exec devvm build node
 exec sh -c 'cd "$SHARE" && ls node-*.erofs'
+
+# --tools --force with a name: only that tool's, built just now.
+exec devvm gc --tools --force node
+stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
+stdout '^==> deleted_tools_no_vm count=3$'
+! stdout gc_tools_recent
+exec sh -c 'cd "$SHARE" && ls *.erofs'
+! stdout '^(node|pnpm|bun)-'
+stdout '^codex-'
+
+# While a VM is being made (its start hangs), --tools --force deletes
+# nothing; once its devvm is killed, nothing holds the lock.
+mkdir $WORK/making
+cd $WORK/making
+exec git init -q
+exec sh -c ': > "$STUB_DIR/start-hangs"'
+! exec devvm --no-network-policy base &u&
+wait_file $STUB_DIR/hanging
+! exec devvm gc --tools --force
+stderr '^devvm: gc_force_making$'
+! stdout 'deleted_'
+exec sh -c 'cd "$SHARE" && ls *.erofs'
+stdout '^codex-'
+kill -KILL u
+wait u
+rm $STUB_DIR/start-hangs
+
+# --tools --force: codex too, at once, but never claude (a VM's).
+exec devvm gc --tools --force
+stdout '^gc_tools_no_vm count=1 size=\S+ tools=codex \S+$'
+stdout '^==> deleted_tools_no_vm count=1$'
+exec sh -c 'cd "$SHARE" && ls *.erofs'
+! stdout '^codex-'
+stdout '^claude-'
+! exists $SHARE/.lock

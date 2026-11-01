@@ -129,6 +129,13 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
+	// Held from before its tools are picked until it's made, so devvm gc
+	// --tools --force deletes none of them meanwhile.
+	unmaking, err := tools.Making{Dirs: e.Dirs}.Hold(ctx)
+	if err != nil {
+		return err
+	}
+	defer unmaking()
 	// A new VM gets the newest tools: check now when the daily check is
 	// due.
 	groups := image.ToolsOf(n.img)
@@ -240,6 +247,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		return err
 	}
 	done()
+	unmaking()
 	return e.Exec(cmd)
 }
 

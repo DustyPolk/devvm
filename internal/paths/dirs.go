@@ -131,6 +131,10 @@ func (d Dirs) AgentSock() string { return filepath.Join(d.Data, "agent.sock") }
 // OCIBuildLock is held while a base image is built from a container image.
 func (d Dirs) OCIBuildLock() string { return filepath.Join(d.Data, "oci-build.lock") }
 
+// MakingLock is held, shared, by each devvm making a VM or giving one new
+// shared tools, and tried exclusively by devvm gc --tools --force.
+func (d Dirs) MakingLock() string { return filepath.Join(d.Data, "making.lock") }
+
 // LimaVM is a VM's folder in devvm's Lima home.
 func (d Dirs) LimaVM(vm string) string { return filepath.Join(d.Lima, vm) }
 

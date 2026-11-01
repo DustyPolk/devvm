@@ -69,14 +69,18 @@ func (e Launch) Update(ctx context.Context, o Options) error {
 	builder := e.builder(t.b, st.Get(state.KeyFrom))
 	tg := toolTarget(t.b, st)
 	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, tg, files) }
-	files, changed, err := tools.VMs{Env: e.Tools}.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), tg)
+	// Held until its state lists the new tools, as a new VM's.
+	unmaking, err := tools.Making{Dirs: e.Dirs}.Hold(ctx)
 	if err != nil {
 		return err
 	}
-	if changed {
-		if err := st.Set(KeyTools, strings.Join(files, " ")); err != nil {
-			return err
-		}
+	files, changed, err := tools.VMs{Env: e.Tools}.Update(ctx, buildFn, vm, st.Get(state.KeyImage), strings.Fields(st.Get(KeyTools)), tg)
+	if err == nil && changed {
+		err = st.Set(KeyTools, strings.Join(files, " "))
+	}
+	unmaking()
+	if err != nil {
+		return err
 	}
 	o.Image = ""
 	return e.open(ctx, o, t)
@@ -375,6 +379,12 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 		e.Info(msg.Keeping(img))
 		return nil
 	}
+	// Held until its state lists the new tools, as a new VM's.
+	unmaking, err := tools.Making{Dirs: e.Dirs}.Hold(ctx)
+	if err != nil {
+		return err
+	}
+	defer unmaking()
 	tg := toolTarget(b, st)
 	files, err := tools.Versions{Env: e.Tools}.Files(ctx, image.ToolsOf(added), tg)
 	if err != nil {

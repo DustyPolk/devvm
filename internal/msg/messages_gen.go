@@ -1119,6 +1119,16 @@ func GCFailed(reason string) M {
 	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
 }
 
+// GCForceMaking is [gc_force_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done, or devvm gc --tools, which keeps the tools built in the last hour."
+func GCForceMaking() M {
+	return M{id: "gc_force_making"}
+}
+
+// GCForceNeedsTools is [gc_force_needs_tools]: "--force goes with --tools. Run devvm gc --tools --force."
+func GCForceNeedsTools() M {
+	return M{id: "gc_force_needs_tools"}
+}
+
 // GCImage is [gc_image]: "  {{.image}} ({{.key}})"
 func GCImage(image string, key string) M {
 	return M{id: "gc_image", vals: []val{{"image", image}, {"key", key}}}
@@ -1212,6 +1222,11 @@ func GCTools(count int, size string) M {
 // GCToolsNoVM is [gc_tools_no_vm]: "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}."
 func GCToolsNoVM(count int, size string, tools string) M {
 	return M{id: "gc_tools_no_vm", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}, {"tools", tools}}}
+}
+
+// GCToolsRecent is [gc_tools_recent]: "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc again with --force to delete them now."
+func GCToolsRecent(count int, tools string) M {
+	return M{id: "gc_tools_recent", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"tools", tools}}}
 }
 
 // GCUnfinished is [gc_unfinished]: "  {{.key}}, left over from a failed build"
@@ -2999,6 +3014,8 @@ var specs = map[string]spec{
 	"gc_export":                        {fields: []string{"date", "size", "vm"}},
 	"gc_exports":                       {plural: true, fields: []string{"count", "size"}},
 	"gc_failed":                        {fields: []string{"reason"}},
+	"gc_force_making":                  {},
+	"gc_force_needs_tools":             {},
 	"gc_image":                         {fields: []string{"image", "key"}},
 	"gc_images":                        {},
 	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
@@ -3018,6 +3035,7 @@ var specs = map[string]spec{
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
+	"gc_tools_recent":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
 	"gc_unknown_tool":                  {fields: []string{"tool", "tools"}},
 	"git_appeared":                     {},

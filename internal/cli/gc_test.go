@@ -72,3 +72,19 @@ func TestWithoutSkipped(t *testing.T) {
 		t.Errorf("nothing skipped: %+v", got)
 	}
 }
+
+// gc asks before it deletes only in a terminal, and never with --force.
+func TestGCAsks(t *testing.T) {
+	for _, tc := range []struct {
+		force, terminal, want bool
+	}{
+		{terminal: true, want: true},
+		{},
+		{force: true, terminal: true},
+		{force: true},
+	} {
+		if got := (gcOpts{tools: true, force: tc.force}).asks(tc.terminal); got != tc.want {
+			t.Errorf("force %v, terminal %v: asks %v", tc.force, tc.terminal, got)
+		}
+	}
+}

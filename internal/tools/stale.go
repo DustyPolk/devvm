@@ -19,18 +19,28 @@ const builtRecent = time.Hour
 // being made may not list it yet. Callers deleting them hold the share's
 // lock from before the List, as for Unused.
 func (t Share) NoVM(ls []Listed, names []string) []Listed {
-	var out []Listed
+	out, _ := t.NoVMRecent(ls, names)
+	return out
+}
+
+// NoVMRecent is NoVM, also returning the ones it keeps because they were
+// built in the last hour: devvm gc --tools says so, and with --force
+// deletes them too.
+func (t Share) NoVMRecent(ls []Listed, names []string) (old, recent []Listed) {
 	for _, l := range ls {
 		if l.State != StateCurrent || l.VMs > 0 || l.File == "" || (len(names) > 0 && !slices.Contains(names, l.Name)) {
 			continue
 		}
 		fi, err := os.Stat(filepath.Join(t.Dirs.Tools(), l.File+".sha256"))
-		if err != nil || t.Now().Sub(fi.ModTime()) < builtRecent {
-			continue
+		switch {
+		case err != nil:
+		case t.Now().Sub(fi.ModTime()) < builtRecent:
+			recent = append(recent, l)
+		default:
+			old = append(old, l)
 		}
-		out = append(out, l)
 	}
-	return out
+	return old, recent
 }
 
 // idleExt is the file beside a current tool image no VM has, made when

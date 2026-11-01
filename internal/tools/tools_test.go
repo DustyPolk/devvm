@@ -998,6 +998,47 @@ func TestNoVM(t *testing.T) {
 	if got := files(e.NoVM(ls, []string{"go"})); !slices.Equal(got, []string{"go-1-0123456789ab.erofs"}) {
 		t.Errorf("NoVM(go) = %v", got)
 	}
+	// The ones kept for being built in the last hour: claude, not codex
+	// (no hash).
+	old2, recent := e.NoVMRecent(ls, nil)
+	if got := files(old2); !slices.Equal(got, []string{"node-1-0123456789ab.erofs", "go-1-0123456789ab.erofs"}) {
+		t.Errorf("NoVMRecent's old = %v", got)
+	}
+	if got := files(recent); !slices.Equal(got, []string{"claude-1-0123456789ab.erofs"}) {
+		t.Errorf("NoVMRecent's recent = %v", got)
+	}
+	if _, recent := e.NoVMRecent(ls, []string{"go"}); len(recent) != 0 {
+		t.Errorf("NoVMRecent(go)'s recent = %v", files(recent))
+	}
+}
+
+// Any number hold Making at once and Exclude doesn't get it meanwhile;
+// once they let go Exclude gets it, and Hold waits while it's held.
+func TestMaking(t *testing.T) {
+	m := Making{Dirs: paths.Dirs{Data: filepath.Join(t.TempDir(), "data")}}
+	one, err := m.Hold(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := m.Hold(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := m.Exclude(); ok || err != nil {
+		t.Errorf("Exclude while two are made: ok %v, %v", ok, err)
+	}
+	one()
+	two()
+	unlock, ok, err := m.Exclude()
+	if !ok || err != nil {
+		t.Fatalf("Exclude once made: ok %v, %v", ok, err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := m.Hold(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Hold while excluded: %v", err)
+	}
+	unlock()
 }
 
 // Idle records when a current tool image first has no VM and returns it

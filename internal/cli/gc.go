@@ -31,6 +31,10 @@ type gcOpts struct {
 	// toolNames when there are any.
 	tools     bool
 	toolNames []string
+	// force is --force, only with --tools: also the current tool images
+	// no VM has that were built in the last hour, without asking, while
+	// no VM is being made.
+	force bool
 	// exports is --exports: also the exports, only those older than
 	// --older-than when it's given.
 	exports   bool
@@ -53,7 +57,7 @@ type gcOpts struct {
 func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 	var o gcOpts
 	c := &cobra.Command{
-		Use:   "gc [--tools [TOOL...]]",
+		Use:   "gc [--tools [--force] [TOOL...]]",
 		Short: "Delete stale images and unused tool images",
 		Long: "Delete what devvm images lists as stale or unfinished, on every backend, with their " +
 			"records, the shared tool images it lists as unused, the copies of devvm's own files " +
@@ -62,7 +66,9 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"With --backend, only that backend's images, its current ones too, and its unused tool " +
 			"images; without it, every backend's, whatever the default backend is. With --tools, also " +
 			"the current tool images no VM has, on every backend and C library, or only those of the " +
-			"TOOLs named (node, claude). With --exports, also the agents' history devvm export and " +
+			"TOOLs named (node, claude), but not those built in the last hour, which it names and keeps " +
+			"because a VM being made may not list them yet. With --tools --force, those too, without " +
+			"asking, unless a VM is being made or getting new shared tools, when it deletes nothing. With --exports, also the agents' history devvm export and " +
 			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
 			"(30d, 2w, 12h). With --nix-cache, also the whole shared Nix cache, which VMs download again " +
 			"when they need it. With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm " +
@@ -82,6 +88,8 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
+	c.Flags().BoolVar(&o.force, "force", false, "with --tools, also delete the current shared tool images no VM has that were built in the last hour, "+
+		"and don't ask; refused while a VM is being made")
 	c.Flags().BoolVar(&o.exports, "exports", false, "also delete the saved exports of agents' history")
 	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --exports, only those older than `AGE`: 30d, 2w or 12h")
 	c.Flags().BoolVar(&o.nixCache, "nix-cache", false, "also delete the whole shared Nix cache, which VMs download again when they need it")
@@ -107,6 +115,9 @@ func (o *gcOpts) checkArgs(args []string) error {
 	if len(args) > 0 && !o.tools {
 		return msg.GCNamesNeedTools(args[0])
 	}
+	if o.force && !o.tools {
+		return msg.GCForceNeedsTools()
+	}
 	for _, a := range args {
 		if !slices.Contains(image.Toolchains, a) && !slices.Contains(image.Agents, a) {
 			return msg.GCUnknownTool(a, strings.Join(slices.Concat(image.Toolchains, image.Agents), " "))
@@ -120,7 +131,10 @@ type gcPlan struct {
 	images  []listedImage  // stale and unfinished images, each with its backend's
 	tools   []tools.Listed // unused tool images
 	current []tools.Listed // with --tools, current tool images no VM has
-	exports []savedExport  // with --exports, the exports old enough
+	// with --tools but not --force, those built in the last hour, which
+	// gc keeps and says so
+	recent  []tools.Listed
+	exports []savedExport // with --exports, the exports old enough
 	// with --orphans, the VMs their backend no longer has, and what
 	// forgets them
 	orphans   vm.LeftoverReport
@@ -161,13 +175,25 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 	return nil
 }
 
-// gcLocked is gcRun holding the share's lock throughout.
+// gcLocked is gcRun holding the share's lock throughout. With --force it
+// also holds the lock VMs being made hold (tools.Making), so no VM picks
+// its tools meanwhile; while one is being made, it deletes nothing.
 func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bool, error) {
 	unlock, err := b.Tools.LockShare(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
+	if o.force {
+		unmaking, ok, err := (tools.Making{Dirs: b.Dirs}).Exclude()
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, msg.GCForceMaking()
+		}
+		defer unmaking()
+	}
 	return gcRun(ctx, u, b, o)
 }
 
@@ -206,11 +232,14 @@ func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bo
 	}
 	if p.empty() {
 		p.showOrphans(u)
-		u.Info(msg.NothingToClean())
+		if !p.showRecent(u) {
+			u.Info(msg.NothingToClean())
+		}
 		return p.skipped, nil
 	}
 	p.show(u)
-	if u.StdinIsTerminal() && !u.Confirm(msg.GCConfirm()) {
+	p.showRecent(u)
+	if o.asks(u.StdinIsTerminal()) && !u.Confirm(msg.GCConfirm()) {
 		u.Info(msg.NothingDeleted())
 		return p.skipped, nil
 	}
@@ -230,7 +259,10 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	imgs, ts := l.images, l.tools
 	p.images, p.tools = staleImages(imgs), tools.Unused(ts)
 	if o.tools {
-		p.current = p.share.NoVM(ts, o.toolNames)
+		p.current, p.recent = p.share.NoVMRecent(ts, o.toolNames)
+		if o.force {
+			p.current, p.recent = append(p.current, p.recent...), nil
+		}
 	}
 	if err := p.skip(u, b, l.unlisted); err != nil {
 		return p, err
@@ -260,6 +292,7 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 		}
 		p.images = backendImages(imgs, o.only)
 		p.tools, p.current = backendTools(p.tools, o.only, target), backendTools(p.current, o.only, target)
+		p.recent = backendTools(p.recent, o.only, target)
 		return p, nil
 	}
 	current, err := state.AssetsHash(b.Assets)
@@ -301,7 +334,7 @@ func (p *gcPlan) skip(u *ui.UI, b *build.Env, unlisted []unlisted) error {
 		}
 		return out
 	}
-	p.tools, p.current = keep(p.tools), keep(p.current)
+	p.tools, p.current, p.recent = keep(p.tools), keep(p.current), keep(p.recent)
 	return nil
 }
 
@@ -343,6 +376,22 @@ func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (strin
 	return out
 }
 
+// asks reports whether gc asks before it deletes: in a terminal, unless
+// --force.
+func (o gcOpts) asks(terminal bool) bool { return terminal && !o.force }
+
+// showRecent says which current tool images no VM has gc keeps because
+// they were built in the last hour, reporting whether there were any.
+func (p gcPlan) showRecent(u *ui.UI) bool {
+	if len(p.recent) == 0 {
+		return false
+	}
+	u.Info(msg.GCToolsRecent(len(p.recent), tools.Label(toolFiles(p.recent))))
+	return true
+}
+
+// empty reports whether gc has nothing to delete; the tool images it
+// keeps for being recent aren't any.
 func (p gcPlan) empty() bool {
 	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.assets)+len(p.mise) == 0 &&
 		!p.nix.any()
