@@ -70,7 +70,7 @@ func (e Launch) Update(ctx context.Context, o Options) error {
 	tg := toolTarget(t.b, st)
 	buildFn := func(ctx context.Context, files []string) error { return e.buildTools(ctx, builder, tg, files) }
 	// Held until its state lists the new tools, as a new VM's.
-	unmaking, err := tools.Making{Dirs: e.Dirs}.Hold(ctx)
+	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
 	if err != nil {
 		return err
 	}
@@ -380,7 +380,7 @@ func (e Launch) addLayers(ctx context.Context, want string, t *found, builder *b
 		return nil
 	}
 	// Held until its state lists the new tools, as a new VM's.
-	unmaking, err := tools.Making{Dirs: e.Dirs}.Hold(ctx)
+	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
 	if err != nil {
 		return err
 	}

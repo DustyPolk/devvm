@@ -38,7 +38,7 @@ devvm keeps what it makes until you delete it, and the retention settings tell i
 | `logs.runs` | the [run logs](troubleshooting.md#a-command-fails) beyond the newest this many, which is 20 when it's off |
 | `exports.age` | the [exports](coding-agents.md#history) written this long ago or more, such as `90d` |
 | `exports.count` | the exports beyond the newest this many |
-| `tools.unused-age` | the current shared tools that no VM has had for this long, counted from when devvm first found that no VM has them |
+| `tools.unused-age` | the current shared tools that no VM has had for this long, counted from when devvm first found that no VM has them. While a VM is being made or is getting new shared tools, retention deletes none of them in that run, because that VM may not list the tools it picked yet, and it still applies the other settings |
 | `orphans.age` | what devvm keeps for VMs that their backend no longer has, once their state hasn't changed for this long, as `devvm gc --orphans` does |
 | `nix-cache.size` | the [shared Nix cache](toolchains.md#nix-projects)'s least recently used files, while it takes more than this, such as `20G`; it's 10 GiB when it's off |
 

@@ -108,13 +108,20 @@ func retainExports(d paths.Dirs, r state.Retention, now time.Time) (int, error) 
 }
 
 // retainTools deletes the current tool images no VM has had for age,
-// holding the share's lock throughout, as gc does.
+// holding the share's lock throughout, then the lock VMs being made hold,
+// as gc --tools does. While a VM is being made it deletes none, and
+// leaves their idle records as they are.
 func retainTools(ctx context.Context, u *ui.UI, b *build.Env, age time.Duration, now time.Time) (int, error) {
 	unlock, err := b.Tools.LockShare(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer unlock()
+	unmaking, ok, err := (tools.Making{Dirs: b.Dirs}).Exclude()
+	if err != nil || !ok {
+		return 0, err
+	}
+	defer unmaking()
 	ts, err := shareListing(ctx, u, b)
 	if err != nil {
 		return 0, err

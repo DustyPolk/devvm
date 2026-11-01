@@ -35,6 +35,9 @@ type gcOpts struct {
 	// no VM has that were built in the last hour, without asking, while
 	// no VM is being made.
 	force bool
+	// making is set with --tools when a VM is being made: gc keeps every
+	// current tool image no VM has, and says so.
+	making bool
 	// exports is --exports: also the exports, only those older than
 	// --older-than when it's given.
 	exports   bool
@@ -67,7 +70,8 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"images; without it, every backend's, whatever the default backend is. With --tools, also " +
 			"the current tool images no VM has, on every backend and C library, or only those of the " +
 			"TOOLs named (node, claude), but not those built in the last hour, which it names and keeps " +
-			"because a VM being made may not list them yet. With --tools --force, those too, without " +
+			"because a VM being made may not list them yet, and none while a VM is being made or getting " +
+			"new shared tools, which it names too. With --tools --force, those built in the last hour too, without " +
 			"asking, unless a VM is being made or getting new shared tools, when it deletes nothing. With --exports, also the agents' history devvm export and " +
 			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
 			"(30d, 2w, 12h). With --nix-cache, also the whole shared Nix cache, which VMs download again " +
@@ -132,8 +136,10 @@ type gcPlan struct {
 	tools   []tools.Listed // unused tool images
 	current []tools.Listed // with --tools, current tool images no VM has
 	// with --tools but not --force, those built in the last hour, which
-	// gc keeps and says so
+	// gc keeps and says so; while a VM is being made (making), all of
+	// them
 	recent  []tools.Listed
+	making  bool
 	exports []savedExport // with --exports, the exports old enough
 	// with --orphans, the VMs their backend no longer has, and what
 	// forgets them
@@ -175,24 +181,29 @@ func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
 	return nil
 }
 
-// gcLocked is gcRun holding the share's lock throughout. With --force it
-// also holds the lock VMs being made hold (tools.Making), so no VM picks
-// its tools meanwhile; while one is being made, it deletes nothing.
+// gcLocked is gcRun holding the share's lock throughout. With --tools it
+// then tries the lock VMs being made hold (tools.Making), and holds it so
+// no VM picks its tools meanwhile. While one is being made, --force
+// deletes nothing, and without it gc keeps every current tool no VM has.
 func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bool, error) {
 	unlock, err := b.Tools.LockShare(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	if o.force {
+	if o.tools {
 		unmaking, ok, err := (tools.Making{Dirs: b.Dirs}).Exclude()
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		switch {
+		case ok:
+			defer unmaking()
+		case o.force:
 			return nil, msg.GCForceMaking()
+		default:
+			o.making = true
 		}
-		defer unmaking()
 	}
 	return gcRun(ctx, u, b, o)
 }
@@ -260,7 +271,10 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	p.images, p.tools = staleImages(imgs), tools.Unused(ts)
 	if o.tools {
 		p.current, p.recent = p.share.NoVMRecent(ts, o.toolNames)
-		if o.force {
+		switch {
+		case o.making:
+			p.current, p.recent, p.making = nil, append(p.current, p.recent...), true
+		case o.force:
 			p.current, p.recent = append(p.current, p.recent...), nil
 		}
 	}
@@ -381,12 +395,18 @@ func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (strin
 func (o gcOpts) asks(terminal bool) bool { return terminal && !o.force }
 
 // showRecent says which current tool images no VM has gc keeps because
-// they were built in the last hour, reporting whether there were any.
+// they were built in the last hour, or because a VM is being made,
+// reporting whether there were any.
 func (p gcPlan) showRecent(u *ui.UI) bool {
 	if len(p.recent) == 0 {
 		return false
 	}
-	u.Info(msg.GCToolsRecent(len(p.recent), tools.Label(toolFiles(p.recent))))
+	label := tools.Label(toolFiles(p.recent))
+	if p.making {
+		u.Info(msg.GCToolsMaking(len(p.recent), label))
+	} else {
+		u.Info(msg.GCToolsRecent(len(p.recent), label))
+	}
 	return true
 }
 

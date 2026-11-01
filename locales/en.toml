@@ -721,6 +721,11 @@ description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
 one = "{{.count}} current shared tool image no VM has stays because it was built in the last hour: {{.tools}}. Run devvm gc again with --force to delete it now."
 other = "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc again with --force to delete them now."
 
+[gc_tools_making]
+description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
+one = "{{.count}} current shared tool image no VM has stays because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tools again once that's done."
+other = "{{.count}} current shared tool images no VM has stay because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tools again once that's done."
+
 [gc_names_need_tools]
 other = "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.tool}}."
 
@@ -728,7 +733,7 @@ other = "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.t
 other = "--force goes with --tools. Run devvm gc --tools --force."
 
 [gc_force_making]
-other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done, or devvm gc --tools, which keeps the tools built in the last hour."
+other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done."
 
 [gc_unknown_tool]
 other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."
@@ -1616,6 +1621,9 @@ other = "{{.dir}}/.lock is still held after devvm waited for it. If no other dev
 
 [share_waiting]
 other = "waiting for another devvm to finish with {{.dir}}"
+
+[making_waiting]
+other = "waiting for another devvm to finish deleting shared tools"
 
 [tools_changed]
 other = "The shared tools' versions changed while devvm waited. Run the command again."

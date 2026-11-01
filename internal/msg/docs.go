@@ -120,6 +120,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"gc_bad_age":                       "using/images#cleaning-up",
 	"gc_names_need_tools":              "using/images#cleaning-up",
 	"gc_tools_recent":                  "using/images#cleaning-up",
+	"gc_tools_making":                  "using/images#cleaning-up",
 	"gc_force_needs_tools":             "using/images#cleaning-up",
 	"gc_force_making":                  "using/images#cleaning-up",
 	"gc_unknown_tool":                  "using/images#cleaning-up",

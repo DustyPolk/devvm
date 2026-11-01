@@ -1038,7 +1038,31 @@ func TestMaking(t *testing.T) {
 	if _, err := m.Hold(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Hold while excluded: %v", err)
 	}
+	// Hold waiting says so, once, and gets it once Exclude's let go.
+	var said []string
+	m.Info = func(m msg.M) { said = append(said, m.ID()) }
+	got := make(chan error, 1)
+	go func() {
+		u, err := m.Hold(t.Context())
+		if err == nil {
+			u()
+		}
+		got <- err
+	}()
+	time.Sleep(400 * time.Millisecond)
 	unlock()
+	if err := <-got; err != nil {
+		t.Errorf("Hold once let go: %v", err)
+	}
+	if !slices.Equal(said, []string{"making_waiting"}) {
+		t.Errorf("said %v", said)
+	}
+	said = nil
+	if u, err := m.Hold(t.Context()); err != nil || len(said) > 0 {
+		t.Errorf("Hold with nothing in the way: %v, said %v", err, said)
+	} else {
+		u()
+	}
 }
 
 // Idle records when a current tool image first has no VM and returns it

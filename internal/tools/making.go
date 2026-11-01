@@ -2,8 +2,11 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"os"
+	"time"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 )
@@ -11,18 +14,35 @@ import (
 // Making is the lock that says a VM is being made: each devvm making a
 // VM, or giving one new shared tools, holds it shared (Hold) from before
 // it picks the tools until the VM's state lists them, and devvm gc --tools
-// --force takes it alone (Exclude), so it never deletes a tool image such
-// a VM may not list yet. It's an OS lock on a file in devvm's data folder
-// (Dirs.MakingLock): the OS lets go of it when the process holding it
-// ends, however it ends, and the processes devvm starts don't inherit it.
-type Making struct{ Dirs paths.Dirs }
+// and retention's tools.unused-age take it alone (Exclude), so they never
+// delete a tool image such a VM may not list yet. It's an OS lock on a
+// file in devvm's data folder (Dirs.MakingLock): the OS lets go of it
+// when the process holding it ends, however it ends, and the processes
+// devvm starts don't inherit it.
+type Making struct {
+	Dirs paths.Dirs
+	// Info says Hold is waiting; nil says nothing.
+	Info func(msg.M)
+}
+
+// makingNote is how long Hold waits before it says it's waiting.
+const makingNote = 200 * time.Millisecond
 
 // Hold holds the lock shared until unlock is called or the process ends:
-// any number of devvms hold it at once. It waits while devvm gc --tools
-// --force has it, until ctx ends.
+// any number of devvms hold it at once. It waits while devvm gc --tools or
+// retention has it, until ctx ends, saying so after a moment.
 func (m Making) Hold(ctx context.Context) (unlock func(), err error) {
 	if err := os.MkdirAll(m.Dirs.Data, 0o700); err != nil {
 		return nil, err
+	}
+	soon, cancel := context.WithTimeout(ctx, makingNote)
+	unlock, err = platform.LockFileShared(soon, m.Dirs.MakingLock())
+	cancel()
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+		return unlock, err
+	}
+	if m.Info != nil {
+		m.Info(msg.MakingWaiting())
 	}
 	return platform.LockFileShared(ctx, m.Dirs.MakingLock())
 }

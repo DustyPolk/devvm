@@ -1119,7 +1119,7 @@ func GCFailed(reason string) M {
 	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
 }
 
-// GCForceMaking is [gc_force_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done, or devvm gc --tools, which keeps the tools built in the last hour."
+// GCForceMaking is [gc_force_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done."
 func GCForceMaking() M {
 	return M{id: "gc_force_making"}
 }
@@ -1217,6 +1217,11 @@ func GCOrphansUnknown(backend string) M {
 // GCTools is [gc_tools]: "{{.count}} shared tool images are unused ({{.size}})."
 func GCTools(count int, size string) M {
 	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
+}
+
+// GCToolsMaking is [gc_tools_making]: "{{.count}} current shared tool images no VM has stay because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tools again once that's done."
+func GCToolsMaking(count int, tools string) M {
+	return M{id: "gc_tools_making", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"tools", tools}}}
 }
 
 // GCToolsNoVM is [gc_tools_no_vm]: "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}."
@@ -1602,6 +1607,11 @@ func LsFailed(reason string) M {
 // MacosOld is [macos_old]: "macOS {{.version}} is too old for the lima backend. Upgrade to macOS 13 or newer."
 func MacosOld(version string) M {
 	return M{id: "macos_old", vals: []val{{"version", version}}}
+}
+
+// MakingWaiting is [making_waiting]: "waiting for another devvm to finish deleting shared tools"
+func MakingWaiting() M {
+	return M{id: "making_waiting"}
 }
 
 // MiseChecksum is [mise_checksum]: "The mise {{.version}} download doesn't match its checksum, so devvm didn't use it."
@@ -3034,6 +3044,7 @@ var specs = map[string]spec{
 	"gc_orphans":                       {plural: true, fields: []string{"count"}},
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
+	"gc_tools_making":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
 	"gc_tools_recent":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
@@ -3111,6 +3122,7 @@ var specs = map[string]spec{
 	"login_copy_failed":                {fields: []string{"agent", "reason", "vm"}},
 	"ls_failed":                        {fields: []string{"reason"}},
 	"macos_old":                        {fields: []string{"version"}},
+	"making_waiting":                   {},
 	"mise_checksum":                    {fields: []string{"version"}},
 	"mise_download_failed":             {fields: []string{"version"}},
 	"mount_comma":                      {fields: []string{"path"}},

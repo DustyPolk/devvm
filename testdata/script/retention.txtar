@@ -62,6 +62,23 @@ stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'
 exec sh -c 'ls "$SHARE"/codex-*.erofs.idle'
 ! exec sh -c 'ls "$SHARE"/claude-*.erofs.idle'
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.idle'
+
+# While a VM is being made (its start hangs), retention keeps the tools
+# and runs the rest; once its devvm is killed, nothing holds the lock.
+mkdir $WORK/making
+cd $WORK/making
+exec git init -q
+exec sh -c ': > "$STUB_DIR/start-hangs"'
+! exec devvm --no-network-policy base &u&
+wait_file $STUB_DIR/hanging
+exec devvm gc --retention
+stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'
+exec sh -c 'ls "$SHARE"/codex-*.erofs.idle'
+kill -KILL u
+wait u
+rm $STUB_DIR/start-hangs
+exec sh -c 'rm -f "$STUB_DIR/hanging"'
+
 exec devvm gc --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=1$'
 exec sh -c 'ls "$SHARE"'

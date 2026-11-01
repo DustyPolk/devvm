@@ -66,8 +66,13 @@ exec sh -c 'cd "$SHARE" && ls *.erofs'
 ! stdout '^(node|pnpm|bun)-'
 stdout '^codex-'
 
+# codex is old now, and node's three are built again just now.
+exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.sha256'
+exec devvm build node
+
 # While a VM is being made (its start hangs), --tools --force deletes
-# nothing; once its devvm is killed, nothing holds the lock.
+# nothing, and plain --tools keeps every current one, old codex too,
+# saying so; once its devvm is killed, nothing holds the lock.
 mkdir $WORK/making
 cd $WORK/making
 exec git init -q
@@ -77,17 +82,27 @@ wait_file $STUB_DIR/hanging
 ! exec devvm gc --tools --force
 stderr '^devvm: gc_force_making$'
 ! stdout 'deleted_'
+exec devvm gc --tools
+stdout '^==> gc_tools_making count=4 tools=codex \S+, node \S+, pnpm \S+, bun \S+$'
+! stdout 'gc_tools_no_vm|gc_tools_recent|deleted_|nothing_to_clean'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
 stdout '^codex-'
+stdout '^node-'
 kill -KILL u
 wait u
 rm $STUB_DIR/start-hangs
 
-# --tools --force: codex too, at once, but never claude (a VM's).
-exec devvm gc --tools --force
+# Plain --tools again: old codex goes, node's three stay (just built).
+exec devvm gc --tools
 stdout '^gc_tools_no_vm count=1 size=\S+ tools=codex \S+$'
+stdout '^==> gc_tools_recent count=3 tools=node \S+, pnpm \S+, bun \S+$'
 stdout '^==> deleted_tools_no_vm count=1$'
+
+# --tools --force: node's three too, at once, but never claude (a VM's).
+exec devvm gc --tools --force
+stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
+stdout '^==> deleted_tools_no_vm count=3$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
-! stdout '^codex-'
+! stdout '^(codex|node|pnpm|bun)-'
 stdout '^claude-'
 ! exists $SHARE/.lock
