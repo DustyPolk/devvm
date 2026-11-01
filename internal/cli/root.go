@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -42,10 +43,16 @@ func NewRoot(u *ui.UI) *cobra.Command {
 				autoRetain(cmd.Context(), u)
 			}
 		},
-		Args: maxArgs(1),
+		Args: cobra.MatchAll(maxArgs(1), func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return nil
+			}
+			return checkWord(cmd, args[0])
+		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return up(cmd.Context(), u, g, uf, args)
 		},
+		SuggestionsMinimumDistance: suggestDistance,
 	}
 	root.SetOut(u.Stdout())
 	addGlobals(root, g)
@@ -56,6 +63,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	checkCommands(root)
+	addHelp(root)
 	return root
 }
 
@@ -81,7 +89,17 @@ func Execute(ctx context.Context, u *ui.UI, args []string) int {
 }
 
 // execute runs root with args, as Execute does.
-func execute(ctx context.Context, u *ui.UI, root *cobra.Command, args []string) int {
+func execute(ctx context.Context, u *ui.UI, root *cobra.Command, args []string) (code int) {
+	defer func() {
+		if p := recover(); p != nil {
+			w, ok := p.(wordPanic)
+			if !ok {
+				panic(p)
+			}
+			printUsage(u, root, w.err)
+			code = usageCode
+		}
+	}()
 	root.SetArgs(args)
 	cmd, err := root.ExecuteContextC(ctx)
 	if err == nil {
@@ -98,8 +116,13 @@ func execute(ctx context.Context, u *ui.UI, root *cobra.Command, args []string) 
 		u.Error(m)
 		return 1
 	}
-	// Anything else is the parser's, before the command ran.
-	u.Error(usage(err).m)
-	u.Note(msg.UsageHelp(cmd.CommandPath()))
+	// Anything else is the parser's, before the command ran. A word that's
+	// neither a command nor an image is devvm's, whichever command (help)
+	// refused it.
+	e := usage(err)
+	if strings.HasPrefix(e.m.ID(), "no_command_or_image") {
+		cmd = root
+	}
+	printUsage(u, cmd, e)
 	return usageCode
 }

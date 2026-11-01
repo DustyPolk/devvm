@@ -180,7 +180,7 @@ With `--backend NAME`, these commands build or delete on that backend instead of
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima` ([details](../backends/lima.md#running-limactl)) |
 
-devvm never reads a command's name as an IMAGE, so `devvm build` runs the build command. To use one of your layers that's named like a command, write it as `base+NAME`.
+devvm never reads a command's name as an IMAGE, so `devvm build` runs the build command, and a layer can't take a command's name. When the word after `devvm` is neither a command nor an image, devvm refuses it and suggests the closest command or image name, such as `devvm stop` for `devvm stpo`. `devvm stpo --help` and `devvm help stpo` are refused the same way.
 
 The folders devvm keeps its state in and the environment variables it reads are in [Settings and files](../using/settings.md).
 

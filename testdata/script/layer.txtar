@@ -34,6 +34,13 @@ stderr '^devvm: layer_name_reserved layer=docker$'
 ! exec devvm layer new nix
 stderr '^devvm: layer_name_reserved layer=nix$'
 ! exists $LAYERS/nix.sh
+! exec devvm layer new stop
+stderr '^devvm: layer_name_command layer=stop$'
+! exec devvm layer new add
+stderr '^devvm: layer_name_command layer=add$'
+! exec devvm layer new link
+stderr '^devvm: layer_name_command layer=link$'
+! exists $LAYERS/stop.sh
 ! exec devvm layer new My_DB
 stderr '^devvm: layer_name_invalid layer=My_DB$'
 ! exec devvm layer new ../x
@@ -46,6 +53,20 @@ stderr '^devvm: arg_missing args=NAME command=devvm layer new$'
 stderr '^devvm: no_subcommand command=devvm layer commands=new given=pg$'
 ! exists $LAYERS/node.sh
 ! exists $LAYERS/My_DB.sh
+
+# A layer file named with a word devvm keeps for its commands is refused
+# wherever an image names it, and images don't complete it; devvm stop
+# stays the command.
+cp $LAYERS/pg.sh $LAYERS/log.sh
+! exec devvm build log
+stderr '^devvm: layer_is_command file=\S*/devvm/layers/log\.sh layer=log$'
+! exec devvm build node+log
+stderr '^devvm: layer_is_command file=\S*/devvm/layers/log\.sh layer=log$'
+! exec devvm log
+stderr '^devvm: layer_is_command file=\S*/devvm/layers/log\.sh layer=log$'
+exec devvm __complete build l
+! stdout '^log$'
+rm $LAYERS/log.sh
 
 # A layers folder that can't be written to fails it.
 rm $LAYERS

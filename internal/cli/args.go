@@ -58,31 +58,37 @@ func checkCommands(root *cobra.Command) {
 	root.SetFlagErrorFunc(func(c *cobra.Command, err error) error { return usage(flagError(c, err)) })
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
-		args := c.Args
-		c.Args = func(cmd *cobra.Command, a []string) error {
-			if err := checkFlags(cmd); err != nil {
-				return usage(err)
-			}
-			if args != nil {
-				if err := args(cmd, a); err != nil {
-					return usage(err)
-				}
-			}
-			return nil
-		}
-		if run := c.RunE; run != nil {
-			c.RunE = func(cmd *cobra.Command, a []string) error {
-				if err := run(cmd, a); err != nil {
-					return ranError{err}
-				}
-				return nil
-			}
-		}
+		checkCommand(c)
 		for _, sub := range c.Commands() {
 			walk(sub)
 		}
 	}
 	walk(root)
+}
+
+// checkCommand is what checkCommands does to each command: c checks its
+// flags and arguments first, and RunE's errors are failures.
+func checkCommand(c *cobra.Command) {
+	args := c.Args
+	c.Args = func(cmd *cobra.Command, a []string) error {
+		if err := checkFlags(cmd); err != nil {
+			return usage(err)
+		}
+		if args != nil {
+			if err := args(cmd, a); err != nil {
+				return usage(err)
+			}
+		}
+		return nil
+	}
+	if run := c.RunE; run != nil {
+		c.RunE = func(cmd *cobra.Command, a []string) error {
+			if err := run(cmd, a); err != nil {
+				return ranError{err}
+			}
+			return nil
+		}
+	}
 }
 
 // argsOf is the arguments in c's Use, without its flags: KEY_FILE,

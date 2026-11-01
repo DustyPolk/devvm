@@ -79,6 +79,9 @@ cp $WORK/package.json package.json
 exec sh -c ': > "$STUB_LOG"'
 ! exec devvm --no-network-policy stray
 ! stdout detected
+stderr '^devvm: no_command_or_image word=stray$'
+stderr '^usage_help command=devvm$'
+! exec devvm --no-network-policy node+stray
 stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go docker foo nix layer=stray$'
 stub_calls
 ! stdout 'create|clone|start'

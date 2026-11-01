@@ -1539,6 +1539,16 @@ func LayerExists(file string) M {
 	return M{id: "layer_exists", vals: []val{{"file", file}}}
 }
 
+// LayerIsCommand is [layer_is_command]: "Your layer {{.file}} is named {{.layer}}, a word devvm keeps for its commands, so devvm can't use it. Rename the file."
+func LayerIsCommand(file string, layer string) M {
+	return M{id: "layer_is_command", vals: []val{{"file", file}, {"layer", layer}}}
+}
+
+// LayerNameCommand is [layer_name_command]: "{{.layer}} is a word devvm keeps for its commands. Choose another name for your layer."
+func LayerNameCommand(layer string) M {
+	return M{id: "layer_name_command", vals: []val{{"layer", layer}}}
+}
+
 // LayerNameInvalid is [layer_name_invalid]: "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
 func LayerNameInvalid(layer string) M {
 	return M{id: "layer_name_invalid", vals: []val{{"layer", layer}}}
@@ -1862,6 +1872,26 @@ func NoClaudeToken(vm string) M {
 // NoCodeCommand is [no_code_command]: "VS Code's code command isn't on PATH. Connect to {{.host}} with Remote-SSH instead."
 func NoCodeCommand(host string) M {
 	return M{id: "no_code_command", vals: []val{{"host", host}}}
+}
+
+// NoCommandOrImage is [no_command_or_image]: "There's no devvm command or image named {{.word}}."
+func NoCommandOrImage(word string) M {
+	return M{id: "no_command_or_image", vals: []val{{"word", word}}}
+}
+
+// NoCommandOrImageBoth is [no_command_or_image_both]: "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}} or the image {{.image}}?"
+func NoCommandOrImageBoth(command string, image string, word string) M {
+	return M{id: "no_command_or_image_both", vals: []val{{"command", command}, {"image", image}, {"word", word}}}
+}
+
+// NoCommandOrImageCommand is [no_command_or_image_command]: "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}}?"
+func NoCommandOrImageCommand(command string, word string) M {
+	return M{id: "no_command_or_image_command", vals: []val{{"command", command}, {"word", word}}}
+}
+
+// NoCommandOrImageImage is [no_command_or_image_image]: "There's no devvm command or image named {{.word}}. Did you mean the image {{.image}}?"
+func NoCommandOrImageImage(image string, word string) M {
+	return M{id: "no_command_or_image_image", vals: []val{{"image", image}, {"word", word}}}
 }
 
 // NoDevcontainerFlagIgnored is [no_devcontainer_flag_ignored]: "The --no-devcontainer flag applies only to new VMs."
@@ -3228,6 +3258,8 @@ var specs = map[string]spec{
 	"kvm_access":                       {fields: []string{"fix"}},
 	"layer_created":                    {fields: []string{"layer", "policy", "script"}},
 	"layer_exists":                     {fields: []string{"file"}},
+	"layer_is_command":                 {fields: []string{"file", "layer"}},
+	"layer_name_command":               {fields: []string{"layer"}},
 	"layer_name_invalid":               {fields: []string{"layer"}},
 	"layer_name_reserved":              {fields: []string{"layer"}},
 	"layer_new_failed":                 {fields: []string{"reason"}},
@@ -3293,6 +3325,10 @@ var specs = map[string]spec{
 	"newer_tools":                      {fields: []string{"tools"}},
 	"no_claude_token":                  {fields: []string{"vm"}},
 	"no_code_command":                  {fields: []string{"host"}},
+	"no_command_or_image":              {fields: []string{"word"}},
+	"no_command_or_image_both":         {fields: []string{"command", "image", "word"}},
+	"no_command_or_image_command":      {fields: []string{"command", "word"}},
+	"no_command_or_image_image":        {fields: []string{"image", "word"}},
 	"no_devcontainer_flag_ignored":     {},
 	"no_digest":                        {fields: []string{"from"}},
 	"no_feature":                       {fields: []string{"feature", "features"}},

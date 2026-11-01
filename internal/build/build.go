@@ -179,9 +179,15 @@ func (b *Env) Environments() []string {
 
 // CheckLayers refuses an image name with a part that isn't base, a shared
 // tool, a built-in layer or one of the user's layers. Names become file names: nothing else
-// gets past it.
+// gets past it. A layer of the user's named with a word devvm keeps for
+// its commands is refused, naming its file.
 func (b *Env) CheckLayers(name string) error {
 	for p := range strings.SplitSeq(name, "+") {
+		if image.IsReserved(p) {
+			if fi, err := os.Stat(b.userLayer(p)); err == nil && fi.Mode().IsRegular() {
+				return msg.LayerIsCommand(b.userLayer(p), p)
+			}
+		}
 		if p != image.Base && !image.IsTool(p) && (!image.LayerName(p) || !b.isLayer(p)) {
 			return msg.UnknownLayer(strings.Join(image.Agents, " "), strings.Join(b.Environments(), " "), p)
 		}

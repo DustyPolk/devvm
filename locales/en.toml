@@ -513,6 +513,29 @@ other = "{{.layer}} can't be a layer's name. Use lowercase letters, digits and d
 [layer_name_reserved]
 other = "{{.layer}} is the name of one of devvm's own images. Choose another name for your layer."
 
+[layer_name_command]
+other = "{{.layer}} is a word devvm keeps for its commands. Choose another name for your layer."
+
+[layer_is_command]
+description = "file is the layer's script in the layers folder"
+other = "Your layer {{.file}} is named {{.layer}}, a word devvm keeps for its commands, so devvm can't use it. Rename the file."
+
+[no_command_or_image]
+description = "word is what was typed after devvm: neither a command nor an image's name"
+other = "There's no devvm command or image named {{.word}}."
+
+[no_command_or_image_command]
+description = "command is the devvm command closest to word"
+other = "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}}?"
+
+[no_command_or_image_image]
+description = "image is the image name closest to word"
+other = "There's no devvm command or image named {{.word}}. Did you mean the image {{.image}}?"
+
+[no_command_or_image_both]
+description = "command is the devvm command and image the image name closest to word"
+other = "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}} or the image {{.image}}?"
+
 [layer_exists]
 other = "{{.file}} already exists. Edit it, or choose another name."
 

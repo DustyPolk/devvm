@@ -359,4 +359,10 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"flag_bad_value":                   "using/troubleshooting#a-command-is-refused-before-it-runs",
 	"flag_bad_switch":                  "using/troubleshooting#a-command-is-refused-before-it-runs",
 	"flags_exclusive":                  "using/troubleshooting#a-command-is-refused-before-it-runs",
+	"no_command_or_image":              "getting-started/commands#devvm-itself",
+	"no_command_or_image_command":      "getting-started/commands#devvm-itself",
+	"no_command_or_image_image":        "getting-started/commands#devvm-itself",
+	"no_command_or_image_both":         "getting-started/commands#devvm-itself",
+	"layer_name_command":               "using/customizing#your-own-layers",
+	"layer_is_command":                 "using/customizing#your-own-layers",
 }

@@ -9,7 +9,7 @@
 #                port through devvm's forwarder (never a port a program here has), ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
-#                program here has, a bad list a usage error),
+#                program here has, a bad list a usage error), a mistyped command refused with a suggestion,
 #                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
 #                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
@@ -992,6 +992,9 @@ check "a running VM's new ports apply at once" bash -c "cd '$p' &&
 check "a bad port list is a usage error, exit 2, naming devvm ports --help, and the VM's ports stay" bash -c "cd '$p' &&
   { '$D' ports 47170-x </dev/null >'$work/last.log' 2>&1; [[ \$? == 2 ]]; } &&
   grep -qxF \"\$(m usage_help 'command=devvm ports')\" '$work/last.log' && [[ \$('$D' ports 2>/dev/null) == 47170-47173 ]]"
+check "a word that's neither a command nor an image is a usage error suggesting the command, and the VM runs on" bash -c "cd '$p' &&
+  { '$D' stoop </dev/null >'$work/last.log' 2>&1; [[ \$? == 2 ]]; } &&
+  grep -qF \"\$(m no_command_or_image_command command=stop word=stoop)\" '$work/last.log' && [[ \$(status_of $vm) == Running ]]"
 check "a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted" ports_live "$p" "$vm" 47178 lima_serve lima_boot
 in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 47178"' >/dev/null 2>&1
 check "its new size waits for its next start" bash -c "cd '$p' && '$D' size --cpus 3 2>&1 | grep -qF \"\$(m size_next_start vm=$vm)\" &&

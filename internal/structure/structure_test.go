@@ -49,6 +49,7 @@ func devvm() rules {
 			"internal/image.Toolchains":              table,
 			"internal/image.Agents":                  table,
 			"internal/image.Builtins":                table,
+			"internal/image.Reserved":                table,
 			"internal/msg.docs":                      table,
 			"internal/msg/gen.taken":                 table,
 			"internal/msg/gen.initialisms":           table,

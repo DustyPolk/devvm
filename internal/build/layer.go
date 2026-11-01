@@ -32,12 +32,14 @@ const layerPolicy = `# Hosts a VM with the NAME layer can reach with network pol
 `
 
 // CheckLayerName refuses a name a new layer can't have: base's, a shared
-// tool's or a built-in layer's, or one that isn't lowercase letters,
-// digits and dashes.
+// tool's or a built-in layer's, a word devvm keeps for its commands, or
+// one that isn't lowercase letters, digits and dashes.
 func CheckLayerName(name string) error {
 	switch {
 	case name == image.Base || image.IsTool(name) || image.IsBuiltin(name):
 		return msg.LayerNameReserved(name)
+	case image.IsReserved(name):
+		return msg.LayerNameCommand(name)
 	case !image.LayerName(name):
 		return msg.LayerNameInvalid(name)
 	}
