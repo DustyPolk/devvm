@@ -125,7 +125,7 @@ cd $WORK/none
 ! exec devvm network
 stderr '^devvm: no_vm dir=\S*/none$'
 ! exec devvm network sideways
-stderr '^devvm: usage_error reason='
+stderr '^devvm: arg_not_choice choices=on, off command=devvm network given=sideways$'
 cd $WORK/off
 exec devvm network
 stdout '^off$'
@@ -168,9 +168,9 @@ stdout '\Aask\n\z'
 ! exec devvm network ask
 stderr '^devvm: net_ask_global$'
 ! exec devvm network -g sideways
-stderr '^devvm: usage_error reason='
+stderr '^devvm: arg_not_choice choices=ask, on, off command=devvm network given=sideways$'
 ! exec devvm network -g on off
-stderr '^devvm: usage_error reason='
+stderr '^devvm: args_too_many args=\[on\|off\] command=devvm network given=on off$'
 
 # A saved off: new VMs get none, unasked and unwarned; --network-policy
 # beats it. The VMs that exist keep theirs.

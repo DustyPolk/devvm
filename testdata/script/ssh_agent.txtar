@@ -16,7 +16,7 @@ cd $WORK/web
 ! exec devvm ssh-agent
 stderr '^devvm: no_vm_ssh_agent dir=\S*/web$'
 ! exec devvm ssh-agent maybe
-stderr '^devvm: usage_error '
+stderr '^devvm: arg_not_choice choices=on, devvm, off command=devvm ssh-agent given=maybe$'
 
 # A new VM: no forwarding, and none of devvm's connections to it carries
 # your agent. An SSH origin says so.

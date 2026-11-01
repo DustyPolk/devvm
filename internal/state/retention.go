@@ -128,10 +128,36 @@ func count(s string) (int, error) {
 // RetainOff is the value that turns a retention setting off.
 const RetainOff = "off"
 
+// CheckRetention checks retention settings as SetRetention takes them,
+// without reading or writing anything: each KEY=VALUE has a known key and
+// a value that key takes, or off.
+func CheckRetention(pairs []string) error {
+	for _, p := range pairs {
+		key, val, ok := strings.Cut(p, "=")
+		switch {
+		case !ok:
+			return fmt.Errorf("%q: not key=value", p)
+		case !slices.Contains(RetentionKeys(), key):
+			return fmt.Errorf("unknown key %q", key)
+		case val == "":
+			return fmt.Errorf("%s= has no value, and %s=%s turns it off", key, key, RetainOff)
+		case val == RetainOff:
+			continue
+		}
+		if err := (&Retention{Raw: map[string]string{}}).set(key, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // SetRetention sets retention settings, each KEY=VALUE, KEY=off turning
 // one off, and writes the file: a bad key or value, or none (KEY=), is
 // refused (an error that isn't a CorruptError) before anything is written.
 func SetRetention(d paths.Dirs, pairs []string) (Retention, error) {
+	if err := CheckRetention(pairs); err != nil {
+		return Retention{}, err
+	}
 	r, err := ReadRetention(d)
 	if err != nil {
 		return r, err
@@ -139,15 +165,8 @@ func SetRetention(d paths.Dirs, pairs []string) (Retention, error) {
 	next := Retention{Raw: map[string]string{}}
 	vals := r.Raw
 	for _, p := range pairs {
-		key, val, ok := strings.Cut(p, "=")
-		switch {
-		case !ok:
-			return r, fmt.Errorf("%q: not key=value", p)
-		case !slices.Contains(RetentionKeys(), key):
-			return r, fmt.Errorf("unknown key %q", key)
-		case val == "":
-			return r, fmt.Errorf("%s= has no value, and %s=%s turns it off", key, key, RetainOff)
-		case val == RetainOff:
+		key, val, _ := strings.Cut(p, "=")
+		if val == RetainOff {
 			val = ""
 		}
 		vals[key] = val

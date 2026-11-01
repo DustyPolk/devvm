@@ -31,7 +31,13 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			"changes it at once: a stopped VM forwards the new ports from its next start, and a running one's " +
 			"forwarder starts again with them, closing the connections open through it, while the VM runs on. " +
 			"With -g, show or change what new VMs forward instead.",
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.MatchAll(maxArgs(1), func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return nil
+			}
+			_, err := vm.ParsePorts(args[0])
+			return err
+		}),
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			if len(args) > 0 {
 				return nil, cobra.ShellCompDirectiveNoFileComp
@@ -53,7 +59,10 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			Use:   op + " LIST",
 			Short: short,
 			Long:  long,
-			Args:  cobra.ExactArgs(1),
+			Args: cobra.MatchAll(exactArgs(1), func(_ *cobra.Command, args []string) error {
+				_, err := vm.ParsePortList(args[0])
+				return err
+			}),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				run(cmd, &vm.PortsChange{Op: op, List: args[0]})
 				return nil

@@ -43,7 +43,7 @@ func newVersionCmd(u *ui.UI) *cobra.Command {
 		Use:               "version",
 		Short:             "Print devvm's version",
 		Hidden:            true,
-		Args:              cobra.NoArgs,
+		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := u.Stdout().Write([]byte(cmd.Root().Version + "\n"))

@@ -22,7 +22,7 @@ func newToolsCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "Show the shared tools of this folder's VM: each tool's version, and the newer version devvm's " +
 			"tools lock has, if any, with whether it's built. devvm tools update moves the VM to the newer ones. " +
 			"It changes nothing, starts no VM and doesn't go online.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var ts []tools.VMTool
 			withEnv(u, func(env *vm.Env) error {
@@ -94,7 +94,7 @@ func newToolsUpdateCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "Check for newer versions of the shared tools (node, python, rust, go, the agents), build " +
 			"them, and move this folder's VM to them, then open a shell in it. Nothing in the VM's disk " +
 			"changes: its tools are mounted from the share.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), g.options()) }, msg.UpFailed)
 			return nil
@@ -107,7 +107,7 @@ func newToolsUpdateCmd(u *ui.UI, g *globals) *cobra.Command {
 // takes only shared tools' names.
 func toolNames(sub string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
+		if err := minArgs(1)(cmd, args); err != nil {
 			return err
 		}
 		names := slices.Concat(image.Toolchains, image.Agents)

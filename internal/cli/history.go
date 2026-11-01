@@ -28,7 +28,7 @@ func newHistoryCmd(u *ui.UI) *cobra.Command {
 			"and devvm rm write there, oldest first: each one's file, the VM it's of, that VM's folder, when " +
 			"it was written and its size. Exports written to a file of your own aren't listed. It changes " +
 			"nothing and starts no VM.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error {
 			d, err := paths.FromEnv()
 			var es []savedExport
@@ -61,7 +61,7 @@ func newHistoryExportCmd(u *ui.UI) *cobra.Command {
 		Long: "Save this folder's VM's agent history (transcripts and sessions, without the agents' " +
 			"logins) to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. A stopped " +
 			"VM is started for it. FILE is replaced only once the export is complete.",
-		Args: cobra.MaximumNArgs(1),
+		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {
 				file := ""

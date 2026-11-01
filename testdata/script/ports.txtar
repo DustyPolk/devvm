@@ -11,9 +11,18 @@ cd $WORK/web
 ! exec devvm ports
 stderr '^devvm: no_vm_ports dir=\S*/web$'
 ! exec devvm ports 5173 8080
-stderr '^devvm: usage_error '
+stderr '^devvm: args_too_many args=\[all\|none\|LIST\] command=devvm ports given=5173 8080$'
 ! exec devvm ports add
-stderr '^devvm: usage_error '
+stderr '^devvm: arg_missing args=LIST command=devvm ports add$'
+stderr '^usage_help command=devvm ports add$'
+
+# A bad LIST is refused before devvm looks for the VM.
+! exec devvm ports banana
+stderr '^devvm: port_invalid value="banana"$'
+! stderr no_vm_ports
+! exec devvm ports add all
+stderr '^devvm: ports_list_needed value="all"$'
+! stderr no_vm_ports
 
 # -g: what new VMs forward, all until it's set; add and rm change it.
 # No VM is looked at.

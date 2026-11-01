@@ -38,12 +38,14 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 			"on or off. --backend and --features each choose without asking anything, and what they leave " +
 			"out stays as it is. A new choice of features makes base and the images built on it rebuild " +
 			"when next used. The size and network policy change only the VMs made after them.",
-		Args: cobra.NoArgs,
+		Args: cobra.MatchAll(noArgs, func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("features") && features == "" {
+				return msg.FeaturesEmpty()
+			}
+			return nil
+		}),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if cmd.Flags().Changed("features") {
-				if features == "" {
-					u.Die(msg.FeaturesEmpty())
-				}
 				c.features = &features
 			}
 			fail(u, newSetup(u).run(c), msg.SetupFailed)

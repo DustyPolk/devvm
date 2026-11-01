@@ -103,14 +103,26 @@ Everything it holds the code to is in `devvm()` in `internal/structure/structure
 
 `TestRulesFail` breaks each rule, and each layer, on small sources and checks the failure names it.
 
+## Command arguments
+
+Each command checks its arguments and flags before it does anything else, so a usage error never looks for a VM, applies the retention settings or changes a file. `internal/cli/args.go` holds the checks:
+
+- **A command's `Args`** is one of `noArgs`, `exactArgs(n)`, `maxArgs(n)` and `minArgs(n)`, never Cobra's own validators, whose errors are in English. Each one names the arguments the command's `Use` shows (`KEY_FILE`, `[all|none|LIST]`), and with `ValidArgs` set, it refuses any other value. `noArgs` on a command with commands of its own says the word isn't one of them and lists them.
+- **Values are checked in `Args` too.** A command adds its own check with `cobra.MatchAll`, such as `vm.ParsePorts` for devvm ports or `netpolicy.Rule` for devvm network allow, returning the same message the command would fail with later.
+- **Flag values are checked by name** in `checkFlagValue`, because one flag name has one meaning: `--cpus`, `--memory`, `--disk`, `--ports`, `--lifetime` and `--older-than`. Flags that can't be given together are marked with `exclusive(cmd, a, b)`, which `checkFlags` checks first, in place of Cobra's `MarkFlagsMutuallyExclusive` alone.
+- **The parser's own flag errors** (an unknown flag, one without its value, a value its type refuses) become messages in `flagError`, set as the root's `SetFlagErrorFunc`.
+
+`checkCommands` wraps every command's `Args` in these checks when `NewRoot` builds the tree. A message one of them returns is a usage error: `Execute` prints it, then `usage_help` naming the command's own `--help`, and exits with 2. `usage_error` is only the fallback for a parser error devvm doesn't know. What a command's `RunE` returns once it ran is a failure, which exits with 1, as `Die` does. `TestUsageErrorsEveryCommand` runs every command with an unknown flag, without the argument it needs and with too many, and checks that each is a usage error and nothing runs.
+
 ## CLI tests
 
 CLI tests are [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scripts in `testdata/script/*.txtar`, run by `internal/cli/script_test.go` against a freshly built `devvm`. Call it with `exec devvm …`:
 
 ```txtar
 # An unknown flag fails.
+env DEVVM_MESSAGES=names
 ! exec devvm --nope
-stderr 'unknown flag: --nope'
+stderr '^devvm: flag_unknown command=devvm flag=--nope$'
 ```
 
 Run one script with `mise exec -- go test ./internal/cli -run TestScript/<name>`.

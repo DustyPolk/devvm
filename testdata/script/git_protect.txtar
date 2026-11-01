@@ -12,7 +12,7 @@ cd $WORK/web
 ! exec devvm git-protect
 stderr '^devvm: no_vm_git_protect dir=\S*/web$'
 ! exec devvm git-protect maybe
-stderr '^devvm: usage_error '
+stderr '^devvm: arg_not_choice choices=on, strict, off command=devvm git-protect given=maybe$'
 
 # A new VM, running: shown, but not changed on macOS (it could race the
 # locks); elsewhere off, and on is refused.

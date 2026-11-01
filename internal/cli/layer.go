@@ -16,7 +16,7 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 		Short: "Your own image layers",
 		Long: "Your own image layers: scripts in ~/.config/devvm/layers that an image runs on top of base, " +
 			"named in images like the shared tools and devvm's built-in layers (node+docker+NAME).",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
 	cmd.AddCommand(&cobra.Command{
@@ -27,7 +27,9 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 			"lowercase letters, digits and dashes, and not base, a built-in layer's (docker, nix) or a shared " +
 			"tool's. Then devvm build NAME " +
 			"builds its image, and devvm node+NAME makes a VM with it.",
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MatchAll(exactArgs(1), func(_ *cobra.Command, args []string) error {
+			return build.CheckLayerName(args[0])
+		}),
 		RunE: func(_ *cobra.Command, args []string) error {
 			dirs, err := paths.FromEnv()
 			var script, policy string

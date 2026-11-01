@@ -16,7 +16,7 @@ func newCodeCmd(u *ui.UI) *cobra.Command {
 		Long: "Get this folder's VM ready as devvm host does, then open its folder in VS Code over Remote-SSH, " +
 			"with VS Code's code command. The VM's VS Code settings turn off forwarding its ports to this " +
 			"machine and answering git's sign-in prompts with your GitHub sign-in.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Code(cmd.Context()) }, msg.CodeFailed)
 			return nil

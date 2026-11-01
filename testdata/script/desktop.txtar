@@ -13,7 +13,7 @@ cd $WORK/desk
 ! exec devvm desktop
 stderr '^devvm: no_vm dir=\S*/desk$'
 ! exec devvm desktop now
-stderr '^devvm: usage_error '
+stderr '^devvm: args_none command=devvm desktop given=now$'
 
 # A VM without the desktop feature: refused, nothing served.
 exec devvm --no-network-policy --no-git-protect base

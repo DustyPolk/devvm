@@ -9,7 +9,7 @@ exec git init -q
 
 # Network policy on and off at once: nothing is built or created.
 ! exec devvm --network-policy --no-network-policy base
-stderr 'usage_error'
+stderr '^devvm: flags_exclusive flag=--network-policy other=--no-network-policy$'
 stub_calls
 ! stdout 'create|clone|start'
 ! exists $VMS

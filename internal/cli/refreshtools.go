@@ -19,7 +19,7 @@ func newRefreshToolsCmd(u *ui.UI) *cobra.Command {
 		Use:    "_refresh-tools",
 		Short:  "Resolve the shared tools' versions again",
 		Hidden: true,
-		Args:   cobra.NoArgs,
+		Args:   noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dirs, err := paths.FromEnv()
 			if err == nil {

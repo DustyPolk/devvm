@@ -26,7 +26,7 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 			"zsh or fish. Load it from your shell's startup file: source <(devvm completion bash) in " +
 			"~/.bashrc (it needs the bash-completion package), source <(devvm completion zsh) in ~/.zshrc " +
 			"(after compinit), devvm completion fish | source in ~/.config/fish/config.fish.",
-		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		Args:      exactArgs(1),
 		ValidArgs: shells,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, out := cmd.Root(), u.Stdout()

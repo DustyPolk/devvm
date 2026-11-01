@@ -23,7 +23,7 @@ func newSizeCmd(u *ui.UI) *cobra.Command {
 			"--cpus, --memory and --disk change them, at once for a stopped VM, from its next start for " +
 			"a running one: devvm restart. A disk only grows. With -g, show or change the size new VMs " +
 			"get instead; what it leaves unset is the image's.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error {
 				set := vm.Settings{Env: env}

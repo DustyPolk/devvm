@@ -48,6 +48,12 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			"or value, or one with no value, and then writes nothing. devvm applies the settings once a day, " +
 			"and devvm gc --retention applies them at once. They never delete a VM, an image or a tool any " +
 			"VM has.",
+		Args: func(_ *cobra.Command, args []string) error {
+			if err := state.CheckRetention(args); err != nil {
+				return msg.RetentionBad(err.Error()).Because(err)
+			}
+			return nil
+		},
 		RunE: func(_ *cobra.Command, args []string) error {
 			dirs, err := paths.FromEnv()
 			fail(u, err, msg.RetentionSettingsFailed)
@@ -58,9 +64,6 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 				return err
 			}
 			_, err = state.SetRetention(dirs, args)
-			if _, corrupt := errors.AsType[*state.CorruptError](err); err != nil && !corrupt {
-				err = msg.RetentionBad(err.Error())
-			}
 			fail(u, err, msg.RetentionSettingsFailed)
 			u.Info(msg.RetentionSaved(dirs.Retention()))
 			return nil

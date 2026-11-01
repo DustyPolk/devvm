@@ -12,7 +12,7 @@ cd $WORK/web
 ! exec devvm stop
 stderr '^devvm: no_vm dir=\S*/web$'
 ! exec devvm stop now
-stderr '^devvm: usage_error '
+stderr '^devvm: args_none command=devvm stop given=now$'
 
 # A running VM with network policy: it stops, then its proxy. (Its
 # hostagent here: the test's runner, which runs on, so the proxy runs until

@@ -27,7 +27,7 @@ func newBuildCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "Build an image and the images under it, unless they're built, and the shared tool " +
 			"images it names that aren't. IMAGE is base, or layers (devvm's docker and nix, your own) joined with +, bottom first " +
 			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), u, g, args[0], build.Builds.Build)
 		},
@@ -42,7 +42,7 @@ func newRebuildCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "Build an image again, from its parent as it is, and delete the stale images " +
 			"no VM uses, the old one and those built on it among them. Shared tools aren't images: " +
 			"their versions come from the tools lock.",
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), u, g, args[0], build.Builds.Rebuild)
 		},

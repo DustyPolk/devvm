@@ -31,15 +31,25 @@ const layerPolicy = `# Hosts a VM with the NAME layer can reach with network pol
 # *.example.com (any subdomain), host:port, an address or CIDR, !rule (deny).
 `
 
+// CheckLayerName refuses a name a new layer can't have: base's, a shared
+// tool's or a built-in layer's, or one that isn't lowercase letters,
+// digits and dashes.
+func CheckLayerName(name string) error {
+	switch {
+	case name == image.Base || image.IsTool(name) || image.IsBuiltin(name):
+		return msg.LayerNameReserved(name)
+	case !image.LayerName(name):
+		return msg.LayerNameInvalid(name)
+	}
+	return nil
+}
+
 // NewLayer starts one of the user's layers: its script, and its allowlist
 // unless that exists. It returns their paths. A name a layer can't have,
 // or whose script exists, is refused.
 func NewLayer(dirs paths.Dirs, name string) (script, policy string, err error) {
-	switch {
-	case name == image.Base || image.IsTool(name) || image.IsBuiltin(name):
-		return "", "", msg.LayerNameReserved(name)
-	case !image.LayerName(name):
-		return "", "", msg.LayerNameInvalid(name)
+	if err := CheckLayerName(name); err != nil {
+		return "", "", err
 	}
 	script = filepath.Join(dirs.Layers(), name+".sh")
 	policy = filepath.Join(dirs.Layers(), name+".policy")

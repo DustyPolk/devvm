@@ -59,8 +59,9 @@ func ParsePorts(v string) (string, error) {
 	return strings.Join(out, ","), nil
 }
 
-// parseList checks a list of ports and ranges, as add and rm take it.
-func parseList(list string) (string, error) {
+// ParsePortList checks a list of ports and ranges, as devvm ports add and
+// rm take it.
+func ParsePortList(list string) (string, error) {
 	l, err := ParsePorts(list)
 	if err != nil {
 		return "", err
@@ -74,7 +75,7 @@ func parseList(list string) (string, error) {
 // AddPorts returns a parsed ports value with list's ports and ranges
 // added: all stays all.
 func AddPorts(old, list string) (string, error) {
-	l, err := parseList(list)
+	l, err := ParsePortList(list)
 	switch {
 	case err != nil:
 		return "", err
@@ -92,7 +93,7 @@ func RemovePorts(old, list string) (string, error) {
 	if old == PortsAll {
 		return "", msg.PortsRmAll()
 	}
-	l, err := parseList(list)
+	l, err := ParsePortList(list)
 	if err != nil {
 		return "", err
 	}

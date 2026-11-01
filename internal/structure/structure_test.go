@@ -30,7 +30,7 @@ func devvm() rules {
 			"internal/backend/docker.Docker":    {86, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
 			"internal/backend/backendtest.Fake": {35, "backend.Backend's 28 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {42, "one method per folder or file devvm uses: a list"},
-			"internal/ui.UI":                    {43, "the one terminal: messages, prompts, status line, tables, run log and how many are kept, cleanups, signals"},
+			"internal/ui.UI":                    {44, "the one terminal: messages, errors with the caller's exit code, prompts, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
 			"internal/cli.version":                   ldflags,

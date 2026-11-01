@@ -31,7 +31,7 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			"disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, " +
 			"or the lock's and not built yet. Then what they take in all, and what the shared Nix cache " +
 			"takes of its cap.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			b, err := builder(u, g.backend)
 			var imgs []listedImage
@@ -70,7 +70,7 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			"from that container image. Every one must be built, or nothing is " +
 			"deleted. VMs made from an image keep working, except on Linux hosts, where an image whose " +
 			"disk VMs use is refused. Shared tools aren't images.",
-		Args: cobra.MinimumNArgs(1),
+		Args: minArgs(1),
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			dirs, err := paths.FromEnv()
 			if err != nil {

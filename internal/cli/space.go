@@ -52,7 +52,7 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 			"are, the disk they take, whether devvm can make them again, what devvm gc frees of them now " +
 			"and what frees the rest, then a total. The backends' own caches come last and apart, because " +
 			"they can also hold your own downloads. It changes nothing and starts no VM.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			r, err := space(cmd.Context(), u, g)
 			fail(u, err, msg.SpaceFailed)

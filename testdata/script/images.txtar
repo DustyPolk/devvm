@@ -75,7 +75,7 @@ stderr '^devvm: tools_not_images_rm image=node\+foo$'
 ! exec devvm --from node:24 images rm base
 stderr '^devvm: no_image_named_from '
 ! exec devvm images rm
-stderr usage_error
+stderr '^devvm: arg_missing args=IMAGE\|KEY\.\.\. command=devvm images rm$'
 exec sh -c 'grep -c "^limactl delete" "$STUB_LOG" || true'
 stdout '^0$'
 exec sh -c 'test -e "$IMAGES/$(cat base.key)"'

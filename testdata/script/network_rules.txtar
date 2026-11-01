@@ -12,6 +12,9 @@ cd $WORK/net
 stderr '^devvm: no_vm dir=\S*/net$'
 ! exec devvm network allow example.com
 stderr '^devvm: no_vm_policy dir=\S*/net$'
+! exec devvm network allow 'a b'
+stderr '^devvm: not_a_rule rule=a b$'
+! stderr no_vm_policy
 exec devvm network allow -g '*.corp.test'
 stdout '^==> rule_added_global rule=\*\.corp\.test$'
 cmp $GLOBAL $WORK/global.policy
@@ -50,9 +53,9 @@ stderr '^devvm: not_a_rule rule=!bad\.example\.com$'
 ! exec devvm network deny 'example.com # c'
 stderr '^devvm: not_a_rule rule='
 ! exec devvm network allow
-stderr '^devvm: usage_error reason='
+stderr '^devvm: arg_missing args=RULE\.\.\. command=devvm network allow$'
 ! exec devvm network sideways
-stderr '^devvm: usage_error reason='
+stderr '^devvm: arg_not_choice choices=on, off command=devvm network given=sideways$'
 exec sh -c 'cat "$VMS"/devvm-net-*.policy'
 cmp stdout $WORK/vm.policy
 

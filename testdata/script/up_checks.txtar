@@ -103,7 +103,7 @@ stdout '^chain=base=[0-9a-f]{12} nix=[0-9a-f]{12}$'
 
 # More than one image is a usage error.
 ! exec devvm a b
-stderr '^devvm: usage_error reason=accepts at most 1 arg\(s\), received 2$'
+stderr '^devvm: args_too_many args=\[IMAGE\] command=devvm given=a b$'
 
 -- package.json --
 {}

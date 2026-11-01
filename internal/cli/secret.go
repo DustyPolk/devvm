@@ -23,7 +23,7 @@ func secretNames() []string {
 
 // oneSecret takes one argument: a secret devvm keeps.
 func oneSecret(cmd *cobra.Command) {
-	cmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)
+	cmd.Args = exactArgs(1)
 	cmd.ValidArgs = secretNames()
 }
 
@@ -37,7 +37,7 @@ func newSecretCmd(u *ui.UI) *cobra.Command {
 			"token of the VMs it's bound to. With network policy a VM gets a placeholder, and its proxy " +
 			"puts the secret into requests for the secret's hosts. Without network policy, the VM gets the " +
 			"secret itself.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u) },
 	}
 	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u),
@@ -131,7 +131,7 @@ func newSecretGetCmd(u *ui.UI) *cobra.Command {
 	get := &cobra.Command{
 		Use:    "get NAME",
 		Short:  "Print a secret's value, for a VM's network policy proxy",
-		Args:   cobra.ExactArgs(1),
+		Args:   exactArgs(1),
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Not to a terminal, so a value isn't shown by accident.

@@ -18,7 +18,7 @@ func newDesktopCmd(u *ui.UI) *cobra.Command {
 			"serve it on this machine's 127.0.0.1 alone, with a password of the VM's own, until you press " +
 			"Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm " +
 			"shows. The clipboard isn't shared unless you add --clipboard.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Desktop{Env: env}.Open(cmd.Context(), o) }, msg.DesktopFailed)
 			return nil

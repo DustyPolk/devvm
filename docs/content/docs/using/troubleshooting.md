@@ -13,6 +13,32 @@ Each run that runs a command has one log, `~/.local/share/devvm/logs/runs/<date>
 
 In a terminal, a status line shows the step, how long it has run, and the log's latest line. A step that takes more than a few seconds leaves a line with its time.
 
+## A command is refused before it runs
+
+devvm checks a command's arguments and flags before it does anything else, so a mistyped one never reaches your VM. When one is wrong, such as a missing argument, one too many, a value the command doesn't take or a flag it doesn't have, devvm says what the command expected, then names that command's own help on the last line:
+
+```console
+$ devvm ports 5173 8080
+devvm: The command devvm ports takes [all|none|LIST], not 5173 8080.
+devvm: https://devvm.dev/docs/using/troubleshooting/#a-command-is-refused-before-it-runs
+Run devvm ports --help to see how to use it.
+```
+
+Nothing has changed at that point, so you can fix the command and run it again.
+
+## Exit codes
+
+devvm exits with one of four codes, so a script can tell what happened:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The command succeeded. |
+| 1 | The command failed, and devvm's error says why. |
+| 2 | devvm refused the command line, such as a bad argument or flag or an unknown command, before anything ran. |
+| 130 | The command was interrupted by Ctrl+C or a closed terminal ([you pressed Ctrl+C](#you-pressed-ctrlc)). |
+
+Two programs can take devvm's place and exit with their own codes. Once devvm opens a shell in your VM, the shell replaces devvm, so the code is the shell's, and `devvm limactl` exits with limactl's code.
+
 ## A build fails
 
 When an image's build fails in its script, or as the build VM starts or stops, devvm keeps the build VM, stopped and without a record, so you can look inside. devvm's error names the VM and says how to open a shell in it. On Lima, that's [`devvm limactl`](../backends/lima.md#running-limactl):

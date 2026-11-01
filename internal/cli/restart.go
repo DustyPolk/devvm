@@ -15,7 +15,7 @@ func newRestartCmd(u *ui.UI, g *globals) *cobra.Command {
 		Short: "Restart this folder's VM and open a shell in it",
 		Long: "Stop this folder's VM, then start it and open a shell in it as devvm does: what applies " +
 			"only when it starts (agent folder mounts, size, ports) applies.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), g.options()) }, msg.UpFailed)
 			return nil

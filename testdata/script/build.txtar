@@ -74,7 +74,7 @@ stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python
 ! exec devvm rebuild ../../x
 stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar docker foo nix layer=\.\./\.\./x$'
 ! exec devvm build
-stderr 'usage_error'
+stderr '^devvm: arg_missing args=IMAGE command=devvm build$'
 ! stub_calls
 
 # A failed script: the end of the run log, and the image's VM kept,

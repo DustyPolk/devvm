@@ -18,7 +18,7 @@ func newGitProtectCmd(u *ui.UI) *cobra.Command {
 			"on (the default on macOS: hooks and config locked), strict (on, and host git status and diff " +
 			"stay out of submodules), off, or clone for a --clone VM. devvm git-protect on, strict or off " +
 			"changes it while the VM is stopped; on and strict lock .git as it is now. Locks need macOS.",
-		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
+		Args:      maxArgs(1),
 		ValidArgs: gitprotect.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {

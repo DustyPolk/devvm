@@ -23,13 +23,13 @@ func TestExecuteExitCodes(t *testing.T) {
 		want int
 	}{
 		{[]string{"--help"}, 0},
-		{[]string{"--nope"}, 1},
-		{[]string{"a", "b"}, 1},
-		{[]string{"build"}, 1},
-		{[]string{"--network-policy", "--no-network-policy"}, 1},
-		{[]string{"version", "x"}, 1},
-		{[]string{"completion"}, 1},
-		{[]string{"completion", "powershell"}, 1},
+		{[]string{"--nope"}, usageCode},
+		{[]string{"a", "b"}, usageCode},
+		{[]string{"build"}, usageCode},
+		{[]string{"--network-policy", "--no-network-policy"}, usageCode},
+		{[]string{"version", "x"}, usageCode},
+		{[]string{"completion"}, usageCode},
+		{[]string{"completion", "powershell"}, usageCode},
 	} {
 		u, _, errOut := testUI()
 		if got := Execute(t.Context(), u, tc.args); got != tc.want {

@@ -39,7 +39,7 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 			"comes first on PATH, when the disk the backend's images and VMs go on has less free space than building " +
 			"base needs, and when this machine has less than 8 GiB of memory or fewer than 4 CPUs. Fails when " +
 			"something is missing, but not for any of these warnings.",
-		Args:              cobra.NoArgs,
+		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			reg, b, err := doctorBackend(u, g.backend)

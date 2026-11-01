@@ -14,5 +14,6 @@ cmp stdout version.txt
 ! stub_calls
 
 # There's no -v.
+env DEVVM_MESSAGES=names
 ! exec devvm -v
-stderr 'unknown shorthand flag: ''v'''
+stderr '^devvm: flag_unknown command=devvm flag=-v$'

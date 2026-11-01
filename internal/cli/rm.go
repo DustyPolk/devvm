@@ -22,7 +22,7 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 			"folder at this path is deleted only after you confirm, even with -f. In a folder without a VM " +
 			"of its own, it's the VM of the nearest folder with one that this folder is inside: devvm names " +
 			"it and deletes it only after you confirm in a terminal, even with -f.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), force) }, msg.RmFailed)
 			return nil

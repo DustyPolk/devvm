@@ -71,7 +71,7 @@ stub_calls
 stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! exec devvm restart base
-stderr usage_error
+stderr '^devvm: args_none command=devvm restart given=base$'
 
 # An image naming what it lacks is refused, naming the command that adds
 # its shared tools, and nothing changes.

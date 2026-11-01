@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -27,14 +28,18 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 			"change whether new VMs get network policy instead: ask (in a terminal, and on without one), " +
 			"on or off. devvm's --network-policy and --no-network-policy still choose for one new VM.",
 		Args: func(cmd *cobra.Command, args []string) error {
-			if err := cobra.MaximumNArgs(1)(cmd, args); err != nil || len(args) == 0 {
+			if err := maxArgs(1)(cmd, args); err != nil || len(args) == 0 {
 				return err
 			}
 			switch {
-			case !slices.Contains(state.NetworkChoices(), args[0]):
-				return fmt.Errorf("invalid argument %q for %q", args[0], cmd.CommandPath())
 			case !global && args[0] == state.NetworkAsk:
 				return msg.NetAskGlobal()
+			case !slices.Contains(state.NetworkChoices(), args[0]):
+				choices := []string{state.NetworkOn, state.NetworkOff}
+				if global {
+					choices = state.NetworkChoices()
+				}
+				return msg.ArgNotChoice(strings.Join(choices, ", "), cmd.CommandPath(), msg.Shown(args[0]))
 			}
 			return nil
 		},
@@ -81,7 +86,17 @@ func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
 			Use:   use + " RULE...",
 			Short: short,
 			Long:  long,
-			Args:  cobra.MinimumNArgs(1),
+			Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
+				if remove {
+					return nil // as written, a deny with its !
+				}
+				for _, r := range args {
+					if _, err := netpolicy.Rule(r, deny); err != nil {
+						return err
+					}
+				}
+				return nil
+			}),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				withEnv(u, func(env *vm.Env) error {
 					return vm.Net{Env: env}.PolicyChange(cmd.Context(), args, deny, remove, global)
@@ -118,7 +133,7 @@ func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 			"the rule that allowed it, the request and the secrets put in, or why it was blocked. " +
 			"--blocked lists the blocks instead, one row per host and port, with the devvm network allow " +
 			"command that allows each.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.Lines = int(min(lines, 1<<31-1))
 			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.Log(cmd.Context(), u.Stdout(), o) }, msg.LogFailed)
@@ -129,7 +144,7 @@ func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 	f.UintVarP(&lines, "lines", "n", 50, "show the last `N` connections and requests")
 	f.BoolVarP(&o.Follow, "follow", "f", false, "then show each new one as it happens, until interrupted")
 	f.BoolVar(&o.Blocked, "blocked", false, "list the blocks by host and port, with the command that allows each")
-	cmd.MarkFlagsMutuallyExclusive("blocked", "follow")
-	cmd.MarkFlagsMutuallyExclusive("blocked", "lines")
+	exclusive(cmd, "blocked", "follow")
+	exclusive(cmd, "blocked", "lines")
 	return cmd
 }

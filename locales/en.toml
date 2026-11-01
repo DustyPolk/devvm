@@ -27,8 +27,56 @@ other = "{{.key}}= is given twice."
 other = "The count must be a whole number, not {{.value}}."
 
 [usage_error]
-description = "reason is the command-line parser's own error, in English"
-other = "{{.reason}}. Run devvm --help to see the commands and flags."
+description = "reason is the command-line parser's own error, in English; usage_help follows on the next line"
+other = "The command line is refused: {{.reason}}."
+
+[usage_help]
+description = "command is the command that refused its arguments or flags, such as devvm ssh-agent add; it follows every usage error"
+other = "Run {{.command}} --help to see how to use it."
+
+[arg_missing]
+description = "args are the arguments the command's help shows, such as KEY_FILE or TOOL..."
+other = "{{.args}} is missing from {{.command}}."
+
+[args_too_many]
+description = "args are the arguments the command's help shows, such as [all|none|LIST]; given are those given, as typed"
+other = "The command {{.command}} takes {{.args}}, not {{.given}}."
+
+[args_none]
+description = "given are the arguments given, as typed"
+other = "The command {{.command}} takes no arguments, not {{.given}}."
+
+[arg_not_choice]
+description = "given is the argument as typed; choices are the values the command takes, such as on, off"
+other = "{{.given}} isn't one of the values {{.command}} takes: {{.choices}}."
+
+[no_subcommand]
+description = "given is the word as typed; commands are the command's own, such as add, rm, update"
+other = "There's no command {{.command}} {{.given}}. The commands under {{.command}} are {{.commands}}."
+
+[flag_unknown]
+description = "flag is the flag as typed, such as --nope or -x"
+other = "There's no flag {{.flag}} for {{.command}}."
+
+[flag_needs_value]
+description = "form is the flag with what its value is, such as --lines N"
+other = "{{.flag}} needs a value: {{.form}}."
+
+[flag_bad_value]
+description = "form is what the value is, as the help names it, such as N or AGE; value is as typed"
+other = "{{.flag}} takes {{.form}}, not {{.value}}."
+
+[flag_bad_switch]
+description = "flag is an on-or-off flag, such as --clone; value is as typed"
+other = "{{.flag}} takes true or false, not {{.value}}."
+
+[flags_exclusive]
+description = "flag and other are two flags given together, such as --blocked and --follow"
+other = "{{.flag}} and {{.other}} can't be given together."
+
+[output_failed]
+description = "reason is why, in English"
+other = "Writing the command's output failed: {{.reason}}."
 
 [log_details]
 other = "(details: {{.file}})"

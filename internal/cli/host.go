@@ -17,7 +17,7 @@ func newHostCmd(u *ui.UI) *cobra.Command {
 			"started if it's stopped, its network policy checked, set up and in devvm's ssh config. Then show " +
 			"the host name ssh and VS Code's Remote-SSH reach it by (devvm-website, for a folder named website). Without the Include line in " +
 			"~/.ssh/config, devvm offers to add it.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.ShowHost(cmd.Context()) }, msg.SSHFailed)
 			return nil

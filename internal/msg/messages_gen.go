@@ -159,6 +159,26 @@ func AlreadyStopped(vm string) M {
 	return M{id: "already_stopped", vals: []val{{"vm", vm}}}
 }
 
+// ArgMissing is [arg_missing]: "{{.args}} is missing from {{.command}}."
+func ArgMissing(args string, command string) M {
+	return M{id: "arg_missing", vals: []val{{"args", args}, {"command", command}}}
+}
+
+// ArgNotChoice is [arg_not_choice]: "{{.given}} isn't one of the values {{.command}} takes: {{.choices}}."
+func ArgNotChoice(choices string, command string, given string) M {
+	return M{id: "arg_not_choice", vals: []val{{"choices", choices}, {"command", command}, {"given", given}}}
+}
+
+// ArgsNone is [args_none]: "The command {{.command}} takes no arguments, not {{.given}}."
+func ArgsNone(command string, given string) M {
+	return M{id: "args_none", vals: []val{{"command", command}, {"given", given}}}
+}
+
+// ArgsTooMany is [args_too_many]: "The command {{.command}} takes {{.args}}, not {{.given}}."
+func ArgsTooMany(args string, command string, given string) M {
+	return M{id: "args_too_many", vals: []val{{"args", args}, {"command", command}, {"given", given}}}
+}
+
 // BackendExperimental is [backend_experimental]: "experimental"
 func BackendExperimental() M {
 	return M{id: "backend_experimental"}
@@ -1029,6 +1049,31 @@ func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
 }
 
+// FlagBadSwitch is [flag_bad_switch]: "{{.flag}} takes true or false, not {{.value}}."
+func FlagBadSwitch(flag string, value string) M {
+	return M{id: "flag_bad_switch", vals: []val{{"flag", flag}, {"value", value}}}
+}
+
+// FlagBadValue is [flag_bad_value]: "{{.flag}} takes {{.form}}, not {{.value}}."
+func FlagBadValue(flag string, form string, value string) M {
+	return M{id: "flag_bad_value", vals: []val{{"flag", flag}, {"form", form}, {"value", value}}}
+}
+
+// FlagNeedsValue is [flag_needs_value]: "{{.flag}} needs a value: {{.form}}."
+func FlagNeedsValue(flag string, form string) M {
+	return M{id: "flag_needs_value", vals: []val{{"flag", flag}, {"form", form}}}
+}
+
+// FlagUnknown is [flag_unknown]: "There's no flag {{.flag}} for {{.command}}."
+func FlagUnknown(command string, flag string) M {
+	return M{id: "flag_unknown", vals: []val{{"command", command}, {"flag", flag}}}
+}
+
+// FlagsExclusive is [flags_exclusive]: "{{.flag}} and {{.other}} can't be given together."
+func FlagsExclusive(flag string, other string) M {
+	return M{id: "flags_exclusive", vals: []val{{"flag", flag}, {"other", other}}}
+}
+
 // FoldersNotPrivate is [folders_not_private]: "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
 func FoldersNotPrivate(config string, data string) M {
 	return M{id: "folders_not_private", vals: []val{{"config", config}, {"data", data}}}
@@ -1869,6 +1914,11 @@ func NoSSHAgent() M {
 	return M{id: "no_ssh_agent"}
 }
 
+// NoSubcommand is [no_subcommand]: "There's no command {{.command}} {{.given}}. The commands under {{.command}} are {{.commands}}."
+func NoSubcommand(command string, commands string, given string) M {
+	return M{id: "no_subcommand", vals: []val{{"command", command}, {"commands", commands}, {"given", given}}}
+}
+
 // NoTerminalDelete is [no_terminal_delete]: "Deleting the VM needs your confirmation, and there's no terminal to ask in. Run devvm rm -f to delete the VM anyway."
 func NoTerminalDelete() M {
 	return M{id: "no_terminal_delete"}
@@ -1957,6 +2007,11 @@ func OCIWaiting() M {
 // OpencodeLoginKept is [opencode_login_kept]: "The VM gets opencode's {{.providers}} login unchanged."
 func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
+}
+
+// OutputFailed is [output_failed]: "Writing the command's output failed: {{.reason}}."
+func OutputFailed(reason string) M {
+	return M{id: "output_failed", vals: []val{{"reason", reason}}}
 }
 
 // PackFailed is [pack_failed]: "Packing {{.vm}} into its image failed."
@@ -2734,9 +2789,14 @@ func UpstreamProxyScheme(scheme string, setting string) M {
 	return M{id: "upstream_proxy_scheme", vals: []val{{"scheme", scheme}, {"setting", setting}}}
 }
 
-// UsageError is [usage_error]: "{{.reason}}. Run devvm --help to see the commands and flags."
+// UsageError is [usage_error]: "The command line is refused: {{.reason}}."
 func UsageError(reason string) M {
 	return M{id: "usage_error", vals: []val{{"reason", reason}}}
+}
+
+// UsageHelp is [usage_help]: "Run {{.command}} --help to see how to use it."
+func UsageHelp(command string) M {
+	return M{id: "usage_help", vals: []val{{"command", command}}}
 }
 
 // UseParentVM is [use_parent_vm]: "{{.parent}} has a VM, {{.vm}}, and {{.dir}} is inside it.\nOpen {{.vm}} here instead of making a new VM for this folder?"
@@ -2892,6 +2952,10 @@ var specs = map[string]spec{
 	"agent_unchosen_stop":              {fields: []string{"vm"}},
 	"agent_unload_failed":              {fields: []string{"key"}},
 	"already_stopped":                  {fields: []string{"vm"}},
+	"arg_missing":                      {fields: []string{"args", "command"}},
+	"arg_not_choice":                   {fields: []string{"choices", "command", "given"}},
+	"args_none":                        {fields: []string{"command", "given"}},
+	"args_too_many":                    {fields: []string{"args", "command", "given"}},
 	"backend_experimental":             {},
 	"backend_flag_ignored":             {fields: []string{"backend", "vm"}},
 	"backend_help":                     {},
@@ -3066,6 +3130,11 @@ var specs = map[string]spec{
 	"fetch_failed":                     {fields: []string{"vm"}},
 	"fetch_until":                      {fields: []string{"file", "remote"}},
 	"fetching":                         {fields: []string{"prefix"}},
+	"flag_bad_switch":                  {fields: []string{"flag", "value"}},
+	"flag_bad_value":                   {fields: []string{"flag", "form", "value"}},
+	"flag_needs_value":                 {fields: []string{"flag", "form"}},
+	"flag_unknown":                     {fields: []string{"command", "flag"}},
+	"flags_exclusive":                  {fields: []string{"flag", "other"}},
 	"folders_not_private":              {fields: []string{"config", "data"}},
 	"forgot_orphan":                    {fields: []string{"vm"}},
 	"forwarder_failed":                 {fields: []string{"reason"}},
@@ -3234,6 +3303,7 @@ var specs = map[string]spec{
 	"no_kvm":                           {},
 	"no_secret":                        {fields: []string{"secret"}},
 	"no_ssh_agent":                     {},
+	"no_subcommand":                    {fields: []string{"command", "commands", "given"}},
 	"no_terminal_delete":               {},
 	"no_terminal_fetch":                {fields: []string{"remote"}},
 	"no_token":                         {},
@@ -3252,6 +3322,7 @@ var specs = map[string]spec{
 	"nothing_to_clean":                 {},
 	"oci_waiting":                      {},
 	"opencode_login_kept":              {fields: []string{"providers"}},
+	"output_failed":                    {fields: []string{"reason"}},
 	"pack_failed":                      {fields: []string{"vm"}},
 	"packing_image":                    {fields: []string{"vm"}},
 	"policy_failed":                    {fields: []string{"reason"}},
@@ -3408,6 +3479,7 @@ var specs = map[string]spec{
 	"upstream_proxy_invalid":           {fields: []string{"setting"}},
 	"upstream_proxy_scheme":            {fields: []string{"scheme", "setting"}},
 	"usage_error":                      {fields: []string{"reason"}},
+	"usage_help":                       {fields: []string{"command"}},
 	"use_parent_vm":                    {fields: []string{"dir", "parent", "vm"}},
 	"use_parent_vm_repo":               {fields: []string{"dir", "parent", "repo", "vm"}},
 	"using_parent_vm":                  {fields: []string{"dir", "vm"}},

@@ -44,7 +44,7 @@ mkdir $WORK/api
 cd $WORK/api
 exec devvm --no-network-policy --no-git-protect go
 ! exec devvm tools now
-stderr usage_error
+stderr '^devvm: no_subcommand command=devvm tools commands=add, rm, update given=now$'
 exec devvm tools
 stdout '^TOOL +VERSION +NEWER +BUILT\ngo +\S+ +- +-\n\z'
 exec devvm tools update
@@ -90,7 +90,7 @@ exec tar -xOf $STUB_DIR/sync.tar tools
 ! exec devvm tools rm python
 stderr '^devvm: vm_lacks has=node layer=python vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm tools rm
-stderr usage_error
+stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools rm$'
 
 # devvm IMAGE adds nothing to a VM that exists: what it lacks is refused,
 # naming the shared tools tools add adds, or a layer only a new VM gets;
@@ -105,7 +105,7 @@ stdout '^image=node$'
 # tools add: the tools it lacks join its name and list, those it has are
 # said; only shared tools, each a separate word.
 ! exec devvm tools add
-stderr usage_error
+stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools add$'
 ! exec devvm tools add python+claude
 stderr '^devvm: tools_joined cmd=add given=python\+claude$'
 ! exec devvm tools add docker

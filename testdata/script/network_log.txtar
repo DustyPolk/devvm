@@ -26,9 +26,9 @@ stdout '\A2026-10-09T10:01:00Z  BLOCKED  a.test:443  not on the allowlist\n2026-
 exec devvm network log --lines 0
 ! stdout .
 ! exec devvm network log -n x
-stderr '^devvm: usage_error reason='
+stderr '^devvm: flag_bad_value flag=--lines form=N value=x$'
 ! exec devvm network log -n -1
-stderr '^devvm: usage_error reason='
+stderr '^devvm: flag_bad_value flag=--lines form=N value=-1$'
 
 # The blocks by host and port, by when last blocked, with the command
 # that allows each: only for a host name or address, and never for a
@@ -36,7 +36,7 @@ stderr '^devvm: usage_error reason='
 exec devvm network log --blocked
 cmp stdout $WORK/blocked.txt
 ! exec devvm network log --blocked -f
-stderr '^devvm: usage_error reason='
+stderr '^devvm: flags_exclusive flag=--blocked other=--follow$'
 
 # A log its proxy rotated: the old file's events come first, so the
 # history and the blocks are the same; one just rotated isn't empty.

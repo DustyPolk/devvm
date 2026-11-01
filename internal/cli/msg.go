@@ -17,7 +17,7 @@ func newMsgCmd(u *ui.UI) *cobra.Command {
 		Short:              "Print a message's text",
 		Hidden:             true,
 		DisableFlagParsing: true,
-		Args:               cobra.MinimumNArgs(1),
+		Args:               minArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			m, err := msg.FromArgs(args[0], args[1:])
 			if err != nil {

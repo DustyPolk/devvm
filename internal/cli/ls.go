@@ -24,7 +24,7 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 			"devvm), backend and folder. A docker VM made for the docker layer shows its runtime beside its " +
 			"backend: docker (sysbox). What a VM's state doesn't have (its creation didn't finish) is -. " +
 			"A VM whose backend sizes no disks (docker) and that holds more than VMs get elsewhere is warned about.",
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dirs, err := paths.FromEnv()
 			var ls []vm.Listed

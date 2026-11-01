@@ -11,7 +11,15 @@ cd $WORK/web
 ! exec devvm size
 stderr '^devvm: no_vm_size dir=\S*/web$'
 ! exec devvm size big
-stderr '^devvm: usage_error '
+stderr '^devvm: args_none command=devvm size given=big$'
+
+# A bad size is refused before devvm looks for the VM.
+! exec devvm size --cpus many
+stderr '^devvm: cpus_not_number value="many"$'
+stderr '^usage_help command=devvm size$'
+! stderr no_vm_size
+! exec devvm size --memory
+stderr '^devvm: flag_needs_value flag=--memory form=--memory GiB$'
 
 # -g: the size new VMs get, unset (the image's) until it's set; each change
 # keeps what it leaves unset. No VM is looked at.

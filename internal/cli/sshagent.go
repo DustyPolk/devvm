@@ -21,7 +21,7 @@ func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 			"first, and each key added to it: its file, its fingerprint and how it's loaded. devvm ssh-agent " +
 			"on, devvm or off changes the VM's forwarding from its next start: devvm restart. While it's on " +
 			"and you're connected, anything in the VM can use the agent's keys.",
-		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
+		Args:      maxArgs(1),
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			withEnv(u, func(env *vm.Env) error {
@@ -50,7 +50,7 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 			"~/.config/devvm/agent-keys with its fingerprint and options, replacing what was recorded for it. " +
 			"devvm loads it again when a VM needs it (after a reboot, or once its lifetime ran out), only " +
 			"while the file holds the same key. A key in a folder a VM mounts is refused.",
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1),
 		ValidArgsFunction: func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
@@ -72,7 +72,7 @@ func newSSHAgentRmCmd(u *ui.UI) *cobra.Command {
 		Long: "Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from " +
 			"~/.config/devvm/agent-keys, so devvm doesn't load it again. The key file stays as it is, and " +
 			"needn't still exist. A key that wasn't added is refused: devvm ssh-agent lists those that were.",
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1),
 		ValidArgsFunction: func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			return nil, cobra.ShellCompDirectiveDefault
 		},

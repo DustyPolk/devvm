@@ -42,7 +42,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 				autoRetain(cmd.Context(), u)
 			}
 		},
-		Args: cobra.MaximumNArgs(1),
+		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return up(cmd.Context(), u, g, uf, args)
 		},
@@ -55,6 +55,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		newRestartCmd(u, g), newStopCmd(u), newToolsCmd(u, g), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
 		newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
+	checkCommands(root)
 	return root
 }
 
@@ -71,19 +72,34 @@ func makePrivate(u *ui.UI) {
 	}
 }
 
-// Execute runs devvm with args on u and returns its exit code. A command's
-// error is printed like Warn: a message as it is, the command line
-// parser's own ("unknown command") in usage_error.
+// Execute runs devvm with args on u and returns its exit code: 0, 1 for a
+// failure, usageCode for a usage error (a bad argument or flag, an
+// unknown command), which is followed by usage_help, naming the
+// command's own --help.
 func Execute(ctx context.Context, u *ui.UI, args []string) int {
-	root := NewRoot(u)
+	return execute(ctx, u, NewRoot(u), args)
+}
+
+// execute runs root with args, as Execute does.
+func execute(ctx context.Context, u *ui.UI, root *cobra.Command, args []string) int {
 	root.SetArgs(args)
-	if err := root.ExecuteContext(ctx); err != nil {
-		m, ok := errors.AsType[msg.M](err)
+	cmd, err := root.ExecuteContextC(ctx)
+	if err == nil {
+		return 0
+	}
+	if cmd == nil {
+		cmd = root
+	}
+	if e, ok := errors.AsType[ranError](err); ok {
+		m, ok := errors.AsType[msg.M](e.err)
 		if !ok {
-			m = msg.UsageError(err.Error())
+			m = msg.OutputFailed(e.err.Error()).Because(e.err)
 		}
-		u.Warn(m)
+		u.Error(m)
 		return 1
 	}
-	return 0
+	// Anything else is the parser's, before the command ran.
+	u.Error(usage(err).m)
+	u.Note(msg.UsageHelp(cmd.CommandPath()))
+	return usageCode
 }

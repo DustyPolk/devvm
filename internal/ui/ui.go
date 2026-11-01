@@ -171,13 +171,17 @@ func prefixLines(prefix, s string) string {
 	return b.String()
 }
 
+// Error prints the message as Die does, without ending the run: for an
+// error the caller returns its own exit code for.
+func (u *UI) Error(m msg.M) { u.write(u.stderr, u.errStyle.labelled(sgrError, m)) }
+
 // Die prints the message like Warn, its label red in a terminal, and ends
 // the run with exit code 1: it panics, and Main runs the cleanups and
 // returns 1. Once the run is interrupted it prints nothing, as the failure
 // is the interrupt's.
 func (u *UI) Die(m msg.M) {
 	if !u.Interrupted() {
-		u.write(u.stderr, u.errStyle.labelled(sgrError, m))
+		u.Error(m)
 	}
 	exit(1)
 }
