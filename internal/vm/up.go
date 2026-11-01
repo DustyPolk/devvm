@@ -354,15 +354,24 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 }
 
 // chooseNet returns whether a new VM gets network policy: the flags', else
-// the saved choice's (devvm setup), else asked for, on by default. A VM
-// that can't have it is made without it, unasked and said:
-// root in a VM made for the docker layer (dockerVM), named or from a
-// devcontainer.json's docker-in-docker, can change its own network, and
-// b may not confine a VM to its proxy (egress-proxy). --network-policy on
-// such a VM is refused, here or by Require, never dropped.
+// the saved choice's (devvm network -g, devvm setup), which isn't read
+// when a flag is given, else asked for, on by default. A saved off makes
+// the VM without it, unsaid. A VM that can't have it is made without it,
+// unasked and said: root in a VM made for the docker layer (dockerVM),
+// named or from a devcontainer.json's docker-in-docker, can change its
+// own network, and b may not confine a VM to its proxy (egress-proxy).
+// --network-policy on such a VM is refused, here or by Require, never
+// dropped.
 func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm string) (bool, error) {
+	saved := state.NetworkAsk
+	if !o.NetworkPolicy && !o.NoNetworkPolicy {
+		var err error
+		if saved, err = state.ReadNetwork(e.Dirs); err != nil {
+			return false, err
+		}
+	}
 	switch {
-	case o.NoNetworkPolicy:
+	case o.NoNetworkPolicy, saved == state.NetworkOff:
 		return false, nil
 	case dockerVM && o.NetworkPolicy:
 		return false, msg.NetDockerLayer(b.Name(), vm)
@@ -375,11 +384,7 @@ func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm str
 	case o.NetworkPolicy:
 		return true, nil
 	}
-	saved, err := state.ReadNetwork(e.Dirs)
-	if err != nil {
-		return false, err
-	}
-	return e.Proxy.Choose(saved == state.NetworkOn, saved == state.NetworkOff, vm), nil
+	return e.Proxy.Choose(saved == state.NetworkOn, false, vm), nil
 }
 
 // dockerLayer chooses the runtime a new VM runs the docker layer under,

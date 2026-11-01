@@ -11,8 +11,8 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// devvm network: shown as devvm ls shows it; on and off change the state
-// only, applied when the VM next starts. A running VM turned on isn't
+// devvm network: shown as devvm ls shows it, then the VM's allowlist; on
+// and off change the state only, applied when the VM next starts. A running VM turned on isn't
 // confined, so its next launch offers the restart; one turned off stays
 // on its proxy until it starts again.
 func TestNetwork(t *testing.T) {
@@ -25,7 +25,9 @@ func TestNetwork(t *testing.T) {
 	shown := func(want string) {
 		t.Helper()
 		var b strings.Builder
-		if err := n.Network(t.Context(), &b); err != nil || b.String() != want+"\n" {
+		err := n.Network(t.Context(), &b)
+		line, rules, _ := strings.Cut(b.String(), "\n")
+		if err != nil || line != want || !strings.HasPrefix(rules, "# ") || !strings.Contains(rules, "/layers/base.policy\n  ") {
 			t.Errorf("Network = %q, %v; want %s", b.String(), names(err), want)
 		}
 	}

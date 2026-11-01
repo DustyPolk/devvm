@@ -134,7 +134,7 @@ var pol *policy
 // --- events ---
 
 // Event is one line of the event log, as JSON: a decision about a
-// connection or a request. devvm log reads them.
+// connection or a request. devvm network log reads them.
 type Event struct {
 	Time    string   `json:"time"`
 	VM      string   `json:"vm"`
@@ -212,7 +212,7 @@ func newBlocks(rs []numbered, count int, after string) string {
 		fmt.Fprintf(&b, "devvm: blocked %s:%d (%s)\n", r.e.Host, r.e.Port, r.e.Reason)
 	}
 	if len(rules) > 0 {
-		fmt.Fprintf(&b, "To allow, run this on the host:\ndevvm policy allow %s\n", strings.Join(rules, " "))
+		fmt.Fprintf(&b, "To allow, run this on the host:\ndevvm network allow %s\n", strings.Join(rules, " "))
 	}
 	return b.String()
 }
@@ -389,7 +389,7 @@ func block(w http.ResponseWriter, e Event) {
 	w.Header().Set("X-Devvm-Blocked", e.Host)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
-	fmt.Fprintf(w, "devvm: %s:%d is blocked (%s). Allow it on the host with: devvm policy allow %s\n",
+	fmt.Fprintf(w, "devvm: %s:%d is blocked (%s). Allow it on the host with: devvm network allow %s\n",
 		e.Host, e.Port, e.Reason, ruleFor(e.Host, e.Port))
 }
 
@@ -400,7 +400,7 @@ func ruleFor(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
-// AllowRule is the rule that allows host:port, for a devvm policy allow
+// AllowRule is the rule that allows host:port, for a devvm network allow
 // command; false for a host the policy doesn't take, which a logged event
 // can't have, or a log that was edited.
 func AllowRule(host string, port int) (string, bool) {
@@ -591,7 +591,7 @@ func serveReserved(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(&b, "%s  %s %s%s  refused: %s\n", e.Time, e.Method, e.Host, e.Path, e.Reason)
 				continue
 			}
-			fmt.Fprintf(&b, "%s  %s:%d  %s\n    allow on the host: devvm policy allow %s\n", e.Time, e.Host, e.Port, e.Reason, ruleFor(e.Host, e.Port))
+			fmt.Fprintf(&b, "%s  %s:%d  %s\n    allow on the host: devvm network allow %s\n", e.Time, e.Host, e.Port, e.Reason, ruleFor(e.Host, e.Port))
 		}
 		_, _ = w.Write(b.Bytes())
 	case "/blocked/new":

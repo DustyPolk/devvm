@@ -24,8 +24,8 @@ It returns when the VM's hostagent is gone.
 
 | File | What |
 | --- | --- |
-| `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
-| `policy.go` | the rule syntax and matching (`ValidRule`: `devvm policy` takes only these); policy files are re-read when they change |
+| `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm network log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
+| `policy.go` | the rule syntax and matching (`ValidRule`: `devvm network allow`, `deny` and `rm` take only these); policy files are re-read when they change |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
 | `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
 | `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |

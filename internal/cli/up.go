@@ -37,7 +37,7 @@ func (g *globals) fromRef() string {
 func addGlobals(root *cobra.Command, g *globals) {
 	f := root.PersistentFlags()
 	f.StringVar(&g.backend, "backend", "", "the `NAME` of the backend a new VM or image gets (default: the default backend file's, else lima)")
-	f.BoolVar(&g.networkPolicy, "network-policy", false, "create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: on, asked in a terminal)")
+	f.BoolVar(&g.networkPolicy, "network-policy", false, "create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g's, else asked in a terminal, and on without one)")
 	f.BoolVar(&g.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy: it reaches anything this machine can")
 	root.MarkFlagsMutuallyExclusive("network-policy", "no-network-policy")
 	f.StringVar(&g.size.CPUs, "cpus", "", "the `N` CPUs a new VM gets (default: the size file's, else the image's)")

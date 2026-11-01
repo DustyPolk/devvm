@@ -18,7 +18,7 @@
 #                image and an unused tool image, keeping base and a VM named like an image; tools makes a node
 #                VM and checks its shared tools, devvm tools, tools update, rm and add, and devvm IMAGE
 #                refused on it; network makes a claude VM with
-#                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
+#                network policy and checks it reaches only its allowlist, devvm network, its log and rules, its tokens
 #                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
 #                stops its proxy; nix builds the nix layer behind a company proxy (no proxy left in its
 #                image), makes a node+nix VM of a flake project with network policy and checks Nix's
@@ -1373,19 +1373,19 @@ check "another host is blocked by the proxy, and so is another port of an allowe
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://example.com' </dev/null 2>&1 | grep -q 403 &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
   ! limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://github.com:8443' </dev/null"
-check "devvm log shows the block and the allowed connection" bash -c "cd '$n' &&
-  '$D' log | grep -q '  BLOCKED  example.com:443  ' && '$D' log | grep -q '  allowed  github.com:443  rule '"
-check "devvm log --blocked groups it, with the command that allows it" bash -c "cd '$n' &&
-  '$D' log --blocked | grep -Eq '^[0-9TZ:-]+ +[0-9]+ +example\.com:443 +devvm policy allow example\.com\$'"
-# The command devvm log suggests, run as it is: the same proxy allows the host at once, and after
-# devvm policy rm blocks it again.
-check "devvm policy allow applies at once to the running VM's proxy, and rm takes it back" bash -c "cd '$n' &&
+check "devvm network log shows the block and the allowed connection" bash -c "cd '$n' &&
+  '$D' network log | grep -q '  BLOCKED  example.com:443  ' && '$D' network log | grep -q '  allowed  github.com:443  rule '"
+check "devvm network log --blocked groups it, with the command that allows it" bash -c "cd '$n' &&
+  '$D' network log --blocked | grep -Eq '^[0-9TZ:-]+ +[0-9]+ +example\.com:443 +devvm network allow example\.com\$'"
+# The command devvm network log suggests, run as it is: the same proxy allows the host at once, and after
+# devvm network rm blocks it again.
+check "devvm network allow applies at once to the running VM's proxy, devvm network shows it after on, and rm takes it back" bash -c "cd '$n' &&
   pid=\$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') && [[ -n \$pid ]] &&
-  cmd=\$('$D' log --blocked | awk '\$3 == \"example.com:443\" { sub(/^.* devvm /, \"\"); print }') &&
-  [[ \$cmd == 'policy allow example.com' ]] && '$D' \$cmd </dev/null >/dev/null &&
-  '$D' policy | grep -qx '  example.com' &&
+  cmd=\$('$D' network log --blocked | awk '\$3 == \"example.com:443\" { sub(/^.* devvm /, \"\"); print }') &&
+  [[ \$cmd == 'network allow example.com' ]] && '$D' \$cmd </dev/null >/dev/null &&
+  '$D' network >'$work/e' && [[ \$(head -1 '$work/e') == on ]] && grep -qx '  example.com' '$work/e' &&
   limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://example.com' </dev/null &&
-  '$D' policy rm example.com >/dev/null &&
+  '$D' network rm example.com >/dev/null &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
   [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
 check "DNS fails at once, not after a timeout" in_vm "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
@@ -1579,13 +1579,13 @@ check "so does devvm host, which names nothing" bash -c "
   ! grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
 # Stopped by the self-check, it's still unenforced: its last self-check failed.
 check "devvm network off: its next start is direct, without a proxy" bash -c "cd '$n' &&
-  [[ \$('$D' network) == unenforced ]] && '$D' network off </dev/null >/dev/null &&
-  printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network) == off ]] &&
+  [[ \$('$D' network | head -1) == unenforced ]] && '$D' network off </dev/null >/dev/null &&
+  printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == off ]] &&
   [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
 check "devvm network on while it runs: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
-  '$D' network on </dev/null >/dev/null 2>&1 && [[ \$('$D' network) == unenforced ]] &&
-  printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network) == on ]] &&
+  '$D' network on </dev/null >/dev/null 2>&1 && [[ \$('$D' network | head -1) == unenforced ]] &&
+  printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == on ]] &&
   grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "devvm network off while it runs confined: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
@@ -1775,7 +1775,7 @@ check "nix-direnv's cache is in the VM's home, not the project folder" bash -c "
 nix_fetch='derivation { name = "e2e"; system = builtins.currentSystem; builder = "builtin:fetchurl"; url = "https://example.com/devvm-e2e"; outputHashMode = "flat"; outputHashAlgo = "sha256"; outputHash = "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="; }'
 check "a download from a host that isn't allowed fails, and devvm-why names it" in_vm "$vm" "
   ! nix build --no-link --impure --expr '$nix_fetch' 2>/tmp/fetch.err && grep -q 'response 403' /tmp/fetch.err &&
-  devvm-why | grep -q 'devvm policy allow example.com'"
+  devvm-why | grep -q 'devvm network allow example.com'"
 check "devvm network off: from the next start, nix-daemon gets no proxy" bash -c "cd '$x' &&
   '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
   in_vm '$vm' '[[ -z \$(ls -A /etc/systemd/system/nix-daemon.service.d 2>/dev/null) && -z \$(systemctl show nix-daemon.service -p Environment --value) ]]'"
@@ -2651,14 +2651,14 @@ check "the decider's token is in no host process's arguments, and never reaches 
   ! ps -axww -o command= | grep -qFf <(echo \"\$tok\") &&
   ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"grep -rqsF \$tok /etc /run /root /home /tmp /var/log\" </dev/null &&
   ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"cat /proc/[0-9]*/environ 2>/dev/null | tr '\\\\0' '\\\\n' | grep -qF \$tok\" </dev/null"
-check "devvm log shows the proxy's block and the direct connection to the host the decider refused" bash -c "cd '$np' &&
-  '$D' log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' && grep -q '  BLOCKED  100.96.0.1:18765  ' '$work/e' ||
+check "devvm network log shows the proxy's block and the direct connection to the host the decider refused" bash -c "cd '$np' &&
+  '$D' network log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' && grep -q '  BLOCKED  100.96.0.1:18765  ' '$work/e' ||
   { cat '$work/e'; false; }"
-check "devvm policy allow applies at once to the running VM's proxy, and rm takes it back" bash -c "cd '$np' &&
+check "devvm network allow applies at once to the running VM's proxy, and rm takes it back" bash -c "cd '$np' &&
   in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc \"\$1\" </dev/null; }
   pid=\$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') && [[ -n \$pid ]] &&
-  ${U[*]} '$D' policy allow example.com </dev/null >/dev/null && in_smol 'curl -fsS -m 20 -o /dev/null https://example.com' &&
-  ${U[*]} '$D' policy rm example.com </dev/null >/dev/null &&
+  ${U[*]} '$D' network allow example.com </dev/null >/dev/null && in_smol 'curl -fsS -m 20 -o /dev/null https://example.com' &&
+  ${U[*]} '$D' network rm example.com </dev/null >/dev/null &&
   [[ \$(in_smol 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]] &&
   [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
 check "its allow list widened while it runs: devvm shows it unenforced, stops it, then starts it confined again" smolnet_widened "$vm" "$np"
@@ -2671,10 +2671,10 @@ check "started outside devvm, with a decider of someone else's: devvm stops it a
   grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(smol_status '$vm') == stopped ]]"
 check "devvm starts it again confined, and the self-check passes" bash -c "cd '$np' &&
   printf 'exit\n' | ${U[*]} '$D' >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] && grep -qx net_check=ok '$vms/$vm' &&
-  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && [[ \$('$D' network 2>/dev/null) == on ]]"
+  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && [[ \$('$D' network 2>/dev/null | head -1) == on ]]"
 check "devvm network off: its next start is smolvm's own network, without an allow list, a decider or a proxy" bash -c "cd '$np' &&
   ${U[*]} '$D' network off </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
-  [[ \$('$D' network) == off && \$(smol_status '$vm') == running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  [[ \$('$D' network | head -1) == off && \$(smol_status '$vm') == running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
 check "... with no allow list left" smolnet_open "$vm"
 check "... where the direct probes get out (their control): 1.1.1.1, github's ssh, IPv6" smolnet_direct_open "$vm"
@@ -2692,7 +2692,7 @@ else
 fi
 check "devvm network on: devvm restart starts it confined again" bash -c "cd '$np' &&
   ${U[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
-  [[ \$('$D' network) == on ]] && grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+  [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 check "... its allow list and DNS closed again, and direct connections fail" smolnet_closed "$vm"
 check "rm -f deletes it, its proxy and its state" bash -c "cd '$np' && ${U[*]} '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
   [[ -z \$(smol_status '$vm') && ! -e '$vms/$vm' ]] && sleep 4 && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
@@ -3807,10 +3807,10 @@ docker_netpolicy() {
   check "no DNS query leaves its network: none of the probe's names in the capture (resolver, 127.0.0.11, 1.1.1.1, 8.8.8.8; UDP and TCP)" dn_dns_kept "$vm"
   check "IPv6: off on its every interface but the loopback, which root can't change; ::1 its only address; its bridge's side link-local alone" dn_ipv6 "$vm"
   echo "  recorded: $(tail -1 "$work/ipv6.log" 2>/dev/null)"
-  check "devvm log shows the proxy's block" bash -c "cd '$np' && '$D' log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' || { cat '$work/e'; false; }"
-  check "devvm policy allow applies at once to its running proxy, and rm takes it back" bash -c "cd '$np' &&
-    '$D' policy allow example.com </dev/null >/dev/null && in_d '$vm' 'curl -fsS -m 20 -o /dev/null https://example.com' &&
-    '$D' policy rm example.com </dev/null >/dev/null && [[ \$(in_d '$vm' 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]]"
+  check "devvm network log shows the proxy's block" bash -c "cd '$np' && '$D' network log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' || { cat '$work/e'; false; }"
+  check "devvm network allow applies at once to its running proxy, and rm takes it back" bash -c "cd '$np' &&
+    '$D' network allow example.com </dev/null >/dev/null && in_d '$vm' 'curl -fsS -m 20 -o /dev/null https://example.com' &&
+    '$D' network rm example.com </dev/null >/dev/null && [[ \$(in_d '$vm' 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]]"
   check "a token bound to it stays on this machine: the VM gets its own placeholder, the proxy puts the token in" dn_secret "$vm" "$np"
   check "with its proxy gone nothing gets out; launched, it gets its proxy back, through the same relay" bash -c "
     p=\$(dn_proxy '$vm') && [[ -n \$p ]] && kill \$p && dn_gone '$vm' &&
@@ -3840,14 +3840,14 @@ docker_netpolicy() {
   check "devvm stop stops it, its relay and its proxy" bash -c "dn_launch '$np' && cd '$np' && '$D' stop </dev/null >/dev/null 2>&1 &&
     [[ \$(d_state '$vm') == exited && \$(d_state '$vm-proxy') == exited ]] && dn_gone '$vm'"
   check "devvm network off: its next start is on Docker's default network alone, without a relay, network or proxy, nor proxy settings" bash -c "cd '$np' &&
-    ${NU[*]} '$D' network off </dev/null >/dev/null 2>&1 && dn_launch '$np' && [[ \$('$D' network) == off && \$(dn_nets '$vm') == bridge ]] &&
+    ${NU[*]} '$D' network off </dev/null >/dev/null 2>&1 && dn_launch '$np' && [[ \$('$D' network | head -1) == off && \$(dn_nets '$vm') == bridge ]] &&
     [[ -z \$(d_state '$vm-proxy') ]] && ! d_net '$vm-net' && [[ -z \$(dn_proxy '$vm') ]] && ! in_root '$vm' 'grep -qiE \"^(https?|no|all)_proxy=\" /etc/environment'"
   check "... where the direct probes get out (their control)" dn_open "$vm"
   check "... and the capture sees its lookup leave (the DNS check's control)" dn_dns_left "$vm"
   check "... and ping works as the VM's user, without NET_RAW (ICMP datagram sockets)" dn_ping "$vm"
   check "devvm network on: devvm restart starts it confined again, and direct connections fail" bash -c "cd '$np' &&
     ${NU[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${NU[*]} '$D' restart >'$work/last.log' 2>&1 &&
-    [[ \$('$D' network) == on ]] && grep -qx net_check=ok '$vms/$vm' && dn_confined '$vm' && dn_closed '$vm'"
+    [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$vms/$vm' && dn_confined '$vm' && dn_closed '$vm'"
   check "rm -f deletes it, its relay, its network, its proxy and its state" bash -c "cd '$np' && ${NU[*]} '$D' rm -f </dev/null >/dev/null 2>&1 &&
     [[ -z \$(d_state '$vm') && -z \$(d_state '$vm-proxy') && ! -e '$vms/$vm' ]] && ! d_net '$vm-net' && dn_gone '$vm'"
   kill "$listener" "${d_hostprogs[@]}" 2>/dev/null; wait "$listener" "${d_hostprogs[@]}" 2>/dev/null; listener="" d_hostprogs=()

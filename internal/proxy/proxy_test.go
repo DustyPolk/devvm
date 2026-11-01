@@ -42,13 +42,13 @@ func TestNewBlocks(t *testing.T) {
 		"devvm: blocked registry.example.com:443 (not in the allowlist)\n" +
 		"devvm: blocked db.test:5432 (not in the allowlist)\n" +
 		"To allow, run this on the host:\n" +
-		"devvm policy allow registry.example.com db.test:5432\n"
+		"devvm network allow registry.example.com db.test:5432\n"
 	all := "4\n" +
 		"devvm: blocked old.test:443 (not in the allowlist)\n" +
 		"devvm: blocked registry.example.com:443 (not in the allowlist)\n" +
 		"devvm: blocked db.test:5432 (not in the allowlist)\n" +
 		"To allow, run this on the host:\n" +
-		"devvm policy allow old.test registry.example.com db.test:5432\n"
+		"devvm network allow old.test registry.example.com db.test:5432\n"
 	for _, c := range []struct{ after, want string }{
 		{"1", newer}, // after the prompt that saw block 1: each new rule once
 		{"4", "4\n"}, // nothing new
@@ -246,7 +246,7 @@ func TestOddHostsRefused(t *testing.T) {
 		"CONNECT [fe80::1%25$(id)]:443 HTTP/1.1\r\nHost: x\r\n\r\n",
 	} {
 		code, body := roundTrip(t, proxy.Listener.Addr().String(), req)
-		if code != http.StatusBadRequest || strings.Contains(body, "policy allow") {
+		if code != http.StatusBadRequest || strings.Contains(body, "network allow") {
 			t.Errorf("%q: %d %q (want 400, no allow command)", strings.SplitN(req, "\r\n", 2)[0], code, body)
 		}
 	}
@@ -594,7 +594,7 @@ func FuzzRequest(f *testing.F) {
 			return // never allowed: no rule names such a port
 		}
 		if !ValidRule(ruleFor(host, port)) {
-			t.Fatalf("%q: devvm policy allow refuses %q", raw, ruleFor(host, port))
+			t.Fatalf("%q: devvm network allow refuses %q", raw, ruleFor(host, port))
 		}
 		n++
 		file := filepath.Join(dir, strconv.Itoa(n))

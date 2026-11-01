@@ -20,7 +20,7 @@ In the VM, you run the agent as `claude`, `codex` or `opencode`.
 | `codex` | Codex | the newest release, with its analytics and metrics off unless your config sets them | the OpenAI API and the ChatGPT login: `api.openai.com`, `chatgpt.com` and `auth.openai.com` |
 | `opencode` | opencode | the newest release | opencode's own service and its model catalog: `opencode.ai` and `models.dev` |
 
-Claude Code's telemetry hosts aren't on its allowlist, because blocking them costs nothing. opencode talks to the model provider you choose, so with network policy you allow that provider's API host yourself, such as `devvm policy allow api.anthropic.com` ([changing rules](../safety/network.md#changing-rules)).
+Claude Code's telemetry hosts aren't on its allowlist, because blocking them costs nothing. opencode talks to the model provider you choose, so with network policy you allow that provider's API host yourself, such as `devvm network allow api.anthropic.com` ([changing rules](../safety/network.md#changing-rules)).
 
 Agents are [shared tools](images.md#shared-tools), like the toolchains, so you can combine them with any image and with each other, as in `devvm node+claude+codex`. devvm follows each agent's newest release, because agents release several times a week, and `devvm tools update` moves a VM to newer versions ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 

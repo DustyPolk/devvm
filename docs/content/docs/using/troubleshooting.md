@@ -72,7 +72,7 @@ On the VM's next launch, devvm offers in a terminal to restart it confined, and 
 
 ## A request is blocked
 
-With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm log --blocked` on this machine, or `devvm-why` in the VM. `devvm log --blocked` also shows the `devvm policy allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
+With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm network log --blocked` on this machine, or `devvm-why` in the VM. `devvm network log --blocked` also shows the `devvm network allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
 
 ## Behind a company proxy
 

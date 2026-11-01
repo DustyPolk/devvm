@@ -163,7 +163,7 @@ func TestWriteLogRotated(t *testing.T) {
 	}
 }
 
-// devvm log -f goes on across a rotation: the renamed log is read to its
+// devvm network log -f goes on across a rotation: the renamed log is read to its
 // end, then the new one from its start.
 func TestWriteLogFollowRotated(t *testing.T) {
 	t.Parallel()
@@ -276,9 +276,9 @@ func TestWriteBlocked(t *testing.T) {
 	}
 	want := "LAST  COUNT  HOST                ALLOW WITH\n" +
 		"T1    1      Bad Host:443        -\n" +
-		"T1    1      [fd00::1]:22        devvm policy allow [fd00::1]:22\n" +
-		"T3    1      db.test:5432        devvm policy allow db.test:5432\n" +
-		"T4    2      a.test:443          devvm policy allow a.test\n" +
+		"T1    1      [fd00::1]:22        devvm network allow [fd00::1]:22\n" +
+		"T3    1      db.test:5432        devvm network allow db.test:5432\n" +
+		"T4    2      a.test:443          devvm network allow a.test\n" +
 		"T5    1      api.github.com:443  -\n"
 	if b.String() != want {
 		t.Errorf("WriteBlocked:\n%s\nwant:\n%s", b.String(), want)

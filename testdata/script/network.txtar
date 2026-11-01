@@ -160,5 +160,74 @@ exec sh -c 'cat "$VMS"/devvm-default-*'
 stdout '^net=on$'
 stdout '^net_check=ok$'
 
+# devvm network -g: what new VMs get, ask until it's saved; ask is only
+# for new VMs.
+exec devvm network -g
+stdout '\Aask\n\z'
+! exists $XDG_CONFIG_HOME/devvm/network
+! exec devvm network ask
+stderr '^devvm: net_ask_global$'
+! exec devvm network -g sideways
+stderr '^devvm: usage_error reason='
+! exec devvm network -g on off
+stderr '^devvm: usage_error reason='
+
+# A saved off: new VMs get none, unasked and unwarned; --network-policy
+# beats it. The VMs that exist keep theirs.
+exec devvm network -g off
+stdout '^==> network_default mode=off$'
+exec cat $XDG_CONFIG_HOME/devvm/network
+stdout '\Aoff\n\z'
+exec devvm network -g
+stdout '\Aoff\n\z'
+mkdir $WORK/offsaved
+cd $WORK/offsaved
+exec devvm --no-git-protect base
+! stderr 'net_about|net_ask|net_off_'
+exec sh -c 'cat "$VMS"/devvm-offsaved-*'
+stdout '^net=off$'
+mkdir $WORK/offflag
+cd $WORK/offflag
+exec devvm --network-policy --no-git-protect base
+exec sh -c 'cat "$VMS"/devvm-offflag-*'
+stdout '^net=on$'
+cd $WORK/default
+exec sh -c 'limactl stop "$(cd "$VMS" && ls devvm-default-* | grep -v "\.")"'
+exec devvm
+exec sh -c 'cat "$VMS"/devvm-default-*'
+stdout '^net=on$'
+stdout '^net_check=ok$'
+
+# A saved on: new VMs get it; --no-network-policy beats it.
+exec devvm network -g on
+stdout '^==> network_default mode=on$'
+mkdir $WORK/onsaved
+cd $WORK/onsaved
+exec devvm --no-git-protect base
+! stderr 'net_about|net_ask|net_off_'
+exec sh -c 'cat "$VMS"/devvm-onsaved-*'
+stdout '^net=on$'
+mkdir $WORK/onflag
+cd $WORK/onflag
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'cat "$VMS"/devvm-onflag-*'
+stdout '^net=off$'
+
+# ask again, and a file edited by hand that says something else: a new
+# VM without a flag is refused, naming the file, and one with a flag
+# doesn't read it.
+exec devvm network -g ask
+stdout '^==> network_default mode=ask$'
+exec cat $XDG_CONFIG_HOME/devvm/network
+stdout '\Aask\n\z'
+exec sh -c 'echo maybe > "$XDG_CONFIG_HOME/devvm/network"'
+! exec devvm network -g
+stderr '^devvm: net_default_failed reason=\S*/config/devvm/network:1: '
+mkdir $WORK/badsaved
+cd $WORK/badsaved
+! exec devvm --no-git-protect base
+stderr '\S*/config/devvm/network:1: '
+exec devvm --network-policy --no-git-protect base
+
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

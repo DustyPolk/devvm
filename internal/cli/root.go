@@ -52,7 +52,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	addUpFlags(root, uf)
 	addVersion(root)
 	root.AddCommand(newBuildCmd(u, g), newRebuildCmd(u, g), newImagesCmd(u, g), newGCCmd(u, g), newSpaceCmd(u, g), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
-		newRestartCmd(u, g), newStopCmd(u), newToolsCmd(u, g), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newLogCmd(u), newPolicyCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
+		newRestartCmd(u, g), newStopCmd(u), newToolsCmd(u, g), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
 		newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	return root

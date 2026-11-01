@@ -1,6 +1,6 @@
 ---
 title: devvm size
-weight: 38
+weight: 37
 ---
 
 Show or change this folder's VM's size
@@ -28,7 +28,7 @@ devvm size [flags]
 ```text
       --backend NAME        the NAME of the backend a new VM or image gets (default: the default backend file's, else lima)
       --from IMAGE          the container IMAGE a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)
-      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: on, asked in a terminal)
+      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g's, else asked in a terminal, and on without one)
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
       --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
 ```

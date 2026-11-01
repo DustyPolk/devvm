@@ -91,13 +91,13 @@ stderr '^devvm: widen_parent_vm_refused cmd=devvm secret use dir=/\S*/app vm=dev
 stderr '^devvm: widen_parent_vm_refused cmd=devvm ssh-agent on dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 exec devvm ssh-agent
 stdout '^off$'
-! exec devvm policy allow example.com
-stderr '^devvm: widen_parent_vm_refused cmd=devvm policy allow dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
-exec devvm policy deny bad.example.com
+! exec devvm network allow example.com
+stderr '^devvm: widen_parent_vm_refused cmd=devvm network allow dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+exec devvm network deny bad.example.com
 stdout 'rule_added'
-! exec devvm policy rm '!bad.example.com'
-stderr '^devvm: widen_parent_vm_refused cmd=devvm policy rm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
-exec devvm policy
+! exec devvm network rm '!bad.example.com'
+stderr '^devvm: widen_parent_vm_refused cmd=devvm network rm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
+exec devvm network
 stdout '!bad.example.com'
 ! stdout '^example.com'
 

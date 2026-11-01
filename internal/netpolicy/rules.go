@@ -14,7 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Rule is the rule for devvm policy allow (deny false) or deny: rule as
+// Rule is the rule for devvm network allow (deny false) or deny: rule as
 // given, with deny's leading ! added. It refuses what the proxy wouldn't
 // take as one rule, and an allow of a deny.
 func Rule(rule string, deny bool) (string, error) {

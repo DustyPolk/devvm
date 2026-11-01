@@ -14,10 +14,10 @@ devvm writes nothing into your project folders. It keeps your settings in `~/.co
 | `base-features` | the [features](customizing.md#choosing-features) that base gets, one name per line | `devvm setup` |
 | `backend` | the [default backend](../backends/_index.md#choosing-a-backend) for new VMs | `devvm setup` |
 | `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g`, `devvm setup` |
-| `network` | the [network policy](../safety/network.md) that new VMs get: `ask`, `on` or `off` ([devvm setup](#devvm-setup)) | `devvm setup` |
+| `network` | the [network policy](../safety/network.md) that new VMs get: `ask`, `on` or `off` ([devvm setup](#devvm-setup)) | `devvm network -g`, `devvm setup` |
 | `ports` | the [ports](ports-size.md#size-and-ports) that new VMs forward | `devvm ports -g` |
 | `retention` | what devvm deletes on its own, and after how long ([retention](#retention)) | `devvm retention` |
-| `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm policy -g` |
+| `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g` |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
@@ -35,7 +35,7 @@ Upgrading devvm keeps this folder as it is. Back it up to keep your settings, la
 1. The [default backend](../backends/_index.md#choosing-a-backend) for new VMs, saved in `backend`.
 2. The [features](customizing.md#choosing-features) that base gets, saved in `base-features`.
 3. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, saved in `size`, as `devvm size -g` saves them.
-4. The [network policy](../safety/network.md) that new VMs get, saved in `network`. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
+4. The [network policy](../safety/network.md) that new VMs get, saved in `network`, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
 
 ```sh
 devvm setup                          # asks all four questions
@@ -44,7 +44,7 @@ devvm setup --features fzf,omb       # base's features, without asking
 devvm setup --features none          # base gets no features
 ```
 
-`devvm setup` has two flags of its own, and each one chooses without asking anything. `--backend NAME` chooses the default backend. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. With either flag, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)).
+`devvm setup` has two flags of its own, and each one chooses without asking anything. `--backend NAME` chooses the default backend. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. With either flag, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)), and to change their network policy, use `devvm network -g` ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
 
 ## Retention
 

@@ -20,7 +20,7 @@ devvm picks the toolchain from the folder's files, such as node for `package.jso
 
 The first time, devvm asks for the CPUs and memory that new VMs get. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)).
 
-For each new VM, devvm asks whether it gets network policy.
+For each new VM, devvm asks whether it gets network policy. To answer once for every new VM, run `devvm network -g on`.
 
 > [!TIP]
 > Answer yes, the default. [Network policy](../safety/network.md) limits the VM to the hosts you allow and keeps your secrets on your machine.

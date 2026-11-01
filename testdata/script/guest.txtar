@@ -74,7 +74,7 @@ bash -c 'PS1="\u@\h:\w\$ "; unset PROMPT_COMMAND; . "$1"; '"$prompts" _ prompt.s
 -- blocked-test.sh --
 # The proxy: each call answers with the next reply, and says which
 # "after" it was asked for.
-replies=("3" $'5\ndevvm: blocked registry.example.com:443 (not in the allowlist)\nTo allow, run this on the host:\ndevvm policy allow registry.example.com' "5")
+replies=("3" $'5\ndevvm: blocked registry.example.com:443 (not in the allowlist)\nTo allow, run this on the host:\ndevvm network allow registry.example.com' "5")
 i=0
 curl() { local url=${!#}; echo "after=${url##*after=}" >&2; [[ $i -lt ${#replies[@]} ]] || return 7; printf "%s\n" "${replies[i]}"; }
 . blocked.sh
@@ -84,7 +84,7 @@ after=
 after=3
 devvm: blocked registry.example.com:443 (not in the allowlist)
 To allow, run this on the host:
-devvm policy allow registry.example.com
+devvm network allow registry.example.com
 after=5
 after=5
 -- merge-test.sh --

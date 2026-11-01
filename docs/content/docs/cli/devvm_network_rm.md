@@ -1,22 +1,23 @@
 ---
-title: devvm policy
-weight: 21
+title: devvm network rm
+weight: 23
 ---
 
-Show the network policy allowlist of this folder's VM
+Remove rules from this folder's VM
 
 ## Synopsis
 
-Show the allowlist of this folder's VM, which its network policy proxy reads: each policy file that has rules, in order (its image's, yours for every VM, the VM's own, its tokens' hosts), and the rules in it. devvm policy allow, deny and rm change the VM's own rules, or with -g yours for every VM; a change applies at once, to the next connection.
+Remove RULEs, as written (a deny with its !), from this folder's VM's own rules, or with -g yours for every VM. They apply at once.
 
 ```text
-devvm policy [flags]
+devvm network rm RULE... [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for policy
+  -g, --global   change your rules for every VM instead
+  -h, --help     help for rm
 ```
 
 ## Options inherited from parent commands
@@ -27,14 +28,11 @@ devvm policy [flags]
       --disk GiB            a new VM's disk in GiB, at least the image's (default: the size file's, else the image's)
       --from IMAGE          the container IMAGE a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)
       --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
-      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: on, asked in a terminal)
+      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g's, else asked in a terminal, and on without one)
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
       --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
 ```
 
 ## See also
 
-- [devvm](devvm.md): Open a shell in this folder's VM, creating it first
-- [devvm policy allow](devvm_policy_allow.md): Allow hosts for this folder's VM
-- [devvm policy deny](devvm_policy_deny.md): Deny hosts for this folder's VM
-- [devvm policy rm](devvm_policy_rm.md): Remove rules from this folder's VM
+- [devvm network](devvm_network.md): Show or change the network policy of this folder's VM

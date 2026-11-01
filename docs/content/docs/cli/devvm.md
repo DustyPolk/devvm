@@ -24,7 +24,7 @@ devvm [IMAGE] [flags]
   -h, --help                help for devvm
       --here                create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM
       --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
-      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: on, asked in a terminal)
+      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g's, else asked in a terminal, and on without one)
       --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json
       --no-git-protect      create the VM without .git protection
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
@@ -49,10 +49,8 @@ devvm [IMAGE] [flags]
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm layer](devvm_layer.md): Your own image layers
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl on devvm's own Lima home
-- [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
-- [devvm policy](devvm_policy.md): Show the network policy allowlist of this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it

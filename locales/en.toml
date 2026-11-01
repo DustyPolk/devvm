@@ -1189,6 +1189,13 @@ other = "{{.vm}}'s network log is empty so far."
 [net_off_policy]
 other = "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
 
+[net_default_failed]
+description = "reason is an error from the system, in English"
+other = "Reading or saving whether new VMs get network policy failed: {{.reason}}."
+
+[net_ask_global]
+other = "Only new VMs can be set to ask. To have devvm ask about each new VM, run devvm network -g ask."
+
 [no_vm_policy]
 other = "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."
 

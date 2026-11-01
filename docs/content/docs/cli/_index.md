@@ -22,13 +22,12 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm layer](devvm_layer.md): Your own image layers
 - [devvm layer new](devvm_layer_new.md): Start a layer of your own
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl on devvm's own Lima home
-- [devvm log](devvm_log.md): Show what this folder's VM connected to and what its network policy blocked
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
-- [devvm policy](devvm_policy.md): Show the network policy allowlist of this folder's VM
-- [devvm policy allow](devvm_policy_allow.md): Allow hosts for this folder's VM
-- [devvm policy deny](devvm_policy_deny.md): Deny hosts for this folder's VM
-- [devvm policy rm](devvm_policy_rm.md): Remove rules from this folder's VM
+- [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM
+- [devvm network deny](devvm_network_deny.md): Deny hosts for this folder's VM
+- [devvm network log](devvm_network_log.md): Show what this folder's VM connected to and what its network policy blocked
+- [devvm network rm](devvm_network_rm.md): Remove rules from this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm ports add](devvm_ports_add.md): Forward more ports from this folder's VM
 - [devvm ports rm](devvm_ports_rm.md): Stop forwarding some ports from this folder's VM

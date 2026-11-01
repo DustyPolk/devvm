@@ -118,7 +118,7 @@ The VM can write anything in the project folder, and devvm locks only `.git`. An
 
 ### The network
 
-- **Allowed hosts.** Anything an allowed host accepts can carry data out. github.com accepts a push from anyone with an account, including an attacker with an account of their own, and the npm registry accepts packages the same way. Keep allowlists short, and check what a VM reached with `devvm log`.
+- **Allowed hosts.** Anything an allowed host accepts can carry data out. github.com accepts a push from anyone with an account, including an attacker with an account of their own, and the npm registry accepts packages the same way. Keep allowlists short, and check what a VM reached with `devvm network log`.
 - **What your secrets allow.** A VM can push with a GitHub token it may use and spend Claude quota. Use a fine-grained GitHub token, and bind only the secrets a VM needs.
 - **VMs without network policy.** A VM without network policy reaches everything this machine can, including its services on `localhost` and your local network. It gets the secrets it uses as they are, and those secrets still work wherever it kept them after `devvm secret unuse`, `devvm secret rm` or `devvm network on`, so rotate them if that matters.
 - **Your browser.** Programs in a VM can open URLs in this machine's browser, and a page that a VM serves on a forwarded port runs in your browser like any other. From there it can reach the internet past network policy, and your services on `localhost`.

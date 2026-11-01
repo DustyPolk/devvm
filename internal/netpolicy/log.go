@@ -21,7 +21,7 @@ import (
 	"github.com/w3cj/devvm/internal/proxy"
 )
 
-// Log is a VM's event log, as devvm log shows it. NewLog sets every
+// Log is a VM's event log, as devvm network log shows it. NewLog sets every
 // field; tests change them.
 type Log struct {
 	Path string
@@ -211,7 +211,7 @@ func readLines(r *bufio.Reader, read *int64, line func(string)) (string, error) 
 	}
 }
 
-// FormatEvent turns one line of an event log into what devvm log shows:
+// FormatEvent turns one line of an event log into what devvm network log shows:
 // the time, allowed or BLOCKED, the host and port, and the rule that
 // allowed it, the request, the tokens put in, or why it was blocked. The
 // VM chose the host and path: control characters are dropped. false for a
@@ -259,7 +259,7 @@ func oneLine(s string) string {
 
 // WriteBlocked writes the log's blocks (Old's too) to w as a table, one row per host
 // and port, by when it was last blocked: the last time, how many times,
-// and the devvm policy allow command that allows it. A request refused
+// and the devvm network allow command that allows it. A request refused
 // whatever the allowlist says, or a host the policy doesn't take, gets -
 // instead: the command is meant to be pasted into a shell.
 func (l *Log) WriteBlocked(w io.Writer) error {
@@ -289,7 +289,7 @@ func (l *Log) WriteBlocked(w io.Writer) error {
 		if r == nil {
 			r = &row{host: hostPort(e), allow: "-"}
 			if rule, ok := proxy.AllowRule(e.Host, e.Port); ok && !e.Refused {
-				r.allow = "devvm policy allow " + rule
+				r.allow = "devvm network allow " + rule
 			}
 			rows[k] = r
 		}

@@ -1,4 +1,4 @@
-# log: what this folder's VM's proxy allowed and blocked, the last N, or
+# network log: what this folder's VM's proxy allowed and blocked, the last N, or
 # the blocks by host with the command that allows each.
 env DEVVM_MESSAGES=names
 env LOGS=$XDG_DATA_HOME/devvm/logs
@@ -6,62 +6,62 @@ env LOGS=$XDG_DATA_HOME/devvm/logs
 # No VM: nothing to show.
 mkdir $WORK/net
 cd $WORK/net
-! exec devvm log
+! exec devvm network log
 stderr '^devvm: no_vm dir=\S*/net$'
 
 # A VM with network policy that logged nothing yet.
 exec devvm --network-policy --no-git-protect base
-exec devvm log
+exec devvm network log
 stdout '^==> log_empty vm=devvm-net-[0-9a-f]{14}$'
 ! stderr .
 
 # Allowed and blocked connections and requests, oldest first, the last 50
 # or the last N.
 exec sh -c 'cp "$WORK/events.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
-exec devvm log
+exec devvm network log
 cmp stdout $WORK/log.txt
 ! stderr .
-exec devvm log -n 2
+exec devvm network log -n 2
 stdout '\A2026-10-09T10:01:00Z  BLOCKED  a.test:443  not on the allowlist\n2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist\n\z'
-exec devvm log --lines 0
+exec devvm network log --lines 0
 ! stdout .
-! exec devvm log -n x
+! exec devvm network log -n x
 stderr '^devvm: usage_error reason='
-! exec devvm log -n -1
+! exec devvm network log -n -1
 stderr '^devvm: usage_error reason='
 
 # The blocks by host and port, by when last blocked, with the command
 # that allows each: only for a host name or address, and never for a
 # request refused whatever the allowlist says.
-exec devvm log --blocked
+exec devvm network log --blocked
 cmp stdout $WORK/blocked.txt
-! exec devvm log --blocked -f
+! exec devvm network log --blocked -f
 stderr '^devvm: usage_error reason='
 
 # A log its proxy rotated: the old file's events come first, so the
 # history and the blocks are the same; one just rotated isn't empty.
 exec sh -c 'l=$(echo "$LOGS"/devvm-net-*.jsonl) && head -n 5 "$WORK/events.jsonl" > "$l.1" && tail -n +6 "$WORK/events.jsonl" > "$l"'
-exec devvm log
+exec devvm network log
 cmp stdout $WORK/log.txt
-exec devvm log --blocked
+exec devvm network log --blocked
 cmp stdout $WORK/blocked.txt
 exec sh -c 'l=$(echo "$LOGS"/devvm-net-*.jsonl) && cp "$WORK/events.jsonl" "$l.1" && : > "$l"'
-exec devvm log -n 1
+exec devvm network log -n 1
 stdout '\A2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist\n\z'
 exec sh -c 'rm "$LOGS"/devvm-net-*.jsonl.1'
 
 # A host and reason from the VM with control characters: dropped.
 exec sh -c 'cp "$WORK/evil.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
-exec devvm log --blocked
+exec devvm network log --blocked
 cmp stdout $WORK/evil-blocked.txt
-exec devvm log
+exec devvm network log
 cmp stdout $WORK/evil.txt
 
 # A VM without network policy logs nothing new, and devvm says so.
 mkdir $WORK/off
 cd $WORK/off
 exec devvm --no-network-policy --no-git-protect base
-exec devvm log
+exec devvm network log
 stdout '^==> log_empty vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_off_log vm=devvm-off-[0-9a-f]{14}$'
 
@@ -87,8 +87,8 @@ not an event
 -- blocked.txt --
 LAST                  COUNT  HOST                ALLOW WITH
 2026-10-09T10:00:07Z  1      api.github.com:443  -
-2026-10-09T10:01:00Z  2      a.test:443          devvm policy allow a.test
-2026-10-09T10:02:00Z  1      db.test:5432        devvm policy allow db.test:5432
+2026-10-09T10:01:00Z  2      a.test:443          devvm network allow a.test
+2026-10-09T10:02:00Z  1      db.test:5432        devvm network allow db.test:5432
 -- evil.jsonl --
 {"time":"2026-10-09T10:00:00Z","vm":"x","event":"blocked","host":"x;sh*","port":443,"method":"CONNECT","reason":"not on the allowlist"}
 {"time":"2026-10-09T10:00:01Z","vm":"x","event":"blocked","host":"e\u001b]0;x\u0007vil.test","port":443,"method":"CONNECT","reason":"r\u009bm\nfake"}

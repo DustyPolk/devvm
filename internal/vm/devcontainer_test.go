@@ -235,33 +235,63 @@ func TestChooseNet(t *testing.T) {
 	}
 }
 
-// The network policy devvm setup saved for new VMs chooses without
-// asking, unless it's ask; the flags beat it.
+// What devvm network -g or devvm setup saved: off makes a new VM without network policy,
+// unasked and unwarned even where it couldn't have it; on gives it
+// unasked, and a VM that can't have it is still made without it and
+// warned; either flag beats it, and with one a file that can't be read
+// isn't read.
 func TestChooseNetSaved(t *testing.T) {
+	noEgress := allNative()
+	delete(noEgress, backend.FeatureEgressProxy)
 	for _, tc := range []struct {
-		saved string
-		o     Options
-		want  bool
-		asked bool
+		name     string
+		saved    string
+		o        Options
+		caps     backend.Caps
+		dockerVM bool
+		want     string
+		warned   string
 	}{
-		{state.NetworkAsk, Options{}, false, true},
-		{state.NetworkOn, Options{}, true, false},
-		{state.NetworkOff, Options{}, false, false},
-		{state.NetworkOff, Options{NetworkPolicy: true}, true, false},
-		{state.NetworkOn, Options{NoNetworkPolicy: true}, false, false},
+		{"off", "off", Options{}, nil, false, "false", ""},
+		{"off, docker layer", "off", Options{}, nil, true, "false", ""},
+		{"off, no egress-proxy", "off", Options{}, noEgress, false, "false", ""},
+		{"off, --network-policy", "off", Options{NetworkPolicy: true}, nil, false, "true", ""},
+		{"on", "on", Options{}, nil, false, "true", ""},
+		{"on, --no-network-policy", "on", Options{NoNetworkPolicy: true}, nil, false, "false", ""},
+		{"on, docker layer", "on", Options{}, nil, true, "false", "net_off_docker_layer backend=fake vm=v"},
+		{"on, no egress-proxy", "on", Options{}, noEgress, false, "false", "net_off_backend backend=fake vm=v"},
+		{"ask", "ask", Options{}, nil, false, "true", ""},
+		{"unknown", "maybe", Options{}, nil, false, "error", ""},
+		{"unknown, --network-policy", "maybe", Options{NetworkPolicy: true}, nil, false, "true", ""},
+		{"unknown, --no-network-policy", "maybe", Options{NoNetworkPolicy: true}, nil, false, "false", ""},
 	} {
-		e, f, _ := upEnv(t, allNative())
-		if err := state.WriteNetwork(e.Dirs, tc.saved); err != nil {
-			t.Fatal(err)
-		}
-		asked := false
-		e.Proxy.Terminal = func() bool { return true }
-		e.Proxy.Note = func(msg.M) {}
-		e.Proxy.Confirm = func(msg.M) bool { asked = true; return false }
-		on, err := creation{Launch{e}}.chooseNet(&tc.o, false, f, "v")
-		if err != nil || on != tc.want || asked != tc.asked {
-			t.Errorf("saved %s, %+v: chooseNet = %v, %v (asked %v), want %v (asked %v)", tc.saved, tc.o, on, err, asked, tc.want, tc.asked)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			caps := tc.caps
+			if caps == nil {
+				caps = allNative()
+			}
+			e, f, _ := upEnv(t, caps)
+			if err := os.MkdirAll(e.Dirs.Config, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(e.Dirs.Network(), []byte(tc.saved+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			asked, warned := false, ""
+			e.Warn = func(m msg.M) { warned += m.Names() }
+			e.Proxy.Terminal = func() bool { return true }
+			e.Proxy.Note = func(msg.M) {}
+			e.Proxy.Confirm = func(msg.M) bool { asked = true; return true }
+			o := tc.o
+			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v")
+			got := fmt.Sprint(on)
+			if err != nil {
+				got = "error"
+			}
+			if got != tc.want || warned != tc.warned || asked != (tc.saved == state.NetworkAsk) {
+				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (warned %q)", got, asked, warned, tc.want, tc.warned)
+			}
+		})
 	}
 }
 

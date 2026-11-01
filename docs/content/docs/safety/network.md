@@ -33,14 +33,17 @@ https://devvm.dev/docs/safety/network/#turning-it-on-or-off
 Turn it on? [Y/n]
 ```
 
-`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. To answer it for every new VM, choose `on` or `off` for new VMs' network policy in `devvm setup`, and devvm makes each new VM that way without asking, while the flags still choose for one VM. The default there, `ask`, asks as above ([devvm setup](../using/settings.md#devvm-setup)). A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
+`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
+
+To answer the question for every new VM, save `on` or `off` with `devvm network -g on` or `devvm network -g off`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm makes each new VM that way without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, `on` or `off`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own network policy, and the two flags still choose for one new VM. devvm keeps the answer in `~/.config/devvm/network`, and when that file holds anything else, devvm names the file and refuses to create a VM without one of the flags.
 
 Some VMs can't have network policy. Those are VMs on a backend that can't confine a VM to its proxy, such as a [Docker](../internals/docker.md#network-policy) engine on another machine, and Docker VMs with the [docker layer](../backends/docker.md#the-docker-layer). devvm doesn't ask about those, and it makes the VM without network policy and warns you. If you pass `--network-policy` for such a VM, devvm refuses before it builds anything, because it never starts a VM you asked network policy for with an open network. For the same reason, it refuses `devvm network on` for a VM on a backend that can't confine it to its proxy.
 
 | | |
 | --- | --- |
-| `devvm network` | print this folder's VM's network policy as `devvm ls` shows it: `on`, `off` or `unenforced` |
+| `devvm network` | print this folder's VM's network policy as `devvm ls` shows it, `on`, `off` or `unenforced`, and then its [allowlist](#changing-rules) |
 | `devvm network on\|off` | change it from the VM's next start, which `devvm restart` gives you |
+| `devvm network -g [on\|off\|ask]` | show or change what new VMs get |
 
 Until the VM starts again, the change waits. If you turn network policy on while the VM is running, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you turn it off while the VM is running confined, its launches keep it on its proxy with your secrets still out of it, and they warn you that network policy turns off when the VM next starts.
 
@@ -58,8 +61,8 @@ The VM's proxy reads several policy files, in order, as one list:
 - devvm's rules for each shared tool in the VM's image (`node`, `claude` and the others), which allow its registries, downloads and APIs;
 - devvm's rules for each [built-in layer](../using/images.md#built-in-layers) in the VM's image, so the `docker` layer allows Docker's packages and the container registries Docker Hub and ghcr.io, and the `nix` layer allows Nix's binary cache, channels and flake registry;
 - `~/.config/devvm/layers/<name>.policy`, for each of your own layers in the VM's image;
-- `~/.config/devvm/policy`, your own rules for every VM, which `devvm policy -g` changes;
-- `~/.local/share/devvm/vms/<vm>.policy`, the rules for that VM only, which [`devvm policy`](#changing-rules) changes;
+- `~/.config/devvm/policy`, your own rules for every VM, which `devvm network allow`, `deny` and `rm` change with `-g`;
+- `~/.local/share/devvm/vms/<vm>.policy`, the rules for that VM only, which [`devvm network allow`, `deny` and `rm`](#changing-rules) change;
 - the hosts of the VM's secrets and logins, on port 443, which devvm adds.
 
 devvm leaves storage and paste sites out of its defaults on purpose, because they're easy ways to send data out. Rules never come from the project folder, because the VM can write it. The proxy reads each file again when it changes, so an edit applies at once, from the next connection. [How it works](../internals/network.md#policy-files) lists where devvm keeps its own files.
@@ -81,16 +84,25 @@ The proxy never dials a denied address, even for an allowed name that resolves t
 
 ### Changing rules
 
-`devvm policy` shows this folder's VM's allowlist. It prints each of the VM's policy files that has rules, with the file's path after `#`, and then its rules without their comments. For a VM without network policy, devvm notes that the rules don't apply.
+`devvm network` shows this folder's VM's allowlist after its network policy. It prints each of the VM's policy files that has rules, with the file's path after `#`, and then its rules without their comments:
+
+```text
+on
+# /Users/you/.local/share/devvm/assets/7fdd969856e644e8/layers/base.policy
+  ports.ubuntu.com
+  github.com
+# /Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy
+  example.com
+```
 
 | | |
 | --- | --- |
-| `devvm policy allow RULE...` | add the rules to the VM's own file |
-| `devvm policy deny RULE...` | add them as denies, adding `!` when it's missing |
-| `devvm policy rm RULE...` | remove the lines with these rules, a deny with its `!`, and warn about one that isn't there |
-| `-g`, `--global` | change `~/.config/devvm/policy`, for every VM, instead, which needs no VM |
+| `devvm network allow RULE...` | add the rules to the VM's own file |
+| `devvm network deny RULE...` | add them as denies, adding `!` when it's missing |
+| `devvm network rm RULE...` | remove the lines with these rules, a deny with its `!`, and warn about one that isn't there |
+| `-g`, `--global` | with `allow`, `deny` or `rm`, change `~/.config/devvm/policy`, for every VM, instead, which needs no VM |
 
-A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again. Each change applies at once, from the next connection. When `devvm log --blocked` or a blocked request in the VM suggests a `devvm policy allow` command, its rule is one that `devvm policy` takes.
+A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again. Each change applies at once, from the next connection. For a VM without network policy, devvm notes that the rules don't apply. When `devvm network log --blocked` or a blocked request in the VM suggests a `devvm network allow` command, its rule is one that `devvm network allow` takes.
 
 If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
@@ -111,15 +123,15 @@ In the VM, `devvm-why` prints what the proxy blocked lately, and a note before e
 
 In a VM with the [`nix` layer](../using/images.md#nix), Nix's daemon makes most of Nix's downloads, and devvm also points it at the proxy, so its downloads go through the same allowlists. The layer's allowlist has `cache.nixos.org` for Nix's binary cache, and `channels.nixos.org` and `releases.nixos.org` for its channels and flake registry, and GitHub, where most flakes' inputs come from, is in devvm's rules for every VM.
 
-Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with network policy and the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's allowlist allows `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. A VM can tell by how fast the cache answers whether another VM downloaded a public package, and a VM that downloads many packages can push other VMs' packages out of the cache, which only makes them download those again. A VM without network policy has no proxy, so it gets no shared cache: its Nix downloads from cache.nixos.org directly, and nothing runs or listens on this machine for it.
+Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with network policy and the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's allowlist allows `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm network log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. A VM can tell by how fast the cache answers whether another VM downloaded a public package, and a VM that downloads many packages can push other VMs' packages out of the cache, which only makes them download those again. A VM without network policy has no proxy, so it gets no shared cache: its Nix downloads from cache.nixos.org directly, and nothing runs or listens on this machine for it.
 
-When a package isn't in the binary cache, Nix builds it from source, and the build downloads its sources from their own hosts, such as `ftpmirror.gnu.org`. The proxy blocks those hosts until you allow them, so the build fails, and the error, `devvm-why` and `devvm log --blocked` name the host and the `devvm policy allow` command that allows it.
+When a package isn't in the binary cache, Nix builds it from source, and the build downloads its sources from their own hosts, such as `ftpmirror.gnu.org`. The proxy blocks those hosts until you allow them, so the build fails, and the error, `devvm-why` and `devvm network log --blocked` name the host and the `devvm network allow` command that allows it.
 
 ## Behind a company proxy
 
 When this machine reaches the internet only through a company proxy, the VM's proxy sends the requests it allows through that proxy. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, or their lowercase forms, from the shell you run it in. It passes them to the VM's proxy when the proxy starts, and when you run devvm again with different settings, devvm starts the VM's proxy again with the new ones. So run devvm from a shell that has your company's proxy settings, and after you change them, run devvm again in the folder or `devvm restart`.
 
-The VM's proxy still decides each request by the host name the VM asked for, against the same allowlists, and only then passes it on. It sends tunnels, which carry HTTPS and the requests it puts your secrets into, through `HTTPS_PROXY`'s proxy, and plain HTTP requests through `HTTP_PROXY`'s. It reaches the hosts that `NO_PROXY` names directly, and also `localhost` and loopback addresses. In `NO_PROXY`, `example.com` matches that host and its subdomains, `.example.com` matches only its subdomains, an address or a CIDR matches addresses, any entry can end in a port, and `*` matches every host. `devvm log` adds `through host:port` to each request that went through the company proxy.
+The VM's proxy still decides each request by the host name the VM asked for, against the same allowlists, and only then passes it on. It sends tunnels, which carry HTTPS and the requests it puts your secrets into, through `HTTPS_PROXY`'s proxy, and plain HTTP requests through `HTTP_PROXY`'s. It reaches the hosts that `NO_PROXY` names directly, and also `localhost` and loopback addresses. In `NO_PROXY`, `example.com` matches that host and its subdomains, `.example.com` matches only its subdomains, an address or a CIDR matches addresses, any entry can end in a port, and `*` matches every host. `devvm network log` adds `through host:port` to each request that went through the company proxy.
 
 The company proxy needs an `http://` address, such as `http://user:password@proxy.example.com:8080`, and a proxy without a port is on port 80. devvm doesn't start a VM with network policy while `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, and it tells you which setting to change. The company proxy's password stays on this machine. The VM never gets it, and devvm writes it into no log, no image and no process's arguments.
 
@@ -162,7 +174,7 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 
 ## Logs
 
-`devvm log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the secrets put in (`, token: github`), a blocked line has why it was blocked, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
+`devvm network log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the secrets put in (`, token: github`), a blocked line has why it was blocked, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
 
 ```text
 2026-10-09T10:00:00Z  BLOCKED  example.com:443  not on the allowlist
@@ -175,9 +187,9 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 | --- | --- |
 | `-n N`, `--lines N` | the last N (default 50) |
 | `-f`, `--follow` | then each new one as it happens, until Ctrl+C |
-| `--blocked` | the blocks instead, one row per host and port, by when last blocked: `LAST`, `COUNT`, `HOST` and `ALLOW WITH`, the `devvm policy allow` command that allows it |
+| `--blocked` | the blocks instead, one row per host and port, by when last blocked: `LAST`, `COUNT`, `HOST` and `ALLOW WITH`, the `devvm network allow` command that allows it |
 
-`ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. A VM without network policy logs nothing new, and `devvm log` says so. The proxy keeps each VM's log to its last 10 to 20 MiB by starting a new file once the current one reaches 10 MiB and keeping one older file, which `devvm log` reads too. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
+`ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. A VM without network policy logs nothing new, and `devvm network log` says so. The proxy keeps each VM's log to its last 10 to 20 MiB by starting a new file once the current one reaches 10 MiB and keeping one older file, which `devvm network log` reads too. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
 
 ## Not covered
 

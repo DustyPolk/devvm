@@ -1,4 +1,4 @@
-# Hosts every VM with network policy can reach. One rule per line; see `devvm policy` in the README.
+# Hosts every VM with network policy can reach. One rule per line; see `devvm network allow --help`.
 # Generic object storage and paste-like hosts are left out on purpose (easy ways to send data out);
 # allow them per VM when a project needs them.
 

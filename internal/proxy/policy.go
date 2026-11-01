@@ -63,7 +63,7 @@ func parseRule(line string) (rule, bool) {
 	return r, true
 }
 
-// ValidRule reports whether s is one rule, as devvm policy writes it: a
+// ValidRule reports whether s is one rule, as devvm network allow writes it: a
 // host name, *.name, ** or an address or CIDR (no zone), optionally with a
 // port and a leading !, and no spaces or comment. AllowRule's rules are
 // valid.

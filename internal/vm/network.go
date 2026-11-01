@@ -20,7 +20,8 @@ import (
 type Net struct{ *Env }
 
 // Network writes the folder's VM's network policy to w, as devvm ls
-// shows it: on, off or unenforced.
+// shows it (on, off or unenforced), then its allowlist: each policy file
+// its proxy reads that has rules, in order.
 func (e Net) Network(ctx context.Context, w io.Writer) error {
 	t, err := e.existing(ctx, "")
 	if err != nil {
@@ -34,8 +35,36 @@ func (e Net) Network(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(w, shown+"\n")
+	files, err := e.Proxy.PolicyFiles(t.f.Name, t.st.Get(state.KeyImage))
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, shown+"\n"); err != nil {
+		return err
+	}
+	return netpolicy.WriteRules(w, files)
+}
+
+// NetworkDefault writes to w whether new VMs get network policy: ask, on
+// or off.
+func (e Net) NetworkDefault(w io.Writer) error {
+	mode, err := state.ReadNetwork(e.Dirs)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, mode+"\n")
 	return err
+}
+
+// SetNetworkDefault saves whether new VMs get network policy (a
+// state.NetworkChoices value), as devvm setup does. The flags of devvm
+// [IMAGE] still choose for one VM.
+func (e Net) SetNetworkDefault(mode string) error {
+	if err := state.WriteNetwork(e.Dirs, mode); err != nil {
+		return err
+	}
+	e.Info(msg.NetworkDefault(mode))
+	return nil
 }
 
 // SetNetwork turns the folder's VM's network policy on or off, from its
@@ -87,7 +116,7 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	return nil
 }
 
-// LogOptions are what devvm log shows of the network log.
+// LogOptions are what devvm network log shows of the network log.
 type LogOptions struct {
 	Lines   int  // the last events shown
 	Follow  bool // then each new one, until ctx ends
@@ -121,15 +150,15 @@ func (e Net) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	return l.Write(ctx, w, o.Lines, o.Follow)
 }
 
-// policyVM finds the folder's VM for devvm policy, which must exist and
-// be made for this folder; noVM is the error when it doesn't exist.
-func (e Net) policyVM(ctx context.Context, noVM func(dir string) msg.M) (*found, error) {
+// policyVM finds the folder's VM for devvm network allow, deny and rm,
+// which must exist and be made for this folder.
+func (e Net) policyVM(ctx context.Context) (*found, error) {
 	t, err := e.find(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 	if !t.exists {
-		return nil, noVM(t.f.Dir)
+		return nil, msg.NoVMPolicy(t.f.Dir)
 	}
 	if err := e.checkFolder(t.f, t.st); err != nil {
 		return nil, err
@@ -146,25 +175,11 @@ func (e Net) policyVM(ctx context.Context, noVM func(dir string) msg.M) (*found,
 func widensPolicy(rules []string, deny, remove bool) string {
 	switch {
 	case !remove && !deny:
-		return "devvm policy allow"
+		return "devvm network allow"
 	case remove && slices.ContainsFunc(rules, func(r string) bool { return strings.HasPrefix(strings.TrimSpace(r), "!") }):
-		return "devvm policy rm"
+		return "devvm network rm"
 	}
 	return ""
-}
-
-// Policy writes the folder's VM's allowlist to w: each policy file its
-// proxy reads that has rules, in order.
-func (e Net) Policy(ctx context.Context, w io.Writer) error {
-	t, err := e.policyVM(ctx, msg.NoVM)
-	if err != nil {
-		return err
-	}
-	files, err := e.Proxy.PolicyFiles(t.f.Name, t.st.Get(state.KeyImage))
-	if err != nil {
-		return err
-	}
-	return netpolicy.WriteRules(w, files)
 }
 
 // PolicyChange adds rules to the folder's VM's own policy file (deny: as
@@ -174,7 +189,7 @@ func (e Net) Policy(ctx context.Context, w io.Writer) error {
 func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, global bool) error {
 	file, vm := e.Dirs.Policy(), ""
 	if !global {
-		t, err := e.policyVM(ctx, msg.NoVMPolicy)
+		t, err := e.policyVM(ctx)
 		if err != nil {
 			return err
 		}

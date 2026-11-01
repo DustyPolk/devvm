@@ -320,7 +320,7 @@ func TestWidenParentVM(t *testing.T) {
 			func() bool { return sshagent.Mode(reread(t, e, vm)) == sshagent.On },
 		},
 		{
-			"devvm policy allow", func() error { return n.PolicyChange(t.Context(), []string{"example.com"}, false, false, false) },
+			"devvm network allow", func() error { return n.PolicyChange(t.Context(), []string{"example.com"}, false, false, false) },
 			func() bool { return policyHas(t, e, vm, "example.com") },
 		},
 		{
@@ -355,7 +355,7 @@ func TestWidenParentVM(t *testing.T) {
 			t.Errorf("%s, answered yes, didn't change the VM", c.cmd)
 		}
 	}
-	// Taking access away asks nothing, and so does policy rm of an allow;
+	// Taking access away asks nothing, and so does network rm of an allow;
 	// rm of a deny asks.
 	asked := answers(t, e, false)
 	if err := n.SetNetwork(t.Context(), true); err != nil {
@@ -373,11 +373,11 @@ func TestWidenParentVM(t *testing.T) {
 	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, false, true, false); err != nil {
 		t.Fatal(names(err))
 	}
-	if want := "widen_parent_vm cmd=devvm policy rm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
-		t.Errorf("policy rm of a deny asked %q", *asked)
+	if want := "widen_parent_vm cmd=devvm network rm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
+		t.Errorf("network rm of a deny asked %q", *asked)
 	}
 	if !policyHas(t, e, vm, "!bad.example.com") {
-		t.Error("policy rm of a deny, answered no, removed it")
+		t.Error("network rm of a deny, answered no, removed it")
 	}
 	// In the parent folder itself, nothing asks.
 	e.Dir = web

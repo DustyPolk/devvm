@@ -1689,6 +1689,16 @@ func NetAsk() M {
 	return M{id: "net_ask"}
 }
 
+// NetAskGlobal is [net_ask_global]: "Only new VMs can be set to ask. To have devvm ask about each new VM, run devvm network -g ask."
+func NetAskGlobal() M {
+	return M{id: "net_ask_global"}
+}
+
+// NetDefaultFailed is [net_default_failed]: "Reading or saving whether new VMs get network policy failed: {{.reason}}."
+func NetDefaultFailed(reason string) M {
+	return M{id: "net_default_failed", vals: []val{{"reason", reason}}}
+}
+
 // NetDirectRoute is [net_direct_route]: "{{.vm}} reached the internet without going through its proxy, so devvm stopped it. Something outside devvm may have given it another network."
 func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
@@ -3188,6 +3198,8 @@ var specs = map[string]spec{
 	"net_about":                        {fields: []string{"vm"}},
 	"net_already":                      {fields: []string{"state", "vm"}},
 	"net_ask":                          {},
+	"net_ask_global":                   {},
+	"net_default_failed":               {fields: []string{"reason"}},
 	"net_direct_route":                 {fields: []string{"vm"}},
 	"net_docker_layer":                 {fields: []string{"backend", "vm"}},
 	"net_flag_ignored":                 {},

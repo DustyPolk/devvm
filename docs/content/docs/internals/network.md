@@ -68,7 +68,7 @@ The proxy decides each request as it does without a company proxy, by the host n
 
 The company proxy resolves the names it's sent, so the proxy can't hold it to the addresses it checked, and the floor changes for those requests. An address in the VM's request is checked as before, and a host whose last label is all digits or starts with `0x`, such as `127.1`, gets `400`, because a company proxy may read it as an address. For a name, the proxy asks this machine's resolver, for at most three seconds, and refuses the request when any answer is internal or denied, unless a rule names the address. A name this machine can't resolve, which is common behind a company proxy, goes to the company proxy unchecked when a rule names it, as itself or under `*.domain`. When only `**` allows it, the proxy refuses it with `403`, and the event log says that this machine can't resolve it and only `**` allows it. The proxy reads at most 64 KiB of the company proxy's answer to `CONNECT`. [The design note](design.md#a-company-proxy) explains what that leaves open, and how builds reach the company proxy through a proxy of their own.
 
-The event log's `upstream` field names the company proxy, by host and port, for each tunnel and request that went through it, and `devvm log` adds `through host:port` to the line. The proxy's own log names both company proxies by host and port when it starts. Neither holds the user or the password.
+The event log's `upstream` field names the company proxy, by host and port, for each tunnel and request that went through it, and `devvm network log` adds `through host:port` to the line. The proxy's own log names both company proxies by host and port when it starts. Neither holds the user or the password.
 
 ### How long a proxy runs
 
@@ -88,11 +88,11 @@ A VM's proxy reads these policy files, in this order, as one list. [Allowlists](
 | `assets/shared-tools/<name>.policy` (devvm's, written out) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
 | `assets/layers/<name>.policy` (devvm's, written out) | each built-in layer in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io, and `nix`'s has Nix's binary cache, channels and flake registry |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
-| `~/.config/devvm/policy` | every VM: your own rules (`devvm policy -g`) |
-| `~/.local/share/devvm/vms/<vm>.policy` | that VM only (`devvm policy`) |
+| `~/.config/devvm/policy` | every VM: your own rules (`devvm network allow`, `deny` and `rm` with `-g`) |
+| `~/.local/share/devvm/vms/<vm>.policy` | that VM only (`devvm network allow`, `deny` and `rm`) |
 | `~/.local/share/devvm/run/<vm>.secrets.policy` | the hosts of the VM's secrets and logins, on port 443 (devvm writes it) |
 
-Each change that `devvm policy` makes rewrites the file whole, through a link if the file is one, so a proxy never reads half of it.
+Each change that `devvm network allow`, `deny` or `rm` makes rewrites the file whole, through a link if the file is one, so a proxy never reads half of it.
 
 ## The VM's setup
 
@@ -118,7 +118,7 @@ VMs with network policy and the [nix layer](images.md#the-nix-layer) share their
 
 **The folder and its cap.** The proxy writes each file whole into a temporary file in the folder, then renames it into place, mode 600 in folders of 700. The cache's cap is the `nix-cache.size` [retention setting](../using/settings.md#retention), 10 GiB when it's off, which devvm passes as `-nix-cache-max` when the proxy starts. The cap counts the disk each file takes, in whole blocks, and a NAR being fetched counts at its full size from the start. When a new file would take the cache past its cap, the proxy deletes the least recently used files, down to nine tenths of the cap, and when the NARs being fetched leave no room, it refuses the fetch. One proxy fetches each NAR once, however many requests ask for it, and at most four at once. A hit marks a file used by setting its modification time. Every VM's proxy and devvm gc take one lock on the folder before they change it, so the cap holds while many VMs fill it, and a running total in the folder saves counting it for each file. devvm gc and the daily retention run trim the cache to its cap too, and `devvm gc --nix-cache` empties it.
 
-**Logs.** Each request is a `nix-cache` event in the VM's own [log](#log-files), with its path and what came of it: `hit`, `fetched`, or why it wasn't found or was refused. `devvm log` shows these as `cache`.
+**Logs.** Each request is a `nix-cache` event in the VM's own [log](#log-files), with its path and what came of it: `hit`, `fetched`, or why it wasn't found or was refused. `devvm network log` shows these as `cache`.
 
 **VMs without network policy** have no proxy, so they get no shared cache. Their Nix goes to cache.nixos.org directly, and nothing runs or listens on the host for them.
 
@@ -229,11 +229,11 @@ What "the process devvm started" is depends on the backend:
 
 The proxy writes every decision (`tunnel`, `intercept`, `forward`, `blocked`, or `nix-cache` for a request to the [shared Nix cache](#the-shared-nix-cache)) as a JSON line in `~/.local/share/devvm/logs/<vm>.jsonl`. A line holds the time, the VM, the host and port, the method and path when the proxy sees them, the rule or the reason, and the names of the secrets it put in, never their values.
 
-The proxy's own lines, such as what it loaded and what failed upstream, go to `<vm>.proxy.log` next to it. An upstream error stays there, because it can name addresses that the VM shouldn't learn. Only you can read both folders, and devvm's run logs never hold a VM's password. The VM chose the hosts and paths, so `devvm log` drops control characters in them.
+The proxy's own lines, such as what it loaded and what failed upstream, go to `<vm>.proxy.log` next to it. An upstream error stays there, because it can name addresses that the VM shouldn't learn. Only you can read both folders, and devvm's run logs never hold a VM's password. The VM chose the hosts and paths, so `devvm network log` drops control characters in them.
 
 The proxy is the only program that writes either log, and it rotates each one before a line would take it past 10 MiB, so a VM that runs for months keeps at most about 20 MiB of each. A line never spans two files, and lines from connections at the same time are written one after another, so a rotation loses none and splits none. It renames `<vm>.jsonl` to `<vm>.jsonl.1`, which replaces the one that was there, and starts a new `<vm>.jsonl`. `<vm>.proxy.log` is also the proxy process's output, where its last error goes when it stops, so the proxy copies it to `<vm>.proxy.log.1` and empties it instead, and that error still reaches the current file. Every log file and its `.1` file is readable only by you (mode 600).
 
-`devvm log` reads `<vm>.jsonl.1` before `<vm>.jsonl`, so the history it shows and the blocks that `devvm log --blocked` counts carry on across a rotation. `devvm log -f` reads the renamed file to its end and then follows the new one from its start. `devvm rm` deletes the `.1` files with the rest of the VM's logs.
+`devvm network log` reads `<vm>.jsonl.1` before `<vm>.jsonl`, so the history it shows and the blocks that `devvm network log --blocked` counts carry on across a rotation. `devvm network log -f` reads the renamed file to its end and then follows the new one from its start. `devvm rm` deletes the `.1` files with the rest of the VM's logs.
 
 ## devvm _proxy
 
