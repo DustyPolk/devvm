@@ -48,7 +48,7 @@ Run the tasks with `mise run <task>`:
 | `fmt` | formats Go code |
 | `lint` | runs `lint:code` and `lint:docs` |
 | `lint:code` | runs golangci-lint, shellcheck, actionlint and zizmor |
-| `lint:docs` | runs the docs linters, the message link check and the command line check |
+| `lint:docs` | runs the docs linters, the message link check and the command line check, and builds the site, which fails on any warning |
 | `test` | runs the tests with the race detector and coverage |
 | `vuln` | runs govulncheck |
 | `deadcode` | lists functions nothing calls outside the tests |
@@ -390,6 +390,8 @@ The site is [Hugo](https://gohugo.io) with the [Hextra](https://imfing.github.io
 | markdownlint-cli2 | Markdown | `.markdownlint-cli2.yaml` |
 | Vale | the style rules | `.vale.ini`, `.vale/styles/devvm/` |
 | lychee (`--offline`) | links to pages and files | |
+
+It also builds the site with Hugo's `--panicOnWarning`, into a temporary folder it removes, so any warning fails it. That includes a deprecation, such as a template that reads `site.Data` where Hugo wants `hugo.Data`, so a Hugo upgrade that deprecates something the templates use fails here before the feature is removed.
 
 ### The CLI reference
 

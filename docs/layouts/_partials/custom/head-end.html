@@ -19,7 +19,7 @@
    doesn't exist. */ -}}
 {{- $selectors := slice -}}
 {{- $rules := slice -}}
-{{- range $path, $name := site.Data.sections -}}
+{{- range $path, $name := hugo.Data.sections -}}
   {{- $page := site.GetPage (printf "/docs/%s" $path) -}}
   {{- if not $page }}{{ errorf "data/sections.yaml: no page docs/%s" $path }}{{ end -}}
   {{- $svg := resources.Get (printf "icons/%s.svg" $name) -}}

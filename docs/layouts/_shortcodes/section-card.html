@@ -5,7 +5,7 @@
    Hextra's card takes an icon only from its own set, so ours goes in its title, where the title's flex
    row spaces them the same. */ -}}
 {{- $path := .Get "path" -}}
-{{- $icon := index site.Data.sections $path -}}
+{{- $icon := index hugo.Data.sections $path -}}
 {{- if not $icon }}{{ errorf "section-card: data/sections.yaml has no icon for %s (%s)" $path .Position }}{{ end -}}
 {{- with site.GetPage (printf "/docs/%s" $path) -}}
   {{- $title := printf "%s<span>%s</span>" (partial "icon.html" (dict "name" $icon "position" $.Position)) (.LinkTitle | htmlEscape) -}}

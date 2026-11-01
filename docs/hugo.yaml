@@ -41,7 +41,7 @@ menu:
         icon: dinkie-github
 
 params:
-  description: "One VM for every folder: an isolated sandbox with your project's toolchain, ready for you or an agent to start coding."
+  description: "One VM for every project: an isolated sandbox with your project's toolchain, ready for you or an agent to start coding."
   # The social preview card, for every page's og:image and twitter:image (static/images/).
   images:
     - /images/social-card.png

@@ -60,6 +60,9 @@ run = [
   "go test ./internal/msg -run '^TestDocLinks$'",
   # Command lines: every devvm command line in the repo is one of devvm's.
   "go test ./internal/cli -run '^TestCommandLines$'",
+  # The site builds with no warning, a deprecation's included, into a folder
+  # the run removes.
+  "d=$(mktemp -d) && trap 'rm -rf \"$d\"' EXIT && hugo -s docs --quiet --panicOnWarning -d \"$d\"",
 ]
 
 [tasks.test]
