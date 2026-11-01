@@ -41,7 +41,8 @@ import (
 //     to the VM's own loopback;
 //   - it listens on the host's loopback alone (127.0.0.1 and ::1), on the
 //     port the VM listens on, for servers on the VM's loopback or all its
-//     addresses: every port from 1024 up, or the VM's listed ports alone
+//     addresses, but never a link's listener, in 127.77.0.0/16
+//     (IsLinkAddr): every port from 1024 up, or the VM's listed ports alone
 //     (Only); never on a port the host has on any address (no SO_REUSEADDR:
 //     platform.ListenExclusive), nor on a port devvm records for any VM
 //     (ssh, proxy, decider, listed forwards) but the VM's own listed ones;
@@ -432,14 +433,15 @@ func procAddr(h string) (netip.Addr, bool) {
 }
 
 // dialAddr is where in the VM a forwarded connection to a server on a goes:
-// its loopback alone.
+// its loopback alone. A link's listener (IsLinkAddr) is never forwarded,
+// so a link isn't put on the host's loopback.
 func dialAddr(a netip.Addr) (netip.Addr, bool) {
 	switch {
 	case a == netip.IPv4Unspecified():
 		return netip.MustParseAddr("127.0.0.1"), true
 	case a == netip.IPv6Unspecified():
 		return netip.IPv6Loopback(), true
-	case a.IsLoopback():
+	case a.IsLoopback() && !IsLinkAddr(a):
 		return a, true
 	}
 	return netip.Addr{}, false
@@ -547,8 +549,14 @@ func (o SSH) watch(script []byte, log io.Writer) func(ctx context.Context) (io.R
 
 // relay carries conn through a channel of the master's.
 func (o SSH) relay(ctx context.Context, conn net.Conn, host string, port int) {
+	pipeSSH(ctx, conn, o.relayArgs(host, port))
+}
+
+// pipeSSH carries conn through ssh run with args (-W), until either side
+// ends, then closes conn.
+func pipeSSH(ctx context.Context, conn net.Conn, args []string) {
 	defer func() { _ = conn.Close() }()
-	cmd := exec.CommandContext(ctx, "ssh", o.relayArgs(host, port)...) //nolint:gosec // devvm's own arguments
+	cmd := exec.CommandContext(ctx, "ssh", args...) //nolint:gosec // devvm's own arguments
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return

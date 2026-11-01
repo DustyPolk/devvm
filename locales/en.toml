@@ -1935,6 +1935,10 @@ other = "The network policy proxy failed: {{.reason}}."
 description = "reason is an error from the system or the flag parser, in English"
 other = "The port forwarder failed: {{.reason}}."
 
+[link_session_failed]
+description = "reason is an error from the system, in English"
+other = "Carrying the VM's links failed: {{.reason}}."
+
 [docker_connect_failed]
 description = "reason is an error from the system, docker or the flag parser, in English"
 other = "Reaching {{.vm}}'s sshd through Docker failed: {{.reason}}."

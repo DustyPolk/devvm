@@ -113,12 +113,12 @@ func TestJSONShapes(t *testing.T) {
 			"network log",
 			logOutput{Events: []logEventJSON{{
 				Time: "t", Event: "forward", Host: "h", Port: 443, Method: "GET", Path: "/",
-				Rule: "h", Reason: "r", Agent: "claude", Secrets: []string{"github"}, Refused: true, Upstream: "proxy:3128",
+				Rule: "h", Reason: "r", Agent: "claude", Secrets: []string{"github"}, Refused: true, Upstream: "proxy:3128", Target: "devvm-db",
 			}}},
 			[]string{
 				"events[].agent: string", "events[].event: string", "events[].host: string", "events[].method: string", "events[].path: string",
 				"events[].port: number", "events[].reason: string", "events[].refused: bool", "events[].rule: string", "events[].secrets[]: string",
-				"events[].time: string", "events[].upstream: string",
+				"events[].target: string", "events[].time: string", "events[].upstream: string",
 			},
 		},
 		{

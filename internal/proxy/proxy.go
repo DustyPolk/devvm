@@ -150,6 +150,8 @@ type Event struct {
 	Refused bool     `json:"refused,omitempty"` // blocked whatever the allowlist says: no rule allows it
 	// The company proxy it went through (-upstream), as host:port: never its credentials.
 	Upstream string `json:"upstream,omitempty"`
+	// The VM a link's connection went to (devvm _links's events, Host the link's name): never the proxy's.
+	Target string `json:"target,omitempty"`
 }
 
 // A block and its number (the first is 1), for /blocked/new.

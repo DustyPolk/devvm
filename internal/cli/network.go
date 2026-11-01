@@ -234,6 +234,7 @@ type logEventJSON struct {
 	Secrets  []string `json:"secrets,omitempty"`
 	Refused  bool     `json:"refused,omitempty"`
 	Upstream string   `json:"upstream,omitempty"`
+	Target   string   `json:"target,omitempty"`
 }
 
 // logOutput is devvm network log --json; blockedOutput, with --blocked.
@@ -280,7 +281,7 @@ func printLogJSON(cmd *cobra.Command, u *ui.UI, o vm.LogOptions) error {
 	for _, e := range events {
 		out.Events = append(out.Events, logEventJSON{
 			Time: e.Time, Event: e.Event, Host: e.Host, Port: e.Port, Method: e.Method, Path: e.Path, Rule: e.Rule,
-			Reason: e.Reason, Agent: e.Agent, Secrets: e.Secrets, Refused: e.Refused, Upstream: e.Upstream,
+			Reason: e.Reason, Agent: e.Agent, Secrets: e.Secrets, Refused: e.Refused, Upstream: e.Upstream, Target: e.Target,
 		})
 	}
 	return printJSON(u, out)

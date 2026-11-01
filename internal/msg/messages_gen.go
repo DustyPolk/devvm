@@ -1709,6 +1709,11 @@ func LinkSelf(vm string) M {
 	return M{id: "link_self", vals: []val{{"vm", vm}}}
 }
 
+// LinkSessionFailed is [link_session_failed]: "Carrying the VM's links failed: {{.reason}}."
+func LinkSessionFailed(reason string) M {
+	return M{id: "link_session_failed", vals: []val{{"reason", reason}}}
+}
+
 // LinkTargetNamed is [link_target_named]: "{{.vm}} reaches {{.target}} as {{.name}} already, and it has one name for each VM it links to. Leave out --as, or run devvm link rm for those links first."
 func LinkTargetNamed(name string, target string, vm string) M {
 	return M{id: "link_target_named", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
@@ -3432,6 +3437,7 @@ var specs = map[string]spec{
 	"link_ports_invalid":               {fields: []string{"value"}},
 	"link_removed":                     {fields: []string{"name", "port", "vm"}},
 	"link_self":                        {fields: []string{"vm"}},
+	"link_session_failed":              {fields: []string{"reason"}},
 	"link_target_named":                {fields: []string{"name", "target", "vm"}},
 	"link_trust":                       {fields: []string{"target", "vm"}},
 	"link_unknown_target":              {fields: []string{"target"}},

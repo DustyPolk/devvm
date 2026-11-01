@@ -22,6 +22,10 @@ func TestFormatEvent(t *testing.T) {
 		{`{"time":"T","event":"blocked","host":"::1","port":80,"reason":"no"}`, "T  BLOCKED  [::1]:80  no"},
 		{`{"time":"T\u001b[2J","event":"forward","host":"a.test","port":443,"method":"GET","path":"/\n\u009bx\t"}`, "T[2J  allowed  a.test:443  GET /x"},
 		{`{"time":"T","event":"nix-cache","host":"cache.nixos.org","port":443,"method":"GET","path":"/nix/x.narinfo","reason":"hit"}`, "T  cache    cache.nixos.org:443  GET /nix/x.narinfo: hit"},
+		{`{"time":"T","event":"link","host":"db","port":5432,"target":"devvm-db-x"}`, "T  link     db:5432  to devvm-db-x"},
+		{`{"time":"T","event":"link_refused","host":"db","port":5432,"target":"devvm-db-x","reason":"unpublished"}`, "T  REFUSED  db:5432  to devvm-db-x: unpublished"},
+		{`{"time":"T","event":"link_target_stopped","host":"db","port":80,"target":"devvm-db-x"}`, "T  REFUSED  db:80  to devvm-db-x: it isn't running"},
+		{`{"time":"T","event":"link_limit","host":"db","port":80,"target":"devvm-db-x","reason":"256"}`, "T  REFUSED  db:80  256 connections carried already"},
 		{`not json`, ""},
 		{`{"time":"T"}`, ""},
 		{``, ""},
@@ -296,5 +300,44 @@ func TestWriteBlocked(t *testing.T) {
 	events, err := (&Log{Path: path}).Events(3)
 	if err != nil || len(events) != 3 || events[0].Host != "fd00::1" || events[2].Host != "api.github.com" {
 		t.Errorf("Events(3) = %+v, %v", events, err)
+	}
+}
+
+// A link's events go into the VM's event log, the user's alone, beside
+// the proxy's, with the time and the VM; a log past the proxy's limit is
+// rotated first.
+func TestAppendEvent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "devvm-app.jsonl")
+	if err := os.WriteFile(path, []byte(event(1)), 0o644); err != nil { //nolint:gosec // a mode AppendEvent leaves
+		t.Fatal(err)
+	}
+	if err := AppendEvent(path, "devvm-app", Event{Event: "link", Host: "db", Port: 5432, Target: "devvm-db"}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := (&Log{Path: path}).Events(10)
+	if err != nil || len(events) != 2 || events[1].VM != "devvm-app" || events[1].Time == "" || events[1].Target != "devvm-db" {
+		t.Fatalf("Events = %+v, %v", events, err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("the log: %v, %v", fi, err)
+	}
+	if err := os.Truncate(path, eventLogMax); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendEvent(path, "devvm-app", Event{Event: "link_limit", Host: "db", Port: 5432, Reason: "256"}); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path + ".1"); err != nil || fi.Size() != eventLogMax {
+		t.Errorf("the old log: %v, %v", fi, err)
+	}
+	if b, err := os.ReadFile(path); err != nil || strings.Count(string(b), "\n") != 1 || !strings.Contains(string(b), `"link_limit"`) { //nolint:gosec // the test's own file
+		t.Errorf("the new log: %q, %v", b, err)
+	}
+	nf := filepath.Join(t.TempDir(), "new.jsonl")
+	if err := AppendEvent(nf, "devvm-app", Event{Event: "link"}); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(nf); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("a new log: %v, %v", fi, err)
 	}
 }

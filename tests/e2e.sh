@@ -6,7 +6,8 @@
 #                project makes a VM from base in a project folder, opens it from a subfolder in that
 #                subfolder, and checks its mounts, a file watcher in it (the VM's edits seen, none
 #                of this machine's: Lima's mounts pass on no file events), no Docker, every
-#                port through devvm's forwarder (never a port a program here has), ssh by
+#                port through devvm's forwarder (never a port a program here has, nor a link's
+#                address), ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
 #                program here has, a bad list a usage error), a mistyped command refused with a suggestion,
@@ -453,6 +454,11 @@ host_port_kept() { local hp out r=1
   echo "$3 not forwarded again"; return 1; }
 # lima_serve VM PORTS...: a server in the VM on each port, every address, left running.
 lima_serve() { local p; for p in "${@:2}"; do in_vm "$1" "setsid -f python3 -m http.server -b 0.0.0.0 $p </dev/null >/dev/null 2>&1"; done; }
+# vm_say VM ADDR PORT WORD: a server in a Lima VM on ADDR:PORT alone that answers each connection with
+# WORD and a newline (pkill -f '[d]evvm-e2e-say' ends it).
+vm_say() {
+  in_vm "$1" "setsid -f python3 -c 'import socket,sys; s=socket.socket(); s.bind((sys.argv[1],int(sys.argv[2]))); s.listen(5); [(lambda c: (c.sendall(sys.argv[3].encode()+bytes([10])), c.close()))(s.accept()[0]) for _ in iter(int,1)]' $2 $3 $4 devvm-e2e-say </dev/null >/dev/null 2>&1"
+}
 # lima_boot VM: its boot's ID.
 lima_boot() { in_vm "$1" 'cat /proc/sys/kernel/random/boot_id'; }
 # ports_live DIR VM PORT SERVE BOOT: VM runs, listing ports without PORT, with a server in it on
@@ -880,7 +886,17 @@ check "a port a program here has on every address keeps its localhost connection
   out=\$(nc -w 2 127.0.0.1 47161 </dev/null); echo \"47161 answered by: \${out:-nothing}\"; [[ \$out == host-program ]] &&
   grep -q 'port 47161: not forwarded' '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.log'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
-in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4716"; pkill -f "[d]evvm-e2e-udp"' >/dev/null 2>&1
+# A server on a link's address (127.77.0.0/16) is never forwarded, while the VM's own on 127.0.0.1
+# with the same port is (the control).
+vm_say "$vm" 127.77.0.1 47163 link
+vm_say "$vm" 127.77.0.1 47164 link
+vm_say "$vm" 127.0.0.1 47164 own
+check "a server on a link's address isn't forwarded, the VM's own on 127.0.0.1 with its port is" bash -c "
+  limactl shell --workdir / $vm ss -Hltn 'sport = :47163' </dev/null | grep -q '127\.77\.0\.1:47163' &&
+  for i in \$(seq 20); do [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && break; sleep 1; done &&
+  [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && sleep 3 && ! nc -z 127.0.0.1 47163 && ! nc -z ::1 47163 &&
+  ! grep -q 'port 47163' '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.log'"
+in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4716"; pkill -f "[d]evvm-e2e-udp"; pkill -f "[d]evvm-e2e-say"' >/dev/null 2>&1
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
   grep -q -- '--- PASS: TestE2EExecQuoting'"

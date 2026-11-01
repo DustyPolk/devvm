@@ -1,0 +1,231 @@
+package vm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// Why a link's connection is refused, besides CheckLink's reasons, as its
+// event has it (vmssh.EventLinkRefused).
+const (
+	LinkRemoved = "removed" // the client no longer has the link
+	LinkNoSSH   = "ssh"     // the target's ssh can't be reached as devvm pins it
+	linkUnread  = "unread"  // the states can't be read
+)
+
+// How often a link session asks whether the client still runs as it
+// did, and reads its links again.
+const (
+	linkAliveEvery = 5 * time.Second
+	linkSyncEvery  = time.Second
+)
+
+// Session carries client vm's links while it runs, as devvm _links does,
+// detached, its lines going to log: the client reached over its own ssh,
+// as devvm pins it, and each connection checked against the states as
+// they are then (linkConn). It ends once the client stops, or has no
+// links.
+func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		return err
+	}
+	if !st.Exists() {
+		return fmt.Errorf("%s: no such VM", vm)
+	}
+	c, err := e.Registry.For(e.Dirs, st, "")
+	if err != nil {
+		return err
+	}
+	b := c.Backend
+	if err := e.Registry.Require(b, vm, linkFeatures()...); err != nil {
+		return err
+	}
+	if in, err := b.Inspect(ctx, vm); err != nil || in.Status != backend.StatusRunning {
+		return msg.VMNotRunning(vm)
+	}
+	start, err := b.StartID(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if start == "" {
+		return msg.VMNotRunning(vm)
+	}
+	ssh, err := e.linkSSH(ctx, b, vm)
+	if err != nil {
+		return err
+	}
+	events := linkEvents{path: netpolicy.EventLog(e.Dirs, vm), vm: vm, mu: &sync.Mutex{}}
+	s := &vmssh.Links{
+		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log,
+		Every: linkAliveEvery, Sync: linkSyncEvery, Tick: 2 * time.Second,
+		Alive: func(ctx context.Context) bool {
+			id, err := b.StartID(ctx, vm)
+			return err == nil && id == start
+		},
+		Want: func() ([]vmssh.Link, error) { return e.sessionLinks(vm) },
+		Check: func(ctx context.Context, l vmssh.Link) (vmssh.LinkTarget, string, string) {
+			return e.linkConn(ctx, vm, l)
+		},
+		Event: events.add,
+		Failed: func(l vmssh.Link, err error) {
+			e.Warn(Link{Name: l.Name, Port: l.Port}.PortTaken(vm).Because(err))
+		},
+	}
+	return s.Run(ctx)
+}
+
+// sessionLinks returns a client's links as its session carries them:
+// every one its state has, whether it applies now or not, as each
+// connection is checked again. A client that's gone has none.
+func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil || !st.Exists() {
+		return nil, err
+	}
+	links, err := ReadLinks(st)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]vmssh.Link, len(links))
+	for i, l := range links {
+		out[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
+	}
+	return out, nil
+}
+
+// linkConn checks a connection to one of client's links, from the states
+// as they are now: the client still has the link, it applies (CheckLink:
+// the target's ID, its published port, the policy rule), the target's
+// backend has links, and the target runs, as its backend says, and is
+// reached as devvm pins it. It returns how to reach the target, or the
+// event and why not. It never starts the target.
+func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link) (vmssh.LinkTarget, string, string) {
+	refused := func(why string, err error) (vmssh.LinkTarget, string, string) {
+		if err != nil {
+			why += ": " + err.Error()
+		}
+		return vmssh.LinkTarget{}, vmssh.EventLinkRefused, why
+	}
+	cst, err := state.ReadVM(e.Dirs, client)
+	if err != nil {
+		return refused(linkUnread, err)
+	}
+	links, err := ReadLinks(cst)
+	if err != nil {
+		return refused(linkUnread, err)
+	}
+	i := slices.IndexFunc(links, func(k Link) bool { return k.Addr == l.Addr && k.Port == l.Port })
+	if i < 0 {
+		return refused(LinkRemoved, nil)
+	}
+	why, tst, err := CheckLink(e.Dirs, cst, links[i])
+	switch {
+	case err != nil:
+		return refused(linkUnread, err)
+	case why != "":
+		return refused(why, nil)
+	}
+	c, err := e.Registry.For(e.Dirs, tst, "")
+	if err != nil {
+		return refused(linkUnread, err)
+	}
+	target := tst.Name()
+	if err := e.Registry.Require(c.Backend, target, linkFeatures()...); err != nil {
+		return refused(LinkNoSSH, err)
+	}
+	if in, err := c.Backend.Inspect(ctx, target); err != nil || in.Status != backend.StatusRunning {
+		return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
+	}
+	start, err := c.Backend.StartID(ctx, target)
+	if err != nil || start == "" {
+		return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
+	}
+	ssh, err := e.linkSSH(ctx, c.Backend, target)
+	if err != nil {
+		return refused(LinkNoSSH, err)
+	}
+	return vmssh.LinkTarget{SSH: ssh, Start: start}, "", ""
+}
+
+// linkSSH is how devvm's own ssh reaches a running VM for links: its
+// backend's ssh (reviewed), with the VM's own key and the host key devvm
+// pins for it, on a host loopback port or through the backend's
+// ProxyCommand.
+func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh.SSH, error) {
+	if !e.Registry.Allowed(b, backend.FeatureSSH) {
+		return vmssh.SSH{}, fmt.Errorf("%s: the %s backend's ssh isn't usable", vm, b.Name())
+	}
+	t, err := b.SSH(ctx, vm)
+	if err != nil {
+		return vmssh.SSH{}, err
+	}
+	key := ""
+	for _, o := range t.Options {
+		if strings.EqualFold(o.Key, "IdentityFile") {
+			key = strings.Trim(o.Value, `"`)
+			break
+		}
+	}
+	switch {
+	case t.User == "" || key == "":
+		return vmssh.SSH{}, fmt.Errorf("%s: no user or key for its ssh", vm)
+	case strings.ContainsAny(t.ProxyCommand, "\r\n"):
+		return vmssh.SSH{}, fmt.Errorf("%s: its ssh's command has a line break", vm)
+	case t.ProxyCommand == "" && (t.Host != "127.0.0.1" || t.Port <= 0):
+		return vmssh.SSH{}, fmt.Errorf("%s: its ssh isn't on a host loopback port", vm)
+	}
+	pinned, err := hostKeyPinned(e.Dirs.KnownHosts(), vm)
+	if err != nil {
+		return vmssh.SSH{}, err
+	}
+	if !pinned {
+		return vmssh.SSH{}, fmt.Errorf("%s: no host key pinned", vm)
+	}
+	return vmssh.SSH{VM: vm, User: t.User, Key: key, KnownHosts: e.Dirs.KnownHosts(), Port: t.Port, Proxy: t.ProxyCommand}, nil
+}
+
+// hostKeyPinned reports whether devvm's known hosts file has a host key
+// for vm, which devvm's ssh then checks the VM's against (HostKeyAlias).
+func hostKeyPinned(path, vm string) (bool, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // devvm's own file
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for l := range strings.SplitSeq(string(data), "\n") {
+		if strings.HasPrefix(l, vm+" ") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// linkEvents writes a link session's events to its client's event log,
+// one at a time.
+type linkEvents struct {
+	path, vm string
+	mu       *sync.Mutex
+}
+
+// add writes one event: the link's name as its host, and its target.
+func (le linkEvents) add(event string, l vmssh.Link, why string) {
+	le.mu.Lock()
+	defer le.mu.Unlock()
+	_ = netpolicy.AppendEvent(le.path, le.vm, netpolicy.Event{Event: event, Host: l.Name, Port: l.Port, Target: l.Target, Reason: why})
+}

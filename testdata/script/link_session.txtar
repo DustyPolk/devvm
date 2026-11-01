@@ -1,0 +1,35 @@
+# devvm _links VM: a running client VM's link session, which devvm starts
+# detached. It takes the client's name alone, refuses a VM that isn't
+# there or isn't running, and with no links ends at once, having started
+# nothing.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# Usage errors, before anything runs.
+! exec devvm _links
+stderr '^devvm: arg_missing args=VM command=devvm _links$'
+stderr '^usage_help command=devvm _links$'
+! exec devvm _links devvm-a-0123456789abcd devvm-b-0123456789abcd
+stderr '^devvm: args_too_many '
+! exec devvm _links --vm devvm-a-0123456789abcd
+stderr '^devvm: flag_unknown command=devvm _links flag=--vm$'
+! exec devvm _links ''
+stderr '^devvm: '
+! exec devvm _links devvm-nope-0123456789abcd
+stderr '^devvm: link_session_failed reason=devvm-nope-0123456789abcd: no such VM$'
+! exists $XDG_DATA_HOME/devvm/run
+
+# A running client without links: the session ends at once, with no ssh
+# of its own and no socket.
+mkdir $WORK/app
+cd $WORK/app
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'devvm _links "$(cd "$VMS" && ls | grep "^devvm-app-[0-9a-f]*$")"'
+stderr '^devvm links: devvm-app-[0-9a-f]{14} has no links$'
+exec sh -c 'grep "^ssh .*link-" "$STUB_LOG" || true; ls "$XDG_DATA_HOME"/devvm/run | grep "^link-" || true'
+! stdout .
+
+# A stopped client is refused.
+exec devvm stop
+! exec sh -c 'devvm _links "$(cd "$VMS" && ls | grep "^devvm-app-[0-9a-f]*$")"'
+stderr '^devvm: vm_not_running vm=devvm-app-[0-9a-f]{14}$'

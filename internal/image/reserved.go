@@ -13,7 +13,7 @@ var Reserved = []string{
 	"host", "images", "layer", "limactl", "ls", "network", "ports", "rebuild", "restart", "retention",
 	"rm", "secret", "setup", "size", "space", "ssh-agent", "stop", "tools", "version",
 	// The hidden ones.
-	"_docker-connect", "_docker-ports", "_lima-ports", "_msg", "_proxy", "_qemu", "_refresh-tools",
+	"_docker-connect", "_docker-ports", "_lima-ports", "_links", "_msg", "_proxy", "_qemu", "_refresh-tools",
 	"_smolvm-ports",
 	// Their commands.
 	"add", "allow", "deny", "export", "get", "log", "new", "set", "unuse", "update", "use",

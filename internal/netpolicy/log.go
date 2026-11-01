@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -271,6 +272,8 @@ func FormatEvent(line string) (string, bool) {
 		d += ", decrypted"
 	case "nix-cache": // the shared Nix cache: a hit, fetched, or why not
 		what, d = "cache", e.Method+" "+e.Path+": "+e.Reason
+	case "link", "link_refused", "link_target_stopped", "link_limit": // devvm _links's
+		what, d = linkEvent(e)
 	}
 	if len(e.Secrets) > 0 {
 		d += ", token: " + strings.Join(e.Secrets, ",")
@@ -280,6 +283,56 @@ func FormatEvent(line string) (string, bool) {
 	}
 	return fmt.Sprintf("%s  %-7s  %s  %s", oneLine(e.Time), what, hostPort(e.Host, e.Port), oneLine(d)), true
 }
+
+// linkEvent is what devvm network log shows of a link's event, whose host
+// is the link's name: carried to its target, or refused and why.
+func linkEvent(e proxy.Event) (what, d string) {
+	switch e.Event {
+	case "link":
+		return "link", "to " + e.Target
+	case "link_target_stopped":
+		return "REFUSED", "to " + e.Target + ": it isn't running"
+	case "link_limit":
+		return "REFUSED", e.Reason + " connections carried already"
+	}
+	return "REFUSED", "to " + e.Target + ": " + e.Reason
+}
+
+// AppendEvent adds an event to a VM's event log (EventLog), the user's
+// alone, with the time and the VM's name: devvm _links's, beside its
+// proxy's. A log past the proxy's limit is rotated first, as the proxy
+// rotates it, so a VM without network policy keeps two at most too.
+func AppendEvent(path, vm string, e Event) error {
+	e.Time, e.VM = time.Now().UTC().Format(time.RFC3339), vm
+	b, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if fi, err := os.Stat(path); err == nil && fi.Size()+int64(len(b)) >= eventLogMax {
+		if err := os.Rename(path, path+".1"); err != nil {
+			return err
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
+	if err != nil {
+		return err
+	}
+	err = f.Chmod(0o600)
+	if err == nil {
+		_, err = f.Write(append(b, '\n'))
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// eventLogMax is how large an event log grows before AppendEvent rotates
+// it: the proxy's limit.
+const eventLogMax = 10 << 20
 
 func hostPort(host string, port int) string {
 	return net.JoinHostPort(oneLine(host), strconv.Itoa(port))
