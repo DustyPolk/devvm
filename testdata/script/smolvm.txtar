@@ -41,10 +41,11 @@ stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +smolv
 # (reviewed): none of smolvm's forwards; once its sshd runs, a forwarder of
 # devvm's on the host reaches it over ssh (a master, offering the VM's key
 # alone, its host key read through smolvm and pinned), and forwards what
-# listens in the VM.
+# listens in the VM. The ports that listen in it are ones free here.
+free_port UNLISTED LISTED
 mkdir $WORK/all
 cd $WORK/all
-exec sh -c 'printf "0100007F:B8DF\n00000000:0050\n" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
+exec sh -c 'printf "0100007F:%04X\n00000000:0050\n" "$UNLISTED" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
 exec devvm --backend smolvm --from $PIN --no-network-policy base
 ! stderr 'backend_unreviewed'
 ! stderr 'ports_'
@@ -55,7 +56,7 @@ stdout '^ssh -F none -M -S \S+/data/devvm/run/smolvm-[0-9a-f]{16}\.ctl -T .* -o 
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*.ports.known_hosts'
 stdout '^devvm-all-[0-9a-f]{14} ssh-ed25519 AAAAstub$'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*.ports.log'
-stdout '^devvm ports: port 47327: forwarded$'
+stdout '^devvm ports: port '$UNLISTED': forwarded$'
 stdout '^devvm ports: forwarding devvm-all-[0-9a-f]{14}''s ports$'
 ! stdout 'port 80'
 exec devvm stop
@@ -68,23 +69,23 @@ cd $WORK/web
 # Listed ports: made from base's pack with everything set (a pack would
 # give it its build machine's), started, set up, then the shell. smolvm
 # forwards none of its ports, only its ssh: devvm's forwarder forwards the
-# listed ports alone (47329 listens in the VM, and 47327, unlisted).
-exec sh -c 'printf "0100007F:B8E1\n0100007F:B8DF\n" > "$STUB_DIR/guest-ports"'
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports 47329,8000-8001 --cpus 2 base
+# listed ports alone (LISTED listens in the VM, and UNLISTED).
+exec sh -c 'printf "0100007F:%04X\n0100007F:%04X\n" "$LISTED" "$UNLISTED" > "$STUB_DIR/guest-ports"'
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports $LISTED,8000-8001 --cpus 2 base
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stderr 'ports_'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --from \S+/image\.smolmachine --cpus 2 --mem \d+ --storage 100 -v /var/lib/docker -v (\S+)/web:\S+/web -v \S+/data/devvm/tools:/mnt/devvm-tools:ro --ssh-agent$'
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --net -p [0-9]+:22$'
-! stdout ' -p (47329|8000)'
+! stdout ' -p ('$LISTED'|8000)'
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-web-[0-9a-f]{14}$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i( -t)? -u \S+ -w \S+/web .* bash -l$'
 ! stderr 'backend_unreviewed'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log'
-stdout '^devvm ports: port 47329: forwarded$'
+stdout '^devvm ports: port '$LISTED': forwarded$'
 stdout '^devvm ports: forwarding devvm-web-[0-9a-f]{14}''s ports$'
-! stdout 'port 47327'
+! stdout 'port '$UNLISTED':'
 exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
@@ -96,7 +97,7 @@ grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 listen_any TAKEN
 exec devvm stop
 exec devvm ports add $TAKEN
-exec sh -c 'printf "0100007F:B8E1\n0100007F:%04X\n" "$TAKEN" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"; : > "$(ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log)"'
+exec sh -c 'printf "0100007F:%04X\n0100007F:%04X\n" "$LISTED" "$TAKEN" >"$STUB_DIR/guest-ports"; : > "$STUB_LOG"; : > "$(ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log)"'
 exec devvm
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 ! stderr 'ports_forward_failed'
@@ -104,19 +105,19 @@ stub_calls
 ! stdout '^smolvm machine (create|update) .* -p '
 ! stdout '--remove-port'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.ports.log'
-stdout '^devvm ports: port 47329: forwarded$'
+stdout '^devvm ports: port '$LISTED': forwarded$'
 ! stdout 'port '$TAKEN
 exec devvm ports
-stdout '^47329,8000-8001,'$TAKEN'$'
+stdout '^'$LISTED',8000-8001,'$TAKEN'$'
 # Running: a change starts its forwarder again at once, the VM running on.
 exec sh -c ': > "$STUB_LOG"'
 exec devvm ports rm 8000-8001
-stdout '^==> ports_forwarding ports=47329,'$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> ports_forwarding ports='$LISTED','$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout '^smolvm machine (stop|start|update)'
-exec sh -c 'ps -axww -o command= | grep "[_]smolvm-ports -vm devvm-web-"'
-stdout ' -only 47329$'
+exec sh -c 'ps -axww -o command= | grep "[_]smolvm-ports -vm devvm-web-" | grep -F -- "-key $XDG_DATA_HOME/devvm/"'
+stdout ' -only '$LISTED'$'
 rm $STUB_DIR/guest-ports
 
 # Its agent forwarding can be turned on later (emulated, reviewed): made

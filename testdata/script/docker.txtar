@@ -201,10 +201,13 @@ rm $STUB_DIR/docker-sysbox
 # exec, nothing published (devvm's ssh config names devvm _docker-connect
 # as ProxyCommand); every port, through a forwarder of devvm's over that
 # ssh (its host key read through docker exec and pinned); the shell an ssh
-# session forwarding the user's agent.
+# session forwarding the user's agent. The port that listens in the VM is
+# one free here; the forwarder checks look for this run's own (its key in
+# this run's data folder).
+free_port PORT
 mkdir $WORK/emu
 cd $WORK/emu
-exec sh -c 'printf "0100007F:B8E0\n" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
+exec sh -c 'printf "0100007F:%04X\n" "$PORT" > "$STUB_DIR/guest-ports"; : > "$STUB_LOG"'
 exec devvm --backend docker --from $PIN --no-network-policy --ssh-agent base
 ! stderr backend_unreviewed
 ! stderr 'ports_(no_ssh|forward_failed)'
@@ -216,7 +219,7 @@ stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} cat /etc/ssh/ssh_host_ed25519_k
 stdout '^ssh -F none -M -S \S+/data/devvm/run/docker-[0-9a-f]{16}\.ctl -T .* -o IdentityAgent=none -o IdentityFile=\S+/docker/vms/devvm-emu-[0-9a-f]{14}\.key .* -o HostKeyAlias=devvm-emu-[0-9a-f]{14} .* -o ForwardAgent=no .* -o ProxyCommand=''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}'' -l \S+ devvm-emu-[0-9a-f]{14} sh -s$'
 stdout '^ssh -F none -T -o ControlMaster=no -o ControlPath=none .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* -o ProxyCommand=.* -l \S+ devvm-emu-[0-9a-f]{14} cd -- ''\S+/emu'' && exec bash -l$'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*.ports.log'
-stdout '^devvm ports: port 47328: forwarded$'
+stdout '^devvm ports: port '$PORT': forwarded$'
 grep '^Host devvm-emu devvm-emu-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 grep '^  ProxyCommand ''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}''$' $XDG_CONFIG_HOME/devvm/ssh_config
 grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
@@ -236,7 +239,7 @@ stub_calls
 stdout '^ssh -F none -T .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* cd -- ''\S+/emu'' && exec bash -l$'
 grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
 exec devvm stop
-! exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
+! exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-" | grep -F -- "-key $XDG_DATA_HOME/devvm/"'
 exec sh -c ': > "$STUB_LOG"'
 exec devvm
 stub_calls
@@ -246,24 +249,24 @@ grep '^  ForwardAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
 # Listed ports: through the forwarder too, those alone; one a program on
 # this machine has is left out, warned.
 exec devvm stop
-exec devvm ports 47328,9-10
+exec devvm ports $PORT,9-10
 exec sh -c ': > "$STUB_LOG"'
 exec devvm
 stub_calls
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*.ports.log'
 stdout '^devvm ports: forwarding devvm-emu-[0-9a-f]{14}''s ports$'
-exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
-stdout ' -only 47328,9-10$'
+exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-" | grep -F -- "-key $XDG_DATA_HOME/devvm/"'
+stdout ' -only '$PORT',9-10$'
 # Running: a change starts its forwarder again at once, for the same
 # start of its container.
 exec sh -c ': > "$STUB_LOG"'
 exec devvm ports rm 9-10
-stdout '^==> ports_forwarding ports=47328 vm=devvm-emu-[0-9a-f]{14}$'
+stdout '^==> ports_forwarding ports='$PORT' vm=devvm-emu-[0-9a-f]{14}$'
 stub_calls
 ! stdout '^docker (container )?(stop|start|create|commit|rm) '
-exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-"'
-stdout ' -only 47328$'
-! stdout ' -only 47328,9-10$'
+exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-" | grep -F -- "-key $XDG_DATA_HOME/devvm/"'
+stdout ' -only '$PORT'$'
+! stdout ' -only '$PORT',9-10$'
 
 # rm deletes its forwarder, its keys and its entry.
 exec devvm rm -f
