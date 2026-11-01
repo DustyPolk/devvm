@@ -78,7 +78,7 @@ Code in the client can often run code in the target through the target's own ser
 
 A client with network policy links only to a target with network policy, because a link to a target without it would let the client reach the internet through the target. A client without network policy may link to any target.
 
-devvm checks this rule when you add a link, at each launch of the client and on every connection. While such a link exists, devvm refuses `devvm network off` in the target's folder and names the clients that link to it, and it refuses `devvm network on` for a client that links to a VM without network policy. Remove those links with `devvm link rm` first, or turn on network policy for the target.
+devvm checks this rule when you add a link, at each launch of the client and on every connection. On every connection, the target's network policy must also be in force as the target runs. If you turn it on while the target is running, `devvm ls` shows it as `unenforced` until the target starts again behind its proxy, and devvm refuses the client's connections to it until then, so start the target again with `devvm restart` in its folder. While such a link exists, devvm refuses `devvm network off` in the target's folder and names the clients that link to it, and it refuses `devvm network on` for a client that links to a VM without network policy. Remove those links with `devvm link rm` first, or turn on network policy for the target.
 
 With network policy, a program that uses the VM's proxy settings, such as curl, sends its requests for a link to the VM's proxy, and the proxy carries a request for one of the link's names and its port, such as `db:5432` or `db.devvm.internal:5432`, to the link. Other programs reach the link by its name, as they do in a VM without network policy. The proxy passes a link's connection on as it is, so it doesn't look into it and puts none of your secrets into it.
 
@@ -170,5 +170,7 @@ A container that the [docker layer](images.md#built-in-layers) runs in the clien
 2026-11-01T10:00:00Z  link     db:5432  to devvm-db-71a99b1076d92c
 2026-11-01T10:05:00Z  REFUSED  db:5432  to devvm-db-71a99b1076d92c: it isn't running
 ```
+
+When the client has network policy and the target's isn't in force yet, the line says `unenforced`, as [Links and network policy](#links-and-network-policy) describes.
 
 A client has at most 256 of its links' connections carried at once, and devvm refuses and logs the next one. [devvm network log --json](../safety/network.md#devvm-network-log---json) describes the events in JSON.

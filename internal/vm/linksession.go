@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,6 +25,10 @@ const (
 	LinkRemoved = "removed" // the client no longer has the link
 	LinkNoSSH   = "ssh"     // the target's ssh can't be reached as devvm pins it
 	linkUnread  = "unread"  // the states can't be read
+	// LinkUnenforced: the client has network policy, and the target's,
+	// though on, isn't enforced (netpolicy.Listed): it runs outside its
+	// proxy, until its next start, or its self-check failed.
+	LinkUnenforced = "unenforced"
 )
 
 // How often a link session asks whether the client still runs as it
@@ -111,7 +116,8 @@ func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
 // linkConn checks a connection to one of client's links, from the states
 // as they are now: the client still has the link, it applies (CheckLink:
 // the target's ID, its published port, the policy rule), the target's
-// backend has links, and the target runs, as its backend says, and is
+// backend has links, and the target runs, as its backend says, its
+// network policy enforced when the client has it (policyEnforced), and is
 // reached as devvm pins it. It returns how to reach the target, or the
 // event and why not. It never starts the target.
 func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link) (vmssh.LinkTarget, string, string) {
@@ -155,11 +161,34 @@ func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link) (vmssh
 	if err != nil || start == "" {
 		return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
 	}
+	if why, err := policyEnforced(ctx, c.Backend, cst, tst); err != nil || why != "" {
+		return refused(cmp.Or(why, linkUnread), err)
+	}
 	ssh, err := e.linkSSH(ctx, c.Backend, target)
 	if err != nil {
 		return refused(LinkNoSSH, err)
 	}
 	return vmssh.LinkTarget{SSH: ssh, Start: start}, "", ""
+}
+
+// policyEnforced checks the policy rule against a running target as it
+// runs, not only as its state has it: for a client with network policy,
+// the target's must be enforced, as devvm ls shows it. A target given
+// network policy while it ran still runs outside its proxy until its next
+// start, and one whose self-check failed may reach the internet directly,
+// so either would carry the client out (LinkUnenforced).
+func policyEnforced(ctx context.Context, b backend.Backend, client, target *state.VM) (string, error) {
+	if !netpolicy.On(client) {
+		return "", nil
+	}
+	listed, err := netpolicy.Listed(ctx, b, target, true)
+	switch {
+	case err != nil:
+		return "", err
+	case listed != "on":
+		return LinkUnenforced, nil
+	}
+	return "", nil
 }
 
 // linkSSH is how devvm's own ssh reaches a running VM for links: its

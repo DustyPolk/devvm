@@ -82,8 +82,9 @@ func linkSessionEnv(t *testing.T) (Links, *backendtest.Fake, *state.VM, *state.V
 // Each connection is checked against the states as they are then: a link
 // that applies reaches its running target as devvm pins it; one the
 // client no longer has, one whose target is gone, made again, no longer
-// publishing the port or without the network policy the client has, one
-// whose target's ssh isn't devvm's, and a target that doesn't run, are
+// publishing the port or without the network policy the client has, or
+// with it unenforced as it runs, one whose target's ssh isn't devvm's, and
+// a target that doesn't run, are
 // each refused with why, and the target is never started.
 func TestLinkConn(t *testing.T) {
 	e, f, client, target, l := linkSessionEnv(t)
@@ -139,6 +140,31 @@ func TestLinkConn(t *testing.T) {
 	}
 	check(vmssh.EventLinkRefused, LinkPolicy)
 	if err := target.Set(netpolicy.KeyNet, "on"); err != nil {
+		t.Fatal(err)
+	}
+	check("", "")
+
+	// The rule as the target runs: given network policy while it ran, it
+	// runs outside its proxy until its next start, and one whose
+	// self-check failed may reach out directly. Either is refused for a
+	// client with network policy, and neither matters to one without.
+	f.Unconfined = true
+	check(vmssh.EventLinkRefused, LinkUnenforced)
+	f.Unconfined = false
+	if err := target.Set(netpolicy.KeyCheck, netpolicy.CheckUnenforced); err != nil {
+		t.Fatal(err)
+	}
+	check(vmssh.EventLinkRefused, LinkUnenforced)
+	f.Unconfined = true
+	if err := client.Set(KeyNet, "off"); err != nil {
+		t.Fatal(err)
+	}
+	check("", "")
+	f.Unconfined = false
+	if err := client.Set(KeyNet, "on"); err != nil {
+		t.Fatal(err)
+	}
+	if err := target.Set(netpolicy.KeyCheck, netpolicy.CheckOK); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
