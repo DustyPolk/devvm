@@ -14,8 +14,8 @@ const (
 	Plain     Role = iota // names, paths, sizes and counts: the default color
 	Good                  // green: current, Running, native
 	Attention             // yellow: stale, unused, Stopped, emulated
-	Bad                   // red: unreviewed, none
-	Secondary             // dim: digests and keys
+	Bad                   // red: unreviewed, unenforced
+	Secondary             // dim: digests, keys and a feature a backend lacks (none)
 )
 
 // sgr is the role's SGR code, "" for none.

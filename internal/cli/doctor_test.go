@@ -36,7 +36,7 @@ func TestWriteFeatures(t *testing.T) {
 		}
 	}
 	wantCodes(t, colored, "\033[1mFEATURE\033[0m", "\033[32mnative\033[0m", "\033[33memulated\033[0m",
-		"\033[31munreviewed\033[0m", "\033[31mnone\033[0m")
+		"\033[31munreviewed\033[0m", "\033[2mnone\033[0m")
 }
 
 // doctor warns when the devvm first on PATH isn't this one, links

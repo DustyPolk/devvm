@@ -229,14 +229,18 @@ func writeFeatures(tab *ui.Table, bs []backend.Backend) error {
 	return tab.Flush()
 }
 
-// supportCell is how a backend has a feature, colored by what it means.
+// supportCell is how a backend has a feature, colored by what it means:
+// none is dim, as a backend lacking a feature is no fault; unreviewed, an
+// emulation devvm refuses, stands out in red.
 func supportCell(s backend.Support) ui.Cell {
-	role := ui.Bad
+	role := ui.Secondary
 	switch {
 	case s.IsNative():
 		role = ui.Good
 	case s.Usable():
 		role = ui.Attention
+	case s.IsEmulated():
+		role = ui.Bad
 	}
 	return ui.Cell{Text: s.String(), Role: role}
 }
