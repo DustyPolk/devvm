@@ -200,27 +200,15 @@ func (e syncer) links(st *state.VM) ([]GuestLink, error) {
 	return e.Links(st)
 }
 
-// linkEnv is env, the guest environment of a start with network policy,
-// with st's links' names in its NO_PROXY (netpolicy.LinkEnv). They're
-// checked first, and again against the VM's hostname by its setup.
-func (e syncer) linkEnv(st *state.VM, env map[string]string) (map[string]string, error) {
+// checkStartLinks checks st's links before a start, as its setup checks
+// them again against the VM's hostname. They change nothing of the
+// start: its HTTP clients reach them through its proxy.
+func (e syncer) checkStartLinks(st *state.VM) error {
 	links, err := e.links(st)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := checkLinks(st.Name(), "", links); err != nil {
-		return nil, err
-	}
-	return netpolicy.LinkEnv(env, linkNames(links)), nil
-}
-
-// linkNames is every name of links, in order.
-func linkNames(links []GuestLink) []string {
-	var names []string
-	for _, l := range links {
-		names = append(names, l.Names...)
-	}
-	return names
+	return checkLinks(st.Name(), "", links)
 }
 
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
@@ -271,7 +259,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		{"DEVVM_GIT_NAME", e.GitConfig(ctx, st.Get(state.KeyDir), "user.name")},
 		{"DEVVM_GIT_EMAIL", e.GitConfig(ctx, st.Get(state.KeyDir), "user.email")},
 		{"DEVVM_PROXY", proxyURL},
-		{"DEVVM_NO_PROXY", netpolicy.NoProxy(linkNames(in.links))},
+		{"DEVVM_NO_PROXY", netpolicy.NoProxy},
 	}
 	// The devcontainer.json's variables first: devvm's own win.
 	dcEnv, err := devcontainerEnv(st)

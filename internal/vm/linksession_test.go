@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -184,7 +185,8 @@ func TestSessionLinks(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	e, _, client, _, l := linkSessionEnv(t)
 	got, err := e.sessionLinks(client.Name())
-	if err != nil || len(got) != 1 || got[0] != (vmssh.Link{Name: "db", Target: l.Target, Addr: l.Addr, Port: 5432}) {
+	want := vmssh.Link{Name: "db", Target: l.Target, Addr: l.Addr, Port: 5432, Hosts: []string{"db", "db.devvm.internal"}}
+	if err != nil || len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("sessionLinks = %+v, %v", got, err)
 	}
 	if err := client.Remove(); err != nil {

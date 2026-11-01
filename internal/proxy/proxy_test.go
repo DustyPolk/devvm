@@ -422,7 +422,7 @@ func TestMainRefuses(t *testing.T) {
 // returns once the VM's hostagent (here a sleep) is gone.
 func TestMainRuns(t *testing.T) {
 	lifelineTick = 50 * time.Millisecond
-	t.Cleanup(func() { lifelineTick = 3 * time.Second; proxyAuth = "" })
+	t.Cleanup(func() { lifelineTick = 3 * time.Second; proxyAuth, linksFile = "", "" })
 	dir := t.TempDir()
 	key, pidFile, logFile := filepath.Join(dir, "key"), filepath.Join(dir, "ha.pid"), filepath.Join(dir, "log.jsonl")
 	if err := os.WriteFile(key, []byte("k3y\n"), 0o600); err != nil {
@@ -450,7 +450,7 @@ func TestMainRuns(t *testing.T) {
 	go func() {
 		done <- Main([]string{
 			"--listen", addr, "-vm", "devvm-x", "-auth-file", key, "-lifeline", pidFile, "-log", logFile,
-			"-policy", filepath.Join(dir, "missing"),
+			"-policy", filepath.Join(dir, "missing"), "-links", filepath.Join(dir, "devvm-x.links.json"),
 		}, IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: errs})
 	}()
 	pu, _ := url.Parse("http://devvm:k3y@" + addr)

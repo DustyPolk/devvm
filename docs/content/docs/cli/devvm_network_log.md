@@ -7,7 +7,7 @@ Show what this folder's VM connected to and what its network policy blocked
 
 ## Synopsis
 
-Show the network log of this folder's VM, which it keeps only with network policy, with one line per connection or request its proxy allowed or blocked, oldest first. --blocked lists the blocks instead, one row per host and port, with the devvm network allow command that allows each.
+Show the network log of this folder's VM, oldest first: with network policy, one line per connection or request its proxy allowed or blocked, and with or without it, one line per connection to one of its links and each that devvm refused. --blocked lists the blocks instead, one row per host and port, with the devvm network allow command that allows each.
 
 ```text
 devvm network log [flags]

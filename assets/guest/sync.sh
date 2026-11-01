@@ -12,7 +12,7 @@
 #                installs them
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
 #                DEVVM_PROXY (the proxy URL when network policy is on, else empty), and
-#                DEVVM_NO_PROXY (what reaches the VM itself and its links without the proxy)
+#                DEVVM_NO_PROXY (what reaches the VM itself without the proxy; its links go through it)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
 #                NAME.devvm.internal...", for /etc/hosts

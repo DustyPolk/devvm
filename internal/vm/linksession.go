@@ -70,7 +70,7 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 	}
 	events := linkEvents{path: netpolicy.EventLog(e.Dirs, vm), vm: vm, mu: &sync.Mutex{}}
 	s := &vmssh.Links{
-		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log,
+		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log, List: netpolicy.LinkList(e.Dirs, vm),
 		Every: linkAliveEvery, Sync: linkSyncEvery, Tick: 2 * time.Second,
 		Alive: func(ctx context.Context) bool {
 			id, err := b.StartID(ctx, vm)
@@ -90,7 +90,8 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 
 // sessionLinks returns a client's links as its session carries them:
 // every one its state has, whether it applies now or not, as each
-// connection is checked again. A client that's gone has none.
+// connection is checked again, with the names its proxy takes it by. A
+// client that's gone has none.
 func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
 	st, err := state.ReadVM(e.Dirs, vm)
 	if err != nil || !st.Exists() {
@@ -102,7 +103,7 @@ func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
 	}
 	out := make([]vmssh.Link, len(links))
 	for i, l := range links {
-		out[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
+		out[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port, Hosts: []string{l.Name, l.Name + LinkDomain}}
 	}
 	return out, nil
 }

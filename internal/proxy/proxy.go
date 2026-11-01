@@ -16,6 +16,8 @@
 //     (/blocked/new: those since the VM's last prompt; /ca.pem serves the CA).
 //   - With -nix-cache, http://devvm.proxy/nix/ is a Nix binary cache shared by VMs, which only the
 //     host fills, from cache.nixos.org, checking what it keeps (see nixcache.go).
+//   - With -links, the VM's links (NAME:PORT, from the list devvm _links writes) go to their
+//     sockets on the host before any rule, their bytes as they are (see links.go).
 //
 // On a backend that asks the host about each connection a VM opens (smolvm), the proxy is also
 // that decider (-decider, decider.go): it takes over connections to itself and refuses the rest.
@@ -103,6 +105,7 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&deciderTokenFile, "decider-token-file", "", "with -decider: file holding the token the backend proves itself with (64 hex digits)")
 	fs.StringVar(&nixCacheDir, "nix-cache", "", "serve http://devvm.proxy/nix/, the Nix cache shared with other VMs, from this folder (nixcache.go)")
 	fs.Int64Var(&nixCacheMax, "nix-cache-max", NixCacheDefault, "with -nix-cache: the cache's cap, in bytes")
+	fs.StringVar(&linksFile, "links", "", "the VM's links list, which devvm _links writes: reach them through their sockets, before any rule (links.go)")
 	return fs
 }
 
@@ -441,6 +444,14 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
+	// One of the VM's links: its socket, before any rule (links.go).
+	if l, ok := linkFor(host, port); ok {
+		connectLink(w, r, host, port, l)
+		return
+	}
+	if notALink(w, "CONNECT", host, port) {
+		return
+	}
 	e := Event{Host: host, Port: port, Method: "CONNECT"}
 	rule, why := check(r.Context(), host, port, false)
 	if why != "" {
@@ -555,6 +566,19 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if host == "devvm.proxy" {
 		serveReserved(w, r)
+		return
+	}
+	// One of the VM's links: its socket, before any rule (links.go). HTTPS to a link goes through
+	// CONNECT, so its TLS stays the client's: the proxy makes none of its own to a link.
+	if l, ok := linkFor(host, port); ok {
+		if scheme == "https" {
+			http.Error(w, "devvm proxy: reach a link over HTTPS through CONNECT", http.StatusBadRequest)
+			return
+		}
+		forwardLink(w, r, host, port, l)
+		return
+	}
+	if notALink(w, r.Method, host, port) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}

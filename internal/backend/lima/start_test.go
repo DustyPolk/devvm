@@ -161,9 +161,9 @@ func TestStartSetsNoForwards(t *testing.T) {
 }
 
 // A start with network policy edits the VM's environment only when it
-// differs from the one the VM has: the same links' names in its NO_PROXY
-// change nothing, so its ssh host keys stay, and new names edit it.
-func TestStartSetsLinkNames(t *testing.T) {
+// differs from the one the VM has: the same NO_PROXY changes nothing, so
+// its ssh host keys stay, and another edits it.
+func TestStartSetsChangedEnv(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	conf := func(noProxy string) backend.Confinement {
 		return backend.Confinement{
@@ -171,7 +171,7 @@ func TestStartSetsLinkNames(t *testing.T) {
 			Env: map[string]string{"NO_PROXY": noProxy, "no_proxy": noProxy},
 		}
 	}
-	const was = "localhost,127.0.0.1,::1,.devvm.internal,db"
+	const was = "localhost,127.0.0.1,::1"
 	f, enabled := false, false
 	cfg := config{Env: l.guestEnv(conf(was)), DNS: []string{"127.0.0.1"}, PropagateProxyEnv: &f}
 	cfg.HostResolver.Enabled = &enabled
@@ -181,11 +181,11 @@ func TestStartSetsLinkNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, _ := l.startSets(&cfg, conf(was), 0); len(got) != 0 {
-		t.Errorf("the same names: %q", got)
+		t.Errorf("the same NO_PROXY: %q", got)
 	}
-	got, fill := l.startSets(&cfg, conf(was+",api"), 0)
-	if len(got) != 2 || !strings.HasPrefix(got[1], ".env = ") || !strings.Contains(got[1], "db,api") || !fill {
-		t.Errorf("a new name: %q, fill %v", got, fill)
+	got, fill := l.startSets(&cfg, conf(was+",.corp"), 0)
+	if len(got) != 2 || !strings.HasPrefix(got[1], ".env = ") || !strings.Contains(got[1], "::1,.corp") || !fill {
+		t.Errorf("another NO_PROXY: %q, fill %v", got, fill)
 	}
 }
 

@@ -68,15 +68,13 @@ func TestLinkHosts(t *testing.T) {
 	if got := linkHosts(nil); len(got) != 0 {
 		t.Errorf("linkHosts(nil) = %q", got)
 	}
-	if got := linkNames(links); !slices.Equal(got, []string{"db", "cache", "redis"}) {
-		t.Errorf("linkNames = %q", got)
-	}
 }
 
 // With links (Env.Links, a hand-made list), a VM with network policy
-// starts with each name in its NO_PROXY, and its setup gets the hosts file
-// and the same NO_PROXY; links that aren't as devvm makes them fail the
-// start, before the VM starts.
+// starts with no link name in its NO_PROXY, as its HTTP clients reach
+// links through its proxy, and its setup gets the hosts file and the same
+// NO_PROXY; links that aren't as devvm makes them fail the start, before
+// the VM starts.
 func TestUpLinks(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
@@ -87,7 +85,7 @@ func TestUpLinks(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
 		t.Fatal(names(err))
 	}
-	want := "localhost,127.0.0.1,::1,.devvm.internal,db,pg"
+	want := "localhost,127.0.0.1,::1"
 	c, _ := call(f, "Start").Args[1].(backend.Confinement)
 	if c.Env["NO_PROXY"] != want || c.Env["no_proxy"] != want {
 		t.Errorf("Start's env = %q", c.Env)
@@ -120,8 +118,7 @@ func TestUpLinksInvalid(t *testing.T) {
 	}
 }
 
-// Without network policy, the setup gets the hosts file too, and its
-// NO_PROXY (unused there) as it is with links.
+// Without network policy, the setup gets the hosts file too.
 func TestUpLinksNoPolicy(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	e.Links = func(*state.VM) ([]GuestLink, error) {

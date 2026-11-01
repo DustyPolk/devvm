@@ -22,12 +22,13 @@ devvm makes a VM without network policy, and warns you, when the VM's backend ca
 
 ## The proxy
 
-One proxy runs for each VM. It runs on the host as `devvm _proxy`, a hidden command, and listens on a loopback port. The VM reaches nothing else over its network, so every connection the VM makes goes through its proxy. The one other way out of the VM is the [links](ports.md#links-between-vms) you add to it, which this machine carries over ssh to the ports your other VMs publish, so they don't use the VM's network.
+One proxy runs for each VM. It runs on the host as `devvm _proxy`, a hidden command, and listens on a loopback port. The VM reaches nothing else over its network, so every connection the VM makes goes through its proxy. The one other way out of the VM is the [links](ports.md#links-between-vms) you add to it, which this machine carries over ssh to the ports your other VMs publish, so they don't use the VM's network. The proxy is a second entrance to those links, for the VM's HTTP clients ([links through the proxy](#links-through-the-proxy)).
 
 Other programs on the host can also reach that port, so the port alone doesn't identify the VM. Every request must carry the VM's password in `Proxy-Authorization`, with the user `devvm`, or it gets `407`. Each VM has its own random password in its proxy settings. The proxy reads the password from a file only you can read, never from its arguments, which other users can see, and it refuses to start without one. The VM's settings also get the password through files ([Lima](lima.md#a-lima-home-of-its-own), [smolvm](smolvm.md#what-devvm-sets-on-a-vm)).
 
 For each connection, the proxy does the following:
 
+- It sends a request for one of the VM's own links to that link before any rule, and passes its bytes on as they are ([links through the proxy](#links-through-the-proxy)).
 - It checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's [policy files](#policy-files), and then tunnels or forwards the allowed ones untouched.
 - It takes only host names, made of letters, digits, `-`, `_` and `.`, and addresses. Anything else gets `400` before the policy or the log sees it.
 - It resolves names itself and dials the addresses it checked. It refuses the host's own addresses and internal ones unless a rule names the address. Internal addresses are loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10` and the other ranges that aren't the public internet, and a NAT64 address `64:ff9b::a.b.c.d` counts as its IPv4 address.
@@ -41,7 +42,9 @@ A `CONNECT` tunnel meets the proxy's checks in this order:
 flowchart TD
   conn["CONNECT host:port from the VM"] --> pw["the VM's password?<br>no: 407"]
   pw --> name["a host name or an address?<br>no: 400"]
-  name --> allow["on the allowlist, and not denied?<br>no: 403"]
+  name --> link{{"one of the VM's links?"}}
+  link -- "yes" --> linked["the link's socket,<br>tunneled untouched"]
+  link -- "no" --> allow["on the allowlist, and not denied?<br>no: 403"]
   allow --> floor["public and not this machine's,<br>or an address a rule names?<br>no: 403"]
   floor --> bound{{"a bound host, on port 443?"}}
   bound -- "no" --> sni["its TLS SNI names<br>the CONNECT host?<br>no: closed"]
@@ -52,6 +55,18 @@ flowchart TD
 ```
 
 On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)). Docker's VMs can't reach the host's loopback, so on Docker the proxy also listens on a unix socket only you can reach, and a relay on the VM's own network passes the VM's connections to that socket, unread ([details](docker.md#network-policy)).
+
+### Links through the proxy
+
+A VM's `NO_PROXY` names only the VM itself, so an HTTP client that uses the VM's proxy settings sends a request for a link, such as `http://db:5432/`, to the proxy. A running VM can't take a new environment, so the proxy carries those requests itself, and a link added while the VM runs works for every HTTP client at once.
+
+`devvm _links` writes every link the VM has, carried or not, to a list, `~/.local/share/devvm/run/<vm>.links.json`, mode 600 in the run folder (mode 700), whenever they change or the file is gone. Each entry has the link's names (`NAME` and `NAME.devvm.internal`), its address and port in the VM, its target, and its socket on this machine. The list stays when `devvm _links` ends, and devvm removes it with the VM, so a link that isn't carried, which has no socket, is refused rather than asked of the rules. devvm passes the list's path to the proxy with `-links`, and the proxy reads it again for every request. The list must be a regular file, not a symbolic link, that only you can write, and at most 1 MiB.
+
+The proxy checks a request's host against the list after the VM's password and before any rule, as it does for `devvm.proxy`. It lowercases the host and drops one trailing dot, and then a host and port match only an entry that names them exactly, so `DB.:5432` matches `db:5432`, while `db..:5432`, `db.devvm:5432` and `127.77.0.1:5432` don't. The request names a host and a port, never a socket. An entry counts only when its socket is the one that `devvm _links` names for this VM's link at that address and port, in the list's own folder, so the proxy never connects to another VM's link or to any other socket, whatever the list holds. Its address must also be in `127.77.0.0/16`. Any other name under `devvm.internal` is refused with `403` and logged as a refused block, whatever the rules allow, so the rules, the host's resolver and a company proxy never see one. A host and port on no entry are otherwise the policy's, as before.
+
+For a match, the proxy connects to the link's socket, which is the same socket that the link's remote forward reaches, so `devvm _links` checks the connection as it checks every other ([each connection](ports.md#links-between-vms)), and the 256-connection cap counts both. A `CONNECT` is tunneled as it is, with no SNI check and no interception, and an absolute-form request, such as `GET http://db:5432/`, goes to the socket in origin form, without `Proxy-Authorization` or `Proxy-Connection`, over a new connection for each request, which ends when the client gives up the request. A kept-alive connection to the proxy that asks for a link and then for another host has each request handled on its own. HTTPS in absolute form gets `400`, because `CONNECT` carries it. The proxy puts no secret into a link's connection, even when a secret's hosts would match the link's name, and its rules don't apply, so `devvm network deny db` doesn't stop the link `db`.
+
+The proxy logs nothing for a link's connection that it passes on, because `devvm _links` logs it as `link`, once. When the socket doesn't answer, because the link was removed since the proxy read the list or `devvm _links` isn't running, the proxy answers `502` and logs `link_refused` with the reason `not carried`. A socket whose backlog is full refuses a connection, so the proxy tries again for under a second.
 
 ### Through a company proxy
 
@@ -101,7 +116,7 @@ On every launch, the VM's setup does the following:
 - It installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only.
 - It points the programs that ignore the proxy variables at the proxy. Those are apt, sudo (which keeps the variables), every ssh connection, Docker's daemon and containers with the [docker layer](../using/images.md#docker), and Nix's daemon with the [nix layer](images.md#the-nix-layer). Under systemd, each daemon gets a drop-in, `devvm-proxy.conf`, that holds the VM's own proxy address and nothing else, and without systemd, Docker's settings in `/etc/conf.d/docker` get a block instead, and Nix's daemon gets `/etc/conf.d/nix-daemon`. When network policy is off, the setup removes them, and it restarts a daemon whose settings changed. An ssh connection gets a `ProxyCommand` that tunnels through the proxy, and the proxy checks its host and port against the allowlist.
 - With the nix layer, it points Nix at the [shared Nix cache](#the-shared-nix-cache) first: `/etc/nix/devvm-cache.conf`, which `/etc/nix/nix.conf` includes with `!include`, sets `substituters = http://devvm.proxy/nix https://cache.nixos.org`. When network policy is off, the setup removes that file, so Nix goes to cache.nixos.org alone, and it restarts Nix's daemon when the file changed.
-- It adds each of the VM's [links](ports.md#links-between-vms) to `NO_PROXY` and `no_proxy`, by its name and `.devvm.internal`, so programs reach a link directly instead of through the proxy. The names are listed rather than an address range, because many clients ignore a CIDR there. They're in the daemons' settings above and in Docker's client settings (`~/.docker/config.json`), which the setup rewrites when links change on a running VM, restarting a daemon whose settings changed. They're also in the environment the VM's backend sets at each start, which shells and other programs read, so those get a changed list at the VM's next start.
+- It sets `NO_PROXY` and `no_proxy` to the VM itself, `localhost,127.0.0.1,::1`, in the daemons' settings above and in Docker's client settings (`~/.docker/config.json`), as the VM's backend does in the environment it sets at each start. The VM's [links](ports.md#links-between-vms) aren't in it, because HTTP clients reach them [through the proxy](#links-through-the-proxy), so a change of links changes no daemon's settings and restarts nothing.
 - It puts the VM's placeholders in `~/.config/devvm/env`, which login shells read, as `CLAUDE_CODE_OAUTH_TOKEN` and `GH_TOKEN`. When `github` is bound, it also sets up git's credential helper for GitHub over HTTPS.
 - It adds `devvm-why`, the note before each prompt, and the notes for Claude Code and Codex ([inside the VM](../safety/network.md#inside-the-vm)).
 
@@ -262,6 +277,7 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | `-decider-token-file` | with `-decider`: a file holding the shared key smolvm proves itself with (64 hex digits); required |
 | `-nix-cache` | serve the [shared Nix cache](#the-shared-nix-cache) at `http://devvm.proxy/nix/` from this folder, which it makes, only yours (mode 700) |
 | `-nix-cache-max` | with `-nix-cache`: the cache's cap, in bytes (default 10 GiB) |
+| `-links` | the VM's links' list, which `devvm _links` writes: reach each link through its socket, before any rule ([links through the proxy](#links-through-the-proxy)); a missing list has no links |
 
 These modes each do one thing and exit:
 

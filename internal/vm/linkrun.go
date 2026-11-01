@@ -81,8 +81,10 @@ func (e linkRuns) stop(ctx context.Context, vm string) {
 
 // removeSockets deletes what a session of vm's that was killed leaves
 // behind and nothing listens on: each of its links' sockets and its own
-// master's control socket. Its masters' to targets, named by their
-// starts too, are devvm gc --orphans's.
+// master's control socket. Its masters' to targets, named by their starts
+// too, are devvm gc --orphans's. Its list for the VM's proxy stays: with
+// no socket to reach, the proxy refuses those links rather than ask its
+// rules, and a new session writes it again.
 func (e linkRuns) removeSockets(ctx context.Context, vm string) {
 	st, err := state.ReadVM(e.Dirs, vm)
 	if err != nil {

@@ -491,10 +491,10 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		if err != nil {
 			return conf, err
 		}
-		// The proxy's confinement, with the agent chosen above, and its
-		// links reached without the proxy.
+		// The proxy's confinement, with the agent chosen above; its links
+		// checked first.
 		p.AgentSocket, p.NoAgent = conf.AgentSocket, conf.NoAgent
-		if p.Env, err = (syncer{e}).linkEnv(st, p.Env); err != nil {
+		if err := (syncer{e}).checkStartLinks(st); err != nil {
 			e.Proxy.Stop(vm)
 			return conf, err
 		}

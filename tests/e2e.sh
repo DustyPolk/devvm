@@ -642,9 +642,9 @@ lk_be=lima lk_cli=()
 # lk_pl: the VMs' helper, /var/tmp/e2e-link.pl (perl: every base has it). serve ADDR PORT WORD
 # answers each connection with an HTTP response whose body is WORD; hold ADDR PORT keeps every
 # connection it accepts open (each writes its pid to /var/tmp/e2e-link-ADDR-PORT.pid); conns HOST
-# PORT N opens N connections, 50 ms apart and the last 5 s after the others, and prints those the far
-# end closed (a burst of them all at once outruns the backlog of the link's socket on macOS, 128, while
-# devvm _links starts their relays);
+# PORT N opens N connections, all at once but the last, 5 s after the others, and prints those the far
+# end closed (a burst past the backlog of the link's socket on macOS, 128, which devvm _links accepts
+# whole before it starts their relays);
 # listeners prints each TCP listener as "PROCESS ADDR:PORT" (as root, to see every process's).
 lk_pl='use strict; use warnings; use IO::Socket::INET; use IO::Select;
 my $mode = shift // "";
@@ -672,7 +672,6 @@ if ($mode eq "serve" or $mode eq "hold") {
   my ($host, $port, $n) = @ARGV; my @c;
   for my $i (1 .. $n) {
     sleep 5 if $i == $n;
-    select(undef, undef, undef, 0.05);
     push @c, IO::Socket::INET->new(PeerAddr => $host, PeerPort => $port, Timeout => 10) || die "connection $i: $!\n";
   }
   sleep 5;
@@ -862,7 +861,7 @@ link_section() {
   check "ssh -R into the client binds nothing on 0.0.0.0, 127.0.0.1, ::1, localhost, another range or a socket; on 127.77.0.0/16 it does (the control)" \
     rfwd_links "$lk_vc" lk_ssh
   check "a program in the client on a link's address and port first fails that link alone (link_port_taken); another link works" lk_port_taken
-  check "257 connections at once: the 257th is refused, and devvm network log shows link_limit" lk_cap
+  check "256 connections at once, past the socket's backlog, all carried; a 257th is refused, and devvm network log shows link_limit" lk_cap
   check "root in the client lets sshd bind any address: the link session still asks only for its links' addresses, and the link works" lk_hostile_listen
   check "... with GatewayPorts yes too: the link session still listens on no TCP port here and connects only to the VMs' sshd, and the link works" lk_hostile_gateway
   echo "  recorded: $(cat "$work/link-gateway.log" 2>/dev/null)"; rm -f "$work/link-gateway.log"
@@ -874,6 +873,8 @@ link_section() {
   check "a VM made again in that folder isn't linked" lk_made_again
   check "devvm network on for a target, then the client, restarted: both behind their proxies" lk_policy_on
   check "with network policy, the client reaches NAME:PORT and NAME.devvm.internal:PORT by curl through its proxy settings and a raw TCP client; a direct connection fails (the control)" lk_policy_reach
+  check "a link added while the client with network policy runs: curl through its proxy reaches it at once, by GET and CONNECT, no link name is in NO_PROXY, and nothing restarts" lk_proxy_added
+  check "the client's proxy reaches only the links on its own list: not a name or port it hasn't linked, a name doubled or an address; the target's proxy doesn't reach the client's links" lk_proxy_own
   check "devvm network log shows the links' connections with network policy" lk_log_on
   check "a client with network policy is refused by devvm link add for a target without it" lk_mismatch_add
   check "devvm network off is refused for a target that a client with network policy links to" lk_off_refused
@@ -1039,13 +1040,46 @@ lk_policy_on() { local v
     fi
     [[ $v == c ]] || lk_serve "$lk_v1" "$lk_w1" 47240 80 || return 1
   done; }
-# The client got its link before its restart with network policy, so the curl here starts with the
-# proxy settings of that start. Once HTTP clients reach links through the VM's proxy, this works for
-# a link added while the client runs, without a restart.
+# The client got its link before its restart with network policy; lk_proxy_added adds one while it
+# runs.
 lk_policy_reach() {
   lk_user "$lk_vc" '[ -n "$HTTP_PROXY" ]' || { echo "no proxy settings"; return 1; }
   lk_until 20 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240" && lk_curls "$lk_vc" http://db.devvm.internal:47240/ "$lk_w1-47240" &&
     lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && ! lk_user "$lk_vc" "curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1/" >/dev/null 2>&1; }
+# lk_via VM URL [-p]: the status curl in VM gets for URL through the VM's own proxy, whatever its
+# NO_PROXY says (-p: by CONNECT, its answer's status), and the body's line on stdout's next line.
+# lk_boot VM: its boot and its init's start, which a restart of the VM changes on every backend.
+lk_via() { local w='%{http_code}'; [[ ${3:-} != -p ]] || w='%{http_connect}'
+  lk_user "$1" "curl -s -m 10 --noproxy '' -x \"\$HTTP_PROXY\" ${3:-} -w '$w\\n' $2 2>/dev/null | tail -2 | tac 2>/dev/null || true" 2>/dev/null; }
+lk_boot() { lk_root "$1" 'cat /proc/sys/kernel/random/boot_id; cut -d" " -f22 /proc/1/stat'; }
+# lk_via_gets VM URL WORD [-p]: through the VM's proxy, URL answers 200 with WORD.
+lk_via_gets() { local a; a=$(lk_via "$1" "$2" "${4:-}"); echo "$2${4:+ ($4)}: $(paste -sd ' ' - <<<"$a")"
+  [[ $(head -1 <<<"$a") == 200 && $(sed -n 2p <<<"$a") == "$3" ]]; }
+lk_proxy_added() { local b0 b1 k0 k1 n
+  b0=$(lk_boot "$lk_vc") k0=$(grep "^$lk_vc " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  n=$(lk_user "$lk_vc" 'printf "%s|%s" "$NO_PROXY" "$no_proxy"'); echo "NO_PROXY|no_proxy: $n"
+  [[ $n == "localhost,127.0.0.1,::1|localhost,127.0.0.1,::1" ]] || return 1
+  lk_start "$lk_v1" serve 127.0.0.1 47242 "$lk_w1-47242" &&
+    lk_dv "$lk_pc" link add "${lk_x}db" 47242 --as db && lk_said "==> link_added name=db port=47242 target=$lk_v1 vm=$lk_vc" || return 1
+  lk_until 15 lk_via_gets "$lk_vc" http://db:47242/ "$lk_w1-47242" &&
+    lk_via_gets "$lk_vc" http://db.devvm.internal:47242/ "$lk_w1-47242" && lk_via_gets "$lk_vc" http://db:47242/ "$lk_w1-47242" -p &&
+    lk_curls "$lk_vc" http://db:47242/ "$lk_w1-47242" && lk_gets "$lk_vc" db 47242 "$lk_w1-47242" || return 1
+  b1=$(lk_boot "$lk_vc") k1=$(grep "^$lk_vc " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  echo "boot and init before: $(paste -sd ' ' - <<<"$b0"), after: $(paste -sd ' ' - <<<"$b1")"
+  [[ -n $b0 && $b0 == "$b1" && $k0 == "$k1" ]] && [[ $(lk_user "$lk_vc" 'printf "%s" "$NO_PROXY"') == localhost,127.0.0.1,::1 ]] &&
+    lk_event "$lk_vc" link db 47242 "\"target\":\"$lk_v1\""; }
+lk_proxy_own() { local u c l0 l1 log=$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl
+  l0=$(grep -c '"event":"link' "$log" 2>/dev/null)
+  for u in "http://${lk_x}db:47240/" http://db:47244/ http://db:47243/ http://db.devvm.internal.devvm.internal:47240/ \
+    http://devvm.internal:47240/ http://127.77.0.1:47240/; do
+    c=$(lk_via "$lk_vc" "$u" | head -1); echo "$u: $c"; [[ $c == 403 ]] || return 1
+    c=$(lk_via "$lk_vc" "$u" -p | head -1); echo "$u (CONNECT): $c"; [[ $c == 403 ]] || return 1
+  done
+  l1=$(grep -c '"event":"link' "$log" 2>/dev/null); echo "link events: $l0 before, $l1 after"
+  # The target has network policy and no links: the client's link names are nothing to its proxy.
+  c=$(lk_via "$lk_v1" http://db:47240/ | head -1); echo "the target's proxy, http://db:47240/: $c"; [[ $c == 403 ]] || return 1
+  c=$(lk_via "$lk_v1" http://db:47240/ -p | head -1); echo "  (CONNECT): $c"
+  [[ $c == 403 && $l0 == "$l1" ]] && lk_via_gets "$lk_vc" http://db:47240/ "$lk_w1-47240"; }
 lk_log_on() { local t0 last
   t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && grep -qx net=on "$vms/$lk_vc" || return 1

@@ -124,6 +124,10 @@ func AssetsInUse(d paths.Dirs) map[string]bool {
 // EventLog is a VM's log of its proxy's decisions (JSON lines).
 func EventLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".jsonl") }
 
+// LinkList is the list of a client VM's links that its link session
+// writes and its proxy reads (proxy.LinkList), in the run folder.
+func LinkList(d paths.Dirs, vm string) string { return filepath.Join(d.Run(), vm+".links.json") }
+
 // ProxyLog is a VM's proxy's own output.
 func ProxyLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".proxy.log") }
 
@@ -467,7 +471,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	args := append([]string{
 		"_proxy", "-listen", addr, "-vm", vm, "-policy", files, "-log", EventLog(p.Dirs, vm), "-proxy-log", logPath, "-lifeline", lifeline,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
-		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth,
+		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth, "-links", LinkList(p.Dirs, vm),
 	}, decider...)
 	for _, f := range [][2]string{{".cas", "-upstream-cas"}, {".upstream", "-upstream"}} {
 		if _, err := os.Stat(p.run(vm, f[0])); err == nil {

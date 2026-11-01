@@ -134,7 +134,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself and its [links](../using/links.md#links-and-network-policy), and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
@@ -291,7 +291,7 @@ With `--blocked`, each of the `blocked` has the `last` time it was blocked, the 
 
 ## Links between VMs
 
-A [link between VMs](../using/links.md) lets a program in one VM, the client, reach a port that another VM, the target, publishes. devvm carries a link's connections over ssh through this machine, so they go through neither VM's proxy nor its network, and with network policy a VM reaches only the hosts on its allowlist and the links you added to it.
+A [link between VMs](../using/links.md) lets a program in one VM, the client, reach a port that another VM, the target, publishes. devvm carries a link's connections over ssh through this machine, so they use neither VM's network, and with network policy a VM reaches only the hosts on its allowlist and the links you added to it. A client's proxy is a second way into its links: it carries a request for one of the client's own links, by the link's name and port, to the same link on this machine, and passes it on as it is, without looking into it or putting a secret into it. It reaches no other socket on this machine and no other VM's links. The allowlist's rules don't apply to links, so `devvm network deny` doesn't stop one, and `devvm link rm` does.
 
 A link joins the two VMs' trust. Code in the client can often run code in the target through the target's service, such as Postgres's `COPY … TO PROGRAM`, and it then has whatever the target has: its network, the secrets it may use and its project folder. So devvm keeps two rules:
 

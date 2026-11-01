@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 // Links carries a client VM's links to other VMs' ports (the design
@@ -34,6 +35,9 @@ import (
 //   - each link's end on the host is a unix socket, mode 600 in the run
 //     folder (mode 700), named by a hash of the client, the address and
 //     the port;
+//   - the client's links are listed in a file (List) that its proxy
+//     reads, so an HTTP client there that sends NAME:PORT to its proxy
+//     reaches the same socket;
 //   - each connection is checked again (Check), then carried by ssh -W
 //     127.0.0.1:PORT through a master to the target that Check names, one
 //     per target and start, with ProxyCommand=/usr/bin/false: the channel
@@ -67,11 +71,12 @@ func IsLinkAddr(a netip.Addr) bool {
 
 // Link is one link a session carries: the client listens on Addr:Port.
 // Name and Target are what its events name: the client's name for it and
-// the target VM.
+// the target VM. Hosts are the names the VM's proxy takes it by (List).
 type Link struct {
 	Name, Target string
 	Addr         netip.Addr
 	Port         int
+	Hosts        []string
 }
 
 // linkKey is what identifies a link in its client: its address and port.
@@ -116,6 +121,11 @@ type Links struct {
 	// Dir is the folder of the sockets and the masters' control sockets:
 	// devvm's run folder.
 	Dir string
+	// List is the file the client's proxy reads its links from
+	// (proxy.LinkList, mode 600 in Dir): every link the client has,
+	// carried or not, written whenever they change (writeList). Empty:
+	// none.
+	List string
 	// Log gets its lines.
 	Log io.Writer
 	// Tick is how long a lost connection waits to be made again, and
@@ -133,6 +143,7 @@ type Links struct {
 	failed  map[linkKey]bool // refused: tried again only once it's removed and added, or in the next connection
 	masters map[string]*targetMaster
 	conns   chan struct{}
+	listed  []byte // the list as last written; nil: none written
 }
 
 // linkEnd is a link being carried: its socket and the link as last read.
@@ -182,14 +193,12 @@ func (l *Links) logf(format string, args ...any) {
 // linkName is the name of one of the session's files in Dir: a hash of
 // what it's for, short, as a socket's path is at most 104 characters.
 func (l *Links) linkName(ext string, parts ...string) string {
-	sum := sha256.Sum256([]byte(strings.Join(append([]string{l.VM}, parts...), "\x00")))
-	return filepath.Join(l.Dir, "link-"+hex.EncodeToString(sum[:])[:16]+ext)
+	return filepath.Join(l.Dir, "link-"+proxy.LinkHash(l.VM, parts...)+ext)
 }
 
-// Socket is a link's socket on the host.
-func (l *Links) Socket(lk Link) string {
-	return l.linkName(".sock", "socket", lk.Addr.String(), strconv.Itoa(lk.Port))
-}
+// Socket is a link's socket on the host, named as the VM's proxy expects
+// it (proxy.LinkSocket).
+func (l *Links) Socket(lk Link) string { return proxy.LinkSocket(l.Dir, l.VM, lk.Addr, lk.Port) }
 
 // Control is the control socket of the session's master (target "") or
 // of its master to a target's start.
@@ -267,8 +276,14 @@ func (l *Links) Run(ctx context.Context) error {
 // it ends, or reports that the client has none.
 func (l *Links) session(ctx context.Context) (none bool, err error) {
 	want, err := l.Want()
-	if err != nil || len(want) == 0 {
-		return err == nil, err
+	if err != nil {
+		return false, err
+	}
+	// Listed before they're carried: until then the proxy finds no socket
+	// for them, and refuses them rather than ask its rules.
+	l.writeList(want)
+	if len(want) == 0 {
+		return true, nil
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -288,6 +303,7 @@ func (l *Links) session(ctx context.Context) (none bool, err error) {
 	t := time.NewTicker(l.Sync)
 	defer t.Stop()
 	for {
+		l.writeList(want)
 		if len(want) == 0 {
 			return true, nil
 		}
@@ -381,10 +397,66 @@ func (l *Links) sync(ctx context.Context, ctl string, want []Link) {
 		_ = end.ln.Close()
 		l.logf("%s: no longer carried", end.link.listen())
 	}
-	slices.SortFunc(add, func(a, b Link) int { return cmp.Or(a.Addr.Compare(b.Addr), cmp.Compare(a.Port, b.Port)) })
+	slices.SortFunc(add, compareLinks)
 	for _, w := range add {
 		l.add(ctx, ctl, w)
 	}
+}
+
+// compareLinks orders links by address, then port.
+func compareLinks(a, b Link) int { return cmp.Or(a.Addr.Compare(b.Addr), cmp.Compare(a.Port, b.Port)) }
+
+// writeList writes the list the client's proxy reads (List): every link
+// the client has (want), carried or not, each with its names, its address
+// and port, its target and its socket. A link the session doesn't carry
+// has no socket there, so the proxy refuses it rather than ask its rules,
+// and a session that ended leaves its list for the same reason: devvm
+// removes it with the VM. It's written whole, when it changed or is gone.
+func (l *Links) writeList(want []Link) {
+	if l.List == "" {
+		return
+	}
+	list := proxy.LinkList{Version: proxy.LinkListVersion, Links: []proxy.LinkEntry{}}
+	listed := slices.Clone(want)
+	slices.SortFunc(listed, compareLinks)
+	for _, lk := range listed {
+		list.Links = append(list.Links, proxy.LinkEntry{
+			Hosts: slices.Clone(lk.Hosts), Addr: lk.Addr.String(), Port: lk.Port, Target: lk.Target, Socket: l.Socket(lk),
+		})
+	}
+	b, err := json.Marshal(list)
+	if err != nil {
+		return
+	}
+	if _, serr := os.Lstat(l.List); serr == nil && bytes.Equal(b, l.listed) {
+		return
+	}
+	if err := writeWhole(l.List, append(b, '\n')); err != nil {
+		l.logf("%s: %v", l.List, err)
+		return
+	}
+	l.listed = b
+}
+
+// writeWhole writes data to path, mode 600: a file of its own in path's
+// folder, renamed over it, so a reader sees the old list or the new one.
+func writeWhole(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".links-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // add listens on a link's socket and asks the client to listen for it.
@@ -511,29 +583,91 @@ func (p *proc) wait(d time.Duration) {
 	}
 }
 
+// How long a link's socket has nothing new to accept before the
+// connections it accepted are carried, and how long the first of them
+// waits at most.
+const (
+	linkSettle    = 5 * time.Millisecond
+	linkSettleMax = 50 * time.Millisecond
+)
+
 // serve carries each connection to a link's socket, maxLinkConns at most
-// at once.
+// at once. Its loop only accepts, and hands what it accepted off once
+// nothing more waits (linkSettle), the first has waited linkSettleMax,
+// or maxLinkConns+1 wait: the socket's backlog is 128 on macOS, and while
+// the process starts a relay's ssh, or a check's command, it accepts
+// nothing, so a burst would fill the backlog, and the client's ssh, or the
+// VM's proxy, would have the rest refused with no event. Accepted, each
+// is carried or refused with link_limit.
 func (l *Links) serve(ctx context.Context, end *linkEnd) {
-	for {
-		conn, err := end.ln.Accept()
-		if err != nil {
-			return
+	var batch []net.Conn
+	var first time.Time
+	release := func() {
+		for _, c := range batch {
+			l.take(ctx, end, c)
 		}
-		l.mu.Lock()
-		lk := end.link
-		l.mu.Unlock()
-		select {
-		case l.conns <- struct{}{}:
-		default:
-			_ = conn.Close()
-			l.Event(EventLinkLimit, lk, strconv.Itoa(maxLinkConns))
+		batch = nil
+	}
+	defer release()
+	ul, _ := end.ln.(interface{ SetDeadline(time.Time) error })
+	for {
+		if ul != nil {
+			var d time.Time
+			if len(batch) > 0 {
+				d = time.Now().Add(linkSettle)
+				if last := first.Add(linkSettleMax); last.Before(d) {
+					d = last
+				}
+			}
+			_ = ul.SetDeadline(d)
+		}
+		conn, err := end.ln.Accept()
+		switch {
+		case errors.Is(err, os.ErrDeadlineExceeded):
+			release()
+			continue
+		case errors.Is(err, net.ErrClosed):
+			return
+		case err != nil:
+			// Out of files, say, in a burst: what's accepted goes on, and the
+			// socket is tried again shortly.
+			release()
+			l.logf("%s: %v", end.sock, err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
 			continue
 		}
-		go func() {
-			defer func() { <-l.conns }()
-			l.carry(ctx, conn, lk)
-		}()
+		if len(batch) == 0 {
+			first = time.Now()
+		}
+		if batch = append(batch, conn); ul == nil || len(batch) > maxLinkConns || time.Since(first) >= linkSettleMax {
+			release()
+		}
 	}
+}
+
+// take hands a connection accepted on a link's socket off to be carried,
+// or refuses it, logged, when maxLinkConns are carried already: refused
+// here, in the accept loop, so a flood past the cap is accepted no faster
+// than its refusals are logged, and starts nothing.
+func (l *Links) take(ctx context.Context, end *linkEnd, conn net.Conn) {
+	l.mu.Lock()
+	lk := end.link
+	l.mu.Unlock()
+	select {
+	case l.conns <- struct{}{}:
+	default:
+		_ = conn.Close()
+		l.Event(EventLinkLimit, lk, strconv.Itoa(maxLinkConns))
+		return
+	}
+	go func() {
+		defer func() { <-l.conns }()
+		l.carry(ctx, conn, lk)
+	}()
 }
 
 // carry checks a connection's link again, then carries it to the target

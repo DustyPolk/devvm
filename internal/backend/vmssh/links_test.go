@@ -3,6 +3,7 @@ package vmssh
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,11 +11,14 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 // shortDir is a folder whose paths are short enough for sockets: a test's
@@ -533,6 +537,127 @@ func TestLinksCap(t *testing.T) {
 	}
 	close(f.hold)
 	waitFor(t, "a free slot", func() bool { return dial(t, l.Socket(db)) != "" })
+}
+
+// A burst of connections, made one after another as fast as the client's
+// ssh makes them, is accepted whole: each is carried, up to the cap, or
+// refused with link_limit, and none is refused by a full backlog
+// before devvm sees it.
+func TestLinksBurst(t *testing.T) {
+	db := Link{Name: "db", Target: "devvm-db-0123456789abcd", Addr: netip.MustParseAddr("127.77.0.1"), Port: 5432}
+	f := &fakeLinks{hold: make(chan struct{})}
+	l := f.newLinks(t)
+	f.target = func(lk Link) (LinkTarget, string, string) {
+		return LinkTarget{SSH: SSH{VM: lk.Target, User: "u", Key: "/k2", KnownHosts: "/kh", Port: 62022}, Start: "s"}, "", ""
+	}
+	f.setWant(db)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- l.Run(ctx) }()
+	defer func() {
+		close(f.hold)
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("Run: %v", err)
+		}
+	}()
+	waitFor(t, "the link", func() bool { _, err := os.Lstat(l.Socket(db)); return err == nil })
+	const n = maxLinkConns + 144 // past the cap, and past macOS's backlog of 128 on its own
+	var conns []net.Conn
+	defer func() {
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	}()
+	d := net.Dialer{Timeout: time.Second}
+	for i := range n {
+		c, err := d.DialContext(t.Context(), "unix", l.Socket(db))
+		if err != nil {
+			t.Fatalf("connection %d: %v", i+1, err)
+		}
+		conns = append(conns, c)
+	}
+	limited := func() int {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return len(slices.DeleteFunc(slices.Clone(f.events), func(e string) bool { return e != "link_limit db 256" }))
+	}
+	waitFor(t, "each carried or refused", func() bool { return f.count(&f.relays) == maxLinkConns && limited() == n-maxLinkConns })
+}
+
+// The session lists the client's links for its proxy (List), carried or
+// not: each with its names, address, port, target and socket, mode 600,
+// written again when they change or the file goes, and empty once the
+// client has none; a list an earlier session left is replaced.
+func TestLinksList(t *testing.T) {
+	a := netip.MustParseAddr
+	db := Link{Name: "db", Target: "devvm-db-0123456789abcd", Addr: a("127.77.0.1"), Port: 5432, Hosts: []string{"db", "db.devvm.internal"}}
+	api := Link{Name: "api", Target: "devvm-api-0123456789abcd", Addr: a("127.77.0.2"), Port: 80, Hosts: []string{"api", "api.devvm.internal"}}
+	f := &fakeLinks{}
+	l := f.newLinks(t)
+	l.List = filepath.Join(l.Dir, l.VM+".links.json")
+	f.taken["127.77.0.2:80"] = true
+	f.target = func(lk Link) (LinkTarget, string, string) {
+		return LinkTarget{SSH: SSH{VM: lk.Target, User: "u", Key: "/k2", KnownHosts: "/kh", Port: 62022}, Start: "s"}, "", ""
+	}
+	if err := os.MkdirAll(l.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.List, []byte(`{"version":1,"links":[{"hosts":["old"],"addr":"127.77.0.9","port":1,"socket":"/x"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.setWant(db, api)
+	read := func() (proxy.LinkList, os.FileMode) {
+		var list proxy.LinkList
+		b, err := os.ReadFile(l.List)
+		fi, serr := os.Stat(l.List)
+		if err != nil || serr != nil || json.Unmarshal(b, &list) != nil {
+			return proxy.LinkList{Version: -1}, 0
+		}
+		return list, fi.Mode().Perm()
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- l.Run(ctx) }()
+	waitFor(t, "the links listed", func() bool { list, _ := read(); return len(list.Links) == 2 })
+	waitFor(t, "db carried", func() bool { return dial(t, l.Socket(db)) != "refused" })
+	list, mode := read()
+	want := []proxy.LinkEntry{
+		{Hosts: db.Hosts, Addr: "127.77.0.1", Port: 5432, Target: db.Target, Socket: l.Socket(db)},
+		// Refused by the client, so not carried, but listed: the proxy finds no socket for it and
+		// refuses it, rather than ask its rules.
+		{Hosts: api.Hosts, Addr: "127.77.0.2", Port: 80, Target: api.Target, Socket: l.Socket(api)},
+	}
+	if list.Version != proxy.LinkListVersion || !reflect.DeepEqual(list.Links, want) || mode != 0o600 {
+		t.Errorf("the list: %+v, mode %v; want %+v", list, mode, want)
+	}
+	if _, err := os.Lstat(l.Socket(api)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("api's socket: %v", err)
+	}
+	if want[0].Socket != proxy.LinkSocket(l.Dir, l.VM, db.Addr, db.Port) {
+		t.Errorf("the socket isn't the one the proxy expects: %s", want[0].Socket)
+	}
+	// Removed by something else, it's written again.
+	if err := os.Remove(l.List); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the list again", func() bool { list, _ := read(); return len(list.Links) == 2 })
+	f.setWant()
+	waitFor(t, "the session's end", func() bool {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("Run: %v", err)
+			}
+			return true
+		default:
+			return false
+		}
+	})
+	cancel()
+	if list, _ := read(); list.Version != proxy.LinkListVersion || len(list.Links) != 0 {
+		t.Errorf("the list once the client has no links: %+v", list)
+	}
 }
 
 // vmssh's links' addresses are 127.77.0.0/16, unmapped.

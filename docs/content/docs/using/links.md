@@ -80,7 +80,9 @@ A client with network policy links only to a target with network policy, because
 
 devvm checks this rule when you add a link, at each launch of the client and on every connection. While such a link exists, devvm refuses `devvm network off` in the target's folder and names the clients that link to it, and it refuses `devvm network on` for a client that links to a VM without network policy. Remove those links with `devvm link rm` first, or turn on network policy for the target.
 
-With network policy, the client's programs reach a link directly, not through the VM's proxy, because devvm adds each link's name and `.devvm.internal` to the VM's `NO_PROXY` and `no_proxy`. The allowlist doesn't decide a link's connections, because the rule above and the published ports do, and `devvm network log` shows them ([the link log](#the-link-log)).
+With network policy, a program that uses the VM's proxy settings, such as curl, sends its requests for a link to the VM's proxy, and the proxy carries a request for one of the link's names and its port, such as `db:5432` or `db.devvm.internal:5432`, to the link. Other programs reach the link by its name, as they do in a VM without network policy. The proxy passes a link's connection on as it is, so it doesn't look into it and puts none of your secrets into it.
+
+Network policy's rules don't apply to links. The allowlist doesn't allow or block a link's connections, and `devvm network deny db` doesn't stop the link `db`. The rule above and the published ports decide which connections a link carries, and `devvm network log` shows them ([the link log](#the-link-log)). To stop a link, remove it with `devvm link rm`, or unpublish its port in the target's folder.
 
 ## Listing links
 
@@ -146,14 +148,7 @@ The link's next connection is refused, while connections that are open stay unti
 
 ## When links change
 
-A change of links reaches a running client at once and a stopped one when it next starts, and devvm says which. On a running client:
-
-- The names resolve at once, because devvm rewrites the client's `/etc/hosts`, and a link's port answers within a few seconds.
-- Without network policy, nothing else changes, and nothing in the VM restarts.
-- With network policy, shells and programs take `NO_PROXY` from the VM's start, so they get a new link's name in it at the client's next start, which `devvm restart` gives you. Until then, a program that uses the VM's proxy settings sends its requests for the new name to the proxy, which doesn't reach the link, so restart the VM or tell that program to skip the proxy for the name, as `curl --noproxy db` does.
-- With network policy, Docker's daemon from the docker layer and Nix's from the nix layer get the new `NO_PROXY` at once, so devvm restarts them. Restarting Docker's daemon stops the containers running in the VM, and Docker starts again only those with a restart policy.
-
-On Lima, a VM with network policy has its links' names in its Lima config, so a start after its link names changed gives the VM new ssh host keys. devvm reads and pins the VM's host keys again at every start, so its ssh config and your editors keep working after the VM starts.
+A change of links reaches a running client at once and a stopped one when it next starts, and devvm says which. On a running client, the names resolve at once, because devvm rewrites the client's `/etc/hosts`, and a link's port answers within a few seconds. With network policy, the VM's proxy reaches a new link as soon as its port answers, so the programs that use the VM's proxy settings also reach it, including those that were already running. Nothing in the VM restarts, and the VM's environment doesn't change, with or without network policy.
 
 ## When a target stops or goes
 
