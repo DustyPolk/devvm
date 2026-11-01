@@ -6,8 +6,8 @@
 #                project makes a VM from base in a project folder, opens it from a subfolder in that
 #                subfolder, and checks its mounts, a file watcher in it (the VM's edits seen, none
 #                of this machine's: Lima's mounts pass on no file events), no Docker, every
-#                port through devvm's forwarder (never a port a program here has, nor a link's
-#                address), ssh by
+#                port through devvm's forwarder (never a port a program here has, nor a server on a
+#                link's address), ssh by
 #                name with pinned host keys, .git protection and shell, then devvm stop, opening it
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
 #                program here has, a bad list a usage error), a mistyped command refused with a suggestion,
@@ -26,7 +26,15 @@
 #                pins, store and trust, nix-daemon's proxy, nix run nixpkgs#hello through the shared Nix
 #                cache (fetched by the host, a VM's writes and other requests refused, a second VM's
 #                hits), sudo nix, the flake's dev shell through direnv before the shared node, a blocked
-#                download named, and network off (no shared cache)
+#                download named, and network off (no shared cache); link makes two small targets and
+#                a client that forwards every port, and checks links between them, each check a row
+#                of the design note's threat check: names alone (never the client's localhost, never
+#                forwarded to this machine), two targets on one port, port 80, publish, unpublish,
+#                add and rm on a running client, the sockets, the 256-connection cap, a program
+#                holding a link's address, root loosening the client's sshd, a stopped and restarted
+#                target, the target's rm and a VM made again, network policy on both and the
+#                policy rule's refusals, the log, and nothing left behind (in the --from tier, an
+#                Alpine client's link to port 80 too). --backend smolvm and docker run it too
 #     --only desktop
 #                base with the desktop feature, and a VM with network policy whose desktop devvm
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
@@ -59,6 +67,7 @@
 #                reach this machine's loopback alone, never a port of this machine's or devvm's, no
 #                way out with network policy), the nix layer (nix-daemon started after each start,
 #                with the VM's proxy and then without, nix run nixpkgs#hello, a sandboxed build),
+#                links between VMs (the link section's checks, port 80 on smolvm's kernel too),
 #                and that no machine without the sandbox's label is touched. Its machines share your
 #                smolvm (macOS): it deletes only those it made, with the sandbox's label.
 #     --backend docker [--engine linux|desktop]
@@ -91,7 +100,8 @@
 #                token kept out of the VM and its relay, its proxy following its container,
 #                fail-closed without it, a network added, a relay replaced or a start outside devvm
 #                unenforced and stopped, another container on its network refused, network off and
-#                on, ping without NET_RAW).
+#                on, ping without NET_RAW); links between VMs (the link section's checks), on each
+#                engine.
 #                On macOS, the same on a Linux engine in a Lima VM e2e keeps (Lima home
 #                ~/.lt-e2e-go-docker, VM dockerhost: this checkout read-only, devvm built for it here,
 #                Sysbox installed, pinned),
@@ -109,9 +119,9 @@
 # $DEVVM_E2E_BIN, a test build of it, where there's no Go: the docker host VM).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-sections_all="images project clone gc tools network desktop nix from"
+sections_all="images project clone gc tools network desktop nix from link"
 usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm | --backend docker [--engine linux|desktop]]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network nix" backend=lima engines=""
+clean=false sel="images project clone gc tools network nix link" backend=lima engines=""
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
@@ -624,6 +634,453 @@ watch_sees() { local w r=1
   rm -rf "$3/.e2e-watch" "$3/watched.txt" "$3/made.txt" "$3/e2e-sub"
   return "$r"; }
 watch_misses() { watch_sees "$1" "$2" "$3" host; grep -qx ready "$work/watch.out" && ! grep -qvx ready "$work/watch.out"; }
+
+# Links between VMs: link_section's checks, the same on each backend, each the end-to-end proof of a
+# row of the design note's threat check (internals/design.md, "Links between VMs"). lk_be is the
+# backend they run on, lk_cli devvm's flag for it.
+lk_be=lima lk_cli=()
+# lk_pl: the VMs' helper, /var/tmp/e2e-link.pl (perl: every base has it). serve ADDR PORT WORD
+# answers each connection with an HTTP response whose body is WORD; hold ADDR PORT keeps every
+# connection it accepts open (each writes its pid to /var/tmp/e2e-link-ADDR-PORT.pid); conns HOST
+# PORT N opens N connections, 50 ms apart and the last 5 s after the others, and prints those the far
+# end closed (a burst of them all at once outruns the backlog of the link's socket on macOS, 128, while
+# devvm _links starts their relays);
+# listeners prints each TCP listener as "PROCESS ADDR:PORT" (as root, to see every process's).
+lk_pl='use strict; use warnings; use IO::Socket::INET; use IO::Select;
+my $mode = shift // "";
+sub v4 { join ".", reverse map { hex } $_[0] =~ /(..)/g }
+sub addr { my $a = uc shift;
+  return v4($a) if length $a == 8;
+  return "[::]" if $a =~ /^0{32}$/;
+  return "[::1]" if $a eq "00000000000000000000000001000000";
+  return "[::ffff:" . v4($1) . "]" if $a =~ /^0{16}FFFF0000(.{8})$/;
+  return "[$a]"; }
+if ($mode eq "serve" or $mode eq "hold") {
+  my ($host, $port, $word) = @ARGV;
+  my $s = IO::Socket::INET->new(LocalAddr => $host, LocalPort => $port, Listen => 1024, ReuseAddr => 1) or die "$host:$port: $!\n";
+  open(my $pf, ">", "/var/tmp/e2e-link-$host-$port.pid") or die "$!\n"; print $pf "$$\n"; close $pf;
+  my @held;
+  while (my $c = $s->accept) {
+    if ($mode eq "hold") { push @held, $c; next }
+    my $sel = IO::Select->new($c); my $buf = "";
+    while ($buf !~ /\n\r?\n/ and $sel->can_read(2)) { sysread($c, $buf, 4096, length $buf) or last }
+    my $body = "$word\n";
+    print $c "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
+    close $c;
+  }
+} elsif ($mode eq "conns") {
+  my ($host, $port, $n) = @ARGV; my @c;
+  for my $i (1 .. $n) {
+    sleep 5 if $i == $n;
+    select(undef, undef, undef, 0.05);
+    push @c, IO::Socket::INET->new(PeerAddr => $host, PeerPort => $port, Timeout => 10) || die "connection $i: $!\n";
+  }
+  sleep 5;
+  my @closed;
+  for my $i (0 .. $#c) { push @closed, $i + 1 if IO::Select->new($c[$i])->can_read(0) and !sysread($c[$i], my $x, 1) }
+  print "closed: @closed\n";
+} elsif ($mode eq "listeners") {
+  my %own;
+  for my $d (glob "/proc/[0-9]*") {
+    open(my $f, "<", "$d/comm") or next; my $n = <$f> // "?"; chomp $n;
+    opendir(my $fd, "$d/fd") or next;
+    for my $e (readdir $fd) { my $l = readlink("$d/fd/$e") // next; $own{$1} = $n if $l =~ /^socket:\[(\d+)\]$/ }
+  }
+  for my $t ("tcp", "tcp6") {
+    open(my $h, "<", "/proc/net/$t") or next; my $head = <$h>;
+    while (my $line = <$h>) {
+      my @f = split " ", $line; next unless $f[3] eq "0A";
+      my ($a, $p) = split /:/, $f[1];
+      printf "%s %s:%d\n", $own{$f[9]} // "?", addr($a), hex $p;
+    }
+  }
+} else { die "e2e-link.pl: serve, hold, conns or listeners\n" }'
+# lk_user VM CMD: CMD in a login shell as the VM's user, on lk_be; lk_root VM CMD: as root; lk_bg VM
+# CMD: as root, left running; lk_put VM FILE: the input, as FILE in the VM.
+lk_user() { case $lk_be in lima) in_vm "$1" "$2" ;; smolvm) in_smol "$1" "$2" ;; *) in_d "$1" "$2" ;; esac; }
+lk_root() { case $lk_be in
+  lima) limactl shell --workdir / "$1" sudo sh -c "$2" </dev/null ;;
+  smolvm) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c "$2" </dev/null ;;
+  *) docker exec -u 0 "$1" sh -c "$2" </dev/null ;; esac; }
+lk_bg() { case $lk_be in
+  lima) lk_root "$1" "setsid -f $2 </dev/null >/dev/null 2>&1" ;;
+  smolvm) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- sh -c "$2" </dev/null >/dev/null 2>&1 ;;
+  *) docker exec -d -u 0 "$1" sh -c "$2" </dev/null >/dev/null 2>&1 ;; esac; }
+lk_put() { case $lk_be in
+  lima) limactl shell --workdir / "$1" sudo sh -c 'cat > "$1"' _ "$2" ;;
+  smolvm) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -i -- sh -c 'cat > "$1"' _ "$2" ;;
+  *) docker exec -i -u 0 "$1" sh -c 'cat > "$1"' _ "$2" ;; esac; }
+# lk_running VM: it runs, as its backend says.
+lk_running() { case $lk_be in
+  lima) [[ $(status_of "$1") == Running ]] ;; smolvm) [[ $(smol_status "$1") == running ]] ;; *) [[ $(d_state "$1") == running ]] ;; esac; }
+# lk_until SECONDS CMD...: CMD, once a second until it passes, for up to SECONDS; lk_not CMD...: CMD fails.
+lk_until() { local n=$1 i; shift; for ((i = 1; i < n; i++)); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done; "$@"; }
+lk_not() { ! "$@"; }
+# lk_start VM serve|hold ADDR PORT [WORD]: the helper's server in the VM, as root, once it listens;
+# lk_end VM ADDR PORT ends it. lk_serve VM WORD PORTS...: the helper written to the VM, and a server
+# on its 127.0.0.1 on each port, answering WORD-PORT.
+lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid
+  lk_root "$1" "rm -f $f" && lk_bg "$1" "perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-}" && lk_until 20 lk_root "$1" "test -s $f"; }
+lk_end() { lk_root "$1" "f=/var/tmp/e2e-link-$2-$3.pid; [ ! -s \$f ] || kill \$(cat \$f); rm -f \$f"; }
+lk_serve() { local vm=$1 w=$2 p; shift 2
+  printf '%s\n' "$lk_pl" | lk_put "$vm" /var/tmp/e2e-link.pl || return 1
+  for p in "$@"; do lk_start "$vm" serve 127.0.0.1 "$p" "$w-$p" || return 1; done; }
+# lk_raw VM HOST PORT: what a raw TCP client in the VM (bash's /dev/tcp) gets back for a request: the
+# body's line. lk_gets VM HOST PORT WORD: it's WORD. lk_curls VM URL WORD: curl gets WORD, through the
+# VM's proxy settings when it has them. lk_resolves VM NAME: the name resolves in the VM.
+lk_raw() { lk_user "$1" "exec 3<>/dev/tcp/$2/$3 && printf 'GET / HTTP/1.0\r\n\r\n' >&3 && timeout 10 cat <&3 | tail -n 1"; }
+lk_gets() { local a; a=$(lk_raw "$1" "$2" "$3" 2>/dev/null); echo "$2:$3 answered: ${a:-nothing}"; [[ $a == "$4" ]]; }
+lk_curls() { local a; a=$(lk_user "$1" "curl -fsS --max-time 10 $2" 2>/dev/null); echo "$2 answered: ${a:-nothing}"; [[ $a == "$3" ]]; }
+lk_resolves() { lk_user "$1" "getent hosts $2" >/dev/null 2>&1; }
+# lk_dv DIR ARGS...: devvm ARGS in DIR, messages by name, its output in $work/last.log; lk_up DIR
+# [ARGS...]: the same with a shell that ends at once. lk_said LINE: the output has that line.
+lk_dv() { local d=$1; shift; (cd "$d" && DEVVM_MESSAGES=names "$D" "$@" </dev/null >"$work/last.log" 2>&1); }
+lk_up() { local d=$1; shift; (cd "$d" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "$@" >"$work/last.log" 2>&1); }
+# lk_shows DIR REGEX ARGS...: devvm ARGS' output in DIR has a line matching REGEX (read whole first:
+# grep -q ending a pipe early fails it, under pipefail).
+lk_shows() { local o; o=$(cd "$1" && "$D" "${@:3}" 2>/dev/null); grep -Eq -- "$2" <<<"$o"; }
+lk_said() { grep -qxF -- "$1" "$work/last.log" || { echo "not said: $1"; tail -5 "$work/last.log"; return 1; }; }
+# lk_ssh ARGS...: ssh through devvm's ssh config, without an agent.
+lk_ssh() { env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$@" </dev/null; }
+# lk_addr VM NAME: the address its links named NAME listen on, from its state. lk_hash PARTS...: the
+# hash devvm names a link session's files by. lk_sock VM ADDR PORT: a link's socket; lk_ctl VM: the
+# session's control socket. lk_mode PATH: its mode, in octal.
+lk_addr() { sed -n 's/^links=//p' "$vms/$1" 2>/dev/null | tr ' ' '\n' | awk -F, -v n="$2" '$1 == n { print $5; exit }'; }
+lk_hash() { local s=$1; shift
+  { printf '%s' "$s"; for s in "$@"; do printf '\0%s' "$s"; done; } | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16; }
+lk_sock() { echo "$XDG_DATA_HOME/devvm/run/link-$(lk_hash "$1" socket "$2" "$3").sock"; }
+lk_ctl() { echo "$XDG_DATA_HOME/devvm/run/link-$(lk_hash "$1" session).ctl"; }
+lk_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+# lk_session VM: the pid of its devvm _links; lk_master VM: of that session's ssh master to it.
+# lk_desc PIDS...: them and their descendants, comma-separated.
+lk_session() { local p; p=$(pgrep -f -- "[_]links $1\$" | head -1); [[ -n $p ]] && echo "$p"; }
+lk_master() { local p; p=$(pgrep -f -- "[-]M -S $(lk_ctl "$1") " | head -1); [[ -n $p ]] && echo "$p"; }
+lk_desc() { local p c; for p in "$@"; do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do lk_desc "$c"; done; done; }
+# lk_sshport VM: the host loopback port devvm's ssh reaches it on ("" through a ProxyCommand: Docker).
+lk_sshport() { local p; p=$(sed -n 's/^ssh_port=//p' "$vms/$1" 2>/dev/null)
+  [[ -n $p ]] || p=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$1.json" 2>/dev/null)
+  echo "$p"; }
+# lk_host_tcp PIDS: those processes' TCP sockets on this machine, "LOCAL (LISTEN)" or "LOCAL->PEER (STATE)".
+lk_host_tcp() {
+  if [[ "$(uname -s)" == Darwin ]]; then lsof -nP -a -p "$1" -iTCP 2>/dev/null | awk 'NR > 1 { print $9, $10 }'
+  else ss -Htanp 2>/dev/null | grep -E "pid=($(tr , '|' <<<"$1"))," | awk '{ print ($1 == "LISTEN" ? $4 : $4 "->" $5), "(" $1 ")" }'; fi; }
+# lk_host_clean CLIENT VMS...: CLIENT's link session and every process it started listen on no TCP
+# port of this machine's, and connect only to the ssh ports of VMS on its loopback.
+lk_host_clean() { local pid t peer v ok bad=""; pid=$(lk_session "$1") || { echo "no link session"; return 1; }; shift
+  t=$(lk_host_tcp "$(lk_desc "$pid" | paste -sd, -)"); echo "the link session's TCP: $(paste -sd ' ' - <<<"${t:-none}")"
+  ! grep -q LISTEN <<<"$t" || return 1
+  while read -r peer; do
+    [[ -n $peer ]] || continue
+    ok=no; for v in "$@"; do [[ $peer != "127.0.0.1:$(lk_sshport "$v")" ]] || ok=yes; done; [[ $ok == yes ]] || bad+=" $peer"
+  done < <(grep -- '->' <<<"$t" | awk '{ sub(/^.*->/, "", $1); print $1 }')
+  [[ -z $bad ]] || { echo "connected to:$bad"; return 1; }; }
+# lk_listens VM: its TCP listeners, as the helper prints them, read as root and as its user: root in a
+# container may not read the processes of the user's (no CAP_SYS_PTRACE), whose sshd has the links'.
+# On Docker neither can: each connection's sshd (sshd -i) isn't dumpable, so a listener no process
+# shows is counted as sshd's ("sshd?"), which only makes lk_vm_clean stricter. lk_vm_clean VM
+# PORTS...: its sshd listens only on its own port (22) and links' addresses, and on each PORT sshd
+# listens on a link's address and nothing listens anywhere else (127.0.0.1, ::1, every address).
+lk_listens() {
+  { lk_root "$1" 'perl /var/tmp/e2e-link.pl listeners'; lk_user "$1" 'perl /var/tmp/e2e-link.pl listeners'; } 2>/dev/null |
+    awk -v d="$lk_be" '!($2 in n) || n[$2] == "?" { n[$2] = $1 } END { for (a in n) print (d == "docker" && n[a] == "?" ? "sshd?" : n[a]), a }'; }
+lk_vm_clean() { local vm=$1 l p bad; shift
+  l=$(lk_listens "$vm") || { echo "no listeners read"; return 1; }
+  bad=$(awk '$1 ~ /^sshd/ && $2 !~ /:22$/ && $2 !~ /^127\.77\./' <<<"$l")
+  [[ -z $bad ]] || { echo "sshd also listens on: $bad"; return 1; }
+  for p in "$@"; do
+    grep -qE "^sshd[^ ]* 127\.77\.[0-9]+\.[0-9]+:$p\$" <<<"$l" || { echo "no link listens on $p: $(grep ":$p\$" <<<"$l")"; return 1; }
+    bad=$(grep ":$p\$" <<<"$l" | grep -v ' 127\.77\.')
+    [[ -z $bad ]] || { echo "on $p: $bad"; return 1; }
+  done; }
+# lk_event VM EVENT NAME PORT [TEXT]: its event log has that event for the link NAME:PORT, with TEXT.
+lk_event() { grep -F "\"event\":\"$2\",\"host\":\"$3\",\"port\":$4," "$XDG_DATA_HOME/devvm/logs/$1.jsonl" 2>/dev/null | grep -qF -- "${5:-}"; }
+# lk_set_net VM on|off: its state's network policy set by hand, as nothing devvm runs would: the rule
+# broken under devvm, which checks it again on every connection and at each launch.
+lk_set_net() { local s; s=$(sed "s/^net=.*/net=$2/" "$vms/$1") && printf '%s\n' "$s" > "$vms/$1"; }
+# lk_hostile VM [gateway]: root in the client loosens its sshd (any listen address, all forwarding;
+# with gateway, GatewayPorts yes too) and makes it read that; lk_honest VM puts it back.
+lk_hostile_sh='if [ -f /etc/devvm/ssh/sshd_config ]; then c=/etc/devvm/ssh/sshd_config
+  [ -f $c.e2e ] || cp $c $c.e2e
+  sed -i -e "s/^PermitListen .*/PermitListen any/" -e "s/^AllowTcpForwarding .*/AllowTcpForwarding yes/" $c
+  [ "$h" != gateway ] || sed -i "s/^GatewayPorts .*/GatewayPorts yes/" $c
+  [ ! -s /run/devvm-sshd.pid ] || kill -HUP "$(cat /run/devvm-sshd.pid)"
+else { echo "PermitListen any"; echo "AllowTcpForwarding yes"; [ "$h" != gateway ] || echo "GatewayPorts yes"; } > /etc/ssh/sshd_config.d/00-aaa-e2e.conf
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || rc-service sshd reload 2>/dev/null || true
+fi'
+lk_honest_sh='if [ -f /etc/devvm/ssh/sshd_config.e2e ]; then mv /etc/devvm/ssh/sshd_config.e2e /etc/devvm/ssh/sshd_config
+  [ ! -s /run/devvm-sshd.pid ] || kill -HUP "$(cat /run/devvm-sshd.pid)"
+else rm -f /etc/ssh/sshd_config.d/00-aaa-e2e.conf
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || rc-service sshd reload 2>/dev/null || true
+fi'
+lk_hostile() { lk_root "$1" "h=${2:-}; $lk_hostile_sh"; }
+lk_honest() { lk_root "$1" "$lk_honest_sh"; }
+# lk_reconnect VM NAME PORT WORD: its link session's connection ended (its master killed), so the
+# session makes a new one, to sshd as it is now; the link NAME:PORT answers WORD again through it.
+lk_reconnect() { local m; m=$(lk_master "$1"); [[ -n $m ]] || { echo "no master"; return 1; }
+  kill "$m"; lk_until 30 lk_new_master "$1" "$m" && lk_until 30 lk_gets "$1" "$2" "$3" "$4"; }
+lk_new_master() { local n; n=$(lk_master "$1"); [[ -n $n && $n != "$2" ]]; }
+
+# link_section BACKEND PREFIX: the link checks on BACKEND (lima, smolvm, docker), the folders named
+# from PREFIX: PREFIXdb and PREFIXapi the targets, PREFIXapp the client. Three small VMs without
+# network policy, then network policy on the client and the first target; ports 47240-47249, and 80.
+link_section() {
+  lk_be=$1 lk_x=$2 lk_cli=(); [[ $lk_be == lima ]] || lk_cli=(--backend "$lk_be")
+  sc=${sc:-$work/ssh}   # rfwd_links's socket forward names a path there
+  lk_p1=$(newproj "${lk_x}db") lk_p2=$(newproj "${lk_x}api") lk_pc=$(newproj "${lk_x}app")
+  local small=(--no-network-policy --no-git-protect --cpus 2 --memory 2)
+  launch "$lk_p1" exit ${lk_cli[@]+"${lk_cli[@]}"} "${small[@]}" --ports none base; lk_v1=$vm
+  launch "$lk_p2" exit ${lk_cli[@]+"${lk_cli[@]}"} "${small[@]}" --ports none base; lk_v2=$vm
+  launch "$lk_pc" exit ${lk_cli[@]+"${lk_cli[@]}"} "${small[@]}" --ports all base; lk_vc=$vm
+  lk_w1=${lk_x}db lk_w2=${lk_x}api lk_n2=${lk_x}api   # the targets' servers' words; the second's link name
+  check "two targets that forward no port and a client that forwards every port, without network policy" lk_made
+  lk_serve "$lk_v1" "$lk_w1" 47240 47242 47243 47244 47249 80 >/dev/null 2>&1
+  lk_start "$lk_v1" hold 127.0.0.1 47241 >/dev/null 2>&1
+  lk_serve "$lk_v2" "$lk_w2" 47240 80 >/dev/null 2>&1
+  printf '%s\n' "$lk_pl" | lk_put "$lk_vc" /var/tmp/e2e-link.pl >/dev/null 2>&1
+  check "sshd -T in every VM: remote forwards on 127.77.*:* alone, at the address asked, no socket forwards, tunnels or X11" \
+    lk_sshd_t "$lk_v1" "$lk_v2" "$lk_vc"
+  if [[ $lk_be == lima ]]; then
+    check "Lima's own rules ignore every port of the client's" bash -c "
+      [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $lk_vc) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]]"
+  fi
+  check "devvm link publish offers ports, and lists them, with \"version\": 1 in its --json" lk_publish
+  check "a port the target doesn't publish is refused by devvm link add" lk_unpublished_add
+  check "devvm link add on the running client applies within seconds: NAME:PORT and NAME.devvm.internal:PORT, by curl and a raw TCP client" lk_add_applies
+  check "--as NAME names the link alone: the target's folder name doesn't resolve in the client" lk_as_alone
+  check "two targets publishing the same port are each reached by their own name" lk_two
+  check "a port below 1024 (80) is linked on the same port, sshd listening on it as the VM's user" lk_low
+  check "devvm link lists each link, with its target, folder and status, and \"version\": 1 in its --json" lk_list
+  check "devvm network on is refused for a client linked to a target without network policy" lk_on_refused
+  check "a published port that isn't linked is refused: nothing listens for it in the client" lk_not_linked
+  check "after devvm link unpublish, the link's next connection is refused and logged, and the clients are named" lk_unpublish
+  check "devvm link rm on the running client applies within seconds: its listener goes" lk_rm_applies
+  check "nothing from a link listens on the client's 127.0.0.1, ::1 or every address; its sshd listens only on its own port and the links' addresses" \
+    lk_vm_clean "$lk_vc" 47240 80
+  check "the client forwards every port, and no link is forwarded to this machine" lk_not_forwarded
+  check "a server of the client's own on its 127.0.0.1 with a link's port runs and reaches this machine as usual (the control); the link still reaches its target" lk_own_server
+  check "each link's end on this machine is a socket of mode 600 in a folder of mode 700, and no TCP port of this machine's carries it" lk_sockets
+  check "ssh -R into the client binds nothing on 0.0.0.0, 127.0.0.1, ::1, localhost, another range or a socket; on 127.77.0.0/16 it does (the control)" \
+    rfwd_links "$lk_vc" lk_ssh
+  check "a program in the client on a link's address and port first fails that link alone (link_port_taken); another link works" lk_port_taken
+  check "257 connections at once: the 257th is refused, and devvm network log shows link_limit" lk_cap
+  check "root in the client lets sshd bind any address: the link session still asks only for its links' addresses, and the link works" lk_hostile_listen
+  check "... with GatewayPorts yes too: the link session still listens on no TCP port here and connects only to the VMs' sshd, and the link works" lk_hostile_gateway
+  echo "  recorded: $(cat "$work/link-gateway.log" 2>/dev/null)"; rm -f "$work/link-gateway.log"
+  check "sshd put back, the session's next connection binds the links' addresses alone again" lk_honest_again
+  check "devvm network log shows the links' connections and refusals without network policy" lk_log_off
+  check "a stopped target: the connection fails, devvm network log shows link_target_stopped, the launch warns, and the target stays stopped" lk_stopped
+  check "restarted, it works again, with its new host key" lk_restarted
+  check "devvm rm of the target removes the client's link, names the client, and its sockets go; the client's session runs on" lk_rm_target
+  check "a VM made again in that folder isn't linked" lk_made_again
+  check "devvm network on for a target, then the client, restarted: both behind their proxies" lk_policy_on
+  check "with network policy, the client reaches NAME:PORT and NAME.devvm.internal:PORT by curl through its proxy settings and a raw TCP client; a direct connection fails (the control)" lk_policy_reach
+  check "devvm network log shows the links' connections with network policy" lk_log_on
+  check "a client with network policy is refused by devvm link add for a target without it" lk_mismatch_add
+  check "devvm network off is refused for a target that a client with network policy links to" lk_off_refused
+  check "the rule broken under devvm: the link's next connection is refused, and the client's launch warns and runs on without it" lk_policy_broken
+  check "the rule restored, the client's next launch has the link again" lk_policy_back
+  if [[ $lk_be == lima ]] && want from; then
+    check "a port below 1024 on Lima's Alpine VMs: an Alpine client reaches its link to port 80 on the same port" lk_alpine
+  elif [[ $lk_be == lima ]]; then
+    skip "a port below 1024 on Lima's Alpine VMs: an Alpine client reaches its link to port 80 on the same port" "Alpine's image comes from the from section"
+  fi
+  check "devvm rm of the client leaves no link session, socket, pid file, log or link state" lk_rm_client
+  (cd "$lk_p1" && quiet "$D" rm --force --no-export)
+  (cd "$lk_p2" && quiet "$D" rm --force --no-export)
+}
+lk_made() { local v
+  for v in "$lk_v1" "$lk_v2" "$lk_vc"; do
+    if ! { [[ -n $v ]] && lk_running "$v" && grep -qx net=off "$vms/$v"; }; then echo "${v:-a VM} wasn't made"; return 1; fi; done
+  grep -qx ports=none "$vms/$lk_v1" && grep -qx ports=none "$vms/$lk_v2" && ! grep -q '^ports=' "$vms/$lk_vc"; }
+lk_sshd_t() { local vm t want
+  for vm in "$@"; do
+    t=$(lk_root "$vm" 's=$(command -v sshd || echo /usr/sbin/sshd); c=/etc/devvm/ssh/sshd_config; if [ -f $c ]; then $s -T -f $c; else $s -T; fi') ||
+      { echo "$vm: no sshd -T"; return 1; }
+    for want in 'allowtcpforwarding yes' 'gatewayports clientspecified' 'permitlisten 127.77.*:*' 'allowstreamlocalforwarding local' \
+      'permittunnel no' 'x11forwarding no'; do
+      grep -qxF "$want" <<<"$t" || { echo "$vm: not $want"; return 1; }
+    done
+  done; }
+lk_publish() {
+  # 47243 on its own, as devvm link unpublish takes ports as they're listed.
+  lk_dv "$lk_p1" link publish 80,47240-47242,47244 && lk_said "==> published ports=80,47240-47242,47244 vm=$lk_v1" &&
+    lk_dv "$lk_p1" link publish 47243 && lk_said "==> published ports=80,47240-47242,47244,47243 vm=$lk_v1" &&
+    lk_dv "$lk_p2" link publish 47240,80 && lk_said "==> published ports=47240,80 vm=$lk_v2" || return 1
+  [[ $(cd "$lk_p1" && "$D" link publish 2>/dev/null) == 80,47240-47242,47244,47243 ]] &&
+    lk_shows "$lk_p1" '^  "version": 1,$' link publish --json &&
+    lk_shows "$lk_p1" '^  "ports": "80,47240-47242,47244,47243"$' link publish --json; }
+lk_unpublished_add() {
+  ! lk_dv "$lk_pc" link add "${lk_x}db" 47249 && lk_said "devvm: link_not_published port=47249 vm=$lk_v1" && ! grep -q '^links=' "$vms/$lk_vc"; }
+lk_add_applies() { local s=$SECONDS
+  lk_dv "$lk_pc" link add "${lk_x}db" 47240 --as db && lk_said "==> link_added name=db port=47240 target=$lk_v1 vm=$lk_vc" || return 1
+  lk_until 15 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240" || return 1
+  echo "reached $((SECONDS - s)) s after devvm link add began"
+  lk_curls "$lk_vc" http://db.devvm.internal:47240/ "$lk_w1-47240" && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" &&
+    lk_gets "$lk_vc" db.devvm.internal 47240 "$lk_w1-47240" && [[ $(lk_addr "$lk_vc" db) == 127.77.0.1 ]]; }
+lk_as_alone() { lk_resolves "$lk_vc" db && lk_resolves "$lk_vc" db.devvm.internal && ! lk_resolves "$lk_vc" "${lk_x}db" &&
+  ! lk_resolves "$lk_vc" "${lk_x}db.devvm.internal"; }
+lk_two() {
+  lk_dv "$lk_pc" link add "$lk_n2" 47240 && lk_said "==> link_added name=$lk_n2 port=47240 target=$lk_v2 vm=$lk_vc" || return 1
+  lk_until 15 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" &&
+    [[ $(lk_addr "$lk_vc" "$lk_n2") == 127.77.0.2 ]]; }
+lk_low() {
+  lk_dv "$lk_pc" link add "$lk_n2" 80 && lk_said "==> link_added name=$lk_n2 port=80 target=$lk_v2 vm=$lk_vc" || return 1
+  echo "the client's ip_unprivileged_port_start: $(lk_root "$lk_vc" 'cat /proc/sys/net/ipv4/ip_unprivileged_port_start')"
+  lk_until 15 lk_gets "$lk_vc" "$lk_n2" 80 "$lk_w2-80" && grep -qE '^sshd[^ ]* 127\.77\.0\.2:80$' <<<"$(lk_listens "$lk_vc")"; }
+lk_list() { local l j
+  l=$(cd "$lk_pc" && "$D" link 2>/dev/null); echo "$l"
+  grep -Eq "^db +47240 +$lk_v1 +$lk_p1 +Running +yes\$" <<<"$l" && grep -Eq "^$lk_n2 +80 +$lk_v2 +$lk_p2 +Running +yes\$" <<<"$l" || return 1
+  j=$(cd "$lk_pc" && "$D" link --json 2>/dev/null)
+  grep -qxF '  "version": 1,' <<<"$j" && grep -qxF '      "name": "db",' <<<"$j" && grep -qxF "      \"target\": \"$lk_v2\"," <<<"$j"; }
+lk_on_refused() { local r=0
+  lk_dv "$lk_pc" network on && r=1
+  cat "$work/last.log"
+  (( r == 0 )) && grep -Eq "^devvm: network_on_linked targets=.*$lk_v1.* vm=$lk_vc\$" "$work/last.log" &&
+    grep -Eq "^devvm: network_on_linked targets=.*$lk_v2.* vm=$lk_vc\$" "$work/last.log" && grep -qx net=off "$vms/$lk_vc"; }
+lk_not_linked() { local a; a=$(lk_raw "$lk_vc" db 47244 2>&1); echo "db:47244: ${a:-nothing}"
+  ! lk_raw "$lk_vc" db 47244 >/dev/null 2>&1; }
+lk_unpublish() {
+  lk_dv "$lk_pc" link add "${lk_x}db" 47243 || { tail -5 "$work/last.log"; return 1; }
+  lk_until 15 lk_gets "$lk_vc" db 47243 "$lk_w1-47243" || return 1
+  lk_dv "$lk_p1" link unpublish 47243 && lk_said "==> unpublished ports=47243 vm=$lk_v1" && lk_said "unpublished_linked vm=$lk_v1 vms=$lk_vc" || return 1
+  lk_gets "$lk_vc" db 47243 "" && lk_until 5 lk_event "$lk_vc" link_refused db 47243 '"reason":"unpublished"' &&
+    lk_shows "$lk_pc" "^db +47243 +$lk_v1 +$lk_p1 +Running +unpublished\$" link; }
+lk_rm_applies() { local s=$SECONDS
+  lk_dv "$lk_pc" link rm db 47243 && lk_said "==> link_removed name=db port=47243 vm=$lk_vc" || return 1
+  lk_until 15 lk_not lk_listening "$lk_vc" 127.77.0.1:47243 || return 1
+  echo "gone $((SECONDS - s)) s after devvm link rm began"
+  ! lk_raw "$lk_vc" db 47243 >/dev/null 2>&1 && [[ ! -e $(lk_sock "$lk_vc" 127.77.0.1 47243) ]]; }
+lk_listening() { grep -q " $2\$" <<<"$(lk_listens "$1")"; }
+lk_not_forwarded() { sleep 3; lk_listening "$lk_vc" 127.77.0.1:47240 && ! nc -z 127.0.0.1 47240 && ! nc -z ::1 47240; }
+lk_own_server() { local h
+  lk_start "$lk_vc" serve 127.0.0.1 47240 own || return 1
+  for _ in $(seq 20); do h=$(curl -s --max-time 5 http://127.0.0.1:47240/ 2>/dev/null); [[ $h != own ]] || break; sleep 1; done
+  echo "this machine's 127.0.0.1:47240 answered: ${h:-nothing}"
+  [[ $h == own ]] && lk_curls "$lk_vc" http://127.0.0.1:47240/ own && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" &&
+    lk_end "$lk_vc" 127.0.0.1 47240; }
+lk_sockets() { local s r=0 dir=$XDG_DATA_HOME/devvm/run
+  for s in "$(lk_sock "$lk_vc" 127.77.0.1 47240)" "$(lk_sock "$lk_vc" 127.77.0.2 47240)" "$(lk_sock "$lk_vc" 127.77.0.2 80)"; do
+    echo "$s: $(lk_mode "$s" 2>/dev/null)"; [[ -S $s && $(lk_mode "$s") == 600 ]] || r=1
+  done
+  echo "$dir: $(lk_mode "$dir")"; [[ $(lk_mode "$dir") == 700 ]] || r=1
+  (( r == 0 )) && lk_host_clean "$lk_vc" "$lk_vc" "$lk_v1" "$lk_v2"; }
+lk_port_taken() {
+  lk_start "$lk_vc" serve 127.77.0.1 47242 squatter || return 1
+  lk_dv "$lk_pc" link add "${lk_x}db" 47242 && lk_said "devvm: link_port_taken name=db port=47242 vm=$lk_vc" || return 1
+  lk_gets "$lk_vc" db 47242 squatter && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && lk_end "$lk_vc" 127.77.0.1 47242 &&
+    lk_dv "$lk_pc" link rm db 47242; }
+lk_cap() { local out s
+  lk_dv "$lk_pc" link add "${lk_x}db" 47241 || { cat "$work/last.log"; return 1; }
+  out=$(lk_user "$lk_vc" 'LC_ALL=C perl /var/tmp/e2e-link.pl conns db 47241 257' 2>&1 | grep -E '^(closed:|connection )'); echo "$out"
+  echo "events for db:47241: $(grep -F '"host":"db","port":47241,' "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" | sed 's/.*"event":"\([a-z_]*\)".*/\1/' | sort | uniq -c | paste -sd ' ' -)"
+  echo "the session's log: $(tail -3 "$XDG_DATA_HOME/devvm/logs/$lk_vc.links.log" | paste -sd '|' -)"
+  [[ $out == "closed: 257" ]] && lk_event "$lk_vc" link_limit db 47241 '"reason":"256"' &&
+    lk_shows "$lk_pc" "  REFUSED  db:47241  256 connections carried already\$" network log -n 100000 || return 1
+  # Their relays end once the target's server lets them go.
+  lk_end "$lk_v1" 127.0.0.1 47241 && s=$(lk_session "$lk_vc") &&
+    lk_until 60 lk_few "$s" && lk_dv "$lk_pc" link rm db 47241; }
+lk_few() { (( $(lk_desc "$1" | wc -l) < 20 )); }
+lk_hostile_listen() {
+  # Without the link to port 80, which GatewayPorts yes would put on the client's every address, and
+  # its forwarder on this machine's port 80.
+  lk_dv "$lk_pc" link rm "$lk_n2" 80 && lk_hostile "$lk_vc" || return 1
+  # The control: sshd now binds an address it refused.
+  lk_ssh -o ExitOnForwardFailure=yes -R 127.0.0.1:47248:127.0.0.1:9 "$lk_vc" true || { echo "sshd still refuses 127.0.0.1"; return 1; }
+  lk_reconnect "$lk_vc" db 47240 "$lk_w1-47240" && lk_until 15 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" &&
+    lk_vm_clean "$lk_vc" 47240 && lk_host_clean "$lk_vc" "$lk_vc" "$lk_v1" "$lk_v2"; }
+# With GatewayPorts yes, sshd binds every remote forward on the client's every address, whatever the
+# host asked: db's on 0.0.0.0:47240, so the second target's on the same port can't bind. What it shows
+# is printed; root in the client can put a relay of its own there as well.
+lk_hostile_gateway() {
+  lk_hostile "$lk_vc" gateway || return 1
+  lk_reconnect "$lk_vc" db 47240 "$lk_w1-47240" || return 1
+  echo "the client's listeners on 47240: $(lk_listens "$lk_vc" | grep -E ':47240$' | paste -sd ' ' -)" | tee "$work/link-gateway.log"
+  lk_host_clean "$lk_vc" "$lk_vc" "$lk_v1" "$lk_v2"; }
+lk_honest_again() {
+  lk_honest "$lk_vc" && lk_reconnect "$lk_vc" db 47240 "$lk_w1-47240" && lk_until 15 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" &&
+    lk_vm_clean "$lk_vc" 47240 && lk_sshd_t "$lk_vc"; }
+lk_log_off() { local l
+  l=$(cd "$lk_pc" && "$D" network log -n 100000 2>/dev/null)
+  grep -E 'REFUSED|:80 ' <<<"$l" | sort -u -k2 | tail -5
+  grep -Eq "  link +db:47240  to $lk_v1\$" <<<"$l" && grep -Eq "  link +$lk_n2:80  to $lk_v2\$" <<<"$l" &&
+    grep -Eq "  REFUSED  db:47243  to $lk_v1: unpublished\$" <<<"$l" && lk_event "$lk_vc" link db 47240 "\"target\":\"$lk_v1\""; }
+lk_stopped() {
+  lk_dv "$lk_p2" stop && lk_until 30 lk_not lk_running "$lk_v2" || return 1
+  lk_gets "$lk_vc" "$lk_n2" 47240 "" && lk_until 5 lk_event "$lk_vc" link_target_stopped "$lk_n2" 47240 || return 1
+  lk_up "$lk_pc" && lk_said "devvm: link_target_stopped target=$lk_v2 vm=$lk_vc" || return 1
+  sleep 5; lk_shows "$lk_pc" "^$lk_n2 +47240 +$lk_v2 +$lk_p2 +Stopped +yes\$" link &&
+    lk_shows "$lk_pc" "  REFUSED  $lk_n2:47240  to $lk_v2: it isn't running\$" network log -n 100000 &&
+    ! lk_running "$lk_v2"; }
+lk_restarted() { local k0 k1
+  k0=$(grep "^$lk_v2 " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  if ! { lk_up "$lk_p2" && lk_running "$lk_v2" && lk_serve "$lk_v2" "$lk_w2" 47240 80; }; then tail -5 "$work/last.log"; return 1; fi
+  k1=$(grep "^$lk_v2 " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  lk_until 20 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" || return 1
+  # Lima keeps a VM's host keys; smolvm and Docker give it new ones at each start.
+  if [[ $lk_be == lima ]]; then echo "host key kept: $([[ $k0 == "$k1" ]] && echo yes || echo no)"
+  else [[ -n $k1 && $k0 != "$k1" ]] || { echo "the same host key"; return 1; }; fi; }
+lk_rm_target() { local s
+  s=$(lk_session "$lk_vc")
+  lk_dv "$lk_p2" rm --force --no-export && lk_said "==> links_target_gone count=1 vm=$lk_v2 vms=$lk_vc" || return 1
+  ! grep "^links=" "$vms/$lk_vc" | grep -qF "$lk_v2" && lk_until 15 lk_not lk_resolves "$lk_vc" "$lk_n2" &&
+    lk_until 15 lk_not test -e "$(lk_sock "$lk_vc" 127.77.0.2 47240)" && [[ ! -e $(lk_sock "$lk_vc" 127.77.0.2 80) ]] &&
+    [[ -n $s && $(lk_session "$lk_vc") == "$s" ]] && lk_gets "$lk_vc" db 47240 "$lk_w1-47240"; }
+lk_made_again() { local id0
+  id0=$(grep "^links=" "$vms/$lk_vc")
+  launch "$lk_p2" exit ${lk_cli[@]+"${lk_cli[@]}"} --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none base
+  if ! { [[ $vm == "$lk_v2" ]] && lk_running "$lk_v2"; }; then echo "not made again: ${vm:-none}"; return 1; fi
+  ! lk_shows "$lk_pc" "$lk_v2" link && ! lk_resolves "$lk_vc" "$lk_n2" &&
+    [[ $(grep "^links=" "$vms/$lk_vc") == "$id0" ]] && lk_dv "$lk_p2" link publish 47240 && lk_serve "$lk_v2" "$lk_w2" 47240; }
+lk_policy_on() { local v
+  for v in 1 c; do
+    if [[ $v == 1 ]]; then set -- "$lk_p1" "$lk_v1"; else set -- "$lk_pc" "$lk_vc"; fi
+    if ! { lk_dv "$1" network on && lk_up "$1" restart && grep -qx net=on "$vms/$2" && grep -qx net_check=ok "$vms/$2"; }; then
+      echo "$2:"; tail -5 "$work/last.log"; return 1
+    fi
+    [[ $v == c ]] || lk_serve "$lk_v1" "$lk_w1" 47240 80 || return 1
+  done; }
+# The client got its link before its restart with network policy, so the curl here starts with the
+# proxy settings of that start. Once HTTP clients reach links through the VM's proxy, this works for
+# a link added while the client runs, without a restart.
+lk_policy_reach() {
+  lk_user "$lk_vc" '[ -n "$HTTP_PROXY" ]' || { echo "no proxy settings"; return 1; }
+  lk_until 20 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240" && lk_curls "$lk_vc" http://db.devvm.internal:47240/ "$lk_w1-47240" &&
+    lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && ! lk_user "$lk_vc" "curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1/" >/dev/null 2>&1; }
+lk_log_on() { local t0 last
+  t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && grep -qx net=on "$vms/$lk_vc" || return 1
+  last=$(cat "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl".1 "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" 2>/dev/null |
+    grep -F '"event":"link","host":"db","port":47240,' | tail -1)
+  echo "the last: ${last:-none}, since $t0"
+  [[ $(sed -n 's/^{"time":"\([^"]*\)".*/\1/p' <<<"$last") > "$t0" || $(sed -n 's/^{"time":"\([^"]*\)".*/\1/p' <<<"$last") == "$t0" ]] &&
+    lk_shows "$lk_pc" "  link +db:47240  to $lk_v1\$" network log -n 100000; }
+lk_mismatch_add() {
+  ! lk_dv "$lk_pc" link add "$lk_n2" 47240 && lk_said "devvm: link_policy_mismatch target=$lk_v2 vm=$lk_vc" && ! lk_resolves "$lk_vc" "$lk_n2"; }
+lk_off_refused() {
+  ! lk_dv "$lk_p1" network off && lk_said "devvm: network_off_linked vm=$lk_v1 vms=$lk_vc" && grep -qx net=on "$vms/$lk_v1"; }
+lk_policy_broken() {
+  lk_set_net "$lk_v1" off || return 1
+  lk_gets "$lk_vc" db 47240 "" && lk_until 5 lk_event "$lk_vc" link_refused db 47240 '"reason":"policy"' &&
+    lk_up "$lk_pc" && lk_said "devvm: link_policy_mismatch target=$lk_v1 vm=$lk_vc" && lk_running "$lk_vc" &&
+    lk_until 10 lk_not lk_resolves "$lk_vc" db; }
+lk_policy_back() {
+  lk_set_net "$lk_v1" on && lk_up "$lk_pc" && ! grep -q link_policy_mismatch "$work/last.log" &&
+    lk_until 10 lk_resolves "$lk_vc" db && lk_until 20 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240"; }
+lk_alpine() { local pa va r=0
+  pa=$(newproj "${lk_x}alp")
+  nd launch "$pa" exit --from alpine:3 --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none base; va=$vm
+  if ! { [[ -n $va ]] && grep -qx libc=musl "$vms/$va"; }; then echo "no Alpine VM"; tail -5 "$work/last.log"; return 1; fi
+  lk_dv "$pa" link add "${lk_x}db" 80 && lk_said "==> link_added name=${lk_x}db port=80 target=$lk_v1 vm=$va" || r=1
+  (( r == 0 )) && echo "its ip_unprivileged_port_start: $(lk_root "$va" 'cat /proc/sys/net/ipv4/ip_unprivileged_port_start')" &&
+    lk_until 20 lk_gets "$va" "${lk_x}db" 80 "$lk_w1-80" || r=1
+  (cd "$pa" && quiet "$D" rm --force --no-export)
+  return "$r"; }
+lk_rm_client() {
+  lk_dv "$lk_pc" rm --force --no-export || { tail -5 "$work/last.log"; return 1; }
+  lk_until 10 lk_not lk_session "$lk_vc" || { echo "its session runs"; return 1; }
+  [[ -z $(lk_session "$lk_vc") ]] && ! ls "$XDG_DATA_HOME/devvm/run/"link-* >/dev/null 2>&1 &&
+    [[ ! -e $XDG_DATA_HOME/devvm/run/$lk_vc.links.pid && ! -e $vms/$lk_vc ]] && ! ls "$XDG_DATA_HOME/devvm/logs/$lk_vc".* >/dev/null 2>&1 &&
+    ! grep -l "^links=.*$lk_vc" "$vms"/* >/dev/null 2>&1; }
 
 if $clean; then
   section "cleaning cached images"
@@ -1204,34 +1661,6 @@ check "ssh-agent rm takes the key out of devvm's own agent and its record, and l
 check "rm deletes the SSH agent VM" bash -c "cd '$g' && as_user '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock"
-
-section "a link between VMs"
-# Two small VMs without network policy: a target with a server on its own 127.0.0.1, forwarding no
-# port of its own to this machine, and a client that forwards every port, links to it while it runs
-# and reaches it by name.
-pt=$(newproj lkdb)
-launch "$pt" 'exit' --no-network-policy --no-git-protect --cpus 1 --memory 2 --ports none base; vt=$vm
-in_vm "$vt" 'mkdir -p /tmp/e2e-link && echo linked > /tmp/e2e-link/e2e.txt &&
-  setsid -f python3 -m http.server -b 127.0.0.1 -d /tmp/e2e-link 47190 </dev/null >/dev/null 2>&1' >/dev/null 2>&1
-pc=$(newproj lkapp)
-launch "$pc" 'exit' --no-network-policy --no-git-protect --cpus 1 --memory 2 base; vc=$vm
-check "devvm link add on a running client reaches the target's server as NAME:PORT and NAME.devvm.internal:PORT" bash -c "
-  [[ -n '$vt' && -n '$vc' ]] && (cd '$pt' && '$D' link publish 47190 </dev/null >/dev/null 2>&1) &&
-  cd '$pc' && '$D' link add lkdb 47190 --as db </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m link_added name=db port=47190 target=$vt vm=$vc)\" '$work/last.log' &&
-  limactl shell --workdir / $vc bash -c 'for i in \$(seq 20); do
-      [[ \$(curl -fsS --max-time 5 http://db:47190/e2e.txt) == linked ]] &&
-      [[ \$(curl -fsS --max-time 5 http://db.devvm.internal:47190/e2e.txt) == linked ]] && exit 0; sleep 1; done; exit 1' </dev/null"
-check "the link's connections are in the client's network log, and nothing of it listens on this machine" bash -c "
-  cd '$pc' && '$D' network log </dev/null 2>/dev/null | grep -q 'db' && sleep 3 && ! nc -z 127.0.0.1 47190 &&
-  pgrep -f -- '[_]links $vc\$' >/dev/null"
-check "devvm rm of the target removes the client's link, names the client, and the client's session goes" bash -c "
-  cd '$pt' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m links_target_gone count=1 vm=$vt vms=$vc)\" '$work/last.log' &&
-  ! grep -q '^links=.' '$vms/$vc' && for i in \$(seq 10); do pgrep -f -- '[_]links $vc\$' >/dev/null || exit 0; sleep 1; done; exit 1"
-check "devvm rm of the client leaves no link session, socket or log of its" bash -c "
-  cd '$pc' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 && ! pgrep -f -- '[_]links $vc\$' >/dev/null &&
-  ! ls '$XDG_DATA_HOME/devvm/run/'link-* >/dev/null 2>&1 && ! ls '$XDG_DATA_HOME/devvm/logs/$vc'.* >/dev/null 2>&1"
 fi
 
 if want clone; then
@@ -1957,6 +2386,12 @@ check "the company proxy's password is in no converted disk, image, log, build f
   ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
 corp_stop
 rm -f "$layers/e2ecorp.sh"
+fi
+
+# After from, whose Alpine image a link's client starts from in the --from tier.
+if want link; then
+section "links between VMs"
+link_section lima lk
 fi
 
 if want smolvm; then
@@ -2984,6 +3419,9 @@ check "devvm network off: after devvm restart, nix-daemon runs again without the
   in_smol '$vm' '[[ ! -e /etc/conf.d/nix-daemon && \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
     ! sudo grep -qa _proxy=http /proc/\$(cat /run/nix-daemon.pid)/environ'"
 (cd "$nx" && quiet "$D" rm --force --no-export)
+
+section "smolvm: links between VMs"
+link_section smolvm slk
 
 check "no machine without the sandbox's label was touched" bash -c "[[ \"\$(smol_others)\" == '$others_before' ]]"
 fi
@@ -4032,6 +4470,8 @@ EOF
   docker_layer dlayer
   docker_emulated d
   docker_netpolicy dnet
+  section "docker: links between VMs"
+  link_section docker dlk
   check "nothing without the sandbox's label was touched" bash -c "[[ \"\$(d_others)\" == '$others_before' ]]"
 }
 
@@ -4173,6 +4613,8 @@ docker_desktop() {
   docker_layer ddlayer
   docker_emulated dd
   docker_netpolicy ddnet
+  section "docker: links between VMs, on Docker Desktop"
+  link_section docker ddlk
   d_purge
   check "all with the sandbox's label is deleted, and nothing else was touched (but the images bases started from, pulled)" bash -c "
     [[ \$(d_ours) == 0 ]] && dd_untouched '$others_before'"
