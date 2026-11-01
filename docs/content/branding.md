@@ -4,6 +4,10 @@ layout: branding
 description: "devvm's logo, icons, social card, colors and fonts, to download and use when you write about devvm."
 sidebar:
   exclude: true
+# Mostly shortcodes, so no Markdown copy, no Copy page menu and no line in llms.txt.
+outputs: [html]
+contextMenu: false
+llms: false
 ---
 
 {{< hextra/hero-headline >}}

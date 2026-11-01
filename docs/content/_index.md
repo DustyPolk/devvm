@@ -1,6 +1,8 @@
 ---
 title: devvm
 layout: hextra-home
+# Mostly shortcodes: no Copy page menu (hugo.yaml gives the home page no Markdown copy).
+contextMenu: false
 ---
 
 <!-- markdownlint-disable-next-line MD034 -- a shortcode's parameter, not a bare URL -->

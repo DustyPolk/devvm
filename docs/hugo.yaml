@@ -19,6 +19,12 @@ markup:
     renderer:
       unsafe: true
 
+# llms.txt at the site root, and a Markdown copy beside each page for the Copy page menu.
+outputs:
+  home: [html, rss, llms]
+  page: [html, markdown]
+  section: [html, rss, markdown]
+
 menu:
   main:
     - name: Docs
@@ -53,6 +59,9 @@ params:
     displayCopyright: false
     displayPoweredBy: false
   displayUpdatedDate: true
+  page:
+    contextMenu:
+      enable: true
   search:
     enable: true
     type: flexsearch

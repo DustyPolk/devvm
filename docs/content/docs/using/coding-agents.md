@@ -1,6 +1,7 @@
 ---
 title: Coding agents
 weight: 6
+description: "devvm runs Claude Code, Codex and opencode in VMs, with your config for each agent from this machine but never your history. This page covers which agents devvm supports, what each VM gets from this machine, the agents' logins and their history."
 ---
 
 ## Supported agents

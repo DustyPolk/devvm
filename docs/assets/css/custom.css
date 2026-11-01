@@ -1168,6 +1168,40 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
   font-weight: 600;
 }
 
+/* The Copy page menu beside each docs page's title (hugo.yaml's params.page.contextMenu): its buttons in
+   a box with the site's border, their text secondary and lime on hover, and its list on the surface color,
+   as a callout is. */
+html.dark .hextra-page-context-menu > div {
+  border-color: var(--devvm-border);
+}
+
+html.dark .hextra-page-context-menu > div:hover {
+  border-color: var(--devvm-accent);
+}
+
+html.dark .hextra-page-context-menu-copy,
+html.dark .hextra-page-context-menu-toggle,
+html.dark .hextra-page-context-menu-dropdown [role="menuitem"],
+html.dark .hextra-page-context-menu-dropdown [role="menuitem"] > div {
+  color: var(--devvm-text-secondary);
+}
+
+html.dark .hextra-page-context-menu-copy:hover,
+html.dark .hextra-page-context-menu-toggle:hover,
+html.dark .hextra-page-context-menu-toggle[aria-expanded="true"],
+html.dark .hextra-page-context-menu-dropdown [role="menuitem"]:hover,
+html.dark .hextra-page-context-menu-dropdown [role="menuitem"]:focus-visible,
+html.dark .hextra-page-context-menu-dropdown [role="menuitem"]:hover > div,
+html.dark .hextra-page-context-menu-dropdown [role="menuitem"]:focus-visible > div {
+  background-color: transparent;
+  color: var(--devvm-accent);
+}
+
+html.dark .hextra-page-context-menu-dropdown {
+  background-color: var(--devvm-surface);
+  border-color: var(--devvm-border);
+}
+
 /* The 404 page (layouts/404.html): one centered column, the heading in Departure Mono like the home
    page's, the art at twice its size, then the search box and the links as the home page's buttons. */
 .devvm-404 {
