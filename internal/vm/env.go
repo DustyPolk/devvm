@@ -110,6 +110,9 @@ type Env struct {
 	Answer                func(msg.M) string
 	PickFeatures          func([]build.Feature) []build.Feature
 	Terminal, Interactive func() bool
+	// AddInclude is --ssh-config: devvm's Include line goes in
+	// ~/.ssh/config, when it's missing, without asking.
+	AddInclude bool
 	// Stdout is where data output goes.
 	Stdout io.Writer
 	// The run log: LogNote says where it is, once a run; LogWriter is
@@ -623,6 +626,7 @@ func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
 func (e *Env) sshConfig() *sshconfig.Config {
 	c := sshconfig.New(e.Dirs, e.Registry)
 	c.Info, c.Warn, c.Say, c.Confirm, c.Terminal = e.Info, e.Warn, e.Say, e.Confirm, e.Terminal
+	c.AddInclude = e.AddInclude
 	return c
 }
 

@@ -140,7 +140,7 @@ func TestCloneRm(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(clone, "new"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Lifecycle{e}).Rm(t.Context(), false); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	want := []string{"fetch_before_delete prefix=saved/devvm", "delete_anyway"}
@@ -159,7 +159,7 @@ func TestCloneRm(t *testing.T) {
 		t.Fatal(err)
 	}
 	asked = answers(t, e, true)
-	if err := (Lifecycle{e}).Rm(t.Context(), false); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if _, ok := f.Instances[vm]; ok || !slices.Equal(*asked, want[:1]) {
@@ -213,7 +213,7 @@ func TestCloneRmWorktrees(t *testing.T) {
 		t.Helper()
 		said, out = nil, bytes.Buffer{}
 		asked := answers(t, e, false)
-		if err := (Lifecycle{e}).Rm(t.Context(), false); err != nil {
+		if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
 			t.Fatal(names(err))
 		}
 		if !slices.Equal(said, want) || out.String() != wantOut || len(*asked) != min(len(want), 1) {
@@ -313,7 +313,7 @@ func TestCloneRmTooManyWorktrees(t *testing.T) {
 	var said []string
 	e.Say = func(m msg.M) { said = append(said, m.Names()) }
 	asked := answers(t, e, false)
-	if err := (Lifecycle{e}).Rm(t.Context(), false); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if _, ok := f.Instances[vm]; !ok || !slices.Equal(said, []string{"clone_worktrees_unchecked max=100"}) || !slices.Equal(*asked, []string{"delete_anyway"}) {

@@ -32,11 +32,20 @@ const streamWait = 2 * time.Second
 // log gets to stderr as it's written, without control characters, dim in
 // a terminal, instead of the status line.
 
-// SetVerbose turns streaming the run log to stderr on or off, from the
-// run's -v/--verbose.
-func (u *UI) SetVerbose(on bool) { u.verboseOn.Store(on) }
+// Flags are the run's flags that every command takes and the UI acts
+// on.
+type Flags struct {
+	Verbose bool // -v/--verbose: the run log streamed to stderr too
+	NoInput bool // --no-input: no question asked; each fails, naming its answer
+}
 
-// verbose reports whether u streams the run log (SetVerbose).
+// SetFlags sets the run's -v/--verbose and --no-input.
+func (u *UI) SetFlags(f Flags) {
+	u.verboseOn.Store(f.Verbose)
+	u.noInput.Store(f.NoInput)
+}
+
+// verbose reports whether u streams the run log (Flags.Verbose).
 func verbose(u *UI) bool { return u.verboseOn.Load() }
 
 // stream is the run log's copy on stderr while verbose: what's written to

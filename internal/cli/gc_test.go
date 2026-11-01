@@ -73,18 +73,17 @@ func TestWithoutSkipped(t *testing.T) {
 	}
 }
 
-// gc asks before it deletes only in a terminal, and never with --force.
-func TestGCAsks(t *testing.T) {
-	for _, tc := range []struct {
-		force, terminal, want bool
-	}{
-		{terminal: true, want: true},
-		{},
-		{force: true, terminal: true},
-		{force: true},
-	} {
-		if got := (gcOpts{tools: true, force: tc.force}).asks(tc.terminal); got != tc.want {
-			t.Errorf("force %v, terminal %v: asks %v", tc.force, tc.terminal, got)
-		}
+// A destructive command asks before it deletes only in a terminal, never
+// with --force, and without a terminal refuses unless --force.
+func TestConfirmed(t *testing.T) {
+	u, _, _ := testUI()
+	asked := false
+	ask := func() bool { asked = true; return true }
+	if ok, err := confirmed(u, true, "devvm gc", ask); !ok || err != nil || asked {
+		t.Errorf("--force: %v, %v, asked %v", ok, err, asked)
+	}
+	ok, err := confirmed(u, false, "devvm gc", ask)
+	if m, isMsg := errors.AsType[msg.M](err); ok || !isMsg || m.Names() != "force_needed command=devvm gc" || asked {
+		t.Errorf("no terminal: %v, %v, asked %v", ok, err, asked)
 	}
 }

@@ -16,13 +16,15 @@ devvm code [flags]
 ## Options
 
 ```text
-  -h, --help   help for code
+  -h, --help         help for code
+      --ssh-config   add devvm's Include line to ~/.ssh/config without asking, when it's missing
 ```
 
 ## Options inherited from parent commands
 
 ```text
-  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
 ```
 
 ## See also

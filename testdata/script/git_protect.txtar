@@ -87,7 +87,7 @@ exec devvm
 stub_calls
 stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
 exec sh -c ': > "$STUB_LOG"'
-exec devvm rm -f
+exec devvm rm --force --no-export
 stub_calls
 stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 

@@ -25,7 +25,7 @@ Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk sha
 
 The second table lists the caches that belong to the backends, with the backend, what each cache holds, how many entries it has, its size and where it is. These are Lima's download cache, smolvm's caches on macOS and the Docker volumes with devvm's label that aren't one VM's own, such as the shared tools' volume. devvm's builds fill them, but Lima's and smolvm's caches can also hold your own downloads, so they aren't in the total. The sections below say what each one holds.
 
-devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's share of them, which is what devvm's builds put there and nothing of devvm's needs. For each backend in turn, it lists the entries it would delete with their sizes and asks, and without a terminal it refuses. With `--backend NAME`, it asks only about that backend's cache.
+devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's share of them, which is what devvm's builds put there and nothing of devvm's needs. For each backend in turn, it lists the entries it would delete with their sizes and asks. Without a terminal it refuses unless you give `--force`, which frees them without asking. With `--backend NAME`, it asks only about that backend's cache.
 
 ### devvm space --json
 
@@ -91,7 +91,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | --- | --- | --- |
 | `vms/<vm>` | each VM's [state](settings.md#devvms-state): its image, folder, backend and settings | `devvm rm` deletes it with the VM |
 | `images/` | each image's record, the [rebuild counters](images.md#rebuilding) and the digests of the container images that `--from` bases start from | `devvm gc` and `devvm images rm` delete an image's record with the image |
-| `tools/` | the [shared tools](images.md#shared-tools), one read-only image per tool version, each with its checksum beside it in a `.sha256` file and what it's built for in a `.target` file | `devvm gc` deletes the versions that no VM has and that aren't the current ones, `devvm gc --tools` also the current ones that no VM has, except those built in the last hour, and `devvm gc --tools --force` those too |
+| `tools/` | the [shared tools](images.md#shared-tools), one read-only image per tool version, each with its checksum beside it in a `.sha256` file and what it's built for in a `.target` file | `devvm gc` deletes the versions that no VM has and that aren't the current ones, `devvm gc --tools` also the current ones that no VM has, except those built in the last hour, and `devvm gc --tools --recent` those too |
 | `mise.lock`, `mise.lock.toml`, `mise.lock.checked` | the tools lock, which holds the tools' versions and their checksums, the config it was resolved from, and when devvm last checked upstream for newer versions | devvm replaces them when it checks again |
 | `mise/<version>` | the mise that devvm runs on this machine to resolve the tools lock, one folder per mise version | `devvm gc` deletes the folders of older versions, which an upgrade of devvm leaves |
 | `exports/` | the agents' [history](coding-agents.md#history) that `devvm history export` and `devvm rm` save, one `.tar.gz` per export, each with a `.folder` file beside it that names its VM's folder | `devvm gc --history` deletes them, or with `--older-than 30d` those that old, and nothing else does |
@@ -103,7 +103,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `run/` | files for running VMs and for builds, such as sandbox profiles, proxy pids and the ports lock | devvm deletes a VM's files when it deletes the VM |
 | `agent.sock` | the socket of [devvm's own SSH agent](ssh.md#devvms-own-agent) | it takes no space |
 | `oci-build.lock` | a folder that holds the pid of the devvm that builds a base from a container image on Lima | devvm deletes it when the build ends |
-| `making.lock` | an empty file that each devvm making a VM locks, so that `devvm gc --tools --force` can tell a VM is [being made](images.md#cleaning-up) | it stays, and takes no space |
+| `making.lock` | an empty file that each devvm making a VM locks, so that `devvm gc --tools` can tell a VM is [being made](images.md#cleaning-up) | it stays, and takes no space |
 | `lima/` | devvm's own [Lima home](../backends/lima.md#devvms-lima-home), with its VMs and images, unless `DEVVM_LIMA_HOME` moves it | see [Lima](#lima) |
 | `lima-vms/` | what the Lima backend sets on each VM: which ports it forwards, and its port forwarder's files | `devvm rm` deletes a VM's files with the VM |
 | `smolvm/` | the smolvm backend's images, which are packs, and what it sets on each VM | see [smolvm](#smolvm) |

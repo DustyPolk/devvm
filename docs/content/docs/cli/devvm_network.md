@@ -24,7 +24,8 @@ devvm network [on|off] [flags]
 ## Options inherited from parent commands
 
 ```text
-  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+      --no-input   never ask anything: a question devvm would ask fails instead, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
 ```
 
 ## See also

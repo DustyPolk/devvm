@@ -472,6 +472,11 @@ func TestRebuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// foo+bar is built on foo: without a terminal, only with --force.
+	if m, ok := errors.AsType[msg.M]((Builds{b}).Rebuild(ctx, "foo")); !ok || m.Names() != "force_needed command=devvm rebuild" {
+		t.Fatalf("rebuild without a terminal or --force: %v", m)
+	}
+	b.Force = true
 	if err := (Builds{b}).Rebuild(ctx, "foo"); err != nil {
 		t.Fatal(err)
 	}

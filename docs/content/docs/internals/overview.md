@@ -66,7 +66,7 @@ devvm never starts a VM whose creation didn't finish, because the VM would start
 
 `devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Other VMs, images and the project folder stay.
 
-For a `--clone` VM, devvm first checks the clone for commits that this repo hasn't fetched and for uncommitted changes, in the clone and in the worktrees inside it ([deleting the VM](../using/clone.md#deleting-the-vm)). The repo's remote for the VM goes with the VM, and devvm keeps the work fetched from it as local branches, which [saved branches](#saved-branches) names. When the VM's image has an agent, devvm then exports the agents' history from the VM, starting it if it's stopped ([history](../using/coding-agents.md#history)), and it keeps the VM if the export fails. `devvm rm -f` deletes the VM without the export or the clone's checks, and a VM whose creation didn't finish gets neither, because it never ran.
+For a `--clone` VM, devvm first checks the clone for commits that this repo hasn't fetched and for uncommitted changes, in the clone and in the worktrees inside it ([deleting the VM](../using/clone.md#deleting-the-vm)). The repo's remote for the VM goes with the VM, and devvm keeps the work fetched from it as local branches, which [saved branches](#saved-branches) names. When the VM's image has an agent, devvm then exports the agents' history from the VM, starting it if it's stopped ([history](../using/coding-agents.md#history)), and it keeps the VM if the export fails. `devvm rm` asks first in a terminal (`rm_confirm`), and without one it refuses unless `--force` (`force_needed`). `devvm rm --no-export` deletes the VM without the export, the clone's checks still run and ask only in a terminal, and a VM whose creation didn't finish gets neither, because it never ran.
 
 ### Saved branches
 
@@ -74,9 +74,9 @@ The local branches are named `saved/<remote>/<branch>`, after the remote, and de
 
 ## A folder made again
 
-A VM's state records its project folder's path (`dir=`) and the folder's identity (`folder=`), which [one VM per folder](security.md#one-vm-per-folder) describes. When either differs from the folder you're in, the folder was deleted and made again, or another repo was cloned where the old one was. devvm then refuses the VM in every command that opens, stops or changes it (`vm_other_folder`), and only `devvm rm` and `devvm adopt` act on it. Each of them asks first, so without a terminal each one refuses (`vm_other_folder_rm`, `vm_other_folder_adopt`):
+A VM's state records its project folder's path (`dir=`) and the folder's identity (`folder=`), which [one VM per folder](security.md#one-vm-per-folder) describes. When either differs from the folder you're in, the folder was deleted and made again, or another repo was cloned where the old one was. devvm then refuses the VM in every command that opens, stops or changes it (`vm_other_folder`), and only `devvm rm` and `devvm adopt` act on it. Each of them asks first, so without a terminal each one refuses (`vm_other_folder_rm`, `vm_other_folder_adopt`), unless `devvm adopt --force`:
 
-- `devvm rm` asks whether to delete the VM, which may hold that project's work (`delete_other_folder_vm`). It then deletes the VM as `devvm rm -f` does, with or without `-f`, so it exports no history and makes no checks of a clone, because the VM's folder is gone.
+- `devvm rm` asks whether to delete the VM, which may hold that project's work (`delete_other_folder_vm`), and `--force` never answers it. It then deletes the VM without exporting history or checking a clone, because the VM's folder is gone.
 - `devvm adopt` asks whether to give this folder the VM's files, secrets and allowlist (`adopt_vm`). It then records this folder's path and identity in the VM's state and clears the inode of `.git` it recorded, so the next launch locks `.git` as if it had just appeared (`vm_adopted`). In a folder the VM already belongs to, it changes nothing (`vm_already_here`).
 
 ## A subfolder's VM

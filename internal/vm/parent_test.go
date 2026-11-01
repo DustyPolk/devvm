@@ -250,20 +250,20 @@ func TestCommandsInSubfolder(t *testing.T) {
 	if c := call(f, "Stop"); c.Args[0] != vm {
 		t.Errorf("Stop = %v", c.Args)
 	}
-	if err := (Lifecycle{e}).Adopt(t.Context()); names(err) != "no_vm dir="+e.Dir {
+	if err := (Lifecycle{e}).Adopt(t.Context(), false); names(err) != "no_vm dir="+e.Dir {
 		t.Errorf("Adopt = %v", names(err))
 	}
 	// rm: refused without a terminal, -f or not; asked in one, a no
 	// keeping it.
 	infos = nil
-	if err := (Lifecycle{e}).Rm(t.Context(), true); names(err) != "rm_parent_vm dir="+web+" vm="+vm {
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); names(err) != "rm_parent_vm dir="+web+" vm="+vm {
 		t.Errorf("Rm without a terminal = %v", names(err))
 	}
 	if len(infos) == 0 || infos[0] != "using_parent_vm dir="+web+" vm="+vm {
 		t.Errorf("Rm's infos = %q", infos)
 	}
 	asked := answers(t, e, false)
-	if err := (Lifecycle{e}).Rm(t.Context(), true); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if n := len(vmNames(t, e)); n != 1 {
@@ -273,7 +273,7 @@ func TestCommandsInSubfolder(t *testing.T) {
 		t.Errorf("asked %q, want %q", *asked, want)
 	}
 	asked = answers(t, e, true)
-	if err := (Lifecycle{e}).Rm(t.Context(), true); err != nil {
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if want := "delete_parent_vm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {

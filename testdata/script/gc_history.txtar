@@ -11,20 +11,20 @@ exec sh -c 'cd "$EXPORTS" && for f in devvm-old-12345612345612-20200101-000000 d
 exec sh -c 'cd "$EXPORTS" && echo x > .devvm-export-123 && echo x > notes.tar.gz && mkdir devvm-dir-12345612345612-20200101-000000.tar.gz'
 
 # The default run keeps them.
-exec devvm gc
+exec devvm gc --force
 stdout '^==> nothing_to_clean$'
 exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
 
 # An age only with --history, and only one devvm takes.
-! exec devvm gc --older-than 30d
+! exec devvm gc --force --older-than 30d
 stderr '^devvm: gc_older_than_needs_history$'
-! exec devvm gc --history --older-than 30
+! exec devvm gc --force --history --older-than 30
 stderr '^devvm: bad_duration value=30$'
-! exec devvm gc --history --older-than forever
+! exec devvm gc --force --history --older-than forever
 stderr '^devvm: bad_duration value=forever$'
 
 # --older-than 30d: the old one, by its VM and date.
-exec devvm gc --history --older-than 30d
+exec devvm gc --force --history --older-than 30d
 stdout '^gc_history count=1 size=\S+$'
 stdout '^gc_history_export date=2020-01-01 00:00 size=\S+ vm=devvm-old-12345612345612$'
 stdout '^==> deleted_history count=1$'
@@ -34,7 +34,7 @@ exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.tar.gz
 exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.folder
 
 # --history: every one left, and nothing that isn't one.
-exec devvm gc --history
+exec devvm gc --force --history
 stdout '^gc_history_export .* vm=devvm-new-abcdefabcdefab$'
 stdout '^==> deleted_history count=1$'
 ! exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.tar.gz

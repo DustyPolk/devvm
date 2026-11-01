@@ -16,14 +16,14 @@ import (
 // for each; it never runs a backend's own prune, which reaches the user's
 // own entries too. With only, that backend alone; never one gc skipped,
 // as it couldn't list its images.
-func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, only string, skipped map[string]bool) error {
+func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map[string]bool) error {
 	reg, err := registry.New(b.Dirs, b.Assets, u)
 	if err != nil {
 		return err
 	}
 	for _, be := range reg.All() {
 		c, ok := be.(backend.CacheCleaner)
-		if !ok || (only != "" && be.Name() != only) || skipped[be.Name()] {
+		if !ok || (o.only != "" && be.Name() != o.only) || skipped[be.Name()] {
 			continue
 		}
 		entries, ok := cacheEntries(ctx, be, c)
@@ -38,7 +38,9 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, only string, skipped 
 		for _, e := range entries {
 			u.Say(msg.GCCacheEntry(humanSize(e.Size), e.What))
 		}
-		if !u.Confirm(msg.GCCacheConfirm(be.Name())) {
+		if ok, err := confirmed(u, o.force, "devvm gc --caches", func() bool { return u.Confirm(msg.GCCacheConfirm(be.Name())) }); err != nil {
+			return err
+		} else if !ok {
 			u.Info(msg.NothingDeleted())
 			continue
 		}

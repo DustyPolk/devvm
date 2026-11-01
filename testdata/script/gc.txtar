@@ -10,7 +10,7 @@ env SHARE=$XDG_DATA_HOME/devvm/tools
 env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Nothing built.
-exec devvm gc
+exec devvm gc --force
 stdout '^==> nothing_to_clean$'
 ! stderr .
 
@@ -56,7 +56,7 @@ stderr '^images_stale_note count=4$'
 stderr '^images_unused size=\S+$'
 
 exec sh -c ': > "$STUB_LOG"'
-exec devvm gc
+exec devvm gc --force
 stdout '^gc_images\n'
 stdout '^gc_image image=foo key=[0-9a-f]{12}$'
 stdout '^gc_unfinished key=000000000000$'
@@ -97,7 +97,7 @@ exec sh -c 'ls "$ASSETS" | grep -cx "[0-9a-f]\{16\}"'
 stdout '^2$'
 
 # Again: nothing left, and devvm images says only the total.
-exec devvm gc
+exec devvm gc --force
 stdout '^==> nothing_to_clean$'
 exec devvm images
 stderr '^images_total size=\S+$'

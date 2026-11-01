@@ -60,6 +60,7 @@ func (u *UI) pick(help msg.M, choices []Choice, one bool) {
 	if len(choices) == 0 || !u.stdinTTY || !u.stdoutTTY {
 		return
 	}
+	refuseInput(u, help)
 	restore, err := u.rawInput()
 	if err != nil {
 		return

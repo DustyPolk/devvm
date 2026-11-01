@@ -73,7 +73,7 @@ stub_calls
 # rm: nothing unfetched, nothing uncommitted (the host's own uncommitted
 # change was never copied): deleted, and the remote removed.
 exec git checkout -q -- tracked
-exec devvm rm
+exec devvm rm --force
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> removed_remote remote=devvm$'
 ! exec git remote get-url devvm
@@ -87,7 +87,7 @@ stdout '^==> clone_ready branch=main remote=devvm-web$'
 exec git remote get-url devvm
 stdout '^https://example.com/other.git$'
 exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm'
-! exec devvm rm
+! exec devvm rm --force
 stdout '^unfetched_commits refs="main"$'
 stderr '^devvm: no_terminal_fetch remote=devvm-web$'
 exec sh -c 'ls "$VMS"'
@@ -100,7 +100,7 @@ exec git fetch -q devvm-web
 exec git log --format=%s -1 devvm-web/main
 stdout '^from-vm$'
 exec sh -c 'echo z > "$STUB_DIR/vmfs$(pwd -P)/new"'
-! exec devvm rm
+! exec devvm rm --force
 ! stdout unfetched_commits
 stdout '^clone_dirty$'
 stdout '^\?\? new$'
@@ -111,15 +111,20 @@ exec git remote get-url devvm-web
 # shows them under the worktree's path, and without a terminal keeps the
 # VM.
 exec sh -c 'c="$STUB_DIR/vmfs$(pwd -P)"; rm "$c/new" && git -C "$c" worktree add -q .worktrees/a && echo .worktrees/ >> "$c/.git/info/exclude" && echo w > "$c/.worktrees/a/w"'
-! exec devvm rm
+! exec devvm rm --force
 ! stdout 'unfetched_commits|clone_dirty$'
 stdout '^clone_worktree_dirty path=/\S*/web/\.worktrees/a$'
 stdout '^\?\? w$'
 stderr '^devvm: no_terminal_delete$'
 
-# rm -f skips the checks; a remote the user pointed elsewhere stays.
+# --force never skips the checks: with the worktree's change still there,
+# rm keeps the VM; once it's gone, rm deletes it, and a remote the user
+# pointed elsewhere stays.
+! exec devvm rm --force --no-export
+stderr '^devvm: no_terminal_delete$'
+exec sh -c 'rm "$STUB_DIR/vmfs$(pwd -P)/.worktrees/a/w"'
 exec git remote set-url devvm-web https://example.com/mine.git
-exec devvm rm -f
+exec devvm rm --force
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 ! stdout removed_remote
 exec git remote get-url devvm-web
@@ -138,12 +143,12 @@ rm $STUB_DIR/ssh-fails
 exec devvm
 stdout '^==> clone_ready branch=main remote=devvm$'
 
-# rm -f: the VM's work fetched only into devvm/* is kept as new local
+# rm --force: the VM's work fetched only into devvm/* is kept as new local
 # branches under saved/devvm, then the remote goes with its
 # remote-tracking branches.
 exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm-2'
 exec git fetch -q devvm
-exec devvm rm -f
+exec devvm rm --force --no-export
 stdout '^==> saved_branches branches="saved/devvm/main"$'
 stdout '^==> removed_remote remote=devvm$'
 exec git log --format=%s -1 saved/devvm/main
@@ -156,7 +161,7 @@ exec git branch -D saved/devvm/main
 exec devvm --no-network-policy --no-git-protect base
 ! exec devvm --clone
 stderr '^devvm: clone_needs_new_vm vm=devvm-web-[0-9a-f]{14}$'
-exec devvm rm -f
+exec devvm rm --force --no-export
 
 -- vm-branches --
 main

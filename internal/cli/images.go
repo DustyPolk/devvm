@@ -76,7 +76,10 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 
 // newImagesRmCmd is devvm images rm IMAGE|KEY....
 func newImagesRmCmd(u *ui.UI) *cobra.Command {
-	var f imageFlags
+	var (
+		f     imageFlags
+		force bool
+	)
 	c := &cobra.Command{
 		Use:   "rm IMAGE|KEY...",
 		Short: "Delete images, by name or by key",
@@ -84,7 +87,8 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 			"devvm images shows, for a stale or unfinished one; with --from, a name is its image on a base " +
 			"from that container image. Every one must be built, or nothing is " +
 			"deleted. VMs made from an image keep working, except on Linux hosts, where an image whose " +
-			"disk VMs use is refused. Shared tools aren't images.",
+			"disk VMs use is refused. Shared tools aren't images. It asks first in a terminal; --force " +
+			"deletes without asking, which it needs without a terminal.",
 		Args: minArgs(1),
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			dirs, err := paths.FromEnv()
@@ -102,14 +106,21 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 			if err == nil {
 				err = b.Backend.Check(cmd.Context())
 			}
+			ok := false
 			if err == nil {
+				ok, err = confirmed(u, force, "devvm images rm", func() bool { return u.Ask(msg.ImagesRmConfirm(shownArgs(args))) })
+			}
+			if err == nil && ok {
 				err = build.Images{Env: b}.Delete(cmd.Context(), args)
+			} else if err == nil {
+				u.Info(msg.NothingDeleted())
 			}
 			fail(u, err, msg.ImagesRmFailed)
 			return nil
 		},
 	}
 	f.add(c)
+	addForceFlag(c.Flags(), &force)
 	return c
 }
 

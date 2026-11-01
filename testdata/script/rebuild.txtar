@@ -11,8 +11,13 @@ exec sh -c 'echo devvm-web-12345612345612 >> "$STUB_DIR/instances"'
 exec sh -c 'for i in base foo foo+bar; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
 exec sh -c ': > "$STUB_LOG"'
 
-# Not a terminal: it says what goes, and goes ahead.
-exec devvm rebuild base+foo
+# Not a terminal: it says what goes, and refuses unless --force, which
+# goes ahead.
+! exec devvm rebuild base+foo
+stdout '^rebuild_replaces above=foo\+bar image=foo$'
+stderr '^devvm: force_needed command=devvm rebuild$'
+! stdout building_image
+exec devvm rebuild --force base+foo
 stdout '^rebuild_replaces above=foo\+bar image=foo$'
 stdout '^==> building_image image=foo key=[0-9a-f]{12}$'
 ! stdout 'image=base'

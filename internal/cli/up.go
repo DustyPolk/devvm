@@ -27,6 +27,7 @@ type upFlags struct {
 	sshAgent        bool
 	noDevcontainer  bool
 	here            bool
+	sshConfig       bool
 }
 
 // addUpFlags adds devvm [IMAGE]'s flags to the root command, as its own:
@@ -48,6 +49,7 @@ func addUpFlags(root *cobra.Command, uf *upFlags) {
 	f.BoolVar(&uf.sshAgent, "ssh-agent", false, "create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)")
 	f.BoolVar(&uf.noDevcontainer, "no-devcontainer", false, "create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json")
 	f.BoolVar(&uf.here, "here", false, "create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM")
+	addSSHConfigFlag(f, &uf.sshConfig)
 }
 
 // options are what the flags ask of up.
@@ -66,7 +68,10 @@ func up(ctx context.Context, u *ui.UI, uf *upFlags, args []string) error {
 	if len(args) > 0 {
 		o.Image = args[0]
 	}
-	withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Up(ctx, o) }, msg.UpFailed)
+	withEnv(u, func(env *vm.Env) error {
+		env.AddInclude = uf.sshConfig
+		return vm.Launch{Env: env}.Up(ctx, o)
+	}, msg.UpFailed)
 	return nil
 }
 

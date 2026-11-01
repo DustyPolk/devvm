@@ -13,6 +13,35 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
+// rm asks first in a terminal and refuses without one, unless --force;
+// --no-export deletes without the export.
+func TestRmConfirms(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	lc := Lifecycle{e}
+	vm := existingVM(t, e, Options{Image: "claude", NoNetworkPolicy: true}).Name()
+	if err := lc.Rm(t.Context(), RmOptions{}); names(err) != "force_needed command=devvm rm" {
+		t.Errorf("no terminal: %v", names(err))
+	}
+	asked := answers(t, e, false)
+	if err := lc.Rm(t.Context(), RmOptions{}); err != nil || !slices.Equal(*asked, []string{"rm_confirm vm=" + vm}) {
+		t.Errorf("declined: %v, asked %q", names(err), *asked)
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Fatal("deleted when declined")
+	}
+	exported := false
+	f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
+		exported = exported || (len(argv) == 3 && strings.Contains(argv[2], "tar -czf"))
+		return nil
+	}
+	if err := lc.Rm(t.Context(), RmOptions{Force: true, NoExport: true}); err != nil {
+		t.Fatal(names(err))
+	}
+	if _, ok := f.Instances[vm]; ok || exported || len(*asked) != 1 {
+		t.Errorf("--force --no-export: deleted %v, exported %v, asked %q", !ok, exported, *asked)
+	}
+}
+
 // rm exports an agent VM's history first; a failed export keeps the VM.
 // One made for an earlier folder at this path is deleted only after
 // asking, without an export.
@@ -27,7 +56,7 @@ func TestRm(t *testing.T) {
 		}
 		return nil
 	}
-	if err := lc.Rm(t.Context(), false); names(err) != "rm_export_failed vm="+vm {
+	if err := lc.Rm(t.Context(), RmOptions{Force: true}); names(err) != "rm_export_failed vm="+vm {
 		t.Errorf("Rm = %v", names(err))
 	}
 	if _, ok := f.Instances[vm]; !ok {
@@ -45,7 +74,7 @@ func TestRm(t *testing.T) {
 		}
 		return nil
 	}
-	if err := lc.Rm(t.Context(), false); err != nil {
+	if err := lc.Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if !strings.Contains(script, "ls -d .claude .claude.json .codex") || !strings.Contains(script, "--exclude=.claude/.credentials.json") {
@@ -76,7 +105,7 @@ func TestRm(t *testing.T) {
 		t.Fatal(err)
 	}
 	asked := answers(t, e, false)
-	if err := lc.Rm(t.Context(), true); err != nil {
+	if err := lc.Rm(t.Context(), RmOptions{Force: true, NoExport: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if _, ok := f.Instances[vm]; !ok || !slices.Equal(*asked, []string{"delete_other_folder_vm vm=" + vm + " was=" + e.Dir}) {
@@ -84,7 +113,7 @@ func TestRm(t *testing.T) {
 	}
 	answers(t, e, true)
 	script = ""
-	if err := lc.Rm(t.Context(), false); err != nil {
+	if err := lc.Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(names(err))
 	}
 	if _, ok := f.Instances[vm]; ok || script != "" {
@@ -179,7 +208,7 @@ func TestAdopt(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	lc, l := Lifecycle{e}, Launch{e}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
-	if err := lc.Adopt(t.Context()); err != nil {
+	if err := lc.Adopt(t.Context(), false); err != nil {
 		t.Fatal(names(err))
 	}
 	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
@@ -189,14 +218,30 @@ func TestAdopt(t *testing.T) {
 		t.Errorf("Up = %v", names(err))
 	}
 	asked := answers(t, e, false)
-	if err := lc.Adopt(t.Context()); err != nil || len(*asked) != 1 {
+	if err := lc.Adopt(t.Context(), false); err != nil || len(*asked) != 1 {
 		t.Fatalf("declined: %v, asked %q", names(err), *asked)
 	}
 	answers(t, e, true)
-	if err := lc.Adopt(t.Context()); err != nil {
+	if err := lc.Adopt(t.Context(), false); err != nil {
 		t.Fatal(names(err))
 	}
 	if err := l.Up(t.Context(), Options{}); err != nil {
 		t.Errorf("Up adopted = %v", names(err))
+	}
+	// --force adopts without asking, and without a terminal.
+	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
+		t.Fatal(err)
+	}
+	e.Terminal = func() bool { return false }
+	if err := lc.Adopt(t.Context(), false); names(err) != "vm_other_folder_adopt vm="+st.Name()+" was="+e.Dir {
+		t.Errorf("no terminal: %v", names(err))
+	}
+	asked = answers(t, e, false)
+	e.Terminal = func() bool { return false }
+	if err := lc.Adopt(t.Context(), true); err != nil || len(*asked) != 0 {
+		t.Fatalf("--force: %v, asked %q", names(err), *asked)
+	}
+	if err := l.Up(t.Context(), Options{}); err != nil {
+		t.Errorf("Up adopted with --force = %v", names(err))
 	}
 }

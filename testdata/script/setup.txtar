@@ -42,7 +42,7 @@ stdout '^==> base_will_rebuild$'
 stdout '^gc_old_hint$'
 exec devvm build base
 stdout '^==> building_image image=base key='
-exec devvm gc
+exec devvm gc --force
 stdout '^gc_image image=base key='
 
 # A name that isn't a feature changes nothing.

@@ -80,10 +80,10 @@ Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd los
 1. If the clone has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches named `saved/devvm/<branch>`. It skips a branch whose name git on this machine refuses and names it, and that branch goes with the VM. To keep such a branch, rename it in the VM with `git branch -m` before you run `devvm rm`.
 2. If the clone or a worktree inside its folder has uncommitted changes, devvm lists the first 20 of them in all, with each worktree's changes under its path, and asks before deleting them along with the VM. devvm skips a worktree whose folder is gone or that git would prune, and it doesn't check worktrees outside the clone's folder. When the clone has more than 100 worktrees, devvm checks the first 100 and asks before deleting the VM, even if none of them has changes.
 
-If either check finds something and there's no terminal to ask in, devvm refuses and keeps the VM.
+If either check finds something and there's no terminal to ask in, devvm refuses and keeps the VM. These questions are asked only in a terminal, because only you can judge the work, so `--force` never answers them and `--no-input` makes them fail ([questions devvm asks](../getting-started/commands.md#questions-devvm-asks)).
 
 Once the checks pass, devvm deletes the VM. If the remote still points at the VM, devvm then removes it with `git remote remove`, which also deletes its `devvm/*` branches and their upstream settings. Before it does, devvm keeps every `devvm/*` branch that has commits no other branch has as a new local branch under `saved/devvm/`, whoever fetched it. devvm names each branch it creates, and they're yours to review, merge or delete, as with `git branch -D saved/devvm/main`.
 
 The saved branches are named after the remote, as `saved/<remote>/<branch>`, and devvm never overwrites a branch. When a branch is in the way, devvm uses `saved/<remote>-2`, then `-3` and so on, and if it finds no free name, `devvm rm` refuses and keeps the VM ([saved branches](../internals/overview.md#saved-branches)).
 
-`devvm rm -f` skips both checks, but it still keeps the fetched branches as described above.
+`devvm rm --force` skips only the question whether to delete the VM at all, and both checks still run. `devvm rm --no-export` skips the export of the agents' history, and it also leaves both checks as they are.

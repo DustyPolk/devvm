@@ -133,7 +133,7 @@ func TestStatusLineInATerminal(t *testing.T) {
 	u.stderrTTY = false
 	u.Status(msg.MsgUnknown("y"))()
 	u.stderrTTY = true
-	u.SetVerbose(true)
+	u.SetFlags(Flags{Verbose: true})
 	u.Status(msg.MsgUnknown("y"))()
 	if errOut.Len() != 0 {
 		t.Errorf("status line outside a terminal: %q", errOut)
@@ -152,7 +152,7 @@ func TestStatusLineInATerminal(t *testing.T) {
 func TestDieLoggedVerbose(t *testing.T) {
 	t.Parallel()
 	u, _, errOut := testUI(t, "")
-	u.SetVerbose(true)
+	u.SetFlags(Flags{Verbose: true})
 	_ = u.logged(t.Context(), msg.M{}, "sh", "-c", "echo failing; exit 1")
 	if code := exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) }); code != 1 {
 		t.Errorf("exit code %d, want 1", code)

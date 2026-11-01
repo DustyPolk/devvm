@@ -1084,6 +1084,11 @@ func FoldersNotPrivate(config string, data string) M {
 	return M{id: "folders_not_private", vals: []val{{"config", config}, {"data", data}}}
 }
 
+// ForceNeeded is [force_needed]: "{{.command}} deletes only after you confirm, and there's no terminal to confirm in. Add --force to go ahead without asking."
+func ForceNeeded(command string) M {
+	return M{id: "force_needed", vals: []val{{"command", command}}}
+}
+
 // ForgotOrphan is [forgot_orphan]: "deleted what devvm kept for {{.vm}}"
 func ForgotOrphan(vm string) M {
 	return M{id: "forgot_orphan", vals: []val{{"vm", vm}}}
@@ -1144,11 +1149,6 @@ func GCCacheEntry(size string, what string) M {
 	return M{id: "gc_cache_entry", vals: []val{{"size", size}, {"what", what}}}
 }
 
-// GCCachesNeedTerminal is [gc_caches_need_terminal]: "--caches asks before it frees each backend's cache, so it runs only in a terminal. Run devvm gc --caches in one."
-func GCCachesNeedTerminal() M {
-	return M{id: "gc_caches_need_terminal"}
-}
-
 // GCConfirm is [gc_confirm]: "Your VMs stay as they are. Delete these?"
 func GCConfirm() M {
 	return M{id: "gc_confirm"}
@@ -1157,16 +1157,6 @@ func GCConfirm() M {
 // GCFailed is [gc_failed]: "Cleaning up failed: {{.reason}}."
 func GCFailed(reason string) M {
 	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
-}
-
-// GCForceMaking is [gc_force_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done."
-func GCForceMaking() M {
-	return M{id: "gc_force_making"}
-}
-
-// GCForceNeedsTools is [gc_force_needs_tools]: "--force goes with --tools. Run devvm gc --tools --force."
-func GCForceNeedsTools() M {
-	return M{id: "gc_force_needs_tools"}
 }
 
 // GCHistory is [gc_history]: "{{.count}} exports of agents' history ({{.size}}), the only copy of a deleted VM's:"
@@ -1264,6 +1254,16 @@ func GCOrphansUnknown(backend string) M {
 	return M{id: "gc_orphans_unknown", vals: []val{{"backend", backend}}}
 }
 
+// GCRecentMaking is [gc_recent_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --recent again once that's done."
+func GCRecentMaking() M {
+	return M{id: "gc_recent_making"}
+}
+
+// GCRecentNeedsTools is [gc_recent_needs_tools]: "--recent goes with --tools. Run devvm gc --tools --recent."
+func GCRecentNeedsTools() M {
+	return M{id: "gc_recent_needs_tools"}
+}
+
 // GCTools is [gc_tools]: "{{.count}} shared tool images are unused ({{.size}})."
 func GCTools(count int, size string) M {
 	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
@@ -1279,7 +1279,7 @@ func GCToolsNoVM(count int, size string, tools string) M {
 	return M{id: "gc_tools_no_vm", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}, {"tools", tools}}}
 }
 
-// GCToolsRecent is [gc_tools_recent]: "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc again with --force to delete them now."
+// GCToolsRecent is [gc_tools_recent]: "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tools --recent to delete them now."
 func GCToolsRecent(count int, tools string) M {
 	return M{id: "gc_tools_recent", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"tools", tools}}}
 }
@@ -1472,6 +1472,11 @@ func ImagesFailed(reason string) M {
 // ImagesNixCache is [images_nix_cache]: "The shared Nix cache takes {{.size}} of its {{.cap}} cap. Run devvm gc --nix-cache to empty it."
 func ImagesNixCache(cap string, size string) M {
 	return M{id: "images_nix_cache", vals: []val{{"cap", cap}, {"size", size}}}
+}
+
+// ImagesRmConfirm is [images_rm_confirm]: "Delete {{.images}}? VMs made from them keep working."
+func ImagesRmConfirm(images string) M {
+	return M{id: "images_rm_confirm", vals: []val{{"images", images}}}
 }
 
 // ImagesRmFailed is [images_rm_failed]: "Deleting the images failed: {{.reason}}."
@@ -1934,6 +1939,16 @@ func NoImageNamedFrom(from string, image string) M {
 	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
 }
 
+// NoInput is [no_input]: "This question needs an answer, and --no-input asks nothing. Give {{.answer}} instead."
+func NoInput(answer string) M {
+	return M{id: "no_input", vals: []val{{"answer", answer}}}
+}
+
+// NoInputTerminal is [no_input_terminal]: "Only you can answer this question, in a terminal, and --no-input asks nothing. Run the command again in a terminal without --no-input."
+func NoInputTerminal() M {
+	return M{id: "no_input_terminal"}
+}
+
 // NoKVM is [no_kvm]: "/dev/kvm doesn't exist. Turn on virtualization in the firmware, or nested virtualization if this machine is a VM."
 func NoKVM() M {
 	return M{id: "no_kvm"}
@@ -1954,12 +1969,12 @@ func NoSubcommand(command string, commands string, given string) M {
 	return M{id: "no_subcommand", vals: []val{{"command", command}, {"commands", commands}, {"given", given}}}
 }
 
-// NoTerminalDelete is [no_terminal_delete]: "Deleting the VM needs your confirmation, and there's no terminal to ask in. Run devvm rm -f to delete the VM anyway."
+// NoTerminalDelete is [no_terminal_delete]: "Deleting the VM loses its clone's uncommitted changes, and there's no terminal to confirm in. Run devvm rm in a terminal to confirm."
 func NoTerminalDelete() M {
 	return M{id: "no_terminal_delete"}
 }
 
-// NoTerminalFetch is [no_terminal_fetch]: "There's no terminal to ask in. Run git fetch {{.remote}} first, or devvm rm -f to delete the VM anyway."
+// NoTerminalFetch is [no_terminal_fetch]: "There's no terminal to ask in, so the VM stays. Run git fetch {{.remote}} first, or devvm rm in a terminal to choose."
 func NoTerminalFetch(remote string) M {
 	return M{id: "no_terminal_fetch", vals: []val{{"remote", remote}}}
 }
@@ -2254,6 +2269,11 @@ func RetentionUnreadable() M {
 	return M{id: "retention_unreadable"}
 }
 
+// RmConfirm is [rm_confirm]: "Delete {{.vm}}, with everything in it?"
+func RmConfirm(vm string) M {
+	return M{id: "rm_confirm", vals: []val{{"vm", vm}}}
+}
+
 // RmExportFailed is [rm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm -f to delete it without exporting."
 func RmExportFailed(vm string) M {
 	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
@@ -2337,6 +2357,11 @@ func SecretReadFailed(reason string, secret string) M {
 // SecretRemoved is [secret_removed]: "devvm deleted the {{.secret}} secret."
 func SecretRemoved(secret string) M {
 	return M{id: "secret_removed", vals: []val{{"secret", secret}}}
+}
+
+// SecretRmConfirm is [secret_rm_confirm]: "Delete the secret {{.name}}? The VMs that use it lose it."
+func SecretRmConfirm(name string) M {
+	return M{id: "secret_rm_confirm", vals: []val{{"name", name}}}
 }
 
 // SecretSaved is [secret_saved]: "devvm saved the {{.secret}} secret in {{.file}}."
@@ -2574,7 +2599,7 @@ func SSHIncludeNeeded(line string) M {
 	return M{id: "ssh_include_needed", vals: []val{{"line", line}}}
 }
 
-// SSHIncludeYourself is [ssh_include_yourself]: "There's no terminal to ask in, so devvm didn't add the line. Add it yourself."
+// SSHIncludeYourself is [ssh_include_yourself]: "There's no terminal to ask in, so devvm didn't add the line. Add it yourself, or run the command again with --ssh-config."
 func SSHIncludeYourself() M {
 	return M{id: "ssh_include_yourself"}
 }
@@ -2919,7 +2944,7 @@ func VMOtherFolder(vm string, was string) M {
 	return M{id: "vm_other_folder", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to use it here, run devvm adopt in a terminal."
+// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To use it here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
 func VMOtherFolderAdopt(vm string, was string) M {
 	return M{id: "vm_other_folder_adopt", vals: []val{{"vm", vm}, {"was", was}}}
 }
@@ -3172,6 +3197,7 @@ var specs = map[string]spec{
 	"flag_unknown":                     {fields: []string{"command", "flag"}},
 	"flags_exclusive":                  {fields: []string{"flag", "other"}},
 	"folders_not_private":              {fields: []string{"config", "data"}},
+	"force_needed":                     {fields: []string{"command"}},
 	"forgot_orphan":                    {fields: []string{"vm"}},
 	"forwarder_failed":                 {fields: []string{"reason"}},
 	"from_cached_not_found":            {fields: []string{"from", "host"}},
@@ -3184,11 +3210,8 @@ var specs = map[string]spec{
 	"gc_cache":                         {plural: true, fields: []string{"backend", "count", "size"}},
 	"gc_cache_confirm":                 {fields: []string{"backend"}},
 	"gc_cache_entry":                   {fields: []string{"size", "what"}},
-	"gc_caches_need_terminal":          {},
 	"gc_confirm":                       {},
 	"gc_failed":                        {fields: []string{"reason"}},
-	"gc_force_making":                  {},
-	"gc_force_needs_tools":             {},
 	"gc_history":                       {plural: true, fields: []string{"count", "size"}},
 	"gc_history_export":                {fields: []string{"date", "size", "vm"}},
 	"gc_image":                         {fields: []string{"image", "key"}},
@@ -3208,6 +3231,8 @@ var specs = map[string]spec{
 	"gc_orphan_volume":                 {fields: []string{"volume"}},
 	"gc_orphans":                       {plural: true, fields: []string{"count"}},
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
+	"gc_recent_making":                 {},
+	"gc_recent_needs_tools":            {},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
 	"gc_tools_making":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
@@ -3250,6 +3275,7 @@ var specs = map[string]spec{
 	"image_ready":                      {fields: []string{"image"}},
 	"images_failed":                    {fields: []string{"reason"}},
 	"images_nix_cache":                 {fields: []string{"cap", "size"}},
+	"images_rm_confirm":                {fields: []string{"images"}},
 	"images_rm_failed":                 {fields: []string{"reason"}},
 	"images_stale_note":                {plural: true, fields: []string{"count"}},
 	"images_total":                     {fields: []string{"size"}},
@@ -3342,6 +3368,8 @@ var specs = map[string]spec{
 	"no_image_for":                     {fields: []string{"agents", "dir", "envs"}},
 	"no_image_named":                   {fields: []string{"image"}},
 	"no_image_named_from":              {fields: []string{"from", "image"}},
+	"no_input":                         {fields: []string{"answer"}},
+	"no_input_terminal":                {},
 	"no_kvm":                           {},
 	"no_secret":                        {fields: []string{"secret"}},
 	"no_ssh_agent":                     {},
@@ -3406,6 +3434,7 @@ var specs = map[string]spec{
 	"retention_saved":                  {fields: []string{"file"}},
 	"retention_settings_failed":        {fields: []string{"reason"}},
 	"retention_unreadable":             {},
+	"rm_confirm":                       {fields: []string{"vm"}},
 	"rm_export_failed":                 {fields: []string{"vm"}},
 	"rm_failed":                        {fields: []string{"reason"}},
 	"rm_parent_vm":                     {fields: []string{"dir", "vm"}},
@@ -3423,6 +3452,7 @@ var specs = map[string]spec{
 	"secret_failed":                    {fields: []string{"reason"}},
 	"secret_read_failed":               {fields: []string{"reason", "secret"}},
 	"secret_removed":                   {fields: []string{"secret"}},
+	"secret_rm_confirm":                {fields: []string{"name"}},
 	"secret_saved":                     {fields: []string{"file", "secret"}},
 	"secret_saved_keychain":            {fields: []string{"secret"}},
 	"secret_to_terminal":               {},

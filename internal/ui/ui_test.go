@@ -211,3 +211,28 @@ func TestSecret(t *testing.T) {
 		t.Errorf("terminal: %q, stderr %q", v, errOut)
 	}
 }
+
+// With --no-input every question fails before anything is read, after
+// showing it: naming what answers it, or a terminal for one only a
+// terminal answers.
+func TestNoInput(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		ask  func(u *UI)
+		want string
+	}{
+		{func(u *UI) { u.Ask(msg.GCConfirm()) }, "gc_confirm\ndevvm: no_input answer=--force\n"},
+		{func(u *UI) { u.Confirm(msg.NetAsk()) }, "net_ask\ndevvm: no_input answer=--network-policy or --no-network-policy\n"},
+		{func(u *UI) { u.Secret(msg.TokenPrompt()) }, "token_prompt\ndevvm: no_input answer=--stdin\n"},
+		{func(u *UI) { u.Ask(msg.DeleteAnyway()) }, "delete_anyway\ndevvm: no_input_terminal\n"},
+	} {
+		u, _, errOut := testUI(t, "y\n")
+		u.SetFlags(Flags{NoInput: true})
+		if code := exitCode(func() { tc.ask(u) }); code != 1 || errOut.String() != tc.want {
+			t.Errorf("exit %d, stderr %q, want %q", code, errOut, tc.want)
+		}
+		if line := u.Line(); line != "y" {
+			t.Errorf("the answer was read: %q left", line)
+		}
+	}
+}

@@ -26,7 +26,7 @@ exec sh -c 'printf "libc=gnu\nformat=\n" > "$SHARE/go-1.2.0-0123456789ab.erofs.t
 # The default backend file names smolvm: plain gc still acts on Lima.
 exec sh -c 'echo smolvm > "$XDG_CONFIG_HOME/devvm/backend"'
 exec sh -c ': > "$STUB_LOG"'
-exec devvm gc
+exec devvm gc --force
 stdout '^gc_image image=foo key=[0-9a-f]{12}$'
 stdout '^gc_tools count=3 '
 ! stdout 'image=base'
@@ -38,7 +38,7 @@ exec sh -c 'cd "$SHARE" && echo x > go-1.1.0-0123456789ab.erofs && echo x > go-1
 exec sh -c 'printf "libc=gnu\nformat=plain-0123456789ab\n" > "$SHARE/go-1.1.0-0123456789ab.erofs.target"'
 exec sh -c 'printf "libc=gnu\nformat=\n" > "$SHARE/go-1.2.0-0123456789ab.erofs.target"'
 exec sh -c ': > "$STUB_LOG"'
-exec devvm --backend smolvm gc
+exec devvm gc --backend smolvm --force
 stdout '^gc_image image=base key=[0-9a-f]{12}$'
 stdout -count=1 '^gc_image '
 stdout '^gc_tools count=1 '
@@ -52,7 +52,7 @@ stub_calls
 
 # Docker alone: its base goes; Lima's base stays.
 exec sh -c ': > "$STUB_LOG"'
-exec devvm --backend docker gc
+exec devvm gc --backend docker --force
 stdout -count=1 '^gc_image image=base '
 stub_calls
 ! stdout '^limactl delete'

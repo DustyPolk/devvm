@@ -10,7 +10,8 @@ import (
 
 // newCodeCmd is devvm code.
 func newCodeCmd(u *ui.UI) *cobra.Command {
-	return &cobra.Command{
+	var include bool
+	cmd := &cobra.Command{
 		Use:   "code",
 		Short: "Open this folder's VM in VS Code over Remote-SSH",
 		Long: "Get this folder's VM ready as devvm host does, then open its folder in VS Code over Remote-SSH, " +
@@ -18,8 +19,13 @@ func newCodeCmd(u *ui.UI) *cobra.Command {
 			"machine and answering git's sign-in prompts with your GitHub sign-in.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Code(cmd.Context()) }, msg.CodeFailed)
+			withEnv(u, func(env *vm.Env) error {
+				env.AddInclude = include
+				return vm.Launch{Env: env}.Code(cmd.Context())
+			}, msg.CodeFailed)
 			return nil
 		},
 	}
+	addSSHConfigFlag(cmd.Flags(), &include)
+	return cmd
 }

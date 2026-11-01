@@ -52,10 +52,10 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 }
 
 // Adopt gives the folder the VM made for an earlier folder at its path,
-// after asking: its files, tokens and allowlist. Its .git is locked as
-// new at its next launch. Only the VM named for this path is adopted,
-// never a parent folder's.
-func (e Lifecycle) Adopt(ctx context.Context) error {
+// after asking in a terminal, or with force (--force): its files, tokens
+// and allowlist. Its .git is locked as new at its next launch. Only the
+// VM named for this path is adopted, never a parent folder's.
+func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
 	t, _, err := e.lookup(ctx, "", false)
 	if err != nil {
 		return err
@@ -69,10 +69,11 @@ func (e Lifecycle) Adopt(ctx context.Context) error {
 		return nil
 	}
 	was := st.Get(state.KeyDir)
-	if !e.Terminal() {
+	switch {
+	case force:
+	case !e.Terminal():
 		return msg.VMOtherFolderAdopt(vm, was)
-	}
-	if !e.Ask(msg.AdoptVM(vm, was)) {
+	case !e.Ask(msg.AdoptVM(vm, was)):
 		return nil
 	}
 	id, err := platform.FolderID(t.f.Dir)
@@ -88,21 +89,28 @@ func (e Lifecycle) Adopt(ctx context.Context) error {
 	return nil
 }
 
-// Rm deletes the folder's VM, exporting its agents' history first unless
-// force: an export that fails keeps it. A --clone VM's branches the repo
-// lacks and uncommitted changes are checked first (cloneRmCheck), unless
-// force. A VM made for an earlier folder at this path is deleted only
-// after asking, without either (its folder is gone), force or not. A
-// parent folder's VM, found from a subfolder, is deleted only after
-// asking too, and never without a terminal.
-func (e Lifecycle) Rm(ctx context.Context, force bool) error {
+// RmOptions are devvm rm's flags.
+type RmOptions struct {
+	Force    bool // --force: no "delete it?" asked, which needs a terminal otherwise
+	NoExport bool // --no-export: the agents' history isn't exported first
+}
+
+// Rm deletes the folder's VM, after asking in a terminal, or with
+// --force; without either it refuses (force_needed). Its agents' history
+// is exported first unless --no-export: an export that fails keeps it.
+// A --clone VM's branches the repo lacks and uncommitted changes are
+// checked first (cloneRmCheck), which asks only in a terminal. A VM made
+// for an earlier folder at this path, or a parent folder's VM found from
+// a subfolder, is deleted only after asking in a terminal, which --force
+// never answers, and never without one; the earlier folder's isn't
+// exported, as its folder is gone.
+func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	t, err := e.findExisting(ctx, "")
 	if err != nil {
 		return err
 	}
 	vm, st := t.f.Name, t.st
-	// A parent folder's VM is deleted only after asking, -f or not; -f
-	// still skips the checks below.
+	asked := false
 	if t.sub != "" {
 		if !e.Terminal() {
 			return msg.RmParentVM(t.f.Dir, vm)
@@ -110,6 +118,7 @@ func (e Lifecycle) Rm(ctx context.Context, force bool) error {
 		if !e.Ask(msg.DeleteParentVM(t.f.Dir, vm)) {
 			return nil
 		}
+		asked = true
 	}
 	if !e.sameFolder(t.f, st) {
 		was := st.Get(state.KeyDir)
@@ -119,16 +128,25 @@ func (e Lifecycle) Rm(ctx context.Context, force bool) error {
 		if !e.Ask(msg.DeleteOtherFolderVM(vm, was)) {
 			return nil
 		}
-		force = true
+		asked, o.NoExport = true, true
+	}
+	if !asked && !o.Force {
+		if !e.Terminal() {
+			return msg.ForceNeeded("devvm rm")
+		}
+		if !e.Ask(msg.RmConfirm(vm)) {
+			e.Info(msg.Kept(vm))
+			return nil
+		}
 	}
 	// A VM whose creation didn't finish never ran: no history, no work.
-	if !force && st.Get(KeyNet) != "" && isClone(st) {
+	if st.Get(KeyNet) != "" && isClone(st) && e.sameFolder(t.f, st) {
 		keep, err := clones(e).cloneRmCheck(ctx, t)
 		if err != nil || keep {
 			return err
 		}
 	}
-	if !force && st.Get(KeyNet) != "" && len(agentsOf(st.Get(state.KeyImage))) > 0 {
+	if !o.NoExport && st.Get(KeyNet) != "" && len(agentsOf(st.Get(state.KeyImage))) > 0 {
 		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
 			return err
 		}

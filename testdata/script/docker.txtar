@@ -127,7 +127,7 @@ stub_calls
 stdout '^docker container start devvm-web-[0-9a-f]{14}$'
 
 # rm deletes its container, its home volume and its record.
-exec devvm rm -f
+exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 stdout '^docker container rm -f -v devvm-web-[0-9a-f]{14}$'
@@ -175,7 +175,7 @@ exec devvm ls
 [linux] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +off +off +docker \(sysbox\) +\S+/sysbox$'
 ! exec devvm network on
 stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
-exec devvm rm -f
+exec devvm rm --force --no-export
 stub_calls
 stdout '^docker volume rm devvm-sysbox-[0-9a-f]{14}-docker$'
 stdout '^docker volume rm devvm-sysbox-[0-9a-f]{14}-containerd$'
@@ -188,7 +188,7 @@ exec sh -c ': > "$STUB_LOG"'
 stderr '^devvm: vm_lacks_layer image=docker layer=docker vm=devvm-inplace-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'docker container (stop|commit|create)'
-exec devvm rm -f
+exec devvm rm --force --no-export
 # A bridge routing to this machine's loopback (Docker's userland proxy
 # off): refused.
 exec sh -c 'echo 1 > "$DEVVM_DOCKER_PROC_SYS/net/ipv4/conf/br-id-net-devvm/route_localnet"'
@@ -271,7 +271,7 @@ stdout ' -only '$PORT'$'
 ! stdout ' -only '$PORT',9-10$'
 
 # rm deletes its forwarder, its keys and its entry.
-exec devvm rm -f
+exec devvm rm --force --no-export
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*'
 ! grep devvm-emu $XDG_CONFIG_HOME/devvm/ssh_config
 rm $STUB_DIR/guest-ports
@@ -289,7 +289,7 @@ stdout '^egress-proxy +emulated +native +emulated$'
 exec devvm --backend docker --from $PIN --no-network-policy --ports none base
 ! stderr backend_unreviewed
 stdout '^==> creating_from image=base vm=devvm-desk-[0-9a-f]{14}$'
-exec devvm rm -f
+exec devvm rm --force --no-export
 
 # Another machine's engine can't confine a VM to its proxy: without a
 # flag, the VM is made without network policy, unasked and warned;
@@ -305,7 +305,7 @@ stderr '^devvm: net_off_backend backend=docker vm=devvm-other-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask'
 exec sh -c 'cat "$VMS"/devvm-other-*'
 stdout '^net=off$'
-exec devvm rm -f
+exec devvm rm --force --no-export
 env DEVVM_DOCKER_KIND=desktop
 
 # A release fetches its own version's Linux build, which network policy's
@@ -323,7 +323,7 @@ exec devvm doctor --backend docker
 stdout '^==> docker_linux_build_fetching url=http://127\.0\.0\.1:\d+/devvm-0\.0\.0-linux-\w+\.tar\.gz$'
 stderr '^devvm: docker_linux_build_mismatch url=http://127\.0\.0\.1:\d+/devvm-0\.0\.0-linux-\w+\.tar\.gz$'
 ! exists $XDG_DATA_HOME/devvm/docker/bin/devvm-linux-$LINUX_ARCH
-exec devvm rm -f
+exec devvm rm --force --no-export
 linux_release match
 ! exec devvm --backend docker --from $PIN --network-policy --ports none base
 stdout '^==> docker_linux_build_fetching url='
@@ -338,7 +338,7 @@ stdout '^docker container create --name devvm-fetch-[0-9a-f]{14}-proxy .* --moun
 ! exec devvm
 ! stdout docker_linux_build_fetching
 stderr '^devvm: net_direct_route vm=devvm-fetch-[0-9a-f]{14}$'
-exec devvm rm -f
+exec devvm rm --force --no-export
 
 # Behind a company proxy, a Linux engine's build goes through a proxy of
 # devvm's on its own network, as on Docker Desktop: its commands get that

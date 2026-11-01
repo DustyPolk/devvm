@@ -64,19 +64,19 @@ exists $CACHE/nar/bbbb.nar.xz
 exec sh -c 'head -c 65536 /dev/zero > "$CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" && touch -t 202001010000 "$CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo"'
 exec devvm images
 stderr '^images_nix_cache cap=128K size=192K$'
-exec devvm gc
+exec devvm gc --force
 stdout '^gc_nix_cache_over cap=128K size=192K$'
 stdout '^==> deleted_nix_cache count=1 size=64K$'
 ! exists $CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo
 exists $CACHE/nar/bbbb.nar.xz
-exec devvm gc
+exec devvm gc --force
 stdout '^==> nothing_to_clean$'
 
 # --nix-cache: all of it, and nothing of a backend's own run (--backend).
-exec devvm gc --backend lima --nix-cache
+exec devvm gc --force --backend lima --nix-cache
 ! stdout nix_cache
 exists $CACHE/nar/bbbb.nar.xz
-exec devvm gc --nix-cache
+exec devvm gc --force --nix-cache
 stdout '^gc_nix_cache count=1 size=128K$'
 stdout '^==> deleted_nix_cache count=1 size=128K$'
 ! exists $CACHE/nar/bbbb.nar.xz

@@ -44,21 +44,26 @@ func newRebuildCmd(u *ui.UI) *cobra.Command {
 		Use:   "rebuild IMAGE",
 		Short: "Build an image again, and delete the old one",
 		Long: "Build an image again, from its parent as it is, and delete the stale images " +
-			"no VM uses, the old one and those built on it among them. Shared tools aren't images: " +
-			"their versions come from the tools lock.",
+			"no VM uses, the old one and those built on it among them. When images are built on it, it asks " +
+			"first in a terminal; --force goes ahead without asking, which it needs without a terminal. " +
+			"Shared tools aren't images: their versions come from the tools lock.",
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Rebuild)
 		},
 	}
 	f.add(cmd)
+	addForceFlag(cmd.Flags(), &f.force)
 	return cmd
 }
 
 // imageFlags are the flags of the commands that build or delete an image
 // by its name: the backend it's on and the container image its base
-// starts from.
-type imageFlags struct{ backend, from string }
+// starts from; rebuild's --force too.
+type imageFlags struct {
+	backend, from string
+	force         bool
+}
 
 func (f *imageFlags) add(cmd *cobra.Command) {
 	addBackendFlag(cmd.Flags(), &f.backend)
@@ -70,7 +75,7 @@ func (f *imageFlags) add(cmd *cobra.Command) {
 func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(build.Builds, context.Context, string) error) error {
 	b, err := builder(u, f.backend)
 	if err == nil {
-		b.From = fromRef(f.from)
+		b.From, b.Force = fromRef(f.from), f.force
 		err = from.Check(b.From)
 	}
 	if err == nil {

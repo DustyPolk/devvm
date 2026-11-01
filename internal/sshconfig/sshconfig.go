@@ -47,6 +47,8 @@ type Config struct {
 	Info, Warn, Say func(msg.M)
 	Confirm         func(msg.M) bool
 	Terminal        func() bool
+	// AddInclude adds the Include line without asking (--ssh-config).
+	AddInclude bool
 }
 
 // New returns the ssh config for the VMs of the backends in reg that some
@@ -367,11 +369,12 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 		return true, nil
 	}
 	c.Say(msg.SSHIncludeNeeded(line))
-	if !c.Terminal() {
+	switch {
+	case c.AddInclude:
+	case !c.Terminal():
 		c.Warn(msg.SSHIncludeYourself())
 		return false, nil
-	}
-	if !c.Confirm(msg.AddItNow()) {
+	case !c.Confirm(msg.AddItNow()):
 		return false, nil
 	}
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {

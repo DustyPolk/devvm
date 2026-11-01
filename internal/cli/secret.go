@@ -87,16 +87,25 @@ func saveSecret(cmd *cobra.Command, u *ui.UI, name string, stdin bool) {
 }
 
 func newSecretRmCmd(u *ui.UI) *cobra.Command {
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "rm NAME",
 		Short: "Delete a saved token",
-		Long:  "Delete a saved token. Proxies running stop putting it in at once; what a VM did with it stays done.",
+		Long: "Delete a saved token, after asking in a terminal; --force deletes it without asking, which it " +
+			"needs without a terminal. Proxies running stop putting it in at once; what a VM did with it stays done.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ok, err := confirmed(u, force, "devvm secret rm", func() bool { return u.Ask(msg.SecretRmConfirm(args[0])) })
+			fail(u, err, msg.SecretFailed)
+			if !ok {
+				u.Info(msg.NothingDeleted())
+				return nil
+			}
 			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
 			return nil
 		},
 	}
 	oneSecret(cmd)
+	addForceFlag(cmd.Flags(), &force)
 	return cmd
 }
 

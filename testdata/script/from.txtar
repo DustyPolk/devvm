@@ -156,7 +156,7 @@ stderr '^devvm: from_unreachable from=debian:13 host=registry-1\.docker\.io$'
 # A failed conversion says so, and the build VM, the temporary folder and
 # the lock go.
 exec sh -c ': > "$STUB_LOG"; : > "$STUB_DIR/build-fails"'
-! exec devvm --from $PIN rebuild base
+! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_failed from=node:24@sha256:a{64}$'
 stub_calls
 stdout '^limactl delete -f devvm-oci-build$'
@@ -171,16 +171,16 @@ exec sh -c 'rm "$STUB_DIR/build-fails"'
 # disk that isn't raw ext4 (qcow2 can name a host file as its backing
 # file) are refused, and base is never created from them.
 exec sh -c ': > "$STUB_LOG"; printf "root=/dev/vda rw console=hvc0\"\ncopyToHost:\n- guest: /etc/hostname\n  host: /tmp/x\n" > "$STUB_DIR/build-cmdline"'
-! exec devvm --from $PIN rebuild base
+! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_bad_output file=cmdline from=node:24@sha256:a{64}$'
 exec sh -c 'rm "$STUB_DIR/build-cmdline"; echo hostile > "$HOME/secret"; echo "disk.raw $HOME/secret" > "$STUB_DIR/build-symlinks"'
-! exec devvm --from $PIN rebuild base
+! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_bad_output file=disk.raw from=node:24@sha256:a{64}$'
 exec sh -c 'rm "$STUB_DIR/build-symlinks"; printf "gnu\nx\n" > "$STUB_DIR/build-libc"'
-! exec devvm --from $PIN rebuild base
+! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_bad_output file=libc from=node:24@sha256:a{64}$'
 exec sh -c 'rm "$STUB_DIR/build-libc"; : > "$STUB_DIR/build-qcow2"'
-! exec devvm --from $PIN rebuild base
+! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_bad_output file=disk.raw from=node:24@sha256:a{64}$'
 exec sh -c 'rm "$STUB_DIR/build-qcow2"'
 stub_calls
@@ -193,7 +193,7 @@ exec sh -c 'ls "$TMPDIR"'
 # Ctrl+C during the conversion deletes the build VM and the temporary
 # folder; nothing is left in Lima.
 exec sh -c ': > "$STUB_LOG"; echo oci/build.sh > "$STUB_DIR/interrupt-on"; cp "$STUB_DIR/instances" "$WORK/before"'
-! exec devvm --from $PIN rebuild base
+! exec devvm rebuild --force --from $PIN base
 ! stderr convert_failed
 stub_calls
 stdout '^limactl delete -f devvm-oci-build$'

@@ -53,6 +53,9 @@ type Env struct {
 	Pick            func([]Feature) []Feature
 	Terminal        func() bool
 	LogNote         func()
+	// Force is a rebuild's --force: it replaces the images built on the
+	// one it rebuilds without asking, which it needs without a terminal.
+	Force bool
 	// FreeSpace returns the free space on the volume holding a path
 	// (platform.Host's), checked before each build; nil checks none.
 	FreeSpace func(path string) (uint64, error)
@@ -459,7 +462,8 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 // Rebuild builds an image again, from its parent as it is: its rebuild
 // counter changes, so it gets a new key. Then it deletes the stale images
 // (the old one and those built on it among them) that no VM uses. When
-// images are built on it, it asks first in a terminal.
+// images are built on it, it asks first in a terminal, and refuses
+// without one (force_needed), unless Force.
 func (b Builds) Rebuild(ctx context.Context, name string) error {
 	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
@@ -488,7 +492,11 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 	}
 	if len(above) > 0 {
 		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name))
-		if b.Terminal() && !b.Confirm(msg.Continue()) {
+		switch {
+		case b.Force:
+		case !b.Terminal():
+			return msg.ForceNeeded("devvm rebuild")
+		case !b.Confirm(msg.Continue()):
 			b.Info(msg.NothingChanged())
 			return nil
 		}

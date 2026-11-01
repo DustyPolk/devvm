@@ -9,6 +9,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/ui"
 )
 
 // addBackendFlag adds --backend, the backend a command uses: a new VM's,
@@ -26,6 +27,30 @@ func addBackendFilterFlag(f *pflag.FlagSet, p *string) {
 // addFromFlag adds --from, the container image a base starts from.
 func addFromFlag(f *pflag.FlagSet, p *string) {
 	f.StringVar(p, "from", "", "the container `IMAGE` the base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM)")
+}
+
+// addForceFlag adds -f/--force, which only skips a confirmation.
+func addForceFlag(f *pflag.FlagSet, p *bool) {
+	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which a command that deletes needs without a terminal")
+}
+
+// addSSHConfigFlag adds --ssh-config, which answers the question whether
+// to add devvm's Include line to ~/.ssh/config.
+func addSSHConfigFlag(f *pflag.FlagSet, p *bool) {
+	f.BoolVar(p, "ssh-config", false, "add devvm's Include line to ~/.ssh/config without asking, when it's missing")
+}
+
+// confirmed is whether a destructive command (command, as typed) goes
+// ahead: with --force without asking; in a terminal, when ask says yes;
+// without one, never, refused with force_needed.
+func confirmed(u *ui.UI, force bool, command string, ask func() bool) (bool, error) {
+	switch {
+	case force:
+		return true, nil
+	case !u.StdinIsTerminal():
+		return false, msg.ForceNeeded(command)
+	}
+	return ask(), nil
 }
 
 // fromRef is --from as given, else its default from the environment.

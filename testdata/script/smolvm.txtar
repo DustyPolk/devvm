@@ -60,7 +60,7 @@ stdout '^devvm ports: port '$UNLISTED': forwarded$'
 stdout '^devvm ports: forwarding devvm-all-[0-9a-f]{14}''s ports$'
 ! stdout 'port 80'
 exec devvm stop
-exec devvm rm -f
+exec devvm rm --force --no-export
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*'
 rm $STUB_DIR/guest-ports
 mkdir $WORK/web
@@ -131,7 +131,7 @@ stdout '^/dev/null/devvm-no-agent$'
 
 # rm deletes the machine and what the backend recorded for it.
 exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.json'
-exec devvm rm -f
+exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.json'
 exec devvm ls
@@ -178,7 +178,7 @@ stub_calls
 stdout '^smolvm machine stop( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14}$'
 ! stdout 'bash -l$'
 exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
-exec devvm rm -f
+exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-pol-[0-9a-f]{14}$'
 
 # ssh for editors (emulated, reviewed): each start forwards the VM's sshd
@@ -217,7 +217,7 @@ stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -
 ! exec devvm host
 stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 rm $STUB_DIR/no-sshd
-exec devvm rm -f
+exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-sshd-[0-9a-f]{14}$'
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
 
@@ -233,7 +233,7 @@ stdout '^smolvm machine create( --state-dir \S+)? --name devvm-many-[0-9a-f]{14}
 ! stdout ' -p (22|3000):'
 exec devvm ports
 stdout '^22,3000-3100$'
-exec devvm rm -f
+exec devvm rm --force --no-export
 
 # Agent forwarding turned on or off (emulated, reviewed): a new VM is made
 # forwarding (--ssh-agent), and each start gives it the agent its choice
@@ -298,4 +298,4 @@ exec devvm stop
 exec sh -c 'smolvm machine start --name "$(basename "$VMS"/devvm-agent-*)"'
 exec devvm
 ! stderr 'agent_unchosen'
-exec devvm rm -f
+exec devvm rm --force --no-export

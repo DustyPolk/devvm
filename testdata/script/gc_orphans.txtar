@@ -34,11 +34,11 @@ exec sh -c 'printf "image=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/d
 exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
 
 # The default run leaves them.
-exec devvm gc
+exec devvm gc --force
 exists $VMS/devvm-gone-12345612345612
 
 exec sh -c ': > "$STUB_LOG"'
-exec devvm gc --orphans
+exec devvm gc --force --orphans
 stdout '^gc_orphans count=3$'
 stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345612$'
 stdout '^gc_orphan backend=docker dir=/p/dock vm=devvm-dock-12345612345612\ngc_orphan_network network=devvm-dock-12345612345612-net\ngc_orphan_volume volume=devvm-dock-12345612345612-home\ngc_orphan_image image=devvm-x:devvm-dock-12345612345612-1$'
@@ -79,7 +79,7 @@ stub_calls
 # VMs' state alone, and goes on with the others.
 exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
 exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
-exec devvm gc --orphans
+exec devvm gc --force --orphans
 stderr '^devvm: gc_backend_skipped backend=smolvm$'
 stderr '^gc_orphans_unknown backend=smolvm$'
 exists $VMS/devvm-smol-12345612345612

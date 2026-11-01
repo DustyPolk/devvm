@@ -82,6 +82,27 @@ other = "Writing the command's output failed: {{.reason}}."
 description = "command is the command run, such as devvm network"
 other = "{{.command}} --json only shows, so it takes no value. Run it without --json to change the setting."
 
+[no_input]
+description = "answer is the flag or command that answers the question, such as --force"
+other = "This question needs an answer, and --no-input asks nothing. Give {{.answer}} instead."
+
+[no_input_terminal]
+other = "Only you can answer this question, in a terminal, and --no-input asks nothing. Run the command again in a terminal without --no-input."
+
+[force_needed]
+description = "command is the command as typed, such as devvm rm"
+other = "{{.command}} deletes only after you confirm, and there's no terminal to confirm in. Add --force to go ahead without asking."
+
+[rm_confirm]
+other = "Delete {{.vm}}, with everything in it?"
+
+[images_rm_confirm]
+description = "images is the images as given, space-separated"
+other = "Delete {{.images}}? VMs made from them keep working."
+
+[secret_rm_confirm]
+other = "Delete the secret {{.name}}? The VMs that use it lose it."
+
 [flag_blank]
 description = "flag is the flag's name, without its dashes"
 other = "The --{{.flag}} flag got an empty value, and no flag takes one. Give it a value, such as none or off where it takes one, or leave the flag out."
@@ -821,8 +842,8 @@ other = "deleted {{.count}} tool images no VM had"
 
 [gc_tools_recent]
 description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
-one = "{{.count}} current shared tool image no VM has stays because it was built in the last hour: {{.tools}}. Run devvm gc again with --force to delete it now."
-other = "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc again with --force to delete them now."
+one = "{{.count}} current shared tool image no VM has stays because it was built in the last hour: {{.tools}}. Run devvm gc --tools --recent to delete it now."
+other = "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tools --recent to delete them now."
 
 [gc_tools_making]
 description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
@@ -832,11 +853,11 @@ other = "{{.count}} current shared tool images no VM has stay because a VM is be
 [gc_names_need_tools]
 other = "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.tool}}."
 
-[gc_force_needs_tools]
-other = "--force goes with --tools. Run devvm gc --tools --force."
+[gc_recent_needs_tools]
+other = "--recent goes with --tools. Run devvm gc --tools --recent."
 
-[gc_force_making]
-other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done."
+[gc_recent_making]
+other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --recent again once that's done."
 
 [unknown_tool]
 other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."
@@ -896,8 +917,6 @@ other = "{{.vm}} was made in another Lima home, HOME or Docker engine than this 
 [gc_orphan_recent]
 other = "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
 
-[gc_caches_need_terminal]
-other = "--caches asks before it frees each backend's cache, so it runs only in a terminal. Run devvm gc --caches in one."
 
 [gc_cache]
 one = "{{.count}} entry of {{.backend}}'s own cache that devvm's builds put there and nothing of devvm's needs ({{.size}}):"
@@ -1010,7 +1029,7 @@ other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted o
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal."
 
 [vm_other_folder_adopt]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to use it here, run devvm adopt in a terminal."
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To use it here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
 
 [rm_parent_vm]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
@@ -1380,7 +1399,7 @@ description = "line is the Include line for ~/.ssh/config"
 other = "To reach VMs by name with ssh or VS Code's Remote-SSH, ~/.ssh/config needs this line at the top:\n  {{.line}}"
 
 [ssh_include_yourself]
-other = "There's no terminal to ask in, so devvm didn't add the line. Add it yourself."
+other = "There's no terminal to ask in, so devvm didn't add the line. Add it yourself, or run the command again with --ssh-config."
 
 [add_it_now]
 other = "Add it now?"
@@ -1573,7 +1592,7 @@ description = "refs is a space-separated list of quoted branch names"
 other = "The VM has commits on {{.refs}} that this repo hasn't fetched."
 
 [no_terminal_fetch]
-other = "There's no terminal to ask in. Run git fetch {{.remote}} first, or devvm rm -f to delete the VM anyway."
+other = "There's no terminal to ask in, so the VM stays. Run git fetch {{.remote}} first, or devvm rm in a terminal to choose."
 
 [branch_names_invalid]
 description = "refs is a space-separated list of quoted branch names"
@@ -1612,7 +1631,7 @@ other = "The worktree {{.path}} in the VM's clone has uncommitted changes, which
 other = "The VM's clone has more than {{.max}} worktrees, and devvm checked only the first {{.max}} for uncommitted changes."
 
 [no_terminal_delete]
-other = "Deleting the VM needs your confirmation, and there's no terminal to ask in. Run devvm rm -f to delete the VM anyway."
+other = "Deleting the VM loses its clone's uncommitted changes, and there's no terminal to confirm in. Run devvm rm in a terminal to confirm."
 
 [delete_anyway]
 other = "Delete anyway?"

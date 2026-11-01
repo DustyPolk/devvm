@@ -133,7 +133,7 @@ cd $WORK/agent
 exec devvm --no-network-policy --no-git-protect base+claude
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-agent-*)"'
 exec sh -c ': > "$STUB_DIR/shell-fails"'
-! exec devvm rm
+! exec devvm rm --force
 stdout '^==> starting vm=devvm-agent-[0-9a-f]{14}$'
 stderr '^devvm: rm_export_failed vm=devvm-agent-[0-9a-f]{14}$'
 exec sh -c 'ls "$VMS"'
@@ -142,7 +142,7 @@ exec sh -c 'ls "$DATA/exports" | wc -l'
 stdout '^ *0$'
 rm $STUB_DIR/shell-fails
 exec sh -c ': > "$STUB_LOG"'
-exec devvm rm
+exec devvm rm --force
 stdout '^==> exported file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
 stdout '^==> deleted vm=devvm-agent-[0-9a-f]{14}$'
 stub_calls
@@ -150,7 +150,7 @@ stdout 'exec ''bash'' ''-c'' ''cd ~ && ls -d \.claude \.claude\.json .* --exclud
 exec sh -c 'ls "$VMS"'
 ! stdout devvm-agent
 cd $WORK/net
-exec devvm rm -f
+exec devvm rm --force --no-export
 ! stdout exported
 
 -- package.json --

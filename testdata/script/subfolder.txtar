@@ -63,7 +63,7 @@ stderr '^devvm: no_vm dir=/\S*/app/tool/bin$'
 exec devvm --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-bin-[0-9a-f]{14}$'
 ! stdout using_parent_vm
-exec devvm rm -f
+exec devvm rm --force --no-export
 
 # --clone: a new VM for the subfolder's own repo, as --here, nothing
 # asked.
@@ -75,12 +75,12 @@ exec git commit -q --allow-empty -m one
 exec devvm --clone --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-repo-[0-9a-f]{14}$'
 ! stdout using_parent_vm
-exec devvm rm -f
+exec devvm rm --force --no-export
 
 # rm: never a parent's without asking. Without a terminal it's refused,
-# -f or not, and nothing is deleted; in the parent's folder it goes.
+# --force or not, and nothing is deleted; in the parent's folder it goes.
 cd $WORK/app/src
-exec devvm rm
+exec devvm rm --force
 cd $WORK/app/src/lib
 
 # Commands that give a parent's VM more access are refused without a
@@ -102,7 +102,7 @@ stdout '!bad.example.com'
 ! stdout '^example.com'
 
 exec sh -c ': > "$STUB_LOG"'
-! exec devvm rm -f
+! exec devvm rm --force --no-export
 stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 stderr '^devvm: rm_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 stub_calls
@@ -110,10 +110,10 @@ stub_calls
 exec sh -c 'ls "$VMS" | grep -v "\.policy$" | wc -l'
 stdout '^ *1$'
 cd $WORK/app
-exec devvm rm
+exec devvm rm --force
 stdout '^==> deleted vm=devvm-app-[0-9a-f]{14}$'
 exec ls $VMS
 ! stdout .
 cd $WORK/app/src/lib
-! exec devvm rm
+! exec devvm rm --force
 stderr '^devvm: no_vm dir=/\S*/app/src/lib$'

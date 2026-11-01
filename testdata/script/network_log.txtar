@@ -37,7 +37,7 @@ stderr '^devvm: flag_bad_value flag=--lines form=N value=-1$'
 exec devvm network log --json -n 3
 stdout '\A{\n  "version": 1,\n  "events": \[\n    {\n      "time": "2026-10-09T10:00:08Z",\n      "event": "tunnel",\n      "host": "fd00::1",\n      "port": 22,\n      "method": "CONNECT",\n      "rule": "\[fd00::1\]:22"\n    },\n'
 ! stdout '"vm"'
-! exec devvm network log --json -f
+! exec devvm network log --json --follow
 stderr '^devvm: flags_exclusive flag=--(json|follow) other=--(json|follow)$'
 
 # The blocks by host and port, by when last blocked, with the command

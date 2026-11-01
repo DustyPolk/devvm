@@ -44,8 +44,9 @@ type UI struct {
 	rawInput func() (restore func(), err error)
 	// getenv reads the terminal's character set.
 	getenv func(string) string
-	// verboseOn streams the run log to stderr (SetVerbose).
-	verboseOn atomic.Bool
+	// verboseOn streams the run log to stderr, and noInput refuses every
+	// question (SetFlags).
+	verboseOn, noInput atomic.Bool
 	// runLogs returns the run logs' folder.
 	runLogs func() (string, error)
 	// interruptGrace is how long a command a signal ended waits for
@@ -228,6 +229,7 @@ func (u *UI) DieLogged(m msg.M) {
 // starting with y. No answer at all (the end of input) ends the run with
 // exit code 1, so nothing goes ahead unanswered.
 func (u *UI) Ask(m msg.M) bool {
+	refuseInput(u, m)
 	a := u.answer(u.errStyle.message(m) + " [y/N] ")
 	return strings.HasPrefix(a, "y") || strings.HasPrefix(a, "Y")
 }
@@ -238,7 +240,10 @@ func (u *UI) Ask(m msg.M) bool {
 func (u *UI) Confirm(q ...msg.M) bool {
 	prompt := "[Y/n] "
 	if len(q) > 0 {
+		refuseInput(u, q[0])
 		prompt = u.errStyle.message(q[0]) + " " + prompt
+	} else {
+		refuseInput(u, msg.M{})
 	}
 	a := u.answer(prompt)
 	return !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N")
@@ -248,6 +253,7 @@ func (u *UI) Confirm(q ...msg.M) bool {
 // the spaces around it, "" for Enter. No answer at all ends the run like
 // Ask.
 func (u *UI) Answer(prompt msg.M) string {
+	refuseInput(u, prompt)
 	return strings.TrimSpace(u.answer(u.errStyle.message(prompt) + " "))
 }
 
@@ -268,6 +274,7 @@ func (u *UI) readTerminal() (string, error) {
 // Secret reads a value such as a token: in a terminal after the prompt on
 // stderr, without echoing it; else a line of input, as Line does.
 func (u *UI) Secret(prompt msg.M) string {
+	refuseInput(u, prompt)
 	if !u.stdinTTY {
 		return u.Line()
 	}
@@ -285,6 +292,22 @@ func (u *UI) Secret(prompt msg.M) string {
 func (u *UI) Line() string {
 	line, _ := u.stdin.ReadString('\n')
 	return strings.TrimRight(line, "\r\n")
+}
+
+// refuseInput ends the run instead of asking q with --no-input: q's text
+// first, then no_input naming what answers it (msg.AnswerFor), or
+// no_input_terminal for a question only a terminal answers.
+func refuseInput(u *UI, q msg.M) {
+	if !u.noInput.Load() {
+		return
+	}
+	if q.ID() != "" {
+		u.Note(q)
+	}
+	if a := msg.AnswerFor(q.ID()); a != "" {
+		u.Die(msg.NoInput(a))
+	}
+	u.Die(msg.NoInputTerminal())
 }
 
 // answer prints the prompt to stderr when the input is a terminal, and

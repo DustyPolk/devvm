@@ -14,7 +14,7 @@ exec sh -c 'cd "$EXPORTS" && for f in devvm-old-12345612345612-20200101-000000 d
 
 # No file: nothing is deleted, by a command or gc --retention.
 exec devvm space
-exec devvm gc --retention
+exec devvm gc --force --retention
 stdout '^==> retention_off$'
 exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
 ! exists $DATA/retention.run
@@ -83,7 +83,7 @@ exec devvm build codex
 mkdir $VMS
 exec sh -c 'printf "image=claude\ndir=/p\nbackend=lima\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 *.sha256'
-exec devvm gc --retention
+exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'
 exec sh -c 'ls "$SHARE"/codex-*.erofs.idle'
 ! exec sh -c 'ls "$SHARE"/claude-*.erofs.idle'
@@ -97,7 +97,7 @@ exec git init -q
 exec sh -c ': > "$STUB_DIR/start-hangs"'
 ! exec devvm --no-network-policy base &u&
 wait_file $STUB_DIR/hanging
-exec devvm gc --retention
+exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'
 exec sh -c 'ls "$SHARE"/codex-*.erofs.idle'
 kill -KILL u
@@ -105,7 +105,7 @@ wait u
 rm $STUB_DIR/start-hangs
 exec sh -c 'rm -f "$STUB_DIR/hanging"'
 
-exec devvm gc --retention
+exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=1$'
 exec sh -c 'ls "$SHARE"'
 ! stdout codex

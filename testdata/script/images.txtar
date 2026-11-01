@@ -68,7 +68,9 @@ stderr '^images_total size=\S+$'
 # images rm: by key (an unfinished build), or by name; nothing else.
 # A name is its image as it is now: foo is current again.
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
-exec devvm images rm 000000000000 base+foo
+! exec devvm images rm 000000000000 base+foo
+stderr '^devvm: force_needed command=devvm images rm$'
+exec devvm images rm --force 000000000000 base+foo
 stdout '^==> deleted_unfinished_build key=000000000000$'
 stdout '^==> deleted_image image=foo key=[0-9a-f]{12}$'
 exec sh -c 'grep "^limactl delete" "$STUB_LOG"'
@@ -79,15 +81,15 @@ exec sh -c '! test -e "$IMAGES/$(cat foo.key)"'
 # A key no image has, a name no layer has, what isn't built and shared
 # tools: errors, and nothing is deleted.
 exec sh -c ': > "$STUB_LOG"'
-! exec devvm images rm fedcba987654
+! exec devvm images rm --force fedcba987654
 stderr '^devvm: unknown_layer '
-! exec devvm images rm base nope
+! exec devvm images rm --force base nope
 stderr '^devvm: unknown_layer .*layer=nope'
-! exec devvm images rm foo
+! exec devvm images rm --force foo
 stderr '^devvm: no_image_named image=foo$'
-! exec devvm images rm node+foo
+! exec devvm images rm --force node+foo
 stderr '^devvm: tools_not_images_rm image=node\+foo$'
-! exec devvm --from node:24 images rm base
+! exec devvm images rm --force --from node:24 base
 stderr '^devvm: no_image_named_from '
 ! exec devvm images rm
 stderr '^devvm: arg_missing args=IMAGE\|KEY\.\.\. command=devvm images rm$'

@@ -27,7 +27,7 @@ devvm tools add claude  # add Claude Code to the folder's existing VM
 | `devvm tools update` | move this folder's VM to the newest shared tools, then open a shell in it ([details](../using/toolchains.md#adding-and-removing-tools)) |
 | `devvm history` | list the exports of agents' history that devvm saved in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
 | `devvm history export [FILE]` | save the history of this folder's VM's agents to FILE, or to a new `.tar.gz` in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
-| `devvm rm [-f]` | delete this folder's VM, exporting its agents' history first ([details](../internals/overview.md#deleting-a-vm)) |
+| `devvm rm [--force] [--no-export]` | delete this folder's VM after asking, exporting its agents' history first unless `--no-export` ([details](../internals/overview.md#deleting-a-vm)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
 | `devvm ls` | list the project VMs ([details](#listing-vms)) |
 | `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`, even while it runs ([details](../using/ports-size.md#ports)) |
@@ -94,7 +94,7 @@ A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets t
 
 A VM belongs to the folder it was made for, which devvm knows by its path and by the folder itself ([one VM per folder](../internals/security.md#one-vm-per-folder)). When that folder was deleted and a new one made at the same path, devvm, `devvm restart` and `devvm tools` refuse the VM. Two commands deal with it, and each acts only after you confirm in a terminal:
 
-- `devvm rm` deletes the VM, with `-f` or without it, and never exports its history, because its folder is gone. The VM may hold that project's work.
+- `devvm rm` deletes the VM and never exports its history, because its folder is gone. The VM may hold that project's work, so `--force` never answers this question.
 - `devvm adopt` gives the VM to this folder, with its files, secrets and allowlist. Its `.git` protection starts again, as if `.git` had just appeared.
 
 ### A subfolder
@@ -103,7 +103,7 @@ A VM mounts its whole project folder, so the folders inside it are in the VM at 
 
 When you run `devvm` in such a subfolder in a terminal, devvm asks whether to open the parent folder's VM there instead of making a new VM, with yes as the default. If you answer yes, the shell opens in the VM at the subfolder's path. If you answer no, devvm makes a new VM for the subfolder alone. Without a terminal, devvm opens the parent folder's VM and names it and its folder first. An IMAGE you give, after the same question, is checked against the parent folder's VM as it would be in that folder ([adding to a VM](#adding-to-a-vm)). `devvm --here` makes a new VM for the subfolder without asking, and so does `devvm --clone`, which makes the subfolder's own clone VM. Once the subfolder has its own VM, devvm opens that one and asks nothing. In a parent folder's `--clone` VM, the shell opens in the subfolder when the clone has it ([subfolders](../using/clone.md#subfolders)).
 
-The other commands that act on this folder's VM, such as `devvm stop`, `restart`, `tools`, `size`, `ports`, `host` and `code`, use the parent folder's VM in the same way, without asking. Each one first prints a line that names the VM and the folder it was made for. `devvm rm` is the exception, because it never deletes a parent folder's VM unasked. In a terminal, it names the VM and its folder and asks before deleting it, with no as the default, even with `-f`, which still skips only its export and clone checks. Without a terminal, it refuses and tells you to run `devvm rm` in the parent folder instead. The commands that give the VM more access ask in the same way, because the parent folder's project may not expect them. They are `devvm secret use`, `devvm ssh-agent on` and `devvm ssh-agent devvm`, `devvm network off`, `devvm network allow`, `devvm network rm` when it removes a deny, and `devvm git-protect off`. In a terminal, each one names the VM and its folder and asks before it changes the VM, with no as the default. Without a terminal, it refuses and tells you to run it in the parent folder, or in a terminal to confirm. The commands that take access away, such as `devvm secret unuse` and `devvm network deny`, ask nothing. `devvm host` gives the subfolder as the folder to open in the VM, and `devvm code` opens the subfolder. `devvm adopt` acts only on the VM made for this folder's own path, never on a parent folder's.
+The other commands that act on this folder's VM, such as `devvm stop`, `restart`, `tools`, `size`, `ports`, `host` and `code`, use the parent folder's VM in the same way, without asking. Each one first prints a line that names the VM and the folder it was made for. `devvm rm` is the exception, because it never deletes a parent folder's VM unasked. In a terminal, it names the VM and its folder and asks before deleting it, with no as the default, and `--force` never answers that question. Without a terminal, it refuses and tells you to run `devvm rm` in the parent folder instead. The commands that give the VM more access ask in the same way, because the parent folder's project may not expect them. They are `devvm secret use`, `devvm ssh-agent on` and `devvm ssh-agent devvm`, `devvm network off`, `devvm network allow`, `devvm network rm` when it removes a deny, and `devvm git-protect off`. In a terminal, each one names the VM and its folder and asks before it changes the VM, with no as the default. Without a terminal, it refuses and tells you to run it in the parent folder, or in a terminal to confirm. The commands that take access away, such as `devvm secret unuse` and `devvm network deny`, ask nothing. `devvm host` gives the subfolder as the folder to open in the VM, and `devvm code` opens the subfolder. `devvm adopt` acts only on the VM made for this folder's own path, never on a parent folder's.
 
 A subfolder that is a git repo of its own is treated as a separate project, and so is a subfolder inside such a repo, when the repo is below the folder with the VM. That covers a nested repo, a submodule and a worktree, which each have a `.git` folder or file of their own. When you run `devvm` there in a terminal, devvm still asks, but the default is a new VM for the subfolder, so the parent folder's VM opens only if you answer yes. Without a terminal, devvm makes the new VM. The other commands never use the parent folder's VM there, and they say this folder has no VM, as in any folder without one.
 
@@ -193,11 +193,36 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 ## Flags and values
 
-Each flag belongs to the commands that list it in their help, and only `-h` or `--help` and `-v` or `--verbose` work with every command. `-v` shows the output of the commands devvm runs as they run ([details](../using/troubleshooting.md#a-command-fails)). A flag can come before or after the command's arguments.
+Each flag belongs to the commands that list it in their help, and only `-h` or `--help`, `-v` or `--verbose` and `--no-input` work with every command. `-v` shows the output of the commands devvm runs as they run ([details](../using/troubleshooting.md#a-command-fails)), and `--no-input` makes devvm ask nothing ([questions devvm asks](#questions-devvm-asks)). A flag can come before or after the command's arguments.
 
 When a flag or a setting can mean none or off, you write that as a word: `devvm setup --features none`, `devvm ports none`, `devvm retention history.age=off` and `devvm ssh-agent add KEY_FILE --lifetime forever`. devvm refuses an empty value, such as `--features ''`, and an empty argument, so a blank never stands for none or for a default.
 
 Every duration is a whole number followed by a unit, which is `m` for minutes, `h` for hours, `d` for days or `w` for weeks, as in `30m`, `12h`, `30d` or `2w`. That covers `devvm gc --older-than`, the retention settings' ages and `devvm ssh-agent add --lifetime`, and only `--lifetime` also takes `forever`, for a key that devvm's agent keeps until it ends.
+
+## Questions devvm asks
+
+devvm asks a question only in a terminal, and each question has a flag or a command that answers it beforehand, so a script never needs to answer one. Without a terminal, devvm asks nothing. A question that only adds something, such as an agent's folders or the `Include` line, gets its usual answer or a warning that says what to do, and a command that deletes something refuses unless you give it `--force`.
+
+| Question | Answered by |
+| --- | --- |
+| whether a new VM gets network policy | `--network-policy` or `--no-network-policy`, or `devvm network -g on` or `off` for every new VM |
+| whether to use the VM of a folder this one is inside | `--here` for a new VM, or `devvm` run in that folder |
+| the CPUs and memory new VMs get, on the first run | `--cpus` and `--memory`, or `devvm size -g` |
+| base's features, on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
+| the default backend and new VMs' network policy, in `devvm setup` | `devvm setup --backend NAME` and `devvm network -g` |
+| whether to load an SSH key into your agent | `devvm ssh-agent add KEY_FILE` beforehand |
+| whether to restart a running VM to mount an agent's folders | `devvm restart` afterwards |
+| whether to add the `Include` line to `~/.ssh/config` | `--ssh-config` on `devvm`, `devvm host` and `devvm code` |
+| a Claude Code token or a GitHub token | `devvm secret set NAME --stdin` |
+| whether to delete, in `devvm rm`, `devvm gc`, `devvm gc --caches`, `devvm images rm` and `devvm secret rm` | `--force` |
+| whether to replace the images built on one, in `devvm rebuild` | `--force` |
+| whether to use the VM made for an earlier folder here, in `devvm adopt` | `--force` |
+
+`--force` only skips a confirmation, and it never deletes more than the command does without it. A command that would delete something asks first in a terminal, and without a terminal it refuses unless you give `--force`.
+
+A few questions protect work that only you can judge, so no flag answers them, and devvm asks them only in a terminal. They are `devvm rm` deleting the VM of a folder this one is inside or the VM made for an earlier folder at this path, a `--clone` VM's commits that this repo hasn't fetched and its uncommitted changes, and a command giving the VM of a folder this one is inside more access. Without a terminal, each of them refuses and says what to run instead.
+
+With `--no-input`, devvm asks nothing even in a terminal. A question it would ask fails instead, after devvm shows the question, and the error names the flag or command that answers it. A question that only a terminal answers fails and tells you to run the command in a terminal without `--no-input`.
 
 ## devvm itself
 

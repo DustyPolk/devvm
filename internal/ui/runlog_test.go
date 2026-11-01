@@ -73,7 +73,7 @@ func TestLoggedGoesToTheLog(t *testing.T) {
 	out.Reset()
 	errOut.Reset()
 	before := readFile(t, u.logPath())
-	u.SetVerbose(true)
+	u.SetFlags(Flags{Verbose: true})
 	if err := u.logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
 		t.Fatal(err)
 	}

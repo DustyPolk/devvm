@@ -27,9 +27,11 @@ devvm [IMAGE] [flags]
       --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g, else asked in a terminal, and on without one)
       --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json
       --no-git-protect      create the VM without .git protection
+      --no-input            never ask anything: a question devvm would ask fails instead, naming the flag that answers it
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
       --ports PORTS         which PORTS the VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: devvm ports -g, else all)
       --ssh-agent           create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)
+      --ssh-config          add devvm's Include line to ~/.ssh/config without asking, when it's missing
       --unsafe-folder       mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway
   -v, --verbose             show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
       --version             print devvm's version
