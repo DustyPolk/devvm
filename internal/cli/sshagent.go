@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"io"
+
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
@@ -12,6 +14,7 @@ import (
 // newSSHAgentCmd is devvm ssh-agent [on|devvm|off], and devvm's own
 // agent's add and rm.
 func newSSHAgentCmd(u *ui.UI) *cobra.Command {
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "ssh-agent [on|devvm|off]",
 		Short: "Show or change SSH agent forwarding for this folder's VM",
@@ -21,24 +24,63 @@ func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 			"first, and each key added to it: its file, its fingerprint and how it's loaded. devvm ssh-agent " +
 			"on, devvm or off changes the VM's forwarding from its next start: devvm restart. While it's on " +
 			"and you're connected, anything in the VM can use the agent's keys.",
-		Args:      maxArgs(1),
+		Args:      showsOnly(maxArgs(1)),
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error {
-				s := vm.Settings{Env: env}
-				if len(args) == 0 {
-					return s.SSHAgent(cmd.Context(), u.Stdout())
-				}
-				return s.SetSSHAgent(cmd.Context(), args[0])
-			}, msg.SSHAgentFailed)
-			if len(args) == 0 {
-				withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
+			if len(args) == 1 {
+				withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.SetSSHAgent(cmd.Context(), args[0]) }, msg.SSHAgentFailed)
+				return nil
 			}
+			var mode string
+			withEnv(u, func(env *vm.Env) error {
+				var err error
+				mode, err = vm.Settings{Env: env}.SSHAgent(cmd.Context())
+				return err
+			}, msg.SSHAgentFailed)
+			if asJSON {
+				return printAgentJSON(cmd, u, mode)
+			}
+			if _, err := io.WriteString(u.Stdout(), mode+"\n"); err != nil {
+				return err
+			}
+			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}
+	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newSSHAgentAddCmd(u), newSSHAgentRmCmd(u))
 	return cmd
+}
+
+// sshAgentOutput is devvm ssh-agent --json: the VM's forwarding, and the
+// keys added to devvm's own agent.
+type sshAgentOutput struct {
+	Mode string         `json:"mode"`
+	Keys []agentKeyJSON `json:"keys"`
+}
+
+type agentKeyJSON struct {
+	File        string `json:"file"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Confirm     bool   `json:"confirm"`
+	Lifetime    string `json:"lifetime"`
+	Loaded      bool   `json:"loaded"`
+}
+
+// printAgentJSON writes the VM's forwarding mode and devvm's own agent's
+// keys as sshAgentOutput.
+func printAgentJSON(cmd *cobra.Command, u *ui.UI, mode string) error {
+	var keys []sshagent.ListedKey
+	withEnv(u, func(env *vm.Env) error {
+		var err error
+		keys, err = vm.Settings{Env: env}.AgentKeyList(cmd.Context())
+		return err
+	}, msg.AgentKeysFailed)
+	out := sshAgentOutput{Mode: mode, Keys: make([]agentKeyJSON, 0, len(keys))}
+	for _, k := range keys {
+		out.Keys = append(out.Keys, agentKeyJSON(k))
+	}
+	return printJSON(u, out)
 }
 
 func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {

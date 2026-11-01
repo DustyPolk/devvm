@@ -1,6 +1,7 @@
 # doctor: what the backend new VMs get needs on this machine and how to
 # get what's missing, each backend's features, and whether Docker is
-# there. --fixes prints only what's missing, for scripts.
+# there. --json prints what it found as JSON, for scripts, and nothing
+# else.
 env DEVVM_MESSAGES=names
 env ALL=$PATH
 chmod 0755 brew/brew
@@ -24,8 +25,9 @@ stdout '^doctor_ok backend=lima version=\S+\n\z'
 ! stderr .
 stub_calls
 stdout '^limactl --version\n\z'
-exec devvm doctor --fixes
-! stdout .
+exec devvm doctor --json
+stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "problems": \[\],\n  "warnings": \[\],\n  "docker": true,\n'
+stdout '^      "egress-proxy": "emulated",$'
 ! stderr .
 
 # Another backend, or one devvm doesn't have.
@@ -41,8 +43,9 @@ stdout '^FEATURE +DOCKER +LIMA +SMOLVM\n'
 stdout '^docker_missing\n'
 ! stdout doctor_ok
 stderr '^devvm: lima_missing$'
-exec devvm doctor --fixes
-stdout '^lima\t\tlima_missing\n'
+exec devvm doctor --json
+stdout '^      "key": "lima",\n      "fix": null,\n      "message": "lima_missing"\n'
+stdout '^  "docker": false,$'
 ! stderr .
 
 # Every command that needs the backend stops at the first problem.
@@ -56,13 +59,13 @@ cd ..
 
 # With Homebrew, its command.
 env PATH=$WORK/brew${:}$WORK/qemu${:}$DEVVM_BIN
-exec devvm doctor --fixes
-stdout '^lima\tbrew install lima\tlima_missing_fix fix=brew install lima\n'
+exec devvm doctor --json
+stdout '^      "key": "lima",\n      "fix": "brew install lima",\n      "message": "lima_missing_fix fix=brew install lima"\n'
 
 # A limactl that doesn't run, as one built for another processor.
 env PATH=$WORK/broken${:}$WORK/brew${:}$WORK/qemu${:}$DEVVM_BIN
-exec devvm doctor --fixes
-stdout '^lima\tbrew reinstall lima\tlima_broken_fix fix=brew reinstall lima\n'
+exec devvm doctor --json
+stdout '^      "key": "lima",\n      "fix": "brew reinstall lima",\n      "message": "lima_broken_fix fix=brew reinstall lima"\n'
 ! exec devvm doctor
 stderr '^devvm: lima_broken_fix fix=brew reinstall lima$'
 
@@ -75,8 +78,8 @@ stderr '^devvm: lima_broken_fix fix=brew reinstall lima\ndevvm: lima_global_conf
 env PATH=$ALL
 ! exec devvm doctor
 stderr '^devvm: lima_global_config files=\S+/_config/default.yaml$'
-exec devvm doctor --fixes
-stdout '^lima-config\t\tlima_global_config files=\S+/_config/default.yaml\n\z'
+exec devvm doctor --json
+stdout '^  "problems": \[\n    {\n      "key": "lima-config",\n      "fix": null,\n      "message": "lima_global_config files=\S+/_config/default.yaml"\n    }\n  \],$'
 
 -- brew/brew --
 #!/bin/sh

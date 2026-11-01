@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -29,6 +30,7 @@ func oneSecret(cmd *cobra.Command) {
 
 // newSecretCmd is devvm secret: the secrets kept on this machine, listed.
 func newSecretCmd(u *ui.UI) *cobra.Command {
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "secret",
 		Short: "List the secrets kept on this machine, for VMs to use",
@@ -38,8 +40,9 @@ func newSecretCmd(u *ui.UI) *cobra.Command {
 			"puts the secret into requests for the secret's hosts. Without network policy, the VM gets the " +
 			"secret itself.",
 		Args: noArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u) },
+		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u, asJSON) },
 	}
+	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u),
 		newSecretUseCmd(u, "use", true), newSecretUseCmd(u, "unuse", false), newSecretGetCmd(u))
 	return cmd
@@ -97,9 +100,44 @@ func newSecretRmCmd(u *ui.UI) *cobra.Command {
 	return cmd
 }
 
-func listSecrets(cmd *cobra.Command, u *ui.UI) error {
-	withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.Secrets(cmd.Context(), u.Stdout()) }, msg.SecretFailed)
-	return nil
+// secretOutput is devvm secret --json: each secret's name, whether it's
+// saved and the VMs using it, never its value.
+type secretOutput struct {
+	Secrets []secretJSON `json:"secrets"`
+}
+
+type secretJSON struct {
+	Name   string   `json:"name"`
+	Saved  bool     `json:"saved"`
+	UsedBy []string `json:"used_by"`
+}
+
+// listSecrets writes the secrets as a table, or with asJSON as
+// secretOutput.
+func listSecrets(cmd *cobra.Command, u *ui.UI, asJSON bool) error {
+	var ss []vm.SecretListed
+	withEnv(u, func(env *vm.Env) error {
+		var err error
+		ss, err = vm.Net{Env: env}.Secrets(cmd.Context())
+		return err
+	}, msg.SecretFailed)
+	if asJSON {
+		out := secretOutput{Secrets: make([]secretJSON, 0, len(ss))}
+		for _, s := range ss {
+			out.Secrets = append(out.Secrets, secretJSON{Name: s.Name, Saved: s.Saved, UsedBy: append([]string{}, s.UsedBy...)})
+		}
+		return printJSON(u, out)
+	}
+	tab := u.Table()
+	tab.Header("NAME", "SAVED", "USED BY")
+	for _, s := range ss {
+		saved := "no"
+		if s.Saved {
+			saved = "yes"
+		}
+		tab.Row(cell(s.Name), cell(saved), cell(strings.Join(s.UsedBy, ", ")))
+	}
+	return tab.Flush()
 }
 
 // newSecretUseCmd is devvm secret use (use) or unuse.

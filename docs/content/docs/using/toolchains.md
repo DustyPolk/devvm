@@ -107,6 +107,28 @@ A new VM gets the shared tools its image names, the toolchains and the [coding a
 
 `devvm tools` changes nothing and starts no VM. It reads the tools lock as it is, without going online, so a release that came out since devvm last checked isn't in it yet.
 
+### devvm tools --json
+
+`devvm tools --json` prints the same table as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. Each of the `tools` has the tool's name and the VM's version. A tool that the lock has another build of also has `newer`, which is the lock's version, and `newer_built`, which says whether that version is built.
+
+```json
+{
+  "version": 1,
+  "tools": [
+    {
+      "tool": "node",
+      "version": "24.10.0",
+      "newer": "24.11.0",
+      "newer_built": false
+    },
+    {
+      "tool": "pnpm",
+      "version": "10.18.0"
+    }
+  ]
+}
+```
+
 The commands below change the VM's tools. They don't change the VM's disk, because its tools are mounted, so a change takes effect when devvm then opens a shell in the VM. Each takes the tools' names as separate words, as in `devvm tools add python claude`, and devvm refuses names joined with `+`.
 
 - `devvm tools add TOOL...` builds the tools that the share lacks and adds them to the VM. A new agent's config folders are mounted too, which needs the VM to start again, so for a running VM devvm asks before restarting it ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).

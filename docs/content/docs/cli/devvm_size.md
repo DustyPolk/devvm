@@ -20,6 +20,7 @@ devvm size [flags]
       --disk GiB     the VM's disk in GiB, at least what it has
   -g, --global       show or change the size new VMs get instead
   -h, --help         help for size
+      --json         print it as one JSON object, for scripts
       --memory GiB   the VM's memory in GiB: 16, 16G or 16GiB
 ```
 

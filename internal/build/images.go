@@ -29,14 +29,15 @@ type Listed struct {
 	// Ubuntu's cloud image, with its release's date when known (ubuntu
 	// 26.04 (20261001)); "" for an unfinished one.
 	Origin string
-	// DigestID is the first 12 hex digits of Origin's SHA-256, "" when
-	// unknown.
+	// SHA256 is Origin's SHA-256 in hex, "" when unknown; DigestID, its
+	// first 12 digits.
+	SHA256   string
 	DigestID string
 	Size     int64 // the disk space it takes, when Sized
 	Sized    bool
 }
 
-var sha256Hex = regexp.MustCompile(`sha256:([0-9a-f]{12})`)
+var sha256Hex = regexp.MustCompile(`sha256:([0-9a-f]{12,64})`)
 
 // Listing lists the backend's images by name, those without one last,
 // with their state, origin and size.
@@ -55,7 +56,8 @@ func (b Images) Listing(ctx context.Context) ([]Listed, error) {
 			l.State = StateCurrent
 		}
 		if img.Name != "" {
-			l.Origin, l.DigestID = b.origin(img)
+			l.Origin, l.SHA256 = b.origin(img)
+			l.DigestID = l.SHA256[:min(12, len(l.SHA256))]
 		}
 		size, err := b.Backend.ImageSize(ctx, img.Key)
 		if err == nil {
@@ -77,9 +79,9 @@ func (b Images) Listing(ctx context.Context) ([]Listed, error) {
 	return out, nil
 }
 
-// origin is what an image's base started from, and its digest's first 12
-// hex digits. An image above base on Ubuntu's cloud image records no
-// digest: its base's record has it.
+// origin is what an image's base started from, and its digest's SHA-256
+// in hex. An image above base on Ubuntu's cloud image records no digest:
+// its base's record has it.
 func (b Images) origin(img Image) (origin, id string) {
 	d := img.Digest
 	if d == "" && img.From == "" && len(img.Chain) > 0 && img.Chain[0].Name == image.Base {

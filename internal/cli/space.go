@@ -3,7 +3,6 @@ package cli
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -63,11 +62,18 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 				u.Note(msg.SpaceStray(s.Backend, s.Data, s.Name))
 			}
 			if asJSON {
-				enc := json.NewEncoder(u.Stdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(r)
+				// Lists are [] when empty, never null.
+				if r.Rows == nil {
+					r.Rows = []spaceRow{}
+				}
+				if r.Caches == nil {
+					r.Caches = []cacheRow{}
+				}
+				err = printJSON(u, r)
+			} else {
+				err = writeSpace(u.Table(), r)
 			}
-			if err := writeSpace(u.Table(), r); err != nil {
+			if err != nil {
 				return err
 			}
 			if len(r.Caches) > 0 {
@@ -76,7 +82,7 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().BoolVar(&asJSON, "json", false, "print it as JSON, for scripts")
+	jsonFlag(c, &asJSON)
 	return c
 }
 

@@ -302,13 +302,21 @@ Tables on `Stdout()` are colored as stdout is. A command gets a `ui.Table` from 
 - devvm space: `only copy` and `leftover` in KEPT need attention.
 - devvm doctor: `native` is good, `emulated` needs attention, and `unreviewed` and `none` are bad.
 
-`doctor --fixes` lines and devvm space `--json` are for scripts and stay plain.
+Every command's `--json` output is for scripts and stays plain.
 
 `mise run test` unsets `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`, and `tests/e2e.sh` unsets the last two, so your own settings never change what they check.
 
 ### Translations
 
 A translation is `locales/<language>.toml` (`de.toml`) with the same tables, `one` and `other` translated (and the language's other plural forms, such as `few`), loaded by go-i18n the same way. Doc links are the same in every language: the docs site is English. devvm picks the language from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set (`de_DE.UTF-8` is German); `C` and `POSIX` are English. A message missing from a translation is shown in English.
+
+## JSON output
+
+Every command that shows or lists something takes `--json`, which `jsonFlag` in `internal/cli/json.go` adds. The command builds a struct of its own with snake_case `json` tags, next to the code that writes its table, and writes it with `printJSON`, which puts `"version": 1` (`jsonVersion`) first, writes HTML characters as they are and refuses anything but an object. A list it prints is never `nil`, so it's `[]` rather than `null`, and a field that doesn't apply is `omitempty`. Sizes are bytes unless the field's name gives the unit, as in `memory_gib`.
+
+The root command's `PersistentPreRun` calls `u.DataOnly()` for any command given `--json`, so `Say`, `Info` and `LogNote` print to stderr from then on, and stdout gets only the JSON. A settings command that also changes its setting with a value wraps its `Args` in `showsOnly`, which refuses the value with `--json` (`json_shows_only`) before anything else runs.
+
+`TestJSONShapes` in `internal/cli/json_test.go` holds each command's shape, a `path: type` line for each field of a sample with every field set. A field renamed, removed or given another type fails it. Shapes only gain fields, so a new field goes into the sample and the test, and any other change raises `jsonVersion`. A new command that shows or lists something gets `--json`, a row in that test, a CLI test and a section on its page with an example, which [output for scripts](../getting-started/commands.md#output-for-scripts) links to.
 
 ## Writing docs
 

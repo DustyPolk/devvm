@@ -132,8 +132,11 @@ func TestSizeText(t *testing.T) {
 func TestSetSize(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	s := Settings{e}
-	var b strings.Builder
-	if err := s.ShowSize(t.Context(), &b, false); names(err) != "no_vm_size dir="+e.Dir {
+	shown := func(global bool) (string, error) {
+		got, err := s.ShowSize(t.Context(), global)
+		return got.Text(), err
+	}
+	if _, err := shown(false); names(err) != "no_vm_size dir="+e.Dir {
 		t.Errorf("no VM: %s", names(err))
 	}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
@@ -187,9 +190,8 @@ func TestSetSize(t *testing.T) {
 	if len(set) != 1 || set[0] != (backend.Size{CPUs: 2, DiskGiB: 120}) {
 		t.Errorf("SetSize calls = %+v", set)
 	}
-	b.Reset()
-	if err := s.ShowSize(t.Context(), &b, false); err != nil || b.String() != "cpus=2 memory=8GiB disk=120GiB\n" {
-		t.Errorf("ShowSize = %q, %v", b.String(), names(err))
+	if got, err := shown(false); err != nil || got != "cpus=2 memory=8GiB disk=120GiB\n" {
+		t.Errorf("ShowSize = %q, %v", got, names(err))
 	}
 
 	if err := s.SetSize(t.Context(), Size{CPUs: "2", Memory: "3"}, true); err != nil {
@@ -201,9 +203,8 @@ func TestSetSize(t *testing.T) {
 	if err := s.SetSize(t.Context(), Size{CPUs: "16"}, true); names(err) != "too_many_cpus have=8 want=16" {
 		t.Errorf("-g --cpus 16: %s", names(err))
 	}
-	b.Reset()
-	if err := s.ShowSize(t.Context(), &b, true); err != nil || b.String() != "cpus=2\nmemory=4\ndisk=\n" {
-		t.Errorf("ShowSize -g = %q, %v", b.String(), names(err))
+	if got, err := shown(true); err != nil || got != "cpus=2\nmemory=4\ndisk=\n" {
+		t.Errorf("ShowSize -g = %q, %v", got, names(err))
 	}
 }
 
@@ -237,14 +238,13 @@ func TestDiskUsed(t *testing.T) {
 	in := f.Instances[st.Name()]
 	in.Size = backend.Size{CPUs: 4, MemoryGiB: 8}
 	f.Instances[st.Name()] = in
-	var b strings.Builder
-	if err := (Settings{e}).ShowSize(t.Context(), &b, false); err != nil || b.String() != "cpus=4 memory=8GiB disk_used=1.5GiB\n" || len(warned) != 0 {
-		t.Errorf("ShowSize = %q, %v, warned %q", b.String(), names(err), warned)
+	s, err := (Settings{e}).ShowSize(t.Context(), false)
+	if err != nil || s.Text() != "cpus=4 memory=8GiB disk_used=1.5GiB\n" || !s.DiskMeasured || s.DiskUsedGiB != 1.5 || len(warned) != 0 {
+		t.Errorf("ShowSize = %+v, %v, warned %q", s, names(err), warned)
 	}
 	df.used = 101 << 30
-	b.Reset()
-	if err := (Settings{e}).ShowSize(t.Context(), &b, false); err != nil || b.String() != "cpus=4 memory=8GiB disk_used=101GiB\n" {
-		t.Errorf("ShowSize = %q, %v", b.String(), names(err))
+	if s, err := (Settings{e}).ShowSize(t.Context(), false); err != nil || s.Text() != "cpus=4 memory=8GiB disk_used=101GiB\n" {
+		t.Errorf("ShowSize = %q, %v", s.Text(), names(err))
 	}
 	if len(warned) != 1 || warned[0] != "disk_over backend=fake limit=100 used=101 vm="+st.Name() {
 		t.Errorf("warned %q", warned)

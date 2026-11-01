@@ -63,6 +63,24 @@ devvm keeps what it makes until you delete it, and the retention settings tell i
 
 Ages are a whole number of days, weeks or hours, such as `30d`, `2w` or `12h`. Sizes are a whole number of `K`, `M`, `G` or `T`, each 1024 of the one before, such as `500M` or `20G`, as `devvm space` shows them. The shared Nix cache also keeps to its size while VMs fill it, because a VM's proxy deletes the cache's least recently used files before a new file would take it past that size. A size you set applies to each VM from its next start. devvm applies the settings at the start of a command, at most once a day, except for `orphans.age`, which needs to ask each backend about its VMs, so only `devvm gc --retention` applies it. `devvm gc --retention` applies all of them at once. When it deletes something, devvm says what in one line. Retention never deletes a VM, an image, a shared tool that any VM's state lists, or anything in the backends' own caches, which only `devvm gc --caches` frees. When two devvms start at once, only one of them applies the settings.
 
+### devvm retention --json
+
+`devvm retention --json` prints the settings as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `settings` has every key with its value as you wrote it, and `off` for each one that isn't set. With `--json` the command only shows, so devvm refuses a `KEY=VALUE` with it.
+
+```json
+{
+  "version": 1,
+  "settings": {
+    "history.age": "90d",
+    "history.count": "off",
+    "logs.runs": "off",
+    "nix-cache.size": "off",
+    "orphans.age": "off",
+    "tools.unused-age": "30d"
+  }
+}
+```
+
 ## A company's CA
 
 Some company networks inspect TLS through a proxy, such as Zscaler or Netskope, that shows its own certificates, signed by the company's certificate authority (CA). This machine trusts that CA, but VMs and the VMs that devvm builds images in don't, so their TLS connections fail. To make them trust it, put the CA's certificate in `~/.config/devvm/ca`:
@@ -120,7 +138,7 @@ The tables that devvm ls, devvm images, devvm space and devvm doctor print are c
 
 devvm uses only your terminal's 16 base colors, so your theme picks shades that read well on its background, light or dark. It never sets a background color.
 
-devvm decides for standard output and standard error apart, and colors one only when it's a terminal, so output you pipe or redirect to a file stays plain, tables included. devvm space `--json` and devvm doctor `--fixes` are plain even in a terminal, and the run log is never colored. These environment variables change when devvm colors, and the first one that applies decides:
+devvm decides for standard output and standard error apart, and colors one only when it's a terminal, so output you pipe or redirect to a file stays plain, tables included. What a command prints with `--json` is plain even in a terminal, and the run log is never colored. These environment variables change when devvm colors, and the first one that applies decides:
 
 - `NO_COLOR`, set to anything but an empty value, turns colors off.
 - `FORCE_COLOR` or `CLICOLOR_FORCE`, set to anything but `0`, turns them on even when the output isn't a terminal.

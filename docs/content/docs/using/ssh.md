@@ -71,3 +71,23 @@ devvm's own agent keeps your other keys out of reach, because it holds only the 
 - An encrypted key in the old PEM format needs converting first, with `ssh-keygen -p -f KEY`, because devvm can't read its fingerprint without the passphrase.
 
 The agent drops each key 12 hours after it loads it, so a VM can't keep using the key indefinitely. `--lifetime 30m` changes that for one key, and it takes any duration that `ssh-add -t` takes, or `forever`. `--confirm` makes the agent ask you before each use, such as each push or each login, through an `ssh-askpass` program. macOS doesn't include one, so install it with `brew install theseal/ssh-askpass/ssh-askpass`. devvm keeps the keys and their options in `~/.config/devvm/agent-keys`, and running `devvm ssh-agent add` on the same key again replaces its options.
+
+### devvm ssh-agent --json
+
+`devvm ssh-agent --json` prints what `devvm ssh-agent` shows as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `mode` is this folder's VM's choice, `off`, `on` or `devvm`. Each of the `keys` is a key you added to devvm's agent, with its `file`, the `fingerprint` devvm recorded, `confirm`, its `lifetime` and `loaded`, which says whether the agent holds it. As without `--json`, devvm loads the keys the agent lacks first, and with no key added, `keys` is `[]` and devvm doesn't start its agent. With `--json` the command only shows, so devvm refuses `on`, `devvm` or `off` with it.
+
+```json
+{
+  "version": 1,
+  "mode": "devvm",
+  "keys": [
+    {
+      "file": "/Users/you/.ssh/deploy_key",
+      "fingerprint": "SHA256:mVPwvezndPv/ARoIadVY98vAC0g+P/5633yTC4d/wXE",
+      "confirm": false,
+      "lifetime": "12h",
+      "loaded": true
+    }
+  ]
+}
+```

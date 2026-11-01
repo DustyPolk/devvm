@@ -45,6 +45,10 @@ exec cat $XDG_CONFIG_HOME/devvm/retention
 cmp stdout want-retention
 exec devvm retention
 cmp stdout want-shown
+exec devvm retention --json
+cmp stdout want-shown.json
+! exec devvm retention --json history.count=5
+stderr '^devvm: json_shows_only command=devvm retention$'
 ! exec devvm retention history.count=x
 cmp $XDG_CONFIG_HOME/devvm/retention want-retention
 exec devvm space
@@ -118,6 +122,18 @@ history.count=off
 tools.unused-age=1d
 orphans.age=off
 nix-cache.size=off
+-- want-shown.json --
+{
+  "version": 1,
+  "settings": {
+    "history.age": "30d",
+    "history.count": "off",
+    "logs.runs": "off",
+    "nix-cache.size": "off",
+    "orphans.age": "off",
+    "tools.unused-age": "1d"
+  }
+}
 -- want-all-off --
 logs.runs=off
 history.age=off

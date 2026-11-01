@@ -17,6 +17,7 @@ devvm secret [flags]
 
 ```text
   -h, --help   help for secret
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

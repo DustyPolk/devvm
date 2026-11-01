@@ -22,15 +22,14 @@ func (e Settings) agentVM(ctx context.Context) (*found, error) {
 	return e.folderVM(ctx, msg.NoVMSSHAgent)
 }
 
-// SSHAgent writes the folder's VM's SSH agent forwarding to w: off, on
-// (the user's agent) or devvm (devvm's own).
-func (e Settings) SSHAgent(ctx context.Context, w io.Writer) error {
+// SSHAgent returns the folder's VM's SSH agent forwarding: off, on (the
+// user's agent) or devvm (devvm's own).
+func (e Settings) SSHAgent(ctx context.Context) (string, error) {
 	t, err := e.agentVM(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = io.WriteString(w, sshagent.Mode(t.st)+"\n")
-	return err
+	return sshagent.Mode(t.st), nil
 }
 
 // SetSSHAgent changes the folder's VM's SSH agent forwarding, from its
@@ -102,6 +101,12 @@ func (e Settings) AgentRemove(ctx context.Context, file string) error {
 // added to it.
 func (e Settings) AgentKeys(ctx context.Context, w io.Writer) error {
 	return e.Agent.Keys(ctx, w)
+}
+
+// AgentKeyList returns the keys added to devvm's own SSH agent, each with
+// whether the agent holds it, loading those it lacks first.
+func (e Settings) AgentKeyList(ctx context.Context) ([]sshagent.ListedKey, error) {
+	return e.Agent.KeyList(ctx)
 }
 
 // checkAgent is for a VM that forwards the user's SSH agent: forwarding

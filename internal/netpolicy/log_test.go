@@ -283,4 +283,18 @@ func TestWriteBlocked(t *testing.T) {
 	if b.String() != want {
 		t.Errorf("WriteBlocked:\n%s\nwant:\n%s", b.String(), want)
 	}
+	blocks, err := (&Log{Path: path}).Blocks()
+	if err != nil || len(blocks) != 5 {
+		t.Fatalf("Blocks = %+v, %v", blocks, err)
+	}
+	if got, want := blocks[3], (Block{Last: "T4", Count: 2, Host: "a.test", Port: 443, Allow: "a.test"}); got != want {
+		t.Errorf("Blocks[3] = %+v, want %+v", got, want)
+	}
+	if blocks[4].Allow != "" {
+		t.Errorf("a refused block has a rule: %+v", blocks[4])
+	}
+	events, err := (&Log{Path: path}).Events(3)
+	if err != nil || len(events) != 3 || events[0].Host != "fd00::1" || events[2].Host != "api.github.com" {
+		t.Errorf("Events(3) = %+v, %v", events, err)
+	}
 }

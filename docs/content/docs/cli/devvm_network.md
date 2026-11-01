@@ -18,6 +18,7 @@ devvm network [on|off] [flags]
 ```text
   -g, --global   show or change whether new VMs get network policy instead
   -h, --help     help for network
+      --json     print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

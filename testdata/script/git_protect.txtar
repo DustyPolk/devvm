@@ -44,6 +44,10 @@ stdout '^chflags -R -P uchg /\S*/web/\.git/hooks$'
 ! stdout 'limactl (start|edit)'
 exec devvm git-protect
 stdout '\Astrict\n\z'
+exec devvm git-protect --json
+stdout '\A{\n  "version": 1,\n  "mode": "strict"\n}\n\z'
+! exec devvm git-protect --json off
+stderr '^devvm: json_shows_only command=devvm git-protect$'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^git_protect=strict$'
 stdout '^git_inode=[0-9]+$'

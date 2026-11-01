@@ -36,6 +36,12 @@ exec sh -c 'cat "$CFG/ports"'
 stdout '\A3000-3999,5173\n\z'
 exec devvm ports -g
 stdout '\A3000-3999,5173\n\z'
+exec devvm ports -g --json
+stdout '\A{\n  "version": 1,\n  "ports": "3000-3999,5173"\n}\n\z'
+! exec devvm ports -g --json all
+stderr '^devvm: json_shows_only command=devvm ports$'
+! exec devvm ports add --json 1
+stderr '^devvm: flag_unknown command=devvm ports add flag=--json$'
 ! exec devvm ports -g add all
 stderr '^devvm: ports_list_needed value="all"$'
 ! exec devvm ports -g rm none

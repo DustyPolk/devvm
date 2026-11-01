@@ -51,6 +51,9 @@ type UI struct {
 	interruptGrace time.Duration
 
 	interrupted atomic.Bool
+	// dataOnly sends what Say, Info and LogNote print to stderr, so
+	// stdout gets only data (DataOnly).
+	dataOnly atomic.Bool
 	// commands is read-locked while a logged command runs, so an
 	// interrupt can wait for the run's commands to end before cleaning up.
 	commands sync.RWMutex
@@ -147,13 +150,30 @@ func (u *UI) write(w io.Writer, s string) {
 	_, _ = io.WriteString(w, s)
 }
 
+// DataOnly keeps stdout for data from now on: what Say, Info and LogNote
+// print goes to stderr instead, for a command whose output is JSON.
+func (u *UI) DataOnly() { u.dataOnly.Store(true) }
+
+// says is where u's Say, Info and LogNote print, with its style: stdout,
+// stderr after DataOnly.
+func says(u *UI) (io.Writer, style) {
+	if u.dataOnly.Load() {
+		return u.stderr, u.errStyle
+	}
+	return u.stdout, u.outStyle
+}
+
 // Say prints the message to stdout.
-func (u *UI) Say(m msg.M) { u.write(u.stdout, u.outStyle.message(m)+"\n") }
+func (u *UI) Say(m msg.M) {
+	w, st := says(u)
+	u.write(w, st.message(m)+"\n")
+}
 
 // Info prints "==> " (bold in a terminal) and the message to stdout: what
 // devvm did.
 func (u *UI) Info(m msg.M) {
-	u.write(u.stdout, u.outStyle.paint(sgrBold, "==>")+" "+u.outStyle.message(m)+"\n")
+	w, st := says(u)
+	u.write(w, st.paint(sgrBold, "==>")+" "+st.message(m)+"\n")
 }
 
 // Note prints the message to stderr.

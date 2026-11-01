@@ -110,3 +110,30 @@ The numbers leave a margin over what each step took when devvm's tests measured 
 devvm checks the disk that holds the backend's images and VMs. On Lima, that's the disk of devvm's Lima home. On smolvm, it's the disk of devvm's data folder, and on macOS also that of your home folder, where smolvm keeps its machines. Shared tool images come out into devvm's data folder on every backend, so a tools build also checks that folder's disk, which needs 0.5 GiB and 0.25 GiB for each tool, rounded up: 1 GiB for one tool and 3 GiB for all ten. The Docker backend keeps its images and VMs in the engine's own storage, which on Docker Desktop is a disk inside Desktop's VM, so devvm checks only the data folder's disk, for shared tool images. When devvm's data folder is on a small temporary disk, such as a tmpfs `/tmp` on Linux, devvm checks that disk.
 
 `devvm doctor` also warns when that disk has less free space than building base needs, but the warning doesn't make doctor fail. When devvm refuses, see [Not enough free space](troubleshooting.md#not-enough-free-space) for how to make room.
+
+## As JSON
+
+`devvm size --json` and `devvm ports --json` print what the commands show as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. With `-g`, they print the same fields for new VMs. With `--json` they only show, so devvm refuses `--cpus`, `--memory`, `--disk` or a list of ports with it.
+
+`devvm size --json` has `cpus`, `memory_gib` and `disk_gib`, and leaves out what isn't set. For `-g`, that's what new VMs take from the image. A Docker VM has no `disk_gib`, because its disk has no size of its own, and it has `disk_used_gib` instead, to a tenth of a GiB. When the VM's size changes at its next start, `pending` has the `cpus`, `memory_gib` and `disk_gib` that change.
+
+```json
+{
+  "version": 1,
+  "cpus": 4,
+  "memory_gib": 8,
+  "disk_gib": 100,
+  "pending": {
+    "memory_gib": 16
+  }
+}
+```
+
+`devvm ports --json` has `ports`, which is `all`, `none` or a list of ports and ranges, written as `devvm ports` takes it.
+
+```json
+{
+  "version": 1,
+  "ports": "5173,8000-8010"
+}
+```

@@ -17,6 +17,7 @@ devvm git-protect [on|strict|off] [flags]
 
 ```text
   -h, --help   help for git-protect
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

@@ -70,6 +70,13 @@ func TestStreamsAndPrefixes(t *testing.T) {
 			if out.String() != tc.stdout || errOut.String() != tc.stder {
 				t.Errorf("stdout %q, stderr %q; want %q, %q", out, errOut, tc.stdout, tc.stder)
 			}
+			// With DataOnly, every message goes to stderr.
+			u, out, errOut = testUI(t, "")
+			u.DataOnly()
+			tc.print(u, m)
+			if out.Len() != 0 || errOut.String() != tc.stdout+tc.stder {
+				t.Errorf("DataOnly: stdout %q, stderr %q; want nothing, %q", out, errOut, tc.stdout+tc.stder)
+			}
 		})
 	}
 }

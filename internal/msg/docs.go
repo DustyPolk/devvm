@@ -182,6 +182,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"net_off_log":                      "safety/network#turning-it-on-or-off",
 	"net_off_policy":                   "safety/network#turning-it-on-or-off",
 	"net_ask_global":                   "safety/network#turning-it-on-or-off",
+	"json_shows_only":                  "getting-started/commands#output-for-scripts",
 	"net_flag_ignored":                 "safety/network#turning-it-on-or-off",
 	"net_on_old_tokens":                "safety/network#turning-it-on-or-off",
 	"net_off_next_start":               "safety/network#turning-it-on-or-off",

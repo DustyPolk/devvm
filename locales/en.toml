@@ -78,6 +78,10 @@ other = "{{.flag}} and {{.other}} can't be given together."
 description = "reason is why, in English"
 other = "Writing the command's output failed: {{.reason}}."
 
+[json_shows_only]
+description = "command is the command run, such as devvm network"
+other = "{{.command}} --json only shows, so it takes no value. Run it without --json to change the setting."
+
 [log_details]
 other = "(details: {{.file}})"
 

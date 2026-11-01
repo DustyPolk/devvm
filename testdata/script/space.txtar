@@ -49,6 +49,7 @@ stub_calls
 
 # --json, for scripts.
 exec devvm space --json
+stdout '^{\n  "version": 1,\n  "devvm": \[\n'
 stdout '"what": "leftover state"'
 stdout '"kept": "only copy"'
 stdout '"total": \d+'

@@ -17,6 +17,7 @@ devvm tools [flags]
 
 ```text
   -h, --help   help for tools
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

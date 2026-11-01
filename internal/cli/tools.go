@@ -16,6 +16,7 @@ import (
 // newToolsCmd is devvm tools: this folder's VM's shared tools, and add,
 // rm and update, which change them.
 func newToolsCmd(u *ui.UI, g *globals) *cobra.Command {
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "tools",
 		Short: "Show this folder's VM's shared tools",
@@ -30,11 +31,41 @@ func newToolsCmd(u *ui.UI, g *globals) *cobra.Command {
 				ts, err = vm.Tools{Env: env}.List(cmd.Context())
 				return err
 			}, msg.ToolsFailed)
+			if asJSON {
+				return printJSON(u, toolsJSON(ts))
+			}
 			return writeTools(u.Table(), ts)
 		},
 	}
+	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newToolsAddCmd(u, g), newToolsRmCmd(u, g), newToolsUpdateCmd(u, g))
 	return cmd
+}
+
+// toolsOutput is devvm tools --json: the VM's shared tools, each with the
+// newer version the tools lock has, when it has one, and whether that one
+// is built.
+type toolsOutput struct {
+	Tools []vmToolJSON `json:"tools"`
+}
+
+type vmToolJSON struct {
+	Tool    string `json:"tool"`
+	Version string `json:"version"`
+	Newer   string `json:"newer,omitempty"`
+	Built   *bool  `json:"newer_built,omitempty"`
+}
+
+func toolsJSON(ts []tools.VMTool) toolsOutput {
+	out := toolsOutput{Tools: make([]vmToolJSON, 0, len(ts))}
+	for _, t := range ts {
+		j := vmToolJSON{Tool: t.Tool, Version: t.Version, Newer: t.Newer}
+		if t.Newer != "" {
+			j.Built = &t.Built
+		}
+		out.Tools = append(out.Tools, j)
+	}
+	return out
 }
 
 // writeTools writes a VM's tools as a table, a header first.

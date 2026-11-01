@@ -16,8 +16,8 @@ devvm doctor [flags]
 ## Options
 
 ```text
-      --fixes   print only what's missing, for scripts: a KEY<tab>FIX<tab>MESSAGE line each, FIX being a command or empty; succeeds either way
-  -h, --help    help for doctor
+  -h, --help   help for doctor
+      --json   print what it found as one JSON object, for scripts, and nothing else; succeeds whatever is missing
 ```
 
 ## Options inherited from parent commands

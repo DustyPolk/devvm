@@ -49,6 +49,14 @@ stderr '^images_total size=\S+$'
 stdout '^node +- '
 stub_calls
 ! stdout mise
+# --json: the same as fields, sizes in bytes; the notes stay on stderr.
+exec devvm images --json
+stdout '^{\n  "version": 1,\n  "images": \[\n    {\n      "name": "base",\n      "from": "ubuntu 26\.04 \(\d{8}\)",\n      "digest": "sha256:[0-9a-f]{64}",\n      "key": "[0-9a-f]{12}",\n      "state": "current",\n      "size": \d+,\n      "sized": true,\n      "backend": "lima"\n'
+stdout '^      "name": "go",\n      "tool": "go",\n      "version": "1\.20\.0",\n      "built": true,\n      "backend": "smolvm",\n      "libc": "musl",\n      "size": \d+,\n      "vms": 1,\n      "state": "in use"\n'
+stdout '^      "name": "go",\n      "tool": "go",\n      "version": "1\.27\.2",\n      "built": false,\n      "size": 0,\n      "vms": 0,\n      "state": "not built"\n'
+stdout '^  "total": \d+,\n  "unused_tools": \d+,\n  "nix_cache": {\n    "files": 0,\n    "size": 0,\n    "cap": \d+\n  }\n}\n\z'
+stderr '^images_total size=\S+$'
+! stdout '^IMAGE'
 
 # images rm: by key (an unfinished build), or by name; nothing else.
 # A name is its image as it is now: foo is current again.

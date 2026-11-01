@@ -139,6 +139,48 @@ The second table lists the [shared tools](#shared-tools) that devvm has built, b
 
 After the tables, devvm says on stderr how many images are stale or unfinished and how much disk the unused tools take, when there are any. It ends with the disk that the images and shared tools take together, and when the [shared Nix cache](toolchains.md#nix-projects) holds anything, the disk it takes of its cap. `devvm space` shows the rest of what devvm keeps ([what devvm keeps](space.md#devvm-space)).
 
+### devvm images --json
+
+`devvm images --json` prints the same as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes, and devvm still says the same on stderr. `images` and `tools` have the tables' columns as fields, with sizes in bytes. An image's `digest` is the full SHA-256 of what its base started from, and `sized` says whether devvm knows its size. A tool image's `built` says whether devvm has built it, and only a built one has `backend` and `libc`. A value an image lacks, such as an unfinished build's name, is `""`. `total` is the disk the images and shared tools take together, `unused_tools` is the part the unused tool images take, and `nix_cache` has the shared Nix cache's files, the disk they take and its cap.
+
+```json
+{
+  "version": 1,
+  "images": [
+    {
+      "name": "base",
+      "from": "ubuntu 26.04 (20261001)",
+      "digest": "sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24",
+      "key": "7a76021c46ef",
+      "state": "current",
+      "size": 2254857830,
+      "sized": true,
+      "backend": "lima"
+    }
+  ],
+  "tools": [
+    {
+      "name": "node",
+      "tool": "node",
+      "version": "24.11.0",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 125829120,
+      "vms": 1,
+      "state": "current"
+    }
+  ],
+  "total": 2380686950,
+  "unused_tools": 0,
+  "nix_cache": {
+    "files": 0,
+    "size": 0,
+    "cap": 10737418240
+  }
+}
+```
+
 ### Deleting images
 
 `devvm images rm IMAGE|KEY...` deletes images. You name each one by its name or by the key that `devvm images` shows:

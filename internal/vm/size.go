@@ -3,7 +3,6 @@ package vm
 import (
 	"bufio"
 	"context"
-	"io"
 	"io/fs"
 	"math"
 	"regexp"
@@ -200,72 +199,109 @@ func (e *Env) applySize(ctx context.Context, b backend.Backend, st *state.VM, in
 	return b.SetSize(ctx, st.Name(), edit)
 }
 
-// ShowSize writes to w the size of the folder's VM (cpus=4 memory=8GiB
-// disk=100GiB), saying what changes at its next start; with global, the
-// size new VMs get, a key=value line each, empty for the image's.
-func (e Settings) ShowSize(ctx context.Context, w io.Writer, global bool) error {
+// SizeShown is a size as devvm size shows it: the folder's VM's, or with
+// -g the one new VMs get, 0 for what's the image's.
+type SizeShown struct {
+	backend.Size
+	// DiskUsedGiB is what the VM's disk holds, to a tenth of a GiB, on a
+	// backend that sizes no disks (DiskMeasured).
+	DiskUsedGiB  float64
+	DiskMeasured bool
+	// Pending is what changes at the VM's next start, 0 for what doesn't.
+	Pending backend.Size
+	Global  bool
+}
+
+// Text is the size as devvm size prints it: cpus=4 memory=8GiB
+// disk=100GiB for a VM, and a key=value line each for -g, empty for the
+// image's.
+func (s SizeShown) Text() string {
+	if s.Global {
+		var b strings.Builder
+		for _, kv := range [][2]string{{KeyCPUs, intText(s.CPUs)}, {KeyMemory, gibValue(s.MemoryGiB)}, {KeyDisk, gibValue(s.DiskGiB)}} {
+			b.WriteString(kv[0] + "=" + kv[1] + "\n")
+		}
+		return b.String()
+	}
+	line := SizeText(s.Size)
+	if s.DiskMeasured {
+		line += " " + KeyDiskUsed + "=" + strconv.FormatFloat(s.DiskUsedGiB, 'f', -1, 64) + "GiB"
+	}
+	return line + "\n"
+}
+
+// intText and gibValue write a size's numbers as the size file has them,
+// "" for 0.
+func intText(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
+}
+
+func gibValue(n float64) string {
+	if n == 0 {
+		return ""
+	}
+	return strconv.FormatFloat(n, 'g', -1, 64)
+}
+
+// ShowSize returns the size of the folder's VM, saying what changes at
+// its next start; with global, the size new VMs get.
+func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) {
 	if global {
 		def, err := e.defaultSize()
 		if err != nil {
-			return err
+			return SizeShown{}, err
 		}
-		var b strings.Builder
-		for _, kv := range def.fields() {
-			b.WriteString(kv[0] + "=" + kv[1] + "\n")
-		}
-		_, err = io.WriteString(w, b.String())
-		return err
+		return SizeShown{Size: def.Backend(), Global: true}, nil
 	}
 	t, err := e.folderVM(ctx, msg.NoVMSize)
 	if err != nil {
-		return err
+		return SizeShown{}, err
 	}
 	in, err := t.b.Inspect(ctx, t.f.Name)
 	if err != nil {
-		return err
+		return SizeShown{}, err
 	}
-	line := SizeText(in.Size)
+	s := SizeShown{Size: in.Size, Pending: pendingSize(t.st, in.Size)}
 	used, over, err := e.diskUsed(ctx, t.b, t.f.Name)
 	if err != nil {
-		return err
+		return SizeShown{}, err
 	}
-	if used != "" {
-		line += " " + KeyDiskUsed + "=" + used + "GiB"
-	}
-	if _, err := io.WriteString(w, line+"\n"); err != nil {
-		return err
+	if used >= 0 {
+		s.DiskUsedGiB, s.DiskMeasured = gib(used), true
 	}
 	if over != nil {
 		e.Warn(*over)
 	}
-	if p := pendingSize(t.st, in.Size); p != (backend.Size{}) {
-		e.Note(msg.SizePending(SizeText(p), t.f.Name))
+	if s.Pending != (backend.Size{}) {
+		e.Note(msg.SizePending(SizeText(s.Pending), t.f.Name))
 	}
-	return nil
+	return s, nil
 }
 
 // KeyDiskUsed is what devvm size shows of a VM whose backend sizes no
 // disks (backend.DiskUser): what its disk holds, in GiB.
 const KeyDiskUsed = "disk_used"
 
-// diskUsed is what the VM's disk holds, in GiB, on a backend that sizes
-// no disks, with the warning for one past the size VMs get elsewhere;
-// "" on other backends.
-func (e *Env) diskUsed(ctx context.Context, b backend.Backend, vm string) (string, *msg.M, error) {
+// diskUsed is the bytes the VM's disk holds on a backend that sizes no
+// disks, with the warning for one past the size VMs get elsewhere; -1 on
+// other backends.
+func (e *Env) diskUsed(ctx context.Context, b backend.Backend, vm string) (int64, *msg.M, error) {
 	du, ok := b.(backend.DiskUser)
 	if !ok {
-		return "", nil, nil
+		return -1, nil, nil
 	}
 	used, limit, err := du.DiskUsed(ctx, vm)
 	if err != nil {
-		return "", nil, err
+		return -1, nil, err
 	}
-	shown := gibText(used)
 	if limit > 0 && used > limit {
-		m := msg.DiskOver(b.Name(), gibText(limit), shown, vm)
-		return shown, &m, nil
+		m := msg.DiskOver(b.Name(), gibText(limit), gibText(used), vm)
+		return used, &m, nil
 	}
-	return shown, nil, nil
+	return used, nil, nil
 }
 
 // warnDisk warns when the VM's disk holds more than VMs get elsewhere, on
@@ -277,10 +313,10 @@ func (e *Env) warnDisk(ctx context.Context, b backend.Backend, vm string) {
 	}
 }
 
-// gibText is bytes in GiB, to a tenth.
-func gibText(n int64) string {
-	return strconv.FormatFloat(math.Round(float64(n)/(1<<30)*10)/10, 'f', -1, 64)
-}
+// gib is bytes in GiB, to a tenth; gibText, written out.
+func gib(n int64) float64 { return math.Round(float64(n)/(1<<30)*10) / 10 }
+
+func gibText(n int64) string { return strconv.FormatFloat(gib(n), 'f', -1, 64) }
 
 // SetSize changes the folder's VM's size to what s sets: at once when it's
 // stopped, from its next start when it runs. A disk only grows. With

@@ -92,17 +92,43 @@ func TestOnPathOther(t *testing.T) {
 	}
 }
 
-// --fixes prints a KEY, FIX and message line for each problem.
-func TestWriteFixes(t *testing.T) {
+// --json has each problem's key, fix (null without one) and message, the
+// warnings, and every backend's features; it prints nothing else.
+func TestDoctorReport(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	var out strings.Builder
-	err := writeFixes(&out, []backend.Problem{
+	b := backendtest.New("lima", backend.Caps{backend.FeatureSSH: backend.Native})
+	b.Missing = []backend.Problem{
 		{Key: "lima", Fix: "brew install lima", Msg: msg.LimaMissingFix("brew install lima")},
 		{Key: "kvm", Msg: msg.NoKVM()},
-	})
-	want := "lima\tbrew install lima\tlima_missing_fix fix=brew install lima\nkvm\t\tno_kvm\n"
-	if err != nil || out.String() != want {
-		t.Errorf("writeFixes: %q, %v; want %q", out.String(), err, want)
+	}
+	d := doctor{
+		Path: onPath{LookPath: func(string) (string, error) { return "", exec.ErrNotFound }, Executable: os.Executable},
+		Free: func(string) (uint64, error) { return 1 << 40, nil },
+		Host: func() (vm.Host, error) { return vm.Host{CPUs: 2, MemoryGiB: 16}, nil },
+	}
+	r := d.report(t.Context(), []backend.Backend{b}, b)
+	fix := "brew install lima"
+	want := []problemJSON{{Key: "lima", Fix: &fix, Message: "lima_missing_fix fix=brew install lima"}, {Key: "kvm", Message: "no_kvm"}}
+	if len(r.Problems) != 2 || r.Problems[0].Fix == nil || *r.Problems[0].Fix != fix || r.Problems[1].Fix != nil ||
+		r.Problems[0].Message != want[0].Message || r.Problems[1].Key != "kvm" {
+		t.Errorf("problems %+v, want %+v", r.Problems, want)
+	}
+	if !slices.Equal(r.Warnings, []string{"host_cpus_few have=2 want=4"}) || r.Backend != "lima" {
+		t.Errorf("warnings %q, backend %q", r.Warnings, r.Backend)
+	}
+	if r.Features["lima"]["ssh"] != "native" || r.Features["lima"]["disk"] != "none" {
+		t.Errorf("features %v", r.Features)
+	}
+	u, out, errOut := testUI()
+	if err := printJSON(u, r); err != nil || errOut.Len() > 0 {
+		t.Fatalf("printJSON: %v, stderr %q", err, errOut)
+	}
+	// install.sh reads this layout: a field a line, the problems' indented
+	// six spaces.
+	layout := "\n  \"problems\": [\n    {\n      \"key\": \"lima\",\n      \"fix\": \"brew install lima\",\n" +
+		"      \"message\": \"lima_missing_fix fix=brew install lima\"\n    },\n    {\n      \"key\": \"kvm\",\n      \"fix\": null,\n"
+	if !strings.Contains(out.String(), layout) || !strings.HasPrefix(out.String(), "{\n  \"version\": 1,\n") {
+		t.Errorf("printed %s", out)
 	}
 }
 
@@ -133,7 +159,7 @@ func TestSmallHost(t *testing.T) {
 }
 
 // doctor's warnings about a small host go to stderr and never change
-// what it returns, and --fixes prints only the problems' lines either way.
+// what it returns.
 func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	t.Setenv("HTTPS_PROXY", "")
@@ -143,27 +169,23 @@ func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 		name     string
 		host     vm.Host
 		problems []backend.Problem
-		fixes    bool
 		wantErr  string // the message doctor returns; "" for none
-		wantOut  string // --fixes' output
 		warned   bool   // whether stderr has the small host's warnings
 	}{
-		{"big, nothing missing", vm.Host{CPUs: 8, MemoryGiB: 16}, nil, false, "", "", false},
-		{"small, nothing missing", vm.Host{CPUs: 2, MemoryGiB: 4}, nil, false, "", "", true},
-		{"small, Lima missing", vm.Host{CPUs: 2, MemoryGiB: 4}, []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}, false, "lima_missing", "", true},
-		{"small, --fixes, nothing missing", vm.Host{CPUs: 2, MemoryGiB: 4}, nil, true, "", "", false},
-		{"small, --fixes, Lima missing", vm.Host{CPUs: 2, MemoryGiB: 4}, []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}, true, "", "lima\t\tlima_missing\n", false},
+		{"big, nothing missing", vm.Host{CPUs: 8, MemoryGiB: 16}, nil, "", false},
+		{"small, nothing missing", vm.Host{CPUs: 2, MemoryGiB: 4}, nil, "", true},
+		{"small, Lima missing", vm.Host{CPUs: 2, MemoryGiB: 4}, []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}, "lima_missing", true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			b := backendtest.New("lima", backend.Caps{})
 			b.Missing = c.problems
-			u, out, errOut := testUI()
+			u, _, errOut := testUI()
 			d := doctor{
 				Path: onPath{LookPath: notFound, Executable: os.Executable},
 				Free: func(string) (uint64, error) { return 1 << 40, nil },
 				Host: func() (vm.Host, error) { return c.host, nil },
 			}
-			err := d.run(t.Context(), u, []backend.Backend{b}, b, c.fixes)
+			err := d.run(t.Context(), u, []backend.Backend{b}, b)
 			gotErr := ""
 			if m, ok := errors.AsType[msg.M](err); ok {
 				gotErr = m.Names()
@@ -173,18 +195,12 @@ func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 			if gotErr != c.wantErr {
 				t.Errorf("returned %q, want %q", gotErr, c.wantErr)
 			}
-			if c.fixes && out.String() != c.wantOut {
-				t.Errorf("--fixes printed %q, want %q", out.String(), c.wantOut)
-			}
 			if warned := strings.Contains(errOut.String(), "devvm: host_cpus_few have=2 want=4\n") &&
 				strings.Contains(errOut.String(), "devvm: host_memory_low have=4 want=8\n"); warned != c.warned {
 				t.Errorf("stderr %q: warned %v, want %v", errOut.String(), warned, c.warned)
 			}
-			if !c.warned && !c.fixes && c.problems == nil && errOut.Len() > 0 {
+			if !c.warned && c.problems == nil && errOut.Len() > 0 {
 				t.Errorf("stderr %q, want nothing", errOut.String())
-			}
-			if c.fixes && errOut.Len() > 0 {
-				t.Errorf("--fixes: stderr %q, want nothing", errOut.String())
 			}
 		})
 	}

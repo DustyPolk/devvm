@@ -105,30 +105,31 @@ stderr '^  remove it, or put \S+/prefix/bin before its folder in PATH$'
 ! stderr 'isn''t on your PATH'
 ! exists other-ran
 
-# The fixes devvm suggests run once allowed; what it can't fix is shown.
-exec bash deps.sh yes 'qemu\tsudo apt-get install -y qemu-system-arm\tQEMU not found\nkvm\t\t/dev/kvm not found: turn on virtualization\nlima\tbrew install lima\tLima not found\n'
-stdout '^  /dev/kvm not found: turn on virtualization$'
+# The fixes devvm suggests run once allowed; what it can't fix is shown,
+# its escapes read.
+exec bash deps.sh yes fixes.json
+stdout '^  /dev/kvm not found: turn on "virtualization" \\ in the firmware$'
 stdout '^checked$'
 cmp ran ran-fixes.want
 
 # After joining the kvm group: log in again, no check.
-exec bash deps.sh yes 'kvm-access\tsudo usermod -aG kvm me\tno access to /dev/kvm\n'
+exec bash deps.sh yes kvm.json
 stdout 'Log out and back in'
 ! stdout '^checked$'
 cmp ran ran-kvm.want
 
 # Nothing runs without a yes.
-exec bash deps.sh no 'kvm-access\tsudo usermod -aG kvm me\tno access to /dev/kvm\n'
+exec bash deps.sh no kvm.json
 stdout '^  skipped: sudo usermod -aG kvm me$'
 ! exists ran
 
 # No Lima and no Homebrew: Lima's release, once allowed.
-exec bash deps.sh lima 'lima\t\tLima not found\n'
+exec bash deps.sh lima lima.json
 stdout '^==> installed Lima 2.3.0: '
 exists prefix/bin/limactl
 
 # Nothing missing, nothing asked.
-exec bash deps.sh asked ''
+exec bash deps.sh asked none.json
 cmp stdout deps-none.want
 
 # The whole script: options, a release, the PATH hint.
@@ -393,14 +394,14 @@ mkdir -p "$WORK/links"
 ln -s "$prefix/lib/devvm/0.1.0/devvm" "$WORK/links/devvm"
 echo "linked: $(PATH="$WORK/links:$prefix/bin:$PATH" path_hint)"
 -- deps.sh --
-# deps.sh ANSWER LINES: install_deps with a devvm whose doctor --fixes
-# prints LINES (printf's format) and whose doctor prints "checked"; the
-# brew and sudo in bin/ log to $WORK/ran. ANSWER: yes (--yes), no (every
-# question answered no), lima (yes, with a Lima release to install), asked
-# (a question prints "asked").
+# deps.sh ANSWER FILE: install_deps with a devvm whose doctor --json
+# prints $WORK/FILE and whose doctor prints "checked"; the brew and sudo
+# in bin/ log to $WORK/ran. ANSWER: yes (--yes), no (every question
+# answered no), lima (yes, with a Lima release to install), asked (a
+# question prints "asked").
 . "$WORK/lib.sh"
 mkdir -p "$WORK/fake"
-printf '#!/bin/sh\n[ "$2" = --fixes ] && printf "%s" || echo checked\n' "$2" > "$WORK/fake/devvm"
+printf '#!/bin/sh\n[ "$2" = --json ] && cat "$WORK/%s" || echo checked\n' "$2" > "$WORK/fake/devvm"
 chmod 755 "$WORK/fake/devvm"
 case $1 in
   yes) yes=true ;;
@@ -409,6 +410,74 @@ case $1 in
   asked) ask() { echo asked; } ;;
 esac
 install_deps "$WORK/fake/devvm"
+-- fixes.json --
+{
+  "version": 1,
+  "backend": "lima",
+  "problems": [
+    {
+      "key": "qemu",
+      "fix": "sudo apt-get install -y qemu-system-arm",
+      "message": "QEMU not found"
+    },
+    {
+      "key": "kvm",
+      "fix": null,
+      "message": "/dev/kvm not found: turn on \"virtualization\" \\ in the firmware"
+    },
+    {
+      "key": "lima",
+      "fix": "brew install lima",
+      "message": "Lima not found,"
+    }
+  ],
+  "warnings": [],
+  "docker": false,
+  "features": {
+    "lima": {
+      "ssh": "native"
+    }
+  }
+}
+-- kvm.json --
+{
+  "version": 1,
+  "backend": "lima",
+  "problems": [
+    {
+      "key": "kvm-access",
+      "fix": "sudo usermod -aG kvm me",
+      "message": "no access to /dev/kvm"
+    }
+  ],
+  "warnings": [],
+  "docker": false,
+  "features": {}
+}
+-- lima.json --
+{
+  "version": 1,
+  "backend": "lima",
+  "problems": [
+    {
+      "key": "lima",
+      "fix": null,
+      "message": "Lima not found"
+    }
+  ],
+  "warnings": [],
+  "docker": false,
+  "features": {}
+}
+-- none.json --
+{
+  "version": 1,
+  "backend": "lima",
+  "problems": [],
+  "warnings": [],
+  "docker": false,
+  "features": {}
+}
 -- deps-none.want --
 ==> everything devvm needs is installed
 checked

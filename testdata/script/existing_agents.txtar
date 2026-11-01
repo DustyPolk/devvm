@@ -47,6 +47,8 @@ exec devvm --no-network-policy --no-git-protect go
 stderr '^devvm: no_subcommand command=devvm tools commands=add, rm, update given=now$'
 exec devvm tools
 stdout '^TOOL +VERSION +NEWER +BUILT\ngo +\S+ +- +-\n\z'
+exec devvm tools --json
+stdout '\A{\n  "version": 1,\n  "tools": \[\n    {\n      "tool": "go",\n      "version": "\S+"\n    }\n  \]\n}\n\z'
 exec devvm tools update
 stdout '^==> checking_tools$'
 stdout '^==> tools_newest vm=devvm-api-[0-9a-f]{14}$'
@@ -71,6 +73,8 @@ exec devvm
 stderr '^devvm: newer_tools tools=go 9\.9\.9$'
 exec devvm tools
 stdout '^go +1\.0\.0 +9\.9\.9 +yes$'
+exec devvm tools --json
+stdout '\A{\n  "version": 1,\n  "tools": \[\n    {\n      "tool": "go",\n      "version": "1\.0\.0",\n      "newer": "9\.9\.9",\n      "newer_built": true\n    }\n  \]\n}\n\z'
 
 # tools rm: the tools leave its name and list, the rest stays; what it
 # lacks is refused, and so is a layer. Names are separate words.

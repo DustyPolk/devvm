@@ -17,6 +17,7 @@ devvm ssh-agent [on|devvm|off] [flags]
 
 ```text
   -h, --help   help for ssh-agent
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

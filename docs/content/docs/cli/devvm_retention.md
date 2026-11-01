@@ -17,6 +17,7 @@ devvm retention [KEY=VALUE...] [flags]
 
 ```text
   -h, --help   help for retention
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

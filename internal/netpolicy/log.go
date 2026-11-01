@@ -94,6 +94,46 @@ func (l *Log) Write(ctx context.Context, w io.Writer, n int, follow bool) error 
 	}
 }
 
+// Event is one event of a VM's network log, as its proxy wrote it.
+type Event = proxy.Event
+
+// Events returns the log's last n events, the previous file's (Old)
+// first. Lines that aren't events are skipped.
+func (l *Log) Events(n int) ([]Event, error) {
+	var last []Event
+	err := l.each(func(line string) {
+		var e Event
+		if json.Unmarshal([]byte(line), &e) != nil || e.Event == "" || n <= 0 {
+			return
+		}
+		if len(last) == n {
+			last = last[1:]
+		}
+		last = append(last, e)
+	})
+	return last, err
+}
+
+// each calls line for each line of the log, the previous file's (Old)
+// first, and for what follows its last newline.
+func (l *Log) each(line func(string)) error {
+	f, err := os.Open(l.Path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	if err := l.readOld(f, line); err != nil {
+		return err
+	}
+	var read int64
+	rest, err := readLines(bufio.NewReader(f), &read, line)
+	if err != nil {
+		return err
+	}
+	line(rest)
+	return nil
+}
+
 // readOld calls line for each line of Old, unless it's cur, the log
 // already open.
 func (l *Log) readOld(cur *os.File, line func(string)) error {
@@ -238,11 +278,11 @@ func FormatEvent(line string) (string, bool) {
 	if e.Upstream != "" {
 		d += ", through " + e.Upstream
 	}
-	return fmt.Sprintf("%s  %-7s  %s  %s", oneLine(e.Time), what, hostPort(e), oneLine(d)), true
+	return fmt.Sprintf("%s  %-7s  %s  %s", oneLine(e.Time), what, hostPort(e.Host, e.Port), oneLine(d)), true
 }
 
-func hostPort(e proxy.Event) string {
-	return net.JoinHostPort(oneLine(e.Host), strconv.Itoa(e.Port))
+func hostPort(host string, port int) string {
+	return net.JoinHostPort(oneLine(host), strconv.Itoa(port))
 }
 
 // oneLine drops every control character from s (C0, newlines and tabs
@@ -257,29 +297,29 @@ func oneLine(s string) string {
 	}, s)
 }
 
-// WriteBlocked writes the log's blocks (Old's too) to w as a table, one row per host
-// and port, by when it was last blocked: the last time, how many times,
-// and the devvm network allow command that allows it. A request refused
-// whatever the allowlist says, or a host the policy doesn't take, gets -
-// instead: the command is meant to be pasted into a shell.
-func (l *Log) WriteBlocked(w io.Writer) error {
-	f, err := os.Open(l.Path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	type row struct {
-		last, host, allow string
-		count             int
-	}
+// Block is a host and port a VM's proxy blocked, as devvm network log
+// --blocked lists it.
+type Block struct {
+	Last  string // when it was last blocked
+	Count int    // how many times
+	Host  string
+	Port  int
+	// Allow is the rule devvm network allow takes to allow it; "" for a
+	// request refused whatever the allowlist says, or a host the policy
+	// doesn't take.
+	Allow string
+}
+
+// Blocks returns the log's blocks (Old's too), one per host and port, by
+// when each was last blocked.
+func (l *Log) Blocks() ([]Block, error) {
 	type key struct {
 		host    string
 		port    int
 		refused bool
 	}
-	rows := map[key]*row{}
-	var read int64
-	add := func(l string) {
+	rows := map[key]*Block{}
+	err := l.each(func(l string) {
 		var e proxy.Event
 		if json.Unmarshal([]byte(l), &e) != nil || e.Event != "blocked" {
 			return
@@ -287,32 +327,47 @@ func (l *Log) WriteBlocked(w io.Writer) error {
 		k := key{e.Host, e.Port, e.Refused}
 		r := rows[k]
 		if r == nil {
-			r = &row{host: hostPort(e), allow: "-"}
+			r = &Block{Host: e.Host, Port: e.Port}
 			if rule, ok := proxy.AllowRule(e.Host, e.Port); ok && !e.Refused {
-				r.allow = "devvm network allow " + rule
+				r.Allow = rule
 			}
 			rows[k] = r
 		}
-		r.count++
-		r.last = oneLine(e.Time)
+		r.Count++
+		r.Last = e.Time
+	})
+	if err != nil {
+		return nil, err
 	}
-	if err := l.readOld(f, add); err != nil {
-		return err
+	sorted := make([]Block, 0, len(rows))
+	for _, r := range rows {
+		sorted = append(sorted, *r)
 	}
-	rest, err := readLines(bufio.NewReader(f), &read, add)
+	slices.SortFunc(sorted, func(a, b Block) int {
+		return cmp.Or(cmp.Compare(a.Last, b.Last), cmp.Compare(hostPort(a.Host, a.Port), hostPort(b.Host, b.Port)))
+	})
+	return sorted, nil
+}
+
+// WriteBlocked writes the log's blocks (Blocks) to w as a table, one row
+// per host and port, by when it was last blocked: the last time, how many
+// times, and the devvm network allow command that allows it. A request
+// refused whatever the allowlist says, or a host the policy doesn't take,
+// gets - instead: the command is meant to be pasted into a shell. The VM
+// chose the host: control characters are dropped.
+func (l *Log) WriteBlocked(w io.Writer) error {
+	blocks, err := l.Blocks()
 	if err != nil {
 		return err
 	}
-	add(rest)
-	sorted := make([]*row, 0, len(rows))
-	for _, r := range rows {
-		sorted = append(sorted, r)
-	}
-	slices.SortFunc(sorted, func(a, b *row) int { return cmp.Or(cmp.Compare(a.last, b.last), cmp.Compare(a.host, b.host)) })
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "LAST\tCOUNT\tHOST\tALLOW WITH")
-	for _, r := range sorted {
-		_, _ = fmt.Fprintf(tw, "%s\t%d\t%s\t%s\n", r.last, r.count, r.host, r.allow)
+	for _, b := range blocks {
+		allow := "-"
+		if b.Allow != "" {
+			allow = "devvm network allow " + b.Allow
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%d\t%s\t%s\n", oneLine(b.Last), b.Count, hostPort(b.Host, b.Port), allow)
 	}
 	return tw.Flush()
 }

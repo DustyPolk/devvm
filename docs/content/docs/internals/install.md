@@ -3,7 +3,7 @@ title: Installing and updating
 weight: 2
 ---
 
-This page explains what devvm's install script downloads and checks, what `devvm doctor --fixes` reports, where devvm keeps its own files, and what happens to older versions when you upgrade. [Installing](../getting-started/install.md) covers the commands you run.
+This page explains what devvm's install script downloads and checks, what `devvm doctor --json` reports, where devvm keeps its own files, and what happens to older versions when you upgrade. [Installing](../getting-started/install.md) covers the commands you run.
 
 ## The install script
 
@@ -12,11 +12,11 @@ The script installs the release it comes with, or the one that `--version` names
 1. It downloads the archive for this machine and the release's `SHA256SUMS`, over HTTPS only. The archive is `devvm-<version>-<os>-<arch>.tar.gz`, where the OS is `darwin` or `linux` and the processor is `arm64` or `amd64`. On Apple silicon, the script picks `arm64` even when it runs under Rosetta.
 2. It checks the signature of `SHA256SUMS`, then the archive's checksum, as [the signature](#the-signature-and-what-it-trusts) describes. When either check fails, it installs nothing.
 3. It puts devvm, which is one binary with its README, changelog and license, in `~/.local/lib/devvm/<version>`, and links `~/.local/bin/devvm` to it. When `~/.local/bin` isn't on `PATH`, the script says how to add it.
-4. Unless you pass `--no-deps`, it runs `devvm doctor --fixes` and offers the [fixes](#devvm-doctor---fixes) that devvm reports, asking before each one. Then it runs `devvm doctor`, which shows doctor's warnings too, even when nothing is missing.
+4. Unless you pass `--no-deps`, it runs `devvm doctor --json` and offers the [fixes](#devvm-doctor---json) that devvm reports, asking before each one. Then it runs `devvm doctor`, which shows doctor's warnings too, even when nothing is missing.
 
 At the end, when `~/.local/bin` is on `PATH`, the script looks up which devvm `PATH` finds first with `command -v devvm`. It resolves that path's links and those of `~/.local/bin/devvm` with `readlink -f`, and when they differ it warns, naming the other copy's path and saying to remove it or to put `~/.local/bin` first. It only looks the other copy up and never runs it. When `~/.local/bin` isn't on `PATH`, the script prints only how to add it, so you don't get both.
 
-`devvm doctor` makes the same check without `--fixes`. It looks up `devvm` on `PATH`, resolves its links and those of the running binary, and when they differ it prints a warning naming both. It skips the check when no devvm is on `PATH`. The warning doesn't change its exit status, and `--fixes` never prints it, so the install script doesn't offer it as a fix.
+`devvm doctor` makes the same check. It looks up `devvm` on `PATH`, resolves its links and those of the running binary, and when they differ it prints a warning naming both. It skips the check when no devvm is on `PATH`. The warning doesn't change its exit status, and `--json` lists it among the warnings rather than the problems, so the install script doesn't offer it as a fix.
 
 On macOS, the [Docker](../backends/docker.md#requirements) backend fetches one more file the first time a Docker VM or build needs it. That file is the same release's Linux archive, and devvm checks the devvm in it against the SHA-256 that the installed devvm has of it before using it. Homebrew's devvm already has its Linux build, which Homebrew builds from source.
 
@@ -38,9 +38,39 @@ The release's `SHA256SUMS` is signed in `SHA256SUMS.minisig`, made with the main
 
 The signature catches an archive or a `SHA256SUMS` that someone replaced, which the checksum alone can't. It can't catch a release that was replaced whole, because `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't trust them, because the formula's checksum lives in a repository of its own, and a replaced GitHub release wouldn't match it. You can also download `install.sh` and read it before you run it.
 
-## devvm doctor --fixes
+## devvm doctor --json
 
-`devvm doctor --fixes` prints only what's missing, one line each, for scripts such as the install script. Each line is `KEY<tab>FIX<tab>MESSAGE`, where `FIX` is a command, or empty when there's none to run, for example when virtualization is turned off in the firmware. The command succeeds either way. Doctor's warnings have no keys, because there's nothing for a script to fix, so `--fixes` never prints them. They're about another devvm on `PATH`, low free space, and a machine with less than 8 GiB of memory or fewer than 4 CPUs. These are the keys:
+`devvm doctor --json` prints what doctor finds as one JSON object, for scripts such as the install script, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. It prints nothing else, because its problems and warnings are in the JSON, and it succeeds whatever is missing. A failure that stops the check, such as a backend devvm doesn't have, still goes to standard error and makes it fail.
+
+- `backend` is the backend that doctor checked, the one new VMs get or the one `--backend` names.
+- `problems` has what that backend is missing, each with its `key`, the `fix` command, and the `message` that `devvm doctor` prints for it. The `fix` is a command whose words are separated by spaces, without shell syntax, or `null` when there's none to run, for example when virtualization is turned off in the firmware.
+- `warnings` has the messages of doctor's warnings, which have no keys, because there's nothing for a script to fix. They're about another devvm on `PATH`, low free space, and a machine with less than 8 GiB of memory or fewer than 4 CPUs.
+- `docker` says whether Docker is installed, which only `--from` with an image that only Docker has needs.
+- `features` has, for each backend, how it has each feature, as `native`, `emulated`, `unreviewed` or `none`. The example below shows two of Lima's features.
+
+```json
+{
+  "version": 1,
+  "backend": "lima",
+  "problems": [
+    {
+      "key": "lima",
+      "fix": "brew install lima",
+      "message": "Lima isn't installed. Run brew install lima to install it."
+    }
+  ],
+  "warnings": [],
+  "docker": true,
+  "features": {
+    "lima": {
+      "agent-forwarding": "native",
+      "disk": "native"
+    }
+  }
+}
+```
+
+These are the keys:
 
 | Key | Missing | Fix |
 | --- | --- | --- |
@@ -56,7 +86,7 @@ The signature catches an archive or a `SHA256SUMS` that someone replaced, which 
 | `docker-access` | access to Docker's socket, on Linux | `sudo usermod -aG docker USER`, then log in again |
 | `docker-version`, `docker-os`, `docker-arch` | Docker 29.1 or newer, running Linux containers of this machine's processor | none |
 
-The install script offers to fix three of these keys, asking first, and prints the message for the others:
+The install script reads `problems` with `awk`, so it needs no JSON tool on this machine. It relies on the layout that devvm writes, with one field on each line, and it reads a problem's `key`, `fix` and `message` from their lines, with their escapes undone. It offers to fix three of these keys, asking first, and prints the message for the others:
 
 - For `lima`, it runs the fix when there is one, which is Homebrew's. Without Homebrew, it offers Lima's latest release instead, which it checks against that release's `SHA256SUMS` and installs into `~/.local`.
 - For `qemu` and `kvm-access`, it runs the fix when there is one, and the fix uses sudo. After you join the `kvm` group, the script doesn't run `devvm doctor`, because the group applies only to new logins, and it tells you to log out and back in first.

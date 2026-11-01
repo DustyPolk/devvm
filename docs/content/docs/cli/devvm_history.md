@@ -17,6 +17,7 @@ devvm history [flags]
 
 ```text
   -h, --help   help for history
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

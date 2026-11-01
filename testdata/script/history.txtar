@@ -17,6 +17,8 @@ stderr '^devvm: no_subcommand command=devvm history commands=export given=now$'
 # None yet: the header alone, no VM needed.
 exec devvm history
 stdout '^FILE +VM +FOLDER +DATE +SIZE\n\z'
+exec devvm history --json
+stdout '\A{\n  "version": 1,\n  "exports": \[\]\n}\n\z'
 
 exec devvm --no-network-policy base
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
@@ -58,4 +60,6 @@ stdout '^FILE +VM +FOLDER +DATE +SIZE\n'
 stdout '^\S*/exports/devvm-old-12345612345612-20200101-000000\.tar\.gz +devvm-old-12345612345612 +- +2020-01-01 00:00 +\S+\n\S*/exports/devvm-web-'
 stdout '^\S*/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz +devvm-web-[0-9a-f]{14} +\S*/web +[0-9-]+ [0-9:]+ +\S+$'
 ! stdout notes
+exec devvm history --json
+stdout '^      "file": "\S*/exports/devvm-old-12345612345612-20200101-000000\.tar\.gz",\n      "vm": "devvm-old-12345612345612",\n      "folder": "",\n      "date": "2020-01-01T00:00:00[-+Z][0-9:]*",\n      "size": \d+\n'
 ! stdout out/h

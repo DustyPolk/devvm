@@ -35,7 +35,8 @@ const retainLockAge = 10 * time.Minute
 // newRetentionCmd is devvm retention [KEY=VALUE...]: the retention
 // settings, shown bare.
 func newRetentionCmd(u *ui.UI) *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	cmd := &cobra.Command{
 		Use:   "retention [KEY=VALUE...]",
 		Short: "Show or change the retention settings: what devvm deletes on its own",
 		Long: "Show each retention setting and its value, off when it isn't set, or change them, each " +
@@ -48,18 +49,21 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			"or value, or one with no value, and then writes nothing. devvm applies the settings once a day, " +
 			"and devvm gc --retention applies them at once. They never delete a VM, an image or a tool any " +
 			"VM has.",
-		Args: func(_ *cobra.Command, args []string) error {
+		Args: showsOnly(func(_ *cobra.Command, args []string) error {
 			if err := state.CheckRetention(args); err != nil {
 				return msg.RetentionBad(err.Error()).Because(err)
 			}
 			return nil
-		},
+		}),
 		RunE: func(_ *cobra.Command, args []string) error {
 			dirs, err := paths.FromEnv()
 			fail(u, err, msg.RetentionSettingsFailed)
 			if len(args) == 0 {
 				r, err := state.ReadRetention(dirs)
 				fail(u, err, msg.RetentionSettingsFailed)
+				if asJSON {
+					return printJSON(u, retentionJSON(r))
+				}
 				_, err = u.Stdout().Write([]byte(retentionShown(r)))
 				return err
 			}
@@ -69,6 +73,8 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			return nil
 		},
 	}
+	jsonFlag(cmd, &asJSON)
+	return cmd
 }
 
 // retentionShown is every retention setting as KEY=VALUE lines, in the
@@ -76,13 +82,32 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 func retentionShown(r state.Retention) string {
 	var b strings.Builder
 	for _, key := range state.RetentionKeys() {
-		v := r.Raw[key]
-		if v == "" {
-			v = state.RetainOff
-		}
-		b.WriteString(key + "=" + v + "\n")
+		b.WriteString(key + "=" + retentionValue(r, key) + "\n")
 	}
 	return b.String()
+}
+
+// retentionValue is a retention setting's value as written, off when it
+// isn't set.
+func retentionValue(r state.Retention, key string) string {
+	if v := r.Raw[key]; v != "" {
+		return v
+	}
+	return state.RetainOff
+}
+
+// retentionOutput is devvm retention --json: every setting by its key,
+// with its value as written, off when it isn't set.
+type retentionOutput struct {
+	Settings map[string]string `json:"settings"`
+}
+
+func retentionJSON(r state.Retention) retentionOutput {
+	out := retentionOutput{Settings: map[string]string{}}
+	for _, key := range state.RetentionKeys() {
+		out.Settings[key] = retentionValue(r, key)
+	}
+	return out
 }
 
 // retained is what retention deleted.

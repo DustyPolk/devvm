@@ -6,7 +6,7 @@ weight: 95
 These pages explain how devvm does what the other sections describe, for readers who want to check a claim, such as security reviewers and agents. They name the files devvm ships and the messages it prints. You don't need them to use devvm.
 
 - [Overview](overview.md): what devvm does, step by step, when it makes, opens, stops and deletes a VM, and the state files it keeps.
-- [Installing and updating](install.md): what the install script downloads and checks, `devvm doctor --fixes`, devvm's own files, and upgrading.
+- [Installing and updating](install.md): what the install script downloads and checks, `devvm doctor --json`, devvm's own files, and upgrading.
 - [Images and caching](images.md): how images and shared tools are built, keyed and cached, and how devvm checks what they start from.
 - [Port forwarding](ports.md): how devvm's forwarder forwards a VM's ports to your machine.
 - [The desktop](desktop.md): how `devvm desktop` serves a VM's desktop on your machine, checks its password and keeps your clipboard out, and why devvm doesn't forward X11.

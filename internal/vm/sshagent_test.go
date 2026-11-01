@@ -187,16 +187,14 @@ func TestSetSSHAgent(t *testing.T) {
 	agent := &agentCalls{}
 	e.Agent.Run = agent.run
 	s := Settings{e}
-	var b strings.Builder
-	if err := s.SSHAgent(t.Context(), &b); names(err) != "no_vm_ssh_agent dir="+e.Dir {
+	if _, err := s.SSHAgent(t.Context()); names(err) != "no_vm_ssh_agent dir="+e.Dir {
 		t.Errorf("no VM: %s", names(err))
 	}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	shown := func(want string) {
 		t.Helper()
-		b.Reset()
-		if err := s.SSHAgent(t.Context(), &b); err != nil || b.String() != want+"\n" {
-			t.Errorf("SSHAgent = %q, %v; want %s", b.String(), names(err), want)
+		if mode, err := s.SSHAgent(t.Context()); err != nil || mode != want {
+			t.Errorf("SSHAgent = %q, %v; want %s", mode, names(err), want)
 		}
 	}
 	shown("off")

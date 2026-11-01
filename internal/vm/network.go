@@ -19,42 +19,40 @@ import (
 // (secret.go).
 type Net struct{ *Env }
 
-// Network writes the folder's VM's network policy to w, as devvm ls
-// shows it (on, off or unenforced), then its allowlist: each policy file
-// its proxy reads that has rules, in order.
-func (e Net) Network(ctx context.Context, w io.Writer) error {
+// NetworkShown is the folder's VM's network policy, as devvm network
+// shows it.
+type NetworkShown struct {
+	Policy string // on, off or unenforced, as devvm ls shows it
+	// Rules are the rules of each policy file its proxy reads that has
+	// any, in order.
+	Rules []netpolicy.RuleFile
+}
+
+// Network returns the folder's VM's network policy and its allowlist.
+func (e Net) Network(ctx context.Context) (NetworkShown, error) {
+	var s NetworkShown
 	t, err := e.existing(ctx, "")
 	if err != nil {
-		return err
+		return s, err
 	}
 	in, err := t.b.Inspect(ctx, t.f.Name)
 	if err != nil {
-		return err
+		return s, err
 	}
-	shown, err := netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning)
-	if err != nil {
-		return err
+	if s.Policy, err = netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning); err != nil {
+		return s, err
 	}
 	files, err := e.Proxy.PolicyFiles(t.f.Name, t.st.Get(state.KeyImage))
 	if err != nil {
-		return err
+		return s, err
 	}
-	if _, err := io.WriteString(w, shown+"\n"); err != nil {
-		return err
-	}
-	return netpolicy.WriteRules(w, files)
+	s.Rules, err = netpolicy.ReadRules(files)
+	return s, err
 }
 
-// NetworkDefault writes to w whether new VMs get network policy: ask, on
-// or off.
-func (e Net) NetworkDefault(w io.Writer) error {
-	mode, err := state.ReadNetwork(e.Dirs)
-	if err != nil {
-		return err
-	}
-	_, err = io.WriteString(w, mode+"\n")
-	return err
-}
+// NetworkDefault returns whether new VMs get network policy: ask, on or
+// off.
+func (e Net) NetworkDefault() (string, error) { return state.ReadNetwork(e.Dirs) }
 
 // SetNetworkDefault saves whether new VMs get network policy (a
 // state.NetworkChoices value), as devvm setup does. The flags of devvm
@@ -127,9 +125,46 @@ type LogOptions struct {
 // and blocked. A VM without network policy logs nothing new, and devvm
 // says so.
 func (e Net) Log(ctx context.Context, w io.Writer, o LogOptions) error {
+	l, vm, err := e.netLog(ctx, o.Follow)
+	if err != nil || l == nil {
+		if err == nil {
+			e.Info(msg.LogEmpty(vm))
+		}
+		return err
+	}
+	if o.Blocked {
+		return l.WriteBlocked(w)
+	}
+	return l.Write(ctx, w, o.Lines, o.Follow)
+}
+
+// LogEvents returns the last n events of the folder's VM's network log,
+// oldest first: none when it has none.
+func (e Net) LogEvents(ctx context.Context, n int) ([]netpolicy.Event, error) {
+	l, _, err := e.netLog(ctx, false)
+	if err != nil || l == nil {
+		return nil, err
+	}
+	return l.Events(n)
+}
+
+// LogBlocks returns the blocks in the folder's VM's network log, one per
+// host and port, by when each was last blocked: none when it has none.
+func (e Net) LogBlocks(ctx context.Context) ([]netpolicy.Block, error) {
+	l, _, err := e.netLog(ctx, false)
+	if err != nil || l == nil {
+		return nil, err
+	}
+	return l.Blocks()
+}
+
+// netLog returns the folder's VM's network log and the VM's name; a nil
+// log when there's nothing to show (follow: nothing to follow). A VM
+// without network policy logs nothing new, and devvm says so.
+func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, error) {
 	t, err := e.findExisting(ctx, "")
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	vm := t.f.Name
 	if !netpolicy.On(t.st) {
@@ -140,14 +175,10 @@ func (e Net) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	// One it just rotated is empty, with its events in the old one.
 	fi, err := os.Stat(l.Path)
 	_, oerr := os.Stat(l.Old())
-	if errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !o.Follow && errors.Is(oerr, os.ErrNotExist) {
-		e.Info(msg.LogEmpty(vm))
-		return nil
+	if errors.Is(err, os.ErrNotExist) || err == nil && fi.Size() == 0 && !follow && errors.Is(oerr, os.ErrNotExist) {
+		return nil, vm, nil
 	}
-	if o.Blocked {
-		return l.WriteBlocked(w)
-	}
-	return l.Write(ctx, w, o.Lines, o.Follow)
+	return l, vm, nil
 }
 
 // policyVM finds the folder's VM for devvm network allow, deny and rm,

@@ -20,7 +20,8 @@ import (
 type Listed struct {
 	Name    string
 	Status  string // as its backend reports it
-	Image   string // its image's label: node+claude, base (from node:24)
+	Image   string // its image: node+claude, base
+	From    string // the container image its base started from (--from), if any
 	Git     string // its .git protection: on, off, or clone for a --clone VM
 	Net     string // its network policy: on, off or unenforced (netpolicy.Listed)
 	Backend string
@@ -79,8 +80,8 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(), DockerLayer: st.Get(KeyDockerLayer),
 		Folder: st.Get(state.KeyDir),
 	}
-	if from := st.Get(state.KeyFrom); l.Image != "" && from != "" {
-		l.Image = msg.ImageFrom(from, l.Image).Line()
+	if l.Image != "" {
+		l.From = st.Get(state.KeyFrom)
 	}
 	if isClone(st) {
 		l.Git = ModeClone

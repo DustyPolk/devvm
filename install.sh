@@ -262,12 +262,48 @@ run_fix() {
   if { : </dev/tty; } 2>/dev/null; then "${a[@]}" </dev/tty; else "${a[@]}" </dev/null; fi
 }
 
-# What devvm's own check says is missing ("KEY<TAB>FIX<TAB>MESSAGE" lines, from devvm doctor
-# --fixes), and an offer to fix each.
+# doctor_fixes: the problems in devvm doctor --json's output on stdin, a "KEY<TAB>FIX<TAB>MESSAGE"
+# line each, FIX empty for a null one. It reads the layout devvm writes, a field a line, each
+# value on its line; escapes in a value come out as the character, and tabs, newlines and \u ones
+# as a space.
+doctor_fixes() {
+  awk '
+    function unq(s, out, i, c) {
+      if (s == "null") return ""
+      s = substr(s, 2, length(s) - 2)
+      out = ""
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") {
+          i++
+          c = substr(s, i, 1)
+          if (c == "u") { c = " "; i += 4 } else if (c == "n" || c == "t" || c == "r" || c == "b" || c == "f") c = " "
+        }
+        out = out c
+      }
+      return out
+    }
+    /^  "problems": \[$/ { in_p = 1; next }
+    in_p && /^  \]/ { in_p = 0 }
+    in_p && /^      "(key|fix|message)": / {
+      name = $0
+      sub(/^      "/, "", name)
+      sub(/".*/, "", name)
+      v = $0
+      sub(/^      "[a-z]+": /, "", v)
+      sub(/,$/, "", v)
+      val[name] = unq(v)
+      if (name == "message") print val["key"] "\t" val["fix"] "\t" val["message"]
+    }
+  '
+}
+
+# What devvm's own check says is missing (devvm doctor --json's problems), and an offer to fix
+# each.
 install_deps() {
   local devvm=$1 line rest key fix m fixes=() relogin=false
   while IFS= read -r line; do [[ -z $line ]] || fixes+=("$line"); done \
-    < <(PATH="$prefix/bin:$PATH" "$devvm" doctor --fixes || true)
+    < <({ PATH="$prefix/bin:$PATH" "$devvm" doctor --json || true; } | doctor_fixes)
   ((${#fixes[@]})) || {
     say "everything devvm needs is installed"
     # Its warnings (a small machine, low free space) aren't fixes.

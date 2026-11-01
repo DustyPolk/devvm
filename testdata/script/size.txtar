@@ -32,6 +32,11 @@ exec devvm size -g --memory=2.5GiB
 stdout '^==> size_defaults size=cpus=2 memory=2\.5GiB$'
 exec devvm size -g
 cmp stdout $WORK/set
+# --json: what's unset left out; it only shows.
+exec devvm size -g --json
+stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 2\.5\n}\n\z'
+! exec devvm size -g --json --cpus 4
+stderr '^devvm: json_shows_only command=devvm size$'
 exec sh -c 'cat "$CFG/size"'
 stdout '^cpus=2$'
 stdout '^memory=2\.5$'
@@ -56,6 +61,9 @@ exec sh -c 'echo "2 8589934592 107374182400" > "$STUB_DIR/size-$(basename "$VMS"
 exec devvm size
 stdout '\Acpus=2 memory=8GiB disk=100GiB\n\z'
 ! stderr .
+exec devvm size --json
+stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 8,\n  "disk_gib": 100\n}\n\z'
+! stderr .
 exec sh -c ': > "$STUB_LOG"'
 exec devvm size --cpus 1 --memory 3
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
@@ -68,6 +76,9 @@ stdout '^memory=3$'
 exec devvm size
 stdout '\Acpus=2 memory=8GiB disk=100GiB\n\z'
 stderr '^size_pending size=cpus=1 memory=3GiB vm=devvm-web-[0-9a-f]{14}$'
+exec devvm size --json
+stdout '^  "disk_gib": 100,\n  "pending": {\n    "cpus": 1,\n    "memory_gib": 3\n  }\n}\n\z'
+stderr '^size_pending '
 # Back to what it has: nothing waits.
 exec devvm size --cpus 2 --memory 8
 stdout '^==> vm_size size=cpus=2 memory=8GiB disk=100GiB vm=devvm-web-[0-9a-f]{14}$'

@@ -107,8 +107,12 @@ func TestWriteRules(t *testing.T) {
 	if err := os.WriteFile(b, []byte("# only a comment\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	files, err := ReadRules([]string{a, b, c})
+	if err != nil || len(files) != 1 || files[0].Path != a || strings.Join(files[0].Rules, " ") != "x.test !y.test" {
+		t.Fatalf("ReadRules = %+v, %v", files, err)
+	}
 	var out strings.Builder
-	if err := WriteRules(&out, []string{a, b, c}); err != nil {
+	if err := WriteRules(&out, files); err != nil {
 		t.Fatal(err)
 	}
 	if want := "# " + a + "\n  x.test\n  !y.test\n"; out.String() != want {

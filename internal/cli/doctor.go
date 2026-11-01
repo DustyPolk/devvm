@@ -3,8 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +24,7 @@ import (
 
 // newDoctorCmd is devvm doctor.
 func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
-	var fixes bool
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check what devvm needs on this machine",
@@ -49,15 +47,79 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 				Free: reg.Host.FreeSpace,
 				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
 			}
-			err = d.run(cmd.Context(), u, reg.All(), b, fixes)
+			if asJSON {
+				return printJSON(u, d.report(cmd.Context(), reg.All(), b))
+			}
+			err = d.run(cmd.Context(), u, reg.All(), b)
 			if m, ok := errors.AsType[msg.M](err); ok {
 				u.Die(m)
 			}
 			return err
 		},
 	}
-	cmd.Flags().BoolVar(&fixes, "fixes", false, "print only what's missing, for scripts: a KEY<tab>FIX<tab>MESSAGE line each, FIX being a command or empty; succeeds either way")
+	f := cmd.Flags()
+	f.BoolVar(&asJSON, "json", false, "print what it found as one JSON object, for scripts, and nothing else; succeeds whatever is missing")
 	return cmd
+}
+
+// doctorOutput is devvm doctor --json: the backend new VMs get and what
+// it's missing, doctor's warnings, whether Docker is installed, and every
+// backend's features.
+type doctorOutput struct {
+	Backend  string        `json:"backend"`
+	Problems []problemJSON `json:"problems"`
+	Warnings []string      `json:"warnings"`
+	Docker   bool          `json:"docker"`
+	// Features is, for each backend, how it has each feature: native,
+	// emulated, unreviewed or none.
+	Features map[string]map[string]string `json:"features"`
+}
+
+// problemJSON is something the backend is missing: its key, the command
+// that fixes it (null when there's none to run) and the message.
+type problemJSON struct {
+	Key     string  `json:"key"`
+	Fix     *string `json:"fix"`
+	Message string  `json:"message"`
+}
+
+// report is what doctor finds, as doctor --json shows it. It prints
+// nothing.
+func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Backend) doctorOutput {
+	out := doctorOutput{Backend: b.Name(), Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{}}
+	for _, p := range b.Problems(ctx) {
+		j := problemJSON{Key: p.Key, Message: p.Msg.Line()}
+		if p.Fix != "" {
+			j.Fix = &p.Fix
+		}
+		out.Problems = append(out.Problems, j)
+	}
+	for _, m := range d.warnings(b) {
+		out.Warnings = append(out.Warnings, m.Line())
+	}
+	_, err := exec.LookPath("docker")
+	out.Docker = err == nil
+	for _, be := range all {
+		fs := map[string]string{}
+		for _, f := range backend.Features {
+			fs[string(f)] = be.Caps()[f].String()
+		}
+		out.Features[be.Name()] = fs
+	}
+	return out
+}
+
+// warnings are doctor's warnings, which never make it fail: another devvm
+// first on PATH, low free space, a small host.
+func (d doctor) warnings(b backend.Backend) []msg.M {
+	var ms []msg.M
+	if m, ok := d.Path.other(); ok {
+		ms = append(ms, m)
+	}
+	if m, low := (backend.Space{Free: d.Free}).Warning(b); low {
+		ms = append(ms, m)
+	}
+	return append(ms, smallHost(d.Host)...)
 }
 
 // The host devvm recommends: base asks for 4 CPUs and 8 GiB.
@@ -75,19 +137,12 @@ type doctor struct {
 
 // run checks b, the backend new VMs get, and lists all's features. It
 // returns the last problem's message when b has problems, having warned
-// the others. With fixes, it writes only the problems' lines, and
-// succeeds. Warnings (another devvm on PATH, low free space, a small
+// the others. Warnings (another devvm on PATH, low free space, a small
 // host) never change what it returns.
-func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b backend.Backend, fixes bool) error {
+func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b backend.Backend) error {
 	problems := b.Problems(ctx)
-	if fixes {
-		return writeFixes(u.Stdout(), problems)
-	}
 	if err := writeFeatures(u.Table(), all); err != nil {
 		return err
-	}
-	if m, ok := d.Path.other(); ok {
-		u.Warn(m)
 	}
 	if _, err := exec.LookPath("docker"); err == nil {
 		u.Say(msg.DockerFound())
@@ -95,10 +150,7 @@ func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b back
 		u.Say(msg.DockerMissing())
 	}
 	sayProxyCA(u)
-	if m, low := (backend.Space{Free: d.Free}).Warning(b); low {
-		u.Warn(m)
-	}
-	for _, m := range smallHost(d.Host) {
+	for _, m := range d.warnings(b) {
 		u.Warn(m)
 	}
 	if len(problems) == 0 {
@@ -197,17 +249,6 @@ func (p onPath) other() (msg.M, bool) {
 		return msg.M{}, false
 	}
 	return msg.DevvmOtherFirst(first, self), true
-}
-
-// writeFixes writes a KEY<tab>FIX<tab>MESSAGE line for each problem, the
-// message on one line.
-func writeFixes(w io.Writer, problems []backend.Problem) error {
-	for _, p := range problems {
-		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", p.Key, p.Fix, p.Msg.Line()); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // writeFeatures writes a table of every feature, with a column for each

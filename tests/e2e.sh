@@ -639,7 +639,7 @@ fi
 if want images; then
 section "images"
 check "devvm doctor finds everything it needs on this host" bash -c "'$D' doctor </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$('$D' doctor --fixes </dev/null) ]]"
+  '$D' doctor --json </dev/null | grep -qxF '  \"problems\": [],'"
 # base stays cached between runs (--clean deletes it); the fixture layers' images are this run's.
 check "build base" quiet env DEVVM_MESSAGES=names "$D" build base
 # Its key: the build's, else the newest base from Ubuntu's image (from's bases are cached too).
@@ -838,6 +838,8 @@ check "it gets --cpus, --memory and --disk" in_vm "$vm" \
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
   grep -Eq '^$vm +Running +base +(on|off) +off +lima +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
+check "ls --json and size --json show it" bash -c "'$D' ls --json 2>/dev/null | grep -qxF '      \"name\": \"$vm\",' &&
+  cd '$p' && '$D' size --json 2>/dev/null | grep -qxF '  \"disk_gib\": 120'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
 # On Linux hosts the mount is 9p, whose subfolders' events reach no watcher, even the VM's own.
 if [[ "$(uname -s)" == Darwin ]]; then
@@ -1934,7 +1936,7 @@ check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
 
 section "smolvm: images"
 check "devvm doctor finds everything smolvm needs" bash -c "'$D' doctor --backend smolvm </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$('$D' doctor --backend smolvm --fixes </dev/null) ]]"
+  '$D' doctor --backend smolvm --json </dev/null | grep -qxF '  \"problems\": [],'"
 check "build base" quiet env DEVVM_MESSAGES=names "$D" "${S[@]}" build base
 kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
 # A cached base: the pack recorded as base, not --from another image (the Alpine checks' bases).
@@ -3886,7 +3888,7 @@ docker_linux() {
   check "devvm doctor finds everything, an engine of this machine's, builds confined, network policy emulated" bash -c "
     DEVVM_MESSAGES=names '$D' doctor --backend docker </dev/null >'$work/last.log' 2>&1 &&
     grep -qE '^docker_engine_linux version=' '$work/last.log' && grep -qE '^build-confinement +native ' '$work/last.log' &&
-    grep -qE '^egress-proxy +emulated ' '$work/last.log' && [[ -z \$('$D' doctor --backend docker --fixes </dev/null) ]]"
+    grep -qE '^egress-proxy +emulated ' '$work/last.log' && '$D' doctor --backend docker --json </dev/null | grep -qxF '  \"problems\": [],'"
   check "build base" quiet env DEVVM_MESSAGES=names "$D" "${B[@]}" build base
   kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
   [[ -n $kb ]] || kb=$(for k in $(keys_of base); do grep -qx from= "$images/$k" && d_img "devvm-$dns:$k" && echo "$k"; done | head -1)

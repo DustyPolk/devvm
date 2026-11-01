@@ -77,6 +77,13 @@ stdout '^  github\.com$'
 stdout '^# \S*/config/devvm/policy\n  \*\.corp\.test\n# \S*/vms/devvm-net-[0-9a-f]{14}\.policy\n  !bad\.example\.com\n  example\.com\n'
 ! stdout mine
 ! stderr .
+# --json: the same, each file with its rules; it only shows.
+exec devvm network --json
+stdout '\A{\n  "version": 1,\n  "policy": "(on|unenforced)",\n  "allowlist": \[\n    {\n      "file": "\S*/layers/base\.policy",\n      "rules": \[\n'
+stdout '^      "file": "\S*/vms/devvm-net-[0-9a-f]{14}\.policy",\n      "rules": \[\n        "!bad\.example\.com",\n        "example\.com"\n      \]\n'
+! stderr .
+! exec devvm network --json off
+stderr '^devvm: json_shows_only command=devvm network$'
 
 # A VM without network policy: devvm network shows it off, with its
 # rules, and changing them says they don't apply.

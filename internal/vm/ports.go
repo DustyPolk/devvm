@@ -2,7 +2,6 @@ package vm
 
 import (
 	"context"
-	"io"
 	"regexp"
 	"slices"
 	"strconv"
@@ -153,25 +152,17 @@ func orAll(ports string) string {
 // portsVM finds the folder's VM for devvm ports.
 func (e Settings) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
 
-// Ports writes to w which ports the folder's VM forwards (all, none or a
+// Ports returns which ports the folder's VM forwards (all, none or a
 // list); with global, what new VMs forward.
-func (e Settings) Ports(ctx context.Context, w io.Writer, global bool) error {
-	ports := ""
+func (e Settings) Ports(ctx context.Context, global bool) (string, error) {
 	if global {
-		def, err := e.defaultPorts()
-		if err != nil {
-			return err
-		}
-		ports = def
-	} else {
-		t, err := e.portsVM(ctx)
-		if err != nil {
-			return err
-		}
-		ports = orAll(t.st.Get(KeyPorts))
+		return e.defaultPorts()
 	}
-	_, err := io.WriteString(w, ports+"\n")
-	return err
+	t, err := e.portsVM(ctx)
+	if err != nil {
+		return "", err
+	}
+	return orAll(t.st.Get(KeyPorts)), nil
 }
 
 // SetPorts changes which ports the folder's VM forwards: a stopped VM's

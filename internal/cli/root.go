@@ -38,6 +38,9 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if wantsJSON(cmd) {
+				u.DataOnly() // stdout is the JSON's alone
+			}
 			makePrivate(u)
 			if !skipsRetention(cmd) {
 				autoRetain(cmd.Context(), u)

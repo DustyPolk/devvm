@@ -35,6 +35,8 @@ stdout '^  ForwardAgent no$'
 ! stdout IdentityAgent
 exec devvm ssh-agent
 stdout '\Aoff\n\z'
+exec devvm ssh-agent --json
+stdout '\A{\n  "version": 1,\n  "mode": "off",\n  "keys": \[\]\n}\n\z'
 exec devvm --ssh-agent
 stderr '^devvm: ssh_agent_flag_ignored$'
 
@@ -97,6 +99,10 @@ stderr '^devvm: agent_key_mounted key=\S*/web/key vm=devvm-web-[0-9a-f]{14}$'
 # holds and those added to it.
 exec devvm ssh-agent
 stdout '\Aon\n256 SHA256:fp-deploy deploy \(ED25519\)\n\S*/keys/deploy: SHA256:fp-deploy lifetime=12h\n\z'
+exec devvm ssh-agent --json
+stdout '\A{\n  "version": 1,\n  "mode": "on",\n  "keys": \[\n    {\n      "file": "\S*/keys/deploy",\n      "fingerprint": "SHA256:fp-deploy",\n      "confirm": false,\n      "lifetime": "12h",\n      "loaded": true\n    }\n  \]\n}\n\z'
+! exec devvm ssh-agent --json off
+stderr '^devvm: json_shows_only command=devvm ssh-agent$'
 
 # devvm ssh-agent devvm on the running VM: from its next start. Until
 # then devvm's connections and its ssh config entry carry the agent it

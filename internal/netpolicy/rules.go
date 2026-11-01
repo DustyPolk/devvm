@@ -87,13 +87,19 @@ func RemoveRule(path, rule string) (bool, error) {
 	return true, writeRules(path, kept)
 }
 
-// WriteRules writes the rules of each policy file that has any to w: the
-// file's path after #, then its rules, indented, comments left out.
-func WriteRules(w io.Writer, files []string) error {
+// RuleFile is a policy file and its rules, comments left out.
+type RuleFile struct {
+	Path  string
+	Rules []string
+}
+
+// ReadRules returns each of files that has rules, in order, with them.
+func ReadRules(files []string) ([]RuleFile, error) {
+	var out []RuleFile
 	for _, f := range files {
 		lines, err := readRules(f)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var rules []string
 		for _, l := range lines {
@@ -101,13 +107,21 @@ func WriteRules(w io.Writer, files []string) error {
 				rules = append(rules, r)
 			}
 		}
-		if len(rules) == 0 {
-			continue
+		if len(rules) > 0 {
+			out = append(out, RuleFile{Path: f, Rules: rules})
 		}
-		if _, err := fmt.Fprintf(w, "# %s\n", f); err != nil {
+	}
+	return out, nil
+}
+
+// WriteRules writes each policy file's rules to w: the file's path after
+// #, then its rules, indented.
+func WriteRules(w io.Writer, files []RuleFile) error {
+	for _, f := range files {
+		if _, err := fmt.Fprintf(w, "# %s\n", f.Path); err != nil {
 			return err
 		}
-		for _, r := range rules {
+		for _, r := range f.Rules {
 			if _, err := fmt.Fprintf(w, "  %s\n", r); err != nil {
 				return err
 			}

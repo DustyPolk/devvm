@@ -3,10 +3,6 @@ package vm
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -51,12 +47,22 @@ func (e Net) SecretRm(ctx context.Context, name string) error {
 	return nil
 }
 
-// Secrets writes the known secrets to w as a table: whether a value is
-// saved (or, for claude, in devvm's environment), and the VMs using each.
-func (e Net) Secrets(ctx context.Context, w io.Writer) error {
+// SecretListed is a known secret as devvm secret lists it: never its
+// value.
+type SecretListed struct {
+	Name string
+	// Saved is whether a value is saved (or, for claude, in devvm's
+	// environment).
+	Saved  bool
+	UsedBy []string // the VMs using it, by name
+}
+
+// Secrets returns the known secrets, each with whether a value is saved
+// and the VMs using it.
+func (e Net) Secrets(ctx context.Context) ([]SecretListed, error) {
 	names, err := state.VMNames(e.Dirs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	users := map[string][]string{}
 	for _, vm := range names {
@@ -68,22 +74,17 @@ func (e Net) Secrets(ctx context.Context, w io.Writer) error {
 			users[s] = append(users[s], vm)
 		}
 	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tSAVED\tUSED BY")
+	out := make([]SecretListed, 0, len(secrets.Known))
 	for _, s := range secrets.Known {
-		saved := "yes"
+		saved := true
 		if _, err := e.Proxy.Secrets.Value(ctx, s.Name); errors.Is(err, secrets.ErrNone) {
-			saved = "no"
+			saved = false
 		} else if err != nil {
-			return err
+			return nil, err
 		}
-		used := "-"
-		if len(users[s.Name]) > 0 {
-			used = strings.Join(users[s.Name], ", ")
-		}
-		_, _ = fmt.Fprintln(tw, s.Name+"\t"+saved+"\t"+used)
+		out = append(out, SecretListed{Name: s.Name, Saved: saved, UsedBy: users[s.Name]})
 	}
-	return tw.Flush()
+	return out, nil
 }
 
 // SecretUse binds a known secret to the folder's VM (use), or unbinds it.

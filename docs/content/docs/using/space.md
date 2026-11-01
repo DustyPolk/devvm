@@ -7,7 +7,7 @@ devvm, the tools it runs and its backends keep files on this machine outside you
 
 ## devvm space
 
-`devvm space` shows what devvm keeps on this machine, on every backend, and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives each backend 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts. The first table has a row for each kind of thing devvm has, followed by a total:
+`devvm space` shows what devvm keeps on this machine, on every backend, and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives each backend 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts ([devvm space --json](#devvm-space---json)). The first table has a row for each kind of thing devvm has, followed by a total:
 
 | Column | |
 | --- | --- |
@@ -26,6 +26,62 @@ Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk sha
 The second table lists the caches that belong to the backends, with the backend, what each cache holds, how many entries it has, its size and where it is. These are Lima's download cache, smolvm's caches on macOS and the Docker volumes with devvm's label that aren't one VM's own, such as the shared tools' volume. devvm's builds fill them, but Lima's and smolvm's caches can also hold your own downloads, so they aren't in the total. The sections below say what each one holds.
 
 devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's share of them, which is what devvm's builds put there and nothing of devvm's needs. For each backend in turn, it lists the entries it would delete with their sizes and asks, and without a terminal it refuses. With `--backend NAME`, it asks only about that backend's cache.
+
+### devvm space --json
+
+`devvm space --json` prints both tables as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes, and devvm still says on stderr what it says without `--json`. `devvm` has a row of the first table each, with sizes in bytes:
+
+| Field | |
+| --- | --- |
+| `what`, `backend`, `count`, `size` | the row's `WHAT`, `BACKEND`, `COUNT` and `SIZE`, with `backend` left out when the row has none |
+| `sized` | whether devvm knows the size, which `SIZE` shows as `-` when it doesn't |
+| `kept` | the row's `KEPT` |
+| `gc` | what `devvm gc` frees of it now |
+| `rest` | the row's `FREED BY` |
+| `retain`, `retain_frees` | the retention setting that applies to the row and what it would delete now, both left out when none is on |
+
+`total` and `gc` are the totals row's `SIZE` and `GC`. `backends` has the second table's rows, each with its `backend`, `name`, `path`, `count`, `size` and `sized`. `unknown` names the backends that one of your VMs uses that didn't answer, and `strays` has the [VMs devvm has no state for](#vms-devvm-has-no-state-for), each with its `backend`, `name` and the `data` folder its label names. devvm leaves both out when they're empty.
+
+```json
+{
+  "version": 1,
+  "devvm": [
+    {
+      "what": "VMs",
+      "backend": "lima",
+      "count": 2,
+      "size": 5368709120,
+      "sized": true,
+      "kept": "only copy",
+      "gc": 0,
+      "rest": "devvm rm"
+    },
+    {
+      "what": "history",
+      "count": 3,
+      "size": 3145728,
+      "sized": true,
+      "kept": "only copy",
+      "gc": 0,
+      "rest": "gc --history",
+      "retain": "30d",
+      "retain_frees": 1048576
+    }
+  ],
+  "total": 5371854848,
+  "gc": 0,
+  "backends": [
+    {
+      "backend": "lima",
+      "name": "download cache",
+      "path": "/Users/you/Library/Caches/lima",
+      "count": 1,
+      "size": 629145600,
+      "sized": true
+    }
+  ]
+}
+```
 
 ## devvm's data folder
 

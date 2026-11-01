@@ -169,9 +169,8 @@ func TestSetPortsRunning(t *testing.T) {
 	if !slices.Equal(infos, []string{"ports_forwarding ports=5173,8080-8081 vm=" + vm}) || !slices.Equal(warned, []string{"ports_taken count=1 ports=8080 vm=" + vm}) {
 		t.Errorf("said %q, warned %q", infos, warned)
 	}
-	var b strings.Builder
-	if err := s.Ports(t.Context(), &b, false); err != nil || b.String() != "5173,8080-8081\n" {
-		t.Errorf("ports: %q, %v", b.String(), err)
+	if ports, err := s.Ports(t.Context(), false); err != nil || ports != "5173,8080-8081" {
+		t.Errorf("ports: %q, %v", ports, err)
 	}
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)

@@ -19,6 +19,7 @@ devvm network log [flags]
       --blocked   list the blocks by host and port, with the command that allows each
   -f, --follow    then show each new one as it happens, until interrupted
   -h, --help      help for log
+      --json      print it as one JSON object, for scripts
   -n, --lines N   show the last N connections and requests (default 50)
 ```
 

@@ -106,6 +106,32 @@ A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses
 
 If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
+### devvm network --json
+
+`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy file that has rules, in the order the proxy reads them, with its path and its rules. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`. With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+
+```json
+{
+  "version": 1,
+  "policy": "on",
+  "allowlist": [
+    {
+      "file": "/Users/you/.local/share/devvm/assets/7fdd969856e644e8/layers/base.policy",
+      "rules": [
+        "ports.ubuntu.com",
+        "github.com"
+      ]
+    },
+    {
+      "file": "/Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy",
+      "rules": [
+        "example.com"
+      ]
+    }
+  ]
+}
+```
+
 ## Inside the VM
 
 Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
@@ -172,6 +198,30 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 
 `devvm secret unuse` and `devvm secret rm` take nothing back from a VM without network policy, because the value it got still works wherever it kept it, and devvm says so on `unuse`. Neither command revokes what a VM made with the secret ([what devvm doesn't protect](../internals/security.md#what-it-doesnt-protect)), so rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos your VMs need.
 
+#### devvm secret --json
+
+`devvm secret --json` prints the list as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. Each of the `secrets` has its name, `saved`, which is `true` when it's saved or, for `claude`, in devvm's environment, and `used_by`, the names of the VMs using it. The JSON never holds a secret's value.
+
+```json
+{
+  "version": 1,
+  "secrets": [
+    {
+      "name": "claude",
+      "saved": true,
+      "used_by": [
+        "devvm-some-project-71a99b1076d92c"
+      ]
+    },
+    {
+      "name": "github",
+      "saved": false,
+      "used_by": []
+    }
+  ]
+}
+```
+
 ## Logs
 
 `devvm network log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the secrets put in (`, token: github`), a blocked line has why it was blocked, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
@@ -190,6 +240,54 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 | `--blocked` | the blocks instead, one row per host and port, by when last blocked: `LAST`, `COUNT`, `HOST` and `ALLOW WITH`, the `devvm network allow` command that allows it |
 
 `ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. A VM without network policy logs nothing new, and `devvm network log` says so. The proxy keeps each VM's log to its last 10 to 20 MiB by starting a new file once the current one reaches 10 MiB and keeping one older file, which `devvm network log` reads too. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
+
+### devvm network log --json
+
+`devvm network log --json` prints the last N events as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes, and devvm refuses it with `--follow`. Each of the `events` has what the proxy logged, without the VM's name. That's the `time`, the `event`, the `host` and the `port`, and, when the event has them, the request's `method` and `path`, the `rule` that allowed it, the `reason` it was blocked or what came of a cache request, the request's `User-Agent` header as `agent`, the `secrets` put in, `refused` for a request refused whatever the allowlist says, and the company proxy it went through as `upstream`. The `event` is `tunnel` for an allowed connection, `intercept` for an allowed tunnel that the proxy decrypted, `forward` for an allowed request, `blocked`, or `nix-cache` for a request to the shared Nix cache. A log with nothing in it gives `"events": []`.
+
+```json
+{
+  "version": 1,
+  "events": [
+    {
+      "time": "2026-10-09T10:00:00Z",
+      "event": "blocked",
+      "host": "example.com",
+      "port": 443,
+      "method": "CONNECT",
+      "reason": "not on the allowlist"
+    },
+    {
+      "time": "2026-10-09T10:00:06Z",
+      "event": "forward",
+      "host": "api.github.com",
+      "port": 443,
+      "method": "GET",
+      "path": "/user",
+      "secrets": [
+        "github"
+      ]
+    }
+  ]
+}
+```
+
+With `--blocked`, each of the `blocked` has the `last` time it was blocked, the `count`, the `host` and the `port`, and `allow`, the rule that `devvm network allow` takes to allow it. A block that `ALLOW WITH` shows as `-` has no `allow`.
+
+```json
+{
+  "version": 1,
+  "blocked": [
+    {
+      "last": "2026-10-09T10:01:00Z",
+      "count": 2,
+      "host": "example.com",
+      "port": 443,
+      "allow": "example.com"
+    }
+  ]
+}
+```
 
 ## Not covered
 

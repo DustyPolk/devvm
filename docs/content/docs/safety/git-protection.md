@@ -29,6 +29,17 @@ devvm git-protect on
 
 On an existing VM, devvm ignores `--no-git-protect` and warns you. A `--clone` VM's protection can't be changed.
 
+### devvm git-protect --json
+
+`devvm git-protect --json` prints the VM's protection as one JSON object with `mode`, which is `on`, `strict`, `off` or `clone`, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. With `--json` the command only shows, so devvm refuses `on`, `strict` or `off` with it.
+
+```json
+{
+  "version": 1,
+  "mode": "on"
+}
+```
+
 ## Strict
 
 The VM can add a submodule at any time, and `git status` and `git diff` on this machine read the submodule's config. So the submodule's `core.fsmonitor` would run on this machine before the VM's next launch locks it. `devvm git-protect strict` closes that gap by setting `diff.ignoreSubmodules = all` in the locked `.git/config`. `git status` and `git diff` on this machine then never look inside submodules, and they don't show the submodules' changes. `git submodule …` and `--recurse-submodules` still enter them, so for a repo with submodules you don't trust, use [`--clone`](../using/clone.md).

@@ -21,6 +21,7 @@ import (
 // newHistoryCmd is devvm history: the exports of agents' history in
 // devvm's exports folder, and history export, which writes one.
 func newHistoryCmd(u *ui.UI) *cobra.Command {
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "history",
 		Short: "List the saved exports of agents' history",
@@ -36,11 +37,38 @@ func newHistoryCmd(u *ui.UI) *cobra.Command {
 				es, err = exports(d)
 			}
 			fail(u, err, msg.HistoryFailed)
+			if asJSON {
+				return printJSON(u, historyJSON(es))
+			}
 			return writeHistory(u.Table(), es)
 		},
 	}
+	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newHistoryExportCmd(u))
 	return cmd
+}
+
+// historyOutput is devvm history --json: the exports, oldest first, each
+// with when it was written in RFC 3339 (this machine's zone) and its size
+// in bytes. A folder devvm has no record of is "".
+type historyOutput struct {
+	Exports []exportJSON `json:"exports"`
+}
+
+type exportJSON struct {
+	File   string `json:"file"`
+	VM     string `json:"vm"`
+	Folder string `json:"folder"`
+	Date   string `json:"date"`
+	Size   int64  `json:"size"`
+}
+
+func historyJSON(es []savedExport) historyOutput {
+	out := historyOutput{Exports: make([]exportJSON, 0, len(es))}
+	for _, e := range es {
+		out.Exports = append(out.Exports, exportJSON{File: e.Path, VM: e.VM, Folder: e.Folder, Date: e.At.Format(time.RFC3339), Size: e.Size})
+	}
+	return out
 }
 
 // writeHistory writes the exports as a table, a header first; a folder

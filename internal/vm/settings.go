@@ -2,7 +2,6 @@ package vm
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -16,19 +15,17 @@ import (
 // agent forwarding (sshagent.go).
 type Settings struct{ *Env }
 
-// GitProtect writes the folder's VM's .git protection to w: on, strict,
-// off, or clone for a --clone VM, which mounts no .git.
-func (e Settings) GitProtect(ctx context.Context, w io.Writer) error {
+// GitProtect returns the folder's VM's .git protection: on, strict, off,
+// or clone for a --clone VM, which mounts no .git.
+func (e Settings) GitProtect(ctx context.Context) (string, error) {
 	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
 	if err != nil {
-		return err
+		return "", err
 	}
-	mode := ModeClone
-	if !isClone(t.st) {
-		mode = e.Protector(t.f.Dir).Mode(t.st)
+	if isClone(t.st) {
+		return ModeClone, nil
 	}
-	_, err = io.WriteString(w, mode+"\n")
-	return err
+	return e.Protector(t.f.Dir).Mode(t.st), nil
 }
 
 // SetGitProtect turns the folder's VM's .git protection on, strict or

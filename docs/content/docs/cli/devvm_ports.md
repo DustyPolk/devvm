@@ -18,6 +18,7 @@ devvm ports [all|none|LIST] [flags]
 ```text
   -g, --global   show or change what new VMs forward instead
   -h, --help     help for ports
+      --json     print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

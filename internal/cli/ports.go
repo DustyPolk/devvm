@@ -11,17 +11,24 @@ import (
 // newPortsCmd is devvm ports [all|none|LIST], and add and rm LIST, each
 // with -g for what new VMs forward.
 func newPortsCmd(u *ui.UI) *cobra.Command {
-	var global bool
+	var global, asJSON bool
 	// run shows the ports without a change, else makes it.
-	run := func(cmd *cobra.Command, c *vm.PortsChange) {
+	run := func(cmd *cobra.Command, c *vm.PortsChange) error {
+		var ports string
 		withEnv(u, func(env *vm.Env) error {
 			s := vm.Settings{Env: env}
-			if c == nil {
-				return s.Ports(cmd.Context(), u.Stdout(), global)
+			if c != nil {
+				c.Global = global
+				return s.SetPorts(cmd.Context(), *c)
 			}
-			c.Global = global
-			return s.SetPorts(cmd.Context(), *c)
+			var err error
+			ports, err = s.Ports(cmd.Context(), global)
+			return err
 		}, msg.PortsFailed)
+		if c != nil {
+			return nil
+		}
+		return printValue(u, asJSON, "ports", ports)
 	}
 	cmd := &cobra.Command{
 		Use:   "ports [all|none|LIST]",
@@ -31,13 +38,13 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			"changes it at once: a stopped VM forwards the new ports from its next start, and a running one's " +
 			"forwarder starts again with them, closing the connections open through it, while the VM runs on. " +
 			"With -g, show or change what new VMs forward instead.",
-		Args: cobra.MatchAll(maxArgs(1), func(_ *cobra.Command, args []string) error {
+		Args: showsOnly(cobra.MatchAll(maxArgs(1), func(_ *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return nil
 			}
 			_, err := vm.ParsePorts(args[0])
 			return err
-		}),
+		})),
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			if len(args) > 0 {
 				return nil, cobra.ShellCompDirectiveNoFileComp
@@ -49,11 +56,11 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			if len(args) == 1 {
 				c = &vm.PortsChange{List: args[0]}
 			}
-			run(cmd, c)
-			return nil
+			return run(cmd, c)
 		},
 	}
 	cmd.PersistentFlags().BoolVarP(&global, "global", "g", false, "show or change what new VMs forward instead")
+	jsonFlag(cmd, &asJSON)
 	sub := func(op, short, long string) *cobra.Command {
 		return &cobra.Command{
 			Use:   op + " LIST",
@@ -64,8 +71,7 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 				return err
 			}),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				run(cmd, &vm.PortsChange{Op: op, List: args[0]})
-				return nil
+				return run(cmd, &vm.PortsChange{Op: op, List: args[0]})
 			},
 		}
 	}

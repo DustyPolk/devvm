@@ -19,13 +19,21 @@ func TestSecrets(t *testing.T) {
 	ctx := t.Context()
 	list := func() string {
 		t.Helper()
-		var b strings.Builder
-		if err := n.Secrets(ctx, &b); err != nil {
+		ss, err := n.Secrets(ctx)
+		if err != nil {
 			t.Fatal(names(err))
+		}
+		var b strings.Builder
+		for _, s := range ss {
+			saved := "no"
+			if s.Saved {
+				saved = "yes"
+			}
+			b.WriteString(s.Name + " " + saved + " " + strings.Join(s.UsedBy, ",") + "\n")
 		}
 		return b.String()
 	}
-	if got, want := list(), "NAME    SAVED  USED BY\nclaude  no     -\ngithub  no     -\n"; got != want {
+	if got, want := list(), "claude no \ngithub no \n"; got != want {
 		t.Errorf("Secrets = %q, want %q", got, want)
 	}
 	if err := n.SecretSave(ctx, "github", " ghp_testfake\n"); err != nil {
@@ -34,7 +42,7 @@ func TestSecrets(t *testing.T) {
 	if err := n.SecretUse(ctx, "github", true); err != nil {
 		t.Fatal(names(err))
 	}
-	if got := list(); !strings.Contains(got, "github  yes    "+vm+"\n") {
+	if got := list(); !strings.Contains(got, "github yes "+vm+"\n") {
 		t.Errorf("Secrets = %q", got)
 	}
 	if err := n.SecretSave(ctx, "claude", "not-a-setup-token"); names(err) != "not_setup_token" {
@@ -59,7 +67,7 @@ func TestSecrets(t *testing.T) {
 	if err := n.SecretUse(ctx, "claude", false); names(err) != "secret_with_image vm="+vm {
 		t.Errorf("SecretUse(claude, false) = %v", names(err))
 	}
-	if got := list(); !strings.Contains(got, "claude  no     "+vm+"\n") {
+	if got := list(); !strings.Contains(got, "claude no "+vm+"\n") {
 		t.Errorf("Secrets = %q", got)
 	}
 }

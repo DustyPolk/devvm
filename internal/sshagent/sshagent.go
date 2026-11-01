@@ -505,3 +505,42 @@ func (a *Agent) Keys(ctx context.Context, w io.Writer) error {
 	}
 	return nil
 }
+
+// ListedKey is a key added to devvm's own agent, as devvm ssh-agent
+// --json lists it.
+type ListedKey struct {
+	File        string // the key file
+	Fingerprint string // its fingerprint when added, "" if unknown
+	Confirm     bool   // the agent asks before each use
+	Lifetime    string // how long the agent keeps it once loaded: 12h, forever
+	Loaded      bool   // the agent holds it now
+}
+
+// KeyList returns the keys added to the agent, loading those it lacks
+// first, each with whether the agent holds it. With none added, it
+// returns none and doesn't start the agent.
+func (a *Agent) KeyList(ctx context.Context) ([]ListedKey, error) {
+	keys, err := state.ReadAgentKeys(a.Dirs)
+	if err != nil || len(keys) == 0 {
+		return nil, err
+	}
+	if err := a.Ensure(ctx); err != nil {
+		return nil, err
+	}
+	out, _ := a.list(ctx)
+	fps, _ := held(out)
+	listed := make([]ListedKey, 0, len(keys))
+	for _, k := range keys {
+		l := ListedKey{File: k.File, Fingerprint: k.Fingerprint, Lifetime: DefaultLifetime}
+		for _, o := range strings.Fields(k.Options) {
+			if o == "confirm" {
+				l.Confirm = true
+			} else if v, ok := strings.CutPrefix(o, "lifetime="); ok {
+				l.Lifetime = v
+			}
+		}
+		l.Loaded = k.Fingerprint != "" && slices.Contains(fps, k.Fingerprint)
+		listed = append(listed, l)
+	}
+	return listed, nil
+}

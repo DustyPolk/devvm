@@ -180,6 +180,8 @@ exec cat $XDG_CONFIG_HOME/devvm/network
 stdout '\Aoff\n\z'
 exec devvm network -g
 stdout '\Aoff\n\z'
+exec devvm network -g --json
+stdout '\A{\n  "version": 1,\n  "policy": "off"\n}\n\z'
 mkdir $WORK/offsaved
 cd $WORK/offsaved
 exec devvm --no-git-protect base

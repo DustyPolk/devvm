@@ -1504,6 +1504,11 @@ func InterruptedVM(vm string) M {
 	return M{id: "interrupted_vm", vals: []val{{"vm", vm}}}
 }
 
+// JSONShowsOnly is [json_shows_only]: "{{.command}} --json only shows, so it takes no value. Run it without --json to change the setting."
+func JSONShowsOnly(command string) M {
+	return M{id: "json_shows_only", vals: []val{{"command", command}}}
+}
+
 // Kept is [kept]: "kept {{.vm}}"
 func Kept(vm string) M {
 	return M{id: "kept", vals: []val{{"vm", vm}}}
@@ -3251,6 +3256,7 @@ var specs = map[string]spec{
 	"images_unused":                    {fields: []string{"size"}},
 	"interrupted_image":                {fields: []string{"vm"}},
 	"interrupted_vm":                   {fields: []string{"vm"}},
+	"json_shows_only":                  {fields: []string{"command"}},
 	"kept":                             {fields: []string{"vm"}},
 	"key_loaded":                       {},
 	"key_loaded_keychain":              {},

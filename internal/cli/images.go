@@ -21,6 +21,7 @@ import (
 
 // newImagesCmd is devvm images, and devvm images rm.
 func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
+	var asJSON bool
 	c := &cobra.Command{
 		Use:   "images",
 		Short: "List the images and the shared tools",
@@ -46,22 +47,20 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			fail(u, err, msg.ImagesFailed)
 			target, err := toolTargets(u, b)
 			fail(u, err, msg.ImagesFailed)
-			if err := writeImages(u.Table(), imgs, ts, target); err != nil {
+			nix := nixCacheOf(u, b.Dirs)
+			if asJSON {
+				err = printJSON(u, imagesJSON(imgs, ts, target, nix))
+			} else {
+				err = writeImages(u.Table(), imgs, ts, target)
+			}
+			if err != nil {
 				return err
 			}
-			if n := len(staleImages(imgs)); n > 0 {
-				u.Note(msg.ImagesStaleNote(n))
-			}
-			if size := toolsSize(tools.Unused(ts)); size > 0 {
-				u.Note(msg.ImagesUnused(humanSize(size)))
-			}
-			u.Note(msg.ImagesTotal(humanSize(imagesSize(imgs) + toolsSize(ts))))
-			if n, size, err := proxy.NixCacheUsage(b.Dirs.NixCache()); err == nil && n > 0 {
-				u.Note(msg.ImagesNixCache(humanSize(nixCacheCap(u, b.Dirs)), humanSize(size)))
-			}
+			imagesNotes(u, imgs, ts, nix)
 			return nil
 		},
 	}
+	jsonFlag(c, &asJSON)
 	c.AddCommand(&cobra.Command{
 		Use:   "rm IMAGE|KEY...",
 		Short: "Delete images, by name or by key",
@@ -95,6 +94,102 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	})
 	return c
+}
+
+// nixCacheJSON is what the shared Nix cache holds: its files, the bytes
+// they take, and its cap in bytes.
+type nixCacheJSON struct {
+	Files int   `json:"files"`
+	Size  int64 `json:"size"`
+	Cap   int64 `json:"cap"`
+}
+
+// nixCacheOf reads what the shared Nix cache holds; none when it can't.
+func nixCacheOf(u *ui.UI, d paths.Dirs) nixCacheJSON {
+	n, size, err := proxy.NixCacheUsage(d.NixCache())
+	if err != nil {
+		return nixCacheJSON{Cap: nixCacheCap(u, d)}
+	}
+	return nixCacheJSON{Files: n, Size: size, Cap: nixCacheCap(u, d)}
+}
+
+// imagesNotes says, after devvm images' tables, how many images aren't
+// current, what the unused tools take, the total, and the Nix cache's
+// use of its cap.
+func imagesNotes(u *ui.UI, imgs []listedImage, ts []tools.Listed, nix nixCacheJSON) {
+	if n := len(staleImages(imgs)); n > 0 {
+		u.Note(msg.ImagesStaleNote(n))
+	}
+	if size := toolsSize(tools.Unused(ts)); size > 0 {
+		u.Note(msg.ImagesUnused(humanSize(size)))
+	}
+	u.Note(msg.ImagesTotal(humanSize(imagesSize(imgs) + toolsSize(ts))))
+	if nix.Files > 0 {
+		u.Note(msg.ImagesNixCache(humanSize(nix.Cap), humanSize(nix.Size)))
+	}
+}
+
+// imagesOutput is devvm images --json: the images on every backend, the
+// shared tool images, the bytes they take in all and of that what unused
+// tool images take, and the shared Nix cache. Sizes are in bytes.
+type imagesOutput struct {
+	Images      []imageJSON     `json:"images"`
+	Tools       []toolImageJSON `json:"tools"`
+	Total       int64           `json:"total"`
+	UnusedTools int64           `json:"unused_tools"`
+	NixCache    nixCacheJSON    `json:"nix_cache"`
+}
+
+// imageJSON is an image: "" for what an unfinished one lacks.
+type imageJSON struct {
+	Name    string `json:"name"`
+	From    string `json:"from"`
+	Digest  string `json:"digest"`
+	Key     string `json:"key"`
+	State   string `json:"state"`
+	Size    int64  `json:"size"`
+	Sized   bool   `json:"sized"`
+	Backend string `json:"backend"`
+}
+
+// toolImageJSON is a shared tool image: its backend, C library, size and
+// VMs only once it's built.
+type toolImageJSON struct {
+	Name    string `json:"name"`
+	Tool    string `json:"tool"`
+	Version string `json:"version"`
+	Built   bool   `json:"built"`
+	Backend string `json:"backend,omitempty"`
+	Libc    string `json:"libc,omitempty"`
+	Size    int64  `json:"size"`
+	VMs     int    `json:"vms"`
+	State   string `json:"state"`
+}
+
+func imagesJSON(imgs []listedImage, ts []tools.Listed, target func(tools.Listed) (be, libc string), nix nixCacheJSON) imagesOutput {
+	out := imagesOutput{
+		Images: make([]imageJSON, 0, len(imgs)), Tools: make([]toolImageJSON, 0, len(ts)),
+		Total: imagesSize(imgs) + toolsSize(ts), UnusedTools: toolsSize(tools.Unused(ts)), NixCache: nix,
+	}
+	for _, l := range imgs {
+		digest := ""
+		if l.SHA256 != "" {
+			digest = "sha256:" + l.SHA256
+		}
+		out.Images = append(out.Images, imageJSON{
+			Name: l.Name, From: l.Origin, Digest: digest, Key: l.Key, State: l.State,
+			Size: l.Size, Sized: l.Sized, Backend: l.Backend,
+		})
+	}
+	for _, t := range ts {
+		j := toolImageJSON{Name: t.Name, Tool: t.Tool, Version: t.Version, Built: t.Built, State: t.State}
+		if t.Built {
+			j.Size, j.VMs = t.Size, t.VMs
+			j.Backend, j.Libc = target(t)
+		}
+		out.Tools = append(out.Tools, j)
+	}
+	return out
 }
 
 // listedImage is an image, its backend's name and the images on it.

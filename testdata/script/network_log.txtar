@@ -14,6 +14,9 @@ exec devvm --network-policy --no-git-protect base
 exec devvm network log
 stdout '^==> log_empty vm=devvm-net-[0-9a-f]{14}$'
 ! stderr .
+exec devvm network log --json
+stdout '\A{\n  "version": 1,\n  "events": \[\]\n}\n\z'
+! stderr .
 
 # Allowed and blocked connections and requests, oldest first, the last 50
 # or the last N.
@@ -29,12 +32,22 @@ exec devvm network log --lines 0
 stderr '^devvm: flag_bad_value flag=--lines form=N value=x$'
 ! exec devvm network log -n -1
 stderr '^devvm: flag_bad_value flag=--lines form=N value=-1$'
+# --json: the events as the proxy logged them, without the VM's name;
+# never followed.
+exec devvm network log --json -n 3
+stdout '\A{\n  "version": 1,\n  "events": \[\n    {\n      "time": "2026-10-09T10:00:08Z",\n      "event": "tunnel",\n      "host": "fd00::1",\n      "port": 22,\n      "method": "CONNECT",\n      "rule": "\[fd00::1\]:22"\n    },\n'
+! stdout '"vm"'
+! exec devvm network log --json -f
+stderr '^devvm: flags_exclusive flag=--(json|follow) other=--(json|follow)$'
 
 # The blocks by host and port, by when last blocked, with the command
 # that allows each: only for a host name or address, and never for a
 # request refused whatever the allowlist says.
 exec devvm network log --blocked
 cmp stdout $WORK/blocked.txt
+exec devvm network log --blocked --json
+stdout '\A{\n  "version": 1,\n  "blocked": \[\n    {\n      "last": "2026-10-09T10:00:07Z",\n      "count": 1,\n      "host": "api.github.com",\n      "port": 443\n    },\n'
+stdout '^      "last": "2026-10-09T10:01:00Z",\n      "count": 2,\n      "host": "a.test",\n      "port": 443,\n      "allow": "a.test"\n'
 ! exec devvm network log --blocked -f
 stderr '^devvm: flags_exclusive flag=--blocked other=--follow$'
 

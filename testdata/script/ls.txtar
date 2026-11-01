@@ -53,6 +53,13 @@ stdout '^devvm-half-0123456789abcd +Stopped +- +- +- +lima +-\n'
 ! stdout devvm-tools-build
 # Sorted by name.
 stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net-'
+# --json: the same, the image and what its base started from apart, ""
+# for what a VM lacks, and nothing else on stdout.
+exec devvm ls --json
+stdout '^{\n  "version": 1,\n  "vms": \[\n'
+stdout '^      "name": "devvm-from-0123456789abcd",\n      "status": "Running",\n      "image": "base",\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from"\n'
+stdout '^      "name": "devvm-half-0123456789abcd",\n      "status": "Stopped",\n      "image": "",\n      "git": "",\n'
+! stdout '^NAME'
 
 # Lima can't list (not installed): fails, as a VM's state names it; with
 # none, the header alone.
@@ -63,7 +70,14 @@ stderr '^devvm: lima_missing$'
 rm $VMS
 exec devvm ls
 cmp stdout $WORK/header.txt
+exec devvm ls --json
+cmp stdout $WORK/none.json
 
+-- none.json --
+{
+  "version": 1,
+  "vms": []
+}
 -- header.txt --
 NAME  STATUS  IMAGE  GIT  NET  BACKEND  FOLDER
 -- clone.state --

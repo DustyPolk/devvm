@@ -123,6 +123,28 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 
 A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name, status and backend.
 
+### devvm ls --json
+
+`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. `docker_layer` is the runtime a `docker` VM made for the docker layer runs under, and it's left out for other VMs. A value the VM's state doesn't have is `""`.
+
+```json
+{
+  "version": 1,
+  "vms": [
+    {
+      "name": "devvm-website-71a99b1076d92c",
+      "status": "Running",
+      "image": "base",
+      "from": "node:24",
+      "git": "on",
+      "net": "on",
+      "backend": "lima",
+      "folder": "/Users/you/code/website"
+    }
+  ]
+}
+```
+
 ## Working on a clone
 
 | | |
@@ -164,7 +186,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm images` | list the images on every backend, then the shared tool images ([details](../using/images.md#listing-images)) |
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](../using/images.md#deleting-images)) |
 | `devvm gc` | delete the stale and unfinished images and the tool images no VM uses, after listing them, and never a VM ([details](../using/images.md#cleaning-up)) |
-| `devvm space [--json]` | show what devvm keeps on this machine, the disk each kind takes, and what frees it ([details](../using/space.md#devvm-space)) |
+| `devvm space` | show what devvm keeps on this machine, the disk each kind takes, and what frees it ([details](../using/space.md#devvm-space)) |
 | `devvm retention [KEY=VALUE...]` | show the retention settings, which say what devvm deletes on its own, or change them, with `KEY=off` turning one off ([details](../using/settings.md#retention)) |
 
 With `--backend NAME`, these commands build or delete on that backend instead of the one new VMs get. With `--from IMAGE`, they work on a base made from that container image ([details](../using/from.md)).
@@ -193,3 +215,27 @@ The completion script completes commands, flags and image names, including names
 | bash | `source <(devvm completion bash)` | `~/.bashrc`, with the bash-completion package installed |
 | zsh | `source <(devvm completion zsh)` | `~/.zshrc`, after `compinit` |
 | fish | `devvm completion fish \| source` | `~/.config/fish/config.fish` |
+
+## Output for scripts
+
+Every command that shows or lists something takes `--json`, which prints what the command shows as one JSON object instead of a table or lines, so a script can read it. The object's first field is `"version": 1`, and the page for each command lists its other fields with an example. A shape only ever gains fields. devvm adds new fields to version 1, and any other change to a shape, such as a field renamed, removed or given another type, comes with a new version.
+
+With `--json`, standard output gets only the JSON. devvm's messages, such as warnings and notes, still go to standard error, as they do without it, and the JSON is never colored. A list with nothing in it is `[]`, never `null`. Sizes are in bytes, unless a field's name gives the unit, such as `memory_gib`. A field that doesn't apply, such as a VM's `from` when its base is Ubuntu's cloud image, is left out.
+
+A command that shows a setting when you run it bare and changes the setting when you give it a value, such as `devvm network` or `devvm size`, only shows with `--json`. devvm refuses a value given with `--json`, such as `devvm network --json off`, and changes nothing.
+
+| Command | Its JSON |
+| --- | --- |
+| `devvm ls --json` | [the project VMs](#devvm-ls---json) |
+| `devvm images --json` | [the images and the shared tool images](../using/images.md#devvm-images---json) |
+| `devvm tools --json` | [this folder's VM's shared tools](../using/toolchains.md#devvm-tools---json) |
+| `devvm size --json`, `devvm ports --json` | [this folder's VM's size and ports](../using/ports-size.md#as-json), or with `-g`, new VMs' |
+| `devvm network --json` | [this folder's VM's network policy and allowlist](../safety/network.md#devvm-network---json), or with `-g`, new VMs' choice |
+| `devvm network log --json` | [this folder's VM's network log, or with `--blocked` its blocks](../safety/network.md#devvm-network-log---json) |
+| `devvm secret --json` | [the secrets, whether each is saved and the VMs using it](../safety/network.md#devvm-secret---json) |
+| `devvm ssh-agent --json` | [this folder's VM's SSH agent forwarding and devvm's own agent's keys](../using/ssh.md#devvm-ssh-agent---json) |
+| `devvm git-protect --json` | [this folder's VM's `.git` protection](../safety/git-protection.md#devvm-git-protect---json) |
+| `devvm history --json` | [the saved exports of agents' history](../using/coding-agents.md#devvm-history---json) |
+| `devvm space --json` | [what devvm keeps on this machine](../using/space.md#devvm-space---json) |
+| `devvm retention --json` | [the retention settings](../using/settings.md#devvm-retention---json) |
+| `devvm doctor --json` | [what devvm needs on this machine and what's missing](../internals/install.md#devvm-doctor---json), and it prints nothing else |

@@ -344,6 +344,14 @@ func TestKeys(t *testing.T) {
 	if b.String() != want {
 		t.Errorf("keys:\n%s\nwant:\n%s", b.String(), want)
 	}
+	listed, err := a.KeyList(t.Context())
+	wantList := []ListedKey{
+		{File: k1, Fingerprint: "SHA256:fp-a", Lifetime: "12h", Loaded: true},
+		{File: k2, Fingerprint: "SHA256:fp-b", Lifetime: "1h", Loaded: true},
+	}
+	if err != nil || !slices.Equal(listed, wantList) {
+		t.Errorf("KeyList = %+v, %v; want %+v", listed, names(err), wantList)
+	}
 }
 
 // With no key added, keys writes nothing and starts no agent.
@@ -355,6 +363,9 @@ func TestKeysNone(t *testing.T) {
 	}
 	if b.Len() != 0 || len(f.calls) != 0 || f.up || len(out.lines) != 0 {
 		t.Errorf("wrote %q, calls %q, said %q", b.String(), f.calls, out.lines)
+	}
+	if l, err := a.KeyList(t.Context()); err != nil || l != nil || len(f.calls) != 0 {
+		t.Errorf("KeyList = %+v, %v, calls %q", l, err, f.calls)
 	}
 }
 

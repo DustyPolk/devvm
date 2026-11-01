@@ -86,7 +86,7 @@ func TestList(t *testing.T) {
 		{Name: other, Status: "Running", Image: "go", Git: "on", Net: "off", Backend: "other", Folder: "/p/api"},
 		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl"},
 		{Name: half, Status: "Stopped", Backend: "lima"},
-		{Name: img, Status: "Stopped", Image: "image_from from=node:24 image=base", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo"},
+		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo"},
 		{Name: web, Status: "Running", Image: "node+claude", Git: "on", Net: "unenforced", Backend: "lima", Folder: "/p/web"},
 	}
 	if !reflect.DeepEqual(got, want) {

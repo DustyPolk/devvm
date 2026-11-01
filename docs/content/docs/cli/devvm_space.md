@@ -17,7 +17,7 @@ devvm space [flags]
 
 ```text
   -h, --help   help for space
-      --json   print it as JSON, for scripts
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

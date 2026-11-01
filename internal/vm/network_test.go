@@ -24,11 +24,9 @@ func TestNetwork(t *testing.T) {
 	n, l := Net{e}, Launch{e}
 	shown := func(want string) {
 		t.Helper()
-		var b strings.Builder
-		err := n.Network(t.Context(), &b)
-		line, rules, _ := strings.Cut(b.String(), "\n")
-		if err != nil || line != want || !strings.HasPrefix(rules, "# ") || !strings.Contains(rules, "/layers/base.policy\n  ") {
-			t.Errorf("Network = %q, %v; want %s", b.String(), names(err), want)
+		s, err := n.Network(t.Context())
+		if err != nil || s.Policy != want || len(s.Rules) == 0 || !strings.HasSuffix(s.Rules[0].Path, "/layers/base.policy") || len(s.Rules[0].Rules) == 0 {
+			t.Errorf("Network = %+v, %v; want %s", s, names(err), want)
 		}
 	}
 	shown("off")
