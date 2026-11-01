@@ -28,6 +28,7 @@ All prose in the repo:
 - The command help that generates those CLI pages: `Short` and `Long` in `internal/cli/*.go`. Run `mise run cli-docs` after editing them.
 - `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `assets/oci/README.md` and `internal/proxy/README.md`.
 - The messages in `locales/en.toml`, which also follow the [Messages](#messages) rules below.
+- The cli skill, `.agents/skills/cli/`.
 
 These follow their own rules and are out of scope:
 

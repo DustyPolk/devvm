@@ -33,6 +33,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `docs/` | the docs site (Hugo + Hextra); `content/docs/cli/` is generated, never edit it |
 | `mise.toml`, `.golangci.yml`, `.vale*`, `.markdownlint-cli2.yaml`, `.github/` | tools, tasks, linters, CI and Pages |
 | `.agents/skills/security-audit/` | the security-audit skill, for backend reviews |
+| `.agents/skills/cli/` | the cli skill: devvm's command line rules, the checklist for adding a command, the tests behind each rule, `judgment.md` for the rest |
 | `.agents/skills/docs-voice/` | the docs-voice skill: the voice of the prose and messages, terms, tropes, `scan.sh` and `facts.sh` |
 
 Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
@@ -53,6 +54,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `assets/shared-tools/build.sh`, or off.
 - **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`assets/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.
 - **Docs:** an easy-to-follow guide in full, joined sentences, every fact kept; write and edit prose with the docs-voice skill (Vale's `devvm.AIWords` fails on chatbot vocabulary). Every behavior change updates its page in `docs/content/docs/` in the same task. The README stays high level.
+- **Adding or changing a command** follows the cli skill (`.agents/skills/cli/`): its checklist, then its review.
 - **Adding or changing a shared tool** updates its page: `using/toolchains.md` for a toolchain, `using/coding-agents.md`'s Supported agents for an agent.
 - **Docs by reader:** user pages (`getting-started/`, `using/`, `safety/`, `backends/`) say what devvm does and what you type, without repo paths, Go identifiers or message names; How it works (`internals/`) explains mechanisms; Contributing (`contributing/`) has repo paths and Go identifiers.
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.

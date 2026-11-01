@@ -51,9 +51,9 @@ run = [
 description = "Lint the docs"
 run = [
   # Every Markdown file but the vendored security-audit skill's.
-  "markdownlint-cli2 'docs/content/**/*.md' '*.md' 'assets/**/*.md' 'internal/**/*.md' '.agents/skills/docs-voice/*.md'",
+  "markdownlint-cli2 'docs/content/**/*.md' '*.md' 'assets/**/*.md' 'internal/**/*.md' '.agents/skills/docs-voice/*.md' '.agents/skills/cli/*.md'",
   # .vale.ini says which rules each file gets, and which files get none.
-  "vale docs/content *.md assets/oci/README.md internal/proxy/README.md .agents/skills/docs-voice",
+  "vale docs/content *.md assets/oci/README.md internal/proxy/README.md .agents/skills/docs-voice .agents/skills/cli",
   "lychee --offline --no-progress --include-fragments 'docs/content/**/*.md'",
   # Message links: every doc link in internal/msg/docs.go is a message and
   # a page and heading in docs/content/docs.

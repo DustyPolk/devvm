@@ -103,6 +103,12 @@ Everything it holds the code to is in `devvm()` in `internal/structure/structure
 
 `TestRulesFail` breaks each rule, and each layer, on small sources and checks the failure names it.
 
+## CLI conventions
+
+devvm's commands follow one set of rules, so that a user who knows a few of them can guess the rest. A bare verb acts on this folder's VM, anything else goes under its noun, and a bare noun shows or lists. A setting shows bare, changes with a value and takes `-g` for what new VMs get. The [cli skill](https://github.com/w3cj/devvm/blob/main/.agents/skills/cli/SKILL.md) holds every rule, with a checklist for adding a command and a review for changing one, and its [judgment.md](https://github.com/w3cj/devvm/blob/main/.agents/skills/cli/judgment.md) explains, with examples, the rules that only a reviewer can check. The reasoning behind most of them is in the [Command Line Interface Guidelines](https://clig.dev/), and Cobra's own mechanics are in [Cobra's docs](https://cobra.dev/docs/).
+
+The tests check every rule that a machine can, as [The CLI rule tests](#the-cli-rule-tests) lists, and `mise run test` runs them. A reviewer checks the rest: where a command goes in the tree, whether it's rm or unX, which commands are settings, whether each argument is the thing acted on, whether a command that deletes asks first and deletes more only with a flag of its own, and the wording of its help and its usage errors. After changing a command's `Use`, `Short`, `Long`, `Example` or flags, run `mise run cli-docs` and commit the [CLI reference](#the-cli-reference) it writes.
+
 ## Command arguments
 
 Each command checks its arguments and flags before it does anything else, so a usage error never looks for a VM, applies the retention settings or changes a file. `internal/cli/args.go` holds the checks:
