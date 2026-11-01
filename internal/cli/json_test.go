@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -56,13 +58,14 @@ func shape(t *testing.T, data []byte) []string {
 
 // Each command's --json shape: its field names and types, from a sample
 // with every field set. A field is only ever added: a change to one that
-// fails here is a new jsonVersion.
+// fails here is a new jsonVersion. Every command that takes --json has
+// one.
 func TestJSONShapes(t *testing.T) {
 	yes := true
 	used := 1.5
 	fix := "brew install lima"
 	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	for _, tc := range []struct {
+	cases := []struct {
 		command string
 		v       any
 		want    []string
@@ -162,7 +165,11 @@ func TestJSONShapes(t *testing.T) {
 				"problems[].message: string", "warnings[]: string",
 			},
 		},
-	} {
+	}
+	shaped := map[string]bool{}
+	for _, tc := range cases {
+		path, _, _ := strings.Cut(tc.command, " -")
+		shaped["devvm "+path] = true
 		t.Run(tc.command, func(t *testing.T) {
 			u, out, _ := testUI()
 			if err := printJSON(u, tc.v); err != nil {
@@ -174,6 +181,73 @@ func TestJSONShapes(t *testing.T) {
 				t.Errorf("devvm %s --json:\n%s\nwant:\n%s", tc.command, strings.Join(got, "\n"), strings.Join(want, "\n"))
 			}
 		})
+	}
+	u, _, _ := testUI()
+	eachCommand(NewRoot(u), func(c *cobra.Command) {
+		if c.LocalFlags().Lookup("json") != nil && !shaped[c.CommandPath()] {
+			t.Errorf("%s --json has no shape here", c.CommandPath())
+		}
+	})
+}
+
+// Every command that shows or lists something takes --json: each one
+// users see takes it or is in withoutJSON.
+func TestShowCommandsTakeJSON(t *testing.T) {
+	// the commands users see that take no --json, each with why: what it
+	// does shows or lists nothing
+	withoutJSON := map[string]string{ //nolint:gosec // G101 takes devvm secret's commands for credentials
+		"devvm":                "it opens a shell",
+		"devvm adopt":          "it changes which folder a VM is for",
+		"devvm build":          "it builds an image",
+		"devvm rebuild":        "it builds an image",
+		"devvm code":           "it opens VS Code",
+		"devvm desktop":        "it opens a VNC viewer, or shows the address and password to type into one",
+		"devvm host":           "it shows one host name, for ssh as it is",
+		"devvm completion":     "it prints a shell script",
+		"devvm limactl":        "it runs limactl, whose output is limactl's",
+		"devvm gc":             "it deletes",
+		"devvm rm":             "it deletes",
+		"devvm images rm":      "it deletes",
+		"devvm secret rm":      "it deletes",
+		"devvm network rm":     "it changes a setting",
+		"devvm ports rm":       "it changes a setting",
+		"devvm ssh-agent rm":   "it changes a setting",
+		"devvm tools rm":       "it changes a setting",
+		"devvm network allow":  "it changes a setting",
+		"devvm network deny":   "it changes a setting",
+		"devvm ports add":      "it changes a setting",
+		"devvm ssh-agent add":  "it changes a setting",
+		"devvm tools add":      "it changes a setting",
+		"devvm tools update":   "it changes a setting",
+		"devvm secret use":     "it changes a setting",
+		"devvm secret unuse":   "it changes a setting",
+		"devvm secret set":     "it saves a secret",
+		"devvm history export": "it writes an export",
+		"devvm layer":          "it prints its help",
+		"devvm layer new":      "it writes a file",
+		"devvm restart":        "it restarts the VM",
+		"devvm stop":           "it stops the VM",
+		"devvm setup":          "it asks, then changes settings",
+		"devvm help":           "it prints help",
+	}
+	u, _, _ := testUI()
+	root := NewRoot(u)
+	root.InitDefaultHelpCmd()
+	eachCommand(root, func(c *cobra.Command) {
+		path := c.CommandPath()
+		_, without := withoutJSON[path]
+		switch takes := c.LocalFlags().Lookup("json") != nil; {
+		case c.Hidden:
+		case takes && without:
+			t.Errorf("%s takes --json: take it out of withoutJSON", path)
+		case !takes && !without:
+			t.Errorf("%s takes no --json: give it one, or add it to withoutJSON with why", path)
+		}
+	})
+	for path := range withoutJSON {
+		if c, rest, err := root.Find(strings.Fields(path)[1:]); err != nil || len(rest) > 0 || c.CommandPath() != path {
+			t.Errorf("withoutJSON has %s, which isn't a command", path)
+		}
 	}
 }
 

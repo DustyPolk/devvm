@@ -1,13 +1,57 @@
 package cli
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
 )
+
+// sentenceEnd ends a sentence: a full stop, question or exclamation mark
+// before a space or the end, as in prose, so devvm.dev or 1.5 isn't one.
+var sentenceEnd = regexp.MustCompile(`[.?!](\s|$)`)
+
+// Every command users see has help of the same shape: a Short in sentence
+// case without a full stop, a Long of one to three sentences, Examples and
+// its docs page, and each of the root's is in a group.
+func TestEveryCommandsHelp(t *testing.T) {
+	t.Parallel()
+	// devvm help is every Cobra command line's help command: Cobra lists
+	// it apart, in Additional Commands, and the CLI reference leaves it
+	// out, so it has no examples, docs page or group.
+	const excepted = "devvm help"
+	u, _, _ := testUI()
+	root := NewRoot(u)
+	root.InitDefaultHelpCmd()
+	eachCommand(root, func(c *cobra.Command) {
+		path := c.CommandPath()
+		if c.Hidden {
+			return
+		}
+		if s := c.Short; s == "" || !unicode.IsUpper([]rune(s)[0]) || strings.HasSuffix(s, ".") {
+			t.Errorf("%s: Short %q, want an action in sentence case without a full stop", path, s)
+		}
+		if n := len(sentenceEnd.FindAllString(c.Long, -1)); n < 1 || n > 3 || !strings.HasSuffix(c.Long, ".") {
+			t.Errorf("%s: Long has %d sentences, want one to three, the last ending with a full stop: %q", path, n, c.Long)
+		}
+		if path == excepted {
+			return
+		}
+		if c.Example == "" {
+			t.Errorf("%s: no Example: add one with examples()", path)
+		}
+		if c.Annotations["docs"] == "" {
+			t.Errorf("%s: no docs page: add its path to commandDocs in internal/msg/docs.go", path)
+		}
+		if c.Parent() == root && c.GroupID == "" {
+			t.Errorf("%s: in no group: add it to commandGroups", path)
+		}
+	})
+}
 
 func TestExamples(t *testing.T) {
 	got := examples("devvm", "open the VM", "devvm ls --json", "list them")

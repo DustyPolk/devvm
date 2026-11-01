@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -71,9 +73,11 @@ func commandPaths(root *cobra.Command) [][]string {
 }
 
 // tries are the command lines that must be usage errors for the command
-// at path: an unknown flag; an argument when its help shows none; none
-// when it shows one it needs; three when it shows one at most.
-func tries(path []string, use string) [][]string {
+// c at path: an unknown flag; an argument when its help shows none; none
+// when it shows one it needs; three when it shows one at most; any flag
+// that takes a value given a blank one, as a special value is a word.
+func tries(path []string, c *cobra.Command) [][]string {
+	use := argsOf(c)
 	with := func(extra ...string) []string { return append(slices.Clone(path), extra...) }
 	out := [][]string{with("--no-such-flag")}
 	if use == "" {
@@ -85,13 +89,18 @@ func tries(path []string, use string) [][]string {
 	if use != "" && !strings.Contains(use, "...") && !strings.Contains(use, " ") {
 		out = append(out, with("a", "b", "c"))
 	}
+	c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Value.Type() == "string" {
+			out = append(out, with("--"+f.Name+"="))
+		}
+	})
 	return out
 }
 
 // Every command, run with an unknown flag, without an argument it needs,
-// or with too many, fails with a devvm message, exit 2, then the line
-// naming the command's own --help; it never runs, and the parser's own
-// English never shows.
+// with too many, or with a flag's value blank, fails with a devvm
+// message, exit 2, then the line naming the command's own --help; it
+// never runs, and the parser's own English never shows.
 func TestUsageErrorsEveryCommand(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	paths := commandPaths(stubbed(nil).root)
@@ -103,7 +112,7 @@ func TestUsageErrorsEveryCommand(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, args := range tries(path, argsOf(c)) {
+		for _, args := range tries(path, c) {
 			s := stubbed(nil)
 			code := s.run(t, args...)
 			got := s.errOut.String()
@@ -115,6 +124,61 @@ func TestUsageErrorsEveryCommand(t *testing.T) {
 			want := "usage_help command=" + c.CommandPath()
 			if len(lines) < 2 || lines[len(lines)-1] != want || strings.Contains(got, "usage_error") {
 				t.Errorf("devvm %q printed %q, want a devvm message, then %q", args, got, want)
+			}
+		}
+	}
+}
+
+// sampleArgs are command lines the arguments in use stand for: none when
+// all are optional, and each given, twice for one that repeats.
+func sampleArgs(t *testing.T, use string) [][]string {
+	t.Helper()
+	// a value each argument a Use names takes
+	argSamples := map[string]string{
+		"IMAGE": "node", "KEY": "0123456789ab", "TOOL": "node", "NAME": "github", "RULE": "example.com",
+		"LIST": "5173", "KEY_FILE": "/k", "FILE": "/f.tar.gz", "KEY=VALUE": state.RetainRunLogs + "=10", "SHELL": "bash",
+	}
+	var all []string
+	optional := true
+	for word := range strings.FieldsSeq(use) {
+		optional = optional && strings.HasPrefix(word, "[")
+		many := strings.HasSuffix(strings.TrimSuffix(word, "]"), "...")
+		name := strings.Trim(word, "[].")
+		name, _, _ = strings.Cut(name, "|")
+		v := name
+		if strings.ToUpper(name) == name {
+			if v = argSamples[name]; v == "" {
+				t.Fatalf("argSamples has no %s", name)
+			}
+		}
+		all = append(all, v)
+		if many {
+			all = append(all, v)
+		}
+	}
+	out := [][]string{all}
+	if optional && len(all) > 0 {
+		out = append(out, nil)
+	}
+	return out
+}
+
+// Every command takes the arguments its Use shows: each, a repeated one
+// twice, and none when they're optional.
+func TestUseMatchesArgs(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for _, path := range commandPaths(stubbed(nil).root) {
+		c, _, err := stubbed(nil).root.Find(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range sampleArgs(t, argsOf(c)) {
+			s := stubbed(nil)
+			line := slices.Concat(path, args)
+			if code := s.run(t, line...); code != 0 || !slices.Equal(s.ran, []string{c.CommandPath()}) {
+				t.Errorf("devvm %q: exit %d, ran %q, stderr %q; want it run, as its Use is %q", line, code, s.ran, s.errOut, c.Use)
 			}
 		}
 	}

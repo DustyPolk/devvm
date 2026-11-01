@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"errors"
+	"maps"
 	"slices"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // eachCommand calls do on c and every command under it.
@@ -16,18 +20,105 @@ func eachCommand(c *cobra.Command, do func(*cobra.Command)) {
 	}
 }
 
-// Flags are local unless truly global: no command has a persistent flag
-// but --help, --no-input and -v/--verbose, so no subcommand takes the
-// root's flags for a new VM.
+// Flags are local unless truly global: every command takes -h/--help,
+// --no-input and -v/--verbose, and no command has another persistent
+// flag, so no subcommand takes the root's flags for a new VM.
 func TestPersistentFlags(t *testing.T) {
-	persistentFlags := []string{"help", "no-input", "verbose"}
+	persistentFlags := map[string]string{"help": "h", "no-input": "", "verbose": "v"}
 	u, _, _ := testUI()
 	root := NewRoot(u)
 	eachCommand(root, func(c *cobra.Command) {
 		c.InitDefaultHelpFlag()
 		c.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-			if !slices.Contains(persistentFlags, f.Name) {
+			if _, ok := persistentFlags[f.Name]; !ok {
 				t.Errorf("%s: --%s is persistent", c.CommandPath(), f.Name)
+			}
+		})
+		for name, short := range persistentFlags {
+			f := c.LocalFlags().Lookup(name)
+			if f == nil {
+				f = c.InheritedFlags().Lookup(name)
+			}
+			if f == nil || f.Shorthand != short {
+				t.Errorf("%s: --%s is %+v, want one with shorthand %q", c.CommandPath(), name, f, short)
+			}
+		}
+	})
+}
+
+// Every shorthand is one of shorthands, for its flag; no command takes
+// --yes, as every question has a flag of its own that answers it; and a
+// flag has one help text wherever it appears, but for manyUses and
+// Cobra's own --help.
+func TestFlagNames(t *testing.T) {
+	// the only one-letter flags, each for one flag name wherever it
+	// appears: few enough to learn
+	shorthands := map[string]string{"h": "help", "v": "verbose", "f": "force", "g": "global", "n": "lines"}
+	// the flag names whose help differs between commands, with why it's
+	// one meaning still
+	manyUses := map[string]string{
+		"backend": "the backend a command uses, new VMs' with devvm setup, or the one alone a command over every backend acts on",
+		"cpus":    "a new VM's says where its default comes from, and devvm size's changes the VM's",
+		"memory":  "a new VM's says where its default comes from, and devvm size's changes the VM's",
+		"disk":    "a new VM's is at least the image's, and devvm size's at least what the VM has",
+		"global":  "each setting's -g says which setting new VMs get",
+		"json":    "devvm doctor's also says it succeeds whatever is missing",
+	}
+	u, _, _ := testUI()
+	root := NewRoot(u)
+	usages := map[string]map[string]bool{}
+	eachCommand(root, func(c *cobra.Command) {
+		if c.Hidden {
+			return
+		}
+		c.InitDefaultHelpFlag()
+		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Shorthand != "" && shorthands[f.Shorthand] != f.Name {
+				t.Errorf("%s: -%s is --%s: give it no shorthand, or add it to shorthands", c.CommandPath(), f.Shorthand, f.Name)
+			}
+			if f.Name == "yes" {
+				t.Errorf("%s takes --yes: give the question it answers a flag of its own", c.CommandPath())
+			}
+			if f.Name == "help" {
+				return
+			}
+			if usages[f.Name] == nil {
+				usages[f.Name] = map[string]bool{}
+			}
+			usages[f.Name][f.Usage] = true
+		})
+	})
+	for name, texts := range usages {
+		_, many := manyUses[name]
+		switch {
+		case len(texts) > 1 && !many:
+			t.Errorf("--%s has %d help texts, want one: %q", name, len(texts), slices.Sorted(maps.Keys(texts)))
+		case len(texts) == 1 && many:
+			t.Errorf("--%s has one help text: take it out of manyUses", name)
+		}
+	}
+}
+
+// A flag whose value is a DURATION takes durations' one grammar,
+// state.ParseDuration's, checked before the command runs; none is Go's
+// time.Duration, whose grammar differs.
+func TestDurationFlags(t *testing.T) {
+	u, _, _ := testUI()
+	root := NewRoot(u)
+	eachCommand(root, func(c *cobra.Command) {
+		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Value.Type() == "duration" {
+				t.Errorf("%s: --%s is a time.Duration", c.CommandPath(), f.Name)
+			}
+			if flagForm(f) != "DURATION" {
+				return
+			}
+			if err := checkFlagValue(f.Name, "30d"); err != nil {
+				t.Errorf("--%s 30d: %v", f.Name, err)
+			}
+			err := checkFlagValue(f.Name, "30")
+			if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != "bad_duration" {
+				t.Errorf("--%s 30: %v, want bad_duration: check it with state.ParseDuration in checkFlagValue", f.Name, err)
 			}
 		})
 	})

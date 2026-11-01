@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -31,6 +32,50 @@ func TestEveryCommandReserved(t *testing.T) {
 			t.Errorf("command %s isn't in image.Reserved", n)
 		}
 	}
+}
+
+var (
+	// commandName is a command's name: lower-case words joined by -.
+	commandName = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
+	// useArg is an argument as a Use shows it: a placeholder in capitals
+	// or a word to type, alternatives joined by |, [optional], ...
+	// repeated.
+	useArg = regexp.MustCompile(`^\[?(?:[a-z][a-z-]*|[A-Z][A-Z_]*(?:=[A-Z][A-Z_]*)?)(?:\|(?:[a-z][a-z-]*|[A-Z][A-Z_]*))*(?:\.\.\.)?\]?$`)
+)
+
+// The commands users see follow the tree's naming rules: lower-case
+// names, no aliases; a noun shows or lists bare, so no command is named
+// for showing or listing but devvm ls, the one list of VMs; rm deletes;
+// an unX undoes its sibling X; and a Use's arguments are placeholders or
+// words, apart, never joined with + or a comma.
+func TestCommandNames(t *testing.T) {
+	t.Parallel()
+	// names for what a bare noun or rm does
+	banned := []string{"ls", "list", "show", "get", "delete", "remove"}
+	u, _, _ := testUI()
+	root := NewRoot(u)
+	eachCommand(root, func(c *cobra.Command) {
+		if c.Hidden || c == root {
+			return
+		}
+		name, path := c.Name(), c.CommandPath()
+		if !commandName.MatchString(name) || len(c.Aliases) > 0 {
+			t.Errorf("%s: want a lower-case name without aliases, %q", path, c.Aliases)
+		}
+		if path != "devvm ls" && slices.Contains(banned, name) {
+			t.Errorf("%s: a noun shows or lists bare, and rm deletes", path)
+		}
+		if undone, ok := strings.CutPrefix(name, "un"); ok {
+			if sib, _, err := c.Parent().Find([]string{undone}); err != nil || sib.Name() != undone {
+				t.Errorf("%s undoes %s, which isn't beside it", path, undone)
+			}
+		}
+		for word := range strings.FieldsSeq(argsOf(c)) {
+			if !useArg.MatchString(word) {
+				t.Errorf("%s: Use's argument %q, want a PLACEHOLDER or word, [optional], ... repeated", path, word)
+			}
+		}
+	})
 }
 
 // Base, the shared tools and the built-in layers are images, so none is
