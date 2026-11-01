@@ -68,6 +68,58 @@ func TestNew(t *testing.T) {
 	}
 }
 
+// A link's TARGET: a VM's name, a folder name (as New makes its part of
+// the VM's name, a long one cut), or a path, which matches the VM made for
+// it whatever its backend left of the folder's name.
+func TestTargets(t *testing.T) {
+	long := "/w/a-very-long-folder-name-for-a-project"
+	longVM, _ := New(long, 0)
+	cut, _ := New(long, 30) // a backend with shorter names
+	web, _ := New("/a/web", 0)
+	web2, _ := New("/b/web", 0)
+	api, _ := New("/a/My_API", 0)
+	all := []string{web.Name, web2.Name, api.Name, longVM.Name, "devvm-img-0123456789ab", "devvm-tools-build"}
+	for _, tc := range []struct {
+		target string
+		want   []string
+	}{
+		{"web", []string{web.Name, web2.Name}},
+		{web2.Name, []string{web2.Name}},
+		{"devvm-web-00000000000000", nil},
+		{"My_API", []string{api.Name}},
+		{"my-api", []string{api.Name}},
+		{"a-very-long-folder-name-for-a-project", []string{longVM.Name}},
+		{"a-very-long-folder-n", []string{longVM.Name}},
+		{"img", nil},
+		{"tools", nil},
+		{"nope", nil},
+	} {
+		if IsPath(tc.target) {
+			t.Errorf("IsPath(%q) = true", tc.target)
+		}
+		if got := Targets(tc.target, all); !slices.Equal(got, tc.want) {
+			t.Errorf("Targets(%q) = %q, want %q", tc.target, got, tc.want)
+		}
+	}
+	for _, p := range []string{"./web", "../web", "/a/web", "a/b", ".hidden"} {
+		if !IsPath(p) {
+			t.Errorf("IsPath(%q) = false", p)
+		}
+	}
+	if got := ForDir("/a/web", all); !slices.Equal(got, []string{web.Name}) {
+		t.Errorf("ForDir(/a/web) = %q", got)
+	}
+	if got := ForDir(long, []string{cut.Name, web.Name}); !slices.Equal(got, []string{cut.Name}) {
+		t.Errorf("ForDir(%s) = %q, want the VM with its name cut, %s", long, got, cut.Name)
+	}
+	if got := ForDir("/c/web", all); got != nil {
+		t.Errorf("ForDir(/c/web) = %q, want none", got)
+	}
+	if got := Matching("web", append(all, "devvm-web-build")); !slices.Equal(got, []string{web.Name, web2.Name}) {
+		t.Errorf("Matching(web) = %q", got)
+	}
+}
+
 // A long folder name is cut to fit the backend's names; names with no
 // room for four characters of it are refused.
 func TestNewFitsNameMax(t *testing.T) {

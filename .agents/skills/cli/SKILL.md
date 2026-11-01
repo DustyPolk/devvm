@@ -13,13 +13,13 @@ The reasoning behind most rules is in the [Command Line Interface Guidelines](ht
 
 ## The tree
 
-devvm has 27 commands at the top, plus help, and links between VMs adds link and group. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
+devvm has 28 commands at the top, plus help, and links between VMs adds group. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
 
 | Group | Commands |
 | --- | --- |
 | Your VM | devvm [IMAGE], restart, stop, rm, adopt, ls, code, desktop, host, history, history export [FILE] |
 | Change your VM | tools, tools add\|rm TOOL..., tools update; size, with --cpus, --memory and --disk; ports [all\|none\|LIST], ports add\|rm LIST; network [on\|off], network allow\|deny\|rm RULE..., network log; ssh-agent [on\|devvm\|off], ssh-agent add\|rm KEY_FILE; git-protect [on\|strict\|off]; secret, secret set\|rm\|use\|unuse NAME |
-| Links between VMs | link and group, which links between VMs adds, so the group shows once they exist |
+| Links between VMs | link, link add\|rm TARGET PORT, with --as NAME on add; link publish [PORTS], link unpublish PORTS; group, which links between VMs adds |
 | Images | images, images rm IMAGE\|KEY..., build IMAGE, rebuild IMAGE, layer new NAME |
 | Disk space | space, gc, retention [KEY=VALUE...] |
 | This machine | setup, doctor, completion SHELL, limactl [ARGS...] |

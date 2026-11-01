@@ -65,6 +65,7 @@ devvm [IMAGE] [flags]
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm layer](devvm_layer.md): Make image layers of your own
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
+- [devvm link](devvm_link.md): List this folder's VM's links to your other VMs
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards

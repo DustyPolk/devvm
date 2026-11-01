@@ -1,0 +1,545 @@
+package vm
+
+import (
+	"cmp"
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"net/netip"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// Keys of a VM's state for links between VMs.
+const (
+	// KeyPublish is the ports and ranges the VM offers to links from the
+	// user's other VMs (ParsePorts, never all); unset for none.
+	KeyPublish = "publish"
+	// KeyLinks is the VM's links, as a client: formatLinks's entries.
+	KeyLinks = "links"
+)
+
+// LinkDomain follows each link's name: the client reaches it as NAME and
+// NAME.devvm.internal.
+const LinkDomain = ".devvm.internal"
+
+// linkNet is the network each client's link addresses are in,
+// 127.77.0.0/16, as its first two bytes.
+const linkNetA, linkNetB = 127, 77
+
+// Link is one of a client VM's links: the client reaches the target's
+// Port at Name (and Name+LinkDomain), on Addr, the address it has for that
+// target.
+type Link struct {
+	Name     string     // one DNS label (CheckLinkName)
+	Port     int        // the target's port, which the client listens on too
+	Target   string     // the target VM's name
+	TargetID string     // the target's state.KeyID when the link was made
+	Addr     netip.Addr // in 127.77.0.0/16, one per target in this client
+}
+
+// linkName is a link's name: one DNS label, in lowercase.
+var linkName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// CheckLinkName refuses a name that isn't one DNS label of lowercase
+// letters, digits and dashes, or is digits alone, which resolvers can
+// read as an address.
+func CheckLinkName(name string) error {
+	if !linkName.MatchString(name) || strings.Trim(name, "0123456789") == "" {
+		return msg.LinkNameInvalid(strconv.Quote(name))
+	}
+	return nil
+}
+
+// ParseLinkPort checks a link's PORT: one port, 1 to 65535.
+func ParseLinkPort(v string) (int, error) {
+	p, err := strconv.Atoi(v)
+	if err != nil || p < 1 || p > 65535 || strconv.Itoa(p) != v {
+		return 0, msg.LinkPortInvalid(strconv.Quote(v))
+	}
+	return p, nil
+}
+
+// ParsePublish checks the ports devvm link publish and unpublish take:
+// ports and ranges, never all or none. It returns them as ParsePorts does.
+func ParsePublish(v string) (string, error) {
+	l, err := ParsePorts(v)
+	if err != nil || l == PortsAll || l == PortsNone {
+		return "", msg.LinkPortsInvalid(strconv.Quote(v))
+	}
+	return l, nil
+}
+
+// IsLinkAddr reports whether a is one of the links' addresses, in
+// 127.77.0.0/16.
+func IsLinkAddr(a netip.Addr) bool {
+	a = a.Unmap()
+	if !a.Is4() {
+		return false
+	}
+	b := a.As4()
+	return b[0] == linkNetA && b[1] == linkNetB
+}
+
+// ReadLinks returns a client VM's links, sorted by name, then port.
+func ReadLinks(st *state.VM) ([]Link, error) {
+	var out []Link
+	for e := range strings.FieldsSeq(st.Get(KeyLinks)) {
+		l, err := parseLink(e)
+		if err != nil {
+			return nil, fmt.Errorf("%s's links: %w", st.Name(), err)
+		}
+		out = append(out, l)
+	}
+	sortLinks(out)
+	return out, nil
+}
+
+// parseLink reads one of formatLinks's entries:
+// NAME,PORT,TARGET,TARGET_ID,ADDR.
+func parseLink(e string) (Link, error) {
+	f := strings.Split(e, ",")
+	if len(f) != 5 {
+		return Link{}, fmt.Errorf("%q isn't NAME,PORT,TARGET,ID,ADDR", e)
+	}
+	port, perr := ParseLinkPort(f[1])
+	addr, aerr := netip.ParseAddr(f[4])
+	switch {
+	case CheckLinkName(f[0]) != nil:
+		return Link{}, fmt.Errorf("%q: the name %q", e, f[0])
+	case perr != nil:
+		return Link{}, fmt.Errorf("%q: the port %q", e, f[1])
+	case !project.IsVM(f[2]) || f[3] == "":
+		return Link{}, fmt.Errorf("%q: the target %q, %q", e, f[2], f[3])
+	case aerr != nil || !IsLinkAddr(addr) || addr != addr.Unmap():
+		return Link{}, fmt.Errorf("%q: the address %q", e, f[4])
+	}
+	return Link{Name: f[0], Port: port, Target: f[2], TargetID: f[3], Addr: addr}, nil
+}
+
+// formatLinks is links as KeyLinks holds them: space-separated entries,
+// each NAME,PORT,TARGET,TARGET_ID,ADDR.
+func formatLinks(links []Link) string {
+	es := make([]string, len(links))
+	for i, l := range links {
+		es[i] = strings.Join([]string{l.Name, strconv.Itoa(l.Port), l.Target, l.TargetID, l.Addr.String()}, ",")
+	}
+	return strings.Join(es, " ")
+}
+
+func sortLinks(links []Link) {
+	slices.SortFunc(links, func(a, b Link) int { return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Port, b.Port)) })
+}
+
+// writeLinks records a client VM's links in its state.
+func writeLinks(st *state.VM, links []Link) error {
+	sortLinks(links)
+	return st.Set(KeyLinks, formatLinks(links))
+}
+
+// linkAddr returns the client's address for a target (its VM name and
+// ID): the one its links to that target have, else the lowest that none
+// of its links has, from 127.77.0.1.
+func linkAddr(links []Link, target, id string) (netip.Addr, error) {
+	used := map[netip.Addr]bool{}
+	for _, l := range links {
+		if l.Target == target && l.TargetID == id {
+			return l.Addr, nil
+		}
+		used[l.Addr] = true
+	}
+	for i := uint16(1); i < 0xffff; i++ {
+		if a := linkNetAddr(i); !used[a] {
+			return a, nil
+		}
+	}
+	return netip.Addr{}, errors.New("every address in 127.77.0.0/16 has a link")
+}
+
+// linkNetAddr is the address i in 127.77.0.0/16.
+func linkNetAddr(i uint16) netip.Addr {
+	b := [4]byte{linkNetA, linkNetB}
+	binary.BigEndian.PutUint16(b[2:], i)
+	return netip.AddrFrom4(b)
+}
+
+// Why a link doesn't apply, as CheckLink and devvm link have it.
+const (
+	LinkGone        = "gone"        // the target has no state: deleted
+	LinkReplaced    = "replaced"    // the target was made again: another ID
+	LinkUnpublished = "unpublished" // the target doesn't publish the port
+	LinkPolicy      = "policy"      // the client has network policy, the target doesn't
+)
+
+// CheckLink reports why a client's link doesn't apply, from the states
+// as they are now ("" when it does), with the target's state: one that
+// doesn't exist when it's gone.
+func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error) {
+	tst, err := state.ReadVM(d, l.Target)
+	switch {
+	case err != nil:
+		return "", nil, err
+	case !tst.Exists():
+		return LinkGone, tst, nil
+	case tst.Get(state.KeyID) != l.TargetID:
+		return LinkReplaced, tst, nil
+	case !Published(tst, l.Port):
+		return LinkUnpublished, tst, nil
+	case netpolicy.On(client) && !netpolicy.On(tst):
+		return LinkPolicy, tst, nil
+	}
+	return "", tst, nil
+}
+
+// Published reports whether a VM publishes port.
+func Published(st *state.VM, port int) bool {
+	ports := st.Get(KeyPublish)
+	if ports == "" || ports == PortsNone {
+		return false
+	}
+	for _, r := range PortsBackend(ports).Ranges {
+		if port >= r.From && port <= r.To {
+			return true
+		}
+	}
+	return false
+}
+
+// linkFeatures are the backend features a link needs on both its VMs,
+// checked with the registry's Require when it's made.
+// TODO(links): the link feature, once backends declare it.
+func linkFeatures() []backend.Feature { return nil }
+
+// PortTaken is the error for a link whose address and port a program in
+// the client already listens on, which fails that link alone.
+func (l Link) PortTaken(vm string) msg.M { return msg.LinkPortTaken(l.Name, strconv.Itoa(l.Port), vm) }
+
+// Links shows and changes the folder's VM's links to other VMs, and the
+// ports it publishes for theirs. Nothing here carries a connection:
+// linksChanged and publishChanged are where a running VM learns of a
+// change.
+type Links struct{ *Env }
+
+// linkVM finds the folder's VM for devvm link.
+func (e Links) linkVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMLink) }
+
+// linksChanged applies a client's changed links while it runs: its guest
+// setup and its link session. A stopped client gets them at its next
+// start.
+// TODO(links): the guest's names and the running devvm _links.
+func (e Links) linksChanged(context.Context, *found) error { return nil }
+
+// publishChanged applies a target's changed published ports to the
+// clients that link to it.
+// TODO(links): name the clients that lose a port.
+func (e Links) publishChanged(context.Context, *found) error { return nil }
+
+// projectVMs returns the project VMs that have state.
+func (e Links) projectVMs() ([]string, error) {
+	names, err := state.VMNames(e.Dirs)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(names, func(n string) bool { return !project.IsVM(n) }), nil
+}
+
+// resolve returns the VM a link's TARGET names: a folder's path (relative
+// to the folder devvm runs in), a VM's name, or a folder's name, which
+// must match one VM alone.
+func (e Links) resolve(target string) (string, error) {
+	all, err := e.projectVMs()
+	if err != nil {
+		return "", err
+	}
+	var vms []string
+	if project.IsPath(target) {
+		dir := target
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(e.Dir, dir)
+		}
+		if dir, err = filepath.EvalSymlinks(dir); err == nil {
+			vms = project.ForDir(dir, all)
+		}
+	} else {
+		vms = project.Targets(target, all)
+	}
+	switch len(vms) {
+	case 0:
+		return "", msg.LinkUnknownTarget(msg.Shown(target))
+	case 1:
+		return vms[0], nil
+	}
+	shown := make([]string, len(vms))
+	for i, vm := range vms {
+		dir := "-"
+		if st, err := state.ReadVM(e.Dirs, vm); err == nil && st.Get(state.KeyDir) != "" {
+			dir = st.Get(state.KeyDir)
+		}
+		shown[i] = vm + " in " + msg.Shown(dir)
+	}
+	return "", msg.LinkAmbiguousTarget(msg.Shown(target), strings.Join(shown, ", "))
+}
+
+// LinkListed is one of the folder's VM's links as devvm link lists it.
+type LinkListed struct {
+	Name, Target string
+	Port         int
+	Folder       string // the target's folder; "" once it's gone
+	Status       string // the target's, as its backend reports it; "" when unknown
+	Reason       string // why it doesn't apply (CheckLink); "" when it does
+}
+
+// List returns the folder's VM's links, with each target's folder and
+// status and whether the link applies.
+func (e Links) List(ctx context.Context) ([]LinkListed, error) {
+	t, err := e.linkVM(ctx)
+	if err != nil {
+		return nil, err
+	}
+	links, err := ReadLinks(t.st)
+	if err != nil {
+		return nil, err
+	}
+	status := map[string]string{}
+	out := make([]LinkListed, 0, len(links))
+	for _, l := range links {
+		why, tst, err := CheckLink(e.Dirs, t.st, l)
+		if err != nil {
+			return nil, err
+		}
+		ll := LinkListed{Name: l.Name, Target: l.Target, Port: l.Port, Reason: why, Folder: tst.Get(state.KeyDir)}
+		if tst.Exists() {
+			s, ok := status[l.Target]
+			if !ok {
+				s = e.targetStatus(ctx, tst)
+				status[l.Target] = s
+			}
+			ll.Status = s
+		}
+		out = append(out, ll)
+	}
+	return out, nil
+}
+
+// targetStatus is a target's status as its backend reports it: "" when it
+// can't say, or doesn't have the VM.
+func (e Links) targetStatus(ctx context.Context, tst *state.VM) string {
+	c, err := e.Registry.For(e.Dirs, tst, "")
+	if err != nil {
+		return ""
+	}
+	in, err := c.Backend.Inspect(ctx, tst.Name())
+	if err != nil {
+		return ""
+	}
+	return string(in.Status)
+}
+
+// LinkAdd is what devvm link add makes: a link to TARGET's Port, named As
+// ("" for the target's folder part).
+type LinkAdd struct {
+	Target, As string
+	Port       int
+}
+
+// Add makes a link from the folder's VM to a's target, once it's checked:
+// the target is another project VM that publishes the port, network
+// policy on the client means network policy on the target, both backends
+// have links, and the name is free.
+func (e Links) Add(ctx context.Context, a LinkAdd) error {
+	t, err := e.linkVM(ctx)
+	if err != nil {
+		return err
+	}
+	client := t.f.Name
+	target, err := e.resolve(a.Target)
+	if err != nil {
+		return err
+	}
+	if target == client {
+		return msg.LinkSelf(client)
+	}
+	tst, err := e.checkTarget(t, target, a.Port)
+	if err != nil {
+		return err
+	}
+	links, err := ReadLinks(t.st)
+	if err != nil {
+		return err
+	}
+	id := tst.Get(state.KeyID)
+	name, err := linkNameFor(t, links, target, id, a.As)
+	if err != nil {
+		return err
+	}
+	port := strconv.Itoa(a.Port)
+	if slices.ContainsFunc(links, func(l Link) bool { return l.Target == target && l.TargetID == id && l.Port == a.Port }) {
+		e.Info(msg.LinkExists(name, port, client))
+		return nil
+	}
+	if ok, err := t.widen(e.Env, "devvm link add"); !ok {
+		return err
+	}
+	addr, err := linkAddr(links, target, id)
+	if err != nil {
+		return err
+	}
+	links = append(links, Link{Name: name, Port: a.Port, Target: target, TargetID: id, Addr: addr})
+	if err := writeLinks(t.st, links); err != nil {
+		return err
+	}
+	e.Info(msg.LinkAdded(name, port, target, client))
+	e.Note(msg.LinkTrust(target, client))
+	return e.linksChanged(ctx, t)
+}
+
+// checkTarget checks a new link's target for client t: made and finished,
+// publishing port, with network policy if the client has it, and on a
+// backend with links, as the client's is. It returns the target's state.
+func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error) {
+	tst, err := state.ReadVM(e.Dirs, target)
+	if err != nil {
+		return nil, err
+	}
+	if tst.Get(state.KeyID) == "" || tst.Get(KeyNet) == "" {
+		return nil, msg.VMUnfinished(target)
+	}
+	if !Published(tst, port) {
+		return nil, msg.LinkNotPublished(strconv.Itoa(port), target)
+	}
+	if netpolicy.On(t.st) && !netpolicy.On(tst) {
+		return nil, msg.LinkPolicyMismatch(target, t.f.Name)
+	}
+	c, err := e.Registry.For(e.Dirs, tst, "")
+	if err != nil {
+		return nil, err
+	}
+	if err := e.Registry.Require(t.b, t.f.Name, linkFeatures()...); err != nil {
+		return nil, err
+	}
+	if err := e.Registry.Require(c.Backend, target, linkFeatures()...); err != nil {
+		return nil, err
+	}
+	return tst, nil
+}
+
+// linkNameFor returns the name of client t's new link to target (with
+// its ID): as, else the name its links to that target have, else the
+// target's folder part. A target has one name in a client, and a name
+// one target; localhost and the client's own hostname are refused.
+func linkNameFor(t *found, links []Link, target, id, as string) (string, error) {
+	had := ""
+	for _, l := range links {
+		if l.Target == target && l.TargetID == id {
+			had = l.Name
+		}
+	}
+	name := cmp.Or(as, had, (project.Folder{Name: target}).Slug())
+	if had != "" && name != had {
+		return "", msg.LinkTargetNamed(had, target, t.f.Name)
+	}
+	if err := CheckLinkName(name); err != nil {
+		return "", err
+	}
+	if name == "localhost" || name == t.f.Slug() {
+		return "", msg.LinkNameHost(name, t.f.Name)
+	}
+	for _, l := range links {
+		if l.Name == name && (l.Target != target || l.TargetID != id) {
+			return "", msg.LinkNameTaken(name, l.Target, t.f.Name)
+		}
+	}
+	return name, nil
+}
+
+// Rm removes the folder's VM's link to target's port, where target is the
+// link's name, its target VM's name, or what devvm link add takes.
+func (e Links) Rm(ctx context.Context, target string, port int) error {
+	t, err := e.linkVM(ctx)
+	if err != nil {
+		return err
+	}
+	links, err := ReadLinks(t.st)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(links, func(l Link) bool { return l.Port == port && l.Name == target })
+	if i < 0 {
+		i = slices.IndexFunc(links, func(l Link) bool { return l.Port == port && l.Target == target })
+	}
+	if i < 0 {
+		if vm, err := e.resolve(target); err == nil {
+			i = slices.IndexFunc(links, func(l Link) bool { return l.Port == port && l.Target == vm })
+		}
+	}
+	if i < 0 {
+		return msg.LinkNotFound(strconv.Itoa(port), msg.Shown(target), t.f.Name)
+	}
+	gone := links[i]
+	if err := writeLinks(t.st, slices.Delete(links, i, i+1)); err != nil {
+		return err
+	}
+	e.Info(msg.LinkRemoved(gone.Name, strconv.Itoa(port), t.f.Name))
+	return e.linksChanged(ctx, t)
+}
+
+// Published returns the ports and ranges the folder's VM publishes, or
+// none.
+func (e Links) Published(ctx context.Context) (string, error) {
+	t, err := e.linkVM(ctx)
+	if err != nil {
+		return "", err
+	}
+	return cmp.Or(t.st.Get(KeyPublish), PortsNone), nil
+}
+
+// Publish offers list's ports and ranges (ParsePublish) to links from the
+// user's other VMs, or with publish false, withdraws them, each as
+// listed.
+func (e Links) Publish(ctx context.Context, list string, publish bool) error {
+	l, err := ParsePublish(list)
+	if err != nil {
+		return err
+	}
+	t, err := e.linkVM(ctx)
+	if err != nil {
+		return err
+	}
+	old := cmp.Or(t.st.Get(KeyPublish), PortsNone)
+	var ports string
+	if publish {
+		if ok, err := t.widen(e.Env, "devvm link publish"); !ok {
+			return err
+		}
+		ports, err = AddPorts(old, l)
+	} else {
+		ports, err = dropPorts(old, l, msg.PortNotPublished)
+	}
+	if err != nil {
+		return err
+	}
+	stored := ports
+	if ports == PortsNone {
+		stored = ""
+	}
+	if err := t.st.Set(KeyPublish, stored); err != nil {
+		return err
+	}
+	if publish {
+		e.Info(msg.Published(ports, t.f.Name))
+	} else {
+		e.Info(msg.Unpublished(l, t.f.Name))
+	}
+	return e.publishChanged(ctx, t)
+}

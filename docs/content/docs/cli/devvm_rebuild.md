@@ -1,6 +1,6 @@
 ---
 title: devvm rebuild
-weight: 27
+weight: 32
 ---
 
 Build an image again, and delete the old one

@@ -72,15 +72,12 @@ func TestHelpGroupsAndDocs(t *testing.T) {
 	}
 	help := out.String()
 	at := 0
-	for _, title := range []string{"Your VM:", "Change your VM:", "Images:", "Disk space:", "This machine:", "Additional Commands:\n  help "} {
+	for _, title := range []string{"Your VM:", "Change your VM:", "Links between VMs:", "Images:", "Disk space:", "This machine:", "Additional Commands:\n  help "} {
 		i := strings.Index(help[at:], "\n"+title)
 		if i < 0 {
 			t.Fatalf("devvm --help has no %q after byte %d:\n%s", title, at, help)
 		}
 		at += i + 1
-	}
-	if strings.Contains(help, "Links between VMs:") {
-		t.Error("devvm --help shows a group none of whose commands exist")
 	}
 	wantEnd := "Docs:\n  " + msg.CommandDocURL("devvm") + "\n\nIssues:\n  " + msg.IssuesURL + "\n"
 	if !strings.HasSuffix(help, wantEnd) {

@@ -1,0 +1,41 @@
+---
+title: devvm link unpublish
+weight: 22
+---
+
+Stop offering ports of this folder's VM to links
+
+## Synopsis
+
+Stop offering PORTS, each as devvm link publish lists it, to links from your other VMs. The server in the VM keeps running.
+
+```text
+devvm link unpublish PORTS [flags]
+```
+
+## Examples
+
+```text
+  devvm link unpublish 5432  # stop offering port 5432
+```
+
+## Options
+
+```text
+  -h, --help   help for unpublish
+```
+
+## Options inherited from parent commands
+
+```text
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
+```
+
+## Docs
+
+[The docs page for devvm link unpublish](../getting-started/commands.md#links-between-vms) explains it in full.
+
+## See also
+
+- [devvm link](devvm_link.md): List this folder's VM's links to your other VMs

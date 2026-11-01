@@ -249,6 +249,8 @@ func checkFlagValue(name, value string) error {
 		if value != "" {
 			err = sshagent.CheckLifetime(value)
 		}
+	case "as":
+		err = vm.CheckLinkName(value)
 	case "older-than":
 		_, err = state.ParseDuration(value)
 	case "backend":

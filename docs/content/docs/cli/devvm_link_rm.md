@@ -1,0 +1,42 @@
+---
+title: devvm link rm
+weight: 21
+---
+
+Remove one of this folder's VM's links
+
+## Synopsis
+
+Remove this folder's VM's link to PORT of TARGET, where TARGET is the link's name or what devvm link add took.
+
+```text
+devvm link rm TARGET PORT [flags]
+```
+
+## Examples
+
+```text
+  devvm link rm db 5432  # stop reaching db:5432
+  devvm link rm pg 5432  # remove a link by the name given with --as
+```
+
+## Options
+
+```text
+  -h, --help   help for rm
+```
+
+## Options inherited from parent commands
+
+```text
+      --no-input   never ask, and fail where devvm would ask, naming the flag that answers it
+  -v, --verbose    show the output of the commands devvm runs instead of a status line
+```
+
+## Docs
+
+[The docs page for devvm link rm](../getting-started/commands.md#links-between-vms) explains it in full.
+
+## See also
+
+- [devvm link](devvm_link.md): List this folder's VM's links to your other VMs

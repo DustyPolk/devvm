@@ -138,6 +138,14 @@ func TestJSONShapes(t *testing.T) {
 			[]string{"secrets[].name: string", "secrets[].saved: bool", "secrets[].used_by[]: string"},
 		},
 		{
+			"link", linkJSON([]vm.LinkListed{{Name: "db", Port: 5432, Target: "devvm-db-0123456789abcd", Folder: "/db", Status: "Running", Reason: vm.LinkUnpublished}}),
+			[]string{
+				"links[].applies: bool", "links[].name: string", "links[].port: number", "links[].reason: string", "links[].target: string",
+				"links[].target_folder: string", "links[].target_status: string",
+			},
+		},
+		{"link publish", map[string]string{"ports": "5432,8000-8010"}, []string{"ports: string"}},
+		{
 			"history", historyJSON([]savedExport{{Path: "/e.tar.gz", VM: "devvm-a", Folder: "/a", At: at, Size: 3}}),
 			[]string{"exports[].date: string", "exports[].file: string", "exports[].folder: string", "exports[].size: number", "exports[].vm: string"},
 		},
@@ -222,6 +230,9 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 		"devvm secret use":     "it changes a setting",
 		"devvm secret unuse":   "it changes a setting",
 		"devvm secret set":     "it saves a secret",
+		"devvm link add":       "it changes a setting",
+		"devvm link rm":        "it changes a setting",
+		"devvm link unpublish": "it changes a setting",
 		"devvm history export": "it writes an export",
 		"devvm layer":          "it prints its help",
 		"devvm layer new":      "it writes a file",

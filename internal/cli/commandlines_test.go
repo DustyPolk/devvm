@@ -431,9 +431,9 @@ func notWordRune(r rune) bool { return (r < 'a' || r > 'z') && r != '-' }
 // devvm, as in "what devvm set".
 func englishCommands() []string { return []string{"set", "new", "use", "add", "get", "log", "help"} }
 
-// toCome are the words image.Reserved keeps for links between VMs, whose
+// toCome are the words image.Reserved keeps for devvm group, whose
 // commands the cli skill describes before they exist.
-func toCome() []string { return []string{"group", "join", "leave", "link", "publish", "unpublish"} }
+func toCome() []string { return []string{"group", "join", "leave"} }
 
 // notCommands are words a command line might take for a command that
 // devvm doesn't have: the names a noun's bare form and rm stand for, and

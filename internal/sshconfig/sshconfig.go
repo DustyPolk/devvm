@@ -62,13 +62,7 @@ func New(d paths.Dirs, reg *backend.Registry) *Config {
 // folder name.
 func Alias(vm string, all []string) string {
 	slug := project.Folder{Name: vm}.Slug()
-	n := 0
-	for _, o := range all {
-		if project.IsVM(o) && (project.Folder{Name: o}).Slug() == slug {
-			n++
-		}
-	}
-	if n > 1 {
+	if len(project.Matching(slug, all)) > 1 {
 		return vm
 	}
 	return project.Prefix + slug

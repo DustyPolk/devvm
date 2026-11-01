@@ -1237,6 +1237,80 @@ other = "There's no VM for {{.dir}}. Run devvm --ports PORTS to make one that fo
 description = "reason is an error from the system, in English"
 other = "Showing or changing the forwarded ports failed: {{.reason}}."
 
+[no_vm_link]
+other = "There's no VM for {{.dir}}, so it has no links or published ports. Run devvm to make one."
+
+[link_failed]
+description = "reason is an error from the system, in English"
+other = "Showing or changing the links failed: {{.reason}}."
+
+[link_port_invalid]
+description = "value is quoted, as given"
+other = "{{.value}} isn't a port. Give one port from 1 to 65535, such as 5432."
+
+[link_ports_invalid]
+description = "value is quoted, as given"
+other = "{{.value}} isn't a list of ports. devvm link publish and unpublish take ports and ranges, such as 5432,8000-8010."
+
+[link_unknown_target]
+description = "target is TARGET, as given"
+other = "There's no VM for {{.target}}. Give a folder's name or path, or a VM's name, as devvm ls lists them."
+
+[link_ambiguous_target]
+description = "target is TARGET, as given; vms lists each VM with its folder, as devvm-web-0123456789abcd in /a/web"
+other = "More than one VM has a folder called {{.target}}: {{.vms}}. Give the VM's name or its folder's path instead."
+
+[link_self]
+other = "{{.vm}} is this folder's VM, and a VM can't link to itself. Programs in it reach its own ports on localhost."
+
+[link_not_published]
+other = "{{.vm}} doesn't publish port {{.port}}. Run devvm link publish {{.port}} in its folder first."
+
+[link_policy_mismatch]
+other = "{{.vm}} has network policy and {{.target}} doesn't, so a link would let {{.vm}} reach the internet through it. Turn on network policy for {{.target}} with devvm network on in its folder first."
+
+[link_name_invalid]
+description = "name is quoted, as given"
+other = "{{.name}} isn't a link name. Use lowercase letters, digits and dashes, such as db, starting and ending with a letter or digit and not all digits."
+
+[link_name_host]
+other = "{{.name}} already names {{.vm}} itself inside it. Give the link another name with --as NAME."
+
+[link_name_taken]
+other = "{{.name}} already names {{.vm}}'s link to {{.target}}. Give this link another name with --as NAME."
+
+[link_target_named]
+other = "{{.vm}} reaches {{.target}} as {{.name}} already, and it has one name for each VM it links to. Leave out --as, or run devvm link rm for those links first."
+
+[link_exists]
+other = "{{.vm}} reaches {{.name}}:{{.port}} already."
+
+[link_added]
+other = "{{.vm}} reaches {{.target}}'s port {{.port}} as {{.name}}:{{.port}} and {{.name}}.devvm.internal:{{.port}}."
+
+[link_trust]
+other = "A link joins the two VMs' trust. Code in {{.vm}} can often run code in {{.target}} through the service it reaches, and then has whatever {{.target}} has."
+
+[link_removed]
+other = "{{.vm}} doesn't reach {{.name}}:{{.port}} any more."
+
+[link_not_found]
+description = "target is TARGET, as given"
+other = "{{.vm}} has no link to {{.target}} on port {{.port}}. Run devvm link to list its links."
+
+[link_port_taken]
+other = "{{.name}}:{{.port}} doesn't work in {{.vm}}, because a program in it already listens on that link's address and port. Stop that program, then run devvm restart."
+
+[published]
+other = "{{.vm}} offers {{.ports}} to links from your other VMs."
+
+[unpublished]
+description = "ports are those withdrawn, as given"
+other = "{{.vm}} doesn't offer {{.ports}} to links any more."
+
+[port_not_published]
+other = "{{.port}} isn't published. The published ports are {{.ports}}."
+
 [detected]
 other = "detected a {{.found}} project"
 

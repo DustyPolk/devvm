@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -173,6 +174,29 @@ func TestVMSetGet(t *testing.T) {
 	}
 	if n := strings.Count(read(t, d.VMState(name)), "ssh_agent="); n != 1 {
 		t.Errorf("ssh_agent is in the file %d times, want 1", n)
+	}
+}
+
+// Every VM CreateVM makes gets an ID of its own, a new one when it's
+// made again under the same name.
+func TestVMID(t *testing.T) {
+	d := testDirs(t)
+	hex32 := regexp.MustCompile(`^[0-9a-f]{32}$`)
+	a, err := CreateVM(d, "vm", NewVM{Image: "base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := a.Get(KeyID)
+	again, err := CreateVM(d, "vm", NewVM{Image: "base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := ReadVM(d, "vm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hex32.MatchString(first) || back.Get(KeyID) != again.Get(KeyID) || again.Get(KeyID) == first {
+		t.Errorf("IDs %q, then %q (read back as %q): want 32 hex digits, a new one each time", first, again.Get(KeyID), back.Get(KeyID))
 	}
 }
 

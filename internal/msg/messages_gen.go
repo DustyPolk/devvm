@@ -1634,6 +1634,96 @@ func LimactlFailed(reason string) M {
 	return M{id: "limactl_failed", vals: []val{{"reason", reason}}}
 }
 
+// LinkAdded is [link_added]: "{{.vm}} reaches {{.target}}'s port {{.port}} as {{.name}}:{{.port}} and {{.name}}.devvm.internal:{{.port}}."
+func LinkAdded(name string, port string, target string, vm string) M {
+	return M{id: "link_added", vals: []val{{"name", name}, {"port", port}, {"target", target}, {"vm", vm}}}
+}
+
+// LinkAmbiguousTarget is [link_ambiguous_target]: "More than one VM has a folder called {{.target}}: {{.vms}}. Give the VM's name or its folder's path instead."
+func LinkAmbiguousTarget(target string, vms string) M {
+	return M{id: "link_ambiguous_target", vals: []val{{"target", target}, {"vms", vms}}}
+}
+
+// LinkExists is [link_exists]: "{{.vm}} reaches {{.name}}:{{.port}} already."
+func LinkExists(name string, port string, vm string) M {
+	return M{id: "link_exists", vals: []val{{"name", name}, {"port", port}, {"vm", vm}}}
+}
+
+// LinkFailed is [link_failed]: "Showing or changing the links failed: {{.reason}}."
+func LinkFailed(reason string) M {
+	return M{id: "link_failed", vals: []val{{"reason", reason}}}
+}
+
+// LinkNameHost is [link_name_host]: "{{.name}} already names {{.vm}} itself inside it. Give the link another name with --as NAME."
+func LinkNameHost(name string, vm string) M {
+	return M{id: "link_name_host", vals: []val{{"name", name}, {"vm", vm}}}
+}
+
+// LinkNameInvalid is [link_name_invalid]: "{{.name}} isn't a link name. Use lowercase letters, digits and dashes, such as db, starting and ending with a letter or digit and not all digits."
+func LinkNameInvalid(name string) M {
+	return M{id: "link_name_invalid", vals: []val{{"name", name}}}
+}
+
+// LinkNameTaken is [link_name_taken]: "{{.name}} already names {{.vm}}'s link to {{.target}}. Give this link another name with --as NAME."
+func LinkNameTaken(name string, target string, vm string) M {
+	return M{id: "link_name_taken", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
+}
+
+// LinkNotFound is [link_not_found]: "{{.vm}} has no link to {{.target}} on port {{.port}}. Run devvm link to list its links."
+func LinkNotFound(port string, target string, vm string) M {
+	return M{id: "link_not_found", vals: []val{{"port", port}, {"target", target}, {"vm", vm}}}
+}
+
+// LinkNotPublished is [link_not_published]: "{{.vm}} doesn't publish port {{.port}}. Run devvm link publish {{.port}} in its folder first."
+func LinkNotPublished(port string, vm string) M {
+	return M{id: "link_not_published", vals: []val{{"port", port}, {"vm", vm}}}
+}
+
+// LinkPolicyMismatch is [link_policy_mismatch]: "{{.vm}} has network policy and {{.target}} doesn't, so a link would let {{.vm}} reach the internet through it. Turn on network policy for {{.target}} with devvm network on in its folder first."
+func LinkPolicyMismatch(target string, vm string) M {
+	return M{id: "link_policy_mismatch", vals: []val{{"target", target}, {"vm", vm}}}
+}
+
+// LinkPortInvalid is [link_port_invalid]: "{{.value}} isn't a port. Give one port from 1 to 65535, such as 5432."
+func LinkPortInvalid(value string) M {
+	return M{id: "link_port_invalid", vals: []val{{"value", value}}}
+}
+
+// LinkPortTaken is [link_port_taken]: "{{.name}}:{{.port}} doesn't work in {{.vm}}, because a program in it already listens on that link's address and port. Stop that program, then run devvm restart."
+func LinkPortTaken(name string, port string, vm string) M {
+	return M{id: "link_port_taken", vals: []val{{"name", name}, {"port", port}, {"vm", vm}}}
+}
+
+// LinkPortsInvalid is [link_ports_invalid]: "{{.value}} isn't a list of ports. devvm link publish and unpublish take ports and ranges, such as 5432,8000-8010."
+func LinkPortsInvalid(value string) M {
+	return M{id: "link_ports_invalid", vals: []val{{"value", value}}}
+}
+
+// LinkRemoved is [link_removed]: "{{.vm}} doesn't reach {{.name}}:{{.port}} any more."
+func LinkRemoved(name string, port string, vm string) M {
+	return M{id: "link_removed", vals: []val{{"name", name}, {"port", port}, {"vm", vm}}}
+}
+
+// LinkSelf is [link_self]: "{{.vm}} is this folder's VM, and a VM can't link to itself. Programs in it reach its own ports on localhost."
+func LinkSelf(vm string) M {
+	return M{id: "link_self", vals: []val{{"vm", vm}}}
+}
+
+// LinkTargetNamed is [link_target_named]: "{{.vm}} reaches {{.target}} as {{.name}} already, and it has one name for each VM it links to. Leave out --as, or run devvm link rm for those links first."
+func LinkTargetNamed(name string, target string, vm string) M {
+	return M{id: "link_target_named", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
+}
+
+// LinkTrust is [link_trust]: "A link joins the two VMs' trust. Code in {{.vm}} can often run code in {{.target}} through the service it reaches, and then has whatever {{.target}} has."
+func LinkTrust(target string, vm string) M {
+	return M{id: "link_trust", vals: []val{{"target", target}, {"vm", vm}}}
+}
+
+// LinkUnknownTarget is [link_unknown_target]: "There's no VM for {{.target}}. Give a folder's name or path, or a VM's name, as devvm ls lists them."
+func LinkUnknownTarget(target string) M {
+	return M{id: "link_unknown_target", vals: []val{{"target", target}}}
+}
+
 // LoadKey is [load_key]: "Run {{.cmd}} now to load {{.key}} into your SSH agent?"
 func LoadKey(cmd string, key string) M {
 	return M{id: "load_key", vals: []val{{"cmd", cmd}, {"key", key}}}
@@ -1999,6 +2089,11 @@ func NoVMGitProtect(dir string) M {
 	return M{id: "no_vm_git_protect", vals: []val{{"dir", dir}}}
 }
 
+// NoVMLink is [no_vm_link]: "There's no VM for {{.dir}}, so it has no links or published ports. Run devvm to make one."
+func NoVMLink(dir string) M {
+	return M{id: "no_vm_link", vals: []val{{"dir", dir}}}
+}
+
 // NoVMPolicy is [no_vm_policy]: "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."
 func NoVMPolicy(dir string) M {
 	return M{id: "no_vm_policy", vals: []val{{"dir", dir}}}
@@ -2089,6 +2184,11 @@ func PortNotListed(port string, ports string) M {
 	return M{id: "port_not_listed", vals: []val{{"port", port}, {"ports", ports}}}
 }
 
+// PortNotPublished is [port_not_published]: "{{.port}} isn't published. The published ports are {{.ports}}."
+func PortNotPublished(port string, ports string) M {
+	return M{id: "port_not_published", vals: []val{{"port", port}, {"ports", ports}}}
+}
+
 // PortsAllAlready is [ports_all_already]: "Every port is already forwarded."
 func PortsAllAlready() M {
 	return M{id: "ports_all_already"}
@@ -2167,6 +2267,11 @@ func ProxyStartFailed(log string, vm string) M {
 // ProxyStopFailed is [proxy_stop_failed]: "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
 func ProxyStopFailed(vm string) M {
 	return M{id: "proxy_stop_failed", vals: []val{{"vm", vm}}}
+}
+
+// Published is [published]: "{{.vm}} offers {{.ports}} to links from your other VMs."
+func Published(ports string, vm string) M {
+	return M{id: "published", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
 // PullingImage is [pulling_image]: "pulling {{.image}}"
@@ -2814,6 +2919,11 @@ func UnpackingTools() M {
 	return M{id: "unpacking_tools"}
 }
 
+// Unpublished is [unpublished]: "{{.vm}} doesn't offer {{.ports}} to links any more."
+func Unpublished(ports string, vm string) M {
+	return M{id: "unpublished", vals: []val{{"ports", ports}, {"vm", vm}}}
+}
+
 // UnsafeFolder is [unsafe_folder]: "{{.dir}} is or holds {{.holds}}, so the VM would get read-write access to it. Use a project folder inside {{.dir}}, use --clone, or pass --unsafe-folder if you mean it."
 func UnsafeFolder(dir string, holds string) M {
 	return M{id: "unsafe_folder", vals: []val{{"dir", dir}, {"holds", holds}}}
@@ -3307,6 +3417,24 @@ var specs = map[string]spec{
 	"lima_old":                         {fields: []string{"version"}},
 	"lima_old_fix":                     {fields: []string{"fix", "version"}},
 	"limactl_failed":                   {fields: []string{"reason"}},
+	"link_added":                       {fields: []string{"name", "port", "target", "vm"}},
+	"link_ambiguous_target":            {fields: []string{"target", "vms"}},
+	"link_exists":                      {fields: []string{"name", "port", "vm"}},
+	"link_failed":                      {fields: []string{"reason"}},
+	"link_name_host":                   {fields: []string{"name", "vm"}},
+	"link_name_invalid":                {fields: []string{"name"}},
+	"link_name_taken":                  {fields: []string{"name", "target", "vm"}},
+	"link_not_found":                   {fields: []string{"port", "target", "vm"}},
+	"link_not_published":               {fields: []string{"port", "vm"}},
+	"link_policy_mismatch":             {fields: []string{"target", "vm"}},
+	"link_port_invalid":                {fields: []string{"value"}},
+	"link_port_taken":                  {fields: []string{"name", "port", "vm"}},
+	"link_ports_invalid":               {fields: []string{"value"}},
+	"link_removed":                     {fields: []string{"name", "port", "vm"}},
+	"link_self":                        {fields: []string{"vm"}},
+	"link_target_named":                {fields: []string{"name", "target", "vm"}},
+	"link_trust":                       {fields: []string{"target", "vm"}},
+	"link_unknown_target":              {fields: []string{"target"}},
 	"load_key":                         {fields: []string{"cmd", "key"}},
 	"load_key_with":                    {fields: []string{"cmd"}},
 	"log_details":                      {fields: []string{"file"}},
@@ -3380,6 +3508,7 @@ var specs = map[string]spec{
 	"no_ubuntu_image":                  {fields: []string{"release", "url", "version"}},
 	"no_vm":                            {fields: []string{"dir"}},
 	"no_vm_git_protect":                {fields: []string{"dir"}},
+	"no_vm_link":                       {fields: []string{"dir"}},
 	"no_vm_policy":                     {fields: []string{"dir"}},
 	"no_vm_ports":                      {fields: []string{"dir"}},
 	"no_vm_size":                       {fields: []string{"dir"}},
@@ -3398,6 +3527,7 @@ var specs = map[string]spec{
 	"policy_failed":                    {fields: []string{"reason"}},
 	"port_invalid":                     {fields: []string{"value"}},
 	"port_not_listed":                  {fields: []string{"port", "ports"}},
+	"port_not_published":               {fields: []string{"port", "ports"}},
 	"ports_all_already":                {},
 	"ports_default":                    {fields: []string{"ports"}},
 	"ports_failed":                     {fields: []string{"reason"}},
@@ -3414,6 +3544,7 @@ var specs = map[string]spec{
 	"proxy_port_taken":                 {fields: []string{"port", "vm"}},
 	"proxy_start_failed":               {fields: []string{"log", "vm"}},
 	"proxy_stop_failed":                {fields: []string{"vm"}},
+	"published":                        {fields: []string{"ports", "vm"}},
 	"pulling_image":                    {fields: []string{"image"}},
 	"qemu_missing":                     {fields: []string{"program"}},
 	"qemu_missing_fix":                 {fields: []string{"fix", "program"}},
@@ -3543,6 +3674,7 @@ var specs = map[string]spec{
 	"unknown_layer":                    {fields: []string{"agents", "envs", "layer"}},
 	"unknown_tool":                     {fields: []string{"tool", "tools"}},
 	"unpacking_tools":                  {},
+	"unpublished":                      {fields: []string{"ports", "vm"}},
 	"unsafe_folder":                    {fields: []string{"dir", "holds"}},
 	"unsafe_folder_inside":             {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":               {fields: []string{"dir", "holds"}},

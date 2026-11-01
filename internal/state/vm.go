@@ -1,6 +1,8 @@
 package state
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -55,7 +57,19 @@ const (
 	KeyChain   = "chain"   // its image's build chain
 	KeyFrom    = "from"    // the image its base started from, if not the default
 	KeyBackend = "backend" // the backend running it
+	// KeyID is a random ID CreateVM gives every VM, so a link can tell a
+	// VM made again in the same folder from the one it linked.
+	KeyID = "id"
 )
+
+// newID is a VM's KeyID: 128 random bits, in hex.
+func newID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
 
 // VM is one VM's state, a key=value file. It lives as long as the VM:
 // creating a VM replaces it, and removing the VM removes it.
@@ -94,13 +108,19 @@ func (v *VM) load() error {
 	return nil
 }
 
-// CreateVM writes a new VM's state, replacing any it had.
+// CreateVM writes a new VM's state, replacing any it had, with a new
+// KeyID.
 func CreateVM(d paths.Dirs, name string, n NewVM) (*VM, error) {
 	if err := checkName("VM name", name); err != nil {
 		return nil, err
 	}
+	id, err := newID()
+	if err != nil {
+		return nil, err
+	}
 	v := &VM{name: name, path: d.VMState(name), kv: newKV()}
 	for _, p := range [][2]string{
+		{KeyID, id},
 		{KeyImage, n.Image},
 		{KeyDir, n.Dir},
 		{KeyFolder, n.Folder},

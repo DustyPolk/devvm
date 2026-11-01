@@ -22,6 +22,11 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm layer](devvm_layer.md): Make image layers of your own
 - [devvm layer new](devvm_layer_new.md): Start a layer of your own
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
+- [devvm link](devvm_link.md): List this folder's VM's links to your other VMs
+- [devvm link add](devvm_link_add.md): Link this folder's VM to a port of another VM
+- [devvm link publish](devvm_link_publish.md): Show or add the ports this folder's VM offers to links
+- [devvm link rm](devvm_link_rm.md): Remove one of this folder's VM's links
+- [devvm link unpublish](devvm_link_unpublish.md): Stop offering ports of this folder's VM to links
 - [devvm ls](devvm_ls.md): List the project VMs
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
 - [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM

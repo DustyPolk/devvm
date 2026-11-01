@@ -96,11 +96,18 @@ func RemovePorts(old, list string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return dropPorts(old, l, msg.PortNotListed)
+}
+
+// dropPorts returns a parsed list of ports and ranges, old, without those
+// of l, a parsed list, each as listed in old (else notListed): none once
+// nothing is left.
+func dropPorts(old, l string, notListed func(port, ports string) msg.M) (string, error) {
 	es := strings.Split(old, ",")
 	for e := range strings.SplitSeq(l, ",") {
 		i := slices.Index(es, e)
 		if i < 0 {
-			return "", msg.PortNotListed(e, old)
+			return "", notListed(e, old)
 		}
 		es = slices.Delete(es, i, i+1)
 	}

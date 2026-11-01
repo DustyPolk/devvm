@@ -63,6 +63,55 @@ func (f Folder) Slug() string {
 	return s
 }
 
+// Matching returns the project VMs among all (VM names) whose folder part
+// is slug, in all's order: how ssh aliases and links name VMs by folder.
+func Matching(slug string, all []string) []string {
+	var out []string
+	for _, vm := range all {
+		if IsVM(vm) && (Folder{Name: vm}).Slug() == slug {
+			out = append(out, vm)
+		}
+	}
+	return out
+}
+
+// IsPath reports whether a link's TARGET is a folder's path: it has a / or
+// starts with a dot.
+func IsPath(target string) bool {
+	return strings.Contains(target, "/") || strings.HasPrefix(target, ".")
+}
+
+// ForDir returns the project VMs among all (VM names) made for dir, a
+// physical path: those whose name ends with its path's hash, whatever
+// length of its folder's name their backend gave them.
+func ForDir(dir string, all []string) []string {
+	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
+	suffix := "-" + hex.EncodeToString(sum[:])[:hashLen]
+	var out []string
+	for _, vm := range all {
+		if IsVM(vm) && strings.HasSuffix(vm, suffix) {
+			out = append(out, vm)
+		}
+	}
+	return out
+}
+
+// Targets returns the project VMs among all (VM names) that a link's
+// TARGET names when it isn't a path (IsPath): the VM itself for a project
+// VM's name, else those whose folder part is the folder name's Slug, as
+// New makes it.
+func Targets(target string, all []string) []string {
+	if IsVM(target) {
+		for _, vm := range all {
+			if vm == target {
+				return []string{vm}
+			}
+		}
+		return nil
+	}
+	return Matching(Slug(target, slugMax), all)
+}
+
 // BadPathError is a folder whose path Lima can't mount: it has a comma
 // (Lima splits mount options on commas) or a control character.
 type BadPathError struct{ Dir string }

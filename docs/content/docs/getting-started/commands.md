@@ -185,6 +185,18 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 `devvm IMAGE` in a folder whose VM exists adds nothing. devvm reads IMAGE as it does for a new VM, with agents alone on top of the folder's toolchains, and when the VM has all of it, devvm opens the VM as it is. When the VM lacks some of it, devvm changes nothing and stops. For shared tools it names the `devvm tools add` command that adds them, and for a layer it tells you to make the VM again.
 
+## Links between VMs
+
+| | |
+| --- | --- |
+| `devvm link` | list this folder's VM's links, each with its name, port, target VM and folder, the target's status, and whether the link applies |
+| `devvm link add TARGET PORT [--as NAME]` | link this folder's VM to PORT of the VM that TARGET names, a folder's name or path or a VM's name, so programs in it reach the port as `NAME:PORT` and `NAME.devvm.internal:PORT`, where NAME is the target's folder name unless you give `--as NAME` |
+| `devvm link rm TARGET PORT` | remove one of this folder's VM's links, by its name or by what `devvm link add` took |
+| `devvm link publish [PORTS]` | show the ports this folder's VM publishes, or offer PORTS, such as `5432` or `8000-8010`, to links from any of your other VMs |
+| `devvm link unpublish PORTS` | stop offering ports to links, each as `devvm link publish` lists it, while the server in the VM keeps running |
+
+A link reaches only a port the target publishes, and a VM with network policy links only to another VM with network policy. A link joins the two VMs' trust, because code in the VM that links can often run code in the target through the service it reaches, and it then has whatever the target has.
+
 ## Images
 
 | | |

@@ -1,0 +1,203 @@
+# devvm link: a folder's VM's links to the ports other VMs publish, kept in
+# the VMs' state on the host. A link records its target's name and ID, its
+# port and the client's address for that target; nothing carries a
+# connection here.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+# The group shows once its commands exist.
+exec devvm --help
+stdout '^Links between VMs:\n  link '
+
+# No VM yet.
+mkdir $WORK/app
+cd $WORK/app
+! exec devvm link
+stderr '^devvm: no_vm_link dir=\S*/app$'
+! exec devvm link publish
+stderr '^devvm: no_vm_link dir=\S*/app$'
+
+# Usage errors, before devvm looks for the VM.
+! exec devvm link nope
+stderr '^devvm: no_subcommand command=devvm link commands=add, publish, rm, unpublish given=nope$'
+! exec devvm link add db
+stderr '^devvm: arg_missing args=TARGET PORT command=devvm link add$'
+stderr '^usage_help command=devvm link add$'
+! exec devvm link add db 0
+stderr '^devvm: link_port_invalid value="0"$'
+! exec devvm link add db 5432-5433
+stderr '^devvm: link_port_invalid value="5432-5433"$'
+! exec devvm link rm db http
+stderr '^devvm: link_port_invalid value="http"$'
+! exec devvm link add db 5432 --as Bad_Name
+stderr '^devvm: link_name_invalid name="Bad_Name"$'
+! exec devvm link add db 5432 --as 123
+stderr '^devvm: link_name_invalid name="123"$'
+! exec devvm link publish all
+stderr '^devvm: link_ports_invalid value="all"$'
+! exec devvm link unpublish none
+stderr '^devvm: link_ports_invalid value="none"$'
+! exec devvm link publish --json 5432
+stderr '^devvm: json_shows_only command=devvm link publish$'
+! exec devvm link add --json db 5432
+stderr '^devvm: flag_unknown command=devvm link add flag=--json$'
+! stderr no_vm_link
+
+# The VMs: app, the client; db, a target; two folders called api.
+exec devvm --no-network-policy --no-git-protect base
+mkdir $WORK/db
+cd $WORK/db
+exec devvm --no-network-policy --no-git-protect base
+mkdir $WORK/x/api
+cd $WORK/x/api
+exec devvm --no-network-policy --no-git-protect base
+exec devvm link publish 5432
+mkdir $WORK/y/api
+cd $WORK/y/api
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'cat "$VMS"/devvm-*'
+stdout '^id=[0-9a-f]{32}$'
+
+# publish: none at first, then ports and ranges, as devvm ports takes
+# them.
+cd $WORK/db
+exec devvm link publish
+stdout '\Anone\n\z'
+exec devvm link publish 5432
+stdout '^==> published ports=5432 vm=devvm-db-[0-9a-f]{14}$'
+exec devvm link publish 8000-8010,5432
+stdout '^==> published ports=5432,8000-8010 vm=devvm-db-[0-9a-f]{14}$'
+exec devvm link publish
+stdout '\A5432,8000-8010\n\z'
+exec devvm link publish --json
+stdout '\A{\n  "version": 1,\n  "ports": "5432,8000-8010"\n}\n\z'
+exec sh -c 'cat "$VMS"/devvm-db-*'
+stdout '^publish=5432,8000-8010$'
+
+# Refusals: an unpublished port, the VM itself, no VM, a folder name two
+# VMs have.
+cd $WORK/app
+exec devvm link
+stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
+exec devvm link --json
+stdout '\A{\n  "version": 1,\n  "links": \[\]\n}\n\z'
+! exec devvm link add db 6379
+stderr '^devvm: link_not_published port=6379 vm=devvm-db-[0-9a-f]{14}$'
+! exec devvm link add app 5432
+stderr '^devvm: link_self vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm link add . 5432
+stderr '^devvm: link_self vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm link add nope 5432
+stderr '^devvm: link_unknown_target target=nope$'
+! exec devvm link add ../nope 5432
+stderr '^devvm: link_unknown_target target=../nope$'
+! exec devvm link add api 5432
+stderr '^devvm: link_ambiguous_target target=api vms=devvm-api-[0-9a-f]{14} in \S*/api, devvm-api-[0-9a-f]{14} in \S*/api$'
+exec sh -c 'cat "$VMS"/devvm-app-*'
+! stdout '^links='
+
+# add: by folder name, its address the first, then the same target's
+# other ports by path or VM name, sharing it.
+exec devvm link add db 5432
+stdout '^==> link_added name=db port=5432 target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+stderr '^link_trust target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link add db 5432
+stdout '^==> link_exists name=db port=5432 vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link add ../db 8000
+stdout '^==> link_added name=db port=8000 '
+exec sh -c 'devvm link add "$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$")" 8005'
+stdout '^==> link_added name=db port=8005 '
+exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS"/devvm-db-*); db=$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$"); grep -x "links=db,5432,$db,$id,127.77.0.1 db,8000,$db,$id,127.77.0.1 db,8005,$db,$id,127.77.0.1" "$VMS"/devvm-app-*'
+
+# A target has one name in a client, and a name one target; localhost
+# and the client's own hostname are refused.
+! exec devvm link add db 8001 --as pg
+stderr '^devvm: link_target_named name=db target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link add db 8001 --as db
+stdout '^==> link_added name=db port=8001 '
+! exec devvm link add ../x/api 5432 --as db
+stderr '^devvm: link_name_taken name=db target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm link add ../x/api 5432 --as app
+stderr '^devvm: link_name_host name=app vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm link add ../x/api 5432 --as localhost
+stderr '^devvm: link_name_host name=localhost vm=devvm-app-[0-9a-f]{14}$'
+# Another target gets the next address.
+exec devvm link add ../x/api 5432
+stdout '^==> link_added name=api port=5432 target=devvm-api-[0-9a-f]{14} '
+exec sh -c 'cat "$VMS"/devvm-app-*'
+stdout '^links=api,5432,devvm-api-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.2 db,5432,'
+
+# The list: each target's folder and status, and whether the link
+# applies.
+exec devvm link
+stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n'
+stdout '^api +5432 +devvm-api-[0-9a-f]{14} +\S*/x/api +Running +yes$'
+stdout '^db +5432 +devvm-db-[0-9a-f]{14} +\S*/db +Running +yes$'
+stdout '^db +8001 +devvm-db-[0-9a-f]{14} +\S*/db +Running +yes$'
+exec devvm link --json
+stdout '\A{\n  "version": 1,\n  "links": \[\n    {\n      "name": "api",\n      "port": 5432,\n      "target": "devvm-api-[0-9a-f]{14}",\n      "target_folder": "\S*/x/api",\n      "target_status": "Running",\n      "applies": true,\n      "reason": ""\n    },\n'
+! stdout '127\.77'
+
+# Network policy: a client with it links only to targets with it.
+exec devvm network on
+exec devvm link
+stdout '^db +5432 +devvm-db-[0-9a-f]{14} +\S*/db +Running +policy$'
+! exec devvm link add db 8002
+stderr '^devvm: link_policy_mismatch target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+cd $WORK/db
+exec devvm network on
+cd $WORK/app
+exec devvm link add db 8002
+stdout '^==> link_added name=db port=8002 '
+exec devvm network off
+cd $WORK/db
+exec devvm network off
+
+# unpublish: each as listed; a link to a withdrawn port no longer applies.
+! exec devvm link unpublish 8001
+stderr '^devvm: port_not_published port=8001 ports=5432,8000-8010$'
+exec devvm link unpublish 8000-8010
+stdout '^==> unpublished ports=8000-8010 vm=devvm-db-[0-9a-f]{14}$'
+exec devvm link publish
+stdout '\A5432\n\z'
+exec devvm link unpublish 5432
+exec devvm link publish
+stdout '\Anone\n\z'
+exec devvm link publish 5432
+cd $WORK/app
+exec devvm link
+stdout '^db +8000 +devvm-db-[0-9a-f]{14} +\S*/db +Running +unpublished$'
+stdout '^db +5432 +devvm-db-[0-9a-f]{14} +\S*/db +Running +yes$'
+
+# rm: by the link's name, its target VM's name or what add takes.
+exec devvm link rm db 8000
+stdout '^==> link_removed name=db port=8000 vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link rm ../db 8001
+stdout '^==> link_removed name=db port=8001 '
+exec sh -c 'devvm link rm "$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$")" 8002'
+stdout '^==> link_removed name=db port=8002 '
+exec devvm link rm api 5432
+stdout '^==> link_removed name=api port=5432 '
+! exec devvm link rm db 9999
+stderr '^devvm: link_not_found port=9999 target=db vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link
+! stdout '^api '
+! stdout ' 800[012] '
+
+# A target deleted is gone; made again in its folder, it's another VM,
+# whose ID the link doesn't have.
+cd $WORK/db
+exec devvm rm --force --no-export
+cd $WORK/app
+exec devvm link
+stdout '^db +5432 +devvm-db-[0-9a-f]{14} +- +- +gone$'
+cd $WORK/db
+exec devvm --no-network-policy --no-git-protect base
+exec devvm link publish 5432
+cd $WORK/app
+exec devvm link
+stdout '^db +5432 +devvm-db-[0-9a-f]{14} +\S*/db +Running +replaced$'
+exec devvm link rm db 5432
+exec devvm link rm db 8005
+exec devvm link
+stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
