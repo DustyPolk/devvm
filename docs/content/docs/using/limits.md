@@ -32,7 +32,7 @@ smolvm is experimental.
 - Network policy has one narrow way out, through DNS ([details](../internals/smolvm.md#network-policy)).
 - A VM that forwards your SSH agent has it the whole time it runs, not only while you're connected ([details](../backends/smolvm.md#whats-different)).
 - Project paths can't contain colons ([details](../backends/smolvm.md#whats-different)).
-- File watchers in a VM don't see the files you delete on this machine, though they see the ones you change or make ([details](../backends/smolvm.md#whats-different)).
+- File watchers in a VM see the files you make on this machine, and a file you change when they watch that file itself and not only its folder, but they don't see the files you delete here ([details](../backends/smolvm.md#whats-different)).
 
 ## Docker
 

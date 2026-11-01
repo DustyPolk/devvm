@@ -563,11 +563,13 @@ for p in AcceptCutText SendCutText; do [ "$(DISPLAY=:1 XAUTHORITY="$HOME/.Xautho
 # desktop_secret: the password, read from the input, is in no file of the VM's (run as root there),
 # its fixed folders searched. Never on a command line: sudo would log it in the VM's journal.
 desktop_secret='read -r pw && [ -n "$pw" ] && ! grep -rlsF -D skip -- "$pw" /home /root /etc /run /tmp /var/log /usr/local'
-# watch_sees RUN VM DIR BY [NESTED [DELETES]]: a watcher in the VM on DIR and a subfolder, as a dev
+# watch_sees RUN VM DIR BY [NESTED [DELETES [FILES]]]: a watcher in the VM on DIR and a subfolder, as a dev
 # server's (RUN VM CMD runs CMD there: in_vm, in_smol, in_d), sees a file changed in each, one made
 # and one deleted, by this machine (BY host) or the VM (BY vm), each within 5 s; with NESTED no,
 # never the subfolder's (9p's limit); with DELETES no, not the deletion (smolvm's and Docker
-# Desktop's limit). The watcher is perl (every base has it) calling inotify itself, so the
+# Desktop's limit); with FILES yes, it watches the two changed files too, and a change counts when
+# the file's own watch sees it (smolvm's limit: a folder's watch sees a change to a file in it with
+# no name, unless the change comes as the file's creation). The watcher is perl (every base has it) calling inotify itself, so the
 # test VM needs nothing added. It prints its events, and writes them to a file in a folder of
 # DIR's it doesn't watch too, as smolvm's exec passes output on only at the end, and 9p shows this
 # machine a file the VM writes only later; they're in $work/watch.out after. watch_misses RUN VM
@@ -604,20 +606,22 @@ watch_saw() { local end=$((SECONDS + 5))
   echo "nothing for $1 within 5 s" >> "$work/watch.missed"; return 1; }
 # watch_do RUN VM BY CMD: CMD on this machine (BY host) or in the VM.
 watch_do() { if [[ $3 == host ]]; then bash -c "$4"; else "$1" "$2" "$4" >/dev/null; fi; }
-watch_sees() { local w r=1
+watch_sees() { local w r=1 files="" own=""
   watch_log=$3/.e2e-watch/events
   mkdir -p "$3/e2e-sub" "$3/.e2e-watch" && printf '%s\n' "$watch_pl" > "$3/.e2e-watch/watch.pl" && : > "$watch_log" &&
     echo before > "$3/watched.txt" && echo before > "$3/e2e-sub/nested.txt" || return 1
   : > "$work/watch.missed"
-  "$1" "$2" "LC_ALL=C exec perl '$3/.e2e-watch/watch.pl' '$watch_log' '$3' '$3/e2e-sub'" > "$work/watch.stream" 2>&1 &
+  # FILES yes: the files' own watches print their events as "MODIFY watched.txt/".
+  if [[ ${7:-no} == yes ]]; then files=" '$3/watched.txt' '$3/e2e-sub/nested.txt'" own='/?'; fi
+  "$1" "$2" "LC_ALL=C exec perl '$3/.e2e-watch/watch.pl' '$watch_log' '$3' '$3/e2e-sub'$files" > "$work/watch.stream" 2>&1 &
   w=$!
   for _ in $(seq 60); do watch_events | grep -qx ready && break; sleep 0.5; done
   if watch_events | grep -qx ready; then
     r=0   # each one tried, so the output shows them all
     # A change may come as a new file (smolvm's): either way, a watcher looks at the file again.
-    watch_do "$1" "$2" "$4" "echo after >> '$3/watched.txt'"; watch_saw '(MODIFY|CLOSE_WRITE|CREATE) watched.txt' || r=1
+    watch_do "$1" "$2" "$4" "echo after >> '$3/watched.txt'"; watch_saw "(MODIFY|CLOSE_WRITE|CREATE) watched.txt$own" || r=1
     watch_do "$1" "$2" "$4" "echo after >> '$3/e2e-sub/nested.txt'"
-    if [[ ${5:-yes} == yes ]]; then watch_saw '(MODIFY|CLOSE_WRITE|CREATE) e2e-sub/nested.txt' || r=1; fi
+    if [[ ${5:-yes} == yes ]]; then watch_saw "(MODIFY|CLOSE_WRITE|CREATE) e2e-sub/nested.txt$own" || r=1; fi
     watch_do "$1" "$2" "$4" "echo made > '$3/made.txt'"; watch_saw '(CREATE|MOVED_TO) made.txt' || r=1
     watch_do "$1" "$2" "$4" "rm '$3/made.txt'"
     if [[ ${6:-yes} == yes ]]; then watch_saw '(DELETE|MOVED_FROM) made.txt' || r=1
@@ -2542,8 +2546,12 @@ check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Run
 check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
   in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -c \"\$1\" </dev/null; }
   in_smol 'echo from-vm > $p/vm.txt' && grep -qx from-vm '$p/vm.txt' && [[ \$(stat -f %Su '$p/vm.txt' 2>/dev/null || stat -c %U '$p/vm.txt') == '$me' ]]"
-# smolvm's virtiofs passes on changes and new files, but no deletions.
-check "a watcher in the VM sees files changed and made on this machine, but not deleted" watch_sees in_smol "$vm" "$p" host yes no
+# smolvm passes on this machine's changes and new files, but no deletions: it watches the folder here
+# and fires each change on the file in the VM. A watch on the file sees a change to it, and a watch on
+# its folder sees the folder change, with no name: only a change macOS still reports with the file's
+# creation, a few seconds after it, comes as a new file there. Each event reaches the VM in about
+# 0.1 s, 0.25 s at most in 30 tries at a load of 19, so 5 s is ample.
+check "a watcher in the VM sees files changed and made on this machine, but not deleted" watch_sees in_smol "$vm" "$p" host yes no yes
 check "the shared tools are read-only, even for root" bash -c "! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- touch /mnt/devvm-tools/x </dev/null 2>/dev/null"
 check "hostname is the folder" in_smol "$vm" '[[ $(hostname) == smolweb ]]'
 check "Exec's arguments, folder, input and user reach the VM as given" bash -c "cd '$root' &&

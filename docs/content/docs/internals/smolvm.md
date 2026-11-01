@@ -103,6 +103,10 @@ A machine runs its image as a container, and nothing starts at boot. After each 
 
 devvm's commands in a VM, such as its setup and your shell, run as the VM's user with the environment a login would give: `HOME`, `USER`, and `/etc/environment`, which smolvm doesn't read.
 
+## File watchers
+
+smolvm watches each mounted folder on the host, with FSEvents on macOS, and for each change it fires an event on the matching file in the VM, so watchers there see [your edits](../backends/smolvm.md#whats-different), though not your deletions, within about a tenth of a second, even on a busy host. An event for a new file names the file to a watch on its folder. An event for a change to an existing file reaches a watch on that file, but a watch on its folder gets only an event for the folder itself, without the file's name. A change made within a few seconds of the file's creation is the exception, because macOS still reports it together with the creation, and the folder's watch sees it as a new file.
+
 ## Shared tools
 
 On smolvm, the shared tools are images of their own, in uncompressed EROFS, because smolvm's kernel mounts no other format. A tool image's key includes the format, so Lima's and smolvm's VMs each get their own tool images from the one share.
