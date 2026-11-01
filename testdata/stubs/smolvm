@@ -2,7 +2,7 @@
 # Stand-in for smolvm in tests. Logs every call to $STUB_LOG. Its machines are files in
 # $STUB_DIR/smolvm/: one per machine, "STATE CPUS MEM_MIB STORAGE_GB NET LABEL", which create,
 # start, stop, update and delete keep up to date; machine ls --json answers from them, and fails
-# with $STUB_DIR/smolvm-ls-fails. A machine
+# with $STUB_DIR/smolvm-ls-fails (hangs 30 s with $STUB_DIR/smolvm-ls-hangs). A machine
 # with $STUB_DIR/smolvm-foreign-NAME has another label (someone else's). start fails with
 # $STUB_DIR/smolvm-start-fails, leaving it stopped, and records the SSH agent it was given
 # ($SSH_AUTH_SOCK, or "unset") to $STUB_DIR/smolvm-agent-NAME. exec answers the libc check
@@ -68,6 +68,7 @@ json_list() { local s="" w; for w in "$@"; do s+="${s:+,}\"$w\""; done; echo "[$
 case $cmd in
   "machine ls")
     [[ ! -e $STUB_DIR/smolvm-ls-fails ]] || { echo "smolvm: the engine didn't answer" >&2; exit 1; }
+    [[ ! -e $STUB_DIR/smolvm-ls-hangs ]] || exec sleep 30
     sep="" out="["
     for m in "$dir"/*; do
       [[ -f $m ]] || continue

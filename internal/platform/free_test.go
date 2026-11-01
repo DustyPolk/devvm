@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestFreeSpace(t *testing.T) {
@@ -74,5 +75,32 @@ func TestHostOverrides(t *testing.T) {
 	}
 	if _, err := test.FreeSpace(t.TempDir()); err != nil {
 		t.Errorf("unset free space: %v", err)
+	}
+}
+
+// TestListTimeout: a test build's positive duration counts; a release's,
+// a bad one, a non-positive one or none give the default.
+func TestListTimeout(t *testing.T) {
+	const def = 30 * time.Second
+	for _, c := range []struct {
+		test bool
+		v    string
+		want time.Duration
+	}{
+		{true, "1s", time.Second},
+		{true, "10m,lima:1s", time.Second},
+		{true, "lima:1s,10m", time.Second},
+		{true, "10m,smolvm:1s", 10 * time.Minute},
+		{true, "smolvm:1s", def},
+		{true, "", def},
+		{true, "soon", def},
+		{true, "0s", def},
+		{true, "-1s", def},
+		{false, "1s", def},
+	} {
+		h := NewHost(c.test, func(k string) string { return map[string]string{TestListWait: c.v}[k] })
+		if got := h.ListTimeout("lima", def); got != c.want {
+			t.Errorf("test=%v %q: %v, want %v", c.test, c.v, got, c.want)
+		}
 	}
 }

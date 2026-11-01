@@ -228,6 +228,9 @@ func fakeHost() map[string]string {
 		platform.TestCPUs:      "8",
 		platform.TestMemoryGiB: "16",
 		platform.TestFreeGiB:   "500",
+		// Backends' listings wait long, as the stubs are slow under load:
+		// a script that tests the timeout sets its own.
+		platform.TestListWait: "10m",
 	}
 }
 

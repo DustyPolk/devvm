@@ -76,6 +76,17 @@ exec devvm space
 stderr '^space_backend_unknown backend=smolvm$'
 stdout '^leftover state +- +1 '
 
+# A backend slower than the timeout is named the same way, and its VMs
+# aren't leftovers either.
+rm $STUB_DIR/smolvm-ls-fails
+exec sh -c 'touch "$STUB_DIR/smolvm-ls-hangs"'
+env DEVVM_TEST_LIST_TIMEOUT=10m,smolvm:1s
+exec devvm space
+stderr '^space_backend_unknown backend=smolvm$'
+stdout '^leftover state +- +1 '
+rm $STUB_DIR/smolvm-ls-hangs
+env DEVVM_TEST_LIST_TIMEOUT=10m
+
 # Lima's download cache, which every Lima home shares: shown apart.
 [darwin] mkdir $HOME/Library/Caches/lima/download/by-url-sha256/0123
 [darwin] exec sh -c 'echo x > "$HOME/Library/Caches/lima/download/by-url-sha256/0123/data"'

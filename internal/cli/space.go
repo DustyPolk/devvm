@@ -29,8 +29,11 @@ import (
 )
 
 // spaceTimeout bounds what devvm space asks each backend, so a backend
-// that hangs (Docker's engine starting) never holds it up.
-const spaceTimeout = 30 * time.Second
+// that hangs (Docker's engine starting) never holds it up; a test build
+// can set it (platform.TestListWait).
+func spaceTimeout(backend string) time.Duration {
+	return registry.Host().ListTimeout(backend, 30*time.Second)
+}
 
 // What devvm space's KEPT column says of each kind of thing.
 const (
@@ -253,7 +256,7 @@ func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
 // backendRows are a backend's VMs and images, and its caches; ok is false
 // when it can't be asked (not installed, not running, too slow).
 func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []spaceRow, caches []cacheRow, ok bool) {
-	ctx, cancel := context.WithTimeout(ctx, spaceTimeout)
+	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
 	defer cancel()
 	if be.Check(ctx) != nil {
 		return nil, nil, false
@@ -305,7 +308,7 @@ func strays(ctx context.Context, be backend.Backend) []strayVM {
 	if !ok {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, spaceTimeout)
+	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
 	defer cancel()
 	ss, err := f.Strays(ctx)
 	if err != nil {

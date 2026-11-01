@@ -4,16 +4,50 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // The environment variables a test build's Host reads in place of the
 // host's own: its CPUs, its memory in GiB, and the free space in GiB on
-// every volume.
+// every volume; and, in place of a timeout's own length, how long
+// devvm waits for a backend's listings (see ListTimeout).
 const (
 	TestCPUs      = "DEVVM_TEST_CPUS"
 	TestMemoryGiB = "DEVVM_TEST_MEMORY_GIB"
 	TestFreeGiB   = "DEVVM_TEST_FREE_GIB"
+	TestListWait  = "DEVVM_TEST_LIST_TIMEOUT"
 )
+
+// ListTimeout returns def, how long devvm waits for backend's listings;
+// in a test build, DEVVM_TEST_LIST_TIMEOUT's, so the CLI tests don't
+// depend on how loaded the machine is. Its value is comma-separated
+// positive durations, each for every backend ("10m") or for one
+// ("smolvm:1s"); one backend's wins.
+func (h Host) ListTimeout(backend string, def time.Duration) time.Duration {
+	all, one := time.Duration(0), time.Duration(0)
+	for _, e := range strings.Split(h.override(TestListWait), ",") {
+		name, v, named := strings.Cut(e, ":")
+		if !named {
+			name, v = "", e
+		}
+		d, err := time.ParseDuration(v)
+		switch {
+		case err != nil || d <= 0:
+		case named && name == backend:
+			one = d
+		case !named:
+			all = d
+		}
+	}
+	switch {
+	case one > 0:
+		return one
+	case all > 0:
+		return all
+	}
+	return def
+}
 
 // Host reads this machine's CPUs, memory and free space. The zero Host
 // reads the machine's own; a test build's (NewHost) reads the overrides

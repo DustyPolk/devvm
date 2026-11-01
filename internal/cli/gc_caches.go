@@ -55,7 +55,7 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 // cacheEntries is devvm's share of a backend's caches; ok is false when
 // the backend can't be asked.
 func cacheEntries(ctx context.Context, be backend.Backend, c backend.CacheCleaner) ([]backend.CacheEntry, bool) {
-	ctx, cancel := context.WithTimeout(ctx, spaceTimeout)
+	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
 	defer cancel()
 	if be.Check(ctx) != nil {
 		return nil, false
