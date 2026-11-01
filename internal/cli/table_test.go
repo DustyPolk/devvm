@@ -55,14 +55,14 @@ func wantCodes(t *testing.T, colored string, painted ...string) {
 func TestWriteListColored(t *testing.T) {
 	ls := []vm.Listed{
 		{Name: "devvm-a", Status: string(backend.StatusRunning), Image: "base", Git: "on", Net: "on", Backend: "lima", Folder: "/a"},
-		{Name: "devvm-bb", Status: string(backend.StatusStopped), Image: "node+claude", Git: "off", Net: "unenforced", Backend: "docker", DockerLayer: "sysbox", Folder: "/b"},
+		{Name: "devvm-bb", Status: string(backend.StatusStopped), Image: "node+claude", Git: "off", Net: "unenforced", Backend: "docker", DockerLayer: "sysbox", Folder: "/b", Links: 2},
 		{Name: "devvm-c", Status: "Broken", Git: vm.ModeClone, Backend: "lima", Folder: "/c"},
 	}
 	plain, colored := tables(t, func(tab *ui.Table) error { return writeList(tab, ls) })
-	want := "NAME      STATUS   IMAGE        GIT    NET         BACKEND          FOLDER\n" +
-		"devvm-a   Running  base         on     on          lima             /a\n" +
-		"devvm-bb  Stopped  node+claude  off    unenforced  docker (sysbox)  /b\n" +
-		"devvm-c   Broken   -            clone  -           lima             /c\n"
+	want := "NAME      STATUS   IMAGE        GIT    NET         LINKS  BACKEND          FOLDER\n" +
+		"devvm-a   Running  base         on     on          -      lima             /a\n" +
+		"devvm-bb  Stopped  node+claude  off    unenforced  2      docker (sysbox)  /b\n" +
+		"devvm-c   Broken   -            clone  -           -      lima             /c\n"
 	if plain != want {
 		t.Errorf("got\n%s\nwant\n%s", plain, want)
 	}

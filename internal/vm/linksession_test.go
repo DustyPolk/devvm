@@ -41,7 +41,7 @@ func linkSessionEnv(t *testing.T) (Links, *backendtest.Fake, *state.VM, *state.V
 	t.Helper()
 	root := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	f := backendtest.New("fake", backend.Caps{backend.FeatureSSH: backend.Native})
+	f := backendtest.New("fake", backend.Caps{backend.FeatureSSH: backend.Native, backend.FeatureLink: backend.Native})
 	f.Target = backend.SSHTarget{
 		Host: "127.0.0.1", Port: 62022, User: "u",
 		Options: []backend.SSHOption{{Key: "IdentityFile", Value: `"/k"`}, {Key: "IdentityFile", Value: `"/other"`}},
@@ -202,9 +202,13 @@ func TestSessionLinks(t *testing.T) {
 		t.Errorf("Session of a stopped client: %v", err)
 	}
 	f.Instances[client.Name()] = backend.Instance{Name: client.Name(), Status: backend.StatusRunning}
-	f.Capabilities = backend.Caps{}
+	f.Capabilities = backend.Caps{backend.FeatureLink: backend.Native}
 	if err := e.Session(t.Context(), client.Name(), nil); err == nil || !strings.Contains(err.Error(), "ssh isn't usable") {
 		t.Errorf("Session without ssh: %v", err)
+	}
+	f.Capabilities = backend.Caps{backend.FeatureSSH: backend.Native}
+	if err := e.Session(t.Context(), client.Name(), nil); names(err) != "backend_lacks backend=fake feature=link vm="+client.Name() {
+		t.Errorf("Session on a backend without links: %v", err)
 	}
 }
 

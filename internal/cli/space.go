@@ -241,7 +241,7 @@ func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
 		return r, err
 	}
 	r.Rows = append(r.Rows, toolRows...)
-	dataRows, err := e.dataRows()
+	dataRows, err := e.dataRows(ctx)
 	if err != nil {
 		return r, err
 	}
@@ -454,7 +454,7 @@ func formatBackend(reg *backend.Registry, format string) string {
 // dataRows are the rest of devvm's data folder: exports, logs, devvm's
 // own mise, its files written out, what's left of VMs gone from their
 // backends, and its other state. Each file is counted once.
-func (e spaceEnv) dataRows() ([]spaceRow, error) {
+func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	d := e.b.Dirs
 	es, err := exports(d)
 	if err != nil {
@@ -484,7 +484,7 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	left, err := e.leftovers()
+	left, err := e.leftovers(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -545,9 +545,15 @@ func (e spaceEnv) staleAssets() (int64, error) {
 
 // leftovers is what devvm keeps for VMs whose backend answered but no
 // longer has them: their state, run and backend files. Their logs are
-// network logs'. A VM whose backend didn't answer is never one.
-func (e spaceEnv) leftovers() (spaceRow, error) {
+// network logs'. A VM whose backend didn't answer is never one. The link
+// sessions' sockets that nothing listens on count too, one each.
+func (e spaceEnv) leftovers(ctx context.Context) (spaceRow, error) {
 	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans", Retain: e.retainOf(state.RetainOrphansAge)}
+	socks, err := vm.LeftoverSockets(ctx, e.b.Dirs)
+	if err != nil {
+		return row, err
+	}
+	row.Count = len(socks)
 	names, err := state.VMNames(e.b.Dirs)
 	if err != nil {
 		return row, err

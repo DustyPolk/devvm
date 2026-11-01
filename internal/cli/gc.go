@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -404,7 +405,7 @@ func (p gcPlan) showRecent(u *ui.UI) bool {
 // keeps for being recent aren't any.
 func (p gcPlan) empty() bool {
 	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.assets)+len(p.mise) == 0 &&
-		!p.nix.any()
+		len(p.orphans.Links)+len(p.orphans.Sockets) == 0 && !p.nix.any()
 }
 
 // showOrphans lists the VMs gc --orphans forgets, then says which it
@@ -418,6 +419,15 @@ func (p gcPlan) showOrphans(u *ui.UI) {
 				u.Say(orphanLeftover(l))
 			}
 		}
+	}
+	if links := p.orphans.Links; len(links) > 0 {
+		u.Say(msg.GCDeadLinks(len(links)))
+		for _, l := range links {
+			u.Say(msg.GCDeadLink(l.Name, strconv.Itoa(l.Port), l.Target, l.Client))
+		}
+	}
+	if n := len(p.orphans.Sockets); n > 0 {
+		u.Say(msg.GCLinkSockets(n))
 	}
 	for _, b := range p.orphans.Unknown {
 		u.Note(msg.GCOrphansUnknown(b))
@@ -486,6 +496,14 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 			return err
 		}
 		u.Info(msg.ForgotOrphan(o.Name))
+	}
+	if len(p.orphans.Links)+len(p.orphans.Sockets) > 0 {
+		if err := p.leftovers.ForgetLinks(ctx); err != nil {
+			return err
+		}
+		if n := len(p.orphans.Sockets); n > 0 {
+			u.Info(msg.DeletedLinkSockets(n))
+		}
 	}
 	if err := deleteStale(ctx, u, p.images); err != nil {
 		return err

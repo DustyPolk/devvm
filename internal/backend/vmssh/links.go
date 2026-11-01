@@ -176,7 +176,7 @@ type proc struct {
 }
 
 func (l *Links) logf(format string, args ...any) {
-	_, _ = fmt.Fprintf(l.Log, "devvm links: "+format+"\n", args...)
+	_, _ = fmt.Fprintf(l.Log, logPrefix+format+"\n", args...)
 }
 
 // linkName is the name of one of the session's files in Dir: a hash of
@@ -245,7 +245,7 @@ func (l *Links) Run(ctx context.Context) error {
 	for ctx.Err() == nil {
 		none, err := l.session(ctx)
 		if none {
-			l.logf("%s has no links", l.VM)
+			l.logf("%s", l.VM+lineNoLinks)
 			return nil
 		}
 		if err != nil && ctx.Err() == nil {
@@ -259,7 +259,7 @@ func (l *Links) Run(ctx context.Context) error {
 		case <-time.After(l.Tick):
 		}
 	}
-	l.logf("%s stopped", l.VM)
+	l.logf("%s", l.VM+lineStopped)
 	return nil
 }
 
@@ -283,6 +283,7 @@ func (l *Links) session(ctx context.Context) (none bool, err error) {
 	clear(l.failed)
 	l.mu.Unlock()
 	defer l.closeAll()
+	defer func() { cancel(); p.wait(masterEndWait) }()
 	l.logf("carrying %s's links", l.VM)
 	t := time.NewTicker(l.Sync)
 	defer t.Stop()
@@ -319,6 +320,10 @@ func (l *Links) master(ctx context.Context, ssh SSH) (*proc, error) {
 	p := &proc{done: make(chan struct{})}
 	go func() {
 		p.err = wait()
+		// ssh killed leaves its control socket: it goes with the master.
+		if fi, err := os.Lstat(ssh.Control); err == nil && fi.Mode()&os.ModeSocket != 0 {
+			_ = os.Remove(ssh.Control)
+		}
 		close(p.done)
 	}()
 	deadline := time.Now().Add(l.Wait)
@@ -384,21 +389,21 @@ func (l *Links) sync(ctx context.Context, ctl string, want []Link) {
 
 // add listens on a link's socket and asks the client to listen for it.
 func (l *Links) add(ctx context.Context, ctl string, w Link) {
-	fail := func(err error) {
+	fail := func(line string, err error) {
 		l.mu.Lock()
 		l.failed[w.key()] = true
 		l.mu.Unlock()
-		l.logf("%s: not carried: %v", w.listen(), err)
+		l.logf("%s: %v", w.listen()+line, err)
 	}
 	sock := l.Socket(w)
 	ln, err := listenSocket(ctx, sock)
 	if err != nil {
-		fail(err)
+		fail(lineNotCarried, err)
 		return
 	}
 	if err := l.Command(ctx, forwardArgs(ctl, "forward", w.listen(), sock)); err != nil {
 		_ = ln.Close()
-		fail(err)
+		fail(lineRefused, err)
 		l.Failed(w, err)
 		return
 	}
@@ -407,21 +412,102 @@ func (l *Links) add(ctx context.Context, ctl string, w Link) {
 	l.open[w.key()] = end
 	l.mu.Unlock()
 	go l.serve(ctx, end)
-	l.logf("%s: carried", w.listen())
+	l.logf("%s", w.listen()+lineCarried)
+}
+
+// What a session's log says of each link it adds, after the address and
+// port the client listens on, and of itself: ReadLinksLog reads them.
+const (
+	logPrefix      = "devvm links: "
+	lineCarried    = ": carried"
+	lineNotCarried = ": not carried"
+	lineRefused    = ": refused by the VM" // the client didn't listen: a program there holds the address
+	lineNoLinks    = " has no links"
+	lineStopped    = " stopped"
+)
+
+// LinksReport is what a session's log says of the links it was asked to
+// carry: those the client refused to listen for, and whether it has said
+// what came of each of them, or that it ended or failed, so there's
+// nothing more to wait for.
+type LinksReport struct {
+	Refused []Link
+	Settled bool
+}
+
+// ReadLinksLog reads what a session for client vm logged (log, from its
+// start) of links: which of them the client refused, and whether every
+// one has a line of its own or the session ended or failed first.
+func ReadLinksLog(log []byte, vm string, links []Link) LinksReport {
+	var r LinksReport
+	said := map[linkKey]bool{}
+	for line := range strings.SplitSeq(string(log), "\n") {
+		rest, ok := strings.CutPrefix(line, logPrefix)
+		if !ok {
+			continue
+		}
+		switch {
+		case rest == vm+lineNoLinks, rest == vm+lineStopped:
+			r.Settled = true
+		case strings.HasPrefix(rest, vm+": "):
+			// The session failed (its ssh didn't connect, say), and tries
+			// again later: nothing to wait for now.
+			r.Settled = true
+		}
+		for _, lk := range links {
+			p := lk.listen()
+			switch {
+			case strings.HasPrefix(rest, p+lineRefused):
+				if !said[lk.key()] {
+					r.Refused = append(r.Refused, lk)
+				}
+				said[lk.key()] = true
+			case strings.HasPrefix(rest, p+lineCarried), strings.HasPrefix(rest, p+lineNotCarried):
+				said[lk.key()] = true
+			}
+		}
+	}
+	if len(said) == len(links) {
+		r.Settled = true
+	}
+	return r
 }
 
 // closeAll stops listening on every link's socket, which removes it, and
 // ends the masters to targets: the connections they carry end too.
 func (l *Links) closeAll() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	var ended []*targetMaster
 	for k, end := range l.open {
 		_ = end.ln.Close()
 		delete(l.open, k)
 	}
 	for vm, m := range l.masters {
 		m.cancel()
+		ended = append(ended, m)
 		delete(l.masters, vm)
+	}
+	l.mu.Unlock()
+	// Each master's ssh ends, and its control socket goes with it, before
+	// the session does.
+	for _, m := range ended {
+		<-m.ready
+		m.p.wait(masterEndWait)
+	}
+}
+
+// masterEndWait bounds how long a session waits for a master's ssh to end
+// once it's stopped.
+const masterEndWait = 2 * time.Second
+
+// wait waits up to d for the ssh to end; a nil one has.
+func (p *proc) wait(d time.Duration) {
+	if p == nil {
+		return
+	}
+	select {
+	case <-p.done:
+	case <-time.After(d):
 	}
 }
 

@@ -554,6 +554,11 @@ func DeletedImage(image string, key string) M {
 	return M{id: "deleted_image", vals: []val{{"image", image}, {"key", key}}}
 }
 
+// DeletedLinkSockets is [deleted_link_sockets]: "deleted {{.count}} sockets of link sessions"
+func DeletedLinkSockets(count int) M {
+	return M{id: "deleted_link_sockets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // DeletedMise is [deleted_mise]: "deleted {{.count}} older versions of devvm's mise"
 func DeletedMise(count int) M {
 	return M{id: "deleted_mise", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
@@ -1154,6 +1159,16 @@ func GCConfirm() M {
 	return M{id: "gc_confirm"}
 }
 
+// GCDeadLink is [gc_dead_link]: "  {{.vm}}'s link {{.name}}:{{.port}} to {{.target}}"
+func GCDeadLink(name string, port string, target string, vm string) M {
+	return M{id: "gc_dead_link", vals: []val{{"name", name}, {"port", port}, {"target", target}, {"vm", vm}}}
+}
+
+// GCDeadLinks is [gc_dead_links]: "{{.count}} links to VMs that are gone:"
+func GCDeadLinks(count int) M {
+	return M{id: "gc_dead_links", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // GCFailed is [gc_failed]: "Cleaning up failed: {{.reason}}."
 func GCFailed(reason string) M {
 	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
@@ -1177,6 +1192,11 @@ func GCImage(image string, key string) M {
 // GCImages is [gc_images]: "Stale and unfinished images:"
 func GCImages() M {
 	return M{id: "gc_images"}
+}
+
+// GCLinkSockets is [gc_link_sockets]: "{{.count}} sockets are left from link sessions that ended."
+func GCLinkSockets(count int) M {
+	return M{id: "gc_link_sockets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
 // GCMise is [gc_mise]: "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."
@@ -1724,6 +1744,16 @@ func LinkTargetNamed(name string, target string, vm string) M {
 	return M{id: "link_target_named", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
 }
 
+// LinkTargetStopped is [link_target_stopped]: "{{.vm}}'s links to {{.target}} don't work until {{.target}} runs, because devvm never starts a VM for a link. To start it, run devvm in its folder."
+func LinkTargetStopped(target string, vm string) M {
+	return M{id: "link_target_stopped", vals: []val{{"target", target}, {"vm", vm}}}
+}
+
+// LinkTargetUnusable is [link_target_unusable]: "{{.vm}}'s links to {{.target}} don't work, because {{.target}}'s backend can't carry links."
+func LinkTargetUnusable(target string, vm string) M {
+	return M{id: "link_target_unusable", vals: []val{{"target", target}, {"vm", vm}}}
+}
+
 // LinkTrust is [link_trust]: "A link joins the two VMs' trust. Code in {{.vm}} can often run code in {{.target}} through the service it reaches, and then has whatever {{.target}} has."
 func LinkTrust(target string, vm string) M {
 	return M{id: "link_trust", vals: []val{{"target", target}, {"vm", vm}}}
@@ -1732,6 +1762,21 @@ func LinkTrust(target string, vm string) M {
 // LinkUnknownTarget is [link_unknown_target]: "There's no VM for {{.target}}. Give a folder's name or path, or a VM's name, as devvm ls lists them."
 func LinkUnknownTarget(target string) M {
 	return M{id: "link_unknown_target", vals: []val{{"target", target}}}
+}
+
+// LinksNextStart is [links_next_start]: "{{.vm}} isn't running, so it gets the change when it next starts."
+func LinksNextStart(vm string) M {
+	return M{id: "links_next_start", vals: []val{{"vm", vm}}}
+}
+
+// LinksTargetGone is [links_target_gone]: "{{.vms}} have no links to {{.vm}} any more."
+func LinksTargetGone(count int, vm string, vms string) M {
+	return M{id: "links_target_gone", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"vm", vm}, {"vms", vms}}}
+}
+
+// LinksUpdateFailed is [links_update_failed]: "Updating {{.vm}}'s links failed, so it gets them when it next starts."
+func LinksUpdateFailed(vm string) M {
+	return M{id: "links_update_failed", vals: []val{{"vm", vm}}}
 }
 
 // LoadKey is [load_key]: "Run {{.cmd}} now to load {{.key}} into your SSH agent?"
@@ -1889,7 +1934,7 @@ func NetOffDockerLayer(backend string, vm string) M {
 	return M{id: "net_off_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetOffLog is [net_off_log]: "Network policy is off for {{.vm}}, so devvm logs nothing new for it. To turn it on, run devvm network on."
+// NetOffLog is [net_off_log]: "Network policy is off for {{.vm}}, so devvm logs only the connections of its links to your other VMs. To log the rest of its traffic, run devvm network on."
 func NetOffLog(vm string) M {
 	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
 }
@@ -1967,6 +2012,16 @@ func NetworkDefaultOn() M {
 // NetworkFailed is [network_failed]: "Reading or changing the network policy of this folder's VM failed: {{.reason}}."
 func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
+}
+
+// NetworkOffLinked is [network_off_linked]: "{{.vms}} have network policy and link to {{.vm}}, so it keeps its network policy. Remove those links with devvm link rm in their folders first."
+func NetworkOffLinked(vm string, vms string) M {
+	return M{id: "network_off_linked", vals: []val{{"vm", vm}, {"vms", vms}}}
+}
+
+// NetworkOnLinked is [network_on_linked]: "{{.vm}} links to {{.targets}}, which have no network policy, so it can't have network policy either. Remove those links with devvm link rm first, or turn on network policy for each of them."
+func NetworkOnLinked(targets string, vm string) M {
+	return M{id: "network_on_linked", vals: []val{{"targets", targets}, {"vm", vm}}}
 }
 
 // NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
@@ -2934,6 +2989,11 @@ func Unpublished(ports string, vm string) M {
 	return M{id: "unpublished", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
+// UnpublishedLinked is [unpublished_linked]: "{{.vms}} link to those ports of {{.vm}}, so their next connections there are refused. To remove those links, run devvm link rm in their folders."
+func UnpublishedLinked(vm string, vms string) M {
+	return M{id: "unpublished_linked", vals: []val{{"vm", vm}, {"vms", vms}}}
+}
+
 // UnsafeFolder is [unsafe_folder]: "{{.dir}} is or holds {{.holds}}, so the VM would get read-write access to it. Use a project folder inside {{.dir}}, use --clone, or pass --unsafe-folder if you mean it."
 func UnsafeFolder(dir string, holds string) M {
 	return M{id: "unsafe_folder", vals: []val{{"dir", dir}, {"holds", holds}}}
@@ -3211,6 +3271,7 @@ var specs = map[string]spec{
 	"deleted_cache":                    {plural: true, fields: []string{"backend", "count"}},
 	"deleted_history":                  {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
+	"deleted_link_sockets":             {plural: true, fields: []string{"count"}},
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
 	"deleted_nix_cache":                {plural: true, fields: []string{"count", "size"}},
 	"deleted_old_image":                {fields: []string{"image", "key"}},
@@ -3331,11 +3392,14 @@ var specs = map[string]spec{
 	"gc_cache_confirm":                 {fields: []string{"backend"}},
 	"gc_cache_entry":                   {fields: []string{"size", "what"}},
 	"gc_confirm":                       {},
+	"gc_dead_link":                     {fields: []string{"name", "port", "target", "vm"}},
+	"gc_dead_links":                    {plural: true, fields: []string{"count"}},
 	"gc_failed":                        {fields: []string{"reason"}},
 	"gc_history":                       {plural: true, fields: []string{"count", "size"}},
 	"gc_history_export":                {fields: []string{"date", "size", "vm"}},
 	"gc_image":                         {fields: []string{"image", "key"}},
 	"gc_images":                        {},
+	"gc_link_sockets":                  {plural: true, fields: []string{"count"}},
 	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
 	"gc_names_need_tools":              {fields: []string{"tool"}},
 	"gc_nix_cache":                     {plural: true, fields: []string{"count", "size"}},
@@ -3445,8 +3509,13 @@ var specs = map[string]spec{
 	"link_session_failed":              {fields: []string{"reason"}},
 	"link_setup_invalid":               {fields: []string{"address", "name", "vm"}},
 	"link_target_named":                {fields: []string{"name", "target", "vm"}},
+	"link_target_stopped":              {fields: []string{"target", "vm"}},
+	"link_target_unusable":             {fields: []string{"target", "vm"}},
 	"link_trust":                       {fields: []string{"target", "vm"}},
 	"link_unknown_target":              {fields: []string{"target"}},
+	"links_next_start":                 {fields: []string{"vm"}},
+	"links_target_gone":                {plural: true, fields: []string{"count", "vm", "vms"}},
+	"links_update_failed":              {fields: []string{"vm"}},
 	"load_key":                         {fields: []string{"cmd", "key"}},
 	"load_key_with":                    {fields: []string{"cmd"}},
 	"log_details":                      {fields: []string{"file"}},
@@ -3494,6 +3563,8 @@ var specs = map[string]spec{
 	"network_default_off":              {},
 	"network_default_on":               {},
 	"network_failed":                   {fields: []string{"reason"}},
+	"network_off_linked":               {fields: []string{"vm", "vms"}},
+	"network_on_linked":                {fields: []string{"targets", "vm"}},
 	"newer_tools":                      {fields: []string{"tools"}},
 	"no_claude_token":                  {fields: []string{"vm"}},
 	"no_code_command":                  {fields: []string{"host"}},
@@ -3687,6 +3758,7 @@ var specs = map[string]spec{
 	"unknown_tool":                     {fields: []string{"tool", "tools"}},
 	"unpacking_tools":                  {},
 	"unpublished":                      {fields: []string{"ports", "vm"}},
+	"unpublished_linked":               {fields: []string{"vm", "vms"}},
 	"unsafe_folder":                    {fields: []string{"dir", "holds"}},
 	"unsafe_folder_inside":             {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":               {fields: []string{"dir", "holds"}},

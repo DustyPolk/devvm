@@ -904,6 +904,22 @@ other = "    image {{.image}}"
 [forgot_orphan]
 other = "deleted what devvm kept for {{.vm}}"
 
+[gc_dead_links]
+one = "{{.count}} link to a VM that's gone:"
+other = "{{.count}} links to VMs that are gone:"
+
+[gc_dead_link]
+description = "vm is the client VM, name and port the link's, target the VM that's gone"
+other = "  {{.vm}}'s link {{.name}}:{{.port}} to {{.target}}"
+
+[gc_link_sockets]
+one = "{{.count}} socket is left from a link session that ended."
+other = "{{.count}} sockets are left from link sessions that ended."
+
+[deleted_link_sockets]
+one = "deleted {{.count}} socket of a link session"
+other = "deleted {{.count}} sockets of link sessions"
+
 [gc_backend_skipped]
 description = "backend is a backend a VM's state names, which couldn't list its images; gc goes on with the other backends"
 other = "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
@@ -1308,6 +1324,37 @@ other = "{{.vm}} offers {{.ports}} to links from your other VMs."
 description = "ports are those withdrawn, as given"
 other = "{{.vm}} doesn't offer {{.ports}} to links any more."
 
+[unpublished_linked]
+description = "vms lists the VMs with links to the ports withdrawn, comma-separated"
+other = "{{.vms}} link to those ports of {{.vm}}, so their next connections there are refused. To remove those links, run devvm link rm in their folders."
+
+[links_next_start]
+other = "{{.vm}} isn't running, so it gets the change when it next starts."
+
+[link_target_stopped]
+other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} runs, because devvm never starts a VM for a link. To start it, run devvm in its folder."
+
+[link_target_unusable]
+description = "the reason follows, from the backend's check"
+other = "{{.vm}}'s links to {{.target}} don't work, because {{.target}}'s backend can't carry links."
+
+[links_target_gone]
+description = "vms lists the VMs that had links to vm, comma-separated; count is how many"
+one = "{{.vms}} has no links to {{.vm}} any more."
+other = "{{.vms}} have no links to {{.vm}} any more."
+
+[links_update_failed]
+description = "the reason follows"
+other = "Updating {{.vm}}'s links failed, so it gets them when it next starts."
+
+[network_off_linked]
+description = "vms lists the VMs with network policy that link to vm, comma-separated"
+other = "{{.vms}} have network policy and link to {{.vm}}, so it keeps its network policy. Remove those links with devvm link rm in their folders first."
+
+[network_on_linked]
+description = "targets lists the VMs without network policy that vm links to, comma-separated"
+other = "{{.vm}} links to {{.targets}}, which have no network policy, so it can't have network policy either. Remove those links with devvm link rm first, or turn on network policy for each of them."
+
 [port_not_published]
 other = "{{.port}} isn't published. The published ports are {{.ports}}."
 
@@ -1355,7 +1402,7 @@ other = "devvm turned network policy {{.state}} for {{.vm}}. It applies when the
 other = "The secrets {{.vm}} got while network policy was off still work wherever it kept them. Rotate them if that matters."
 
 [net_off_log]
-other = "Network policy is off for {{.vm}}, so devvm logs nothing new for it. To turn it on, run devvm network on."
+other = "Network policy is off for {{.vm}}, so devvm logs only the connections of its links to your other VMs. To log the rest of its traffic, run devvm network on."
 
 [log_empty]
 other = "{{.vm}}'s network log is empty so far."

@@ -29,6 +29,8 @@ type Listed struct {
 	// backend makes VMs for it (KeyDockerLayer).
 	DockerLayer string
 	Folder      string
+	// Links is how many links it has to other VMs' ports, as a client.
+	Links int
 	// DiskOver warns that its disk holds more than VMs get elsewhere, on
 	// a backend that sizes no disks (backend.DiskUser); nil otherwise.
 	DiskOver *msg.M
@@ -78,7 +80,7 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	l := Listed{
 		Name: in.Name, Status: string(in.Status), Image: st.Get(state.KeyImage),
 		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(), DockerLayer: st.Get(KeyDockerLayer),
-		Folder: st.Get(state.KeyDir),
+		Folder: st.Get(state.KeyDir), Links: len(strings.Fields(st.Get(KeyLinks))),
 	}
 	if l.Image != "" {
 		l.From = st.Get(state.KeyFrom)

@@ -101,7 +101,7 @@ stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- 
 ! stderr backend_unreviewed
 exists $STUB_DIR/sync.tar
 exec devvm ls
-stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +docker +\S+/web$'
+stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +- +docker +\S+/web$'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^backend=docker$'
 ! stdout '^disk='
@@ -171,8 +171,8 @@ exec sh -c 'cat "$VMS"/devvm-sysbox-*'
 stdout '^docker_layer=sysbox$'
 stdout '^net=off$'
 exec devvm ls
-[darwin] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +on +off +docker \(sysbox\) +\S+/sysbox$'
-[linux] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +off +off +docker \(sysbox\) +\S+/sysbox$'
+[darwin] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +on +off +- +docker \(sysbox\) +\S+/sysbox$'
+[linux] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +off +off +- +docker \(sysbox\) +\S+/sysbox$'
 ! exec devvm network on
 stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
 exec devvm rm --force --no-export

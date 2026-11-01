@@ -1,0 +1,372 @@
+package vm
+
+import (
+	"net"
+	"net/netip"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// linkVMs makes the states of project VMs by folder name, each finished
+// (its network choice made, off), on the fake backend.
+func linkVMs(t *testing.T, d paths.Dirs, folders ...string) []*state.VM {
+	t.Helper()
+	var out []*state.VM
+	for _, f := range folders {
+		st, err := state.CreateVM(d, "devvm-"+f+"-0123456789abcd", state.NewVM{Image: "base", Backend: "fake"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.Set(KeyNet, "off"); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+// linkTo is a link from a client to target's port, at addr.
+func linkTo(target *state.VM, name string, port int, addr string) Link {
+	return Link{Name: name, Port: port, Target: target.Name(), TargetID: target.Get(state.KeyID), Addr: netip.MustParseAddr(addr)}
+}
+
+func setNet(t *testing.T, st *state.VM, v string) {
+	t.Helper()
+	if err := st.Set(netpolicy.KeyNet, v); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A client's guest gets an address and a name for each target, by
+// address, but none for a target whose policy rule no longer holds.
+func TestGuestLinks(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	vms := linkVMs(t, d, "app", "db", "api")
+	app, db, api := vms[0], vms[1], vms[2]
+	links := []Link{linkTo(api, "api", 3000, "127.77.0.2"), linkTo(db, "db", 5432, "127.77.0.1"), linkTo(db, "db", 6379, "127.77.0.1")}
+	if err := writeLinks(app, links); err != nil {
+		t.Fatal(err)
+	}
+	show := func(gs []GuestLink) string {
+		var s []string
+		for _, g := range gs {
+			s = append(s, g.Addr.String()+"="+strings.Join(g.Names, ","))
+		}
+		return strings.Join(s, " ")
+	}
+	if got, err := guestLinks(d, app); err != nil || show(got) != "127.77.0.1=db 127.77.0.2=api" {
+		t.Errorf("guestLinks = %q, %v", show(got), err)
+	}
+	setNet(t, app, "on")
+	setNet(t, api, "on")
+	if got, err := guestLinks(d, app); err != nil || show(got) != "127.77.0.2=api" {
+		t.Errorf("with network policy on app and api alone: %q, %v", show(got), err)
+	}
+}
+
+// Turning network policy off for a target that clients with it link to,
+// or on for a client linked to a target without it, is refused; links to
+// a VM that's gone or was made again don't count.
+func TestPolicyLinked(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	vms := linkVMs(t, d, "app", "web", "db")
+	app, web, db := vms[0], vms[1], vms[2]
+	for _, c := range []*state.VM{app, web} {
+		if err := writeLinks(c, []Link{linkTo(db, "db", 5432, "127.77.0.1")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(st *state.VM, on bool, want string) {
+		t.Helper()
+		if got := names(policyLinked(d, st, on)); got != want {
+			t.Errorf("policyLinked(%s, %v) = %q, want %q", st.Name(), on, got, want)
+		}
+	}
+	check(db, false, "")
+	check(app, true, "network_on_linked targets="+db.Name()+" vm="+app.Name())
+	setNet(t, db, "on")
+	check(app, true, "")
+	setNet(t, app, "on")
+	setNet(t, web, "on")
+	check(db, false, "network_off_linked vm="+db.Name()+" vms="+app.Name()+", "+web.Name())
+	setNet(t, web, "off")
+	check(db, false, "network_off_linked vm="+db.Name()+" vms="+app.Name())
+	// db made again: app's link is to the one before.
+	if _, err := state.CreateVM(d, db.Name(), state.NewVM{Image: "base", Backend: "fake"}); err != nil {
+		t.Fatal(err)
+	}
+	db, _ = state.ReadVM(d, db.Name())
+	check(db, false, "")
+	setNet(t, app, "off")
+	check(app, true, "")
+}
+
+// A target's removal takes the links to it out of every client's state,
+// and names the clients; their other links stay.
+func TestUnlinkTarget(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	vms := linkVMs(t, e.Dirs, "app", "web", "db", "api")
+	app, web, db, api := vms[0], vms[1], vms[2], vms[3]
+	if err := writeLinks(app, []Link{linkTo(db, "db", 5432, "127.77.0.1"), linkTo(api, "api", 3000, "127.77.0.2")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeLinks(web, []Link{linkTo(db, "pg", 5432, "127.77.0.1")}); err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range vms {
+		f.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: backend.StatusStopped}
+	}
+	var said []string
+	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	e.Warn = func(m msg.M) { t.Errorf("warned %s", m.Names()) }
+	if err := (linkRuns{e}).unlinkTarget(t.Context(), db.Name()); err != nil {
+		t.Fatal(err)
+	}
+	want := "links_target_gone count=2 vm=" + db.Name() + " vms=" + app.Name() + ", " + web.Name()
+	if !slices.Equal(said, []string{want}) {
+		t.Errorf("said %q, want %q", said, want)
+	}
+	for _, c := range []struct {
+		st   *state.VM
+		want string
+	}{{app, "api"}, {web, ""}} {
+		st, _ := state.ReadVM(e.Dirs, c.st.Name())
+		links, err := ReadLinks(st)
+		var got []string
+		for _, l := range links {
+			got = append(got, l.Name)
+		}
+		if err != nil || strings.Join(got, " ") != c.want {
+			t.Errorf("%s's links: %v, %v; want %q", c.st.Name(), got, err, c.want)
+		}
+	}
+	said = nil
+	if err := (linkRuns{e}).unlinkTarget(t.Context(), db.Name()); err != nil || len(said) != 0 {
+		t.Errorf("again: %v, said %q", err, said)
+	}
+}
+
+// Links to VMs without state are dead links; a socket nothing listens on
+// is a leftover, and one something listens on isn't.
+func TestLinkLeftovers(t *testing.T) {
+	run, err := os.MkdirTemp("/tmp", "dl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(run) })
+	d := paths.Dirs{Data: t.TempDir()}
+	vms := linkVMs(t, d, "app", "db")
+	app, db := vms[0], vms[1]
+	if err := writeLinks(app, []Link{linkTo(db, "db", 5432, "127.77.0.1")}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := deadLinks(d); err != nil || len(got) != 0 {
+		t.Errorf("deadLinks with db there: %+v, %v", got, err)
+	}
+	if err := db.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	want := DeadLink{Client: app.Name(), Name: "db", Target: db.Name(), Port: 5432}
+	if got, err := deadLinks(d); err != nil || !slices.Equal(got, []DeadLink{want}) {
+		t.Errorf("deadLinks = %+v, %v; want %+v", got, err, want)
+	}
+
+	d = paths.Dirs{Data: run}
+	if err := os.MkdirAll(d.Run(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	listen := func(name string, keep bool) {
+		t.Helper()
+		ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(d.Run(), name), Net: "unix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln.SetUnlinkOnClose(false)
+		if keep {
+			t.Cleanup(func() { _ = ln.Close() })
+		} else {
+			_ = ln.Close()
+		}
+	}
+	listen("link-0000000000000001.sock", false)
+	listen("link-0000000000000002.ctl", false)
+	listen("link-0000000000000003.sock", true)
+	listen("devvm-app-0123456789abcd.proxy.sock", false)
+	if err := os.WriteFile(filepath.Join(d.Run(), "link-0000000000000004.sock"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LeftoverSockets(t.Context(), d)
+	stale := []string{filepath.Join(d.Run(), "link-0000000000000001.sock"), filepath.Join(d.Run(), "link-0000000000000002.ctl")}
+	slices.Sort(stale)
+	if err != nil || !slices.Equal(got, stale) {
+		t.Errorf("LeftoverSockets = %v, %v; want %v", got, err, stale)
+	}
+	for _, p := range append(got, filepath.Join(d.Run(), "link-0000000000000003.sock"), filepath.Join(d.Run(), "link-0000000000000004.sock")) {
+		if err := RemoveLeftoverSocket(t.Context(), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	left, _ := filepath.Glob(filepath.Join(d.Run(), "link-*"))
+	if !slices.Equal(left, []string{filepath.Join(d.Run(), "link-0000000000000003.sock"), filepath.Join(d.Run(), "link-0000000000000004.sock")}) {
+		t.Errorf("left: %v", left)
+	}
+}
+
+// linkRunsEnv is an Env whose link sessions are sleeps, each started with
+// what start writes to its log.
+func linkRunsEnv(t *testing.T, logged string) (linkRuns, *[][]string) {
+	t.Helper()
+	e, _, _ := upEnv(t, allNative())
+	var mu sync.Mutex
+	args := map[int][]string{}
+	var started [][]string
+	e.Proxy.Start = func(path string, a []string, out *os.File) (int, error) {
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
+		if err := cmd.Start(); err != nil {
+			return 0, err
+		}
+		done := make(chan struct{})
+		go func() { _ = cmd.Wait(); close(done) }()
+		t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
+		mu.Lock()
+		defer mu.Unlock()
+		args[cmd.Process.Pid] = append([]string{path}, a...)
+		started = append(started, a)
+		_, err := out.WriteString(logged)
+		return cmd.Process.Pid, err
+	}
+	e.Proxy.Args = func(pid int) ([]string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return args[pid], nil
+	}
+	e.Proxy.Signal = func(pid int, sig syscall.Signal) error {
+		p, err := os.FindProcess(pid)
+		if err != nil {
+			return err
+		}
+		return p.Signal(sig)
+	}
+	return linkRuns{e}, &started
+}
+
+// A client's link session is started once, found by its pid file and
+// arguments, waited for to say what came of its links, and stopped.
+func TestLinkRuns(t *testing.T) {
+	vm := "devvm-app-0123456789abcd"
+	db := Link{Name: "db", Port: 5432, Addr: netip.MustParseAddr("127.77.0.1")}
+	api := Link{Name: "api", Port: 3000, Addr: netip.MustParseAddr("127.77.0.2")}
+	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255\n")
+	var warned []string
+	r.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if _, ok := r.pid(vm); ok {
+		t.Fatal("a session before any started")
+	}
+	ok, from, err := r.ensure(vm)
+	if err != nil || !ok || from != 0 {
+		t.Fatalf("ensure = %v, %d, %v", ok, from, err)
+	}
+	if ok, _, err := r.ensure(vm); err != nil || ok || len(*started) != 1 || !slices.Equal((*started)[0], []string{"_links", vm}) {
+		t.Errorf("ensure again: %v, %v; started %v", ok, err, *started)
+	}
+	start := time.Now()
+	r.report(t.Context(), vm, []Link{db, api}, from)
+	if !slices.Equal(warned, []string{"link_port_taken name=api port=3000 vm=" + vm}) || time.Since(start) > time.Second {
+		t.Errorf("warned %q after %v", warned, time.Since(start))
+	}
+	// Lines before from aren't this change's.
+	warned = nil
+	r.report(t.Context(), vm, []Link{api}, r.logSize(vm))
+	if len(warned) != 0 {
+		t.Errorf("warned %q of an earlier line", warned)
+	}
+	// Another process with the pid file's pid isn't the session.
+	if err := os.WriteFile(linksPID(r.Dirs, vm), []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.pid(vm); ok {
+		t.Error("pid 1 is the session")
+	}
+	if _, _, err := r.ensure(vm); err != nil {
+		t.Fatal(err)
+	}
+	pid, ok := r.pid(vm)
+	if !ok {
+		t.Fatal("no session")
+	}
+	r.stop(t.Context(), vm)
+	if _, ok := r.pid(vm); ok || r.Proxy.Signal(pid, 0) == nil && !zombie(pid) {
+		t.Errorf("still running: %d", pid)
+	}
+	if _, err := os.Stat(linksPID(r.Dirs, vm)); !os.IsNotExist(err) {
+		t.Errorf("its pid file: %v", err)
+	}
+}
+
+// zombie reports whether pid ended and only waits to be reaped: the
+// test's own sleeps are reaped by their Wait.
+func zombie(pid int) bool {
+	for range 50 {
+		if syscall.Kill(pid, 0) != nil {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
+// A launch of a client warns once for each target its links can't reach
+// now, and starts nothing for a client without links.
+func TestLinksAtLaunch(t *testing.T) {
+	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.1:6379: carried\n"+
+		"devvm links: 127.77.0.3:80: carried\ndevvm links: 127.77.0.4:1: carried\n")
+	f := r.Registry.All()[0].(*backendtest.Fake)
+	vms := linkVMs(t, r.Dirs, "app", "db", "web", "gone")
+	app, db, web, gone := vms[0], vms[1], vms[2], vms[3]
+	for _, st := range vms {
+		f.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: backend.StatusRunning}
+	}
+	if err := r.atLaunch(t.Context(), f, app); err != nil || len(*started) != 0 {
+		t.Fatalf("no links: %v, started %v", err, *started)
+	}
+	links := []Link{linkTo(db, "db", 5432, "127.77.0.1"), linkTo(db, "db", 6379, "127.77.0.1"), linkTo(web, "web", 80, "127.77.0.3"), linkTo(gone, "gone", 1, "127.77.0.4")}
+	if err := writeLinks(app, links); err != nil {
+		t.Fatal(err)
+	}
+	if err := gone.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	f.Instances[db.Name()] = backend.Instance{Name: db.Name(), Status: backend.StatusStopped}
+	setNet(t, app, "on")
+	setNet(t, db, "on")
+	var warned []string
+	r.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := r.atLaunch(t.Context(), f, app); err != nil || len(*started) != 1 {
+		t.Fatalf("atLaunch: %v, started %v", err, *started)
+	}
+	want := []string{
+		"link_target_stopped target=" + db.Name() + " vm=" + app.Name(),
+		"link_policy_mismatch target=" + web.Name() + " vm=" + app.Name(),
+	}
+	if !slices.Equal(warned, want) {
+		t.Errorf("warned %q, want %q", warned, want)
+	}
+	f.Capabilities = backend.Caps{}
+	if err := r.atLaunch(t.Context(), f, app); names(err) != "backend_lacks backend=fake feature=link vm="+app.Name() {
+		t.Errorf("a backend without links: %v", err)
+	}
+}

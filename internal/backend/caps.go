@@ -31,6 +31,7 @@ const (
 	FeatureDisk             Feature = "disk"              // setting a VM's disk size
 	FeatureDockerLayer      Feature = "docker-layer"      // the docker layer: Docker's engine running in the VM
 	FeatureNixLayer         Feature = "nix-layer"         // the nix layer: Nix's daemon and store in the VM
+	FeatureLink             Feature = "link"              // links to other VMs' ports, over ssh to both VMs
 )
 
 // Features is every feature, in the backends page's order.
@@ -39,7 +40,7 @@ var Features = []Feature{
 	FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
 	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeaturePortsAll,
 	FeatureAgentForwarding, FeatureAgentToggle,
-	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer, FeatureNixLayer,
+	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer, FeatureNixLayer, FeatureLink,
 }
 
 // Support is how a backend has a feature: natively, emulated (usable only

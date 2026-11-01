@@ -138,29 +138,47 @@ exec devvm link --json
 stdout '\A{\n  "version": 1,\n  "links": \[\n    {\n      "name": "api",\n      "port": 5432,\n      "target": "devvm-api-[0-9a-f]{14}",\n      "target_folder": "\S*/x/api",\n      "target_status": "Running",\n      "applies": true,\n      "reason": ""\n    },\n'
 ! stdout '127\.77'
 
-# Network policy: a client with it links only to targets with it.
-exec devvm network on
-exec devvm link
-stdout '^db +5432 +devvm-db-[0-9a-f]{14} +\S*/db +Running +policy$'
-! exec devvm link add db 8002
-stderr '^devvm: link_policy_mismatch target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+# Network policy: a client with it links only to targets with it, so it
+# can't have it while it links to one without, and a target keeps it while
+# a client with it links to it.
+! exec devvm network on
+stderr '^devvm: network_on_linked targets=devvm-api-[0-9a-f]{14}, devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
 cd $WORK/db
 exec devvm network on
+cd $WORK/x/api
+exec devvm network on
+cd $WORK/y/api
+exec devvm link publish 5432
 cd $WORK/app
+exec devvm network on
+! exec devvm link add ../y/api 5432
+stderr '^devvm: link_policy_mismatch target=devvm-api-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
 exec devvm link add db 8002
 stdout '^==> link_added name=db port=8002 '
+cd $WORK/db
+! exec devvm network off
+stderr '^devvm: network_off_linked vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'
+cd $WORK/app
 exec devvm network off
 cd $WORK/db
 exec devvm network off
+cd $WORK/x/api
+exec devvm network off
+cd $WORK/db
 
 # unpublish: each as listed; a link to a withdrawn port no longer applies.
 ! exec devvm link unpublish 8001
 stderr '^devvm: port_not_published port=8001 ports=5432,8000-8010$'
 exec devvm link unpublish 8000-8010
 stdout '^==> unpublished ports=8000-8010 vm=devvm-db-[0-9a-f]{14}$'
+stderr '^unpublished_linked vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'
 exec devvm link publish
 stdout '\A5432\n\z'
 exec devvm link unpublish 5432
+stderr '^unpublished_linked vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'
+exec devvm link publish 7000
+exec devvm link unpublish 7000
+! stderr unpublished_linked
 exec devvm link publish
 stdout '\Anone\n\z'
 exec devvm link publish 5432
@@ -184,20 +202,20 @@ exec devvm link
 ! stdout '^api '
 ! stdout ' 800[012] '
 
-# A target deleted is gone; made again in its folder, it's another VM,
-# whose ID the link doesn't have.
+# A target deleted takes every link to it with it, and names the clients
+# that lost one; made again in its folder, it's another VM, which the
+# client doesn't link to.
 cd $WORK/db
 exec devvm rm --force --no-export
+stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'
 cd $WORK/app
 exec devvm link
-stdout '^db +5432 +devvm-db-[0-9a-f]{14} +- +- +gone$'
+stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
+exec sh -c 'cat "$VMS"/devvm-app-*'
+stdout '^links=$'
 cd $WORK/db
 exec devvm --no-network-policy --no-git-protect base
 exec devvm link publish 5432
 cd $WORK/app
-exec devvm link
-stdout '^db +5432 +devvm-db-[0-9a-f]{14} +\S*/db +Running +replaced$'
-exec devvm link rm db 5432
-exec devvm link rm db 8005
 exec devvm link
 stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'

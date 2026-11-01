@@ -1,0 +1,382 @@
+package vm
+
+import (
+	"context"
+	"errors"
+	"net"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// linkRuns starts and stops client VMs' link sessions: devvm _links VM,
+// one detached process for each running client with links, its output in
+// its log (LinksLog). The proxies' seams start, find and signal them
+// (Proxy.Start, Args and Signal).
+type linkRuns struct{ *Env }
+
+// LinksLog is a client VM's link session's own output.
+func LinksLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".links.log") }
+
+// linksPID is where the pid of a client VM's link session is kept.
+func linksPID(d paths.Dirs, vm string) string { return filepath.Join(d.Run(), vm+".links.pid") }
+
+// linksLogMax is the most a link session's log keeps: one over it is
+// emptied when the next session starts.
+const linksLogMax = 1 << 20
+
+// linksReportWait bounds how long devvm waits for a session it started,
+// or one whose links changed, to say what came of each link.
+const linksReportWait = 10 * time.Second
+
+// pid returns the pid of vm's running link session: the process its pid
+// file names, if that still runs as vm's devvm _links.
+func (e linkRuns) pid(vm string) (int, bool) {
+	b, err := os.ReadFile(linksPID(e.Dirs, vm))
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 || e.Proxy.Signal(pid, syscall.Signal(0)) != nil {
+		return 0, false
+	}
+	args, err := e.Proxy.Args(pid)
+	if err != nil || len(args) != 3 || args[1] != "_links" || args[2] != vm {
+		return 0, false
+	}
+	return pid, true
+}
+
+// stop stops vm's link session, if it runs: SIGTERM, which ends its
+// connections and removes its sockets, then after two seconds SIGKILL.
+func (e linkRuns) stop(ctx context.Context, vm string) {
+	pid, ok := e.pid(vm)
+	if !ok {
+		return
+	}
+	defer e.removeSockets(ctx, vm)
+	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
+		_ = e.Proxy.Signal(pid, sig)
+		for range 20 {
+			if _, ok := e.pid(vm); !ok {
+				_ = os.Remove(linksPID(e.Dirs, vm))
+				return
+			}
+			time.Sleep(e.Proxy.Tick / 5)
+		}
+	}
+}
+
+// removeSockets deletes what a session of vm's that was killed leaves
+// behind and nothing listens on: each of its links' sockets and its own
+// master's control socket. Its masters' to targets, named by their
+// starts too, are devvm gc --orphans's.
+func (e linkRuns) removeSockets(ctx context.Context, vm string) {
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		return
+	}
+	links, _ := ReadLinks(st)
+	s := vmssh.Links{VM: vm, Dir: e.Dirs.Run()}
+	paths := []string{s.Control("", "")}
+	for _, l := range links {
+		paths = append(paths, s.Socket(vmssh.Link{Addr: l.Addr, Port: l.Port}))
+	}
+	for _, p := range paths {
+		_ = RemoveLeftoverSocket(context.WithoutCancel(ctx), p)
+	}
+}
+
+// logSize is how long vm's link session's log is now: what's written
+// after it is new.
+func (e linkRuns) logSize(vm string) int64 {
+	fi, err := os.Stat(LinksLog(e.Dirs, vm))
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+// ensure makes sure vm's link session runs, starting it when it doesn't.
+// It reports whether it started one, and where in its log the new
+// session's lines start.
+func (e linkRuns) ensure(vm string) (bool, int64, error) {
+	if _, ok := e.pid(vm); ok {
+		return false, 0, nil
+	}
+	from, err := e.start(vm)
+	return err == nil, from, err
+}
+
+// start starts vm's link session, detached, its output in its log, and
+// returns how long that log was before.
+func (e linkRuns) start(vm string) (int64, error) {
+	logPath := LinksLog(e.Dirs, vm)
+	for _, dir := range []string{e.Dirs.Logs(), e.Dirs.Run()} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return 0, err
+		}
+	}
+	flags := os.O_APPEND | os.O_CREATE | os.O_WRONLY
+	if fi, err := os.Stat(logPath); err == nil && fi.Size() > linksLogMax {
+		flags |= os.O_TRUNC
+	}
+	out, err := os.OpenFile(logPath, flags, 0o600) //nolint:gosec // devvm's own log
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = out.Close() }()
+	fi, err := out.Stat()
+	if err != nil {
+		return 0, err
+	}
+	pid, err := e.Proxy.Start(e.Proxy.Self, []string{"_links", vm}, out)
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), os.WriteFile(linksPID(e.Dirs, vm), []byte(strconv.Itoa(pid)+"\n"), 0o600)
+}
+
+// report waits, up to linksReportWait, for vm's link session to say what
+// came of links, in its log after from, and warns of each the VM refused:
+// a program there holds the link's address and port.
+func (e linkRuns) report(ctx context.Context, vm string, links []Link, from int64) {
+	want := make([]vmssh.Link, len(links))
+	for i, l := range links {
+		want[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
+	}
+	var r vmssh.LinksReport
+	deadline := time.Now().Add(linksReportWait)
+	for {
+		data, _ := os.ReadFile(LinksLog(e.Dirs, vm))
+		if int64(len(data)) < from {
+			from = 0 // emptied since
+		}
+		r = vmssh.ReadLinksLog(data[from:], vm, want)
+		_, running := e.pid(vm)
+		if r.Settled || !running || time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	for _, l := range r.Refused {
+		e.Warn(Link{Name: l.Name, Port: l.Port}.PortTaken(vm))
+	}
+}
+
+// atLaunch runs a launched client's link session, once it runs and its
+// setup is done: its backend must have links, each stopped target and
+// each whose policy rule no longer holds is warned of once, and a session
+// it starts is waited for to say what came of each link.
+func (e linkRuns) atLaunch(ctx context.Context, b backend.Backend, st *state.VM) error {
+	vm := st.Name()
+	links, err := ReadLinks(st)
+	if err != nil || len(links) == 0 {
+		return err
+	}
+	if err := e.Registry.Require(b, vm, linkFeatures()...); err != nil {
+		return err
+	}
+	if err := e.warnTargets(ctx, st, links); err != nil {
+		return err
+	}
+	started, from, err := e.ensure(vm)
+	if err != nil {
+		return err
+	}
+	if started {
+		e.report(ctx, vm, links, from)
+	}
+	return nil
+}
+
+// warnTargets warns once for each target of a client's links that its
+// links can't reach now: one whose policy rule no longer holds, which the
+// client starts without (guestLinks), one whose backend lacks links, and
+// one that's stopped, which devvm doesn't start.
+func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) error {
+	seen := map[string]bool{}
+	for _, l := range links {
+		key := l.Target + "\x00" + l.TargetID
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		why, tst, err := CheckLink(e.Dirs, st, l)
+		switch {
+		case err != nil:
+			return err
+		case why == LinkGone || why == LinkReplaced:
+			continue // devvm link says so
+		case policyBroken(st, tst):
+			e.Warn(msg.LinkPolicyMismatch(l.Target, st.Name()))
+			continue
+		}
+		c, err := e.Registry.For(e.Dirs, tst, "")
+		if err != nil {
+			return err
+		}
+		if err := e.Registry.Require(c.Backend, l.Target, linkFeatures()...); err != nil {
+			e.Warn(msg.LinkTargetUnusable(l.Target, st.Name()).Because(err))
+			continue
+		}
+		if in, err := c.Backend.Inspect(ctx, l.Target); err != nil || in.Status != backend.StatusRunning {
+			e.Warn(msg.LinkTargetStopped(l.Target, st.Name()))
+		}
+	}
+	return nil
+}
+
+// guestLinks returns the links a client's start and setup give it
+// (Env.Links): an address and a name for each target, by address, but
+// none for a target whose policy rule no longer holds, which the client
+// starts without.
+func guestLinks(d paths.Dirs, st *state.VM) ([]GuestLink, error) {
+	links, err := ReadLinks(st)
+	if err != nil {
+		return nil, err
+	}
+	var out []GuestLink
+	for _, l := range links {
+		tst, err := state.ReadVM(d, l.Target)
+		if err != nil {
+			return nil, err
+		}
+		if tst.Get(state.KeyID) == l.TargetID && policyBroken(st, tst) ||
+			slices.ContainsFunc(out, func(g GuestLink) bool { return g.Addr == l.Addr }) {
+			continue
+		}
+		out = append(out, GuestLink{Addr: l.Addr, Names: []string{l.Name}})
+	}
+	slices.SortFunc(out, func(a, b GuestLink) int { return a.Addr.Compare(b.Addr) })
+	return out, nil
+}
+
+// policyBroken reports whether a link from client to target, which
+// exists, breaks the policy rule: the client has network policy and the
+// target doesn't.
+func policyBroken(client, target *state.VM) bool {
+	return target.Exists() && netpolicy.On(client) && !netpolicy.On(target)
+}
+
+// runningConf is the confinement a running VM runs with, for its setup
+// sent again: its proxy's, made ready (Prepare), when it runs on one,
+// network policy turned off while it ran included.
+func (e linkRuns) runningConf(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
+	vm := st.Name()
+	if !netpolicy.On(st) {
+		confined, err := b.Confined(ctx, vm)
+		if err != nil || !confined {
+			return backend.Confinement{Net: backend.NetDirect}, err
+		}
+	}
+	c, err := e.Proxy.Prepare(ctx, b, st, true)
+	if err != nil {
+		return c, e.Proxy.Unproxied(ctx, b, vm, err)
+	}
+	return c, nil
+}
+
+// apply gives a running client its changed links: its setup sent again,
+// for its /etc/hosts and NO_PROXY settings, and its link session running,
+// which reads its links again each second. It waits for the session to
+// say what came of added, the links that are new, in its log after from
+// (logSize, before the change was written). It reports whether the client
+// runs: a stopped one gets them at its next start.
+func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, added []Link, from int64) (bool, error) {
+	vm := st.Name()
+	in, err := b.Inspect(ctx, vm)
+	if err != nil || in.Status != backend.StatusRunning {
+		return false, err
+	}
+	conf, err := e.runningConf(ctx, b, st)
+	if err != nil {
+		return true, err
+	}
+	slug := project.Folder{Name: vm}.Slug()
+	if err := syncer(e).sync(ctx, b, st, slug, strings.Fields(st.Get(KeyTools)), conf); err != nil {
+		return true, err
+	}
+	links, err := ReadLinks(st)
+	if err != nil || len(links) == 0 {
+		return true, err // its session ends on its own, having none
+	}
+	if err := e.Registry.Require(b, vm, linkFeatures()...); err != nil {
+		return true, err
+	}
+	started, start, err := e.ensure(vm)
+	switch {
+	case err != nil:
+		return true, err
+	case started:
+		e.report(ctx, vm, links, start)
+	case len(added) > 0:
+		e.report(ctx, vm, added, from)
+	}
+	return true, nil
+}
+
+// LeftoverSockets returns the link sessions' sockets in the run folder
+// that nothing listens on any more, which a session that was killed
+// leaves behind: devvm gc --orphans deletes them, and devvm space counts
+// them.
+func LeftoverSockets(ctx context.Context, d paths.Dirs) ([]string, error) {
+	var out []string
+	for _, ext := range []string{".sock", ".ctl"} {
+		m, err := filepath.Glob(filepath.Join(d.Run(), "link-*"+ext))
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range m {
+			if staleSocket(ctx, p) {
+				out = append(out, p)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// RemoveLeftoverSocket deletes one of LeftoverSockets's, checked again
+// first: one that something listens on again stays.
+func RemoveLeftoverSocket(ctx context.Context, path string) error {
+	if !staleSocket(ctx, path) {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// staleSocket reports whether path is a unix socket that refuses a
+// connection.
+func staleSocket(ctx context.Context, path string) bool {
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSocket == 0 {
+		return false
+	}
+	d := net.Dialer{Timeout: time.Second}
+	c, err := d.DialContext(ctx, "unix", path)
+	if err != nil {
+		return ctx.Err() == nil
+	}
+	_ = c.Close()
+	return false
+}

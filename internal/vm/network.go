@@ -67,7 +67,8 @@ func (e Net) SetNetworkDefault(mode string) error {
 
 // SetNetwork turns the folder's VM's network policy on or off, from its
 // next start. Turning it on, its backend must be able to confine the VM
-// to its proxy, and tokens the VM got before stay valid.
+// to its proxy, and tokens the VM got before stay valid. Either is
+// refused while it would break a link's policy rule (policyLinked).
 func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	t, err := e.existing(ctx, "")
 	if err != nil {
@@ -81,6 +82,11 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	if st.Get(KeyNet) == to {
 		e.Info(msg.NetAlready(to, vm))
 		return nil
+	}
+	// Links' policy rule: a client with network policy links only to a
+	// target with it.
+	if err := policyLinked(e.Dirs, st, on); err != nil {
+		return err
 	}
 	if !on {
 		if ok, err := t.widen(e.Env, "devvm network off"); !ok {
@@ -122,8 +128,8 @@ type LogOptions struct {
 }
 
 // Log writes the folder's VM's network log to w: what its proxy allowed
-// and blocked. A VM without network policy logs nothing new, and devvm
-// says so.
+// and blocked, and its links' connections. A VM without network policy
+// logs only its links' connections, and devvm says so.
 func (e Net) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	l, vm, err := e.netLog(ctx, o.Follow)
 	if err != nil || l == nil {
@@ -160,7 +166,8 @@ func (e Net) LogBlocks(ctx context.Context) ([]netpolicy.Block, error) {
 
 // netLog returns the folder's VM's network log and the VM's name; a nil
 // log when there's nothing to show (follow: nothing to follow). A VM
-// without network policy logs nothing new, and devvm says so.
+// without network policy logs only its links' connections, and devvm says
+// so.
 func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, error) {
 	t, err := e.findExisting(ctx, "")
 	if err != nil {

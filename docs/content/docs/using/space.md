@@ -131,7 +131,9 @@ When you delete a VM with its backend's own command instead of `devvm rm`, such 
 - **The VM was made elsewhere.** devvm records where each new VM's backend keeps it: the Lima home, which `DEVVM_LIMA_HOME` moves, your home folder for smolvm on macOS, or the Docker engine that `DOCKER_HOST` or `DOCKER_CONTEXT` chooses. When this run looks somewhere else, the VM may still exist there. A VM whose state doesn't record it counts as made in the backend's default place, so while `DEVVM_LIMA_HOME`, `DOCKER_HOST` or `DOCKER_CONTEXT` is set, gc leaves such a VM alone.
 - **Its state changed in the last hour,** because the VM may still be being made.
 
-Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `devvm space` counts the state of VMs that their backend doesn't list as `leftover state`.
+Forgetting a VM also removes your other VMs' [links](../getting-started/commands.md#links-between-vms) to it, as `devvm rm` does. `devvm gc --orphans` also removes links to VMs whose state is already gone, naming each one, and deletes the sockets that a link session leaves on your machine when it's killed, which are the ones nothing listens on.
+
+Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `devvm space` counts the state of VMs that their backend doesn't list as `leftover state`, and each socket a link session left counts there too.
 
 ### VMs devvm has no state for
 

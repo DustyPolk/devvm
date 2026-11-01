@@ -172,6 +172,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
+	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
 	e.Agent = sshagent.New(d, e.mounts, u)
 	return e, nil
 }
@@ -460,6 +461,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
 		return conf, err
 	}
+	// A link session of its last start's, which would end on its own: the
+	// launch starts one for this start.
+	linkRuns{e}.stop(ctx, vm)
 	// The VM's backend forwards the agent it gets when it starts: devvm's
 	// own, with the keys it lacks loaded, for a VM that uses it; none for
 	// one that uses none.

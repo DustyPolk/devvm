@@ -243,6 +243,7 @@ func (d *Docker) Caps() backend.Caps {
 	for _, f := range []backend.Feature{
 		backend.FeatureBuildImage, backend.FeatureFrom, backend.FeatureClone, backend.FeatureProjectMount,
 		backend.FeatureAgentFolders, backend.FeatureToolsShare, backend.FeatureCPUs, backend.FeatureMemory,
+		backend.FeatureLink,
 	} {
 		caps[f] = backend.Native
 	}

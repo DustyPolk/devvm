@@ -113,6 +113,7 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 | `IMAGE` | its image, with the shared tools added to it since, and a base from a container image as `base (from node:24)` ([details](../using/from.md)) |
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
 | `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
+| `LINKS` | how many [links](#links-between-vms) it has to ports of your other VMs, or `-` for none |
 | `BACKEND` | the [backend](../backends/_index.md) that runs it, with the runtime beside it for a Docker VM made for the docker layer, as in `docker (sysbox)` |
 | `FOLDER` | its project folder |
 
@@ -120,7 +121,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 ### devvm ls --json
 
-`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. `docker_layer` is the runtime a `docker` VM made for the docker layer runs under, and it's left out for other VMs. A value the VM's state doesn't have is `""`.
+`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. `docker_layer` is the runtime a `docker` VM made for the docker layer runs under, and it's left out for other VMs. A value the VM's state doesn't have is `""`. `links` is how many links the VM has, `0` for none.
 
 ```json
 {
@@ -134,7 +135,8 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
       "git": "on",
       "net": "on",
       "backend": "lima",
-      "folder": "/Users/you/code/website"
+      "folder": "/Users/you/code/website",
+      "links": 0
     }
   ]
 }
@@ -196,6 +198,8 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm link unpublish PORTS` | stop offering ports to links, each as `devvm link publish` lists it, while the server in the VM keeps running |
 
 A link reaches only a port the target publishes, and a VM with network policy links only to another VM with network policy. A link joins the two VMs' trust, because code in the VM that links can often run code in the target through the service it reaches, and it then has whatever the target has.
+
+devvm never starts a VM for a link, so a link to a stopped VM doesn't work until you start that VM, and devvm says so each time the VM that links starts. A change of links reaches a running VM at once, and a stopped one when it next starts. `devvm rm` of a VM removes every link to it from your other VMs and names them. While a VM with network policy links to another VM, `devvm network off` is refused in that other VM's folder, and `devvm network on` is refused for a VM that links to a VM without network policy.
 
 ## Images
 

@@ -73,7 +73,7 @@ func TestJSONShapes(t *testing.T) {
 		{
 			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", From: "node:24", Git: "on", Net: "on", Backend: "docker", DockerLayer: "sysbox", Folder: "/a"}}),
 			[]string{
-				"vms[].backend: string", "vms[].docker_layer: string", "vms[].folder: string", "vms[].from: string", "vms[].git: string", "vms[].image: string",
+				"vms[].backend: string", "vms[].docker_layer: string", "vms[].folder: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
 				"vms[].name: string", "vms[].net: string", "vms[].status: string",
 			},
 		},

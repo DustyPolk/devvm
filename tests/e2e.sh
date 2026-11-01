@@ -854,7 +854,7 @@ check "it gets --cpus, --memory and --disk" in_vm "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
-  grep -Eq '^$vm +Running +base +(on|off) +off +lima +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
+  grep -Eq '^$vm +Running +base +(on|off) +off +- +lima +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
 check "ls --json and size --json show it" bash -c "'$D' ls --json 2>/dev/null | grep -qxF '      \"name\": \"$vm\",' &&
   cd '$p' && '$D' size --json 2>/dev/null | grep -qxF '  \"disk_gib\": 120'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
@@ -1204,6 +1204,34 @@ check "ssh-agent rm takes the key out of devvm's own agent and its record, and l
 check "rm deletes the SSH agent VM" bash -c "cd '$g' && as_user '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock"
+
+section "a link between VMs"
+# Two small VMs without network policy: a target with a server on its own 127.0.0.1, forwarding no
+# port of its own to this machine, and a client that forwards every port, links to it while it runs
+# and reaches it by name.
+pt=$(newproj lkdb)
+launch "$pt" 'exit' --no-network-policy --no-git-protect --cpus 1 --memory 2 --ports none base; vt=$vm
+in_vm "$vt" 'mkdir -p /tmp/e2e-link && echo linked > /tmp/e2e-link/e2e.txt &&
+  setsid -f python3 -m http.server -b 127.0.0.1 -d /tmp/e2e-link 47190 </dev/null >/dev/null 2>&1' >/dev/null 2>&1
+pc=$(newproj lkapp)
+launch "$pc" 'exit' --no-network-policy --no-git-protect --cpus 1 --memory 2 base; vc=$vm
+check "devvm link add on a running client reaches the target's server as NAME:PORT and NAME.devvm.internal:PORT" bash -c "
+  [[ -n '$vt' && -n '$vc' ]] && (cd '$pt' && '$D' link publish 47190 </dev/null >/dev/null 2>&1) &&
+  cd '$pc' && '$D' link add lkdb 47190 --as db </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m link_added name=db port=47190 target=$vt vm=$vc)\" '$work/last.log' &&
+  limactl shell --workdir / $vc bash -c 'for i in \$(seq 20); do
+      [[ \$(curl -fsS --max-time 5 http://db:47190/e2e.txt) == linked ]] &&
+      [[ \$(curl -fsS --max-time 5 http://db.devvm.internal:47190/e2e.txt) == linked ]] && exit 0; sleep 1; done; exit 1' </dev/null"
+check "the link's connections are in the client's network log, and nothing of it listens on this machine" bash -c "
+  cd '$pc' && '$D' network log </dev/null 2>/dev/null | grep -q 'db' && sleep 3 && ! nc -z 127.0.0.1 47190 &&
+  pgrep -f -- '[_]links $vc\$' >/dev/null"
+check "devvm rm of the target removes the client's link, names the client, and the client's session goes" bash -c "
+  cd '$pt' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m links_target_gone count=1 vm=$vt vms=$vc)\" '$work/last.log' &&
+  ! grep -q '^links=.' '$vms/$vc' && for i in \$(seq 10); do pgrep -f -- '[_]links $vc\$' >/dev/null || exit 0; sleep 1; done; exit 1"
+check "devvm rm of the client leaves no link session, socket or log of its" bash -c "
+  cd '$pc' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 && ! pgrep -f -- '[_]links $vc\$' >/dev/null &&
+  ! ls '$XDG_DATA_HOME/devvm/run/'link-* >/dev/null 2>&1 && ! ls '$XDG_DATA_HOME/devvm/logs/$vc'.* >/dev/null 2>&1"
 fi
 
 if want clone; then
@@ -1607,9 +1635,9 @@ else
   skip "the next start puts Lima's ignore rules back" "Seatbelt is macOS's"
 fi
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
-  '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +on +lima ' &&
+  '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +on +- +lima ' &&
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
-  '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +unenforced +lima '"
+  '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +unenforced +- +lima '"
 check "started outside devvm again: without a terminal, devvm stops it and opens nothing" bash -c "
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
   ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
@@ -2028,7 +2056,7 @@ check "devvm creates the VM from base's pack, labelled, and opens a shell in the
   grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=smolvm '$vms/$vm' && grep -qx net=off '$vms/$vm'"
 check "it gets --cpus, --memory and --disk" in_smol "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
-check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +\S+ +off +smolvm +$p\$'"
+check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +\S+ +off +- +smolvm +$p\$'"
 check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
   in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -c \"\$1\" </dev/null; }
   in_smol 'echo from-vm > $p/vm.txt' && grep -qx from-vm '$p/vm.txt' && [[ \$(stat -f %Su '$p/vm.txt' 2>/dev/null || stat -c %U '$p/vm.txt') == '$me' ]]"
@@ -2608,7 +2636,7 @@ smolnet_fail_closed() {
 # it unenforced, and its next launch stops it; the one after starts it confined again.
 smolnet_widened() {
   SMOLVM_USAGE=0 smolvm machine update --name "$1" --allow-cidr 1.1.1.1/32 >/dev/null 2>&1 || return 1
-  if ! "$D" ls | grep -Eq "^$1 +Running +\S+ +\S+ +unenforced +smolvm "; then "$D" ls; return 1; fi
+  if ! "$D" ls | grep -Eq "^$1 +Running +\S+ +\S+ +unenforced +- +smolvm "; then "$D" ls; return 1; fi
   if (cd "$2" && printf 'echo e2e-opened\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1) ||
     ! grep -qx "devvm: net_unenforced_stop vm=$1" "$work/last.log" || [[ $(smol_status "$1") != stopped ]]; then
     cat "$work/last.log"; return 1
@@ -2992,7 +3020,7 @@ docker_project() {
     grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=docker '$vms/$vm' && grep -qx net=off '$vms/$vm' &&
     [[ \$(docker container inspect -f '{{index .Config.Labels \"devvm.kind\"}}' '$vm') == vm ]]"
   check "it gets --cpus and --memory" in_d "$vm" '[[ $(nproc) == 2 && $(cat /sys/fs/cgroup/memory.max) == 3221225472 ]]'
-  check "ls lists it on docker" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +\S+ +off +docker +$p\$'"
+  check "ls lists it on docker" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +\S+ +off +- +docker +$p\$'"
   check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
     docker exec -u '$me' '$vm' sh -c 'echo from-vm > \"$p/vm.txt\"' </dev/null && grep -qx from-vm '$p/vm.txt'"
   check "... yours on this machine (and your group on Linux)" owner_is_me "$p/vm.txt"
@@ -3865,7 +3893,7 @@ docker_netpolicy() {
     ! in_d '$vm' 'curl -fsS -m 10 -o /dev/null https://github.com' && cd '$np' &&
     printf 'exit\n' | ${NU[*]} '$D' >'$work/last.log' 2>&1 && [[ -n \$(dn_proxy '$vm') ]] && in_d '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com'"
   check "on another network too (docker network connect): unenforced, and its next launch stops it and opens nothing" bash -c "
-    docker network connect bridge '$vm' && '$D' ls | grep -Eq '^$vm +Running +base +\S+ +unenforced +docker ' && cd '$np' &&
+    docker network connect bridge '$vm' && '$D' ls | grep -Eq '^$vm +Running +base +\S+ +unenforced +- +docker ' && cd '$np' &&
     ! printf 'echo e2e-opened\n' | ${NU[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
     grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(d_state '$vm') == exited ]]"
   check "devvm starts it confined again: its own network alone, and the self-check passes" bash -c "
@@ -3873,12 +3901,12 @@ docker_netpolicy() {
   check "... so" dn_confined "$vm"
   check "its relay replaced by another container by its name, on its network: unenforced, and its next launch stops it; the one after starts it confined" bash -c "
     docker container rm -f '$vm-proxy' >/dev/null && docker run -d --name '$vm-proxy' --label 'devvm.data=$XDG_DATA_HOME/devvm' --label devvm.kind=proxy \
-      --network '$vm-net' '$d_alpine_ref' sleep 600 >/dev/null && '$D' ls | grep -Eq '^$vm +Running +base +\S+ +unenforced +docker ' &&
+      --network '$vm-net' '$d_alpine_ref' sleep 600 >/dev/null && '$D' ls | grep -Eq '^$vm +Running +base +\S+ +unenforced +- +docker ' &&
     ! dn_launch '$np' 'echo e2e-opened' && grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && [[ \$(d_state '$vm') == exited ]] &&
     dn_launch '$np' && dn_confined '$vm' && dn_members '$vm'"
   check "docker stop outside devvm: its proxy follows it, and is gone" bash -c "docker stop -t 1 '$vm' >/dev/null && dn_gone '$vm'"
   check "docker start outside devvm: unenforced, and its next launch stops it" bash -c "
-    docker start '$vm' >/dev/null && '$D' ls | grep -Eq '^$vm +Running +base +\S+ +unenforced +docker ' &&
+    docker start '$vm' >/dev/null && '$D' ls | grep -Eq '^$vm +Running +base +\S+ +unenforced +- +docker ' &&
     ! dn_launch '$np' 'echo e2e-opened' && grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && [[ \$(d_state '$vm') == exited ]]"
   check "another container on its network: its next launch is refused in one line naming the network, before the VM starts; once it's gone, it starts" bash -c "
     docker run -d --name '$d_squat' --label 'devvm.data=$XDG_DATA_HOME/devvm' --network '$vm-net' '$d_alpine_ref' sleep 600 >/dev/null &&

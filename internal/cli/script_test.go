@@ -128,6 +128,26 @@ func buildDevvm(t *testing.T) string {
 	return dir
 }
 
+// stopLinkSessions stops the link sessions (devvm _links) of the sandbox
+// at root: each process a pid file in its run folder names, if it still
+// runs as devvm _links.
+func stopLinkSessions(root string) {
+	pids, _ := filepath.Glob(filepath.Join(root, "data", "devvm", "run", "*.links.pid"))
+	for _, f := range pids {
+		b, err := os.ReadFile(f) //nolint:gosec // the test's own folder
+		if err != nil {
+			continue
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+		if err != nil || pid <= 0 {
+			continue
+		}
+		if args, err := platform.ProcessArgs(pid); err == nil && len(args) > 1 && args[1] == "_links" {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	}
+}
+
 // sandbox points every folder devvm uses into a new temporary folder, and puts
 // devvm and the stubs first on PATH.
 func sandbox(env *testscript.Env, bin, stubs string) error {
@@ -145,6 +165,10 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_smolvm-ports -vm .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		// And Docker VMs'.
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_docker-ports -vm .* -key "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
+		// And client VMs' link sessions, named only by their VM: by their
+		// pid files, then the stub ssh's masters they leave.
+		stopLinkSessions(root)
+		_ = exec.CommandContext(context.Background(), "pkill", "-f", "IO::Socket::UNIX.* "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		_ = os.RemoveAll(root)
 	})
 

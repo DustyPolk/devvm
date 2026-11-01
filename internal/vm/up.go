@@ -467,13 +467,18 @@ func (e Launch) setUp(ctx context.Context, b backend.Backend, st *state.VM, f pr
 }
 
 // setUpVM sets up a running VM, started with conf: its setup sent, ssh
-// and editors reaching it by name, a --clone VM's clone made if it isn't
-// yet, then its devcontainer.json's commands run (devcontainers.run).
+// and editors reaching it by name, its links carried (linkRuns.atLaunch),
+// a --clone VM's clone made if it isn't yet, then its devcontainer.json's
+// commands run (devcontainers.run).
 func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) error {
 	if err := syncer(e).sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
 		return err
 	}
 	if err := e.sshConfig().Write(ctx); err != nil {
+		return err
+	}
+	// Its links, once its host key is pinned, which their session checks.
+	if err := linkRuns(e).atLaunch(ctx, b, st); err != nil {
 		return err
 	}
 	if isClone(st) && st.Get(KeySeeded) == "" {

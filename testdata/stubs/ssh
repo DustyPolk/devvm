@@ -5,10 +5,28 @@
 # them). With $STUB_DIR/ssh-fails, or for anything else, it fails as ssh
 # does. A login shell in a folder (a Docker VM's shell over ssh) reads its input and ends. A
 # master connection (-M, a smolvm or Docker VM's port forwarder's) reads the script it's fed, answers it with $STUB_DIR/guest-ports (what listens in the VM, as /proc/net/tcp has
-# it) and ".", then waits to be stopped.
+# it) and ".", then waits to be stopped. A link session's master (-M -N -S CONTROL, devvm _links's)
+# listens on its control socket until it's stopped, and its -O forward and -O cancel work, but for a
+# forward whose ADDRESS:PORT is a line of $STUB_DIR/link-taken, which the VM refuses.
 set -euo pipefail
 echo "ssh $*" >> "$STUB_LOG"
 [[ ! -e $STUB_DIR/ssh-fails ]] || exit 255
+if [[ " $* " == *" -M "* && " $* " == *" -N "* ]]; then
+  ctl=
+  while (($#)); do [[ $1 != -S ]] || ctl=$2; shift; done
+  exec perl -MSocket -MIO::Socket::UNIX -e \
+    'my $s = IO::Socket::UNIX->new(Type => SOCK_STREAM(), Local => $ARGV[0], Listen => 1) or die "$!"; sleep 300' "$ctl"
+fi
+if [[ " $* " == *" -O "* ]]; then
+  fwd=
+  while (($#)); do [[ $1 != -R ]] || fwd=$2; shift; done
+  IFS=: read -r addr port _ <<< "$fwd"
+  if [[ -f $STUB_DIR/link-taken ]] && grep -qxF "$addr:$port" "$STUB_DIR/link-taken"; then
+    echo "Error: remote port forwarding failed for listen port $port" >&2
+    exit 255
+  fi
+  exit 0
+fi
 if [[ " $* " == *" -M "* ]]; then
   cat > /dev/null
   [[ ! -f $STUB_DIR/guest-ports ]] || cat "$STUB_DIR/guest-ports"

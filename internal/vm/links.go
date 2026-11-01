@@ -203,8 +203,10 @@ func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error
 }
 
 // Published reports whether a VM publishes port.
-func Published(st *state.VM, port int) bool {
-	ports := st.Get(KeyPublish)
+func Published(st *state.VM, port int) bool { return publishedIn(st.Get(KeyPublish), port) }
+
+// publishedIn reports whether ports, as KeyPublish holds them, has port.
+func publishedIn(ports string, port int) bool {
 	if ports == "" || ports == PortsNone {
 		return false
 	}
@@ -217,33 +219,55 @@ func Published(st *state.VM, port int) bool {
 }
 
 // linkFeatures are the backend features a link needs on both its VMs,
-// checked with the registry's Require when it's made.
-// TODO(links): the link feature, once backends declare it.
-func linkFeatures() []backend.Feature { return nil }
+// checked with the registry's Require when it's made, at each launch of
+// the client and on each connection.
+func linkFeatures() []backend.Feature { return []backend.Feature{backend.FeatureLink} }
 
 // PortTaken is the error for a link whose address and port a program in
 // the client already listens on, which fails that link alone.
 func (l Link) PortTaken(vm string) msg.M { return msg.LinkPortTaken(l.Name, strconv.Itoa(l.Port), vm) }
 
 // Links shows and changes the folder's VM's links to other VMs, and the
-// ports it publishes for theirs. Nothing here carries a connection:
-// linksChanged and publishChanged are where a running VM learns of a
-// change.
+// ports it publishes for theirs. Nothing here carries a connection: the
+// client's link session does (Session), and changeLinks is where a
+// running client learns of a change.
 type Links struct{ *Env }
 
 // linkVM finds the folder's VM for devvm link.
 func (e Links) linkVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMLink) }
 
-// linksChanged applies a client's changed links while it runs: its guest
-// setup and its link session. A stopped client gets them at its next
-// start.
-// TODO(links): the guest's names and the running devvm _links.
-func (e Links) linksChanged(context.Context, *found) error { return nil }
+// changeLinks records client t's links and says so (said), then applies
+// them while it runs: its setup sent again and its link session running
+// (linkRuns.apply), which is waited for to say what came of added. A
+// stopped client gets them at its next start.
+func (e Links) changeLinks(ctx context.Context, t *found, links, added []Link, said func()) error {
+	runs := linkRuns(e)
+	from := runs.logSize(t.f.Name)
+	if err := writeLinks(t.st, links); err != nil {
+		return err
+	}
+	said()
+	running, err := runs.apply(ctx, t.b, t.st, added, from)
+	if err == nil && !running {
+		e.Info(msg.LinksNextStart(t.f.Name))
+	}
+	return err
+}
 
-// publishChanged applies a target's changed published ports to the
-// clients that link to it.
-// TODO(links): name the clients that lose a port.
-func (e Links) publishChanged(context.Context, *found) error { return nil }
+// publishChanged names the clients that link to ports of target t that it
+// published before (old, as KeyPublish had it) and doesn't now: their next
+// connections to those ports are refused.
+func (e Links) publishChanged(t *found, old string) error {
+	id := t.st.Get(state.KeyID)
+	clients, err := linkClients(e.Dirs, t.f.Name, id, func(_ *state.VM, l Link) bool {
+		return publishedIn(old, l.Port) && !Published(t.st, l.Port)
+	})
+	if err != nil || len(clients) == 0 {
+		return err
+	}
+	e.Note(msg.UnpublishedLinked(t.f.Name, strings.Join(clients, ", ")))
+	return nil
+}
 
 // projectVMs returns the project VMs that have state.
 func (e Links) projectVMs() ([]string, error) {
@@ -395,13 +419,11 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	if err != nil {
 		return err
 	}
-	links = append(links, Link{Name: name, Port: a.Port, Target: target, TargetID: id, Addr: addr})
-	if err := writeLinks(t.st, links); err != nil {
-		return err
-	}
-	e.Info(msg.LinkAdded(name, port, target, client))
-	e.Note(msg.LinkTrust(target, client))
-	return e.linksChanged(ctx, t)
+	l := Link{Name: name, Port: a.Port, Target: target, TargetID: id, Addr: addr}
+	return e.changeLinks(ctx, t, append(links, l), []Link{l}, func() {
+		e.Info(msg.LinkAdded(name, port, target, client))
+		e.Note(msg.LinkTrust(target, client))
+	})
 }
 
 // checkTarget checks a new link's target for client t: made and finished,
@@ -487,11 +509,9 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 		return msg.LinkNotFound(strconv.Itoa(port), msg.Shown(target), t.f.Name)
 	}
 	gone := links[i]
-	if err := writeLinks(t.st, slices.Delete(links, i, i+1)); err != nil {
-		return err
-	}
-	e.Info(msg.LinkRemoved(gone.Name, strconv.Itoa(port), t.f.Name))
-	return e.linksChanged(ctx, t)
+	return e.changeLinks(ctx, t, slices.Delete(links, i, i+1), nil, func() {
+		e.Info(msg.LinkRemoved(gone.Name, strconv.Itoa(port), t.f.Name))
+	})
 }
 
 // Published returns the ports and ranges the folder's VM publishes, or
@@ -538,8 +558,8 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	}
 	if publish {
 		e.Info(msg.Published(ports, t.f.Name))
-	} else {
-		e.Info(msg.Unpublished(l, t.f.Name))
+		return nil
 	}
-	return e.publishChanged(ctx, t)
+	e.Info(msg.Unpublished(l, t.f.Name))
+	return e.publishChanged(t, old)
 }

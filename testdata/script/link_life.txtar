@@ -1,0 +1,87 @@
+# Links in VMs' lives: the client's link session (devvm _links, the stub
+# ssh standing in for its connections) starts with devvm link add on a
+# running client and with each launch, warns of what it can't carry, and
+# stops with the VM; devvm rm, gc --orphans and devvm ls know of links.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env RUN=$XDG_DATA_HOME/devvm/run
+
+mkdir $WORK/db
+cd $WORK/db
+exec devvm --no-network-policy --no-git-protect base
+exec devvm link publish 5432,80
+mkdir $WORK/app
+cd $WORK/app
+exec devvm --no-network-policy --no-git-protect base
+exec sh -c 'ls "$RUN" | grep "links.pid" || true'
+! stdout .
+
+# add on a running client: its setup sent again with the link's name, and
+# its session started, which carries it.
+exec devvm link add db 5432
+stdout '^==> link_added name=db port=5432 '
+! stdout links_next_start
+exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.0\.1:5432: carried" "$XDG_DATA_HOME"/devvm/logs/devvm-app-*.links.log && exit 0; sleep 0.5; done; exit 1'
+exec sh -c 'kill -0 "$(cat "$RUN"/devvm-app-*.links.pid)"'
+exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
+exec devvm ls
+stdout '^NAME +STATUS +IMAGE +GIT +NET +LINKS +BACKEND +FOLDER$'
+stdout '^devvm-app-[0-9a-f]{14} +Running +base +off +off +1 +lima '
+stdout '^devvm-db-[0-9a-f]{14} +Running +base +off +off +- +lima '
+exec devvm ls --json
+stdout '"links": 1'
+
+# A program in the client holding a link's address: that link fails alone,
+# said at once.
+exec sh -c 'echo 127.77.0.1:80 > "$STUB_DIR"/link-taken'
+exec devvm link add db 80
+stdout '^==> link_added name=db port=80 '
+stderr '^devvm: link_port_taken name=db port=80 vm=devvm-app-[0-9a-f]{14}$'
+rm $STUB_DIR/link-taken
+
+# Stopped, its session goes with it, and its sockets; a stopped client
+# gets a change at its next start.
+exec devvm stop
+exec sh -c 'pid=$(cat "$RUN"/devvm-app-*.links.pid 2>/dev/null) || exit 0; ! kill -0 "$pid" 2>/dev/null'
+exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$" || true'
+! stdout .
+exec devvm link rm db 80
+stdout '^==> links_next_start vm=devvm-app-[0-9a-f]{14}$'
+
+# A launch with the target stopped: warned once, the target left stopped,
+# and the session started all the same.
+cd $WORK/db
+exec devvm stop
+cd $WORK/app
+exec devvm
+stderr -count=1 '^devvm: link_target_stopped target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+exec sh -c 'kill -0 "$(cat "$RUN"/devvm-app-*.links.pid)"'
+exec devvm ls
+stdout '^devvm-db-[0-9a-f]{14} +Stopped '
+
+# devvm network log says what it logs for a VM without network policy.
+exec devvm network log
+stderr '^net_off_log vm=devvm-app-[0-9a-f]{14}$'
+
+# A session killed leaves its sockets: gc --orphans deletes them, and the
+# links to a VM whose state is gone.
+exec sh -c 'kill -9 "$(cat "$RUN"/devvm-app-*.links.pid)"'
+exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
+exec devvm space
+stdout '^leftover state +- +[12] '
+exec sh -c 'rm "$VMS"/devvm-db-*'
+exec devvm gc --orphans --force
+stdout '^gc_dead_links count=1$'
+stdout '^gc_dead_link name=db port=5432 target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+stdout '^gc_link_sockets count=[12]$'
+stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'
+stdout '^==> deleted_link_sockets count=[12]$'
+exec sh -c 'ls "$RUN" | grep "^link-" || true'
+! stdout .
+exec sh -c 'cat "$VMS"/devvm-app-*'
+stdout '^links=$'
+
+# devvm rm of the client stops its session and takes its links with it.
+exec devvm rm --force --no-export
+exec sh -c 'ls "$RUN" "$XDG_DATA_HOME"/devvm/logs | grep "^devvm-app-.*links" || true'
+! stdout .

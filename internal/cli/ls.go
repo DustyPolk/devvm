@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strconv"
+
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/assets"
@@ -21,7 +23,7 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 		Use:   "ls",
 		Short: "List the project VMs",
 		Long: "List the project VMs on every backend, sorted by name. " +
-			"Each row has the VM's status, image, .git protection, network policy, backend and folder.",
+			"Each row has the VM's status, image, .git protection, network policy, links to your other VMs, backend and folder.",
 		Example: examples(
 			"devvm ls", "list every project VM",
 			"devvm ls --json", "the same list as JSON, for scripts",
@@ -71,6 +73,8 @@ type vmJSON struct {
 	// DockerLayer is the runtime a docker VM runs the docker layer under.
 	DockerLayer string `json:"docker_layer,omitempty"`
 	Folder      string `json:"folder"`
+	// Links is how many links the VM has to other VMs' ports.
+	Links int `json:"links"`
 }
 
 func lsJSON(ls []vm.Listed) lsOutput {
@@ -78,7 +82,7 @@ func lsJSON(ls []vm.Listed) lsOutput {
 	for _, l := range ls {
 		out.VMs = append(out.VMs, vmJSON{
 			Name: l.Name, Status: l.Status, Image: l.Image, From: l.From, Git: l.Git, Net: l.Net,
-			Backend: l.Backend, DockerLayer: l.DockerLayer, Folder: l.Folder,
+			Backend: l.Backend, DockerLayer: l.DockerLayer, Folder: l.Folder, Links: l.Links,
 		})
 	}
 	return out
@@ -93,10 +97,10 @@ func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error)
 }
 
 // writeList writes the VMs as a table, a header first; a value a VM lacks
-// is -. A VM's status, .git protection and network policy are colored by
-// what they mean.
+// is -, and so is LINKS for a VM without links. A VM's status, .git
+// protection and network policy are colored by what they mean.
 func writeList(tab *ui.Table, ls []vm.Listed) error {
-	tab.Header("NAME", "STATUS", "IMAGE", "GIT", "NET", "BACKEND", "FOLDER")
+	tab.Header("NAME", "STATUS", "IMAGE", "GIT", "NET", "LINKS", "BACKEND", "FOLDER")
 	for _, l := range ls {
 		backend := l.Backend
 		if l.DockerLayer != "" {
@@ -106,8 +110,12 @@ func writeList(tab *ui.Table, ls []vm.Listed) error {
 		if l.From != "" {
 			image = msg.ImageFrom(l.From, l.Image).Line()
 		}
+		links := ""
+		if l.Links > 0 {
+			links = strconv.Itoa(l.Links)
+		}
 		tab.Row(cell(l.Name), cellAs(l.Status, vmStatuses), cell(image), cellAs(l.Git, gitModes),
-			cellAs(l.Net, netModes), cell(backend), cell(l.Folder))
+			cellAs(l.Net, netModes), cell(links), cell(backend), cell(l.Folder))
 	}
 	return tab.Flush()
 }

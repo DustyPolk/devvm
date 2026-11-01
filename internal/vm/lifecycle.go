@@ -20,7 +20,8 @@ import (
 // agents' history and deletes it.
 type Lifecycle struct{ *Env }
 
-// Stop stops the folder's VM and its proxy. Then, the VM being stopped,
+// Stop stops the folder's VM, its proxy and its link session. Then, the
+// VM being stopped,
 // .git is locked again and checked (on Linux, set-id files too) as on a
 // launch that finds it stopped, and its ssh config entry goes.
 func (e Lifecycle) Stop(ctx context.Context) error {
@@ -42,6 +43,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 		e.Info(msg.Stopped(vm))
 	}
 	e.Proxy.Stop(vm)
+	linkRuns(e).stop(ctx, vm)
 	if !isClone(t.st) {
 		if err := e.Protector(t.f.Dir).Check(ctx, t.st, false); err != nil {
 			return err
@@ -249,8 +251,10 @@ func (e Lifecycle) delete(ctx context.Context, t *found) error {
 }
 
 // forget deletes what devvm keeps for a VM its backend no longer has: its
-// clone's remote or .git's locks, its proxy and its rules, run files,
-// state and logs, its host keys and its ssh config entry.
+// clone's remote or .git's locks, its proxy and its rules, its link
+// session, run files, state (its own links with it) and logs, its host
+// keys and its ssh config entry. Other VMs' links to it go too
+// (unlinkTarget).
 func (e Lifecycle) forget(ctx context.Context, t *found) error {
 	vm := t.f.Name
 	if isClone(t.st) {
@@ -258,10 +262,14 @@ func (e Lifecycle) forget(ctx context.Context, t *found) error {
 	} else if m := t.st.Get(gitprotect.KeyGitProtect); m == gitprotect.On || m == gitprotect.Strict {
 		e.Protector(t.f.Dir).Unlock(ctx)
 	}
+	linkRuns(e).stop(ctx, vm)
 	if err := e.Proxy.Forget(vm); err != nil {
 		return err
 	}
 	if err := t.st.Remove(); err != nil {
+		return err
+	}
+	if err := linkRuns(e).unlinkTarget(ctx, vm); err != nil {
 		return err
 	}
 	logs, err := filepath.Glob(filepath.Join(e.Dirs.Logs(), vm+".*"))

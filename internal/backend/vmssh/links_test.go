@@ -546,3 +546,38 @@ func TestIsLinkAddr(t *testing.T) {
 		}
 	}
 }
+
+// ReadLinksLog finds the links the client refused and says when there's
+// nothing more to wait for: a line for every link, or the session ending
+// or failing.
+func TestReadLinksLog(t *testing.T) {
+	vm := "devvm-app-0123456789abcd"
+	db := Link{Name: "db", Addr: netip.MustParseAddr("127.77.0.1"), Port: 5432}
+	api := Link{Name: "api", Addr: netip.MustParseAddr("127.77.0.2"), Port: 3000}
+	both := []Link{db, api}
+	for _, tc := range []struct {
+		name, log string
+		refused   []string
+		settled   bool
+	}{
+		{"nothing yet", "", nil, false},
+		{"one carried", "devvm links: carrying " + vm + "'s links\ndevvm links: 127.77.0.1:5432: carried\n", nil, false},
+		{"both", "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255: Port forwarding failed\n", []string{"api"}, true},
+		{"a socket that failed", "devvm links: 127.77.0.1:5432: not carried: x\ndevvm links: 127.77.0.2:3000: carried\n", nil, true},
+		{"refused twice, once a session", "devvm links: 127.77.0.1:5432: refused by the VM: x\ndevvm links: 127.77.0.1:5432: refused by the VM: x\n", []string{"db"}, false},
+		{"the session failed", "devvm links: " + vm + ": its ssh didn't connect\n", nil, true},
+		{"no links", "devvm links: " + vm + " has no links\n", nil, true},
+		{"it stopped", "devvm links: " + vm + " stopped\n", nil, true},
+		{"another VM's lines", "devvm links: devvm-x-0123456789abcd: its ssh didn't connect\nwarning 127.77.0.1:5432: carried\n", nil, false},
+		{"a cancelled link isn't one carried", "devvm links: 127.77.0.1:5432: no longer carried\n", nil, false},
+	} {
+		r := ReadLinksLog([]byte(tc.log), vm, both)
+		var got []string
+		for _, l := range r.Refused {
+			got = append(got, l.Name)
+		}
+		if !slices.Equal(got, tc.refused) || r.Settled != tc.settled {
+			t.Errorf("%s: refused %v, settled %v; want %v, %v", tc.name, got, r.Settled, tc.refused, tc.settled)
+		}
+	}
+}

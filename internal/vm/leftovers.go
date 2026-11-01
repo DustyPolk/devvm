@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -47,6 +48,10 @@ type LeftoverReport struct {
 	// run (another Lima home, HOME or Docker engine), and Recent those
 	// whose state changed in the last hour: never orphans.
 	Elsewhere, Recent []string
+	// Links are clients' links to VMs that have no state, and Sockets the
+	// link sessions' sockets nothing listens on (LeftoverSockets).
+	Links   []DeadLink
+	Sockets []string
 }
 
 // Find finds the VMs whose state names a backend that answers and
@@ -107,7 +112,43 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 		}
 		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Get(state.KeyDir), Changed: fi.ModTime(), Leaves: leaves})
 	}
-	return r, nil
+	if r.Links, err = deadLinks(e.Dirs); err != nil {
+		return r, err
+	}
+	r.Sockets, err = LeftoverSockets(ctx, e.Dirs)
+	return r, err
+}
+
+// ForgetLinks removes every client's links to VMs that have no state, as
+// devvm rm of the VM would have, naming the clients that lose them, and
+// deletes the link sessions' sockets nothing listens on. Both are found
+// again first.
+func (e Leftovers) ForgetLinks(ctx context.Context) error {
+	dead, err := deadLinks(e.Dirs)
+	if err != nil {
+		return err
+	}
+	var targets []string
+	for _, l := range dead {
+		if !slices.Contains(targets, l.Target) {
+			targets = append(targets, l.Target)
+		}
+	}
+	for _, t := range targets {
+		if err := linkRuns(e).unlinkTarget(ctx, t); err != nil {
+			return err
+		}
+	}
+	socks, err := LeftoverSockets(ctx, e.Dirs)
+	if err != nil {
+		return err
+	}
+	for _, s := range socks {
+		if err := RemoveLeftoverSocket(ctx, s); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // leftoversOf are the resources of b's own that Forget deletes for vm;

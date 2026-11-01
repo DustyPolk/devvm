@@ -88,7 +88,7 @@ stdout '^devvm ports: forwarding devvm-web-[0-9a-f]{14}''s ports$'
 ! stdout 'port '$UNLISTED':'
 exists $STUB_DIR/sync.tar
 exec devvm ls
-stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +smolvm +\S+/web$'
+stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +- +smolvm +\S+/web$'
 grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 
 # A listed port a program on this machine has, on any address, isn't
