@@ -183,11 +183,15 @@ github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okW
 github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
 github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
 KEYS
-# The VM's sshd forwards nothing through the host for the VM: local forwarding only (Lima's own port
-# and socket forwards, editors' -L and -D), no remote forwarding, tunnels or X11. First in
-# sshd_config.d, so it wins. A defence for an honest VM: root in it can change it.
+# The VM's sshd: local forwarding (Lima's own port and socket forwards, editors' -L and -D), and
+# remote forwards of TCP ports only on 127.77.0.0/16, the addresses of the VM's links, which devvm
+# on the host asks for by number (clientspecified binds the address asked for, which PermitListen
+# matches as text, so 0.0.0.0, 127.0.0.1, ::1 and localhost are refused); no remote socket forwards,
+# tunnels or X11. First in sshd_config.d, so it wins. It's a safeguard for an honest VM, as root in
+# it can change it: the boundary is the host's ssh, which asks for no other remote forward and
+# accepts a channel only for a forward it asked for.
 if [[ -d /etc/ssh ]]; then
   sudo mkdir -p /etc/ssh/sshd_config.d
-  printf '%s\n' 'AllowTcpForwarding local' 'AllowStreamLocalForwarding local' 'GatewayPorts no' \
-    'PermitTunnel no' 'X11Forwarding no' | sudo tee /etc/ssh/sshd_config.d/00-devvm.conf >/dev/null
+  printf '%s\n' 'AllowTcpForwarding all' 'AllowStreamLocalForwarding local' 'GatewayPorts clientspecified' \
+    'PermitListen 127.77.*:*' 'PermitTunnel no' 'X11Forwarding no' | sudo tee /etc/ssh/sshd_config.d/00-devvm.conf >/dev/null
 fi

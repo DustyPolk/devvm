@@ -23,10 +23,11 @@ import (
 //     reads them through smolvm's exec, as it does on Lima;
 //   - sshd runs on devvm's own config (services.sh): the VM's user alone,
 //     with the VM's own key (sshKey, vmssh.EnsureKey) alone, no passwords;
-//     local forwarding only, no remote forwarding, tunnels or X11. Root in
-//     the VM can change that: what keeps the VM's connections from going
-//     out through the host is the host's ssh, which asks for none of those
-//     (devvm's entry pins its options);
+//     local forwarding, remote forwards of TCP ports only on 127.77.0.0/16
+//     (links' addresses), no remote socket forwards, tunnels or X11. Root
+//     in the VM can change that: what keeps the VM's connections from
+//     going out through the host is the host's ssh, which asks for none of
+//     those but a link's (devvm's entry pins its options);
 //   - its guest port, 22, is forwarded from a host loopback port
 //     (sshForward): Confinement.SSHPort, or one of the backend's, kept while
 //     it stays free, never one of the VM's listed ports. It's the one

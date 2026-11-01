@@ -13,8 +13,11 @@
 #   services.sh [ssh USER KEY [VAR...]]
 # ssh: devvm's sshd for ssh and editors, on a config of its own: new host keys (ed25519) at each
 # start, so no two VMs made from one image share them; USER alone may log in, with KEY (the VM's
-# own, an authorized_keys line) alone; local forwarding only, no remote forwarding, tunnels or X11
-# (a defence for an honest VM: root here can change it), to IPv4 or IPv6; its sessions get /etc/environment and each
+# own, an authorized_keys line) alone; local forwarding, to IPv4 or IPv6, and remote forwards of TCP
+# ports only on 127.77.0.0/16, the addresses of the VM's links, as layers/base.sh allows them on
+# Lima; no remote socket forwards, tunnels or X11 (a safeguard for an honest VM: root here can change
+# it, and the boundary is the host's ssh, which asks for no other remote forward and accepts a
+# channel only for a forward it asked for); its sessions get /etc/environment and each
 # VAR from this script's environment (the proxy's under network policy), as devvm's own commands
 # do. The config holds them, so it's root's alone. devvm asks for it only once it found sshd there.
 # With DEVVM_SSHD=inetd (Docker's containers) no sshd daemon starts and nothing listens: each
@@ -85,10 +88,12 @@ if [ "${1:-}" = ssh ]; then
     echo "AuthorizedKeysCommand none"
     echo "AuthorizedPrincipalsFile none"
     echo "PermitUserEnvironment no"
-    echo "AllowTcpForwarding local"
+    # Remote forwards bind the address asked for, which PermitListen matches as text: 0.0.0.0,
+    # 127.0.0.1, ::1 and localhost are refused.
+    echo "AllowTcpForwarding all"
     echo "AllowStreamLocalForwarding local"
-    echo "PermitListen none"
-    echo "GatewayPorts no"
+    echo "GatewayPorts clientspecified"
+    echo "PermitListen 127.77.*:*"
     echo "X11Forwarding no"
     echo "PermitTunnel no"
     echo "AllowAgentForwarding yes"

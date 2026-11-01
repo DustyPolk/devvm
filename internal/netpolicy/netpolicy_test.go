@@ -54,6 +54,33 @@ func sandbox(t *testing.T, img string) (paths.Dirs, *state.VM) {
 	return d, st
 }
 
+// A VM's links reach their targets without its proxy: each name, and
+// every name under .devvm.internal, after the VM itself; nothing more
+// without links. LinkEnv changes only the NO_PROXY variables env has, in
+// a copy.
+func TestNoProxyLinks(t *testing.T) {
+	if got := NoProxy(nil); got != "localhost,127.0.0.1,::1" {
+		t.Errorf("NoProxy(nil) = %q", got)
+	}
+	if got := NoProxy([]string{"db", "pg"}); got != "localhost,127.0.0.1,::1,.devvm.internal,db,pg" {
+		t.Errorf("NoProxy = %q", got)
+	}
+	env := LinkEnv(Env, []string{"db"})
+	want := map[string]string{
+		"NO_PROXY": "localhost,127.0.0.1,::1,.devvm.internal,db", "no_proxy": "localhost,127.0.0.1,::1,.devvm.internal,db",
+		"NODE_USE_ENV_PROXY": "1",
+	}
+	if !maps.Equal(env, want) || Env["NO_PROXY"] != "localhost,127.0.0.1,::1" {
+		t.Errorf("LinkEnv = %q, Env = %q", env, Env)
+	}
+	if got := LinkEnv(map[string]string{"A": "1"}, []string{"db"}); !maps.Equal(got, map[string]string{"A": "1"}) {
+		t.Errorf("LinkEnv without NO_PROXY = %q", got)
+	}
+	if got := LinkEnv(Env, nil); !maps.Equal(got, Env) {
+		t.Errorf("LinkEnv without links = %q", got)
+	}
+}
+
 func TestPolicyFiles(t *testing.T) {
 	d := paths.Dirs{Data: "/d", Config: "/c", Lima: "/l"}
 	got := PolicyFiles(d, "/r", "vm1", "node+claude")

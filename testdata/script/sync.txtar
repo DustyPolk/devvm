@@ -43,6 +43,9 @@ exec tar -xOf $STUB_DIR/sync.tar host_home
 stdout '/home$'
 exec tar -xOf $STUB_DIR/sync.tar vm
 cmp stdout $WORK/vm-plain
+# Without links, the hosts file for /etc/hosts is empty.
+exec tar -xOf $STUB_DIR/sync.tar hosts
+! stdout .
 exec tar -xOf $STUB_DIR/sync.tar env
 stdout '^export LANG=''en_US\.UTF-8''\nexport CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-testfake''\n\z'
 
@@ -141,3 +144,4 @@ DEVVM_LANG='en_US.UTF-8'
 DEVVM_GIT_NAME='Test User'
 DEVVM_GIT_EMAIL='test@example.com'
 DEVVM_PROXY=''
+DEVVM_NO_PROXY='localhost,127.0.0.1,::1'

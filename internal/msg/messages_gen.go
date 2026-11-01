@@ -1714,6 +1714,11 @@ func LinkSessionFailed(reason string) M {
 	return M{id: "link_session_failed", vals: []val{{"reason", reason}}}
 }
 
+// LinkSetupInvalid is [link_setup_invalid]: "Setting up {{.vm}} stopped, because its link {{.name}} at {{.address}} isn't one devvm makes."
+func LinkSetupInvalid(address string, name string, vm string) M {
+	return M{id: "link_setup_invalid", vals: []val{{"address", address}, {"name", name}, {"vm", vm}}}
+}
+
 // LinkTargetNamed is [link_target_named]: "{{.vm}} reaches {{.target}} as {{.name}} already, and it has one name for each VM it links to. Leave out --as, or run devvm link rm for those links first."
 func LinkTargetNamed(name string, target string, vm string) M {
 	return M{id: "link_target_named", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
@@ -3438,6 +3443,7 @@ var specs = map[string]spec{
 	"link_removed":                     {fields: []string{"name", "port", "vm"}},
 	"link_self":                        {fields: []string{"vm"}},
 	"link_session_failed":              {fields: []string{"reason"}},
+	"link_setup_invalid":               {fields: []string{"address", "name", "vm"}},
 	"link_target_named":                {fields: []string{"name", "target", "vm"}},
 	"link_trust":                       {fields: []string{"target", "vm"}},
 	"link_unknown_target":              {fields: []string{"target"}},

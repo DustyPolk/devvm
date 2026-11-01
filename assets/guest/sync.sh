@@ -11,8 +11,11 @@
 #                the proxy's, when network policy is on; devvm-extra-N.crt, the user's own; ca.sh
 #                installs them
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
-#                and DEVVM_PROXY (the proxy URL when network policy is on, else empty)
+#                DEVVM_PROXY (the proxy URL when network policy is on, else empty), and
+#                DEVVM_NO_PROXY (what reaches the VM itself and its links without the proxy)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
+#   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
+#                NAME.devvm.internal...", for /etc/hosts
 set -euo pipefail
 # devvm reads devvm-tools' report when this setup fails, so an older one (from boot) goes first.
 sudo rm -f /run/devvm/tools-unmounted
@@ -27,6 +30,26 @@ if [[ -n "$DEVVM_HOSTNAME" && "$(hostname)" != "$DEVVM_HOSTNAME" ]]; then
   if $systemd; then sudo hostnamectl set-hostname "$DEVVM_HOSTNAME"
   else echo "$DEVVM_HOSTNAME" | sudo tee /etc/hostname >/dev/null; sudo hostname "$DEVVM_HOSTNAME"; fi
   grep -q "[[:space:]]$DEVVM_HOSTNAME\$" /etc/hosts || echo "127.0.1.1 $DEVVM_HOSTNAME" | sudo tee -a /etc/hosts >/dev/null
+fi
+# link_hosts FILE HOSTS: replace (or remove) the block of the VM's links in FILE with HOSTS, a line
+# per target: its address, its names and NAME.devvm.internal. Written in place, never renamed over,
+# and only when it changed: Docker's /etc/hosts is a bind mount of Docker's, which it writes again at
+# every start, so the setup that follows each start writes the block again there.
+link_hosts() {
+  local tmp
+  tmp=$(mktemp)
+  sed '/^# devvm links begin$/,/^# devvm links end$/d' "$1" > "$tmp"
+  [[ ! -s $2 ]] || { echo '# devvm links begin'; cat "$2"; echo '# devvm links end'; } >> "$tmp"
+  cmp -s "$tmp" "$1" || sudo cp "$tmp" "$1"   # into the file itself, which keeps its mode
+  rm -f "$tmp"
+}
+link_hosts /etc/hosts "$s/hosts"
+# A link listens on its target's own port, so one below 1024 needs them open to the VM's user, whose
+# sshd binds it. 1024 is the kernel's default (Lima's Alpine VMs, smolvm); Lima's Ubuntu and Debian
+# VMs and Docker's containers have 0, and Docker's runc keeps /proc/sys read-only.
+ports=/proc/sys/net/ipv4/ip_unprivileged_port_start
+if [[ "$(cat "$ports" 2>/dev/null)" == 1024 ]]; then
+  echo 0 | sudo tee "$ports" >/dev/null || echo "devvm: links to ports below 1024 can't listen in this VM" >&2
 fi
 if [[ -n "$DEVVM_TZ" ]]; then
   if $systemd; then
@@ -189,7 +212,7 @@ docker_proxies() {   # docker_proxies CONFIG [sudo]: set (or remove) the proxy f
   tmp=$(mktemp)
   if [[ -n "${DEVVM_PROXY:-}" ]]; then
     ${as[@]+"${as[@]}"} jq --arg p "$DEVVM_PROXY" \
-      '.proxies.default = {httpProxy: $p, httpsProxy: $p, noProxy: "localhost,127.0.0.1"}' "$c" > "$tmp"
+      --arg n "$DEVVM_NO_PROXY" '.proxies.default = {httpProxy: $p, httpsProxy: $p, noProxy: $n}' "$c" > "$tmp"
   else
     ${as[@]+"${as[@]}"} jq 'del(.proxies.default)' "$c" > "$tmp"
   fi
@@ -218,10 +241,10 @@ fi
 if [[ -n "${DEVVM_PROXY:-}" && -x $nixd ]]; then
   sudo mkdir -p "$(dirname "$nix_conf")"
   if $systemd; then
-    printf '[Service]\nEnvironment="http_proxy=%s" "https_proxy=%s" "no_proxy=localhost,127.0.0.1"\n' \
-      "$DEVVM_PROXY" "$DEVVM_PROXY"
+    printf '[Service]\nEnvironment="http_proxy=%s" "https_proxy=%s" "no_proxy=%s"\n' \
+      "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_NO_PROXY"
   else
-    printf 'export http_proxy=%s https_proxy=%s no_proxy=localhost,127.0.0.1\n' "$DEVVM_PROXY" "$DEVVM_PROXY"
+    printf 'export http_proxy=%s https_proxy=%s no_proxy=%s\n' "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_NO_PROXY"
   fi | sudo tee "$nix_conf" >/dev/null
 else
   sudo rm -f "$nix_conf"
@@ -259,16 +282,17 @@ if [[ -n "${DEVVM_PROXY:-}" ]]; then
       sudo tee /etc/apt/apt.conf.d/95devvm-proxy >/dev/null
   if ! $systemd; then
     # Without PAM (Alpine), shells don't read Lima's /etc/environment.
-    printf 'export http_proxy=%s https_proxy=%s HTTP_PROXY=%s HTTPS_PROXY=%s no_proxy=localhost,127.0.0.1,::1 NO_PROXY=localhost,127.0.0.1,::1\n' \
-      "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_PROXY" | sudo tee /etc/profile.d/devvm-proxy.sh >/dev/null
+    printf 'export http_proxy=%s https_proxy=%s HTTP_PROXY=%s HTTPS_PROXY=%s no_proxy=%s NO_PROXY=%s\n' \
+      "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_NO_PROXY" "$DEVVM_NO_PROXY" |
+      sudo tee /etc/profile.d/devvm-proxy.sh >/dev/null
   fi
   if command -v dockerd >/dev/null; then
     sudo mkdir -p "$(dirname "$dropin")"
     if $systemd; then
-      printf '[Service]\nEnvironment="HTTP_PROXY=%s" "HTTPS_PROXY=%s" "NO_PROXY=localhost,127.0.0.1"\n' \
-        "$DEVVM_PROXY" "$DEVVM_PROXY" | sudo tee "$dropin" >/dev/null
+      printf '[Service]\nEnvironment="HTTP_PROXY=%s" "HTTPS_PROXY=%s" "NO_PROXY=%s"\n' \
+        "$DEVVM_PROXY" "$DEVVM_PROXY" "$DEVVM_NO_PROXY" | sudo tee "$dropin" >/dev/null
     else
-      conf_block "$dropin" "export HTTP_PROXY=$DEVVM_PROXY HTTPS_PROXY=$DEVVM_PROXY NO_PROXY=localhost,127.0.0.1"
+      conf_block "$dropin" "export HTTP_PROXY=$DEVVM_PROXY HTTPS_PROXY=$DEVVM_PROXY NO_PROXY=$DEVVM_NO_PROXY"
     fi
   fi
   # Every SSH connection goes through the proxy too, checked against the allowlist and logged.

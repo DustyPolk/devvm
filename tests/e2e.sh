@@ -356,6 +356,17 @@ skip() {
   echo "  SKIP  [$ncheck/$total] $1 ($2)"
 }
 skipped=0
+# rfwd_links HOST SSH...: the VM's sshd, reached as HOST by the command SSH..., binds a remote forward
+# only on 127.77.0.0/16, the addresses of links: ssh's default (localhost), 127.0.0.1, 0.0.0.0, ::1,
+# localhost and another range are refused, as is a remote socket forward, and 127.77.0.250 binds
+# (the control). A safeguard for an honest VM: the boundary is the host's ssh.
+rfwd_links() { local h=$1 a; shift
+  for a in 0:127.0.0.1:9 47613:127.0.0.1:9 127.0.0.1:47613:127.0.0.1:9 0.0.0.0:47613:127.0.0.1:9 \
+    '[::1]:47613:127.0.0.1:9' localhost:47613:127.0.0.1:9 127.78.0.2:47613:127.0.0.1:9 "/tmp/devvm-e2e-$$.sock:$sc/agent.sock"; do
+    ! "$@" -o ExitOnForwardFailure=yes -R "$a" "$h" true </dev/null 2>/dev/null || { echo "-R $a bound"; return 1; }
+  done
+  "$@" -o ExitOnForwardFailure=yes -R 127.77.0.250:47613:127.0.0.1:9 "$h" true </dev/null || { echo "-R 127.77.0.250 refused"; return 1; }; }
+export -f rfwd_links
 section() { echo; echo "== $*"; }
 quiet() { "$@" </dev/null >"$work/last.log" 2>&1; }
 # keys_of IMAGE: the keys of the images recorded under that name, one per line.
@@ -940,12 +951,17 @@ check "a changed host key is refused" bash -c "
   { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/other.pub')\"; } > '$kh' &&
   { env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web true </dev/null 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } &&
   (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
-check "its sshd refuses remote forwarding (a port, a socket) and X11; a local forward works (the control)" bash -c "
-  ! env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-web true </dev/null &&
-  ! env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o ExitOnForwardFailure=yes -R /tmp/devvm-e2e-\$\$.sock:'$sc/agent.sock' devvm-web true </dev/null &&
-  limactl shell --workdir / $vm sudo sshd -T </dev/null | grep -qx 'x11forwarding no' &&
-  limactl shell --workdir / $vm sudo sshd -T </dev/null | grep -qx 'allowtcpforwarding local' &&
-  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' -W 127.0.0.1:22 devvm-web </dev/null | head -c 4) == SSH- ]]"
+# lima_sshd VM HOST: its sshd binds remote forwards only on links' addresses (rfwd_links) and refuses
+# X11, as sshd -T shows; a local forward works (the control).
+lima_sshd() { local t want
+  rfwd_links "$2" env -u SSH_AUTH_SOCK ssh -F "$sc/config" || return 1
+  t=$(limactl shell --workdir / "$1" sudo sshd -T </dev/null) || return 1
+  for want in 'x11forwarding no' 'allowtcpforwarding yes' 'allowstreamlocalforwarding local' 'gatewayports clientspecified' \
+    'permitlisten 127.77.*:*' 'permittunnel no'; do
+    grep -qxF "$want" <<<"$t" || { echo "not $want"; return 1; }
+  done
+  [[ $(env -u SSH_AUTH_SOCK ssh -F "$sc/config" -W 127.0.0.1:22 "$2" </dev/null | head -c 4) == SSH- ]]; }
+check "its sshd binds remote forwards only on 127.77.0.0/16, refuses socket forwards and X11; a local forward works (the control)" lima_sshd "$vm" devvm-web
 check "the entry turns off X11, tunnels and adding keys to an agent, whatever Host * says" bash -c "
   printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n  Tunnel yes\n' '$XDG_CONFIG_HOME/devvm/ssh_config' > '$sc/hostile-config' &&
   g=\$(ssh -G -F '$sc/hostile-config' devvm-web) &&
@@ -1738,10 +1754,10 @@ check "Nix's store is root's, builds are sandboxed, only root is trusted, and th
   [[ $(nix config show sandbox) == true && $(nix config show sandbox-fallback) == false ]] &&
   [[ $(nix config show trusted-users) == root ]] &&
   nix store info --option substituters https://example.invalid 2>&1 | grep -q "ignoring untrusted substituter"'
-check "nix-daemon gets the VM's proxy alone, in devvm's drop-in" in_vm "$vm" '
-  [[ $(ls /etc/systemd/system/nix-daemon.service.d) == devvm-proxy.conf ]] &&
+check "nix-daemon gets the VM's proxy alone, and its NO_PROXY, in devvm's drop-in" in_vm "$vm" '
+  [[ $(ls /etc/systemd/system/nix-daemon.service.d) == devvm-proxy.conf && $NO_PROXY == localhost,127.0.0.1,::1 ]] &&
   e=$(systemctl show nix-daemon.service -p Environment --value) &&
-  [[ $e == "http_proxy=$HTTP_PROXY https_proxy=$HTTP_PROXY no_proxy=localhost,127.0.0.1" ]]'
+  [[ $e == "http_proxy=$HTTP_PROXY https_proxy=$HTTP_PROXY no_proxy=$NO_PROXY" ]]'
 check "the VM's Nix tries the shared cache first, then cache.nixos.org, trusting cache.nixos.org's key alone" in_vm "$vm" '
   [[ -f /etc/nix/devvm-cache.conf && $(nix config show substituters) == "http://devvm.proxy/nix https://cache.nixos.org"* ]] &&
   [[ $(nix config show trusted-public-keys) == "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ]]'
@@ -1854,6 +1870,8 @@ check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && 
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
+check "ports below 1024 are open to the VM's user after the setup (Alpine's kernel starts at 1024)" in_vm "$vm" \
+  '[[ $(cat /proc/sys/net/ipv4/ip_unprivileged_port_start) == 0 ]]'
 check "and every feature" in_vm "$vm" 'eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 # As root: syslog's and acpid's pid files are root-only, so a user's rc-status calls them crashed.
 check "no crashed services" in_vm "$vm" '[[ -z "$(sudo rc-status --crashed 2>/dev/null)" ]]'
@@ -2200,9 +2218,9 @@ smolssh_sshd() { local t
   t=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- /usr/sbin/sshd -T -f /etc/devvm/ssh/sshd_config </dev/null) || return 1
   echo "$t" | grep -E '^(listenaddress|allowusers|permitrootlogin|authenticationmethods|passwordauthentication|kbdinteractiveauthentication|allowtcpforwarding|allowstreamlocalforwarding|permitlisten|gatewayports|x11forwarding|permittunnel|permituserenvironment|allowagentforwarding) '
   for want in 'listenaddress 0.0.0.0:22' "allowusers $me" 'permitrootlogin no' 'authenticationmethods publickey' \
-    'passwordauthentication no' 'kbdinteractiveauthentication no' 'allowtcpforwarding local' 'allowstreamlocalforwarding local' \
-    'permitlisten none' 'gatewayports no' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
-    grep -qx "$want" <<<"$t" || { echo "not $want"; return 1; }
+    'passwordauthentication no' 'kbdinteractiveauthentication no' 'allowtcpforwarding yes' 'allowstreamlocalforwarding local' \
+    'permitlisten 127.77.*:*' 'gatewayports clientspecified' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
+    grep -qxF "$want" <<<"$t" || { echo "not $want"; return 1; }
   done
   [[ $(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- stat -c '%U %a' /etc/devvm/ssh/sshd_config </dev/null) == 'root 600' ]]; }
 # smolssh_nopass HOST: password and keyboard-interactive logins are refused, publickey alone offered.
@@ -2225,12 +2243,17 @@ smolssh_onlykey() {
   ! env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile="$kh" -o HostKeyAlias="$1" -o StrictHostKeyChecking=yes \
     -o BatchMode=yes -o IdentitiesOnly=yes -i "$sc/other" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null &&
   ! sshs -o BatchMode=yes -l root "$2" true && ! sshs -o BatchMode=yes -l nobody "$2" true && sshs -o BatchMode=yes "$2" true; }
-# smolssh_forwarding HOST: devvm's sshd refuses remote forwarding (a port, a socket); a local forward,
-# as editors use, works (the control).
+# smolssh_forwarding HOST: devvm's sshd binds remote forwards only on links' addresses (rfwd_links);
+# a local forward, as editors use, works (the control).
 smolssh_forwarding() {
-  ! sshs -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 "$1" true &&
-  ! sshs -o ExitOnForwardFailure=yes -R "/tmp/devvm-e2e-$$.sock:$sc/agent.sock" "$1" true &&
+  rfwd_links "$1" sshs &&
   [[ $(sshs -W 127.0.0.1:22 "$1" | head -c 4) == SSH- ]]; }
+# smolssh_lowport VM HOST: the setup opened ports below 1024 to the VM's user (smolvm's kernel starts
+# at 1024), so its sshd binds a link's port 80.
+smolssh_lowport() { local p
+  p=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- cat /proc/sys/net/ipv4/ip_unprivileged_port_start </dev/null)
+  echo "ip_unprivileged_port_start: $p"
+  [[ $p == 0 ]] && sshs -o ExitOnForwardFailure=yes -R 127.77.0.250:80:127.0.0.1:9 "$2" true; }
 # smolssh_hostile VM HOST: root in the VM rewrites its sshd's config to allow remote forwarding, X11
 # and tunnels (with xauth for X11), and restarts it. Through a config of the check's own whose Host *
 # asks for X11 and to add keys to the agent, the session gets no display and the agent no key; the
@@ -2306,7 +2329,8 @@ check "a changed host key is refused" bash -c "
   (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
 check "password and keyboard-interactive logins are refused: publickey alone is offered" smolssh_nopass devvm-smolssh
 check "only devvm's key logs in, as the VM's user: another key, root and another user are refused" smolssh_onlykey "$vm" devvm-smolssh
-check "devvm's sshd refuses remote forwarding (a port, a socket); a local forward, as editors use, works" smolssh_forwarding devvm-smolssh
+check "devvm's sshd binds remote forwards only on 127.77.0.0/16 and refuses socket forwards; a local forward, as editors use, works" smolssh_forwarding devvm-smolssh
+check "ports below 1024 are open to the VM's user after the setup, so a remote forward on 127.77.0.250:80 binds" smolssh_lowport "$vm" devvm-smolssh
 check "sshd runs devvm's settings, and its config is root's alone" smolssh_sshd "$vm"
 check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" smolssh_hostile "$vm" devvm-smolssh
 check "devvm host names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
@@ -2610,8 +2634,8 @@ smolnet_ssh() { local key out
   [[ $out == "http://devvm:$key@100.96.0.1:"*$'\n'"localhost,127.0.0.1,::1"$'\n'"http://devvm:$key@100.96.0.1:"* ]] || { echo "sessions: ${out//$key/KEY}"; return 1; }
   sshn "$1" 'curl -fsS -m 20 -o /dev/null https://github.com' </dev/null; }
 # smolnet_ssh_closed VM: ssh opens no way out: a local forward to an outside host or to a service on
-# the host's loopback (which answers 407) gets nothing back, remote forwarding is refused, and a
-# direct connection from a session fails.
+# the host's loopback (which answers 407) gets nothing back, a remote forward on the VM's loopback to
+# that service is refused, and a direct connection from a session fails.
 smolnet_ssh_closed() { local a b
   a=$(smolnet_via "$1" 1.1.1.1:80) b=$(smolnet_via "$1" 100.96.0.1:18765)
   echo "1.1.1.1:80: ${a:-nothing}; the host's loopback: ${b:-nothing}"
@@ -2656,7 +2680,7 @@ check "another host is blocked by the proxy, and so is another port of an allowe
   ! in_smol 'curl -fsS -m 20 -o /dev/null https://github.com:8443'"
 check "direct connections fail, even as root: an address, other ports, IPv6, the host's loopback" smolnet_direct "$vm"
 check "ssh reaches it on its port; its sessions, a login's or not, get the proxy's settings, and an allowed host works" smolnet_ssh "$vm"
-check "ssh opens no way out: a local forward to 1.1.1.1 or the host's loopback gets nothing, remote forwarding is refused" smolnet_ssh_closed "$vm"
+check "ssh opens no way out: a local forward to 1.1.1.1 or the host's loopback gets nothing, a remote forward on the VM's loopback is refused" smolnet_ssh_closed "$vm"
 check "the host's loopback is refused through the proxy too (internal addresses need a rule)" bash -c "
   [[ \$(SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://100.96.0.1:18765/' </dev/null) == 403 ]]"
 check "DNS fails at once, not after a timeout" in_smol "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
@@ -2923,7 +2947,7 @@ nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem;
 check "a nix VM with network policy: nix-daemon runs, with the VM's proxy" bash -c "
   [[ -n '$vm' ]] && grep -qx image=nix '$vms/$vm' && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
   in_smol '$vm' '[[ \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
-    sudo grep -qx \"export http_proxy=\$HTTP_PROXY https_proxy=\$HTTP_PROXY no_proxy=localhost,127.0.0.1\" /etc/conf.d/nix-daemon'"
+    sudo grep -qx \"export http_proxy=\$HTTP_PROXY https_proxy=\$HTTP_PROXY no_proxy=localhost,127.0.0.1,::1\" /etc/conf.d/nix-daemon'"
 check "nix run nixpkgs#hello works through the proxy, and a build runs in Nix's sandbox" in_smol "$vm" "
   nix run nixpkgs#hello | grep -qx 'Hello, world!' && [[ \$(nix config show sandbox-fallback) == false ]] &&
   nix build --no-link --impure --expr '$nix_built'"
@@ -3382,16 +3406,15 @@ docker_ssh() {
       -o BatchMode=yes -o IdentitiesOnly=yes -i '$sc/other' -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null &&
     ! dsh -o BatchMode=yes -l root devvm-$1 true && ! dsh -o BatchMode=yes -l nobody devvm-$1 true && dsh -o BatchMode=yes devvm-$1 true"
   d_serve "$vm" 127.0.0.1 47501
-  check "devvm's sshd refuses remote forwarding (a port, a socket); a local forward to the VM's loopback works" bash -c "
-    ! dsh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-$1 true &&
-    ! dsh -o ExitOnForwardFailure=yes -R '/tmp/devvm-e2e-$$.sock:$sc/agent.sock' devvm-$1 true &&
+  check "devvm's sshd binds remote forwards only on 127.77.0.0/16 and refuses socket forwards; a local forward to the VM's loopback works" bash -c "
+    rfwd_links devvm-$1 dsh &&
     for _ in \$(seq 10); do [[ \$(dsh -W 127.0.0.1:47501 devvm-$1 2>/dev/null | head -1) == vm-47501 ]] && exit 0; sleep 1; done; false"
   check "sshd runs devvm's settings, and its config is root's alone" bash -c "
     t=\$(docker exec -u 0 '$vm' /usr/sbin/sshd -T -f /etc/devvm/ssh/sshd_config </dev/null) || exit 1
     for want in 'allowusers $me' 'permitrootlogin no' 'authenticationmethods publickey' 'passwordauthentication no' \
-      'kbdinteractiveauthentication no' 'allowtcpforwarding local' 'allowstreamlocalforwarding local' 'permitlisten none' \
-      'gatewayports no' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
-      grep -qx \"\$want\" <<<\"\$t\" || { echo \"not \$want\"; exit 1; }; done
+      'kbdinteractiveauthentication no' 'allowtcpforwarding yes' 'allowstreamlocalforwarding local' 'permitlisten 127.77.*:*' \
+      'gatewayports clientspecified' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
+      grep -qxF \"\$want\" <<<\"\$t\" || { echo \"not \$want\"; exit 1; }; done
     [[ \$(docker exec -u 0 '$vm' stat -c '%U %a' /etc/devvm/ssh/sshd_config </dev/null) == 'root 600' ]]"
   check "devvm _docker-connect refuses another devvm's container, in one line, running nothing" bash -c "
     out=\$(DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data /tmp/devvm-e2e-elsewhere '$vm' </dev/null 2>&1)
@@ -3404,7 +3427,7 @@ docker_ssh() {
     out=\$(printf 'pwd; echo \"conn=\${SSH_CONNECTION:+yes}\"\n' | '$D' 2>&1) && grep -qx '$q' <<<\"\$out\" && grep -qx conn=yes <<<\"\$out\" || { echo \"\$out\"; false; }"
   check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" d_hostile "$vm" "devvm-$1"
   k1=$(dssh_key "$vm")
-  check "restart: new host keys, pinned again, devvm's sshd config again (remote forwarding refused), and ssh reaches it" bash -c "cd '$q' &&
+  check "restart: new host keys, pinned again, devvm's sshd config again (a remote forward on 127.0.0.1 refused), and ssh reaches it" bash -c "cd '$q' &&
     printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(d_state '$vm') == running ]] &&
     k=\$(dssh_key '$vm') && [[ -n \$k && \$k != '$k1' ]] && ! dsh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-$1 true && dsh devvm-$1 true"
   check "started outside devvm (docker restart): devvm host says so, its entry goes, and devvm's shell is a docker exec; devvm restart has ssh again" bash -c "cd '$q' &&

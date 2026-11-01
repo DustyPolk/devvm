@@ -52,13 +52,54 @@ cmp $HOME/.vscode-server/data/Machine/settings.json vsc-comments.json
 exec bash tools-test.sh $DEVVM_REPO/assets/guest/tools.sh
 cmp stdout tools.want
 
+# The VM's links in /etc/hosts: a marked block after the file's own lines,
+# replaced whole when they change, and gone without links. The file is
+# written in place (Docker's /etc/hosts is a bind mount, which a rename
+# can't replace), and not at all when nothing changed.
+exec bash hosts-test.sh
+cmp stdout hosts.want
+
 -- snippets.sh --
 # Each piece of sync.sh ($1) into a file of its own.
 awk '/^cat > ~\/.bashrc.d\/devvm-prompt.sh/ { on = 1; next } on && /^EOF$/ { exit } on' "$1" > prompt.sh
 awk '/^_devvm_blocked\(\) \{/ { on = 1 } on && /^EOF$/ { exit } on' "$1" > blocked.sh
 awk '/^merge_claude_json\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$1" > merge.sh
 awk '/^vsc=~\/.vscode-server/ { on = 1 } on && /^# Codex has no env-var/ { exit } on' "$1" > vsc.sh
-for f in prompt.sh blocked.sh merge.sh vsc.sh; do [[ -s $f ]] || { echo "no $f in $1" >&2; exit 1; }; done
+awk '/^link_hosts\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$1" > hosts.sh
+for f in prompt.sh blocked.sh merge.sh vsc.sh hosts.sh; do [[ -s $f ]] || { echo "no $f in $1" >&2; exit 1; }; done
+-- hosts-test.sh --
+# sudo runs the command and says when it writes; hosts.link is the same
+# file as hosts, which a write in place keeps.
+exec 3>&1
+sudo() { echo "(write)" >&3; "$@"; }
+. hosts.sh
+printf '127.0.0.1 localhost\n127.0.1.1 web\n' > hosts
+ln hosts hosts.link
+printf '127.77.0.2 db db.devvm.internal\n' > links
+link_hosts hosts links; cat hosts.link
+link_hosts hosts links; echo '-- again'
+printf '127.77.0.2 db db.devvm.internal\n127.77.0.3 api api.devvm.internal\n' > links
+link_hosts hosts links; cat hosts.link
+: > links
+link_hosts hosts links; cat hosts.link
+-- hosts.want --
+(write)
+127.0.0.1 localhost
+127.0.1.1 web
+# devvm links begin
+127.77.0.2 db db.devvm.internal
+# devvm links end
+-- again
+(write)
+127.0.0.1 localhost
+127.0.1.1 web
+# devvm links begin
+127.77.0.2 db db.devvm.internal
+127.77.0.3 api api.devvm.internal
+# devvm links end
+(write)
+127.0.0.1 localhost
+127.0.1.1 web
 -- first-cmd.sh --
 # The first command of a script ($1) after its set line, past comments.
 awk 'on && !/^#/ { print; exit } /^set -euo pipefail$/ { on = 1 }' "$1"

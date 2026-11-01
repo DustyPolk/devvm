@@ -101,6 +101,10 @@ type Env struct {
 	// (the registry's Host), checked before a new VM and each build; nil
 	// checks none.
 	FreeSpace func(path string) (uint64, error)
+	// Links returns the links a VM's start and setup give it: its targets'
+	// addresses and names, for its /etc/hosts and, with network policy,
+	// its NO_PROXY (checkLinks checks them first); nil gives none.
+	Links func(st *state.VM) ([]GuestLink, error)
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
 	// asks which features base gets (build.Env.Pick); Terminal reports
 	// whether it can ask, Interactive whether someone can also see the
@@ -483,8 +487,13 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		if err != nil {
 			return conf, err
 		}
-		// The proxy's confinement, with the agent chosen above.
+		// The proxy's confinement, with the agent chosen above, and its
+		// links reached without the proxy.
 		p.AgentSocket, p.NoAgent = conf.AgentSocket, conf.NoAgent
+		if p.Env, err = (syncer{e}).linkEnv(st, p.Env); err != nil {
+			e.Proxy.Stop(vm)
+			return conf, err
+		}
 		conf = p
 	}
 	// Tools pointed at the CAs devvm adds, with network policy or

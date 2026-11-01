@@ -102,7 +102,7 @@ The VM has host keys of its own, which devvm reads through `docker exec` and pin
 
 Only the VM's own key logs in, and only as the VM's user. The key is `~/.local/share/devvm/docker/vms/<vm>.key` (mode 600), and its public half is that VM's only authorized key. Passwords, root and other users can't log in. The entries offer only that key, and never your agent's keys.
 
-An ssh session gives the VM no way out as long as your ssh doesn't ask for one, as on [smolvm](smolvm.md#ssh-for-editors). devvm's entry turns off X11, tunnels, remote SOCKS forwards and adding keys to an agent, and the sshd allows only local forwarding, which protects only an honest VM.
+An ssh session gives the VM no way out as long as your ssh doesn't ask for one, as on [smolvm](smolvm.md#ssh-for-editors). devvm's entry turns off X11, tunnels, remote SOCKS forwards and adding keys to an agent, and the sshd allows local forwarding and remote forwards only on `127.77.0.0/16`, which protects only an honest VM.
 
 A VM started without ssh, or started outside devvm since (`docker start`), gets no entry from devvm's next launch, and `devvm host` tells you to restart it (`vm_no_ssh`). Its shell is then a `docker exec`. A VM whose image has no sshd starts and runs without ssh, with a warning (`vm_no_sshd`), and a VM made after `devvm rebuild` has it.
 

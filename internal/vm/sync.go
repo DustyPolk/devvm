@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,12 +35,17 @@ type syncer struct{ *Env }
 // with what it needs sent over as a tar stream, staged in memory (it holds
 // credentials): the host's settings, the agents' config, the VM's tokens
 // or their placeholders, its shared tools, and the user's CAs (trust.Read:
-// a folder of them that holds anything else fails it). With network policy its
+// a folder of them that holds anything else fails it), and its links'
+// addresses and names (Env.Links, checkLinks). With network policy its
 // proxy's address, devvm's CA, the logins' copies with placeholders, and
 // the agents' settings files with their keys taken out.
 func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug string, files []string, conf backend.Confinement) error {
 	vm := st.Name()
-	s, err := e.stage(ctx, st, slug, files, b.ProxyURL(conf))
+	links, err := e.links(st)
+	if err != nil {
+		return err
+	}
+	s, err := e.stage(ctx, st, setupInputs{slug: slug, files: files, proxyURL: b.ProxyURL(conf), links: links})
 	if err != nil {
 		return err
 	}
@@ -108,11 +114,125 @@ func reported(files []string, report []byte) []string {
 	return bad
 }
 
+// setupInputs is what devvm gives a VM's setup besides its state: its
+// hostname (the folder's slug), its tool files, its proxy's address (empty
+// without network policy) and its links.
+type setupInputs struct {
+	slug, proxyURL string
+	files          []string
+	links          []GuestLink
+}
+
+// GuestLink is one target a client VM reaches through its links: the
+// address devvm chose for that target in the client, in 127.77.0.0/16
+// (LinkNet), and the names the client reaches it by, each one DNS label.
+// The setup adds NAME.devvm.internal for each name itself.
+type GuestLink struct {
+	Addr  netip.Addr
+	Names []string
+}
+
+// LinkNet is the range of a client VM's loopback that holds its links'
+// addresses, an address per target.
+func LinkNet() netip.Prefix { return netip.PrefixFrom(netip.AddrFrom4([4]byte{127, 77, 0, 0}), 16) }
+
+// checkLinks refuses links that aren't as devvm makes them, before any of
+// them reaches the VM (vm, its hostname host): an address outside
+// LinkNet or given twice, or a name that isn't one lowercase DNS label, is
+// localhost or the VM's hostname, or is given twice. The setup writes
+// them into /etc/hosts and NO_PROXY as they are.
+func checkLinks(vm, host string, links []GuestLink) error {
+	var addrs []netip.Addr
+	var names []string
+	for _, l := range links {
+		bad := func(name string) error { return msg.LinkSetupInvalid(l.Addr.String(), name, vm) }
+		if !l.Addr.Is4() || !LinkNet().Contains(l.Addr) || slices.Contains(addrs, l.Addr) {
+			return bad(strings.Join(l.Names, " "))
+		}
+		addrs = append(addrs, l.Addr)
+		if len(l.Names) == 0 {
+			return bad("")
+		}
+		for _, n := range l.Names {
+			if !dnsLabel(n) || n == "localhost" || n == host || slices.Contains(names, n) {
+				return bad(n)
+			}
+			names = append(names, n)
+		}
+	}
+	return nil
+}
+
+// dnsLabel reports whether s is one lowercase DNS label: letters, digits
+// and dashes, at most 63, with a letter or digit at each end.
+func dnsLabel(s string) bool {
+	if s == "" || len(s) > 63 || s[0] == '-' || s[len(s)-1] == '-' {
+		return false
+	}
+	for _, c := range s {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+// linkHosts is the setup's hosts file: a line per target, its address and
+// then each of its names and NAME.devvm.internal, which guest/sync.sh
+// puts between its markers in /etc/hosts.
+func linkHosts(links []GuestLink) []byte {
+	var b bytes.Buffer
+	for _, l := range links {
+		b.WriteString(l.Addr.String())
+		for _, n := range l.Names {
+			b.WriteString(" " + n + " " + n + "." + netpolicy.LinkDomain)
+		}
+		b.WriteString("\n")
+	}
+	return b.Bytes()
+}
+
+// links returns st's links (Env.Links): none without it.
+func (e syncer) links(st *state.VM) ([]GuestLink, error) {
+	if e.Links == nil {
+		return nil, nil
+	}
+	return e.Links(st)
+}
+
+// linkEnv is env, the guest environment of a start with network policy,
+// with st's links' names in its NO_PROXY (netpolicy.LinkEnv). They're
+// checked first, and again against the VM's hostname by its setup.
+func (e syncer) linkEnv(st *state.VM, env map[string]string) (map[string]string, error) {
+	links, err := e.links(st)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkLinks(st.Name(), "", links); err != nil {
+		return nil, err
+	}
+	return netpolicy.LinkEnv(env, linkNames(links)), nil
+}
+
+// linkNames is every name of links, in order.
+func linkNames(links []GuestLink) []string {
+	var names []string
+	for _, l := range links {
+		names = append(names, l.Names...)
+	}
+	return names
+}
+
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
-func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []string, proxyURL string) (*stage, error) {
+func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage, error) {
 	vm, img, net := st.Name(), st.Get(state.KeyImage), netpolicy.On(st)
+	slug, files, proxyURL := in.slug, in.files, in.proxyURL
+	if err := checkLinks(vm, slug, in.links); err != nil {
+		return nil, err
+	}
 	store := e.Proxy.Secrets
 	s := &stage{}
+	s.put("hosts", 0o644, linkHosts(in.links))
 	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh"} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
@@ -151,6 +271,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, slug string, files []st
 		{"DEVVM_GIT_NAME", e.GitConfig(ctx, st.Get(state.KeyDir), "user.name")},
 		{"DEVVM_GIT_EMAIL", e.GitConfig(ctx, st.Get(state.KeyDir), "user.email")},
 		{"DEVVM_PROXY", proxyURL},
+		{"DEVVM_NO_PROXY", netpolicy.NoProxy(linkNames(in.links))},
 	}
 	// The devcontainer.json's variables first: devvm's own win.
 	dcEnv, err := devcontainerEnv(st)

@@ -1879,6 +1879,10 @@ other = "{{.vm}} moves to the newest shared tools on this launch."
 [sync_failed]
 other = "Setting up {{.vm}} failed."
 
+[link_setup_invalid]
+description = "name is the link's names, space-separated, or one of them; address is its address in the VM"
+other = "Setting up {{.vm}} stopped, because its link {{.name}} at {{.address}} isn't one devvm makes."
+
 [tools_unmounted]
 description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
 other = "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm tools update to build the missing ones."

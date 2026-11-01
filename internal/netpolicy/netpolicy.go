@@ -7,6 +7,7 @@ package netpolicy
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"maps"
 	"path/filepath"
 	"strings"
 
@@ -119,11 +120,49 @@ func PolicyFiles(d paths.Dirs, assets, vm, img string) []string {
 func VMPolicyFile(d paths.Dirs, vm string) string { return d.VMState(vm) + ".policy" }
 
 // Env is the guest environment a VM with network policy gets besides the
-// proxy's address: no proxy for the VM itself, and Node told to use the
-// proxy variables. Tools find the proxy's CA as every VM finds the user's
-// (trust.Env).
+// proxy's address: no proxy for the VM itself (LinkEnv adds its links),
+// and Node told to use the proxy variables. Tools find the proxy's CA as
+// every VM finds the user's (trust.Env).
 var Env = map[string]string{
-	"NO_PROXY":           "localhost,127.0.0.1,::1",
-	"no_proxy":           "localhost,127.0.0.1,::1",
+	"NO_PROXY":           noProxy,
+	"no_proxy":           noProxy,
 	"NODE_USE_ENV_PROXY": "1",
+}
+
+// noProxy is what a VM with network policy reaches without its proxy: the
+// VM itself.
+const noProxy = "localhost,127.0.0.1,::1"
+
+// LinkDomain is the domain under which a client VM reaches each of its
+// links' targets, as NAME.devvm.internal besides NAME: .internal is
+// reserved for private use, so it names no host on the internet.
+const LinkDomain = "devvm.internal"
+
+// NoProxy is the NO_PROXY of a VM with network policy whose links have
+// names: the VM itself, and with links, LinkDomain and each name, listed
+// rather than as an address range, which many clients ignore. A leading
+// dot, which Node needs, matches every name under LinkDomain.
+func NoProxy(names []string) string { return noProxy + linksNoProxy(names) }
+
+// LinkEnv is env with names added to NO_PROXY and no_proxy, where env has
+// them, as NoProxy adds them; env itself isn't changed.
+func LinkEnv(env map[string]string, names []string) map[string]string {
+	if len(names) == 0 {
+		return env
+	}
+	out := maps.Clone(env)
+	for _, k := range []string{"NO_PROXY", "no_proxy"} {
+		if v, ok := out[k]; ok {
+			out[k] = v + linksNoProxy(names)
+		}
+	}
+	return out
+}
+
+// linksNoProxy is what links add to a NO_PROXY: nothing without names.
+func linksNoProxy(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	return ",." + LinkDomain + "," + strings.Join(names, ",")
 }

@@ -88,7 +88,7 @@ func TestUpDevcontainer(t *testing.T) {
 			t.Errorf("ran in %q", d)
 		}
 	}
-	s, err := syncer{e}.stage(t.Context(), st, "web", nil, "")
+	s, err := syncer{e}.stage(t.Context(), st, setupInputs{slug: "web"})
 	if err != nil {
 		t.Fatal(err)
 	}
