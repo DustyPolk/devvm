@@ -1,6 +1,7 @@
 {{- /* llms.txt at the site root, in place of Hextra's: the site's title and description, then each top-level
    section and the sections in it, two levels as the site has, each with its own page first and its pages
-   after it, each a link and a line of plain text (_partials/llms-summary.txt). A page or section with
+   after it, each a link to its Markdown copy (_partials/llms-link.txt) and a line of plain text
+   (_partials/llms-summary.txt). A page or section with
    llms: false in its front matter is left out. */ -}}
 # {{ site.Title }}
 
@@ -9,20 +10,20 @@
 {{- if ne .Params.llms false }}
 ## {{ .Title }}
 
-- [{{ .Title }}]({{ .Permalink }}): {{ partial "llms-summary.txt" . }}
+- [{{ .Title }}]({{ partial "llms-link.txt" . }}): {{ partial "llms-summary.txt" . }}
 {{- range .RegularPages }}
 {{- if ne .Params.llms false }}
-- [{{ .Title }}]({{ .Permalink }}): {{ partial "llms-summary.txt" . }}
+- [{{ .Title }}]({{ partial "llms-link.txt" . }}): {{ partial "llms-summary.txt" . }}
 {{- end }}
 {{- end }}
 {{ range .Sections }}
 {{- if ne .Params.llms false }}
 ### {{ .Title }}
 
-- [{{ .Title }}]({{ .Permalink }}): {{ partial "llms-summary.txt" . }}
+- [{{ .Title }}]({{ partial "llms-link.txt" . }}): {{ partial "llms-summary.txt" . }}
 {{- range .RegularPages }}
 {{- if ne .Params.llms false }}
-- [{{ .Title }}]({{ .Permalink }}): {{ partial "llms-summary.txt" . }}
+- [{{ .Title }}]({{ partial "llms-link.txt" . }}): {{ partial "llms-summary.txt" . }}
 {{- end }}
 {{- end }}
 {{ end }}
@@ -33,6 +34,6 @@
 ## Other pages
 
 {{ range . -}}
-- [{{ .Title }}]({{ .Permalink }}): {{ partial "llms-summary.txt" . }}
+- [{{ .Title }}]({{ partial "llms-link.txt" . }}): {{ partial "llms-summary.txt" . }}
 {{ end }}
 {{- end }}

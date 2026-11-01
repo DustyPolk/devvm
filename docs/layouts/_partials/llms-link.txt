@@ -1,0 +1,7 @@
+{{- /* A page's link in llms.txt: its Markdown copy, as the llms.txt convention prefers, else its HTML page
+   for one without a copy. */ -}}
+{{- with .OutputFormats.Get "markdown" -}}
+{{- .Permalink -}}
+{{- else -}}
+{{- .Permalink -}}
+{{- end -}}
