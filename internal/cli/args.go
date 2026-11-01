@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
@@ -71,6 +72,9 @@ func checkCommands(root *cobra.Command) {
 func checkCommand(c *cobra.Command) {
 	args := c.Args
 	c.Args = func(cmd *cobra.Command, a []string) error {
+		if err := noBlanks(cmd, a); err != nil {
+			return usage(err)
+		}
 		if err := checkFlags(cmd); err != nil {
 			return usage(err)
 		}
@@ -242,12 +246,14 @@ func checkFlagValue(name, value string) error {
 	case "ports":
 		_, err = vm.ParsePorts(value)
 	case "lifetime":
-		if value != "" && !sshagent.ValidLifetime(value) {
-			err = msg.AgentLifetimeInvalid(msg.Shown(value))
+		if value != "" {
+			err = sshagent.CheckLifetime(value)
 		}
 	case "older-than":
-		if _, perr := state.ParseAge(value); perr != nil {
-			err = msg.GCBadAge(msg.Shown(value))
+		_, err = state.ParseDuration(value)
+	case "backend":
+		if names := registry.Names(); value != "" && !slices.Contains(names, value) {
+			err = msg.BackendUnknown(strings.Join(names, ", "), msg.Shown(value))
 		}
 	}
 	return err

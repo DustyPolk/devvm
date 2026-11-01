@@ -12,8 +12,7 @@ import (
 )
 
 // newSizeCmd is devvm size [--cpus N] [--memory GiB] [--disk GiB], with -g
-// for the size new VMs get. Its size flags are its own, in place of the
-// root's for new VMs.
+// for the size new VMs get.
 func newSizeCmd(u *ui.UI) *cobra.Command {
 	var (
 		global, asJSON bool

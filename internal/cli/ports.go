@@ -59,10 +59,10 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			return run(cmd, c)
 		},
 	}
-	cmd.PersistentFlags().BoolVarP(&global, "global", "g", false, "show or change what new VMs forward instead")
+	cmd.Flags().BoolVarP(&global, "global", "g", false, "show or change what new VMs forward instead")
 	jsonFlag(cmd, &asJSON)
 	sub := func(op, short, long string) *cobra.Command {
-		return &cobra.Command{
+		c := &cobra.Command{
 			Use:   op + " LIST",
 			Short: short,
 			Long:  long,
@@ -74,6 +74,8 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 				return run(cmd, &vm.PortsChange{Op: op, List: args[0]})
 			},
 		}
+		c.Flags().BoolVarP(&global, "global", "g", false, "change what new VMs forward instead")
+		return c
 	}
 	cmd.AddCommand(
 		sub("add", "Forward more ports from this folder's VM", "Add LIST's ports and ranges (5173,8000-8010) "+

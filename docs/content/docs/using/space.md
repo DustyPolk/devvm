@@ -7,7 +7,7 @@ devvm, the tools it runs and its backends keep files on this machine outside you
 
 ## devvm space
 
-`devvm space` shows what devvm keeps on this machine, on every backend, and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives each backend 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts ([devvm space --json](#devvm-space---json)). The first table has a row for each kind of thing devvm has, followed by a total:
+`devvm space` shows what devvm keeps on this machine, on every backend, and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives each backend 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts ([devvm space --json](#devvm-space---json)). `devvm space --backend NAME` shows only that backend's rows and caches, with their total, and asks no other backend. The first table has a row for each kind of thing devvm has, followed by a total:
 
 | Column | |
 | --- | --- |

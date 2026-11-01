@@ -1,0 +1,59 @@
+package cli
+
+import (
+	"os"
+	"slices"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+
+	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/msg"
+)
+
+// addBackendFlag adds --backend, the backend a command uses: a new VM's,
+// or the one it builds, deletes or checks on.
+func addBackendFlag(f *pflag.FlagSet, p *string) {
+	f.StringVar(p, "backend", "", "the `NAME` of the backend to use (default: devvm setup --backend, else lima)")
+}
+
+// addBackendFilterFlag adds --backend as a filter: a command that acts on
+// every backend acts on that one alone.
+func addBackendFilterFlag(f *pflag.FlagSet, p *string) {
+	f.StringVar(p, "backend", "", "the `NAME` of the only backend to act on (default: every backend)")
+}
+
+// addFromFlag adds --from, the container image a base starts from.
+func addFromFlag(f *pflag.FlagSet, p *string) {
+	f.StringVar(p, "from", "", "the container `IMAGE` the base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM)")
+}
+
+// fromRef is --from as given, else its default from the environment.
+func fromRef(flag string) string {
+	if flag != "" {
+		return flag
+	}
+	return os.Getenv(from.Env)
+}
+
+// noBlanks refuses a flag given an empty value, and an empty argument: no
+// flag or argument takes a blank to mean none or its default. A command
+// that passes its arguments on as they are (limactl) is left alone.
+func noBlanks(cmd *cobra.Command, args []string) error {
+	if cmd.DisableFlagParsing {
+		return nil
+	}
+	var err error
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if err == nil && f.Value.Type() == "string" && f.Value.String() == "" {
+			err = msg.FlagBlank(f.Name)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if slices.Contains(args, "") {
+		return msg.ArgBlank(cmd.CommandPath())
+	}
+	return nil
+}

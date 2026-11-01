@@ -57,7 +57,7 @@ type gcOpts struct {
 }
 
 // newGCCmd is devvm gc.
-func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
+func newGCCmd(u *ui.UI) *cobra.Command {
 	var o gcOpts
 	c := &cobra.Command{
 		Use:   "gc [--tools [--force] [TOOL...]]",
@@ -74,7 +74,7 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"new shared tools, which it names too. With --tools --force, those built in the last hour too, without " +
 			"asking, unless a VM is being made or getting new shared tools, when it deletes nothing. With --history, also the agents' history devvm history export and " +
 			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
-			"(30d, 2w, 12h). With --nix-cache, also the whole shared Nix cache, which VMs download again " +
+			"(a duration: 12h, 30d, 2w). With --nix-cache, also the whole shared Nix cache, which VMs download again " +
 			"when they need it. With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm " +
 			"does, for each VM whose backend answers that it no longer has it. With --caches, then " +
 			"what devvm's builds put in the backends' own caches that nothing of devvm's needs (Lima's " +
@@ -86,20 +86,22 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"skipped with a warning, everything of its left alone, and gc goes on with the others.",
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			o.only, o.toolNames = g.backend, args
-			fail(u, gc(cmd.Context(), u, g, o), msg.GCFailed)
+			o.toolNames = args
+			fail(u, gc(cmd.Context(), u, o), msg.GCFailed)
 			return nil
 		},
 	}
-	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
-	c.Flags().BoolVar(&o.force, "force", false, "with --tools, also delete the current shared tool images no VM has that were built in the last hour, "+
-		"and don't ask; refused while a VM is being made")
-	c.Flags().BoolVar(&o.history, "history", false, "also delete the saved exports of agents' history")
-	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --history, only those older than `AGE`: 30d, 2w or 12h")
-	c.Flags().BoolVar(&o.nixCache, "nix-cache", false, "also delete the whole shared Nix cache, which VMs download again when they need it")
-	c.Flags().BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has, as devvm rm does")
-	c.Flags().BoolVar(&o.caches, "caches", false, "then free devvm's share of the backends' own caches, asking for each backend; only in a terminal")
-	c.Flags().BoolVar(&o.retention, "retention", false, "then apply the retention settings now, which devvm otherwise does once a day")
+	f := c.Flags()
+	addBackendFilterFlag(f, &o.only)
+	f.BoolVar(&o.tools, "tools", false, "delete the current shared tool images no VM has too; with TOOL names, only theirs")
+	f.BoolVarP(&o.force, "force", "f", false, "with --tools, delete the current shared tool images no VM has that were built in the last hour too, "+
+		"without asking; refused while a VM is being made")
+	f.BoolVar(&o.history, "history", false, "delete the saved exports of agents' history too")
+	f.StringVar(&o.olderThan, "older-than", "", "with --history, only those older than `DURATION`: 12h, 30d or 2w")
+	f.BoolVar(&o.nixCache, "nix-cache", false, "delete the whole shared Nix cache too, which VMs download again when they need it")
+	f.BoolVar(&o.orphans, "orphans", false, "delete what devvm keeps for VMs their backend no longer has too, as devvm rm does")
+	f.BoolVar(&o.caches, "caches", false, "free devvm's share of the backends' own caches afterwards, asking for each backend; only in a terminal")
+	f.BoolVar(&o.retention, "retention", false, "apply the retention settings afterwards, which devvm otherwise does once a day")
 	return c
 }
 
@@ -110,9 +112,9 @@ func (o *gcOpts) checkArgs(args []string) error {
 		if !o.history {
 			return msg.GCOlderThanNeedsHistory()
 		}
-		age, err := state.ParseAge(o.olderThan)
+		age, err := state.ParseDuration(o.olderThan)
 		if err != nil {
-			return msg.GCBadAge(o.olderThan)
+			return err
 		}
 		o.age = age
 	}
@@ -157,12 +159,12 @@ type gcPlan struct {
 // gc lists what's stale or unused, asks in a terminal, and deletes it. It
 // holds the share's lock throughout, so no build moves a tool image in
 // and no update swaps the lock meanwhile.
-func gc(ctx context.Context, u *ui.UI, g *globals, o gcOpts) error {
-	b, err := builder(u, g.backend)
+func gc(ctx context.Context, u *ui.UI, o gcOpts) error {
+	b, err := builder(u, o.only)
 	if err != nil {
 		return err
 	}
-	b.From = g.fromRef()
+	b.From = fromRef("")
 	if o.caches && !u.StdinIsTerminal() {
 		return msg.GCCachesNeedTerminal()
 	}

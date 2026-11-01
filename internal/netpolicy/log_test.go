@@ -163,7 +163,7 @@ func TestWriteLogRotated(t *testing.T) {
 	}
 }
 
-// devvm network log -f goes on across a rotation: the renamed log is read to its
+// devvm network log --follow goes on across a rotation: the renamed log is read to its
 // end, then the new one from its start.
 func TestWriteLogFollowRotated(t *testing.T) {
 	t.Parallel()

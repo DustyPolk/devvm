@@ -48,8 +48,11 @@ cmp stdout $WORK/blocked.txt
 exec devvm network log --blocked --json
 stdout '\A{\n  "version": 1,\n  "blocked": \[\n    {\n      "last": "2026-10-09T10:00:07Z",\n      "count": 1,\n      "host": "api.github.com",\n      "port": 443\n    },\n'
 stdout '^      "last": "2026-10-09T10:01:00Z",\n      "count": 2,\n      "host": "a.test",\n      "port": 443,\n      "allow": "a.test"\n'
-! exec devvm network log --blocked -f
+! exec devvm network log --blocked --follow
 stderr '^devvm: flags_exclusive flag=--blocked other=--follow$'
+# -f is --force's, never --follow's.
+! exec devvm network log -f
+stderr '^devvm: flag_unknown command=devvm network log flag=-f$'
 
 # A log its proxy rotated: the old file's events come first, so the
 # history and the blocks are the same; one just rotated isn't empty.

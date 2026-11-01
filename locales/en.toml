@@ -82,6 +82,17 @@ other = "Writing the command's output failed: {{.reason}}."
 description = "command is the command run, such as devvm network"
 other = "{{.command}} --json only shows, so it takes no value. Run it without --json to change the setting."
 
+[flag_blank]
+description = "flag is the flag's name, without its dashes"
+other = "The --{{.flag}} flag got an empty value, and no flag takes one. Give it a value, such as none or off where it takes one, or leave the flag out."
+
+[arg_blank]
+description = "command is the command as typed, such as devvm history export"
+other = "One of the arguments of {{.command}} is empty, and no command takes one. Give it a value, or leave it out."
+
+[bad_duration]
+other = "{{.value}} isn't a duration devvm takes. Give a whole number and m, h, d or w, such as 30m, 12h, 30d or 2w."
+
 [log_details]
 other = "(details: {{.file}})"
 
@@ -583,8 +594,6 @@ other = "experimental"
 description = "reason is an error from the system, in English"
 other = "Saving the settings failed: {{.reason}}."
 
-[features_empty]
-other = "The --features flag takes a list of features, such as fzf,omb, or none for no features."
 
 [network_default_help]
 other = "Network policy for new VMs (up/down to choose, enter to confirm):"
@@ -846,9 +855,6 @@ other = "deleted {{.count}} exports of agents' history"
 
 [gc_older_than_needs_history]
 other = "--older-than goes with --history. Run devvm gc --history --older-than AGE."
-
-[gc_bad_age]
-other = "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
 
 [gc_orphans]
 one = "What devvm keeps for {{.count}} VM its backend no longer has:"
@@ -1515,9 +1521,6 @@ other = "Removing {{.key}} from devvm's SSH agent failed, so devvm kept it on th
 [agent_key_removed]
 other = "devvm removed {{.key}} from its SSH agent and won't load it again."
 
-[agent_lifetime_invalid]
-other = "The --lifetime flag takes a duration, such as 30m, 8h or 1d, or forever, not {{.value}}."
-
 [agent_confirm_needs_askpass]
 other = "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't have one. Run brew install theseal/ssh-askpass/ssh-askpass to get it."
 
@@ -1855,7 +1858,7 @@ description = "reason is an error from the system, in English"
 other = "Reading the {{.secret}} secret failed: {{.reason}}."
 
 [secret_to_terminal]
-other = "The secret wasn't printed, because the output is a terminal. To print it anyway, add --force."
+other = "The secret wasn't printed, because the output is a terminal. To print it anyway, add --to-terminal."
 
 [secret_failed]
 description = "reason is an error from the system, in English"

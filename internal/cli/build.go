@@ -20,8 +20,9 @@ import (
 )
 
 // newBuildCmd is devvm build IMAGE.
-func newBuildCmd(u *ui.UI, g *globals) *cobra.Command {
-	return &cobra.Command{
+func newBuildCmd(u *ui.UI) *cobra.Command {
+	var f imageFlags
+	cmd := &cobra.Command{
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
 		Long: "Build an image and the images under it, unless they're built, and the shared tool " +
@@ -29,14 +30,17 @@ func newBuildCmd(u *ui.UI, g *globals) *cobra.Command {
 			"(foo+bar is bar on foo on base), with any shared tools (node+foo+claude).",
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), u, g, args[0], build.Builds.Build)
+			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Build)
 		},
 	}
+	f.add(cmd)
+	return cmd
 }
 
 // newRebuildCmd is devvm rebuild IMAGE.
-func newRebuildCmd(u *ui.UI, g *globals) *cobra.Command {
-	return &cobra.Command{
+func newRebuildCmd(u *ui.UI) *cobra.Command {
+	var f imageFlags
+	cmd := &cobra.Command{
 		Use:   "rebuild IMAGE",
 		Short: "Build an image again, and delete the old one",
 		Long: "Build an image again, from its parent as it is, and delete the stale images " +
@@ -44,17 +48,29 @@ func newRebuildCmd(u *ui.UI, g *globals) *cobra.Command {
 			"their versions come from the tools lock.",
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), u, g, args[0], build.Builds.Rebuild)
+			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Rebuild)
 		},
 	}
+	f.add(cmd)
+	return cmd
+}
+
+// imageFlags are the flags of the commands that build or delete an image
+// by its name: the backend it's on and the container image its base
+// starts from.
+type imageFlags struct{ backend, from string }
+
+func (f *imageFlags) add(cmd *cobra.Command) {
+	addBackendFlag(cmd.Flags(), &f.backend)
+	addFromFlag(cmd.Flags(), &f.from)
 }
 
 // imageCmd runs do on the builds of the backend new VMs get, once the
 // name is one and the backend can run.
-func imageCmd(ctx context.Context, u *ui.UI, g *globals, name string, do func(build.Builds, context.Context, string) error) error {
-	b, err := builder(u, g.backend)
+func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(build.Builds, context.Context, string) error) error {
+	b, err := builder(u, f.backend)
 	if err == nil {
-		b.From = g.fromRef()
+		b.From = fromRef(f.from)
 		err = from.Check(b.From)
 	}
 	if err == nil {

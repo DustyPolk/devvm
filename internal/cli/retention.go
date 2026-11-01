@@ -44,13 +44,17 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			"and history.count (the exports of agents' history older than an age, or beyond the newest count, deleted), " +
 			"tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age " +
 			"(what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc " +
-			"--retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or " +
-			"12h, and sizes 500M, 20G or 1T. Every setting is off until you set it. devvm refuses a bad key " +
+			"--retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are durations, such as 30m, " +
+			"12h, 30d or 2w, and sizes 500M, 20G or 1T. Every setting is off until you set it. devvm refuses a bad key " +
 			"or value, or one with no value, and then writes nothing. devvm applies the settings once a day, " +
 			"and devvm gc --retention applies them at once. They never delete a VM, an image or a tool any " +
 			"VM has.",
 		Args: showsOnly(func(_ *cobra.Command, args []string) error {
 			if err := state.CheckRetention(args); err != nil {
+				// A bad duration is bad_duration, as for every flag.
+				if m, ok := errors.AsType[msg.M](err); ok {
+					return m
+				}
 				return msg.RetentionBad(err.Error()).Because(err)
 			}
 			return nil

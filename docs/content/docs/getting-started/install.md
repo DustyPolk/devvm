@@ -110,7 +110,7 @@ Images whose inputs changed are built again the next time you use them. Existing
 ## Uninstalling
 
 1. Delete your VMs: `devvm ls`, then `devvm rm` in each folder. For a `--clone` VM, this also removes the `devvm` git remote from the repo.
-2. Delete the images: `devvm gc`, then `devvm images rm` with every name `devvm images` lists. Images built `--from` a container image need the same `--from`: `devvm --from node:24 images rm base`.
+2. Delete the images: `devvm gc`, then `devvm images rm` with every name `devvm images` lists. Images built `--from` a container image need the same `--from`: `devvm images rm --from node:24 base`.
 3. On Docker, delete the volumes and networks that devvm's label is still on, such as the shared tools' volume. `docker volume ls --filter label=devvm.data=$HOME/.local/share/devvm` and `docker network ls --filter label=devvm.data=$HOME/.local/share/devvm` list them, and `docker volume rm` and `docker network rm` delete them by name.
 4. Free the backends' caches. In a terminal, `devvm gc --caches` frees devvm's share of them and of Docker's labelled volumes, after asking for each backend. If you don't use a backend yourself, you can also empty its cache: Lima keeps Ubuntu's cloud images in `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux, and `limactl prune` deletes that whole cache. On macOS, smolvm keeps its caches and its machines in `~/Library/Caches/smolvm`, so delete that folder only once `smolvm machine ls` lists no machine you want to keep ([what devvm keeps](../using/space.md#smolvm)).
 5. Delete your saved secrets: `devvm secret rm NAME` for each one `devvm secret` lists. On macOS they're in the Keychain under the service `devvm`, and on Linux in `~/.config/devvm/secrets/`.

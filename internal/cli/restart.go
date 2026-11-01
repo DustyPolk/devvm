@@ -9,7 +9,7 @@ import (
 )
 
 // newRestartCmd is devvm restart.
-func newRestartCmd(u *ui.UI, g *globals) *cobra.Command {
+func newRestartCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "restart",
 		Short: "Restart this folder's VM and open a shell in it",
@@ -17,7 +17,7 @@ func newRestartCmd(u *ui.UI, g *globals) *cobra.Command {
 			"only when it starts (agent folder mounts, size, ports) applies.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), g.options()) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 			return nil
 		},
 	}

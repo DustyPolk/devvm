@@ -165,7 +165,7 @@ func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
 	}
 }
 
-// newNetworkLogCmd is devvm network log [-f] [-n N] [--blocked].
+// newNetworkLogCmd is devvm network log [--follow] [-n N] [--blocked].
 func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 	var lines uint
 	var o vm.LogOptions
@@ -190,7 +190,7 @@ func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.UintVarP(&lines, "lines", "n", 50, "show the last `N` connections and requests")
-	f.BoolVarP(&o.Follow, "follow", "f", false, "then show each new one as it happens, until interrupted")
+	f.BoolVar(&o.Follow, "follow", false, "keep showing each new one as it happens, until interrupted")
 	f.BoolVar(&o.Blocked, "blocked", false, "list the blocks by host and port, with the command that allows each")
 	jsonFlag(cmd, &asJSON)
 	exclusive(cmd, "blocked", "follow")

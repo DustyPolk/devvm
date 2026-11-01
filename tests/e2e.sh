@@ -1853,7 +1853,7 @@ check "devvm network on: after devvm restart, its nix-daemon goes through the pr
 (cd "$al" && quiet "$D" rm -f)
 
 # Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.
-check "base builds from ubuntu:26.04" nd quiet "$D" --from ubuntu:26.04 build base
+check "base builds from ubuntu:26.04" nd quiet "$D" build --from ubuntu:26.04 base
 check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '$work/docker-calls'"
 check "and the build VM and its temporary folders are gone" bash -c "
   ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
@@ -1871,7 +1871,7 @@ printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\n%s\n' \
   'echo "e2e-sudo: $(sudo env | grep -i "_proxy=" | sort | tr "\n" " ")"' \
   'curl -fsS -m 30 -o /dev/null https://github.com' > "$layers/e2ecorp.sh"
 check "behind a company proxy, --from's conversion and the builds on it reach it through devvm's own proxies" bash -c "
-  HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' PATH='$work/nodocker':\"\$PATH\" '$D' --from alpine:3.21 build e2ecorp \
+  HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' PATH='$work/nodocker':\"\$PATH\" '$D' build --from alpine:3.21 e2ecorp \
     </dev/null >'$work/last.log' 2>&1 &&
   grep -q '\"event\":\"tunnel\",\"host\":\"[a-z0-9.-]*docker\.io\"' '$work/corp.jsonl' &&
   grep -q '\"host\":\"dl-cdn\.alpinelinux\.org\"' '$work/corp.jsonl' &&

@@ -65,7 +65,12 @@ stderr '^devvm: backend_unknown backends=docker, lima, smolvm name=nope$'
 cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
 
 # New VMs' size is devvm size -g's, and without a terminal nothing asks
-# for it or for new VMs' network policy.
+# for it or for new VMs' network policy. Flags for a new VM are devvm
+# [IMAGE]'s alone, so setup doesn't take them.
+! exec devvm setup --cpus 2
+stderr '^devvm: flag_unknown command=devvm setup flag=--cpus$'
+! exec devvm setup --memory 8
+stderr '^devvm: flag_unknown command=devvm setup flag=--memory$'
 ! exists $XDG_CONFIG_HOME/devvm/size
 ! exists $XDG_CONFIG_HOME/devvm/network
 
@@ -73,7 +78,7 @@ cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
 # nothing.
 exec devvm setup --features fzf
 ! exec devvm setup --features ''
-stderr '^devvm: features_empty$'
+stderr '^devvm: flag_blank flag=features$'
 cmp $CHOSEN fzf.txt
 exec devvm setup --features none
 stdout '^==> base_features_none$'

@@ -18,7 +18,6 @@ import (
 // printing and asking through u. devvm itself is up: a shell in this
 // folder's VM.
 func NewRoot(u *ui.UI) *cobra.Command {
-	g := new(globals)
 	uf := new(upFlags)
 	root := &cobra.Command{
 		Use:   "devvm [IMAGE]",
@@ -53,16 +52,15 @@ func NewRoot(u *ui.UI) *cobra.Command {
 			return checkWord(cmd, args[0])
 		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return up(cmd.Context(), u, g, uf, args)
+			return up(cmd.Context(), u, uf, args)
 		},
 		SuggestionsMinimumDistance: suggestDistance,
 	}
 	root.SetOut(u.Stdout())
-	addGlobals(root, g)
 	addUpFlags(root, uf)
 	addVersion(root)
-	root.AddCommand(newBuildCmd(u, g), newRebuildCmd(u, g), newImagesCmd(u, g), newGCCmd(u, g), newSpaceCmd(u, g), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
-		newRestartCmd(u, g), newStopCmd(u), newToolsCmd(u, g), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
+	root.AddCommand(newBuildCmd(u), newRebuildCmd(u), newImagesCmd(u), newGCCmd(u), newSpaceCmd(u), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
+		newRestartCmd(u), newStopCmd(u), newToolsCmd(u), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
 		newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	checkCommands(root)

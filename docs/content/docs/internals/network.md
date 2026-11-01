@@ -152,7 +152,7 @@ A secret's hosts join the VM's allowlist on port 443, whether a value is saved o
 
 For each secret that has a value, devvm writes the VM's bindings to `~/.local/share/devvm/run/<vm>.secrets.json`. A binding holds the secret's name, hosts, header and placeholder, and never its value. For a bound host, the proxy intercepts `:443` tunnels instead of passing them through. It terminates TLS with a certificate from devvm's own CA (`~/.local/share/devvm/ca`), which is ECDSA P-256, valid for 30 days and has no host name in it. It then replaces the placeholder in the binding's header with the real value, also inside `Basic` credentials, and forwards the request over a new TLS connection. Absolute-form `https://` requests get the same. Each request must name the bound host, and one that names another host gets `421`. The proxy reads the bindings again for every request, so removing a binding applies to tunnels that are already open.
 
-The proxy gets a value by running `devvm secret get NAME`, which prints it, but never to a terminal unless you add `--force`. The proxy caches values for 5 minutes, or 30 seconds for agents' logins, and never logs them. It refuses with `403` the GitHub API calls that would make a credential of their own with the GitHub token, which are adding an account or deploy key, registering a runner and adding a webhook.
+The proxy gets a value by running `devvm secret get NAME`, which prints it, but never to a terminal unless you add `--to-terminal`. The proxy caches values for 5 minutes, or 30 seconds for agents' logins, and never logs them. It refuses with `403` the GitHub API calls that would make a credential of their own with the GitHub token, which are adding an account or deploy key, registering a runner and adding a webhook.
 
 ## Agents' logins and settings
 
@@ -233,7 +233,7 @@ The proxy's own lines, such as what it loaded and what failed upstream, go to `<
 
 The proxy is the only program that writes either log, and it rotates each one before a line would take it past 10 MiB, so a VM that runs for months keeps at most about 20 MiB of each. A line never spans two files, and lines from connections at the same time are written one after another, so a rotation loses none and splits none. It renames `<vm>.jsonl` to `<vm>.jsonl.1`, which replaces the one that was there, and starts a new `<vm>.jsonl`. `<vm>.proxy.log` is also the proxy process's output, where its last error goes when it stops, so the proxy copies it to `<vm>.proxy.log.1` and empties it instead, and that error still reaches the current file. Every log file and its `.1` file is readable only by you (mode 600).
 
-`devvm network log` reads `<vm>.jsonl.1` before `<vm>.jsonl`, so the history it shows and the blocks that `devvm network log --blocked` counts carry on across a rotation. `devvm network log -f` reads the renamed file to its end and then follows the new one from its start. `devvm rm` deletes the `.1` files with the rest of the VM's logs.
+`devvm network log` reads `<vm>.jsonl.1` before `<vm>.jsonl`, so the history it shows and the blocks that `devvm network log --blocked` counts carry on across a rotation. `devvm network log --follow` reads the renamed file to its end and then follows the new one from its start. `devvm rm` deletes the `.1` files with the rest of the VM's logs.
 
 ## devvm _proxy
 

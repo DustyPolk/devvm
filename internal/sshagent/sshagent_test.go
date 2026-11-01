@@ -176,7 +176,7 @@ func TestAddOptions(t *testing.T) {
 	if f.calls[len(f.calls)-1] != "ssh-add key:k" {
 		t.Errorf("calls = %q", f.calls)
 	}
-	if err := a.Add(t.Context(), key, AddOptions{Lifetime: "soon"}); names(err) != "agent_lifetime_invalid value=soon" {
+	if err := a.Add(t.Context(), key, AddOptions{Lifetime: "soon"}); names(err) != "bad_duration value=soon" {
 		t.Errorf("--lifetime soon: %s", names(err))
 	}
 	a.Getenv = func(string) string { return "" }
@@ -510,10 +510,11 @@ func TestMode(t *testing.T) {
 	}
 }
 
-func TestValidLifetime(t *testing.T) {
-	for s, want := range map[string]bool{"30m": true, "8h": true, "1h30m": true, "3600": true, "forever": true, "": false, "soon": false, "-1h": false, "8 h": false} {
-		if got := ValidLifetime(s); got != want {
-			t.Errorf("ValidLifetime(%q) = %v, want %v", s, got, want)
+// A lifetime is forever or a duration as every flag takes one.
+func TestCheckLifetime(t *testing.T) {
+	for s, want := range map[string]bool{"30m": true, "8h": true, "1d": true, "2w": true, "forever": true, "1h30m": false, "3600": false, "": false, "soon": false, "-1h": false, "8 h": false} {
+		if got := CheckLifetime(s) == nil; got != want {
+			t.Errorf("CheckLifetime(%q) ok = %v, want %v", s, got, want)
 		}
 	}
 }

@@ -55,7 +55,7 @@ flowchart TD
   running ~~~ outdated
 ```
 
-Options for a new VM:
+These options are for a new VM, and only `devvm [IMAGE]` takes them. Another command given one of them, such as `devvm ls --cpus 4`, fails as it does for any flag it doesn't know.
 
 | | |
 | --- | --- |
@@ -160,7 +160,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm network [on\|off]` | show this folder's VM's network policy, `on`, `off` or `unenforced`, and then its allowlist, file by file, or change its network policy from its next start with `devvm restart` ([details](../safety/network.md#turning-it-on-or-off)) |
 | `devvm network -g [on\|off\|ask]` | show or change whether new VMs get network policy, which is `ask` until you change it ([details](../safety/network.md#turning-it-on-or-off)) |
 | `devvm network allow\|deny\|rm RULE... [-g]` | add allow or deny rules to this folder's VM's own, or remove them, at once, and with `-g`, change yours for every VM ([details](../safety/network.md#changing-rules)) |
-| `devvm network log [-f] [-n N] [--blocked]` | show what this folder's VM connected to and what its network policy blocked ([details](../safety/network.md#logs)) |
+| `devvm network log [--follow] [-n N] [--blocked]` | show what this folder's VM connected to and what its network policy blocked ([details](../safety/network.md#logs)) |
 | `devvm secret set claude\|github [--stdin]` | save your Claude Code token or GitHub token on this machine, so that with network policy VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret use\|unuse NAME` | let this folder's VM use a secret, or stop it, though a VM whose image has `claude` always uses `claude` ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret`, `devvm secret rm NAME` | list the secrets, whether each is saved and the VMs using it, or delete a saved one ([details](../safety/network.md#saving-and-binding-secrets)) |
@@ -189,7 +189,15 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm space` | show what devvm keeps on this machine, the disk each kind takes, and what frees it ([details](../using/space.md#devvm-space)) |
 | `devvm retention [KEY=VALUE...]` | show the retention settings, which say what devvm deletes on its own, or change them, with `KEY=off` turning one off ([details](../using/settings.md#retention)) |
 
-With `--backend NAME`, these commands build or delete on that backend instead of the one new VMs get. With `--from IMAGE`, they work on a base made from that container image ([details](../using/from.md)).
+`devvm build`, `devvm rebuild` and `devvm images rm` take `--backend NAME` to build or delete on that backend instead of the one new VMs get, and `--from IMAGE` to work on a base made from that container image ([details](../using/from.md)). `devvm images`, `devvm gc` and `devvm space` act on every backend, and with `--backend NAME` they act on that backend alone.
+
+## Flags and values
+
+Each flag belongs to the commands that list it in their help, and only `--help` works with every command. A flag can come before or after the command's arguments.
+
+When a flag or a setting can mean none or off, you write that as a word: `devvm setup --features none`, `devvm ports none`, `devvm retention history.age=off` and `devvm ssh-agent add KEY_FILE --lifetime forever`. devvm refuses an empty value, such as `--features ''`, and an empty argument, so a blank never stands for none or for a default.
+
+Every duration is a whole number followed by a unit, which is `m` for minutes, `h` for hours, `d` for days or `w` for weeks, as in `30m`, `12h`, `30d` or `2w`. That covers `devvm gc --older-than`, the retention settings' ages and `devvm ssh-agent add --lifetime`, and only `--lifetime` also takes `forever`, for a key that devvm's agent keeps until it ends.
 
 ## devvm itself
 

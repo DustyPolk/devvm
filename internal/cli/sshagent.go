@@ -103,7 +103,7 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.BoolVar(&o.Confirm, "confirm", false, "ask before each use of the key, through an ssh-askpass program")
-	f.StringVar(&o.Lifetime, "lifetime", "", "how long the agent keeps the key once loaded: a `DURATION` like 30m or 8h, or forever (default 12h)")
+	f.StringVar(&o.Lifetime, "lifetime", "", "how long the agent keeps the key once loaded: a `DURATION` such as 30m, 8h or 1d, or forever (default 12h)")
 	return cmd
 }
 

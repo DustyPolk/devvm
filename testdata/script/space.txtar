@@ -47,6 +47,20 @@ stdout '^total +- +- +\S+ +- +\S+ +- +-$'
 stub_calls
 ! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'
 
+# --backend: that backend's rows alone, with their total, and no other
+# backend asked.
+exec sh -c ': > "$STUB_LOG"'
+exec devvm space --backend lima
+stdout '^VMs +lima +1 +'
+stdout '^images +lima +2 +'
+stdout '^tools gnu +lima +'
+! stdout '^(history|state|mise|tools -) '
+stdout '^total +- +- +\S+ +- +\S+ +- +-$'
+stub_calls
+! stdout smolvm
+! exec devvm space --backend nope
+stderr '^devvm: backend_unknown '
+
 # --json, for scripts.
 exec devvm space --json
 stdout '^{\n  "version": 1,\n  "devvm": \[\n'

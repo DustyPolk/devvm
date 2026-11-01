@@ -32,6 +32,33 @@ cmp stderr build-args.txt
 ! stdout .
 ! stub_calls
 
+# Flags for a new VM are devvm [IMAGE]'s alone, so other commands refuse
+# them, before or after the command's name.
+! exec devvm ls --cpus 4
+stderr '^devvm: flag_unknown command=devvm ls flag=--cpus$'
+! exec devvm --cpus 4 ls
+stderr '^devvm: flag_unknown command=devvm ls flag=--cpus$'
+! exec devvm restart --backend lima
+stderr '^devvm: flag_unknown command=devvm restart flag=--backend$'
+! exec devvm tools add node --from node:24
+stderr '^devvm: flag_unknown command=devvm tools add flag=--from$'
+# A backend that isn't one is refused first too.
+! exec devvm build --backend nope base
+stderr '^devvm: backend_unknown backends=docker, lima, smolvm name=nope$'
+stderr '^usage_help command=devvm build$'
+! stub_calls
+
+# No flag or argument takes an empty value to mean none or its default.
+! exec devvm --ports ''
+stderr '^devvm: flag_blank flag=ports$'
+! exec devvm --cpus=
+stderr '^devvm: flag_blank flag=cpus$'
+! exec devvm ''
+stderr '^devvm: arg_blank command=devvm$'
+! exec devvm history export ''
+stderr '^devvm: arg_blank command=devvm history export$'
+! stub_calls
+
 -- nope-flag.txt --
 devvm: flag_unknown command=devvm flag=--nope
 usage_help command=devvm

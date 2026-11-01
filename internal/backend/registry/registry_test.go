@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/assets"
@@ -99,6 +100,11 @@ func TestLimaIsTheDefault(t *testing.T) {
 	}
 	if _, ok := r.Lookup("lima"); !ok {
 		t.Fatalf("no lima in %q", r.Names())
+	}
+	// Names, which --backend is checked against before anything runs,
+	// are the registry's own.
+	if got, want := strings.Join(Names(), " "), strings.Join(r.Names(), " "); got != want {
+		t.Errorf("Names() = %q, the registry has %q", got, want)
 	}
 	vm, err := state.ReadVM(d, "devvm-p-0123456789abcd")
 	if err != nil {

@@ -104,11 +104,6 @@ func AgentKeysFailed(reason string) M {
 	return M{id: "agent_keys_failed", vals: []val{{"reason", reason}}}
 }
 
-// AgentLifetimeInvalid is [agent_lifetime_invalid]: "The --lifetime flag takes a duration, such as 30m, 8h or 1d, or forever, not {{.value}}."
-func AgentLifetimeInvalid(value string) M {
-	return M{id: "agent_lifetime_invalid", vals: []val{{"value", value}}}
-}
-
 // AgentLoadFailed is [agent_load_failed]: "Loading {{.key}} into devvm's SSH agent failed."
 func AgentLoadFailed(key string) M {
 	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
@@ -157,6 +152,11 @@ func AgentUnloadFailed(key string) M {
 // AlreadyStopped is [already_stopped]: "{{.vm}} is already stopped"
 func AlreadyStopped(vm string) M {
 	return M{id: "already_stopped", vals: []val{{"vm", vm}}}
+}
+
+// ArgBlank is [arg_blank]: "One of the arguments of {{.command}} is empty, and no command takes one. Give it a value, or leave it out."
+func ArgBlank(command string) M {
+	return M{id: "arg_blank", vals: []val{{"command", command}}}
 }
 
 // ArgMissing is [arg_missing]: "{{.args}} is missing from {{.command}}."
@@ -222,6 +222,11 @@ func BackendUnreviewed(backend string, feature string, vm string) M {
 // BackendUnreviewedUsed is [backend_unreviewed_used]: "{{.vm}} uses the {{.backend}} backend's unreviewed {{.feature}}, because DEVVM_UNREVIEWED asks for it. Use this only for testing."
 func BackendUnreviewedUsed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed_used", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
+}
+
+// BadDuration is [bad_duration]: "{{.value}} isn't a duration devvm takes. Give a whole number and m, h, d or w, such as 30m, 12h, 30d or 2w."
+func BadDuration(value string) M {
+	return M{id: "bad_duration", vals: []val{{"value", value}}}
 }
 
 // BadFrom is [bad_from]: "{{.from}} isn't a container image reference. Give --from one such as node:24, or ghcr.io/org/image@sha256:… with a digest."
@@ -1019,11 +1024,6 @@ func FeatureShadowed(feature string, file string) M {
 	return M{id: "feature_shadowed", vals: []val{{"feature", feature}, {"file", file}}}
 }
 
-// FeaturesEmpty is [features_empty]: "The --features flag takes a list of features, such as fzf,omb, or none for no features."
-func FeaturesEmpty() M {
-	return M{id: "features_empty"}
-}
-
 // FeaturesHelp is [features_help]: "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
 func FeaturesHelp() M {
 	return M{id: "features_help"}
@@ -1057,6 +1057,11 @@ func FlagBadSwitch(flag string, value string) M {
 // FlagBadValue is [flag_bad_value]: "{{.flag}} takes {{.form}}, not {{.value}}."
 func FlagBadValue(flag string, form string, value string) M {
 	return M{id: "flag_bad_value", vals: []val{{"flag", flag}, {"form", form}, {"value", value}}}
+}
+
+// FlagBlank is [flag_blank]: "The --{{.flag}} flag got an empty value, and no flag takes one. Give it a value, such as none or off where it takes one, or leave the flag out."
+func FlagBlank(flag string) M {
+	return M{id: "flag_blank", vals: []val{{"flag", flag}}}
 }
 
 // FlagNeedsValue is [flag_needs_value]: "{{.flag}} needs a value: {{.form}}."
@@ -1122,11 +1127,6 @@ func GCAssets(count int) M {
 // GCBackendSkipped is [gc_backend_skipped]: "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
 func GCBackendSkipped(backend string) M {
 	return M{id: "gc_backend_skipped", vals: []val{{"backend", backend}}}
-}
-
-// GCBadAge is [gc_bad_age]: "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
-func GCBadAge(age string) M {
-	return M{id: "gc_bad_age", vals: []val{{"age", age}}}
 }
 
 // GCCache is [gc_cache]: "{{.count}} entries of {{.backend}}'s own cache that devvm's builds put there and nothing of devvm's needs ({{.size}}):"
@@ -2349,7 +2349,7 @@ func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
 }
 
-// SecretToTerminal is [secret_to_terminal]: "The secret wasn't printed, because the output is a terminal. To print it anyway, add --force."
+// SecretToTerminal is [secret_to_terminal]: "The secret wasn't printed, because the output is a terminal. To print it anyway, add --to-terminal."
 func SecretToTerminal() M {
 	return M{id: "secret_to_terminal"}
 }
@@ -2976,7 +2976,6 @@ var specs = map[string]spec{
 	"agent_key_removed":                {fields: []string{"key"}},
 	"agent_key_unpinned":               {fields: []string{"key"}},
 	"agent_keys_failed":                {fields: []string{"reason"}},
-	"agent_lifetime_invalid":           {fields: []string{"value"}},
 	"agent_load_failed":                {fields: []string{"key"}},
 	"agent_next_start":                 {fields: []string{"vm"}},
 	"agent_no_keys":                    {},
@@ -2987,6 +2986,7 @@ var specs = map[string]spec{
 	"agent_unchosen_stop":              {fields: []string{"vm"}},
 	"agent_unload_failed":              {fields: []string{"key"}},
 	"already_stopped":                  {fields: []string{"vm"}},
+	"arg_blank":                        {fields: []string{"command"}},
 	"arg_missing":                      {fields: []string{"args", "command"}},
 	"arg_not_choice":                   {fields: []string{"choices", "command", "given"}},
 	"args_none":                        {fields: []string{"command", "given"}},
@@ -3000,6 +3000,7 @@ var specs = map[string]spec{
 	"backend_unknown_vm":               {fields: []string{"backend", "vm"}},
 	"backend_unreviewed":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unreviewed_used":          {fields: []string{"backend", "feature", "vm"}},
+	"bad_duration":                     {fields: []string{"value"}},
 	"bad_from":                         {fields: []string{"from"}},
 	"bad_path":                         {fields: []string{"dir"}},
 	"bad_secret_service":               {},
@@ -3159,7 +3160,6 @@ var specs = map[string]spec{
 	"exported":                         {fields: []string{"file", "vm"}},
 	"exporting_docker":                 {fields: []string{"from"}},
 	"feature_shadowed":                 {fields: []string{"feature", "file"}},
-	"features_empty":                   {},
 	"features_help":                    {},
 	"fetch_before_delete":              {fields: []string{"prefix"}},
 	"fetch_failed":                     {fields: []string{"vm"}},
@@ -3167,6 +3167,7 @@ var specs = map[string]spec{
 	"fetching":                         {fields: []string{"prefix"}},
 	"flag_bad_switch":                  {fields: []string{"flag", "value"}},
 	"flag_bad_value":                   {fields: []string{"flag", "form", "value"}},
+	"flag_blank":                       {fields: []string{"flag"}},
 	"flag_needs_value":                 {fields: []string{"flag", "form"}},
 	"flag_unknown":                     {fields: []string{"command", "flag"}},
 	"flags_exclusive":                  {fields: []string{"flag", "other"}},
@@ -3180,7 +3181,6 @@ var specs = map[string]spec{
 	"from_unreachable":                 {fields: []string{"from", "host"}},
 	"gc_assets":                        {plural: true, fields: []string{"count"}},
 	"gc_backend_skipped":               {fields: []string{"backend"}},
-	"gc_bad_age":                       {fields: []string{"age"}},
 	"gc_cache":                         {plural: true, fields: []string{"backend", "count", "size"}},
 	"gc_cache_confirm":                 {fields: []string{"backend"}},
 	"gc_cache_entry":                   {fields: []string{"size", "what"}},

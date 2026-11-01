@@ -87,6 +87,10 @@ func newFor(d paths.Dirs, assets fs.FS, u UI, build string, getenv func(string) 
 	return r, nil
 }
 
+// Names are every backend's name, sorted, as New registers them: what
+// --backend takes.
+func Names() []string { return []string{docker.Name, lima.Name, smolvm.Name} }
+
 // Experimental reports whether the backend by that name is experimental:
 // smolvm and docker.
 func Experimental(name string) bool { return name == smolvm.Name || name == docker.Name }

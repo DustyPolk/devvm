@@ -87,7 +87,13 @@ exec devvm ssh-agent add $WORK/keys/deploy
 ! exec devvm ssh-agent add $WORK/keys/none
 stderr '^devvm: agent_key_not_found key=\S*/keys/none$'
 ! exec devvm ssh-agent add $WORK/keys/deploy --lifetime soon
-stderr '^devvm: agent_lifetime_invalid value=soon$'
+stderr '^devvm: bad_duration value=soon$'
+! exec devvm ssh-agent add $WORK/keys/deploy --lifetime ''
+stderr '^devvm: flag_blank flag=lifetime$'
+exec devvm ssh-agent add $WORK/keys/deploy --lifetime 2w
+exec sh -c 'cat "$CFG/agent-keys"'
+stdout 'lifetime=2w\n\z'
+exec devvm ssh-agent add $WORK/keys/deploy
 env SSH_ASKPASS=
 ! exec devvm ssh-agent add $WORK/keys/deploy --confirm
 stderr '^devvm: agent_confirm_needs_askpass$'

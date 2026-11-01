@@ -23,8 +23,11 @@ import (
 )
 
 // newDoctorCmd is devvm doctor.
-func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
-	var asJSON bool
+func newDoctorCmd(u *ui.UI) *cobra.Command {
+	var (
+		asJSON  bool
+		backend string
+	)
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check what devvm needs on this machine",
@@ -40,7 +43,7 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reg, b, err := doctorBackend(u, g.backend)
+			reg, b, err := doctorBackend(u, backend)
 			fail(u, err, msg.DoctorFailed)
 			d := doctor{
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
@@ -58,6 +61,7 @@ func newDoctorCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
+	addBackendFlag(f, &backend)
 	f.BoolVar(&asJSON, "json", false, "print what it found as one JSON object, for scripts, and nothing else; succeeds whatever is missing")
 	return cmd
 }

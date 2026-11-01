@@ -32,6 +32,13 @@ exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec devvm images
 stdout '^foo +ubuntu .* +stale +'
 
+# --backend: that backend's images alone.
+exec devvm images --backend lima
+stdout '^foo +ubuntu .* +stale +\S+ +lima$'
+exec devvm images --backend smolvm
+! stdout ' lima$'
+stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\n'
+
 # Shared tools: each version newest first, how many VMs list it, and
 # whether it's the lock's; the lock's go, not built, and an older one no
 # VM uses.

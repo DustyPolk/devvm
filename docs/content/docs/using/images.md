@@ -114,7 +114,7 @@ A VM keeps the image it was made from. When that image, or one it's built on, ch
 
 ## Listing images
 
-`devvm images` prints two tables, each with a header, and it shows what a row lacks as `-`. The first table lists the images on every backend by name, with unfinished builds last:
+`devvm images` prints two tables, each with a header, and it shows what a row lacks as `-`. `devvm images --backend NAME` lists only that backend's images and the shared tool images built for it. The first table lists the images on every backend by name, with unfinished builds last:
 
 | Column | |
 | --- | --- |
@@ -197,7 +197,7 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 - `devvm gc --tools --force` also deletes the current shared tools that no VM has and that were built in the last hour, and it doesn't ask first, though it still lists what it deletes. `--force` goes only with `--tools`, it never deletes a tool that a VM's state lists, and it changes nothing else that gc deletes. While a VM is being made or is getting new shared tools, gc refuses `--force` and deletes nothing, so run it again once that's done.
 - The devvm making a VM holds a lock that the system lets go of as soon as that devvm ends, so one that crashed or that you killed never leaves gc keeping tools or refusing. A devvm that starts to make a VM while `devvm gc --tools` runs, or while retention deletes shared tools, waits for it to finish and says it's waiting. In a terminal, gc holds that lock while it asks you, so answer it first.
 - When a shared tool that a new VM's state lists is gone before the VM's first shell, for example because you deleted it by hand, the VM's setup can't mount it. devvm then names the tools it couldn't mount and stops, and the VM stays. Run `devvm tools update` in the folder, which builds the missing tools again and opens the VM.
-- `devvm gc --history` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm history export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than AGE` keeps those newer than `AGE`, such as `30d`, `2w` or `12h`. gc never deletes exports without `--history`.
+- `devvm gc --history` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm history export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than DURATION` keeps those newer than that [duration](../getting-started/commands.md#flags-and-values), such as `12h`, `30d` or `2w`. gc never deletes exports without `--history`.
 - `devvm gc --nix-cache` also deletes the rest of the shared Nix cache. VMs download its packages again when they need them.
 - `devvm gc --orphans` also deletes what devvm keeps for VMs that their backend no longer has, such as one you deleted with `limactl delete` instead of `devvm rm`, and with it the hold their state has on their shared tools ([leftovers](space.md#leftovers-of-a-vm-deleted-outside-devvm)).
 - `devvm gc --caches` then frees devvm's share of the backends' own caches, such as Lima's downloads of Ubuntu's cloud image, asking for each backend apart, and only in a terminal ([the backends' caches](space.md#the-backends-caches)).

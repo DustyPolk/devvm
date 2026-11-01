@@ -16,19 +16,19 @@ devvm [IMAGE] [flags]
 ## Options
 
 ```text
-      --backend NAME        the NAME of the backend a new VM or image gets (default: the default backend file's, else lima)
+      --backend NAME        the NAME of the backend to use (default: devvm setup --backend, else lima)
       --clone               create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from
-      --cpus N              the N CPUs a new VM gets (default: the size file's, else the image's)
-      --disk GiB            a new VM's disk in GiB, at least the image's (default: the size file's, else the image's)
-      --from IMAGE          the container IMAGE a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)
+      --cpus N              the N CPUs the VM gets (default: devvm size -g, else the image's)
+      --disk GiB            the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
+      --from IMAGE          the container IMAGE the base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM)
   -h, --help                help for devvm
       --here                create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM
-      --memory GiB          a new VM's memory in GiB: 16, 16G or 16GiB (default: the size file's, else the image's)
-      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g's, else asked in a terminal, and on without one)
+      --memory GiB          the VM's memory in GiB: 16, 16G or 16GiB (default: devvm size -g, else the image's)
+      --network-policy      create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g, else asked in a terminal, and on without one)
       --no-devcontainer     create the VM without reading the folder's .devcontainer/devcontainer.json or .devcontainer.json
       --no-git-protect      create the VM without .git protection
       --no-network-policy   create the VM without network policy: it reaches anything this machine can
-      --ports PORTS         which PORTS a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)
+      --ports PORTS         which PORTS the VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: devvm ports -g, else all)
       --ssh-agent           create the VM with your SSH agent forwarded: while you're connected, anything in it can use your keys (devvm ssh-agent changes it later)
       --unsafe-folder       mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway
       --version             print devvm's version

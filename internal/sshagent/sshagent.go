@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -88,11 +87,16 @@ const DefaultLifetime = "12h"
 // Forever is the lifetime of a key the agent keeps until it ends.
 const Forever = "forever"
 
-// lifetime is a duration ssh-add -t takes: 30m, 8h, 1h30m, 3600.
-var lifetime = regexp.MustCompile(`^([0-9]+[smhdwSMHDW]?)+$`)
-
-// ValidLifetime reports whether s is a lifetime --lifetime takes.
-func ValidLifetime(s string) bool { return s == Forever || lifetime.MatchString(s) }
+// CheckLifetime refuses a lifetime --lifetime doesn't take: forever, or
+// a duration as state.ParseDuration reads one (30m, 8h, 1d, 2w), which
+// ssh-add -t takes as it is.
+func CheckLifetime(s string) error {
+	if s == Forever {
+		return nil
+	}
+	_, err := state.ParseDuration(s)
+	return err
+}
 
 // Mount is a host folder a project VM mounts.
 type Mount struct{ VM, Dir string }
@@ -362,8 +366,8 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 		opts = append(opts, "confirm")
 	}
 	if o.Lifetime != "" {
-		if !ValidLifetime(o.Lifetime) {
-			return msg.AgentLifetimeInvalid(msg.Shown(o.Lifetime))
+		if err := CheckLifetime(o.Lifetime); err != nil {
+			return err
 		}
 		opts = append(opts, "lifetime="+o.Lifetime)
 	}

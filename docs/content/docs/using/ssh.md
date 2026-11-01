@@ -70,7 +70,7 @@ devvm's own agent keeps your other keys out of reach, because it holds only the 
 - devvm refuses a key inside a folder a VM mounts, and doesn't load it, because that VM could read it. Keep the keys for devvm's agent outside project folders.
 - An encrypted key in the old PEM format needs converting first, with `ssh-keygen -p -f KEY`, because devvm can't read its fingerprint without the passphrase.
 
-The agent drops each key 12 hours after it loads it, so a VM can't keep using the key indefinitely. `--lifetime 30m` changes that for one key, and it takes any duration that `ssh-add -t` takes, or `forever`. `--confirm` makes the agent ask you before each use, such as each push or each login, through an `ssh-askpass` program. macOS doesn't include one, so install it with `brew install theseal/ssh-askpass/ssh-askpass`. devvm keeps the keys and their options in `~/.config/devvm/agent-keys`, and running `devvm ssh-agent add` on the same key again replaces its options.
+The agent drops each key 12 hours after it loads it, so a VM can't keep using the key indefinitely. `--lifetime 30m` changes that for one key, and it takes a [duration](../getting-started/commands.md#flags-and-values) in minutes, hours, days or weeks, such as `30m`, `8h` or `1d`, or `forever`. `--confirm` makes the agent ask you before each use, such as each push or each login, through an `ssh-askpass` program. macOS doesn't include one, so install it with `brew install theseal/ssh-askpass/ssh-askpass`. devvm keeps the keys and their options in `~/.config/devvm/agent-keys`, and running `devvm ssh-agent add` on the same key again replaces its options.
 
 ### devvm ssh-agent --json
 

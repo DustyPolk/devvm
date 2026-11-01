@@ -20,8 +20,11 @@ import (
 )
 
 // newImagesCmd is devvm images, and devvm images rm.
-func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
-	var asJSON bool
+func newImagesCmd(u *ui.UI) *cobra.Command {
+	var (
+		asJSON bool
+		only   string
+	)
 	c := &cobra.Command{
 		Use:   "images",
 		Short: "List the images and the shared tools",
@@ -31,23 +34,28 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			"by the name images have them by: each version, the backend and C library it's built for, the " +
 			"disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, " +
 			"or the lock's and not built yet. Then what they take in all, and what the shared Nix cache " +
-			"takes of its cap.",
+			"takes of its cap. With --backend, only that backend's images and shared tool images.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			b, err := builder(u, g.backend)
+			b, err := builder(u, only)
 			var imgs []listedImage
 			var ts []tools.Listed
 			if err == nil {
-				b.From = g.fromRef()
+				b.From = fromRef("")
 				var l imageListing
 				if l, err = listImages(cmd.Context(), u, b); err == nil {
+					l = l.only(only)
 					imgs, ts, err = l.images, l.tools, l.failUnlisted()
 				}
 			}
 			fail(u, err, msg.ImagesFailed)
 			target, err := toolTargets(u, b)
 			fail(u, err, msg.ImagesFailed)
+			ts = toolsOn(only, ts, target)
 			nix := nixCacheOf(u, b.Dirs)
+			if only != "" {
+				nix = nixCacheJSON{}
+			}
 			if asJSON {
 				err = printJSON(u, imagesJSON(imgs, ts, target, nix))
 			} else {
@@ -60,8 +68,16 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			return nil
 		},
 	}
+	addBackendFilterFlag(c.Flags(), &only)
 	jsonFlag(c, &asJSON)
-	c.AddCommand(&cobra.Command{
+	c.AddCommand(newImagesRmCmd(u))
+	return c
+}
+
+// newImagesRmCmd is devvm images rm IMAGE|KEY....
+func newImagesRmCmd(u *ui.UI) *cobra.Command {
+	var f imageFlags
+	c := &cobra.Command{
 		Use:   "rm IMAGE|KEY...",
 		Short: "Delete images, by name or by key",
 		Long: "Delete images, with their records: each by its name (base, foo+bar), or by the key " +
@@ -78,9 +94,9 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			return joined(toComplete, (&build.Env{Dirs: dirs}).Layers()), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := builder(u, g.backend)
+			b, err := builder(u, f.backend)
 			if err == nil {
-				b.From = g.fromRef()
+				b.From = fromRef(f.from)
 				err = from.Check(b.From)
 			}
 			if err == nil {
@@ -92,8 +108,45 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			fail(u, err, msg.ImagesRmFailed)
 			return nil
 		},
-	})
+	}
+	f.add(c)
 	return c
+}
+
+// only is the listing of the backend named alone, or all of it when name
+// is "". Shared tool images are left to toolsOn, which knows their
+// targets.
+func (l imageListing) only(name string) imageListing {
+	if name == "" {
+		return l
+	}
+	out := imageListing{tools: l.tools}
+	for _, i := range l.images {
+		if i.Backend == name {
+			out.images = append(out.images, i)
+		}
+	}
+	for _, x := range l.unlisted {
+		if x.backend == name {
+			out.unlisted = append(out.unlisted, x)
+		}
+	}
+	return out
+}
+
+// toolsOn is the shared tool images built for the backend named, by
+// target, or all of them when name is "".
+func toolsOn(name string, ts []tools.Listed, target func(tools.Listed) (be, libc string)) []tools.Listed {
+	if name == "" {
+		return ts
+	}
+	var out []tools.Listed
+	for _, t := range ts {
+		if be, _ := target(t); be == name {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // nixCacheJSON is what the shared Nix cache holds: its files, the bytes

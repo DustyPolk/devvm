@@ -19,7 +19,9 @@ exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
 ! exec devvm gc --older-than 30d
 stderr '^devvm: gc_older_than_needs_history$'
 ! exec devvm gc --history --older-than 30
-stderr '^devvm: gc_bad_age age=30$'
+stderr '^devvm: bad_duration value=30$'
+! exec devvm gc --history --older-than forever
+stderr '^devvm: bad_duration value=forever$'
 
 # --older-than 30d: the old one, by its VM and date.
 exec devvm gc --history --older-than 30d

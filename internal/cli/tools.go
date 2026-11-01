@@ -15,7 +15,7 @@ import (
 
 // newToolsCmd is devvm tools: this folder's VM's shared tools, and add,
 // rm and update, which change them.
-func newToolsCmd(u *ui.UI, g *globals) *cobra.Command {
+func newToolsCmd(u *ui.UI) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "tools",
@@ -38,7 +38,7 @@ func newToolsCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newToolsAddCmd(u, g), newToolsRmCmd(u, g), newToolsUpdateCmd(u, g))
+	cmd.AddCommand(newToolsAddCmd(u), newToolsRmCmd(u), newToolsUpdateCmd(u))
 	return cmd
 }
 
@@ -84,7 +84,7 @@ func writeTools(tab *ui.Table, ts []tools.VMTool) error {
 	return tab.Flush()
 }
 
-func newToolsAddCmd(u *ui.UI, g *globals) *cobra.Command {
+func newToolsAddCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "add TOOL...",
 		Short: "Add shared tools to this folder's VM, then open a shell in it",
@@ -95,14 +95,14 @@ func newToolsAddCmd(u *ui.UI, g *globals) *cobra.Command {
 			"running VM. Layers can't be added: only a new VM gets one.",
 		Args: toolNames("add"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Add(cmd.Context(), g.options(), args) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Add(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
 			return nil
 		},
 		ValidArgsFunction: completeToolNames,
 	}
 }
 
-func newToolsRmCmd(u *ui.UI, g *globals) *cobra.Command {
+func newToolsRmCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rm TOOL...",
 		Short: "Take shared tools out of this folder's VM, then open a shell in it",
@@ -111,14 +111,14 @@ func newToolsRmCmd(u *ui.UI, g *globals) *cobra.Command {
 			"layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.",
 		Args: toolNames("rm"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Remove(cmd.Context(), g.options(), args) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Remove(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
 			return nil
 		},
 		ValidArgsFunction: completeToolNames,
 	}
 }
 
-func newToolsUpdateCmd(u *ui.UI, g *globals) *cobra.Command {
+func newToolsUpdateCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "update",
 		Short: "Move this folder's VM to the newest shared tools, then open a shell in it",
@@ -127,7 +127,7 @@ func newToolsUpdateCmd(u *ui.UI, g *globals) *cobra.Command {
 			"changes: its tools are mounted from the share.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), g.options()) }, msg.UpFailed)
+			withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 			return nil
 		},
 	}

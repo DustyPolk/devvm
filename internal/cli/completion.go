@@ -54,13 +54,23 @@ func addCompletions(root *cobra.Command, u *ui.UI) {
 		case "build", "rebuild":
 			c.ValidArgsFunction = completeImage
 		case "setup":
-			_ = c.RegisterFlagCompletionFunc("backend", backendNames)
 			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
 		}
 	}
 	root.ValidArgsFunction = completeImage
-	_ = root.RegisterFlagCompletionFunc("backend", backendNames)
+	completeBackendFlags(root, backendNames)
 	_ = root.RegisterFlagCompletionFunc("ports", cobra.FixedCompletions([]string{"all", "none"}, cobra.ShellCompDirectiveNoFileComp))
+}
+
+// completeBackendFlags completes --backend with backend names on c and
+// every command under it that takes it.
+func completeBackendFlags(c *cobra.Command, names cobra.CompletionFunc) {
+	if c.Flags().Lookup("backend") != nil {
+		_ = c.RegisterFlagCompletionFunc("backend", names)
+	}
+	for _, sub := range c.Commands() {
+		completeBackendFlags(sub, names)
+	}
 }
 
 // completeImage completes IMAGE: base, the toolchains, your layers and

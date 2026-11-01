@@ -2,63 +2,46 @@ package cli
 
 import (
 	"context"
-	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend/registry"
-	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// globals are the flags every command takes.
-type globals struct {
+// upFlags are devvm [IMAGE]'s flags, all of them for what a new VM gets.
+type upFlags struct {
 	backend         string
+	from            string
 	networkPolicy   bool
 	noNetworkPolicy bool
 	size            vm.Size
 	ports           string
-	from            string
+	unsafeFolder    bool
+	noGitProtect    bool
+	clone           bool
+	sshAgent        bool
+	noDevcontainer  bool
+	here            bool
 }
 
-// fromRef is --from, else its default from the environment.
-func (g *globals) fromRef() string {
-	if g.from != "" {
-		return g.from
-	}
-	return os.Getenv(from.Env)
-}
-
-// addGlobals adds the global flags to the root command.
-func addGlobals(root *cobra.Command, g *globals) {
-	f := root.PersistentFlags()
-	f.StringVar(&g.backend, "backend", "", "the `NAME` of the backend a new VM or image gets (default: the default backend file's, else lima)")
-	f.BoolVar(&g.networkPolicy, "network-policy", false, "create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g's, else asked in a terminal, and on without one)")
-	f.BoolVar(&g.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy: it reaches anything this machine can")
+// addUpFlags adds devvm [IMAGE]'s flags to the root command, as its own:
+// no subcommand takes them.
+func addUpFlags(root *cobra.Command, uf *upFlags) {
+	f := root.Flags()
+	addBackendFlag(f, &uf.backend)
+	addFromFlag(f, &uf.from)
+	f.BoolVar(&uf.networkPolicy, "network-policy", false, "create the VM with network policy: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine (default: devvm network -g, else asked in a terminal, and on without one)")
+	f.BoolVar(&uf.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy: it reaches anything this machine can")
 	exclusive(root, "network-policy", "no-network-policy")
-	f.StringVar(&g.size.CPUs, "cpus", "", "the `N` CPUs a new VM gets (default: the size file's, else the image's)")
-	f.StringVar(&g.size.Memory, "memory", "", "a new VM's memory in `GiB`: 16, 16G or 16GiB (default: the size file's, else the image's)")
-	f.StringVar(&g.size.Disk, "disk", "", "a new VM's disk in `GiB`, at least the image's (default: the size file's, else the image's)")
-	f.StringVar(&g.from, "from", "", "the container `IMAGE` a new VM's or image's base starts from instead of Ubuntu's cloud image: node:24, debian:13, ghcr.io/org/image@sha256:… (default: $DEVVM_FROM's)")
-	f.StringVar(&g.ports, "ports", "", "which `PORTS` a new VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: the ports file's, else all)")
-}
-
-// upFlags are the flags only up takes.
-type upFlags struct {
-	unsafeFolder   bool
-	noGitProtect   bool
-	clone          bool
-	sshAgent       bool
-	noDevcontainer bool
-	here           bool
-}
-
-func addUpFlags(cmd *cobra.Command, uf *upFlags) {
-	f := cmd.Flags()
+	f.StringVar(&uf.size.CPUs, "cpus", "", "the `N` CPUs the VM gets (default: devvm size -g, else the image's)")
+	f.StringVar(&uf.size.Memory, "memory", "", "the VM's memory in `GiB`: 16, 16G or 16GiB (default: devvm size -g, else the image's)")
+	f.StringVar(&uf.size.Disk, "disk", "", "the VM's disk in `GiB`, at least the image's (default: devvm size -g, else the image's)")
+	f.StringVar(&uf.ports, "ports", "", "which `PORTS` the VM forwards to this machine's localhost: all, none, or a list like 5173,8000-8010 (default: devvm ports -g, else all)")
 	f.BoolVar(&uf.clone, "clone", false, "create the VM with its own clone of this repo instead of mounting the folder: your branches are copied in, and the repo gets a devvm remote to fetch its work from")
 	f.BoolVar(&uf.unsafeFolder, "unsafe-folder", false, "mount a folder that is or holds your home folder or devvm's own, or is inside devvm's own, anyway")
 	f.BoolVar(&uf.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
@@ -67,19 +50,19 @@ func addUpFlags(cmd *cobra.Command, uf *upFlags) {
 	f.BoolVar(&uf.here, "here", false, "create a VM for this folder when it has none, even when a folder it's inside has one, without asking whether to use that VM")
 }
 
-// options are what the global flags ask of up.
-func (g *globals) options() vm.Options {
+// options are what the flags ask of up.
+func (uf *upFlags) options() vm.Options {
 	return vm.Options{
-		Backend: g.backend, NetworkPolicy: g.networkPolicy, NoNetworkPolicy: g.noNetworkPolicy, Size: g.size, Ports: g.ports,
-		From: g.fromRef(), FromSet: g.from != "",
+		Backend: uf.backend, NetworkPolicy: uf.networkPolicy, NoNetworkPolicy: uf.noNetworkPolicy, Size: uf.size, Ports: uf.ports,
+		From: fromRef(uf.from), FromSet: uf.from != "",
+		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, SSHAgent: uf.sshAgent,
+		NoDevcontainer: uf.noDevcontainer, Here: uf.here,
 	}
 }
 
 // up opens a shell in this folder's VM, making it first.
-func up(ctx context.Context, u *ui.UI, g *globals, uf *upFlags, args []string) error {
-	o := g.options()
-	o.UnsafeFolder, o.NoGitProtect, o.Clone, o.SSHAgent = uf.unsafeFolder, uf.noGitProtect, uf.clone, uf.sshAgent
-	o.NoDevcontainer, o.Here = uf.noDevcontainer, uf.here
+func up(ctx context.Context, u *ui.UI, uf *upFlags, args []string) error {
+	o := uf.options()
 	if len(args) > 0 {
 		o.Image = args[0]
 	}

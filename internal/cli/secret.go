@@ -165,7 +165,7 @@ func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
 
 // newSecretGetCmd is devvm secret get, which VMs' proxies run for a value.
 func newSecretGetCmd(u *ui.UI) *cobra.Command {
-	var force bool
+	var toTerminal bool
 	get := &cobra.Command{
 		Use:    "get NAME",
 		Short:  "Print a secret's value, for a VM's network policy proxy",
@@ -173,7 +173,7 @@ func newSecretGetCmd(u *ui.UI) *cobra.Command {
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Not to a terminal, so a value isn't shown by accident.
-			if u.StdoutIsTerminal() && !force {
+			if u.StdoutIsTerminal() && !toTerminal {
 				u.Die(msg.SecretToTerminal())
 			}
 			dirs, err := paths.FromEnv()
@@ -186,6 +186,6 @@ func newSecretGetCmd(u *ui.UI) *cobra.Command {
 			return err
 		},
 	}
-	get.Flags().BoolVar(&force, "force", false, "print it to a terminal too")
+	get.Flags().BoolVar(&toTerminal, "to-terminal", false, "print it even when the output is a terminal")
 	return get
 }

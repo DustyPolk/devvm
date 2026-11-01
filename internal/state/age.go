@@ -5,26 +5,29 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
-// errAge is an age that isn't a whole number of days, weeks or hours.
-var errAge = errors.New("an age is a whole number of days, weeks or hours, such as 30d, 2w or 12h")
-
-// ParseAge reads an age as devvm's settings and flags take one: a whole
-// number of days (30d), weeks (2w) or hours (12h), more than zero.
-func ParseAge(s string) (time.Duration, error) {
-	units := map[string]time.Duration{"d": 24 * time.Hour, "w": 7 * 24 * time.Hour, "h": time.Hour}
+// ParseDuration reads a duration as every devvm flag and setting takes
+// one, an age or a lifetime: a whole number, more than zero, and a unit,
+// minutes (30m), hours (12h), days (30d) or weeks (2w). A bad one is
+// bad_duration, naming it.
+func ParseDuration(s string) (time.Duration, error) {
+	const day = 24 * time.Hour
+	units := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": day, "w": 7 * day}
+	bad := msg.BadDuration(msg.Shown(s))
 	if len(s) < 2 {
-		return 0, errAge
+		return 0, bad
 	}
 	unit, ok := units[s[len(s)-1:]]
 	digits := s[:len(s)-1]
 	if !ok || strings.TrimLeft(digits, "0123456789") != "" {
-		return 0, errAge
+		return 0, bad
 	}
 	n, err := strconv.Atoi(digits)
 	if err != nil || n <= 0 || n > 100000 {
-		return 0, errAge
+		return 0, bad
 	}
 	return time.Duration(n) * unit, nil
 }

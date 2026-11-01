@@ -42,19 +42,24 @@ const (
 )
 
 // newSpaceCmd is devvm space.
-func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
-	var asJSON bool
+func newSpaceCmd(u *ui.UI) *cobra.Command {
+	var (
+		asJSON bool
+		only   string
+	)
 	c := &cobra.Command{
 		Use:   "space",
 		Short: "Show what devvm keeps on this machine and the space it takes",
 		Long: "Show each kind of thing devvm keeps on this machine, on every backend, with how many there " +
 			"are, the disk they take, whether devvm can make them again, what devvm gc frees of them now " +
 			"and what frees the rest, then a total. The backends' own caches come last and apart, because " +
-			"they can also hold your own downloads. It changes nothing and starts no VM.",
+			"they can also hold your own downloads. With --backend, only that backend's VMs, images, " +
+			"shared tool images and caches. It changes nothing and starts no VM.",
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			r, err := space(cmd.Context(), u, g)
+			r, err := space(cmd.Context(), u, only)
 			fail(u, err, msg.SpaceFailed)
+			r = r.only(only)
 			for _, b := range r.Unknown {
 				u.Note(msg.SpaceBackendUnknown(b))
 			}
@@ -82,8 +87,39 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 			return nil
 		},
 	}
+	addBackendFilterFlag(c.Flags(), &only)
 	jsonFlag(c, &asJSON)
 	return c
+}
+
+// only is the report of the backend named alone: its rows, caches and
+// stray VMs, and the totals of those rows; all of it when name is "".
+func (r spaceReport) only(name string) spaceReport {
+	if name == "" {
+		return r
+	}
+	out := spaceReport{}
+	for _, row := range r.Rows {
+		if row.Backend == name {
+			out.Rows = append(out.Rows, row)
+			out.Total += row.Size
+			out.GC += row.GC
+		}
+	}
+	for _, c := range r.Caches {
+		if c.Backend == name {
+			out.Caches = append(out.Caches, c)
+		}
+	}
+	for _, s := range r.Strays {
+		if s.Backend == name {
+			out.Strays = append(out.Strays, s)
+		}
+	}
+	if slices.Contains(r.Unknown, name) {
+		out.Unknown = []string{name}
+	}
+	return out
 }
 
 // spaceRow is one kind of thing devvm keeps, as devvm space shows it.
@@ -155,10 +191,10 @@ type spaceEnv struct {
 
 // space reads what devvm keeps. Nothing it runs changes anything, and
 // each backend gets spaceTimeout.
-func space(ctx context.Context, u *ui.UI, g *globals) (spaceReport, error) {
+func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
 	defer u.Status(msg.ReadingSpace())()
 	var r spaceReport
-	b, err := builder(u, g.backend)
+	b, err := builder(u, only)
 	if err != nil {
 		return r, err
 	}
@@ -180,6 +216,9 @@ func space(ctx context.Context, u *ui.UI, g *globals) (spaceReport, error) {
 		return r, err
 	}
 	for _, be := range reg.All() {
+		if only != "" && be.Name() != only {
+			continue
+		}
 		rows, caches, ok := e.backendRows(ctx, be)
 		if !ok {
 			if used[be.Name()] {

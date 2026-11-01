@@ -99,11 +99,11 @@ func (r *Retention) set(key, val string) error {
 	case RetainHistoryCount:
 		r.ExportsCount, err = count(val)
 	case RetainHistoryAge:
-		r.ExportsAge, err = ParseAge(val)
+		r.ExportsAge, err = ParseDuration(val)
 	case RetainToolsAge:
-		r.ToolsAge, err = ParseAge(val)
+		r.ToolsAge, err = ParseDuration(val)
 	case RetainOrphansAge:
-		r.OrphansAge, err = ParseAge(val)
+		r.OrphansAge, err = ParseDuration(val)
 	case RetainNixCacheSize:
 		r.NixCacheSize, err = ParseSize(val)
 	}

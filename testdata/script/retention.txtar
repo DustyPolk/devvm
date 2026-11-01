@@ -28,7 +28,12 @@ cmp stdout want-all-off
 # Bad keys and values, and a key with no value, are refused, and nothing
 # is written.
 ! exec devvm retention history.age=30
-stderr '^devvm: retention_bad '
+stderr '^devvm: bad_duration value=30$'
+! exec devvm retention history.age=forever
+stderr '^devvm: bad_duration value=forever$'
+exec devvm retention history.age=90m
+exec devvm retention history.age=off
+! exists $XDG_CONFIG_HOME/devvm/retention
 ! exec devvm retention logs.network.size=10M
 stderr '^devvm: retention_bad '
 ! exec devvm retention history.age=

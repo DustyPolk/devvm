@@ -7,13 +7,13 @@ By default `base` starts from Ubuntu 26.04's cloud image. `--from IMAGE` starts 
 
 ```sh
 devvm --from node:24 claude          # a new VM whose base is node:24
-devvm --from alpine:3 build base     # just the image
+devvm build --from alpine:3 base     # just the image
 DEVVM_FROM=node:24 devvm             # a default for every new VM and build
 ```
 
 Everything above `base` builds and runs as usual, including base's own setup, the layers (`docker` and yours) and the [shared tools](images.md#shared-tools). devvm keeps the images from each container image apart, so each `base` and the images on it sit side by side with the others, and each image's record keeps the container image its base came from and that image's digest.
 
-`--from` applies to new VMs and to `devvm build` and `devvm rebuild`. An existing VM keeps what it was made from, and `devvm tools add` and `devvm tools update` build its shared tools on that `base`. devvm ignores another `--from` for an existing VM, with a warning.
+`--from` applies to new VMs and to `devvm build` and `devvm rebuild`, and `devvm images rm` takes it to delete an image on a base from that container image. An existing VM keeps what it was made from, and `devvm tools add` and `devvm tools update` build its shared tools on that `base`. devvm ignores another `--from` for an existing VM, with a warning.
 
 [Images and caching](../internals/images.md#how-its-converted) explains how devvm turns a container image into a VM's disk and how it treats the image's code as untrusted.
 

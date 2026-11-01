@@ -19,7 +19,7 @@ var logLimit int64 = 10 << 20
 // rotation.
 //
 // The event log (-log) is the proxy's alone: it's renamed to <log>.1 and
-// a new one is opened, which devvm network log -f follows by name. The proxy's
+// a new one is opened, which devvm network log --follow follows by name. The proxy's
 // own log (-proxy-log) is also the proxy process's stdout and stderr,
 // which devvm opened, where its last error and any crash go: that file
 // is copied to <log>.1 and emptied instead, so those writes, appended to
