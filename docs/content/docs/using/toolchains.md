@@ -54,6 +54,40 @@ A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), 
 - **Trust.** Only root is a trusted Nix user, so the VM's user can't add caches or signing keys of their own, and Nix ignores `--option substituters` from them. `sudo nix` works. Nix builds every package in its sandbox, and a build fails rather than run without it.
 - **Allowlist.** With network policy, the VM can reach Nix's binary cache and its channels and flake registry, which are `cache.nixos.org`, `channels.nixos.org` and `releases.nixos.org`, and GitHub, where most flakes' inputs come from. A package that isn't in Nix's binary cache builds from source, which downloads its sources from their own hosts, and those are blocked until you allow them ([Nix with network policy](../safety/network.md#nix)).
 
+### Sharing a team's packages
+
+When your team's projects use one flake for their dev shell, you can put that dev shell's packages into an image, so every VM made from the image starts with them in its store and downloads none of them. VMs made from one image share its disk, because on macOS each VM's disk is a copy-on-write clone of the image's, and on Linux hosts it's an overlay of the image's, so the packages take their space once. This works with the stable Nix that the `nix` layer installs, with network policy or without it, on every backend that has the `nix` layer, which are Lima and smolvm.
+
+To do it, make a [layer of your own](customizing.md#your-own-layers) that builds the dev shell while the image builds, and name it after `nix` in the image, so that it runs on top of the `nix` layer:
+
+```sh
+devvm layer new myteam
+$EDITOR ~/.config/devvm/layers/myteam.sh
+devvm nix+myteam         # or devvm node+nix+myteam
+```
+
+Put these lines in `~/.config/devvm/layers/myteam.sh`, below the starter's `set -euo pipefail`, with your team's flake at the commit you want:
+
+```bash
+# The team's flake at a commit, so the image holds exactly that dev shell.
+flake=github:myorg/devshell/0123456789abcdef0123456789abcdef01234567
+bin=/nix/var/nix/profiles/default/bin
+"$bin/nix" develop "$flake" --profile /tmp/myteam-shell --command true
+# A garbage collector root in the VM's home keeps the dev shell's packages in the store.
+mkdir -p ~/.cache/myteam
+"$bin/nix-store" --add-root ~/.cache/myteam/dev-shell --realise "$(readlink -f /tmp/myteam-shell)"
+rm -f /tmp/myteam-shell /tmp/myteam-shell-*-link
+```
+
+`nix develop` builds or downloads every package of the flake's dev shell into the image's store and records the dev shell in a profile. `nix-store --add-root` then makes `~/.cache/myteam/dev-shell` a garbage collector root, so `nix-collect-garbage` in a VM never deletes those packages. A project that loads the same dev shell, with `use flake github:myorg/devshell/<commit>` in its `.envrc`, finds every package already in its VM's store, and so does most of a project whose own flake pins the same nixpkgs revision. The image is built without your credentials, because [credentials never go into images](../internals/security.md#read-only-and-confined-builds), so the flake has to be one that anyone can fetch, such as a public repository.
+
+What this doesn't cover:
+
+- **Packages a VM gets after it's made** stay on that VM's own disk. With network policy, the [shared downloads](#nix-projects) at least save downloading them again.
+- **A new version of the flake** needs a new image. Moving `flake` to another commit edits the script, so devvm builds the image again the next time it's used, while VMs made earlier keep the packages they have. When the script names a branch instead of a commit, a changed `flake.lock` upstream doesn't change the script, so run `devvm rebuild myteam` to build the image again.
+- **A flake that pins another nixpkgs revision** shares few packages with the image, and its VM downloads the rest.
+- **Nix's local overlay store**, which would let VMs share one store as it changes, is left out until Nix makes it stable.
+
 ## How toolchains are shared and updated
 
 The toolchains are [shared tools](images.md#shared-tools), like the [coding agents](coding-agents.md#supported-agents), so they aren't part of any image. devvm builds each version once and mounts it read-only into every VM that has it, and [mise](https://mise.jdx.dev) runs it, so `node`, `python`, `cargo` and `go` work from any shell in the VM, including `bash -c` from agents and from editors over SSH. Because the shared copy is read-only, a toolchain can't update itself, and anything you install globally goes into your home in the VM, as each section above says.

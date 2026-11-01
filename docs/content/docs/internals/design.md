@@ -660,7 +660,7 @@ VMs with network policy and the nix layer share their downloads from cache.nixos
 **Options weighed:**
 
 - **Nix's local overlay store**, the VM's store over a read-only lower store shared from the host. It works on Lima, but it's still experimental in Nix 2.35, the lower store can't change while it's mounted, so sharing new paths means remounting, and a garbage collection by a daemon not set up for it writes whiteouts that hide lower paths from that VM for good.
-- **Packages fetched into an image**, by a custom layer that runs `nix build` while the image builds. Clones share them on disk at no cost, on every backend, but only what's in the image, and a changed `flake.lock` needs a rebuild.
+- **Packages fetched into an image**, by a custom layer that runs `nix build` while the image builds ([the recipe](../using/toolchains.md#sharing-a-teams-packages)). Clones share them on disk at no cost, on every backend, but only what's in the image, and a changed `flake.lock` needs a rebuild.
 - **VMs without network policy:** they get no shared cache, and fetch from cache.nixos.org directly. Weighed and not chosen: a cache-only `devvm _proxy` per VM (on loopback, with the VM's password), which runs something new on the host for each VM that otherwise has none; a shared loopback listener without a password, ruled out, because anything on the host or any VM that reaches the host's loopback could use it; and the cache folder mounted read-only into VMs, which leaves the VM's Nix to read the files and the host with nothing to fill it.
 
 **Review** (the security-audit skill, on `nixcache.go`, its callers and the VM's setup):
