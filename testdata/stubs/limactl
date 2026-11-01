@@ -28,9 +28,10 @@
 # $STUB_DIR/sync-fails-with, the setup then fails, and that file is the VM's
 # /run/devvm/tools-unmounted). The
 # tools build VM writes the images its build.sh is asked for (below). A
-# --clone VM's git (git -C DIR, and the script that makes its clone) runs
-# here, on $STUB_DIR/vmfs/DIR: the VM's files, which the ssh stub pushes
-# to and fetches from. A shell running assets/oci/build.sh writes what it would
+# --clone VM's git (git -C DIR, the script that makes its clone and the
+# one that reads a worktree's status) runs here, on $STUB_DIR/vmfs/DIR:
+# the VM's files, which the ssh stub pushes to and fetches from; git
+# worktree list gives its paths without that prefix. A shell running assets/oci/build.sh writes what it would
 # (below), or fails when $STUB_DIR/build-fails exists. A call whose
 # arguments contain $STUB_DIR/interrupt-on's text is Ctrl+C: it interrupts
 # devvm, once.
@@ -159,9 +160,15 @@ case ${1:-} in
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/shell-agent"
     # A clone's git: Exec's command line is "cd '/' && exec WORDS".
     line=${*: -1}
-    if [[ $line == "cd '/' && exec 'git' '-C' "* || ($line == "cd '/' && exec 'sh' '-c' "* && $line == *receive.denyCurrentBranch*) ]]; then
+    if [[ $line == "cd '/' && exec 'git' '-C' "* || ($line == "cd '/' && exec 'sh' '-c' "* && ($line == *receive.denyCurrentBranch* || $line == *"status --porcelain"*)) ]]; then
       [[ ! -e $STUB_DIR/shell-fails ]] || exit 1
       eval "set -- ${line#"cd '/' && exec "}"
+      # git worktree list: its paths as the VM's, without vmfs.
+      if [[ $1 == git && $4 == worktree && $5 == list ]]; then
+        vmfs="$(cd "$STUB_DIR" && pwd -P)/vmfs"
+        git -C "$STUB_DIR/vmfs$3" "${@:4}" | while IFS= read -r -d '' l; do printf '%s\0' "${l/#"worktree $vmfs"/worktree }"; done
+        exit "${PIPESTATUS[0]}"
+      fi
       if [[ $1 == git ]]; then exec git -C "$STUB_DIR/vmfs$3" "${@:4}"; fi
       sudo() { "$@"; }
       export -f sudo

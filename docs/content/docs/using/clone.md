@@ -55,12 +55,30 @@ When you run devvm in a subfolder of the repo's folder, devvm uses the `--clone`
 
 `devvm --clone` in a subfolder never uses a parent folder's VM. It makes a new `--clone` VM for the subfolder without asking, as `devvm --here` does, so the subfolder must be the top folder of a repo of its own.
 
+## Several agents in one VM
+
+Several agents can work in one `--clone` VM, each on a branch of its own in a git worktree of its own, so each agent edits its own copy of the files. Put the worktrees inside the clone, such as in `.worktrees/NAME`, because the clone's parent folders in the VM belong to root, and so `git worktree add ../NAME` fails there. In the VM, in the clone:
+
+```sh
+echo .worktrees/ >> .git/info/exclude         # once, so git status in the clone leaves the worktrees out
+git worktree add -b agent/api .worktrees/api  # a worktree on a new branch, agent/api
+cd .worktrees/api                             # then start the agent here
+```
+
+Every worktree shares the clone's repo, so the agents' branches are all in it. One `git fetch devvm` on this machine brings every agent's branch back, such as `devvm/agent/api`, and you review each one as you would any of the VM's work ([fetching the VM's work](#fetching-the-vms-work)). Before `devvm rm` deletes the VM, it also checks each worktree inside the clone for uncommitted changes ([deleting the VM](#deleting-the-vm)).
+
+Install each worktree's dependencies in that worktree, and never share one `node_modules` folder between worktrees, because each branch can need different packages, and two agents installing at once can break it. pnpm and bun keep one package store in the VM and hard-link packages from it into each worktree's `node_modules` when both are on the same disk, so another worktree costs little download or disk.
+
+The agents also share the VM's ports, so two servers on the same port collide. Give each worktree's server a port of its own, such as with `PORT=3001`. A VM that forwards every port, as new VMs do by default, forwards each of them to this machine's `localhost` ([ports](ports-size.md#ports)).
+
+The agents in one VM share its network policy, its secrets, and its CPUs, memory and disk, and each agent can read and change every other agent's worktree. When the agents need different network policies, secrets or sizes, or when one agent mustn't reach another's work, give each agent a folder of its own on this machine, such as a separate clone of the repo, and run `devvm --clone` in each, so each gets a VM of its own.
+
 ## Deleting the VM
 
 Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd lose, starting the VM if it's stopped:
 
 1. If the clone has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches named `saved/devvm/<branch>`. It skips a branch whose name git on this machine refuses and names it, and that branch goes with the VM. To keep such a branch, rename it in the VM with `git branch -m` before you run `devvm rm`.
-2. If the clone has uncommitted changes, devvm lists the first 20 and asks before deleting them along with the VM.
+2. If the clone or a worktree inside its folder has uncommitted changes, devvm lists the first 20 of them in all, with each worktree's changes under its path, and asks before deleting them along with the VM. devvm skips a worktree whose folder is gone or that git would prune, and it doesn't check worktrees outside the clone's folder. When the clone has more than 100 worktrees, devvm checks the first 100 and asks before deleting the VM, even if none of them has changes.
 
 If either check finds something and there's no terminal to ask in, devvm refuses and keeps the VM.
 

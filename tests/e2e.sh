@@ -1181,6 +1181,11 @@ check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgi
 in_vm "$vm" "cd '$c' && echo c > c" >/dev/null 2>&1
 check "then rm refuses with uncommitted changes in the clone, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && grep -qx '?? c' '$work/last.log' && limactl list -q | grep -qx $vm"
+in_vm "$vm" "cd '$c' && rm c && git worktree add -q .worktrees/a && mkdir -p .git/info && echo .worktrees/ >> .git/info/exclude && echo w > .worktrees/a/w" >/dev/null 2>&1
+check "then rm refuses with uncommitted changes in a worktree in the clone, shown under its path, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' && grep -qx '?? w' '$work/last.log' &&
+  ! grep -qF \"\$(m clone_dirty | head -1)\" '$work/last.log' &&
+  grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
 check "rm -f deletes it and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm -f </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
   [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&

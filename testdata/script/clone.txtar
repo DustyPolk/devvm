@@ -2,7 +2,7 @@
 # mounted. The host's branches are pushed into it over devvm's ssh config,
 # the repo gets a devvm remote, and nothing of .git is locked. rm checks
 # the clone for commits the repo hasn't fetched and uncommitted changes,
-# keeps fetched work as local branches and removes the remote. (The stubs
+# in the clone and its worktrees, keeps fetched work as local branches and removes the remote. (The stubs
 # keep the VM's files in
 # $STUB_DIR/vmfs.)
 env DEVVM_MESSAGES=names
@@ -106,6 +106,16 @@ stdout '^clone_dirty$'
 stdout '^\?\? new$'
 stderr '^devvm: no_terminal_delete$'
 exec git remote get-url devvm-web
+
+# A clean clone with a worktree in it that has uncommitted changes: rm
+# shows them under the worktree's path, and without a terminal keeps the
+# VM.
+exec sh -c 'c="$STUB_DIR/vmfs$(pwd -P)"; rm "$c/new" && git -C "$c" worktree add -q .worktrees/a && echo .worktrees/ >> "$c/.git/info/exclude" && echo w > "$c/.worktrees/a/w"'
+! exec devvm rm
+! stdout 'unfetched_commits|clone_dirty$'
+stdout '^clone_worktree_dirty path=/\S*/web/\.worktrees/a$'
+stdout '^\?\? w$'
+stderr '^devvm: no_terminal_delete$'
 
 # rm -f skips the checks; a remote the user pointed elsewhere stays.
 exec git remote set-url devvm-web https://example.com/mine.git

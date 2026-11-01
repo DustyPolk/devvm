@@ -374,6 +374,16 @@ func CloneSeedFailed(vm string) M {
 	return M{id: "clone_seed_failed", vals: []val{{"vm", vm}}}
 }
 
+// CloneWorktreeDirty is [clone_worktree_dirty]: "The worktree {{.path}} in the VM's clone has uncommitted changes, which will be lost:"
+func CloneWorktreeDirty(path string) M {
+	return M{id: "clone_worktree_dirty", vals: []val{{"path", path}}}
+}
+
+// CloneWorktreesUnchecked is [clone_worktrees_unchecked]: "The VM's clone has more than {{.max}} worktrees, and devvm checked only the first {{.max}} for uncommitted changes."
+func CloneWorktreesUnchecked(max string) M {
+	return M{id: "clone_worktrees_unchecked", vals: []val{{"max", max}}}
+}
+
 // CloningImage is [cloning_image]: "cloning {{.parent}}'s image"
 func CloningImage(parent string) M {
 	return M{id: "cloning_image", vals: []val{{"parent", parent}}}
@@ -2820,6 +2830,8 @@ var specs = map[string]spec{
 	"clone_not_top":                    {fields: []string{"dir"}},
 	"clone_ready":                      {fields: []string{"branch", "remote"}},
 	"clone_seed_failed":                {fields: []string{"vm"}},
+	"clone_worktree_dirty":             {fields: []string{"path"}},
+	"clone_worktrees_unchecked":        {fields: []string{"max"}},
 	"cloning_image":                    {fields: []string{"parent"}},
 	"code_failed":                      {fields: []string{"reason"}},
 	"codex_login_kept":                 {fields: []string{"keys"}},

@@ -248,6 +248,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"saved_names_taken":                "using/clone#deleting-the-vm",
 	"remote_kept":                      "using/clone#deleting-the-vm",
 	"no_terminal_delete":               "using/clone#deleting-the-vm",
+	"clone_worktrees_unchecked":        "using/clone#deleting-the-vm",
 	"tools_need_resolve":               "using/images#shared-tools",
 	"mise_checksum":                    "internals/images#versions",
 	"tool_stepped_back":                "internals/images#versions",

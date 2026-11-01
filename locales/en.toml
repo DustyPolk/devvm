@@ -1450,6 +1450,13 @@ other = "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it
 [clone_dirty]
 other = "The VM's clone has uncommitted changes, which will be lost:"
 
+[clone_worktree_dirty]
+description = "path is the worktree's path in the VM"
+other = "The worktree {{.path}} in the VM's clone has uncommitted changes, which will be lost:"
+
+[clone_worktrees_unchecked]
+other = "The VM's clone has more than {{.max}} worktrees, and devvm checked only the first {{.max}} for uncommitted changes."
+
 [no_terminal_delete]
 other = "Deleting the VM needs your confirmation, and there's no terminal to ask in. Run devvm rm -f to delete the VM anyway."
 

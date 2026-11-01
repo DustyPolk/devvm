@@ -66,7 +66,7 @@ devvm never starts a VM whose creation didn't finish, because the VM would start
 
 `devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Other VMs, images and the project folder stay.
 
-For a `--clone` VM, devvm first checks the clone for commits that this repo hasn't fetched and for uncommitted changes ([deleting the VM](../using/clone.md#deleting-the-vm)). The repo's remote for the VM goes with the VM, and devvm keeps the work fetched from it as local branches, which [saved branches](#saved-branches) names. When the VM's image has an agent, devvm then exports the agents' history from the VM, starting it if it's stopped ([history](../using/coding-agents.md#history)), and it keeps the VM if the export fails. `devvm rm -f` deletes the VM without the export or the clone's checks, and a VM whose creation didn't finish gets neither, because it never ran.
+For a `--clone` VM, devvm first checks the clone for commits that this repo hasn't fetched and for uncommitted changes, in the clone and in the worktrees inside it ([deleting the VM](../using/clone.md#deleting-the-vm)). The repo's remote for the VM goes with the VM, and devvm keeps the work fetched from it as local branches, which [saved branches](#saved-branches) names. When the VM's image has an agent, devvm then exports the agents' history from the VM, starting it if it's stopped ([history](../using/coding-agents.md#history)), and it keeps the VM if the export fails. `devvm rm -f` deletes the VM without the export or the clone's checks, and a VM whose creation didn't finish gets neither, because it never ran.
 
 ### Saved branches
 

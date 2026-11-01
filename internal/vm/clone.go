@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -34,11 +35,12 @@ const (
 // ModeClone is KeyMode for a --clone VM.
 const ModeClone = "clone"
 
-// cloneShown is how many of the clone's uncommitted changes rm shows.
+// cloneShown is how many of the clone's uncommitted changes rm shows, in
+// all its worktrees.
 const cloneShown = 20
 
-// cloneOutMax is the most of the VM's answer read for its branches or
-// its changes.
+// cloneOutMax is the most of the VM's answer read for its branches, its
+// worktrees or a worktree's changes.
 const cloneOutMax = 1 << 20
 
 // objectName matches a git object name: what a VM answers is only looked
@@ -165,9 +167,10 @@ func remoteURL(ctx context.Context, dir, name string) (string, bool) {
 
 // cloneRmCheck is rm's check of a --clone VM before deleting it: it offers
 // to fetch the branches whose commits the host's repo lacks, and asks
-// before uncommitted changes in the clone are lost, starting the VM if
-// it's stopped. Without a terminal, either refuses. It reports whether to
-// keep the VM. A VM never seeded has nothing of its own.
+// before uncommitted changes in the clone or its worktrees (cloneChanges)
+// are lost, starting the VM if it's stopped. Without a terminal, either
+// refuses. It reports whether to keep the VM. A VM never seeded has
+// nothing of its own.
 func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	vm, st, b, dir := t.f.Name, t.st, t.b, t.f.Dir
 	if st.Get(KeySeeded) == "" {
@@ -190,20 +193,9 @@ func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 			return false, err
 		}
 	}
-	dirty, err := e.cloneGit(ctx, b, vm, dir, "status", "--porcelain")
-	if err != nil {
+	if dirty, err := e.cloneChanges(ctx, b, vm, dir); err != nil || !dirty {
 		return false, err
 	}
-	if len(bytes.TrimSpace(dirty)) == 0 {
-		return false, nil
-	}
-	e.Say(msg.CloneDirty())
-	var shown strings.Builder
-	s := bufio.NewScanner(bytes.NewReader(dirty))
-	for n := 0; n < cloneShown && s.Scan(); n++ {
-		shown.WriteString(msg.Shown(s.Text()) + "\n")
-	}
-	_, _ = e.Stdout.Write([]byte(shown.String()))
 	if !e.Terminal() {
 		return false, msg.NoTerminalDelete()
 	}
@@ -214,11 +206,116 @@ func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	return false, nil
 }
 
+// cloneChanges shows the uncommitted changes in the VM's clone and in
+// its linked worktrees inside it (cloneWorktrees), each under its
+// heading, at most cloneShown in all, and reports whether there are any.
+// It stops checking once it has shown cloneShown. A clone with more
+// worktrees than devvm checks counts as changed, and devvm says so.
+func (e clones) cloneChanges(ctx context.Context, b backend.Backend, vm, dir string) (bool, error) {
+	list, err := e.cloneGit(ctx, b, vm, dir, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return false, err
+	}
+	trees, more := cloneWorktrees(dir, list)
+	shown, dirty := 0, false
+	for _, wt := range append([]string{dir}, trees...) {
+		if shown >= cloneShown {
+			break
+		}
+		var out []byte
+		if wt == dir {
+			out, err = e.cloneGit(ctx, b, vm, dir, "status", "--porcelain")
+		} else {
+			out, err = e.cloneExec(ctx, b, vm, []string{"sh", "-c", worktreeStatus, "sh", wt})
+		}
+		if err != nil {
+			return false, err
+		}
+		if len(bytes.TrimSpace(out)) == 0 {
+			continue
+		}
+		dirty = true
+		if wt == dir {
+			e.Say(msg.CloneDirty())
+		} else {
+			e.Say(msg.CloneWorktreeDirty(msg.Shown(wt)))
+		}
+		shown += e.showChanges(out, cloneShown-shown)
+	}
+	if more > 0 {
+		e.Say(msg.CloneWorktreesUnchecked(strconv.Itoa(cloneWorktreesMax)))
+		dirty = true
+	}
+	return dirty, nil
+}
+
+// worktreeStatus is git status in a linked worktree, $1, in the VM: one
+// whose folder is gone has nothing to lose.
+const worktreeStatus = `[ -d "$1" ] || exit 0; exec git -C "$1" status --porcelain`
+
+// showChanges prints the first n lines of git status's output, each
+// through msg.Shown, and returns how many it printed.
+func (e clones) showChanges(status []byte, n int) int {
+	var shown strings.Builder
+	s := bufio.NewScanner(bytes.NewReader(status))
+	i := 0
+	for ; i < n && s.Scan(); i++ {
+		shown.WriteString(msg.Shown(s.Text()) + "\n")
+	}
+	_, _ = e.Stdout.Write([]byte(shown.String()))
+	return i
+}
+
+// cloneWorktreesMax is how many of the clone's linked worktrees rm checks.
+const cloneWorktreesMax = 100
+
+// cloneWorktrees returns, from the VM's git worktree list --porcelain -z
+// (records of NUL-ended "key value" lines, each record ended by an empty
+// line), the linked worktrees rm checks, at most cloneWorktreesMax, and
+// how many more there are. The VM's answer is untrusted: only a clean
+// absolute path inside dir is kept, each once; bare and prunable ones are
+// skipped.
+func cloneWorktrees(dir string, list []byte) (trees []string, more int) {
+	seen := map[string]bool{}
+	var wt string
+	skip := false
+	for line := range strings.SplitSeq(string(list), "\x00") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			wt, skip = strings.TrimPrefix(line, "worktree "), false
+		case line == "bare" || line == "prunable" || strings.HasPrefix(line, "prunable "):
+			skip = true
+		case line == "":
+			if !skip && insideClone(dir, wt) && !seen[wt] {
+				seen[wt] = true
+				if len(trees) < cloneWorktreesMax {
+					trees = append(trees, wt)
+				} else {
+					more++
+				}
+			}
+			wt, skip = "", false
+		}
+	}
+	return trees, more
+}
+
+// insideClone reports whether p, a path the VM gave, is a clean absolute
+// path below dir.
+func insideClone(dir, p string) bool {
+	return path.IsAbs(p) && path.Clean(p) == p && strings.HasPrefix(p, dir+"/")
+}
+
 // cloneGit runs git on the VM's clone and returns what it printed, at
 // most cloneOutMax bytes.
 func (e clones) cloneGit(ctx context.Context, b backend.Backend, vm, dir string, args ...string) ([]byte, error) {
+	return e.cloneExec(ctx, b, vm, append([]string{"git", "-C", dir}, args...))
+}
+
+// cloneExec runs argv in the VM and returns what it printed, at most
+// cloneOutMax bytes.
+func (e clones) cloneExec(ctx context.Context, b backend.Backend, vm string, argv []string) ([]byte, error) {
 	out := &capped{max: cloneOutMax}
-	argv := append([]string{"git", "-C", dir}, args...)
 	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()}); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
