@@ -348,12 +348,9 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 	if fi, err := os.Stat(file); err != nil || !fi.Mode().IsRegular() {
 		return msg.AgentKeyNotFound(file)
 	}
-	key, err := filepath.Abs(file)
+	key, err := recordedPath(file)
 	if err != nil {
 		return err
-	}
-	if dir, err := filepath.EvalSymlinks(filepath.Dir(key)); err == nil {
-		key = filepath.Join(dir, filepath.Base(key))
 	}
 	var opts []string
 	if o.Confirm {
@@ -403,19 +400,98 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 	return nil
 }
 
+// recordedPath is the path the agent's keys file records for file: made
+// absolute, its folder's links resolved.
+func recordedPath(file string) (string, error) {
+	key, err := filepath.Abs(file)
+	if err != nil {
+		return "", err
+	}
+	if dir, err := filepath.EvalSymlinks(filepath.Dir(key)); err == nil {
+		key = filepath.Join(dir, filepath.Base(key))
+	}
+	return key, nil
+}
+
+// Remove takes a key added to the agent out of it, when the agent runs
+// and holds it, then out of the keys file, so it isn't loaded again. The
+// key file itself, wherever it is, isn't touched, and needn't still exist.
+// A key that isn't recorded is refused.
+func (a *Agent) Remove(ctx context.Context, file string) error {
+	key, err := recordedPath(file)
+	if err != nil {
+		return err
+	}
+	keys, err := state.ReadAgentKeys(a.Dirs)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k state.AgentKey) bool { return k.File == key })
+	if i < 0 {
+		return msg.AgentKeyNotRecorded(file)
+	}
+	if err := a.unload(ctx, keys[i]); err != nil {
+		return err
+	}
+	if err := state.WriteAgentKeys(a.Dirs, slices.Delete(keys, i, i+1)); err != nil {
+		return err
+	}
+	a.Info(msg.AgentKeyRemoved(key))
+	return nil
+}
+
+// unload deletes k from the agent if the agent holds it, found by its
+// fingerprint: each public key the agent lists is written to a private
+// file, and the one whose fingerprint is k's is the one ssh-add -d gets.
+// The key's own file isn't read, as it may have changed or be gone.
+func (a *Agent) unload(ctx context.Context, k state.AgentKey) error {
+	out, code := a.list(ctx)
+	if fps, _ := held(out); code != 0 || !slices.Contains(fps, k.Fingerprint) {
+		return nil
+	}
+	pubs, code := a.Run(ctx, false, "ssh-add", "-L")
+	if code != 0 {
+		return msg.AgentUnloadFailed(k.File)
+	}
+	tmp, err := os.MkdirTemp("", "devvm-key.")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	pub := filepath.Join(tmp, "key.pub")
+	for line := range strings.SplitSeq(pubs, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := os.WriteFile(pub, []byte(line+"\n"), 0o600); err != nil {
+			return err
+		}
+		fp, code := a.Run(ctx, false, "ssh-keygen", "-lf", pub)
+		if f := strings.Fields(fp); code != 0 || len(f) < 2 || f[1] != k.Fingerprint {
+			continue
+		}
+		if _, code := a.Run(ctx, false, "ssh-add", "-d", pub); code != 0 {
+			return msg.AgentUnloadFailed(k.File)
+		}
+		return nil
+	}
+	return msg.AgentUnloadFailed(k.File)
+}
+
 // Keys writes to w the keys the agent holds, as ssh-add -l lists them,
 // loading those it lacks first, then each key added to it: its file, its
-// fingerprint and how it's loaded.
+// fingerprint and how it's loaded. With none added, it writes nothing and
+// doesn't start the agent.
 func (a *Agent) Keys(ctx context.Context, w io.Writer) error {
+	keys, err := state.ReadAgentKeys(a.Dirs)
+	if err != nil || len(keys) == 0 {
+		return err
+	}
 	if err := a.Ensure(ctx); err != nil {
 		return err
 	}
 	out, _ := a.list(ctx)
 	if _, err := io.WriteString(w, out); err != nil {
-		return err
-	}
-	keys, err := state.ReadAgentKeys(a.Dirs)
-	if err != nil {
 		return err
 	}
 	for _, k := range keys {

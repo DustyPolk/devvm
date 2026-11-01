@@ -692,7 +692,7 @@ Lima merges `_config/default.yaml` and `override.yaml` of its home into every VM
 
 ## Failed attempts
 
-- **Claude's host login in VMs:** on macOS it's in the Keychain, which can't be shared. VMs use a `claude setup-token` token instead. The first token saved was the code the browser shows, so `devvm auth claude` refuses one without the `sk-ant-oat01-` prefix.
+- **Claude's host login in VMs:** on macOS it's in the Keychain, which can't be shared. VMs use a `claude setup-token` token instead. The first token saved was the code the browser shows, so `devvm secret set claude` refuses one without the `sk-ant-oat01-` prefix.
 - **krunkit (Lima on libkrun) to return freed memory:** it didn't visibly return any.
 - **Debian's arm64 cloud kernel for `--from`:** it has no `gpio_keys`, so it ignored Lima's stop request; Lima hard-killed the VM after 30 s, and node, bun and dockerd in the image came out corrupted. `--from` uses the generic kernel.
 - **Every layer as a Docker build stage, flattened:** it worked, but each image became its own full disk (3.7 GB for `node`).

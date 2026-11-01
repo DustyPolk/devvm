@@ -1,6 +1,6 @@
 ---
 title: devvm secret use
-weight: 36
+weight: 35
 ---
 
 Let this folder's VM use a token
@@ -34,4 +34,4 @@ devvm secret use NAME [flags]
 
 ## See also
 
-- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use

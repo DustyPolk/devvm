@@ -37,7 +37,6 @@ devvm [IMAGE] [flags]
 ## See also
 
 - [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
-- [devvm auth](devvm_auth.md): Save the Claude token: devvm secret set claude
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm code](devvm_code.md): Open this folder's VM in VS Code over Remote-SSH
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
@@ -57,9 +56,10 @@ devvm [IMAGE] [flags]
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
+- [devvm retention](devvm_retention.md): Show or change the retention settings: what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
-- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
-- [devvm setup](devvm_setup.md): Choose the default backend, base's features and new VMs' size
+- [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
+- [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh](devvm_ssh.md): Get this folder's VM ready for ssh and editors, and show its host name

@@ -75,15 +75,15 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 devvm asks for the CPUs and memory that new VMs get on your first run, before it asks which features base gets, and again whenever you run `devvm setup`:
 
 ```sh
-devvm setup                         # asks for the backend, base's features, then the CPUs and memory
-devvm setup --cpus 6 --memory 16    # without asking; the backend and features stay as they are
+devvm setup                         # asks for the backend, base's features, the CPUs and memory, then the network policy
+devvm size -g --cpus 6 --memory 16  # only the size, without asking
 ```
 
 Before the two questions, devvm says how many CPUs and how much memory this machine has. Each question shows in brackets the value new VMs get now. That's what `devvm size -g` saved, or else base's own size fitted to this machine: 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them ([size and ports](#size-and-ports)). Press Enter to keep the value, or type another one. devvm checks what you type as it checks `--cpus` and `--memory`, and when this machine can't give it, devvm says why and asks again.
 
 devvm saves only the values you type, in the same file as `devvm size -g`, and keeps a saved disk size as it is. When you keep both values, devvm saves nothing, so new VMs go on getting the image's size. Either way, devvm prints the size new VMs get. A new size changes only the VMs made after it, and nothing is rebuilt, so existing VMs keep their size until you change it with `devvm size`.
 
-The first run asks only in a terminal, and only when no size is saved and you didn't give `--cpus` or `--memory`. It asks once, because that run also chooses base's features, and devvm asks only before they're chosen. Without a terminal, devvm asks nothing, and new VMs get the image's size. `devvm setup` asks only in a terminal and only when you give it no flags. `--cpus` and `--memory` on `devvm setup` take the same values as on `devvm size -g` and have the same limits, and with only them, devvm asks nothing else.
+The first run asks only in a terminal, and only when no size is saved and you didn't give `--cpus` or `--memory`. It asks once, because that run also chooses base's features, and devvm asks only before they're chosen. Without a terminal, devvm asks nothing, and new VMs get the image's size. `devvm setup` asks only in a terminal and only when you give it no flags ([devvm setup](settings.md#devvm-setup)). To set the size without asking, use `devvm size -g --cpus N --memory GiB`, which takes the same values and has the same limits.
 
 ### Disk use
 

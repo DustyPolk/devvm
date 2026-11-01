@@ -80,6 +80,34 @@ func TestBackend(t *testing.T) {
 	wantCorrupt(t, err, d.Backend(), 2)
 }
 
+// The network policy new VMs get: ask without a file; ask, on or off
+// written; anything else refused, and a file holding it corrupt.
+func TestNetwork(t *testing.T) {
+	d := testDirs(t)
+	if got, err := ReadNetwork(d); err != nil || got != NetworkAsk {
+		t.Fatalf("no file: got %q, %v", got, err)
+	}
+	for _, mode := range NetworkChoices() {
+		if err := WriteNetwork(d, mode); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := ReadNetwork(d); err != nil || got != mode {
+			t.Errorf("%s: got %q, %v", mode, got, err)
+		}
+	}
+	if s := read(t, d.Network()); s != "off\n" {
+		t.Errorf("file: %q", s)
+	}
+	for _, bad := range []string{"", "yes", "on\n"} {
+		if err := WriteNetwork(d, bad); err == nil {
+			t.Errorf("WriteNetwork(%q): want an error", bad)
+		}
+	}
+	write(t, d.Network(), "maybe\n")
+	_, err := ReadNetwork(d)
+	wantCorrupt(t, err, d.Network(), 1)
+}
+
 func TestBaseFeatures(t *testing.T) {
 	d := testDirs(t)
 	if _, err := ReadBaseFeatures(d); !errors.Is(err, fs.ErrNotExist) {

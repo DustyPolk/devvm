@@ -353,8 +353,9 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	return n, nil
 }
 
-// chooseNet returns whether a new VM gets network policy (asked for, on by
-// default). A VM that can't have it is made without it, unasked and said:
+// chooseNet returns whether a new VM gets network policy: the flags', else
+// the saved choice's (devvm setup), else asked for, on by default. A VM
+// that can't have it is made without it, unasked and said:
 // root in a VM made for the docker layer (dockerVM), named or from a
 // devcontainer.json's docker-in-docker, can change its own network, and
 // b may not confine a VM to its proxy (egress-proxy). --network-policy on
@@ -371,8 +372,14 @@ func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm str
 	case !o.NetworkPolicy && !e.Registry.Allowed(b, backend.FeatureEgressProxy):
 		e.Warn(msg.NetOffBackend(b.Name(), vm))
 		return false, nil
+	case o.NetworkPolicy:
+		return true, nil
 	}
-	return e.Proxy.Choose(o.NetworkPolicy, false, vm), nil
+	saved, err := state.ReadNetwork(e.Dirs)
+	if err != nil {
+		return false, err
+	}
+	return e.Proxy.Choose(saved == state.NetworkOn, saved == state.NetworkOff, vm), nil
 }
 
 // dockerLayer chooses the runtime a new VM runs the docker layer under,

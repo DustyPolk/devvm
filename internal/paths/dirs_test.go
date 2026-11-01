@@ -96,6 +96,7 @@ func TestFiles(t *testing.T) {
 		{d.BaseFeatures(), "/c/base-features"},
 		{d.Size(), "/c/size"},
 		{d.Ports(), "/c/ports"},
+		{d.Network(), "/c/network"},
 		{d.AgentKeys(), "/c/agent-keys"},
 		{d.Backend(), "/c/backend"},
 		{d.Layers(), "/c/layers"},

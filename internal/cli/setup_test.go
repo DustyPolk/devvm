@@ -23,9 +23,10 @@ type asked struct {
 
 // setupSandbox points devvm's folders at a temporary HOME, with a feature
 // of the user's, and returns a setup that sees a terminal (or not) and
-// picks the backend answer names, keeping the size with Enter, on a host
-// of 8 CPUs and 32 GiB; the folders; what the picker was shown, nil until
-// it's asked; and the size prompts shown.
+// picks the backend answer names, keeping the size with Enter and picking
+// network policy off, on a host of 8 CPUs and 32 GiB; the folders; what
+// the backend picker was shown, nil until it's asked; and the size
+// prompts and network pickers shown.
 func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs, func() *asked, *[]string) {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
@@ -51,6 +52,10 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 		ui:       u,
 		terminal: func() bool { return terminal },
 		pickOne: func(help msg.M, cs []ui.Choice) int {
+			if help.ID() == "network_default_help" {
+				sized = append(sized, pickedNetwork(cs))
+				return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == state.NetworkOff })
+			}
 			if a != nil {
 				t.Error("asked for the backend twice")
 			}
@@ -61,6 +66,38 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 		host:   func() (vm.Host, error) { return vm.Host{CPUs: 8, MemoryGiB: 32}, nil },
 	}
 	return s, d, func() *asked { return a }, &sized
+}
+
+// pickedNetwork is the network picker's choices, as names, the one it
+// starts on starred, and their descriptions' message names.
+func pickedNetwork(cs []ui.Choice) string {
+	s := "network"
+	for _, c := range cs {
+		on := ""
+		if c.On {
+			on = "*"
+		}
+		s += " " + on + c.Name + ":" + c.Desc
+	}
+	return s
+}
+
+// The network picker starts from the network policy saved for new VMs.
+func TestSetupNetworkStartsFromSaved(t *testing.T) {
+	s, d, _, picked := setupSandbox(t, true, "lima")
+	if err := state.WriteNetwork(d, state.NetworkOn); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.run(setupChoice{}); err != nil {
+		t.Fatal(err)
+	}
+	want := "network ask:network_default_ask *on:network_default_on off:network_default_off"
+	if !slices.Contains(*picked, want) {
+		t.Errorf("pickers %q, want %q", *picked, want)
+	}
+	if mode, err := state.ReadNetwork(d); err != nil || mode != state.NetworkOff {
+		t.Errorf("network policy for new VMs %q, %v", mode, err)
+	}
 }
 
 // readBackend is the default backend file's name, "" without one.
@@ -108,10 +145,16 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 			}
 			wantSized := []string(nil)
 			if tc.ask {
-				wantSized = []string{"size_cpus_prompt cpus=4", "size_memory_prompt memory=8"}
+				wantSized = []string{
+					"size_cpus_prompt cpus=4", "size_memory_prompt memory=8",
+					"network *ask:network_default_ask on:network_default_on off:network_default_off",
+				}
 			}
 			if !slices.Equal(*sized, wantSized) {
-				t.Errorf("size prompts %q, want %q", *sized, wantSized)
+				t.Errorf("size prompts and network pickers %q, want %q", *sized, wantSized)
+			}
+			if mode, err := state.ReadNetwork(d); err != nil || mode != map[bool]string{true: state.NetworkOff, false: state.NetworkAsk}[tc.ask] {
+				t.Errorf("network policy for new VMs %q, %v", mode, err)
 			}
 			if _, err := os.Stat(d.Size()); !errors.Is(err, fs.ErrNotExist) {
 				t.Errorf("Enter wrote the size file: %v", err)

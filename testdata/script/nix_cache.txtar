@@ -40,9 +40,9 @@ exec sh -c 'ls cache cache/nar'
 ! stdout narinfo
 
 # nix-cache.size takes sizes as devvm space shows them.
-! exec devvm space set nix-cache.size=2k
+! exec devvm retention nix-cache.size=2k
 stderr '^devvm: retention_bad '
-exec devvm space set nix-cache.size=128K
+exec devvm retention nix-cache.size=128K
 stdout '^==> retention_saved '
 
 # 192K in the cache, over its 128K cap: devvm space says so, and the daily

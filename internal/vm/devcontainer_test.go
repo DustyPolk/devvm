@@ -235,6 +235,36 @@ func TestChooseNet(t *testing.T) {
 	}
 }
 
+// The network policy devvm setup saved for new VMs chooses without
+// asking, unless it's ask; the flags beat it.
+func TestChooseNetSaved(t *testing.T) {
+	for _, tc := range []struct {
+		saved string
+		o     Options
+		want  bool
+		asked bool
+	}{
+		{state.NetworkAsk, Options{}, false, true},
+		{state.NetworkOn, Options{}, true, false},
+		{state.NetworkOff, Options{}, false, false},
+		{state.NetworkOff, Options{NetworkPolicy: true}, true, false},
+		{state.NetworkOn, Options{NoNetworkPolicy: true}, false, false},
+	} {
+		e, f, _ := upEnv(t, allNative())
+		if err := state.WriteNetwork(e.Dirs, tc.saved); err != nil {
+			t.Fatal(err)
+		}
+		asked := false
+		e.Proxy.Terminal = func() bool { return true }
+		e.Proxy.Note = func(msg.M) {}
+		e.Proxy.Confirm = func(msg.M) bool { asked = true; return false }
+		on, err := creation{Launch{e}}.chooseNet(&tc.o, false, f, "v")
+		if err != nil || on != tc.want || asked != tc.asked {
+			t.Errorf("saved %s, %+v: chooseNet = %v, %v (asked %v), want %v (asked %v)", tc.saved, tc.o, on, err, asked, tc.want, tc.asked)
+		}
+	}
+}
+
 func TestDevcontainerEnvFromState(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	st, err := state.CreateVM(e.Dirs, "devvm-x-0123456789abcd", state.NewVM{})

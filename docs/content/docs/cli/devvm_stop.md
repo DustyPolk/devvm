@@ -1,6 +1,6 @@
 ---
 title: devvm stop
-weight: 45
+weight: 43
 ---
 
 Stop this folder's VM

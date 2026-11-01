@@ -14,8 +14,9 @@ devvm writes nothing into your project folders. It keeps your settings in `~/.co
 | `base-features` | the [features](customizing.md#choosing-features) that base gets, one name per line | `devvm setup` |
 | `backend` | the [default backend](../backends/_index.md#choosing-a-backend) for new VMs | `devvm setup` |
 | `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g`, `devvm setup` |
+| `network` | the [network policy](../safety/network.md) that new VMs get: `ask`, `on` or `off` ([devvm setup](#devvm-setup)) | `devvm setup` |
 | `ports` | the [ports](ports-size.md#size-and-ports) that new VMs forward | `devvm ports -g` |
-| `retention` | what devvm deletes on its own, and after how long ([retention](#retention)) | `devvm space set` |
+| `retention` | what devvm deletes on its own, and after how long ([retention](#retention)) | `devvm retention` |
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm policy -g` |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
@@ -27,11 +28,29 @@ On Linux hosts, devvm also keeps your [secrets](../safety/network.md#saving-and-
 
 Upgrading devvm keeps this folder as it is. Back it up to keep your settings, layers and features, and keep in mind that on Linux hosts it holds your secrets.
 
+## devvm setup
+
+`devvm setup` chooses what new VMs get. In a terminal, it asks four questions, each starting from the current choice, and saves each answer where the command for that setting saves it:
+
+1. The [default backend](../backends/_index.md#choosing-a-backend) for new VMs, saved in `backend`.
+2. The [features](customizing.md#choosing-features) that base gets, saved in `base-features`.
+3. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, saved in `size`, as `devvm size -g` saves them.
+4. The [network policy](../safety/network.md) that new VMs get, saved in `network`. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
+
+```sh
+devvm setup                          # asks all four questions
+devvm setup --backend smolvm         # the default backend, without asking
+devvm setup --features fzf,omb       # base's features, without asking
+devvm setup --features none          # base gets no features
+```
+
+`devvm setup` has two flags of its own, and each one chooses without asking anything. `--backend NAME` chooses the default backend. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. With either flag, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)).
+
 ## Retention
 
 devvm keeps what it makes until you delete it, and the retention settings tell it to delete some of it on its own. Every setting is off until you set it, so first run `devvm space` to see what each one would free: its `RETAIN` column shows each setting that's on, beside the row it applies to, with what it would delete now ([devvm space](space.md#devvm-space)).
 
-`devvm space set KEY=VALUE...` sets them, and `devvm space set KEY=` turns one off, for example `devvm space set exports.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know and writes nothing. The settings are `key=value` lines in `~/.config/devvm/retention`, and when a line can't be read, devvm names the file and the line and applies none of them.
+`devvm retention` shows every setting and its value, and `off` for each one that isn't set. `devvm retention KEY=VALUE...` sets them, and `devvm retention KEY=off` turns one off, for example `devvm retention exports.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know, and a key with no value such as `exports.age=`, and then it writes nothing. The settings are `key=value` lines in `~/.config/devvm/retention`, and when a line can't be read, devvm names the file and the line and applies none of them.
 
 | Key | What devvm deletes |
 | --- | --- |

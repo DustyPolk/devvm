@@ -3,7 +3,8 @@
 # it was given (SOCK=$SSH_AUTH_SOCK). Only the ssh-agent stub's agent runs
 # (exit 2 for any other). A key file's contents stand for the key: added, it
 # is logged as key:<contents>, and held (once) as fingerprint
-# SHA256:fp-<contents> with that comment.
+# SHA256:fp-<contents> with that comment. -L lists the contents as the
+# public keys, and -d FILE deletes the key FILE holds.
 set -euo pipefail
 echo "ssh-add $* SOCK=${SSH_AUTH_SOCK-unset}" >> "$STUB_LOG"
 up=$STUB_DIR/agent-up held=$STUB_DIR/agent-held
@@ -13,7 +14,17 @@ if [[ ${1:-} == -l ]]; then
   cat "$held"
   exit 0
 fi
+if [[ ${1:-} == -L ]]; then
+  [[ -s $held ]] || { echo "The agent has no identities."; exit 1; }
+  awk '{ print $3 }' "$held"
+  exit 0
+fi
 c=$(cat "${*: -1}")
 echo "ssh-add ${*:1:$#-1} key:$c" | sed 's/ \{2,\}/ /g' >> "$STUB_LOG"
+if [[ ${1:-} == -d ]]; then
+  { grep -vF " SHA256:fp-$c " "$held" || true; } > "$held.new"
+  mv "$held.new" "$held"
+  exit 0
+fi
 { grep -vF " SHA256:fp-$c " "$held" || true; echo "256 SHA256:fp-$c $c (ED25519)"; } > "$held.new"
 mv "$held.new" "$held"

@@ -77,33 +77,6 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&asJSON, "json", false, "print it as JSON, for scripts")
-	c.AddCommand(&cobra.Command{
-		Use:   "set KEY=VALUE...",
-		Short: "Change the retention settings: what devvm deletes on its own",
-		Long: "Change the retention settings, each KEY=VALUE, and KEY= to turn one off: logs.runs (the run " +
-			"logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or " +
-			"beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had " +
-			"for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for " +
-			"that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, " +
-			"10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off " +
-			"unless set. A bad key or value is refused, and nothing is written. devvm applies them once a " +
-			"day, and devvm gc --retention at once; they never delete a VM, an image or a tool any VM has.",
-		Args: cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			dirs, err := paths.FromEnv()
-			if err == nil {
-				_, err = state.SetRetention(dirs, args)
-				if err != nil {
-					if _, corrupt := errors.AsType[*state.CorruptError](err); !corrupt {
-						err = msg.RetentionBad(err.Error())
-					}
-				}
-			}
-			fail(u, err, msg.SpaceFailed)
-			u.Info(msg.RetentionSaved(dirs.Retention()))
-			return nil
-		},
-	})
 	return c
 }
 

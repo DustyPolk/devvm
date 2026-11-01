@@ -52,11 +52,11 @@ A new VM gets the first of:
 To set the default:
 
 ```sh
-devvm setup                  # asks, then for base's features and new VMs' size
-devvm setup --backend NAME   # without asking; the features and size stay as they are
+devvm setup                  # asks, then for base's features and new VMs' size and network policy
+devvm setup --backend NAME   # without asking; the features, size and network policy stay as they are
 ```
 
-In a terminal, `devvm setup` lists every backend, with the experimental ones marked, starting from the current default. The up and down keys (or `k` and `j`) move, and Enter confirms. devvm saves and prints the choice, then asks for [base's features](../using/customizing.md#choosing-features) and for the [CPUs and memory](../using/ports-size.md#choosing-new-vms-size) that new VMs get. With `--features`, `--cpus` or `--memory` alone, or without a terminal, it doesn't ask for the backend.
+In a terminal, `devvm setup` lists every backend, with the experimental ones marked, starting from the current default. The up and down keys (or `k` and `j`) move, and Enter confirms. devvm saves and prints the choice, then asks for [base's features](../using/customizing.md#choosing-features), for the [CPUs and memory](../using/ports-size.md#choosing-new-vms-size) that new VMs get and for their network policy ([devvm setup](../using/settings.md#devvm-setup)). With `--features` alone, or without a terminal, it doesn't ask for the backend.
 
 A VM's state records its backend, and the VM stays on that backend, so devvm ignores `--backend` on an existing VM. When the backend file or a VM's state names a backend devvm doesn't have, devvm stops and lists the ones it has.
 

@@ -22,7 +22,7 @@ func TestRetention(t *testing.T) {
 	if _, err := SetRetention(d, []string{"exports.age=30d", "logs.runs=50", "tools.unused-age=2w"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range [][]string{{"nope=1"}, {"exports.age=30"}, {"logs.runs=0"}, {"logs.runs=05"}, {"exports.count=x"}, {"novalue"}, {"exports.age=1d", "orphans.age=-1d"}} {
+	for _, bad := range [][]string{{"nope=1"}, {"exports.age=30"}, {"logs.runs=0"}, {"logs.runs=05"}, {"exports.count=x"}, {"novalue"}, {"exports.age=1d", "orphans.age=-1d"}, {"exports.age="}, {"nope=off"}} {
 		if _, err := SetRetention(d, bad); err == nil {
 			t.Errorf("SetRetention(%q): want an error", bad)
 		}
@@ -34,14 +34,14 @@ func TestRetention(t *testing.T) {
 	if r.ExportsAge != 30*24*time.Hour || r.RunLogs != 50 || r.ToolsAge != 14*24*time.Hour || r.OrphansAge != 0 || r.ExportsCount != 0 {
 		t.Errorf("read back: %+v", r)
 	}
-	// KEY= turns one off; all off removes the file.
-	if _, err := SetRetention(d, []string{"exports.age=", "logs.runs="}); err != nil {
+	// KEY=off turns one off; all off removes the file.
+	if _, err := SetRetention(d, []string{"exports.age=off", "logs.runs=off"}); err != nil {
 		t.Fatal(err)
 	}
 	if r, _ = ReadRetention(d); r.ExportsAge != 0 || r.RunLogs != 0 || r.ToolsAge == 0 {
 		t.Errorf("after turning two off: %+v", r)
 	}
-	if _, err := SetRetention(d, []string{"tools.unused-age="}); err != nil {
+	if _, err := SetRetention(d, []string{"tools.unused-age=off"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(d.Retention()); !errors.Is(err, os.ErrNotExist) {

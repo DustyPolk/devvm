@@ -16,9 +16,12 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// newSetupCmd is devvm setup [--backend NAME] [--features LIST] [--cpus N]
-// [--memory GiB]. Its --backend, --cpus and --memory are its own, in
-// place of the root's for new VMs.
+// featuresNone is the value of devvm setup --features that chooses no
+// features.
+const featuresNone = "none"
+
+// newSetupCmd is devvm setup [--backend NAME] [--features LIST|none]. Its
+// --backend is its own, in place of the root's for new VMs.
 func newSetupCmd(u *ui.UI) *cobra.Command {
 	var (
 		features string
@@ -26,18 +29,21 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Choose the default backend, base's features and new VMs' size",
-		Long: "Choose the backend new VMs get by default (lima, or smolvm, experimental), then the " +
-			"optional features the base image gets: omb (oh-my-bash), fzf, cli-tools, and your own in " +
-			"~/.config/devvm/features, then the CPUs and memory new VMs get. In a terminal it asks for " +
-			"all three, starting from the current choices, and for the size that's what devvm size -g " +
-			"saved, else base's size fitted to this machine. --backend, --features, --cpus and --memory " +
-			"each choose without asking, and what they leave out stays as it is. A new choice of features " +
-			"makes base and the images built on it rebuild when next used. A new size changes only the " +
-			"VMs made after it.",
+		Short: "Choose the default backend, base's features, and new VMs' size and network policy",
+		Long: "Choose the backend new VMs get by default (lima, or docker and smolvm, both experimental), " +
+			"then the optional features the base image gets: omb (oh-my-bash), fzf, cli-tools, desktop, " +
+			"and your own in ~/.config/devvm/features. In a terminal it asks for both, starting from the " +
+			"current choices, then for the CPUs and memory new VMs get, as devvm size -g sets them, and " +
+			"for the network policy new VMs get: ask (each new VM asks, and gets it without a terminal), " +
+			"on or off. --backend and --features each choose without asking anything, and what they leave " +
+			"out stays as it is. A new choice of features makes base and the images built on it rebuild " +
+			"when next used. The size and network policy change only the VMs made after them.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if cmd.Flags().Changed("features") {
+				if features == "" {
+					u.Die(msg.FeaturesEmpty())
+				}
 				c.features = &features
 			}
 			fail(u, newSetup(u).run(c), msg.SetupFailed)
@@ -45,30 +51,26 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&features, "features", "", "the `LIST` of features base gets, without asking: fzf,omb, or '' for none")
+	f.StringVar(&features, "features", "", "the `LIST` of features base gets, without asking: fzf,omb, or none")
 	f.StringVar(&c.backend, "backend", "", "the `NAME` of the backend new VMs get by default")
-	f.StringVar(&c.size.CPUs, "cpus", "", "the `N` CPUs new VMs get, without asking")
-	f.StringVar(&c.size.Memory, "memory", "", "the memory new VMs get in `GiB`, without asking: 16, 16G or 16GiB")
 	return cmd
 }
 
 // setupChoice is what devvm setup's flags choose: base's features (nil
-// for none given), the default backend and new VMs' CPUs and memory (""
-// for none given).
+// for none given) and the default backend ("" for none given).
 type setupChoice struct {
 	features *string
 	backend  string
-	size     vm.Size
 }
 
 // none reports whether no flag chose anything.
 func (c setupChoice) none() bool {
-	return c.features == nil && c.backend == "" && c.size == (vm.Size{})
+	return c.features == nil && c.backend == ""
 }
 
 // setup is devvm setup's run: the UI it prints through, whether it's in a
-// terminal, how it asks for the backend and the size, and the host the
-// size is checked against.
+// terminal, how it asks for the backend, the size and the network policy,
+// and the host the size is checked against.
 type setup struct {
 	ui       *ui.UI
 	terminal func() bool
@@ -88,11 +90,11 @@ func newSetup(u *ui.UI) setup {
 	}
 }
 
-// run saves what c chooses: the default backend, base's features, then
-// new VMs' size. With nothing chosen, it asks for all three in a
-// terminal; without one, it keeps the features (every one until they're
-// chosen) and saves them. A change to the features says base rebuilds,
-// and that devvm gc deletes the old images.
+// run saves what c chooses: the default backend, then base's features.
+// With nothing chosen, it asks in a terminal for those, then new VMs' size
+// and network policy; without one, it keeps the features (every one until
+// they're chosen) and saves them. A change to the features says base
+// rebuilds, and that devvm gc deletes the old images.
 func (s setup) run(c setupChoice) error {
 	dirs, err := paths.FromEnv()
 	if err != nil {
@@ -109,7 +111,7 @@ func (s setup) run(c setupChoice) error {
 			return err
 		}
 	}
-	if c.size == (vm.Size{}) && !ask {
+	if !ask {
 		return nil
 	}
 	host, err := s.host()
@@ -117,10 +119,35 @@ func (s setup) run(c setupChoice) error {
 		return err
 	}
 	sc := vm.SizeChoice{Dirs: dirs, Assets: assets.FS, Host: host, Answer: s.answer, Say: s.ui.Say, Warn: s.ui.Warn, Info: s.ui.Info}
-	if ask {
-		return sc.Ask()
+	if err := sc.Ask(); err != nil {
+		return err
 	}
-	return sc.Set(c.size)
+	return s.saveNetwork(dirs)
+}
+
+// saveNetwork asks which network policy new VMs get, starting from the
+// saved one, and saves it in the network file new VMs read.
+func (s setup) saveNetwork(dirs paths.Dirs) error {
+	current, err := state.ReadNetwork(dirs)
+	if err != nil {
+		return err
+	}
+	modes := state.NetworkChoices()
+	descs := map[string]msg.M{
+		state.NetworkAsk: msg.NetworkDefaultAsk(),
+		state.NetworkOn:  msg.NetworkDefaultOn(),
+		state.NetworkOff: msg.NetworkDefaultOff(),
+	}
+	choices := make([]ui.Choice, len(modes))
+	for i, m := range modes {
+		choices[i] = ui.Choice{Name: m, Desc: descs[m].String(), On: m == current}
+	}
+	mode := modes[s.pickOne(msg.NetworkDefaultHelp(), choices)]
+	if err := state.WriteNetwork(dirs, mode); err != nil {
+		return err
+	}
+	s.ui.Info(msg.NetworkDefault(mode))
+	return nil
 }
 
 // saveBackend saves name as the default backend, asking for it when "".
@@ -149,9 +176,12 @@ func (s setup) saveFeatures(dirs paths.Dirs, features *string) error {
 	b := build.Choice{Env: newBuilder(s.ui, dirs, nil, backend.Review{}, nil, "")}
 	var changed bool
 	var err error
-	if features == nil {
+	switch {
+	case features == nil:
 		changed, err = b.PickFeatures()
-	} else {
+	case *features == featuresNone:
+		changed, err = b.SetFeatures(nil)
+	default:
 		changed, err = b.SetFeatures(splitList(*features))
 	}
 	if err != nil || !changed {

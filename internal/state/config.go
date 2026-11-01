@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/paths"
@@ -85,6 +86,42 @@ func ReadBackend(d paths.Dirs) (string, error) { return readValue(d.Backend()) }
 
 // WriteBackend writes the default backend for new VMs.
 func WriteBackend(d paths.Dirs, name string) error { return writeValue(d.Backend(), name) }
+
+// The network policy new VMs get, as the network file holds it: asked
+// for in a terminal (on without one), on, or off.
+const (
+	NetworkAsk = "ask"
+	NetworkOn  = "on"
+	NetworkOff = "off"
+)
+
+// NetworkChoices are the network file's values, in the order devvm shows
+// them.
+func NetworkChoices() []string { return []string{NetworkAsk, NetworkOn, NetworkOff} }
+
+// ReadNetwork reads the network policy new VMs get. A missing or empty
+// file is NetworkAsk; a value it can't be is an error naming the file.
+func ReadNetwork(d paths.Dirs) (string, error) {
+	v, err := readValue(d.Network())
+	switch {
+	case err != nil:
+		return "", err
+	case v == "":
+		return NetworkAsk, nil
+	case !slices.Contains(NetworkChoices(), v):
+		return "", &CorruptError{Path: d.Network(), Line: 1, Reason: "not ask, on or off"}
+	}
+	return v, nil
+}
+
+// WriteNetwork writes the network policy new VMs get: NetworkAsk, NetworkOn
+// or NetworkOff.
+func WriteNetwork(d paths.Dirs, mode string) error {
+	if !slices.Contains(NetworkChoices(), mode) {
+		return fmt.Errorf("invalid network policy %q", mode)
+	}
+	return writeValue(d.Network(), mode)
+}
 
 var featureName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 

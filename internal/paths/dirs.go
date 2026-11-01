@@ -168,6 +168,9 @@ func (d Dirs) Size() string { return filepath.Join(d.Config, "size") }
 // Ports holds which ports new VMs forward by default.
 func (d Dirs) Ports() string { return filepath.Join(d.Config, "ports") }
 
+// Network holds the network policy new VMs get: ask, on or off.
+func (d Dirs) Network() string { return filepath.Join(d.Config, "network") }
+
 // AgentKeys lists the keys added to devvm's SSH agent.
 func (d Dirs) AgentKeys() string { return filepath.Join(d.Config, "agent-keys") }
 

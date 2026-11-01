@@ -1,8 +1,9 @@
-# setup: the default backend, base's features and new VMs' size (all
-# asked in a terminal, which Go tests cover; without one, the backend and
-# size aren't asked and the features are kept, or every one until they're
-# chosen; --backend, --features, --cpus and --memory without asking). A new choice of features says base
-# rebuilds, and once images are built that devvm gc deletes the old ones.
+# setup: the default backend, base's features, and new VMs' size and
+# network policy (all asked in a terminal, which Go tests cover; without
+# one, the backend, size and network policy aren't asked and the features
+# are kept, or every one until they're chosen; --backend and --features
+# without asking). A new choice of features says base rebuilds, and once
+# images are built that devvm gc deletes the old ones.
 env DEVVM_MESSAGES=names
 env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
 
@@ -35,7 +36,7 @@ exec devvm setup --features fzf,omb
 
 # Built: a new choice rebuilds base, and gc deletes the old one.
 exec devvm build base
-exec devvm setup --features ''
+exec devvm setup --features none
 stdout '^==> base_features_none$'
 stdout '^==> base_will_rebuild$'
 stdout '^gc_old_hint$'
@@ -63,27 +64,31 @@ stdout '^==> base_features features=fzf$'
 stderr '^devvm: backend_unknown backends=docker, lima, smolvm name=nope$'
 cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
 
-# New VMs' size: --cpus and --memory, checked, without asking; with only
-# them the backend and features stay, and a saved disk is kept.
-exec sh -c 'echo disk=120 > "$XDG_CONFIG_HOME/devvm/size"'
-exec devvm setup --cpus 2 --memory 4GiB
-stdout '^==> size_defaults size=cpus=2 memory=4GiB disk=120GiB$'
-! stdout 'base_features|default_backend|size_question'
-cmp $XDG_CONFIG_HOME/devvm/size size.txt
-exec devvm setup --memory 3
-stdout '^==> size_defaults size=cpus=2 memory=3GiB disk=120GiB$'
-cmp $XDG_CONFIG_HOME/devvm/size size3.txt
-! exec devvm setup --cpus 9999
-stderr '^devvm: too_many_cpus have=8 want=9999$'
-! exec devvm setup --memory 99999
-stderr '^devvm: too_much_memory have=16 max=14 want=99999$'
-! exec devvm setup --cpus 1.5
-stderr '^devvm: cpus_not_number value="1\.5"$'
-cmp $XDG_CONFIG_HOME/devvm/size size3.txt
-exec devvm setup --backend lima --cpus 4
-stdout '^==> default_backend backend=lima$'
-stdout '^==> size_defaults size=cpus=4 memory=3GiB disk=120GiB$'
-! stdout base_features
+# New VMs' size is devvm size -g's, and without a terminal nothing asks
+# for it or for new VMs' network policy.
+! exists $XDG_CONFIG_HOME/devvm/size
+! exists $XDG_CONFIG_HOME/devvm/network
+
+# --features none chooses none; --features '' is refused, and changes
+# nothing.
+exec devvm setup --features fzf
+! exec devvm setup --features ''
+stderr '^devvm: features_empty$'
+cmp $CHOSEN fzf.txt
+exec devvm setup --features none
+stdout '^==> base_features_none$'
+exec cat $CHOSEN
+! stdout .
+
+# The network policy saved for new VMs: off makes one without it.
+exec sh -c 'echo off > "$XDG_CONFIG_HOME/devvm/network"'
+mkdir $WORK/off
+cd $WORK/off
+exec git init -q
+exec devvm --no-git-protect base
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/vms/devvm-off-*'
+stdout '^net=off$'
+cd $WORK
 
 # An unreadable choice stays for you to fix.
 cp bad $CHOSEN
@@ -96,13 +101,7 @@ fzf
 omb
 -- lima.txt --
 lima
--- size.txt --
-cpus=2
-memory=4
-disk=120
--- size3.txt --
-cpus=2
-memory=3
-disk=120
+-- fzf.txt --
+fzf
 -- bad --
 Not_A_Feature

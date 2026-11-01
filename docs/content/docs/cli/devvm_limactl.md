@@ -1,6 +1,6 @@
 ---
 title: devvm limactl
-weight: 16
+weight: 15
 ---
 
 Run Lima's limactl on devvm's own Lima home

@@ -25,7 +25,7 @@ flowchart TD
   before -. "interrupted" .-> undo["deletes the VM and what<br>devvm made for it,<br>and unlocks .git"]
 ```
 
-1. devvm checks everything the new VM needs before it builds anything, because a build can take minutes. That covers the folder, the image, the size, the ports, the network policy choice, which it asks for when you give neither flag, the SSH agent, the backend's [features](backends.md#features) and what the folder's `devcontainer.json` says.
+1. devvm checks everything the new VM needs before it builds anything, because a build can take minutes. That covers the folder, the image, the size, the ports, the network policy choice, which it asks for when you give neither flag and `devvm setup` chose `ask` for new VMs, the SSH agent, the backend's [features](backends.md#features) and what the folder's `devcontainer.json` says.
 2. When the image names shared tools and the [daily check](../using/images.md#shared-tools) is due, devvm checks for newer versions of them.
 3. devvm builds the image with its [shared tools](../using/images.md#shared-tools) if it isn't built yet ([building](images.md#building)).
 4. devvm writes the VM's state, with the network choice in it, before it makes the VM. If a later step fails, the VM never starts without its network choice. devvm also clears what a VM by the same name that was deleted some other way left behind: its proxy, its own rules and its run files.

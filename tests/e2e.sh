@@ -1154,6 +1154,12 @@ check "ssh-agent off, then restart: no agent in the VM" bash -c "cd '$g' &&
   as_user '$D' ssh-agent off </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' restart >>'$work/last.log' 2>&1 &&
   ! as_user limactl shell --workdir / $vm ssh-add -l </dev/null &&
   grep -A8 '^Host .* $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' | grep -q '^  ForwardAgent no\$'"
+check "ssh-agent rm takes the key out of devvm's own agent and its record, and leaves the key file" bash -c "cd '$g' &&
+  as_user '$D' ssh-agent </dev/null 2>/dev/null | grep -q devvm-e2e-key &&
+  as_user '$D' ssh-agent rm '$sa/devvm-key' </dev/null >'$work/last.log' 2>&1 &&
+  ! SSH_AUTH_SOCK='$XDG_DATA_HOME/devvm/agent.sock' ssh-add -l </dev/null | grep -q devvm-e2e-key &&
+  ! grep -q devvm-key '$XDG_CONFIG_HOME/devvm/agent-keys' && [[ -f '$sa/devvm-key' ]] &&
+  [[ \$(as_user '$D' ssh-agent </dev/null 2>/dev/null) == off ]]"
 check "rm deletes the SSH agent VM" bash -c "cd '$g' && as_user '$D' rm -f </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock"
@@ -1232,6 +1238,9 @@ touch -t 202001010000 "$vms/$vm"
 check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c "'$D' gc --orphans </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$vms/$vm' ]] &&
   ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg' ]]"
+check "retention sets a setting, shows it, and KEY=off turns it off again" bash -c "
+  '$D' retention orphans.age=30d </dev/null >'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=30d' &&
+  '$D' retention orphans.age=off </dev/null >>'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=off'"
 rm -f "$gfix" "$share/$old" "$share/$old.sha256"
 (cd "$g" && quiet "$D" rm -f)
 fi
@@ -1468,7 +1477,7 @@ check "secret use github: its proxy gets the binding at once, the VM its own pla
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'echo \$GH_TOKEN' </dev/null) == devvm-proxy-managed-github-$salt ]] &&
   ! limactl shell --workdir / $vm bash -lc 'env; cat ~/.config/devvm/env' </dev/null | grep -q ghp_E2EFAKE &&
-  HOME='$nh' '$D' secret ls | grep -Eq '^github +yes +$vm\$'"
+  HOME='$nh' '$D' secret | grep -Eq '^github +yes +$vm\$'"
 check "the proxy puts the GitHub token in for its host" bash -c "
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.github.com/user -H \"Authorization: token \$GH_TOKEN\"' </dev/null &&
   grep '\"path\":\"/user\"' '$events' | grep -q '\"secrets\":\[\"github\"\]'"

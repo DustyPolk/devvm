@@ -51,12 +51,19 @@ func (f *fakeAgent) run(_ context.Context, _ bool, argv ...string) (string, int)
 		}
 		return b.String(), 0
 	}
+	if argv[1] == "-L" { // a key's contents stand for its public key too
+		return strings.Join(f.held, "\n") + "\n", 0
+	}
 	data, err := os.ReadFile(argv[len(argv)-1])
 	if err != nil {
 		return "", 1
 	}
 	k := strings.TrimSpace(string(data))
 	f.calls = append(f.calls, strings.Join(append(slices.Clone(argv[:len(argv)-1]), "key:"+k), " "))
+	if argv[1] == "-d" {
+		f.held = slices.DeleteFunc(f.held, func(h string) bool { return h == k })
+		return "", 0
+	}
 	f.held = append(f.held, k)
 	return "", 0
 }
@@ -339,6 +346,68 @@ func TestKeys(t *testing.T) {
 	}
 }
 
+// With no key added, keys writes nothing and starts no agent.
+func TestKeysNone(t *testing.T) {
+	a, f, out, _, _ := testAgent(t)
+	var b strings.Builder
+	if err := a.Keys(t.Context(), &b); err != nil {
+		t.Fatal(names(err))
+	}
+	if b.Len() != 0 || len(f.calls) != 0 || f.up || len(out.lines) != 0 {
+		t.Errorf("wrote %q, calls %q, said %q", b.String(), f.calls, out.lines)
+	}
+}
+
+// rm takes the key out of the agent, by its fingerprint, and out of the
+// keys file, leaving the others and the key file itself. Its file needn't
+// exist, a relative path finds it, and one not added is refused, with
+// nothing changed.
+func TestRemove(t *testing.T) {
+	a, f, out, tmp, _ := testAgent(t)
+	k1, k2 := filepath.Join(tmp, "a"), filepath.Join(tmp, "b")
+	writeKey(t, k1, "a")
+	writeKey(t, k2, "b")
+	for _, k := range []string{k1, k2} {
+		if err := a.Add(t.Context(), k, AddOptions{}); err != nil {
+			t.Fatal(names(err))
+		}
+	}
+	if err := a.Remove(t.Context(), filepath.Join(tmp, "nope")); names(err) != "agent_key_not_recorded key="+filepath.Join(tmp, "nope") {
+		t.Errorf("not added: %s", names(err))
+	}
+	if len(readKeys(t, a)) != 2 || len(f.held) != 2 {
+		t.Fatalf("not added: changed %+v %q", readKeys(t, a), f.held)
+	}
+	if err := os.Remove(k1); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(tmp)
+	out.lines = nil
+	if err := a.Remove(t.Context(), "a"); err != nil {
+		t.Fatal(names(err))
+	}
+	if got, want := readKeys(t, a), []state.AgentKey{{File: k2, Fingerprint: "SHA256:fp-b"}}; !slices.Equal(got, want) {
+		t.Errorf("keys = %+v, want %+v", got, want)
+	}
+	if !slices.Equal(f.held, []string{"b"}) || !slices.Contains(f.calls, "ssh-add -d key:a") {
+		t.Errorf("held %q, calls %q", f.held, f.calls)
+	}
+	if want := []string{"==> agent_key_removed key=" + k1}; !slices.Equal(out.lines, want) {
+		t.Errorf("said %q, want %q", out.lines, want)
+	}
+	if _, err := os.Stat(k2); err != nil {
+		t.Errorf("the other key's file: %v", err)
+	}
+	// An agent that doesn't run, or no longer holds it: only the record goes.
+	f.up = false
+	if err := a.Remove(t.Context(), k2); err != nil {
+		t.Fatal(names(err))
+	}
+	if len(readKeys(t, a)) != 0 {
+		t.Errorf("keys = %+v", readKeys(t, a))
+	}
+}
+
 // With OpenSSH's own tools: a throwaway key, in an agent of the test's
 // own, whose socket the test names. No other agent is reached.
 func TestRealAgent(t *testing.T) {
@@ -398,6 +467,19 @@ func TestRealAgent(t *testing.T) {
 	if !strings.Contains(b.String(), " "+keys[0].Fingerprint+" devvm-test-key (ED25519)\n") ||
 		!strings.Contains(b.String(), key+": "+keys[0].Fingerprint+" lifetime=1h\n") {
 		t.Errorf("keys:\n%s", b.String())
+	}
+	// rm takes it out of the agent and the record, and leaves its file.
+	if err := a.Remove(t.Context(), key); err != nil {
+		t.Fatal(names(err))
+	}
+	if held, code := a.list(t.Context()); code != 1 {
+		t.Errorf("after rm, the agent holds (%d):\n%s", code, held)
+	}
+	if len(readKeys(t, a)) != 0 {
+		t.Errorf("after rm, keys = %+v", readKeys(t, a))
+	}
+	if _, err := os.Stat(key); err != nil {
+		t.Errorf("after rm, the key's file: %v", err)
 	}
 }
 

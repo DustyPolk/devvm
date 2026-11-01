@@ -1,6 +1,6 @@
 ---
 title: devvm secret unuse
-weight: 35
+weight: 34
 ---
 
 Stop this folder's VM using a token
@@ -34,4 +34,4 @@ devvm secret unuse NAME [flags]
 
 ## See also
 
-- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use

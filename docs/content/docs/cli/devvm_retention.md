@@ -1,22 +1,22 @@
 ---
-title: devvm space set
-weight: 40
+title: devvm retention
+weight: 29
 ---
 
-Change the retention settings: what devvm deletes on its own
+Show or change the retention settings: what devvm deletes on its own
 
 ## Synopsis
 
-Change the retention settings, each KEY=VALUE, and KEY= to turn one off: logs.runs (the run logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off unless set. A bad key or value is refused, and nothing is written. devvm applies them once a day, and devvm gc --retention at once; they never delete a VM, an image or a tool any VM has.
+Show each retention setting and its value, off when it isn't set, or change them, each KEY=VALUE, and KEY=off to turn one off: logs.runs (the run logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off until you set it. devvm refuses a bad key or value, or one with no value, and then writes nothing. devvm applies the settings once a day, and devvm gc --retention applies them at once. They never delete a VM, an image or a tool any VM has.
 
 ```text
-devvm space set KEY=VALUE... [flags]
+devvm retention [KEY=VALUE...] [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for set
+  -h, --help   help for retention
 ```
 
 ## Options inherited from parent commands
@@ -34,4 +34,4 @@ devvm space set KEY=VALUE... [flags]
 
 ## See also
 
-- [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
+- [devvm](devvm.md): Open a shell in this folder's VM, creating it first

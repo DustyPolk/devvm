@@ -1,6 +1,7 @@
 # SSH agent forwarding: off unless asked for; --ssh-agent forwards yours,
 # devvm ssh-agent devvm devvm's own, which holds only the keys added to it
-# (the ssh-agent and ssh-add stubs). Every connection devvm opens to a VM
+# and not removed with devvm ssh-agent rm (the ssh-agent and ssh-add
+# stubs). Every connection devvm opens to a VM
 # carries the agent its mode says, or none. Your own agent is a made-up
 # socket the stubs never answer on.
 env DEVVM_MESSAGES=names
@@ -92,8 +93,10 @@ stderr '^devvm: agent_confirm_needs_askpass$'
 exec sh -c 'echo inside > "$WORK/web/key"'
 ! exec devvm ssh-agent add $WORK/web/key
 stderr '^devvm: agent_key_mounted key=\S*/web/key vm=devvm-web-[0-9a-f]{14}$'
-exec devvm ssh-agent keys
-stdout '\A256 SHA256:fp-deploy deploy \(ED25519\)\n\S*/keys/deploy: SHA256:fp-deploy lifetime=12h\n\z'
+# Bare, once a key is added: the VM's mode, then the keys devvm's agent
+# holds and those added to it.
+exec devvm ssh-agent
+stdout '\Aon\n256 SHA256:fp-deploy deploy \(ED25519\)\n\S*/keys/deploy: SHA256:fp-deploy lifetime=12h\n\z'
 
 # devvm ssh-agent devvm on the running VM: from its next start. Until
 # then devvm's connections and its ssh config entry carry the agent it
@@ -103,7 +106,7 @@ exec devvm ssh-agent devvm
 stderr '^devvm: agent_devvm_risk vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> agent_set_running mode=devvm vm=devvm-web-[0-9a-f]{14}$'
 exec devvm ssh-agent
-stdout '\Adevvm\n\z'
+stdout '\Adevvm\n256 SHA256:fp-deploy '
 exec devvm ssh-agent devvm
 stdout '^==> agent_already mode=devvm vm=devvm-web-[0-9a-f]{14}$'
 exec devvm
@@ -151,3 +154,25 @@ exec sh -c 'cat "$STUB_DIR/shell-agent"'
 stdout '\Aunset\n\z'
 exec sh -c 'cat "$CFG/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
+
+# devvm ssh-agent rm: the key out of devvm's agent and agent-keys, found
+# by its fingerprint, the key file left as it is. One not added is
+# refused, and changes nothing.
+! exec devvm ssh-agent rm $WORK/keys/none
+stderr '^devvm: agent_key_not_recorded key=\S*/keys/none$'
+exec sh -c 'cat "$CFG/agent-keys"'
+stdout 'keys/deploy'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm ssh-agent rm $WORK/keys/deploy
+stdout '^==> agent_key_removed key=\S*/keys/deploy$'
+stub_calls
+stdout '^ssh-add -d key:deploy$'
+exec sh -c 'cat "$CFG/agent-keys"'
+! stdout .
+exists $WORK/keys/deploy
+exec sh -c 'cat "$STUB_DIR/agent-held"'
+! stdout deploy
+exec devvm ssh-agent
+stdout '\Aoff\n\z'
+! exec devvm ssh-agent rm $WORK/keys/deploy
+stderr '^devvm: agent_key_not_recorded '

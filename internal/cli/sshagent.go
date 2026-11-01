@@ -10,15 +10,17 @@ import (
 )
 
 // newSSHAgentCmd is devvm ssh-agent [on|devvm|off], and devvm's own
-// agent's add and keys.
+// agent's add and rm.
 func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ssh-agent [on|devvm|off]",
 		Short: "Show or change SSH agent forwarding for this folder's VM",
 		Long: "Show whether this folder's VM forwards an SSH agent: off (the default), on (yours) or devvm " +
-			"(devvm's own, which holds only the keys added to it with devvm ssh-agent add). devvm ssh-agent " +
-			"on, devvm or off changes it from the VM's next start: devvm restart. While it's on and you're " +
-			"connected, anything in the VM can use the agent's keys.",
+			"(devvm's own, which holds only the keys added to it with devvm ssh-agent add). Then, once a key " +
+			"is added, it lists the keys devvm's own agent holds, as ssh-add -l does, loading those it lacks " +
+			"first, and each key added to it: its file, its fingerprint and how it's loaded. devvm ssh-agent " +
+			"on, devvm or off changes the VM's forwarding from its next start: devvm restart. While it's on " +
+			"and you're connected, anything in the VM can use the agent's keys.",
 		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -29,10 +31,13 @@ func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 				}
 				return s.SetSSHAgent(cmd.Context(), args[0])
 			}, msg.SSHAgentFailed)
+			if len(args) == 0 {
+				withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
+			}
 			return nil
 		},
 	}
-	cmd.AddCommand(newSSHAgentAddCmd(u), newSSHAgentKeysCmd(u))
+	cmd.AddCommand(newSSHAgentAddCmd(u), newSSHAgentRmCmd(u))
 	return cmd
 }
 
@@ -60,15 +65,19 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 	return cmd
 }
 
-func newSSHAgentKeysCmd(u *ui.UI) *cobra.Command {
+func newSSHAgentRmCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
-		Use:   "keys",
-		Short: "List the keys in devvm's own SSH agent",
-		Long: "List the keys devvm's own SSH agent holds, as ssh-add -l does, loading those it lacks first, " +
-			"then each key added to it: its file, its fingerprint and how it's loaded.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
+		Use:   "rm KEY_FILE",
+		Short: "Remove a key from devvm's own SSH agent",
+		Long: "Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from " +
+			"~/.config/devvm/agent-keys, so devvm doesn't load it again. The key file stays as it is, and " +
+			"needn't still exist. A key that wasn't added is refused: devvm ssh-agent lists those that were.",
+		Args: cobra.ExactArgs(1),
+		ValidArgsFunction: func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			return nil, cobra.ShellCompDirectiveDefault
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentRemove(cmd.Context(), args[0]) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}

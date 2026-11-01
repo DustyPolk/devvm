@@ -27,19 +27,20 @@ func oneSecret(cmd *cobra.Command) {
 	cmd.ValidArgs = secretNames()
 }
 
-// newSecretCmd is devvm secret: tokens kept on this machine.
+// newSecretCmd is devvm secret: the secrets kept on this machine, listed.
 func newSecretCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret",
-		Short: "Tokens kept on this machine, for VMs to use",
-		Long: "Tokens kept on this machine: claude (every VM whose image has claude uses it) and github " +
-			"(VMs it's bound to). With network policy a VM gets a placeholder and its proxy puts the token " +
-			"into requests for the token's hosts; without it, the VM gets the token. devvm secret alone " +
-			"lists them, as devvm secret ls does.",
+		Short: "List the secrets kept on this machine, for VMs to use",
+		Long: "List the secrets devvm keeps on this machine, whether each is saved, and the VMs using it: " +
+			"claude, the Claude Code token every VM whose image has claude uses, and github, the GitHub " +
+			"token of the VMs it's bound to. With network policy a VM gets a placeholder, and its proxy " +
+			"puts the secret into requests for the secret's hosts. Without network policy, the VM gets the " +
+			"secret itself.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u) },
 	}
-	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u), newSecretLsCmd(u),
+	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u),
 		newSecretUseCmd(u, "use", true), newSecretUseCmd(u, "unuse", false), newSecretGetCmd(u))
 	return cmd
 }
@@ -48,11 +49,11 @@ func newSecretSetCmd(u *ui.UI) *cobra.Command {
 	var stdin bool
 	cmd := &cobra.Command{
 		Use:   "set NAME",
-		Short: "Save a token on this machine",
-		Long: "Save a token on this machine, claude or github: in the macOS Keychain, else in " +
-			"~/.config/devvm/secrets/NAME, a file only you can read. It asks for the token without showing " +
-			"it; --stdin reads a line instead. A claude token comes from claude setup-token. Proxies running " +
-			"put the new token in at once.",
+		Short: "Save the Claude Code token or GitHub token on this machine",
+		Long: "Save a secret on this machine, claude (the Claude Code token that claude setup-token prints) " +
+			"or github (a GitHub token), in the macOS Keychain, else in ~/.config/devvm/secrets/NAME, a file " +
+			"only you can read. It asks for the token without showing it, and --stdin reads a line instead. " +
+			"Proxies that are running put the new token in at once.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			saveSecret(cmd, u, args[0], stdin)
 			return nil
@@ -94,15 +95,6 @@ func newSecretRmCmd(u *ui.UI) *cobra.Command {
 	}
 	oneSecret(cmd)
 	return cmd
-}
-
-func newSecretLsCmd(u *ui.UI) *cobra.Command {
-	return &cobra.Command{
-		Use:   "ls",
-		Short: "List the tokens, whether each is saved, and the VMs using it",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u) },
-	}
 }
 
 func listSecrets(cmd *cobra.Command, u *ui.UI) error {
@@ -158,19 +150,4 @@ func newSecretGetCmd(u *ui.UI) *cobra.Command {
 	}
 	get.Flags().BoolVar(&force, "force", false, "print it to a terminal too")
 	return get
-}
-
-// newAuthCmd is devvm auth claude: devvm secret set claude.
-func newAuthCmd(u *ui.UI) *cobra.Command {
-	return &cobra.Command{
-		Use:       "auth claude",
-		Short:     "Save the Claude token: devvm secret set claude",
-		Long:      "Save the Claude token that claude setup-token prints, as devvm secret set claude does.",
-		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
-		ValidArgs: []string{"claude"},
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			saveSecret(cmd, u, "claude", false)
-			return nil
-		},
-	}
 }

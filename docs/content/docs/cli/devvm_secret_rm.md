@@ -1,6 +1,6 @@
 ---
 title: devvm secret rm
-weight: 33
+weight: 32
 ---
 
 Delete a saved token
@@ -34,4 +34,4 @@ devvm secret rm NAME [flags]
 
 ## See also
 
-- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use

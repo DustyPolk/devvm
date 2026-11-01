@@ -508,6 +508,25 @@ other = "experimental"
 description = "reason is an error from the system, in English"
 other = "Saving the settings failed: {{.reason}}."
 
+[features_empty]
+other = "The --features flag takes a list of features, such as fzf,omb, or none for no features."
+
+[network_default_help]
+other = "Network policy for new VMs (up/down to choose, enter to confirm):"
+
+[network_default_ask]
+other = "devvm asks for each new VM, and turns it on without a terminal"
+
+[network_default_on]
+other = "new VMs reach only the hosts you allow (recommended)"
+
+[network_default_off]
+other = "new VMs reach anything this machine can"
+
+[network_default]
+description = "mode is ask, on or off"
+other = "new VMs' network policy is {{.mode}}"
+
 [feature_shadowed]
 other = "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
 
@@ -827,7 +846,7 @@ description = "data is devvm's data folder and config its settings folder, which
 other = "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
 
 [retention_unreadable]
-other = "The retention settings can't be read, so devvm applies none. Fix the line it names, or run devvm space set KEY= to turn one off."
+other = "The retention settings can't be read, so devvm applies none. Fix or delete the line it names, then run devvm retention to check them."
 
 [retention_failed]
 other = "Applying the retention settings failed. Run devvm gc --retention to see why."
@@ -838,6 +857,10 @@ other = "That retention setting is refused, and nothing changed: {{.reason}}."
 
 [retention_saved]
 other = "saved the retention settings in {{.file}}"
+
+[retention_settings_failed]
+description = "reason is an error from the system, in English"
+other = "Reading or changing the retention settings failed: {{.reason}}."
 
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
@@ -1353,7 +1376,7 @@ other = "SSH agent forwarding is already {{.mode}} for {{.vm}}"
 other = "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 
 [agent_devvm_risk]
-other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent keys to list them."
+other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent to list them."
 
 [agent_set_running]
 description = "mode is on (the user's agent), devvm (devvm's own) or off"
@@ -1395,6 +1418,15 @@ other = "{{.key}} is in a folder that {{.vm}} mounts, so that VM can read it. Ke
 
 [agent_key_not_found]
 other = "There's no key file {{.key}}."
+
+[agent_key_not_recorded]
+other = "{{.key}} isn't a key you added to devvm's SSH agent. Run devvm ssh-agent to list them."
+
+[agent_unload_failed]
+other = "Removing {{.key}} from devvm's SSH agent failed, so devvm kept it on the list of keys it loads. Run devvm ssh-agent rm {{.key}} again."
+
+[agent_key_removed]
+other = "devvm removed {{.key}} from its SSH agent and won't load it again."
 
 [agent_lifetime_invalid]
 other = "The --lifetime flag takes a duration, such as 30m, 8h or 1d, or forever, not {{.value}}."
@@ -1689,10 +1721,10 @@ other = "{{.vm}}'s agent folder mounts change when it next starts."
 other = "updated {{.vm}}'s agent folder mounts"
 
 [no_claude_token]
-other = "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm auth claude."
+other = "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm secret set claude."
 
 [claude_token_invalid]
-other = "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm auth claude."
+other = "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm secret set claude."
 
 [no_github_token]
 other = "{{.vm}} uses github, but no GitHub token is saved. Run devvm secret set github."

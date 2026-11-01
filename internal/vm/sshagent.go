@@ -93,6 +93,11 @@ func (e Settings) AgentAdd(ctx context.Context, file string, o sshagent.AddOptio
 	return e.Agent.Add(ctx, file, o)
 }
 
+// AgentRemove takes a key out of devvm's own SSH agent and its record.
+func (e Settings) AgentRemove(ctx context.Context, file string) error {
+	return e.Agent.Remove(ctx, file)
+}
+
 // AgentKeys writes to w the keys devvm's own SSH agent holds, then those
 // added to it.
 func (e Settings) AgentKeys(ctx context.Context, w io.Writer) error {

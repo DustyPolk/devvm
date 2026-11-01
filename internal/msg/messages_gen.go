@@ -44,7 +44,7 @@ func AgentConfirmNeedsAskpass() M {
 	return M{id: "agent_confirm_needs_askpass"}
 }
 
-// AgentDevvmRisk is [agent_devvm_risk]: "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent keys to list them."
+// AgentDevvmRisk is [agent_devvm_risk]: "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent to list them."
 func AgentDevvmRisk(vm string) M {
 	return M{id: "agent_devvm_risk", vals: []val{{"vm", vm}}}
 }
@@ -97,6 +97,16 @@ func AgentKeyNoFingerprint(key string) M {
 // AgentKeyNotFound is [agent_key_not_found]: "There's no key file {{.key}}."
 func AgentKeyNotFound(key string) M {
 	return M{id: "agent_key_not_found", vals: []val{{"key", key}}}
+}
+
+// AgentKeyNotRecorded is [agent_key_not_recorded]: "{{.key}} isn't a key you added to devvm's SSH agent. Run devvm ssh-agent to list them."
+func AgentKeyNotRecorded(key string) M {
+	return M{id: "agent_key_not_recorded", vals: []val{{"key", key}}}
+}
+
+// AgentKeyRemoved is [agent_key_removed]: "devvm removed {{.key}} from its SSH agent and won't load it again."
+func AgentKeyRemoved(key string) M {
+	return M{id: "agent_key_removed", vals: []val{{"key", key}}}
 }
 
 // AgentKeyUnpinned is [agent_key_unpinned]: "{{.key}} has no fingerprint that devvm recorded, so devvm didn't load the key. Run devvm ssh-agent add {{.key}} to add it again."
@@ -152,6 +162,11 @@ func AgentStartFailed(sock string) M {
 // AgentUnchosenStop is [agent_unchosen_stop]: "Something outside devvm started {{.vm}}, which may have forwarded an SSH agent you didn't choose, so devvm stopped the VM. Run devvm to start it again."
 func AgentUnchosenStop(vm string) M {
 	return M{id: "agent_unchosen_stop", vals: []val{{"vm", vm}}}
+}
+
+// AgentUnloadFailed is [agent_unload_failed]: "Removing {{.key}} from devvm's SSH agent failed, so devvm kept it on the list of keys it loads. Run devvm ssh-agent rm {{.key}} again."
+func AgentUnloadFailed(key string) M {
+	return M{id: "agent_unload_failed", vals: []val{{"key", key}}}
 }
 
 // AlreadyStopped is [already_stopped]: "{{.vm}} is already stopped"
@@ -324,7 +339,7 @@ func ClaudeTokenHowto() M {
 	return M{id: "claude_token_howto"}
 }
 
-// ClaudeTokenInvalid is [claude_token_invalid]: "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm auth claude."
+// ClaudeTokenInvalid is [claude_token_invalid]: "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm secret set claude."
 func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
@@ -997,6 +1012,11 @@ func ExportingDocker(from string) M {
 // FeatureShadowed is [feature_shadowed]: "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
 func FeatureShadowed(feature string, file string) M {
 	return M{id: "feature_shadowed", vals: []val{{"feature", feature}, {"file", file}}}
+}
+
+// FeaturesEmpty is [features_empty]: "The --features flag takes a list of features, such as fzf,omb, or none for no features."
+func FeaturesEmpty() M {
+	return M{id: "features_empty"}
 }
 
 // FeaturesHelp is [features_help]: "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
@@ -1759,6 +1779,31 @@ func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
 
+// NetworkDefault is [network_default]: "new VMs' network policy is {{.mode}}"
+func NetworkDefault(mode string) M {
+	return M{id: "network_default", vals: []val{{"mode", mode}}}
+}
+
+// NetworkDefaultAsk is [network_default_ask]: "devvm asks for each new VM, and turns it on without a terminal"
+func NetworkDefaultAsk() M {
+	return M{id: "network_default_ask"}
+}
+
+// NetworkDefaultHelp is [network_default_help]: "Network policy for new VMs (up/down to choose, enter to confirm):"
+func NetworkDefaultHelp() M {
+	return M{id: "network_default_help"}
+}
+
+// NetworkDefaultOff is [network_default_off]: "new VMs reach anything this machine can"
+func NetworkDefaultOff() M {
+	return M{id: "network_default_off"}
+}
+
+// NetworkDefaultOn is [network_default_on]: "new VMs reach only the hosts you allow (recommended)"
+func NetworkDefaultOn() M {
+	return M{id: "network_default_on"}
+}
+
 // NetworkFailed is [network_failed]: "Reading or changing the network policy of this folder's VM failed: {{.reason}}."
 func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
@@ -1769,7 +1814,7 @@ func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
 }
 
-// NoClaudeToken is [no_claude_token]: "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm auth claude."
+// NoClaudeToken is [no_claude_token]: "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm secret set claude."
 func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
 }
@@ -2124,7 +2169,12 @@ func RetentionSaved(file string) M {
 	return M{id: "retention_saved", vals: []val{{"file", file}}}
 }
 
-// RetentionUnreadable is [retention_unreadable]: "The retention settings can't be read, so devvm applies none. Fix the line it names, or run devvm space set KEY= to turn one off."
+// RetentionSettingsFailed is [retention_settings_failed]: "Reading or changing the retention settings failed: {{.reason}}."
+func RetentionSettingsFailed(reason string) M {
+	return M{id: "retention_settings_failed", vals: []val{{"reason", reason}}}
+}
+
+// RetentionUnreadable is [retention_unreadable]: "The retention settings can't be read, so devvm applies none. Fix or delete the line it names, then run devvm retention to check them."
 func RetentionUnreadable() M {
 	return M{id: "retention_unreadable"}
 }
@@ -2820,6 +2870,8 @@ var specs = map[string]spec{
 	"agent_key_mounted":                {fields: []string{"key", "vm"}},
 	"agent_key_no_fingerprint":         {fields: []string{"key"}},
 	"agent_key_not_found":              {fields: []string{"key"}},
+	"agent_key_not_recorded":           {fields: []string{"key"}},
+	"agent_key_removed":                {fields: []string{"key"}},
 	"agent_key_unpinned":               {fields: []string{"key"}},
 	"agent_keys_failed":                {fields: []string{"reason"}},
 	"agent_lifetime_invalid":           {fields: []string{"value"}},
@@ -2831,6 +2883,7 @@ var specs = map[string]spec{
 	"agent_set_stopped":                {fields: []string{"mode", "vm"}},
 	"agent_start_failed":               {fields: []string{"sock"}},
 	"agent_unchosen_stop":              {fields: []string{"vm"}},
+	"agent_unload_failed":              {fields: []string{"key"}},
 	"already_stopped":                  {fields: []string{"vm"}},
 	"backend_experimental":             {},
 	"backend_flag_ignored":             {fields: []string{"backend", "vm"}},
@@ -3000,6 +3053,7 @@ var specs = map[string]spec{
 	"exported":                         {fields: []string{"file", "vm"}},
 	"exporting_docker":                 {fields: []string{"from"}},
 	"feature_shadowed":                 {fields: []string{"feature", "file"}},
+	"features_empty":                   {},
 	"features_help":                    {},
 	"fetch_before_delete":              {fields: []string{"prefix"}},
 	"fetch_failed":                     {fields: []string{"vm"}},
@@ -3152,6 +3206,11 @@ var specs = map[string]spec{
 	"net_unenforced":                   {fields: []string{"vm"}},
 	"net_unenforced_restart":           {fields: []string{"vm"}},
 	"net_unenforced_stop":              {fields: []string{"vm"}},
+	"network_default":                  {fields: []string{"mode"}},
+	"network_default_ask":              {},
+	"network_default_help":             {},
+	"network_default_off":              {},
+	"network_default_on":               {},
 	"network_failed":                   {fields: []string{"reason"}},
 	"newer_tools":                      {fields: []string{"tools"}},
 	"no_claude_token":                  {fields: []string{"vm"}},
@@ -3225,6 +3284,7 @@ var specs = map[string]spec{
 	"retention_failed":                 {},
 	"retention_off":                    {},
 	"retention_saved":                  {fields: []string{"file"}},
+	"retention_settings_failed":        {fields: []string{"reason"}},
 	"retention_unreadable":             {},
 	"rm_export_failed":                 {fields: []string{"vm"}},
 	"rm_failed":                        {fields: []string{"reason"}},

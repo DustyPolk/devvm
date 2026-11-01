@@ -1,6 +1,6 @@
 ---
 title: devvm images rm
-weight: 13
+weight: 12
 ---
 
 Delete images, by name or by key

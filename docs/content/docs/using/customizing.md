@@ -71,10 +71,11 @@ To change the choice:
 
 ```sh
 devvm setup                     # asks again, starting from the current choice
-devvm setup --features fzf,omb  # without asking; --features '' chooses none
+devvm setup --features fzf,omb  # without asking
+devvm setup --features none     # without asking, and base gets no features
 ```
 
-In a terminal, `devvm setup` first asks for the [default backend](../backends/_index.md#choosing-a-backend), then for the features and then for the [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, but `--features` asks for neither the backend nor the size. Without a terminal, `devvm setup` keeps the choice. devvm refuses a name that isn't a feature, and then nothing changes. You can also edit `base-features` yourself. An empty file chooses none, and devvm skips a name without a script, with a warning.
+In a terminal, `devvm setup` first asks for the [default backend](../backends/_index.md#choosing-a-backend), then for the features, and then for the [CPUs and memory](ports-size.md#choosing-new-vms-size) and the network policy that new VMs get ([devvm setup](settings.md#devvm-setup)). `--features` asks for none of the others. Without a terminal, `devvm setup` keeps the choice. devvm refuses a name that isn't a feature, and an empty `--features ''`, and then nothing changes. You can also edit `base-features` yourself. An empty file chooses none, and devvm skips a name without a script, with a warning.
 
 A new choice makes `base` and the images built on it rebuild the next time they're used, and `devvm setup` says so. The old images are then stale, and [`devvm gc`](images.md#cleaning-up) deletes them.
 

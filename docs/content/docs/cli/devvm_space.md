@@ -1,6 +1,6 @@
 ---
 title: devvm space
-weight: 39
+weight: 38
 ---
 
 Show what devvm keeps on this machine and the space it takes
@@ -36,4 +36,3 @@ devvm space [flags]
 ## See also
 
 - [devvm](devvm.md): Open a shell in this folder's VM, creating it first
-- [devvm space set](devvm_space_set.md): Change the retention settings: what devvm deletes on its own

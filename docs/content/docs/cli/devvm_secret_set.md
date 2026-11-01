@@ -1,13 +1,13 @@
 ---
 title: devvm secret set
-weight: 34
+weight: 33
 ---
 
-Save a token on this machine
+Save the Claude Code token or GitHub token on this machine
 
 ## Synopsis
 
-Save a token on this machine, claude or github: in the macOS Keychain, else in ~/.config/devvm/secrets/NAME, a file only you can read. It asks for the token without showing it; --stdin reads a line instead. A claude token comes from claude setup-token. Proxies running put the new token in at once.
+Save a secret on this machine, claude (the Claude Code token that claude setup-token prints) or github (a GitHub token), in the macOS Keychain, else in ~/.config/devvm/secrets/NAME, a file only you can read. It asks for the token without showing it, and --stdin reads a line instead. Proxies that are running put the new token in at once.
 
 ```text
 devvm secret set NAME [flags]
@@ -35,4 +35,4 @@ devvm secret set NAME [flags]
 
 ## See also
 
-- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use

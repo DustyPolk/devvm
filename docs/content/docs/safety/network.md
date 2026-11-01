@@ -33,7 +33,7 @@ https://devvm.dev/docs/safety/network/#turning-it-on-or-off
 Turn it on? [Y/n]
 ```
 
-`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
+`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. To answer it for every new VM, choose `on` or `off` for new VMs' network policy in `devvm setup`, and devvm makes each new VM that way without asking, while the flags still choose for one VM. The default there, `ask`, asks as above ([devvm setup](../using/settings.md#devvm-setup)). A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
 
 Some VMs can't have network policy. Those are VMs on a backend that can't confine a VM to its proxy, such as a [Docker](../internals/docker.md#network-policy) engine on another machine, and Docker VMs with the [docker layer](../backends/docker.md#the-docker-layer). devvm doesn't ask about those, and it makes the VM without network policy and warns you. If you pass `--network-policy` for such a VM, devvm refuses before it builds anything, because it never starts a VM you asked network policy for with an open network. For the same reason, it refuses `devvm network on` for a VM on a backend that can't confine it to its proxy.
 
@@ -149,9 +149,8 @@ Agents' logins work the same way. When a VM's image has Codex or opencode and yo
 | Command | What it does |
 | --- | --- |
 | `devvm secret set claude` or `github` | asks for the Claude Code token or the GitHub token without showing it, and saves it (`--stdin` reads a line instead) |
-| `devvm auth claude` | the same as `devvm secret set claude` |
 | `devvm secret rm NAME` | deletes a saved secret |
-| `devvm secret ls` (or `devvm secret`) | lists the secrets, whether each is saved, and the VMs using each |
+| `devvm secret` | lists the secrets, whether each is saved, and the VMs using each |
 | `devvm secret use NAME` | lets this folder's VM use the secret |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |
 

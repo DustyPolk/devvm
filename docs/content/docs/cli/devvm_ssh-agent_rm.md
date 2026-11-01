@@ -1,18 +1,22 @@
 ---
-title: devvm secret ls
-weight: 32
+title: devvm ssh-agent rm
+weight: 42
 ---
 
-List the tokens, whether each is saved, and the VMs using it
+Remove a key from devvm's own SSH agent
+
+## Synopsis
+
+Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from ~/.config/devvm/agent-keys, so devvm doesn't load it again. The key file stays as it is, and needn't still exist. A key that wasn't added is refused: devvm ssh-agent lists those that were.
 
 ```text
-devvm secret ls [flags]
+devvm ssh-agent rm KEY_FILE [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for ls
+  -h, --help   help for rm
 ```
 
 ## Options inherited from parent commands
@@ -30,4 +34,4 @@ devvm secret ls [flags]
 
 ## See also
 
-- [devvm secret](devvm_secret.md): Tokens kept on this machine, for VMs to use
+- [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM

@@ -54,8 +54,8 @@ flowchart TD
 Claude Code in a VM needs a Claude Code token, which you make once on this machine:
 
 ```sh
-claude setup-token   # approve in the browser, then copy the sk-ant-oat01-… token it prints
-devvm auth claude    # paste it
+claude setup-token        # approve in the browser, then copy the sk-ant-oat01-… token it prints
+devvm secret set claude   # paste it
 ```
 
 With network policy, the VM gets a placeholder, and the proxy on your machine puts the real token into Claude's requests. Every agent gets your settings, skills and MCP servers, but never your history ([coding agents](../using/coding-agents.md)).
