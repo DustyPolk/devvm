@@ -9,6 +9,7 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [Toolchains](toolchains.md): node, python, rust and go, with what each brings, the files that choose it, its version files, its global installs and its allowlist.
 - [Working on a clone](clone.md): `--clone`, which gives a VM its own clone of the repo instead of mounting the folder.
 - [Customizing images](customizing.md): your own layers, and the optional features in every VM, such as oh-my-bash and fzf.
+- [Links between VMs](links.md): `devvm link`, which lets a program in one VM reach a service in another by name, as in `postgres://db:5432/app`, once that VM publishes the port.
 - [Ports and size](ports-size.md): the ports a VM forwards to your machine, and its CPUs, memory and disk.
 - [Coding agents](coding-agents.md): the supported agents, which are Claude Code, Codex and opencode, the config they get in a VM, their logins, and their history.
 - [SSH and editors](ssh.md): reaching VMs by name from ssh and VS Code, and forwarding your SSH agent.

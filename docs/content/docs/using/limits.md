@@ -12,6 +12,7 @@ These are the things devvm can't do, everywhere and then by host and backend.
 - **`--from` takes only Debian-, Ubuntu- and Alpine-based images,** and Alpine, Debian 12 (`node:24`) and Ubuntu before 26.04 on arm64 build with unpinned packages ([details](from.md#supported-images)).
 - **Agent folders** that you make or delete on this machine reach a running VM only after a restart, which devvm offers ([details](coding-agents.md#mounts)).
 - **Ports** are forwarded over TCP only, on every backend, and forwarding every port means every port from 1024 up. You can tunnel UDP over a forwarded TCP port with socat ([details](ports-size.md#ports)).
+- **Links between VMs** carry TCP over IPv4 alone, and a container in a VM reaches them only with `--network host` ([details](links.md#ports)).
 - **Changing a running VM's ports** closes the connections that are open through its forwards ([details](ports-size.md#ports)).
 - **With Lima,** project paths can't contain commas, folder names in VM names are cut short, and disks grow but never shrink ([details](../backends/lima.md#limits)).
 - **File watchers in a Lima VM** don't see the edits you make on this machine, only those made in the VM, so set a dev server that should reload on your edits to poll the project folder ([details](../backends/lima.md#file-watchers)).

@@ -37,7 +37,7 @@ devvm link publish [PORTS] [flags]
 
 ## Docs
 
-[The docs page for devvm link publish](../getting-started/commands.md#links-between-vms) explains it in full.
+[The docs page for devvm link publish](../using/links.md#publishing-a-port) explains it in full.
 
 ## See also
 

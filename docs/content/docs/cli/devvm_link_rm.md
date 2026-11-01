@@ -35,7 +35,7 @@ devvm link rm TARGET PORT [flags]
 
 ## Docs
 
-[The docs page for devvm link rm](../getting-started/commands.md#links-between-vms) explains it in full.
+[The docs page for devvm link rm](../using/links.md#removing-a-link) explains it in full.
 
 ## See also
 

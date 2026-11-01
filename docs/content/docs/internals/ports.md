@@ -11,7 +11,7 @@ devvm's forwarder forwards ports by the same rules on every backend, and devvm u
 
 [Ports](../using/ports-size.md#ports) lists which ports the forwarder forwards, for `--ports all`, the default, and for a list such as `--ports 5173,8000-8010`, and how soon. A listed port also carries a server on the VM's loopback (`127.0.0.1` or `::1`) to this machine. You can list port 22, which forwards the VM's sshd to port 22 on this machine, while ssh by name keeps using the VM's own ssh port.
 
-The forwarder never forwards a server on an address in `127.77.0.0/16`, on any VM, because that's where a VM listens for its [links to other VMs](design.md#links-between-vms), so a link never appears on this machine's `localhost`. A server of the VM's own on `127.0.0.1` with the same port is forwarded as usual.
+The forwarder never forwards a server on an address in `127.77.0.0/16`, on any VM, because that's where a VM listens for its [links to other VMs](#links-between-vms), so a link never appears on this machine's `localhost`. A server of the VM's own on `127.0.0.1` with the same port is forwarded as usual.
 
 ## What it never takes
 
@@ -23,7 +23,7 @@ When a start, or a change of a running VM's ports, finds that a program on this 
 
 ## How it reaches the VM
 
-The forwarder reaches the VM over the VM's ssh, with a key and a host key that devvm pins, and it asks for no forwarding into this machine. Every connection starts on this machine, and the VM opens none to it. The VM sees each forwarded connection only as one to its own loopback, and with network policy the VM still reaches only its proxy.
+The forwarder reaches the VM over the VM's ssh, with a key and a host key that devvm pins, and it asks for no forwarding into this machine. Only a [link session](#the-link-session) asks a VM for a remote forward, on a connection of its own. Every connection starts on this machine, and the VM opens none to it. The VM sees each forwarded connection only as one to its own loopback, and with network policy the VM still reaches only its proxy.
 
 A connection to a forwarded port, such as 5173, takes this path:
 
@@ -50,3 +50,47 @@ The forwarder runs as a hidden devvm command, one process for each VM. devvm sta
 
 - A VM without ssh forwards no ports, and devvm warns you (`ports_no_ssh`). On smolvm, for example, that's a VM whose image has no sshd.
 - When a forwarder doesn't start, devvm warns you and names its log (`ports_forward_failed`), and the VM runs on without forwarded ports.
+
+## Links between VMs
+
+A [link between VMs](../using/links.md) carries a client VM's connections to a port that a target VM publishes. Like the forwarder, it goes over ssh, every connection starts on this machine, and it uses neither VM's network, so no backend's confinement changes and a VM with network policy still reaches nothing past its proxy over its own network. [The design note](design.md#links-between-vms) has the rules, the threat check and what the prototype showed.
+
+### The addresses
+
+Each target that a client links to gets an address of its own in `127.77.0.0/16` in that client, starting at `127.77.0.1`. devvm chooses it when the client's first link to that target is made and keeps it for every port of that target, so two targets can share a port. The client's `/etc/hosts` holds a block between `# devvm links begin` and `# devvm links end`, with a line `127.77.x.y NAME NAME.devvm.internal` for each target. The VM's setup replaces the block whole at each launch, and again when links change on a running client. Docker writes a container's `/etc/hosts` again at every start and refuses a rename over it, so on Docker the setup writes the file in place.
+
+A link listens at its target's address on the target's own port, never on the client's `127.0.0.1` or `::1`. At each start, the setup sets `net.ipv4.ip_unprivileged_port_start` to `0` where it's `1024`, which is on Lima's Alpine VMs and on smolvm, so a link to a port below 1024 listens on that port too. Lima's Ubuntu and Debian VMs and Docker's containers already have `0`.
+
+The addresses are internal to devvm. `devvm link` and its JSON never show them, and the forwarder never forwards them ([above](#what-it-forwards)).
+
+### The link session
+
+For each running client with links, devvm runs a hidden command, `devvm _links VM`, as one detached process on this machine. Its pid is in `~/.local/share/devvm/run/<vm>.links.pid`, and its log is `~/.local/share/devvm/logs/<vm>.links.log`. It keeps an ssh connection of its own to the client, never the forwarder's, which starts with no forwards and asks for each link as a remote forward from `127.77.x.y:PORT` in the client to a unix socket on this machine. That's the only remote forward devvm asks a VM for. It reads the client's links again every second and adds or cancels one forward at a time as they change, and a cancel leaves the connections that are open. A link whose address and port a program in the client already holds fails alone, with `link_port_taken` in the session's log, which the next launch shows.
+
+The process ends once the client no longer runs the start it was made for, or has no links left, and `devvm stop` stops it with the client, which ends its connections and removes its sockets.
+
+Every VM's sshd allows remote forwards on `127.77.0.0/16` alone, with `AllowTcpForwarding all`, `GatewayPorts clientspecified` and `PermitListen 127.77.*:*`, written once into every image, so links never change or reload sshd. sshd matches the address a request names against that rule as text, so a remote forward on `localhost`, `127.0.0.1`, `0.0.0.0` or `::1` is refused. Root in the client can change sshd, so those settings protect only an honest VM. What keeps the VM from choosing where its connections go on this machine is the host's ssh client, which accepts a forwarded channel only for a forward it asked for and connects it only to that link's socket.
+
+### Each connection
+
+A program in the client that connects to `db:5432` takes this path:
+
+```mermaid
+flowchart TD
+  app["your program, in the client"] -- "db:5432, which /etc/hosts<br>names as 127.77.0.1" --> csshd["the client's sshd"]
+  csshd -- "the link session's ssh,<br>which this machine opened" --> links["devvm _links,<br>on this machine"]
+  links -- "ssh, with the target's key<br>and pinned host key" --> tsshd["the target's sshd"]
+  tsshd -- "127.0.0.1:5432,<br>its own loopback" --> server["the server, in the target"]
+```
+
+1. The client's sshd carries the connection over the link session to this machine, where ssh connects it to the link's unix socket. The socket is mode 600, in `~/.local/share/devvm/run` (mode 700), and named by a hash of the client, the address and the port, because a socket's path is at most 104 characters.
+2. `devvm _links` checks the link again. The link must still exist, the target must be the VM it was made for, by its ID, the port must be published, the [network policy rule](../using/links.md#links-and-network-policy) must hold, and the target must be running, as its backend says. devvm never starts the target for a connection.
+3. It carries the connection over one ssh connection that it keeps to each target, with the target's key and pinned host key, and the target's sshd connects to `127.0.0.1:PORT` in the target. That connection to a target ends when the target stops, and the next one reads the target's host keys again, because smolvm and Docker VMs get new ones at each start.
+
+At most 256 of a client's connections are carried at once, and the next one is refused. Each connection carried or refused is written to the client's [event log](network.md#log-files), which `devvm network log` shows, so a VM without network policy gets an event log for its links' connections.
+
+### When links change
+
+`devvm link add` and `devvm link rm` record the change in the client's state on this machine, never in a VM. On a running client they send its setup again, which rewrites `/etc/hosts` and, with network policy, the daemons' `NO_PROXY` ([the VM's setup](network.md#the-vms-setup)), and they start `devvm _links` if it isn't running. A stopped client gets the change when it next starts. With network policy, the names are also in the environment the VM's backend sets at each start, so on Lima a start whose link names changed edits the VM's Lima config, which gives the VM new ssh host keys at that boot ([Lima's guest environment](lima.md#what-devvm-sets-on-a-vm)). devvm pins a VM's host keys again at every start.
+
+`devvm rm` of a target removes every link to it from every client's state and updates the running clients, and `devvm gc --orphans` removes links to VMs whose state is gone and the sockets that a killed link session left.

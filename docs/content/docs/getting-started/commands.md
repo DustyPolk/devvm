@@ -113,7 +113,7 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 | `IMAGE` | its image, with the shared tools added to it since, and a base from a container image as `base (from node:24)` ([details](../using/from.md)) |
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
 | `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
-| `LINKS` | how many [links](#links-between-vms) it has to ports of your other VMs, or `-` for none |
+| `LINKS` | how many [links](../using/links.md) it has to ports of your other VMs, or `-` for none |
 | `BACKEND` | the [backend](../backends/_index.md) that runs it, with the runtime beside it for a Docker VM made for the docker layer, as in `docker (sysbox)` |
 | `FOLDER` | its project folder |
 
@@ -191,15 +191,13 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 | | |
 | --- | --- |
-| `devvm link` | list this folder's VM's links, each with its name, port, target VM and folder, the target's status, and whether the link applies |
-| `devvm link add TARGET PORT [--as NAME]` | link this folder's VM to PORT of the VM that TARGET names, a folder's name or path or a VM's name, so programs in it reach the port as `NAME:PORT` and `NAME.devvm.internal:PORT`, where NAME is the target's folder name unless you give `--as NAME` |
-| `devvm link rm TARGET PORT` | remove one of this folder's VM's links, by its name or by what `devvm link add` took |
-| `devvm link publish [PORTS]` | show the ports this folder's VM publishes, or offer PORTS, such as `5432` or `8000-8010`, to links from any of your other VMs |
-| `devvm link unpublish PORTS` | stop offering ports to links, each as `devvm link publish` lists it, while the server in the VM keeps running |
+| `devvm link` | list this folder's VM's links, each with its name, port, target VM and folder, the target's status, and whether the link applies ([details](../using/links.md#listing-links)) |
+| `devvm link add TARGET PORT [--as NAME]` | link this folder's VM to PORT of the VM that TARGET names, so programs in it reach the port as `NAME:PORT` and `NAME.devvm.internal:PORT` ([details](../using/links.md#adding-a-link)) |
+| `devvm link rm TARGET PORT` | remove one of this folder's VM's links ([details](../using/links.md#removing-a-link)) |
+| `devvm link publish [PORTS]` | show the ports this folder's VM publishes, or offer PORTS to links from any of your other VMs ([details](../using/links.md#publishing-a-port)) |
+| `devvm link unpublish PORTS` | stop offering ports to links ([details](../using/links.md#publishing-a-port)) |
 
-A link reaches only a port the target publishes, and a VM with network policy links only to another VM with network policy. A link joins the two VMs' trust, because code in the VM that links can often run code in the target through the service it reaches, and it then has whatever the target has.
-
-devvm never starts a VM for a link, so a link to a stopped VM doesn't work until you start that VM, and devvm says so each time the VM that links starts. A change of links reaches a running VM at once, and a stopped one when it next starts. `devvm rm` of a VM removes every link to it from your other VMs and names them. While a VM with network policy links to another VM, `devvm network off` is refused in that other VM's folder, and `devvm network on` is refused for a VM that links to a VM without network policy.
+[Links between VMs](../using/links.md) explains what a link reaches, its names, and why a link joins the two VMs' trust.
 
 ## Images
 
@@ -304,6 +302,8 @@ A command that shows a setting when you run it bare and changes the setting when
 | `devvm network log --json` | [this folder's VM's network log, or with `--blocked` its blocks](../safety/network.md#devvm-network-log---json) |
 | `devvm secret --json` | [the secrets, whether each is saved and the VMs using it](../safety/network.md#devvm-secret---json) |
 | `devvm ssh-agent --json` | [this folder's VM's SSH agent forwarding and devvm's own agent's keys](../using/ssh.md#devvm-ssh-agent---json) |
+| `devvm link --json` | [this folder's VM's links](../using/links.md#devvm-link---json) |
+| `devvm link publish --json` | [the ports this folder's VM publishes to links](../using/links.md#devvm-link-publish---json) |
 | `devvm git-protect --json` | [this folder's VM's `.git` protection](../safety/git-protection.md#devvm-git-protect---json) |
 | `devvm history --json` | [the saved exports of agents' history](../using/coding-agents.md#devvm-history---json) |
 | `devvm space --json` | [what devvm keeps on this machine](../using/space.md#devvm-space---json) |

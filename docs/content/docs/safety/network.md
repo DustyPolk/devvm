@@ -134,7 +134,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself and its [links](../using/links.md#links-and-network-policy), and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
@@ -288,6 +288,17 @@ With `--blocked`, each of the `blocked` has the `last` time it was blocked, the 
   ]
 }
 ```
+
+## Links between VMs
+
+A [link between VMs](../using/links.md) lets a program in one VM, the client, reach a port that another VM, the target, publishes. devvm carries a link's connections over ssh through this machine, so they go through neither VM's proxy nor its network, and with network policy a VM reaches only the hosts on its allowlist and the links you added to it.
+
+A link joins the two VMs' trust. Code in the client can often run code in the target through the target's service, such as Postgres's `COPY … TO PROGRAM`, and it then has whatever the target has: its network, the secrets it may use and its project folder. So devvm keeps two rules:
+
+- **A client with network policy links only to a target with network policy.** A link to a target without it would let the client reach the internet through the target, around its own proxy. devvm checks this when you add a link, at each launch of the client and on every connection. While such a link exists, devvm refuses `devvm network off` for the target, and it refuses `devvm network on` for a client that links to a target without network policy. A client without network policy may link to any target, and it then has the target's secrets and project folder within reach as well as its own network.
+- **The target publishes.** A link reaches only a port that the target's folder publishes with `devvm link publish`, and only on the target's own loopback. Publishing offers the port to any of your VMs, and each link is still added in the client's folder, so a VM reaches another's service only when you've run a command in both folders.
+
+The first rule keeps a client's network policy whole, but it doesn't keep the target's data in the target. A client with network policy can read whatever the target's service gives it and send that out through the hosts on its own allowlist. Link two VMs only when you'd trust each with what the other has.
 
 ## Not covered
 

@@ -37,7 +37,7 @@ devvm link [flags]
 
 ## Docs
 
-[The docs page for devvm link](../getting-started/commands.md#links-between-vms) explains it in full.
+[The docs page for devvm link](../using/links.md#listing-links) explains it in full.
 
 ## See also
 

@@ -56,7 +56,7 @@ A few habits close most of what devvm can't close on its own, so read [Staying s
 The docs are at [devvm.dev](https://devvm.dev/), and their source is in `docs/`:
 
 - [Getting started](https://devvm.dev/docs/getting-started/): installing devvm, your first VM and the commands you use most.
-- [Using devvm](https://devvm.dev/docs/using/): images and tools, clones, ports and size, coding agents, SSH and editors, and troubleshooting.
+- [Using devvm](https://devvm.dev/docs/using/): images and tools, clones, links between VMs, ports and size, coding agents, SSH and editors, and troubleshooting.
 - [Staying safe](https://devvm.dev/docs/safety/): the habits that keep you safe, network policy, `.git` protection and attack vectors.
 - [Backends](https://devvm.dev/docs/backends/): what runs the VMs, and choosing one.
 - [CLI reference](https://devvm.dev/docs/cli/): every command, with its arguments and flags.

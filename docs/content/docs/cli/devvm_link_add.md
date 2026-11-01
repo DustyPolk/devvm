@@ -37,7 +37,7 @@ devvm link add TARGET PORT [flags]
 
 ## Docs
 
-[The docs page for devvm link add](../getting-started/commands.md#links-between-vms) explains it in full.
+[The docs page for devvm link add](../using/links.md#adding-a-link) explains it in full.
 
 ## See also
 
