@@ -33,10 +33,10 @@ type statusLine struct {
 }
 
 // Status shows label on a status line, around slow work that isn't one
-// logged command, until stop is called. Only in a terminal, and not with
-// DEVVM_VERBOSE.
+// logged command, until stop is called. Only in a terminal, and not
+// while verbose.
 func (u *UI) Status(label msg.M) (stop func()) {
-	if u.verbose() || !u.stderrTTY {
+	if verbose(u) || !u.stderrTTY {
 		return func() {}
 	}
 	s := u.startStatus(valueParts(label))

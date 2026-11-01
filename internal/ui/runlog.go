@@ -21,12 +21,56 @@ import (
 // keepLogs is how many run logs are kept, the newest.
 const keepLogs = 20
 
-// verbose reports whether DEVVM_VERBOSE is set. The output of the commands
-// devvm runs (the backends', the build scripts') goes to a log, one per
-// devvm run that has any, not the terminal: devvm prints its own steps, and
-// the end of the log when a step fails. DEVVM_VERBOSE=1 prints it all
-// instead.
-func (u *UI) verbose() bool { return u.getenv("DEVVM_VERBOSE") != "" }
+// streamWait is how long a streamed command's output is read after the
+// command ends.
+const streamWait = 2 * time.Second
+
+// The output of the commands devvm runs (the backends', the build
+// scripts') goes to a log, one per devvm run that has any, not the
+// terminal: devvm prints its own steps behind a status line, and the end
+// of the log when a step fails. Verbose (-v) also streams each line the
+// log gets to stderr as it's written, without control characters, dim in
+// a terminal, instead of the status line.
+
+// SetVerbose turns streaming the run log to stderr on or off, from the
+// run's -v/--verbose.
+func (u *UI) SetVerbose(on bool) { u.verboseOn.Store(on) }
+
+// verbose reports whether u streams the run log (SetVerbose).
+func verbose(u *UI) bool { return u.verboseOn.Load() }
+
+// stream is the run log's copy on stderr while verbose: what's written to
+// it goes to stderr printable and dim. A lead byte of a C1 control
+// (0xc2) at a write's end is held for the next, so a control split
+// across writes is still dropped.
+type stream struct {
+	u    *UI
+	mu   sync.Mutex
+	held []byte
+}
+
+func (s *stream) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := slices.Concat(s.held, p)
+	s.held = nil
+	if n := len(b); n > 0 && b[n-1] == 0xc2 {
+		b, s.held = b[:n-1], []byte{0xc2}
+	}
+	if text := printable(string(b)); text != "" {
+		s.u.write(s.u.stderr, s.u.errStyle.paintLines(sgrDim, text))
+	}
+	return len(p), nil
+}
+
+// logTo is where a command's output goes: the run log, and while
+// verbose, the stream too.
+func logTo(u *UI, f *os.File) io.Writer {
+	if !verbose(u) {
+		return f
+	}
+	return io.MultiWriter(f, &stream{u: u})
+}
 
 // logPath is the run's log, "" before it's opened.
 func (u *UI) logPath() string {
@@ -102,9 +146,6 @@ func pruneLogs(dir string, keep int) {
 
 // LogNote says where the details of slow steps go, once per run.
 func (u *UI) LogNote() {
-	if u.verbose() {
-		return
-	}
 	path := u.openLog().Name()
 	u.log.Lock()
 	noted := u.log.noted
@@ -117,14 +158,9 @@ func (u *UI) LogNote() {
 }
 
 // LogWriter is where to send the output of a command run some other way
-// than LoggedCmd (a backend's Exec, say): the run log, or with
-// DEVVM_VERBOSE the terminal.
-func (u *UI) LogWriter() io.Writer {
-	if u.verbose() {
-		return u.Stderr()
-	}
-	return u.openLog()
-}
+// than LoggedCmd (a backend's Exec, say): the run log, streamed to stderr
+// too while verbose.
+func (u *UI) LogWriter() io.Writer { return logTo(u, u.openLog()) }
 
 // proxyKey is a VM's proxy key in a proxy URL, which lets a process act as
 // that VM. It's kept out of the run log.
@@ -173,11 +209,8 @@ func count(ctx context.Context, step string) (label, logLine string) {
 // It returns the command's error; the caller dies with what failed
 // (DieLogged).
 func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
-	if u.verbose() {
-		cmd.Stdout, cmd.Stderr = u.Stdout(), u.Stderr()
-		return u.run(cmd)
-	}
 	f := u.openLog()
+	w := logTo(u, f)
 	label := []part{{text: strings.Join(cmd.Args[:min(2, len(cmd.Args))], " ")}}
 	logLine := ""
 	if step.ID() != "" {
@@ -186,11 +219,11 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 		// The count before the step, then the step, its values bold.
 		label = append([]part{{text: strings.TrimSuffix(counted, step.Line())}}, valueParts(step)...)
 	}
-	_, _ = f.WriteString(logLine + redact("+ "+strings.Join(cmd.Args, " ")) + "\n")
-	cmd.Stdout, cmd.Stderr = f, f
+	_, _ = io.WriteString(w, logLine+redact("+ "+strings.Join(cmd.Args, " "))+"\n")
+	cmd.Stdout, cmd.Stderr = w, w
 
 	var s *statusLine
-	if u.stderrTTY {
+	if u.stderrTTY && !verbose(u) {
 		s = u.startStatus(label)
 	}
 	start := time.Now()
@@ -207,7 +240,16 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 func (u *UI) run(cmd *exec.Cmd) error {
 	u.commands.RLock()
 	defer u.commands.RUnlock()
+	// Streamed output is copied through a pipe, which a process the
+	// command left running (a VM's own) can hold open: once the command
+	// ends, its output gets a moment, then the pipe is closed.
+	if _, file := cmd.Stdout.(*os.File); !file && cmd.WaitDelay == 0 {
+		cmd.WaitDelay = streamWait
+	}
 	err := cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
+	}
 	if killed(err) {
 		u.awaitInterrupt(u.interruptGrace)
 	}

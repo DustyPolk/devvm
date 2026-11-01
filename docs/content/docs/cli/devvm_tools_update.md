@@ -19,6 +19,12 @@ devvm tools update [flags]
   -h, --help   help for update
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm tools](devvm_tools.md): Show this folder's VM's shared tools

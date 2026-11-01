@@ -7,11 +7,13 @@ Each section below starts with what you see, then says what to do, with a link t
 
 ## A command fails
 
-devvm prints its own steps, and it sends the output of the commands it runs to a log instead of the terminal. When a step fails, devvm prints the end of the log. To see the commands' output as they run, set `DEVVM_VERBOSE=1`.
+devvm prints its own steps, and it sends the output of the commands it runs to a log instead of the terminal. When a step fails, devvm prints the end of the log.
+
+To see the commands' output as they run, add `-v` or `--verbose` to any command, as in `devvm -v build base` or `devvm -v`. devvm then shows each line on standard error as the log gets it, without the status line, and it still writes the log. The lines are the log's own, so a VM's proxy key is hidden in them as it is in the log, and devvm drops the control characters a command prints, so its output can't move the cursor or change your terminal. When a step fails with `-v`, devvm names the log instead of printing its end again.
 
 Each run that runs a command has one log, `~/.local/share/devvm/logs/runs/<date>-<time>-<pid>.log`, which only you can read, and devvm keeps the newest 20. In the log, each command appears as a `+` line with its arguments, followed by its output, and a numbered step adds a `# [2/5] <step>` line first. A VM's proxy key is written as `devvm:<key>@`.
 
-In a terminal, a status line shows the step, how long it has run, and the log's latest line. A step that takes more than a few seconds leaves a line with its time.
+In a terminal and without `-v`, a status line shows the step, how long it has run, and the log's latest line. A step that takes more than a few seconds leaves a line with its time.
 
 ## A command is refused before it runs
 

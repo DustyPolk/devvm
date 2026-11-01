@@ -20,6 +20,12 @@ devvm network rm RULE... [flags]
   -h, --help     help for rm
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM

@@ -42,8 +42,10 @@ type UI struct {
 	// rawInput puts the terminal devvm reads from into raw mode, returning
 	// what undoes it.
 	rawInput func() (restore func(), err error)
-	// getenv reads DEVVM_VERBOSE and the terminal's character set.
+	// getenv reads the terminal's character set.
 	getenv func(string) string
+	// verboseOn streams the run log to stderr (SetVerbose).
+	verboseOn atomic.Bool
 	// runLogs returns the run logs' folder.
 	runLogs func() (string, error)
 	// interruptGrace is how long a command a signal ended waits for
@@ -207,9 +209,15 @@ func (u *UI) Die(m msg.M) {
 }
 
 // DieLogged is Die after printing the last 25 lines of the run's log, if it
-// has one, without control characters, dim in a terminal.
+// has one, without control characters, dim in a terminal. While verbose,
+// those lines are on stderr already, so only the log's path is.
 func (u *UI) DieLogged(m msg.M) {
-	if path := u.logPath(); path != "" && !u.Interrupted() {
+	path := u.logPath()
+	switch {
+	case path == "" || u.Interrupted():
+	case verbose(u):
+		u.write(u.stderr, u.errStyle.paintLines(sgrDim, msg.LogDetails(path).Line()+"\n"))
+	default:
 		tail := "--- " + msg.LogEnd(path).Line() + "\n" + printable(tailLines(path, 25)) + "---\n"
 		u.write(u.stderr, u.errStyle.paintLines(sgrDim, tail))
 	}

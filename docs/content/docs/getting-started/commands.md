@@ -193,7 +193,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 ## Flags and values
 
-Each flag belongs to the commands that list it in their help, and only `--help` works with every command. A flag can come before or after the command's arguments.
+Each flag belongs to the commands that list it in their help, and only `-h` or `--help` and `-v` or `--verbose` work with every command. `-v` shows the output of the commands devvm runs as they run ([details](../using/troubleshooting.md#a-command-fails)). A flag can come before or after the command's arguments.
 
 When a flag or a setting can mean none or off, you write that as a word: `devvm setup --features none`, `devvm ports none`, `devvm retention history.age=off` and `devvm ssh-agent add KEY_FILE --lifetime forever`. devvm refuses an empty value, such as `--features ''`, and an empty argument, so a blank never stands for none or for a default.
 

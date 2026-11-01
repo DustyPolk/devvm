@@ -13,7 +13,6 @@ exec devvm --version node
 cmp stdout version.txt
 ! stub_calls
 
-# There's no -v.
-env DEVVM_MESSAGES=names
-! exec devvm -v
-stderr '^devvm: flag_unknown command=devvm flag=-v$'
+# -v is --verbose, never --version.
+exec devvm -v --version
+cmp stdout version.txt

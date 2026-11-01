@@ -19,6 +19,12 @@ devvm layer new NAME [flags]
   -h, --help   help for new
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm layer](devvm_layer.md): Your own image layers

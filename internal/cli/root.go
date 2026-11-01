@@ -19,6 +19,7 @@ import (
 // folder's VM.
 func NewRoot(u *ui.UI) *cobra.Command {
 	uf := new(upFlags)
+	var verbose bool
 	root := &cobra.Command{
 		Use:   "devvm [IMAGE]",
 		Short: "Open a shell in this folder's VM, creating it first",
@@ -37,6 +38,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			u.SetVerbose(verbose)
 			if wantsJSON(cmd) {
 				u.DataOnly() // stdout is the JSON's alone
 			}
@@ -57,6 +59,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SuggestionsMinimumDistance: suggestDistance,
 	}
 	root.SetOut(u.Stdout())
+	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line")
 	addUpFlags(root, uf)
 	addVersion(root)
 	root.AddCommand(newBuildCmd(u), newRebuildCmd(u), newImagesCmd(u), newGCCmd(u), newSpaceCmd(u), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),

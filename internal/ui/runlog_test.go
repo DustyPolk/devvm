@@ -68,15 +68,41 @@ func TestLoggedGoesToTheLog(t *testing.T) {
 		t.Errorf("LogNote: %q, want %q", got, want)
 	}
 
-	// DEVVM_VERBOSE prints it all instead.
+	// Verbose streams what the log gets to stderr as well, the log still
+	// written, stdout left alone.
 	out.Reset()
-	u.getenv = env{"DEVVM_VERBOSE": "1"}.get
+	errOut.Reset()
+	before := readFile(t, u.logPath())
+	u.SetVerbose(true)
 	if err := u.logged(t.Context(), msg.M{}, append(noisy, "0")...); err != nil {
 		t.Fatal(err)
 	}
-	u.LogNote()
-	if out.String() != "lots of output\n" || errOut.String() != "the error\n" {
-		t.Errorf("verbose: stdout %q, stderr %q", out, errOut)
+	added := strings.TrimPrefix(readFile(t, u.logPath()), before)
+	if !strings.Contains(added, "lots of output\n") || errOut.String() != added {
+		t.Errorf("verbose: stderr %q, the log got %q", errOut, added)
+	}
+	if out.Len() != 0 {
+		t.Errorf("verbose: stdout %q", out)
+	}
+}
+
+// The stream drops control characters, a C1 one split across writes
+// too, and is dim only where stderr's style is on.
+func TestStreamIsPrintable(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	s := &stream{u: u}
+	for _, p := range []string{"a\033]0;x\007b\xc2", "\x9bc\n", "é\tok\n"} {
+		_, _ = s.Write([]byte(p))
+	}
+	if got := errOut.String(); got != "a]0;xbc\né\tok\n" {
+		t.Errorf("stream: %q", got)
+	}
+	errOut.Reset()
+	u.errStyle = style{on: true}
+	_, _ = s.Write([]byte("x\n"))
+	if got := errOut.String(); got != "\033["+sgrDim+"mx\033[0m\n" {
+		t.Errorf("stream, colored: %q", got)
 	}
 }
 

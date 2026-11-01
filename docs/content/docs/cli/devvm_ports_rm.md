@@ -20,6 +20,12 @@ devvm ports rm LIST [flags]
   -h, --help     help for rm
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards

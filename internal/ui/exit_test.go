@@ -133,7 +133,7 @@ func startHelper(t *testing.T, mode string) (cmd *exec.Cmd, record string, stder
 	record = filepath.Join(t.TempDir(), "record")
 	cmd = exec.CommandContext(t.Context(), exe) //nolint:gosec // the test binary
 	cmd.Env = append(os.Environ(), "UI_TEST_HELPER="+mode, "UI_TEST_RECORD="+record,
-		"DEVVM_MESSAGES=names", "DEVVM_VERBOSE=", "HOME="+t.TempDir(), "XDG_DATA_HOME="+t.TempDir())
+		"DEVVM_MESSAGES=names", "HOME="+t.TempDir(), "XDG_DATA_HOME="+t.TempDir())
 	stderr = &strings.Builder{}
 	cmd.Stderr = stderr
 	out, err := cmd.StdoutPipe()

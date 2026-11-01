@@ -20,6 +20,12 @@ devvm secret set NAME [flags]
       --stdin   read the token from a line of input, without asking
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use

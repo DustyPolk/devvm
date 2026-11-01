@@ -139,7 +139,7 @@ work=/tmp/devvm-go-e2e
 [[ $backend != docker ]] || work=/tmp/devvm-go-e2e-docker
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE=devvm-go-e2e   # its Keychain items: fake tokens only, deleted at the end
-unset DEVVM_MESSAGES DEVVM_VERBOSE DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
+unset DEVVM_MESSAGES DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
 unset SSH_AUTH_SOCK   # your SSH agent is never reached: checks that need one start their own
 unset FORCE_COLOR CLICOLOR_FORCE   # devvm's output stays plain where the checks read it
 mkdir -p "$LIMA_HOME"

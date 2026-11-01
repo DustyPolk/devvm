@@ -290,7 +290,7 @@ The colors are SGR codes from the 16 base colors only, which the theme maps to i
 - `Die`'s `devvm:` label is bold red (`1;31`), and `Warn`'s is bold yellow (`1;33`).
 - A doc link is underlined blue (`4;34`). `msg.M.Segments` gives the doc link apart from the text, so `ui` colors the link alone.
 - `Info`'s `==>` is bold (`1`).
-- The run log's end that `DieLogged` prints, with its `---` lines, and the log text on the status line are dim (`2`).
+- The run log's end that `DieLogged` prints, with its `---` lines, the log text on the status line, and the log's lines that `-v` streams (`SetVerbose`: `LoggedCmd` and `LogWriter` copy the log to stderr through `printable`, with no status line) are dim (`2`).
 - The done mark that a slow step leaves is green (`32`).
 
 The codes are added after `printable` and `msg.Shown`, so they're the only ones devvm prints. The status line cuts and counts its plain text with `style.fit` before painting it, so it still fits the terminal's width and clears the right number of rows. The run log is never colored.

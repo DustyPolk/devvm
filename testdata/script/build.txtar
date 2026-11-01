@@ -45,9 +45,16 @@ stub_calls
 ! stdout 'create|clone|start'
 
 # An image without a record is a failed build: deleted and built again.
+# With -v, the run log's lines are streamed to stderr as well, numbered
+# steps and commands, and the log still gets them.
 exec sh -c 'rm "$IMAGES"/*'
-exec devvm build base
+exec devvm -v build base
 stdout '^==> image_leftover image=base key=[0-9a-f]{12}$'
+stderr '^# \[1/5\] creating_from_ubuntu vm=devvm-img-'
+stderr '^\+ limactl create '
+! stdout '^\+ limactl'
+exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
+stdout '^\+ limactl create '
 stub_calls
 stdout '^limactl delete -f devvm-img-[0-9a-f]{12}$'
 exec sh -c 'cat "$IMAGES"/*'

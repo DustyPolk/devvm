@@ -23,6 +23,12 @@ devvm network log [flags]
   -n, --lines N   show the last N connections and requests (default 50)
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm network](devvm_network.md): Show or change the network policy of this folder's VM

@@ -19,6 +19,12 @@ devvm history export [FILE] [flags]
   -h, --help   help for export
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm history](devvm_history.md): List the saved exports of agents' history

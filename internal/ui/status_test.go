@@ -133,10 +133,33 @@ func TestStatusLineInATerminal(t *testing.T) {
 	u.stderrTTY = false
 	u.Status(msg.MsgUnknown("y"))()
 	u.stderrTTY = true
-	u.getenv = env{"LC_ALL": "C", "DEVVM_VERBOSE": "1"}.get
+	u.SetVerbose(true)
 	u.Status(msg.MsgUnknown("y"))()
 	if errOut.Len() != 0 {
 		t.Errorf("status line outside a terminal: %q", errOut)
+	}
+	// Nor for a logged command while verbose, whose lines are streamed.
+	if err := u.logged(t.Context(), msg.MsgUnknown("z"), "true"); err != nil {
+		t.Fatal(err)
+	}
+	if got := errOut.String(); strings.Contains(got, "msg_unknown") || !strings.Contains(got, "+ true\n") {
+		t.Errorf("verbose logged command: %q", got)
+	}
+}
+
+// While verbose, a logged failure names the run log, whose lines were
+// streamed, instead of printing its end again.
+func TestDieLoggedVerbose(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	u.SetVerbose(true)
+	_ = u.logged(t.Context(), msg.M{}, "sh", "-c", "echo failing; exit 1")
+	if code := exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) }); code != 1 {
+		t.Errorf("exit code %d, want 1", code)
+	}
+	want := "+ sh -c echo failing; exit 1\nfailing\nlog_details file=" + u.logPath() + "\ndevvm: msg_unknown name=x\n"
+	if got := errOut.String(); got != want {
+		t.Errorf("stderr %q, want %q", got, want)
 	}
 }
 

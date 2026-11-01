@@ -21,6 +21,12 @@ devvm images rm IMAGE|KEY... [flags]
   -h, --help           help for rm
 ```
 
+## Options inherited from parent commands
+
+```text
+  -v, --verbose   show the output of the commands devvm runs as they run, as the run log gets it, instead of a status line
+```
+
 ## See also
 
 - [devvm images](devvm_images.md): List the images and the shared tools
