@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/image"
@@ -188,10 +187,6 @@ type DockerLayerVM interface {
 	// under (sysbox), or says why the backend can't run it here, in a
 	// message naming vm.
 	DockerLayer(vm string) (string, error)
-	// SetDockerLayer makes a stopped VM one for the docker layer, added to
-	// it in place, from its next start (on); or, the layer's script having
-	// failed, one as it was before (off).
-	SetDockerLayer(ctx context.Context, vm string, on bool) error
 }
 
 // Features returns what the tools build needs.

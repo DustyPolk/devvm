@@ -8,9 +8,9 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// SSH gets the folder's VM ready for ssh and editors (reach), then says
-// the name they reach it by and the folder to open (shellDir).
-func (e Launch) SSH(ctx context.Context) error {
+// ShowHost gets the folder's VM ready for ssh and editors (reach), then
+// says the name they reach it by and the folder to open (shellDir).
+func (e Launch) ShowHost(ctx context.Context) error {
 	host, t, err := e.reach(ctx)
 	if err != nil {
 		return err

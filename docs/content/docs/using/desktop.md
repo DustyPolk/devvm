@@ -25,7 +25,7 @@ devvm desktop --no-open    # only shows its address and password
 devvm desktop --clipboard  # shares the clipboard both ways, for this run
 ```
 
-`devvm desktop` gets the VM ready as `devvm ssh` does, and starts it if it's stopped. Then it starts the VM's desktop, unless it's running already, and shows its address and password:
+`devvm desktop` gets the VM ready as `devvm host` does, and starts it if it's stopped. Then it starts the VM's desktop, unless it's running already, and shows its address and password:
 
 ```text
 devvm-website-0123456789abcd's desktop is at vnc://127.0.0.1:41234, with the password k3mxq7tw.

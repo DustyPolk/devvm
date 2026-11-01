@@ -17,8 +17,8 @@ import (
 // Every setting is off unless the file sets it.
 const (
 	RetainRunLogs      = "logs.runs"        // run logs kept, the newest; 20 when off
-	RetainExportsAge   = "exports.age"      // exports older than this are deleted
-	RetainExportsCount = "exports.count"    // exports kept, the newest
+	RetainHistoryAge   = "history.age"      // exports of agents' history older than this are deleted
+	RetainHistoryCount = "history.count"    // exports of agents' history kept, the newest
 	RetainToolsAge     = "tools.unused-age" // current tool images no VM has for this long are deleted
 	RetainOrphansAge   = "orphans.age"      // what devvm keeps of VMs gone from their backend, after this long
 	RetainNixCacheSize = "nix-cache.size"   // the shared Nix cache's cap; NixCacheDefault when off
@@ -31,7 +31,7 @@ const NixCacheDefault int64 = 10 << 30
 // RetentionKeys are the retention settings' keys, in the order devvm
 // space shows them.
 func RetentionKeys() []string {
-	return []string{RetainRunLogs, RetainExportsAge, RetainExportsCount, RetainToolsAge, RetainOrphansAge, RetainNixCacheSize}
+	return []string{RetainRunLogs, RetainHistoryAge, RetainHistoryCount, RetainToolsAge, RetainOrphansAge, RetainNixCacheSize}
 }
 
 // Retention is the retention file's settings: 0 is off.
@@ -96,9 +96,9 @@ func (r *Retention) set(key, val string) error {
 	switch key {
 	case RetainRunLogs:
 		r.RunLogs, err = count(val)
-	case RetainExportsCount:
+	case RetainHistoryCount:
 		r.ExportsCount, err = count(val)
-	case RetainExportsAge:
+	case RetainHistoryAge:
 		r.ExportsAge, err = ParseAge(val)
 	case RetainToolsAge:
 		r.ToolsAge, err = ParseAge(val)

@@ -22,7 +22,7 @@ In the VM, you run the agent as `claude`, `codex` or `opencode`.
 
 Claude Code's telemetry hosts aren't on its allowlist, because blocking them costs nothing. opencode talks to the model provider you choose, so with network policy you allow that provider's API host yourself, such as `devvm policy allow api.anthropic.com` ([changing rules](../safety/network.md#changing-rules)).
 
-Agents are [shared tools](images.md#shared-tools), like the toolchains, so you can combine them with any image and with each other, as in `devvm node+claude+codex`. devvm follows each agent's newest release, because agents release several times a week, and `devvm update` moves a VM to newer versions ([adding and removing tools](images.md#adding-and-removing-tools)).
+Agents are [shared tools](images.md#shared-tools), like the toolchains, so you can combine them with any image and with each other, as in `devvm node+claude+codex`. devvm follows each agent's newest release, because agents release several times a week, and `devvm tools update` moves a VM to newer versions ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## Config from this machine
 
@@ -43,7 +43,7 @@ flowchart TD
   folders -- "mounted<br>read-only" --> links
   files -- "copied on every<br>launch, with network<br>policy without<br>your secrets" --> copies
   history -. "never<br>copied" .-x own
-  own -- "devvm export,<br>devvm rm" --> export["a .tar.gz<br>on this machine"]
+  own -- "devvm history export,<br>devvm rm" --> export["a .tar.gz<br>on this machine"]
 ```
 
 | | Mounted read-only, linked into `~` | Copied in on every launch |
@@ -79,7 +79,11 @@ With network policy, the VM's `auth.json` holds placeholders, and its proxy hold
 
 ## History
 
-Each VM's transcripts and sessions stay in that VM. `devvm export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM whose image has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. After `devvm rm`, an export is the only copy of that VM's history, so devvm keeps the exports until you ask it to delete them. `devvm gc --exports` deletes the exports in that folder, and `devvm gc --exports --older-than 30d` deletes only those written 30 days ago or more. An export's age counts from the date and time in its name, which is this machine's local time when devvm wrote it, so across a change to or from daylight saving time an export reaches an age such as `30d` an hour earlier or later, for `--older-than` and for the `exports.age` [retention setting](settings.md#retention) alike. gc lists each one by its VM and date first, and in a terminal it asks. Exports you wrote to a FILE of your own stay where they are.
+Each VM's transcripts and sessions stay in that VM. `devvm history export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM whose image has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. An export in that folder gets a `<vm>-<date>-<time>.folder` file beside it, which names the VM's project folder.
+
+`devvm history` lists the exports in `~/.local/share/devvm/exports`, oldest first, in a table with a header. It shows each export's file, the VM it's of, that VM's folder, the date and time devvm wrote it, and its size, with `-` for a folder devvm has no record of. Exports you wrote to a FILE of your own aren't listed, and `devvm history` changes nothing and starts no VM.
+
+After `devvm rm`, an export is the only copy of that VM's history, so devvm keeps the exports until you ask it to delete them. `devvm gc --history` deletes the exports in that folder, and `devvm gc --history --older-than 30d` deletes only those written 30 days ago or more. An export's age counts from the date and time in its name, which is this machine's local time when devvm wrote it, so across a change to or from daylight saving time an export reaches an age such as `30d` an hour earlier or later, for `--older-than` and for the `history.age` [retention setting](settings.md#retention) alike. gc lists each one by its VM and date first, and in a terminal it asks. Exports you wrote to a FILE of your own stay where they are.
 
 The agents' logins aren't in the export, which leaves out `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. devvm starts a stopped VM for the export, and the VM stays running. devvm writes the file only once the export is complete, so a failed export leaves no file and leaves an existing FILE as it was. Only you can read the file, and devvm makes the exports folder yours alone each time it writes one there, whatever its mode was before. When FILE is in a folder of your own, that folder keeps its mode. If the export fails, `devvm rm` keeps the VM, and `devvm rm -f` deletes it without exporting.
 

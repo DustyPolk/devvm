@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -128,7 +129,7 @@ func (e Lifecycle) Rm(ctx context.Context, force bool) error {
 		}
 	}
 	if !force && st.Get(KeyNet) != "" && len(agentsOf(st.Get(state.KeyImage))) > 0 {
-		if err := e.export(ctx, t, e.exportFile(vm), msg.RmExportFailed(vm)); err != nil {
+		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
 			return err
 		}
 	}
@@ -142,11 +143,7 @@ func (e Lifecycle) Export(ctx context.Context, file string) error {
 	if err != nil {
 		return err
 	}
-	vm := t.f.Name
-	if file == "" {
-		file = e.exportFile(vm)
-	}
-	return e.export(ctx, t, file, backend.Logged(msg.HistoryNotExported(vm)))
+	return e.export(ctx, t, file, backend.Logged(msg.HistoryNotExported(t.f.Name)))
 }
 
 // exportFile is a new export's file in the exports folder.
@@ -155,7 +152,9 @@ func (e Lifecycle) exportFile(vm string) string {
 }
 
 // export saves the VM's agents' history (transcripts, sessions) to a
-// tarball at file, starting the VM if it's stopped; failed is the error
+// tarball at file, or a new one in the exports folder when it's "", with
+// a file beside it naming the VM's folder (paths.ExportFolder), for devvm
+// history to list once the VM is gone; starting the VM if it's stopped; failed is the error
 // when its tar fails. Their logins aren't in it. It's written next to
 // file and renamed into place once complete, so a failed export leaves
 // nothing and replaces nothing. The file is the user's alone (600), and
@@ -163,6 +162,10 @@ func (e Lifecycle) exportFile(vm string) string {
 // keeps its own.
 func (e Lifecycle) export(ctx context.Context, t *found, file string, failed error) error {
 	vm, b := t.f.Name, t.b
+	own := file == ""
+	if own {
+		file = e.exportFile(vm)
+	}
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return err
 	}
@@ -201,6 +204,11 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 	}
 	if err := os.Rename(tmp, file); err != nil {
 		return err
+	}
+	if own {
+		if err := state.WriteFile(paths.ExportFolder(file), []byte(t.f.Dir+"\n")); err != nil {
+			return err
+		}
 	}
 	e.Info(msg.Exported(file, vm))
 	return nil

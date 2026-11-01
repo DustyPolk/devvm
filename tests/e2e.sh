@@ -11,12 +11,13 @@
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
 #                program here has),
 #                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
-#                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm export, rm's export), and SSH agent forwarding
+#                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
 #                image and an unused tool image, keeping base and a VM named like an image; tools makes a node
-#                VM and checks its shared tools, update and remove; network makes a claude VM with
+#                VM and checks its shared tools, devvm tools, tools update, rm and add, and devvm IMAGE
+#                refused on it; network makes a claude VM with
 #                network policy and checks it reaches only its allowlist, devvm log and policy, its tokens
 #                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
 #                stops its proxy; nix builds the nix layer behind a company proxy (no proxy left in its
@@ -47,11 +48,11 @@
 #                program here has, a running VM's changed at once), no Docker
 #                without the docker layer, agent forwarding, a node VM's
 #                shared tools, agent toggling's emulation (your agent, devvm's or none from each
-#                start, devvm export's too, none reaching no agent and adding to none, a VM set to
+#                start, devvm history export's too, none reaching no agent and adding to none, a VM set to
 #                devvm's or none never reaching yours, one started by smolvm machine start from your
 #                shell stopped), ssh for editors' emulation (pinned
 #                host keys of each VM's own, its own key alone, no forwarding out even past a hostile
-#                sshd, devvm ssh and code, an alpine:3 VM, a --clone VM's push and fetch), network policy's emulation
+#                sshd, devvm host and code, an alpine:3 VM, a --clone VM's push and fetch), network policy's emulation
 #                (a docker VM: nothing but the proxy, Docker's pulls through it, DNS kept on this
 #                machine, failing closed, the policy, ssh opening no way out), every port's (servers on the VM's loopback or all its addresses
 #                reach this machine's loopback alone, never a port of this machine's or devvm's, no
@@ -75,10 +76,10 @@
 #                Docker's default network and another out of reach even as root, and this machine's
 #                loopback even routed to, the internet not; IPv6 turned on reaches this machine's
 #                servers), Docker running in it after each start, no network policy, ls saying so;
-#                added in place to a VM, its disk and home kept, and made as it was when a script fails;
+#                refused for a VM that exists, which stays as it was;
 #                ssh for editors', ports' and agent forwarding's emulations (nothing published or
 #                listening, pinned host keys of each VM's own, its own key alone, no forwarding out even
-#                past a hostile sshd, a VM started outside devvm, devvm ssh and code, every port and
+#                past a hostile sshd, a VM started outside devvm, devvm host and code, every port and
 #                listed ports through devvm's forwarder, a running VM's changed at once, never a port
 #                of this machine's programs or another VM's, the agent in ssh sessions alone, a --clone VM); network policy's
 #                emulation (the VM without NET_RAW on an internal network of its own, with
@@ -962,14 +963,14 @@ check "stopped, devvm starts it again, on a new ssh port when a program here has
   [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && kill -0 '$hostprog'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
-# devvm ssh and code with a home of their own, so the Include line is offered for an empty one (and,
+# devvm host and code with a home of their own, so the Include line is offered for an empty one (and,
 # without a terminal, not added), and a stub code first on PATH: never your editor.
 mkdir -p "$sc/home" "$sc/bin"
 printf '#!/bin/sh\necho "$*" > %s/code-args\necho "${SSH_AUTH_SOCK-unset}" > %s/code-agent\n' "$sc" "$sc" > "$sc/bin/code"
 chmod +x "$sc/bin/code"
-check "devvm ssh starts a stopped VM and names it, without a shell; ssh reaches it" bash -c "cd '$p' &&
+check "devvm host starts a stopped VM and names it, without a shell; ssh reaches it" bash -c "cd '$p' &&
   HOME='$sc/home' '$D' stop </dev/null >/dev/null 2>&1 && [[ \$(status_of $vm) == Stopped ]] &&
-  HOME='$sc/home' '$D' ssh </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
+  HOME='$sc/home' '$D' host </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   grep -qF \"\$(m ssh_host_info dir=$p host=devvm-web | head -1)\" '$work/last.log' &&
   grep -qF \"\$(m ssh_host_info dir=$p host=devvm-web | tail -1)\" '$work/last.log' &&
   grep -qF \"\$(m ssh_include_yourself | head -1)\" '$work/last.log' && [[ ! -e '$sc/home/.ssh' ]] &&
@@ -977,8 +978,8 @@ check "devvm ssh starts a stopped VM and names it, without a shell; ssh reaches 
 check "VS Code's settings in the VM: no port forwarding, no git sign-in relay" in_vm "$vm" \
   '[[ $(jq -c . ~/.vscode-server/data/Machine/settings.json) == "{\"remote.autoForwardPorts\":false,\"git.terminalAuthentication\":false,\"github.gitAuthentication\":false}" ]]'
 in_vm "$vm" 'echo "{\"editor.fontSize\": 14, \"remote.autoForwardPorts\": true}" > ~/.vscode-server/data/Machine/settings.json' >/dev/null 2>&1
-(cd "$p" && HOME=$sc/home "$D" ssh </dev/null >"$work/last.log" 2>&1)
-check "changed back in the VM, devvm ssh turns them off again and keeps the others" in_vm "$vm" \
+(cd "$p" && HOME=$sc/home "$D" host </dev/null >"$work/last.log" 2>&1)
+check "changed back in the VM, devvm host turns them off again and keeps the others" in_vm "$vm" \
   'jq -e ".[\"editor.fontSize\"] == 14 and .[\"remote.autoForwardPorts\"] == false and .[\"github.gitAuthentication\"] == false" ~/.vscode-server/data/Machine/settings.json >/dev/null'
 check "devvm code opens the folder over Remote-SSH (a stub code), with the agent devvm started with" bash -c "cd '$p' &&
   HOME='$sc/home' PATH='$sc/bin':\$PATH SSH_AUTH_SOCK='$sc/agent.sock' '$D' code </dev/null >'$work/last.log' 2>&1 &&
@@ -1114,7 +1115,7 @@ check "a removed one is unmounted, and the VM starts" bash -c "cd '$a' && printf
 in_vm "$vm" 'mkdir -p ~/.claude/projects/e2e && echo e2e-transcript > ~/.claude/projects/e2e/t.jsonl && echo secret > ~/.claude/.credentials.json'
 limactl stop "$vm" >/dev/null 2>&1
 check "export starts the stopped VM and saves its agents' history to a file, without their logins" bash -c "cd '$a' &&
-  HOME='$ah' '$D' export '$work/export/h.tar.gz' </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
+  HOME='$ah' '$D' history export '$work/export/h.tar.gz' </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   tar -tzf '$work/export/h.tar.gz' > '$work/export.list' &&
   grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list'"
 check "rm exports its agents' history, without their logins, only yours to read, then deletes it" bash -c "ex='$XDG_DATA_HOME/devvm/exports' &&
@@ -1308,13 +1309,23 @@ check "a second node VM uses the same tool images: none built" bash -c "
 check "the tools build left no VM behind" bash -c "[[ -z \$(status_of devvm-tools-build) ]]"
 # Upstream can publish mid-run (node's musl builds come days after a release): with the lock
 # unchanged, the tools are the newest; changed, the VM may move (if one of its tools did).
-check "devvm update: checks upstream; the newest unless the lock changed" bash -c "cd '$t2' &&
-  before=\$(cksum < '$lock'); out=\$(printf 'exit\n' | '$D' update 2>&1)
+check "devvm tools lists node, pnpm and bun, each at the lock's version" bash -c "cd '$t2' && '$D' tools </dev/null >'$work/last.log' 2>&1 &&
+  grep -qE '^node +$(lockv node) +- +-$' '$work/last.log' && grep -qE '^pnpm +$(lockv pnpm) +- +-$' '$work/last.log' &&
+  grep -qE '^bun +$(lockv bun) +- +-$' '$work/last.log' || { cat '$work/last.log'; false; }"
+check "devvm tools update: checks upstream; the newest unless the lock changed" bash -c "cd '$t2' &&
+  before=\$(cksum < '$lock'); out=\$(printf 'exit\n' | '$D' tools update 2>&1)
   grep -qF \"\$(m tools_newest vm=$vm | head -1)\" <<<\"\$out\" ||
     { [[ \$(cksum < '$lock') != \"\$before\" ]] && grep -qF \"\$(m tools_switch vm=$vm | head -1)\" <<<\"\$out\"; }"
-check "devvm remove takes node out of the VM" bash -c "cd '$t2' && printf 'exit\n' | '$D' remove node >'$work/last.log' 2>&1 &&
+check "devvm tools rm takes node out of the VM" bash -c "cd '$t2' && printf 'exit\n' | '$D' tools rm node >'$work/last.log' 2>&1 &&
   grep -qx image=base '$vms/$vm' && ! grep -q '^tools=.*node' '$vms/$vm' &&
   limactl shell --workdir / $vm bash -lc '! command -v node' </dev/null"
+check "devvm node on it adds nothing: refused in one line, naming devvm tools add" bash -c "cd '$t2' &&
+  ! DEVVM_MESSAGES=names '$D' node </dev/null >'$work/last.log' 2>&1; cat '$work/last.log'
+  [[ \$(grep -c '^devvm: ' '$work/last.log') -eq 1 ]] && grep -qx 'devvm: vm_lacks_tools tools=node vm=$vm' '$work/last.log' &&
+  grep -qx image=base '$vms/$vm'"
+check "devvm tools add node mounts it again, nothing built" bash -c "cd '$t2' && n=\$(find '$share' -name '*.erofs' | wc -l) &&
+  printf 'node -v\nexit\n' | '$D' tools add node >'$work/last.log' 2>&1 && grep -qx v$(lockv node) '$work/last.log' &&
+  grep -qx image=node '$vms/$vm' && (( \$(find '$share' -name '*.erofs' | wc -l) == n ))"
 fi
 
 if want network; then
@@ -1349,8 +1360,8 @@ check "the proxy's password was in no host process's arguments while devvm launc
 check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
   grep -q '^Host devvm-net $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
-check "devvm ssh runs the self-check, which passes, and names it" bash -c "cd '$n' &&
-  HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' ssh </dev/null >'$work/last.log' 2>&1 && grep -qx net_check=ok '$vms/$vm' &&
+check "devvm host runs the self-check, which passes, and names it" bash -c "cd '$n' &&
+  HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qx net_check=ok '$vms/$vm' &&
   grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log'"
 check "direct connections fail, even as root: an address, other ports" bash -c "
   ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
@@ -1562,9 +1573,9 @@ check "started outside devvm again: without a terminal, devvm stops it and opens
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
   ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
   ! grep -q e2e-opened '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
-check "so does devvm ssh, which names nothing" bash -c "
+check "so does devvm host, which names nothing" bash -c "
   limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
-  ! HOME='$nh' '$D' ssh </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
+  ! HOME='$nh' '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
   ! grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
 # Stopped by the self-check, it's still unenforced: its last self-check failed.
 check "devvm network off: its next start is direct, without a proxy" bash -c "cd '$n' &&
@@ -2104,24 +2115,24 @@ check "  with devvm's agent ended while it runs: no agent, never yours" bash -c 
   for i in \$(seq 20); do [[ ! -S '$da_sock' ]] && break; sleep 0.25; done; smol_no_agent '$vm'"
 check "on, after a restart: your agent's key alone, never devvm's" smol_switch "$g" on smol_only "$vm" e2e-smolvm-user
 check "  root in the VM can add a key to it then (the add check's control)" smol_vm_adds "$vm"
-check "off while it runs, stopped, then started by devvm export (no launch, its record still forwarding yours): no agent" bash -c "cd '$g' &&
+check "off while it runs, stopped, then started by devvm history export (no launch, its record still forwarding yours): no agent" bash -c "cd '$g' &&
   as_ua '$D' ssh-agent off </dev/null >/dev/null 2>&1 && as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
   ! grep -q agent_off '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json' &&
-  { as_ua '$D' export '$work/smol-export.tar.gz' </dev/null >'$work/last.log' 2>&1; rm -f '$work/smol-export.tar.gz'; true; } &&
+  { as_ua '$D' history export '$work/smol-export.tar.gz' </dev/null >'$work/last.log' 2>&1; rm -f '$work/smol-export.tar.gz'; true; } &&
   [[ \$(smol_status '$vm') == running ]] && smol_no_agent '$vm'"
 check "off, after a restart: no agent again, your agent and devvm's untouched" smol_switch "$g" off smol_no_agent "$vm"
 check "stopped, then smolvm machine start from your shell: the VM, set to off, gets your agent" bash -c "cd '$g' &&
   as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
   SSH_AUTH_SOCK='$ua_sock' SMOLVM_USAGE=0 smolvm machine start --name '$vm' </dev/null >/dev/null 2>&1 && smol_only '$vm' e2e-smolvm-user"
-check "  devvm export stops it, in one line, before anything runs in it" bash -c "cd '$g' &&
-  ! as_ua DEVVM_MESSAGES=names '$D' export '$work/smol-export.tar.gz' </dev/null 2>'$work/e' && ! test -e '$work/smol-export.tar.gz' &&
+check "  devvm history export stops it, in one line, before anything runs in it" bash -c "cd '$g' &&
+  ! as_ua DEVVM_MESSAGES=names '$D' history export '$work/smol-export.tar.gz' </dev/null 2>'$work/e' && ! test -e '$work/smol-export.tar.gz' &&
   grep -qx 'devvm: agent_unchosen_stop vm=$vm' '$work/e' && [[ \$(smol_status '$vm') == stopped ]]"
 check "  so does devvm, started that way again; then devvm starts it with none" bash -c "cd '$g' &&
   SSH_AUTH_SOCK='$ua_sock' SMOLVM_USAGE=0 smolvm machine start --name '$vm' </dev/null >/dev/null 2>&1 &&
   ! as_ua DEVVM_MESSAGES=names '$D' </dev/null 2>'$work/e' && grep -qx 'devvm: agent_unchosen_stop vm=$vm' '$work/e' &&
   [[ \$(smol_status '$vm') == stopped ]] && printf 'exit\n' | as_ua '$D' >/dev/null 2>&1 && smol_no_agent '$vm'"
-check "  devvm ssh on its own start keeps it running" bash -c "cd '$g' &&
-  as_ua DEVVM_MESSAGES=names '$D' ssh </dev/null >'$work/e' 2>&1 && ! grep -q agent_unchosen '$work/e' && [[ \$(smol_status '$vm') == running ]]"
+check "  devvm host on its own start keeps it running" bash -c "cd '$g' &&
+  as_ua DEVVM_MESSAGES=names '$D' host </dev/null >'$work/e' 2>&1 && ! grep -q agent_unchosen '$work/e' && [[ \$(smol_status '$vm') == running ]]"
 (cd "$g" && quiet as_ua "$D" rm -f)
 g=$(newproj smolfwd)
 (cd "$g" && printf 'ssh-add -l\n' | as_ua "$D" "${S[@]}" --no-network-policy --ports none --ssh-agent base >"$work/last.log" 2>&1)
@@ -2229,14 +2240,14 @@ smolssh_squatted() { local p n sq
   kill "$sq" 2>/dev/null; wait "$sq" 2>/dev/null
   [[ -n $n && $n != "$p" ]] && (( r == 0 )); }
 # smolssh_nosshd VM DIR: root moves sshd away; devvm's next start warns vm_no_sshd, the VM runs
-# with no entry, and devvm ssh says so; sshd put back, a start has ssh again (the control).
+# with no entry, and devvm host says so; sshd put back, a start has ssh again (the control).
 smolssh_nosshd() {
   SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null || return 1
   (cd "$2" && printf 'exit\n' | "${UR[@]}" DEVVM_MESSAGES=names "$D" restart >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
   if ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/last.log" || [[ $(smol_status "$1") != running ]] || grep -q "$1" "$dsc"; then
     cat "$work/last.log"; return 1
   fi
-  if (cd "$2" && "${UR[@]}" DEVVM_MESSAGES=names "$D" ssh </dev/null 2>"$work/e") || ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/e"; then
+  if (cd "$2" && "${UR[@]}" DEVVM_MESSAGES=names "$D" host </dev/null 2>"$work/e") || ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/e"; then
     cat "$work/e"; return 1
   fi
   SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd.away /usr/sbin/sshd </dev/null || return 1
@@ -2273,8 +2284,8 @@ check "only devvm's key logs in, as the VM's user: another key, root and another
 check "devvm's sshd refuses remote forwarding (a port, a socket); a local forward, as editors use, works" smolssh_forwarding devvm-smolssh
 check "sshd runs devvm's settings, and its config is root's alone" smolssh_sshd "$vm"
 check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" smolssh_hostile "$vm" devvm-smolssh
-check "devvm ssh names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
-  HOME='$sc/home' ${UR[*]} '$D' ssh </dev/null >'$work/last.log' 2>&1 &&
+check "devvm host names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
+  HOME='$sc/home' ${UR[*]} '$D' host </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m ssh_host_info dir=$q host=devvm-smolssh | head -1)\" '$work/last.log' &&
   HOME='$sc/home' PATH='$sc/bin':\$PATH ${UR[*]} '$D' code </dev/null >'$work/last.log' 2>&1 &&
   [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-smolssh $q' ]]"
@@ -3094,19 +3105,15 @@ d_layer_ipv6() { local br ll out
     'sysctl -qw net.ipv6.conf.eth0.disable_ipv6=1' | d_netroot "$1" 2>&1)
   kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
   echo "bridge $br at $ll; the VM got: $out"; grep -qx host-47413 <<<"$out"; }
-# with_tty CMD...: CMD with a terminal (devvm asks before adding a layer), its input from ours.
-with_tty() { if [[ "$(uname -s)" == Darwin ]]; then script -q /dev/null "$@"; else script -qec "$(printf '%q ' "$@")" /dev/null; fi; }
-# d_layer_failed DIR VM: the docker layer added in place to VM (DIR's) with e2elayerfail, whose script
-# fails: refused, and VM made as it was (its image base, no docker_layer, a VM as any other, its
-# network and engine's volumes gone); network policy then turns on (and off again).
-d_layer_failed() { local d=$1 vm=$2
-  (cd "$d" && printf 'y\nexit\n' | DEVVM_MESSAGES=names with_tty "$D" docker+e2elayerfail >"$work/last.log" 2>&1)
-  tr -d '\r' < "$work/last.log" | grep -E '^(devvm|==>) ' | tail -4
+# d_layer_refused_existing DIR VM: the docker layer named for VM (DIR's, a base VM) that exists:
+# refused in one line, naming the layer, and VM as it was (its image base, no docker_layer, a VM as
+# any other, still running, no network or engine's volumes of the layer's).
+d_layer_refused_existing() { local d=$1 vm=$2
+  (cd "$d" && ! DEVVM_MESSAGES=names "$D" docker </dev/null >"$work/last.log" 2>&1); cat "$work/last.log"
   echo "state: $(grep -E '^(image|docker_layer|net)=' "$vms/$vm" | xargs)"
-  grep -q '^devvm: add_layer_failed ' "$work/last.log" && grep -qx image=base "$vms/$vm" && ! grep -q '^docker_layer=.' "$vms/$vm" &&
-    d_plain_vm "$vm" && ! d_vol "$vm-docker" && ! d_vol "$vm-containerd" && ! d_net "$vm-docker-net" && echo "made as it was" || return 1
-  (cd "$d" && DEVVM_MESSAGES=names "$D" network on </dev/null 2>&1 | tail -3) && grep -qx net=on "$vms/$vm" &&
-    (cd "$d" && DEVVM_MESSAGES=names "$D" network off </dev/null >/dev/null 2>&1); }
+  [[ $(grep -c '^devvm: ' "$work/last.log") -eq 1 ]] && grep -qx "devvm: vm_lacks_layer image=docker layer=docker vm=$vm" "$work/last.log" &&
+    grep -qx image=base "$vms/$vm" && ! grep -q '^docker_layer=.' "$vms/$vm" && [[ $(d_state "$vm") == running ]] &&
+    d_plain_vm "$vm" && ! d_vol "$vm-docker" && ! d_vol "$vm-containerd" && ! d_net "$vm-docker-net"; }
 # d_engine_kept DIR VM: devvm restart in DIR starts VM's Docker engine again, with the image d_inner
 # pulled; else what its engine logged.
 d_engine_kept() {
@@ -3115,11 +3122,11 @@ d_engine_kept() {
   in_root "$2" 'echo "pid file: $(cat /run/docker.pid); processes: $(for p in /proc/[0-9]*; do printf "%s=%s " "${p#/proc/}" "$(cat "$p/comm")"; done)"
     tail -3 /var/log/dockerd.log'
   return 1; }
-export -f d_inner d_layer_vm d_plain_vm owner_is_me with_tty
+export -f d_inner d_layer_vm d_plain_vm owner_is_me
 
 # docker_layer NAME: the docker layer, under Sysbox where the engine has it (an emulation, reviewed),
-# new and added in place; refused elsewhere (on Docker Desktop, saying to use a VM backend; on a Linux
-# engine without Sysbox, to install it), and with network policy.
+# for a new VM; refused elsewhere (on Docker Desktop, saying to use a VM backend; on a Linux engine
+# without Sysbox, to install it), with network policy, and for a VM that exists.
 docker_layer() {
   local q s p n=docker_layer_no_sysbox
   q=$(newproj "$1-no")
@@ -3129,9 +3136,7 @@ docker_layer() {
     ! $d_desktop || n=docker_layer_needs_vm
     check "the docker layer is refused without Sysbox ($n), in one line, nothing made" \
       d_layer_refused "$q" "$n" --no-network-policy --ports none docker
-    check "... and added in place, before anything changes" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D' docker </dev/null >'$work/last.log' 2>&1;
-      cat '$work/last.log'; [[ \$(grep -c '^devvm: ' '$work/last.log') -eq 1 ]] && grep -qE '^devvm: $n vm=$vm\$' '$work/last.log' &&
-      grep -qx image=base '$vms/$vm' && [[ \$(d_state '$vm') == running ]]"
+    check "... and named for a VM that exists, refused in one line, the VM as it was" d_layer_refused_existing "$p" "$vm"
     (cd "$p" && quiet "$D" rm -f)
     return 0
   fi
@@ -3163,26 +3168,16 @@ docker_layer() {
   check "... ls shows it" bash -c "cd '$s' && '$D' ls 2>/dev/null | grep -Eq '^$vm +Running +.* +docker \(sysbox\) +$s\$'"
   check "... network policy can't be turned on" bash -c "cd '$s' && ! DEVVM_MESSAGES=names '$D' network on </dev/null 2>'$work/last.log' &&
     grep -qx 'devvm: net_docker_layer backend=docker vm=$vm' '$work/last.log' && grep -qx net=off '$vms/$vm'"
+  # Its shell, a login, has the docker group the layer adds.
+  check "... Docker's engine runs in it, for the VM's user in its shell" bash -c "cd '$s' &&
+    printf 'for _ in \$(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done\ndocker run --rm alpine:3 echo e2e-inner-ran\n' |
+      '$D' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran"
   check "... restarted, its engine runs again with its images kept" d_engine_kept "$s" "$vm"
   check "rm deletes its container, volumes and network" bash -c "cd '$s' && '$D' rm -f </dev/null >/dev/null 2>&1 &&
     [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-docker' && ! d_vol '$vm-containerd' && ! d_net '$vm-docker-net'"
 
   vm=$(vm_of "$p")
-  in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
-  in_d "$vm" 'echo home > ~/e2e-home'
-  printf '#!/bin/bash\nexit 3\n' > "$layers/e2elayerfail.sh"
-  check "added in place with a layer whose script fails: the VM made as it was, network policy free to turn on" \
-    d_layer_failed "$p" "$vm"
-  rm -f "$layers/e2elayerfail.sh"
-  check "added in place: the VM made again under Sysbox, on its own network, its disk and home kept" bash -c "
-    cd '$p' && printf 'y\ncat /var/tmp/e2e-kept ~/e2e-home\nexit\n' | DEVVM_MESSAGES=names with_tty '$D' docker \
-      >'$work/last.log' 2>&1; tr -d '\r' < '$work/last.log' > '$work/last.txt'
-    grep -qx image=docker '$vms/$vm' && grep -qx docker_layer=sysbox '$vms/$vm' && grep -qx kept '$work/last.txt' &&
-    grep -qx home '$work/last.txt' && d_layer_vm '$vm' || { tail -5 '$work/last.txt'; false; }"
-  # Its shell, a login, has the docker group the layer added (docker exec's -u doesn't, under Sysbox).
-  check "... Docker's engine runs in it, for the VM's user in its shell" bash -c "cd '$p' &&
-    printf 'for _ in \$(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done\ndocker run --rm alpine:3 echo e2e-inner-ran\n' |
-      '$D' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran"
+  check "named for a VM that exists: refused in one line, the VM as it was" d_layer_refused_existing "$p" "$vm"
   (cd "$p" && quiet "$D" rm -f)
 }
 
@@ -3377,8 +3372,8 @@ docker_ssh() {
     out=\$(DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data /tmp/devvm-e2e-elsewhere '$vm' </dev/null 2>&1)
     r=\$?; echo \"\$out\"; (( r != 0 )) && grep -qx 'devvm: docker_container_foreign name=$vm' <<<\"\$out\" &&
     [[ \$(grep -c '^devvm: ' <<<\"\$out\") -eq 1 ]] && ! d_procs '$vm' | grep -q sshd"
-  check "devvm ssh names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
-    '$D' ssh </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m ssh_host_info dir=$q host=devvm-$1 | head -1)\" '$work/last.log' &&
+  check "devvm host names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
+    '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m ssh_host_info dir=$q host=devvm-$1 | head -1)\" '$work/last.log' &&
     PATH='$sc/bin':\$PATH '$D' code </dev/null >'$work/last.log' 2>&1 && [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-$1 $q' ]]"
   check "devvm's shell is an ssh session: SSH_CONNECTION set, in the folder" bash -c "cd '$q' &&
     out=\$(printf 'pwd; echo \"conn=\${SSH_CONNECTION:+yes}\"\n' | '$D' 2>&1) && grep -qx '$q' <<<\"\$out\" && grep -qx conn=yes <<<\"\$out\" || { echo \"\$out\"; false; }"
@@ -3387,8 +3382,8 @@ docker_ssh() {
   check "restart: new host keys, pinned again, devvm's sshd config again (remote forwarding refused), and ssh reaches it" bash -c "cd '$q' &&
     printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(d_state '$vm') == running ]] &&
     k=\$(dssh_key '$vm') && [[ -n \$k && \$k != '$k1' ]] && ! dsh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-$1 true && dsh devvm-$1 true"
-  check "started outside devvm (docker restart): devvm ssh says so, its entry goes, and devvm's shell is a docker exec; devvm restart has ssh again" bash -c "cd '$q' &&
-    docker restart -t 1 '$vm' >/dev/null && ! DEVVM_MESSAGES=names '$D' ssh </dev/null >'$work/e' 2>&1 &&
+  check "started outside devvm (docker restart): devvm host says so, its entry goes, and devvm's shell is a docker exec; devvm restart has ssh again" bash -c "cd '$q' &&
+    docker restart -t 1 '$vm' >/dev/null && ! DEVVM_MESSAGES=names '$D' host </dev/null >'$work/e' 2>&1 &&
     grep -qx 'devvm: vm_no_ssh vm=$vm' '$work/e' && ! grep -q '$vm' '$dsc' &&
     out=\$(printf 'echo \"conn=\${SSH_CONNECTION:-none}\"\n' | '$D' 2>&1) && grep -qx conn=none <<<\"\$out\" &&
     printf 'exit\n' | '$D' restart >/dev/null 2>&1 && grep -q '^Host devvm-$1 $vm\$' '$dsc' && dsh devvm-$1 true"
@@ -3405,7 +3400,7 @@ docker_ssh() {
     docker exec -u 0 '$vm2' mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null &&
     printf 'exit\n' | DEVVM_MESSAGES=names '$D' restart >'$work/last.log' 2>&1 && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/last.log' &&
     [[ \$(d_state '$vm2') == running ]] && ! grep -q '$vm2' '$dsc' &&
-    ! DEVVM_MESSAGES=names '$D' ssh </dev/null 2>'$work/e' && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/e'"
+    ! DEVVM_MESSAGES=names '$D' host </dev/null 2>'$work/e' && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/e'"
   (cd "$q2" && quiet "$D" rm -f)
   qa=$(newproj "${1}alpine")
   (cd "$qa" && printf 'exit\n' | "$D" "${B[@]}" --from alpine:3 --no-network-policy --ports none base >"$work/last.log" 2>&1)

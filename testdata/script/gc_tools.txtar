@@ -10,7 +10,7 @@ env VMS=$XDG_DATA_HOME/devvm/vms
 ! exec devvm gc node
 stderr '^devvm: gc_names_need_tools tool=node$'
 ! exec devvm gc --tools nope
-stderr '^devvm: gc_unknown_tool tool=nope '
+stderr '^devvm: unknown_tool tool=nope '
 
 # node (node, pnpm, bun), claude and codex, all current. A VM deleted
 # outside devvm still lists claude in its state; codex was built just now.

@@ -159,7 +159,7 @@ func TestWriteSpace(t *testing.T) {
 		Rows: []spaceRow{
 			{What: "images", Backend: "lima", Count: 2, Size: 2048, Sized: true, Kept: keptRemade, GC: 1024, Rest: "gc --backend lima"},
 			{What: "VMs", Backend: "docker", Count: 1, Kept: keptOnlyCopy, Rest: "devvm rm"},
-			{What: "exports", Count: 1, Size: 1024, Sized: true, Kept: keptOnlyCopy, Rest: "gc --exports", Retain: "30d", RetainFrees: 1024},
+			{What: "history", Count: 1, Size: 1024, Sized: true, Kept: keptOnlyCopy, Rest: "gc --history", Retain: "30d", RetainFrees: 1024},
 		},
 		Total:  2048,
 		GC:     1024,
@@ -169,7 +169,7 @@ func TestWriteSpace(t *testing.T) {
 	want := "WHAT     BACKEND  COUNT  SIZE  KEPT       GC    FREED BY           RETAIN\n" +
 		"images   lima     2      2.0K  remade     1.0K  gc --backend lima  -\n" +
 		"VMs      docker   1      -     only copy  -     devvm rm           -\n" +
-		"exports  -        1      1.0K  only copy  -     gc --exports       30d (1.0K)\n" +
+		"history  -        1      1.0K  only copy  -     gc --history       30d (1.0K)\n" +
 		"total    -        -      2.0K  -          1.0K  -                  -\n" +
 		"\n" +
 		"BACKEND  CACHE           COUNT  SIZE  PATH\n" +

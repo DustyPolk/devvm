@@ -1,13 +1,13 @@
 ---
 title: devvm retention
-weight: 29
+weight: 30
 ---
 
 Show or change the retention settings: what devvm deletes on its own
 
 ## Synopsis
 
-Show each retention setting and its value, off when it isn't set, or change them, each KEY=VALUE, and KEY=off to turn one off: logs.runs (the run logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off until you set it. devvm refuses a bad key or value, or one with no value, and then writes nothing. devvm applies the settings once a day, and devvm gc --retention applies them at once. They never delete a VM, an image or a tool any VM has.
+Show each retention setting and its value, off when it isn't set, or change them, each KEY=VALUE, and KEY=off to turn one off: logs.runs (the run logs kept, 20 when off), history.age and history.count (the exports of agents' history older than an age, or beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off until you set it. devvm refuses a bad key or value, or one with no value, and then writes nothing. devvm applies the settings once a day, and devvm gc --retention applies them at once. They never delete a VM, an image or a tool any VM has.
 
 ```text
 devvm retention [KEY=VALUE...] [flags]

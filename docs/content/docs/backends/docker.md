@@ -20,7 +20,7 @@ Everything else devvm promises holds on Docker too, as far as the container boun
 
 ## What works
 
-`--from` works with any container image Docker has or pulls. `devvm ssh`, `devvm code`, `--clone`, forwarding ports and SSH agent forwarding work as they do on Lima. Network policy works on Docker Desktop and on an engine on this Linux machine. Docker lacks some of these, so devvm builds them from other parts of Docker, and [How it works › Docker](../internals/docker.md) explains how.
+`--from` works with any container image Docker has or pulls. `devvm host`, `devvm code`, `--clone`, forwarding ports and SSH agent forwarding work as they do on Lima. Network policy works on Docker Desktop and on an engine on this Linux machine. Docker lacks some of these, so devvm builds them from other parts of Docker, and [How it works › Docker](../internals/docker.md) explains how.
 
 ## Requirements
 
@@ -82,9 +82,9 @@ Docker's engine needs more than devvm gives its other containers, and Sysbox giv
 
 What a VM with the layer gets, and what it gives up:
 
-- **You can add the layer to an existing VM.** devvm makes the VM's container again, keeping its disk and home ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). A script that fails while the layer is added leaves the VM as it was.
+- **Only a new VM gets the layer,** as with any layer, so devvm makes a VM for it when it makes the VM ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
 - **It has a network of its own,** which reaches the internet but no other container, even as root. On Linux it also reaches your machine's servers on every address but its loopback, as any Docker VM without network policy does.
-- **It has no network policy,** because root in it can change its own network. devvm doesn't ask about network policy for a new VM with the layer, whether you named the layer or a `devcontainer.json`'s docker-in-docker asked for it. It makes the VM without network policy and warns you. It refuses `--network-policy`, `devvm network on` and adding the layer to a VM that has network policy.
+- **It has no network policy,** because root in it can change its own network. devvm doesn't ask about network policy for a new VM with the layer, whether you named the layer or a `devcontainer.json`'s docker-in-docker asked for it. It makes the VM without network policy and warns you. It refuses `--network-policy` and `devvm network on`.
 - **Root in it writes as your machine's root in the project folder,** as in any Docker VM. A set-user-id file it makes there runs as root on your machine for anyone who runs it, so devvm names such files at each launch ([details](../internals/security.md#what-it-doesnt-protect)).
 - **Docker's userland proxy must stay on,** which is its default. With `"userland-proxy": false` in `daemon.json`, root in the VM could reach your machine's loopback, so devvm refuses the VM.
 - `devvm ls` shows its backend as `docker (sysbox)`, and `devvm rm` also deletes its network and its engine's files.

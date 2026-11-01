@@ -1,0 +1,42 @@
+# gc --history: the exports devvm history export and devvm rm saved, never
+# part of gc's default run; with --older-than, only those that old, each
+# with the file beside it that names its folder. Only files named as devvm
+# names them: never an export being written, nor anything else in the
+# folder. Never a VM.
+env DEVVM_MESSAGES=names
+env EXPORTS=$XDG_DATA_HOME/devvm/exports
+
+mkdir $EXPORTS
+exec sh -c 'cd "$EXPORTS" && for f in devvm-old-12345612345612-20200101-000000 devvm-new-abcdefabcdefab-20991231-235959; do echo x > $f.tar.gz; echo /p > $f.folder; done'
+exec sh -c 'cd "$EXPORTS" && echo x > .devvm-export-123 && echo x > notes.tar.gz && mkdir devvm-dir-12345612345612-20200101-000000.tar.gz'
+
+# The default run keeps them.
+exec devvm gc
+stdout '^==> nothing_to_clean$'
+exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
+
+# An age only with --history, and only one devvm takes.
+! exec devvm gc --older-than 30d
+stderr '^devvm: gc_older_than_needs_history$'
+! exec devvm gc --history --older-than 30
+stderr '^devvm: gc_bad_age age=30$'
+
+# --older-than 30d: the old one, by its VM and date.
+exec devvm gc --history --older-than 30d
+stdout '^gc_history count=1 size=\S+$'
+stdout '^gc_history_export date=2020-01-01 00:00 size=\S+ vm=devvm-old-12345612345612$'
+stdout '^==> deleted_history count=1$'
+! exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
+! exists $EXPORTS/devvm-old-12345612345612-20200101-000000.folder
+exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.tar.gz
+exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.folder
+
+# --history: every one left, and nothing that isn't one.
+exec devvm gc --history
+stdout '^gc_history_export .* vm=devvm-new-abcdefabcdefab$'
+stdout '^==> deleted_history count=1$'
+! exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.tar.gz
+! exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.folder
+exists $EXPORTS/.devvm-export-123
+exists $EXPORTS/notes.tar.gz
+exists $EXPORTS/devvm-dir-12345612345612-20200101-000000.tar.gz

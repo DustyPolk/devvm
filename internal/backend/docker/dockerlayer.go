@@ -4,7 +4,7 @@ package docker
 // Sysbox alone (FeatureDockerLayer), where a Linux engine of this
 // machine's has its runtime and its bridges don't route to the loopback: a
 // container runs dockerd only with more than devvm's others get, so a VM
-// is made for it (backend.DockerLayerVM), or made one in place.
+// is made for it (backend.DockerLayerVM).
 //
 // Sysbox gives the container a user namespace of its own (root in it is an
 // unprivileged uid range on the host, but on its mounts, ID-mapped, where
@@ -67,53 +67,6 @@ func (d *Docker) DockerLayer(vm string) (string, error) {
 		return "", msg.DockerLayerNoSysbox(vm)
 	}
 	return "sysbox", nil
-}
-
-// SetDockerLayer makes a stopped VM one for the docker layer, added to it
-// in place, under Sysbox's runtime, refused where the engine hasn't it
-// (DockerLayer). Its next start makes its container again from a commit
-// of its own (start.go's remake), its disk and home kept, with its
-// engine's volumes, its own network and the runtime. One made for it
-// already is left as it is.
-//
-// Off (the layer's script failed), a VM made for it is made one as it was:
-// its container made again from a commit at once, on Docker's runtime and
-// default network with what any VM has, then its own network and its
-// engine's volumes deleted, which nothing names any more.
-func (d *Docker) SetDockerLayer(ctx context.Context, vm string, on bool) error {
-	ct, r, err := d.stopped(ctx, vm)
-	if err != nil || r.dockerLayer() == on {
-		return err
-	}
-	if !on {
-		return unsetDockerLayer(ctx, d, vm, ct, r)
-	}
-	if _, err := d.DockerLayer(vm); err != nil {
-		return err
-	}
-	r.Runtime = sysboxRuntime
-	return d.writeRecord(vm, r)
-}
-
-// unsetDockerLayer is SetDockerLayer off, for a stopped VM (ct) made for
-// it (r).
-func unsetDockerLayer(ctx context.Context, d *Docker, vm string, ct container, r record) error {
-	r.Runtime = ""
-	if err := d.writeRecord(vm, r); err != nil {
-		return err
-	}
-	if err := d.prepare(ctx, vm, ct, &r); err != nil {
-		return err
-	}
-	if err := (egress{d}).removeNetwork(ctx, layerNetName(vm)); err != nil {
-		return err
-	}
-	for _, v := range engineVolumes(vm) {
-		if err := d.removeVolume(ctx, v); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // layerNetName is a VM's own network, made for the docker layer.

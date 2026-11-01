@@ -1,4 +1,4 @@
-# devvm ssh and devvm code: the folder's VM launched as devvm does without
+# devvm host and devvm code: the folder's VM launched as devvm does without
 # its shell (checked, started, self-checked, set up, in devvm's ssh
 # config), then its host name shown, or its folder opened in VS Code (a
 # stub code) with the SSH agent devvm started with. The Include line is
@@ -10,11 +10,11 @@ env CFG=$XDG_CONFIG_HOME/devvm
 # No VM.
 mkdir $WORK/web
 cd $WORK/web
-! exec devvm ssh
+! exec devvm host
 stderr '^devvm: no_vm dir=\S*/web$'
 ! exec devvm code
 stderr '^devvm: no_vm dir=\S*/web$'
-! exec devvm ssh now
+! exec devvm host now
 stderr '^devvm: usage_error '
 ! exec devvm code .
 stderr '^devvm: usage_error '
@@ -24,7 +24,7 @@ stderr '^devvm: usage_error '
 exec devvm --no-network-policy --no-git-protect base
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
 exec sh -c ': > "$STUB_LOG"'
-exec devvm ssh
+exec devvm host
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stdout '^ssh_include_needed line=Include /\S*/config/devvm/ssh_config$'
 stderr '^devvm: ssh_include_yourself$'
@@ -42,7 +42,7 @@ stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
 exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $CFG/ssh_config" > "$HOME/.ssh/config"'
 exec sh -c 'f=$(ls "$VMS"/devvm-web-*); echo cpus=6 >> "$f"'
 exec sh -c ': > "$STUB_LOG"'
-exec devvm ssh
+exec devvm host
 ! stdout 'starting|ssh_include'
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
 stdout '^ssh_host_info dir=/\S*/web host=devvm-web$'
@@ -89,7 +89,7 @@ cd $WORK/leak
 exec devvm --network-policy --no-git-protect base
 exec sh -c 'n=$(basename "$VMS"/devvm-leak-*); echo $PPID > "$LIMA_HOME/$n/ha.pid"; echo "$PPID 1" > "$XDG_DATA_HOME/devvm/run/$n.started"'
 exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/net-direct"'
-! exec devvm ssh
+! exec devvm host
 stderr '^devvm: net_direct_route vm=devvm-leak-[0-9a-f]{14}$'
 ! stdout ssh_host_info
 stub_calls

@@ -50,7 +50,7 @@ const (
 // Desktop is devvm desktop: the folder's VM's desktop on this machine.
 type Desktop struct{ *Env }
 
-// Open gets the folder's VM ready as devvm ssh does (ready), starts its
+// Open gets the folder's VM ready as devvm host does (ready), starts its
 // desktop (the desktop feature's devvm-desktop), and serves it on this
 // machine's loopback through devvm's relay (desktop.Relay), each viewer
 // checked against the VM's password before anything reaches the VM, until

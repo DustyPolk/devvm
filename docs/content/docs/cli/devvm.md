@@ -7,7 +7,7 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains (and the nix layer) the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that in place, after asking. In a folder without a VM of its own, inside one that has a VM, devvm asks whether to open that VM in this folder instead of creating one, and opens it without asking when there's no terminal. --here and --clone create the new VM without asking.
+Open a shell in this folder's VM, at the same path, creating the VM first. A new VM gets IMAGE (base, layers such as docker or your own, and the shared tools joined with +: node+python+docker+claude), else the toolchains (and the nix layer) the folder's files call for, with any agents IMAGE names on top, built if it isn't. Only the folder is mounted, read-write, with the shared tools read-only, and its .git hooks and config are locked against changes from the VM (macOS); with --clone, nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists is started if it's stopped and opened as it is; an IMAGE that names what it lacks is refused, naming the devvm tools add command that adds its shared tools, as only a new VM gets a layer. In a folder without a VM of its own, inside one that has a VM, devvm asks whether to open that VM in this folder instead of creating one, and opens it without asking when there's no terminal. --here and --clone create the new VM without asking.
 
 ```text
 devvm [IMAGE] [flags]
@@ -42,9 +42,10 @@ devvm [IMAGE] [flags]
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm desktop](devvm_desktop.md): Open this folder's VM's desktop in a VNC viewer
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
-- [devvm export](devvm_export.md): Save this folder's VM's agent history to a .tar.gz
 - [devvm gc](devvm_gc.md): Delete stale images and unused tool images
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
+- [devvm history](devvm_history.md): List the saved exports of agents' history
+- [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm layer](devvm_layer.md): Your own image layers
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl on devvm's own Lima home
@@ -54,7 +55,6 @@ devvm [IMAGE] [flags]
 - [devvm policy](devvm_policy.md): Show the network policy allowlist of this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
-- [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm retention](devvm_retention.md): Show or change the retention settings: what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
@@ -62,7 +62,6 @@ devvm [IMAGE] [flags]
 - [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
-- [devvm ssh](devvm_ssh.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm stop](devvm_stop.md): Stop this folder's VM
-- [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it
+- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools

@@ -71,7 +71,7 @@ trusted_config_paths = ["/"]
 T
 } > "$s/mise.toml"
 cmp -s "$s/mise.toml" /etc/mise/config.toml 2>/dev/null || sudo install -D -m 644 "$s/mise.toml" /etc/mise/config.toml
-# Links into tools this VM no longer has (devvm remove, devvm update).
+# Links into tools this VM doesn't have any more (devvm tools rm, devvm tools update).
 for l in ~/.rustup/toolchains/* ~/.local/bin/claude; do
   [[ -L $l && ! -e $l && "$(readlink "$l")" == /opt/devvm/tools/* ]] && rm "$l"
 done

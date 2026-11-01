@@ -37,13 +37,13 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 
 ### Built-in layers
 
-devvm ships two layers, `docker` and `nix`. You choose them like any other layer, as in `devvm node+docker` or `devvm build nix`, and you can also add them to an existing VM in place ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
+devvm ships two layers, `docker` and `nix`. You choose them like any other layer, as in `devvm node+docker` or `devvm build nix`, and like any layer, only a new VM gets them ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
 
 #### docker
 
 The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker.
 
-On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs Sysbox on a Linux engine, where devvm makes a VM for it, or makes the VM again when you add the layer in place. Anywhere else on that backend, devvm refuses the layer before it changes anything, and you need a VM backend for it.
+On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs Sysbox on a Linux engine, where devvm makes a VM for it. Anywhere else on that backend, devvm refuses the layer before it changes anything, and you need a VM backend for it.
 
 #### nix
 
@@ -64,13 +64,7 @@ devvm builds each tool version once and mounts it read-only into every VM that n
 
 devvm doesn't pin the tools' versions, because agents like Claude Code release several times a week. It follows the newest release of each tool, and Node 24 for node. The first time a tool is needed, devvm looks up its newest release, which needs this machine to be online once. When it makes a new VM, devvm also checks for newer releases if its last check was more than a day ago, and `DEVVM_NO_TOOL_CHECK=1` turns that check off.
 
-### Adding and removing tools
-
-A new VM gets the tools its image names and keeps those versions. On each launch, devvm warns when there are newer ones. The commands below don't change the VM's disk, because its tools are mounted, so a change takes effect on that launch.
-
-- `devvm update` checks upstream for newer versions, builds what's missing, and moves the VM to them. When the VM already has the newest versions, it builds any of them that are missing.
-- `devvm IMAGE` with tools the VM lacks adds them, after asking ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
-- `devvm remove TOOLS` takes tools out, as in `devvm remove python+claude`. What the VM installed itself, such as other versions or global packages, stays.
+A new VM gets the tools its image names and keeps those versions. `devvm tools` shows them, and `devvm tools add`, `devvm tools rm` and `devvm tools update` change them without changing the VM's disk ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## Which image a new VM gets
 
@@ -112,7 +106,7 @@ When you edit a layer's script, devvm builds that layer again the next time it's
 
 `devvm rebuild IMAGE` builds an image again from its parent as the parent is now, which is how you get the newest packages that a script installs without a pin. devvm also builds the images on it again, on the new image, the next time they're needed. When there are such images, devvm lists them first and, in a terminal, asks before it goes on. After the build, devvm deletes the old images that no VM uses.
 
-Shared tools aren't images, so `devvm rebuild` refuses them, and `devvm update` gets their newer versions instead. [Rebuilding](../internals/images.md#rebuilding) explains how devvm tells which images to build again.
+Shared tools aren't images, so `devvm rebuild` refuses them, and `devvm tools update` gets their newer versions instead. [Rebuilding](../internals/images.md#rebuilding) explains how devvm tells which images to build again.
 
 ## Outdated VMs
 
@@ -157,11 +151,11 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 
 `devvm gc` deletes five things. The first is what `devvm images` lists as stale or unfinished, on every backend. The second is the shared tools it lists as `unused`. The third is the copies of devvm's own files that older versions [wrote out](../internals/install.md#devvms-own-files), except those a VM's proxy was started with. The fourth is the older versions of the mise that devvm runs on this machine to look up the tools' versions, which an upgrade of devvm leaves behind, except one that changed in the last hour, because another devvm may be downloading it. The fifth is the [shared Nix cache](toolchains.md#nix-projects)'s least recently used files, while it takes more than its cap, the `nix-cache.size` [retention setting](settings.md#retention), which is 10 GiB when it's off. gc lists them all first and, in a terminal, asks. Without a terminal, it goes ahead.
 
-- `devvm gc --tools` also deletes the current shared tools that no VM has, such as a toolchain you tried once, on every backend and C library. `devvm gc --tools node claude` deletes only those tools' builds, by the names images use, so `node` also covers pnpm and bun. A tool that a VM's state lists stays, including a stopped VM's. So does one built in the last hour, because the VM it was built for may not list it yet, and gc names the tools it keeps for that reason. While devvm is making a VM, or giving one new shared tools through `devvm update` or by adding a layer to it, that VM may not list the tools it picked yet, so gc keeps every current shared tool that no VM has, names them, and deletes the rest of what it would. Run it again once that's done. A VM whose image names a deleted tool builds it again when it needs it.
+- `devvm gc --tools` also deletes the current shared tools that no VM has, such as a toolchain you tried once, on every backend and C library. `devvm gc --tools node claude` deletes only those tools' builds, by the names images use, so `node` also covers pnpm and bun. A tool that a VM's state lists stays, including a stopped VM's. So does one built in the last hour, because the VM it was built for may not list it yet, and gc names the tools it keeps for that reason. While devvm is making a VM, or giving one new shared tools through `devvm tools add` or `devvm tools update`, that VM may not list the tools it picked yet, so gc keeps every current shared tool that no VM has, names them, and deletes the rest of what it would. Run it again once that's done. A VM whose image names a deleted tool builds it again when it needs it.
 - `devvm gc --tools --force` also deletes the current shared tools that no VM has and that were built in the last hour, and it doesn't ask first, though it still lists what it deletes. `--force` goes only with `--tools`, it never deletes a tool that a VM's state lists, and it changes nothing else that gc deletes. While a VM is being made or is getting new shared tools, gc refuses `--force` and deletes nothing, so run it again once that's done.
 - The devvm making a VM holds a lock that the system lets go of as soon as that devvm ends, so one that crashed or that you killed never leaves gc keeping tools or refusing. A devvm that starts to make a VM while `devvm gc --tools` runs, or while retention deletes shared tools, waits for it to finish and says it's waiting. In a terminal, gc holds that lock while it asks you, so answer it first.
-- When a shared tool that a new VM's state lists is gone before the VM's first shell, for example because you deleted it by hand, the VM's setup can't mount it. devvm then names the tools it couldn't mount and stops, and the VM stays. Run `devvm update` in the folder, which builds the missing tools again and opens the VM.
-- `devvm gc --exports` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than AGE` keeps those newer than `AGE`, such as `30d`, `2w` or `12h`. gc never deletes exports without `--exports`.
+- When a shared tool that a new VM's state lists is gone before the VM's first shell, for example because you deleted it by hand, the VM's setup can't mount it. devvm then names the tools it couldn't mount and stops, and the VM stays. Run `devvm tools update` in the folder, which builds the missing tools again and opens the VM.
+- `devvm gc --history` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm history export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than AGE` keeps those newer than `AGE`, such as `30d`, `2w` or `12h`. gc never deletes exports without `--history`.
 - `devvm gc --nix-cache` also deletes the rest of the shared Nix cache. VMs download its packages again when they need them.
 - `devvm gc --orphans` also deletes what devvm keeps for VMs that their backend no longer has, such as one you deleted with `limactl delete` instead of `devvm rm`, and with it the hold their state has on their shared tools ([leftovers](space.md#leftovers-of-a-vm-deleted-outside-devvm)).
 - `devvm gc --caches` then frees devvm's share of the backends' own caches, such as Lima's downloads of Ubuntu's cloud image, asking for each backend apart, and only in a terminal ([the backends' caches](space.md#the-backends-caches)).

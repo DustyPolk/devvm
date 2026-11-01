@@ -1,22 +1,22 @@
 ---
-title: devvm update
-weight: 44
+title: devvm history
+weight: 10
 ---
 
-Move this folder's VM to the newest shared tools, then open a shell in it
+List the saved exports of agents' history
 
 ## Synopsis
 
-Check for newer versions of the shared tools (node, python, rust, go, the agents), build them, and move this folder's VM to them, then open a shell in it. Nothing in the VM's disk changes: its tools are mounted from the share.
+List the exports of agents' history in ~/.local/share/devvm/exports, which devvm history export and devvm rm write there, oldest first: each one's file, the VM it's of, that VM's folder, when it was written and its size. Exports written to a file of your own aren't listed. It changes nothing and starts no VM.
 
 ```text
-devvm update [flags]
+devvm history [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for update
+  -h, --help   help for history
 ```
 
 ## Options inherited from parent commands
@@ -35,3 +35,4 @@ devvm update [flags]
 ## See also
 
 - [devvm](devvm.md): Open a shell in this folder's VM, creating it first
+- [devvm history export](devvm_history_export.md): Save this folder's VM's agent history to a .tar.gz

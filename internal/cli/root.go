@@ -30,8 +30,8 @@ func NewRoot(u *ui.UI) *cobra.Command {
 			"its .git hooks and config are locked against changes from the VM (macOS); with --clone, " +
 			"nothing is mounted but the shared tools, and the VM gets its own clone of the repo. A new VM also gets " +
 			"what the folder's devcontainer.json says it can, unless --no-devcontainer. A VM that exists " +
-			"is started if it's stopped and opened as it is; an IMAGE that names what it lacks adds that " +
-			"in place, after asking. In a folder without a VM of its own, inside one that has a VM, devvm " +
+			"is started if it's stopped and opened as it is; an IMAGE that names what it lacks is refused, " +
+			"naming the devvm tools add command that adds its shared tools, as only a new VM gets a layer. In a folder without a VM of its own, inside one that has a VM, devvm " +
 			"asks whether to open that VM in this folder instead of creating one, and opens it without " +
 			"asking when there's no terminal. --here and --clone create the new VM without asking.",
 		SilenceUsage:  true,
@@ -52,7 +52,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	addUpFlags(root, uf)
 	addVersion(root)
 	root.AddCommand(newBuildCmd(u, g), newRebuildCmd(u, g), newImagesCmd(u, g), newGCCmd(u, g), newSpaceCmd(u, g), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
-		newRestartCmd(u, g), newStopCmd(u), newRemoveCmd(u, g), newUpdateCmd(u, g), newAdoptCmd(u), newExportCmd(u), newRmCmd(u), newLsCmd(u), newLogCmd(u), newPolicyCmd(u), newNetworkCmd(u), newSSHCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
+		newRestartCmd(u, g), newStopCmd(u), newToolsCmd(u, g), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newLogCmd(u), newPolicyCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u, g), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
 		newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	return root

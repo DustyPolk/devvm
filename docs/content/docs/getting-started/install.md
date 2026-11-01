@@ -105,7 +105,7 @@ Running the install script again installs the newest release.
 
 Your images and VMs stay, because they live in `~/.local/share/devvm`, and your settings, layers and features stay in `~/.config/devvm`, apart from devvm itself.
 
-Images whose inputs changed are built again the next time you use them. Existing VMs keep working, and `devvm update` moves a VM to the new shared tools. `devvm gc` deletes the copies of devvm's files that older versions wrote out, except those that a VM's proxy was started with.
+Images whose inputs changed are built again the next time you use them. Existing VMs keep working, and `devvm tools update` moves a VM to the new shared tools. `devvm gc` deletes the copies of devvm's files that older versions wrote out, except those that a VM's proxy was started with.
 
 ## Uninstalling
 

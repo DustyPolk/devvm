@@ -1,6 +1,6 @@
 ---
 title: devvm log
-weight: 16
+weight: 18
 ---
 
 Show what this folder's VM connected to and what its network policy blocked

@@ -1,22 +1,22 @@
 ---
-title: devvm ssh
-weight: 39
+title: devvm tools rm
+weight: 46
 ---
 
-Get this folder's VM ready for ssh and editors, and show its host name
+Take shared tools out of this folder's VM, then open a shell in it
 
 ## Synopsis
 
-Get this folder's VM ready for ssh and editors as devvm does before opening a shell: checked, started if it's stopped, its network policy checked, set up and in devvm's ssh config. Then show the name ssh and VS Code's Remote-SSH reach it by (devvm-website, for a folder named website). Without the Include line in ~/.ssh/config, devvm offers to add it.
+Take shared tools out of this folder's VM, each TOOL a separate word (devvm tools rm python claude), then open a shell in it. They're not mounted in it any more; what the VM installed itself stays. Your layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.
 
 ```text
-devvm ssh [flags]
+devvm tools rm TOOL... [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for ssh
+  -h, --help   help for rm
 ```
 
 ## Options inherited from parent commands
@@ -34,4 +34,4 @@ devvm ssh [flags]
 
 ## See also
 
-- [devvm](devvm.md): Open a shell in this folder's VM, creating it first
+- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools

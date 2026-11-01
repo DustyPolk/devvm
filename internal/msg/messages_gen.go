@@ -4,24 +4,9 @@ package msg
 
 import "strconv"
 
-// AddInPlace is [add_in_place]: "devvm made {{.vm}} from {{.image}}. Add {{.missing}} to it in place?"
-func AddInPlace(image string, missing string, vm string) M {
-	return M{id: "add_in_place", vals: []val{{"image", image}, {"missing", missing}, {"vm", vm}}}
-}
-
 // AddItNow is [add_it_now]: "Add it now?"
 func AddItNow() M {
 	return M{id: "add_it_now"}
-}
-
-// AddLayerFailed is [add_layer_failed]: "Adding {{.layer}} to {{.vm}} failed, and the VM is otherwise unchanged."
-func AddLayerFailed(layer string, vm string) M {
-	return M{id: "add_layer_failed", vals: []val{{"layer", layer}, {"vm", vm}}}
-}
-
-// Adding is [adding]: "adding {{.layer}}"
-func Adding(layer string) M {
-	return M{id: "adding", vals: []val{{"layer", layer}}}
 }
 
 // AdoptFailed is [adopt_failed]: "Adopting this folder's VM failed: {{.reason}}."
@@ -534,9 +519,9 @@ func DeletedCache(backend string, count int) M {
 	return M{id: "deleted_cache", plural: true, count: count, vals: []val{{"backend", backend}, {"count", strconv.Itoa(count)}}}
 }
 
-// DeletedExports is [deleted_exports]: "deleted {{.count}} exports"
-func DeletedExports(count int) M {
-	return M{id: "deleted_exports", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+// DeletedHistory is [deleted_history]: "deleted {{.count}} exports of agents' history"
+func DeletedHistory(count int) M {
+	return M{id: "deleted_history", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
 // DeletedImage is [deleted_image]: "deleted image {{.image}} ({{.key}})"
@@ -1124,16 +1109,6 @@ func GCConfirm() M {
 	return M{id: "gc_confirm"}
 }
 
-// GCExport is [gc_export]: "  {{.vm}}, {{.date}} ({{.size}})"
-func GCExport(date string, size string, vm string) M {
-	return M{id: "gc_export", vals: []val{{"date", date}, {"size", size}, {"vm", vm}}}
-}
-
-// GCExports is [gc_exports]: "{{.count}} exports of agents' history ({{.size}}), the only copy of a deleted VM's:"
-func GCExports(count int, size string) M {
-	return M{id: "gc_exports", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
-}
-
 // GCFailed is [gc_failed]: "Cleaning up failed: {{.reason}}."
 func GCFailed(reason string) M {
 	return M{id: "gc_failed", vals: []val{{"reason", reason}}}
@@ -1147,6 +1122,16 @@ func GCForceMaking() M {
 // GCForceNeedsTools is [gc_force_needs_tools]: "--force goes with --tools. Run devvm gc --tools --force."
 func GCForceNeedsTools() M {
 	return M{id: "gc_force_needs_tools"}
+}
+
+// GCHistory is [gc_history]: "{{.count}} exports of agents' history ({{.size}}), the only copy of a deleted VM's:"
+func GCHistory(count int, size string) M {
+	return M{id: "gc_history", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
+}
+
+// GCHistoryExport is [gc_history_export]: "  {{.vm}}, {{.date}} ({{.size}})"
+func GCHistoryExport(date string, size string, vm string) M {
+	return M{id: "gc_history_export", vals: []val{{"date", date}, {"size", size}, {"vm", vm}}}
 }
 
 // GCImage is [gc_image]: "  {{.image}} ({{.key}})"
@@ -1184,9 +1169,9 @@ func GCOldHint() M {
 	return M{id: "gc_old_hint"}
 }
 
-// GCOlderThanNeedsExports is [gc_older_than_needs_exports]: "--older-than goes with --exports. Run devvm gc --exports --older-than AGE."
-func GCOlderThanNeedsExports() M {
-	return M{id: "gc_older_than_needs_exports"}
+// GCOlderThanNeedsHistory is [gc_older_than_needs_history]: "--older-than goes with --history. Run devvm gc --history --older-than AGE."
+func GCOlderThanNeedsHistory() M {
+	return M{id: "gc_older_than_needs_history"}
 }
 
 // GCOrphan is [gc_orphan]: "  {{.vm}} ({{.backend}}), for {{.dir}}"
@@ -1257,11 +1242,6 @@ func GCToolsRecent(count int, tools string) M {
 // GCUnfinished is [gc_unfinished]: "  {{.key}}, left over from a failed build"
 func GCUnfinished(key string) M {
 	return M{id: "gc_unfinished", vals: []val{{"key", key}}}
-}
-
-// GCUnknownTool is [gc_unknown_tool]: "There's no shared tool named {{.tool}}. The names are {{.tools}}."
-func GCUnknownTool(tool string, tools string) M {
-	return M{id: "gc_unknown_tool", vals: []val{{"tool", tool}, {"tools", tools}}}
 }
 
 // GitAppeared is [git_appeared]: "A git repo appeared in this folder after its VM was made. If you didn't make it, check its hooks and config before you run git here."
@@ -1384,6 +1364,16 @@ func GithubTokenHowto() M {
 	return M{id: "github_token_howto"}
 }
 
+// HasTools is [has_tools]: "{{.vm}} has {{.tools}} already"
+func HasTools(tools string, vm string) M {
+	return M{id: "has_tools", vals: []val{{"tools", tools}, {"vm", vm}}}
+}
+
+// HistoryFailed is [history_failed]: "Listing the exports of agents' history failed: {{.reason}}."
+func HistoryFailed(reason string) M {
+	return M{id: "history_failed", vals: []val{{"reason", reason}}}
+}
+
 // HistoryNotExported is [history_not_exported]: "Exporting {{.vm}}'s agent history failed."
 func HistoryNotExported(vm string) M {
 	return M{id: "history_not_exported", vals: []val{{"vm", vm}}}
@@ -1467,11 +1457,6 @@ func InterruptedImage(vm string) M {
 // InterruptedVM is [interrupted_vm]: "interrupted: deleting {{.vm}}, which wasn't ready yet"
 func InterruptedVM(vm string) M {
 	return M{id: "interrupted_vm", vals: []val{{"vm", vm}}}
-}
-
-// Keeping is [keeping]: "keeping {{.image}}"
-func Keeping(image string) M {
-	return M{id: "keeping", vals: []val{{"image", image}}}
 }
 
 // Kept is [kept]: "kept {{.vm}}"
@@ -1809,7 +1794,7 @@ func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
 }
 
-// NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
+// NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
 func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
 }
@@ -1872,11 +1857,6 @@ func NoSecret(secret string) M {
 // NoSSHAgent is [no_ssh_agent]: "No SSH agent is running, so git over SSH won't work in the VM."
 func NoSSHAgent() M {
 	return M{id: "no_ssh_agent"}
-}
-
-// NoTerminalConfirm is [no_terminal_confirm]: "Adding to {{.vm}} needs your answer, and there's no terminal to ask in. Run devvm {{.want}} in a terminal."
-func NoTerminalConfirm(vm string, want string) M {
-	return M{id: "no_terminal_confirm", vals: []val{{"vm", vm}, {"want", want}}}
 }
 
 // NoTerminalDelete is [no_terminal_delete]: "Deleting the VM needs your confirmation, and there's no terminal to ask in. Run devvm rm -f to delete the VM anyway."
@@ -2132,11 +2112,6 @@ func RemovedRemote(remote string) M {
 // ResolvingTools is [resolving_tools]: "resolving the shared tools' versions"
 func ResolvingTools() M {
 	return M{id: "resolving_tools"}
-}
-
-// RestartForMounts is [restart_for_mounts]: "This restarts the VM to mount their config from this machine, and anything running in it stops."
-func RestartForMounts() M {
-	return M{id: "restart_for_mounts"}
 }
 
 // RetentionBad is [retention_bad]: "That retention setting is refused, and nothing changed: {{.reason}}."
@@ -2579,7 +2554,7 @@ func ToolBadOutput(file string) M {
 	return M{id: "tool_bad_output", vals: []val{{"file", file}}}
 }
 
-// ToolBadVersion is [tool_bad_version]: "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm update to resolve the shared tools again."
+// ToolBadVersion is [tool_bad_version]: "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm tools update to resolve the shared tools again."
 func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
 }
@@ -2589,7 +2564,7 @@ func ToolNoDownload(tool string, version string) M {
 	return M{id: "tool_no_download", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
-// ToolNotLocked is [tool_not_locked]: "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm update to resolve the shared tools again."
+// ToolNotLocked is [tool_not_locked]: "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm tools update to resolve the shared tools again."
 func ToolNotLocked(lock string, tool string) M {
 	return M{id: "tool_not_locked", vals: []val{{"lock", lock}, {"tool", tool}}}
 }
@@ -2617,6 +2592,16 @@ func ToolsChanged() M {
 // ToolsCheckFailed is [tools_check_failed]: "The check for newer shared tools failed, so devvm uses the versions it last found."
 func ToolsCheckFailed() M {
 	return M{id: "tools_check_failed"}
+}
+
+// ToolsFailed is [tools_failed]: "Reading the shared tools of this folder's VM failed: {{.reason}}."
+func ToolsFailed(reason string) M {
+	return M{id: "tools_failed", vals: []val{{"reason", reason}}}
+}
+
+// ToolsJoined is [tools_joined]: "{{.given}} joins shared tools with +. Give them as separate words, such as devvm tools {{.cmd}} node claude."
+func ToolsJoined(cmd string, given string) M {
+	return M{id: "tools_joined", vals: []val{{"cmd", cmd}, {"given", given}}}
 }
 
 // ToolsNeedResolve is [tools_need_resolve]: "Resolving the shared tools' versions failed, and devvm has to do it once, online. Try again when you're online."
@@ -2649,7 +2634,7 @@ func ToolsSwitch(vm string) M {
 	return M{id: "tools_switch", vals: []val{{"vm", vm}}}
 }
 
-// ToolsUnmounted is [tools_unmounted]: "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm update to build the missing ones."
+// ToolsUnmounted is [tools_unmounted]: "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm tools update to build the missing ones."
 func ToolsUnmounted(tools string, vm string) M {
 	return M{id: "tools_unmounted", vals: []val{{"tools", tools}, {"vm", vm}}}
 }
@@ -2692,6 +2677,11 @@ func UnknownFeature(feature string) M {
 // UnknownLayer is [unknown_layer]: "There's no layer or shared tool {{.layer}}. Choose from {{.envs}} and the agents {{.agents}}."
 func UnknownLayer(agents string, envs string, layer string) M {
 	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
+}
+
+// UnknownTool is [unknown_tool]: "There's no shared tool named {{.tool}}. The names are {{.tools}}."
+func UnknownTool(tool string, tools string) M {
+	return M{id: "unknown_tool", vals: []val{{"tool", tool}, {"tools", tools}}}
 }
 
 // UnpackingTools is [unpacking_tools]: "unpacking the shared tools"
@@ -2784,6 +2774,16 @@ func VMLacks(has string, layer string, vm string) M {
 	return M{id: "vm_lacks", vals: []val{{"has", has}, {"layer", layer}, {"vm", vm}}}
 }
 
+// VMLacksLayer is [vm_lacks_layer]: "{{.vm}} doesn't have the {{.layer}} layer, and only a new VM can get a layer. Save your work outside the project folder, then run devvm rm and devvm {{.image}}."
+func VMLacksLayer(image string, layer string, vm string) M {
+	return M{id: "vm_lacks_layer", vals: []val{{"image", image}, {"layer", layer}, {"vm", vm}}}
+}
+
+// VMLacksTools is [vm_lacks_tools]: "{{.vm}} doesn't have {{.tools}}. Run devvm tools add {{.tools}} to add them."
+func VMLacksTools(tools string, vm string) M {
+	return M{id: "vm_lacks_tools", vals: []val{{"tools", tools}, {"vm", vm}}}
+}
+
 // VMNameNoRoom is [vm_name_no_room]: "The {{.backend}} backend's VM names have at most {{.max}} characters, which leaves no room for the folder's name."
 func VMNameNoRoom(backend string, max string) M {
 	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
@@ -2851,10 +2851,7 @@ func WidenParentVMRefused(cmd string, dir string, vm string) M {
 
 // specs describes every message, by ID.
 var specs = map[string]spec{
-	"add_in_place":                     {fields: []string{"image", "missing", "vm"}},
 	"add_it_now":                       {},
-	"add_layer_failed":                 {fields: []string{"layer", "vm"}},
-	"adding":                           {fields: []string{"layer"}},
 	"adopt_failed":                     {fields: []string{"reason"}},
 	"adopt_vm":                         {fields: []string{"vm", "was"}},
 	"agent_already":                    {fields: []string{"mode", "vm"}},
@@ -2957,7 +2954,7 @@ var specs = map[string]spec{
 	"deleted":                          {fields: []string{"vm"}},
 	"deleted_assets":                   {plural: true, fields: []string{"count"}},
 	"deleted_cache":                    {plural: true, fields: []string{"backend", "count"}},
-	"deleted_exports":                  {plural: true, fields: []string{"count"}},
+	"deleted_history":                  {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
 	"deleted_nix_cache":                {plural: true, fields: []string{"count", "size"}},
@@ -3075,11 +3072,11 @@ var specs = map[string]spec{
 	"gc_cache_entry":                   {fields: []string{"size", "what"}},
 	"gc_caches_need_terminal":          {},
 	"gc_confirm":                       {},
-	"gc_export":                        {fields: []string{"date", "size", "vm"}},
-	"gc_exports":                       {plural: true, fields: []string{"count", "size"}},
 	"gc_failed":                        {fields: []string{"reason"}},
 	"gc_force_making":                  {},
 	"gc_force_needs_tools":             {},
+	"gc_history":                       {plural: true, fields: []string{"count", "size"}},
+	"gc_history_export":                {fields: []string{"date", "size", "vm"}},
 	"gc_image":                         {fields: []string{"image", "key"}},
 	"gc_images":                        {},
 	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
@@ -3087,7 +3084,7 @@ var specs = map[string]spec{
 	"gc_nix_cache":                     {plural: true, fields: []string{"count", "size"}},
 	"gc_nix_cache_over":                {fields: []string{"cap", "size"}},
 	"gc_old_hint":                      {},
-	"gc_older_than_needs_exports":      {},
+	"gc_older_than_needs_history":      {},
 	"gc_orphan":                        {fields: []string{"backend", "dir", "vm"}},
 	"gc_orphan_container":              {fields: []string{"container"}},
 	"gc_orphan_elsewhere":              {fields: []string{"vm"}},
@@ -3102,7 +3099,6 @@ var specs = map[string]spec{
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
 	"gc_tools_recent":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
-	"gc_unknown_tool":                  {fields: []string{"tool", "tools"}},
 	"git_appeared":                     {},
 	"git_commondir":                    {fields: []string{"git", "target"}},
 	"git_config_failed":                {fields: []string{"config"}},
@@ -3127,6 +3123,8 @@ var specs = map[string]spec{
 	"git_unlocked":                     {fields: []string{"vm"}},
 	"git_worktree_stray":               {fields: []string{"wt"}},
 	"github_token_howto":               {},
+	"has_tools":                        {fields: []string{"tools", "vm"}},
+	"history_failed":                   {fields: []string{"reason"}},
 	"history_not_exported":             {fields: []string{"vm"}},
 	"home_not_absolute":                {},
 	"host_cpus_few":                    {fields: []string{"have", "want"}},
@@ -3144,7 +3142,6 @@ var specs = map[string]spec{
 	"images_unused":                    {fields: []string{"size"}},
 	"interrupted_image":                {fields: []string{"vm"}},
 	"interrupted_vm":                   {fields: []string{"vm"}},
-	"keeping":                          {fields: []string{"image"}},
 	"kept":                             {fields: []string{"vm"}},
 	"key_loaded":                       {},
 	"key_loaded_keychain":              {},
@@ -3225,7 +3222,6 @@ var specs = map[string]spec{
 	"no_kvm":                           {},
 	"no_secret":                        {fields: []string{"secret"}},
 	"no_ssh_agent":                     {},
-	"no_terminal_confirm":              {fields: []string{"vm", "want"}},
 	"no_terminal_delete":               {},
 	"no_terminal_fetch":                {fields: []string{"remote"}},
 	"no_token":                         {},
@@ -3277,7 +3273,6 @@ var specs = map[string]spec{
 	"remotes_taken":                    {fields: []string{"slug", "vm"}},
 	"removed_remote":                   {fields: []string{"remote"}},
 	"resolving_tools":                  {},
-	"restart_for_mounts":               {},
 	"retention_bad":                    {fields: []string{"reason"}},
 	"retention_busy":                   {},
 	"retention_deleted":                {fields: []string{"exports", "nix_files", "orphans", "tools"}},
@@ -3374,6 +3369,8 @@ var specs = map[string]spec{
 	"tools_build_failed":               {},
 	"tools_changed":                    {},
 	"tools_check_failed":               {},
+	"tools_failed":                     {fields: []string{"reason"}},
+	"tools_joined":                     {fields: []string{"cmd", "given"}},
 	"tools_need_resolve":               {},
 	"tools_newest":                     {fields: []string{"vm"}},
 	"tools_not_images":                 {fields: []string{"tools"}},
@@ -3389,6 +3386,7 @@ var specs = map[string]spec{
 	"unfinished_image":                 {fields: []string{"vm"}},
 	"unknown_feature":                  {fields: []string{"feature"}},
 	"unknown_layer":                    {fields: []string{"agents", "envs", "layer"}},
+	"unknown_tool":                     {fields: []string{"tool", "tools"}},
 	"unpacking_tools":                  {},
 	"unsafe_folder":                    {fields: []string{"dir", "holds"}},
 	"unsafe_folder_inside":             {fields: []string{"dir", "inside"}},
@@ -3407,6 +3405,8 @@ var specs = map[string]spec{
 	"vm_has_networks":                  {fields: []string{"file", "vm"}},
 	"vm_is_now":                        {fields: []string{"image", "vm"}},
 	"vm_lacks":                         {fields: []string{"has", "layer", "vm"}},
+	"vm_lacks_layer":                   {fields: []string{"image", "layer", "vm"}},
+	"vm_lacks_tools":                   {fields: []string{"tools", "vm"}},
 	"vm_name_no_room":                  {fields: []string{"backend", "max"}},
 	"vm_no_ssh":                        {fields: []string{"vm"}},
 	"vm_no_sshd":                       {fields: []string{"vm"}},

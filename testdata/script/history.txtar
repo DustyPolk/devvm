@@ -1,0 +1,61 @@
+# history export: the folder's VM's agent history, to the exports folder or a
+# file, from the VM, started if it's stopped. A failed export leaves the
+# file it would replace as it was. history: the exports in the exports
+# folder, each with its VM's folder, and nothing else there.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+env EXPORTS=$XDG_DATA_HOME/devvm/exports
+mkdir $WORK/web
+cd $WORK/web
+! exec devvm history export
+stderr '^devvm: no_vm dir=\S*/web$'
+! exec devvm history export a b
+stderr usage_error
+! exec devvm history now
+stderr usage_error
+
+# None yet: the header alone, no VM needed.
+exec devvm history
+stdout '^FILE +VM +FOLDER +DATE +SIZE\n\z'
+
+exec devvm --no-network-policy base
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm history export
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> exported file=\S*/data/devvm/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'exec ''bash'' ''-c'' ''cd ~ && ls -d \.claude \.claude\.json .* --exclude=\.claude/\.credentials\.json .* -T -'''
+exec sh -c 'ls "$EXPORTS"/*.tar.gz | wc -l'
+stdout '^ *1$'
+
+# A file, relative to here, in a folder made for it.
+exec devvm history export out/h.tar.gz
+stdout '^==> exported file=\S*/web/out/h\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'
+exists out/h.tar.gz
+! stdout starting
+! exists out/h.folder
+
+# A failed export keeps the file as it was, and the VM.
+exec sh -c 'echo before > out/h.tar.gz'
+exec sh -c ': > "$STUB_DIR/shell-fails"'
+! exec devvm history export out/h.tar.gz
+stderr '^devvm: history_not_exported vm=devvm-web-[0-9a-f]{14}$'
+rm $STUB_DIR/shell-fails
+exec cat out/h.tar.gz
+stdout '^before$'
+exec ls -A out
+stdout '^h\.tar\.gz\n\z'
+exec sh -c 'ls "$VMS"'
+stdout devvm-web
+
+# history lists the exports folder's: its own export with its folder, one
+# devvm has no folder for as -, and never another file there or one of
+# your own.
+exec sh -c 'echo x > "$EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz" && echo x > "$EXPORTS/notes.tar.gz"'
+exec devvm history
+stdout '^FILE +VM +FOLDER +DATE +SIZE\n'
+stdout '^\S*/exports/devvm-old-12345612345612-20200101-000000\.tar\.gz +devvm-old-12345612345612 +- +2020-01-01 00:00 +\S+\n\S*/exports/devvm-web-'
+stdout '^\S*/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz +devvm-web-[0-9a-f]{14} +\S*/web +[0-9-]+ [0-9:]+ +\S+$'
+! stdout notes
+! stdout out/h

@@ -82,8 +82,8 @@ func TestStaleReferenceIsCaught(t *testing.T) {
 			root.AddCommand(&cobra.Command{Use: "zap", Short: "Zap", Run: func(*cobra.Command, []string) {}})
 		}, []string{"_index.md", "devvm.md", "devvm_zap.md"}},
 		{"a command gone", func(root *cobra.Command) {
-			root.RemoveCommand(find(t, root, "update")) // the last: no other page's place changes
-		}, []string{"_index.md", "devvm.md", "devvm_update.md"}},
+			root.RemoveCommand(find(t, root, "tools")) // the last: no other page's place changes
+		}, []string{"_index.md", "devvm.md", "devvm_tools.md", "devvm_tools_add.md", "devvm_tools_rm.md", "devvm_tools_update.md"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := newRoot()
@@ -106,12 +106,13 @@ func TestHiddenCommandsAreLeftOut(t *testing.T) {
 	}
 	slices.Sort(names)
 	want := []string{
-		"_index.md", "devvm.md", "devvm_adopt.md", "devvm_build.md", "devvm_code.md", "devvm_completion.md", "devvm_desktop.md", "devvm_doctor.md", "devvm_export.md", "devvm_gc.md", "devvm_git-protect.md", "devvm_images.md", "devvm_images_rm.md", "devvm_layer.md", "devvm_layer_new.md", "devvm_limactl.md", "devvm_log.md", "devvm_ls.md", "devvm_network.md",
+		"_index.md", "devvm.md", "devvm_adopt.md", "devvm_build.md", "devvm_code.md", "devvm_completion.md", "devvm_desktop.md", "devvm_doctor.md", "devvm_gc.md", "devvm_git-protect.md", "devvm_history.md", "devvm_history_export.md", "devvm_host.md", "devvm_images.md", "devvm_images_rm.md", "devvm_layer.md", "devvm_layer_new.md", "devvm_limactl.md", "devvm_log.md", "devvm_ls.md", "devvm_network.md",
 		"devvm_policy.md", "devvm_policy_allow.md", "devvm_policy_deny.md", "devvm_policy_rm.md",
 		"devvm_ports.md", "devvm_ports_add.md", "devvm_ports_rm.md", "devvm_rebuild.md",
-		"devvm_remove.md", "devvm_restart.md", "devvm_retention.md", "devvm_rm.md", "devvm_secret.md", "devvm_secret_rm.md",
+		"devvm_restart.md", "devvm_retention.md", "devvm_rm.md", "devvm_secret.md", "devvm_secret_rm.md",
 		"devvm_secret_set.md", "devvm_secret_unuse.md", "devvm_secret_use.md",
-		"devvm_setup.md", "devvm_size.md", "devvm_space.md", "devvm_ssh-agent.md", "devvm_ssh-agent_add.md", "devvm_ssh-agent_rm.md", "devvm_ssh.md", "devvm_stop.md", "devvm_update.md",
+		"devvm_setup.md", "devvm_size.md", "devvm_space.md", "devvm_ssh-agent.md", "devvm_ssh-agent_add.md", "devvm_ssh-agent_rm.md", "devvm_stop.md",
+		"devvm_tools.md", "devvm_tools_add.md", "devvm_tools_rm.md", "devvm_tools_update.md",
 	}
 	if !slices.Equal(names, want) {
 		t.Errorf("files = %v, want %v", names, want)

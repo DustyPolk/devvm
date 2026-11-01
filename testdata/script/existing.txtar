@@ -73,15 +73,15 @@ stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! exec devvm restart base
 stderr usage_error
 
-# An image naming what it lacks adds it in place, after asking: without
-# a terminal, nothing changes.
+# An image naming what it lacks is refused, naming the command that adds
+# its shared tools, and nothing changes.
 ! exec devvm go
-stderr '^devvm: no_terminal_confirm vm=devvm-web-[0-9a-f]{14} want=go$'
+stderr '^devvm: vm_lacks_tools tools=go vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^image=base$'
-# Naming what it has adds nothing.
+# Naming what it has opens it.
 exec devvm base
-! stderr no_terminal_confirm
+! stderr vm_lacks
 
 # A VM without a network choice didn't finish being made: never started
 # (it would start without network policy); rm deletes it.
@@ -127,7 +127,9 @@ stdout devvm-api
 stderr '^devvm: no_vm dir=/\S*/web$'
 ! exec devvm restart
 stderr '^devvm: no_vm dir=/\S*/web$'
-! exec devvm update
+! exec devvm tools update
+stderr '^devvm: no_vm dir=/\S*/web$'
+! exec devvm tools
 stderr '^devvm: no_vm dir=/\S*/web$'
 ! exec devvm adopt
 stderr '^devvm: no_vm dir=/\S*/web$'

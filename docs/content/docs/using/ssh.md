@@ -15,16 +15,16 @@ devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches
 Include ~/.config/devvm/ssh_config
 ```
 
-You can also point ssh at the file, as in `ssh -F ~/.config/devvm/ssh_config devvm-website`. `devvm ssh`, `devvm code` and a new [`--clone`](clone.md) VM offer to add the line in a terminal, and without one, they show it.
+You can also point ssh at the file, as in `ssh -F ~/.config/devvm/ssh_config devvm-website`. `devvm host`, `devvm code` and a new [`--clone`](clone.md) VM offer to add the line in a terminal, and without one, they show it.
 
-- **Only running VMs are listed.** A stopped VM's port is free for any program on this machine to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm ssh` or `devvm` before you connect from an editor.
+- **Only running VMs are listed.** A stopped VM's port is free for any program on this machine to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm host` or `devvm` before you connect from an editor.
 - **Each entry checks the VM's own host keys,** which devvm keeps in `~/.config/devvm/known_hosts`. ssh refuses a host key that doesn't match, and a VM whose keys devvm can't read gets no entry.
 - **The entries need OpenSSH 8.7 or newer** (`ssh -V`), and an older ssh refuses them.
 - **Keep remote forwards out of `Host *`.** The entries turn off what else your ssh config could share with a VM, but they can't turn off a `RemoteForward` of yours.
 
-## devvm ssh and devvm code
+## devvm host and devvm code
 
-`devvm ssh` gets this folder's VM ready for ssh and editors, then shows its name (`devvm-website`) and its folder in the VM. It does what [a launch of an existing VM](../internals/overview.md#an-existing-vm) does, without opening a shell. It checks `.git`, applies the size, ports and agent forwarding that a stopped VM's state asks for, starts the VM if it's stopped, runs the [self-check](../internals/network.md#the-self-check), sets the VM up and writes the ssh config. A VM whose network policy doesn't hold is stopped, and it gets no name.
+`devvm host` gets this folder's VM ready for ssh and editors, then shows its host name (`devvm-website`) and its folder in the VM. It does what [a launch of an existing VM](../internals/overview.md#an-existing-vm) does, without opening a shell. It checks `.git`, applies the size, ports and agent forwarding that a stopped VM's state asks for, starts the VM if it's stopped, runs the [self-check](../internals/network.md#the-self-check), sets the VM up and writes the ssh config. A VM whose network policy doesn't hold is stopped, and it gets no name.
 
 `devvm code` does the same, then opens the folder in VS Code over Remote-SSH with VS Code's `code` command, as in `code --remote ssh-remote+devvm-website ~/website`. VS Code gets the SSH agent that devvm was started with, not the one that devvm's own connections to the VM carry. Without `code` on `PATH`, devvm names the host to connect to with *Remote-SSH: Connect to Host*.
 

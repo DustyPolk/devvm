@@ -50,13 +50,13 @@ devvm setup --features none          # base gets no features
 
 devvm keeps what it makes until you delete it, and the retention settings tell it to delete some of it on its own. Every setting is off until you set it, so first run `devvm space` to see what each one would free: its `RETAIN` column shows each setting that's on, beside the row it applies to, with what it would delete now ([devvm space](space.md#devvm-space)).
 
-`devvm retention` shows every setting and its value, and `off` for each one that isn't set. `devvm retention KEY=VALUE...` sets them, and `devvm retention KEY=off` turns one off, for example `devvm retention exports.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know, and a key with no value such as `exports.age=`, and then it writes nothing. The settings are `key=value` lines in `~/.config/devvm/retention`, and when a line can't be read, devvm names the file and the line and applies none of them.
+`devvm retention` shows every setting and its value, and `off` for each one that isn't set. `devvm retention KEY=VALUE...` sets them, and `devvm retention KEY=off` turns one off, for example `devvm retention history.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know, and a key with no value such as `history.age=`, and then it writes nothing. The settings are `key=value` lines in `~/.config/devvm/retention`, and when a line can't be read, devvm names the file and the line and applies none of them.
 
 | Key | What devvm deletes |
 | --- | --- |
 | `logs.runs` | the [run logs](troubleshooting.md#a-command-fails) beyond the newest this many, which is 20 when it's off |
-| `exports.age` | the [exports](coding-agents.md#history) written this long ago or more, such as `90d` |
-| `exports.count` | the exports beyond the newest this many |
+| `history.age` | the [exports of agents' history](coding-agents.md#history) written this long ago or more, such as `90d` |
+| `history.count` | the exports of agents' history beyond the newest this many |
 | `tools.unused-age` | the current shared tools that no VM has had for this long, counted from when devvm first found that no VM has them. While a VM is being made or is getting new shared tools, retention deletes none of them in that run, because that VM may not list the tools it picked yet, and it still applies the other settings |
 | `orphans.age` | what devvm keeps for VMs that their backend no longer has, once their state hasn't changed for this long, as `devvm gc --orphans` does |
 | `nix-cache.size` | the [shared Nix cache](toolchains.md#nix-projects)'s least recently used files, while it takes more than this, such as `20G`; it's 10 GiB when it's off |
@@ -94,7 +94,7 @@ A CA in the folder can read every TLS connection a VM makes, as it can this mach
 - each VM's state, its own allowlist and its network logs;
 - the images and their records, and the shared tools;
 - the [run logs](troubleshooting.md#a-command-fails) in `logs/runs/`;
-- the agents' history that `devvm export` and `devvm rm` save, in `exports/`;
+- the agents' history that `devvm history export` and `devvm rm` save, in `exports/`;
 - devvm's own Lima home (`lima/`), where the Lima backend's VMs and images live.
 
 [What devvm keeps on this machine](space.md) lists everything in this folder, with how each is cleaned up.

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
 )
@@ -120,6 +121,11 @@ func (d Dirs) Mise() string { return filepath.Join(d.Data, "mise") }
 
 // Exports is where exported VM state goes by default.
 func (d Dirs) Exports() string { return filepath.Join(d.Data, "exports") }
+
+// ExportFolder is the file beside an export in Exports that names the
+// project folder of the VM it's of: the export's path with .folder for
+// .tar.gz.
+func ExportFolder(export string) string { return strings.TrimSuffix(export, ".tar.gz") + ".folder" }
 
 // NixCache is the Nix cache VMs with network policy share, which their
 // proxies fill from cache.nixos.org.

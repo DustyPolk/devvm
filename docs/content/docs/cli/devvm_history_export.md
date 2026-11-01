@@ -1,6 +1,6 @@
 ---
-title: devvm export
-weight: 8
+title: devvm history export
+weight: 11
 ---
 
 Save this folder's VM's agent history to a .tar.gz
@@ -10,7 +10,7 @@ Save this folder's VM's agent history to a .tar.gz
 Save this folder's VM's agent history (transcripts and sessions, without the agents' logins) to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. A stopped VM is started for it. FILE is replaced only once the export is complete.
 
 ```text
-devvm export [FILE] [flags]
+devvm history export [FILE] [flags]
 ```
 
 ## Options
@@ -34,4 +34,4 @@ devvm export [FILE] [flags]
 
 ## See also
 
-- [devvm](devvm.md): Open a shell in this folder's VM, creating it first
+- [devvm history](devvm_history.md): List the saved exports of agents' history

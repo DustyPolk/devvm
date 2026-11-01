@@ -38,9 +38,9 @@ type gcOpts struct {
 	// making is set with --tools when a VM is being made: gc keeps every
 	// current tool image no VM has, and says so.
 	making bool
-	// exports is --exports: also the exports, only those older than
-	// --older-than when it's given.
-	exports   bool
+	// history is --history: also the exports of agents' history, only
+	// those older than --older-than when it's given.
+	history   bool
 	olderThan string
 	age       time.Duration
 	// orphans is --orphans: also what devvm keeps for VMs their backend
@@ -72,7 +72,7 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 			"TOOLs named (node, claude), but not those built in the last hour, which it names and keeps " +
 			"because a VM being made may not list them yet, and none while a VM is being made or getting " +
 			"new shared tools, which it names too. With --tools --force, those built in the last hour too, without " +
-			"asking, unless a VM is being made or getting new shared tools, when it deletes nothing. With --exports, also the agents' history devvm export and " +
+			"asking, unless a VM is being made or getting new shared tools, when it deletes nothing. With --history, also the agents' history devvm history export and " +
 			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
 			"(30d, 2w, 12h). With --nix-cache, also the whole shared Nix cache, which VMs download again " +
 			"when they need it. With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm " +
@@ -94,8 +94,8 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
 	c.Flags().BoolVar(&o.force, "force", false, "with --tools, also delete the current shared tool images no VM has that were built in the last hour, "+
 		"and don't ask; refused while a VM is being made")
-	c.Flags().BoolVar(&o.exports, "exports", false, "also delete the saved exports of agents' history")
-	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --exports, only those older than `AGE`: 30d, 2w or 12h")
+	c.Flags().BoolVar(&o.history, "history", false, "also delete the saved exports of agents' history")
+	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --history, only those older than `AGE`: 30d, 2w or 12h")
 	c.Flags().BoolVar(&o.nixCache, "nix-cache", false, "also delete the whole shared Nix cache, which VMs download again when they need it")
 	c.Flags().BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has, as devvm rm does")
 	c.Flags().BoolVar(&o.caches, "caches", false, "then free devvm's share of the backends' own caches, asking for each backend; only in a terminal")
@@ -104,11 +104,11 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 }
 
 // checkArgs takes tool names, by the names images have them by, only
-// with --tools, and an age only with --exports.
+// with --tools, and an age only with --history.
 func (o *gcOpts) checkArgs(args []string) error {
 	if o.olderThan != "" {
-		if !o.exports {
-			return msg.GCOlderThanNeedsExports()
+		if !o.history {
+			return msg.GCOlderThanNeedsHistory()
 		}
 		age, err := state.ParseAge(o.olderThan)
 		if err != nil {
@@ -124,7 +124,7 @@ func (o *gcOpts) checkArgs(args []string) error {
 	}
 	for _, a := range args {
 		if !slices.Contains(image.Toolchains, a) && !slices.Contains(image.Agents, a) {
-			return msg.GCUnknownTool(a, strings.Join(slices.Concat(image.Toolchains, image.Agents), " "))
+			return msg.UnknownTool(a, strings.Join(slices.Concat(image.Toolchains, image.Agents), " "))
 		}
 	}
 	return nil
@@ -140,7 +140,7 @@ type gcPlan struct {
 	// them
 	recent  []tools.Listed
 	making  bool
-	exports []savedExport // with --exports, the exports old enough
+	exports []savedExport // with --history, the exports old enough
 	// with --orphans, the VMs their backend no longer has, and what
 	// forgets them
 	orphans   vm.LeftoverReport
@@ -281,7 +281,7 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	if err := p.skip(u, b, l.unlisted); err != nil {
 		return p, err
 	}
-	if o.exports {
+	if o.history {
 		es, err := exports(b.Dirs)
 		if err != nil {
 			return p, err
@@ -482,9 +482,9 @@ func (p gcPlan) show(u *ui.UI) {
 	}
 	p.nix.show(u)
 	if len(p.exports) > 0 {
-		u.Say(msg.GCExports(len(p.exports), humanSize(exportsSize(p.exports))))
+		u.Say(msg.GCHistory(len(p.exports), humanSize(exportsSize(p.exports))))
 		for _, e := range p.exports {
-			u.Say(msg.GCExport(exportDate(e.At), humanSize(e.Size), e.VM))
+			u.Say(msg.GCHistoryExport(exportDate(e.At), humanSize(e.Size), e.VM))
 		}
 	}
 }
@@ -516,7 +516,7 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 		return err
 	}
 	if len(p.exports) > 0 {
-		u.Info(msg.DeletedExports(len(p.exports)))
+		u.Info(msg.DeletedHistory(len(p.exports)))
 	}
 	if len(p.tools) > 0 {
 		if err := p.share.Delete(toolFiles(p.tools)); err != nil {

@@ -8,7 +8,7 @@ These are the things devvm can't do, everywhere and then by host and backend.
 ## Everywhere
 
 - **Shared tools are read-only,** so a tool can't update itself or add components, for example with `rustup component add` ([details](images.md#shared-tools)).
-- **Layers can be added to a VM in place but not taken out.** To take one out, run `devvm rm` and make the VM again, but shared tools come out with `devvm remove` ([details](images.md#adding-and-removing-tools)).
+- **Only a new VM gets a layer.** A layer's script changes the VM's disk, so a VM that exists can't have one added or taken out. To change its layers, run `devvm rm` and make the VM again, but shared tools go in with `devvm tools add` and come out with `devvm tools rm` ([details](toolchains.md#adding-and-removing-tools)).
 - **`--from` takes only Debian-, Ubuntu- and Alpine-based images,** and Alpine, Debian 12 (`node:24`) and Ubuntu before 26.04 on arm64 build with unpinned packages ([details](from.md#supported-images)).
 - **Agent folders** that you make or delete on this machine reach a running VM only after a restart, which devvm offers ([details](coding-agents.md#mounts)).
 - **Ports** are forwarded over TCP only, on every backend, and forwarding every port means every port from 1024 up. You can tunnel UDP over a forwarded TCP port with socat ([details](ports-size.md#ports)).

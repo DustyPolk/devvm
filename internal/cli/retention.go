@@ -39,8 +39,8 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 		Use:   "retention [KEY=VALUE...]",
 		Short: "Show or change the retention settings: what devvm deletes on its own",
 		Long: "Show each retention setting and its value, off when it isn't set, or change them, each " +
-			"KEY=VALUE, and KEY=off to turn one off: logs.runs (the run logs kept, 20 when off), exports.age " +
-			"and exports.count (the exports older than an age, or beyond the newest count, deleted), " +
+			"KEY=VALUE, and KEY=off to turn one off: logs.runs (the run logs kept, 20 when off), history.age " +
+			"and history.count (the exports of agents' history older than an age, or beyond the newest count, deleted), " +
 			"tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age " +
 			"(what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc " +
 			"--retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or " +
@@ -93,8 +93,8 @@ func (r retained) report() msg.M {
 }
 
 // retain applies the retention settings r, each to what it names and
-// nothing else: exports older than exports.age, then all but the newest
-// exports.count; current tool images no VM has had for tools.unused-age;
+// nothing else: exports older than history.age, then all but the newest
+// history.count; current tool images no VM has had for tools.unused-age;
 // with orphans, what devvm keeps for VMs their backend hasn't had for
 // orphans.age (it asks the backends); the shared Nix cache's least recently
 // used files while it's over nix-cache.size (or its default). Never a VM,
@@ -124,7 +124,7 @@ func retain(ctx context.Context, u *ui.UI, b *build.Env, r state.Retention, orph
 	return done, nil
 }
 
-// exportsToRetire are the exports exports.age and exports.count say to
+// exportsToRetire are the exports history.age and history.count say to
 // delete: those that old, then all but the newest count.
 func exportsToRetire(es []savedExport, r state.Retention, now time.Time) []savedExport {
 	var gone []savedExport

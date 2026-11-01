@@ -204,17 +204,17 @@ grep '^  AddKeysToAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
 grep '^  IdentitiesOnly yes$' $XDG_CONFIG_HOME/devvm/ssh_config
 grep '^  ForwardAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
 grep '^devvm-sshd-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/known_hosts
-exec devvm ssh
+exec devvm host
 stdout '^ssh_host_info dir=\S+/sshd host=devvm-sshd$'
 # An image without sshd: the start runs the rest without it, warned; no
-# entry, and devvm ssh says so.
+# entry, and devvm host says so.
 exec sh -c 'touch "$STUB_DIR/no-sshd"; : > "$STUB_LOG"'
 exec devvm restart
 stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 stub_calls
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s --$'
 ! grep 'devvm-sshd' $XDG_CONFIG_HOME/devvm/ssh_config
-! exec devvm ssh
+! exec devvm host
 stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 rm $STUB_DIR/no-sshd
 exec devvm rm -f
@@ -289,7 +289,7 @@ exec devvm
 exec sh -c 'cat "$STUB_DIR"/smolvm-agent-devvm-agent-*'
 stdout '^/dev/null/devvm-no-agent$'
 # Its own start, kept: devvm doesn't stop it.
-exec devvm ssh
+exec devvm host
 ! stderr 'agent_unchosen'
 # With the user's agent, nothing to keep from it: started outside devvm,
 # it runs on.

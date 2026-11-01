@@ -23,3 +23,22 @@ func TestJoined(t *testing.T) {
 		}
 	}
 }
+
+// devvm tools add and rm complete separate words: the shared tools not
+// given yet.
+func TestCompleteToolNames(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		in   string
+		want []string
+	}{
+		{nil, "c", []string{"claude", "codex"}},
+		{[]string{"claude"}, "c", []string{"codex"}},
+		{[]string{"node"}, "", []string{"python", "rust", "go", "claude", "codex", "opencode"}},
+		{nil, "node+", nil},
+	} {
+		if got, _ := completeToolNames(nil, tc.args, tc.in); !slices.Equal(got, tc.want) {
+			t.Errorf("completeToolNames(%q, %q) = %q, want %q", tc.args, tc.in, got, tc.want)
+		}
+	}
+}

@@ -43,7 +43,7 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 }
 
 // addCompletions sets how the shell completes root's commands' arguments
-// and flags: image names for IMAGE, tool names for TOOLS, backend names
+// and flags: image names for IMAGE, backend names
 // for --backend, and no file names, which none of them take.
 func addCompletions(root *cobra.Command, u *ui.UI) {
 	backendNames := completeBackend(u)
@@ -53,8 +53,6 @@ func addCompletions(root *cobra.Command, u *ui.UI) {
 		switch c.Name() {
 		case "build", "rebuild":
 			c.ValidArgsFunction = completeImage
-		case "remove":
-			c.ValidArgsFunction = completeTools
 		case "setup":
 			_ = c.RegisterFlagCompletionFunc("backend", backendNames)
 			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
@@ -79,13 +77,16 @@ func completeImage(_ *cobra.Command, args []string, toComplete string) ([]cobra.
 	return joined(toComplete, slices.Concat(b.Environments(), image.Agents)), cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeTools completes TOOLS: the toolchains and the agents, after the
-// parts already given.
-func completeTools(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	if len(args) > 0 {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// completeToolNames completes TOOL...: the toolchains and the agents not
+// already given.
+func completeToolNames(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	var out []cobra.Completion
+	for _, n := range slices.Concat(image.Toolchains, image.Agents) {
+		if strings.HasPrefix(n, toComplete) && !slices.Contains(args, n) {
+			out = append(out, n)
+		}
 	}
-	return joined(toComplete, slices.Concat(image.Toolchains, image.Agents)), cobra.ShellCompDirectiveNoFileComp
+	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeFeatures completes setup's --features: base's features, after

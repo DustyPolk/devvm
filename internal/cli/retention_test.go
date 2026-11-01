@@ -9,7 +9,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// exports.age deletes those that old; exports.count then keeps the newest;
+// history.age deletes those that old; history.count then keeps the newest;
 // off deletes none.
 func TestExportsToRetire(t *testing.T) {
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)

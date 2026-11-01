@@ -1,8 +1,6 @@
 package vm
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -63,13 +62,13 @@ func TestOpenNetworkPolicy(t *testing.T) {
 	}
 }
 
-// An image naming what the VM lacks adds it in place, after asking: the
-// tools join its list, a layer's script runs in it, and new agents'
-// folders are mounted, which stops it first. Declined, nothing changes.
-func TestAddLayers(t *testing.T) {
+// An image naming what the VM lacks is refused, and nothing changes: a
+// layer it lacks first, which only a new VM gets, else the shared tools
+// it lacks, which devvm tools add adds. Naming what it has opens it.
+func TestImageLacks(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	l := Launch{e}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Image: "go", NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := os.MkdirAll(e.Dirs.Layers(), 0o700); err != nil {
 		t.Fatal(err)
@@ -77,132 +76,126 @@ func TestAddLayers(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.Dirs.Layers(), "foo.sh"), []byte("#!/bin/bash\necho foo\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	before := len(f.Calls())
+	for _, tc := range []struct{ image, want string }{
+		{"foo+claude", "vm_lacks_layer image=go+foo+claude layer=foo vm=" + vm},
+		{"docker", "vm_lacks_layer image=go+docker layer=docker vm=" + vm},
+		{"python+claude", "vm_lacks_tools tools=python claude vm=" + vm},
+		{"claude", "vm_lacks_tools tools=claude vm=" + vm},
+	} {
+		if err := l.Up(t.Context(), Options{Image: tc.image}); names(err) != tc.want {
+			t.Errorf("Up %s = %v, want %s", tc.image, names(err), tc.want)
+		}
+	}
+	st, _ = state.ReadVM(e.Dirs, vm)
+	if ms := f.Methods()[before:]; st.Get(state.KeyImage) != "go" || slices.Contains(ms, "Stop") || slices.Contains(ms, "BuildTools") ||
+		slices.Contains(ms, "Exec") {
+		t.Errorf("image %s, calls %q", st.Get(state.KeyImage), ms)
+	}
+	for _, img := range []string{"go", "base"} {
+		if err := l.Up(t.Context(), Options{Image: img}); err != nil {
+			t.Errorf("Up %s = %v", img, names(err))
+		}
+	}
+}
+
+// devvm tools add: the tools the share lacks built, then in the VM's
+// image name and list; a new agent's config folders mounted at once on a
+// stopped VM, after asking on a running one; those it has said and left.
+func TestToolsAdd(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	tl := Tools{e}
+	st := existingVM(t, e, Options{Image: "go", NoNetworkPolicy: true})
+	vm := st.Name()
 	skills := filepath.Join(e.Home, ".claude", "skills")
 	if err := os.MkdirAll(skills, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	asked := answers(t, e, false)
+	var said []string
+	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	if err := f.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
 	before := len(f.Calls())
-	if err := l.Up(t.Context(), Options{Image: "foo+claude"}); err != nil {
+	if err := tl.Add(t.Context(), Options{}, []string{"go", "claude", "claude"}); err != nil {
 		t.Fatal(names(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
-	if !slices.Equal(*asked, []string{"add_in_place image=base missing=foo claude vm=" + vm}) || st.Get(state.KeyImage) != "base" ||
-		slices.Contains(f.Methods()[before:], "BuildTools") {
-		t.Errorf("declined: asked %q, image %s, calls %q", *asked, st.Get(state.KeyImage), f.Methods()[before:])
-	}
-
-	answers(t, e, true)
-	var scripts []string
-	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
-		if slices.Equal(argv, []string{"bash", "-s"}) {
-			b, _ := readAll(o)
-			scripts = append(scripts, b)
-		}
-		return nil
-	}
-	before = len(f.Calls())
-	if err := l.Up(t.Context(), Options{Image: "foo+claude"}); err != nil {
-		t.Fatal(names(err))
-	}
-	st, _ = state.ReadVM(e.Dirs, vm)
-	if st.Get(state.KeyImage) != "foo+claude" || !strings.HasPrefix(st.Get(KeyTools), "claude-") {
+	if st.Get(state.KeyImage) != "go+claude" || !strings.Contains(st.Get(KeyTools), " claude-") {
 		t.Errorf("state image=%s tools=%s", st.Get(state.KeyImage), st.Get(KeyTools))
 	}
-	if len(scripts) != 1 || !strings.Contains(scripts[0], "echo foo") {
-		t.Errorf("scripts %q", scripts)
-	}
 	ms := f.Methods()[before:]
-	if i, j := slices.Index(ms, "Stop"), slices.Index(ms, "SetAgentDirs"); i < 0 || j < i || !slices.Contains(ms, "BuildTools") {
+	if i, j := slices.Index(ms, "SetAgentDirs"), slices.Index(ms, "Start"); !slices.Contains(ms, "BuildTools") || i < 0 || j < i {
 		t.Errorf("calls = %q", ms)
 	}
 	if dirs := f.Instances[vm].AgentDirs; !slices.Equal(dirs, []string{skills}) {
 		t.Errorf("agent dirs = %q", dirs)
 	}
-	// It has them now: nothing to add or ask.
-	*asked = nil
-	if err := l.Up(t.Context(), Options{Image: "claude"}); err != nil || len(*asked) > 0 {
-		t.Errorf("again: %v, asked %q", names(err), *asked)
+	if !slices.Contains(said, "has_tools tools=go vm="+vm) || !slices.Contains(said, "vm_is_now image=go+claude vm="+vm) {
+		t.Errorf("said %q", said)
 	}
-}
 
-// A built-in layer added in place runs devvm's script, with the new image
-// already the VM's (its proxy reads the layer's policy from it); a script
-// that fails sets the image back.
-func TestAddBuiltinLayer(t *testing.T) {
-	e, f, _ := upEnv(t, allNative())
-	l := Launch{e}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
-	vm := st.Name()
-	answers(t, e, true)
-	want, err := fs.ReadFile(e.Assets, "layers/docker.sh")
-	if err != nil {
+	// Running: a new agent's folders after a restart it asks for.
+	prompts := filepath.Join(e.Home, ".codex", "prompts")
+	if err := os.MkdirAll(prompts, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	var scripts, during []string
-	fail := true
-	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
-		if !slices.Equal(argv, []string{"bash", "-s"}) {
-			return nil
-		}
-		b, _ := readAll(o)
-		scripts = append(scripts, b)
-		now, _ := state.ReadVM(e.Dirs, vm)
-		during = append(during, now.Get(state.KeyImage))
-		if fail {
-			return errors.New("exit 1")
-		}
-		return nil
-	}
-	if err := l.Up(t.Context(), Options{Image: "docker"}); !strings.HasPrefix(names(err), "add_layer_failed ") {
-		t.Errorf("failing script: %v", names(err))
-	}
-	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "base" {
-		t.Errorf("after a failed script, image=%s", st.Get(state.KeyImage))
-	}
-	fail = false
-	if err := l.Up(t.Context(), Options{Image: "docker"}); err != nil {
+	asked := answers(t, e, true)
+	before = len(f.Calls())
+	if err := tl.Add(t.Context(), Options{}, []string{"codex"}); err != nil {
 		t.Fatal(names(err))
 	}
-	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "docker" {
-		t.Errorf("image=%s", st.Get(state.KeyImage))
+	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "go+claude+codex" {
+		t.Errorf("image = %s", st.Get(state.KeyImage))
 	}
-	if len(scripts) != 2 || scripts[1] != string(want) || !slices.Equal(during, []string{"docker", "docker"}) {
-		t.Errorf("%d scripts, devvm's last: %v, image while running %q", len(scripts), len(scripts) == 2 && scripts[1] == string(want), during)
-	}
-}
-
-func readAll(o backend.ExecOpts) (string, error) {
-	var b strings.Builder
-	buf := make([]byte, 512)
-	for {
-		n, err := o.Stdin.Read(buf)
-		b.Write(buf[:n])
-		if err != nil {
-			return b.String(), nil //nolint:nilerr // EOF
-		}
+	ms = f.Methods()[before:]
+	if !slices.Equal(*asked, []string{"update_mounts vm=" + vm}) || !slices.Contains(ms, "Stop") ||
+		!slices.Contains(f.Instances[vm].AgentDirs, prompts) {
+		t.Errorf("asked %q, calls %q, agent dirs %q", *asked, ms, f.Instances[vm].AgentDirs)
 	}
 }
 
-// remove and update open the VM after changing its tools; restart stops
+// tools rm and update open the VM after changing its tools; restart stops
 // it first.
 func TestRemoveUpdateRestart(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	l := Launch{e}
+	tl := Tools{e}
 	st := existingVM(t, e, Options{Image: "go+claude", NoNetworkPolicy: true})
 	vm := st.Name()
-	if err := l.Remove(t.Context(), Options{}, "claude"); err != nil {
+	if err := tl.Remove(t.Context(), Options{}, []string{"claude"}); err != nil {
 		t.Fatal(names(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
 	if st.Get(state.KeyImage) != "go" || strings.Contains(st.Get(KeyTools), "claude") {
 		t.Errorf("state image=%s tools=%s", st.Get(state.KeyImage), st.Get(KeyTools))
 	}
-	if err := l.Remove(t.Context(), Options{}, "python"); names(err) != "vm_lacks has=go layer=python vm="+vm {
+	if err := tl.Remove(t.Context(), Options{}, []string{"python"}); names(err) != "vm_lacks has=go layer=python vm="+vm {
 		t.Errorf("Remove python = %v", names(err))
 	}
-	if err := l.Update(t.Context(), Options{}); err != nil {
+	if err := tl.Update(t.Context(), Options{}); err != nil {
 		t.Fatal(names(err))
+	}
+	if ts, err := tl.List(t.Context()); err != nil || len(ts) != 1 || ts[0].Tool != "go" || ts[0].Newer != "" {
+		t.Errorf("List = %+v, %v", ts, err)
+	}
+	// claude added after go, listed first by the image: still the newest.
+	if err := tl.Add(t.Context(), Options{}, []string{"claude"}); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := tl.Remove(t.Context(), Options{}, []string{"go"}); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := tl.Add(t.Context(), Options{}, []string{"go"}); err != nil {
+		t.Fatal(names(err))
+	}
+	st, _ = state.ReadVM(e.Dirs, vm)
+	had := st.Get(KeyTools)
+	if err := tl.Update(t.Context(), Options{}); err != nil {
+		t.Fatal(names(err))
+	}
+	if st, _ = state.ReadVM(e.Dirs, vm); !strings.HasPrefix(had, "claude-") || st.Get(KeyTools) != had {
+		t.Errorf("Update after adding: tools %q, were %q", st.Get(KeyTools), had)
 	}
 	before := len(f.Calls())
 	if err := l.Restart(t.Context(), Options{}); err != nil {

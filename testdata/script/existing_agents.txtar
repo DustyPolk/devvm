@@ -1,6 +1,7 @@
 # Existing VMs with network policy, shared tools and agents: a running
-# VM keeps its proxy, the self-check runs on every launch, update and
-# remove change its tools, and rm exports its agents' history first.
+# VM keeps its proxy, the self-check runs on every launch, tools shows
+# its tools and tools add, rm and update change them, and rm exports its
+# agents' history first.
 env DEVVM_MESSAGES=names
 env DATA=$XDG_DATA_HOME/devvm
 env VMS=$XDG_DATA_HOME/devvm/vms
@@ -35,17 +36,29 @@ stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-net-*'
 stdout '^net_check=ok$'
 
-# update: with the lock as it is, the tools are the newest; with a newer
-# go upstream, it's built and the VM moves to it.
+# tools update: with the lock as it is, the tools are the newest; with a
+# newer go upstream, it's built and the VM moves to it. tools shows the
+# VM's version and the lock's newer one, built or not, without going
+# online.
 mkdir $WORK/api
 cd $WORK/api
 exec devvm --no-network-policy --no-git-protect go
-exec devvm update
+! exec devvm tools now
+stderr usage_error
+exec devvm tools
+stdout '^TOOL +VERSION +NEWER +BUILT\ngo +\S+ +- +-\n\z'
+exec devvm tools update
 stdout '^==> checking_tools$'
 stdout '^==> tools_newest vm=devvm-api-[0-9a-f]{14}$'
 exec sh -c 'sed "/^\[\[tools.go\]\]/,/^version/ s/^version = .*/version = \"9.9.9\"/" "$MISE_STUB_LOCK" > "$WORK/newer.lock"'
+exec sh -c 'cp "$WORK/newer.lock" "$XDG_DATA_HOME/devvm/mise.lock"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm tools
+stdout '^go +\S+ +9\.9\.9 +no$'
+stub_calls
+! stdout mise
 env MISE_STUB_LOCK=$WORK/newer.lock
-exec devvm update
+exec devvm tools update
 stdout '^==> building_tools tools=go 9\.9\.9$'
 stdout '^==> tools_switch vm=devvm-api-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-api-*'
@@ -56,24 +69,57 @@ stdout '^go-9\.9\.9-[0-9a-f]{12}\.erofs go 9\.9\.9$'
 exec sh -c 'f=$(ls "$VMS"/devvm-api-*); sed "s/^tools=.*/tools=go-1.0.0-0123456789ab.erofs/" "$f" > "$f.new" && mv "$f.new" "$f"'
 exec devvm
 stderr '^devvm: newer_tools tools=go 9\.9\.9$'
+exec devvm tools
+stdout '^go +1\.0\.0 +9\.9\.9 +yes$'
 
-# remove: the tools leave its name and list, the rest stays; what it
-# lacks is refused, and so is a layer.
+# tools rm: the tools leave its name and list, the rest stays; what it
+# lacks is refused, and so is a layer. Names are separate words.
 mkdir $WORK/web
 cd $WORK/web
 cp $WORK/package.json package.json
 exec devvm --no-network-policy --no-git-protect claude
-exec devvm remove claude
+! exec devvm tools rm node+claude
+stderr '^devvm: tools_joined cmd=rm given=node\+claude$'
+exec devvm tools rm claude
 stdout '^==> vm_is_now image=node vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-web-*'
 stdout '^image=node$'
 stdout '^tools=node-\S+ pnpm-\S+ bun-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 ! stdout claude
-! exec devvm remove python
+! exec devvm tools rm python
 stderr '^devvm: vm_lacks has=node layer=python vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm remove
+! exec devvm tools rm
 stderr usage_error
+
+# devvm IMAGE adds nothing to a VM that exists: what it lacks is refused,
+# naming the shared tools tools add adds, or a layer only a new VM gets;
+# nothing changes.
+! exec devvm python+claude
+stderr '^devvm: vm_lacks_tools tools=python claude vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm docker
+stderr '^devvm: vm_lacks_layer image=node\+docker layer=docker vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^image=node$'
+
+# tools add: the tools it lacks join its name and list, those it has are
+# said; only shared tools, each a separate word.
+! exec devvm tools add
+stderr usage_error
+! exec devvm tools add python+claude
+stderr '^devvm: tools_joined cmd=add given=python\+claude$'
+! exec devvm tools add docker
+stderr '^devvm: unknown_tool tool=docker tools=node python rust go claude codex opencode$'
+exec devvm tools add node claude
+stdout '^==> has_tools tools=node vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> vm_is_now image=node\+claude vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^image=node\+claude$'
+stdout '^tools=node-\S+ pnpm-\S+ bun-\S+ claude-\S+$'
+exec tar -xOf $STUB_DIR/sync.tar tools
+stdout claude
+exec devvm claude
+! stderr vm_lacks
 
 # rm: an image with an agent has its history exported first, from the
 # VM, started if it's stopped; a failed export keeps the VM, and -f

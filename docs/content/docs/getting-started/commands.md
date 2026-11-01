@@ -8,9 +8,10 @@ This page lists devvm's commands in the order you'll need them, and each row lin
 ## VMs
 
 ```sh
-devvm          # a VM with the project's toolchain, or a shell in the folder's VM
-devvm claude   # the same, with Claude Code: added to an existing VM after asking
-devvm codex    # the same, with Codex
+devvm                   # a VM with the project's toolchain, or a shell in the folder's VM
+devvm claude            # a new VM with the project's toolchain and Claude Code
+devvm codex             # the same, with Codex
+devvm tools add claude  # add Claude Code to the folder's existing VM
 ```
 
 [Adding to a VM](#adding-to-a-vm) explains what adding an agent to an existing VM does.
@@ -20,9 +21,12 @@ devvm codex    # the same, with Codex
 | `devvm [IMAGE]` | open a shell in this folder's VM, at the same path, making the VM first from IMAGE or from the image the folder's files call for ([details](../using/images.md#which-image-a-new-vm-gets)) |
 | `devvm restart` | stop this folder's VM, start it again and open a shell in it, for changes that apply only when it starts |
 | `devvm stop` | stop this folder's VM ([details](../internals/overview.md#stopping-a-vm)) |
-| `devvm update` | move this folder's VM to the newest shared tools, then open a shell in it ([details](../using/images.md#adding-and-removing-tools)) |
-| `devvm remove TOOLS` | take shared tools out of this folder's VM, such as `devvm remove python+claude`, then open a shell in it |
-| `devvm export [FILE]` | save the history of this folder's VM's agents to FILE, or to a new `.tar.gz` in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
+| `devvm tools` | show this folder's VM's shared tools, each with its version and any newer one ([details](../using/toolchains.md#adding-and-removing-tools)) |
+| `devvm tools add TOOL...` | add shared tools to this folder's VM, such as `devvm tools add python claude`, then open a shell in it ([details](#adding-to-a-vm)) |
+| `devvm tools rm TOOL...` | take shared tools out of this folder's VM, such as `devvm tools rm python claude`, then open a shell in it |
+| `devvm tools update` | move this folder's VM to the newest shared tools, then open a shell in it ([details](../using/toolchains.md#adding-and-removing-tools)) |
+| `devvm history` | list the exports of agents' history that devvm saved in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
+| `devvm history export [FILE]` | save the history of this folder's VM's agents to FILE, or to a new `.tar.gz` in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
 | `devvm rm [-f]` | delete this folder's VM, exporting its agents' history first ([details](../internals/overview.md#deleting-a-vm)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
 | `devvm ls` | list the project VMs ([details](#listing-vms)) |
@@ -76,17 +80,19 @@ A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets t
 
 ### Adding to a VM
 
-`devvm IMAGE` in a folder whose VM exists names an image as it does for a new VM, with agents alone on top of the folder's toolchains. devvm adds whatever of it the VM's image lacks in place, after you confirm in a terminal. Without a terminal, devvm stops and changes nothing.
+`devvm tools add TOOL...` adds shared tools to the folder's VM, each one a separate word, as in `devvm tools add python claude`, and then opens a shell in it. The tools are mounted rather than installed, so nothing in the VM's disk changes.
 
-- devvm builds the shared tools that the share lacks, and they join the VM's list at once.
-- devvm mounts an agent's config folders, which stops the VM first, so anything running in it stops.
-- A layer's script runs in the VM, as when devvm builds an image. If the script fails, the VM is otherwise left as it was.
+- devvm builds the shared tools that the share lacks, and they join the VM's image and its list at once.
+- devvm mounts a new agent's config folders, which needs the VM to start again. A stopped VM gets them as it starts, and for a running VM devvm asks before restarting it, because anything running in it stops. If you answer no, or there's no terminal, the VM gets them at its next start.
+- devvm says which of the tools the VM has already and leaves those as they are.
 
-The VM's image is then its old one with these added. `devvm remove TOOLS` takes shared tools out again. You can't take layers out, because their scripts changed the VM's disk, so to drop one, save your work outside the project folder, run `devvm rm`, and make the VM again.
+`devvm tools rm TOOL...` takes shared tools out again. A layer can't be added to a VM that exists or taken out of one, because its script changes the VM's disk, so only a new VM gets a layer. To add or drop one, save your work outside the project folder, run `devvm rm`, and make the VM again with the image you want.
+
+`devvm IMAGE` in a folder whose VM exists adds nothing. devvm reads IMAGE as it does for a new VM, with agents alone on top of the folder's toolchains, and when the VM has all of it, devvm opens the VM as it is. When the VM lacks some of it, devvm changes nothing and stops. For shared tools it names the `devvm tools add` command that adds them, and for a layer it tells you to make the VM again.
 
 ### A folder made again
 
-A VM belongs to the folder it was made for, which devvm knows by its path and by the folder itself ([one VM per folder](../internals/security.md#one-vm-per-folder)). When that folder was deleted and a new one made at the same path, devvm, `devvm restart`, `update` and `remove` refuse the VM. Two commands deal with it, and each acts only after you confirm in a terminal:
+A VM belongs to the folder it was made for, which devvm knows by its path and by the folder itself ([one VM per folder](../internals/security.md#one-vm-per-folder)). When that folder was deleted and a new one made at the same path, devvm, `devvm restart` and `devvm tools` refuse the VM. Two commands deal with it, and each acts only after you confirm in a terminal:
 
 - `devvm rm` deletes the VM, with `-f` or without it, and never exports its history, because its folder is gone. The VM may hold that project's work.
 - `devvm adopt` gives the VM to this folder, with its files, secrets and allowlist. Its `.git` protection starts again, as if `.git` had just appeared.
@@ -95,9 +101,9 @@ A VM belongs to the folder it was made for, which devvm knows by its path and by
 
 A VM mounts its whole project folder, so the folders inside it are in the VM at the same paths. When the folder you run a command in has no VM of its own, devvm looks for one in the folders it's inside, starting with the nearest. It stops before your home folder and the filesystem root, so it never uses a VM made for either. It stops at the nearest folder that has a VM, and when that VM was made for an earlier folder at its path ([a folder made again](#a-folder-made-again)), or its backend has lost it, the folder you're in has no VM, so devvm never reaches past it to a VM further out. Using a parent folder's VM mounts nothing new, because the subfolder is already inside the folder that VM mounts.
 
-When you run `devvm` in such a subfolder in a terminal, devvm asks whether to open the parent folder's VM there instead of making a new VM, with yes as the default. If you answer yes, the shell opens in the VM at the subfolder's path. If you answer no, devvm makes a new VM for the subfolder alone. Without a terminal, devvm opens the parent folder's VM and names it and its folder first. An IMAGE you give, after the same question, adds to the parent folder's VM in place as it would in that folder ([adding to a VM](#adding-to-a-vm)). `devvm --here` makes a new VM for the subfolder without asking, and so does `devvm --clone`, which makes the subfolder's own clone VM. Once the subfolder has its own VM, devvm opens that one and asks nothing. In a parent folder's `--clone` VM, the shell opens in the subfolder when the clone has it ([subfolders](../using/clone.md#subfolders)).
+When you run `devvm` in such a subfolder in a terminal, devvm asks whether to open the parent folder's VM there instead of making a new VM, with yes as the default. If you answer yes, the shell opens in the VM at the subfolder's path. If you answer no, devvm makes a new VM for the subfolder alone. Without a terminal, devvm opens the parent folder's VM and names it and its folder first. An IMAGE you give, after the same question, is checked against the parent folder's VM as it would be in that folder ([adding to a VM](#adding-to-a-vm)). `devvm --here` makes a new VM for the subfolder without asking, and so does `devvm --clone`, which makes the subfolder's own clone VM. Once the subfolder has its own VM, devvm opens that one and asks nothing. In a parent folder's `--clone` VM, the shell opens in the subfolder when the clone has it ([subfolders](../using/clone.md#subfolders)).
 
-The other commands that act on this folder's VM, such as `devvm stop`, `restart`, `size`, `ports`, `ssh` and `code`, use the parent folder's VM in the same way, without asking. Each one first prints a line that names the VM and the folder it was made for. `devvm rm` is the exception, because it never deletes a parent folder's VM unasked. In a terminal, it names the VM and its folder and asks before deleting it, with no as the default, even with `-f`, which still skips only its export and clone checks. Without a terminal, it refuses and tells you to run `devvm rm` in the parent folder instead. The commands that give the VM more access ask in the same way, because the parent folder's project may not expect them. They are `devvm secret use`, `devvm ssh-agent on` and `devvm ssh-agent devvm`, `devvm network off`, `devvm policy allow`, `devvm policy rm` when it removes a deny, and `devvm git-protect off`. In a terminal, each one names the VM and its folder and asks before it changes the VM, with no as the default. Without a terminal, it refuses and tells you to run it in the parent folder, or in a terminal to confirm. The commands that take access away, such as `devvm secret unuse` and `devvm policy deny`, ask nothing. `devvm ssh` gives the subfolder as the folder to open in the VM, and `devvm code` opens the subfolder. `devvm adopt` acts only on the VM made for this folder's own path, never on a parent folder's.
+The other commands that act on this folder's VM, such as `devvm stop`, `restart`, `tools`, `size`, `ports`, `host` and `code`, use the parent folder's VM in the same way, without asking. Each one first prints a line that names the VM and the folder it was made for. `devvm rm` is the exception, because it never deletes a parent folder's VM unasked. In a terminal, it names the VM and its folder and asks before deleting it, with no as the default, even with `-f`, which still skips only its export and clone checks. Without a terminal, it refuses and tells you to run `devvm rm` in the parent folder instead. The commands that give the VM more access ask in the same way, because the parent folder's project may not expect them. They are `devvm secret use`, `devvm ssh-agent on` and `devvm ssh-agent devvm`, `devvm network off`, `devvm policy allow`, `devvm policy rm` when it removes a deny, and `devvm git-protect off`. In a terminal, each one names the VM and its folder and asks before it changes the VM, with no as the default. Without a terminal, it refuses and tells you to run it in the parent folder, or in a terminal to confirm. The commands that take access away, such as `devvm secret unuse` and `devvm policy deny`, ask nothing. `devvm host` gives the subfolder as the folder to open in the VM, and `devvm code` opens the subfolder. `devvm adopt` acts only on the VM made for this folder's own path, never on a parent folder's.
 
 A subfolder that is a git repo of its own is treated as a separate project, and so is a subfolder inside such a repo, when the repo is below the folder with the VM. That covers a nested repo, a submodule and a worktree, which each have a `.git` folder or file of their own. When you run `devvm` there in a terminal, devvm still asks, but the default is a new VM for the subfolder, so the parent folder's VM opens only if you answer yes. Without a terminal, devvm makes the new VM. The other commands never use the parent folder's VM there, and they say this folder has no VM, as in any folder without one.
 
@@ -109,7 +115,7 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 | --- | --- |
 | `NAME` | the VM's name, `devvm-<folder>-<hash>` |
 | `STATUS` | its state as its backend reports it, such as `Running` or `Stopped` |
-| `IMAGE` | its image, with what was added to it in place, and a base from a container image as `base (from node:24)` ([details](../using/from.md)) |
+| `IMAGE` | its image, with the shared tools added to it since, and a base from a container image as `base (from node:24)` ([details](../using/from.md)) |
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
 | `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
 | `BACKEND` | the [backend](../backends/_index.md) that runs it |
@@ -144,7 +150,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm ssh-agent [on\|devvm\|off]` | show this folder's VM's SSH agent forwarding, which is `off`, `on` for yours or `devvm` for devvm's own, then the keys devvm's own agent holds and those added to it, or change the forwarding from the VM's next start ([details](../using/ssh.md#agent-forwarding)) |
 | `devvm ssh-agent add KEY_FILE [--confirm] [--lifetime DURATION]` | load a key into devvm's own agent, and load it again whenever a VM needs it ([details](../using/ssh.md#devvms-own-agent)) |
 | `devvm ssh-agent rm KEY_FILE` | take a key out of devvm's own agent, so devvm doesn't load it again ([details](../using/ssh.md#devvms-own-agent)) |
-| `devvm ssh` | get this folder's VM ready for ssh and editors, and show the name they reach it by, such as `devvm-website` ([details](../using/ssh.md#devvm-ssh-and-devvm-code)) |
+| `devvm host` | get this folder's VM ready for ssh and editors, and show the host name they reach it by, such as `devvm-website` ([details](../using/ssh.md#devvm-host-and-devvm-code)) |
 | `devvm code` | the same, then open its folder in VS Code over Remote-SSH ([VS Code](../using/ssh.md#vs-code)) |
 | `devvm desktop [--clipboard] [--no-open]` | serve this folder's VM's desktop on `127.0.0.1` with its password until Ctrl+C, and open it in Screen Sharing on macOS ([details](../using/desktop.md)) |
 
@@ -180,7 +186,7 @@ The folders devvm keeps its state in and the environment variables it reads are 
 
 ### Shell completion
 
-The completion script completes commands, flags and image names, including names joined with `+` after the parts you've already typed. It also completes shared tools for `devvm remove`, `--backend` values, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
+The completion script completes commands, flags and image names, including names joined with `+` after the parts you've already typed. It also completes shared tools for `devvm tools add` and `devvm tools rm`, `--backend` values, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
 
 | Shell | Line | In |
 | --- | --- | --- |

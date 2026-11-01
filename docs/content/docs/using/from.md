@@ -13,7 +13,7 @@ DEVVM_FROM=node:24 devvm             # a default for every new VM and build
 
 Everything above `base` builds and runs as usual, including base's own setup, the layers (`docker` and yours) and the [shared tools](images.md#shared-tools). devvm keeps the images from each container image apart, so each `base` and the images on it sit side by side with the others, and each image's record keeps the container image its base came from and that image's digest.
 
-`--from` applies to new VMs and to `devvm build` and `devvm rebuild`. An existing VM keeps what it was made from, and adding to it, `devvm update` and `devvm remove` build on that `base`. devvm ignores another `--from` for an existing VM, with a warning.
+`--from` applies to new VMs and to `devvm build` and `devvm rebuild`. An existing VM keeps what it was made from, and `devvm tools add` and `devvm tools update` build its shared tools on that `base`. devvm ignores another `--from` for an existing VM, with a warning.
 
 [Images and caching](../internals/images.md#how-its-converted) explains how devvm turns a container image into a VM's disk and how it treats the image's code as untrusted.
 

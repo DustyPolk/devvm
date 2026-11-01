@@ -30,11 +30,19 @@ stdout '^node\+claude$'
 exec devvm __complete node+c
 cmp stdout node-c.txt
 
-# remove takes shared tools only.
-exec devvm __complete remove ''
+# tools add and rm take shared tools only, each a word of its own, those
+# given left out.
+exec devvm __complete tools add ''
 stdout '^python$'
 ! stdout '^foo$'
 ! stdout '^base$'
+exec devvm __complete tools rm python c
+stdout '^claude$'
+stdout '^codex$'
+! stdout python
+exec devvm __complete tools add python ''
+! stdout '^python$'
+stdout '^claude$'
 
 # Flags: backend names, the ports keywords; never file names.
 exec devvm __complete --backend ''

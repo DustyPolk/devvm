@@ -9,7 +9,7 @@ Docker's container [features](backends.md#features) are native: building images,
 
 devvm emulates the rest, and each emulation is reviewed:
 
-- [ssh for editors](#ssh-for-editors), and so `devvm ssh`, `devvm code` and `--clone`, [forwarding ports](#ports), both the listed ones and every one, and [SSH agent forwarding](#ssh-agent-forwarding), including turning it on or off later. All of them go over one transport, which is `docker exec` into the container.
+- [ssh for editors](#ssh-for-editors), and so `devvm host`, `devvm code` and `--clone`, [forwarding ports](#ports), both the listed ones and every one, and [SSH agent forwarding](#ssh-agent-forwarding), including turning it on or off later. All of them go over one transport, which is `docker exec` into the container.
 - [Network policy](#network-policy), and build confinement on Docker Desktop, through an internal network of the VM's or the build's own and a relay to devvm's proxy on your machine.
 - [The docker layer](#the-docker-layer), under Sysbox on a Linux engine that has it, and nowhere else.
 
@@ -92,7 +92,7 @@ A VM with [network policy](../safety/network.md) reaches nothing but its proxy, 
 
 ## ssh for editors
 
-ssh for editors is emulated, and reviewed ([design](design.md#ssh-for-editors-on-docker)). `devvm ssh`, `devvm code`, `--clone` and the [ssh config entries](../using/ssh.md#ssh-access-by-name) work as they do on Lima, and the container publishes nothing.
+ssh for editors is emulated, and reviewed ([design](design.md#ssh-for-editors-on-docker)). `devvm host`, `devvm code`, `--clone` and the [ssh config entries](../using/ssh.md#ssh-access-by-name) work as they do on Lima, and the container publishes nothing.
 
 No sshd listens in the VM. After each start, devvm writes the VM's sshd config (`/etc/devvm/ssh/sshd_config`, which only root can change) and makes it a new ed25519 host key, and it starts no daemon. Each ssh connection is an sshd of its own in the container (`sshd -i`, as root), whose input and output are the connection. `docker exec -i` runs it, so nothing else in the container, or on any network, can connect to it.
 
@@ -104,7 +104,7 @@ Only the VM's own key logs in, and only as the VM's user. The key is `~/.local/s
 
 An ssh session gives the VM no way out as long as your ssh doesn't ask for one, as on [smolvm](smolvm.md#ssh-for-editors). devvm's entry turns off X11, tunnels, remote SOCKS forwards and adding keys to an agent, and the sshd allows only local forwarding, which protects only an honest VM.
 
-A VM started without ssh, or started outside devvm since (`docker start`), gets no entry from devvm's next launch, and `devvm ssh` tells you to restart it (`vm_no_ssh`). Its shell is then a `docker exec`. A VM whose image has no sshd starts and runs without ssh, with a warning (`vm_no_sshd`), and a VM made after `devvm rebuild` has it.
+A VM started without ssh, or started outside devvm since (`docker start`), gets no entry from devvm's next launch, and `devvm host` tells you to restart it (`vm_no_ssh`). Its shell is then a `docker exec`. A VM whose image has no sshd starts and runs without ssh, with a warning (`vm_no_sshd`), and a VM made after `devvm rebuild` has it.
 
 ## Ports
 
@@ -145,12 +145,11 @@ The docker layer is emulated, and reviewed ([design](design.md#the-docker-layer-
 
 A container runs `dockerd` only with more than devvm gives its other containers. Sysbox gives it that without `--privileged`, in a user namespace of its own, so root in it is an unprivileged user on your machine. Sysbox ID-maps the container's mounts, so your files are yours in it, and what you write there is yours. What root in it writes in the project folder is your machine's root's, as in any Docker VM, so a set-user-id file it makes there runs as root on your machine for anyone who runs it. devvm names such files at each launch (`setid_root_files`, [details](security.md#what-it-doesnt-protect)). Sysbox's own code is part of the boundary.
 
-- **Where it runs:** on a Linux engine on your machine with Sysbox's runtime (`sysbox-runc`), which `devvm doctor --backend docker` reports (`docker_sysbox`). A VM with the layer runs under Sysbox, and devvm says so (`docker_layer_runtime`), whether the VM is made with the layer or gets it in place ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). When it gets the layer in place, devvm [makes its container again](#changing-what-docker-fixes) from a commit, keeping its disk and home. On a Linux engine without Sysbox, devvm refuses the layer in one line, before anything changes (`docker_layer_no_sysbox`), and it does the same on Docker Desktop and other engines, such as another machine's (`docker_layer_needs_vm`).
+- **Where it runs:** on a Linux engine on your machine with Sysbox's runtime (`sysbox-runc`), which `devvm doctor --backend docker` reports (`docker_sysbox`). A VM with the layer runs under Sysbox, and devvm says so (`docker_layer_runtime`). Only a new VM gets the layer, as with any layer ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)), so a VM is made for it from the start. On a Linux engine without Sysbox, devvm refuses the layer in one line, before anything changes (`docker_layer_no_sysbox`), and it does the same on Docker Desktop and other engines, such as another machine's (`docker_layer_needs_vm`).
 - **Its own network:** the VM is on a network of its own, `<vm>-docker-net`, instead of Docker's default one. The network is labelled, isn't internal, and has nothing else on it. It reaches the internet, but no other container, on Docker's default network or any other, even as root. On Linux it reaches your machine's servers on every address but its loopback, as any Docker VM without network policy does, and with IPv6 turned on, those on IPv6 too. devvm refuses the network if another container is on it (`docker_network_shared`).
 - **Its engine's files** are in volumes of their own, `<vm>-docker` at `/var/lib/docker` and `<vm>-containerd` at `/var/lib/containerd`, because Docker's storage doesn't stack on the container's own. devvm keeps them when it makes the container again, and `devvm rm` deletes them and the VM's network.
 - **Docker's daemon** starts after each start, from base's services, and the VM's user is in the `docker` group.
-- **No network policy:** root in the VM can change its own network. In its own network namespace it can turn IPv6 on and reach your machine's servers on the bridge's link-local address. So devvm doesn't ask about network policy for a new VM with the layer, whether you named the layer or a `devcontainer.json`'s docker-in-docker asked for it. It makes the VM without network policy and warns you (`net_off_docker_layer`). It refuses `--network-policy`, `devvm network on` and adding the layer to a VM with network policy (`net_docker_layer`).
+- **No network policy:** root in the VM can change its own network. In its own network namespace it can turn IPv6 on and reach your machine's servers on the bridge's link-local address. So devvm doesn't ask about network policy for a new VM with the layer, whether you named the layer or a `devcontainer.json`'s docker-in-docker asked for it. It makes the VM without network policy and warns you (`net_off_docker_layer`). It refuses `--network-policy` and `devvm network on` (`net_docker_layer`).
 - **`NET_RAW` and `NET_ADMIN`:** the VM has them, in its own namespaces, because Sysbox gives root every capability there, and Docker's engine needs `NET_ADMIN`. Its own network keeps what it sends away from other containers, and your machine drops what it routes to its loopback.
 - **Docker's userland proxy stays on,** which is its default. `"userland-proxy": false` in `daemon.json` turns `route_localnet` on for Docker's bridges, and then root in the VM could reach your machine's loopback. devvm reads its network's bridge setting at each create and start, and it refuses the VM in one line if the setting is on (`docker_route_localnet`).
-- **A script that fails** while the layer is added in place leaves the VM as it was. devvm makes its container again as for any VM, and deletes its network and its engine's volumes.
 - `devvm ls` shows its backend as `docker (sysbox)`, and its state has `docker_layer=sysbox`.

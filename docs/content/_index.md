@@ -76,7 +76,7 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 - The base image comes with [optional extras](docs/using/customizing.md#base-image-features) that you choose, such as oh-my-bash, fzf, zoxide (`z`), tree and tldr.
 - Every VM gets your git name and email, so the commits made in it are authored by you or your agent.
 - Ports forward on their own, so a dev server on `:5173` in the VM opens at `localhost:5173` on your machine ([ports](docs/using/ports-size.md#ports)).
-- `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-ssh-and-devvm-code)).
+- `devvm code` opens the VM in VS Code over Remote-SSH ([devvm code](docs/using/ssh.md#devvm-host-and-devvm-code)).
 
 {{< /feature >}}
 

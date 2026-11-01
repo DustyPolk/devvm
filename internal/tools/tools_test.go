@@ -1147,7 +1147,7 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-// devvm remove: the tools leave the VM's name and list, the rest stays;
+// devvm tools rm: the tools leave the VM's name and list, the rest stays;
 // what it lacks, and custom layers, are refused.
 func TestRemove(t *testing.T) {
 	e := newEnv(t)
@@ -1155,19 +1155,51 @@ func TestRemove(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	vm := "devvm-p-abc123abc123ab"
 	all := e.files(t, "node", "pnpm", "bun", "python", "uv", "claude")
-	img, files, err := Remove(vm, "node+python+claude", all, "python+claude")
+	img, files, err := Remove(vm, "node+python+claude", all, []string{"python", "claude"})
 	if err != nil || img != "node" || !slices.Equal(files, all[:3]) {
 		t.Errorf("Remove = %q, %q, %v", img, files, err)
 	}
-	img, files, err = Remove(vm, img, files, "node")
+	img, files, err = Remove(vm, img, files, []string{"node"})
 	if err != nil || img != "base" || len(files) != 0 {
 		t.Errorf("Remove the last = %q, %q, %v", img, files, err)
 	}
-	if _, _, err := Remove(vm, "node+foo", nil, "python"); names(err) != "vm_lacks has=node foo layer=python vm="+vm {
+	if _, _, err := Remove(vm, "node+foo", nil, []string{"python"}); names(err) != "vm_lacks has=node foo layer=python vm="+vm {
 		t.Errorf("Remove what it lacks = %v", names(err))
 	}
-	if _, _, err := Remove(vm, "node+foo", nil, "foo"); names(err) != "custom_layer_remove layer=foo vm="+vm {
+	if _, _, err := Remove(vm, "node+foo", nil, []string{"foo"}); names(err) != "custom_layer_remove layer=foo vm="+vm {
 		t.Errorf("Remove a layer = %v", names(err))
+	}
+}
+
+// devvm tools: each of a VM's tools with its version, and the lock's when
+// it's another, built or not; without a lock, none is newer.
+func TestShow(t *testing.T) {
+	e := newEnv(t)
+	if ts, err := e.Show([]string{"claude-2.0.0-0123456789ab.erofs"}, gnuT); err != nil || len(ts) != 1 || ts[0].Newer != "" {
+		t.Errorf("Show without a lock = %+v, %v", ts, err)
+	}
+	e.locked(t, fixture(t))
+	cur := e.files(t, "go")
+	ts, err := e.Show(append(cur, "claude-2.0.0-0123456789ab.erofs", "not-a-tool-file"), gnuT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gov := Lock(fixture(t)).Version("go")
+	cv := Lock(fixture(t)).Version("claude")
+	want := []VMTool{{Tool: "go", Version: gov}, {Tool: "claude", Version: "2.0.0", Newer: cv}}
+	if !slices.Equal(ts, want) {
+		t.Errorf("Show = %+v, want %+v", ts, want)
+	}
+	// The lock's version, another build: the lock's is the one to move to.
+	other := "go-" + gov + "-0123456789ab.erofs"
+	if ts, _ := e.Show([]string{other}, gnuT); len(ts) != 1 || ts[0].Newer != gov {
+		t.Errorf("Show another build = %+v", ts)
+	}
+	claude := e.files(t, "claude")[0]
+	write(t, filepath.Join(e.Dirs.Tools(), claude), nil)
+	write(t, filepath.Join(e.Dirs.Tools(), claude+".sha256"), nil)
+	if ts, _ := e.Show([]string{"claude-2.0.0-0123456789ab.erofs"}, gnuT); len(ts) != 1 || !ts[0].Built {
+		t.Errorf("Show built = %+v", ts)
 	}
 }
 
@@ -1189,7 +1221,7 @@ func TestWarnNewer(t *testing.T) {
 	}
 }
 
-// devvm update: resolves the newest versions, builds them, and says which
+// devvm tools update: resolves the newest versions, builds them, and says which
 // the VM gets; offline, it says so and keeps the versions it has.
 func TestUpdate(t *testing.T) {
 	e := newEnv(t)

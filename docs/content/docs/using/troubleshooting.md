@@ -102,13 +102,13 @@ When you delete a project folder and make a new one at the same path, such as by
 
 ## An outdated VM, or newer shared tools
 
-devvm warns on each launch when an image the VM was made from has changed, and it leaves the VM as it is ([outdated VMs](images.md#outdated-vms)). It also warns when there are newer shared tools than the VM's, and `devvm update` moves the VM to them ([adding and removing tools](images.md#adding-and-removing-tools)).
+devvm warns on each launch when an image the VM was made from has changed, and it leaves the VM as it is ([outdated VMs](images.md#outdated-vms)). It also warns when there are newer shared tools than the VM's, and `devvm tools update` moves the VM to them ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## A shared tool doesn't mount
 
 When a VM can't mount one of its shared tools, devvm stops the launch with an error that names the VM and the tools, and the VM keeps running. That happens when the tool's image is missing from the folder that devvm keeps the shared tools in, such as after you deleted it by hand, or when the VM can't mount the image. devvm doesn't let the VM download the tool in its place, because that copy would be the VM's own, a download you didn't ask for, and one that network policy may block.
 
-Run `devvm update` in the project folder. It builds the tools that are missing and then opens the shell. When the VM has the newest versions, devvm builds those, and otherwise it builds the newest versions and moves the VM to them. If the launch still stops, the run log says why the VM couldn't mount the image ([a command fails](#a-command-fails)).
+Run `devvm tools update` in the project folder. It builds the tools that are missing and then opens the shell. When the VM has the newest versions, devvm builds those, and otherwise it builds the newest versions and moves the VM to them. If the launch still stops, the run log says why the VM couldn't mount the image ([a command fails](#a-command-fails)).
 
 A tool that doesn't mount never keeps the VM from booting. The VM mounts the tools it can and boots as usual, and only devvm's launch stops ([the share](../internals/images.md#the-share)).
 

@@ -141,8 +141,8 @@ exec devvm ls
 # unwarned: the VM runs under its runtime, said, recorded, on a network of
 # its own, with volumes of its own for Docker's engine, Docker's daemon
 # started after each start; ls shows it; no network policy, at creation or
-# later; rm deletes its network and volumes. Added in place to a VM with
-# network policy, refused before anything changes.
+# later; rm deletes its network and volumes. Named for a VM that exists,
+# refused before anything changes: only a new VM gets a layer.
 exec sh -c ': > "$STUB_DIR/docker-sysbox"'
 env DEVVM_DOCKER_PROC_SYS=$WORK/sys
 mkdir $WORK/sys/net/ipv4/conf/br-id-net-devvm
@@ -183,9 +183,11 @@ stdout '^docker network rm devvm-sysbox-[0-9a-f]{14}-docker-net$'
 mkdir $WORK/inplace
 cd $WORK/inplace
 exec devvm --backend docker --from $PIN --no-network-policy --ports none base
-exec devvm network on
+exec sh -c ': > "$STUB_LOG"'
 ! exec devvm docker
-stderr '^devvm: net_docker_layer backend=docker vm=devvm-inplace-[0-9a-f]{14}$'
+stderr '^devvm: vm_lacks_layer image=docker layer=docker vm=devvm-inplace-[0-9a-f]{14}$'
+stub_calls
+! stdout 'docker container (stop|commit|create)'
 exec devvm rm -f
 # A bridge routing to this machine's loopback (Docker's userland proxy
 # off): refused.
@@ -225,7 +227,7 @@ grep '^  ProxyCommand ''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-
 grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
 ! grep '^  Port ' $XDG_CONFIG_HOME/devvm/ssh_config
 grep '^devvm-emu-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/known_hosts
-exec devvm ssh
+exec devvm host
 stdout '^ssh_host_info dir=\S+/emu host=devvm-emu$'
 
 # The agent turned off while it runs: from its next start, the shell's and

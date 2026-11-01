@@ -1,4 +1,4 @@
-# devvm desktop: the folder's VM launched as devvm ssh does (started when
+# devvm desktop: the folder's VM launched as devvm host does (started when
 # it's stopped, set up, in devvm's ssh config), its desktop feature's
 # devvm-desktop started, clipboard off unless asked for, then its desktop
 # served on this machine's 127.0.0.1 with the VM's password, both kept in

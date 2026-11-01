@@ -1,22 +1,22 @@
 ---
-title: devvm remove
-weight: 27
+title: devvm tools add
+weight: 45
 ---
 
-Take shared tools out of this folder's VM, then open a shell in it
+Add shared tools to this folder's VM, then open a shell in it
 
 ## Synopsis
 
-Take shared tools out of this folder's VM (TOOLS joined with +: python+claude), then open a shell in it. They're no longer mounted in it; what the VM installed itself stays. Your layers are in the VM's disk, so they can't be taken out: devvm rm, and make the VM again.
+Add shared tools to this folder's VM, each TOOL a separate word (devvm tools add python claude), then open a shell in it: node, python, rust, go, claude, codex or opencode. devvm builds the ones the share lacks, and nothing in the VM's disk changes, because its tools are mounted. A new agent's config folders are mounted too, which needs the VM to start again: devvm asks before restarting a running VM. Layers can't be added: only a new VM gets one.
 
 ```text
-devvm remove TOOLS [flags]
+devvm tools add TOOL... [flags]
 ```
 
 ## Options
 
 ```text
-  -h, --help   help for remove
+  -h, --help   help for add
 ```
 
 ## Options inherited from parent commands
@@ -34,4 +34,4 @@ devvm remove TOOLS [flags]
 
 ## See also
 
-- [devvm](devvm.md): Open a shell in this folder's VM, creating it first
+- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools

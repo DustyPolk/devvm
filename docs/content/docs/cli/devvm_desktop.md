@@ -7,7 +7,7 @@ Open this folder's VM's desktop in a VNC viewer
 
 ## Synopsis
 
-Get this folder's VM ready as devvm ssh does, start the desktop of its desktop feature, and serve it on this machine's 127.0.0.1 alone, with a password of the VM's own, until you press Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm shows. The clipboard isn't shared unless you add --clipboard.
+Get this folder's VM ready as devvm host does, start the desktop of its desktop feature, and serve it on this machine's 127.0.0.1 alone, with a password of the VM's own, until you press Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm shows. The clipboard isn't shared unless you add --clipboard.
 
 ```text
 devvm desktop [flags]

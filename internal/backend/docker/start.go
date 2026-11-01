@@ -319,7 +319,7 @@ func (d *Docker) Start(ctx context.Context, vm string, c backend.Confinement) er
 		return msg.NetDockerLayer(Name, vm)
 	}
 	// Its own network and its engine's volumes, before a container made
-	// again names them (SetDockerLayer's, or another remake).
+	// again names them (a remake).
 	if r.dockerLayer() {
 		for _, v := range engineVolumes(vm) {
 			if err := d.ensureVolume(ctx, v); err != nil {

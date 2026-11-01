@@ -19,10 +19,10 @@ func TestRetention(t *testing.T) {
 		t.Fatalf("no file: %+v, %v", r, err)
 	}
 	// Set some; a bad key or value writes nothing.
-	if _, err := SetRetention(d, []string{"exports.age=30d", "logs.runs=50", "tools.unused-age=2w"}); err != nil {
+	if _, err := SetRetention(d, []string{"history.age=30d", "logs.runs=50", "tools.unused-age=2w"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range [][]string{{"nope=1"}, {"exports.age=30"}, {"logs.runs=0"}, {"logs.runs=05"}, {"exports.count=x"}, {"novalue"}, {"exports.age=1d", "orphans.age=-1d"}, {"exports.age="}, {"nope=off"}} {
+	for _, bad := range [][]string{{"nope=1"}, {"history.age=30"}, {"logs.runs=0"}, {"logs.runs=05"}, {"history.count=x"}, {"novalue"}, {"history.age=1d", "orphans.age=-1d"}, {"history.age="}, {"nope=off"}} {
 		if _, err := SetRetention(d, bad); err == nil {
 			t.Errorf("SetRetention(%q): want an error", bad)
 		}
@@ -35,7 +35,7 @@ func TestRetention(t *testing.T) {
 		t.Errorf("read back: %+v", r)
 	}
 	// KEY=off turns one off; all off removes the file.
-	if _, err := SetRetention(d, []string{"exports.age=off", "logs.runs=off"}); err != nil {
+	if _, err := SetRetention(d, []string{"history.age=off", "logs.runs=off"}); err != nil {
 		t.Fatal(err)
 	}
 	if r, _ = ReadRetention(d); r.ExportsAge != 0 || r.RunLogs != 0 || r.ToolsAge == 0 {
@@ -48,14 +48,14 @@ func TestRetention(t *testing.T) {
 		t.Errorf("all off: the file stays: %v", err)
 	}
 	// A bad line names the file and the line.
-	if err := os.WriteFile(d.Retention(), []byte("exports.count=3\n\nexports.age=soon\n"), 0o600); err != nil {
+	if err := os.WriteFile(d.Retention(), []byte("history.count=3\n\nhistory.age=soon\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, err = ReadRetention(d)
 	if c, ok := errors.AsType[*CorruptError](err); !ok || c.Line != 3 || c.Path != d.Retention() {
 		t.Errorf("bad line: %v", err)
 	}
-	if err := os.WriteFile(d.Retention(), []byte("exports.count=3\nexports.count=4\n"), 0o600); err != nil {
+	if err := os.WriteFile(d.Retention(), []byte("history.count=3\nhistory.count=4\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ReadRetention(d); err == nil {

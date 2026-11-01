@@ -12,9 +12,11 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm desktop](devvm_desktop.md): Open this folder's VM's desktop in a VNC viewer
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
-- [devvm export](devvm_export.md): Save this folder's VM's agent history to a .tar.gz
 - [devvm gc](devvm_gc.md): Delete stale images and unused tool images
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
+- [devvm history](devvm_history.md): List the saved exports of agents' history
+- [devvm history export](devvm_history_export.md): Save this folder's VM's agent history to a .tar.gz
+- [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm images rm](devvm_images_rm.md): Delete images, by name or by key
 - [devvm layer](devvm_layer.md): Your own image layers
@@ -31,7 +33,6 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm ports add](devvm_ports_add.md): Forward more ports from this folder's VM
 - [devvm ports rm](devvm_ports_rm.md): Stop forwarding some ports from this folder's VM
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
-- [devvm remove](devvm_remove.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm retention](devvm_retention.md): Show or change the retention settings: what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
@@ -43,9 +44,11 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
-- [devvm ssh](devvm_ssh.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm ssh-agent add](devvm_ssh-agent_add.md): Load a key into devvm's own SSH agent
 - [devvm ssh-agent rm](devvm_ssh-agent_rm.md): Remove a key from devvm's own SSH agent
 - [devvm stop](devvm_stop.md): Stop this folder's VM
-- [devvm update](devvm_update.md): Move this folder's VM to the newest shared tools, then open a shell in it
+- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools
+- [devvm tools add](devvm_tools_add.md): Add shared tools to this folder's VM, then open a shell in it
+- [devvm tools rm](devvm_tools_rm.md): Take shared tools out of this folder's VM, then open a shell in it
+- [devvm tools update](devvm_tools_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

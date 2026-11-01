@@ -5,7 +5,7 @@ weight: 10
 
 This page explains how devvm builds and runs VMs on smolvm, and how it emulates what smolvm lacks. [smolvm (experimental)](../backends/smolvm.md) covers what you need to run it and what's different for you.
 
-devvm emulates four [features](backends.md#features) that smolvm lacks, and each emulation has been reviewed. They are [network policy](#network-policy), [ssh for editors](#ssh-for-editors) (`devvm ssh`, `devvm code` and `--clone`), [forwarding ports](#ports), every one or only the ones you list, and [turning SSH agent forwarding on or off](#ssh-agent-forwarding) after a VM is made.
+devvm emulates four [features](backends.md#features) that smolvm lacks, and each emulation has been reviewed. They are [network policy](#network-policy), [ssh for editors](#ssh-for-editors) (`devvm host`, `devvm code` and `--clone`), [forwarding ports](#ports), every one or only the ones you list, and [turning SSH agent forwarding on or off](#ssh-agent-forwarding) after a VM is made.
 
 ## Its machines
 
@@ -33,7 +33,7 @@ When a build fails, devvm keeps its machine, stopped (`smolvm_script_failed`), s
 
 ## What devvm sets on a VM
 
-- **Mounts:** devvm mounts the project folder (read-write) and agents' folders (read-only) at their host paths, and the shared tools at `/mnt/devvm-tools` (read-only). It also mounts `/var/lib/docker` on the machine's own disk, because the [docker layer](../using/images.md#built-in-layers)'s storage needs it. Every VM gets that mount, so you can add the layer in place. devvm refuses a path with a colon, because smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, with mode 0600.
+- **Mounts:** devvm mounts the project folder (read-write) and agents' folders (read-only) at their host paths, and the shared tools at `/mnt/devvm-tools` (read-only). It also mounts `/var/lib/docker` on the machine's own disk, because the [docker layer](../using/images.md#built-in-layers)'s storage needs it. Every VM gets that mount. devvm refuses a path with a colon, because smolvm splits mounts on colons. Files a VM makes in the project folder are yours on the host, with mode 0600.
 - **Network:** without network policy, a VM has smolvm's own network, which reaches the internet but not the host's loopback. With network policy, devvm confines it as [below](#network-policy).
 - **Size:** a VM gets the size you ask for, or base's. Its disk only grows.
 - **Ports:** devvm's forwarder forwards them, and smolvm forwards none of them ([below](#ports)). The only port smolvm forwards is the VM's [ssh](#ssh-for-editors).
@@ -52,7 +52,7 @@ The policy fails closed. With the proxy gone, nothing gets out, and once a VM ha
 
 ## ssh for editors
 
-ssh for editors is emulated, and reviewed. `devvm ssh`, `devvm code`, `--clone` and the [ssh config entries](../using/ssh.md#ssh-access-by-name) work as they do on Lima ([design](design.md#ssh-for-editors-on-smolvm)).
+ssh for editors is emulated, and reviewed. `devvm host`, `devvm code`, `--clone` and the [ssh config entries](../using/ssh.md#ssh-access-by-name) work as they do on Lima ([design](design.md#ssh-for-editors-on-smolvm)).
 
 devvm starts an sshd of its own after each start of the VM ([below](#no-init-system)), with a config of devvm's own, `/etc/devvm/ssh/sshd_config`, which only root can change. The image's own sshd config doesn't apply.
 
@@ -68,7 +68,7 @@ Agent forwarding follows the entry, as on Lima. `ForwardAgent` is set by the [SS
 
 Sessions get the same environment as devvm's own commands: `/etc/environment` and, with network policy, the proxy's settings, in a login shell or not.
 
-A VM that has been running since a start without ssh gets no entry, and `devvm ssh` tells you to restart it (`vm_no_ssh`). A VM whose image has no sshd starts and runs without ssh, with a warning (`vm_no_sshd`). A VM made after `devvm rebuild` has it.
+A VM that has been running since a start without ssh gets no entry, and `devvm host` tells you to restart it (`vm_no_ssh`). A VM whose image has no sshd starts and runs without ssh, with a warning (`vm_no_sshd`). A VM made after `devvm rebuild` has it.
 
 ## Ports
 
@@ -89,7 +89,7 @@ smolvm forwards an SSH agent into a VM made with `--ssh-agent` for as long as th
 - **Every new VM is made forwarding,** and each start gives it the agent its choice names: yours (`SSH_AUTH_SOCK` in your shell), devvm's own, or none. If you chose yours and your shell has none, the start stops (`smolvm_no_agent`).
 - **None** is a path where no socket can be (`/dev/null/devvm-no-agent`). The VM's connections to its agent fail, so it lists no keys and can't add any.
 - **A change** applies from the VM's next start (`devvm restart`), to smolvm's agent, your shell and the ssh config's entry alike, as on Lima.
-- **A VM started outside devvm** gets the agent your shell has, whatever its choice, because `smolvm machine start` from your shell passes it on, and fails without one. When devvm, `devvm ssh`, `devvm code` or `devvm export` finds the VM running on a process devvm didn't start, it stops the VM and says so (`agent_unchosen_stop`), unless the VM uses your agent anyway. The next devvm starts it with its own choice. Until then the VM has your shell's agent, so start devvm's VMs with devvm.
+- **A VM started outside devvm** gets the agent your shell has, whatever its choice, because `smolvm machine start` from your shell passes it on, and fails without one. When devvm, `devvm host`, `devvm code` or `devvm history export` finds the VM running on a process devvm didn't start, it stops the VM and says so (`agent_unchosen_stop`), unless the VM uses your agent anyway. The next devvm starts it with its own choice. Until then the VM has your shell's agent, so start devvm's VMs with devvm.
 - **A VM made without forwarding** can't have it turned on (`agent_fixed`). Run `devvm rm`, then `devvm --ssh-agent`.
 
 ## No init system

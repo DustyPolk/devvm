@@ -62,7 +62,7 @@ other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have
 
 [tool_bad_version]
 description = "version is quoted, as the tools lock has it"
-other = "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm update to resolve the shared tools again."
+other = "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm tools update to resolve the shared tools again."
 
 [lima_missing]
 other = "Lima isn't installed. Install Lima 2.0 or newer."
@@ -754,23 +754,23 @@ other = "--force goes with --tools. Run devvm gc --tools --force."
 [gc_force_making]
 other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --force again once that's done."
 
-[gc_unknown_tool]
+[unknown_tool]
 other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."
 
-[gc_exports]
+[gc_history]
 one = "{{.count}} export of agents' history ({{.size}}), the only copy of a deleted VM's:"
 other = "{{.count}} exports of agents' history ({{.size}}), the only copy of a deleted VM's:"
 
-[gc_export]
+[gc_history_export]
 description = "date is when devvm wrote it, as 2026-10-27 23:23"
 other = "  {{.vm}}, {{.date}} ({{.size}})"
 
-[deleted_exports]
-one = "deleted {{.count}} export"
-other = "deleted {{.count}} exports"
+[deleted_history]
+one = "deleted {{.count}} export of agents' history"
+other = "deleted {{.count}} exports of agents' history"
 
-[gc_older_than_needs_exports]
-other = "--older-than goes with --exports. Run devvm gc --exports --older-than AGE."
+[gc_older_than_needs_history]
+other = "--older-than goes with --history. Run devvm gc --history --older-than AGE."
 
 [gc_bad_age]
 other = "{{.age}} isn't an age devvm takes. Give a whole number of days, weeks or hours, such as 30d, 2w or 12h."
@@ -995,24 +995,21 @@ other = "The --ports flag applies only to new VMs. To change this VM's ports, ru
 [size_next_start]
 other = "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 
-[add_in_place]
-description = "missing is a space-separated list of layers and tools"
-other = "devvm made {{.vm}} from {{.image}}. Add {{.missing}} to it in place?"
+[vm_lacks_tools]
+description = "tools is a space-separated list of shared tools: python claude"
+other = "{{.vm}} doesn't have {{.tools}}. Run devvm tools add {{.tools}} to add them."
 
-[restart_for_mounts]
-other = "This restarts the VM to mount their config from this machine, and anything running in it stops."
+[vm_lacks_layer]
+description = "image is the VM's image with what was asked for: node+docker"
+other = "{{.vm}} doesn't have the {{.layer}} layer, and only a new VM can get a layer. Save your work outside the project folder, then run devvm rm and devvm {{.image}}."
 
-[no_terminal_confirm]
-other = "Adding to {{.vm}} needs your answer, and there's no terminal to ask in. Run devvm {{.want}} in a terminal."
+[has_tools]
+description = "tools is a space-separated list of shared tools: python claude"
+other = "{{.vm}} has {{.tools}} already"
 
-[keeping]
-other = "keeping {{.image}}"
-
-[adding]
-other = "adding {{.layer}}"
-
-[add_layer_failed]
-other = "Adding {{.layer}} to {{.vm}} failed, and the VM is otherwise unchanged."
+[tools_joined]
+description = "cmd is the devvm tools subcommand: add or rm"
+other = "{{.given}} joins shared tools with +. Give them as separate words, such as devvm tools {{.cmd}} node claude."
 
 [vm_is_now]
 other = "{{.vm}} is now {{.image}}"
@@ -1029,6 +1026,14 @@ other = "Exporting {{.vm}}'s agent history failed."
 [export_failed]
 description = "reason is an error from the system, in English"
 other = "Exporting the agent history of this folder's VM failed: {{.reason}}."
+
+[history_failed]
+description = "reason is an error from the system, in English"
+other = "Listing the exports of agents' history failed: {{.reason}}."
+
+[tools_failed]
+description = "reason is an error from the system, in English"
+other = "Reading the shared tools of this folder's VM failed: {{.reason}}."
 
 [deleted]
 other = "deleted {{.vm}}"
@@ -1634,7 +1639,7 @@ other = "Resolving the shared tools' versions failed. Check that you're online."
 other = "Resolving the shared tools' versions failed, and devvm has to do it once, online. Try again when you're online."
 
 [tool_not_locked]
-other = "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm update to resolve the shared tools again."
+other = "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm tools update to resolve the shared tools again."
 
 [tool_stepped_back]
 other = "{{.tool}} {{.version}} isn't published for every platform yet, so devvm uses {{.tool}} {{.older}}."
@@ -1678,7 +1683,7 @@ other = "The shared tools' build wrote {{.file}} as something other than a plain
 
 [newer_tools]
 description = "tools lists tools and versions: claude 2.1.295, codex 0.162.0"
-other = "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
+other = "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
 
 [vm_lacks]
 description = "has is a space-separated list of the VM's layers and tools"
@@ -1698,7 +1703,7 @@ other = "Setting up {{.vm}} failed."
 
 [tools_unmounted]
 description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
-other = "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm update to build the missing ones."
+other = "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm tools update to build the missing ones."
 
 [agent_dir_comma]
 other = "Lima can't mount paths with a comma, so devvm doesn't mount {{.path}}."

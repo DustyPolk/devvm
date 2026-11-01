@@ -443,8 +443,8 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 	}
 	other := otherState(d) - left.Size
 	exportsRow := spaceRow{
-		What: "exports", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --exports",
-		Retain: e.retainOf(state.RetainExportsAge, state.RetainExportsCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
+		What: "history", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --history",
+		Retain: e.retainOf(state.RetainHistoryAge, state.RetainHistoryCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
 	}
 	runsRow := spaceRow{
 		What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog,

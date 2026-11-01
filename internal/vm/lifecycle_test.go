@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -51,11 +52,16 @@ func TestRm(t *testing.T) {
 		t.Errorf("export script %q", script)
 	}
 	es, _ := os.ReadDir(e.Dirs.Exports())
-	if len(es) != 1 || !strings.HasPrefix(es[0].Name(), vm+"-") {
+	if len(es) != 2 || !strings.HasPrefix(es[1].Name(), vm+"-") || !strings.HasSuffix(es[1].Name(), ".tar.gz") {
 		t.Fatalf("exports %v", es)
 	}
-	if data, _ := os.ReadFile(filepath.Join(e.Dirs.Exports(), es[0].Name())); string(data) != "tarball" {
+	export := filepath.Join(e.Dirs.Exports(), es[1].Name())
+	if data, _ := os.ReadFile(export); string(data) != "tarball" { //nolint:gosec // the test's own export
 		t.Errorf("export = %q", data)
+	}
+	// The file beside it names its folder, for devvm history.
+	if data, _ := os.ReadFile(paths.ExportFolder(export)); string(data) != e.Dir+"\n" {
+		t.Errorf("folder = %q, want %q", data, e.Dir)
 	}
 	if _, ok := f.Instances[vm]; ok {
 		t.Error("not deleted")
@@ -116,10 +122,12 @@ func TestExport(t *testing.T) {
 		t.Fatal(names(err))
 	}
 	es, _ := os.ReadDir(e.Dirs.Exports())
-	if len(es) != 1 || !strings.HasPrefix(es[0].Name(), vm+"-") || !strings.HasSuffix(es[0].Name(), ".tar.gz") {
+	if len(es) != 2 || !strings.HasPrefix(es[1].Name(), vm+"-") || !strings.HasSuffix(es[1].Name(), ".tar.gz") {
 		t.Fatalf("exports %v", es)
 	}
-	for path, mode := range map[string]os.FileMode{e.Dirs.Exports(): 0o700, filepath.Join(e.Dirs.Exports(), es[0].Name()): 0o600} {
+	for path, mode := range map[string]os.FileMode{
+		e.Dirs.Exports(): 0o700, filepath.Join(e.Dirs.Exports(), es[1].Name()): 0o600, filepath.Join(e.Dirs.Exports(), es[0].Name()): 0o600,
+	} {
 		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != mode {
 			t.Errorf("%s: %v, want %v (%v)", path, fi.Mode().Perm(), mode, err)
 		}

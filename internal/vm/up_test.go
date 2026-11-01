@@ -319,7 +319,7 @@ func TestUpRefusesLowSpace(t *testing.T) {
 }
 
 // The docker layer needs docker-layer of the backend, before anything is
-// built: for a new VM, and for one it's added to.
+// built.
 func TestUpRequiresDockerLayer(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureDockerLayer)
@@ -329,15 +329,6 @@ func TestUpRequiresDockerLayer(t *testing.T) {
 		t.Errorf("Up = %v", got)
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") {
-		t.Errorf("calls = %q", ms)
-	}
-	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
-	before := len(f.Calls())
-	err = Launch{e}.Up(t.Context(), Options{Image: "docker"})
-	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
-		t.Errorf("adding it: %v", got)
-	}
-	if ms := f.Methods()[before:]; slices.Contains(ms, "Exec") {
 		t.Errorf("calls = %q", ms)
 	}
 }

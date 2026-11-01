@@ -10,14 +10,51 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
+// VMTool is one of a VM's shared tools, as devvm tools lists it.
+type VMTool struct {
+	Tool    string // its name in the lock: node, pnpm
+	Version string // the VM's version of it
+	// Newer is the lock's version when the VM has another build, else "";
+	// Built is whether the share has that one.
+	Newer string
+	Built bool
+}
+
+// Show returns a VM's tools, from its tool files, in their order. The
+// lock is read as it is, never resolved: without one, none is newer.
+func (t VMs) Show(files []string, tg Target) ([]VMTool, error) {
+	lock, err := Versions(t).ReadLock()
+	if err != nil {
+		return nil, err
+	}
+	share := Share(t)
+	var out []VMTool
+	for _, f := range files {
+		tool, v, ok := image.ParseToolFile(f)
+		if !ok {
+			continue
+		}
+		vt := VMTool{Tool: tool, Version: v}
+		// Another file is another build: a newer version, or the same
+		// version from a changed lock entry or build script, as WarnNewer
+		// tells it.
+		if lv := lock.Version(tool); lv != "" {
+			if cur, err := t.File(lock, tool, tg); err == nil && cur != f {
+				vt.Newer, vt.Built = lv, share.Built(cur)
+			}
+		}
+		out = append(out, vt)
+	}
+	return out, nil
+}
+
 // Remove takes shared tools out of a VM made from imageName with these
 // tool files: it returns the VM's image name and tool files without them.
 // What the VM installed itself stays. A custom layer ran its script into
 // the VM's disk, so it can't be removed, and neither can anything the VM
 // lacks.
-func Remove(vm, imageName string, files []string, names string) (string, []string, error) {
+func Remove(vm, imageName string, files []string, gone []string) (string, []string, error) {
 	have := strings.Split(imageName, "+")
-	gone := strings.Split(names, "+")
 	var drop []string
 	for _, n := range gone {
 		if !slices.Contains(have, n) {
@@ -90,7 +127,8 @@ func (t VMs) Update(ctx context.Context, build func(context.Context, []string) e
 	if err := build(ctx, files); err != nil {
 		return nil, false, err
 	}
-	if slices.Equal(files, have) {
+	// The same files in any order: tools added since are listed last.
+	if slices.Equal(slices.Sorted(slices.Values(files)), slices.Sorted(slices.Values(have))) {
 		t.Info(msg.ToolsNewest(vm))
 		return files, false, nil
 	}
