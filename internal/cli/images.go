@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -28,7 +29,8 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 			"build that didn't finish), the disk it takes and its backend. Then the shared tool images, " +
 			"by the name images have them by: each version, the backend and C library it's built for, the " +
 			"disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, " +
-			"or the lock's and not built yet. Then what they take in all.",
+			"or the lock's and not built yet. Then what they take in all, and what the shared Nix cache " +
+			"takes of its cap.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			b, err := builder(u, g.backend)
@@ -54,6 +56,9 @@ func newImagesCmd(u *ui.UI, g *globals) *cobra.Command {
 				u.Note(msg.ImagesUnused(humanSize(size)))
 			}
 			u.Note(msg.ImagesTotal(humanSize(imagesSize(imgs) + toolsSize(ts))))
+			if n, size, err := proxy.NixCacheUsage(b.Dirs.NixCache()); err == nil && n > 0 {
+				u.Note(msg.ImagesNixCache(humanSize(nixCacheCap(u, b.Dirs)), humanSize(size)))
+			}
 			return nil
 		},
 	}

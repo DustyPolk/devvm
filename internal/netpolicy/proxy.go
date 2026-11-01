@@ -474,6 +474,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 			args = append(args, f[1], p.run(vm, f[0]))
 		}
 	}
+	args = append(args, p.nixCacheArgs(st)...)
 	pid, err := p.Start(p.Self, args, out)
 	if err != nil {
 		return err
@@ -496,6 +497,20 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		time.Sleep(p.Tick)
 	}
 	return msg.ProxyStartFailed(logPath, vm)
+}
+
+// nixCacheArgs are the proxy's flags for the shared Nix cache: only for a
+// VM whose image has the nix layer, with the cap nix-cache.size gives (its
+// default when the retention settings can't be read, with a warning).
+func (p *Proxy) nixCacheArgs(st *state.VM) []string {
+	if !image.HasLayer(st.Get(state.KeyImage), image.NixLayer) {
+		return nil
+	}
+	r, err := state.ReadRetention(p.Dirs)
+	if err != nil {
+		p.Warn(msg.RetentionUnreadable().Because(err))
+	}
+	return []string{"-nix-cache", p.Dirs.NixCache(), "-nix-cache-max", strconv.FormatInt(r.NixCacheCap(), 10)}
 }
 
 // logged reports whether a log has want after its first before bytes. A

@@ -18,3 +18,16 @@ func TestParseAge(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSize(t *testing.T) {
+	for in, want := range map[string]int64{"64K": 64 << 10, "500M": 500 << 20, "20G": 20 << 30, "1T": 1 << 40, "1024T": 1 << 50} {
+		if got, err := ParseSize(in); err != nil || got != want {
+			t.Errorf("ParseSize(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "G", "0G", "-1G", "20", "20g", "20GB", "20GiB", "1.5G", "20 G", "+3G", "1025T", "99999999999999999999G"} {
+		if _, err := ParseSize(in); err == nil {
+			t.Errorf("ParseSize(%q): want an error", in)
+		}
+	}
+}

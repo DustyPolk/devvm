@@ -21,20 +21,35 @@ const (
 	RetainExportsCount = "exports.count"    // exports kept, the newest
 	RetainToolsAge     = "tools.unused-age" // current tool images no VM has for this long are deleted
 	RetainOrphansAge   = "orphans.age"      // what devvm keeps of VMs gone from their backend, after this long
+	RetainNixCacheSize = "nix-cache.size"   // the shared Nix cache's cap; NixCacheDefault when off
 )
+
+// NixCacheDefault is the shared Nix cache's cap when nix-cache.size is
+// off: 10 GiB.
+const NixCacheDefault int64 = 10 << 30
 
 // RetentionKeys are the retention settings' keys, in the order devvm
 // space shows them.
 func RetentionKeys() []string {
-	return []string{RetainRunLogs, RetainExportsAge, RetainExportsCount, RetainToolsAge, RetainOrphansAge}
+	return []string{RetainRunLogs, RetainExportsAge, RetainExportsCount, RetainToolsAge, RetainOrphansAge, RetainNixCacheSize}
 }
 
 // Retention is the retention file's settings: 0 is off.
 type Retention struct {
 	RunLogs, ExportsCount            int
 	ExportsAge, ToolsAge, OrphansAge time.Duration
+	NixCacheSize                     int64
 	// Raw is each setting as written, by key.
 	Raw map[string]string
+}
+
+// NixCacheCap is the shared Nix cache's cap: nix-cache.size, or
+// NixCacheDefault when it's off.
+func (r Retention) NixCacheCap() int64 {
+	if r.NixCacheSize > 0 {
+		return r.NixCacheSize
+	}
+	return NixCacheDefault
 }
 
 // Off reports whether no setting is on.
@@ -89,6 +104,8 @@ func (r *Retention) set(key, val string) error {
 		r.ToolsAge, err = ParseAge(val)
 	case RetainOrphansAge:
 		r.OrphansAge, err = ParseAge(val)
+	case RetainNixCacheSize:
+		r.NixCacheSize, err = ParseSize(val)
 	}
 	if err != nil {
 		return fmt.Errorf("%s=%s: %w", key, val, err)

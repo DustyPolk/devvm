@@ -284,7 +284,7 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	return os.Rename(tmp.Name(), path) //nolint:gosec // devvm's CA, or a Nix cache file nixPath named
 }
 
 func loadCA(certPath, keyPath string) error {

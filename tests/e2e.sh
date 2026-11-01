@@ -21,9 +21,10 @@
 #                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
 #                stops its proxy; nix builds the nix layer behind a company proxy (no proxy left in its
 #                image), makes a node+nix VM of a flake project with network policy and checks Nix's
-#                pins, store and trust, nix-daemon's proxy, nix run nixpkgs#hello, sudo nix, the
-#                flake's dev shell through direnv before the shared node, a blocked download named, and
-#                network off
+#                pins, store and trust, nix-daemon's proxy, nix run nixpkgs#hello through the shared Nix
+#                cache (fetched by the host, a VM's writes and other requests refused, a second VM's
+#                hits), sudo nix, the flake's dev shell through direnv before the shared node, a blocked
+#                download named, and network off (no shared cache)
 #     --only desktop
 #                base with the desktop feature, and a VM with network policy whose desktop devvm
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
@@ -1676,6 +1677,9 @@ cat > "$x/flake.nix" <<EOF
   };
 }
 EOF
+# The shared Nix cache starts empty, so the first VM fetches into it and the second gets hits.
+nixcache=$XDG_DATA_HOME/devvm/nix-cache
+rm -rf "$nixcache"
 launch "$x" exit --network-policy --no-git-protect
 export -f in_vm
 nv=$(sed -n 's/^nix_version=//p' "$root/assets/layers/nix.sh")
@@ -1693,8 +1697,45 @@ check "nix-daemon gets the VM's proxy alone, in devvm's drop-in" in_vm "$vm" '
   [[ $(ls /etc/systemd/system/nix-daemon.service.d) == devvm-proxy.conf ]] &&
   e=$(systemctl show nix-daemon.service -p Environment --value) &&
   [[ $e == "http_proxy=$HTTP_PROXY https_proxy=$HTTP_PROXY no_proxy=localhost,127.0.0.1" ]]'
-check "nix run nixpkgs#hello works with network policy, from Nix's cache" in_vm "$vm" \
-  'nix run nixpkgs#hello 2>/tmp/hello.err | grep -qx "Hello, world!" && grep -q "from .https://cache.nixos.org" /tmp/hello.err'
+check "the VM's Nix tries the shared cache first, then cache.nixos.org, trusting cache.nixos.org's key alone" in_vm "$vm" '
+  [[ -f /etc/nix/devvm-cache.conf && $(nix config show substituters) == "http://devvm.proxy/nix https://cache.nixos.org"* ]] &&
+  [[ $(nix config show trusted-public-keys) == "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ]]'
+check "nix run nixpkgs#hello works with network policy, through the shared cache" in_vm "$vm" \
+  "nix run nixpkgs#hello 2>/tmp/hello.err | grep -qx 'Hello, world!' && grep -q 'from .http://devvm.proxy/nix' /tmp/hello.err &&
+   nix build --no-link github:NixOS/nixpkgs/$nixpkgs_rev#hello"
+nixev=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
+check "... which the host fetched into the shared cache, each file the user's alone" bash -c "
+  grep -q '\"event\":\"nix-cache\".*\"reason\":\"fetched\"' '$nixev' &&
+  ls '$nixcache'/*.narinfo >/dev/null && ls '$nixcache'/nar/*.nar* >/dev/null &&
+  [[ -z \$(find '$nixcache' -type f ! -perm 600 -print -quit) && -z \$(find '$nixcache' -type d ! -perm 700 -print -quit) ]]"
+check "a VM's writes to the shared cache, and its requests for anything else through it, are refused" in_vm "$vm" '
+  c() { curl -s -o /dev/null -w "%{http_code}" --proxy "$HTTP_PROXY" "$@"; }
+  z=00000000000000000000000000000000
+  [[ $(c -X PUT --data-binary x http://devvm.proxy/nix/$z.narinfo) == 400 ]] &&
+  [[ $(c -X POST --data-binary x http://devvm.proxy/nix/nar/${z}00000000000000000000.nar.xz) == 400 ]] &&
+  [[ $(c http://devvm.proxy/nix/https://example.com/x) == 400 ]] &&
+  [[ $(c "http://devvm.proxy/nix/$z.narinfo?u=https://example.com") == 400 ]] &&
+  [[ $(c --path-as-is http://devvm.proxy/nix/nar/../../etc/passwd) == 400 ]] &&
+  [[ $(c http://devvm.proxy/nix/nar/${z}00000000000000000000.nar.xz) == 404 ]] &&
+  [[ $(c http://devvm.proxy/nix/$z.narinfo) == 404 ]]'
+check "... and the host kept none of them, asking cache.nixos.org alone" bash -c "
+  [[ ! -e '$nixcache/00000000000000000000000000000000.narinfo' ]] &&
+  grep -q '\"path\":\"/nix/00000000000000000000000000000000.narinfo\".*\"reason\":\"not found: cache.nixos.org answered 404\"' '$nixev' &&
+  grep -q '\"path\":\"/nix/nar/0*.nar.xz\".*\"reason\":\"not found: no checked narinfo names it\"' '$nixev' &&
+  [[ -z \$(find '$nixcache' -type f ! -name '.*' ! -name '*.narinfo' ! -path '*/nar/*' -print -quit) ]]"
+# A second VM of a Nix project gets what the first fetched from the shared cache, as hits.
+nixvm1=$vm
+y=$(newproj nixflake2); cp "$x/flake.nix" "$x/flake.lock" "$x/package.json" "$y/"
+launch "$y" exit --network-policy --no-git-protect
+nixvm2=$vm
+check "a second VM gets the paths the first fetched as hits from the shared cache, fetching none again" bash -c "
+  [[ -n '$nixvm2' && '$nixvm2' != '$nixvm1' ]] &&
+  in_vm '$nixvm2' \"nix build --no-link github:NixOS/nixpkgs/$nixpkgs_rev#hello 2>/tmp/hello.err && grep -q 'from .http://devvm.proxy/nix' /tmp/hello.err\" &&
+  ev='$XDG_DATA_HOME/devvm/logs/$nixvm2.jsonl' &&
+  grep -q '\"event\":\"nix-cache\",.*\"path\":\"/nix/nar/[^\"]*\".*\"reason\":\"hit\"' \"\$ev\" &&
+  ! grep -q '\"event\":\"nix-cache\".*\"reason\":\"fetched\"' \"\$ev\""
+limactl stop "$nixvm2" >/dev/null 2>&1
+vm=$nixvm1
 nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
 check "a build runs in Nix's sandbox, which it would fail without" in_vm "$vm" "nix build --no-link --impure --expr '$nix_built'"
 check "sudo nix finds Nix, and so does a command over ssh" bash -c "
@@ -1718,6 +1759,8 @@ check "a download from a host that isn't allowed fails, and devvm-why names it" 
 check "devvm network off: from the next start, nix-daemon gets no proxy" bash -c "cd '$x' &&
   '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
   in_vm '$vm' '[[ -z \$(ls -A /etc/systemd/system/nix-daemon.service.d 2>/dev/null) && -z \$(systemctl show nix-daemon.service -p Environment --value) ]]'"
+check "... and no shared cache: Nix goes to cache.nixos.org alone" in_vm "$vm" \
+  '[[ ! -e /etc/nix/devvm-cache.conf && $(nix config show substituters) != *devvm.proxy* ]]'
 limactl stop "$vm" >/dev/null 2>&1
 fi
 

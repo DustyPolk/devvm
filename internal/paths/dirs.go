@@ -121,6 +121,10 @@ func (d Dirs) Mise() string { return filepath.Join(d.Data, "mise") }
 // Exports is where exported VM state goes by default.
 func (d Dirs) Exports() string { return filepath.Join(d.Data, "exports") }
 
+// NixCache is the Nix cache VMs with network policy share, which their
+// proxies fill from cache.nixos.org.
+func (d Dirs) NixCache() string { return filepath.Join(d.Data, "nix-cache") }
+
 // AgentSock is the socket of devvm's own SSH agent.
 func (d Dirs) AgentSock() string { return filepath.Join(d.Data, "agent.sock") }
 

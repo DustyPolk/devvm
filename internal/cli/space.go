@@ -22,6 +22,7 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -82,8 +83,9 @@ func newSpaceCmd(u *ui.UI, g *globals) *cobra.Command {
 		Long: "Change the retention settings, each KEY=VALUE, and KEY= to turn one off: logs.runs (the run " +
 			"logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or " +
 			"beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had " +
-			"for that long deleted) and orphans.age (what devvm keeps for VMs gone from their backend for " +
-			"that long, deleted by devvm gc --retention). Ages are 30d, 2w or 12h. Every setting is off " +
+			"for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for " +
+			"that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, " +
+			"10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off " +
 			"unless set. A bad key or value is refused, and nothing is written. devvm applies them once a " +
 			"day, and devvm gc --retention at once; they never delete a VM, an image or a tool any VM has.",
 		Args: cobra.MinimumNArgs(1),
@@ -462,6 +464,10 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	nix, err := e.nixCacheRow()
+	if err != nil {
+		return nil, err
+	}
 	other := otherState(d) - left.Size
 	exportsRow := spaceRow{
 		What: "exports", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --exports",
@@ -478,9 +484,22 @@ func (e spaceEnv) dataRows() ([]spaceRow, error) {
 		runsRow,
 		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, GC: dirsSize(oldMise), Rest: "-"},
 		spaceRow{What: "devvm's files", Count: assets.count, Size: assets.size, Sized: true, Kept: keptRemade, GC: stale, Rest: "-"},
+		nix,
 		left,
 		spaceRow{What: "state", Count: 1, Size: max(other, 0), Sized: true, Kept: keptState, Rest: "-"},
 	), nil
+}
+
+// nixCacheRow is the shared Nix cache: what devvm gc and retention free of
+// it now is what it takes over its cap. Its size is its files', as its cap
+// counts them.
+func (e spaceEnv) nixCacheRow() (spaceRow, error) {
+	n, size, err := proxy.NixCacheUsage(e.b.Dirs.NixCache())
+	over := max(size-e.ret.NixCacheCap(), 0)
+	return spaceRow{
+		What: "Nix cache", Count: n, Size: size, Sized: true, Kept: keptRemade, GC: over, Rest: "gc --nix-cache",
+		Retain: e.retainOf(state.RetainNixCacheSize), RetainFrees: over,
+	}, err
 }
 
 // staleAssets is the disk devvm gc frees of the copies of devvm's files.

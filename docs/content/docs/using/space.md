@@ -11,12 +11,12 @@ devvm, the tools it runs and its backends keep files on this machine outside you
 
 | Column | |
 | --- | --- |
-| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `exports`, `network logs`, `run logs`, `mise`, `devvm's files` for the copies of devvm's own files, `leftover state` for what devvm keeps of VMs that their backend no longer has, and `state` for the rest of devvm's data folder |
+| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `exports`, `network logs`, `run logs`, `mise`, `devvm's files` for the copies of devvm's own files, `Nix cache` for the [shared Nix cache](toolchains.md#nix-projects), `leftover state` for what devvm keeps of VMs that their backend no longer has, and `state` for the rest of devvm's data folder |
 | `BACKEND` | the backend that has them, for VMs, images and shared tools |
 | `COUNT`, `SIZE` | how many there are and the disk they take, in powers of 1024 (`2.1G`) |
 | `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
-| `GC` | what `devvm gc` frees of it now |
-| `FREED BY` | what frees the rest, such as `devvm rm`, or `gc --backend lima`, which deletes all of a backend's images |
+| `GC` | what `devvm gc` frees of it now, which for the Nix cache is what it takes beyond its cap |
+| `FREED BY` | what frees the rest, such as `devvm rm`, `gc --backend lima`, which deletes all of a backend's images, or `gc --nix-cache` |
 | `RETAIN` | the [retention setting](settings.md#retention) that applies to the row when it's on, such as `30d`, with what it would delete now in brackets, and `-` when none is on |
 
 Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. A shared tool's build shows `-` as its backend when devvm can't tell which backend it's for. When a backend that one of your VMs uses doesn't answer, devvm says so, and its VMs and images aren't counted.
@@ -42,6 +42,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `logs/runs/` | the [run logs](troubleshooting.md#a-command-fails), one per devvm run that runs a command | devvm keeps the newest 20 |
 | `logs/<vm>.jsonl`, `logs/<vm>.proxy.log` | a VM's network log, which holds its proxy's decisions, and its proxy's own output. Before a log would grow past 10 MiB, the proxy moves it to the same name with `.1` added, replacing the older one, so each log takes at most about 20 MiB, and `devvm log` reads both | `devvm rm` deletes them with the VM, `.1` files included |
 | `ca/` | the certificate authority that VMs trust for their proxy | devvm makes a new one when the old one has less than a week of its 30 days left |
+| `nix-cache/` | the [shared Nix cache](toolchains.md#nix-projects): the packages that VMs with network policy and the `nix` layer downloaded from Nix's binary cache, once for all of them | the VMs' proxies and `devvm gc` delete its least recently used files while it takes more than its cap, `nix-cache.size`, which is 10 GiB when it's off, and `devvm gc --nix-cache` deletes all of it |
 | `assets/<hash>` | devvm's own files, written out where a program needs them at a path, one folder per version of devvm's files | `devvm gc` deletes the folders of older versions, except one that a running VM's proxy was started with |
 | `run/` | files for running VMs and for builds, such as sandbox profiles, proxy pids and the ports lock | devvm deletes a VM's files when it deletes the VM |
 | `agent.sock` | the socket of [devvm's own SSH agent](ssh.md#devvms-own-agent) | it takes no space |
@@ -51,7 +52,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `smolvm/` | the smolvm backend's images, which are packs, and what it sets on each VM | see [smolvm](#smolvm) |
 | `docker/` | what the Docker backend sets on each VM, the shared tools it unpacked, and devvm's Linux build | see [Docker](#docker) |
 
-The [retention settings](settings.md#retention), which are all off until you set them, make devvm delete some of these on its own: `logs.runs` keeps that many run logs instead of 20, `exports.age` and `exports.count` delete old exports, `tools.unused-age` deletes current shared tools that no VM has had for that long, and `orphans.age` forgets VMs that their backend no longer has. Retention also writes `retention.run` in the data folder, when it last ran, and keeps a `.idle` file beside each current shared tool that no VM has, which records since when.
+The [retention settings](settings.md#retention), which are all off until you set them, make devvm delete some of these on its own: `logs.runs` keeps that many run logs instead of 20, `exports.age` and `exports.count` delete old exports, `tools.unused-age` deletes current shared tools that no VM has had for that long, and `orphans.age` forgets VMs that their backend no longer has. `nix-cache.size` sets the shared Nix cache's cap, and each time retention runs, it deletes the cache's least recently used files while it takes more than that. Retention also writes `retention.run` in the data folder, when it last ran, and keeps a `.idle` file beside each current shared tool that no VM has, which records since when.
 
 A build also makes a temporary folder in the data folder, `tools-build.<random>` for the shared tools, and devvm deletes it when the build ends, even after a failure or Ctrl+C.
 

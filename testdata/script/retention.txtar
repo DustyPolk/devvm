@@ -36,7 +36,7 @@ stdout 'RETAIN'
 
 # The next command applies it, once: the old export goes, the new stays.
 exec devvm ls
-stderr '^retention_deleted exports=1 orphans=0 tools=0$'
+stderr '^retention_deleted exports=1 nix_files=0 orphans=0 tools=0$'
 ! exists $EXPORTS/devvm-old-12345612345612-20200101-000000.tar.gz
 exists $EXPORTS/devvm-new-abcdefabcdefab-20991231-235959.tar.gz
 exists $DATA/retention.run
@@ -58,12 +58,12 @@ mkdir $VMS
 exec sh -c 'printf "image=claude\ndir=/p\nbackend=lima\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 *.sha256'
 exec devvm gc --retention
-stdout '^==> retention_deleted exports=0 orphans=0 tools=0$'
+stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'
 exec sh -c 'ls "$SHARE"/codex-*.erofs.idle'
 ! exec sh -c 'ls "$SHARE"/claude-*.erofs.idle'
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.idle'
 exec devvm gc --retention
-stdout '^==> retention_deleted exports=0 orphans=0 tools=1$'
+stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=1$'
 exec sh -c 'ls "$SHARE"'
 ! stdout codex
 stdout '^claude-'

@@ -534,6 +534,11 @@ func DeletedMise(count int) M {
 	return M{id: "deleted_mise", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// DeletedNixCache is [deleted_nix_cache]: "deleted {{.count}} files of the shared Nix cache ({{.size}})"
+func DeletedNixCache(count int, size string) M {
+	return M{id: "deleted_nix_cache", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
+}
+
 // DeletedOldImage is [deleted_old_image]: "deleted the old image {{.image}} ({{.key}})"
 func DeletedOldImage(image string, key string) M {
 	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
@@ -1134,6 +1139,16 @@ func GCNamesNeedTools(tool string) M {
 	return M{id: "gc_names_need_tools", vals: []val{{"tool", tool}}}
 }
 
+// GCNixCache is [gc_nix_cache]: "The shared Nix cache holds {{.count}} files ({{.size}}), which VMs download again when they need them."
+func GCNixCache(count int, size string) M {
+	return M{id: "gc_nix_cache", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
+}
+
+// GCNixCacheOver is [gc_nix_cache_over]: "The shared Nix cache takes {{.size}}, more than its cap of {{.cap}}, so its least recently used files go until it fits."
+func GCNixCacheOver(cap string, size string) M {
+	return M{id: "gc_nix_cache_over", vals: []val{{"cap", cap}, {"size", size}}}
+}
+
 // GCOldHint is [gc_old_hint]: "After they rebuild, run devvm gc to delete the old ones."
 func GCOldHint() M {
 	return M{id: "gc_old_hint"}
@@ -1377,6 +1392,11 @@ func ImageReady(image string) M {
 // ImagesFailed is [images_failed]: "Listing the images failed: {{.reason}}."
 func ImagesFailed(reason string) M {
 	return M{id: "images_failed", vals: []val{{"reason", reason}}}
+}
+
+// ImagesNixCache is [images_nix_cache]: "The shared Nix cache takes {{.size}} of its {{.cap}} cap. Run devvm gc --nix-cache to empty it."
+func ImagesNixCache(cap string, size string) M {
+	return M{id: "images_nix_cache", vals: []val{{"cap", cap}, {"size", size}}}
 }
 
 // ImagesRmFailed is [images_rm_failed]: "Deleting the images failed: {{.reason}}."
@@ -2059,9 +2079,9 @@ func RetentionBusy() M {
 	return M{id: "retention_busy"}
 }
 
-// RetentionDeleted is [retention_deleted]: "retention deleted {{.exports}} exports, {{.tools}} shared tool images no VM has, and what devvm kept for {{.orphans}} VMs gone from their backend"
-func RetentionDeleted(exports string, orphans string, tools string) M {
-	return M{id: "retention_deleted", vals: []val{{"exports", exports}, {"orphans", orphans}, {"tools", tools}}}
+// RetentionDeleted is [retention_deleted]: "retention deleted {{.exports}} exports, {{.tools}} shared tool images no VM has, what devvm kept for {{.orphans}} VMs gone from their backend, and {{.nix_files}} files of the shared Nix cache"
+func RetentionDeleted(exports string, nixFiles string, orphans string, tools string) M {
+	return M{id: "retention_deleted", vals: []val{{"exports", exports}, {"nix_files", nixFiles}, {"orphans", orphans}, {"tools", tools}}}
 }
 
 // RetentionFailed is [retention_failed]: "Applying the retention settings failed. Run devvm gc --retention to see why."
@@ -2862,6 +2882,7 @@ var specs = map[string]spec{
 	"deleted_exports":                  {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
+	"deleted_nix_cache":                {plural: true, fields: []string{"count", "size"}},
 	"deleted_old_image":                {fields: []string{"image", "key"}},
 	"deleted_tools":                    {plural: true, fields: []string{"count"}},
 	"deleted_tools_no_vm":              {plural: true, fields: []string{"count"}},
@@ -2982,6 +3003,8 @@ var specs = map[string]spec{
 	"gc_images":                        {},
 	"gc_mise":                          {plural: true, fields: []string{"count", "size"}},
 	"gc_names_need_tools":              {fields: []string{"tool"}},
+	"gc_nix_cache":                     {plural: true, fields: []string{"count", "size"}},
+	"gc_nix_cache_over":                {fields: []string{"cap", "size"}},
 	"gc_old_hint":                      {},
 	"gc_older_than_needs_exports":      {},
 	"gc_orphan":                        {fields: []string{"backend", "dir", "vm"}},
@@ -3031,6 +3054,7 @@ var specs = map[string]spec{
 	"image_missing":                    {fields: []string{"key"}},
 	"image_ready":                      {fields: []string{"image"}},
 	"images_failed":                    {fields: []string{"reason"}},
+	"images_nix_cache":                 {fields: []string{"cap", "size"}},
 	"images_rm_failed":                 {fields: []string{"reason"}},
 	"images_stale_note":                {plural: true, fields: []string{"count"}},
 	"images_total":                     {fields: []string{"size"}},
@@ -3167,7 +3191,7 @@ var specs = map[string]spec{
 	"restart_for_mounts":               {},
 	"retention_bad":                    {fields: []string{"reason"}},
 	"retention_busy":                   {},
-	"retention_deleted":                {fields: []string{"exports", "orphans", "tools"}},
+	"retention_deleted":                {fields: []string{"exports", "nix_files", "orphans", "tools"}},
 	"retention_failed":                 {},
 	"retention_off":                    {},
 	"retention_saved":                  {fields: []string{"file"}},

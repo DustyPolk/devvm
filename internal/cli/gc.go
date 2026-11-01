@@ -44,6 +44,9 @@ type gcOpts struct {
 	caches bool
 	// retention is --retention: then the retention settings, at once.
 	retention bool
+	// nixCache is --nix-cache: also the whole shared Nix cache, not only
+	// what's over its cap.
+	nixCache bool
 }
 
 // newGCCmd is devvm gc.
@@ -54,13 +57,15 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 		Short: "Delete stale images and unused tool images",
 		Long: "Delete what devvm images lists as stale or unfinished, on every backend, with their " +
 			"records, the shared tool images it lists as unused, the copies of devvm's own files " +
-			"older versions wrote out, and the older versions of the mise devvm runs on this machine. " +
+			"older versions wrote out, the older versions of the mise devvm runs on this machine, and the " +
+			"shared Nix cache's least recently used files while it's over its cap (nix-cache.size). " +
 			"With --backend, only that backend's images, its current ones too, and its unused tool " +
 			"images; without it, every backend's, whatever the default backend is. With --tools, also " +
 			"the current tool images no VM has, on every backend and C library, or only those of the " +
 			"TOOLs named (node, claude). With --exports, also the agents' history devvm export and " +
 			"devvm rm saved, the only copy of a deleted VM's, or only those older than --older-than " +
-			"(30d, 2w, 12h). With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm " +
+			"(30d, 2w, 12h). With --nix-cache, also the whole shared Nix cache, which VMs download again " +
+			"when they need it. With --orphans, also what devvm keeps for VMs deleted outside it, as devvm rm " +
 			"does, for each VM whose backend answers that it no longer has it. With --caches, then " +
 			"what devvm's builds put in the backends' own caches that nothing of devvm's needs (Lima's " +
 			"Ubuntu downloads, smolvm's disks of devvm's packs, Docker volumes of devvm's no VM has), " +
@@ -79,6 +84,7 @@ func newGCCmd(u *ui.UI, g *globals) *cobra.Command {
 	c.Flags().BoolVar(&o.tools, "tools", false, "also delete the current shared tool images no VM has; with TOOL names, only theirs")
 	c.Flags().BoolVar(&o.exports, "exports", false, "also delete the saved exports of agents' history")
 	c.Flags().StringVar(&o.olderThan, "older-than", "", "with --exports, only those older than `AGE`: 30d, 2w or 12h")
+	c.Flags().BoolVar(&o.nixCache, "nix-cache", false, "also delete the whole shared Nix cache, which VMs download again when they need it")
 	c.Flags().BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has, as devvm rm does")
 	c.Flags().BoolVar(&o.caches, "caches", false, "then free devvm's share of the backends' own caches, asking for each backend; only in a terminal")
 	c.Flags().BoolVar(&o.retention, "retention", false, "then apply the retention settings now, which devvm otherwise does once a day")
@@ -119,8 +125,9 @@ type gcPlan struct {
 	// forgets them
 	orphans   vm.LeftoverReport
 	leftovers vm.Leftovers
-	assets    []string    // old copies of devvm's files no VM's proxy was started with
-	mise      []string    // older versions of devvm's own mise
+	assets    []string // old copies of devvm's files no VM's proxy was started with
+	mise      []string // older versions of devvm's own mise
+	nix       nixCachePlan
 	share     tools.Share // where the tool images are
 	// skipped are the backends a VM uses that couldn't list their
 	// images: gc leaves everything of theirs alone.
@@ -262,7 +269,10 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	if p.assets, err = state.StaleAssets(b.Dirs, current, netpolicy.AssetsInUse(b.Dirs)); err != nil {
 		return p, err
 	}
-	p.mise, err = tools.Versions{Env: b.Tools}.StaleMise()
+	if p.mise, err = (tools.Versions{Env: b.Tools}).StaleMise(); err != nil {
+		return p, err
+	}
+	p.nix, err = planNixCache(u, b.Dirs, o.nixCache)
 	return p, err
 }
 
@@ -334,7 +344,8 @@ func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (strin
 }
 
 func (p gcPlan) empty() bool {
-	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.assets)+len(p.mise) == 0
+	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.assets)+len(p.mise) == 0 &&
+		!p.nix.any()
 }
 
 // showOrphans lists the VMs gc --orphans forgets, then says which it
@@ -400,6 +411,7 @@ func (p gcPlan) show(u *ui.UI) {
 	if len(p.mise) > 0 {
 		u.Say(msg.GCMise(len(p.mise), humanSize(dirsSize(p.mise))))
 	}
+	p.nix.show(u)
 	if len(p.exports) > 0 {
 		u.Say(msg.GCExports(len(p.exports), humanSize(exportsSize(p.exports))))
 		for _, e := range p.exports {
@@ -449,7 +461,7 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 		}
 		u.Info(msg.DeletedToolsNoVM(len(p.current)))
 	}
-	return nil
+	return p.nix.run(u)
 }
 
 // toolFiles are these tool images' files in the share.

@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -32,21 +33,23 @@ const retainEvery = 24 * time.Hour
 const retainLockAge = 10 * time.Minute
 
 // retained is what retention deleted.
-type retained struct{ exports, tools, orphans int }
+type retained struct{ exports, tools, orphans, nixFiles int }
 
-func (r retained) any() bool { return r.exports+r.tools+r.orphans > 0 }
+func (r retained) any() bool { return r.exports+r.tools+r.orphans+r.nixFiles > 0 }
 
 // report is the one line that says what retention deleted.
 func (r retained) report() msg.M {
-	return msg.RetentionDeleted(strconv.Itoa(r.exports), strconv.Itoa(r.orphans), strconv.Itoa(r.tools))
+	return msg.RetentionDeleted(strconv.Itoa(r.exports), strconv.Itoa(r.nixFiles), strconv.Itoa(r.orphans), strconv.Itoa(r.tools))
 }
 
 // retain applies the retention settings r, each to what it names and
 // nothing else: exports older than exports.age, then all but the newest
 // exports.count; current tool images no VM has had for tools.unused-age;
 // with orphans, what devvm keeps for VMs their backend hasn't had for
-// orphans.age (it asks the backends). Never a VM, an image, or a tool
-// image any VM's state lists. logs.runs is the run log's own (KeepRunLogs).
+// orphans.age (it asks the backends); the shared Nix cache's least recently
+// used files while it's over nix-cache.size (or its default). Never a VM,
+// an image, or a tool image any VM's state lists. logs.runs is the run
+// log's own (KeepRunLogs).
 func retain(ctx context.Context, u *ui.UI, b *build.Env, r state.Retention, orphans bool) (retained, error) {
 	var done retained
 	now := time.Now()
@@ -55,6 +58,9 @@ func retain(ctx context.Context, u *ui.UI, b *build.Env, r state.Retention, orph
 		return done, err
 	}
 	done.exports = n
+	if done.nixFiles, _, err = proxy.TrimNixCache(b.Dirs.NixCache(), r.NixCacheCap()); err != nil {
+		return done, err
+	}
 	if r.ToolsAge > 0 {
 		if done.tools, err = retainTools(ctx, u, b, r.ToolsAge, now); err != nil {
 			return done, err

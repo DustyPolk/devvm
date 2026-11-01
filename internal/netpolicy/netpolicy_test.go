@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -933,5 +934,38 @@ func TestListed(t *testing.T) {
 				t.Errorf("asked the backend: %v", asked)
 			}
 		})
+	}
+}
+
+// Only a VM with the nix layer gets the shared Nix cache, with the cap
+// nix-cache.size gives, or its default.
+func TestNixCacheArgs(t *testing.T) {
+	if state.NixCacheDefault != proxy.NixCacheDefault {
+		t.Errorf("the cap's default: state's %d, the proxy's %d", state.NixCacheDefault, proxy.NixCacheDefault)
+	}
+	d, st := sandbox(t, "base")
+	var warned []string
+	p := &Proxy{Dirs: d, Warn: func(m msg.M) { warned = append(warned, m.Names()) }}
+	if got := p.nixCacheArgs(st); got != nil {
+		t.Errorf("base: %q", got)
+	}
+	if err := st.Set(state.KeyImage, "node+nix"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-nix-cache", d.NixCache(), "-nix-cache-max", strconv.FormatInt(state.NixCacheDefault, 10)}
+	if got := p.nixCacheArgs(st); !slices.Equal(got, want) {
+		t.Errorf("node+nix: %q, want %q", got, want)
+	}
+	if _, err := state.SetRetention(d, []string{"nix-cache.size=2G"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.nixCacheArgs(st); got[3] != strconv.FormatInt(2<<30, 10) {
+		t.Errorf("nix-cache.size=2G: %q", got)
+	}
+	if err := os.WriteFile(d.Retention(), []byte("nix-cache.size=lots\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.nixCacheArgs(st); got[3] != want[3] || len(warned) != 1 || !strings.HasPrefix(warned[0], "retention_unreadable") {
+		t.Errorf("unreadable: %q, warned %q", got, warned)
 	}
 }

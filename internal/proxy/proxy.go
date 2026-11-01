@@ -14,6 +14,8 @@
 //     (see secrets.go). Everything else passes unread.
 //   - Every decision goes to a JSON-lines log, and http://devvm.proxy/blocked lists recent blocks
 //     (/blocked/new: those since the VM's last prompt; /ca.pem serves the CA).
+//   - With -nix-cache, http://devvm.proxy/nix/ is a Nix binary cache shared by VMs, which only the
+//     host fills, from cache.nixos.org, checking what it keeps (see nixcache.go).
 //
 // On a backend that asks the host about each connection a VM opens (smolvm), the proxy is also
 // that decider (-decider, decider.go): it takes over connections to itself and refuses the rest.
@@ -99,6 +101,8 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&deciderAddr, "decider", "", "also decide, on this loopback address, each connection the VM opens (decider.go)")
 	fs.StringVar(&deciderTo, "decider-to", "", "with -decider: the proxy's address in the VM, the only destination taken over")
 	fs.StringVar(&deciderTokenFile, "decider-token-file", "", "with -decider: file holding the token the backend proves itself with (64 hex digits)")
+	fs.StringVar(&nixCacheDir, "nix-cache", "", "serve http://devvm.proxy/nix/, the Nix cache shared with other VMs, from this folder (nixcache.go)")
+	fs.Int64Var(&nixCacheMax, "nix-cache-max", NixCacheDefault, "with -nix-cache: the cache's cap, in bytes")
 	return fs
 }
 
@@ -566,6 +570,10 @@ type noCloseNotify struct{ http.ResponseWriter }
 func (w noCloseNotify) Flush() { _ = http.NewResponseController(w.ResponseWriter).Flush() }
 
 func serveReserved(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/nix/") {
+		serveNix(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	switch r.URL.Path {
 	case "/blocked":
@@ -643,6 +651,21 @@ func watchLifeline(path string) {
 			return
 		}
 	}
+}
+
+// loadPolicies reads the policy files (-policy) and the host's own addresses, and opens the Nix
+// cache (-nix-cache).
+func loadPolicies() error {
+	var files []string
+	for f := range strings.SplitSeq(policies, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			files = append(files, f)
+		}
+	}
+	pol = newPolicy(files)
+	pol.all()
+	loadOwnAddrs()
+	return openNixCache()
 }
 
 // IO is what devvm _proxy reads and writes: devvm's own streams.
@@ -741,15 +764,9 @@ func Main(args []string, std IO) error {
 		}
 		logger.SetOutput(f)
 	}
-	var files []string
-	for f := range strings.SplitSeq(policies, ",") {
-		if f = strings.TrimSpace(f); f != "" {
-			files = append(files, f)
-		}
+	if err := loadPolicies(); err != nil {
+		return err
 	}
-	pol = newPolicy(files)
-	pol.all()
-	loadOwnAddrs()
 	// The decider listens first: "listening on" means both are.
 	h, to, token, err := startDecider()
 	if err != nil {

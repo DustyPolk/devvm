@@ -47,7 +47,7 @@ On the [Docker backend](../backends/docker.md#the-docker-layer), the layer needs
 
 #### nix
 
-The `nix` layer installs [Nix](https://nixos.org) with flakes and the `nix` command turned on, and [direnv](https://direnv.net) with [nix-direnv](https://github.com/nix-community/nix-direnv), so a project's `flake.nix`, `shell.nix` or `devenv.nix` can supply its toolchain. Each VM has a Nix store and daemon of its own, which no other VM and nothing on this machine shares. [Nix projects](toolchains.md#nix-projects) explains how a flake's dev shell and the shared tools work together.
+The `nix` layer installs [Nix](https://nixos.org) with flakes and the `nix` command turned on, and [direnv](https://direnv.net) with [nix-direnv](https://github.com/nix-community/nix-direnv), so a project's `flake.nix`, `shell.nix` or `devenv.nix` can supply its toolchain. Each VM has a Nix store and daemon of its own, which no other VM and nothing on this machine shares. With network policy, VMs share their downloads from Nix's binary cache through a cache on this machine that only devvm fills. [Nix projects](toolchains.md#nix-projects) explains that cache, and how a flake's dev shell and the shared tools work together.
 
 The `nix` layer works on Lima and smolvm, on a base from Ubuntu, Debian or Alpine. On a base made `--from alpine`, it installs Alpine's `xz` package, which isn't pinned, and runs Nix's daemon as an OpenRC service. devvm refuses the layer on the Docker backend, whose containers can't make the sandbox that Nix builds packages in ([what Docker VMs can't do](../backends/docker.md#what-docker-vms-cant-do)).
 
@@ -143,7 +143,7 @@ The second table lists the [shared tools](#shared-tools) that devvm has built, b
 | `VMS` | how many VMs have it |
 | `STATE` | `current` for the version new VMs get, `in use` for another version a VM has, `unused` for neither, `not built` for the current version of a tool devvm has other versions of, and `not installed` when devvm has no version of it |
 
-After the tables, devvm says on stderr how many images are stale or unfinished and how much disk the unused tools take, when there are any. It ends with the disk that the images and shared tools take together, and `devvm space` shows the rest of what devvm keeps ([what devvm keeps](space.md#devvm-space)).
+After the tables, devvm says on stderr how many images are stale or unfinished and how much disk the unused tools take, when there are any. It ends with the disk that the images and shared tools take together, and when the [shared Nix cache](toolchains.md#nix-projects) holds anything, the disk it takes of its cap. `devvm space` shows the rest of what devvm keeps ([what devvm keeps](space.md#devvm-space)).
 
 ### Deleting images
 
@@ -155,10 +155,11 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 
 ### Cleaning up
 
-`devvm gc` deletes four things. The first is what `devvm images` lists as stale or unfinished, on every backend. The second is the shared tools it lists as `unused`. The third is the copies of devvm's own files that older versions [wrote out](../internals/install.md#devvms-own-files), except those a VM's proxy was started with. The fourth is the older versions of the mise that devvm runs on this machine to look up the tools' versions, which an upgrade of devvm leaves behind, except one that changed in the last hour, because another devvm may be downloading it. gc lists them all first and, in a terminal, asks. Without a terminal, it goes ahead.
+`devvm gc` deletes five things. The first is what `devvm images` lists as stale or unfinished, on every backend. The second is the shared tools it lists as `unused`. The third is the copies of devvm's own files that older versions [wrote out](../internals/install.md#devvms-own-files), except those a VM's proxy was started with. The fourth is the older versions of the mise that devvm runs on this machine to look up the tools' versions, which an upgrade of devvm leaves behind, except one that changed in the last hour, because another devvm may be downloading it. The fifth is the [shared Nix cache](toolchains.md#nix-projects)'s least recently used files, while it takes more than its cap, the `nix-cache.size` [retention setting](settings.md#retention), which is 10 GiB when it's off. gc lists them all first and, in a terminal, asks. Without a terminal, it goes ahead.
 
 - `devvm gc --tools` also deletes the current shared tools that no VM has, such as a toolchain you tried once, on every backend and C library. `devvm gc --tools node claude` deletes only those tools' builds, by the names images use, so `node` also covers pnpm and bun. A tool that a VM's state lists stays, including a stopped VM's, and so does one built in the last hour, because the VM it was built for may not list it yet. A VM whose image names a deleted tool builds it again when it needs it.
 - `devvm gc --exports` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than AGE` keeps those newer than `AGE`, such as `30d`, `2w` or `12h`. gc never deletes exports without `--exports`.
+- `devvm gc --nix-cache` also deletes the rest of the shared Nix cache. VMs download its packages again when they need them.
 - `devvm gc --orphans` also deletes what devvm keeps for VMs that their backend no longer has, such as one you deleted with `limactl delete` instead of `devvm rm`, and with it the hold their state has on their shared tools ([leftovers](space.md#leftovers-of-a-vm-deleted-outside-devvm)).
 - `devvm gc --caches` then frees devvm's share of the backends' own caches, such as Lima's downloads of Ubuntu's cloud image, asking for each backend apart, and only in a terminal ([the backends' caches](space.md#the-backends-caches)).
 - `devvm gc --retention` then applies the [retention settings](settings.md#retention) at once, which devvm otherwise applies at most once a day. They're all off until you set them.

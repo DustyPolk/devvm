@@ -21,6 +21,7 @@ func TestFormatEvent(t *testing.T) {
 		{`{"time":"T","event":"blocked","host":"b.test","port":22,"reason":"no"}`, "T  BLOCKED  b.test:22  no"},
 		{`{"time":"T","event":"blocked","host":"::1","port":80,"reason":"no"}`, "T  BLOCKED  [::1]:80  no"},
 		{`{"time":"T\u001b[2J","event":"forward","host":"a.test","port":443,"method":"GET","path":"/\n\u009bx\t"}`, "T[2J  allowed  a.test:443  GET /x"},
+		{`{"time":"T","event":"nix-cache","host":"cache.nixos.org","port":443,"method":"GET","path":"/nix/x.narinfo","reason":"hit"}`, "T  cache    cache.nixos.org:443  GET /nix/x.narinfo: hit"},
 		{`not json`, ""},
 		{`{"time":"T"}`, ""},
 		{``, ""},

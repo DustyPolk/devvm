@@ -1,0 +1,98 @@
+# The shared Nix cache: devvm _proxy -nix-cache answers http://devvm.proxy/nix/
+# itself; devvm space, devvm images and devvm gc show what it takes, and devvm
+# gc deletes its least recently used files while it's over its cap
+# (nix-cache.size), or all of it with --nix-cache.
+env DEVVM_MESSAGES=names
+env CACHE=$XDG_DATA_HOME/devvm/nix-cache
+
+exec devvm _proxy --help
+stdout '-nix-cache '
+stdout '-nix-cache-max'
+
+# The proxy makes the folder, the user's alone, and answers nix-cache-info
+# itself. What the cache doesn't take is refused, a NAR no checked narinfo
+# names isn't fetched, and nothing is answered without the VM's password.
+free_port PORT
+! exec devvm _proxy -listen 127.0.0.1:$PORT -auth-file key -policy nix.policy -log events.jsonl -nix-cache cache -nix-cache-max 1000 &p&
+exec sh $WORK/waitfor 'nc -z 127.0.0.1 $PORT'
+exec curl -sS -x http://devvm:k@127.0.0.1:$PORT http://devvm.proxy/nix/nix-cache-info
+stdout '^Priority: 30$'
+stdout '^StoreDir: /nix/store$'
+exec curl -sS -o /dev/null -w '%{http_code}' -x http://devvm:k@127.0.0.1:$PORT -X POST -d x http://devvm.proxy/nix/nix-cache-info
+stdout '^400$'
+exec curl -sS -o /dev/null -w '%{http_code}' -x http://devvm:k@127.0.0.1:$PORT --path-as-is http://devvm.proxy/nix/nar/../aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo
+stdout '^400$'
+exec curl -sS -o /dev/null -w '%{http_code}' -x http://devvm:k@127.0.0.1:$PORT http://devvm.proxy/nix/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo?x
+stdout '^400$'
+exec curl -sS -o /dev/null -w '%{http_code}' -x http://devvm:k@127.0.0.1:$PORT http://devvm.proxy/nix/nar/0000000000000000000000000000000000000000000000000000.nar.xz
+stdout '^404$'
+exec curl -sS -o /dev/null -w '%{http_code}' -x http://127.0.0.1:$PORT http://devvm.proxy/nix/nix-cache-info
+stdout '^407$'
+exec ls -ld cache
+stdout '^drwx------'
+exec ls -ld cache/nar
+stdout '^drwx------'
+kill p
+wait p
+grep '"event":"nix-cache".*"reason":"not found: no checked narinfo names it"' events.jsonl
+grep '"event":"nix-cache".*"reason":"refused: ' events.jsonl
+exec sh -c 'ls cache cache/nar'
+! stdout narinfo
+
+# nix-cache.size takes sizes as devvm space shows them.
+! exec devvm space set nix-cache.size=2k
+stderr '^devvm: retention_bad '
+exec devvm space set nix-cache.size=128K
+stdout '^==> retention_saved '
+
+# 192K in the cache, over its 128K cap: devvm space says so, and the daily
+# retention run deletes the least recently used file. Sizes are whole
+# blocks, which the cap counts.
+mkdir $CACHE/nar
+exec sh -c 'head -c 65536 /dev/zero > "$CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" && head -c 131072 /dev/zero > "$CACHE/nar/bbbb.nar.xz" && touch -t 202001010000 "$CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo"'
+exec devvm space --json
+stdout '"what": "Nix cache",\n\s+"count": 2,\n\s+"size": 196608,\n\s+"sized": true,\n\s+"kept": "remade",\n\s+"gc": 65536,\n\s+"rest": "gc --nix-cache",\n\s+"retain": "128K",\n\s+"retain_frees": 65536'
+exec devvm space
+stdout '^Nix cache .* gc --nix-cache +128K \(64K\)$'
+exec devvm ls
+stderr '^retention_deleted exports=0 nix_files=1 orphans=0 tools=0$'
+! exists $CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo
+exists $CACHE/nar/bbbb.nar.xz
+
+# Over its cap again: devvm images says what it takes, and devvm gc deletes
+# the least recently used file.
+exec sh -c 'head -c 65536 /dev/zero > "$CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" && touch -t 202001010000 "$CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo"'
+exec devvm images
+stderr '^images_nix_cache cap=128K size=192K$'
+exec devvm gc
+stdout '^gc_nix_cache_over cap=128K size=192K$'
+stdout '^==> deleted_nix_cache count=1 size=64K$'
+! exists $CACHE/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo
+exists $CACHE/nar/bbbb.nar.xz
+exec devvm gc
+stdout '^==> nothing_to_clean$'
+
+# --nix-cache: all of it, and nothing of a backend's own run (--backend).
+exec devvm gc --backend lima --nix-cache
+! stdout nix_cache
+exists $CACHE/nar/bbbb.nar.xz
+exec devvm gc --nix-cache
+stdout '^gc_nix_cache count=1 size=128K$'
+stdout '^==> deleted_nix_cache count=1 size=128K$'
+! exists $CACHE/nar/bbbb.nar.xz
+exists $CACHE
+exec devvm images
+! stderr images_nix_cache
+
+-- key --
+k
+-- nix.policy --
+cache.nixos.org
+-- waitfor --
+# waitfor CMD: CMD every 0.1 s until it succeeds, for 30 s at most.
+i=0
+until sh -c "$1"; do
+  i=$((i + 1))
+  [ "$i" -lt 300 ] || exit 1
+  sleep 0.1
+done

@@ -202,7 +202,19 @@ docker_proxies() {   # docker_proxies CONFIG [sudo]: set (or remove) the proxy f
 nixd=/nix/var/nix/profiles/default/bin/nix-daemon
 nix_conf=/etc/systemd/system/nix-daemon.service.d/devvm-proxy.conf
 $systemd || nix_conf=/etc/conf.d/nix-daemon
-nix_before=$(cat "$nix_conf" 2>/dev/null || true)
+# The shared Nix cache, also only under network policy: the proxy's /nix/ first, then cache.nixos.org
+# itself, which Nix goes to when the cache doesn't answer. The keys stay Nix's own (cache.nixos.org-1),
+# so each path is checked here as well. nix.conf includes devvm's file when it's there.
+nix_cache=/etc/nix/devvm-cache.conf
+if [[ -x $nixd ]] && ! grep -qx '!include devvm-cache.conf' /etc/nix/nix.conf 2>/dev/null; then
+  echo '!include devvm-cache.conf' | sudo tee -a /etc/nix/nix.conf >/dev/null
+fi
+nix_before=$(cat "$nix_conf" "$nix_cache" 2>/dev/null || true)
+if [[ -n "${DEVVM_PROXY:-}" && -x $nixd ]]; then
+  echo 'substituters = http://devvm.proxy/nix https://cache.nixos.org' | sudo tee "$nix_cache" >/dev/null
+else
+  sudo rm -f "$nix_cache"
+fi
 if [[ -n "${DEVVM_PROXY:-}" && -x $nixd ]]; then
   sudo mkdir -p "$(dirname "$nix_conf")"
   if $systemd; then
@@ -214,7 +226,7 @@ if [[ -n "${DEVVM_PROXY:-}" && -x $nixd ]]; then
 else
   sudo rm -f "$nix_conf"
 fi
-if [[ "$nix_before" != "$(cat "$nix_conf" 2>/dev/null || true)" ]]; then
+if [[ "$nix_before" != "$(cat "$nix_conf" "$nix_cache" 2>/dev/null || true)" ]]; then
   if $systemd; then sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
   elif [[ -x $nixd && -e /run/openrc/softlevel ]]; then sudo rc-service nix-daemon restart >/dev/null
   elif [[ -x $nixd ]]; then

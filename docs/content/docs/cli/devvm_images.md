@@ -7,7 +7,7 @@ List the images and the shared tools
 
 ## Synopsis
 
-List the images on every backend, by name: what each one's base started from and its digest, its key, whether it's current, stale (its inputs changed since) or unfinished (a build that didn't finish), the disk it takes and its backend. Then the shared tool images, by the name images have them by: each version, the backend and C library it's built for, the disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, or the lock's and not built yet. Then what they take in all.
+List the images on every backend, by name: what each one's base started from and its digest, its key, whether it's current, stale (its inputs changed since) or unfinished (a build that didn't finish), the disk it takes and its backend. Then the shared tool images, by the name images have them by: each version, the backend and C library it's built for, the disk it takes, how many VMs use it, and whether it's the tools lock's version, in use, unused, or the lock's and not built yet. Then what they take in all, and what the shared Nix cache takes of its cap.
 
 ```text
 devvm images [flags]

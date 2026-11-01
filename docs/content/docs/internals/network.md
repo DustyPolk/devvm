@@ -100,10 +100,29 @@ On every launch, the VM's setup does the following:
 
 - It installs devvm's CA into the VM's trust store, so the proxy's certificates for hosts with a bound secret verify, in this VM only.
 - It points the programs that ignore the proxy variables at the proxy. Those are apt, sudo (which keeps the variables), every ssh connection, Docker's daemon and containers with the [docker layer](../using/images.md#docker), and Nix's daemon with the [nix layer](images.md#the-nix-layer). Under systemd, each daemon gets a drop-in, `devvm-proxy.conf`, that holds the VM's own proxy address and nothing else, and without systemd, Docker's settings in `/etc/conf.d/docker` get a block instead, and Nix's daemon gets `/etc/conf.d/nix-daemon`. When network policy is off, the setup removes them, and it restarts a daemon whose settings changed. An ssh connection gets a `ProxyCommand` that tunnels through the proxy, and the proxy checks its host and port against the allowlist.
+- With the nix layer, it points Nix at the [shared Nix cache](#the-shared-nix-cache) first: `/etc/nix/devvm-cache.conf`, which `/etc/nix/nix.conf` includes with `!include`, sets `substituters = http://devvm.proxy/nix https://cache.nixos.org`. When network policy is off, the setup removes that file, so Nix goes to cache.nixos.org alone, and it restarts Nix's daemon when the file changed.
 - It puts the VM's placeholders in `~/.config/devvm/env`, which login shells read, as `CLAUDE_CODE_OAUTH_TOKEN` and `GH_TOKEN`. When `github` is bound, it also sets up git's credential helper for GitHub over HTTPS.
 - It adds `devvm-why`, the note before each prompt, and the notes for Claude Code and Codex ([inside the VM](../safety/network.md#inside-the-vm)).
 
 Each placeholder ends in a random value of the VM's own, its salt, which isn't its password.
+
+## The shared Nix cache
+
+VMs with network policy and the [nix layer](images.md#the-nix-layer) share their downloads from Nix's binary cache, so each package comes from cache.nixos.org once per machine instead of once per VM. Each VM keeps its own Nix store and daemon, and only the host writes the cache, so no VM can change what another VM gets. The [design note](design.md#the-shared-nix-cache) says why it's a cache that the host fills rather than a shared store.
+
+**In the VM.** devvm starts the VM's proxy with `-nix-cache ~/.local/share/devvm/nix-cache` when the VM's image has the nix layer, and the VM's setup puts `http://devvm.proxy/nix` before `https://cache.nixos.org` in Nix's `substituters` ([the VM's setup](#the-vms-setup)). It leaves `trusted-public-keys` as Nix has it, which is cache.nixos.org's key alone. Nix's daemon reaches `devvm.proxy` through its own proxy settings, so its requests are absolute-form `GET`s with the VM's password, and the proxy answers them itself, as it does `/blocked` and `/ca.pem`, and never forwards them. When the cache answers with anything but a file, Nix goes on to cache.nixos.org, through the proxy as any other download.
+
+**What a VM can ask for.** The proxy takes only `GET` and `HEAD` requests with no query, for three kinds of path under `/nix/`. These are `nix-cache-info`, a narinfo named `<hash>.narinfo` with a 32-character hash in Nix's base 32, and a NAR named `nar/<hash>.nar` with a 52-character hash and no suffix or `.xz`, `.zst` or `.bz2`. Anything else gets `400`. The proxy makes up `nix-cache-info` itself, with priority 30, so Nix asks the cache before cache.nixos.org, whose priority is 40. It serves the other files from the folder, or fetches them from `https://cache.nixos.org` when the VM's policy allows `cache.nixos.org:443`. That's the only host it fetches from, and its fetches go through the same address floor and company proxy as the VM's own requests. It follows no redirect, and nothing of the VM's request goes with it, so nothing a VM sends is ever stored.
+
+**What the host checks.** Before it keeps a narinfo, the proxy checks that its `StorePath` is the path the VM asked for, and that `cache.nixos.org-1`, whose Ed25519 key devvm pins, signed its fingerprint, `1;StorePath;NarHash;NarSize;References`. The signature doesn't cover the NAR's URL, so the proxy also checks that the URL is named by the narinfo's own `NarHash` or `FileHash`, and no narinfo can put a file in another NAR's place. It fetches a NAR only after it checked a narinfo that names it, never for a `HEAD`, and it keeps the NAR only when its SHA-256 and size are that narinfo's `FileHash` and `FileSize`. The host can't check a NAR's `NarHash`, which is the hash of the archive before compression, because the proxy uses Go's standard library alone, and that has no xz or zstd. Each VM's Nix checks the signature and the `NarHash` again, so a narinfo with an added reference, or a corrupted NAR, fails there too. A file that fails a check, a not-found and an error all get `404`, and the proxy keeps nothing of them, so Nix goes to cache.nixos.org itself.
+
+**The folder and its cap.** The proxy writes each file whole into a temporary file in the folder, then renames it into place, mode 600 in folders of 700. The cache's cap is the `nix-cache.size` [retention setting](../using/settings.md#retention), 10 GiB when it's off, which devvm passes as `-nix-cache-max` when the proxy starts. The cap counts the disk each file takes, in whole blocks, and a NAR being fetched counts at its full size from the start. When a new file would take the cache past its cap, the proxy deletes the least recently used files, down to nine tenths of the cap, and when the NARs being fetched leave no room, it refuses the fetch. One proxy fetches each NAR once, however many requests ask for it, and at most four at once. A hit marks a file used by setting its modification time. Every VM's proxy and devvm gc take one lock on the folder before they change it, so the cap holds while many VMs fill it, and a running total in the folder saves counting it for each file. devvm gc and the daily retention run trim the cache to its cap too, and `devvm gc --nix-cache` empties it.
+
+**Logs.** Each request is a `nix-cache` event in the VM's own [log](#log-files), with its path and what came of it: `hit`, `fetched`, or why it wasn't found or was refused. `devvm log` shows these as `cache`.
+
+**VMs without network policy** have no proxy, so they get no shared cache. Their Nix goes to cache.nixos.org directly, and nothing runs or listens on the host for them.
+
+**What stays open.** A VM can tell by timing whether some VM fetched a public path, and it can fill the cache up to its cap, which pushes other VMs' files out, so they fetch those again. Private caches, such as Cachix or one behind a `netrc`, are never shared, because only root in a VM can add a substituter, and Nix reaches it directly through the proxy's allowlist.
 
 ## A company's CA
 
@@ -208,7 +227,7 @@ What "the process devvm started" is depends on the backend:
 
 ## Log files
 
-The proxy writes every decision (`tunnel`, `intercept`, `forward` or `blocked`) as a JSON line in `~/.local/share/devvm/logs/<vm>.jsonl`. A line holds the time, the VM, the host and port, the method and path when the proxy sees them, the rule or the reason, and the names of the secrets it put in, never their values.
+The proxy writes every decision (`tunnel`, `intercept`, `forward`, `blocked`, or `nix-cache` for a request to the [shared Nix cache](#the-shared-nix-cache)) as a JSON line in `~/.local/share/devvm/logs/<vm>.jsonl`. A line holds the time, the VM, the host and port, the method and path when the proxy sees them, the rule or the reason, and the names of the secrets it put in, never their values.
 
 The proxy's own lines, such as what it loaded and what failed upstream, go to `<vm>.proxy.log` next to it. An upstream error stays there, because it can name addresses that the VM shouldn't learn. Only you can read both folders, and devvm's run logs never hold a VM's password. The VM chose the hosts and paths, so `devvm log` drops control characters in them.
 
@@ -238,6 +257,8 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | `-decider` | also decide each connection the VM opens, on this loopback address (smolvm's mediated egress) |
 | `-decider-to` | with `-decider`: the proxy's address in the VM, the only destination taken over |
 | `-decider-token-file` | with `-decider`: a file holding the shared key smolvm proves itself with (64 hex digits); required |
+| `-nix-cache` | serve the [shared Nix cache](#the-shared-nix-cache) at `http://devvm.proxy/nix/` from this folder, which it makes, only yours (mode 700) |
+| `-nix-cache-max` | with `-nix-cache`: the cache's cap, in bytes (default 10 GiB) |
 
 These modes each do one thing and exit:
 

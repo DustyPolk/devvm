@@ -68,4 +68,15 @@ func TestRetention(t *testing.T) {
 	if r, err := ReadRetention(d); err != nil || !r.Off() {
 		t.Errorf("empty file: %+v, %v", r, err)
 	}
+	// The Nix cache's cap: its default when off, the setting's size when set.
+	if r.NixCacheCap() != NixCacheDefault {
+		t.Errorf("cap when off: %d", r.NixCacheCap())
+	}
+	if _, err := SetRetention(d, []string{"nix-cache.size=20g"}); err == nil {
+		t.Error("nix-cache.size=20g: want an error")
+	}
+	r, err = SetRetention(d, []string{"nix-cache.size=20G"})
+	if err != nil || r.NixCacheCap() != 20<<30 || r.Raw[RetainNixCacheSize] != "20G" {
+		t.Errorf("nix-cache.size=20G: %+v, %v", r, err)
+	}
 }

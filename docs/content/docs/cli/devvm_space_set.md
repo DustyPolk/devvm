@@ -7,7 +7,7 @@ Change the retention settings: what devvm deletes on its own
 
 ## Synopsis
 
-Change the retention settings, each KEY=VALUE, and KEY= to turn one off: logs.runs (the run logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had for that long deleted) and orphans.age (what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc --retention). Ages are 30d, 2w or 12h. Every setting is off unless set. A bad key or value is refused, and nothing is written. devvm applies them once a day, and devvm gc --retention at once; they never delete a VM, an image or a tool any VM has.
+Change the retention settings, each KEY=VALUE, and KEY= to turn one off: logs.runs (the run logs kept, 20 when off), exports.age and exports.count (the exports older than an age, or beyond the newest count, deleted), tools.unused-age (current shared tool images no VM has had for that long deleted), orphans.age (what devvm keeps for VMs gone from their backend for that long, deleted by devvm gc --retention) and nix-cache.size (the shared Nix cache's cap, 10G when off). Ages are 30d, 2w or 12h, and sizes 500M, 20G or 1T. Every setting is off unless set. A bad key or value is refused, and nothing is written. devvm applies them once a day, and devvm gc --retention at once; they never delete a VM, an image or a tool any VM has.
 
 ```text
 devvm space set KEY=VALUE... [flags]

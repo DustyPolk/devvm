@@ -103,12 +103,15 @@ A blocked request gets `403`, and the response names the host, the reason and th
 - `/blocked` lists the last 50 blocks.
 - `/blocked/new?after=N` gives the number of blocks so far, then those after the Nth, with each rule once, so a shell prompt can show what a command hit.
 - `/ca.pem` is devvm's CA certificate, never its key.
+- `/nix/` is the shared Nix cache, in a VM with the `nix` layer ([below](#nix)).
 
 In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
 
 ### Nix
 
 In a VM with the [`nix` layer](../using/images.md#nix), Nix's daemon makes most of Nix's downloads, and devvm also points it at the proxy, so its downloads go through the same allowlists. The layer's allowlist has `cache.nixos.org` for Nix's binary cache, and `channels.nixos.org` and `releases.nixos.org` for its channels and flake registry, and GitHub, where most flakes' inputs come from, is in devvm's rules for every VM.
+
+Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with network policy and the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's allowlist allows `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. A VM can tell by how fast the cache answers whether another VM downloaded a public package, and a VM that downloads many packages can push other VMs' packages out of the cache, which only makes them download those again. A VM without network policy has no proxy, so it gets no shared cache: its Nix downloads from cache.nixos.org directly, and nothing runs or listens on this machine for it.
 
 When a package isn't in the binary cache, Nix builds it from source, and the build downloads its sources from their own hosts, such as `ftpmirror.gnu.org`. The proxy blocks those hosts until you allow them, so the build fails, and the error, `devvm-why` and `devvm log --blocked` name the host and the `devvm policy allow` command that allows it.
 
@@ -160,12 +163,13 @@ Saving, deleting, binding and unbinding apply at once to the proxies that are ru
 
 ## Logs
 
-`devvm log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed` or `BLOCKED`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the secrets put in (`, token: github`), and a blocked line has why it was blocked:
+`devvm log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the secrets put in (`, token: github`), a blocked line has why it was blocked, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
 
 ```text
 2026-10-09T10:00:00Z  BLOCKED  example.com:443  not on the allowlist
 2026-10-09T10:00:05Z  allowed  github.com:443  rule github.com
 2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, token: github
+2026-10-09T10:00:07Z  cache    cache.nixos.org:443  GET /nix/yv1zf3y6all4j99aad30cb8i55dw9zmp.narinfo: hit
 ```
 
 | | |

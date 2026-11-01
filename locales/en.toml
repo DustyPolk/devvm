@@ -798,7 +798,7 @@ one = "deleted {{.count}} entry of {{.backend}}'s cache"
 other = "deleted {{.count}} entries of {{.backend}}'s cache"
 
 [retention_deleted]
-other = "retention deleted {{.exports}} exports, {{.tools}} shared tool images no VM has, and what devvm kept for {{.orphans}} VMs gone from their backend"
+other = "retention deleted {{.exports}} exports, {{.tools}} shared tool images no VM has, what devvm kept for {{.orphans}} VMs gone from their backend, and {{.nix_files}} files of the shared Nix cache"
 
 [retention_off]
 other = "no retention setting is on"
@@ -830,6 +830,22 @@ other = "{{.count}} older versions of the mise devvm runs on this machine are le
 [deleted_mise]
 one = "deleted {{.count}} older version of devvm's mise"
 other = "deleted {{.count}} older versions of devvm's mise"
+
+[gc_nix_cache_over]
+description = "size and cap are sizes, as 12G and 10G"
+other = "The shared Nix cache takes {{.size}}, more than its cap of {{.cap}}, so its least recently used files go until it fits."
+
+[gc_nix_cache]
+one = "The shared Nix cache holds {{.count}} file ({{.size}}), which VMs download again when they need it."
+other = "The shared Nix cache holds {{.count}} files ({{.size}}), which VMs download again when they need them."
+
+[deleted_nix_cache]
+one = "deleted {{.count}} file of the shared Nix cache ({{.size}})"
+other = "deleted {{.count}} files of the shared Nix cache ({{.size}})"
+
+[images_nix_cache]
+description = "size and cap are sizes, as 2.1G and 10G"
+other = "The shared Nix cache takes {{.size}} of its {{.cap}} cap. Run devvm gc --nix-cache to empty it."
 
 [deleted_assets]
 one = "deleted {{.count}} old copy of devvm's files"

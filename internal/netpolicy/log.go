@@ -229,6 +229,8 @@ func FormatEvent(line string) (string, bool) {
 		d = e.Method + " " + e.Path
 	case "intercept":
 		d += ", decrypted"
+	case "nix-cache": // the shared Nix cache: a hit, fetched, or why not
+		what, d = "cache", e.Method+" "+e.Path+": "+e.Reason
 	}
 	if len(e.Secrets) > 0 {
 		d += ", token: " + strings.Join(e.Secrets, ",")
