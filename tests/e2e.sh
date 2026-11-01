@@ -413,6 +413,9 @@ ca_serve() {
   openssl s_server -accept "$1" -cert "$cad/srv.pem" -key "$cad/srv.key" -www -quiet </dev/null >/dev/null 2>&1 &
   ca_server=$!; sleep 0.5
 }
+# ca_stop: ends ca_serve's server once a section is done with it, so its port is free for later
+# sections' checks (the network section's VM server has 47195 too).
+ca_stop() { [[ -z $ca_server ]] || { kill "$ca_server" 2>/dev/null; wait "$ca_server" 2>/dev/null; }; ca_server=""; }
 # ca_gone VM: the running VM has none of devvm's CA files, and the run's CA isn't in its system's
 # bundle: what an image keeps.
 ca_gone() {
@@ -897,6 +900,7 @@ rm -rf "$cafolder"
 check "emptied, the VM trusts it no more from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
   limactl shell --workdir / $vm sh -c '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 && [ ! -s /etc/ssl/devvm.pem ] &&
     ! curl -sSf -o /dev/null https://host.lima.internal:47195/' </dev/null"
+ca_stop
 
 section "ssh by name"
 # An ~/.ssh/config of its own, set up as the docs say, with a Host * that forwards the agent: yours
@@ -1254,7 +1258,7 @@ mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
 (cd "$t" && printf 'exit\n' | "$D" >"$work/last.log" 2>&1)
 check "node trusts a CA in devvm's CA folder" in_vm "$vm" \
   'node -e "fetch(\"https://host.lima.internal:47195/\").then(r => process.exit(r.ok ? 0 : 1), e => { console.error(e); process.exit(1) })"'
-rm -rf "$cafolder"
+rm -rf "$cafolder"; ca_stop
 # ssh with a command runs a non-login, non-interactive shell, as editors and agents' tools do.
 check "a non-login shell finds the tools too" bash -c "ssh -F '$LIMA_HOME/$vm/ssh.config' lima-$vm 'node -v' </dev/null"
 # The checks above pass with a download of the locked version too: these tell the share's from one.
