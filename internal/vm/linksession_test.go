@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -202,6 +203,54 @@ func TestLinkConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkGone)
+}
+
+// devvm link add and publish warn, refusing nothing, when a client with
+// network policy links to a running target whose own isn't in force as
+// it runs, which its connections would be refused for: never for a
+// stopped target, whose policy applies at its next start, a target that
+// runs confined, or a client without network policy.
+func TestWarnUnenforced(t *testing.T) {
+	e, f, client, target, _ := linkSessionEnv(t)
+	var warned []string
+	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	want := "link_target_unenforced target=" + target.Name() + " vm=" + client.Name()
+	setNet(t, client, "on")
+	setNet(t, target, "on")
+	for _, c := range []struct {
+		name               string
+		unconfined, failed bool
+		status             backend.Status
+		clientNet          string
+		warns              bool
+	}{
+		{name: "enforced", status: backend.StatusRunning, clientNet: "on"},
+		{name: "unconfined", unconfined: true, status: backend.StatusRunning, clientNet: "on", warns: true},
+		{name: "self-check failed", failed: true, status: backend.StatusRunning, clientNet: "on", warns: true},
+		{name: "stopped", unconfined: true, status: backend.StatusStopped, clientNet: "on"},
+		{name: "stopped, self-check failed", failed: true, status: backend.StatusStopped, clientNet: "on"},
+		{name: "client without policy", unconfined: true, status: backend.StatusRunning, clientNet: "off"},
+	} {
+		f.Unconfined = c.unconfined
+		check := netpolicy.CheckOK
+		if c.failed {
+			check = netpolicy.CheckUnenforced
+		}
+		if err := target.Set(netpolicy.KeyCheck, check); err != nil {
+			t.Fatal(err)
+		}
+		f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: c.status}
+		setNet(t, client, c.clientNet)
+		warned = nil
+		e.warnUnenforced(t.Context(), client, target)
+		if got := len(warned) == 1 && warned[0] == want; got != c.warns || len(warned) > 1 {
+			t.Errorf("%s: warned %q", c.name, warned)
+		}
+		// The connection's check agrees with the warning.
+		if c.status == backend.StatusRunning && policyUnenforced(t.Context(), f, client, target) != c.warns {
+			t.Errorf("%s: policyUnenforced disagrees", c.name)
+		}
+	}
 }
 
 // A session carries every link its client's state has, applying or not,

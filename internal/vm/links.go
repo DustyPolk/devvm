@@ -269,6 +269,28 @@ func (e Links) publishChanged(t *found, old string) error {
 	return nil
 }
 
+// publishUnenforced warns, for each client with network policy that links
+// to ports of target t that it publishes now and didn't before (old, as
+// KeyPublish had it), when t runs with its network policy not in force
+// (warnUnenforced): those links' connections are refused until t starts
+// again.
+func (e Links) publishUnenforced(ctx context.Context, t *found, old string) error {
+	clients, err := linkClients(e.Dirs, t.f.Name, t.st.Get(state.KeyID), func(c *state.VM, l Link) bool {
+		return netpolicy.On(c) && !publishedIn(old, l.Port) && Published(t.st, l.Port)
+	})
+	if err != nil {
+		return err
+	}
+	for _, vm := range clients {
+		cst, err := state.ReadVM(e.Dirs, vm)
+		if err != nil {
+			return err
+		}
+		e.warnUnenforced(ctx, cst, t.st)
+	}
+	return nil
+}
+
 // projectVMs returns the project VMs that have state.
 func (e Links) projectVMs() ([]string, error) {
 	names, err := state.VMNames(e.Dirs)
@@ -380,7 +402,8 @@ type LinkAdd struct {
 // Add makes a link from the folder's VM to a's target, once it's checked:
 // the target is another project VM that publishes the port, network
 // policy on the client means network policy on the target, both backends
-// have links, and the name is free.
+// have links, and the name is free. A running target whose network policy
+// isn't in force is warned of (warnUnenforced), and refused nothing.
 func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	t, err := e.linkVM(ctx)
 	if err != nil {
@@ -410,6 +433,7 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	port := strconv.Itoa(a.Port)
 	if slices.ContainsFunc(links, func(l Link) bool { return l.Target == target && l.TargetID == id && l.Port == a.Port }) {
 		e.Info(msg.LinkExists(name, port, client))
+		e.warnUnenforced(ctx, t.st, tst)
 		return nil
 	}
 	if ok, err := t.widen(e.Env, "devvm link add"); !ok {
@@ -423,6 +447,7 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	return e.changeLinks(ctx, t, append(links, l), []Link{l}, func() {
 		e.Info(msg.LinkAdded(name, port, target, client))
 		e.Note(msg.LinkTrust(target, client))
+		e.warnUnenforced(ctx, t.st, tst)
 	})
 }
 
@@ -558,7 +583,7 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	}
 	if publish {
 		e.Info(msg.Published(ports, t.f.Name))
-		return nil
+		return e.publishUnenforced(ctx, t, old)
 	}
 	e.Info(msg.Unpublished(l, t.f.Name))
 	return e.publishChanged(t, old)

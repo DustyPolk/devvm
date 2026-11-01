@@ -1749,6 +1749,11 @@ func LinkTargetStopped(target string, vm string) M {
 	return M{id: "link_target_stopped", vals: []val{{"target", target}, {"vm", vm}}}
 }
 
+// LinkTargetUnenforced is [link_target_unenforced]: "{{.vm}}'s links to {{.target}} don't work until {{.target}} starts again, because its network policy isn't in force as it runs. To start it again, run devvm restart in its folder."
+func LinkTargetUnenforced(target string, vm string) M {
+	return M{id: "link_target_unenforced", vals: []val{{"target", target}, {"vm", vm}}}
+}
+
 // LinkTargetUnusable is [link_target_unusable]: "{{.vm}}'s links to {{.target}} don't work, because {{.target}}'s backend can't carry links."
 func LinkTargetUnusable(target string, vm string) M {
 	return M{id: "link_target_unusable", vals: []val{{"target", target}, {"vm", vm}}}
@@ -3510,6 +3515,7 @@ var specs = map[string]spec{
 	"link_setup_invalid":               {fields: []string{"address", "name", "vm"}},
 	"link_target_named":                {fields: []string{"name", "target", "vm"}},
 	"link_target_stopped":              {fields: []string{"target", "vm"}},
+	"link_target_unenforced":           {fields: []string{"target", "vm"}},
 	"link_target_unusable":             {fields: []string{"target", "vm"}},
 	"link_trust":                       {fields: []string{"target", "vm"}},
 	"link_unknown_target":              {fields: []string{"target"}},

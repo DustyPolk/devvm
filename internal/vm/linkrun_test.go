@@ -330,7 +330,8 @@ func zombie(pid int) bool {
 }
 
 // A launch of a client warns once for each target its links can't reach
-// now, and starts nothing for a client without links.
+// now, one whose network policy isn't in force as it runs included, and
+// starts nothing for a client without links.
 func TestLinksAtLaunch(t *testing.T) {
 	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.1:6379: carried\n"+
 		"devvm links: 127.77.0.3:80: carried\ndevvm links: 127.77.0.4:1: carried\n")
@@ -365,6 +366,30 @@ func TestLinksAtLaunch(t *testing.T) {
 	if !slices.Equal(warned, want) {
 		t.Errorf("warned %q, want %q", warned, want)
 	}
+
+	// A running target whose network policy isn't in force as it runs:
+	// warned, for a client with network policy alone, and nothing is
+	// refused.
+	f.Instances[db.Name()] = backend.Instance{Name: db.Name(), Status: backend.StatusRunning}
+	f.Unconfined = true
+	warned = nil
+	if err := r.atLaunch(t.Context(), f, app); err != nil {
+		t.Fatalf("atLaunch, unenforced: %v", err)
+	}
+	want = []string{
+		"link_target_unenforced target=" + db.Name() + " vm=" + app.Name(),
+		"link_policy_mismatch target=" + web.Name() + " vm=" + app.Name(),
+	}
+	if !slices.Equal(warned, want) {
+		t.Errorf("unenforced: warned %q, want %q", warned, want)
+	}
+	setNet(t, app, "off")
+	warned = nil
+	if err := r.atLaunch(t.Context(), f, app); err != nil || len(warned) != 0 {
+		t.Errorf("a client without network policy: %v, warned %q", err, warned)
+	}
+	f.Unconfined = false
+
 	f.Capabilities = backend.Caps{}
 	if err := r.atLaunch(t.Context(), f, app); names(err) != "backend_lacks backend=fake feature=link vm="+app.Name() {
 		t.Errorf("a backend without links: %v", err)

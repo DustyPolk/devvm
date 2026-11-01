@@ -872,7 +872,7 @@ link_section() {
   check "devvm rm of the target removes the client's link, names the client, and its sockets go; the client's session runs on" lk_rm_target
   check "a VM made again in that folder isn't linked" lk_made_again
   check "devvm network on for a target while it runs, then for the client, restarted behind its proxy" lk_policy_on
-  check "the target's network policy on but not yet enforced (devvm ls: unenforced): the link's next connection is refused and logged" lk_policy_unenforced
+  check "the target's network policy on but not yet enforced (devvm ls: unenforced): the link's next connection is refused and logged, and devvm link add and the client's launch warn" lk_policy_unenforced
   check "the target restarted behind its proxy" lk_policy_target
   check "with network policy, the client reaches NAME:PORT and NAME.devvm.internal:PORT by curl through its proxy settings and a raw TCP client; a direct connection fails (the control)" lk_policy_reach
   check "a link added while the client with network policy runs: curl through its proxy reaches it at once, by GET and CONNECT, no link name is in NO_PROXY, and nothing restarts" lk_proxy_added
@@ -1035,7 +1035,8 @@ lk_made_again() { local id0
   ! lk_shows "$lk_pc" "$lk_v2" link && ! lk_resolves "$lk_vc" "$lk_n2" &&
     [[ $(grep "^links=" "$vms/$lk_vc") == "$id0" ]] && lk_dv "$lk_p2" link publish 47240 && lk_serve "$lk_v2" "$lk_w2" 47240; }
 # The target gets network policy first, while it runs: until its next start it runs outside its
-# proxy, its servers still up, and the client's link to it is refused then (lk_policy_unenforced).
+# proxy, its servers still up, and the client's link to it is refused then, and warned of by
+# devvm link add and the client's launch (lk_policy_unenforced).
 lk_policy_on() {
   if ! { lk_dv "$lk_p1" network on && grep -qx net=on "$vms/$lk_v1"; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
   if ! { lk_dv "$lk_pc" network on && lk_up "$lk_pc" restart && grep -qx net=on "$vms/$lk_vc" && grep -qx net_check=ok "$vms/$lk_vc"; }; then
@@ -1044,7 +1045,11 @@ lk_policy_on() {
 lk_policy_unenforced() {
   lk_shows "$lk_p1" "^$lk_v1 +Running .* unenforced " ls || { echo "devvm ls doesn't show it unenforced"; return 1; }
   lk_root "$lk_v1" "test -s /var/tmp/e2e-link-127.0.0.1-47240.pid" || { echo "the target's server isn't up"; return 1; }
-  lk_gets "$lk_vc" db 47240 "" && lk_until 5 lk_event "$lk_vc" link_refused db 47240 '"reason":"unenforced"'; }
+  lk_gets "$lk_vc" db 47240 "" && lk_until 5 lk_event "$lk_vc" link_refused db 47240 '"reason":"unenforced"' || return 1
+  # devvm link add and the client's launch warn of it, refusing nothing.
+  lk_dv "$lk_pc" link add "${lk_x}db" 47240 && lk_said "==> link_exists name=db port=47240 vm=$lk_vc" &&
+    lk_said "devvm: link_target_unenforced target=$lk_v1 vm=$lk_vc" || return 1
+  lk_up "$lk_pc" && lk_said "devvm: link_target_unenforced target=$lk_v1 vm=$lk_vc"; }
 lk_policy_target() {
   if ! { lk_up "$lk_p1" restart && grep -qx net_check=ok "$vms/$lk_v1"; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
   lk_serve "$lk_v1" "$lk_w1" 47240 80; }

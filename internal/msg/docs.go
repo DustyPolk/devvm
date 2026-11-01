@@ -358,6 +358,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"link_port_taken":                  "using/links#when-a-target-stops-or-goes",
 	"link_target_stopped":              "using/links#when-a-target-stops-or-goes",
 	"link_target_unusable":             "using/links#when-a-target-stops-or-goes",
+	"link_target_unenforced":           "using/links#links-and-network-policy",
 	"links_update_failed":              "using/links#when-links-change",
 	"unpublished_linked":               "using/links#publishing-a-port",
 	"network_off_linked":               "using/links#links-and-network-policy",

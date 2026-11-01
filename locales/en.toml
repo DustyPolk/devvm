@@ -1334,6 +1334,9 @@ other = "{{.vm}} isn't running, so it gets the change when it next starts."
 [link_target_stopped]
 other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} runs, because devvm never starts a VM for a link. To start it, run devvm in its folder."
 
+[link_target_unenforced]
+other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} starts again, because its network policy isn't in force as it runs. To start it again, run devvm restart in its folder."
+
 [link_target_unusable]
 description = "the reason follows, from the backend's check"
 other = "{{.vm}}'s links to {{.target}} don't work, because {{.target}}'s backend can't carry links."

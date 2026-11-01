@@ -191,6 +191,36 @@ func policyEnforced(ctx context.Context, b backend.Backend, client, target *stat
 	return "", nil
 }
 
+// policyUnenforced reports whether a running target's network policy
+// isn't in force for a link from client (policyEnforced), so the link's
+// connections are refused until the target starts again. It only decides
+// a warning: a target whose policy can't be read isn't warned of, as each
+// connection checks it again.
+func policyUnenforced(ctx context.Context, b backend.Backend, client, target *state.VM) bool {
+	why, err := policyEnforced(ctx, b, client, target)
+	return err == nil && why == LinkUnenforced
+}
+
+// warnUnenforced warns when client's links to target, found as devvm
+// link add and publish check them, are refused for now because the target
+// runs with its network policy not in force (policyUnenforced). A stopped
+// target isn't warned of, as its policy applies when it next starts.
+func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
+	if !netpolicy.On(client) {
+		return
+	}
+	c, err := e.Registry.For(e.Dirs, target, "")
+	if err != nil {
+		return
+	}
+	if in, err := c.Backend.Inspect(ctx, target.Name()); err != nil || in.Status != backend.StatusRunning {
+		return
+	}
+	if policyUnenforced(ctx, c.Backend, client, target) {
+		e.Warn(msg.LinkTargetUnenforced(target.Name(), client.Name()))
+	}
+}
+
 // linkSSH is how devvm's own ssh reaches a running VM for links: its
 // backend's ssh (reviewed), with the VM's own key and the host key devvm
 // pins for it, on a host loopback port or through the backend's

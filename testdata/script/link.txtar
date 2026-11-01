@@ -153,8 +153,28 @@ cd $WORK/app
 exec devvm network on
 ! exec devvm link add ../y/api 5432
 stderr '^devvm: link_policy_mismatch target=devvm-api-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+# db got network policy while it ran, so it runs outside its proxy until
+# it starts again: add warns, refusing nothing, and so does publishing a
+# port that a client with network policy links to.
 exec devvm link add db 8002
 stdout '^==> link_added name=db port=8002 '
+stderr '^devvm: link_target_unenforced target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link add db 8002
+stdout '^==> link_exists name=db port=8002 '
+stderr '^devvm: link_target_unenforced target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+cd $WORK/db
+exec devvm link unpublish 8000-8010
+exec devvm link publish 7000
+! stderr link_target_unenforced
+exec devvm link publish 8000-8010
+stderr -count=1 '^devvm: link_target_unenforced target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link unpublish 7000
+# Without network policy, the client isn't warned.
+cd $WORK/app
+exec devvm network off
+exec devvm link add db 8002
+! stderr link_target_unenforced
+exec devvm network on
 cd $WORK/db
 ! exec devvm network off
 stderr '^devvm: network_off_linked vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'

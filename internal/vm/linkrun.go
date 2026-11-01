@@ -210,8 +210,10 @@ func (e linkRuns) atLaunch(ctx context.Context, b backend.Backend, st *state.VM)
 
 // warnTargets warns once for each target of a client's links that its
 // links can't reach now: one whose policy rule no longer holds, which the
-// client starts without (guestLinks), one whose backend lacks links, and
-// one that's stopped, which devvm doesn't start.
+// client starts without (guestLinks), one whose backend lacks links, one
+// that's stopped, which devvm doesn't start, and, for a client with
+// network policy, one that runs with its network policy not in force
+// (policyUnenforced), until it starts again.
 func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) error {
 	seen := map[string]bool{}
 	for _, l := range links {
@@ -238,8 +240,12 @@ func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) e
 			e.Warn(msg.LinkTargetUnusable(l.Target, st.Name()).Because(err))
 			continue
 		}
-		if in, err := c.Backend.Inspect(ctx, l.Target); err != nil || in.Status != backend.StatusRunning {
+		in, err := c.Backend.Inspect(ctx, l.Target)
+		switch {
+		case err != nil || in.Status != backend.StatusRunning:
 			e.Warn(msg.LinkTargetStopped(l.Target, st.Name()))
+		case policyUnenforced(ctx, c.Backend, st, tst):
+			e.Warn(msg.LinkTargetUnenforced(l.Target, st.Name()))
 		}
 	}
 	return nil
