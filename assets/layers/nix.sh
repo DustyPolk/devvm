@@ -50,7 +50,7 @@ if [[ -n $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -qui
   echo "devvm: Nix's store isn't root's after its install" >&2
   exit 1
 fi
-# Running now too, for a VM it's added to in place: systemd started it; OpenRC (Alpine) gets a service
+# Running now too, for the rest of the build: systemd started it; OpenRC (Alpine) gets a service
 # of devvm's, started at each boot and now; with no init system, devvm starts it after each start
 # (assets/container/services.sh), and here. Without systemd, its settings are /etc/conf.d/nix-daemon
 # (guest/sync.sh's: the proxy under network policy), which OpenRC reads for its service.

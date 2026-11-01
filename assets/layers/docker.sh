@@ -53,7 +53,7 @@ else
   sudo usermod -aG docker "$USER"
 fi
 
-# Running now too, for a VM it's added to in place: systemd started it with the package; OpenRC
+# Running now too, for the rest of the build: systemd started it with the package; OpenRC
 # starts it here; with no init system (smolvm), devvm starts it after each start
 # (assets/container/services.sh), and here.
 if [[ -d /run/systemd/system ]]; then
