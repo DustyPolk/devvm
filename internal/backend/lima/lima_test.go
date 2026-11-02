@@ -403,10 +403,12 @@ func TestImageSize(t *testing.T) {
 }
 
 // Linux hosts: an image whose disk project VMs are overlays of is never
-// deleted.
+// deleted. A running VM's QEMU holds its disk's write lock, which refuses
+// qemu-img info unless it shares the disk (-U).
 func TestDeleteImageInUse(t *testing.T) {
 	l, f, _ := testLima(t, "linux")
 	f.out["limactl list --json"] = listed
+	f.fail = []string{"qemu-img info --output=json"}
 	vm := "devvm-img-x-0123456789abcd"
 	for _, d := range []string{"devvm-img-0123456789ab", vm} {
 		if err := os.MkdirAll(l.Dirs.LimaVM(d), 0o700); err != nil {
@@ -416,7 +418,7 @@ func TestDeleteImageInUse(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	f.out["qemu-img info --output=json "+l.disk(vm)] = `{"format":"qcow2","backing-filename":"` + l.disk("devvm-img-0123456789ab") + `"}`
+	f.out["qemu-img info -U --output=json "+l.disk(vm)] = `{"format":"qcow2","backing-filename":"` + l.disk("devvm-img-0123456789ab") + `"}`
 	err := l.DeleteImage(t.Context(), "0123456789ab")
 	if err == nil || err.Error() != "image_in_use key=0123456789ab vms="+vm {
 		t.Errorf("DeleteImage: %v", err)
@@ -482,7 +484,7 @@ func TestOverlay(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		f.out["qemu-img info --output=json "+l.disk(vm)] = `{"format":"qcow2"}`
+		f.out["qemu-img info -U --output=json "+l.disk(vm)] = `{"format":"qcow2"}`
 		f.do = func(c call) {
 			if c.argv[0] == "qemu-img" && c.argv[1] == "create" {
 				if err := os.WriteFile(c.argv[len(c.argv)-1], []byte("overlay"), 0o644); err != nil { //nolint:gosec // as qemu-img would

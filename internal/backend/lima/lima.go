@@ -573,9 +573,12 @@ type qemuImgInfo struct {
 	Backing string `json:"backing-filename"`
 }
 
+// diskInfo reads a disk's format and backing file, sharing it (-U): a
+// running VM's QEMU holds its disk's write lock, which refuses qemu-img
+// info otherwise. Neither changes while the VM runs.
 func (l *Lima) diskInfo(ctx context.Context, path string) (qemuImgInfo, error) {
 	var info qemuImgInfo
-	out, err := l.Runner.Output(qemuImg(ctx, "info", "--output=json", path))
+	out, err := l.Runner.Output(qemuImg(ctx, "info", "-U", "--output=json", path))
 	if err != nil {
 		return info, fmt.Errorf("qemu-img info %s: %w", path, err)
 	}
