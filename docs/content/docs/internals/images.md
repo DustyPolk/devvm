@@ -14,6 +14,8 @@ devvm builds each image in a VM of its own, and that VM then is the image:
 3. The script runs. For base, that's `assets/layers/base.sh` and then the [features](../using/customizing.md) you chose, and for a layer, it's the layer's script.
 4. The VM stops. devvm writes the image's record last, with its chain, what base started from, and its C library.
 
+While the VM is being built, it already has the image's final name, so devvm holds a lock for each image it builds, `~/.local/share/devvm/images/locks/<key>`, from before it looks for the image until the record is written. Another devvm that builds the same image waits for that lock and says so (`image_build_waiting`) after 3 seconds, and once it gets the lock, it finds the image built. An image without a record is unfinished only when its lock is free, so devvm then deletes it and builds it again (`image_leftover`). While the lock is held, the image is `building`, and `devvm gc`, `devvm rebuild` and `devvm images rm` leave it alone (`image_building`). The lock is an OS lock on an open file, which the system releases when its devvm ends, however it ends, so a crash never leaves an image looking like it's still being built. devvm deletes the lock file together with the image.
+
 Nothing from the host is mounted into a build, because layer scripts run third-party installers, which mustn't see your files. Behind a company proxy, a build on Lima or Docker goes through a proxy of devvm's on this machine for that build alone, which goes through the company proxy. The scripts' commands get only that proxy's address, with a password devvm makes for the build, so neither the build nor its image ever has the company proxy's password ([a company proxy](design.md#a-company-proxy)). base gets `base.yaml`'s CPUs, or as many as the host has when it has fewer. It gets `base.yaml`'s memory, or half the host's memory when `base.yaml`'s would leave the host less than 2 GiB. The images built on base, and their VMs, keep that size ([base's size](#bases-size)).
 
 ## Keys and caching
@@ -173,7 +175,7 @@ At boot the same failure fails only the `devvm-tools` service, and the boot goes
 
 ## Listing and cleaning up
 
-[Listing images](../using/images.md#listing-images) describes the columns of `devvm images`. An `unfinished` image is a build that didn't finish, so it has no record. A tool image's `STATE` compares it with the tools lock and with the VMs' state:
+[Listing images](../using/images.md#listing-images) describes the columns of `devvm images`. An `unfinished` image is a build that didn't finish, so it has no record, and a `building` image has no record yet because another devvm holds its [lock](#building). A tool image's `STATE` compares it with the tools lock and with the VMs' state:
 
 - `current` is the tools lock's version, for the C library of the base that new VMs get, which `--from` changes.
 - `in use` is another version, which a VM has in its state.

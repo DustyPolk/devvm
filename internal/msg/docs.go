@@ -87,6 +87,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"mount_comma":                      "backends/lima#limits",
 	"disk_shrink":                      "backends/lima#limits",
 	"image_in_use":                     "using/images#deleting-images",
+	"image_building":                   "using/images#deleting-images",
 	"qemu_refused":                     "internals/lima#confinement",
 	"start_no_ssh":                     "using/troubleshooting#a-vm-wont-boot",
 	"no_ubuntu_image":                  "using/troubleshooting#base-cant-build-on-lima",

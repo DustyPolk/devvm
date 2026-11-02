@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,19 @@ func WriteImage(d paths.Dirs, key string, img Image) error {
 		k.set(p[0], p[1])
 	}
 	return writeFile(d.ImageState(key), k.bytes())
+}
+
+// ImageLock returns the path of the lock the devvm building the image
+// with this key holds, images/locks/KEY, making its folder.
+func ImageLock(d paths.Dirs, key string) (string, error) {
+	if err := checkName("image key", key); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(d.Images(), "locks")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, key), nil
 }
 
 // RemoveImage deletes the record of the image with this key, if there is

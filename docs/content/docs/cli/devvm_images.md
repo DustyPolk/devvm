@@ -7,7 +7,7 @@ List the images and the shared tools
 
 ## Synopsis
 
-List the images on every backend, with whether each is current, stale or unfinished and the disk it takes, then the shared tools devvm has built, with how many VMs have each. It ends with what they take in all.
+List the images on every backend, with whether each is current, stale, unfinished or being built and the disk it takes, then the shared tools devvm has built, with how many VMs have each. It ends with what they take in all.
 
 ```text
 devvm images [flags]

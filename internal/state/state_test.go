@@ -343,6 +343,24 @@ func TestAnyImage(t *testing.T) {
 	}
 }
 
+// ImageLock is a key's lock in its folder, made; a key that isn't a file
+// name is refused, and nothing is made for it.
+func TestImageLock(t *testing.T) {
+	d := testDirs(t)
+	path, err := ImageLock(d, "0123456789ab")
+	if err != nil || path != filepath.Join(d.Images(), "locks", "0123456789ab") {
+		t.Errorf("ImageLock = %q, %v", path, err)
+	}
+	if fi, err := os.Stat(filepath.Dir(path)); err != nil || !fi.IsDir() {
+		t.Errorf("its folder: %v", err)
+	}
+	for _, key := range []string{"", "../k", ".k", `a\b`} {
+		if _, err := ImageLock(d, key); err == nil {
+			t.Errorf("ImageLock(%q): want an error", key)
+		}
+	}
+}
+
 func TestImageBad(t *testing.T) {
 	d := testDirs(t)
 	tests := []struct {

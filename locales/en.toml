@@ -645,6 +645,12 @@ other = "Building {{.image}} failed: {{.reason}}."
 [image_leftover]
 other = "Image {{.key}} is left over from a failed build of {{.image}}, so devvm builds it again."
 
+[image_build_waiting]
+other = "waiting for another devvm to finish building {{.image}}"
+
+[image_building]
+other = "Another devvm is building image {{.key}}, so devvm leaves it. Run the command again once that build ends."
+
 [building_image]
 other = "building image {{.image}} ({{.key}})"
 

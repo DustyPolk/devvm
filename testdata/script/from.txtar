@@ -53,7 +53,7 @@ exec sh -c 'ls "$TMPDIR"'
 exec sh -c 'ls "$XDG_DATA_HOME/devvm/run/builds"'
 ! stdout .
 # Its record: what it came from, and musl from the image.
-exec sh -c 'cat "$IMAGES"/*'
+exec sh -c 'cat "$IMAGES"/????????????'
 stdout '^name=base$'
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^digest=node:24@sha256:a{64}$'
@@ -76,7 +76,7 @@ exec sh -c ': > "$STUB_LOG"; mkdir -p "$XDG_CONFIG_HOME/devvm/layers"; printf "#
 exec devvm --from $PIN build foo
 ! stdout 'building_image_from .*image=base '
 stdout '^==> building_image_from from=node:24@sha256:a{64} image=foo key=[0-9a-f]{12}$'
-exec sh -c 'grep -l "^name=foo$" "$IMAGES"/* | xargs cat'
+exec sh -c 'grep -l "^name=foo$" "$IMAGES"/???????????? | xargs cat'
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^digest=node:24@sha256:a{64}$'
 stdout '^libc=musl$'

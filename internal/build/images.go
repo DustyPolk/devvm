@@ -19,6 +19,7 @@ const (
 	StateCurrent    = "current"    // its key is what its inputs hash to now
 	StateStale      = "stale"      // it isn't: nothing new is built on it
 	StateUnfinished = "unfinished" // it has no record: a build that didn't finish
+	StateBuilding   = "building"   // it has no record, and another devvm is building it
 )
 
 // Listed is a built image as devvm images lists it.
@@ -50,6 +51,8 @@ func (b Images) Listing(ctx context.Context) ([]Listed, error) {
 	for _, img := range imgs {
 		l := Listed{Image: img, State: StateStale}
 		switch {
+		case img.Building:
+			l.State = StateBuilding
 		case img.Name == "":
 			l.State = StateUnfinished
 		case img.Current:
@@ -107,8 +110,9 @@ var keyLike = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
 // Delete deletes images, each named by its name or by its key (an
 // unfinished build has only its key), with their records. Each must be
-// built: nothing is deleted until every one is found. Shared tools aren't
-// images, and are refused.
+// built, and none being built by another devvm (image_building): nothing
+// is deleted until every one is found. Shared tools aren't images, and
+// are refused.
 func (b Images) Delete(ctx context.Context, refs []string) error {
 	built, err := b.Backend.Images(ctx)
 	if err != nil {
@@ -141,8 +145,22 @@ func (b Images) Delete(ctx context.Context, refs []string) error {
 			keys, labels = append(keys, key), append(labels, label)
 		}
 	}
+	// Nor while another devvm builds any of them.
+	var unlocks []func()
+	defer func() {
+		for _, u := range unlocks {
+			u()
+		}
+	}()
+	for _, key := range keys {
+		unlock, err := b.lockFree(key)
+		if err != nil {
+			return err
+		}
+		unlocks = append(unlocks, unlock)
+	}
 	for i, key := range keys {
-		if err := b.deleteImage(ctx, key); err != nil {
+		if err := b.deleteLocked(ctx, key, true); err != nil {
 			return err
 		}
 		if labels[i] == "" {
@@ -154,9 +172,9 @@ func (b Images) Delete(ctx context.Context, refs []string) error {
 	return nil
 }
 
-// DeleteKey deletes the image with this key, with its record. The backend
-// may refuse it as a message: on Linux hosts, one whose disk VMs use
-// (image_in_use).
+// DeleteKey deletes the image with this key, with its record. It refuses
+// one another devvm is building as a message (image_building), and the
+// backend may too: on Linux hosts, one whose disk VMs use (image_in_use).
 func (b Images) DeleteKey(ctx context.Context, key string) error {
 	return b.deleteImage(ctx, key)
 }

@@ -10,6 +10,7 @@
 package build
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io/fs"
@@ -18,12 +19,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
@@ -59,6 +62,9 @@ type Env struct {
 	// FreeSpace returns the free space on the volume holding a path
 	// (platform.Host's), checked before each build; nil checks none.
 	FreeSpace func(path string) (uint64, error)
+	// WaitNote is how long a build waits for another devvm building the
+	// same image before it says so; 0 for buildWaitNote.
+	WaitNote time.Duration
 
 	looked bool // From's digest was looked up in this run
 }
@@ -279,6 +285,13 @@ func (b Builds) build(ctx context.Context, name string) error {
 	if name == image.Base && b.From != "" {
 		spec.From = &backend.From{Ref: b.From, Digest: digest}
 	}
+	// One devvm at a time builds it: another waits, then finds it built,
+	// or left over from a build that didn't finish.
+	unlock, err := b.lockBuild(ctx, name, key)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	// What building it needs, only when it's built: an image the backend
 	// has, with its record, needs none of it.
 	done, leftover, err := b.built(ctx, key)
@@ -290,7 +303,7 @@ func (b Builds) build(ctx context.Context, name string) error {
 	}
 	if leftover {
 		b.Info(msg.ImageLeftover(name, key))
-		if err := b.deleteImage(ctx, key); err != nil {
+		if err := b.deleteLocked(ctx, key, false); err != nil {
 			return err
 		}
 	}
@@ -389,9 +402,52 @@ func (b Builds) sayFitted(f backend.Size) {
 	}
 }
 
+// buildWaitNote is how long a build waits for another devvm building the
+// same image before it says so, when Env's WaitNote is 0.
+const buildWaitNote = 3 * time.Second
+
+// lockBuild holds the lock of the image with key, named name, while it's
+// built, waiting for another devvm that holds it and saying so. The
+// system lets go of it when its devvm ends, however it ends.
+func (b Builds) lockBuild(ctx context.Context, name, key string) (unlock func(), err error) {
+	path, err := state.ImageLock(b.Dirs, key)
+	if err != nil {
+		return nil, err
+	}
+	after := cmp.Or(b.WaitNote, buildWaitNote)
+	return platform.LockFileWaiting(ctx, path, after, func() { b.Info(msg.ImageBuildWaiting(name)) })
+}
+
+// lockFree holds the lock of the image with key, for deleting it, unless
+// another devvm is building it (image_building).
+func (b *Env) lockFree(key string) (unlock func(), err error) {
+	path, err := state.ImageLock(b.Dirs, key)
+	if err != nil {
+		return nil, err
+	}
+	unlock, ok, err := platform.TryLockFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, msg.ImageBuilding(key)
+	}
+	return unlock, nil
+}
+
+// building reports whether another devvm is building the image with key.
+func (b *Env) building(key string) (bool, error) {
+	path, err := state.ImageLock(b.Dirs, key)
+	if err != nil {
+		return false, err
+	}
+	return platform.LockHeld(path)
+}
+
 // built reports whether the image with key is built: the backend has it,
 // and its record. One without a record (leftover) is left over from a
-// build that didn't finish, for the caller to delete.
+// build that didn't finish, for the caller to delete; the caller holds
+// its lock, so no other devvm is building it.
 func (b Builds) built(ctx context.Context, key string) (done, leftover bool, err error) {
 	keys, err := b.Backend.Images(ctx)
 	if err != nil || !slices.Contains(keys, key) {
@@ -407,11 +463,41 @@ func (b Builds) built(ctx context.Context, key string) (done, leftover bool, err
 	return false, true, nil
 }
 
+// deleteImage deletes the image with key and its record, unless another
+// devvm is building it (image_building), then its lock's file, which a
+// build of it makes again.
 func (b *Env) deleteImage(ctx context.Context, key string) error {
+	unlock, err := b.lockFree(key)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return b.deleteLocked(ctx, key, true)
+}
+
+// deleteLocked deletes the image with key and its record, its lock held,
+// and the lock's file when unlocking follows (a build that deletes a
+// leftover keeps it).
+func (b *Env) deleteLocked(ctx context.Context, key string, lockFile bool) error {
 	if err := b.Backend.DeleteImage(ctx, key); err != nil {
 		return err
 	}
-	return state.RemoveImage(b.Dirs, key)
+	if err := state.RemoveImage(b.Dirs, key); err != nil {
+		return err
+	}
+	if !lockFile {
+		return nil
+	}
+	path, err := state.ImageLock(b.Dirs, key)
+	if err != nil {
+		return err
+	}
+	// Safe while held: a devvm that then gets the lock on the removed file
+	// tries again (platform.LockFile).
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // Image is a built image as List finds it.
@@ -424,6 +510,9 @@ type Image struct {
 	// Current is whether its key is still what its inputs hash to. One
 	// that isn't is stale: nothing new is built on it.
 	Current bool
+	// Building is whether another devvm is building it: it has no record
+	// and its lock is held. One without a record that isn't is unfinished.
+	Building bool
 }
 
 // List returns the backend's images, with their records.
@@ -440,7 +529,11 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 	for _, key := range keys {
 		rec, err := state.ReadImage(b.Dirs, key)
 		if _, corrupt := errors.AsType[*state.CorruptError](err); corrupt || errors.Is(err, fs.ErrNotExist) {
-			out = append(out, Image{Key: key})
+			building, err := b.building(key)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, Image{Key: key, Building: building})
 			continue
 		} else if err != nil {
 			return nil, err
@@ -511,11 +604,13 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 		return err
 	}
 	for _, img := range imgs {
-		if img.Current {
+		// One another devvm is building isn't left over.
+		if img.Current || img.Building {
 			continue
 		}
 		if err := b.deleteImage(ctx, img.Key); err != nil {
-			// One a VM uses stays, saying so.
+			// One a VM uses, or one another devvm has started building
+			// since, stays, saying so.
 			if m, ok := errors.AsType[msg.M](err); ok {
 				b.Warn(m)
 				continue

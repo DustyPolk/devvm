@@ -122,7 +122,7 @@ A VM keeps the image it was made from. When that image, or one it's built on, ch
 | `FROM` | what its base started from: the `--from` image, or Ubuntu's cloud image with its release's date, `ubuntu 26.04 (20261001)` |
 | `DIGEST` | the first 12 hex digits of that image's SHA-256 |
 | `KEY` | its key, which `devvm images rm` also takes |
-| `STATE` | `current`, `stale` when what it's built from has changed since it was built, or `unfinished` for a build that didn't finish |
+| `STATE` | `current`, `stale` when what it's built from has changed since it was built, `unfinished` for a build that didn't finish, or `building` while another devvm builds it |
 | `SIZE` | the disk it takes, in powers of 1024 (`2.1G`). On macOS an image is a clone of its parent's disk, and the blocks they share count for both |
 | `BACKEND` | the [backend](../backends/_index.md) that has it |
 
@@ -187,6 +187,7 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 
 - A name means its image as it is now, on base from `--from` when you give it. A stale or unfinished image has only its key.
 - Each image must be built, or devvm deletes nothing. Shared tools aren't images, so devvm refuses a name that has any, such as `node+foo`.
+- devvm also deletes nothing while another devvm is building one of the images, so run the command again once that build ends. `devvm gc` and `devvm rebuild` leave such an image alone too.
 - A deleted image is built again the next time it's needed. VMs made from it keep working, because on macOS they're clones of its disk. On Linux hosts, devvm refuses to delete an image whose disk VMs are overlays of, and names those VMs.
 
 ### Cleaning up

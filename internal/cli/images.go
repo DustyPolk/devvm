@@ -28,7 +28,7 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "images",
 		Short: "List the images and the shared tools",
-		Long: "List the images on every backend, with whether each is current, stale or unfinished and the disk it takes, " +
+		Long: "List the images on every backend, with whether each is current, stale, unfinished or being built and the disk it takes, " +
 			"then the shared tools devvm has built, with how many VMs have each. " +
 			"It ends with what they take in all.",
 		Example: examples(
@@ -266,12 +266,12 @@ type listedImage struct {
 	images  build.Images
 }
 
-// staleImages returns the images that aren't current: stale, or
-// unfinished.
+// staleImages returns the images that are stale or unfinished, never one
+// another devvm is building.
 func staleImages(imgs []listedImage) []listedImage {
 	var out []listedImage
 	for _, l := range imgs {
-		if l.State != build.StateCurrent {
+		if l.State == build.StateStale || l.State == build.StateUnfinished {
 			out = append(out, l)
 		}
 	}

@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"os"
 	"time"
 
@@ -35,16 +34,11 @@ func (m Making) Hold(ctx context.Context) (unlock func(), err error) {
 	if err := os.MkdirAll(m.Dirs.Data, 0o700); err != nil {
 		return nil, err
 	}
-	soon, cancel := context.WithTimeout(ctx, makingNote)
-	unlock, err = platform.LockFileShared(soon, m.Dirs.MakingLock())
-	cancel()
-	if err == nil || !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
-		return unlock, err
-	}
-	if m.Info != nil {
-		m.Info(msg.MakingWaiting())
-	}
-	return platform.LockFileShared(ctx, m.Dirs.MakingLock())
+	return platform.LockFileSharedWaiting(ctx, m.Dirs.MakingLock(), makingNote, func() {
+		if m.Info != nil {
+			m.Info(msg.MakingWaiting())
+		}
+	})
 }
 
 // Exclude takes the lock alone without waiting, so no VM starts being

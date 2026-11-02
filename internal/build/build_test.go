@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
@@ -427,6 +428,103 @@ func TestBuiltNeedsNoBuild(t *testing.T) {
 	}
 }
 
+// An image another devvm is building (no record, its lock held) is left
+// alone: a build of it waits, saying so, rebuild and Delete don't delete
+// it, and it's listed as building. Once its lock is free, it's a
+// leftover, deleted and built again.
+func TestBuildInProgress(t *testing.T) {
+	b, f := testEnv(t)
+	ctx := t.Context()
+	if err := (Builds{b}).Build(ctx, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	key, err := b.Key("foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.ImageKeys = append(f.ImageKeys, key) // another devvm's, unfinished
+	path, err := state.ImageLock(b.Dirs, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := platform.LockFile(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted := func() bool {
+		for _, c := range f.Calls() {
+			if c.Method == "DeleteImage" && c.Args[0] == key {
+				return true
+			}
+		}
+		return false
+	}
+	var said []string
+	b.Info = func(m msg.M) { said = append(said, m.Names()) }
+	b.WaitNote = time.Millisecond
+
+	soon, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	if err := (Builds{b}).Build(soon, "foo+bar"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Build while another builds it = %v", err)
+	}
+	if !slices.Contains(said, "image_build_waiting image=foo+bar") {
+		t.Errorf("said %q", said)
+	}
+	ls, err := (Images{b}).Listing(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.IndexFunc(ls, func(l Listed) bool { return l.Key == key }); i < 0 || ls[i].State != StateBuilding {
+		t.Errorf("listed %+v", ls)
+	}
+	if err := (Images{b}).Delete(ctx, []string{key}); !isMsg(err, "image_building") {
+		t.Errorf("Delete while it builds = %v", err)
+	}
+	b.Force = true
+	if err := (Builds{b}).Rebuild(ctx, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if deleted() {
+		t.Fatal("deleted while another devvm builds it")
+	}
+
+	unlock()
+	if ls, err = (Images{b}).Listing(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.IndexFunc(ls, func(l Listed) bool { return l.Key == key }); i < 0 || ls[i].State != StateUnfinished {
+		t.Errorf("listed once let go %+v", ls)
+	}
+	if err := (Images{b}).Delete(ctx, []string{key}); err != nil || !deleted() {
+		t.Errorf("Delete once let go = %v, deleted %v", err, deleted())
+	}
+}
+
+// Two builds of one image take turns: the second finds it built.
+func TestBuildTakesTurns(t *testing.T) {
+	b, f := testEnv(t)
+	ctx := t.Context()
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() { errs <- (Builds{b}).Build(ctx, "foo") }()
+	}
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	n := 0
+	for _, m := range f.Methods() {
+		if m == "BuildImage" {
+			n++
+		}
+	}
+	if n != 2 { // base and foo, once each
+		t.Errorf("built %d images: %q", n, f.Methods())
+	}
+}
+
 // A failed build writes no record, so the next build starts over.
 func TestFailedBuildHasNoRecord(t *testing.T) {
 	b, f := testEnv(t)
@@ -434,8 +532,8 @@ func TestFailedBuildHasNoRecord(t *testing.T) {
 	if err := (Builds{b}).Build(t.Context(), "base"); err == nil {
 		t.Fatal("Build succeeded")
 	}
-	if entries, _ := os.ReadDir(b.Dirs.Images()); len(entries) != 0 {
-		t.Errorf("records after a failed build: %v", entries)
+	if found, err := state.AnyImage(b.Dirs); found || err != nil {
+		t.Errorf("records after a failed build: %v, %v", found, err)
 	}
 }
 

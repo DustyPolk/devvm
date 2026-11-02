@@ -1574,6 +1574,16 @@ func HostMemoryLow(have string, want string) M {
 	return M{id: "host_memory_low", vals: []val{{"have", have}, {"want", want}}}
 }
 
+// ImageBuildWaiting is [image_build_waiting]: "waiting for another devvm to finish building {{.image}}"
+func ImageBuildWaiting(image string) M {
+	return M{id: "image_build_waiting", vals: []val{{"image", image}}}
+}
+
+// ImageBuilding is [image_building]: "Another devvm is building image {{.key}}, so devvm leaves it. Run the command again once that build ends."
+func ImageBuilding(key string) M {
+	return M{id: "image_building", vals: []val{{"key", key}}}
+}
+
 // ImageFrom is [image_from]: "{{.image}} (from {{.from}})"
 func ImageFrom(from string, image string) M {
 	return M{id: "image_from", vals: []val{{"from", from}, {"image", image}}}
@@ -3605,6 +3615,8 @@ var specs = map[string]spec{
 	"home_not_absolute":                {},
 	"host_cpus_few":                    {fields: []string{"have", "want"}},
 	"host_memory_low":                  {fields: []string{"have", "want"}},
+	"image_build_waiting":              {fields: []string{"image"}},
+	"image_building":                   {fields: []string{"key"}},
 	"image_from":                       {fields: []string{"from", "image"}},
 	"image_in_use":                     {fields: []string{"key", "vms"}},
 	"image_leftover":                   {fields: []string{"image", "key"}},

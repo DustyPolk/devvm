@@ -22,7 +22,7 @@ stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
 stdout '^limactl shell --workdir / devvm-img-[0-9a-f]{12} sync$'
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
 grep 'Essentials, and mise' $STUB_DIR/scripts
-exec sh -c 'cat "$IMAGES"/*'
+exec sh -c 'cat "$IMAGES"/????????????'
 stdout '^name=base$'
 stdout '^chain=base=[0-9a-f]{12}$'
 stdout '^digest=file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img sha256:[0-9a-f]{64}$'
@@ -47,7 +47,7 @@ stub_calls
 # An image without a record is a failed build: deleted and built again.
 # With -v, the run log's lines are streamed to stderr as well, numbered
 # steps and commands, and the log still gets them.
-exec sh -c 'rm "$IMAGES"/*'
+exec sh -c 'rm "$IMAGES"/????????????'
 exec devvm -v build base
 stdout '^==> image_leftover image=base key=[0-9a-f]{12}$'
 stderr '^# \[1/5\] creating_from_ubuntu vm=devvm-img-'
@@ -57,7 +57,7 @@ exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
 stdout '^\+ limactl create '
 stub_calls
 stdout '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'cat "$IMAGES"/*'
+exec sh -c 'cat "$IMAGES"/????????????'
 stdout '^name=base$'
 
 # A layer is a clone of its parent's image, without host mounts, running
@@ -70,7 +70,7 @@ stub_calls
 stdout '^limactl clone --tty=false --mount-none devvm-img-[0-9a-f]{12} devvm-img-[0-9a-f]{12}$'
 ! stdout 'limactl create'
 grep '^echo foo$' $STUB_DIR/scripts
-exec sh -c 'cat "$IMAGES"/*'
+exec sh -c 'cat "$IMAGES"/????????????'
 stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
 stdout -count=2 '^libc=gnu$'
 
@@ -95,15 +95,25 @@ stderr '^devvm: script_failed script=bar\.sh vm=devvm-img-[0-9a-f]{12}$'
 stub_calls
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
 ! stdout 'limactl delete'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; grep -c " Stopped$" "$STUB_DIR/instances"; ls "$IMAGES" | grep -c .'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; grep -c " Stopped$" "$STUB_DIR/instances"; ls "$IMAGES"/???????????? | grep -c .'
 stdout '^3\n3\n2\n$'
 rm $STUB_DIR/shell-fails
 
-# The next build deletes it first. Ctrl+C during a build deletes the
-# unfinished image, never a finished one.
+# The next build deletes it first. While it builds, devvm images lists it
+# as building, gc leaves it and images rm refuses it. Ctrl+C during a
+# build deletes the unfinished image, never a finished one.
 exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/shell-hangs"'
 ! exec devvm build foo+bar &b&
 wait_file $STUB_DIR/hanging
+exec devvm images
+stdout '^- +- +- +[0-9a-f]{12} +building +'
+exec sh -c 'devvm images | awk "\$5 == \"building\" { print \$4 }" > building.key'
+exec devvm gc --force
+! stdout 'gc_unfinished|deleted_unfinished_build'
+exec sh -c '! devvm images rm --force "$(cat building.key)"'
+stderr '^devvm: image_building key=[0-9a-f]{12}$'
+exec sh -c 'grep "^limactl delete" "$STUB_LOG" | grep -c "$(cat building.key)"'
+stdout '^1$'
 kill -INT b
 wait b
 stdout '^==> image_leftover image=foo\+bar key=[0-9a-f]{12}$'
@@ -111,7 +121,7 @@ stdout '^==> interrupted_image vm=devvm-img-[0-9a-f]{12}$'
 ! stderr script_failed
 stub_calls
 stdout -count=2 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES" | grep -c .'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/???????????? | grep -c .'
 stdout '^2\n2\n$'
 rm $STUB_DIR/shell-hangs
 
@@ -122,7 +132,7 @@ stderr '^devvm: vm_create_failed vm=devvm-img-[0-9a-f]{12}$'
 stdout '^==> unfinished_image vm=devvm-img-[0-9a-f]{12}$'
 stub_calls
 stdout -count=1 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES" | grep -c .'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/???????????? | grep -c .'
 stdout '^2\n2\n$'
 rm $STUB_DIR/clone-fails
 

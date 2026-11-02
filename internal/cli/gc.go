@@ -362,11 +362,12 @@ func withoutSkipped(r vm.LeftoverReport, skipped map[string]bool) vm.LeftoverRep
 	return r
 }
 
-// backendImages are a backend's images, current or not.
+// backendImages are a backend's images, current or not, but none another
+// devvm is building.
 func backendImages(imgs []listedImage, be string) []listedImage {
 	var out []listedImage
 	for _, l := range imgs {
-		if l.Backend == be {
+		if l.Backend == be && l.State != build.StateBuilding {
 			out = append(out, l)
 		}
 	}
