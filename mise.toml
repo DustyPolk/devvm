@@ -69,7 +69,7 @@ run = [
 description = "Run the unit and CLI tests, and hold each package to its coverage baseline"
 env = { CGO_ENABLED = "1" }
 # scripts/test.sh: a throwaway HOME, the race detector, 30 minutes a package,
-# then each package's coverage against testdata/coverage.txt.
+# then each package's coverage against this system's baseline in testdata/coverage/.
 run = "scripts/test.sh"
 
 [tasks.coverage]
