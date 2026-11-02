@@ -600,25 +600,56 @@ const (
 // or maxLinkConns+1 wait: the socket's backlog is 128 on macOS, and while
 // the process starts a relay's ssh, or a check's command, it accepts
 // nothing, so a burst would fill the backlog, and the client's ssh, or the
-// VM's proxy, would have the rest refused with no event. Accepted, each
-// is carried or refused with link_limit.
+// VM's proxy, would have the rest refused with no event. What it hands
+// off is taken by a goroutine of its own (take), so the loop goes on
+// accepting while a batch is carried or refused: it waits for that only
+// with maxLinkConns+1 of the next batch accepted. Accepted, each is
+// carried or refused with link_limit.
 func (l *Links) serve(ctx context.Context, end *linkEnd) {
+	handoff := make(chan []net.Conn)
+	taken := make(chan struct{})
+	go func() {
+		defer close(taken)
+		for batch := range handoff {
+			for _, c := range batch {
+				l.take(ctx, end, c)
+			}
+		}
+	}()
 	var batch []net.Conn
 	var first time.Time
-	release := func() {
-		for _, c := range batch {
-			l.take(ctx, end, c)
+	// release hands the batch off; unless wait, only if the last one is
+	// taken already, or it waits for the next try.
+	release := func(wait bool) {
+		if len(batch) == 0 {
+			return
+		}
+		if wait {
+			handoff <- batch
+		} else {
+			select {
+			case handoff <- batch:
+			default:
+				return
+			}
 		}
 		batch = nil
 	}
-	defer release()
+	defer func() {
+		release(true)
+		close(handoff)
+		<-taken
+	}()
 	ul, _ := end.ln.(interface{ SetDeadline(time.Time) error })
 	for {
 		if ul != nil {
 			var d time.Time
 			if len(batch) > 0 {
-				d = time.Now().Add(linkSettle)
-				if last := first.Add(linkSettleMax); last.Before(d) {
+				// A batch whose first has waited linkSettleMax already waits
+				// for the last one to be taken: tried again after linkSettle.
+				now := time.Now()
+				d = now.Add(linkSettle)
+				if last := first.Add(linkSettleMax); last.Before(d) && last.After(now) {
 					d = last
 				}
 			}
@@ -627,14 +658,14 @@ func (l *Links) serve(ctx context.Context, end *linkEnd) {
 		conn, err := end.ln.Accept()
 		switch {
 		case errors.Is(err, os.ErrDeadlineExceeded):
-			release()
+			release(false)
 			continue
 		case errors.Is(err, net.ErrClosed):
 			return
 		case err != nil:
 			// Out of files, say, in a burst: what's accepted goes on, and the
 			// socket is tried again shortly.
-			release()
+			release(true)
 			l.logf("%s: %v", end.sock, err)
 			select {
 			case <-ctx.Done():
@@ -646,16 +677,21 @@ func (l *Links) serve(ctx context.Context, end *linkEnd) {
 		if len(batch) == 0 {
 			first = time.Now()
 		}
-		if batch = append(batch, conn); ul == nil || len(batch) > maxLinkConns || time.Since(first) >= linkSettleMax {
-			release()
+		batch = append(batch, conn)
+		switch {
+		case ul == nil || len(batch) > maxLinkConns:
+			release(true)
+		case time.Since(first) >= linkSettleMax:
+			release(false)
 		}
 	}
 }
 
 // take hands a connection accepted on a link's socket off to be carried,
 // or refuses it, logged, when maxLinkConns are carried already: refused
-// here, in the accept loop, so a flood past the cap is accepted no faster
-// than its refusals are logged, and starts nothing.
+// before anything starts, by serve's one goroutine for it, so a flood
+// past the cap is accepted at most two batches ahead of its refusals
+// being logged.
 func (l *Links) take(ctx context.Context, end *linkEnd, conn net.Conn) {
 	l.mu.Lock()
 	lk := end.link
@@ -663,8 +699,10 @@ func (l *Links) take(ctx context.Context, end *linkEnd, conn net.Conn) {
 	select {
 	case l.conns <- struct{}{}:
 	default:
-		_ = conn.Close()
+		// Logged before it's closed, so a client that sees it closed finds
+		// why.
 		l.Event(EventLinkLimit, lk, strconv.Itoa(maxLinkConns))
+		_ = conn.Close()
 		return
 	}
 	go func() {

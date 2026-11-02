@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -195,6 +196,7 @@ type fakeLinks struct {
 	want     []Link
 	target   func(Link) (LinkTarget, string, string)
 	hold     chan struct{} // relays wait for it to close, when set
+	slow     chan struct{} // link_limit's events wait for it to close, when set
 }
 
 func (f *fakeLinks) start(ctx context.Context, args []string) (func() error, error) {
@@ -246,6 +248,9 @@ func (f *fakeLinks) relay(_ context.Context, conn net.Conn, args []string) {
 }
 
 func (f *fakeLinks) event(event string, l Link, why string) {
+	if event == EventLinkLimit && f.slow != nil {
+		<-f.slow
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.events = append(f.events, strings.TrimSpace(event+" "+l.Name+" "+why))
@@ -293,6 +298,40 @@ func dial(t *testing.T, sock string) string {
 	_ = c.SetDeadline(time.Now().Add(2 * time.Second))
 	line, _ := bufio.NewReader(c).ReadString('\n')
 	return strings.TrimSpace(line)
+}
+
+// dialMany makes n connections to a link's socket, one after another,
+// closed once the test ends. One the socket's backlog refuses is tried
+// again for up to five seconds: a busy host can keep the session's loop
+// from running long enough for a dialer in the same process to fill the
+// backlog, whatever the loop does, but a loop that stops accepting fails.
+func dialMany(t *testing.T, sock string, n int) []net.Conn {
+	t.Helper()
+	var conns []net.Conn
+	t.Cleanup(func() {
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	})
+	d := net.Dialer{Timeout: time.Second}
+	again := 0
+	for i := range n {
+		var c net.Conn
+		var err error
+		for give := time.Now().Add(5 * time.Second); ; again++ {
+			c, err = d.DialContext(t.Context(), "unix", sock)
+			if !errors.Is(err, syscall.ECONNREFUSED) || time.Now().After(give) {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+		if err != nil {
+			t.Fatalf("connection %d: %v", i+1, err)
+		}
+		conns = append(conns, c)
+	}
+	t.Logf("%d dials tried again", again)
+	return conns
 }
 
 // waitFor waits for cond, failing the test after two seconds.
@@ -511,20 +550,7 @@ func TestLinksCap(t *testing.T) {
 		}
 	}()
 	waitFor(t, "the link", func() bool { _, err := os.Lstat(l.Socket(db)); return err == nil })
-	var conns []net.Conn
-	defer func() {
-		for _, c := range conns {
-			_ = c.Close()
-		}
-	}()
-	d := net.Dialer{Timeout: time.Second}
-	for range maxLinkConns {
-		c, err := d.DialContext(t.Context(), "unix", l.Socket(db))
-		if err != nil {
-			t.Fatal(err)
-		}
-		conns = append(conns, c)
-	}
+	dialMany(t, l.Socket(db), maxLinkConns)
 	waitFor(t, "every relay", func() bool { return f.count(&f.relays) == maxLinkConns })
 	if got := dial(t, l.Socket(db)); got != "" {
 		t.Errorf("one past the cap: %q", got)
@@ -540,12 +566,16 @@ func TestLinksCap(t *testing.T) {
 }
 
 // A burst of connections, made one after another as fast as the client's
-// ssh makes them, is accepted whole: each is carried, up to the cap, or
-// refused with link_limit, and none is refused by a full backlog
-// before devvm sees it.
+// ssh makes them, past the cap and past macOS's backlog of 128 on its
+// own, is accepted whole: each is carried, up to the cap, or refused with
+// link_limit. The loop goes on accepting while the refusals are logged,
+// however slowly: one that waited for them would leave the socket's
+// backlog full until they were (dialMany). The relays are held, so the
+// cap is how many are carried at once, never more.
 func TestLinksBurst(t *testing.T) {
 	db := Link{Name: "db", Target: "devvm-db-0123456789abcd", Addr: netip.MustParseAddr("127.77.0.1"), Port: 5432}
-	f := &fakeLinks{hold: make(chan struct{})}
+	f := &fakeLinks{hold: make(chan struct{}), slow: make(chan struct{})}
+	logged := sync.OnceFunc(func() { close(f.slow) })
 	l := f.newLinks(t)
 	f.target = func(lk Link) (LinkTarget, string, string) {
 		return LinkTarget{SSH: SSH{VM: lk.Target, User: "u", Key: "/k2", KnownHosts: "/kh", Port: 62022}, Start: "s"}, "", ""
@@ -555,6 +585,7 @@ func TestLinksBurst(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- l.Run(ctx) }()
 	defer func() {
+		logged()
 		close(f.hold)
 		cancel()
 		if err := <-done; err != nil {
@@ -562,27 +593,33 @@ func TestLinksBurst(t *testing.T) {
 		}
 	}()
 	waitFor(t, "the link", func() bool { _, err := os.Lstat(l.Socket(db)); return err == nil })
-	const n = maxLinkConns + 144 // past the cap, and past macOS's backlog of 128 on its own
-	var conns []net.Conn
-	defer func() {
-		for _, c := range conns {
-			_ = c.Close()
-		}
-	}()
-	d := net.Dialer{Timeout: time.Second}
-	for i := range n {
-		c, err := d.DialContext(t.Context(), "unix", l.Socket(db))
-		if err != nil {
-			t.Fatalf("connection %d: %v", i+1, err)
-		}
-		conns = append(conns, c)
-	}
+	const n = maxLinkConns + 144
+	conns := dialMany(t, l.Socket(db), n)
+	logged()
 	limited := func() int {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		return len(slices.DeleteFunc(slices.Clone(f.events), func(e string) bool { return e != "link_limit db 256" }))
 	}
 	waitFor(t, "each carried or refused", func() bool { return f.count(&f.relays) == maxLinkConns && limited() == n-maxLinkConns })
+	// Each connection, as the client sees it: carried, its relay's line,
+	// or refused, closed without a word.
+	carried, refused := 0, 0
+	for i, c := range conns {
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		line, err := bufio.NewReader(c).ReadString('\n')
+		switch {
+		case err == nil && strings.HasPrefix(line, "127.0.0.1:5432 via "):
+			carried++
+		case errors.Is(err, io.EOF) && line == "":
+			refused++
+		default:
+			t.Errorf("connection %d: %q, %v", i+1, line, err)
+		}
+	}
+	if carried != maxLinkConns || refused != n-maxLinkConns || f.count(&f.relays) != maxLinkConns {
+		t.Errorf("%d carried, %d refused, %d relays; want %d, %d, %d", carried, refused, f.count(&f.relays), maxLinkConns, n-maxLinkConns, maxLinkConns)
+	}
 }
 
 // The session lists the client's links for its proxy (List), carried or
