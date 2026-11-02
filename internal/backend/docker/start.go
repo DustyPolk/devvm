@@ -17,7 +17,9 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // maxLayers is the most layers a VM's own commit has before devvm
@@ -141,9 +143,8 @@ func (d *Docker) vmConfig(vm string, r record) (config, error) {
 // hostname is a VM's hostname: its folder's part of devvm-<folder>-<hash>,
 // as devvm's setup would set it; the name itself for any other.
 func hostname(vm string) string {
-	s, ok := strings.CutPrefix(vm, "devvm-")
-	if i := strings.LastIndexByte(s, '-'); ok && i > 0 {
-		return s[:i]
+	if s, ok := vmname.SlugOf(vm); ok {
+		return s
 	}
 	return vm
 }
@@ -267,7 +268,7 @@ func (d *Docker) CreateVM(ctx context.Context, img string, spec backend.VMSpec) 
 // checkCreate checks what CreateVM is asked for: a valid image key, no
 // disk size, the image built, and no container by the VM's name.
 func (d *Docker) checkCreate(ctx context.Context, img string, spec backend.VMSpec) error {
-	if !keyPattern.MatchString(img) {
+	if !image.IsKey(img) {
 		return fmt.Errorf("docker: invalid image key %q", img)
 	}
 	if spec.Size.DiskGiB > 0 {

@@ -11,12 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -211,9 +211,6 @@ func (t Versions) resolveFailed(ctx context.Context) error {
 	return backend.Logged(msg.ToolsResolveFailed())
 }
 
-// versionLike is a name shaped like a version: it goes into a TOML list.
-var versionLike = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]*$`)
-
 // candidates is how many older versions a step back tries.
 const candidates = 5
 
@@ -285,7 +282,7 @@ func (t Versions) olderVersions(ctx context.Context, mise, backendName, spec, v 
 		if line == v {
 			break
 		}
-		if versionLike.MatchString(line) {
+		if image.ToolVersion(line) { // it goes into a TOML list
 			vs = append(vs, line)
 		}
 	}

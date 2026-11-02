@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -28,7 +29,7 @@ func (s *Smolvm) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if spec.Format != s.ToolFormat() {
 		return fmt.Errorf("smolvm: tool images are %s, not %q", s.ToolFormat(), spec.Format)
 	}
-	if !keyPattern.MatchString(spec.Base) {
+	if !image.IsKey(spec.Base) {
 		return fmt.Errorf("smolvm: invalid image key %q", spec.Base)
 	}
 	if !filepath.IsAbs(spec.Out) || !filepath.IsAbs(spec.OutAt) {

@@ -19,6 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
@@ -269,7 +270,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	var env bytes.Buffer
 	env.WriteString(dcEnv)
 	if lang != "" {
-		env.WriteString("export LANG=" + shellQuote(lang) + "\n")
+		env.WriteString("export LANG=" + shell.Quote(lang) + "\n")
 	}
 
 	// The agents' config: folders to link to their mounts, files copied.
@@ -331,7 +332,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		if net {
 			v = sec.Placeholder(salt)
 		}
-		env.WriteString("export " + sec.Env + "=" + shellQuote(v) + "\n")
+		env.WriteString("export " + sec.Env + "=" + shell.Quote(v) + "\n")
 		if name == "github" {
 			vars = append(vars, [2]string{"DEVVM_GITHUB", "1"})
 		}
@@ -344,7 +345,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	}
 	var vmFile bytes.Buffer
 	for _, kv := range vars {
-		vmFile.WriteString(kv[0] + "=" + shellQuote(kv[1]) + "\n")
+		vmFile.WriteString(kv[0] + "=" + shell.Quote(kv[1]) + "\n")
 	}
 	s.put("vm", 0o644, vmFile.Bytes())
 	s.put("env", 0o600, env.Bytes())
@@ -419,9 +420,6 @@ func settingsFormat(rel string) (string, bool) {
 	}
 	return "json", true
 }
-
-// shellQuote quotes s for a POSIX shell.
-func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // hostTZ is the host's timezone: what /etc/localtime links to, else
 // /etc/timezone.

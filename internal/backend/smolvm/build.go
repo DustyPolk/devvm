@@ -49,7 +49,7 @@ func (s *Smolvm) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		return backend.Built{}, fmt.Errorf("smolvm: builds are confined, not started with network %d", spec.Net)
 	}
 	for _, k := range []string{spec.Key, spec.Parent} {
-		if k != "" && !keyPattern.MatchString(k) {
+		if k != "" && !image.IsKey(k) {
 			return backend.Built{}, fmt.Errorf("smolvm: invalid image key %q", k)
 		}
 	}
@@ -293,7 +293,7 @@ func (s *Smolvm) Images(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	for _, e := range entries {
-		if keyPattern.MatchString(e.Name()) && e.IsDir() {
+		if image.IsKey(e.Name()) && e.IsDir() {
 			keys = append(keys, e.Name())
 		}
 	}
@@ -312,7 +312,7 @@ func (s *Smolvm) Images(ctx context.Context) ([]string, error) {
 // ImageSize is the disk space of an image's pack, and of its build
 // machine while it has one.
 func (s *Smolvm) ImageSize(ctx context.Context, key string) (int64, error) {
-	if !keyPattern.MatchString(key) {
+	if !image.IsKey(key) {
 		return 0, msg.NotAnImage(ImagePrefix + key)
 	}
 	var total int64
@@ -348,7 +348,7 @@ func (s *Smolvm) dataDir(ctx context.Context, vm string) string {
 // DeleteImage deletes an image's pack and its build machine. One that VMs
 // were made from is refused: they read its pack when their disks grow.
 func (s *Smolvm) DeleteImage(ctx context.Context, key string) error {
-	if !keyPattern.MatchString(key) {
+	if !image.IsKey(key) {
 		return msg.NotAnImage(ImagePrefix + key)
 	}
 	users, err := s.imageUsers(ctx, key)
@@ -392,7 +392,7 @@ func (s *Smolvm) imageUsers(ctx context.Context, key string) ([]string, error) {
 // (forward.go), so smolvm forwards none of them.
 func (s *Smolvm) CreateVM(ctx context.Context, img string, spec backend.VMSpec) error {
 	vm := spec.Name
-	if !keyPattern.MatchString(img) {
+	if !image.IsKey(img) {
 		return fmt.Errorf("smolvm: invalid image key %q", img)
 	}
 	if _, err := os.Stat(s.packFile(img)); err != nil {

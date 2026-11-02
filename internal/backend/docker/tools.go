@@ -145,7 +145,7 @@ func (d *Docker) checkTools(spec backend.ToolsSpec) error {
 	if spec.Format != d.ToolFormat() {
 		return fmt.Errorf("docker: tool images are %s, not %q", d.ToolFormat(), spec.Format)
 	}
-	if !keyPattern.MatchString(spec.Base) {
+	if !image.IsKey(spec.Base) {
 		return fmt.Errorf("docker: invalid image key %q", spec.Base)
 	}
 	if !filepath.IsAbs(spec.Out) || !filepath.IsAbs(spec.OutAt) {

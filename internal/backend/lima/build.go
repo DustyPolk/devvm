@@ -19,8 +19,6 @@ import (
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
-var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
-
 // BuildImage builds the image's instance, devvm-img-<key>, which is then
 // the image: base is a VM made from Ubuntu's cloud image with base.yaml's
 // settings (with spec.From, from that image converted into a disk:
@@ -40,7 +38,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		return backend.Built{}, fmt.Errorf("lima: builds are confined, not started with network %d", spec.Net)
 	}
 	for _, k := range []string{spec.Key, spec.Parent} {
-		if k != "" && !keyPattern.MatchString(k) {
+		if k != "" && !image.IsKey(k) {
 			return backend.Built{}, fmt.Errorf("lima: invalid image key %q", k)
 		}
 	}

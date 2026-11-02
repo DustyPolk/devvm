@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/shell"
 )
 
 // A build behind a company proxy (the host's HTTPS_PROXY or HTTP_PROXY)
@@ -109,7 +110,7 @@ func proxyExports(h backend.HostProxy) []byte {
 	b.WriteString("export")
 	for _, kv := range env {
 		k, v, _ := strings.Cut(kv, "=")
-		b.WriteString(" " + k + "=" + shq(v))
+		b.WriteString(" " + k + "=" + shell.Quote(v))
 	}
 	b.WriteString("\n")
 	return []byte(b.String())
@@ -131,6 +132,6 @@ func sudoScripts(h backend.HostProxy) (on, off backend.Script) {
 		return backend.Script{}, backend.Script{}
 	}
 	f := "/etc/sudoers.d/devvm-build-proxy"
-	return backend.Script{Name: "sudo-proxy", Data: []byte("printf '%s\\n' " + shq(sudoKeepProxy) + " > " + f + " && chmod 440 " + f + "\n")},
+	return backend.Script{Name: "sudo-proxy", Data: []byte("printf '%s\\n' " + shell.Quote(sudoKeepProxy) + " > " + f + " && chmod 440 " + f + "\n")},
 		backend.Script{Name: "sudo-proxy", Data: []byte("rm -f " + f + "\n")}
 }

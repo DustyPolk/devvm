@@ -14,6 +14,24 @@ import (
 	"testing"
 )
 
+func TestIsDigest(t *testing.T) {
+	hex64 := strings.Repeat("0123456789abcdef", 4)
+	for s, want := range map[string]bool{
+		"sha256:" + hex64:                  true,
+		"sha256:" + hex64[:63]:             false,
+		"sha256:" + hex64 + "0":            false,
+		"sha256:" + strings.ToUpper(hex64): false,
+		"sha512:" + hex64:                  false,
+		hex64:                              false,
+		"sha256:" + hex64 + "\n":           false,
+		"":                                 false,
+	} {
+		if got := IsDigest(s); got != want {
+			t.Errorf("IsDigest(%q) = %v", s, got)
+		}
+	}
+}
+
 func TestParseRef(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct{ in, host, repo, tag string }{

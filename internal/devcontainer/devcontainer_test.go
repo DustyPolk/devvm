@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/shell"
 )
 
 const ws = "/Users/me/web app"
@@ -64,7 +65,7 @@ func FuzzParse(f *testing.F) {
 			return
 		}
 		for _, v := range p.Env {
-			if !envName.MatchString(v.Name) || !shellWord.MatchString(v.Value) || hostVar.MatchString(v.Value) {
+			if !shell.EnvName(v.Name) || !shellWord.MatchString(v.Value) || hostVar.MatchString(v.Value) {
 				t.Errorf("variable %q=%q", v.Name, v.Value)
 			}
 		}

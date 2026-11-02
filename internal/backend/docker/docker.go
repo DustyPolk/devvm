@@ -37,7 +37,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -289,9 +288,6 @@ func cloneVolume(vm string) string { return vm + "-clone" }
 
 // nextName is a VM's next container, while it's made.
 func nextName(vm string) string { return vm + "-next" }
-
-// keyPattern is an image key.
-var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
 // record is what devvm set on one of its VMs, kept in devvm's data folder
 // (paths.Dirs.DockerVM): what its container is made with, and which commit

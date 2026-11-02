@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // newHistoryCmd is devvm history: the exports of agents' history in
@@ -118,7 +119,18 @@ func newHistoryExportCmd(u *ui.UI) *cobra.Command {
 // there is one: an export being written (.devvm-export-…), the file
 // beside one that names its folder (paths.ExportFolder) or the user's
 // own.
-var exportName = regexp.MustCompile(`^(devvm-.+-[0-9a-f]{14})-(\d{8}-\d{6})\.tar\.gz$`)
+var exportName = regexp.MustCompile(`^(.+)-(\d{8}-\d{6})\.tar\.gz$`)
+
+// parseExportName returns the VM and the date and time of an export's
+// name (exportName), and whether it is one: its VM a project VM's
+// (vmname.IsVM).
+func parseExportName(name string) (vm, stamp string, ok bool) {
+	m := exportName.FindStringSubmatch(name)
+	if m == nil || !vmname.IsVM(m[1]) {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
 
 // savedExport is one of the exports in devvm's exports folder.
 type savedExport struct {
@@ -150,8 +162,8 @@ func exports(d paths.Dirs) ([]savedExport, error) {
 	}
 	var out []savedExport
 	for _, e := range entries {
-		m := exportName.FindStringSubmatch(e.Name())
-		if m == nil || !e.Type().IsRegular() {
+		vm, stamp, ok := parseExportName(e.Name())
+		if !ok || !e.Type().IsRegular() {
 			continue
 		}
 		// The name has no zone: it's the host's wall clock when the export
@@ -161,12 +173,12 @@ func exports(d paths.Dirs) ([]savedExport, error) {
 		// export reaches it an hour before or after the same wall-clock
 		// time 30 days on, and on a host moved to another zone it's off by
 		// the zones' difference.
-		at, err := time.ParseInLocation("20060102-150405", m[2], time.Local)
+		at, err := time.ParseInLocation("20060102-150405", stamp, time.Local)
 		if err != nil {
 			continue
 		}
 		p := filepath.Join(d.Exports(), e.Name())
-		out = append(out, savedExport{Path: p, VM: m[1], Folder: exportFolder(p), At: at, Size: du(p)})
+		out = append(out, savedExport{Path: p, VM: vm, Folder: exportFolder(p), At: at, Size: du(p)})
 	}
 	slices.SortFunc(out, func(a, b savedExport) int { return a.At.Compare(b.At) })
 	return out, nil

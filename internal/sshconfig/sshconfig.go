@@ -23,6 +23,7 @@ import (
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // header starts the ssh config devvm writes.
@@ -65,7 +66,7 @@ func Alias(vm string, all []string) string {
 	if len(project.Matching(slug, all)) > 1 {
 		return vm
 	}
-	return project.Prefix + slug
+	return vmname.Prefix + slug
 }
 
 type running struct {
@@ -89,7 +90,7 @@ func (c *Config) projectVMs(ctx context.Context) ([]string, []running, error) {
 			continue
 		}
 		for _, in := range ins {
-			if !project.IsVM(in.Name) {
+			if !vmname.IsVM(in.Name) {
 				continue
 			}
 			all = append(all, in.Name)

@@ -117,6 +117,25 @@ func TestLeftoverFiles(t *testing.T) {
 	}
 }
 
+func TestParseExportName(t *testing.T) {
+	for _, c := range []struct {
+		name, vm, stamp string
+		ok              bool
+	}{
+		{"devvm-web-0123456789abcd-20260101-120000.tar.gz", "devvm-web-0123456789abcd", "20260101-120000", true},
+		{"devvm-img-keep-0123456789abcd-20260101-120000.tar.gz", "devvm-img-keep-0123456789abcd", "20260101-120000", true},
+		{"devvm-img-0123456789ab-20260101-120000.tar.gz", "", "", false},
+		{"devvm-web-0123456789abcd-2026010-120000.tar.gz", "", "", false},
+		{"devvm-web-0123456789abcd-20260101-120000.tar", "", "", false},
+		{"devvm-web-0123456789abcd.tar.gz", "", "", false},
+		{".devvm-export-1", "", "", false},
+	} {
+		if vm, stamp, ok := parseExportName(c.name); vm != c.vm || stamp != c.stamp || ok != c.ok {
+			t.Errorf("parseExportName(%q) = %q, %q, %v", c.name, vm, stamp, ok)
+		}
+	}
+}
+
 // Exports: only plain files named as devvm names them, oldest first; the
 // age filter keeps those at least that old.
 func TestExports(t *testing.T) {

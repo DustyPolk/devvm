@@ -13,6 +13,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/paths"
@@ -331,5 +332,14 @@ func (k keyHash) rebuild(in Inputs, img string) error {
 	return nil
 }
 
-// sum is sha12: the first 12 hex digits of the SHA-256.
-func (k keyHash) sum() string { return hex.EncodeToString(k.h.Sum(nil))[:12] }
+// keyLen is how many hex digits an image's or a tool image's key has.
+const keyLen = 12
+
+// sum is sha12: the first keyLen hex digits of the SHA-256.
+func (k keyHash) sum() string { return hex.EncodeToString(k.h.Sum(nil))[:keyLen] }
+
+var keyPattern = regexp.MustCompile(`^[0-9a-f]{` + strconv.Itoa(keyLen) + `}$`)
+
+// IsKey reports whether s is shaped like an image's key, as Key makes it:
+// 12 lowercase hex digits.
+func IsKey(s string) bool { return keyPattern.MatchString(s) }

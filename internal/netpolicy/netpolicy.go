@@ -110,9 +110,11 @@ func Policies(d paths.Dirs, vm, img string) (builtin, files []string) {
 			builtin = append(builtin, "shared-tools/"+p+".policy")
 		case image.IsBuiltin(p):
 			builtin = append(builtin, "layers/"+p+".policy")
-		default:
+		case image.LayerName(p):
 			files = append(files, filepath.Join(d.Layers(), p+".policy"))
 		}
+		// A part that's no layer's name (../x) names no file: its path
+		// would leave the user's layers, so it adds no rules.
 	}
 	return builtin, append(files, d.Policy(), VMPolicyFile(d, vm), secrets.PolicyFile(d, vm))
 }

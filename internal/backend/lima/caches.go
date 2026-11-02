@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
@@ -132,7 +133,7 @@ func (l limaCache) recordedURLs() (map[string]bool, error) {
 	}
 	keep := map[string]bool{}
 	for _, e := range entries {
-		if !keyPattern.MatchString(e.Name()) {
+		if !image.IsKey(e.Name()) {
 			continue
 		}
 		rec, err := state.ReadImage(l.dirs, e.Name())

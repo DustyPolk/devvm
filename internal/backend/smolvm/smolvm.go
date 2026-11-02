@@ -29,7 +29,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -37,6 +36,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -321,14 +321,11 @@ func (s *Smolvm) writeRecord(vm string, r record) error {
 	return state.WriteFile(s.Dirs.SmolvmVM(vm), append(b, '\n'))
 }
 
-// keyPattern is an image key.
-var keyPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
-
 // imageKey returns the key of an image's build machine, and whether it is
 // one.
 func imageKey(name string) (string, bool) {
 	key, ok := strings.CutPrefix(name, ImagePrefix)
-	return key, ok && keyPattern.MatchString(key)
+	return key, ok && image.IsKey(key)
 }
 
 // pack is an image's pack: smolvm's stub, beside its .smolmachine.

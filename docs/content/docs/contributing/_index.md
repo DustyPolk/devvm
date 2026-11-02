@@ -89,7 +89,7 @@ A fresh context elsewhere, such as for a cleanup that outlives a canceled run, o
 | `no-init` | no `func init()` |
 | `package-vars` | outside `internal/proxy`, a package-level `var` is a blank interface check, an `Err*`/`err*` sentinel from `errors.New` or `fmt.Errorf`, a `regexp.MustCompile`, `template.Must` or `sync.Once*` result, a `//go:embed` file, or listed in `allowedVars`; anything else becomes a field, a const or a local |
 | `layers` | which packages import which, in non-test files (tests may wire packages together) |
-| `owners` | in non-test files, only its owner runs a host command that `commands` lists, and only `envOwner` reads a `DEVVM_` variable, but the settings `envSettings` lists ([details](#the-checks-on-owners)) |
+| `owners` | in non-test files, only its owner runs a host command that `commands` lists, only `envOwner` reads a `DEVVM_` variable, but the settings `envSettings` lists, and only its owner's string literals hold a text that `literals` lists ([details](#the-checks-on-owners)) |
 
 The layers:
 
@@ -97,7 +97,7 @@ The layers:
 - `internal/backend/...` imports none of `internal/vm`, `build`, `tools`, `netpolicy`, `secrets`, `project`, `gitprotect`, `sshconfig` or `sshagent`.
 - Only `internal/backend/registry` and `internal/cli` import a backend (`lima`, `smolvm`, `docker`); only tests import `backendtest` and `internal/stubtest`, and `internal/stubtest` imports only `internal/msg`.
 - `internal/proxy` imports no other devvm package.
-- `assets`, `locales`, `internal/platform` and `internal/msg/gen` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg` and `internal/paths`; `internal/image` only `assets`, `internal/msg` and `internal/paths`; `internal/devcontainer` only `internal/image` and `internal/msg`.
+- `assets`, `locales`, `internal/platform`, `internal/msg/gen`, `internal/testbuild`, `internal/hostgit`, `internal/shell` and `internal/vmname` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg` and `internal/paths`; `internal/image` only `assets`, `internal/msg` and `internal/paths`; `internal/devcontainer` only `internal/image`, `internal/msg` and `internal/shell`.
 
 Everything it holds the code to is in `devvm()` in `internal/structure/structure_test.go`:
 
@@ -105,6 +105,7 @@ Everything it holds the code to is in `devvm()` in `internal/structure/structure
 - **`allowedVars`** lists the other package-level vars, by package folder and name, each with why: values set by `-ldflags`, fixed tables, test fixtures. An entry whose var is gone fails.
 - **`layers`** is the layering table: a layer's packages (`from`, but not `exceptFrom`) import none of `to` (but `exceptTo`); `x/...` is `x` and the packages below it.
 - **`commands`** maps a host command to the one package that runs it, and **`envOwner`** names the one file that reads devvm's `DEVVM_` variables. **`envSettings`** lists the variables read elsewhere, each with the files that read it and why. A listed file that no longer reads its variable fails.
+- **`literals`** maps a text that only one package's string literals may hold to that package and what the others use instead.
 
 `TestRulesFail` breaks each rule, and each layer, on small sources and checks the failure names it.
 
@@ -121,8 +122,12 @@ An owner gets a check only when a second copy would be a bug or a security hole,
 | forbidigo, `testbuild.On` | `internal/cli`, whose `readOverrides` is the only code that asks whether this is a test build | nowhere: other packages take the overrides as fields |
 | the structure test's `owners`, git | `internal/hostgit`, which runs git without the repo's fsmonitor, hooks or filters, over ssh only, without the environment's `GIT_*` variables and prompts | tests, which run git to make their repos |
 | the structure test's `owners`, `DEVVM_` variables | `readOverrides` in `internal/cli/overrides.go`, which reads a test build's stand-ins, while a release reads none | the settings in `envSettings`, and tests |
+| the structure test's `owners`, shell quoting | `internal/shell`, whose `Quote` and `QuoteJoin` quote words for a POSIX shell, so a value never runs as a command | tests |
+| the structure test's `owners`, the VM-name grammar | `internal/vmname`, whose `IsVM` tells a project VM's name from an image's, so gc never takes a project VM for an image | tests |
 
 forbidigo matches only the function a call names, so the checks that look at a call's arguments are in the [structure test](#the-structure-test). It finds a host command in an `exec.Command` or `exec.CommandContext` call that names it, as a literal or as a constant, whatever name the file imports `os/exec` under. It finds a `DEVVM_` variable in a call to any function or field named `Getenv` or `LookupEnv`, in any case, so `t.Getenv` and a `getenv` parameter count as well as `os.Getenv`. The settings `envSettings` lists are the ones users set, `DEVVM_NO_TOOL_CHECK`, `DEVVM_LIMA_HOME`, `DEVVM_SECRET_SERVICE` and `DEVVM_FROM`; names mode, `DEVVM_MESSAGES`, which any build has; and the variables devvm sets for its own processes, `DEVVM_LOGIN_SALT` for `devvm _proxy` and `DEVVM_GUESTFWD` for `devvm _qemu`.
+
+The structure test also finds a copy of an owner's code by its text, in `literals`. A string literal outside tests that holds `'\''`, the escaped quote a shell quoter writes, belongs in `internal/shell`, and one that holds `[0-9a-f]{14}`, the hash at the end of a project VM's name, belongs in `internal/vmname`. A quote written as a rune, such as `'\''` in Go, isn't a string literal, so it doesn't count.
 
 Four concerns still have copies, so each gets its check in the change that gives it one owner: writing devvm's state files, through `internal/state` alone; HTTP clients; signaling processes, through one helper and `internal/platform`; and running external commands, through the UI's `LoggedCmd`, a backend's runner and `internal/hostgit`.
 

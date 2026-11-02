@@ -139,7 +139,7 @@ func (d *Docker) checkBuild(ctx context.Context, spec backend.ImageSpec) error {
 		return err
 	}
 	for _, k := range []string{spec.Key, spec.Parent} {
-		if k != "" && !keyPattern.MatchString(k) {
+		if k != "" && !image.IsKey(k) {
 			return fmt.Errorf("docker: invalid image key %q", k)
 		}
 	}
@@ -309,7 +309,7 @@ func (d *Docker) Images(ctx context.Context) ([]string, error) {
 	}
 	var keys []string
 	for l := range strings.FieldsSeq(string(out)) {
-		if k, ok := strings.CutPrefix(l, "devvm-"+d.ns()+":"); ok && keyPattern.MatchString(k) && !slices.Contains(keys, k) {
+		if k, ok := strings.CutPrefix(l, "devvm-"+d.ns()+":"); ok && image.IsKey(k) && !slices.Contains(keys, k) {
 			keys = append(keys, k)
 		}
 	}
@@ -318,7 +318,7 @@ func (d *Docker) Images(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	for _, c := range cs {
-		if k := c.Config.Labels[keyLabel]; keyPattern.MatchString(k) && c.name() == d.buildName(k) && !slices.Contains(keys, k) {
+		if k := c.Config.Labels[keyLabel]; image.IsKey(k) && c.name() == d.buildName(k) && !slices.Contains(keys, k) {
 			keys = append(keys, k)
 		}
 	}
@@ -328,7 +328,7 @@ func (d *Docker) Images(ctx context.Context) ([]string, error) {
 // ImageSize is the disk space of an image, its parents' layers included,
 // and of its build container's own while it has one.
 func (d *Docker) ImageSize(ctx context.Context, key string) (int64, error) {
-	if !keyPattern.MatchString(key) {
+	if !image.IsKey(key) {
 		return 0, msg.NotAnImage(key)
 	}
 	var total int64
@@ -352,7 +352,7 @@ func (d *Docker) ImageSize(ctx context.Context, key string) (int64, error) {
 // DeleteImage deletes an image and its build container. One that VMs were
 // made from is refused.
 func (d *Docker) DeleteImage(ctx context.Context, key string) error {
-	if !keyPattern.MatchString(key) {
+	if !image.IsKey(key) {
 		return msg.NotAnImage(key)
 	}
 	users, err := d.imageUsers(ctx, key)

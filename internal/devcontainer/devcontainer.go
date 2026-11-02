@@ -14,13 +14,13 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/shell"
 )
 
 // Where a project's devcontainer.json is looked for, relative to its
@@ -47,8 +47,6 @@ const (
 	dockerInDocker = "docker-in-docker"
 	dockerOutside  = "docker-outside-of-docker"
 )
-
-var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // ErrTooLarge is a devcontainer.json larger than devvm reads.
 var ErrTooLarge = errors.New("larger than 1 MiB")
@@ -412,7 +410,7 @@ func (p *parser) env(top map[string]json.RawMessage) error {
 			return err
 		}
 		for name, v := range m {
-			if !envName.MatchString(name) {
+			if !shell.EnvName(name) {
 				return msg.DevcontainerEnvName(p.file, name)
 			}
 			if v == nil {

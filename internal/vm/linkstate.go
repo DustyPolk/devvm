@@ -8,8 +8,8 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // clientStates calls each with the state and links of every project VM
@@ -21,7 +21,7 @@ func clientStates(d paths.Dirs, skip string, each func(st *state.VM, links []Lin
 	}
 	slices.Sort(names)
 	for _, n := range names {
-		if n == skip || !project.IsVM(n) {
+		if n == skip || !vmname.IsVM(n) {
 			continue
 		}
 		st, err := state.ReadVM(d, n)

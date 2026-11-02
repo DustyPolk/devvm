@@ -75,6 +75,16 @@ func TestPolicies(t *testing.T) {
 			t.Errorf("Policies(%s) = %q, %q; want %q, %q", c.img, builtin, files, c.builtin, c.file)
 		}
 	}
+	// A part that's no layer's name never names a file outside the
+	// user's layers.
+	for _, bad := range []string{"../x", "node+../../etc/x", "a/b", "X", ".x"} {
+		builtin, files := Policies(d, "vm1", bad)
+		if got := slices.Concat(builtin, files); slices.ContainsFunc(got, func(f string) bool {
+			return strings.Contains(f, "x.policy") || strings.Contains(f, "b.policy") || strings.Contains(f, "X.policy")
+		}) {
+			t.Errorf("Policies(%q) = %q", bad, got)
+		}
+	}
 }
 
 // Every image part devvm has comes with its allowlist, in devvm's files.

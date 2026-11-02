@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -16,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -47,8 +47,6 @@ const devcontainerUnreadable = "unreadable"
 // commandScript runs a devcontainer.json's command, its arguments, in a
 // login shell: the VM's PATH, and its variables (~/.profile).
 const commandScript = `exec "$@"`
-
-var envVarName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // devcontainers reads a project's devcontainer.json for a new VM, and runs
 // its commands in the VM.
@@ -268,7 +266,7 @@ func devcontainerEnv(st *state.VM) (string, error) {
 	}
 	var out strings.Builder
 	for _, v := range vars {
-		if envVarName.MatchString(v.Name) {
+		if shell.EnvName(v.Name) {
 			out.WriteString("export " + v.Name + "=" + v.Value + "\n")
 		}
 	}

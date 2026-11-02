@@ -11,8 +11,8 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // Listed is a project VM as devvm ls shows it. A field is "" when the VM's
@@ -55,7 +55,7 @@ func List(ctx context.Context, d paths.Dirs, reg *backend.Registry) ([]Listed, e
 			return nil, err
 		}
 		for _, in := range ins {
-			if !project.IsVM(in.Name) {
+			if !vmname.IsVM(in.Name) {
 				continue
 			}
 			l, err := listed(ctx, d, b, in)

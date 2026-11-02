@@ -11,6 +11,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/shell"
 )
 
 // On Linux hosts Lima runs QEMU, with a user-mode network. A VM that must
@@ -47,7 +48,7 @@ func qemuEnvVar(goarch string) string {
 	return "QEMU_SYSTEM_" + strings.ToUpper(qemuArch(goarch))
 }
 
-var wrapperTmpl = template.Must(template.New("qemu").Funcs(template.FuncMap{"shq": shq}).Parse(`#!/bin/sh
+var wrapperTmpl = template.Must(template.New("qemu").Funcs(template.FuncMap{"shq": shell.Quote}).Parse(`#!/bin/sh
 # Written by devvm: QEMU with devvm's network restrictions.
 exec {{shq .}} _qemu exec "$0" "$@"
 `))
@@ -69,7 +70,7 @@ func writeWrapper(dir, self, goarch string) (string, error) {
 // address: devvm joining it to the proxy's port. QEMU runs it with
 // /bin/sh -c, so devvm's path is quoted.
 func guestFwdCmd(self, proxyAddr string) string {
-	return shq(self) + " _qemu connect " + proxyAddr
+	return shell.Quote(self) + " _qemu connect " + proxyAddr
 }
 
 // RestrictNetdev returns QEMU's arguments with restrict=on, and a guestfwd

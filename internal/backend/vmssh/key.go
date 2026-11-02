@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -153,10 +154,6 @@ func HostKey(out []byte) (string, bool) {
 // makes at each start.
 const HostKeyPath = "/etc/ssh/ssh_host_ed25519_key.pub"
 
-// envName is a variable's name, as services.sh is given those its ssh
-// sessions get.
-var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
 // ServicesArgs are services.sh's arguments for a start that runs the VM's
 // sshd: the user, devvm's public key, and the names of the variables its
 // sessions get from the start's environment (first, then env's), values
@@ -164,7 +161,7 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 func ServicesArgs(user, pub string, first []string, env map[string]string) []string {
 	names := slices.Clone(first)
 	for _, k := range slices.Sorted(maps.Keys(env)) {
-		if envName.MatchString(k) {
+		if shell.EnvName(k) {
 			names = append(names, k)
 		}
 	}

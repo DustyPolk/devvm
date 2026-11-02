@@ -105,9 +105,6 @@ func (b Images) origin(img Image) (origin, id string) {
 	return origin, id
 }
 
-// keyLike is what devvm images shows for an image's key.
-var keyLike = regexp.MustCompile(`^[0-9a-f]{12}$`)
-
 // Delete deletes images, each named by its name or by its key (an
 // unfinished build has only its key), with their records. Each must be
 // built, and none being built by another devvm (image_building): nothing
@@ -121,7 +118,7 @@ func (b Images) Delete(ctx context.Context, refs []string) error {
 	var keys, labels []string
 	for _, ref := range refs {
 		key, label := ref, ""
-		if keyLike.MatchString(ref) && slices.Contains(built, ref) {
+		if image.IsKey(ref) && slices.Contains(built, ref) {
 			label = b.recordName(ref)
 		} else {
 			label = image.Normalize(ref)

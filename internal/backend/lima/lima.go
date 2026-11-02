@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -27,7 +26,9 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // Name is the backend's name.
@@ -195,15 +196,12 @@ func (l *Lima) NameMax() int {
 	return max(0, socketMax-sshSocketExtra-len(l.Dirs.Lima)-len("/")-len("/ssh.sock"))
 }
 
-// projectVM matches a project VM's name: devvm-<folder>-<14 hex>. A folder
-// named img-… gives devvm-img-…-<hash>, so starting with ImagePrefix alone
-// doesn't make an image.
-var projectVM = regexp.MustCompile(`^devvm-.+-[0-9a-f]{14}$`)
-
 // imageKey returns the key of an image's instance, and whether it is one.
+// A folder named img-… gives devvm-img-…-<hash>, a project VM's name, so
+// starting with ImagePrefix alone doesn't make an image.
 func imageKey(name string) (string, bool) {
 	key, ok := strings.CutPrefix(name, ImagePrefix)
-	return key, ok && key != "" && !projectVM.MatchString(name)
+	return key, ok && key != "" && !vmname.IsVM(name)
 }
 
 // Images lists the keys of the images in devvm's Lima home.
@@ -417,7 +415,7 @@ func (l *Lima) Exec(ctx context.Context, vm string, argv []string, o backend.Exe
 	if dir == "" {
 		dir = "/"
 	}
-	cmd := l.limactl(ctx, "shell", "--workdir", "/", vm, "sh", "-c", "cd "+shq(dir)+" && exec "+shqJoin(argv))
+	cmd := l.limactl(ctx, "shell", "--workdir", "/", vm, "sh", "-c", "cd "+shell.Quote(dir)+" && exec "+shell.QuoteJoin(argv))
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr
 	return l.Runner.Attach(cmd)
 }

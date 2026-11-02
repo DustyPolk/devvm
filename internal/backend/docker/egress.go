@@ -54,6 +54,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -427,10 +428,7 @@ func (e egress) linuxBuild(ctx context.Context) (string, error) {
 	return dst, nil
 }
 
-var (
-	envKey   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	envValue = regexp.MustCompile(`^[A-Za-z0-9_./:@,=+-]*$`)
-)
+var envValue = regexp.MustCompile(`^[A-Za-z0-9_./:@,=+-]*$`)
 
 // envScript replaces devvm's block in /etc/environment with its input.
 const envScript = `set -eu; f=/etc/environment; t=$(mktemp); ` +
@@ -446,7 +444,7 @@ func (e egress) setEnv(ctx context.Context, vm string, env map[string]string) er
 	if len(env) > 0 {
 		b.WriteString("# devvm-proxy begin\n")
 		for _, k := range slices.Sorted(maps.Keys(env)) {
-			if !envKey.MatchString(k) || !envValue.MatchString(env[k]) {
+			if !shell.EnvName(k) || !envValue.MatchString(env[k]) {
 				return fmt.Errorf("docker: %s can't go in %s's /etc/environment", k, vm)
 			}
 			b.WriteString(k + "=" + env[k] + "\n")

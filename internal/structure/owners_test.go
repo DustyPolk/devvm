@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"maps"
 	"path"
 	"slices"
 	"strconv"
@@ -177,6 +178,35 @@ func checkEnv(m *module, r rules) []violation {
 				vs = append(vs, violation{ruleOwners, "envSettings", name + " isn't read in " + file + ": take it out"})
 			}
 		}
+	}
+	return vs
+}
+
+// checkLiterals: outside tests, a string literal holding a text that
+// literals lists is in its owner's package: one anywhere else is a copy
+// of what that package owns.
+func checkLiterals(m *module, r rules) []violation {
+	var vs []violation
+	for _, f := range m.files {
+		if f.test {
+			continue
+		}
+		ast.Inspect(f.ast, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			v, ok := literal(lit)
+			if !ok {
+				return true
+			}
+			for _, text := range slices.Sorted(maps.Keys(r.literals)) {
+				if o := r.literals[text]; strings.Contains(v, text) && f.dir != o.dir {
+					vs = append(vs, violation{ruleOwners, m.pos(lit), fmt.Sprintf("holds %s: a copy of what %s owns, so use %s", text, o.dir, o.use)})
+				}
+			}
+			return true
+		})
 	}
 	return vs
 }

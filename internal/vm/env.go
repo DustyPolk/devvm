@@ -33,6 +33,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // Keys of a VM's state that up writes, besides state's own.
@@ -628,7 +629,7 @@ func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
 			continue
 		}
 		for _, in := range ins {
-			if !project.IsVM(in.Name) {
+			if !vmname.IsVM(in.Name) {
 				continue
 			}
 			st, err := state.ReadVM(e.Dirs, in.Name)

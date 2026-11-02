@@ -72,6 +72,10 @@ const accept = "application/vnd.oci.image.index.v1+json, application/vnd.docker.
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
+// IsDigest reports whether s is a SHA-256 digest as registries and Docker
+// write one (sha256:<64 hex>): an image's digest or Docker's ID for it.
+func IsDigest(s string) bool { return digestPattern.MatchString(s) }
+
 // Registry asks registries for image digests, anonymously.
 type Registry struct {
 	Client *http.Client
@@ -218,7 +222,7 @@ func (r *Registry) Digest(ctx context.Context, ref string) (string, error) {
 			return "", err
 		}
 	}
-	if h.status != http.StatusOK || !digestPattern.MatchString(h.digest) {
+	if h.status != http.StatusOK || !IsDigest(h.digest) {
 		return "", fmt.Errorf("%w: %s answered %d", ErrNotFound, p.Host, h.status)
 	}
 	return h.digest, nil

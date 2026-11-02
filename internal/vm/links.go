@@ -19,6 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // Keys of a VM's state for links between VMs.
@@ -125,7 +126,7 @@ func parseLink(e string) (Link, error) {
 		return Link{}, fmt.Errorf("%q: the name %q", e, f[0])
 	case perr != nil:
 		return Link{}, fmt.Errorf("%q: the port %q", e, f[1])
-	case !project.IsVM(f[2]) || f[3] == "":
+	case !vmname.IsVM(f[2]) || f[3] == "":
 		return Link{}, fmt.Errorf("%q: the target %q, %q", e, f[2], f[3])
 	case aerr != nil || !IsLinkAddr(addr) || addr != addr.Unmap():
 		return Link{}, fmt.Errorf("%q: the address %q", e, f[4])
@@ -318,7 +319,7 @@ func (e Links) projectVMs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(names, func(n string) bool { return !project.IsVM(n) }), nil
+	return slices.DeleteFunc(names, func(n string) bool { return !vmname.IsVM(n) }), nil
 }
 
 // resolve returns the VM a link's TARGET names: a folder's path (relative

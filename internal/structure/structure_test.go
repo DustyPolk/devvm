@@ -69,7 +69,7 @@ func devvm() rules {
 			"internal/vm.historyPaths":               table,
 			"internal/vm.historyExcludes":            table,
 			"internal/vm.defaultKeys":                table,
-			"internal/backend/lima.nasty":            fixture,
+			"internal/shell.nasty":                   fixture,
 			"internal/image.images":                  fixture,
 			"internal/tools.gnuT":                    fixture,
 			"internal/tools.muslT":                   fixture,
@@ -80,6 +80,7 @@ func devvm() rules {
 		// hostgit runs git without the repo's fsmonitor, hooks or filters,
 		// over ssh only, without the environment's GIT_* and prompts.
 		commands: map[string]string{"git": "internal/hostgit"},
+		literals: devvmLiterals(),
 		// readOverrides reads a test build's stand-ins, and a release
 		// none.
 		envOwner: "internal/cli/overrides.go",
@@ -145,8 +146,11 @@ func devvm() rules {
 			},
 			{
 				name: "leaves import nothing of devvm's",
-				from: []string{"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit"},
-				to:   []string{"..."},
+				from: []string{
+					"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit",
+					"internal/shell", "internal/vmname",
+				},
+				to: []string{"..."},
 			},
 			{
 				name: "internal/msg imports only locales",
@@ -169,11 +173,21 @@ func devvm() rules {
 				to: []string{"..."},
 			},
 			{
-				name: "internal/devcontainer imports only internal/image and internal/msg",
-				from: []string{"internal/devcontainer"}, exceptTo: []string{"internal/image", "internal/msg"},
+				name: "internal/devcontainer imports only internal/image, internal/msg and internal/shell",
+				from: []string{"internal/devcontainer"}, exceptTo: []string{"internal/image", "internal/msg", "internal/shell"},
 				to: []string{"..."},
 			},
 		},
+	}
+}
+
+// devvmLiterals are devvm's literals: a second shell quoter can let a value
+// run as a command in a VM or on this machine, and a second copy of the
+// VM-name grammar can read a project VM as an image, which gc deletes.
+func devvmLiterals() map[string]literalOwner {
+	return map[string]literalOwner{
+		`'\''`:         {"internal/shell", "shell.Quote"},
+		`[0-9a-f]{14}`: {"internal/vmname", "vmname.IsVM"},
 	}
 }
 

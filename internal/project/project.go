@@ -13,28 +13,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"unicode"
 
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/vmname"
 )
-
-// vmName matches a project VM's name.
-var vmName = regexp.MustCompile(`^devvm-.+-[0-9a-f]{14}$`)
-
-// IsVM reports whether name is a project VM's: devvm-<folder>-<hash>.
-// Images and build VMs aren't.
-func IsVM(name string) bool { return vmName.MatchString(name) }
-
-// Prefix starts every project VM's name: devvm-<folder>-<hash>.
-const Prefix = "devvm-"
-
-// hashLen is how many hex digits of the path's hash a VM's name has: 56
-// bits, so another folder with the same name is out of reach, and the
-// length tells project VMs apart from images (devvm-img-<12>).
-const hashLen = 14
 
 // slugMax is the most of the folder's name a VM's name has.
 const slugMax = 20
@@ -54,12 +39,9 @@ type Folder struct {
 }
 
 // Slug is the folder's part of its VM's name, which is also the VM's
-// hostname.
+// hostname (vmname.SlugOf).
 func (f Folder) Slug() string {
-	s := strings.TrimPrefix(f.Name, Prefix)
-	if i := strings.LastIndexByte(s, '-'); i >= 0 {
-		s = s[:i]
-	}
+	s, _ := vmname.SlugOf(f.Name)
 	return s
 }
 
@@ -68,7 +50,7 @@ func (f Folder) Slug() string {
 func Matching(slug string, all []string) []string {
 	var out []string
 	for _, vm := range all {
-		if IsVM(vm) && (Folder{Name: vm}).Slug() == slug {
+		if vmname.IsVM(vm) && (Folder{Name: vm}).Slug() == slug {
 			out = append(out, vm)
 		}
 	}
@@ -86,10 +68,10 @@ func IsPath(target string) bool {
 // length of its folder's name their backend gave them.
 func ForDir(dir string, all []string) []string {
 	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
-	suffix := "-" + hex.EncodeToString(sum[:])[:hashLen]
+	suffix := "-" + hex.EncodeToString(sum[:])[:vmname.HashLen]
 	var out []string
 	for _, vm := range all {
-		if IsVM(vm) && strings.HasSuffix(vm, suffix) {
+		if vmname.IsVM(vm) && strings.HasSuffix(vm, suffix) {
 			out = append(out, vm)
 		}
 	}
@@ -101,7 +83,7 @@ func ForDir(dir string, all []string) []string {
 // VM's name, else those whose folder part is the folder name's Slug, as
 // New makes it.
 func Targets(target string, all []string) []string {
-	if IsVM(target) {
+	if vmname.IsVM(target) {
 		for _, vm := range all {
 			if vm == target {
 				return []string{vm}
@@ -126,13 +108,13 @@ func New(dir string, nameMax int) (Folder, error) {
 	}
 	room := slugMax
 	if nameMax > 0 {
-		room = min(room, nameMax-len(Prefix)-1-hashLen)
+		room = min(room, nameMax-len(vmname.Prefix)-1-vmname.HashLen)
 	}
 	if room < slugMin {
 		return Folder{}, ErrNoRoom
 	}
 	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
-	return Folder{Dir: dir, Name: Prefix + Slug(filepath.Base(dir), room) + "-" + hex.EncodeToString(sum[:])[:hashLen]}, nil
+	return Folder{Dir: dir, Name: vmname.Prefix + Slug(filepath.Base(dir), room) + "-" + hex.EncodeToString(sum[:])[:vmname.HashLen]}, nil
 }
 
 // Slug is a folder's name as it goes into its VM's name: lowercase, each

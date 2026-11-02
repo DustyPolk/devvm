@@ -176,6 +176,26 @@ func stubLima(t *testing.T) (*Lima, *msg.Recorder, *stubtest.Stubs) {
 	return l, warned, stubs
 }
 
+// An image's instance is devvm-img-<key>; a project VM's from a folder
+// named img-… isn't one, so gc never takes it for an image.
+func TestImageKey(t *testing.T) {
+	for _, c := range []struct {
+		name, key string
+		ok        bool
+	}{
+		{"devvm-img-0123456789ab", "0123456789ab", true},
+		{"devvm-img-x", "x", true},
+		{"devvm-img-keep-0123456789abcd", "keep-0123456789abcd", false},
+		{"devvm-img-", "", false},
+		{"devvm-web-0123456789abcd", "", false},
+		{"other", "", false},
+	} {
+		if key, ok := imageKey(c.name); ok != c.ok || ok && key != c.key {
+			t.Errorf("imageKey(%q) = %q, %v", c.name, key, ok)
+		}
+	}
+}
+
 // Lima runs on devvm's own Lima home (DEVVM_LIMA_HOME, never LIMA_HOME),
 // from devvm's data folder, never the caller's: Lima writes
 // lima.REJECTED.yaml into the folder it runs in.

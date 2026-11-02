@@ -25,6 +25,7 @@ internal/platform 85.5
 internal/project 91.5
 internal/proxy 88.2
 internal/secrets 90.4
+internal/shell 100.0
 internal/sshagent 83.4
 internal/sshconfig 84.8
 internal/state 91.8
@@ -35,3 +36,4 @@ internal/trust 93.9
 internal/ubuntu 88.7
 internal/ui 93.8
 internal/vm 85.5
+internal/vmname 100.0

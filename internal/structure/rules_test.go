@@ -16,7 +16,7 @@ func imports(p, dir string) string {
 type ruleCase struct {
 	name  string
 	files map[string]string
-	r     rules // maxMethods 2, devvm's layers, commands and envOwner unless set
+	r     rules // maxMethods 2, devvm's layers, commands, envOwner and literals unless set
 	want  *want // nil: no violation
 }
 
@@ -257,6 +257,41 @@ func ownerCases() []ruleCase {
 	listed := rules{envSettings: map[string]envSetting{"DEVVM_X": {[]string{"internal/tools/a.go"}, "x"}}}
 	return []ruleCase{
 		{
+			name:  "a shell quoter outside shell",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nconst q = `'\\''`\n"},
+			want:  &want{ruleOwners, "holds '\\'': a copy of what internal/shell owns, so use shell.Quote"},
+		},
+		{
+			name:  "a shell quoter in a double-quoted literal",
+			files: map[string]string{"internal/backend/lima/a.go": "package lima\n\nconst q = \"'\\\\''\"\n"},
+			want:  &want{ruleOwners, "holds '\\''"},
+		},
+		{
+			name:  "the shell quoter in shell",
+			files: map[string]string{"internal/shell/a.go": "package shell\n\nconst q = `'\\''`\n"},
+		},
+		{
+			name:  "a shell quoter in a test",
+			files: map[string]string{"internal/vm/a_test.go": "package vm\n\nconst q = `'\\''`\n"},
+		},
+		{
+			name:  "a quote as a rune",
+			files: map[string]string{"internal/proxy/a.go": "package proxy\n\nconst q = '\\''\n"},
+		},
+		{
+			name:  "the VM-name grammar outside vmname",
+			files: map[string]string{"internal/cli/a.go": "package cli\n\nconst re = `^devvm-.+-[0-9a-f]{14}$`\n"},
+			want:  &want{ruleOwners, "holds [0-9a-f]{14}: a copy of what internal/vmname owns, so use vmname.IsVM"},
+		},
+		{
+			name:  "the VM-name grammar in vmname",
+			files: map[string]string{"internal/vmname/a.go": "package vmname\n\nconst re = `[0-9a-f]{14}`\n"},
+		},
+		{
+			name:  "another hex length",
+			files: map[string]string{"internal/cli/a.go": "package cli\n\nconst re = `[0-9a-f]{12}`\n"},
+		},
+		{
 			name:  "git outside hostgit",
 			files: map[string]string{"internal/vm/a.go": runs("vm", "exec", `"git"`)},
 			want:  &want{ruleOwners, "runs git: run it through internal/hostgit"},
@@ -378,6 +413,9 @@ func TestRulesFail(t *testing.T) {
 			}
 			if r.envOwner == "" {
 				r.envOwner = devvm().envOwner
+			}
+			if r.literals == nil {
+				r.literals = devvm().literals
 			}
 			vs := check(m, r)
 			if tc.want == nil {

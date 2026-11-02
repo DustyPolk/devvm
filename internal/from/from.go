@@ -203,7 +203,7 @@ func DockerID(ctx context.Context, ref string) (string, bool) {
 	}
 	out, err := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", ref).Output() //nolint:gosec // a checked reference
 	id := strings.TrimSpace(string(out))
-	return id, err == nil && digestPattern.MatchString(id)
+	return id, err == nil && IsDigest(id)
 }
 
 // DockerRunning reports whether Docker is installed and running.

@@ -61,7 +61,7 @@ func (s packCache) packs() (map[string]string, error) {
 	if err == nil {
 		sc := bufio.NewScanner(f)
 		for sc.Scan() {
-			if key, sum, ok := strings.Cut(sc.Text(), " "); ok && keyPattern.MatchString(key) {
+			if key, sum, ok := strings.Cut(sc.Text(), " "); ok && image.IsKey(key) {
 				out[sum] = key
 			}
 		}
@@ -78,7 +78,7 @@ func (s packCache) packs() (map[string]string, error) {
 		return nil, err
 	}
 	for _, e := range entries {
-		if !keyPattern.MatchString(e.Name()) || known[e.Name()] {
+		if !image.IsKey(e.Name()) || known[e.Name()] {
 			continue
 		}
 		if sum, err := image.SHA256File(s.packFile(e.Name())); err == nil {

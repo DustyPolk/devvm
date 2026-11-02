@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/shell"
 )
 
 // strip returns JSON with comments (devcontainer.json's JSONC): its
@@ -136,7 +137,7 @@ func (p *parser) subst(key, s string, mode int) (string, error) {
 		switch {
 		case text.Len() == 0:
 		case mode == modeEnv:
-			out.WriteString(shellQuote(text.String()))
+			out.WriteString(shell.Quote(text.String()))
 		default:
 			out.WriteString(text.String())
 		}
@@ -163,7 +164,7 @@ func (p *parser) subst(key, s string, mode int) (string, error) {
 			lit(p.workspace)
 		case name == "containerWorkspaceFolderBasename":
 			lit(path.Base(p.workspace))
-		case isEnv && mode != modeLiteral && envName.MatchString(v):
+		case isEnv && mode != modeLiteral && shell.EnvName(v):
 			flush()
 			if mode == modeEnv {
 				out.WriteString(`"${` + v + `}"`)
@@ -183,6 +184,3 @@ func (p *parser) subst(key, s string, mode int) (string, error) {
 	}
 	return out.String(), nil
 }
-
-// shellQuote quotes s for a POSIX shell.
-func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

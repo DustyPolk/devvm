@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -25,7 +26,7 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if spec.Format != l.ToolFormat() {
 		return fmt.Errorf("lima: tool images are build.sh's own, not %q", spec.Format)
 	}
-	if !keyPattern.MatchString(spec.Base) {
+	if !image.IsKey(spec.Base) {
 		return fmt.Errorf("lima: invalid image key %q", spec.Base)
 	}
 	if !filepath.IsAbs(spec.Out) || !filepath.IsAbs(spec.OutAt) {

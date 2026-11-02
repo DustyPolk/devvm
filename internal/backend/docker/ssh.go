@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -275,11 +276,8 @@ func (d *Docker) sshShell(ctx context.Context, vm, dir string) ([]string, bool, 
 	if dir == "" {
 		dir = "/"
 	}
-	return t.SessionArgs(r.Agent, d.Terminal(), "cd -- "+shq(dir)+" && exec bash -l"), true, nil
+	return t.SessionArgs(r.Agent, d.Terminal(), "cd -- "+shell.Quote(dir)+" && exec bash -l"), true, nil
 }
-
-// shq quotes s for the VM's shell.
-func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // Connect connects its standard input and output to a new sshd in a VM's
 // container (devvm _docker-connect, ssh's ProxyCommand), with its

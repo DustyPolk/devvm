@@ -221,13 +221,11 @@ func (l *Lima) exportDocker(ctx context.Context, f *backend.From, dir string) (s
 // index.json: a few KB.
 const maxExportJSON = 16 << 20
 
-var idPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-
 // exportIs reports whether a docker save tarball holds the image with
 // Docker ID id: its config, as Docker's own image store names it, or its
 // manifest, as the containerd image store does.
 func exportIs(file, id string) bool {
-	if !idPattern.MatchString(id) {
+	if !from.IsDigest(id) {
 		return false
 	}
 	h := strings.TrimPrefix(id, "sha256:")

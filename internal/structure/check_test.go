@@ -34,6 +34,16 @@ type rules struct {
 	// envSettings the variables read elsewhere, by name.
 	envOwner    string
 	envSettings map[string]envSetting
+	// literals is text only one package's string literals hold, outside
+	// tests: what a copy of what that package owns would hold, then the
+	// package folder and what to use.
+	literals map[string]literalOwner
+}
+
+// A literalOwner is the package whose string literals alone hold a text,
+// and what others use instead.
+type literalOwner struct {
+	dir, use string
 }
 
 // An envSetting is a DEVVM_ variable read outside envOwner: the files
@@ -139,7 +149,7 @@ func load(fsys fs.FS) (*module, error) {
 
 // check runs every rule on m, the violations sorted.
 func check(m *module, r rules) []violation {
-	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r), checkEnv(m, r))
+	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r), checkEnv(m, r), checkLiterals(m, r))
 	slices.SortFunc(vs, func(a, b violation) int { return strings.Compare(a.String(), b.String()) })
 	return vs
 }

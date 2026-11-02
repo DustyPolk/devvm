@@ -15,7 +15,9 @@ import (
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // --clone: the VM works on its own clone of the repo instead of mounting
@@ -91,9 +93,9 @@ func checkCloneRepo(ctx context.Context, dir string) error {
 // can't prompt for a password.
 func (e clones) gitSSH(ctx context.Context, vm, dir string, args ...string) *exec.Cmd {
 	cmd := hostgit.Command(ctx, append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F "+shellQuote(e.Dirs.SSHConfig())+" -o BatchMode=yes"+
-		" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="+shellQuote(e.Dirs.KnownHosts())+" -o GlobalKnownHostsFile=/dev/null"+
-		" -o HostKeyAlias="+shellQuote(vm)+" -o ForwardAgent=no -o ClearAllForwardings=yes")
+	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F "+shell.Quote(e.Dirs.SSHConfig())+" -o BatchMode=yes"+
+		" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="+shell.Quote(e.Dirs.KnownHosts())+" -o GlobalKnownHostsFile=/dev/null"+
+		" -o HostKeyAlias="+shell.Quote(vm)+" -o ForwardAgent=no -o ClearAllForwardings=yes")
 	return cmd
 }
 
@@ -158,7 +160,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 // the VM's.
 func freeRemote(ctx context.Context, f project.Folder) (string, error) {
 	url := cloneURL(f.Name, f.Dir)
-	for _, r := range []string{"devvm", project.Prefix + f.Slug(), f.Name} {
+	for _, r := range []string{"devvm", vmname.Prefix + f.Slug(), f.Name} {
 		if got, ok := remoteURL(ctx, f.Dir, r); !ok || got == url {
 			return r, nil
 		}
