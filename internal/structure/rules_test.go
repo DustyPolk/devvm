@@ -251,7 +251,8 @@ func reads(p, call, name string) string {
 		"func f(getenv func(string) string) { _ = " + call + "(" + name + ") }\n"
 }
 
-// ownerCases break and keep the owners: devvm's commands and envOwner.
+// ownerCases break and keep the owners: devvm's commands, envOwner and
+// envOwners.
 func ownerCases() []ruleCase {
 	const platform = "package platform\n\nconst TestCPUs = \"DEVVM_TEST_CPUS\"\n"
 	listed := rules{envSettings: map[string]envSetting{"DEVVM_X": {[]string{"internal/tools/a.go"}, "x"}}}
@@ -360,7 +361,25 @@ func ownerCases() []ruleCase {
 		},
 		{
 			name:  "another variable",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "os.Getenv", `"TMPDIR"`)},
+		},
+		{
+			name:  "HOME outside paths",
 			files: map[string]string{"internal/tools/a.go": reads("tools", "os.Getenv", `"HOME"`)},
+			want:  &want{ruleOwners, "reads HOME: only internal/paths/dirs.go reads it"},
+		},
+		{
+			name:  "HOME through a field",
+			files: map[string]string{"internal/backend/smolvm/a.go": reads("smolvm", "s.Getenv", `"HOME"`)},
+			want:  &want{ruleOwners, "reads HOME"},
+		},
+		{
+			name:  "HOME in paths",
+			files: map[string]string{"internal/paths/dirs.go": "package paths\n\nfunc f(getenv func(string) string) { _ = getenv(\"HOME\") }\n"},
+		},
+		{
+			name:  "HOME in a test",
+			files: map[string]string{"internal/tools/a_test.go": reads("tools", "os.Getenv", `"HOME"`)},
 		},
 		{
 			name:  "a DEVVM_ variable set",
@@ -413,6 +432,9 @@ func TestRulesFail(t *testing.T) {
 			}
 			if r.envOwner == "" {
 				r.envOwner = devvm().envOwner
+			}
+			if r.envOwners == nil {
+				r.envOwners = devvm().envOwners
 			}
 			if r.literals == nil {
 				r.literals = devvm().literals

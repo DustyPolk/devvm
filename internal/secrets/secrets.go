@@ -83,8 +83,7 @@ func LoginFile(home, kind string) string {
 // Store reads secrets' values and agents' logins. NewStore sets every
 // field; tests change them.
 type Store struct {
-	Dirs paths.Dirs
-	Home string
+	Dirs paths.Dirs // its Home holds the agents' login files
 	// Keychain: values are in the Keychain (KeychainGet), else in files.
 	Keychain       bool
 	KeychainGet    func(ctx context.Context, service, account string) (string, error)
@@ -100,9 +99,9 @@ type Store struct {
 
 // NewStore returns the store for devvm's folders and the user's home,
 // warning through warn.
-func NewStore(d paths.Dirs, home string, warn func(msg.M)) *Store {
+func NewStore(d paths.Dirs, warn func(msg.M)) *Store {
 	s := &Store{
-		Dirs: d, Home: home, Keychain: platform.HasKeychain, Getenv: os.Getenv,
+		Dirs: d, Keychain: platform.HasKeychain, Getenv: os.Getenv,
 		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
 		Warn: warn,
 	}
@@ -128,7 +127,7 @@ func LoginKept(warn func(msg.M), agent string, names []string) {
 // ending in salt in place of its keys and tokens.
 func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
 	var out bytes.Buffer
-	err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-vm", "-login-salt", salt}, &out)
+	err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-vm", "-login-salt", salt}, &out)
 	return out.Bytes(), err
 }
 
@@ -136,7 +135,7 @@ func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
 // secrets; none when it can't be read.
 func (s *Store) MCPSecrets() []string {
 	var out bytes.Buffer
-	if s.Login([]string{"-login", "claude", "-login-file", LoginFile(s.Home, "claude"), "-login-secrets"}, &out) != nil {
+	if s.Login([]string{"-login", "claude", "-login-file", LoginFile(s.Dirs.Home, "claude"), "-login-secrets"}, &out) != nil {
 		return nil
 	}
 	return lines(out.String())
@@ -314,7 +313,7 @@ func loginOf(name string) (string, bool) {
 func (s *Store) Get(ctx context.Context, name string) (string, error) {
 	if kind, ok := loginOf(name); ok {
 		var out bytes.Buffer
-		if err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-get", name}, &out); err != nil {
+		if err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-get", name}, &out); err != nil {
 			return "", msg.ProxyFailed(err.Error()).Because(err)
 		}
 		return strings.TrimSpace(out.String()), nil
@@ -372,7 +371,7 @@ func (s *Store) Logins(img string) []string {
 		if !slices.Contains(as, k) {
 			continue
 		}
-		if fi, err := os.Stat(LoginFile(s.Home, k)); err == nil && fi.Mode().IsRegular() {
+		if fi, err := os.Stat(LoginFile(s.Dirs.Home, k)); err == nil && fi.Mode().IsRegular() {
 			kinds = append(kinds, k)
 		}
 	}
@@ -407,7 +406,7 @@ func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error
 	var hosts []string
 	// A login the helper can't read has no bindings.
 	for _, kind := range s.Logins(st.Get(state.KeyImage)) {
-		args := []string{"-login", kind, "-login-file", LoginFile(s.Home, kind), "-login-bindings", "-login-salt", salt}
+		args := []string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-bindings", "-login-salt", salt}
 		var out bytes.Buffer
 		var bs []json.RawMessage
 		if s.Login(args, &out) == nil && json.Unmarshal(out.Bytes(), &bs) == nil {

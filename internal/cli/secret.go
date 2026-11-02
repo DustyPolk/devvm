@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -202,7 +201,7 @@ func newSecretGetCmd(u *ui.UI) *cobra.Command {
 			dirs, err := paths.FromEnv()
 			var v string
 			if err == nil {
-				v, err = secrets.NewStore(dirs, os.Getenv("HOME"), u.Warn).Get(cmd.Context(), args[0])
+				v, err = secrets.NewStore(dirs, u.Warn).Get(cmd.Context(), args[0])
 			}
 			fail(u, err, func(reason string) msg.M { return msg.SecretReadFailed(reason, args[0]) })
 			_, err = u.Stdout().Write([]byte(v + "\n"))

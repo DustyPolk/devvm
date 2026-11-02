@@ -145,7 +145,8 @@ func funcName(call *ast.CallExpr) string {
 }
 
 // checkEnv: outside tests, a DEVVM_ variable is read only in envOwner, or
-// in the files envSettings lists for it. A call to a function or a field
+// in the files envSettings lists for it, and a variable envOwners lists
+// only in its file. A call to a function or a field
 // named Getenv or LookupEnv, in any case, reads its argument, a literal
 // or a constant. A listed file that no longer reads its variable fails.
 func checkEnv(m *module, r rules) []violation {
@@ -162,6 +163,12 @@ func checkEnv(m *module, r rules) []violation {
 				return
 			}
 			name, ok := c.value(m, f, call.Args[0])
+			if owner, owned := r.envOwners[name]; ok && owned {
+				if f.name != owner {
+					vs = append(vs, violation{ruleOwners, m.pos(call), fmt.Sprintf("reads %s: only %s reads it; take it from there", name, owner)})
+				}
+				return
+			}
 			if !ok || !strings.HasPrefix(name, "DEVVM_") || f.name == r.envOwner {
 				return
 			}

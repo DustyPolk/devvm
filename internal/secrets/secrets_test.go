@@ -25,8 +25,8 @@ func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
 	root := t.TempDir()
-	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	s := NewStore(d, filepath.Join(root, "home"), func(m msg.M) { t.Log(m.Names()) })
+	d := paths.Dirs{Home: filepath.Join(root, "home"), Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
+	s := NewStore(d, func(m msg.M) { t.Log(m.Names()) })
 	kc := map[string]string{}
 	s.Keychain = keychain
 	s.KeychainGet = func(_ context.Context, service, account string) (string, error) {
@@ -213,10 +213,10 @@ func TestGet(t *testing.T) {
 		t.Errorf("github = %q, %v", v, err)
 	}
 	for _, tc := range [][2]string{
-		{"codex-key", "codex " + s.Home + "/.codex/auth.json"},
-		{"codex", "codex " + s.Home + "/.codex/auth.json"},
-		{"opencode-anthropic", "opencode " + s.Home + "/.local/share/opencode/auth.json"},
-		{"claude-mcp-0123456789ab", "claude " + s.Home + "/.claude.json"},
+		{"codex-key", "codex " + s.Dirs.Home + "/.codex/auth.json"},
+		{"codex", "codex " + s.Dirs.Home + "/.codex/auth.json"},
+		{"opencode-anthropic", "opencode " + s.Dirs.Home + "/.local/share/opencode/auth.json"},
+		{"claude-mcp-0123456789ab", "claude " + s.Dirs.Home + "/.claude.json"},
 	} {
 		calls = nil
 		v, err := s.Get(ctx, tc[0])
@@ -252,7 +252,7 @@ func TestNamesAndLogins(t *testing.T) {
 		t.Errorf("Logins without files = %q", got)
 	}
 	for _, k := range loginKinds {
-		f := LoginFile(s.Home, k)
+		f := LoginFile(s.Dirs.Home, k)
 		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -279,7 +279,7 @@ func TestWriteFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = st.Set(KeySecrets, "github")
-	auth := LoginFile(s.Home, "codex")
+	auth := LoginFile(s.Dirs.Home, "codex")
 	if err := os.MkdirAll(filepath.Dir(auth), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestVMCopies(t *testing.T) {
 	s, _ := testStore(t, false, nil)
 	write := func(kind, data string) {
 		t.Helper()
-		f := LoginFile(s.Home, kind)
+		f := LoginFile(s.Dirs.Home, kind)
 		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
 			t.Fatal(err)
 		}

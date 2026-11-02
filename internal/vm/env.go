@@ -69,8 +69,7 @@ type Env struct {
 	Tools    *tools.Env
 	Proxy    *netpolicy.Proxy // VMs' network policy proxies
 	Dir      string           // the folder devvm runs in, a physical path
-	Home     string
-	OS       string // the host's, as Go names it
+	OS       string           // the host's, as Go names it
 	Host     func() (Host, error)
 	// Protector returns the .git protection for a project folder.
 	Protector func(dir string) *gitprotect.Protector
@@ -157,11 +156,10 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 	if wd, err = filepath.EvalSymlinks(wd); err != nil {
 		return nil, err
 	}
-	home := os.Getenv("HOME")
 	e := &Env{
 		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, u, reg.Host),
-		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, home, u.Warn), u),
-		Dir:   wd, Home: home, OS: runtime.GOOS,
+		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, u.Warn), u),
+		Dir:   wd, OS: runtime.GOOS,
 		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
@@ -172,7 +170,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
 	}
-	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, e.Warn) }
+	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Warn) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
 	e.Agent = sshagent.New(d, e.mounts, u)
 	return e, nil
@@ -288,7 +286,7 @@ func (e *Env) parentVM(ctx context.Context, nameMax int, flag string) (*found, e
 	if hasGit(e.Dir) {
 		repo = e.Dir
 	}
-	for _, dir := range project.Parents(e.Dir, e.Home) {
+	for _, dir := range project.Parents(e.Dir, e.Dirs.Home) {
 		pf, err := project.New(dir, nameMax)
 		if err != nil {
 			continue // a folder no VM can be made for

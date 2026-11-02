@@ -107,7 +107,7 @@ func TestToolsAdd(t *testing.T) {
 	tl := Tools{e}
 	st := existingVM(t, e, Options{Image: "go", NoNetworkPolicy: true})
 	vm := st.Name()
-	skills := filepath.Join(e.Home, ".claude", "skills")
+	skills := filepath.Join(e.Dirs.Home, ".claude", "skills")
 	if err := os.MkdirAll(skills, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestToolsAdd(t *testing.T) {
 	}
 
 	// Running: a new agent's folders after a restart it asks for.
-	prompts := filepath.Join(e.Home, ".codex", "prompts")
+	prompts := filepath.Join(e.Dirs.Home, ".codex", "prompts")
 	if err := os.MkdirAll(prompts, 0o700); err != nil {
 		t.Fatal(err)
 	}

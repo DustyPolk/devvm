@@ -177,7 +177,10 @@ func TestFormatAndKeyFiles(t *testing.T) {
 // user's home folder, where smolvm keeps machines.
 func TestDiskDirs(t *testing.T) {
 	s := newSandbox(t)
-	s.Getenv = func(k string) string { return map[string]string{"HOME": "/Users/u"}[k] }
+	s.Dirs.Home = "/Users/u"
+	if loc, ok := s.Location(); loc != "/Users/u" || !ok {
+		t.Errorf("macOS: Location = %q, %v", loc, ok)
+	}
 	if got := s.DiskDirs(); !slices.Equal(got, []string{s.Dirs.Smolvm(), "/Users/u"}) {
 		t.Errorf("macOS: DiskDirs = %q", got)
 	}

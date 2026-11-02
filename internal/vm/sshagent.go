@@ -123,7 +123,7 @@ func (e Launch) checkAgent(ctx context.Context) {
 	}
 	key := ""
 	for _, k := range defaultKeys {
-		p := filepath.Join(e.Home, ".ssh", k)
+		p := filepath.Join(e.Dirs.Home, ".ssh", k)
 		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
 			key = p
 			break

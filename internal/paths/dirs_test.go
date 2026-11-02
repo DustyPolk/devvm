@@ -20,27 +20,32 @@ func TestFromEnv(t *testing.T) {
 		{
 			name: "defaults under HOME",
 			env:  map[string]string{"HOME": "/h"},
-			want: Dirs{Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
+		},
+		{
+			name: "HOME cleaned",
+			env:  map[string]string{"HOME": "/h//x/../"},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
 		},
 		{
 			name: "XDG folders, LIMA_HOME ignored",
 			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "/d", "XDG_CONFIG_HOME": "/c/", "LIMA_HOME": "/elsewhere"},
-			want: Dirs{Data: "/d/devvm", Config: "/c/devvm", Lima: "/d/devvm/lima"},
+			want: Dirs{Home: "/h", Data: "/d/devvm", Config: "/c/devvm", Lima: "/d/devvm/lima"},
 		},
 		{
 			name: "DEVVM_LIMA_HOME moves the Lima home",
 			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "/d", "DEVVM_LIMA_HOME": "/short", "LIMA_HOME": "/elsewhere"},
-			want: Dirs{Data: "/d/devvm", Config: "/h/.config/devvm", Lima: "/short"},
+			want: Dirs{Home: "/h", Data: "/d/devvm", Config: "/h/.config/devvm", Lima: "/short"},
 		},
 		{
 			name: "a relative DEVVM_LIMA_HOME is made absolute",
 			env:  map[string]string{"HOME": "/h", "DEVVM_LIMA_HOME": "lt"},
-			want: Dirs{Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: filepath.Join(cwd, "lt")},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: filepath.Join(cwd, "lt")},
 		},
 		{
 			name: "relative XDG folders are ignored",
 			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "d", "XDG_CONFIG_HOME": "c"},
-			want: Dirs{Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
 		},
 	}
 	for _, tt := range tests {

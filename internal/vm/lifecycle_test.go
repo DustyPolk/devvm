@@ -215,7 +215,7 @@ func TestExportStartsAsLaunch(t *testing.T) {
 	gitIn(t, e.Dir, "init", "-q")
 	var locks []string
 	e.Protector = func(dir string) *gitprotect.Protector {
-		p := gitprotect.New(dir, quiet)
+		p := gitprotect.New(dir, e.Dirs.Home, quiet)
 		p.OS = "darwin"
 		p.Chflags = func(_ context.Context, flags, path string) error {
 			locks = append(locks, flags+" "+path)

@@ -12,6 +12,9 @@ import (
 // Dirs holds the folders devvm keeps its state in. Every file devvm writes
 // outside a VM is under one of them, never in a project folder.
 type Dirs struct {
+	// Home is the user's home folder: $HOME, which must be absolute. It's
+	// the one place devvm reads HOME; everything else takes it from here.
+	Home string
 	// Data is devvm's data folder: $XDG_DATA_HOME/devvm, by default
 	// ~/.local/share/devvm.
 	Data string
@@ -35,6 +38,7 @@ func fromEnv(getenv func(string) string) (Dirs, error) {
 		return Dirs{}, msg.HomeNotAbsolute()
 	}
 	d := Dirs{
+		Home:   filepath.Clean(home),
 		Data:   filepath.Join(xdg(getenv, "XDG_DATA_HOME", home, ".local", "share"), "devvm"),
 		Config: filepath.Join(xdg(getenv, "XDG_CONFIG_HOME", home, ".config"), "devvm"),
 	}

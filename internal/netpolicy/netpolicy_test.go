@@ -329,7 +329,9 @@ func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { retur
 
 func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	t.Helper()
-	store := secrets.NewStore(d, t.TempDir(), testUI{t}.Warn)
+	home := d
+	home.Home = t.TempDir()
+	store := secrets.NewStore(home, testUI{t}.Warn)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	f := &proxies{args: map[int][]string{}}
 	p := NewProxy(d, assets.FS, "/bin/sh", store, testUI{t})

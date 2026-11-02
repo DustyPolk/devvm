@@ -61,11 +61,11 @@ type Protector struct {
 	Warn func(msg.M)
 }
 
-// New returns the protector for the project folder dir, warning through
-// warn.
-func New(dir string, warn func(msg.M)) *Protector {
+// New returns the protector for the project folder dir, ~ in git's paths
+// being home (paths.Dirs.Home), warning through warn.
+func New(dir, home string, warn func(msg.M)) *Protector {
 	return &Protector{
-		Dir: dir, Home: os.Getenv("HOME"), OS: runtime.GOOS,
+		Dir: dir, Home: home, OS: runtime.GOOS,
 		Chflags: platform.Chflags, Locked: platform.Immutable, Warn: warn,
 	}
 }

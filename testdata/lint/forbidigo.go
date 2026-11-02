@@ -32,4 +32,6 @@ func finds(pid int) (*os.Process, error) { return os.FindProcess(pid) } // want 
 
 func client() any { return &http.Client{} } // want forbidigo
 
+func home() (string, error) { return os.UserHomeDir() } // want forbidigo
+
 func writesFile() error { return os.WriteFile("f", nil, 0o600) } // want forbidigo

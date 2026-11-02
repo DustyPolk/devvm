@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/sshagent"
 )
 
@@ -421,7 +422,7 @@ func TestCheckAgent(t *testing.T) {
 				}
 			}
 			var calls []string
-			e := &Env{Home: home, OS: tc.os, SSHAdd: func(_ context.Context, args ...string) int {
+			e := &Env{Dirs: paths.Dirs{Home: home}, OS: tc.os, SSHAdd: func(_ context.Context, args ...string) int {
 				calls = append(calls, strings.Join(args, " "))
 				return tc.rc
 			}}

@@ -86,12 +86,12 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		t.Fatal(err)
 	}
 	var execs []backend.Command
-	home := filepath.Join(root, "home")
+	d.Home = filepath.Join(root, "home")
 	e := &Env{
-		Dirs: d, Assets: assets.FS, Registry: reg, Tools: tl, Proxy: testProxy(t, d, home), Dir: dir, Home: home, OS: "darwin",
+		Dirs: d, Assets: assets.FS, Registry: reg, Tools: tl, Proxy: testProxy(t, d), Dir: dir, OS: "darwin",
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
-			p := gitprotect.New(dir, quiet)
+			p := gitprotect.New(dir, d.Home, quiet)
 			p.OS = "darwin" // as the Env's
 			p.Chflags = func(context.Context, string, string) error { return nil }
 			return p
@@ -147,9 +147,9 @@ func (a *agentCalls) run(_ context.Context, _ bool, argv ...string) (string, int
 
 // testProxy runs each VM's "proxy" as a sleep that says it listens, with
 // no Keychain and no backups.
-func testProxy(t *testing.T, d paths.Dirs, home string) *netpolicy.Proxy {
+func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 	t.Helper()
-	store := secrets.NewStore(d, home, quiet)
+	store := secrets.NewStore(d, quiet)
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	p := netpolicy.NewProxy(d, assets.FS, "/devvm", store, testUI{t})
 	p.Terminal = func() bool { return false }

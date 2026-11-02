@@ -98,6 +98,8 @@ linters:
           msg: signal processes through internal/daemon (Proc, Handle, Alive, Signal), which checks a pid is still the process it was.
         - pattern: ^http\.(Client|DefaultClient|DefaultTransport|Get|Head|Post|PostForm)$
           msg: reach the web through internal/fetch (fetch.NewClient, fetch.Client), which sets the timeout, the redirect policy and retries.
+        - pattern: ^os\.UserHomeDir$
+          msg: take the home folder from paths.Dirs.Home, the one place devvm reads HOME.
         - pattern: ^os\.WriteFile$
           msg: write a file whole through state.WriteFile, or state.WriteFileMode for another mode; internal/proxy uses its writeAtomic.
     nolintlint:

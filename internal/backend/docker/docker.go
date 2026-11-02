@@ -183,8 +183,8 @@ var _ backend.Backend = (*Docker)(nil)
 // (assets), on u.
 func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 	sharing := ""
-	if home, err := os.UserHomeDir(); err == nil && runtime.GOOS == "darwin" {
-		sharing = filepath.Join(home, "Library", "Group Containers", "group.com.docker", "settings-store.json")
+	if runtime.GOOS == "darwin" {
+		sharing = filepath.Join(d.Home, "Library", "Group Containers", "group.com.docker", "settings-store.json")
 	}
 	// As run, a link's path kept: devvm's ssh config names it, and a link
 	// (Homebrew's) outlives the version it points to.

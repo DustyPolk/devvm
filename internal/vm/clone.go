@@ -143,7 +143,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 	if err := st.Set(KeySeeded, "yes"); err != nil {
 		return err
 	}
-	if ok, err := e.sshConfig().EnsureInclude(e.Home); err != nil {
+	if ok, err := e.sshConfig().EnsureInclude(e.Dirs.Home); err != nil {
 		return err
 	} else if !ok {
 		e.Warn(msg.FetchUntil(e.Dirs.SSHConfig(), remote))

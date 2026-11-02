@@ -497,7 +497,7 @@ func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f 
 // devvm's state, or is inside devvm's own folders, unless the user means
 // it (unsafe).
 func (e Launch) checkUnsafe(dir string, unsafe bool) error {
-	u := project.Unsafe{Home: e.Home, Config: e.Dirs.Config, Data: e.Dirs.Data, Lima: e.Dirs.Lima}
+	u := project.Unsafe{Home: e.Dirs.Home, Config: e.Dirs.Config, Data: e.Dirs.Data, Lima: e.Dirs.Lima}
 	if holds := u.Holds(dir); holds != "" {
 		if !unsafe {
 			return msg.UnsafeFolder(dir, holds)

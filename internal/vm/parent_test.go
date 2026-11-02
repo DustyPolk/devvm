@@ -110,12 +110,12 @@ func TestLookupParents(t *testing.T) {
 		t.Errorf("findExisting past another folder's VM = %v, want no_vm", msg.NamesOf(err))
 	}
 	// Never the home folder's, or one above it.
-	e.Home = web
+	e.Dirs.Home = web
 	if dir, _ := lookupVM(t, e); dir != "" {
 		t.Errorf("with web as home: %q", dir)
 	}
 	// Without parents, only its own.
-	e.Home = filepath.Dir(web)
+	e.Dirs.Home = filepath.Dir(web)
 	if _, p, err := e.lookup(t.Context(), "", false); err != nil || p != nil {
 		t.Errorf("without parents: %+v, %v", p, err)
 	}

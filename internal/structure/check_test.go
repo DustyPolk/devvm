@@ -34,6 +34,9 @@ type rules struct {
 	// envSettings the variables read elsewhere, by name.
 	envOwner    string
 	envSettings map[string]envSetting
+	// envOwners are other variables one file reads: a variable's name,
+	// then the file, from the module's root.
+	envOwners map[string]string
 	// literals is text only one package's string literals hold, outside
 	// tests: what a copy of what that package owns would hold, then the
 	// package folder and what to use.

@@ -239,7 +239,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		s.put("ca/"+trust.Name(i), 0o644, c)
 	}
 	s.put("tools", 0o644, tools.Mounts(files))
-	s.put("host_home", 0o644, []byte(e.Home+"\n"))
+	s.put("host_home", 0o644, []byte(e.Dirs.Home+"\n"))
 
 	// The host's settings, for every VM.
 	lang := e.Getenv("LC_ALL")
@@ -278,17 +278,17 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	agents := agentsOf(img)
 	var links bytes.Buffer
 	for _, a := range agents {
-		for _, rel := range agentDirs(e.Home, a) {
+		for _, rel := range agentDirs(e.Dirs.Home, a) {
 			links.WriteString(rel + "\n")
 		}
-		for _, rel := range agentFiles(e.Home, a) {
-			if err := s.copy("home/"+rel, filepath.Join(e.Home, rel)); err != nil {
+		for _, rel := range agentFiles(e.Dirs.Home, a) {
+			if err := s.copy("home/"+rel, filepath.Join(e.Dirs.Home, rel)); err != nil {
 				return nil, err
 			}
 		}
 	}
 	if slices.Contains(agents, "claude") {
-		if err := s.copy("claude.json", secrets.LoginFile(e.Home, "claude")); err != nil {
+		if err := s.copy("claude.json", secrets.LoginFile(e.Dirs.Home, "claude")); err != nil {
 			return nil, err
 		}
 		// With network policy the copy holds placeholders (below).
@@ -370,7 +370,7 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) e
 		}
 		name := "claude.json" // merged by sync.sh, not copied
 		if kind != "claude" {
-			rel, err := filepath.Rel(store.Home, secrets.LoginFile(store.Home, kind))
+			rel, err := filepath.Rel(store.Dirs.Home, secrets.LoginFile(store.Dirs.Home, kind))
 			if err != nil {
 				return err
 			}
@@ -387,7 +387,7 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) e
 		if !ok {
 			continue
 		}
-		shown := filepath.Join(e.Home, rel)
+		shown := filepath.Join(e.Dirs.Home, rel)
 		out, keys, err := secrets.Redact(format, f.data)
 		if err != nil {
 			s.drop(f.name)

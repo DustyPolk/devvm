@@ -198,8 +198,8 @@ func (s *Smolvm) KeyFiles() map[string][]byte {
 // under the user's home folder (backend.Storage).
 func (s *Smolvm) DiskDirs() []string {
 	dirs := []string{s.Dirs.Smolvm()}
-	if home := s.Getenv("HOME"); s.OS != "linux" && home != "" {
-		dirs = append(dirs, home)
+	if s.OS != "linux" && s.Dirs.Home != "" {
+		dirs = append(dirs, s.Dirs.Home)
 	}
 	return dirs
 }

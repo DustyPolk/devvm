@@ -41,7 +41,7 @@ func mkdirs(t *testing.T, home string, rels ...string) {
 // warning.
 func TestAgentMounts(t *testing.T) {
 	home := t.TempDir()
-	e := &Env{Home: home}
+	e := &Env{Dirs: paths.Dirs{Home: home}}
 	got := printed(t, e, false)
 	mkdirs(t, home, ".config/opencode/my agents", ".config/opencode/node_modules", ".config/opencode/a\nb", ".claude/skills", ".codex/prompts", ".claude/agents")
 	if err := os.WriteFile(filepath.Join(home, ".claude", "commands"), nil, 0o600); err != nil {
@@ -58,7 +58,7 @@ func TestAgentMounts(t *testing.T) {
 	}
 	comma := filepath.Join(t.TempDir(), "a,b")
 	mkdirs(t, comma, ".codex/prompts")
-	e.Home = comma
+	e.Dirs.Home = comma
 	if ms := (Launch{e}).AgentMounts("codex"); ms != nil {
 		t.Errorf("AgentMounts with a comma = %q", ms)
 	}
@@ -122,7 +122,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			e := &Env{Home: home}
+			e := &Env{Dirs: paths.Dirs{Home: home}}
 			got := printed(t, e, tc.tty)
 			if tc.name != "nothing changed, nothing edited" {
 				mkdirs(t, home, ".claude/agents")

@@ -100,8 +100,8 @@ func agentsOf(img string) []string {
 func (e Launch) AgentMounts(img string) []string {
 	var dirs []string
 	for _, a := range agentsOf(img) {
-		for _, rel := range agentDirs(e.Home, a) {
-			p := filepath.Join(e.Home, rel)
+		for _, rel := range agentDirs(e.Dirs.Home, a) {
+			p := filepath.Join(e.Dirs.Home, rel)
 			if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 				continue
 			}

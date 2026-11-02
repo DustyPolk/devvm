@@ -521,7 +521,7 @@ func TestRealLocks(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	t.Cleanup(func() { _ = exec.Command("chflags", "-R", "nouchg", f.root).Run() }) //nolint:noctx,gosec // cleanup, of the test's own folder
-	f.p.Chflags = New(f.dir, nil).Chflags
+	f.p.Chflags = New(f.dir, f.p.Home, nil).Chflags
 	f.git(f.root, "init", "-q", "--template=", f.dir)
 	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
 		t.Fatal(err)
@@ -538,7 +538,7 @@ func TestRealLocks(t *testing.T) {
 	if len(f.warns.Names()) > 0 {
 		t.Errorf("warnings %q", f.warns.Names())
 	}
-	if locked := New(f.dir, nil).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
+	if locked := New(f.dir, f.p.Home, nil).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
 		t.Error("Locked doesn't see the flag")
 	}
 }
@@ -823,5 +823,17 @@ func TestSetLinuxAndNoGit(t *testing.T) {
 	f.set(Strict)
 	if f.vm.Get(KeyGitProtect) != Strict || len(f.flags)+len(f.warns.Names()) > 0 {
 		t.Errorf("no .git: %s, locks %q, warnings %q", f.vm.Get(KeyGitProtect), f.flags, f.warns.Names())
+	}
+}
+
+// ~ in git's paths is the home folder New is given, never the
+// environment's HOME.
+func TestNewHome(t *testing.T) {
+	t.Setenv("HOME", "/elsewhere")
+	p := New("/p", "/h", nil)
+	for in, want := range map[string]string{"~": "/h", "~/x": "/h/x", "~x/y": "~x/y", "/a": "/a"} {
+		if got := p.expandHome(in); got != want {
+			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

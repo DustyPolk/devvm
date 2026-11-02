@@ -20,8 +20,7 @@ var (
 // machines); on Linux smolvm's state in devvm's data folder.
 func (s *Smolvm) Location() (string, bool) {
 	if s.OS == "darwin" {
-		home, _ := os.UserHomeDir()
-		return home, true
+		return s.Dirs.Home, true
 	}
 	return s.stateDir(), true
 }
