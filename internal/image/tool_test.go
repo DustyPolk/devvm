@@ -25,8 +25,22 @@ func node() Tool {
 	return Tool{Name: "node", Version: "24.21.0", LockEntry: []byte(nodeEntry), Libc: "gnu"}
 }
 
+const miseConfig = `# The shared tools.
+[tools]
+node = "24"
+python = "latest"
+
+[settings]
+experimental = true
+python.compile = false
+`
+
 func toolRoot(script string) fstest.MapFS {
-	return fstest.MapFS{"shared-tools/build.sh": {Data: []byte(script)}}
+	return withConfig(script, miseConfig)
+}
+
+func withConfig(script, config string) fstest.MapFS {
+	return fstest.MapFS{"shared-tools/build.sh": {Data: []byte(script)}, "shared-tools/mise.toml": {Data: []byte(config)}}
 }
 
 func toolFile(t *testing.T, root fstest.MapFS, tool Tool) string {
@@ -57,6 +71,8 @@ func TestToolFile(t *testing.T) {
 		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc = "musl" }},
 		{"the version", root, func(t *Tool) { t.Version = "24.22.0" }},
 		{"the format (smolvm's)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
+		{"a setting in mise.toml", withConfig("#!/bin/bash\n", strings.Replace(miseConfig, "compile = false", "compile = true", 1)), func(*Tool) {}},
+		{"a setting added to mise.toml", withConfig("#!/bin/bash\n", miseConfig+"node.gpg_verify = false\n"), func(*Tool) {}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -66,6 +82,19 @@ func TestToolFile(t *testing.T) {
 				t.Errorf("still %q", got)
 			}
 		})
+	}
+	// What the lock entry already holds (the tools and their holds), the
+	// comments and how the settings are written don't change it.
+	same := map[string]string{
+		"a tool's hold": strings.Replace(miseConfig, `node = "24"`, `node = "26"`, 1),
+		"a comment":     "# edited\n" + miseConfig,
+		"the settings written another way": strings.Replace(miseConfig, "experimental = true\npython.compile = false",
+			"python = { compile = false }\nexperimental = true", 1),
+	}
+	for name, config := range same {
+		if got := toolFile(t, withConfig("#!/bin/bash\n", config), node()); got != f {
+			t.Errorf("%s: %q, want %q", name, got, f)
+		}
 	}
 }
 
@@ -88,8 +117,14 @@ func TestToolFileRefuses(t *testing.T) {
 			t.Errorf("%s: no error", name)
 		}
 	}
-	if _, err := ToolFile(fstest.MapFS{}, node()); err == nil {
+	if _, err := ToolFile(fstest.MapFS{"shared-tools/mise.toml": {Data: []byte(miseConfig)}}, node()); err == nil {
 		t.Error("no shared-tools/build.sh: no error")
+	}
+	if _, err := ToolFile(fstest.MapFS{"shared-tools/build.sh": {}}, node()); err == nil {
+		t.Error("no shared-tools/mise.toml: no error")
+	}
+	if _, err := ToolFile(withConfig("", "[settings\n"), node()); err == nil {
+		t.Error("a mise.toml that isn't TOML: no error")
 	}
 }
 

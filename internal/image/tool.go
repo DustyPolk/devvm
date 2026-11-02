@@ -3,6 +3,7 @@ package image
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 
 	"github.com/w3cj/devvm/internal/msg"
 )
@@ -124,8 +127,9 @@ var (
 
 // ToolFile names a tool's image: <tool>-<version>-<key>.erofs. The key is
 // 12 hex digits of a SHA-256 over the tool's lock entry, devvm's
-// shared-tools/build.sh (in assets, devvm's own files), the libc and,
-// unless it's build.sh's own, the format.
+// shared-tools/build.sh (in assets, devvm's own files), the [settings] of
+// devvm's shared-tools/mise.toml, which change what mise installs, the
+// libc and, unless it's build.sh's own, the format.
 func ToolFile(assets fs.FS, t Tool) (string, error) {
 	if !toolName.MatchString(t.Name) {
 		return "", fmt.Errorf("invalid tool name %q", t.Name)
@@ -143,11 +147,35 @@ func ToolFile(assets fs.FS, t Tool) (string, error) {
 	if err := k.own(assets, "shared-tools/build.sh"); err != nil {
 		return "", err
 	}
+	settings, err := miseSettings(assets)
+	if err != nil {
+		return "", err
+	}
+	k.bytes("mise-settings", settings)
 	k.field("libc", t.Libc)
 	if t.Format != "" {
 		k.field("format", t.Format)
 	}
 	return t.Name + "-" + t.Version + "-" + k.sum() + ".erofs", nil
+}
+
+// miseSettings is the [settings] table of devvm's shared-tools/mise.toml,
+// as JSON (its keys sorted), so only what the settings say counts: not
+// comments, how they're written, nor the [tools] table, whose holds the
+// lock entry already reflects.
+func miseSettings(assets fs.FS) ([]byte, error) {
+	const name = "shared-tools/mise.toml"
+	data, err := fs.ReadFile(assets, name)
+	if err != nil {
+		return nil, fmt.Errorf("reading devvm's %s: %w", name, err)
+	}
+	var config struct {
+		Settings map[string]any `toml:"settings"`
+	}
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("reading devvm's %s: %w", name, err)
+	}
+	return json.Marshal(config.Settings)
 }
 
 // ParseToolFile reads the tool and version from a tool image's name.
