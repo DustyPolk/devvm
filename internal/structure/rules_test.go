@@ -16,7 +16,7 @@ func imports(p, dir string) string {
 type ruleCase struct {
 	name  string
 	files map[string]string
-	r     rules // maxMethods 2 and devvm's layers unless set
+	r     rules // maxMethods 2, devvm's layers, commands and envOwner unless set
 	want  *want // nil: no violation
 }
 
@@ -238,11 +238,125 @@ func layerCases() []ruleCase {
 	}
 }
 
+// runs is a file in package p that runs name with os/exec, imported as
+// exec.
+func runs(p, exec, name string) string {
+	return "package " + p + "\n\nimport " + exec + " \"os/exec\"\n\nfunc f() { _ = " + exec + ".Command(" + name + ") }\n"
+}
+
+// reads is a file in package p that reads the variable name with call,
+// importing os and the module's internal/platform.
+func reads(p, call, name string) string {
+	return "package " + p + "\n\nimport (\n\t\"os\"\n\n\t\"example.com/m/internal/platform\"\n)\n\n" +
+		"func f(getenv func(string) string) { _ = " + call + "(" + name + ") }\n"
+}
+
+// ownerCases break and keep the owners: devvm's commands and envOwner.
+func ownerCases() []ruleCase {
+	const platform = "package platform\n\nconst TestCPUs = \"DEVVM_TEST_CPUS\"\n"
+	listed := rules{envSettings: map[string]envSetting{"DEVVM_X": {[]string{"internal/tools/a.go"}, "x"}}}
+	return []ruleCase{
+		{
+			name:  "git outside hostgit",
+			files: map[string]string{"internal/vm/a.go": runs("vm", "exec", `"git"`)},
+			want:  &want{ruleOwners, "runs git: run it through internal/hostgit"},
+		},
+		{
+			name: "git with a context, exec imported as another name",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nimport x \"os/exec\"\n\n" +
+				"func f() { _ = x.CommandContext(nil, \"git\", \"status\") }\n"},
+			want: &want{ruleOwners, "runs git"},
+		},
+		{
+			name:  "git by a constant",
+			files: map[string]string{"internal/vm/a.go": runs("vm", "exec", "git") + "const git = \"git\"\n"},
+			want:  &want{ruleOwners, "runs git"},
+		},
+		{
+			name:  "git in hostgit",
+			files: map[string]string{"internal/hostgit/a.go": runs("hostgit", "exec", `"git"`)},
+		},
+		{
+			name:  "git in a test",
+			files: map[string]string{"internal/vm/a_test.go": runs("vm", "exec", `"git"`)},
+		},
+		{
+			name:  "another command",
+			files: map[string]string{"internal/vm/a.go": runs("vm", "exec", `"ssh"`)},
+		},
+		{
+			name:  "a DEVVM_ variable outside the overrides",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "os.Getenv", `"DEVVM_X"`)},
+			want:  &want{ruleOwners, "reads DEVVM_X"},
+		},
+		{
+			name:  "a DEVVM_ variable through a parameter",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "getenv", `"DEVVM_X"`)},
+			want:  &want{ruleOwners, "reads DEVVM_X"},
+		},
+		{
+			name:  "a DEVVM_ variable through a field",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "t.Getenv", `"DEVVM_X"`)},
+			want:  &want{ruleOwners, "reads DEVVM_X"},
+		},
+		{
+			name:  "a DEVVM_ variable looked up",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "os.LookupEnv", `"DEVVM_X"`)},
+			want:  &want{ruleOwners, "reads DEVVM_X"},
+		},
+		{
+			name: "a DEVVM_ variable by another package's constant",
+			files: map[string]string{
+				"internal/platform/a.go": platform,
+				"internal/tools/a.go":    reads("tools", "os.Getenv", "platform.TestCPUs"),
+			},
+			want: &want{ruleOwners, "reads DEVVM_TEST_CPUS"},
+		},
+		{
+			name: "a DEVVM_ variable in the overrides",
+			files: map[string]string{
+				"internal/platform/a.go":    platform,
+				"internal/cli/overrides.go": reads("cli", "getenv", "platform.TestCPUs"),
+			},
+		},
+		{
+			name:  "a DEVVM_ variable in a test",
+			files: map[string]string{"internal/tools/a_test.go": reads("tools", "os.Getenv", `"DEVVM_X"`)},
+		},
+		{
+			name:  "another variable",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "os.Getenv", `"HOME"`)},
+		},
+		{
+			name:  "a DEVVM_ variable set",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nvar env = []string{\"DEVVM_TZ=\" + tz}\n"},
+			r:     rules{allowedVars: map[string]string{"internal/vm.env": "x"}},
+		},
+		{
+			name:  "a setting where it's listed",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "os.Getenv", `"DEVVM_X"`)},
+			r:     listed,
+		},
+		{
+			name:  "a setting elsewhere",
+			files: map[string]string{"internal/tools/a.go": reads("tools", "os.Getenv", `"DEVVM_X"`), "internal/vm/a.go": reads("vm", "os.Getenv", `"DEVVM_X"`)},
+			r:     listed,
+			want:  &want{ruleOwners, "reads DEVVM_X"},
+		},
+		{
+			name:  "a setting no longer read",
+			files: map[string]string{"internal/tools/a.go": "package tools\n"},
+			r:     listed,
+			want:  &want{ruleOwners, "DEVVM_X isn't read in internal/tools/a.go"},
+		},
+	}
+}
+
 // Each rule fails on code that breaks it, naming the rule, and passes
 // what it allows.
 func TestRulesFail(t *testing.T) {
 	var broken []string // the layer violations' texts
-	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases()) {
+	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases()) {
 		t.Run(tc.name, func(t *testing.T) {
 			fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/m\n\ngo 1.27\n")}}
 			for name, src := range tc.files {
@@ -258,6 +372,12 @@ func TestRulesFail(t *testing.T) {
 			}
 			if r.layers == nil {
 				r.layers = devvm().layers
+			}
+			if r.commands == nil {
+				r.commands = devvm().commands
+			}
+			if r.envOwner == "" {
+				r.envOwner = devvm().envOwner
 			}
 			vs := check(m, r)
 			if tc.want == nil {

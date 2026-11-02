@@ -86,6 +86,8 @@ linters:
           msg: take the caller's ctx; a fresh one only where it must outlive it, with a nolint saying why.
         - pattern: ^(runtime\.NumCPU|unix\.(Statfs|Fstatfs|Sysinfo|SysctlUint64)|syscall\.(Statfs|Fstatfs|Sysinfo))$
           msg: read the host's CPUs, memory and free space through platform.Host, which test builds can override.
+        - pattern: ^testbuild\.On$
+          msg: only internal/cli asks whether this is a test build, in readOverrides; take its overrides as fields.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -113,6 +115,9 @@ linters:
       - path: ^internal/platform/
         linters: [forbidigo]
         text: runtime\.NumCPU|unix\.|syscall\.
+      - path: ^internal/cli/
+        linters: [forbidigo]
+        text: testbuild\.On
     paths:
       - ^\.agents/
 

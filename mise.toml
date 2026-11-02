@@ -33,6 +33,14 @@ depends = ["lint:code", "lint:docs"]
 description = "Lint the Go code, shell scripts and GitHub workflows"
 run = [
   "golangci-lint run",
+  # Each forbidigo rule fires: testdata/lint breaks each once, on the lines
+  # ending in "// want forbidigo", and forbidigo reports those lines alone.
+  '''
+  want=$(grep -Hn '// want forbidigo$' testdata/lint/*.go | cut -d: -f1,2 | sort)
+  got=$(golangci-lint run --enable-only forbidigo --max-same-issues=0 --max-issues-per-linter=0 \
+    --output.text.print-issued-lines=false --show-stats=false ./testdata/lint/ | grep '(forbidigo)$' | cut -d: -f1,2 | sort)
+  [ "$want" = "$got" ] || { printf 'forbidigo reported:\n%s\ntestdata/lint wants:\n%s\n' "$got" "$want" >&2; exit 1; }
+  ''',
   # The workflows: actionlint (with shellcheck on run steps), then zizmor's
   # security audits, offline so a run never depends on GitHub's API.
   "actionlint",

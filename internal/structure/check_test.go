@@ -18,6 +18,7 @@ const (
 	ruleInit    = "no-init"
 	ruleVars    = "package-vars"
 	ruleLayers  = "layers"
+	ruleOwners  = "owners"
 )
 
 // rules is what check holds a module to.
@@ -26,6 +27,20 @@ type rules struct {
 	largeTypes  map[string]large // types allowed more, by "folder.Type"
 	allowedVars map[string]string
 	layers      []layer
+	// commands are the host commands one package runs: a command's name,
+	// then the package folder that runs it.
+	commands map[string]string
+	// envOwner is the one file that reads devvm's DEVVM_ variables, and
+	// envSettings the variables read elsewhere, by name.
+	envOwner    string
+	envSettings map[string]envSetting
+}
+
+// An envSetting is a DEVVM_ variable read outside envOwner: the files
+// that read it, from the module's root, and why.
+type envSetting struct {
+	files []string
+	why   string
 }
 
 // A large type may have more than maxMethods: at most max, its count
@@ -58,6 +73,7 @@ func (v violation) String() string { return v.rule + ": " + v.pos + ": " + v.tex
 
 // A srcFile is one parsed Go file.
 type srcFile struct {
+	name string // its path from the module's root
 	dir  string // its package's folder from the module's root ("." for the root)
 	test bool
 	ast  *ast.File
@@ -114,7 +130,7 @@ func load(fsys fs.FS) (*module, error) {
 			return err
 		}
 		if !ast.IsGenerated(f) {
-			m.files = append(m.files, srcFile{dir: path.Dir(name), test: strings.HasSuffix(name, "_test.go"), ast: f})
+			m.files = append(m.files, srcFile{name: name, dir: path.Dir(name), test: strings.HasSuffix(name, "_test.go"), ast: f})
 		}
 		return nil
 	})
@@ -123,7 +139,7 @@ func load(fsys fs.FS) (*module, error) {
 
 // check runs every rule on m, the violations sorted.
 func check(m *module, r rules) []violation {
-	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r))
+	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r), checkEnv(m, r))
 	slices.SortFunc(vs, func(a, b violation) int { return strings.Compare(a.String(), b.String()) })
 	return vs
 }

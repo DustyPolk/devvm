@@ -77,6 +77,21 @@ func devvm() rules {
 			"internal/ubuntu.sumAmd64":               fixture,
 			"internal/ubuntu.testAssets":             fixture,
 		},
+		// hostgit runs git without the repo's fsmonitor, hooks or filters,
+		// over ssh only, without the environment's GIT_* and prompts.
+		commands: map[string]string{"git": "internal/hostgit"},
+		// readOverrides reads a test build's stand-ins, and a release
+		// none.
+		envOwner: "internal/cli/overrides.go",
+		envSettings: map[string]envSetting{
+			"DEVVM_NO_TOOL_CHECK":  {[]string{"internal/tools/tools.go"}, "a user setting: no daily check for newer shared tools"},
+			"DEVVM_LIMA_HOME":      {[]string{"internal/paths/dirs.go"}, "a user setting: devvm's Lima home"},
+			"DEVVM_SECRET_SERVICE": {[]string{"internal/secrets/secrets.go"}, "a user setting: the Keychain service secrets are saved under"},
+			"DEVVM_FROM":           {[]string{"internal/cli/flags.go"}, "a user setting: --from's default"},
+			"DEVVM_MESSAGES":       {[]string{"internal/msg/msg.go", "internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
+			"DEVVM_LOGIN_SALT":     {[]string{"internal/proxy/proxy.go"}, "what devvm gives its own proxy, devvm _proxy"},
+			"DEVVM_GUESTFWD":       {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
+		},
 		layers: []layer{
 			{
 				name: "only cmd/devvm and internal/cli hold the UI",

@@ -69,13 +69,15 @@ golangci-lint enforces the [Go conventions](https://github.com/w3cj/devvm/blob/m
 
 | Rule | Enforces |
 | --- | --- |
-| forbidigo | only `internal/ui` prints (`fmt.Print*`, `os.Stdout`, `os.Stderr`); only `cmd/devvm` calls `os.Exit`; only `internal/ui` and `cmd/devvm` make a context (`context.Background`, `context.TODO`), every other function takes its caller's |
+| forbidigo | only `internal/ui` prints (`fmt.Print*`, `os.Stdout`, `os.Stderr`); only `cmd/devvm` calls `os.Exit`; only `internal/ui` and `cmd/devvm` make a context (`context.Background`, `context.TODO`), every other function takes its caller's; only `internal/platform` reads the host's CPUs, memory and free space, which the rest reads through `platform.Host`; only `internal/cli` calls `testbuild.On` |
 | depguard | the allowed modules; `internal/proxy` uses only the standard library; only `cmd/devvm` and `internal/cli` import `internal/ui` |
 | nolintlint | every `//nolint` names its linters and says why, and is still needed |
 | reassign | no package reassigns another package's variables, tests included |
 | revive | at most 100 statements or 160 lines a function (`function-length`), and a cognitive complexity of 75 (`cognitive-complexity`) |
 
 A fresh context elsewhere, such as for a cleanup that outlives a canceled run, or a lookup that many requests share, takes `//nolint:forbidigo // <why>`.
+
+`testdata/lint/forbidigo.go` breaks each forbidigo rule once, on a line that ends in `// want forbidigo`. `mise run lint:code` lints it with forbidigo alone and fails unless forbidigo reports exactly those lines, so a rule whose pattern stops matching fails there. A new rule gets its line in the file. `./...` leaves `testdata` out, so the file never fails the lint run of the code itself.
 
 ## The structure test
 
@@ -87,6 +89,7 @@ A fresh context elsewhere, such as for a cleanup that outlives a canceled run, o
 | `no-init` | no `func init()` |
 | `package-vars` | outside `internal/proxy`, a package-level `var` is a blank interface check, an `Err*`/`err*` sentinel from `errors.New` or `fmt.Errorf`, a `regexp.MustCompile`, `template.Must` or `sync.Once*` result, a `//go:embed` file, or listed in `allowedVars`; anything else becomes a field, a const or a local |
 | `layers` | which packages import which, in non-test files (tests may wire packages together) |
+| `owners` | in non-test files, only its owner runs a host command that `commands` lists, and only `envOwner` reads a `DEVVM_` variable, but the settings `envSettings` lists ([details](#the-checks-on-owners)) |
 
 The layers:
 
@@ -101,8 +104,45 @@ Everything it holds the code to is in `devvm()` in `internal/structure/structure
 - **`largeTypes`** lists the types allowed more methods (the backends, which implement all of `backend.Backend`, among them), each with its count as its maximum and why. One that grows fails; one that shrinks fails until its maximum is lowered.
 - **`allowedVars`** lists the other package-level vars, by package folder and name, each with why: values set by `-ldflags`, fixed tables, test fixtures. An entry whose var is gone fails.
 - **`layers`** is the layering table: a layer's packages (`from`, but not `exceptFrom`) import none of `to` (but `exceptTo`); `x/...` is `x` and the packages below it.
+- **`commands`** maps a host command to the one package that runs it, and **`envOwner`** names the one file that reads devvm's `DEVVM_` variables. **`envSettings`** lists the variables read elsewhere, each with the files that read it and why. A listed file that no longer reads its variable fails.
 
 `TestRulesFail` breaks each rule, and each layer, on small sources and checks the failure names it.
+
+## One owner for each concern
+
+Each concern in devvm has one owner, the package or function that does it, such as `internal/hostgit` for every git command devvm runs on the host, `internal/paths` for every folder and file devvm uses, and `locales/en.toml` for every message. Before you add a helper, a parser, a path, a file reader, a message or a table, find its owner and extend it. A second copy drifts from the first, and then one of them is wrong. AGENTS.md's layout table names the owners, and so do the failures of the checks below.
+
+### The checks on owners
+
+An owner gets a check only when a second copy would be a bug or a security hole, and only when the check is exact, so that it never fails on code that's right. Each check's failure names the owner:
+
+| Check | Owner | Allowed elsewhere |
+| --- | --- | --- |
+| forbidigo, `testbuild.On` | `internal/cli`, whose `readOverrides` is the only code that asks whether this is a test build | nowhere: other packages take the overrides as fields |
+| the structure test's `owners`, git | `internal/hostgit`, which runs git without the repo's fsmonitor, hooks or filters, over ssh only, without the environment's `GIT_*` variables and prompts | tests, which run git to make their repos |
+| the structure test's `owners`, `DEVVM_` variables | `readOverrides` in `internal/cli/overrides.go`, which reads a test build's stand-ins, while a release reads none | the settings in `envSettings`, and tests |
+
+forbidigo matches only the function a call names, so the checks that look at a call's arguments are in the [structure test](#the-structure-test). It finds a host command in an `exec.Command` or `exec.CommandContext` call that names it, as a literal or as a constant, whatever name the file imports `os/exec` under. It finds a `DEVVM_` variable in a call to any function or field named `Getenv` or `LookupEnv`, in any case, so `t.Getenv` and a `getenv` parameter count as well as `os.Getenv`. The settings `envSettings` lists are the ones users set, `DEVVM_NO_TOOL_CHECK`, `DEVVM_LIMA_HOME`, `DEVVM_SECRET_SERVICE` and `DEVVM_FROM`; names mode, `DEVVM_MESSAGES`, which any build has; and the variables devvm sets for its own processes, `DEVVM_LOGIN_SALT` for `devvm _proxy` and `DEVVM_GUESTFWD` for `devvm _qemu`.
+
+Four concerns still have copies, so each gets its check in the change that gives it one owner: writing devvm's state files, through `internal/state` alone; HTTP clients; signaling processes, through one helper and `internal/platform`; and running external commands, through the UI's `LoggedCmd`, a backend's runner and `internal/hostgit`.
+
+### Agreement tests
+
+When two places must agree but can't be one, a test checks that they agree. `TestLinkAddrsAgree` checks that `internal/vm` and `internal/backend/vmssh`, which can't import it, give each link the same addresses. `TestEveryPartHasAPolicy` checks that every image part has its policy, `TestBuiltinPolicies` that every policy devvm ships parses, `TestEveryMessageIsUsed` that every message has a caller, `TestDocLinks` that every doc link is a message and a heading, and `TestReferenceIsCurrent` that the CLI reference matches the commands. A new pair of places that must agree gets such a test.
+
+### The consolidation pass
+
+A review of a body of work, and the review before a release, look across the code for copies:
+
+- two parsers of one format
+- a path built outside `internal/paths`
+- a list of files kept beside the folder that holds them
+- a value encoded in a string
+- two messages that say one thing
+- a comment that says to keep two places in sync
+- a test that copies a constant
+
+Each copy gets one of three outcomes: extend the owner, make one owner, or leave it. Leave it when the only shared helper would be the wrong one, because a copy costs less than the wrong helper, and wait for a third copy before making one. The pass is part of those reviews, not a step every change runs.
 
 ## CLI conventions
 

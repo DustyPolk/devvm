@@ -27,7 +27,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts; the built-in layers, `docker` and `nix`, each with its policy), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`), `container/` (smolvm's and Docker's scripts in containers), `smolvm/`, `docker/` (each one's own) |
 | `internal/structure/` | the structure test (tests only) |
 | `internal/stubtest/` | Go tests' stubs on `PATH` (tests only): their folder, calls and files, `ExecRunner`; `msg.Recorder` and `msg.NamesOf` are tests' too, `backendtest.Stored` a fake with disks |
-| `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture), `coverage/<os>.txt` (each package's coverage baseline, per system) |
+| `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture), `coverage/<os>.txt` (each package's coverage baseline, per system), `lint/` (a line breaking each forbidigo rule, which `lint:code` checks) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |
 | `scripts/`, `packaging/`, `.goreleaser.yaml`, `VERSION`, `CHANGELOG.md` | `bump.sh` (pins), `release.sh` (signed-tag checks around GoReleaser, then minisign), `test.sh` and `coverage.sh` (mise's test tasks); the Homebrew formula; `VERSION` is read by the scripts only |
 | `install.sh` | `curl \| bash`: the host's archive (the binary, README, changelog, license), checked, into `~/.local/lib/devvm/<version>`, then doctor's fixes, asking first; tests source it (`DEVVM_INSTALL_TEST`) |
@@ -58,6 +58,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Adding or changing a command** follows the cli skill (`.agents/skills/cli/`): its checklist, then its review.
 - **Adding or changing a shared tool** updates its page: `using/toolchains.md` for a toolchain, `using/coding-agents.md`'s Supported agents for an agent.
 - **Docs by reader:** user pages (`getting-started/`, `using/`, `safety/`, `backends/`) say what devvm does and what you type, without repo paths, Go identifiers or message names; How it works (`internals/`) explains mechanisms; Contributing (`contributing/`) has repo paths and Go identifiers.
+- **Extend the owner, don't copy it:** before adding a helper, parser, path, file reader, message or table, find its owner and extend it; a new owner gets a forbidigo rule or a structure-test check only when a second copy would be a bug ([Contributing](docs/content/docs/contributing/_index.md#one-owner-for-each-concern)).
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.
 - **Ask first** before anything outward-facing (publishing, releases, repos, pushing) and before deleting anything you didn't create.
 - **A task that turns out wrong or incomplete** gets a proposed change (`dex edit`), not quietly something else.
@@ -76,7 +77,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a backend's shell are quoted with `shq()`.
 - **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars (reassign: no package sets another's); the one exception is `internal/proxy`'s globals (set by `Main`).
-- **The structure test** (`internal/structure`, in `mise run test`) holds types to 24 methods, bans `func init`, allows only constants' kin as package vars and checks the package layers: see [Contributing](docs/content/docs/contributing/_index.md#the-structure-test) before raising a limit or listing an exception.
+- **The structure test** (`internal/structure`, in `mise run test`) holds types to 24 methods, bans `func init`, allows only constants' kin as package vars, checks the package layers and the owners (host git only in `internal/hostgit`; `DEVVM_` variables only in `readOverrides` and the listed settings): see [Contributing](docs/content/docs/contributing/_index.md#the-structure-test) before raising a limit or listing an exception.
 - **The CLI reference is generated:** `TestReferenceIsCurrent` fails on a stale one (`mise run cli-docs`).
 - `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
 
