@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -13,7 +11,7 @@ import (
 
 var _ backend.UsageReporter = (*Docker)(nil)
 
-// Usage is what each VM's container wrote and its own volumes hold, and
+// Usage is what each VM holds, as DiskUsed counts it (vmDisk), and
 // devvm's other volumes in the engine (the shared tools', and those of
 // VMs whose container is gone), by their labels: never anyone else's.
 func (d *Docker) Usage(ctx context.Context) (backend.Usage, error) {
@@ -32,19 +30,12 @@ func (d *Docker) Usage(ctx context.Context) (backend.Usage, error) {
 	}
 	owned := map[string]bool{}
 	for _, in := range vms {
-		out, err := d.Runner.Output(d.docker(ctx, "container", "inspect", "--size", "--format", "{{.SizeRw}}", in.Name))
+		n, vols, err := d.vmDisk(ctx, in.Name, sizes, ours)
 		if err != nil {
 			continue
 		}
-		n, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
-		if err != nil {
-			continue
-		}
-		for _, v := range append([]string{homeVolume(in.Name), cloneVolume(in.Name)}, engineVolumes(in.Name)...) {
-			if slices.Contains(ours, v) {
-				n += sizes[v]
-				owned[v] = true
-			}
+		for _, v := range vols {
+			owned[v] = true
 		}
 		u.VMs[in.Name] = n
 	}

@@ -3822,6 +3822,12 @@ docker_layer() {
     printf 'for _ in \$(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done\ndocker run --rm alpine:3 echo e2e-inner-ran\n' |
       '$D' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran"
   check "... restarted, its engine runs again with its images kept" d_engine_kept "$s" "$vm"
+  # 600 MB in the engine's volume, outside the container's own writes: devvm size counts it.
+  check "... devvm size's disk_used counts its engine's volumes" bash -c "
+    used() { cd '$s' && '$D' size 2>/dev/null | sed -n 's/.*disk_used=\([0-9.]*\)GiB.*/\1/p'; }
+    a=\$(used) && in_root '$vm' 'dd if=/dev/urandom of=/var/lib/docker/e2e-fill bs=1M count=600 status=none' &&
+    b=\$(used); in_root '$vm' 'rm -f /var/lib/docker/e2e-fill'; echo \"disk_used: \$a GiB, then \$b GiB\"
+    [[ -n \$a && -n \$b ]] && awk -v a=\"\$a\" -v b=\"\$b\" 'BEGIN { exit !(b - a >= 0.5) }'"
   check "rm deletes its container, volumes and network" bash -c "cd '$s' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
     [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-docker' && ! d_vol '$vm-containerd' && ! d_net '$vm-docker-net'"
 

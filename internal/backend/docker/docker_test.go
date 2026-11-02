@@ -859,6 +859,30 @@ func TestDiskUsed(t *testing.T) {
 	if err != nil || used != 1048576+1500000000 || limit != 100<<30 {
 		t.Errorf("DiskUsed = %d, %d, %v", used, limit, err)
 	}
+	// The docker layer's engine volumes count too, as devvm space counts
+	// them; one of someone else's with a VM volume's name never does.
+	vols := filepath.Join(s.stub, "docker", "volumes")
+	for v, size := range map[string]string{engineVolumes(vm)[0]: "2GB", engineVolumes(vm)[1]: "1MB", cloneVolume(vm): "7GB"} {
+		if err := os.MkdirAll(filepath.Join(vols, v), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(vols, v, "size"), []byte(size), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if v != cloneVolume(vm) {
+			if err := os.WriteFile(filepath.Join(vols, v, "labels"), []byte(LabelKey+"="+s.Data+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	s.touch(t, "docker-foreign-"+cloneVolume(vm))
+	used, _, err = s.DiskUsed(t.Context(), vm)
+	if want := int64(1048576 + 1500000000 + 2000000000 + 1000000); err != nil || used != want {
+		t.Errorf("with the engine's volumes: DiskUsed = %d, %v, want %d", used, err, want)
+	}
+	if u, err := s.Usage(t.Context()); err != nil || u.VMs[vm] != used {
+		t.Errorf("Usage = %v, %v, want %d as DiskUsed", u.VMs, err, used)
+	}
 	for in, want := range map[string]int64{"3.238kB": 3238, "1.2GB": 1200000000, "0B": 0, "12MB": 12000000, "x": 0, "1TB": 1e12} {
 		if got := parseSize(in); got != want {
 			t.Errorf("parseSize(%q) = %d", in, got)

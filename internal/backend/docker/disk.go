@@ -2,9 +2,9 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -13,7 +13,8 @@ import (
 // and the containerd image store, Linux's default, ignores it. So a VM's
 // disk is the engine's, and devvm says what it holds instead (DiskUsed):
 // what its container wrote and its volumes (its home, a --clone VM's
-// clone), against base.yaml's disk, the size VMs get on other backends.
+// clone, the docker layer's engine), against base.yaml's disk, the size
+// VMs get on other backends.
 
 // DiskUsed is what the VM's container and its volumes hold, in bytes, and
 // base's disk size.
@@ -25,28 +26,39 @@ func (d *Docker) DiskUsed(ctx context.Context, vm string) (used, limit int64, er
 	if err != nil {
 		return 0, 0, err
 	}
-	limit = int64(disk * gib)
-	out, err := d.Runner.Output(d.docker(ctx, "container", "inspect", "--size", "--format", "{{.SizeRw}}", vm))
+	sizes, err := d.volumeSizes(ctx)
 	if err != nil {
-		return 0, 0, fmt.Errorf("docker container inspect --size: %w", err)
+		return 0, 0, err
 	}
-	if used, err = strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64); err != nil {
-		return 0, 0, fmt.Errorf("docker container inspect --size: %w", err)
-	}
-	out, err = d.Runner.Output(d.docker(ctx, "system", "df", "-v", "--format", "{{json .Volumes}}"))
+	ours, err := d.volumes(ctx)
 	if err != nil {
-		return 0, 0, fmt.Errorf("docker system df: %w", err)
+		return 0, 0, err
 	}
-	var vols []struct{ Name, Size string }
-	if err := json.Unmarshal(out, &vols); err != nil {
-		return 0, 0, fmt.Errorf("docker system df: %w", err)
+	used, _, err = d.vmDisk(ctx, vm, sizes, ours)
+	return used, int64(disk * gib), err
+}
+
+// vmDisk is what a VM holds, for devvm size, devvm space and the warning
+// past base's disk alike: what its container wrote and its own volumes
+// with devvm's label (ours), by sizes (volumeSizes). It also returns
+// those volumes.
+func (cl client) vmDisk(ctx context.Context, vm string, sizes map[string]int64, ours []string) (int64, []string, error) {
+	out, err := cl.Runner.Output(cl.docker(ctx, "container", "inspect", "--size", "--format", "{{.SizeRw}}", vm))
+	if err != nil {
+		return 0, nil, fmt.Errorf("docker container inspect --size: %w", err)
 	}
-	for _, v := range vols {
-		if v.Name == homeVolume(vm) || v.Name == cloneVolume(vm) {
-			used += parseSize(v.Size)
+	n, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return 0, nil, fmt.Errorf("docker container inspect --size: %w", err)
+	}
+	var vols []string
+	for _, v := range append([]string{homeVolume(vm), cloneVolume(vm)}, engineVolumes(vm)...) {
+		if slices.Contains(ours, v) {
+			n += sizes[v]
+			vols = append(vols, v)
 		}
 	}
-	return used, limit, nil
+	return n, vols, nil
 }
 
 // parseSize reads a size as docker system df shows it (3.238kB, 1.2GB,
