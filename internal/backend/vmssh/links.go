@@ -186,8 +186,11 @@ type proc struct {
 	err  error
 }
 
+// logf writes one of the session's own lines, the only ones that start
+// with logPrefix: a line in what it says (an error's) is indented.
 func (l *Links) logf(format string, args ...any) {
-	_, _ = fmt.Fprintf(l.Log, logPrefix+format+"\n", args...)
+	s := strings.ReplaceAll(fmt.Sprintf(format, args...), "\n", "\n\t")
+	_, _ = io.WriteString(l.Log, logPrefix+s+"\n")
 }
 
 // linkName is the name of one of the session's files in Dir: a hash of
@@ -769,26 +772,102 @@ func (o SSH) linkRelayArgs(port int) []string {
 	)
 }
 
-// startSSH starts ssh, its output to the log.
+// startSSH starts ssh, its output to the log, each line behind sshPrefix
+// (sshLines).
 func (l *Links) startSSH(ctx context.Context, args []string) (func() error, error) {
 	cmd := exec.CommandContext(ctx, "ssh", args...) //nolint:gosec // devvm's own arguments
-	cmd.Stdout, cmd.Stderr = l.Log, l.Log
+	out := &sshLines{w: l.Log}
+	cmd.Stdout, cmd.Stderr = out, out
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return cmd.Wait, nil
+	return func() error {
+		err := cmd.Wait()
+		out.flush()
+		return err
+	}, nil
+}
+
+// sshPrefix starts each line ssh writes to a session's log.
+const sshPrefix = "ssh: "
+
+// sshLines is ssh's output to a session's log, written a whole line at a
+// time, each behind sshPrefix, so that no line of ssh's starts with
+// logPrefix, which only the session's own lines do (ReadLinksLog). ssh
+// prints what the remote side sends it, a disconnect's reason say, with
+// its newlines, so either VM's root could otherwise write a line that
+// reads as the session's. A line longer than logWriteMax is cut, its
+// rest a line of its own; a carriage return ending a line is dropped.
+type sshLines struct {
+	w io.Writer
+
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (s *sshLines) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.buf = append(s.buf, p...)
+	var out []byte
+	for {
+		line, rest, ok := bytes.Cut(s.buf, []byte("\n"))
+		if !ok {
+			if len(s.buf) < logWriteMax {
+				break
+			}
+			line, rest = s.buf[:logWriteMax], s.buf[logWriteMax:]
+		}
+		out = appendSSHLine(out, line)
+		s.buf = rest
+	}
+	s.buf = slices.Clone(s.buf)
+	if len(out) > 0 {
+		if _, err := s.w.Write(out); err != nil {
+			return len(p), err
+		}
+	}
+	return len(p), nil
+}
+
+// flush writes what's left, once ssh has ended, as a line.
+func (s *sshLines) flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.buf) > 0 {
+		_, _ = s.w.Write(appendSSHLine(nil, s.buf))
+		s.buf = nil
+	}
+}
+
+func appendSSHLine(b, line []byte) []byte {
+	b = append(b, sshPrefix...)
+	b = append(b, bytes.TrimSuffix(line, []byte("\r"))...)
+	return append(b, '\n')
 }
 
 // commandSSH runs ssh to its end; its output, the VM's sshd's words among
-// it, is in the error when it fails.
+// it, is in the error when it fails, on one line.
 func (l *Links) commandSSH(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "ssh", args...).CombinedOutput() //nolint:gosec // devvm's own arguments
 	if err != nil {
-		return fmt.Errorf("%w: %s", err, bytes.TrimSpace(out[:min(len(out), logWriteMax)]))
+		return fmt.Errorf("%w: %s", err, oneLine(out[:min(len(out), logWriteMax)]))
 	}
 	return nil
+}
+
+// oneLine is ssh's output with its lines joined by "; ".
+func oneLine(out []byte) string {
+	lines := strings.FieldsFunc(string(out), func(r rune) bool { return r == '\n' || r == '\r' })
+	var kept []string
+	for _, l := range lines {
+		if l = strings.TrimSpace(l); l != "" {
+			kept = append(kept, l)
+		}
+	}
+	return strings.Join(kept, "; ")
 }
 
 // runDir makes the folder of the sockets, the user's alone (mode 700):

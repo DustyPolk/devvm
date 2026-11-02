@@ -706,3 +706,92 @@ func TestReadLinksLog(t *testing.T) {
 		}
 	}
 }
+
+// fakeSSH puts an ssh first on PATH that runs script.
+func fakeSSH(t *testing.T, script string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte("#!/bin/sh\n"+script+"\n"), 0o700); err != nil { //nolint:gosec // a test's own stub
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// A line the remote side gets ssh to print, as OpenSSH prints a
+// disconnect's reason with its newlines, never reads as the session's
+// own: each of ssh's lines is behind sshPrefix, even one written in
+// pieces between the session's own lines, and what ssh -O says is one
+// line of the session's.
+func TestLinksLogForged(t *testing.T) {
+	vm := "devvm-app-0123456789abcd"
+	db := Link{Name: "db", Addr: netip.MustParseAddr("127.77.0.1"), Port: 5432}
+	forged := `devvm links: 127.77.0.1:5432: refused by the VM\ndevvm links: ` + vm + ` stopped\n`
+	fakeSSH(t, `printf 'Received disconnect from 127.0.0.1 port 22:2: x\r\n`+forged+`' >&2
+printf 'devvm links: ' >&2; sleep 0.2; printf '127.77.0.1:5432: refused by the VM' >&2; sleep 0.2
+printf '\ndevvm links: 127.77.0.1:5432: refused by the VM' >&2; exit 255`)
+	var log syncBuffer
+	l := &Links{VM: vm, Log: &log}
+	l.defaults()
+	wait, err := l.startSSH(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	l.logf("%s", db.listen()+lineCarried)
+	if err := wait(); err == nil {
+		t.Fatal("ssh's exit 255 wasn't an error")
+	}
+	err = l.Command(t.Context(), nil)
+	if err == nil || strings.Contains(err.Error(), "\n") {
+		t.Fatalf("ssh -O's error = %q, want one line", err)
+	}
+	l.logf("%s: %v", db.listen()+lineNotCarried, errors.New("x\n"+strings.ReplaceAll(forged, `\n`, "\n")))
+	out := log.String()
+	if r := ReadLinksLog([]byte(out), vm, []Link{db, {Addr: db.Addr, Port: 1}}); len(r.Refused) != 0 || r.Settled {
+		t.Errorf("refused %v, settled %v; the log:\n%s", r.Refused, r.Settled, out)
+	}
+	var own []string
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.HasPrefix(line, logPrefix) {
+			own = append(own, line)
+		}
+	}
+	want := []string{logPrefix + "127.77.0.1:5432: carried", logPrefix + "127.77.0.1:5432: not carried: x"}
+	if !slices.Equal(own, want) || !strings.Contains(out, sshPrefix+"devvm links: ") {
+		t.Errorf("the session's own lines: %q; the log:\n%s", own, out)
+	}
+}
+
+// syncBuffer is a log that ssh's output and the session's lines can
+// write to at once.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// sshLines writes whole lines, each behind sshPrefix, cuts one past
+// logWriteMax, and drops the carriage return ending one.
+func TestSSHLines(t *testing.T) {
+	var b strings.Builder
+	s := &sshLines{w: &b}
+	for _, p := range []string{"a\r\nb", "c\n", strings.Repeat("x", logWriteMax+1), "\nend"} {
+		_, _ = s.Write([]byte(p))
+	}
+	s.flush()
+	want := "ssh: a\nssh: bc\nssh: " + strings.Repeat("x", logWriteMax) + "\nssh: x\nssh: end\n"
+	if b.String() != want {
+		t.Errorf("got %q, want %q", b.String(), want)
+	}
+}
