@@ -189,7 +189,7 @@ func TestSetFeatures(t *testing.T) {
 	} {
 		changed, err := (Choice{b}).SetFeatures(tc.set)
 		if tc.refusing != "" {
-			if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != tc.refusing {
+			if msg.IDOf(err) != tc.refusing {
 				t.Errorf("%s: err %v, want %s", tc.name, err, tc.refusing)
 			}
 			continue

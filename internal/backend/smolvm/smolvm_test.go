@@ -18,17 +18,9 @@ import (
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
-
-// execRunner runs the commands as they are: here, the smolvm stub.
-type execRunner struct{}
-
-func (execRunner) Run(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-
-func (execRunner) Output(cmd *exec.Cmd) ([]byte, error) { return cmd.Output() }
-
-func (execRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 
 // testUI prints nothing, runs commands as they are, counts no steps and
 // keeps no cleanups.
@@ -47,29 +39,23 @@ func (testUI) StdinIsTerminal() bool                                     { retur
 // uid 501, on a host with 64 GiB.
 type sandbox struct {
 	*Smolvm
-	stub string
+	stubs *stubtest.Stubs
+	stub  string // stubs.Dir
 }
 
 func newSandbox(t *testing.T) sandbox {
 	t.Helper()
 	root := t.TempDir()
-	stub := filepath.Join(root, "stub")
-	for _, d := range []string{"data", "config", "stub"} {
+	for _, d := range []string{"data", "config"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	stubs, err := filepath.Abs(filepath.Join("..", "..", "..", "testdata", "stubs"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("STUB_DIR", stub)
-	t.Setenv("STUB_LOG", filepath.Join(stub, "calls"))
+	stubs := stubtest.New(t)
 	t.Setenv("SMOLVM_MACHINE_NAME", "users-own")
-	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
 	s := &Smolvm{
-		Dirs: d, Runner: execRunner{}, OS: "darwin", Arch: "arm64", Assets: assets.FS,
+		Dirs: d, Runner: stubtest.ExecRunner{}, OS: "darwin", Arch: "arm64", Assets: assets.FS,
 		Getenv: func(string) string { return "" },
 		User:   func() (*user.User, error) { return &user.User{Username: "u", Uid: "501"}, nil },
 		Memory: func() (uint64, error) { return 64 << 30, nil }, CPUs: func() int { return 8 },
@@ -85,30 +71,19 @@ func newSandbox(t *testing.T) sandbox {
 			return f
 		}(),
 	}
-	return sandbox{s, stub}
+	return sandbox{s, stubs, stubs.Dir}
 }
 
 // calls are the stub's calls, without the reads.
 func (s sandbox) calls(t *testing.T) []string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(s.stub, "calls"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
 	var out []string
-	for l := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
-		if l != "" && l != "smolvm machine ls --json" && !strings.HasPrefix(l, "smolvm machine data-dir") {
+	for _, l := range s.stubs.Calls(t) {
+		if l != "smolvm machine ls --json" && !strings.HasPrefix(l, "smolvm machine data-dir") {
 			out = append(out, l)
 		}
 	}
 	return out
-}
-
-func (s sandbox) reset(t *testing.T) {
-	t.Helper()
-	if err := os.Remove(filepath.Join(s.stub, "calls")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
 }
 
 // machine makes a stub machine: "STATE CPUS MEM STORAGE NET", with this
@@ -119,13 +94,6 @@ func (s sandbox) machine(t *testing.T, name, fields string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(s.stub, "smolvm", name), []byte(fields+" "+s.Dirs.Data+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func (s sandbox) touch(t *testing.T, name string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(s.stub, name), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -141,17 +109,6 @@ func (s sandbox) image(t *testing.T, key string) {
 			t.Fatal(err)
 		}
 	}
-}
-
-func names(err error) string {
-	var m msg.M
-	if !errors.As(err, &m) {
-		if err == nil {
-			return ""
-		}
-		return "not a message: " + err.Error()
-	}
-	return m.Names()
 }
 
 // What smolvm has natively, and what waits for an emulation: refused in
@@ -242,7 +199,7 @@ func TestListedAndVolume(t *testing.T) {
 	if got := listed(backend.Ports{}); len(got) != 0 {
 		t.Errorf("none: %v", got)
 	}
-	if _, err := volume("/a:b", "/a:b", true); names(err) != "smolvm_mount_colon path=/a:b" {
+	if _, err := volume("/a:b", "/a:b", true); msg.NamesOf(err) != "smolvm_mount_colon path=/a:b" {
 		t.Errorf("colon: %v", err)
 	}
 }
@@ -279,12 +236,12 @@ func TestCreateVM(t *testing.T) {
 		t.Error("made twice")
 	}
 	s.machine(t, "devvm-q-0123456789abcd", "created 4 8192 null false")
-	s.touch(t, "smolvm-foreign-devvm-q-0123456789abcd")
+	s.stubs.Touch(t, "smolvm-foreign-devvm-q-0123456789abcd")
 	spec.Name = "devvm-q-0123456789abcd"
-	if err := s.CreateVM(t.Context(), "0123456789ab", spec); names(err) != "smolvm_machine_foreign vm=devvm-q-0123456789abcd" {
+	if err := s.CreateVM(t.Context(), "0123456789ab", spec); msg.NamesOf(err) != "smolvm_machine_foreign vm=devvm-q-0123456789abcd" {
 		t.Errorf("foreign: %v", err)
 	}
-	if err := s.CreateVM(t.Context(), "ba9876543210", spec); names(err) != "image_missing key=ba9876543210" {
+	if err := s.CreateVM(t.Context(), "ba9876543210", spec); msg.NamesOf(err) != "image_missing key=ba9876543210" {
 		t.Errorf("no image: %v", err)
 	}
 }
@@ -297,7 +254,7 @@ func TestOnlyOurs(t *testing.T) {
 	s.machine(t, "devvm-img-0123456789ab", "stopped 4 8192 100 true")
 	s.machine(t, ToolsVM, "stopped 4 8192 100 true")
 	s.machine(t, "devvm-b-0123456789abcd", "running 4 8192 20 true")
-	s.touch(t, "smolvm-foreign-devvm-b-0123456789abcd")
+	s.stubs.Touch(t, "smolvm-foreign-devvm-b-0123456789abcd")
 	ins, err := s.List(t.Context())
 	if err != nil || len(ins) != 1 || ins[0].Name != "devvm-a-0123456789abcd" || ins[0].Status != backend.StatusRunning {
 		t.Fatalf("List = %+v, %v", ins, err)
@@ -344,19 +301,19 @@ func TestStart(t *testing.T) {
 	if got := s.calls(t); !slices.Equal(got, want) {
 		t.Errorf("calls:\n%q\nwant\n%q", got, want)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil || len(s.calls(t)) != 0 {
 		t.Errorf("running: %v, %q", err, s.calls(t))
 	}
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetNone}); err != nil ||
 		s.calls(t)[0] != "smolvm machine update --name "+vm+" --no-net" {
 		t.Errorf("no network: %v, %q", err, s.calls(t))
 	}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); err == nil || names(err) != "not a message: smolvm: "+vm+": no decider to start it through" {
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); err == nil || msg.IDOf(err) != "" || err.Error() != "smolvm: "+vm+": no decider to start it through" {
 		t.Errorf("network policy without a decider: %v", err)
 	}
 
@@ -366,7 +323,7 @@ func TestStart(t *testing.T) {
 	if err := s.writeRecord(fw, record{Forwarding: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Start(t.Context(), fw, backend.Confinement{}); names(err) != "smolvm_no_agent vm="+fw {
+	if err := s.Start(t.Context(), fw, backend.Confinement{}); msg.NamesOf(err) != "smolvm_no_agent vm="+fw {
 		t.Errorf("no agent: %v", err)
 	}
 	if err := s.Start(t.Context(), fw, backend.Confinement{AgentSocket: "/a.sock"}); err != nil {
@@ -414,8 +371,8 @@ func TestStartListedNoSSH(t *testing.T) {
 	if err := s.writeRecord(vm, record{Listed: listed}); err != nil {
 		t.Fatal(err)
 	}
-	var warned []string
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	s.Warn = warned.Add
 	free := func(_ context.Context, rs []backend.PortRange) []backend.PortRange { return rs[1:] }
 	if err := s.Start(t.Context(), vm, backend.Confinement{Free: free}); err != nil {
 		t.Fatal(err)
@@ -426,8 +383,8 @@ func TestStartListedNoSSH(t *testing.T) {
 	if r, err := s.readRecord(vm); err != nil || !slices.Equal(r.Listed, listed) {
 		t.Errorf("record %+v, %v", r, err)
 	}
-	if !slices.Equal(warned, []string{"ports_no_ssh vm=" + vm}) {
-		t.Errorf("warned %q", warned)
+	if !slices.Equal(warned.Names(), []string{"ports_no_ssh vm=" + vm}) {
+		t.Errorf("warned %q", warned.Names())
 	}
 }
 
@@ -500,15 +457,15 @@ func TestAgentToggle(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Getenv = func(string) string { return "" }
-	s.reset(t)
-	if err := s.Start(t.Context(), vm, backend.Confinement{}); names(err) != "smolvm_no_agent vm="+vm || len(s.calls(t)) != 0 {
+	s.stubs.Reset(t)
+	if err := s.Start(t.Context(), vm, backend.Confinement{}); msg.NamesOf(err) != "smolvm_no_agent vm="+vm || len(s.calls(t)) != 0 {
 		t.Errorf("no agent: %v, %q", err, s.calls(t))
 	}
 	// Running: changed only once it's stopped.
 	if err := s.Start(t.Context(), vm, backend.Confinement{NoAgent: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetAgentForwarding(t.Context(), vm, false); names(err) != "vm_not_stopped vm="+vm {
+	if err := s.SetAgentForwarding(t.Context(), vm, false); msg.NamesOf(err) != "vm_not_stopped vm="+vm {
 		t.Errorf("running: %v", err)
 	}
 	// Made without forwarding: off stays off, on is refused.
@@ -522,7 +479,7 @@ func TestAgentToggle(t *testing.T) {
 	if err := s.SetAgentForwarding(t.Context(), fixed, false); err != nil {
 		t.Errorf("off: %v", err)
 	}
-	if err := s.SetAgentForwarding(t.Context(), fixed, true); names(err) != "agent_fixed backend=smolvm vm="+fixed {
+	if err := s.SetAgentForwarding(t.Context(), fixed, true); msg.NamesOf(err) != "agent_fixed backend=smolvm vm="+fixed {
 		t.Errorf("on: %v", err)
 	}
 	// Made forwarding (--ssh-agent): on.
@@ -641,7 +598,7 @@ func TestStartConfined(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +615,7 @@ func TestStartConfined(t *testing.T) {
 	if ok, _ := s.Confined(t.Context(), vm); ok {
 		t.Error("stopped, yet confined")
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
@@ -677,7 +634,7 @@ func TestStartConfined(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +703,7 @@ func TestBuildBase(t *testing.T) {
 	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-p-0123456789abcd"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteImage(t.Context(), "0123456789ab"); names(err) != "image_in_use key=0123456789ab vms=devvm-p-0123456789abcd" {
+	if err := s.DeleteImage(t.Context(), "0123456789ab"); msg.NamesOf(err) != "image_in_use key=0123456789ab vms=devvm-p-0123456789abcd" {
 		t.Errorf("in use: %v", err)
 	}
 	if err := s.Delete(t.Context(), "devvm-p-0123456789abcd"); err != nil {
@@ -797,12 +754,12 @@ func TestSmallHost(t *testing.T) {
 func TestBuildFails(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, "0123456789ab")
-	s.touch(t, "script-fails")
+	s.stubs.Touch(t, "script-fails")
 	_, err := s.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "foo", Key: "ba9876543210", Parent: "0123456789ab", Net: backend.NetInternet,
 		Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\nexit 3\n")}},
 	})
-	if names(err) != "smolvm_script_failed script=foo.sh vm=devvm-img-ba9876543210" {
+	if msg.NamesOf(err) != "smolvm_script_failed script=foo.sh vm=devvm-img-ba9876543210" {
 		t.Errorf("failed: %v", err)
 	}
 	m, err := s.inspect(t.Context(), "devvm-img-ba9876543210")
@@ -815,7 +772,7 @@ func TestBuildFails(t *testing.T) {
 	_, err = s.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: "aaaaaaaaaaaa", Net: backend.NetInternet, From: &backend.From{Ref: "mine:1", Digest: "sha256:" + strings.Repeat("cd", 32)},
 	})
-	if names(err) != "smolvm_from_registry_only image=mine:1" {
+	if msg.NamesOf(err) != "smolvm_from_registry_only image=mine:1" {
 		t.Errorf("Docker's: %v", err)
 	}
 }
@@ -832,7 +789,7 @@ func TestSet(t *testing.T) {
 	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 4, MemoryGiB: 4, DiskGiB: 120}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetSize(t.Context(), vm, backend.Size{DiskGiB: 50}); names(err) != "disk_shrink have=120 vm="+vm+" want=50" {
+	if err := s.SetSize(t.Context(), vm, backend.Size{DiskGiB: 50}); msg.NamesOf(err) != "disk_shrink have=120 vm="+vm+" want=50" {
 		t.Errorf("shrink: %v", err)
 	}
 	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: []backend.PortRange{{From: 8000, To: 8000}}}, backend.Confinement{}); err != nil {
@@ -852,7 +809,7 @@ func TestSet(t *testing.T) {
 		t.Errorf("record %+v, %v", r, err)
 	}
 	s.machine(t, vm, "running 4 4096 120 true")
-	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 2}); names(err) != "vm_not_stopped vm="+vm {
+	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 2}); msg.NamesOf(err) != "vm_not_stopped vm="+vm {
 		t.Errorf("running: %v", err)
 	}
 }
@@ -878,11 +835,11 @@ func TestProblems(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.stub, "smolvm-version"), []byte("1.31.0"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Check(t.Context()); !strings.HasPrefix(names(err), "smolvm_old") {
+	if err := s.Check(t.Context()); !strings.HasPrefix(msg.NamesOf(err), "smolvm_old") {
 		t.Errorf("old: %v", err)
 	}
 	s.OS, s.Arch = "darwin", "amd64"
-	if err := s.Check(t.Context()); names(err) != "smolvm_host_unsupported host=darwin/amd64" {
+	if err := s.Check(t.Context()); msg.NamesOf(err) != "smolvm_host_unsupported host=darwin/amd64" {
 		t.Errorf("Intel Mac: %v", err)
 	}
 	for _, v := range []struct {

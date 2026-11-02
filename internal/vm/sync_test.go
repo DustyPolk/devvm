@@ -12,6 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -48,7 +49,7 @@ func TestCheckLinks(t *testing.T) {
 		{"63 characters", []GuestLink{{a("127.77.0.2"), []string{strings.Repeat("a", 63)}}}, ""},
 		{"64 characters", []GuestLink{{a("127.77.0.2"), []string{strings.Repeat("a", 64)}}}, "link_setup_invalid address=127.77.0.2 name=" + strings.Repeat("a", 64) + " vm=v"},
 	} {
-		if got := names(checkLinks("v", "web", c.links)); got != c.want {
+		if got := msg.NamesOf(checkLinks("v", "web", c.links)); got != c.want {
 			t.Errorf("%s: checkLinks = %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -83,7 +84,7 @@ func TestUpLinks(t *testing.T) {
 		return []GuestLink{{netip.MustParseAddr("127.77.0.2"), []string{"db", "pg"}}}, nil
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	want := "localhost,127.0.0.1,::1"
 	c, _ := call(f, "Start").Args[1].(backend.Confinement)
@@ -107,8 +108,8 @@ func TestUpLinksInvalid(t *testing.T) {
 	}
 	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
-	if names(err) != "link_setup_invalid address=127.0.0.1 name=db vm="+spec.Name {
-		t.Fatalf("Up = %v", names(err))
+	if msg.NamesOf(err) != "link_setup_invalid address=127.0.0.1 name=db vm="+spec.Name {
+		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	if slices.Contains(f.Methods(), "Start") {
 		t.Errorf("calls = %q", f.Methods())
@@ -125,7 +126,7 @@ func TestUpLinksNoPolicy(t *testing.T) {
 		return []GuestLink{{netip.MustParseAddr("127.77.0.9"), []string{"api"}}}, nil
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Env["NO_PROXY"] != "" {
 		t.Errorf("Start's env = %q", c.Env)

@@ -29,16 +29,6 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-func names(err error) string {
-	if m, ok := err.(msg.M); ok { //nolint:errorlint // messages aren't wrapped
-		return m.Names()
-	}
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 // sandbox returns devvm's folders in a temporary folder, and a VM's state
 // there with that image.
 func sandbox(t *testing.T, img string) (paths.Dirs, *state.VM) {
@@ -388,7 +378,7 @@ func TestPrepare(t *testing.T) {
 	}
 	conf, err := p.Prepare(t.Context(), lima, st, false)
 	if err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	key := st.Get(KeyProxyKey)
 	sp, _ := strconv.Atoi(st.Get(KeySSHPort))
@@ -476,8 +466,8 @@ func TestPrepareWaitsForTheProxy(t *testing.T) {
 	p, f := testProxy(t, d)
 	f.quiet = true
 	_, err := p.Prepare(t.Context(), lifelined(), st, false)
-	if want := "proxy_start_failed log=" + ProxyLog(d, st.Name()) + " vm=" + st.Name(); names(err) != want {
-		t.Errorf("Prepare = %v, want %s", names(err), want)
+	if want := "proxy_start_failed log=" + ProxyLog(d, st.Name()) + " vm=" + st.Name(); msg.NamesOf(err) != want {
+		t.Errorf("Prepare = %v, want %s", msg.NamesOf(err), want)
 	}
 }
 
@@ -492,7 +482,7 @@ func TestPrepareDecider(t *testing.T) {
 	b.Decides = true
 	conf, err := p.Prepare(t.Context(), b, st, false)
 	if err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	dp := st.Get(KeyDeciderPort)
 	tok := st.Get(KeyDeciderToken)
@@ -523,8 +513,8 @@ func TestPrepareDecider(t *testing.T) {
 	// A running VM whose proxy is gone, with the decider's port taken.
 	p.Stop(st.Name())
 	p.Listening = func(_ context.Context, port int) bool { return strconv.Itoa(port) == dp }
-	if _, err := p.Prepare(t.Context(), b, st, true); names(err) != "proxy_port_taken port="+dp+" vm="+st.Name() {
-		t.Errorf("decider port taken: %v", names(err))
+	if _, err := p.Prepare(t.Context(), b, st, true); msg.NamesOf(err) != "proxy_port_taken port="+dp+" vm="+st.Name() {
+		t.Errorf("decider port taken: %v", msg.NamesOf(err))
 	}
 }
 
@@ -545,7 +535,7 @@ func TestPrepareSocket(t *testing.T) {
 	p, f := testProxy(t, d)
 	sock := filepath.Join(d.Data, "docker", "sock", "x", "p.sock")
 	if _, err := p.Prepare(t.Context(), socketed{lifelined(), sock}, st, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	pid, _ := p.PID(st.Name())
 	if args := strings.Join(f.args[pid], " "); !strings.HasSuffix(args, " -listen-unix "+sock) {
@@ -555,7 +545,7 @@ func TestPrepareSocket(t *testing.T) {
 		t.Errorf("the socket's folder: %v %v", fi, err)
 	}
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	pid, _ = p.PID(st.Name())
 	if args := strings.Join(f.args[pid], " "); strings.Contains(args, "-listen-unix") {
@@ -572,7 +562,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	prepare := func(running bool) {
 		t.Helper()
 		if _, err := p.Prepare(t.Context(), lifelined(), st, running); err != nil {
-			t.Fatal(names(err))
+			t.Fatal(msg.NamesOf(err))
 		}
 	}
 	prepare(false)
@@ -606,8 +596,8 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	// program.
 	p.Stop(st.Name())
 	p.Listening = func(_ context.Context, port int) bool { return strconv.Itoa(port) == pp }
-	if _, err := p.Prepare(t.Context(), lifelined(), st, true); names(err) != "proxy_port_taken port="+pp+" vm="+st.Name() {
-		t.Errorf("port taken: %v", names(err))
+	if _, err := p.Prepare(t.Context(), lifelined(), st, true); msg.NamesOf(err) != "proxy_port_taken port="+pp+" vm="+st.Name() {
+		t.Errorf("port taken: %v", msg.NamesOf(err))
 	}
 	// Stopped, it moves.
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil || st.Get(KeyProxyPort) == pp {
@@ -630,7 +620,7 @@ func TestPrepareUpstream(t *testing.T) {
 		return err
 	}
 	if err := prepare(false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	file := filepath.Join(d.Run(), st.Name()+".proxy.upstream")
 	pid, _ := p.PID(st.Name())
@@ -647,16 +637,16 @@ func TestPrepareUpstream(t *testing.T) {
 	}
 	// Running, the same settings keep it; others start it again.
 	if err := prepare(true); err != nil || f.count() != 1 {
-		t.Errorf("unchanged: %v, %d starts", names(err), f.count())
+		t.Errorf("unchanged: %v, %d starts", msg.NamesOf(err), f.count())
 	}
 	env["HTTP_PROXY"] = "proxy.corp:3128"
 	if err := prepare(true); err != nil || f.count() != 2 {
-		t.Errorf("changed: %v, %d starts", names(err), f.count())
+		t.Errorf("changed: %v, %d starts", msg.NamesOf(err), f.count())
 	}
 	// None: no file, no flag.
 	env = map[string]string{}
 	if err := prepare(true); err != nil || f.count() != 3 {
-		t.Fatalf("none: %v, %d starts", names(err), f.count())
+		t.Fatalf("none: %v, %d starts", msg.NamesOf(err), f.count())
 	}
 	pid, _ = p.PID(st.Name())
 	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) || strings.Contains(strings.Join(f.args[pid], " "), "-upstream ") {
@@ -668,8 +658,8 @@ func TestPrepareUpstream(t *testing.T) {
 		{"HTTPS_PROXY", "http://proxy.corp:http", "upstream_proxy_invalid setting=HTTPS_PROXY"},
 	} {
 		env = map[string]string{c.env: c.value}
-		if err := prepare(false); names(err) != c.want {
-			t.Errorf("%s=%s: %v, want %s", c.env, c.value, names(err), c.want)
+		if err := prepare(false); msg.NamesOf(err) != c.want {
+			t.Errorf("%s=%s: %v, want %s", c.env, c.value, msg.NamesOf(err), c.want)
 		}
 	}
 }
@@ -683,18 +673,18 @@ func TestPrepareStopsTheOldProxy(t *testing.T) {
 	p.Tick = 20 * time.Millisecond
 	f.stubborn = true
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	old, _ := p.PID(st.Name())
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if pid, ok := p.PID(st.Name()); !ok || pid == old || alive(old) {
 		t.Errorf("the old proxy %d: alive %v; now %d", old, alive(old), pid)
 	}
 	p.Signal = func(int, syscall.Signal) error { return nil } // signals that never arrive
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); names(err) != "proxy_stop_failed vm="+st.Name() {
-		t.Errorf("a proxy that won't stop: %v", names(err))
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_stop_failed vm="+st.Name() {
+		t.Errorf("a proxy that won't stop: %v", msg.NamesOf(err))
 	}
 }
 
@@ -702,8 +692,8 @@ func TestPrepareCAFails(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
 	p.InitCA = func(string) error { return errors.New("disk full") }
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); names(err) != "proxy_ca_failed dir="+d.CA() {
-		t.Errorf("Prepare = %v", names(err))
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_ca_failed dir="+d.CA() {
+		t.Errorf("Prepare = %v", msg.NamesOf(err))
 	}
 }
 
@@ -712,8 +702,8 @@ func TestPrepareCAFails(t *testing.T) {
 func TestPrepareWarnsPolicy(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
-	var warned []string
-	p.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	p.Warn = warned.Add
 	if err := os.MkdirAll(filepath.Dir(VMPolicyFile(d, st.Name())), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -721,12 +711,12 @@ func TestPrepareWarnsPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	f := VMPolicyFile(d, st.Name())
 	want := []string{"policy_broken_deny file=" + f + " line=2 rule=! bad.test", "policy_not_rule file=" + f + " line=3 rule=a b"}
-	if !slices.Equal(warned, want) {
-		t.Errorf("warned %q; want %q", warned, want)
+	if !slices.Equal(warned.Names(), want) {
+		t.Errorf("warned %q; want %q", warned.Names(), want)
 	}
 }
 
@@ -898,30 +888,30 @@ func TestUnproxied(t *testing.T) {
 	why := msg.ProxyStartFailed("/log", "V")
 	f := backendtest.New("fake", nil)
 	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
-	var warned []string
-	p := &Proxy{Warn: func(m msg.M) { warned = append(warned, m.Names()) }}
-	if err := p.Unproxied(t.Context(), f, "V", why); names(err) != "proxy_start_failed log=/log vm=V" ||
+	var warned msg.Recorder
+	p := &Proxy{Warn: warned.Add}
+	if err := p.Unproxied(t.Context(), f, "V", why); msg.NamesOf(err) != "proxy_start_failed log=/log vm=V" ||
 		f.Instances["V"].Status != backend.StatusStopped {
-		t.Errorf("Unproxied = %v, VM %s", names(err), f.Instances["V"].Status)
+		t.Errorf("Unproxied = %v, VM %s", msg.NamesOf(err), f.Instances["V"].Status)
 	}
-	if !slices.Equal(warned, []string{"net_proxy_down_stopped vm=V"}) {
-		t.Errorf("warned %q", warned)
+	if !slices.Equal(warned.Names(), []string{"net_proxy_down_stopped vm=V"}) {
+		t.Errorf("warned %q", warned.Names())
 	}
 	// Interrupted (its context cancelled), it still stops the VM.
 	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	cs := ctxStopper{Fake: f}
-	if err := p.Unproxied(ctx, &cs, "V", why); names(err) != "proxy_start_failed log=/log vm=V" || cs.err != nil ||
+	if err := p.Unproxied(ctx, &cs, "V", why); msg.NamesOf(err) != "proxy_start_failed log=/log vm=V" || cs.err != nil ||
 		f.Instances["V"].Status != backend.StatusStopped {
-		t.Errorf("interrupted: %v, stop's context %v, VM %s", names(err), cs.err, f.Instances["V"].Status)
+		t.Errorf("interrupted: %v, stop's context %v, VM %s", msg.NamesOf(err), cs.err, f.Instances["V"].Status)
 	}
 	stopErr := errors.New("stop failed")
 	f.Errs = map[string]error{"Stop": stopErr}
-	warned = nil
+	warned.Reset()
 	if err := p.Unproxied(t.Context(), f, "V", why); !errors.Is(err, stopErr) ||
-		!slices.Equal(warned, []string{"proxy_start_failed log=/log vm=V"}) {
-		t.Errorf("a failed stop: %v, warned %q", err, warned)
+		!slices.Equal(warned.Names(), []string{"proxy_start_failed log=/log vm=V"}) {
+		t.Errorf("a failed stop: %v, warned %q", err, warned.Names())
 	}
 }
 
@@ -977,8 +967,8 @@ func TestSelfCheck(t *testing.T) {
 				f.Unconfined = !tc.fixed
 				return f.Start(t.Context(), "V", backend.Confinement{Net: backend.NetProxy})
 			})
-			if names(err) != tc.want {
-				t.Errorf("SelfCheck = %v, want %q", names(err), tc.want)
+			if msg.NamesOf(err) != tc.want {
+				t.Errorf("SelfCheck = %v, want %q", msg.NamesOf(err), tc.want)
 			}
 			if st.Get(KeyCheck) != tc.check {
 				t.Errorf("net_check = %q", st.Get(KeyCheck))
@@ -1046,8 +1036,8 @@ func TestNixCacheArgs(t *testing.T) {
 		t.Errorf("the cap's default: state's %d, the proxy's %d", state.NixCacheDefault, proxy.NixCacheDefault)
 	}
 	d, st := sandbox(t, "base")
-	var warned []string
-	p := &Proxy{Dirs: d, Warn: func(m msg.M) { warned = append(warned, m.Names()) }}
+	var warned msg.Recorder
+	p := &Proxy{Dirs: d, Warn: warned.Add}
 	if got := p.nixCacheArgs(st); got != nil {
 		t.Errorf("base: %q", got)
 	}
@@ -1067,7 +1057,7 @@ func TestNixCacheArgs(t *testing.T) {
 	if err := os.WriteFile(d.Retention(), []byte("nix-cache.size=lots\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := p.nixCacheArgs(st); got[3] != want[3] || len(warned) != 1 || !strings.HasPrefix(warned[0], "retention_unreadable") {
-		t.Errorf("unreadable: %q, warned %q", got, warned)
+	if got := p.nixCacheArgs(st); got[3] != want[3] || len(warned.Names()) != 1 || !strings.HasPrefix(warned.Names()[0], "retention_unreadable") {
+		t.Errorf("unreadable: %q, warned %q", got, warned.Names())
 	}
 }

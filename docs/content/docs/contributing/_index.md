@@ -91,7 +91,7 @@ The layers:
 
 - Only `cmd/devvm` and `internal/cli` import `internal/ui`; only `internal/cli` imports `internal/vm`; only `cmd/devvm` imports `internal/cli`.
 - `internal/backend/...` imports none of `internal/vm`, `build`, `tools`, `netpolicy`, `secrets`, `project`, `gitprotect`, `sshconfig` or `sshagent`.
-- Only `internal/backend/registry` and `internal/cli` import a backend (`lima`, `smolvm`, `docker`); only tests import `backendtest`.
+- Only `internal/backend/registry` and `internal/cli` import a backend (`lima`, `smolvm`, `docker`); only tests import `backendtest` and `internal/stubtest`, and `internal/stubtest` imports only `internal/msg`.
 - `internal/proxy` imports no other devvm package.
 - `assets`, `locales`, `internal/platform` and `internal/msg/gen` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg` and `internal/paths`; `internal/image` only `assets`, `internal/msg` and `internal/paths`; `internal/devcontainer` only `internal/image` and `internal/msg`.
 
@@ -132,6 +132,16 @@ The Go tests in `internal/cli` walk the command tree, so a command that breaks o
 - **`TestCommandNames`** checks that command names are lower case without aliases, that no command is named `list`, `show`, `get`, `delete`, `remove` or `ls` but devvm ls, that a command named unX has a sibling X, and that each argument in a `Use` is a `PLACEHOLDER` or a word, with `|`, `[]` and `...` only. **`TestUseMatchesArgs`** runs every command with the arguments its `Use` shows, from `argSamples`, and with none when they're optional, and checks that it runs, so its `Args` takes what its help shows. `TestEveryCommandReserved` checks that every command's name is in `image.Reserved`.
 - **`TestCommandLines`** reads every devvm command line in the repo: the docs, the generated CLI reference among them, the README, AGENTS.md, `locales/en.toml`, Go's comments and strings, `assets/`, `install.sh`, `tests/e2e.sh`, the CLI tests and their stubs, the scripts, the workflows and the skills. It checks that each one's command exists, that each flag is one that command takes, that a placeholder is one its `Use` shows and a flag's value the one its help shows, such as `DURATION`, and that a word after a command with commands of its own isn't a command from elsewhere in the tree. A command line written to be typed, in a code block, a code span or a CLI test's `exec`, also has its values checked with `checkFlagValue`, and when it has nothing to fill in, it runs in a tree whose commands do nothing, where it mustn't be a usage error. Prose has only its command and its flags checked, because its words after the command are English. The lines written to show a refusal are in `refused`, each with why, and a CLI test's `! exec` lines are left out, as they're meant to fail. `mise run lint:docs` runs it too, so a docs change that names a command that doesn't exist fails there. `TestCheckCommandLine` checks that it finds each kind of stale line.
 - **`TestPromptsAnswered`** in `internal/msg` finds every message the code asks as a question, given to `Ask`, `Confirm`, `Answer`, `Secret`, `Pick` or `PickOne`, and checks that `AnswerFor` names what answers it, so that `--no-input` names it, or that it's in `terminalOnly`, the questions only a terminal answers.
+
+## Go test helpers
+
+Go tests are table tests next to the code they test, and they share a few helpers, so each one reads the same way:
+
+- **`stubtest.New(t)`** puts the stubs in `testdata/stubs/` first on `PATH` for one test, as the CLI tests have them, with a new folder under `/tmp` as their `STUB_DIR` and its `calls` file as their `STUB_LOG`. The folder goes when the test ends. `stubtest.New(t, "ssh")` puts only the stubs it names on `PATH`, so the host's other commands, such as git, stay. Its `Calls` returns the calls the stubs logged, `Reset` forgets them, and `Touch`, `Write` and `Read` work on the files the stubs read, such as a file whose presence makes a stub fail.
+- **`stubtest.ExecRunner`** is a backend's runner that runs each command as it is, with no run log, so a backend under test runs the stubs.
+- **`msg.IDOf(err)`** returns the ID of the message an error carries, or "" when it carries none, and **`msg.NamesOf(err)`** returns the message's names, as names mode prints them, or the error's own text when it isn't a message. A test compares either with what it expects.
+- **A `msg.Recorder`** keeps the messages a package's `Info` or `Warn` is given. Set the field to the recorder's `Add`, then compare its `Names` or its `IDs`.
+- **`backendtest.Stored`** is the fake backend with its disks on the host, for the free-space checks.
 
 ## CLI tests
 

@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/stubtest"
 )
 
 // gitEnv gives git in the test a config and identity of its own.
@@ -49,22 +50,7 @@ func cloneEnv(t *testing.T) (e *Env, f *backendtest.Fake, vmfs string) {
 	gitEnv(t)
 	gitIn(t, e.Dir, "init", "-q", "-b", "main")
 	gitIn(t, e.Dir, "commit", "-q", "--allow-empty", "-m", "one")
-	stubDir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	vmfs = filepath.Join(stubDir, "vmfs")
-	bin := t.TempDir()
-	stub, err := filepath.Abs(filepath.Join("..", "..", "testdata", "stubs", "ssh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(stub, filepath.Join(bin, "ssh")); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("STUB_DIR", stubDir)
-	t.Setenv("STUB_LOG", filepath.Join(stubDir, "calls"))
+	vmfs = stubtest.New(t, "ssh").Path("vmfs")
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		var cmd *exec.Cmd
 		switch {
@@ -118,10 +104,11 @@ func TestUpClone(t *testing.T) {
 		t.Errorf("clone's HEAD %q", got)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{Clone: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	calls, _ := os.ReadFile(os.Getenv("STUB_LOG")) //nolint:gosec // the test's own
-	if n := strings.Count(string(calls), "git-receive-pack"); n != 1 {
+	// The ssh stub's folder is the one vmfs is in.
+	calls := strings.Join((&stubtest.Stubs{Dir: filepath.Dir(vmfs)}).Calls(t), "\n")
+	if n := strings.Count(calls, "git-receive-pack"); n != 1 {
 		t.Errorf("pushed %d times:\n%s", n, calls)
 	}
 }
@@ -142,7 +129,7 @@ func TestCloneRm(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{"fetch_before_delete prefix=saved/devvm", "delete_anyway"}
 	if _, ok := f.Instances[vm]; !ok || !slices.Equal(*asked, want) {
@@ -161,7 +148,7 @@ func TestCloneRm(t *testing.T) {
 	}
 	asked = answers(t, e, true)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if _, ok := f.Instances[vm]; ok || !slices.Equal(*asked, want[:1]) {
 		t.Errorf("confirmed: deleted %v, asked %q", !ok, *asked)
@@ -206,18 +193,18 @@ func TestCloneRmStartsAsLaunch(t *testing.T) {
 	}
 	e.Proxy.Stop(vm)
 	direct = true
-	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	e.Warn = warned.Add
 	before := len(f.Calls())
 	err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true})
 	// What kept it from starting is said, then the way out, carrying it.
-	if names(err) != "clone_check_not_started vm="+vm {
-		t.Errorf("gets out directly: %v", names(err))
+	if msg.NamesOf(err) != "clone_check_not_started vm="+vm {
+		t.Errorf("gets out directly: %v", msg.NamesOf(err))
 	}
-	if !slices.Contains(warned, "net_direct_route vm="+vm) {
-		t.Errorf("warned %q", warned)
+	if !slices.Contains(warned.Names(), "net_direct_route vm="+vm) {
+		t.Errorf("warned %q", warned.Names())
 	}
-	if m, ok := errors.AsType[msg.M](errors.Unwrap(err)); !ok || m.Names() != "net_direct_route vm="+vm {
+	if msg.NamesOf(errors.Unwrap(err)) != "net_direct_route vm="+vm {
 		t.Errorf("cause %v", errors.Unwrap(err))
 	}
 	// Nothing ran in it but the self-check.
@@ -251,21 +238,22 @@ func TestCloneRmWorktrees(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(clone, ".git", "info", "exclude"), []byte(".worktrees/\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var said []string
-	e.Say = func(m msg.M) { said = append(said, m.Names()) }
+	var said msg.Recorder
+	e.Say = said.Add
 	var out bytes.Buffer
 	e.Stdout = &out
 
 	// check runs rm, declining, and compares what it said and printed.
 	check := func(want []string, wantOut string) {
 		t.Helper()
-		said, out = nil, bytes.Buffer{}
+		said.Reset()
+		out = bytes.Buffer{}
 		asked := answers(t, e, false)
 		if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
-			t.Fatal(names(err))
+			t.Fatal(msg.NamesOf(err))
 		}
-		if !slices.Equal(said, want) || out.String() != wantOut || len(*asked) != min(len(want), 1) {
-			t.Errorf("said %q, printed %q, asked %q", said, out.String(), *asked)
+		if !slices.Equal(said.Names(), want) || out.String() != wantOut || len(*asked) != min(len(want), 1) {
+			t.Errorf("said %q, printed %q, asked %q", said.Names(), out.String(), *asked)
 		}
 	}
 	// Dirty only in a: shown under its heading, at most cloneShown.
@@ -358,14 +346,14 @@ func TestCloneRmTooManyWorktrees(t *testing.T) {
 		}
 		return inner(name, argv, o)
 	}
-	var said []string
-	e.Say = func(m msg.M) { said = append(said, m.Names()) }
+	var said msg.Recorder
+	e.Say = said.Add
 	asked := answers(t, e, false)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if _, ok := f.Instances[vm]; !ok || !slices.Equal(said, []string{"clone_worktrees_unchecked max=100"}) || !slices.Equal(*asked, []string{"delete_anyway"}) {
-		t.Errorf("said %q, asked %q", said, *asked)
+	if _, ok := f.Instances[vm]; !ok || !slices.Equal(said.Names(), []string{"clone_worktrees_unchecked max=100"}) || !slices.Equal(*asked, []string{"delete_anyway"}) {
+		t.Errorf("said %q, asked %q", said.Names(), *asked)
 	}
 }
 
@@ -374,7 +362,7 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	e, _, _ := cloneEnv(t)
 	got := printed(t, e, true)
 	if err := (clones{e}).fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
 	if !slices.Equal(*got, want) {
@@ -383,8 +371,8 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	gitIn(t, e.Dir, "branch", "saved")
 	*got = nil
 	err := (clones{e}).fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
-	if names(err) != "saved_names_taken remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
-		t.Errorf("no free names: %s, printed %q", names(err), *got)
+	if msg.NamesOf(err) != "saved_names_taken remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
+		t.Errorf("no free names: %s, printed %q", msg.NamesOf(err), *got)
 	}
 }
 
@@ -428,7 +416,7 @@ func TestCheckCloneRepo(t *testing.T) {
 	if err := os.Mkdir(sub, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	check := func(d string) string { return names(checkCloneRepo(t.Context(), d)) }
+	check := func(d string) string { return msg.NamesOf(checkCloneRepo(t.Context(), d)) }
 	if got := check(dir); got != "clone_not_top dir="+dir {
 		t.Errorf("no repo: %s", got)
 	}
@@ -474,7 +462,7 @@ func TestFreeRemote(t *testing.T) {
 		}
 		got, err := freeRemote(t.Context(), f)
 		if err != nil {
-			got = "error " + names(err)
+			got = "error " + msg.NamesOf(err)
 		}
 		if got != c.want {
 			t.Errorf("after %v: %q, want %q", c.add, got, c.want)

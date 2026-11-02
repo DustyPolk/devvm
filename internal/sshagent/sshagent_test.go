@@ -2,7 +2,6 @@ package sshagent
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -117,16 +116,6 @@ func readKeys(t *testing.T, a *Agent) []state.AgentKey {
 	return keys
 }
 
-func names(err error) string {
-	if m, ok := errors.AsType[msg.M](err); ok {
-		return m.Names()
-	}
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 // add records the key and its fingerprint, starts the agent and loads the
 // key there, kept 12 hours.
 func TestAdd(t *testing.T) {
@@ -134,7 +123,7 @@ func TestAdd(t *testing.T) {
 	key := filepath.Join(tmp, "deploy_key")
 	writeKey(t, key, "deploy")
 	if err := a.Add(t.Context(), key, AddOptions{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if got, want := readKeys(t, a), []state.AgentKey{{File: key, Fingerprint: "SHA256:fp-deploy"}}; !slices.Equal(got, want) {
 		t.Errorf("keys = %+v, want %+v", got, want)
@@ -159,7 +148,7 @@ func TestAddOptions(t *testing.T) {
 	writeKey(t, key, "k")
 	a.Getenv = func(k string) string { return map[string]string{"SSH_ASKPASS": "/usr/bin/true"}[k] } //nolint:gosec // a program, not a credential
 	if err := a.Add(t.Context(), key, AddOptions{Confirm: true, Lifetime: "30m"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if got := readKeys(t, a); len(got) != 1 || got[0].Options != "confirm lifetime=30m" {
 		t.Errorf("keys = %+v", got)
@@ -168,7 +157,7 @@ func TestAddOptions(t *testing.T) {
 		t.Errorf("calls = %q", f.calls)
 	}
 	if err := a.Add(t.Context(), key, AddOptions{Lifetime: Forever}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if got := readKeys(t, a); len(got) != 1 || got[0].Options != "lifetime=forever" {
 		t.Errorf("keys = %+v", got)
@@ -176,22 +165,22 @@ func TestAddOptions(t *testing.T) {
 	if f.calls[len(f.calls)-1] != "ssh-add key:k" {
 		t.Errorf("calls = %q", f.calls)
 	}
-	if err := a.Add(t.Context(), key, AddOptions{Lifetime: "soon"}); names(err) != "bad_duration value=soon" {
-		t.Errorf("--lifetime soon: %s", names(err))
+	if err := a.Add(t.Context(), key, AddOptions{Lifetime: "soon"}); msg.NamesOf(err) != "bad_duration value=soon" {
+		t.Errorf("--lifetime soon: %s", msg.NamesOf(err))
 	}
 	a.Getenv = func(string) string { return "" }
-	if err := a.Add(t.Context(), key, AddOptions{Confirm: true}); names(err) != "agent_confirm_needs_askpass" {
-		t.Errorf("--confirm without ssh-askpass: %s", names(err))
+	if err := a.Add(t.Context(), key, AddOptions{Confirm: true}); msg.NamesOf(err) != "agent_confirm_needs_askpass" {
+		t.Errorf("--confirm without ssh-askpass: %s", msg.NamesOf(err))
 	}
 	a.LookPath = func(string) (string, error) { return "/x/ssh-askpass", nil }
 	if err := a.Add(t.Context(), key, AddOptions{Confirm: true}); err != nil {
-		t.Errorf("--confirm with ssh-askpass on PATH: %s", names(err))
+		t.Errorf("--confirm with ssh-askpass on PATH: %s", msg.NamesOf(err))
 	}
-	if err := a.Add(t.Context(), filepath.Join(tmp, "none"), AddOptions{}); names(err) != "agent_key_not_found key="+filepath.Join(tmp, "none") {
-		t.Errorf("missing key: %s", names(err))
+	if err := a.Add(t.Context(), filepath.Join(tmp, "none"), AddOptions{}); msg.NamesOf(err) != "agent_key_not_found key="+filepath.Join(tmp, "none") {
+		t.Errorf("missing key: %s", msg.NamesOf(err))
 	}
-	if err := a.Add(t.Context(), tmp, AddOptions{}); !strings.HasPrefix(names(err), "agent_key_not_found ") {
-		t.Errorf("a folder: %s", names(err))
+	if err := a.Add(t.Context(), tmp, AddOptions{}); !strings.HasPrefix(msg.NamesOf(err), "agent_key_not_found ") {
+		t.Errorf("a folder: %s", msg.NamesOf(err))
 	}
 }
 
@@ -210,7 +199,7 @@ func TestEnsure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := a.Ensure(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := []string{"ssh-agent -a " + a.Socket(), "ssh-add -t 12h key:deploy", "ssh-add key:other"}; !slices.Equal(f.calls, want) {
 		t.Errorf("calls = %q, want %q", f.calls, want)
@@ -221,7 +210,7 @@ func TestEnsure(t *testing.T) {
 	}
 	f.held = slices.DeleteFunc(f.held, func(k string) bool { return k == "deploy" }) // its lifetime ran out
 	if err := a.Ensure(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := []string{"ssh-add -t 12h key:deploy"}; !slices.Equal(f.calls, want) {
 		t.Errorf("calls = %q, want %q", f.calls, want)
@@ -235,7 +224,7 @@ func TestEnsure(t *testing.T) {
 func TestEnsureNoKeys(t *testing.T) {
 	a, f, out, _, _ := testAgent(t)
 	if err := a.Ensure(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !f.up || !slices.Equal(out.lines, []string{"devvm: agent_no_keys"}) {
 		t.Errorf("up %v, said %q", f.up, out.lines)
@@ -250,7 +239,7 @@ func TestEnsurePinned(t *testing.T) {
 	writeKey(t, deploy, "deploy")
 	writeKey(t, main, "main")
 	if err := a.Add(t.Context(), deploy, AddOptions{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	*f = fakeAgent{} // a reboot
 	if err := os.Remove(deploy); err != nil {
@@ -261,7 +250,7 @@ func TestEnsurePinned(t *testing.T) {
 	}
 	out.lines = nil
 	if err := a.Ensure(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := []string{"devvm: agent_key_changed key=" + deploy}; !slices.Equal(out.lines, want) {
 		t.Errorf("said %q, want %q", out.lines, want)
@@ -274,7 +263,7 @@ func TestEnsurePinned(t *testing.T) {
 	}
 	out.lines = nil
 	if err := a.Ensure(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := []string{"devvm: agent_key_unpinned key=" + main}; !slices.Equal(out.lines, want) || slices.Contains(f.held, "main") {
 		t.Errorf("said %q, held %q", out.lines, f.held)
@@ -293,8 +282,8 @@ func TestMountedKey(t *testing.T) {
 	writeKey(t, key, "deploy")
 	*mounts = []Mount{{VM: "devvm-other-0123456789abcd", Dir: "/elsewhere"}, {VM: "devvm-proj-0123456789abcd", Dir: proj}}
 	want := "agent_key_mounted key=" + key + " vm=devvm-proj-0123456789abcd"
-	if err := a.Add(t.Context(), key, AddOptions{}); names(err) != want {
-		t.Errorf("add: %s, want %s", names(err), want)
+	if err := a.Add(t.Context(), key, AddOptions{}); msg.NamesOf(err) != want {
+		t.Errorf("add: %s, want %s", msg.NamesOf(err), want)
 	}
 	if len(readKeys(t, a)) != 0 || len(f.held) != 0 {
 		t.Error("the key was recorded or loaded")
@@ -303,19 +292,19 @@ func TestMountedKey(t *testing.T) {
 	if err := os.Symlink(key, link); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Add(t.Context(), link, AddOptions{}); !strings.HasPrefix(names(err), "agent_key_mounted ") {
-		t.Errorf("add a link to it: %s", names(err))
+	if err := a.Add(t.Context(), link, AddOptions{}); !strings.HasPrefix(msg.NamesOf(err), "agent_key_mounted ") {
+		t.Errorf("add a link to it: %s", msg.NamesOf(err))
 	}
 	// A sibling folder whose name starts the same isn't inside it.
 	*mounts = []Mount{{VM: "devvm-pro-0123456789abcd", Dir: filepath.Join(tmp, "pro")}}
 	if err := a.Add(t.Context(), key, AddOptions{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	*f = fakeAgent{}
 	*mounts = []Mount{{VM: "devvm-proj-0123456789abcd", Dir: proj}}
 	out.lines = nil
 	if err := a.Ensure(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.Equal(out.lines, []string{"devvm: " + want}) || len(f.held) != 0 {
 		t.Errorf("said %q, held %q", out.lines, f.held)
@@ -330,14 +319,14 @@ func TestKeys(t *testing.T) {
 	writeKey(t, k1, "a")
 	writeKey(t, k2, "b")
 	if err := a.Add(t.Context(), k1, AddOptions{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := a.Add(t.Context(), k2, AddOptions{Lifetime: "1h"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	var b strings.Builder
 	if err := a.Keys(t.Context(), &b); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	want := "256 SHA256:fp-a a comment (ED25519)\n256 SHA256:fp-b b comment (ED25519)\n" +
 		k1 + ": SHA256:fp-a lifetime=12h\n" + k2 + ": SHA256:fp-b lifetime=1h\n"
@@ -350,7 +339,7 @@ func TestKeys(t *testing.T) {
 		{File: k2, Fingerprint: "SHA256:fp-b", Lifetime: "1h", Loaded: true},
 	}
 	if err != nil || !slices.Equal(listed, wantList) {
-		t.Errorf("KeyList = %+v, %v; want %+v", listed, names(err), wantList)
+		t.Errorf("KeyList = %+v, %v; want %+v", listed, msg.NamesOf(err), wantList)
 	}
 }
 
@@ -359,7 +348,7 @@ func TestKeysNone(t *testing.T) {
 	a, f, out, _, _ := testAgent(t)
 	var b strings.Builder
 	if err := a.Keys(t.Context(), &b); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if b.Len() != 0 || len(f.calls) != 0 || f.up || len(out.lines) != 0 {
 		t.Errorf("wrote %q, calls %q, said %q", b.String(), f.calls, out.lines)
@@ -380,11 +369,11 @@ func TestRemove(t *testing.T) {
 	writeKey(t, k2, "b")
 	for _, k := range []string{k1, k2} {
 		if err := a.Add(t.Context(), k, AddOptions{}); err != nil {
-			t.Fatal(names(err))
+			t.Fatal(msg.NamesOf(err))
 		}
 	}
-	if err := a.Remove(t.Context(), filepath.Join(tmp, "nope")); names(err) != "agent_key_not_recorded key="+filepath.Join(tmp, "nope") {
-		t.Errorf("not added: %s", names(err))
+	if err := a.Remove(t.Context(), filepath.Join(tmp, "nope")); msg.NamesOf(err) != "agent_key_not_recorded key="+filepath.Join(tmp, "nope") {
+		t.Errorf("not added: %s", msg.NamesOf(err))
 	}
 	if len(readKeys(t, a)) != 2 || len(f.held) != 2 {
 		t.Fatalf("not added: changed %+v %q", readKeys(t, a), f.held)
@@ -395,7 +384,7 @@ func TestRemove(t *testing.T) {
 	t.Chdir(tmp)
 	out.lines = nil
 	if err := a.Remove(t.Context(), "a"); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if got, want := readKeys(t, a), []state.AgentKey{{File: k2, Fingerprint: "SHA256:fp-b"}}; !slices.Equal(got, want) {
 		t.Errorf("keys = %+v, want %+v", got, want)
@@ -412,7 +401,7 @@ func TestRemove(t *testing.T) {
 	// An agent that doesn't run, or no longer holds it: only the record goes.
 	f.up = false
 	if err := a.Remove(t.Context(), k2); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if len(readKeys(t, a)) != 0 {
 		t.Errorf("keys = %+v", readKeys(t, a))
@@ -462,7 +451,7 @@ func TestRealAgent(t *testing.T) {
 	var out said
 	a := New(d, func(context.Context) ([]Mount, error) { return nil, nil }, &out)
 	if err := a.Add(t.Context(), key, AddOptions{Lifetime: "1h"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if len(out.lines) == 0 || out.lines[0] != "==> agent_holds keys=devvm-test-key" {
 		t.Errorf("said %q", out.lines)
@@ -473,7 +462,7 @@ func TestRealAgent(t *testing.T) {
 	}
 	var b strings.Builder
 	if err := a.Keys(t.Context(), &b); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !strings.Contains(b.String(), " "+keys[0].Fingerprint+" devvm-test-key (ED25519)\n") ||
 		!strings.Contains(b.String(), key+": "+keys[0].Fingerprint+" lifetime=1h\n") {
@@ -481,7 +470,7 @@ func TestRealAgent(t *testing.T) {
 	}
 	// rm takes it out of the agent and the record, and leaves its file.
 	if err := a.Remove(t.Context(), key); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if held, code := a.list(t.Context()); code != 1 {
 		t.Errorf("after rm, the agent holds (%d):\n%s", code, held)

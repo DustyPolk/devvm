@@ -470,26 +470,26 @@ func TestSBString(t *testing.T) {
 // Lima can report a failed start for a VM that's running: carry on with a
 // warning, unless it doesn't answer over ssh; then it's stopped.
 func TestDegradedStart(t *testing.T) {
-	l, warned := stubLima(t)
+	l, warned, stubs := stubLima(t)
 	vm := "devvm-img-0123456789ab"
-	writeStub(t, "instances", vm+" Stopped\n")
-	writeStub(t, "start-fails", "")
+	stubs.Write(t, "instances", vm+" Stopped\n")
+	stubs.Write(t, "start-fails", "")
 	if err := l.Start(t.Context(), vm, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"started_with_warnings vm=" + vm}; !slices.Equal(*warned, want) {
-		t.Errorf("warned %q, want %q", *warned, want)
+	if want := []string{"started_with_warnings vm=" + vm}; !slices.Equal(warned.Names(), want) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
-	writeStub(t, "instances", vm+" Stopped\n")
-	writeStub(t, "shell-hangs", "")
+	stubs.Write(t, "instances", vm+" Stopped\n")
+	stubs.Write(t, "shell-hangs", "")
 	l.SSHTimeout = 200 * time.Millisecond
 	err := l.Start(t.Context(), vm, backend.Confinement{})
 	le, ok := errors.AsType[*backend.LoggedError](err)
 	if !ok || le.Msg.Names() != "start_no_ssh console="+filepath.Join(l.Dirs.LimaVM(vm), "serial*.log")+" vm="+vm {
 		t.Errorf("no ssh: %v", err)
 	}
-	if !slices.Contains(stubCalls(t), "limactl stop --force "+vm) {
-		t.Errorf("not stopped: %q", stubCalls(t))
+	if !slices.Contains(stubs.Calls(t), "limactl stop --force "+vm) {
+		t.Errorf("not stopped: %q", stubs.Calls(t))
 	}
 	// Not running after a failed start: it failed.
 	f := &fakeRunner{out: map[string]string{"limactl list --json": `{"name":"v","status":"Stopped"}`}, fail: []string{"limactl start"}}

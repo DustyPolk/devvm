@@ -212,8 +212,8 @@ func TestLinkConn(t *testing.T) {
 // runs confined, or a client without network policy.
 func TestWarnUnenforced(t *testing.T) {
 	e, f, client, target, _ := linkSessionEnv(t)
-	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	e.Warn = warned.Add
 	want := "link_target_unenforced target=" + target.Name() + " vm=" + client.Name()
 	setNet(t, client, "on")
 	setNet(t, target, "on")
@@ -241,10 +241,11 @@ func TestWarnUnenforced(t *testing.T) {
 		}
 		f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: c.status}
 		setNet(t, client, c.clientNet)
-		warned = nil
+		warned.Reset()
 		e.warnUnenforced(t.Context(), client, target)
-		if got := len(warned) == 1 && warned[0] == want; got != c.warns || len(warned) > 1 {
-			t.Errorf("%s: warned %q", c.name, warned)
+		w := warned.Names()
+		if got := len(w) == 1 && w[0] == want; got != c.warns || len(w) > 1 {
+			t.Errorf("%s: warned %q", c.name, w)
 		}
 		// The connection's check agrees with the warning.
 		if c.status == backend.StatusRunning && policyUnenforced(t.Context(), f, client, target) != c.warns {
@@ -275,7 +276,7 @@ func TestSessionLinks(t *testing.T) {
 	}
 	e, f, client, _, _ := linkSessionEnv(t)
 	f.Instances[client.Name()] = backend.Instance{Name: client.Name(), Status: backend.StatusStopped}
-	if err := e.Session(t.Context(), client.Name(), nil); names(err) != "vm_not_running vm="+client.Name() {
+	if err := e.Session(t.Context(), client.Name(), nil); msg.NamesOf(err) != "vm_not_running vm="+client.Name() {
 		t.Errorf("Session of a stopped client: %v", err)
 	}
 	f.Instances[client.Name()] = backend.Instance{Name: client.Name(), Status: backend.StatusRunning}
@@ -284,7 +285,7 @@ func TestSessionLinks(t *testing.T) {
 		t.Errorf("Session without ssh: %v", err)
 	}
 	f.Capabilities = backend.Caps{backend.FeatureSSH: backend.Native}
-	if err := e.Session(t.Context(), client.Name(), nil); names(err) != "backend_lacks backend=fake feature=link vm="+client.Name() {
+	if err := e.Session(t.Context(), client.Name(), nil); msg.NamesOf(err) != "backend_lacks backend=fake feature=link vm="+client.Name() {
 		t.Errorf("Session on a backend without links: %v", err)
 	}
 }

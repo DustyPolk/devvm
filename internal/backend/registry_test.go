@@ -10,6 +10,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -89,7 +90,7 @@ func TestFor(t *testing.T) {
 			c, err := r.For(d, vm, tc.flag)
 			if err != nil {
 				want := strings.ReplaceAll(tc.want, "$CONFIG", d.Config)
-				if got := names(t, err); got != want {
+				if got := msg.NamesOf(err); got != want {
 					t.Errorf("got %q, want %q", got, want)
 				}
 				return
@@ -164,7 +165,7 @@ func TestForWithoutTheDefault(t *testing.T) {
 	d := testDirs(t)
 	r := testRegistry(t, "smolvm")
 	_, err := r.For(d, readVM(t, d, ""), "")
-	if got, want := names(t, err), "backend_unknown backends=smolvm name=lima"; got != want {
+	if got, want := msg.NamesOf(err), "backend_unknown backends=smolvm name=lima"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

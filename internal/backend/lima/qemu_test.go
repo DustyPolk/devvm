@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 const fwd = "/x/devvm _qemu connect 127.0.0.1:5"
@@ -55,7 +57,7 @@ func TestRestrictNetdev(t *testing.T) {
 	} {
 		got, err := RestrictNetdev(tc.args, tc.guestfwd)
 		if tc.want == nil {
-			if !isMsg(err, "qemu_refused") {
+			if msg.IDOf(err) != "qemu_refused" {
 				t.Errorf("%s: %q, %v; want it refused", tc.name, got, err)
 			}
 			continue
@@ -145,7 +147,7 @@ func TestFindQEMU(t *testing.T) {
 	if err != nil || got != filepath.Join(realQEMU, "qemu-system-aarch64") {
 		t.Errorf("findQEMU = %q, %v", got, err)
 	}
-	if _, err := findQEMU("qemu-system-aarch64", wrapper, wrapper+":."); !isMsg(err, "qemu_missing") {
+	if _, err := findQEMU("qemu-system-aarch64", wrapper, wrapper+":."); msg.IDOf(err) != "qemu_missing" {
 		t.Errorf("none outside the wrapper: %v", err)
 	}
 }

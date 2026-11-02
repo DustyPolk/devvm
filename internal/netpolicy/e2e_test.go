@@ -37,8 +37,8 @@ func TestE2ESelfCheck(t *testing.T) {
 	want := os.Getenv("DEVVM_E2E_WANT")
 	p := &Proxy{Warn: func(m msg.M) { t.Log(m.Names()) }, Terminal: func() bool { return false }}
 	err = p.SelfCheck(t.Context(), b, st, func(context.Context) error { return errors.New("restarted without a terminal") })
-	if names(err) != want {
-		t.Fatalf("SelfCheck = %v, want %q", names(err), want)
+	if msg.NamesOf(err) != want {
+		t.Fatalf("SelfCheck = %v, want %q", msg.NamesOf(err), want)
 	}
 	in, err := b.Inspect(t.Context(), vm)
 	if err != nil {

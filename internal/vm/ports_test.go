@@ -23,8 +23,8 @@ func TestParsePorts(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", " ", "0", "65536", "8010-8000", "5173,,80", "abc", "80-", "1-2-3", "123456"} {
-		if _, err := ParsePorts(bad); names(err) != "port_invalid value="+`"`+bad+`"` {
-			t.Errorf("ParsePorts(%q) = %v", bad, names(err))
+		if _, err := ParsePorts(bad); msg.NamesOf(err) != "port_invalid value="+`"`+bad+`"` {
+			t.Errorf("ParsePorts(%q) = %v", bad, msg.NamesOf(err))
 		}
 	}
 }
@@ -54,8 +54,8 @@ func TestAddRemovePorts(t *testing.T) {
 			f, name = RemovePorts, "RemovePorts"
 		}
 		got, err := f(c.old, c.list)
-		if got != c.out || names(err) != c.err {
-			t.Errorf("%s(%q, %q) = %q, %v; want %q, %s", name, c.old, c.list, got, names(err), c.out, c.err)
+		if got != c.out || msg.NamesOf(err) != c.err {
+			t.Errorf("%s(%q, %q) = %q, %v; want %q, %s", name, c.old, c.list, got, msg.NamesOf(err), c.out, c.err)
 		}
 	}
 }
@@ -93,8 +93,8 @@ func TestStartPorts(t *testing.T) {
 		t.Run(strings.ReplaceAll(tc.ports, ",", "+"), func(t *testing.T) { // a comma isn't a project path's
 			e, f, _ := upEnv(t, allNative())
 			e.PortInUse = func(_ context.Context, p int) bool { return p == 5174 || p == 8080 }
-			var warned []string
-			e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+			var warned msg.Recorder
+			e.Warn = warned.Add
 			st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: tc.ports})
 			var got []backend.PortRange
 			for _, c := range f.Calls() {
@@ -113,7 +113,7 @@ func TestStartPorts(t *testing.T) {
 			if tc.warned != "" {
 				want = []string{tc.warned + st.Name()}
 			}
-			if taken := slices.DeleteFunc(warned, func(w string) bool { return !strings.HasPrefix(w, "ports_taken") }); !reflect.DeepEqual(taken, want) {
+			if taken := slices.DeleteFunc(warned.Names(), func(w string) bool { return !strings.HasPrefix(w, "ports_taken") }); !reflect.DeepEqual(taken, want) {
 				t.Errorf("warned %q, want %q", taken, want)
 			}
 		})
@@ -126,9 +126,9 @@ func TestStartPorts(t *testing.T) {
 // VM's backend gets them alone.
 func TestSetPortsRunning(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	var infos, warned []string
-	e.Info = func(m msg.M) { infos = append(infos, m.Names()) }
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var infos, warned msg.Recorder
+	e.Info = infos.Add
+	e.Warn = warned.Add
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "5173"})
 	vm := st.Name()
 	if err := st.Set("proxy_port", "30001"); err != nil {
@@ -136,10 +136,11 @@ func TestSetPortsRunning(t *testing.T) {
 	}
 	e.PortInUse = func(_ context.Context, p int) bool { return p == 8080 }
 	n := len(f.Calls())
-	infos, warned = nil, nil
+	infos.Reset()
+	warned.Reset()
 	s := Settings{e}
 	if err := s.SetPorts(t.Context(), PortsChange{Op: "add", List: "8080-8081"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	setPorts := func(n int) []any {
 		t.Helper()
@@ -166,8 +167,8 @@ func TestSetPortsRunning(t *testing.T) {
 	if got := conf.Forwarded(t.Context(), want); !reflect.DeepEqual(got, []backend.PortRange{{From: 5173, To: 5173}, {From: 8081, To: 8081}}) {
 		t.Errorf("forwarded %v", got)
 	}
-	if !slices.Equal(infos, []string{"ports_forwarding ports=5173,8080-8081 vm=" + vm}) || !slices.Equal(warned, []string{"ports_taken count=1 ports=8080 vm=" + vm}) {
-		t.Errorf("said %q, warned %q", infos, warned)
+	if !slices.Equal(infos.Names(), []string{"ports_forwarding ports=5173,8080-8081 vm=" + vm}) || !slices.Equal(warned.Names(), []string{"ports_taken count=1 ports=8080 vm=" + vm}) {
+		t.Errorf("said %q, warned %q", infos.Names(), warned.Names())
 	}
 	if ports, err := s.Ports(t.Context(), false); err != nil || ports != "5173,8080-8081" {
 		t.Errorf("ports: %q, %v", ports, err)
@@ -176,18 +177,18 @@ func TestSetPortsRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	n = len(f.Calls())
-	infos = nil
+	infos.Reset()
 	if err := s.SetPorts(t.Context(), PortsChange{List: "none"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if args := setPorts(n); !reflect.DeepEqual(args[2], backend.Confinement{}) || !slices.Equal(infos, []string{"ports_now ports=none vm=" + vm}) {
-		t.Errorf("stopped: SetPorts %v, said %q", args, infos)
+	if args := setPorts(n); !reflect.DeepEqual(args[2], backend.Confinement{}) || !slices.Equal(infos.Names(), []string{"ports_now ports=none vm=" + vm}) {
+		t.Errorf("stopped: SetPorts %v, said %q", args, infos.Names())
 	}
 	// Its backend failing: its state as it was, nothing said.
 	f.Errs = map[string]error{"SetPorts": msg.VMNotStopped(vm)}
-	infos = nil
-	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); names(err) != "vm_not_stopped vm="+vm || len(infos) != 0 {
-		t.Errorf("backend failed: %v, said %q", err, infos)
+	infos.Reset()
+	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); msg.NamesOf(err) != "vm_not_stopped vm="+vm || len(infos.Names()) != 0 {
+		t.Errorf("backend failed: %v, said %q", err, infos.Names())
 	}
 	if now, err := state.ReadVM(e.Dirs, vm); err != nil || now.Get(KeyPorts) != "none" {
 		t.Errorf("backend failed: state ports=%q, %v", now.Get(KeyPorts), err)

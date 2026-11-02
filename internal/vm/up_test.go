@@ -24,7 +24,7 @@ import (
 func TestUp(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Size: Size{CPUs: "2"}, Ports: "none"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()
 	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}
@@ -67,7 +67,7 @@ func TestUp(t *testing.T) {
 	// It exists now, and runs: opened as it is, set up again.
 	before := len(f.Calls())
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if ms := f.Methods()[before:]; slices.Contains(ms, "Start") || slices.Contains(ms, "CreateVM") || !slices.Contains(ms, "Exec") {
 		t.Errorf("calls again = %q", ms)
@@ -93,7 +93,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Exec", "List", "SSH", "Shell"}
 	if ms := f.Methods(); !slices.Equal(ms, want) {
@@ -126,8 +126,8 @@ func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
-	if names(err) != "net_direct_route vm="+spec.Name {
-		t.Fatalf("Up = %v", names(err))
+	if msg.NamesOf(err) != "net_direct_route vm="+spec.Name {
+		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Confined", "Stop"}
 	if ms := f.Methods(); !slices.Equal(ms, want) || len(*execs) > 0 {
@@ -164,7 +164,7 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
 	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
-	if got := names(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {
@@ -172,7 +172,7 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	}
 	// Without network policy it doesn't need it.
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
-		t.Errorf("Up without network policy = %v", names(err))
+		t.Errorf("Up without network policy = %v", msg.NamesOf(err))
 	}
 }
 
@@ -183,19 +183,19 @@ func TestUpWithoutEgressProxy(t *testing.T) {
 	delete(caps, backend.FeatureEgressProxy)
 	e, f, _ := upEnv(t, caps)
 	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
-	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=egress-proxy vm=devvm-web-") ||
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=egress-proxy vm=devvm-web-") ||
 		slices.Contains(f.Methods(), "BuildImage") {
 		t.Errorf("Up --network-policy = %v, calls %q", got, f.Methods())
 	}
-	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	e.Warn = warned.Add
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base"}); err != nil {
-		t.Fatalf("Up = %v", names(err))
+		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if st.Get(KeyNet) != "off" || !slices.Contains(warned, "net_off_backend backend=fake vm="+spec.Name) {
-		t.Errorf("net=%q, warned %q", st.Get(KeyNet), warned)
+	if st.Get(KeyNet) != "off" || !slices.Contains(warned.Names(), "net_off_backend backend=fake vm="+spec.Name) {
+		t.Errorf("net=%q, warned %q", st.Get(KeyNet), warned.Names())
 	}
 }
 
@@ -208,7 +208,7 @@ func TestUpTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "claude", NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "BuildTools", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}) {
 		t.Errorf("calls = %q", ms)
@@ -267,7 +267,7 @@ func TestUpRequires(t *testing.T) {
 	delete(caps, backend.FeatureProjectMount)
 	e, f, execs := upEnv(t, caps)
 	err := Launch{e}.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true})
-	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=project-mount vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=project-mount vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") || len(*execs) > 0 {
@@ -275,24 +275,12 @@ func TestUpRequires(t *testing.T) {
 	}
 }
 
-// stored is a fake whose disks are in dirs (backend.Storage).
-type stored struct {
-	*backendtest.Fake
-	dirs []string
-}
-
-func (s stored) DiskDirs() []string { return s.dirs }
-
-func (s stored) Floors() backend.Floors {
-	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
-}
-
 // Below the free space a new VM wants, nothing is built or made, and the
 // VM has no state; with enough for the VM but not base, base's build is
 // refused before it starts.
 func TestUpRefusesLowSpace(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
-	reg, err := backend.NewRegistry(stored{f, []string{e.Dirs.Lima}})
+	reg, err := backend.NewRegistry(backendtest.Stored{Fake: f, Dirs: []string{e.Dirs.Lima}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +294,7 @@ func TestUpRefusesLowSpace(t *testing.T) {
 	} {
 		e.FreeSpace = func(string) (uint64, error) { return tc.free, nil }
 		err := Launch{e}.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})
-		if got := names(err); !strings.HasPrefix(got, tc.want) {
+		if got := msg.NamesOf(err); !strings.HasPrefix(got, tc.want) {
 			t.Errorf("with %d free: Up = %v, want %s…", tc.free, got, tc.want)
 		}
 		if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") || len(*execs) > 0 {
@@ -325,7 +313,7 @@ func TestUpRequiresDockerLayer(t *testing.T) {
 	delete(caps, backend.FeatureDockerLayer)
 	e, f, _ := upEnv(t, caps)
 	err := Launch{e}.Up(t.Context(), Options{Image: "docker", NoNetworkPolicy: true, Ports: "none"})
-	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") {
@@ -342,24 +330,24 @@ func TestUpDefaultDiskUnused(t *testing.T) {
 	if err := state.WriteSize(e.Dirs, state.Size{CPUs: "2", Disk: "150"}); err != nil {
 		t.Fatal(err)
 	}
-	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	e.Warn = warned.Add
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	if spec.Size != (backend.Size{CPUs: 2}) {
 		t.Errorf("size = %+v", spec.Size)
 	}
-	if len(warned) != 1 || !strings.HasPrefix(warned[0], "size_disk_default_unused backend=fake vm=devvm-web-") {
-		t.Errorf("warned %q", warned)
+	if w := warned.Names(); len(w) != 1 || !strings.HasPrefix(w[0], "size_disk_default_unused backend=fake vm=devvm-web-") {
+		t.Errorf("warned %q", w)
 	}
 	if st, _ := state.ReadVM(e.Dirs, spec.Name); st.Get(KeyDisk) != "" || st.Get(KeyCPUs) != "2" {
 		t.Errorf("state disk=%q cpus=%q", st.Get(KeyDisk), st.Get(KeyCPUs))
 	}
 	e2, _, _ := upEnv(t, caps)
 	err := (Launch{e2}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
-	if got := names(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
 		t.Errorf("--disk: %v", got)
 	}
 }

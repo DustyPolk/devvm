@@ -50,11 +50,11 @@ func fakeForwarders(t *testing.T, l *Lima, vm string) *[][]string {
 // on, as does one without a ports record. Stopping the VM stops it;
 // deleting it removes its files.
 func TestStartForwarder(t *testing.T) {
-	l, warned := stubLima(t)
+	l, warned, stubs := stubLima(t)
 	// Confined as on this host: macOS's sandbox-exec runs for real.
 	l.OS = runtime.GOOS
 	vm := "devvm-p-0123456789abcd"
-	writeStub(t, "instances", vm+" Stopped\n")
+	stubs.Write(t, "instances", vm+" Stopped\n")
 	starts := fakeForwarders(t, l, vm)
 	ctx := t.Context()
 	key := func(context.Context) (string, error) { return "ssh-ed25519 AAAAkey", nil }
@@ -63,10 +63,10 @@ func TestStartForwarder(t *testing.T) {
 	if err := l.Start(ctx, vm, c); err != nil {
 		t.Fatal(err)
 	}
-	if len(*starts) != 0 || !slices.Equal(*warned, []string{"ports_forward_failed log=" + l.Forwards.Log(vm) + " vm=" + vm}) {
-		t.Fatalf("no record: started %q, warned %q", *starts, *warned)
+	if len(*starts) != 0 || !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + l.Forwards.Log(vm) + " vm=" + vm}) {
+		t.Fatalf("no record: started %q, warned %q", *starts, warned.Names())
 	}
-	*warned = nil
+	warned.Reset()
 	if err := l.Stop(ctx, vm); err != nil {
 		t.Fatal(err)
 	}
@@ -142,8 +142,8 @@ func TestStartForwarder(t *testing.T) {
 	if err := l.Stop(ctx, vm); err != nil {
 		t.Fatal(err)
 	}
-	if len(*starts) != n || len(*warned) != 0 {
-		t.Errorf("forwarders started %q, warned %q", (*starts)[n:], *warned)
+	if len(*starts) != n || len(warned.Names()) != 0 {
+		t.Errorf("forwarders started %q, warned %q", (*starts)[n:], warned.Names())
 	}
 
 	// Its host key unknown: warned, the VM runs.
@@ -151,8 +151,8 @@ func TestStartForwarder(t *testing.T) {
 	if err := l.Start(ctx, vm, c); err != nil {
 		t.Fatal(err)
 	}
-	if len(*starts) != n || !slices.Equal(*warned, []string{"ports_forward_failed log=" + l.Forwards.Log(vm) + " vm=" + vm}) {
-		t.Errorf("no host key: started %q, warned %q", (*starts)[n:], *warned)
+	if len(*starts) != n || !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + l.Forwards.Log(vm) + " vm=" + vm}) {
+		t.Errorf("no host key: started %q, warned %q", (*starts)[n:], warned.Names())
 	}
 	if err := l.Delete(ctx, vm); err != nil {
 		t.Fatal(err)
@@ -168,9 +168,9 @@ func TestStartForwarder(t *testing.T) {
 // the new ones, those Free leaves, the old one stopped first; none stops
 // it. A stopped VM's change starts none.
 func TestSetPortsRunning(t *testing.T) {
-	l, warned := stubLima(t)
+	l, warned, stubs := stubLima(t)
 	vm := "devvm-p-0123456789abcd"
-	writeStub(t, "instances", vm+" Stopped\n")
+	stubs.Write(t, "instances", vm+" Stopped\n")
 	starts := fakeForwarders(t, l, vm)
 	ctx := t.Context()
 	key := func(context.Context) (string, error) { return "ssh-ed25519 AAAAkey", nil }
@@ -214,8 +214,8 @@ func TestSetPortsRunning(t *testing.T) {
 	if err := l.SetPorts(ctx, vm, backend.Ports{All: true}, c); err != nil {
 		t.Fatal(err)
 	}
-	if len(*starts) != 2 || len(*warned) != 0 {
-		t.Errorf("stopped: started %q, warned %q", *starts, *warned)
+	if len(*starts) != 2 || len(warned.Names()) != 0 {
+		t.Errorf("stopped: started %q, warned %q", *starts, warned.Names())
 	}
 }
 

@@ -1,7 +1,6 @@
 package state
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -17,7 +16,7 @@ func TestParseDuration(t *testing.T) {
 	}
 	for _, in := range []string{"", "d", "0d", "-1d", "30", "30s", "1h30m", "1.5d", "30 d", "+3d", "999999d", "30D", "forever", "off"} {
 		_, err := ParseDuration(in)
-		if m, ok := errors.AsType[msg.M](err); !ok || m.Names() != "bad_duration value="+in {
+		if msg.NamesOf(err) != "bad_duration value="+in {
 			t.Errorf("ParseDuration(%q) = %v; want bad_duration", in, err)
 		}
 	}

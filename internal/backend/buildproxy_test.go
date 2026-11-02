@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // A build's proxy starts with its own password, its policy and the
@@ -98,7 +100,7 @@ func TestProxyStarterFails(t *testing.T) {
 		return p.Process, nil
 	}}
 	_, err := s.Start("b", dir, "/l", nil)
-	if names(t, err) != "proxy_start_failed log="+filepath.Join(dir, "proxy.log")+" vm=b" {
+	if msg.NamesOf(err) != "proxy_start_failed log="+filepath.Join(dir, "proxy.log")+" vm=b" {
 		t.Errorf("Start = %v", err)
 	}
 }

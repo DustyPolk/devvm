@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // devvm's git on the host never runs a repo's fsmonitor, which a repo's
@@ -60,7 +62,7 @@ func TestCloneRunsNoHooks(t *testing.T) {
 	gitIn(t, vmfs+e.Dir, "commit", "-q", "--allow-empty", "-m", "from-vm")
 	answers(t, e, true)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if got := gitIn(t, e.Dir, "log", "--format=%s", "-1", "refs/heads/saved/devvm/main"); got != "from-vm" {
 		t.Errorf("fetched %q", got)

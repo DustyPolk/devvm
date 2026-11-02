@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -26,13 +27,13 @@ func TestNetwork(t *testing.T) {
 		t.Helper()
 		s, err := n.Network(t.Context())
 		if err != nil || s.Policy != want || len(s.Rules) == 0 || !strings.HasSuffix(s.Rules[0].Path, "/layers/base.policy") || len(s.Rules[0].Rules()) == 0 {
-			t.Errorf("Network = %+v, %v; want %s", s, names(err), want)
+			t.Errorf("Network = %+v, %v; want %s", s, msg.NamesOf(err), want)
 		}
 	}
 	shown("off")
 	for range 2 { // the second time it's already on
 		if err := n.SetNetwork(t.Context(), true); err != nil {
-			t.Fatal(names(err))
+			t.Fatal(msg.NamesOf(err))
 		}
 	}
 	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(KeyNet) != "on" || slices.Contains(f.Methods(), "Stop") {
@@ -41,11 +42,11 @@ func TestNetwork(t *testing.T) {
 	shown(netpolicy.CheckUnenforced)
 	// Its next launch, without a terminal to offer the restart in, stops
 	// it; the one after starts it confined.
-	if err := l.Up(t.Context(), Options{}); names(err) != "net_unenforced_stop vm="+vm {
-		t.Fatalf("Up = %v", names(err))
+	if err := l.Up(t.Context(), Options{}); msg.NamesOf(err) != "net_unenforced_stop vm="+vm {
+		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	if err := l.Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetProxy {
 		t.Errorf("started %+v", c)
@@ -53,19 +54,19 @@ func TestNetwork(t *testing.T) {
 	shown("on")
 	// Off while it runs confined: it keeps its proxy until it starts again.
 	if err := n.SetNetwork(t.Context(), false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	pid, ok := e.Proxy.PID(vm)
 	before := len(f.Calls())
 	if err := l.Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if again, _ := e.Proxy.PID(vm); !ok || again != pid || slices.Contains(f.Methods()[before:], "Start") {
 		t.Errorf("proxy %d, was %d; calls %q", again, pid, f.Methods()[before:])
 	}
 	shown("off")
 	if err := l.Restart(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetDirect {
 		t.Errorf("restarted %+v", c)
@@ -83,7 +84,7 @@ func TestNetworkRequiresEgressProxy(t *testing.T) {
 	e, _, _ := upEnv(t, caps)
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	err := Net{e}.SetNetwork(t.Context(), true)
-	if got := names(err); got != "backend_unreviewed backend=fake feature=egress-proxy vm="+st.Name() {
+	if got := msg.NamesOf(err); got != "backend_unreviewed backend=fake feature=egress-proxy vm="+st.Name() {
 		t.Errorf("Network on = %v", got)
 	}
 	if st, _ := state.ReadVM(e.Dirs, st.Name()); st.Get(KeyNet) != "off" {

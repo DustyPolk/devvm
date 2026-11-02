@@ -103,7 +103,7 @@ func TestToolFileRefuses(t *testing.T) {
 	bad := node()
 	bad.Version = "1$(id)"
 	_, err := ToolFile(root, bad)
-	if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != "tool_bad_version" {
+	if msg.IDOf(err) != "tool_bad_version" {
 		t.Errorf("version 1$(id): got %v, want tool_bad_version", err)
 	}
 	for name, change := range map[string]func(*Tool){

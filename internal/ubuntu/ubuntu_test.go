@@ -108,11 +108,10 @@ func finder(url, arch string, g *fakeGPGV, notes *[]msg.M) *Finder {
 
 func wantMsg(t *testing.T, err error, id string, vals ...string) {
 	t.Helper()
-	m, ok := errors.AsType[msg.M](err)
-	if !ok || m.ID() != id {
+	if msg.IDOf(err) != id {
 		t.Fatalf("got %v, want %s", err, id)
 	}
-	if got := m.Names(); !strings.HasPrefix(got, strings.Join(append([]string{id}, vals...), " ")) {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, strings.Join(append([]string{id}, vals...), " ")) {
 		t.Errorf("got %s, want %s %s", got, id, strings.Join(vals, " "))
 	}
 }

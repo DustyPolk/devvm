@@ -22,6 +22,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -107,9 +108,9 @@ func (f *fakeRunner) lines() []string {
 	return ls
 }
 
-// sandbox points devvm's folders and the stubs' into a new folder under
-// /tmp (short, for Lima's socket paths), with the stubs first on PATH.
-func sandbox(t *testing.T) paths.Dirs {
+// sandbox points devvm's folders into a new folder under /tmp (short, for
+// Lima's socket paths), with the stubs first on PATH.
+func sandbox(t *testing.T) (paths.Dirs, *stubtest.Stubs) {
 	t.Helper()
 	root, err := os.MkdirTemp("/tmp", "dvl.")
 	if err != nil {
@@ -120,38 +121,40 @@ func sandbox(t *testing.T) paths.Dirs {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, d := range []string{"home", "data", "config", "stub"} {
+	for _, d := range []string{"home", "data", "config"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	stubs, err := filepath.Abs(filepath.Join("..", "..", "..", "testdata", "stubs"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	stubs := stubtest.New(t)
 	t.Setenv("HOME", filepath.Join(root, "home"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("DEVVM_LIMA_HOME", filepath.Join(root, "lima"))
 	t.Setenv("LIMA_HOME", "/elsewhere") // never devvm's
-	t.Setenv("STUB_DIR", filepath.Join(root, "stub"))
-	t.Setenv("STUB_LOG", filepath.Join(root, "stub", "calls"))
 	t.Setenv("DEVVM_MESSAGES", "names")
-	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 	d, err := paths.FromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d
+	return d, stubs
 }
 
 // testLima returns the backend on a sandbox, as on host os, with the fake
 // runner; warnings go to warned.
-func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
+func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder) {
 	t.Helper()
-	l := New(sandbox(t), assets.FS, testUI{}, platform.Host{}, "")
+	l, f, warned, _ := limaOn(t, goos)
+	return l, f, warned
+}
+
+// limaOn is testLima, with the sandbox's stubs.
+func limaOn(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder, *stubtest.Stubs) {
+	t.Helper()
+	d, stubs := sandbox(t)
+	l := New(d, assets.FS, testUI{}, platform.Host{}, "")
 	f := &fakeRunner{out: map[string]string{}}
-	var warned []string
+	warned := &msg.Recorder{}
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"
 	l.Getenv = func(string) string { return "" }
 	l.Spawn = func(string, []string, *os.File) (*os.Process, error) { return nil, errors.New("no build proxy here") }
@@ -161,42 +164,16 @@ func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *[]string) {
 	if err := os.WriteFile(l.KVM, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	l.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
-	return l, f, &warned
+	l.Warn = warned.Add
+	return l, f, warned, stubs
 }
 
 // stubLima is testLima with the real runner, so limactl is the stub.
-func stubLima(t *testing.T) (*Lima, *[]string) {
+func stubLima(t *testing.T) (*Lima, *msg.Recorder, *stubtest.Stubs) {
 	t.Helper()
-	l, _, warned := testLima(t, "darwin")
-	l.Runner = logRunner{testUI{}.LoggedCmd}
-	return l, warned
-}
-
-func writeStub(t *testing.T, name, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(os.Getenv("STUB_DIR"), name), []byte(content), 0o600); err != nil { //nolint:gosec // the test's sandbox
-		t.Fatal(err)
-	}
-}
-
-func readStub(t *testing.T, name string) string {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join(os.Getenv("STUB_DIR"), name)) //nolint:gosec // the test's sandbox
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
-	return string(b)
-}
-
-func stubCalls(t *testing.T) []string {
-	t.Helper()
-	return strings.Split(strings.TrimSpace(readStub(t, "calls")), "\n")
-}
-
-func isMsg(err error, id string) bool {
-	m, ok := errors.AsType[msg.M](err)
-	return ok && m.ID() == id
+	l, _, warned, stubs := limaOn(t, "darwin")
+	l.Runner = stubtest.ExecRunner{}
+	return l, warned, stubs
 }
 
 // Lima runs on devvm's own Lima home (DEVVM_LIMA_HOME, never LIMA_HOME),
@@ -215,13 +192,13 @@ func TestFloors(t *testing.T) {
 }
 
 func TestLimactlUsesDevvmsHomeAndFolder(t *testing.T) {
-	l, _ := stubLima(t)
+	l, _, stubs := stubLima(t)
 	t.Chdir(t.TempDir())
 	if _, err := l.List(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	want := "cwd=" + l.Dirs.Data + " LIMA_HOME=" + os.Getenv("DEVVM_LIMA_HOME") + "\n"
-	if got := readStub(t, "limactl-env"); got != want {
+	if got := stubs.Read(t, "limactl-env"); got != want {
 		t.Errorf("limactl ran with %q, want %q", got, want)
 	}
 }
@@ -246,11 +223,11 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := l.Start(t.Context(), "devvm-img-x", backend.Confinement{Net: backend.NetInternet})
-	if !isMsg(err, "lima_global_config") || !strings.Contains(err.Error(), "files="+filepath.Join(cfg, "default.yaml")) {
+	if msg.IDOf(err) != "lima_global_config" || !strings.Contains(err.Error(), "files="+filepath.Join(cfg, "default.yaml")) {
 		t.Errorf("with default.yaml: %v", err)
 	}
 	f.out["limactl --version"] = "limactl version 2.2.1\n"
-	if err := l.Check(t.Context()); !isMsg(err, "lima_global_config") {
+	if err := l.Check(t.Context()); msg.IDOf(err) != "lima_global_config" {
 		t.Errorf("Check with default.yaml: %v", err)
 	}
 	if err := os.Remove(filepath.Join(cfg, "default.yaml")); err != nil {
@@ -276,7 +253,7 @@ func TestNameMax(t *testing.T) {
 	}
 	long := "devvm-" + strings.Repeat("x", n) + "-0123456789abcd"
 	err := l.CreateVM(t.Context(), "k", backend.VMSpec{Name: long})
-	if !isMsg(err, "lima_home_too_long") {
+	if msg.IDOf(err) != "lima_home_too_long" {
 		t.Errorf("a name too long: %v", err)
 	}
 	if len(f.calls) > 0 {
@@ -368,7 +345,7 @@ func TestListAndImages(t *testing.T) {
 func TestDeleteImage(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
 	f.out["limactl list --json"] = listed
-	if err := l.DeleteImage(t.Context(), "x-0123456789abcd"); !isMsg(err, "not_an_image") {
+	if err := l.DeleteImage(t.Context(), "x-0123456789abcd"); msg.IDOf(err) != "not_an_image" {
 		t.Errorf("a project VM: %v", err)
 	}
 	if err := l.DeleteImage(t.Context(), "missing0000"); err != nil {
@@ -384,7 +361,7 @@ func TestDeleteImage(t *testing.T) {
 
 func TestImageSize(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
-	if _, err := l.ImageSize(t.Context(), "x-0123456789abcd"); !isMsg(err, "not_an_image") {
+	if _, err := l.ImageSize(t.Context(), "x-0123456789abcd"); msg.IDOf(err) != "not_an_image" {
 		t.Errorf("a project VM: %v", err)
 	}
 	if _, err := l.ImageSize(t.Context(), "0123456789ab"); !errors.Is(err, fs.ErrNotExist) {
@@ -459,7 +436,7 @@ func TestCreateVM(t *testing.T) {
 	if err == nil || err.Error() != "mount_comma path=/a,b" {
 		t.Errorf("a comma: %v", err)
 	}
-	if err := l.CreateVM(t.Context(), "fedcba987654", backend.VMSpec{Name: "devvm-q-0123456789abcd"}); !isMsg(err, "image_missing") {
+	if err := l.CreateVM(t.Context(), "fedcba987654", backend.VMSpec{Name: "devvm-q-0123456789abcd"}); msg.IDOf(err) != "image_missing" {
 		t.Errorf("no image: %v", err)
 	}
 	f.fail = []string{"limactl clone"}
@@ -641,7 +618,7 @@ func TestSSH(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("SSH: %+v, %v; want %+v", got, err, want)
 	}
-	if _, err := l.SSH(t.Context(), "s"); !isMsg(err, "vm_not_running") {
+	if _, err := l.SSH(t.Context(), "s"); msg.IDOf(err) != "vm_not_running" {
 		t.Errorf("SSH to a stopped VM: %v", err)
 	}
 }
@@ -668,8 +645,8 @@ func TestExecAndShell(t *testing.T) {
 
 // Against the limactl stub: VMs stop, start and go.
 func TestStubLifecycle(t *testing.T) {
-	l, _ := stubLima(t)
-	writeStub(t, "instances", "devvm-p-0123456789abcd Stopped\n")
+	l, _, stubs := stubLima(t)
+	stubs.Write(t, "instances", "devvm-p-0123456789abcd Stopped\n")
 	ctx := t.Context()
 	vm := "devvm-p-0123456789abcd"
 	if err := l.Start(ctx, vm, backend.Confinement{}); err != nil {
@@ -695,7 +672,7 @@ func TestStubLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got []string
-	for _, c := range stubCalls(t) {
+	for _, c := range stubs.Calls(t) {
 		if c != "limactl list --json" {
 			got = append(got, c)
 		}

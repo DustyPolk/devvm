@@ -98,12 +98,11 @@ func TestRead(t *testing.T) {
 			}
 			got, err := Read(dir)
 			if c.err != "" {
-				var m msg.M
-				if !errors.As(err, &m) || m.ID() != c.err {
+				if msg.IDOf(err) != c.err {
 					t.Fatalf("err = %v, want %s", err, c.err)
 				}
-				if !strings.Contains(m.Names(), "file="+dir) {
-					t.Errorf("message %s doesn't name the file", m.Names())
+				if !strings.Contains(msg.NamesOf(err), "file="+dir) {
+					t.Errorf("message %s doesn't name the file", msg.NamesOf(err))
 				}
 				return
 			}
@@ -188,8 +187,7 @@ func TestReadRefuses(t *testing.T) {
 	}
 	dir := filepath.Join(parent, "ca")
 	_, err := Read(dir)
-	var m msg.M
-	if !errors.As(err, &m) || m.Names() != "ca_folder_link dir="+dir {
+	if msg.NamesOf(err) != "ca_folder_link dir="+dir {
 		t.Errorf("a linked folder: %v", err)
 	}
 }

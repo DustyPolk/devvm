@@ -17,25 +17,18 @@ import (
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
-
-// execRunner runs the commands as they are: here, the docker stub.
-type execRunner struct{}
-
-func (execRunner) Run(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-
-func (execRunner) Output(cmd *exec.Cmd) ([]byte, error) { return cmd.Output() }
-
-func (execRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 
 // sandbox is a Docker backend on the stub (testdata/stubs/docker), first
 // on PATH, with devvm's folders in a new temporary folder, on Linux, its
 // engine this machine's; its user is u, uid 501, gid 1000.
 type sandbox struct {
 	*Docker
-	stub  string
-	infos []msg.M
+	stubs *stubtest.Stubs
+	stub  string // stubs.Dir
+	infos msg.Recorder
 	// detached are the processes Detach and Spawn started, each its path
 	// and arguments.
 	detached [][]string
@@ -46,28 +39,22 @@ type sandbox struct {
 func newSandbox(t *testing.T) *sandbox {
 	t.Helper()
 	root := t.TempDir()
-	stub := filepath.Join(root, "stub")
-	for _, d := range []string{"data", "config", "stub"} {
+	for _, d := range []string{"data", "config"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	stubs, err := filepath.Abs(filepath.Join("..", "..", "..", "testdata", "stubs"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("STUB_DIR", stub)
-	t.Setenv("STUB_LOG", filepath.Join(stub, "calls"))
-	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
+	stubs := stubtest.New(t)
+	stub := stubs.Dir
 	d := paths.Dirs{Data: filepath.Join(root, "data", "devvm"), Config: filepath.Join(root, "config", "devvm"), Lima: filepath.Join(root, "lima")}
-	s := &sandbox{stub: stub}
+	s := &sandbox{stubs: stubs, stub: stub}
 	// devvm's Linux build, as findLinux would find it.
 	linux := filepath.Join(root, "devvm-linux")
 	if err := os.WriteFile(linux, []byte("devvm for linux"), 0o700); err != nil { //nolint:gosec // a stand-in for a binary
 		t.Fatal(err)
 	}
 	s.Docker = &Docker{
-		client: client{Runner: execRunner{}, names: names{Data: d.Data}}, Dirs: d, OS: "linux", Arch: "arm64", Assets: assets.FS,
+		client: client{Runner: stubtest.ExecRunner{}, names: names{Data: d.Data}}, Dirs: d, OS: "linux", Arch: "arm64", Assets: assets.FS,
 		User:     func() (*user.User, error) { return &user.User{Username: "u", Uid: "501", Gid: "1000"}, nil },
 		Hostname: func() (string, error) { return "stub-host", nil },
 		Terminal: func() bool { return false },
@@ -93,7 +80,7 @@ func newSandbox(t *testing.T) *sandbox {
 			f.Args = func(int) ([]string, error) { return nil, errors.New("no process") }
 			return f
 		}(),
-		Info: func(m msg.M) { s.infos = append(s.infos, m) }, Warn: func(msg.M) {},
+		Info: s.infos.Add, Warn: func(msg.M) {},
 		WithSteps:  func(ctx context.Context, _ int) context.Context { return ctx },
 		AddCleanup: func(func(context.Context)) func() { return func() {} }, Interrupted: func() bool { return false },
 	}
@@ -109,13 +96,9 @@ func newSandbox(t *testing.T) *sandbox {
 // calls are the stub's calls, without the reads.
 func (s *sandbox) calls(t *testing.T) []string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(s.stub, "calls"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
 	var out []string
-	for l := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
-		if l == "" || strings.HasPrefix(l, "docker container inspect") || strings.HasPrefix(l, "docker image inspect") ||
+	for _, l := range s.stubs.Calls(t) {
+		if strings.HasPrefix(l, "docker container inspect") || strings.HasPrefix(l, "docker image inspect") ||
 			strings.HasPrefix(l, "docker container ls") || strings.HasPrefix(l, "docker volume inspect") || strings.HasPrefix(l, "docker info") ||
 			strings.HasPrefix(l, "docker network inspect") {
 			continue
@@ -141,39 +124,6 @@ func (s *sandbox) sleep(t *testing.T, path string, args []string, out *os.File) 
 		_, _ = out.WriteString("devvm proxy: listening on 127.0.0.1:40000 for x\n")
 	}
 	return sleep.Process, nil
-}
-
-func (s *sandbox) reset(t *testing.T) {
-	t.Helper()
-	if err := os.Remove(filepath.Join(s.stub, "calls")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
-}
-
-func (s *sandbox) touch(t *testing.T, name string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(s.stub, name), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// id is the ID of the message err carries; "" for none.
-func id(err error) string {
-	var m msg.M
-	if errors.As(err, &m) {
-		return m.ID()
-	}
-	return ""
-}
-
-// shown is the message err carries, as DEVVM_MESSAGES=names shows it; ""
-// for none.
-func shown(err error) string {
-	var m msg.M
-	if errors.As(err, &m) {
-		return m.Names()
-	}
-	return ""
 }
 
 // field reads a stub object's field: containers/NAME/status.
@@ -269,7 +219,7 @@ func TestCapsByEngine(t *testing.T) {
 			if c.kind == kindLinux {
 				want = "docker_layer_no_sysbox"
 			}
-			if rt, err := s.DockerLayer("devvm-x"); rt != "" || id(err) != want {
+			if rt, err := s.DockerLayer("devvm-x"); rt != "" || msg.IDOf(err) != want {
 				t.Errorf("DockerLayer = %q, %v; want %s", rt, err, want)
 			}
 			// Over docker exec, on every engine, reviewed.
@@ -302,12 +252,12 @@ func TestProblems(t *testing.T) {
 	if got := key(); len(got) != 0 {
 		t.Errorf("an engine of this machine's: %v", got)
 	}
-	s.touch(t, "docker-down")
+	s.stubs.Touch(t, "docker-down")
 	if got := key(); !slices.Equal(got, []string{"docker-engine:docker_down:"}) {
 		t.Errorf("no engine: %v", got)
 	}
 	_ = os.Remove(filepath.Join(s.stub, "docker-down"))
-	s.touch(t, "docker-denied")
+	s.stubs.Touch(t, "docker-denied")
 	if got := key(); !slices.Equal(got, []string{"docker-access:docker_access:sudo usermod -aG docker u"}) {
 		t.Errorf("no access: %v", got)
 	}
@@ -396,7 +346,7 @@ func TestReport(t *testing.T) {
 	if err := s.checkShared("/Users/me/p"); err != nil {
 		t.Errorf("a shared folder: %v", err)
 	}
-	if err := s.checkShared("/opt/p"); id(err) != "docker_not_shared" {
+	if err := s.checkShared("/opt/p"); msg.IDOf(err) != "docker_not_shared" {
 		t.Errorf("a folder it doesn't share: %v", err)
 	}
 	if err := os.WriteFile(s.SharingFile, []byte(`{}`), 0o600); err != nil {
@@ -469,7 +419,7 @@ func TestBuildBase(t *testing.T) {
 func TestBuildLayerFails(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, baseKey)
-	s.touch(t, "script-fails")
+	s.stubs.Touch(t, "script-fails")
 	_, err := s.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base+node", Key: nodeKey, Parent: baseKey, Net: backend.NetInternet,
 		Scripts: []backend.Script{{Name: "node.sh", Data: []byte("#!/bin/bash\n# node\n")}},
@@ -506,7 +456,7 @@ func TestBuildRefusedElsewhere(t *testing.T) {
 		t.Fatal(ps)
 	}
 	_, err := s.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet})
-	if shown(err) != msg.BackendLacks(Name, "build-confinement", "base").Names() {
+	if msg.NamesOf(err) != msg.BackendLacks(Name, "build-confinement", "base").Names() {
 		t.Errorf("err = %v", err)
 	}
 	if calls := s.calls(t); len(calls) != 0 {
@@ -531,7 +481,7 @@ func TestBuildFrom(t *testing.T) {
 	if _, ok := has(s.calls(t), "docker image pull"); ok {
 		t.Error("pulled an image only Docker has")
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	digest := "docker.io/library/node@sha256:" + strings.Repeat("e", 64)
 	if _, err := s.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: nodeKey, Net: backend.NetInternet, From: &backend.From{Ref: "node:24", Digest: digest},
@@ -597,7 +547,7 @@ func TestCreateVM(t *testing.T) {
 	if users, err := s.imageUsers(t.Context(), baseKey); err != nil || !slices.Equal(users, []string{vm}) {
 		t.Errorf("imageUsers = %v, %v", users, err)
 	}
-	if err := s.DeleteImage(t.Context(), baseKey); id(err) != "image_in_use" {
+	if err := s.DeleteImage(t.Context(), baseKey); msg.IDOf(err) != "image_in_use" {
 		t.Errorf("DeleteImage of an image in use: %v", err)
 	}
 }
@@ -608,17 +558,17 @@ func TestCreateVMRefused(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, baseKey)
 	err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Size: backend.Size{DiskGiB: 200}})
-	if shown(err) != msg.BackendLacks(Name, "disk", vm).Names() {
+	if msg.NamesOf(err) != msg.BackendLacks(Name, "disk", vm).Names() {
 		t.Errorf("disk: %v", err)
 	}
-	if err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/a,b"}); id(err) != "docker_mount_path" {
+	if err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/a,b"}); msg.IDOf(err) != "docker_mount_path" {
 		t.Errorf("a comma: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(s.stub, "docker", "containers", vm), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	s.touch(t, "docker-foreign-"+vm)
-	if err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/web"}); id(err) != "docker_container_foreign" {
+	s.stubs.Touch(t, "docker-foreign-"+vm)
+	if err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/web"}); msg.IDOf(err) != "docker_container_foreign" {
 		t.Errorf("someone else's: %v", err)
 	}
 	if _, err := s.Inspect(t.Context(), vm); !errors.Is(err, backend.ErrNotFound) {
@@ -632,7 +582,7 @@ func TestCreateVMRefused(t *testing.T) {
 func TestStart(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{CloneAt: "/p/web"})
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
@@ -649,11 +599,11 @@ func TestStart(t *testing.T) {
 		t.Errorf("mounts: %s", s.field(t, "containers/"+vm+"/mounts"))
 	}
 	// Without ssh: none to reach.
-	if _, err := s.SSH(t.Context(), vm); id(err) != "vm_no_ssh" {
+	if _, err := s.SSH(t.Context(), vm); msg.IDOf(err) != "vm_no_ssh" {
 		t.Errorf("SSH without ssh: %v", err)
 	}
 	// Running: left as it is.
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil || len(s.calls(t)) != 0 {
 		t.Errorf("a running VM: %v %v", s.calls(t), err)
 	}
@@ -668,7 +618,7 @@ func TestStartRemakes(t *testing.T) {
 	if err := s.SetAgentDirs(t.Context(), vm, []string{"/h/.claude"}); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
@@ -742,7 +692,7 @@ func TestRemakeFlattens(t *testing.T) {
 	if err := s.SetAgentDirs(t.Context(), vm, []string{"/h/.codex"}); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
@@ -761,20 +711,20 @@ func TestRemakeFlattens(t *testing.T) {
 func TestSetSize(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 6, MemoryGiB: 8}); err != nil {
 		t.Fatal(err)
 	}
 	if calls := s.calls(t); !slices.Equal(calls, []string{"docker update --cpus 6 " + vm}) {
 		t.Errorf("calls: %v", calls)
 	}
-	if err := s.SetSize(t.Context(), vm, backend.Size{DiskGiB: 200}); id(err) != "backend_lacks" {
+	if err := s.SetSize(t.Context(), vm, backend.Size{DiskGiB: 200}); msg.IDOf(err) != "backend_lacks" {
 		t.Errorf("disk: %v", err)
 	}
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 2}); id(err) != "vm_not_stopped" {
+	if err := s.SetSize(t.Context(), vm, backend.Size{CPUs: 2}); msg.IDOf(err) != "vm_not_stopped" {
 		t.Errorf("running: %v", err)
 	}
 }
@@ -820,7 +770,7 @@ func TestTools(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.Dirs.Tools(), file), []byte("image"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.syncTools(t.Context(), s.imageRef(baseKey)); err != nil || len(s.calls(t)) != 0 {
 		t.Errorf("in sync: %v %v", s.calls(t), err)
 	}
@@ -838,7 +788,7 @@ func TestTools(t *testing.T) {
 	if err := os.Remove(filepath.Join(s.Dirs.Tools(), file)); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.syncTools(t.Context(), s.imageRef(baseKey)); err != nil {
 		t.Fatal(err)
 	}
@@ -875,7 +825,7 @@ func TestDiskUsed(t *testing.T) {
 			}
 		}
 	}
-	s.touch(t, "docker-foreign-"+cloneVolume(vm))
+	s.stubs.Touch(t, "docker-foreign-"+cloneVolume(vm))
 	used, _, err = s.DiskUsed(t.Context(), vm)
 	if want := int64(1048576 + 1500000000 + 2000000000 + 1000000); err != nil || used != want {
 		t.Errorf("with the engine's volumes: DiskUsed = %d, %v, want %d", used, err, want)
@@ -904,7 +854,7 @@ func TestUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s.touch(t, "docker-foreign-theirs")
+	s.stubs.Touch(t, "docker-foreign-theirs")
 	u, err := s.Usage(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -932,7 +882,7 @@ func TestDevvmCacheVolumes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s.touch(t, "docker-foreign-theirs")
+	s.stubs.Touch(t, "docker-foreign-theirs")
 	if err := os.MkdirAll(s.Dirs.VMs(), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -988,8 +938,8 @@ func TestLeftovers(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("Leftovers = %+v, want %+v", got, want)
 	}
-	s.touch(t, "docker-foreign-"+homeVolume(gone))
-	if _, err := s.Leftovers(t.Context(), gone); id(err) != "docker_volume_foreign" {
+	s.stubs.Touch(t, "docker-foreign-"+homeVolume(gone))
+	if _, err := s.Leftovers(t.Context(), gone); msg.IDOf(err) != "docker_volume_foreign" {
 		t.Errorf("someone else's volume: %v, want docker_volume_foreign", err)
 	}
 }

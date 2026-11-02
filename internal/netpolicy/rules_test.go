@@ -1,7 +1,6 @@
 package netpolicy
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -31,7 +30,7 @@ func TestRule(t *testing.T) {
 	} {
 		got, err := Rule(c.in, c.deny)
 		if c.want == "" {
-			if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != "not_a_rule" {
+			if msg.IDOf(err) != "not_a_rule" {
 				t.Errorf("Rule(%q, %v): %v; want not_a_rule", c.in, c.deny, err)
 			}
 			continue

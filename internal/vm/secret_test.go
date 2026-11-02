@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -21,7 +22,7 @@ func TestSecrets(t *testing.T) {
 		t.Helper()
 		ss, err := n.Secrets(ctx)
 		if err != nil {
-			t.Fatal(names(err))
+			t.Fatal(msg.NamesOf(err))
 		}
 		var b strings.Builder
 		for _, s := range ss {
@@ -37,25 +38,25 @@ func TestSecrets(t *testing.T) {
 		t.Errorf("Secrets = %q, want %q", got, want)
 	}
 	if err := n.SecretSave(ctx, "github", " ghp_testfake\n"); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := n.SecretUse(ctx, "github", true); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if got := list(); !strings.Contains(got, "github yes "+vm+"\n") {
 		t.Errorf("Secrets = %q", got)
 	}
-	if err := n.SecretSave(ctx, "claude", "not-a-setup-token"); names(err) != "not_setup_token" {
-		t.Errorf("SecretSave(claude) = %v", names(err))
+	if err := n.SecretSave(ctx, "claude", "not-a-setup-token"); msg.NamesOf(err) != "not_setup_token" {
+		t.Errorf("SecretSave(claude) = %v", msg.NamesOf(err))
 	}
 	if err := n.SecretRm(ctx, "github"); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if err := n.SecretRm(ctx, "github"); names(err) != "no_secret secret=github" {
-		t.Errorf("SecretRm again = %v", names(err))
+	if err := n.SecretRm(ctx, "github"); msg.NamesOf(err) != "no_secret secret=github" {
+		t.Errorf("SecretRm again = %v", msg.NamesOf(err))
 	}
 	if err := n.SecretUse(ctx, "github", false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(secrets.KeySecrets) != "" {
 		t.Errorf("secrets=%q", st.Get(secrets.KeySecrets))
@@ -64,8 +65,8 @@ func TestSecrets(t *testing.T) {
 	if err := st.Set(state.KeyImage, "base+claude"); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SecretUse(ctx, "claude", false); names(err) != "secret_with_image vm="+vm {
-		t.Errorf("SecretUse(claude, false) = %v", names(err))
+	if err := n.SecretUse(ctx, "claude", false); msg.NamesOf(err) != "secret_with_image vm="+vm {
+		t.Errorf("SecretUse(claude, false) = %v", msg.NamesOf(err))
 	}
 	if got := list(); !strings.Contains(got, "claude no "+vm+"\n") {
 		t.Errorf("Secrets = %q", got)

@@ -46,14 +46,14 @@ func TestStartForwarder(t *testing.T) {
 		}
 		return []string{"/devvm", forwarderCmd, "-vm", vm}, nil
 	}
-	var warned []string
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	s.Warn = warned.Add
 	c := backend.Confinement{SSH: true, Net: backend.NetDirect, ProxyPort: 30001, Decider: "127.0.0.1:30002"}
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
-	if len(warned) != 0 {
-		t.Errorf("warned %q", warned)
+	if len(warned.Names()) != 0 {
+		t.Errorf("warned %q", warned.Names())
 	}
 	r, _ := s.readRecord(vm)
 	want := []string{
@@ -83,13 +83,13 @@ func TestStartForwarder(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.touch(t, "no-sshd")
+	s.stubs.Touch(t, "no-sshd")
 	args = nil
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
-	if args != nil || !slices.Contains(warned, "ports_no_ssh vm="+vm) {
-		t.Errorf("no sshd: forwarder %q, warned %q", args, warned)
+	if args != nil || !slices.Contains(warned.Names(), "ports_no_ssh vm="+vm) {
+		t.Errorf("no sshd: forwarder %q, warned %q", args, warned.Names())
 	}
 	if err := os.Remove(filepath.Join(s.stub, "no-sshd")); err != nil {
 		t.Fatal(err)
@@ -98,13 +98,13 @@ func TestStartForwarder(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	warned = nil
+	warned.Reset()
 	s.Forwards.Detach = func(string, []string, *os.File) (int, error) { return os.Getpid(), nil }
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(warned, []string{"ports_forward_failed log=" + s.Forwards.Log(vm) + " vm=" + vm}) {
-		t.Errorf("warned %q", warned)
+	if !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + s.Forwards.Log(vm) + " vm=" + vm}) {
+		t.Errorf("warned %q", warned.Names())
 	}
 
 	if err := s.Delete(t.Context(), vm); err != nil {
@@ -147,9 +147,10 @@ func TestStartListedForwarder(t *testing.T) {
 	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: vm, Ports: backend.Ports{Ranges: listed}}); err != nil {
 		t.Fatal(err)
 	}
-	var args, warned []string
+	var args []string
+	var warned msg.Recorder
 	s.fakeForwarder(t, vm, &args)
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	s.Warn = warned.Add
 	c := backend.Confinement{SSH: true, Net: backend.NetDirect}
 	for _, tc := range []struct {
 		free []backend.PortRange // nil for no Free
@@ -159,7 +160,8 @@ func TestStartListedForwarder(t *testing.T) {
 		{listed[2:], "8000-8100"},
 		{[]backend.PortRange{}, ""},
 	} {
-		args, warned = nil, nil
+		args = nil
+		warned.Reset()
 		c.Free = nil
 		if tc.free != nil {
 			c.Free = func(_ context.Context, rs []backend.PortRange) []backend.PortRange {
@@ -173,8 +175,8 @@ func TestStartListedForwarder(t *testing.T) {
 			t.Fatal(err)
 		}
 		i := slices.Index(args, "-only")
-		if tc.only == "" && args != nil || tc.only != "" && (i < 0 || i+1 >= len(args) || args[i+1] != tc.only) || len(warned) != 0 {
-			t.Errorf("only %q: forwarder %q, warned %q", tc.only, args, warned)
+		if tc.only == "" && args != nil || tc.only != "" && (i < 0 || i+1 >= len(args) || args[i+1] != tc.only) || len(warned.Names()) != 0 {
+			t.Errorf("only %q: forwarder %q, warned %q", tc.only, args, warned.Names())
 		}
 		if err := s.Stop(t.Context(), vm); err != nil {
 			t.Fatal(err)
@@ -186,7 +188,7 @@ func TestStartListedForwarder(t *testing.T) {
 		}
 	}
 	// Every port again: the record alone changes.
-	s.reset(t)
+	s.stubs.Reset(t)
 	args = nil
 	if err := s.SetPorts(t.Context(), vm, backend.Ports{All: true}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
@@ -204,7 +206,7 @@ func TestStartListedForwarder(t *testing.T) {
 	if slices.Contains(args, "-only") {
 		t.Errorf("all: forwarder %q", args)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	args = nil
 	c = backend.Confinement{ProxyPort: 30001, Free: func(_ context.Context, rs []backend.PortRange) []backend.PortRange { return rs[1:] }}
 	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: listed}, c); err != nil {
@@ -239,10 +241,11 @@ func TestStartListedForwarder(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.stub, "smolvm-data", vm, "agent.pid"), other, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	args, warned = nil, nil
+	args = nil
+	warned.Reset()
 	if err := s.SetPorts(t.Context(), vm, backend.Ports{Ranges: listed}, c); err != nil || args != nil ||
-		!slices.Equal(warned, []string{"ports_no_ssh vm=" + vm}) {
-		t.Errorf("started elsewhere: forwarder %q, warned %q, %v", args, warned, err)
+		!slices.Equal(warned.Names(), []string{"ports_no_ssh vm=" + vm}) {
+		t.Errorf("started elsewhere: forwarder %q, warned %q, %v", args, warned.Names(), err)
 	}
 	if r, _ := s.readRecord(vm); !slices.Equal(r.Listed, listed) {
 		t.Errorf("started elsewhere: record %+v", r)

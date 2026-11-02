@@ -114,6 +114,16 @@ func devvm() rules {
 				to: []string{"internal/backend/backendtest"},
 			},
 			{
+				name: "stubtest is for tests",
+				from: []string{"..."}, exceptFrom: []string{"internal/stubtest"},
+				to: []string{"internal/stubtest"},
+			},
+			{
+				name: "internal/stubtest imports only internal/msg",
+				from: []string{"internal/stubtest"}, exceptTo: []string{"internal/msg"},
+				to: []string{"..."},
+			},
+			{
 				name: "internal/proxy is standard library only",
 				from: []string{"internal/proxy/..."}, exceptTo: []string{"internal/proxy/..."},
 				to: []string{"..."},

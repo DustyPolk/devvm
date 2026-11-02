@@ -21,21 +21,21 @@ import (
 // devcontainerEnv is up on a fake backend with a devcontainer.json in the
 // project folder, its warnings and the devcontainer.json commands it runs
 // collected.
-func devcontainerTestEnv(t *testing.T, src string) (*Env, *backendtest.Fake, *[]string) {
+func devcontainerTestEnv(t *testing.T, src string) (*Env, *backendtest.Fake, *msg.Recorder) {
 	t.Helper()
 	e, f, _ := upEnv(t, allNative())
 	if err := os.WriteFile(filepath.Join(e.Dir, ".devcontainer.json"), []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	warned := &msg.Recorder{}
+	e.Warn = warned.Add
 	e.PublicImage = func(_ context.Context, ref string) (string, error) {
 		if ref == "private:1" {
 			return "", fmt.Errorf("%w: no", from.ErrNotFound)
 		}
 		return from.Name(ref) + "@sha256:" + strings.Repeat("a", 64), nil
 	}
-	return e, f, &warned
+	return e, f, warned
 }
 
 // commandsRun returns the devcontainer.json commands the fake ran, each
@@ -96,14 +96,14 @@ func TestUpDevcontainer(t *testing.T) {
 		t.Errorf("env = %q", env)
 	}
 	// Its ports beyond the user's are said, not added.
-	if want := []string{"devcontainer_ports_not_forwarded file=.devcontainer.json ports=3000"}; !slices.Equal(*warned, want) {
-		t.Errorf("warned %q, want %q", *warned, want)
+	if want := []string{"devcontainer_ports_not_forwarded file=.devcontainer.json ports=3000"}; !slices.Equal(warned.Names(), want) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
-	*warned = nil
+	warned.Reset()
 
 	// Launched again, running: nothing runs; changed, it's said.
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if cmds, _ := commandsRun(f); len(cmds) != 2 {
 		t.Errorf("ran again: %q", cmds)
@@ -112,17 +112,17 @@ func TestUpDevcontainer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if want := "devcontainer_changed file=.devcontainer.json vm=" + st.Name(); !slices.Equal(*warned, []string{want}) {
-		t.Errorf("warned %q, want %q", *warned, want)
+	if want := "devcontainer_changed file=.devcontainer.json vm=" + st.Name(); !slices.Equal(warned.Names(), []string{want}) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
 	// Started again: postStartCommand runs again.
 	if err := f.Stop(t.Context(), st.Name()); err != nil {
 		t.Fatal(err)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if cmds, _ := commandsRun(f); !slices.Equal(cmds, []string{"touch x", "sh -c echo hi", "sh -c echo hi"}) {
 		t.Errorf("ran %q", cmds)
@@ -140,8 +140,8 @@ func TestUpDevcontainerCommandFails(t *testing.T) {
 		return nil
 	}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
-	if want := "devcontainer_command_failed command=onCreateCommand vm=" + st.Name(); !slices.Equal(*warned, []string{want}) {
-		t.Errorf("warned %q, want %q", *warned, want)
+	if want := "devcontainer_command_failed command=onCreateCommand vm=" + st.Name(); !slices.Equal(warned.Names(), []string{want}) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
 	if cmds, _ := commandsRun(f); !slices.Equal(cmds, []string{"sh -c false", "sh -c echo hi"}) {
 		t.Errorf("ran %q", cmds)
@@ -158,7 +158,7 @@ func TestUpDevcontainerRefused(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e, f, _ := devcontainerTestEnv(t, tc.src)
 			err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true})
-			if got := names(err); got != tc.want {
+			if got := msg.NamesOf(err); got != tc.want {
 				t.Errorf("error = %s, want %s", got, tc.want)
 			}
 			for _, c := range f.Calls() {
@@ -226,7 +226,7 @@ func TestChooseNet(t *testing.T) {
 			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v")
 			got := fmt.Sprint(on)
 			if err != nil {
-				got = names(err)
+				got = msg.NamesOf(err)
 			}
 			if got != tc.want || asked != tc.asked || warned != tc.warned {
 				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (asked %v, warned %q)", got, asked, warned, tc.want, tc.asked, tc.warned)

@@ -23,8 +23,8 @@ func TestParseSizes(t *testing.T) {
 		{"many", "", `cpus_not_number value="many"`},
 	} {
 		got, err := ParseCPUs(tc.in)
-		if got != tc.want || names(err) != tc.err {
-			t.Errorf("ParseCPUs(%q) = %q, %v", tc.in, got, names(err))
+		if got != tc.want || msg.NamesOf(err) != tc.err {
+			t.Errorf("ParseCPUs(%q) = %q, %v", tc.in, got, msg.NamesOf(err))
 		}
 	}
 	for _, tc := range []struct{ in, want, err string }{
@@ -40,16 +40,16 @@ func TestParseSizes(t *testing.T) {
 		{"1$(touch x)", "", `size_not_gib flag=--memory value="1$(touch x)"`},
 	} {
 		got, err := ParseGiB("--memory", tc.in)
-		if got != tc.want || names(err) != tc.err {
-			t.Errorf("ParseGiB(%q) = %q, %v", tc.in, got, names(err))
+		if got != tc.want || msg.NamesOf(err) != tc.err {
+			t.Errorf("ParseGiB(%q) = %q, %v", tc.in, got, msg.NamesOf(err))
 		}
 	}
 	s, err := Size{CPUs: "6", Memory: "12G", Disk: "150"}.Parse()
 	if err != nil || s != (Size{CPUs: "6", Memory: "12", Disk: "150"}) {
 		t.Errorf("Parse = %+v, %v", s, err)
 	}
-	if _, err := (Size{Disk: "x"}).Parse(); names(err) != `size_not_gib flag=--disk value="x"` {
-		t.Errorf("Parse with a bad disk: %v", names(err))
+	if _, err := (Size{Disk: "x"}).Parse(); msg.NamesOf(err) != `size_not_gib flag=--disk value="x"` {
+		t.Errorf("Parse with a bad disk: %v", msg.NamesOf(err))
 	}
 }
 
@@ -76,8 +76,8 @@ func TestSizeCheck(t *testing.T) {
 		{Size{CPUs: "8", Memory: "30", Disk: "200"}, ""},
 		{Size{}, ""},
 	} {
-		if err := tc.s.Check(h, 100, "v"); names(err) != tc.err {
-			t.Errorf("Check(%+v) = %v, want %s", tc.s, names(err), tc.err)
+		if err := tc.s.Check(h, 100, "v"); msg.NamesOf(err) != tc.err {
+			t.Errorf("Check(%+v) = %v, want %s", tc.s, msg.NamesOf(err), tc.err)
 		}
 	}
 	// The memory a VM may have keeps 2 GiB for the host, or half of it on
@@ -95,8 +95,8 @@ func TestSizeCheck(t *testing.T) {
 		{3, "1.5", ""},
 		{3, "2", "too_much_memory have=3 max=1.5 want=2"},
 	} {
-		if err := (Size{Memory: tc.mem}).Check(Host{CPUs: 8, MemoryGiB: tc.host}, 0, "v"); names(err) != tc.err {
-			t.Errorf("Check(memory %s on %d GiB) = %v, want %q", tc.mem, tc.host, names(err), tc.err)
+		if err := (Size{Memory: tc.mem}).Check(Host{CPUs: 8, MemoryGiB: tc.host}, 0, "v"); msg.NamesOf(err) != tc.err {
+			t.Errorf("Check(memory %s on %d GiB) = %v, want %q", tc.mem, tc.host, msg.NamesOf(err), tc.err)
 		}
 	}
 	if b := (Size{CPUs: "2", Memory: "1.5", Disk: "120"}).Backend(); b != (backend.Size{CPUs: 2, MemoryGiB: 1.5, DiskGiB: 120}) {
@@ -136,8 +136,8 @@ func TestSetSize(t *testing.T) {
 		got, err := s.ShowSize(t.Context(), global)
 		return got.Text(), err
 	}
-	if _, err := shown(false); names(err) != "no_vm_size dir="+e.Dir {
-		t.Errorf("no VM: %s", names(err))
+	if _, err := shown(false); msg.NamesOf(err) != "no_vm_size dir="+e.Dir {
+		t.Errorf("no VM: %s", msg.NamesOf(err))
 	}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	vm := st.Name()
@@ -147,7 +147,7 @@ func TestSetSize(t *testing.T) {
 
 	before := len(f.Calls())
 	if err := s.SetSize(t.Context(), Size{CPUs: "2", Memory: "8G"}, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if ms := f.Methods()[before:]; slices.Contains(ms, "SetSize") {
 		t.Errorf("a running VM was changed: %q", ms)
@@ -160,14 +160,14 @@ func TestSetSize(t *testing.T) {
 		t.Errorf("pending = %+v", p)
 	}
 
-	if err := s.SetSize(t.Context(), Size{Disk: "50"}, false); names(err) != "disk_shrink have=100 vm="+vm+" want=50" {
-		t.Errorf("smaller disk: %s", names(err))
+	if err := s.SetSize(t.Context(), Size{Disk: "50"}, false); msg.NamesOf(err) != "disk_shrink have=100 vm="+vm+" want=50" {
+		t.Errorf("smaller disk: %s", msg.NamesOf(err))
 	}
 	caps := allNative()
 	caps[backend.FeatureDisk] = backend.None
 	f.Capabilities = caps
-	if err := s.SetSize(t.Context(), Size{Disk: "200"}, false); !strings.HasPrefix(names(err), "backend_lacks ") {
-		t.Errorf("without the feature: %s", names(err))
+	if err := s.SetSize(t.Context(), Size{Disk: "200"}, false); !strings.HasPrefix(msg.NamesOf(err), "backend_lacks ") {
+		t.Errorf("without the feature: %s", msg.NamesOf(err))
 	}
 	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(KeyDisk) != "" {
 		t.Errorf("disk=%q", st.Get(KeyDisk))
@@ -179,7 +179,7 @@ func TestSetSize(t *testing.T) {
 	}
 	before = len(f.Calls())
 	if err := s.SetSize(t.Context(), Size{Disk: "120"}, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	var set []backend.Size
 	for _, c := range f.Calls()[before:] {
@@ -191,20 +191,20 @@ func TestSetSize(t *testing.T) {
 		t.Errorf("SetSize calls = %+v", set)
 	}
 	if got, err := shown(false); err != nil || got != "cpus=2 memory=8GiB disk=120GiB\n" {
-		t.Errorf("ShowSize = %q, %v", got, names(err))
+		t.Errorf("ShowSize = %q, %v", got, msg.NamesOf(err))
 	}
 
 	if err := s.SetSize(t.Context(), Size{CPUs: "2", Memory: "3"}, true); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := s.SetSize(t.Context(), Size{Memory: "4GiB"}, true); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if err := s.SetSize(t.Context(), Size{CPUs: "16"}, true); names(err) != "too_many_cpus have=8 want=16" {
-		t.Errorf("-g --cpus 16: %s", names(err))
+	if err := s.SetSize(t.Context(), Size{CPUs: "16"}, true); msg.NamesOf(err) != "too_many_cpus have=8 want=16" {
+		t.Errorf("-g --cpus 16: %s", msg.NamesOf(err))
 	}
 	if got, err := shown(true); err != nil || got != "cpus=2\nmemory=4\ndisk=\n" {
-		t.Errorf("ShowSize -g = %q, %v", got, names(err))
+		t.Errorf("ShowSize -g = %q, %v", got, msg.NamesOf(err))
 	}
 }
 
@@ -232,31 +232,32 @@ func TestDiskUsed(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Registry = reg
-	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	e.Warn = warned.Add
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})
 	in := f.Instances[st.Name()]
 	in.Size = backend.Size{CPUs: 4, MemoryGiB: 8}
 	f.Instances[st.Name()] = in
 	s, err := (Settings{e}).ShowSize(t.Context(), false)
-	if err != nil || s.Text() != "cpus=4 memory=8GiB disk_used=1.5GiB\n" || !s.DiskMeasured || s.DiskUsedGiB != 1.5 || len(warned) != 0 {
-		t.Errorf("ShowSize = %+v, %v, warned %q", s, names(err), warned)
+	if err != nil || s.Text() != "cpus=4 memory=8GiB disk_used=1.5GiB\n" || !s.DiskMeasured || s.DiskUsedGiB != 1.5 || len(warned.Names()) != 0 {
+		t.Errorf("ShowSize = %+v, %v, warned %q", s, msg.NamesOf(err), warned.Names())
 	}
 	df.used = 101 << 30
 	if s, err := (Settings{e}).ShowSize(t.Context(), false); err != nil || s.Text() != "cpus=4 memory=8GiB disk_used=101GiB\n" {
-		t.Errorf("ShowSize = %q, %v", s.Text(), names(err))
+		t.Errorf("ShowSize = %q, %v", s.Text(), msg.NamesOf(err))
 	}
-	if len(warned) != 1 || warned[0] != "disk_over backend=fake limit=100 used=101 vm="+st.Name() {
-		t.Errorf("warned %q", warned)
+	if w := warned.Names(); len(w) != 1 || w[0] != "disk_over backend=fake limit=100 used=101 vm="+st.Name() {
+		t.Errorf("warned %q", w)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if len(warned) != 2 || warned[1] != warned[0] {
-		t.Errorf("a launch warned %q", warned)
+	w := warned.Names()
+	if len(w) != 2 || w[1] != w[0] {
+		t.Errorf("a launch warned %q", w)
 	}
 	ls, err := List(t.Context(), e.Dirs, e.Registry)
-	if err != nil || len(ls) != 1 || ls[0].DiskOver == nil || ls[0].DiskOver.Names() != warned[0] {
+	if err != nil || len(ls) != 1 || ls[0].DiskOver == nil || ls[0].DiskOver.Names() != w[0] {
 		t.Errorf("List = %+v, %v", ls, err)
 	}
 	df.used = 1 << 30

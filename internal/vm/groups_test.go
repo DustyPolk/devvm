@@ -21,11 +21,11 @@ func TestCheckGroupName(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, ok := range []string{"web", "team-2", "a"} {
 		if err := CheckGroupName(ok); err != nil {
-			t.Errorf("CheckGroupName(%q) = %v", ok, names(err))
+			t.Errorf("CheckGroupName(%q) = %v", ok, msg.NamesOf(err))
 		}
 	}
 	for _, bad := range []string{"", "Web", "a_b", "-a", "a.b", "42", strings.Repeat("a", 64)} {
-		if got := names(CheckGroupName(bad)); !strings.HasPrefix(got, "group_name_invalid ") {
+		if got := msg.NamesOf(CheckGroupName(bad)); !strings.HasPrefix(got, "group_name_invalid ") {
 			t.Errorf("CheckGroupName(%q) = %s", bad, got)
 		}
 	}
@@ -172,7 +172,7 @@ func TestCheckJoinName(t *testing.T) {
 		{"devvm-app-0123456789abcd", "web2", "group_name_taken group=web member=" + api.Name() + " name=web2"},
 		{"devvm-app-0123456789abcd", "api", "group_name_taken group=web member=" + api.Name() + " name=api"},
 	} {
-		if got := names(checkJoinName("web", c.vm, c.as, members)); got != c.want {
+		if got := msg.NamesOf(checkJoinName("web", c.vm, c.as, members)); got != c.want {
 			t.Errorf("checkJoinName(%s, %q) = %q; want %q", c.vm, c.as, got, c.want)
 		}
 	}
@@ -192,10 +192,10 @@ func TestLockGroups(t *testing.T) {
 	if _, err := lockGroups(ctx, d, nil); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("while held: %v", err)
 	}
-	var said []string
+	var said msg.Recorder
 	got := make(chan error, 1)
 	go func() {
-		u, err := lockGroups(t.Context(), d, func(m msg.M) { said = append(said, m.Names()) })
+		u, err := lockGroups(t.Context(), d, said.Add)
 		if err == nil {
 			u()
 		}
@@ -210,8 +210,8 @@ func TestLockGroups(t *testing.T) {
 	if err := <-got; err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(said, []string{"group_waiting"}) {
-		t.Errorf("said %q", said)
+	if !slices.Equal(said.Names(), []string{"group_waiting"}) {
+		t.Errorf("said %q", said.Names())
 	}
 	if _, err := os.Stat(filepath.Join(d.Data, "groups.lock")); err != nil {
 		t.Error(err)
@@ -230,10 +230,10 @@ func TestGroupJoinsAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Launch{&e2}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := (Net{&e2}).SetNetwork(t.Context(), true); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	vms, err := state.VMNames(e.Dirs)
 	if err != nil || len(vms) != 2 {
@@ -251,16 +251,16 @@ func TestGroupJoinsAtOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(members) != 1 || (errs[0] == nil) == (errs[1] == nil) {
-			t.Fatalf("members %d, joins %q, %q", len(members), names(errs[0]), names(errs[1]))
+			t.Fatalf("members %d, joins %q, %q", len(members), msg.NamesOf(errs[0]), msg.NamesOf(errs[1]))
 		}
 		for i, env := range []*Env{e, &e2} {
 			want := []string{"group_policy_on group=web vm=", "group_policy_off group=web vm="}[i]
-			if errs[i] != nil && !strings.HasPrefix(names(errs[i]), want) {
-				t.Errorf("join %d: %s", i, names(errs[i]))
+			if errs[i] != nil && !strings.HasPrefix(msg.NamesOf(errs[i]), want) {
+				t.Errorf("join %d: %s", i, msg.NamesOf(errs[i]))
 			}
 			if errs[i] == nil {
 				if err := (Groups{env}).Leave(t.Context()); err != nil {
-					t.Fatal(names(err))
+					t.Fatal(msg.NamesOf(err))
 				}
 			}
 		}

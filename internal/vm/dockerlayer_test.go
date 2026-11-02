@@ -27,7 +27,7 @@ func (l layerFake) DockerLayer(vm string) (string, error) {
 
 // layerEnv is upEnv on a layerFake with caps, warnings and infos recorded
 // by name.
-func layerEnv(t *testing.T, caps backend.Caps, runtime string) (*Env, *backendtest.Fake, *[]string) {
+func layerEnv(t *testing.T, caps backend.Caps, runtime string) (*Env, *backendtest.Fake, *msg.Recorder) {
 	t.Helper()
 	e, f, _ := upEnv(t, caps)
 	reg, err := backend.NewRegistry(layerFake{f, runtime})
@@ -35,10 +35,10 @@ func layerEnv(t *testing.T, caps backend.Caps, runtime string) (*Env, *backendte
 		t.Fatal(err)
 	}
 	e.Registry = reg
-	var said []string
-	e.Warn = func(m msg.M) { said = append(said, m.Names()) }
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
-	return e, f, &said
+	said := &msg.Recorder{}
+	e.Warn = said.Add
+	e.Info = said.Add
+	return e, f, said
 }
 
 // noLayerCaps are a backend's that can't run the docker layer here.
@@ -57,12 +57,12 @@ func saidAny(all []string, prefix string) bool {
 func TestUpDockerLayerRefused(t *testing.T) {
 	e, f, _ := layerEnv(t, noLayerCaps(), "")
 	err := Launch{e}.Up(t.Context(), Options{Image: "docker", Ports: "none"})
-	if got := names(err); !strings.HasPrefix(got, "docker_layer_needs_vm vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "docker_layer_needs_vm vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	e2, _, _ := layerEnv(t, allNative(), "sysbox")
 	err = Launch{e2}.Up(t.Context(), Options{Image: "docker", Ports: "none", NetworkPolicy: true})
-	if got := names(err); !strings.HasPrefix(got, "net_docker_layer backend=fake vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "net_docker_layer backend=fake vm=devvm-web-") {
 		t.Errorf("with network policy: %v", got)
 	}
 	// Unreviewed, it's refused as any unreviewed emulation.
@@ -70,7 +70,7 @@ func TestUpDockerLayerRefused(t *testing.T) {
 	caps[backend.FeatureDockerLayer] = backend.Emulated(false)
 	e3, _, _ := layerEnv(t, caps, "sysbox")
 	err = Launch{e3}.Up(t.Context(), Options{Image: "docker", Ports: "none"})
-	if got := names(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=docker-layer vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=docker-layer vm=devvm-web-") {
 		t.Errorf("unreviewed: %v", got)
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") {
@@ -83,7 +83,7 @@ func TestUpDockerLayerRefused(t *testing.T) {
 func TestUpDockerLayerRuntime(t *testing.T) {
 	e, f, said := layerEnv(t, allNative(), "sysbox")
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "docker", Ports: "none"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	if !spec.DockerLayer {
@@ -92,8 +92,8 @@ func TestUpDockerLayerRuntime(t *testing.T) {
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetDirect {
 		t.Errorf("Start confinement = %+v", c)
 	}
-	if !saidAny(*said, "docker_layer_runtime backend=fake runtime=sysbox vm=") {
-		t.Errorf("said %q", *said)
+	if !saidAny(said.Names(), "docker_layer_runtime backend=fake runtime=sysbox vm=") {
+		t.Errorf("said %q", said.Names())
 	}
 	st, err := state.ReadVM(e.Dirs, spec.Name)
 	if err != nil {
@@ -102,15 +102,15 @@ func TestUpDockerLayerRuntime(t *testing.T) {
 	if st.Get(KeyDockerLayer) != "sysbox" || st.Get(KeyNet) != "off" {
 		t.Errorf("state docker_layer=%q net=%q", st.Get(KeyDockerLayer), st.Get(KeyNet))
 	}
-	if err := (Net{e}).SetNetwork(t.Context(), true); !strings.HasPrefix(names(err), "net_docker_layer backend=fake vm=") {
-		t.Errorf("network on: %v", names(err))
+	if err := (Net{e}).SetNetwork(t.Context(), true); !strings.HasPrefix(msg.NamesOf(err), "net_docker_layer backend=fake vm=") {
+		t.Errorf("network on: %v", msg.NamesOf(err))
 	}
 	// A state edited by hand: refused all the same.
 	if err := st.Set(KeyNet, "on"); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{}); !strings.HasPrefix(names(err), "net_docker_layer backend=fake vm=") {
-		t.Errorf("net=on in its state: %v", names(err))
+	if err := (Launch{e}).Up(t.Context(), Options{}); !strings.HasPrefix(msg.NamesOf(err), "net_docker_layer backend=fake vm=") {
+		t.Errorf("net=on in its state: %v", msg.NamesOf(err))
 	}
 	if ls, err := List(t.Context(), e.Dirs, e.Registry); err != nil || len(ls) != 1 || ls[0].DockerLayer != "sysbox" {
 		t.Errorf("List = %+v, %v", ls, err)

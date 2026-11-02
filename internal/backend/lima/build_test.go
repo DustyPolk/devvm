@@ -280,7 +280,7 @@ func TestBuildImageHostProxyRefused(t *testing.T) {
 	l, f := buildLima(t, "linux", "Running")
 	l.Getenv = func(k string) string { return map[string]string{"HTTPS_PROXY": "socks5://proxy.corp:1080"}[k] }
 	_, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet})
-	if m, ok := errors.AsType[msg.M](err); !ok || m.Names() != "upstream_proxy_scheme scheme=socks5:// setting=HTTPS_PROXY" {
+	if msg.NamesOf(err) != "upstream_proxy_scheme scheme=socks5:// setting=HTTPS_PROXY" {
 		t.Errorf("BuildImage = %v", err)
 	}
 	if slices.ContainsFunc(f.lines(), func(l string) bool { return strings.HasPrefix(l, "limactl clone") }) {

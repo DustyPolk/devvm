@@ -29,7 +29,7 @@ func TestOpenNetworkPolicy(t *testing.T) {
 	}
 	before := len(f.Calls())
 	if err := l.Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()[before:]
 	if slices.Contains(ms, "Start") || !slices.Contains(ms, "Confined") {
@@ -43,15 +43,15 @@ func TestOpenNetworkPolicy(t *testing.T) {
 	}
 	before = len(f.Calls())
 	if err := l.Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); !slices.Contains(f.Methods()[before:], "Start") || c.Net != backend.NetProxy {
 		t.Errorf("calls = %q, confinement %+v", f.Methods()[before:], c)
 	}
 	// Started outside devvm: no terminal to ask in, so it's stopped.
 	f.Unconfined = true
-	if err := l.Up(t.Context(), Options{}); names(err) != "net_unenforced_stop vm="+vm {
-		t.Errorf("Up unconfined = %v", names(err))
+	if err := l.Up(t.Context(), Options{}); msg.NamesOf(err) != "net_unenforced_stop vm="+vm {
+		t.Errorf("Up unconfined = %v", msg.NamesOf(err))
 	}
 	if f.Instances[vm].Status != backend.StatusStopped || len(*execs) != 3 {
 		t.Errorf("status %s, execs %d", f.Instances[vm].Status, len(*execs))
@@ -83,8 +83,8 @@ func TestImageLacks(t *testing.T) {
 		{"python+claude", "vm_lacks_tools tools=python claude vm=" + vm},
 		{"claude", "vm_lacks_tools tools=claude vm=" + vm},
 	} {
-		if err := l.Up(t.Context(), Options{Image: tc.image}); names(err) != tc.want {
-			t.Errorf("Up %s = %v, want %s", tc.image, names(err), tc.want)
+		if err := l.Up(t.Context(), Options{Image: tc.image}); msg.NamesOf(err) != tc.want {
+			t.Errorf("Up %s = %v, want %s", tc.image, msg.NamesOf(err), tc.want)
 		}
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
@@ -94,7 +94,7 @@ func TestImageLacks(t *testing.T) {
 	}
 	for _, img := range []string{"go", "base"} {
 		if err := l.Up(t.Context(), Options{Image: img}); err != nil {
-			t.Errorf("Up %s = %v", img, names(err))
+			t.Errorf("Up %s = %v", img, msg.NamesOf(err))
 		}
 	}
 }
@@ -111,14 +111,14 @@ func TestToolsAdd(t *testing.T) {
 	if err := os.MkdirAll(skills, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	var said []string
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	var said msg.Recorder
+	e.Info = said.Add
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
 	before := len(f.Calls())
 	if err := tl.Add(t.Context(), Options{}, []string{"go", "claude", "claude"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
 	if st.Get(state.KeyImage) != "go+claude" || !strings.Contains(st.Get(KeyTools), " claude-") {
@@ -131,8 +131,8 @@ func TestToolsAdd(t *testing.T) {
 	if dirs := f.Instances[vm].AgentDirs; !slices.Equal(dirs, []string{skills}) {
 		t.Errorf("agent dirs = %q", dirs)
 	}
-	if !slices.Contains(said, "has_tools tools=go vm="+vm) || !slices.Contains(said, "vm_is_now image=go+claude vm="+vm) {
-		t.Errorf("said %q", said)
+	if !slices.Contains(said.Names(), "has_tools tools=go vm="+vm) || !slices.Contains(said.Names(), "vm_is_now image=go+claude vm="+vm) {
+		t.Errorf("said %q", said.Names())
 	}
 
 	// Running: a new agent's folders after a restart it asks for.
@@ -143,7 +143,7 @@ func TestToolsAdd(t *testing.T) {
 	asked := answers(t, e, true)
 	before = len(f.Calls())
 	if err := tl.Add(t.Context(), Options{}, []string{"codex"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "go+claude+codex" {
 		t.Errorf("image = %s", st.Get(state.KeyImage))
@@ -164,42 +164,42 @@ func TestRemoveUpdateRestart(t *testing.T) {
 	st := existingVM(t, e, Options{Image: "go+claude", NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := tl.Remove(t.Context(), Options{}, []string{"claude"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
 	if st.Get(state.KeyImage) != "go" || strings.Contains(st.Get(KeyTools), "claude") {
 		t.Errorf("state image=%s tools=%s", st.Get(state.KeyImage), st.Get(KeyTools))
 	}
-	if err := tl.Remove(t.Context(), Options{}, []string{"python"}); names(err) != "vm_lacks has=go layer=python vm="+vm {
-		t.Errorf("Remove python = %v", names(err))
+	if err := tl.Remove(t.Context(), Options{}, []string{"python"}); msg.NamesOf(err) != "vm_lacks has=go layer=python vm="+vm {
+		t.Errorf("Remove python = %v", msg.NamesOf(err))
 	}
 	if err := tl.Update(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if ts, err := tl.List(t.Context()); err != nil || len(ts) != 1 || ts[0].Tool != "go" || ts[0].Newer != "" {
 		t.Errorf("List = %+v, %v", ts, err)
 	}
 	// claude added after go, listed first by the image: still the newest.
 	if err := tl.Add(t.Context(), Options{}, []string{"claude"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := tl.Remove(t.Context(), Options{}, []string{"go"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := tl.Add(t.Context(), Options{}, []string{"go"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
 	had := st.Get(KeyTools)
 	if err := tl.Update(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if st, _ = state.ReadVM(e.Dirs, vm); !strings.HasPrefix(had, "claude-") || st.Get(KeyTools) != had {
 		t.Errorf("Update after adding: tools %q, were %q", st.Get(KeyTools), had)
 	}
 	before := len(f.Calls())
 	if err := l.Restart(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()[before:]
 	if i, j := slices.Index(ms, "Stop"), slices.Index(ms, "Start"); i < 0 || j < i {

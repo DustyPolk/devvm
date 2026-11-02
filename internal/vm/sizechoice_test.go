@@ -101,7 +101,7 @@ func TestSizeChoiceAsk(t *testing.T) {
 			}
 			a := &sizeAsker{t: t, answers: tc.answers}
 			if err := a.choice(d, tc.host).Ask(); err != nil {
-				t.Fatal(names(err))
+				t.Fatal(msg.NamesOf(err))
 			}
 			if !slices.Equal(a.shown, tc.shown) {
 				t.Errorf("shown\n%q\nwant\n%q", a.shown, tc.shown)
@@ -135,7 +135,7 @@ func TestSizeChoiceSet(t *testing.T) {
 	a := &sizeAsker{t: t}
 	c := a.choice(d, Host{CPUs: 8, MemoryGiB: 32})
 	if err := c.Set(Size{CPUs: "2", Memory: "4GiB"}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	for _, s := range []Size{{CPUs: "9"}, {Memory: "31"}, {Memory: "x"}} {
 		if err := c.Set(s); err == nil {
@@ -164,7 +164,7 @@ func TestFirstRunSize(t *testing.T) {
 		t.Helper()
 		a.shown, a.answers = nil, []string{"", ""}
 		if err := (creation{Launch{e}}).firstRunSize(given); err != nil {
-			t.Fatal(names(err))
+			t.Fatal(msg.NamesOf(err))
 		}
 		return len(a.shown) > 0
 	}

@@ -108,11 +108,6 @@ func (quietUI) Status(msg.M) func()                                       { retu
 func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
 func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
 
-func isMsg(err error, id string) bool {
-	m, ok := errors.AsType[msg.M](err)
-	return ok && m.ID() == id
-}
-
 // Layers are devvm's built-in ones and the user's scripts with names image
 // names can hold; nothing else gets past CheckLayers.
 func TestLayersAndCheckLayers(t *testing.T) {
@@ -142,7 +137,7 @@ func TestLayersAndCheckLayers(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "stray", "Bad_Name", "dir", "foo+", "../../x", "foo+nope", "-x"} {
-		if err := b.CheckLayers(bad); !isMsg(err, "unknown_layer") {
+		if err := b.CheckLayers(bad); msg.IDOf(err) != "unknown_layer" {
 			t.Errorf("CheckLayers(%q) = %v, want unknown_layer", bad, err)
 		}
 	}
@@ -336,7 +331,7 @@ func TestBuildSaysFitted(t *testing.T) {
 func TestBuildRequires(t *testing.T) {
 	b, f := testEnv(t)
 	delete(f.Capabilities, backend.FeatureBuildConfinement)
-	if err := (Builds{b}).Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
+	if err := (Builds{b}).Build(t.Context(), "foo"); msg.IDOf(err) != "backend_lacks" {
 		t.Errorf("Build = %v, want backend_lacks", err)
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {
@@ -344,24 +339,12 @@ func TestBuildRequires(t *testing.T) {
 	}
 }
 
-// stored is a fake whose disks are in dirs (backend.Storage).
-type stored struct {
-	*backendtest.Fake
-	dirs []string
-}
-
-func (s stored) DiskDirs() []string { return s.dirs }
-
-func (s stored) Floors() backend.Floors {
-	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
-}
-
 // Below the free space building base wants, or another image, nothing of
 // it is made: the backend is only asked which images it has.
 func TestBuildRefusesLowSpace(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	b, f := testEnv(t)
-	b.Backend = stored{f, []string{"/lima"}}
+	b.Backend = backendtest.Stored{Fake: f, Dirs: []string{"/lima"}}
 	free := uint64(12<<30 - 1)
 	b.FreeSpace = func(dir string) (uint64, error) {
 		if dir != "/lima" {
@@ -416,7 +399,7 @@ func TestBuiltNeedsNoBuild(t *testing.T) {
 	if err := state.RemoveImage(b.Dirs, key); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Builds{b}).Build(t.Context(), "base"); !isMsg(err, "backend_lacks") {
+	if err := (Builds{b}).Build(t.Context(), "base"); msg.IDOf(err) != "backend_lacks" {
 		t.Errorf("Build of a leftover = %v, want backend_lacks", err)
 	}
 	if ms := f.Methods()[before:]; slices.Contains(ms, "DeleteImage") || slices.Contains(ms, "BuildImage") {
@@ -455,8 +438,8 @@ func TestBuildInProgress(t *testing.T) {
 		}
 		return false
 	}
-	var said []string
-	b.Info = func(m msg.M) { said = append(said, m.Names()) }
+	var said msg.Recorder
+	b.Info = said.Add
 	b.WaitNote = time.Millisecond
 
 	soon, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
@@ -464,8 +447,8 @@ func TestBuildInProgress(t *testing.T) {
 	if err := (Builds{b}).Build(soon, "foo+bar"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Build while another builds it = %v", err)
 	}
-	if !slices.Contains(said, "image_build_waiting image=foo+bar") {
-		t.Errorf("said %q", said)
+	if !slices.Contains(said.Names(), "image_build_waiting image=foo+bar") {
+		t.Errorf("said %q", said.Names())
 	}
 	ls, err := (Images{b}).Listing(ctx)
 	if err != nil {
@@ -474,7 +457,7 @@ func TestBuildInProgress(t *testing.T) {
 	if i := slices.IndexFunc(ls, func(l Listed) bool { return l.Key == key }); i < 0 || ls[i].State != StateBuilding {
 		t.Errorf("listed %+v", ls)
 	}
-	if err := (Images{b}).Delete(ctx, []string{key}); !isMsg(err, "image_building") {
+	if err := (Images{b}).Delete(ctx, []string{key}); msg.IDOf(err) != "image_building" {
 		t.Errorf("Delete while it builds = %v", err)
 	}
 	b.Force = true
@@ -567,8 +550,8 @@ func TestRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	// foo+bar is built on foo: without a terminal, only with --force.
-	if m, ok := errors.AsType[msg.M]((Builds{b}).Rebuild(ctx, "foo")); !ok || m.Names() != "force_needed command=devvm rebuild" {
-		t.Fatalf("rebuild without a terminal or --force: %v", m)
+	if err := (Builds{b}).Rebuild(ctx, "foo"); msg.NamesOf(err) != "force_needed command=devvm rebuild" {
+		t.Fatalf("rebuild without a terminal or --force: %v", err)
 	}
 	b.Force = true
 	if err := (Builds{b}).Rebuild(ctx, "foo"); err != nil {
@@ -733,7 +716,7 @@ func TestBuildFromRequires(t *testing.T) {
 	digest, lookups := "sha256:"+strings.Repeat("a", 64), 0
 	b, f := fromEnv(t, &digest, &lookups)
 	delete(f.Capabilities, backend.FeatureFrom)
-	if err := (Builds{b}).Build(t.Context(), "foo"); !isMsg(err, "backend_lacks") {
+	if err := (Builds{b}).Build(t.Context(), "foo"); msg.IDOf(err) != "backend_lacks" {
 		t.Errorf("Build = %v, want backend_lacks", err)
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {

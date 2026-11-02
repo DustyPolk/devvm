@@ -83,7 +83,7 @@ func TestConfirmed(t *testing.T) {
 		t.Errorf("--force: %v, %v, asked %v", ok, err, asked)
 	}
 	ok, err := confirmed(u, false, "devvm gc", ask)
-	if m, isMsg := errors.AsType[msg.M](err); ok || !isMsg || m.Names() != "force_needed command=devvm gc" || asked {
+	if ok || msg.NamesOf(err) != "force_needed command=devvm gc" || asked {
 		t.Errorf("no terminal: %v, %v, asked %v", ok, err, asked)
 	}
 }

@@ -55,11 +55,11 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	before := len(f.Calls())
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	calls := f.Calls()[before:]
 	start := slices.IndexFunc(calls, func(c backendtest.Call) bool { return c.Method == "Start" })
@@ -74,10 +74,10 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != "" || !c.NoAgent {
 		t.Errorf("off: started with %+v", c)
@@ -102,7 +102,7 @@ func TestOpenAgent(t *testing.T) {
 	}
 	before := len(f.Calls())
 	if err := (Launch{e}).Up(t.Context(), Options{SSHAgent: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	calls := f.Calls()[before:]
 	set := slices.IndexFunc(calls, func(c backendtest.Call) bool { return c.Method == "SetAgentForwarding" })
@@ -123,7 +123,7 @@ func TestOpenAgent(t *testing.T) {
 	agent.calls = nil
 	before = len(f.Calls())
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.Contains(agent.calls, "ssh-add -l") || slices.Contains(f.Methods()[before:], "Start") {
 		t.Errorf("running: agent calls %q, calls %q", agent.calls, f.Methods()[before:])
@@ -133,7 +133,7 @@ func TestOpenAgent(t *testing.T) {
 	}
 	before = len(f.Calls())
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if slices.Contains(f.Methods()[before:], "SetAgentForwarding") || !f.Instances[vm].AgentForwarding {
 		t.Errorf("running, turned off: calls %q", f.Methods()[before:])
@@ -143,7 +143,7 @@ func TestOpenAgent(t *testing.T) {
 		t.Errorf("running, turned off: SSH_AUTH_SOCK=%q, want %q", got, e.Agent.Socket())
 	}
 	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if f.Instances[vm].AgentForwarding {
 		t.Error("restart didn't turn forwarding off")
@@ -187,20 +187,20 @@ func TestSetSSHAgent(t *testing.T) {
 	agent := &agentCalls{}
 	e.Agent.Run = agent.run
 	s := Settings{e}
-	if _, err := s.SSHAgent(t.Context()); names(err) != "no_vm_ssh_agent dir="+e.Dir {
-		t.Errorf("no VM: %s", names(err))
+	if _, err := s.SSHAgent(t.Context()); msg.NamesOf(err) != "no_vm_ssh_agent dir="+e.Dir {
+		t.Errorf("no VM: %s", msg.NamesOf(err))
 	}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	shown := func(want string) {
 		t.Helper()
 		if mode, err := s.SSHAgent(t.Context()); err != nil || mode != want {
-			t.Errorf("SSHAgent = %q, %v; want %s", mode, names(err), want)
+			t.Errorf("SSHAgent = %q, %v; want %s", mode, msg.NamesOf(err), want)
 		}
 	}
 	shown("off")
 	before := len(f.Calls())
 	if err := s.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	shown("devvm")
 	if !slices.Contains(agent.calls, "ssh-add -l") {
@@ -210,17 +210,17 @@ func TestSetSSHAgent(t *testing.T) {
 		t.Errorf("calls = %q", f.Methods()[before:])
 	}
 	if err := s.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := s.SetSSHAgent(t.Context(), sshagent.Off); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	shown("off")
 	caps := allNative()
 	caps[backend.FeatureAgentForwarding] = backend.None
 	f.Capabilities = caps
-	if err := s.SetSSHAgent(t.Context(), sshagent.On); !strings.HasPrefix(names(err), "backend_lacks ") {
-		t.Errorf("without the feature: %s", names(err))
+	if err := s.SetSSHAgent(t.Context(), sshagent.On); !strings.HasPrefix(msg.NamesOf(err), "backend_lacks ") {
+		t.Errorf("without the feature: %s", msg.NamesOf(err))
 	}
 	if sshagent.Mode(st) != sshagent.Off {
 		t.Errorf("mode = %s", sshagent.Mode(st))
@@ -234,8 +234,8 @@ func TestSetSSHAgentRisk(t *testing.T) {
 	for _, whileRunning := range []bool{false, true} {
 		e, f, _ := upEnv(t, allNative())
 		e.Agent.Run = (&agentCalls{}).run
-		var warned []string
-		e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+		var warned msg.Recorder
+		e.Warn = warned.Add
 		st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 		vm := st.Name()
 		in := f.Instances[vm]
@@ -243,15 +243,15 @@ func TestSetSSHAgentRisk(t *testing.T) {
 		f.Instances[vm] = in
 		for _, mode := range []string{sshagent.On, sshagent.Devvm} {
 			if err := (Settings{e}).SetSSHAgent(t.Context(), mode); err != nil {
-				t.Fatal(names(err))
+				t.Fatal(msg.NamesOf(err))
 			}
 		}
 		want := []string{"agent_on_risk vm=" + vm, "agent_devvm_risk vm=" + vm}
 		if whileRunning {
 			want = []string{"agent_on_risk_running vm=" + vm, "agent_devvm_risk_running vm=" + vm}
 		}
-		if !slices.Equal(warned, want) {
-			t.Errorf("while running %v: warned %q, want %q", whileRunning, warned, want)
+		if !slices.Equal(warned.Names(), want) {
+			t.Errorf("while running %v: warned %q, want %q", whileRunning, warned.Names(), want)
 		}
 	}
 }
@@ -265,26 +265,26 @@ func TestAgentToggleEmulated(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureAgentToggle] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
-	var warned []string
-	e.Registry.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	e.Registry.Warn = warned.Add
 	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	vm := st.Name()
 	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); !spec.AgentToggle || spec.AgentForwarding {
 		t.Errorf("spec = %+v", spec)
 	}
-	if !slices.Contains(warned, "backend_unreviewed_used backend=fake feature=agent-toggle vm="+vm) || st.Get(KeyAgentToggle) != "on" {
-		t.Errorf("warned %q, state %q", warned, st.Get(KeyAgentToggle))
+	if !slices.Contains(warned.Names(), "backend_unreviewed_used backend=fake feature=agent-toggle vm="+vm) || st.Get(KeyAgentToggle) != "on" {
+		t.Errorf("warned %q, state %q", warned.Names(), st.Get(KeyAgentToggle))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); !c.NoAgent || c.AgentSocket != "" {
 		t.Errorf("off: started with %+v", c)
 	}
 	// devvm's own, from its next start.
 	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.NoAgent || c.AgentSocket != e.Agent.Socket() || !f.Instances[vm].AgentForwarding {
 		t.Errorf("devvm: started with %+v", c)
@@ -294,8 +294,8 @@ func TestAgentToggleEmulated(t *testing.T) {
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{}); names(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+vm {
-		t.Errorf("refused: %s", names(err))
+	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+vm {
+		t.Errorf("refused: %s", msg.NamesOf(err))
 	}
 	// Made without forwarding, where that's fixed: on is refused.
 	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
@@ -305,14 +305,14 @@ func TestAgentToggleEmulated(t *testing.T) {
 	if err := st.Set(sshagent.Key, sshagent.Off); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); names(err) != "agent_fixed backend=fake vm="+vm {
-		t.Errorf("fixed, devvm ssh-agent on: %s", names(err))
+	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); msg.NamesOf(err) != "agent_fixed backend=fake vm="+vm {
+		t.Errorf("fixed, devvm ssh-agent on: %s", msg.NamesOf(err))
 	}
 	if err := st.Set(sshagent.Key, sshagent.On); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{}); names(err) != "agent_fixed backend=fake vm="+vm {
-		t.Errorf("fixed, launched on: %s", names(err))
+	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "agent_fixed backend=fake vm="+vm {
+		t.Errorf("fixed, launched on: %s", msg.NamesOf(err))
 	}
 }
 
@@ -333,7 +333,7 @@ func TestAgentUnchosen(t *testing.T) {
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatalf("not an AgentStarter: %s", names(err))
+		t.Fatalf("not an AgentStarter: %s", msg.NamesOf(err))
 	}
 	w := &starterFake{Fake: f, unchosen: true}
 	reg, err := backend.NewRegistry(w)
@@ -347,13 +347,13 @@ func TestAgentUnchosen(t *testing.T) {
 			t.Fatal(err)
 		}
 		e.Agent.Run = (&agentCalls{}).run
-		if err := (Launch{e}).Up(t.Context(), Options{}); names(err) != "agent_unchosen_stop vm="+vm || !stopped() {
-			t.Errorf("%s: launch %s, stopped %v", mode, names(err), stopped())
+		if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "agent_unchosen_stop vm="+vm || !stopped() {
+			t.Errorf("%s: launch %s, stopped %v", mode, msg.NamesOf(err), stopped())
 		}
 		// Started by devvm again: chosen.
 		w.unchosen = false
 		if err := (Launch{e}).Up(t.Context(), Options{}); err != nil || stopped() {
-			t.Fatalf("%s: relaunch %s", mode, names(err))
+			t.Fatalf("%s: relaunch %s", mode, msg.NamesOf(err))
 		}
 		w.unchosen = true
 	}
@@ -362,8 +362,8 @@ func TestAgentUnchosen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.ensureRunning(t.Context(), fd); names(err) != "agent_unchosen_stop vm="+vm || !stopped() {
-		t.Errorf("export: %s, stopped %v", names(err), stopped())
+	if err := e.ensureRunning(t.Context(), fd); msg.NamesOf(err) != "agent_unchosen_stop vm="+vm || !stopped() {
+		t.Errorf("export: %s, stopped %v", msg.NamesOf(err), stopped())
 	}
 	// The user's agent: nothing to keep from it.
 	w.unchosen = false
@@ -371,11 +371,11 @@ func TestAgentUnchosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	w.unchosen = true
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil || stopped() {
-		t.Errorf("on: %s, stopped %v", names(err), stopped())
+		t.Errorf("on: %s, stopped %v", msg.NamesOf(err), stopped())
 	}
 }
 
@@ -388,8 +388,8 @@ func TestAgentToggleRefused(t *testing.T) {
 	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.AgentToggle || st.Get(KeyAgentToggle) != "" {
 		t.Errorf("spec = %+v, state %q", spec, st.Get(KeyAgentToggle))
 	}
-	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); names(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+st.Name() {
-		t.Errorf("devvm ssh-agent on: %s", names(err))
+	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); msg.NamesOf(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+st.Name() {
+		t.Errorf("devvm ssh-agent on: %s", msg.NamesOf(err))
 	}
 }
 

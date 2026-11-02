@@ -36,7 +36,7 @@ func lookupVM(t *testing.T, e *Env) (dir, sub string) {
 	t.Helper()
 	own, parent, err := e.lookup(t.Context(), "", true)
 	if err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if parent == nil {
 		if own.f.Dir != e.Dir || own.sub != "" {
@@ -60,7 +60,7 @@ func TestLookupParents(t *testing.T) {
 	// The nearest one wins.
 	subfolder(t, e, web, "src")
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Here: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	src := e.Dir
 	e.Dir = lib
@@ -106,8 +106,8 @@ func TestLookupParents(t *testing.T) {
 	if dir, _ := lookupVM(t, e); dir != "" {
 		t.Errorf("past another folder's VM: %q, want none", dir)
 	}
-	if _, err := e.findExisting(t.Context(), ""); names(err) != "no_vm dir="+lib {
-		t.Errorf("findExisting past another folder's VM = %v, want no_vm", names(err))
+	if _, err := e.findExisting(t.Context(), ""); msg.NamesOf(err) != "no_vm dir="+lib {
+		t.Errorf("findExisting past another folder's VM = %v, want no_vm", msg.NamesOf(err))
 	}
 	// Never the home folder's, or one above it.
 	e.Home = web
@@ -141,23 +141,23 @@ func TestUpInSubfolder(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
 	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
-	var infos []string
-	e.Info = func(m msg.M) { infos = append(infos, m.Names()) }
+	var infos msg.Recorder
+	e.Info = infos.Add
 	src := subfolder(t, e, web, "src")
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	vm := vmName(t, e)
 	if c := call(f, "Shell"); c.Args[0] != vm || c.Args[1] != src {
 		t.Errorf("Shell = %v, want %s in %s", c.Args, vm, src)
 	}
-	if !slices.Contains(infos, "using_parent_vm dir="+web+" vm="+vm) {
-		t.Errorf("infos = %q", infos)
+	if !slices.Contains(infos.Names(), "using_parent_vm dir="+web+" vm="+vm) {
+		t.Errorf("infos = %q", infos.Names())
 	}
 	// Asked: yes opens it, no makes a new VM.
 	asked := answers(t, e, true)
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := "use_parent_vm dir=" + src + " parent=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
 		t.Errorf("asked %q, want %q", *asked, want)
@@ -167,7 +167,7 @@ func TestUpInSubfolder(t *testing.T) {
 	}
 	answers(t, e, false)
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 2 {
 		t.Errorf("%d VMs after no", n)
@@ -177,14 +177,14 @@ func TestUpInSubfolder(t *testing.T) {
 	subfolder(t, e, web, "tests")
 	asked = answers(t, e, true)
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Clone: true}); err == nil ||
-		strings.HasPrefix(names(err), "clone_needs_new_vm") || len(*asked) != 0 {
-		t.Errorf("--clone: %v, asked %q", names(err), *asked)
+		strings.HasPrefix(msg.NamesOf(err), "clone_needs_new_vm") || len(*asked) != 0 {
+		t.Errorf("--clone: %v, asked %q", msg.NamesOf(err), *asked)
 	}
 	// --here: a new VM, nothing asked.
 	subfolder(t, e, web, "docs")
 	asked = answers(t, e, true)
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Here: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if len(*asked) != 0 || len(vmNames(t, e)) != 3 {
 		t.Errorf("--here: asked %q, %d VMs", *asked, len(vmNames(t, e)))
@@ -200,7 +200,7 @@ func TestShellDir(t *testing.T) {
 	src := subfolder(t, e, web, "src")
 	_, p, err := e.lookup(t.Context(), "", true)
 	if err != nil || p == nil {
-		t.Fatalf("lookup = %+v, %v", p, names(err))
+		t.Fatalf("lookup = %+v, %v", p, msg.NamesOf(err))
 	}
 	if got := p.shellDir(t.Context(), io.Discard); got != src {
 		t.Errorf("shellDir = %q, want %q", got, src)
@@ -238,33 +238,33 @@ func TestCommandsInSubfolder(t *testing.T) {
 	web := e.Dir
 	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	vm := vmName(t, e)
-	var infos []string
-	e.Info = func(m msg.M) { infos = append(infos, m.Names()) }
+	var infos msg.Recorder
+	e.Info = infos.Add
 	subfolder(t, e, web, "src")
 	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
-	if want := []string{"using_parent_vm dir=" + web + " vm=" + vm, "stopped vm=" + vm}; !slices.Equal(infos, want) {
-		t.Errorf("infos = %q, want %q", infos, want)
+	if want := []string{"using_parent_vm dir=" + web + " vm=" + vm, "stopped vm=" + vm}; !slices.Equal(infos.Names(), want) {
+		t.Errorf("infos = %q, want %q", infos.Names(), want)
 	}
 	if c := call(f, "Stop"); c.Args[0] != vm {
 		t.Errorf("Stop = %v", c.Args)
 	}
-	if err := (Lifecycle{e}).Adopt(t.Context(), false); names(err) != "no_vm dir="+e.Dir {
-		t.Errorf("Adopt = %v", names(err))
+	if err := (Lifecycle{e}).Adopt(t.Context(), false); msg.NamesOf(err) != "no_vm dir="+e.Dir {
+		t.Errorf("Adopt = %v", msg.NamesOf(err))
 	}
 	// rm: refused without a terminal, -f or not; asked in one, a no
 	// keeping it.
-	infos = nil
-	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); names(err) != "rm_parent_vm dir="+web+" vm="+vm {
-		t.Errorf("Rm without a terminal = %v", names(err))
+	infos.Reset()
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); msg.NamesOf(err) != "rm_parent_vm dir="+web+" vm="+vm {
+		t.Errorf("Rm without a terminal = %v", msg.NamesOf(err))
 	}
-	if len(infos) == 0 || infos[0] != "using_parent_vm dir="+web+" vm="+vm {
-		t.Errorf("Rm's infos = %q", infos)
+	if i := infos.Names(); len(i) == 0 || i[0] != "using_parent_vm dir="+web+" vm="+vm {
+		t.Errorf("Rm's infos = %q", i)
 	}
 	asked := answers(t, e, false)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 1 {
 		t.Errorf("%d VMs after no", n)
@@ -274,7 +274,7 @@ func TestCommandsInSubfolder(t *testing.T) {
 	}
 	asked = answers(t, e, true)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true, NoExport: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := "delete_parent_vm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
 		t.Errorf("asked %q, want %q", *asked, want)
@@ -295,7 +295,7 @@ func TestWidenParentVM(t *testing.T) {
 	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := (Net{e}).SetNetwork(t.Context(), true); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := st.Set(gitprotect.KeyGitProtect, gitprotect.On); err != nil {
 		t.Fatal(err)
@@ -331,12 +331,12 @@ func TestWidenParentVM(t *testing.T) {
 	for _, c := range cases {
 		e.Terminal = func() bool { return false }
 		want := "widen_parent_vm_refused cmd=" + c.cmd + " dir=" + web + " vm=" + vm
-		if err := c.do(); names(err) != want {
-			t.Errorf("%s without a terminal = %v, want %s", c.cmd, names(err), want)
+		if err := c.do(); msg.NamesOf(err) != want {
+			t.Errorf("%s without a terminal = %v, want %s", c.cmd, msg.NamesOf(err), want)
 		}
 		asked := answers(t, e, false)
 		if err := c.do(); err != nil {
-			t.Errorf("%s, answered no: %v", c.cmd, names(err))
+			t.Errorf("%s, answered no: %v", c.cmd, msg.NamesOf(err))
 		}
 		if want := "widen_parent_vm cmd=" + c.cmd + " dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
 			t.Errorf("%s asked %q, want %q", c.cmd, *asked, want)
@@ -349,7 +349,7 @@ func TestWidenParentVM(t *testing.T) {
 		}
 		answers(t, e, true)
 		if err := c.do(); err != nil {
-			t.Errorf("%s, answered yes: %v", c.cmd, names(err))
+			t.Errorf("%s, answered yes: %v", c.cmd, msg.NamesOf(err))
 		}
 		if !c.changed() {
 			t.Errorf("%s, answered yes, didn't change the VM", c.cmd)
@@ -359,19 +359,19 @@ func TestWidenParentVM(t *testing.T) {
 	// rm of a deny asks.
 	asked := answers(t, e, false)
 	if err := n.SetNetwork(t.Context(), true); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, true, false, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := n.PolicyChange(t.Context(), []string{"example.com"}, false, true, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if len(*asked) != 0 {
 		t.Errorf("asked %q", *asked)
 	}
 	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, false, true, false); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := "widen_parent_vm cmd=devvm network rm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
 		t.Errorf("network rm of a deny asked %q", *asked)
@@ -383,7 +383,7 @@ func TestWidenParentVM(t *testing.T) {
 	e.Dir = web
 	e.Terminal = func() bool { return false }
 	if err := n.SetNetwork(t.Context(), false); err != nil {
-		t.Errorf("network off in the VM's own folder: %v", names(err))
+		t.Errorf("network off in the VM's own folder: %v", msg.NamesOf(err))
 	}
 }
 
@@ -423,17 +423,17 @@ func TestSubfolderRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, p, err := e.lookup(t.Context(), "", true); err != nil || p == nil || p.repo != pkg || p.f.Dir != web {
-		t.Fatalf("lookup = %+v, %v", p, names(err))
+		t.Fatalf("lookup = %+v, %v", p, msg.NamesOf(err))
 	}
 	// A .git file (a worktree's) in the folder itself is nearer.
 	if err := os.WriteFile(filepath.Join(src, ".git"), []byte("gitdir: /x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, p, err := e.lookup(t.Context(), "", true); err != nil || p == nil || p.repo != src {
-		t.Fatalf("lookup = %+v, %v", p, names(err))
+		t.Fatalf("lookup = %+v, %v", p, msg.NamesOf(err))
 	}
-	if err := (Lifecycle{e}).Stop(t.Context()); names(err) != "no_vm dir="+src {
-		t.Errorf("Stop = %v", names(err))
+	if err := (Lifecycle{e}).Stop(t.Context()); msg.NamesOf(err) != "no_vm dir="+src {
+		t.Errorf("Stop = %v", msg.NamesOf(err))
 	}
 	if c := call(f, "Stop"); c.Method != "" {
 		t.Errorf("stopped %v", c.Args)
@@ -441,7 +441,7 @@ func TestSubfolderRepo(t *testing.T) {
 	// Asked: yes opens the parent's, no makes a new VM.
 	asked := answers(t, e, true)
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if want := "use_parent_vm_repo dir=" + src + " parent=" + web + " repo=" + src + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
 		t.Errorf("asked %q, want %q", *asked, want)
@@ -451,7 +451,7 @@ func TestSubfolderRepo(t *testing.T) {
 	}
 	answers(t, e, false)
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 2 {
 		t.Errorf("%d VMs after no", n)
@@ -461,7 +461,7 @@ func TestSubfolderRepo(t *testing.T) {
 	e.Terminal = func() bool { return false }
 	e.Ask, e.Confirm = unasked(t), unasked(t)
 	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 3 {
 		t.Errorf("%d VMs without a terminal", n)

@@ -1,7 +1,6 @@
 package paths
 
 import (
-	"errors"
 	"path/filepath"
 	"testing"
 
@@ -65,7 +64,7 @@ func TestFromEnvNeedsHome(t *testing.T) {
 			}
 			return ""
 		})
-		if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != "home_not_absolute" {
+		if msg.IDOf(err) != "home_not_absolute" {
 			t.Errorf("HOME=%q: got %v, want home_not_absolute", home, err)
 		}
 	}

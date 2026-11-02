@@ -19,16 +19,6 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-func names(err error) string {
-	if m, ok := err.(msg.M); ok { //nolint:errorlint // messages aren't wrapped
-		return m.Names()
-	}
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 // testStore is a store in a temporary sandbox, its Keychain a map and its
 // environment env.
 func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[string]string) {
@@ -81,8 +71,8 @@ func TestToken(t *testing.T) {
 		{"claude", "some-browser-code", "", "not_setup_token"},
 	} {
 		v, err := Token(tc.name, tc.given)
-		if v != tc.want || names(err) != tc.err {
-			t.Errorf("Token(%s, %q) = %q, %v", tc.name, tc.given, v, names(err))
+		if v != tc.want || msg.NamesOf(err) != tc.err {
+			t.Errorf("Token(%s, %q) = %q, %v", tc.name, tc.given, v, msg.NamesOf(err))
 		}
 	}
 }
@@ -105,12 +95,12 @@ func TestSaveDelete(t *testing.T) {
 		t.Errorf("Delete again: %v", err)
 	}
 	s.KeychainSet = func(context.Context, string, string, string, string) error { return errors.New("denied") }
-	if err := s.Save(ctx, "claude", "sk-ant-oat01-x"); names(err) != "keychain_save_failed secret=claude" {
-		t.Errorf("a failed save: %v", names(err))
+	if err := s.Save(ctx, "claude", "sk-ant-oat01-x"); msg.NamesOf(err) != "keychain_save_failed secret=claude" {
+		t.Errorf("a failed save: %v", msg.NamesOf(err))
 	}
 	for _, name := range []string{"../../x", "nope"} {
-		if err := s.Save(ctx, name, "v"); names(err) != "no_secret secret="+msg.OneLine(name) {
-			t.Errorf("Save(%s): %v", name, names(err))
+		if err := s.Save(ctx, name, "v"); msg.NamesOf(err) != "no_secret secret="+msg.OneLine(name) {
+			t.Errorf("Save(%s): %v", name, msg.NamesOf(err))
 		}
 		if err := s.Delete(ctx, name); !errors.Is(err, ErrNone) {
 			t.Errorf("Delete(%s): %v", name, err)
@@ -181,8 +171,8 @@ func TestValue(t *testing.T) {
 		t.Errorf("another service's: %v", err)
 	}
 	env["DEVVM_SECRET_SERVICE"] = "x -a y"
-	if _, err := s.Value(ctx, "github"); names(err) != "bad_secret_service" {
-		t.Errorf("a service with spaces: %v", names(err))
+	if _, err := s.Value(ctx, "github"); msg.NamesOf(err) != "bad_secret_service" {
+		t.Errorf("a service with spaces: %v", msg.NamesOf(err))
 	}
 	// A claude token in the environment wins.
 	delete(env, "DEVVM_SECRET_SERVICE")
@@ -236,8 +226,8 @@ func TestGet(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"claude", "../../etc/passwd", "nope"} {
-		if _, err := s.Get(ctx, name); names(err) != `no_secret secret=`+msg.OneLine(name) {
-			t.Errorf("Get(%s) = %v", name, names(err))
+		if _, err := s.Get(ctx, name); msg.NamesOf(err) != `no_secret secret=`+msg.OneLine(name) {
+			t.Errorf("Get(%s) = %v", name, msg.NamesOf(err))
 		}
 	}
 }

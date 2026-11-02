@@ -25,7 +25,7 @@ func TestValidAndCheck(t *testing.T) {
 		if Valid(s) {
 			t.Errorf("%q accepted", s)
 		}
-		if m, ok := errors.AsType[msg.M](Check(s)); !ok || m.ID() != "bad_from" {
+		if msg.IDOf(Check(s)) != "bad_from" {
 			t.Errorf("Check(%q) = %v", s, Check(s))
 		}
 	}
@@ -41,7 +41,7 @@ type testLookup struct {
 	reg         *fakeRegistry
 	docker      map[string]string
 	dockerCalls int
-	warned      []string
+	warned      msg.Recorder
 }
 
 func newTestLookup(t *testing.T) *testLookup {
@@ -59,7 +59,7 @@ func newTestLookup(t *testing.T) *testLookup {
 			id, ok := tl.docker[ref]
 			return id, ok
 		},
-		Warn: func(m msg.M) { tl.warned = append(tl.warned, m.Names()) },
+		Warn: tl.warned.Add,
 	}
 	return tl
 }
@@ -80,11 +80,6 @@ func (tl *testLookup) recorded(t *testing.T, ref string) string {
 		t.Fatal(err)
 	}
 	return d
-}
-
-func isMsg(err error, id string) bool {
-	m, ok := errors.AsType[msg.M](err)
-	return ok && m.ID() == id
 }
 
 func TestRefreshRecordsTheRegistrysDigestPerTag(t *testing.T) {
@@ -112,8 +107,8 @@ func TestRefreshRecordsTheRegistrysDigestPerTag(t *testing.T) {
 		t.Errorf("ghcr.io: %q", d)
 	}
 	// Docker isn't asked about an image its registry has.
-	if tl.dockerCalls != 0 || len(tl.warned) != 0 {
-		t.Errorf("docker asked %d times, warnings %q", tl.dockerCalls, tl.warned)
+	if tl.dockerCalls != 0 || len(tl.warned.Names()) != 0 {
+		t.Errorf("docker asked %d times, warnings %q", tl.dockerCalls, tl.warned.Names())
 	}
 }
 
@@ -149,8 +144,8 @@ func TestRefreshOffline(t *testing.T) {
 	tl.offline(t)
 	// Nothing recorded: Docker's ID, quietly.
 	tl.docker["myapp:dev"] = digestOf("d")
-	if err := tl.Refresh(t.Context(), "myapp:dev"); err != nil || len(tl.warned) != 0 {
-		t.Fatalf("Refresh: %v, warnings %q", err, tl.warned)
+	if err := tl.Refresh(t.Context(), "myapp:dev"); err != nil || len(tl.warned.Names()) != 0 {
+		t.Fatalf("Refresh: %v, warnings %q", err, tl.warned.Names())
 	}
 	if d := tl.recorded(t, "myapp:dev"); d != digestOf("d") {
 		t.Errorf("recorded %q", d)
@@ -164,11 +159,11 @@ func TestRefreshOffline(t *testing.T) {
 	if d := tl.recorded(t, "node:24"); d != "node@"+digestOf("a") {
 		t.Errorf("recorded %q", d)
 	}
-	if want := "from_cached_unreachable from=node:24 host=" + DockerHub; strings.Join(tl.warned, "\n") != want {
-		t.Errorf("warnings %q, want %q", tl.warned, want)
+	if want := "from_cached_unreachable from=node:24 host=" + DockerHub; strings.Join(tl.warned.Names(), "\n") != want {
+		t.Errorf("warnings %q, want %q", tl.warned.Names(), want)
 	}
 	// Neither: an error.
-	if err := tl.Refresh(t.Context(), "debian:13"); !isMsg(err, "from_unreachable") {
+	if err := tl.Refresh(t.Context(), "debian:13"); msg.IDOf(err) != "from_unreachable" {
 		t.Errorf("debian:13: %v", err)
 	}
 }
@@ -176,7 +171,7 @@ func TestRefreshOffline(t *testing.T) {
 func TestRefreshNotFound(t *testing.T) {
 	t.Parallel()
 	tl := newTestLookup(t)
-	if err := tl.Refresh(t.Context(), "ghcr.io/someone/private"); !isMsg(err, "from_not_found") {
+	if err := tl.Refresh(t.Context(), "ghcr.io/someone/private"); msg.IDOf(err) != "from_not_found" {
 		t.Errorf("nothing recorded: %v", err)
 	}
 	if err := state.SetFromDigest(tl.Dirs, "ghcr.io/someone/private", digestOf("f")); err != nil {
@@ -185,8 +180,8 @@ func TestRefreshNotFound(t *testing.T) {
 	if err := tl.Refresh(t.Context(), "ghcr.io/someone/private"); err != nil {
 		t.Fatal(err)
 	}
-	if want := "from_cached_not_found from=ghcr.io/someone/private host=ghcr.io"; strings.Join(tl.warned, "\n") != want {
-		t.Errorf("warnings %q, want %q", tl.warned, want)
+	if want := "from_cached_not_found from=ghcr.io/someone/private host=ghcr.io"; strings.Join(tl.warned.Names(), "\n") != want {
+		t.Errorf("warnings %q, want %q", tl.warned.Names(), want)
 	}
 }
 
@@ -242,11 +237,11 @@ func TestPublic(t *testing.T) {
 	if got, err := tl.Public(t.Context(), "node:24"); err != nil || got != "node@"+digestOf("a") {
 		t.Errorf("offline: %q, %v", got, err)
 	}
-	if want := "from_cached_unreachable from=node:24 host=" + DockerHub; strings.Join(tl.warned, "\n") != want {
-		t.Errorf("warnings %q, want %q", tl.warned, want)
+	if want := "from_cached_unreachable from=node:24 host=" + DockerHub; strings.Join(tl.warned.Names(), "\n") != want {
+		t.Errorf("warnings %q, want %q", tl.warned.Names(), want)
 	}
 	for _, ref := range []string{"myapp:dev", "debian:13", "node@" + digestOf("b")} {
-		if _, err := tl.Public(t.Context(), ref); !isMsg(err, "from_unreachable") {
+		if _, err := tl.Public(t.Context(), ref); msg.IDOf(err) != "from_unreachable" {
 			t.Errorf("offline %s: %v", ref, err)
 		}
 	}
@@ -279,7 +274,7 @@ func TestPublicRefusesLocalRegistries(t *testing.T) {
 			}
 		}
 	}
-	if len(tl.reg.calls) != 0 || len(tl.warned) != 0 {
-		t.Errorf("asked %q, warned %q", tl.reg.calls, tl.warned)
+	if len(tl.reg.calls) != 0 || len(tl.warned.Names()) != 0 {
+		t.Errorf("asked %q, warned %q", tl.reg.calls, tl.warned.Names())
 	}
 }

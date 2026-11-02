@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
@@ -17,7 +18,7 @@ func TestLinkArgs(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, ok := range []string{"db", "pg-1", "a", "0db", strings.Repeat("a", 63)} {
 		if err := CheckLinkName(ok); err != nil {
-			t.Errorf("CheckLinkName(%q) = %v", ok, names(err))
+			t.Errorf("CheckLinkName(%q) = %v", ok, msg.NamesOf(err))
 		}
 	}
 	for _, bad := range []string{"", "DB", "db_1", "-db", "db-", "db.x", "5432", "a b", "db\n", strings.Repeat("a", 64)} {
@@ -27,20 +28,20 @@ func TestLinkArgs(t *testing.T) {
 	}
 	for in, want := range map[string]int{"5432": 5432, "1": 1, "65535": 65535} {
 		if got, err := ParseLinkPort(in); got != want || err != nil {
-			t.Errorf("ParseLinkPort(%q) = %d, %v", in, got, names(err))
+			t.Errorf("ParseLinkPort(%q) = %d, %v", in, got, msg.NamesOf(err))
 		}
 	}
 	for _, bad := range []string{"0", "65536", "05432", "5432-5433", "all", " 80", "http"} {
-		if _, err := ParseLinkPort(bad); names(err) != `link_port_invalid value="`+bad+`"` {
-			t.Errorf("ParseLinkPort(%q) = %v", bad, names(err))
+		if _, err := ParseLinkPort(bad); msg.NamesOf(err) != `link_port_invalid value="`+bad+`"` {
+			t.Errorf("ParseLinkPort(%q) = %v", bad, msg.NamesOf(err))
 		}
 	}
 	if got, err := ParsePublish("8000-8010, 5432,5432"); got != "8000-8010,5432" || err != nil {
-		t.Errorf("ParsePublish = %q, %v", got, names(err))
+		t.Errorf("ParsePublish = %q, %v", got, msg.NamesOf(err))
 	}
 	for _, bad := range []string{"all", "none", "0", "x"} {
-		if _, err := ParsePublish(bad); names(err) != `link_ports_invalid value="`+bad+`"` {
-			t.Errorf("ParsePublish(%q) = %v", bad, names(err))
+		if _, err := ParsePublish(bad); msg.NamesOf(err) != `link_ports_invalid value="`+bad+`"` {
+			t.Errorf("ParsePublish(%q) = %v", bad, msg.NamesOf(err))
 		}
 	}
 }
@@ -207,8 +208,8 @@ func TestLinkNameFor(t *testing.T) {
 		{target: "devvm-app-fedcba98765432", id: "i3", err: "link_name_host name=app vm=devvm-app-0123456789abcd"},
 	} {
 		got, err := linkNameFor(client, links, tc.target, tc.id, tc.as)
-		if got != tc.want || names(err) != tc.err {
-			t.Errorf("linkNameFor(%s, %s, %q) = %q, %v; want %q, %s", tc.target, tc.id, tc.as, got, names(err), tc.want, tc.err)
+		if got != tc.want || msg.NamesOf(err) != tc.err {
+			t.Errorf("linkNameFor(%s, %s, %q) = %q, %v; want %q, %s", tc.target, tc.id, tc.as, got, msg.NamesOf(err), tc.want, tc.err)
 		}
 	}
 }

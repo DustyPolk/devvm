@@ -30,16 +30,6 @@ import (
 	"github.com/w3cj/devvm/internal/tools"
 )
 
-func names(err error) string {
-	if m, ok := err.(msg.M); ok { //nolint:errorlint // messages aren't wrapped
-		return m.Names()
-	}
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 // testUI is devvm's UI for these tests: it prints nothing, fails the test
 // on a question, runs commands as they are, their output dropped, counts
 // no steps and keeps no cleanups.
@@ -202,7 +192,7 @@ func allNative() backend.Caps {
 func existingVM(t *testing.T, e *Env, o Options) *state.VM {
 	t.Helper()
 	if err := (Launch{e}).Up(t.Context(), o); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	vm := vmName(t, e)
 	t.Cleanup(func() { e.Proxy.Stop(vm) }) // its proxy, if any: the test's sleep

@@ -154,16 +154,6 @@ func (e env) locked(t *testing.T, lock []byte) {
 	write(t, e.checkedFile(), nil)
 }
 
-func names(err error) string {
-	if m, ok := errors.AsType[msg.M](err); ok {
-		return m.Names()
-	}
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 func TestMiseArch(t *testing.T) {
 	for in, want := range map[string]string{"amd64": "x64", "arm64": "arm64"} {
 		if got := MiseArch(in); got != want {
@@ -177,7 +167,7 @@ func TestLockResolvesOnce(t *testing.T) {
 	e := newEnv(t)
 	lock, err := e.Lock(t.Context())
 	if err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !bytes.Equal(lock, fixture(t)) || !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) {
 		t.Error("the lock isn't what mise wrote")
@@ -210,15 +200,15 @@ func TestLockResolvesAgainWhenConfigChanges(t *testing.T) {
 	e.locked(t, fixture(t))
 	config := read(t, e.configFile())
 	write(t, e.configFile(), bytes.Replace(config, []byte("[tools]\n"), []byte("[tools]\nzig = \"latest\"\n"), 1))
-	if _, err := e.Lock(t.Context()); names(err) != "tools_need_resolve" {
-		t.Errorf("Lock with a tool mise didn't lock = %v", names(err))
+	if _, err := e.Lock(t.Context()); msg.NamesOf(err) != "tools_need_resolve" {
+		t.Errorf("Lock with a tool mise didn't lock = %v", msg.NamesOf(err))
 	}
 	if !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) || !bytes.Equal(read(t, e.lockConfig()), config) {
 		t.Error("the lock changed")
 	}
 	write(t, e.configFile(), append(config, "# a comment\n"...))
 	if _, err := e.Lock(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !bytes.Equal(read(t, e.lockConfig()), read(t, e.configFile())) || !strings.Contains(e.calls(t), "mise lock") {
 		t.Error("not resolved again")
@@ -370,7 +360,7 @@ func TestRefreshStepsBack(t *testing.T) {
 	newer := newerLock(t)
 	e.stubLocks(t, newer, olderLock(t), "24.19.0 24.20.0 24.20.1 24.21.0.1 24.22.0")
 	if err := e.Refresh(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.Contains(*e.said, "devvm: tool_stepped_back older=24.20.0 tool=node version=24.21.0.1") {
 		t.Errorf("said %q", *e.said)
@@ -404,7 +394,7 @@ func TestRefreshStepsBackToNothing(t *testing.T) {
 	newer := newerLock(t)
 	e.stubLocks(t, newer, newer, "")
 	if err := e.Refresh(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.Contains(*e.said, "devvm: tool_no_download tool=node version=24.21.0.1") {
 		t.Errorf("said %q", *e.said)
@@ -432,7 +422,7 @@ func TestRefresh(t *testing.T) {
 	}
 	t.Setenv("MISE_STUB_FAIL", "")
 	if err := e.Refresh(t.Context()); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if !bytes.Equal(read(t, e.Dirs.ToolLock()), newer) {
 		t.Error("the lock isn't the newer one")
@@ -519,11 +509,11 @@ func TestFiles(t *testing.T) {
 	}
 	bad := regexp.MustCompile(`(?m)(\[\[tools\.go\]\]\n)version = ".*"`).ReplaceAll(fixture(t), []byte(`${1}version = "1$$(id)"`))
 	e.locked(t, bad)
-	if _, err := e.Files(t.Context(), []string{"go"}, gnuT); names(err) != `tool_bad_version tool=go version="1$(id)"` {
-		t.Errorf("a bad version: %v", names(err))
+	if _, err := e.Files(t.Context(), []string{"go"}, gnuT); msg.NamesOf(err) != `tool_bad_version tool=go version="1$(id)"` {
+		t.Errorf("a bad version: %v", msg.NamesOf(err))
 	}
-	if _, err := e.File(Lock(fixture(t)), "zig", gnuT); names(err) != "tool_not_locked lock="+e.Dirs.ToolLock()+" tool=zig" {
-		t.Errorf("a tool the lock hasn't: %v", names(err))
+	if _, err := e.File(Lock(fixture(t)), "zig", gnuT); msg.NamesOf(err) != "tool_not_locked lock="+e.Dirs.ToolLock()+" tool=zig" {
+		t.Errorf("a tool the lock hasn't: %v", msg.NamesOf(err))
 	}
 }
 
@@ -588,7 +578,7 @@ func TestBuild(t *testing.T) {
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]), []byte("built"))
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]+".sha256"), []byte("x\n"))
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if ms := f.Methods(); !slices.Equal(ms, []string{"BuildTools"}) {
 		t.Fatalf("calls = %q", ms)
@@ -632,8 +622,8 @@ func TestBuildFolder(t *testing.T) {
 		}
 		return nil
 	}
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, e.files(t, "uv")); names(err) != "tool_bad_output file="+e.files(t, "uv")[0] {
-		t.Errorf("Build with no image written = %v", names(err))
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, e.files(t, "uv")); msg.NamesOf(err) != "tool_bad_output file="+e.files(t, "uv")[0] {
+		t.Errorf("Build with no image written = %v", msg.NamesOf(err))
 	}
 	e.noLeftovers(t)
 }
@@ -645,7 +635,7 @@ func TestBuildOneBatch(t *testing.T) {
 	f := fake()
 	files := e.files(t, "node", "go", "bun")
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, files); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	var batches [][]string
 	outs := map[string]bool{}
@@ -675,8 +665,8 @@ func TestBuildHostileOutput(t *testing.T) {
 	f := fake()
 	f.ToolsBuild = func(spec backend.ToolsSpec) error { return os.Symlink(victim, filepath.Join(spec.Out, spec.Args[2])) }
 	node := e.files(t, "node")
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, node); names(err) != "tool_bad_output file="+node[0] {
-		t.Errorf("Build = %v", names(err))
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, node); msg.NamesOf(err) != "tool_bad_output file="+node[0] {
+		t.Errorf("Build = %v", msg.NamesOf(err))
 	}
 	if _, err := os.Lstat(filepath.Join(e.Dirs.Tools(), node[0])); !errors.Is(err, os.ErrNotExist) {
 		t.Error("the symlink reached the share")
@@ -691,7 +681,7 @@ func TestBuildHostileOutput(t *testing.T) {
 		return os.Symlink(victim, filepath.Join(e.Dirs.Tools(), file+".sha256"))
 	}
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, node); err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if string(read(t, victim)) != "victim\n" {
 		t.Error("devvm wrote through the planted link")
@@ -710,11 +700,11 @@ func TestBuildRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); names(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
-		t.Errorf("Build = %v", names(err))
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); msg.NamesOf(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
+		t.Errorf("Build = %v", msg.NamesOf(err))
 	}
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); names(err) != "tools_changed" {
-		t.Errorf("Build of a version the lock moved on from = %v", names(err))
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); msg.NamesOf(err) != "tools_changed" {
+		t.Errorf("Build of a version the lock moved on from = %v", msg.NamesOf(err))
 	}
 	if len(f.Calls()) > 0 {
 		t.Errorf("calls = %q", f.Methods())
@@ -745,7 +735,7 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 		f := fake()
 		var b backend.Backend = f
 		if tc.stored {
-			b = stored{f, []string{"/lima"}}
+			b = backendtest.Stored{Fake: f, Dirs: []string{"/lima"}}
 		}
 		e.FreeSpace = func(dir string) (uint64, error) {
 			if dir == tc.low {
@@ -754,7 +744,7 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 			return 100 << 30, nil
 		}
 		err := e.Build(t.Context(), backend.Review{}, b, baseKey, gnuT, all)
-		if got := names(err); got != tc.want {
+		if got := msg.NamesOf(err); got != tc.want {
 			t.Errorf("%s low: Build = %v, want %s", tc.name, got, tc.want)
 		}
 		if len(f.Calls()) > 0 {
@@ -762,18 +752,6 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 		}
 		e.noLeftovers(t)
 	}
-}
-
-// stored is a fake whose disks are in dirs (backend.Storage).
-type stored struct {
-	*backendtest.Fake
-	dirs []string
-}
-
-func (s stored) DiskDirs() []string { return s.dirs }
-
-func (s stored) Floors() backend.Floors {
-	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
 }
 
 // Another devvm holding the share is waited for, saying so, until it lets
@@ -790,7 +768,7 @@ func TestLockShare(t *testing.T) {
 	soon, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 	if _, err := e.LockShare(soon); !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("LockShare while held = %v", names(err))
+		t.Errorf("LockShare while held = %v", msg.NamesOf(err))
 	}
 	if !slices.Contains(*e.said, "==> share_waiting dir="+e.Dirs.Tools()) {
 		t.Errorf("said %q", *e.said)
@@ -858,7 +836,7 @@ func TestLockShareKilled(t *testing.T) {
 	defer cancel()
 	unlock, err := e.LockShare(ctx)
 	if err != nil {
-		t.Fatalf("LockShare once its holder was killed = %v", names(err))
+		t.Fatalf("LockShare once its holder was killed = %v", msg.NamesOf(err))
 	}
 	unlock()
 }
@@ -1095,8 +1073,8 @@ func TestMaking(t *testing.T) {
 		t.Errorf("Hold while excluded: %v", err)
 	}
 	// Hold waiting says so, once, and gets it once Exclude's let go.
-	var said []string
-	m.Info = func(m msg.M) { said = append(said, m.ID()) }
+	var said msg.Recorder
+	m.Info = said.Add
 	got := make(chan error, 1)
 	go func() {
 		u, err := m.Hold(t.Context())
@@ -1110,12 +1088,12 @@ func TestMaking(t *testing.T) {
 	if err := <-got; err != nil {
 		t.Errorf("Hold once let go: %v", err)
 	}
-	if !slices.Equal(said, []string{"making_waiting"}) {
-		t.Errorf("said %v", said)
+	if !slices.Equal(said.IDs(), []string{"making_waiting"}) {
+		t.Errorf("said %v", said.IDs())
 	}
-	said = nil
-	if u, err := m.Hold(t.Context()); err != nil || len(said) > 0 {
-		t.Errorf("Hold with nothing in the way: %v, said %v", err, said)
+	said.Reset()
+	if u, err := m.Hold(t.Context()); err != nil || len(said.IDs()) > 0 {
+		t.Errorf("Hold with nothing in the way: %v, said %v", err, said.IDs())
 	} else {
 		u()
 	}
@@ -1219,11 +1197,11 @@ func TestRemove(t *testing.T) {
 	if err != nil || img != "base" || len(files) != 0 {
 		t.Errorf("Remove the last = %q, %q, %v", img, files, err)
 	}
-	if _, _, err := Remove(vm, "node+foo", nil, []string{"python"}); names(err) != "vm_lacks has=node foo layer=python vm="+vm {
-		t.Errorf("Remove what it lacks = %v", names(err))
+	if _, _, err := Remove(vm, "node+foo", nil, []string{"python"}); msg.NamesOf(err) != "vm_lacks has=node foo layer=python vm="+vm {
+		t.Errorf("Remove what it lacks = %v", msg.NamesOf(err))
 	}
-	if _, _, err := Remove(vm, "node+foo", nil, []string{"foo"}); names(err) != "custom_layer_remove layer=foo vm="+vm {
-		t.Errorf("Remove a layer = %v", names(err))
+	if _, _, err := Remove(vm, "node+foo", nil, []string{"foo"}); msg.NamesOf(err) != "custom_layer_remove layer=foo vm="+vm {
+		t.Errorf("Remove a layer = %v", msg.NamesOf(err))
 	}
 }
 
@@ -1292,7 +1270,7 @@ func TestUpdate(t *testing.T) {
 	before := e.files(t, "go")
 	files, changed, err := e.Update(t.Context(), build, vm, "go", before, gnuT)
 	if err != nil {
-		t.Fatal(names(err))
+		t.Fatal(msg.NamesOf(err))
 	}
 	if Lock(read(t, e.Dirs.ToolLock())).Version("go") != "9.9.9" || !changed || slices.Equal(files, before) {
 		t.Errorf("Update = %q, %v", files, changed)
@@ -1344,8 +1322,8 @@ func TestHostMise(t *testing.T) {
 	e.OS, e.Arch = "linux", "amd64"
 	e.miseURL = srv.URL + "/v%[1]s/mise-v%[1]s-%[2]s"
 	e.miseSums = map[string]string{"linux-x64": strings.Repeat("0", 64)}
-	if _, err := e.HostMise(t.Context()); names(err) != "mise_checksum version="+miseVersion {
-		t.Errorf("a download that doesn't match = %v", names(err))
+	if _, err := e.HostMise(t.Context()); msg.NamesOf(err) != "mise_checksum version="+miseVersion {
+		t.Errorf("a download that doesn't match = %v", msg.NamesOf(err))
 	}
 	path := filepath.Join(e.Dirs.Mise(), miseVersion, "mise")
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -1370,8 +1348,8 @@ func TestHostMise(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.HostMise(t.Context()); names(err) != "mise_download_failed version="+miseVersion {
-		t.Errorf("offline = %v", names(err))
+	if _, err := e.HostMise(t.Context()); msg.NamesOf(err) != "mise_download_failed version="+miseVersion {
+		t.Errorf("offline = %v", msg.NamesOf(err))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -85,8 +86,8 @@ func TestDelete(t *testing.T) {
 			t.Errorf("Delete %q: no error", refs)
 		}
 	}
-	if !isMsg((Images{b}).Delete(ctx, []string{"node"}), "tools_not_images_rm") || !isMsg((Images{b}).Delete(ctx, []string{"bar"}), "no_image_named") ||
-		!isMsg((Images{b}).Delete(ctx, []string{"nope"}), "unknown_layer") {
+	if msg.IDOf((Images{b}).Delete(ctx, []string{"node"})) != "tools_not_images_rm" || msg.IDOf((Images{b}).Delete(ctx, []string{"bar"})) != "no_image_named" ||
+		msg.IDOf((Images{b}).Delete(ctx, []string{"nope"})) != "unknown_layer" {
 		t.Error("Delete: not the messages expected")
 	}
 	if len(f.ImageKeys) != 3 {
@@ -105,7 +106,7 @@ func TestDelete(t *testing.T) {
 		write(t, filepath.Join(assetsDir(b), "oci", s), "#!/bin/bash\n")
 	}
 	b.From = "node:24"
-	if err := (Images{b}).Delete(ctx, []string{"base"}); !isMsg(err, "no_image_named_from") {
+	if err := (Images{b}).Delete(ctx, []string{"base"}); msg.IDOf(err) != "no_image_named_from" {
 		t.Errorf("another base's: %v, want no_image_named_from", err)
 	}
 }

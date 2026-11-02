@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"slices"
 	"strings"
 
@@ -38,8 +37,8 @@ func checkWord(root *cobra.Command, word string) error {
 		return nil
 	}
 	if image.IsReserved(word) {
-		if m, ok := errors.AsType[msg.M](b.CheckLayers(word)); ok && m.ID() == "layer_is_command" {
-			return m
+		if err := b.CheckLayers(word); msg.IDOf(err) == "layer_is_command" {
+			return err
 		}
 	}
 	// Cobra's suggestions, by distance or as a prefix: the closest first.

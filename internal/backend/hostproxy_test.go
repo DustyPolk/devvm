@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"errors"
 	"slices"
 	"testing"
 
@@ -46,8 +45,7 @@ func TestHostProxy(t *testing.T) {
 		{HostProxy{HTTPS: "proxy.corp:8080", NoProxy: "a\nHTTPS_PROXY=x"}, "upstream_proxy_invalid setting=NO_PROXY"},
 	} {
 		_, err := c.h.Upstream()
-		var m msg.M
-		if !errors.As(err, &m) || m.Names() != c.want {
+		if msg.NamesOf(err) != c.want {
 			t.Errorf("%+v: %v, want %s", c.h, err, c.want)
 		}
 	}

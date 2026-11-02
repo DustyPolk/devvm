@@ -92,7 +92,7 @@ func TestPolicyLinked(t *testing.T) {
 	}
 	check := func(st *state.VM, on bool, want string) {
 		t.Helper()
-		if got := names(policyLinked(d, st, on)); got != want {
+		if got := msg.NamesOf(policyLinked(d, st, on)); got != want {
 			t.Errorf("policyLinked(%s, %v) = %q, want %q", st.Name(), on, got, want)
 		}
 	}
@@ -130,15 +130,15 @@ func TestUnlinkTarget(t *testing.T) {
 	for _, st := range vms {
 		f.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: backend.StatusStopped}
 	}
-	var said []string
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	var said msg.Recorder
+	e.Info = said.Add
 	e.Warn = func(m msg.M) { t.Errorf("warned %s", m.Names()) }
 	if err := (linkRuns{e}).unlinkTarget(t.Context(), db.Name()); err != nil {
 		t.Fatal(err)
 	}
 	want := "links_target_gone count=2 vm=" + db.Name() + " vms=" + app.Name() + ", " + web.Name()
-	if !slices.Equal(said, []string{want}) {
-		t.Errorf("said %q, want %q", said, want)
+	if !slices.Equal(said.Names(), []string{want}) {
+		t.Errorf("said %q, want %q", said.Names(), want)
 	}
 	for _, c := range []struct {
 		st   *state.VM
@@ -154,9 +154,9 @@ func TestUnlinkTarget(t *testing.T) {
 			t.Errorf("%s's links: %v, %v; want %q", c.st.Name(), got, err, c.want)
 		}
 	}
-	said = nil
-	if err := (linkRuns{e}).unlinkTarget(t.Context(), db.Name()); err != nil || len(said) != 0 {
-		t.Errorf("again: %v, said %q", err, said)
+	said.Reset()
+	if err := (linkRuns{e}).unlinkTarget(t.Context(), db.Name()); err != nil || len(said.Names()) != 0 {
+		t.Errorf("again: %v, said %q", err, said.Names())
 	}
 }
 
@@ -271,8 +271,8 @@ func TestLinkRuns(t *testing.T) {
 	db := Link{Name: "db", Port: 5432, Addr: netip.MustParseAddr("127.77.0.1")}
 	api := Link{Name: "api", Port: 3000, Addr: netip.MustParseAddr("127.77.0.2")}
 	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255\n")
-	var warned []string
-	r.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	r.Warn = warned.Add
 	if _, ok := r.pid(vm); ok {
 		t.Fatal("a session before any started")
 	}
@@ -285,14 +285,14 @@ func TestLinkRuns(t *testing.T) {
 	}
 	start := time.Now()
 	r.report(t.Context(), vm, []Link{db, api}, from)
-	if !slices.Equal(warned, []string{"link_port_taken name=api port=3000 vm=" + vm}) || time.Since(start) > time.Second {
-		t.Errorf("warned %q after %v", warned, time.Since(start))
+	if !slices.Equal(warned.Names(), []string{"link_port_taken name=api port=3000 vm=" + vm}) || time.Since(start) > time.Second {
+		t.Errorf("warned %q after %v", warned.Names(), time.Since(start))
 	}
 	// Lines before from aren't this change's.
-	warned = nil
+	warned.Reset()
 	r.report(t.Context(), vm, []Link{api}, r.logSize(vm))
-	if len(warned) != 0 {
-		t.Errorf("warned %q of an earlier line", warned)
+	if len(warned.Names()) != 0 {
+		t.Errorf("warned %q of an earlier line", warned.Names())
 	}
 	// Another process with the pid file's pid isn't the session.
 	if err := os.WriteFile(linksPID(r.Dirs, vm), []byte("1\n"), 0o600); err != nil {
@@ -354,8 +354,8 @@ func TestLinksAtLaunch(t *testing.T) {
 	f.Instances[db.Name()] = backend.Instance{Name: db.Name(), Status: backend.StatusStopped}
 	setNet(t, app, "on")
 	setNet(t, db, "on")
-	var warned []string
-	r.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	r.Warn = warned.Add
 	if err := r.atLaunch(t.Context(), f, app); err != nil || len(*started) != 1 {
 		t.Fatalf("atLaunch: %v, started %v", err, *started)
 	}
@@ -363,8 +363,8 @@ func TestLinksAtLaunch(t *testing.T) {
 		"link_target_stopped target=" + db.Name() + " vm=" + app.Name(),
 		"link_policy_mismatch target=" + web.Name() + " vm=" + app.Name(),
 	}
-	if !slices.Equal(warned, want) {
-		t.Errorf("warned %q, want %q", warned, want)
+	if !slices.Equal(warned.Names(), want) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
 
 	// A running target whose network policy isn't in force as it runs:
@@ -372,7 +372,7 @@ func TestLinksAtLaunch(t *testing.T) {
 	// refused.
 	f.Instances[db.Name()] = backend.Instance{Name: db.Name(), Status: backend.StatusRunning}
 	f.Unconfined = true
-	warned = nil
+	warned.Reset()
 	if err := r.atLaunch(t.Context(), f, app); err != nil {
 		t.Fatalf("atLaunch, unenforced: %v", err)
 	}
@@ -380,18 +380,18 @@ func TestLinksAtLaunch(t *testing.T) {
 		"link_target_unenforced target=" + db.Name() + " vm=" + app.Name(),
 		"link_policy_mismatch target=" + web.Name() + " vm=" + app.Name(),
 	}
-	if !slices.Equal(warned, want) {
-		t.Errorf("unenforced: warned %q, want %q", warned, want)
+	if !slices.Equal(warned.Names(), want) {
+		t.Errorf("unenforced: warned %q, want %q", warned.Names(), want)
 	}
 	setNet(t, app, "off")
-	warned = nil
-	if err := r.atLaunch(t.Context(), f, app); err != nil || len(warned) != 0 {
-		t.Errorf("a client without network policy: %v, warned %q", err, warned)
+	warned.Reset()
+	if err := r.atLaunch(t.Context(), f, app); err != nil || len(warned.Names()) != 0 {
+		t.Errorf("a client without network policy: %v, warned %q", err, warned.Names())
 	}
 	f.Unconfined = false
 
 	f.Capabilities = backend.Caps{}
-	if err := r.atLaunch(t.Context(), f, app); names(err) != "backend_lacks backend=fake feature=link vm="+app.Name() {
+	if err := r.atLaunch(t.Context(), f, app); msg.NamesOf(err) != "backend_lacks backend=fake feature=link vm="+app.Name() {
 		t.Errorf("a backend without links: %v", err)
 	}
 }

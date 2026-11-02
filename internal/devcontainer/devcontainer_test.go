@@ -233,11 +233,10 @@ func TestParseRefused(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parse(t, tc.src)
-			m, ok := errors.AsType[msg.M](err)
-			if !ok {
+			if msg.IDOf(err) == "" {
 				t.Fatalf("error = %v, want %s", err, tc.want)
 			}
-			if got := m.Names(); got != tc.want {
+			if got := msg.NamesOf(err); got != tc.want {
 				t.Errorf("error = %s, want %s", got, tc.want)
 			}
 		})

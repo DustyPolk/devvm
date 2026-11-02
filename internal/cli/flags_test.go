@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"maps"
 	"slices"
 	"testing"
@@ -118,7 +117,7 @@ func TestDurationFlags(t *testing.T) {
 				t.Errorf("--%s 30d: %v", f.Name, err)
 			}
 			err := checkFlagValue(f.Name, "30")
-			if m, ok := errors.AsType[msg.M](err); !ok || m.ID() != "bad_duration" {
+			if msg.IDOf(err) != "bad_duration" {
 				t.Errorf("--%s 30: %v, want bad_duration: check it with state.ParseDuration in checkFlagValue", f.Name, err)
 			}
 		})

@@ -187,13 +187,10 @@ func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 				Host: func() (vm.Host, error) { return c.host, nil },
 			}
 			err := d.run(t.Context(), u, []backend.Backend{b}, b)
-			gotErr := ""
-			if m, ok := errors.AsType[msg.M](err); ok {
-				gotErr = m.Names()
-			} else if err != nil {
+			if err != nil && msg.IDOf(err) == "" {
 				t.Fatal(err)
 			}
-			if gotErr != c.wantErr {
+			if gotErr := msg.NamesOf(err); gotErr != c.wantErr {
 				t.Errorf("returned %q, want %q", gotErr, c.wantErr)
 			}
 			if warned := strings.Contains(errOut.String(), "devvm: host_cpus_few have=2 want=4\n") &&

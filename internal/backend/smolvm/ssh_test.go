@@ -36,7 +36,7 @@ func TestStartSSH(t *testing.T) {
 	}
 	next := []int{61022, 61023}
 	s.FreePort = func(context.Context) (int, error) { p := next[0]; next = next[1:]; return p, nil }
-	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_not_running vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); msg.NamesOf(err) != "vm_not_running vm="+vm {
 		t.Errorf("stopped: %v", err)
 	}
 	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil {
@@ -76,7 +76,7 @@ func TestStartSSH(t *testing.T) {
 	if err := s.writeRecord(vm, r); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_no_ssh vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); msg.NamesOf(err) != "vm_no_ssh vm="+vm {
 		t.Errorf("sshd not up: %v", err)
 	}
 
@@ -91,7 +91,7 @@ func TestStartSSH(t *testing.T) {
 		if err := s.Stop(t.Context(), vm); err != nil {
 			t.Fatal(err)
 		}
-		s.reset(t)
+		s.stubs.Reset(t)
 		s.PortFree = func(context.Context, int) bool { return tc.free }
 		next = []int{61099}
 		if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil {
@@ -108,12 +108,12 @@ func TestStartSSH(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	c := backend.Confinement{
 		Net: backend.NetProxy, ProxyPort: 3128, ProxyUser: "devvm", ProxyPassword: "pw", SSH: true, SSHPort: 61022,
 		Env: map[string]string{"NO_PROXY": "localhost"}, Decider: "127.0.0.1:4000", DeciderToken: strings.Repeat("ab", 32),
 	}
-	if err := s.Start(t.Context(), vm, c); names(err) != "smolvm_ssh_port_forwarded port=61022 vm="+vm {
+	if err := s.Start(t.Context(), vm, c); msg.NamesOf(err) != "smolvm_ssh_port_forwarded port=61022 vm="+vm {
 		t.Errorf("forwarded port: %v", err)
 	}
 	c.SSHPort = 40022
@@ -133,7 +133,7 @@ func TestStartSSH(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,10 +142,10 @@ func TestStartSSH(t *testing.T) {
 		got[len(got)-1] != "smolvm machine exec --name "+vm+" -i -- sh -s --" {
 		t.Errorf("without ssh: %q", got)
 	}
-	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_no_ssh vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); msg.NamesOf(err) != "vm_no_ssh vm="+vm {
 		t.Errorf("without ssh: %v", err)
 	}
-	s.touch(t, "smolvm-foreign-"+vm)
+	s.stubs.Touch(t, "smolvm-foreign-"+vm)
 	if _, err := s.SSH(t.Context(), vm); !errors.Is(err, backend.ErrNotFound) {
 		t.Errorf("someone else's: %v", err)
 	}
@@ -157,23 +157,23 @@ func TestStartNoSSHD(t *testing.T) {
 	s := newSandbox(t)
 	vm := "devvm-o-0123456789abcd"
 	s.machine(t, vm, "stopped 4 8192 20 true")
-	s.touch(t, "no-sshd")
-	var warned []string
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	s.stubs.Touch(t, "no-sshd")
+	var warned msg.Recorder
+	s.Warn = warned.Add
 	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil {
 		t.Fatal(err)
 	}
 	if m, err := s.inspect(t.Context(), vm); err != nil || m.status() != backend.StatusRunning {
 		t.Errorf("not running: %+v, %v", m, err)
 	}
-	if !slices.Equal(warned, []string{"vm_no_sshd vm=" + vm}) {
-		t.Errorf("warned %q", warned)
+	if !slices.Equal(warned.Names(), []string{"vm_no_sshd vm=" + vm}) {
+		t.Errorf("warned %q", warned.Names())
 	}
 	// services.sh ran the rest, asked for no sshd.
 	if got := s.calls(t); got[len(got)-1] != "smolvm machine exec --name "+vm+" -i -- sh -s --" {
 		t.Errorf("calls: %q", got)
 	}
-	if _, err := s.SSH(t.Context(), vm); names(err) != "vm_no_sshd vm="+vm {
+	if _, err := s.SSH(t.Context(), vm); msg.NamesOf(err) != "vm_no_sshd vm="+vm {
 		t.Errorf("SSH: %v", err)
 	}
 	if err := s.Delete(t.Context(), vm); err != nil {

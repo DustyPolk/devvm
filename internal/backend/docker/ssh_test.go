@@ -23,7 +23,7 @@ import (
 func TestStartSSH(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
-	if _, err := s.SSH(t.Context(), vm); id(err) != "vm_not_running" {
+	if _, err := s.SSH(t.Context(), vm); msg.IDOf(err) != "vm_not_running" {
 		t.Errorf("stopped: %v", err)
 	}
 	c := backend.Confinement{SSH: true, Env: map[string]string{"NO_PROXY": "localhost"}}
@@ -33,7 +33,7 @@ func TestStartSSH(t *testing.T) {
 	if err := s.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestStartSSH(t *testing.T) {
 	if err := s.Runner.Run(t.Context(), msg.M{}, s.docker(t.Context(), "container", "start", vm)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SSH(t.Context(), vm); id(err) != "vm_no_ssh" {
+	if _, err := s.SSH(t.Context(), vm); msg.IDOf(err) != "vm_no_ssh" {
 		t.Errorf("started outside devvm: %v", err)
 	}
 	if sh, err := s.Shell(t.Context(), vm, "/p"); err != nil || sh.Args[0] != "docker" {
@@ -120,20 +120,20 @@ func TestStartSSH(t *testing.T) {
 func TestStartNoSSHD(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
-	s.touch(t, "no-sshd")
-	var warned []string
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
-	s.reset(t)
+	s.stubs.Touch(t, "no-sshd")
+	var warned msg.Recorder
+	s.Warn = warned.Add
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(warned, []string{"vm_no_sshd vm=" + vm}) || s.field(t, "containers/"+vm+"/status") != "running" {
-		t.Errorf("warned %q", warned)
+	if !slices.Equal(warned.Names(), []string{"vm_no_sshd vm=" + vm}) || s.field(t, "containers/"+vm+"/status") != "running" {
+		t.Errorf("warned %q", warned.Names())
 	}
 	if got := s.calls(t); got[len(got)-1] != "docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd "+vm+" sh -s --" {
 		t.Errorf("calls: %q", got)
 	}
-	if _, err := s.SSH(t.Context(), vm); id(err) != "vm_no_sshd" {
+	if _, err := s.SSH(t.Context(), vm); msg.IDOf(err) != "vm_no_sshd" {
 		t.Errorf("SSH: %v", err)
 	}
 }
@@ -179,7 +179,7 @@ func TestAgent(t *testing.T) {
 			}
 		}
 	}
-	if err := s.SetAgentForwarding(t.Context(), vm, true); id(err) != "vm_not_stopped" {
+	if err := s.SetAgentForwarding(t.Context(), vm, true); msg.IDOf(err) != "vm_not_stopped" {
 		t.Errorf("running: %v", err)
 	}
 }
@@ -207,8 +207,8 @@ func TestPorts(t *testing.T) {
 		_, err := fmt.Fprintf(out, "devvm ports: forwarding %s's ports\n", vm)
 		return os.Getpid(), err
 	}
-	var warned []string
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	var warned msg.Recorder
+	s.Warn = warned.Add
 	start := func(c backend.Confinement) {
 		t.Helper()
 		args = nil
@@ -229,8 +229,8 @@ func TestPorts(t *testing.T) {
 		"/devvm", "_docker-ports", "-vm", vm, "-docker", "/bin/docker", "-container", ct.ID, "-started", ct.State.StartedAt, "-proxy", proxy,
 		"-user", "u", "-key", s.sshKey(vm), "-known-hosts", s.Forwards.KnownHosts(vm), "-control", s.Forwards.Control(vm), "-reserve", "",
 	}
-	if !slices.Equal(args, want) || ct.ID == "" || ct.State.StartedAt == "" || len(warned) != 0 {
-		t.Errorf("every port:\n%q\nwant\n%q; warned %q", args, want, warned)
+	if !slices.Equal(args, want) || ct.ID == "" || ct.State.StartedAt == "" || len(warned.Names()) != 0 {
+		t.Errorf("every port:\n%q\nwant\n%q; warned %q", args, want, warned.Names())
 	}
 	if b, err := os.ReadFile(s.Forwards.KnownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAstub\n" {
 		t.Errorf("forwarder's known_hosts: %q, %v", b, err)
@@ -262,16 +262,16 @@ func TestPorts(t *testing.T) {
 	}
 	// Without ssh: warned, no forwarder.
 	start(backend.Confinement{})
-	if args != nil || !slices.Contains(warned, "ports_no_ssh vm="+vm) {
-		t.Errorf("without ssh: %q, warned %q", args, warned)
+	if args != nil || !slices.Contains(warned.Names(), "ports_no_ssh vm="+vm) {
+		t.Errorf("without ssh: %q, warned %q", args, warned.Names())
 	}
 	// One that never says it forwards: warned, the VM runs on.
-	warned = nil
+	warned.Reset()
 	detach := s.Forwards.Detach
 	s.Forwards.Detach = func(string, []string, *os.File) (int, error) { return os.Getpid(), nil }
 	start(backend.Confinement{SSH: true})
-	if !slices.Equal(warned, []string{"ports_forward_failed log=" + s.Forwards.Log(vm) + " vm=" + vm}) {
-		t.Errorf("warned %q", warned)
+	if !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + s.Forwards.Log(vm) + " vm=" + vm}) {
+		t.Errorf("warned %q", warned.Names())
 	}
 	s.Forwards.Detach = detach
 	// None: nothing.
@@ -281,9 +281,10 @@ func TestPorts(t *testing.T) {
 	if err := s.SetPorts(t.Context(), vm, backend.Ports{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
-	warned, args = nil, nil
-	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil || args != nil || len(warned) != 0 {
-		t.Errorf("none: %q, %q, %v", args, warned, err)
+	warned.Reset()
+	args = nil
+	if err := s.Start(t.Context(), vm, backend.Confinement{SSH: true}); err != nil || args != nil || len(warned.Names()) != 0 {
+		t.Errorf("none: %q, %q, %v", args, warned.Names(), err)
 	}
 	// Running: its forwarder starts again at once with the new ports and
 	// the host key its start pinned, for the same start of its container.
@@ -298,8 +299,8 @@ func TestPorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if i := slices.Index(args, "-only"); i < 0 || args[i+1] != "3000" || !slices.Contains(args, now.State.StartedAt) || len(warned) != 0 {
-		t.Errorf("running: %q, warned %q", args, warned)
+	if i := slices.Index(args, "-only"); i < 0 || args[i+1] != "3000" || !slices.Contains(args, now.State.StartedAt) || len(warned.Names()) != 0 {
+		t.Errorf("running: %q, warned %q", args, warned.Names())
 	}
 	if b, err := os.ReadFile(s.Forwards.KnownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAstub\n" {
 		t.Errorf("running: forwarder's known_hosts: %q, %v", b, err)
@@ -350,12 +351,12 @@ func TestProxyCommand(t *testing.T) {
 		t.Errorf("proxyCommand = %q, %v\nwant %q", got, err, want)
 	}
 	for _, bad := range []string{"/a'b", `/a\b`, "/a%h", "/a\nb", ""} {
-		if _, err := shellWords([]string{bad}); id(err) != "docker_ssh_path" {
+		if _, err := shellWords([]string{bad}); msg.IDOf(err) != "docker_ssh_path" {
 			t.Errorf("shellWords(%q): %v", bad, err)
 		}
 	}
 	s.Self = "/odd'path/devvm"
-	if _, err := s.proxyCommand(vm); id(err) != "docker_ssh_path" {
+	if _, err := s.proxyCommand(vm); msg.IDOf(err) != "docker_ssh_path" {
 		t.Errorf("an odd path: %v", err)
 	}
 }
@@ -375,7 +376,7 @@ func TestConnect(t *testing.T) {
 		return nil
 	}
 	args := []string{"-docker", "docker", "-data", s.Data, "-env", "DOCKER_CONTEXT=other", vm}
-	if err := Connect(t.Context(), args, run); id(err) != "vm_not_running" || ran != nil {
+	if err := Connect(t.Context(), args, run); msg.IDOf(err) != "vm_not_running" || ran != nil {
 		t.Errorf("stopped: %v, ran %q", err, ran)
 	}
 	if err := s.Start(t.Context(), vm, backend.Confinement{}); err != nil {
@@ -401,9 +402,9 @@ func TestConnect(t *testing.T) {
 			t.Errorf("%s: %v, ran %q", name, err, ran)
 		}
 	}
-	s.touch(t, "docker-foreign-"+vm)
+	s.stubs.Touch(t, "docker-foreign-"+vm)
 	ran = nil
-	if err := Connect(t.Context(), args, run); id(err) != "docker_container_foreign" || ran != nil {
+	if err := Connect(t.Context(), args, run); msg.IDOf(err) != "docker_container_foreign" || ran != nil {
 		t.Errorf("someone else's: %v, ran %q", err, ran)
 	}
 }

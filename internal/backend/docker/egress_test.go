@@ -21,6 +21,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/stubtest"
 )
 
 // proxied is a start through devvm's proxy.
@@ -68,7 +69,7 @@ func inOrder(t *testing.T, calls []string, prefixes ...string) []string {
 func TestStartProxy(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, proxied()); err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +160,8 @@ func TestStartProxy(t *testing.T) {
 	// before the VM starts; started again once it's gone.
 	s.stubDocker(t, "container", "create", "--name", "devvm-other", "--network", netw, "alpine")
 	s.stubDocker(t, "container", "start", "devvm-other")
-	s.reset(t)
-	if err := s.Start(t.Context(), vm, proxied()); shown(err) != msg.DockerNetworkShared(netw).Names() {
+	s.stubs.Reset(t)
+	if err := s.Start(t.Context(), vm, proxied()); msg.NamesOf(err) != msg.DockerNetworkShared(netw).Names() {
 		t.Errorf("another container on its network: %v", err)
 	}
 	if _, ok := has(s.calls(t), "docker container start "+vm); ok {
@@ -209,8 +210,8 @@ func TestStartProxyOff(t *testing.T) {
 	netw := netName(vm)
 	s.stubDocker(t, "container", "create", "--name", "devvm-other", "--network", netw, "alpine")
 	s.stubDocker(t, "container", "start", "devvm-other")
-	s.reset(t)
-	if err := s.Start(t.Context(), vm, backend.Confinement{}); shown(err) != msg.DockerNetworkShared(netw).Names() {
+	s.stubs.Reset(t)
+	if err := s.Start(t.Context(), vm, backend.Confinement{}); msg.NamesOf(err) != msg.DockerNetworkShared(netw).Names() {
 		t.Errorf("another container on its network: %v", err)
 	}
 	if _, ok := has(s.calls(t), "docker container start "+vm); ok || !s.exists("networks/"+netw) {
@@ -257,7 +258,7 @@ func TestStartProxyDesktop(t *testing.T) {
 		t.Fatal(ps)
 	}
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, proxied()); err != nil {
 		t.Fatal(err)
 	}
@@ -273,20 +274,20 @@ func TestStartProxyDesktop(t *testing.T) {
 func TestStartProxyRefused(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); err == nil || id(err) != "" {
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy}); err == nil || msg.IDOf(err) != "" {
 		t.Errorf("no proxy: %v", err)
 	}
-	s.touch(t, "docker-foreign-"+vm+"-net")
+	s.stubs.Touch(t, "docker-foreign-"+vm+"-net")
 	s.stubDocker(t, "network", "create", vm+"-net")
-	if err := s.Start(t.Context(), vm, proxied()); shown(err) != msg.DockerNetworkForeign(vm+"-net").Names() {
+	if err := s.Start(t.Context(), vm, proxied()); msg.NamesOf(err) != msg.DockerNetworkForeign(vm+"-net").Names() {
 		t.Errorf("someone else's network: %v", err)
 	}
 	s.Kind = kindOther
 	if ps := s.Problems(t.Context()); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	s.reset(t)
-	if err := s.Start(t.Context(), vm, proxied()); shown(err) != msg.BackendLacks(Name, "egress-proxy", vm).Names() {
+	s.stubs.Reset(t)
+	if err := s.Start(t.Context(), vm, proxied()); msg.NamesOf(err) != msg.BackendLacks(Name, "egress-proxy", vm).Names() {
 		t.Errorf("another engine: %v", err)
 	}
 	if calls := s.calls(t); len(calls) != 0 {
@@ -373,7 +374,7 @@ func TestBuildOnDesktop(t *testing.T) {
 		t.Error("the build left its network or relay, or made no image")
 	}
 	// A build with no network needs no proxy.
-	s.reset(t)
+	s.stubs.Reset(t)
 	s.detached = nil
 	if _, err := s.BuildImage(t.Context(), backend.ImageSpec{Image: "node", Key: nodeKey, Parent: baseKey, Net: backend.NetNone}); err != nil {
 		t.Fatal(err)
@@ -463,20 +464,20 @@ func TestBuildHostProxy(t *testing.T) {
 	}
 	// One the proxy can't go through is refused before anything's made.
 	env["HTTPS_PROXY"] = "socks5://proxy.corp:1080"
-	d.reset(t)
+	d.stubs.Reset(t)
 	_, err := d.BuildImage(t.Context(), backend.ImageSpec{Image: "node", Key: nodeKey, Parent: baseKey, Net: backend.NetInternet})
-	var m msg.M
-	if !errors.As(err, &m) || m.Names() != "upstream_proxy_scheme scheme=socks5:// setting=HTTPS_PROXY" {
+	if msg.NamesOf(err) != "upstream_proxy_scheme scheme=socks5:// setting=HTTPS_PROXY" {
 		t.Errorf("socks5: %v", err)
 	}
 }
 
-// peekRunner runs commands as execRunner does, calling peek before each.
+// peekRunner runs commands as stubtest.ExecRunner does, calling peek
+// before each.
 type peekRunner struct{ peek func() }
 
 func (p peekRunner) Run(ctx context.Context, m msg.M, cmd *exec.Cmd) error {
 	p.peek()
-	return execRunner{}.Run(ctx, m, cmd)
+	return stubtest.ExecRunner{}.Run(ctx, m, cmd)
 }
 func (p peekRunner) Output(cmd *exec.Cmd) ([]byte, error) { p.peek(); return cmd.Output() }
 func (p peekRunner) Attach(cmd *exec.Cmd) error           { p.peek(); return cmd.Run() }
@@ -520,7 +521,7 @@ func TestFindLinux(t *testing.T) {
 	if p, err := find("linux"); err != nil || p != resolved(self) {
 		t.Errorf("Linux: %q %v", p, err)
 	}
-	if _, err := find("darwin"); shown(err) != msg.DockerLinuxBuildMissing(filepath.Join(resolved(filepath.Dir(self)), "devvm-linux-arm64")).Names() {
+	if _, err := find("darwin"); msg.NamesOf(err) != msg.DockerLinuxBuildMissing(filepath.Join(resolved(filepath.Dir(self)), "devvm-linux-arm64")).Names() {
 		t.Errorf("missing, nothing to fetch: %v", err)
 	}
 	other := filepath.Join(dir, "libexec", "devvm-linux-arm64")
@@ -530,7 +531,7 @@ func TestFindLinux(t *testing.T) {
 	if err := os.WriteFile(other, []byte("not a Go binary"), 0o700); err != nil { //nolint:gosec // a stand-in
 		t.Fatal(err)
 	}
-	if _, err := find("darwin"); id(err) != "docker_linux_build_other" {
+	if _, err := find("darwin"); msg.IDOf(err) != "docker_linux_build_other" {
 		t.Errorf("not this build: %v", err)
 	}
 }
@@ -583,32 +584,32 @@ func TestFetchLinux(t *testing.T) {
 	if err := os.WriteFile(self, []byte("devvm"), 0o700); err != nil { //nolint:gosec // a stand-in
 		t.Fatal(err)
 	}
-	var infos []string
+	var infos msg.Recorder
 	f := linuxFinder{
 		Self: self, GOOS: "darwin", GOARCH: "arm64", URL: srv.URL + "/devvm-1.0.0-linux-arm64.tar.gz", SHA256: pin,
-		Copy: filepath.Join(dir, "data", "devvm-linux-arm64"), Info: func(m msg.M) { infos = append(infos, m.ID()) },
+		Copy: filepath.Join(dir, "data", "devvm-linux-arm64"), Info: infos.Add,
 	}
-	if _, err := f.find(t.Context(), false); !errors.Is(err, errUnfetched) || len(infos) != 0 {
-		t.Errorf("without fetch: %v, %v", err, infos)
+	if _, err := f.find(t.Context(), false); !errors.Is(err, errUnfetched) || len(infos.IDs()) != 0 {
+		t.Errorf("without fetch: %v, %v", err, infos.IDs())
 	}
 	// The SHA-256 matches; the stand-in isn't a Go build, so the same-build
 	// check refuses it, and it goes.
-	if _, err := f.find(t.Context(), true); id(err) != "docker_linux_build_other" || !slices.Equal(infos, []string{"docker_linux_build_fetching"}) {
-		t.Errorf("fetched: %v, %v", err, infos)
+	if _, err := f.find(t.Context(), true); msg.IDOf(err) != "docker_linux_build_other" || !slices.Equal(infos.IDs(), []string{"docker_linux_build_fetching"}) {
+		t.Errorf("fetched: %v, %v", err, infos.IDs())
 	}
 	if _, err := os.Stat(f.Copy); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("kept: %v", err)
 	}
 	// Another SHA-256: refused before anything is kept.
 	f.SHA256 = strings.Repeat("0", 64)
-	if _, err := f.find(t.Context(), true); id(err) != "docker_linux_build_mismatch" {
+	if _, err := f.find(t.Context(), true); msg.IDOf(err) != "docker_linux_build_mismatch" {
 		t.Errorf("mismatch: %v", err)
 	}
 	if ents, _ := os.ReadDir(filepath.Dir(f.Copy)); len(ents) != 0 {
 		t.Errorf("left %v", ents)
 	}
 	f.URL = srv.URL + "/missing.tar.gz"
-	if _, err := f.find(t.Context(), true); id(err) != "docker_linux_build_fetch_failed" {
+	if _, err := f.find(t.Context(), true); msg.IDOf(err) != "docker_linux_build_fetch_failed" {
 		t.Errorf("not there: %v", err)
 	}
 	// -ldflags compare without the pin's flags.

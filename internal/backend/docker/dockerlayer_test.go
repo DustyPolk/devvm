@@ -49,7 +49,7 @@ func TestRouteLocalnet(t *testing.T) {
 	s.routeLocalnet(t, "1")
 	s.image(t, baseKey)
 	err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/web", DockerLayer: true})
-	if id(err) != "docker_route_localnet" || s.exists("containers/"+vm) {
+	if msg.IDOf(err) != "docker_route_localnet" || s.exists("containers/"+vm) {
 		t.Errorf("create: %v", err)
 	}
 	s.routeLocalnet(t, "0")
@@ -57,18 +57,18 @@ func TestRouteLocalnet(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.routeLocalnet(t, "1")
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); id(err) != "docker_route_localnet" {
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); msg.IDOf(err) != "docker_route_localnet" {
 		t.Errorf("start: %v", err)
 	}
 	if err := os.RemoveAll(s.ProcSys); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); id(err) != "docker_bridge_unreadable" {
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); msg.IDOf(err) != "docker_bridge_unreadable" {
 		t.Errorf("unreadable: %v", err)
 	}
 	s.Kind = kindOther
 	s.Problems(t.Context())
-	if _, err := s.DockerLayer(vm); id(err) != "docker_layer_needs_vm" || s.Caps()[backend.FeatureDockerLayer] != backend.None {
+	if _, err := s.DockerLayer(vm); msg.IDOf(err) != "docker_layer_needs_vm" || s.Caps()[backend.FeatureDockerLayer] != backend.None {
 		t.Errorf("another machine's: %v", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestCreateVMSysbox(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, baseKey)
 	err := s.CreateVM(t.Context(), baseKey, backend.VMSpec{Name: vm, Project: "/p/web", DockerLayer: true})
-	if shown(err) != msg.DockerLayerNoSysbox(vm).Names() || s.exists("containers/"+vm) {
+	if msg.NamesOf(err) != msg.DockerLayerNoSysbox(vm).Names() || s.exists("containers/"+vm) {
 		t.Errorf("without Sysbox: %v", err)
 	}
 	s.withSysbox(t)
@@ -124,10 +124,10 @@ func TestCreateVMSysbox(t *testing.T) {
 	if !strings.Contains(s.field(t, "containers/"+vm+"/labels"), configLabel+"="+cfg.hash()) {
 		t.Errorf("config hash isn't %s", cfg.hash())
 	}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "p"}); shown(err) != msg.NetDockerLayer(Name, vm).Names() {
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "p"}); msg.NamesOf(err) != msg.NetDockerLayer(Name, vm).Names() {
 		t.Errorf("network policy: %v", err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestLayerNetwork(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.stub, "docker", "networks", net, "ipv6"), []byte("true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s.reset(t)
+	s.stubs.Reset(t)
 	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
@@ -200,10 +200,10 @@ func TestLayerNetwork(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); id(err) != "docker_network_shared" {
+	if err := s.Start(t.Context(), vm, backend.Confinement{Net: backend.NetDirect}); msg.IDOf(err) != "docker_network_shared" {
 		t.Errorf("shared: %v", err)
 	}
-	if err := s.Delete(t.Context(), vm); id(err) != "docker_network_shared" || !s.exists("containers/"+vm) {
+	if err := s.Delete(t.Context(), vm); msg.IDOf(err) != "docker_network_shared" || !s.exists("containers/"+vm) {
 		t.Errorf("delete with it shared: %v", err)
 	}
 	if err := os.RemoveAll(other); err != nil {

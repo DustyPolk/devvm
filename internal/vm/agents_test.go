@@ -129,7 +129,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 			}
 			f, st := agentVM(t, tc.img, tc.status, tc.have...)
 			if err := (Launch{e}).UpdateAgentDirs(t.Context(), f, st); err != nil {
-				t.Fatal(names(err))
+				t.Fatal(msg.NamesOf(err))
 			}
 			if ms := f.Methods(); !slices.Equal(ms, tc.methods) {
 				t.Errorf("calls = %q, want %q", ms, tc.methods)

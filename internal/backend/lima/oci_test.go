@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -124,13 +125,13 @@ func TestCheckConverted(t *testing.T) {
 func TestLockOCI(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	l.OCINote = 10 * time.Millisecond
-	var infos []string
-	l.Info = func(m msg.M) { infos = append(infos, m.ID()) }
+	var infos msg.Recorder
+	l.Info = infos.Add
 
 	writeTestFile(t, l.Dirs.OCIBuildLock(), "")
 	unlock, err := l.lockOCI(t.Context())
-	if err != nil || len(infos) != 0 {
-		t.Fatalf("lockOCI on a file nothing holds: %v, infos %q", err, infos)
+	if err != nil || len(infos.IDs()) != 0 {
+		t.Fatalf("lockOCI on a file nothing holds: %v, infos %q", err, infos.IDs())
 	}
 	go func() {
 		time.Sleep(200 * time.Millisecond)
@@ -140,8 +141,8 @@ func TestLockOCI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(infos) != 1 || infos[0] != "oci_waiting" {
-		t.Errorf("infos: %q", infos)
+	if !slices.Equal(infos.IDs(), []string{"oci_waiting"}) {
+		t.Errorf("infos: %q", infos.IDs())
 	}
 	again()
 }
