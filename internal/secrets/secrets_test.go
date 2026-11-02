@@ -107,7 +107,7 @@ func TestSaveDelete(t *testing.T) {
 		t.Errorf("a failed save: %v", names(err))
 	}
 	for _, name := range []string{"../../x", "nope"} {
-		if err := s.Save(ctx, name, "v"); names(err) != "no_secret secret="+msg.Shown(name) {
+		if err := s.Save(ctx, name, "v"); names(err) != "no_secret secret="+msg.OneLine(name) {
 			t.Errorf("Save(%s): %v", name, names(err))
 		}
 		if err := s.Delete(ctx, name); !errors.Is(err, ErrNone) {
@@ -234,7 +234,7 @@ func TestGet(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"claude", "../../etc/passwd", "nope"} {
-		if _, err := s.Get(ctx, name); names(err) != `no_secret secret=`+msg.Shown(name) {
+		if _, err := s.Get(ctx, name); names(err) != `no_secret secret=`+msg.OneLine(name) {
 			t.Errorf("Get(%s) = %v", name, names(err))
 		}
 	}

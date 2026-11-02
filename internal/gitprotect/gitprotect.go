@@ -174,13 +174,13 @@ func (p *Protector) ignoreSubmodules(ctx context.Context, on bool) error {
 	cfg := filepath.Join(p.git(), "config")
 	if !isFile(cfg) || !p.realInDir(cfg) {
 		if on && exists(p.git()) {
-			return msg.GitConfigFailed(msg.Shown(cfg))
+			return msg.GitConfigFailed(cfg)
 		}
 		return nil
 	}
 	if !p.flag(ctx, "nouchg", cfg) {
 		if on {
-			return msg.GitConfigFailed(msg.Shown(cfg))
+			return msg.GitConfigFailed(cfg)
 		}
 		return nil
 	}
@@ -190,7 +190,7 @@ func (p *Protector) ignoreSubmodules(ctx context.Context, on bool) error {
 	}
 	// --unset fails when there's nothing to take out.
 	if err := exec.CommandContext(ctx, "git", args...).Run(); err != nil && on { //nolint:gosec // devvm's own arguments
-		return msg.GitConfigFailed(msg.Shown(cfg))
+		return msg.GitConfigFailed(cfg)
 	}
 	return nil
 }
@@ -199,11 +199,11 @@ func (p *Protector) warnDelegations(ds []delegation) {
 	for _, d := range ds {
 		switch d.kind {
 		case "include":
-			p.Warn(msg.GitIncludeInside(msg.Shown(d.where), msg.Shown(d.target)))
+			p.Warn(msg.GitIncludeInside(d.where, d.target))
 		case "hook":
-			p.Warn(msg.GitHookLinkInside(msg.Shown(d.where), msg.Shown(d.target)))
+			p.Warn(msg.GitHookLinkInside(d.where, d.target))
 		case "outside":
-			p.Warn(msg.GitGitdirOutside(msg.Shown(d.target), msg.Shown(d.where)))
+			p.Warn(msg.GitGitdirOutside(d.target, d.where))
 		}
 	}
 }
@@ -254,15 +254,15 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 	}
 	was := vm.Get(KeyGitInode)
 	if w == whyCheck && was != "" && was != inode(g) {
-		p.Warn(msg.GitReplaced(msg.Shown(g)))
+		p.Warn(msg.GitReplaced(g))
 		return nil
 	}
 	if isDir(g) && exists(filepath.Join(g, "commondir")) {
 		target, _ := os.ReadFile(filepath.Join(g, "commondir")) //nolint:gosec // the project's own
-		p.Warn(msg.GitCommondir(msg.Shown(g), msg.Shown(strings.TrimSpace(string(target)))))
+		p.Warn(msg.GitCommondir(g, strings.TrimSpace(string(target))))
 	}
 	for _, s := range p.worktreeStrays() {
-		p.Warn(msg.GitWorktreeStray(msg.Shown(s)))
+		p.Warn(msg.GitWorktreeStray(s))
 	}
 	if was == "" && w == whyCheck {
 		p.Warn(msg.GitAppeared())
@@ -271,7 +271,7 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 	seen, _ := p.list(vm.Get(KeyGitEmbedded))
 	for _, d := range emb.inside {
 		if w != whyNew && !slices.Contains(seen, d) {
-			p.Warn(msg.GitEmbeddedNew(msg.Shown(d)))
+			p.Warn(msg.GitEmbeddedNew(d))
 		}
 	}
 	if err := vm.Set(KeyGitEmbedded, p.relList(emb.inside)); err != nil {
@@ -286,7 +286,7 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 		}
 		mods = append(mods, d)
 		if w != whyNew && recorded && !slices.Contains(seen, d) {
-			p.Warn(msg.GitEmbeddedNew(msg.Shown(d)))
+			p.Warn(msg.GitEmbeddedNew(d))
 		}
 	}
 	if err := vm.Set(KeyGitModules, p.relList(mods)); err != nil {
@@ -298,7 +298,7 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 	if w == whyCheck {
 		for _, path := range p.paths(ctx, emb) {
 			if filepath.Base(path) == "hooks" && isDir(path) && !isLink(path) && !p.Locked(path) && hasHooks(path) {
-				p.Warn(msg.GitHooksUnlocked(msg.Shown(path)))
+				p.Warn(msg.GitHooksUnlocked(path))
 			}
 		}
 	}
@@ -309,7 +309,7 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 	}
 	if w != whyCheck {
 		if hp := gitConfig(ctx, filepath.Join(g, "config"), "core.hooksPath"); hp != "" && p.hooksPathInside(hp) {
-			p.Warn(msg.GitHooksPath(msg.Shown(hp)))
+			p.Warn(msg.GitHooksPath(hp))
 		}
 	}
 	ds := p.delegations(ctx, emb)
@@ -710,7 +710,7 @@ func (p *Protector) realInDir(path string) bool {
 func (p *Protector) lock(ctx context.Context, vm *state.VM, emb embeds) error {
 	for _, path := range p.paths(ctx, emb) {
 		if !p.realInDir(path) {
-			p.Warn(msg.GitNotLocked(msg.Shown(path)))
+			p.Warn(msg.GitNotLocked(path))
 			continue
 		}
 		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
@@ -748,7 +748,7 @@ func (p *Protector) flag(ctx context.Context, flags, path string) bool {
 	if flags == "uchg" {
 		_ = p.Chflags(ctx, "nouchg", path)
 	}
-	p.Warn(msg.GitLockRaced(msg.Shown(path)))
+	p.Warn(msg.GitLockRaced(path))
 	return false
 }
 

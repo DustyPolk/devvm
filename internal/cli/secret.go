@@ -204,7 +204,7 @@ func newSecretGetCmd(u *ui.UI) *cobra.Command {
 			if err == nil {
 				v, err = secrets.NewStore(dirs, os.Getenv("HOME"), u.Warn).Get(cmd.Context(), args[0])
 			}
-			fail(u, err, func(reason string) msg.M { return msg.SecretReadFailed(reason, msg.Shown(args[0])) })
+			fail(u, err, func(reason string) msg.M { return msg.SecretReadFailed(reason, args[0]) })
 			_, err = u.Stdout().Write([]byte(v + "\n"))
 			return err
 		},

@@ -59,7 +59,7 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 		return nil, msg.NoDigest(f.Ref)
 	}
 	if !from.Valid(f.Ref) || !from.Valid(f.Digest) {
-		return nil, msg.BadFrom(msg.Shown(f.Ref))
+		return nil, msg.BadFrom(f.Ref)
 	}
 	tmp, err := os.MkdirTemp("", "devvm-oci.")
 	if err != nil {

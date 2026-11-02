@@ -43,7 +43,7 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 				if global {
 					choices = state.NetworkChoices()
 				}
-				return msg.ArgNotChoice(strings.Join(choices, ", "), cmd.CommandPath(), msg.Shown(args[0]))
+				return msg.ArgNotChoice(strings.Join(choices, ", "), cmd.CommandPath(), args[0])
 			}
 			return nil
 		}),

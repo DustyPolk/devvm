@@ -154,7 +154,7 @@ func statusText(label string, secs int, logLine string, cols int) (text, log str
 	if i := strings.LastIndexByte(logLine, '\r'); i >= 0 {
 		logLine = logLine[i+1:]
 	}
-	logLine = oneLine(logLine)
+	logLine = msg.OneLine(logLine)
 	room := cols - utf8.RuneCountInString(text) - 9
 	if room >= 10 && logLine != "" {
 		log = "  " + truncate(logLine, room)
@@ -183,31 +183,6 @@ func clearLine(drawn, cols int) string {
 		up = (drawn - 1) / cols
 	}
 	return "\r\033[K" + strings.Repeat("\033[A\033[K", up)
-}
-
-// oneLine drops every control character from s, newlines and tabs too.
-func oneLine(s string) string {
-	return strings.NewReplacer("\t", "", "\n", "").Replace(printable(s))
-}
-
-// printable drops control characters (C0 but newline and tab, DEL, and C1
-// in UTF-8) from text a VM or a build printed, which could move the cursor
-// or rewrite what's shown.
-func printable(s string) string {
-	b := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c == '\n' || c == '\t':
-		case c < 0x20 || c == 0x7f:
-			continue
-		case c == 0xc2 && i+1 < len(s) && s[i+1] >= 0x80 && s[i+1] <= 0x9f:
-			i++
-			continue
-		}
-		b = append(b, c)
-	}
-	return string(b)
 }
 
 // tail returns up to the last size bytes of the file at path.

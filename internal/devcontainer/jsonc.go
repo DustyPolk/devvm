@@ -158,7 +158,7 @@ func (p *parser) subst(key, s string, mode int) (string, error) {
 		name := whole[2 : len(whole)-1]
 		switch v, isEnv := strings.CutPrefix(name, "containerEnv:"); {
 		case strings.HasPrefix(name, "localEnv:") || strings.HasPrefix(name, "env:"):
-			return "", msg.DevcontainerLocalEnv(p.file, msg.Shown(whole))
+			return "", msg.DevcontainerLocalEnv(p.file, whole)
 		case name == "containerWorkspaceFolder":
 			lit(p.workspace)
 		case name == "containerWorkspaceFolderBasename":
@@ -171,7 +171,7 @@ func (p *parser) subst(key, s string, mode int) (string, error) {
 				out.WriteString("${" + v + "}")
 			}
 		case isEnv, name == "localWorkspaceFolder", name == "localWorkspaceFolderBasename", name == "devcontainerId":
-			return "", msg.DevcontainerVariable(p.file, msg.Shown(whole))
+			return "", msg.DevcontainerVariable(p.file, whole)
 		default:
 			lit(whole)
 		}

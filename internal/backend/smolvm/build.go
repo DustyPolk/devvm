@@ -192,10 +192,10 @@ func (s *Smolvm) baseImage(f *backend.From) (ref, origin string, err error) {
 			return "", "", msg.NoDigest(f.Ref)
 		}
 		if !from.Valid(f.Ref) || !from.Valid(f.Digest) {
-			return "", "", msg.BadFrom(msg.Shown(f.Ref))
+			return "", "", msg.BadFrom(f.Ref)
 		}
 		if !strings.Contains(f.Digest, "@") {
-			return "", "", msg.SmolvmFromRegistryOnly(msg.Shown(f.Ref))
+			return "", "", msg.SmolvmFromRegistryOnly(f.Ref)
 		}
 		return f.Digest, f.Digest, nil
 	}

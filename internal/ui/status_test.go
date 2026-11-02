@@ -61,20 +61,6 @@ func TestClearLine(t *testing.T) {
 	}
 }
 
-func TestPrintable(t *testing.T) {
-	t.Parallel()
-	for in, want := range map[string]string{
-		"guest\033]0;title\007 \302\233line\n": "guest]0;title line\n",
-		"tab\tand\nnewline":                    "tab\tand\nnewline",
-		"del\177 nul\000 c1\302\237 é ü":       "del nul c1 é ü",
-		"\302":                                 "\302",
-	} {
-		if got := printable(in); got != want {
-			t.Errorf("printable(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestGlyphs(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

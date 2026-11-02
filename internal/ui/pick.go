@@ -97,7 +97,7 @@ func (u *UI) pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
 			if i == cur {
 				ptr = ">"
 			}
-			fmt.Fprintf(&b, "\033[2K%s %s%s%s %-10s %s\r\n", ptr, open, mark, closed, printable(c.Name), printable(c.Desc))
+			fmt.Fprintf(&b, "\033[2K%s %s%s%s %-10s %s\r\n", ptr, open, mark, closed, msg.OneLine(c.Name), msg.OneLine(c.Desc))
 		}
 		u.write(u.stdout, b.String())
 		key, err := in.ReadByte()

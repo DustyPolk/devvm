@@ -396,9 +396,6 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 	}
 	out, _ := a.list(ctx)
 	_, comments := held(out)
-	for i, c := range comments {
-		comments[i] = msg.Shown(c)
-	}
 	a.Info(msg.AgentHolds(strings.Join(comments, " ")))
 	a.Note(msg.AgentHoldsNote())
 	return nil

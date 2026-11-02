@@ -36,7 +36,7 @@ func (e Net) SecretSave(ctx context.Context, name, given string) error {
 // putting it in at once.
 func (e Net) SecretRm(ctx context.Context, name string) error {
 	if err := e.Proxy.Secrets.Delete(ctx, name); errors.Is(err, secrets.ErrNone) {
-		return msg.NoSecret(msg.Shown(name))
+		return msg.NoSecret(name)
 	} else if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (e Net) Secrets(ctx context.Context) ([]SecretListed, error) {
 // launch. Without network policy, the token it got before still works.
 func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	if _, ok := secrets.Lookup(name); !ok {
-		return msg.NoSecret(msg.Shown(name))
+		return msg.NoSecret(name)
 	}
 	t, err := e.existing(ctx, "")
 	if err != nil {

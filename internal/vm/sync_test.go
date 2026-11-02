@@ -41,7 +41,7 @@ func TestCheckLinks(t *testing.T) {
 		{"a dot", []GuestLink{{a("127.77.0.2"), []string{"db.devvm.internal"}}}, "link_setup_invalid address=127.77.0.2 name=db.devvm.internal vm=v"},
 		{"capitals", []GuestLink{{a("127.77.0.2"), []string{"DB"}}}, "link_setup_invalid address=127.77.0.2 name=DB vm=v"},
 		{"a space", []GuestLink{{a("127.77.0.2"), []string{"db x"}}}, "link_setup_invalid address=127.77.0.2 name=db x vm=v"},
-		{"a newline", []GuestLink{{a("127.77.0.2"), []string{"db\n1.2.3.4"}}}, "link_setup_invalid address=127.77.0.2 name=db\n1.2.3.4 vm=v"},
+		{"a newline", []GuestLink{{a("127.77.0.2"), []string{"db\n1.2.3.4"}}}, "link_setup_invalid address=127.77.0.2 name=db1.2.3.4 vm=v"},
 		{"a leading dash", []GuestLink{{a("127.77.0.2"), []string{"-db"}}}, "link_setup_invalid address=127.77.0.2 name=-db vm=v"},
 		{"a trailing dash", []GuestLink{{a("127.77.0.2"), []string{"db-"}}}, "link_setup_invalid address=127.77.0.2 name=db- vm=v"},
 		{"an empty name", []GuestLink{{a("127.77.0.2"), []string{""}}}, "link_setup_invalid address=127.77.0.2 name= vm=v"},

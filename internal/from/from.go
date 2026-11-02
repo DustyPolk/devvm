@@ -38,7 +38,7 @@ func Valid(s string) bool { return refPattern.MatchString(s) }
 // Check refuses a --from that isn't an image reference; "" is none.
 func Check(s string) error {
 	if s != "" && !Valid(s) {
-		return msg.BadFrom(msg.Shown(s))
+		return msg.BadFrom(s)
 	}
 	return nil
 }

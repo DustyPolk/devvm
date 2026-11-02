@@ -128,13 +128,7 @@ func argsOf(c *cobra.Command) string {
 }
 
 // shownArgs is args as a message shows them: as typed, apart.
-func shownArgs(args []string) string {
-	shown := make([]string, len(args))
-	for i, a := range args {
-		shown[i] = msg.Shown(a)
-	}
-	return strings.Join(shown, " ")
-}
+func shownArgs(args []string) string { return strings.Join(args, " ") }
 
 // noArgs takes no arguments. A command with commands of its own says the
 // word isn't one of them.
@@ -149,7 +143,7 @@ func noArgs(cmd *cobra.Command, args []string) error {
 				names = append(names, c.Name())
 			}
 		}
-		return msg.NoSubcommand(cmd.CommandPath(), strings.Join(names, ", "), msg.Shown(args[0]))
+		return msg.NoSubcommand(cmd.CommandPath(), strings.Join(names, ", "), args[0])
 	}
 	return msg.ArgsNone(cmd.CommandPath(), shownArgs(args))
 }
@@ -171,7 +165,7 @@ func argsN(least, most int) cobra.PositionalArgs {
 		}
 		for _, a := range args {
 			if !slices.Contains(cmd.ValidArgs, a) {
-				return msg.ArgNotChoice(strings.Join(cmd.ValidArgs, ", "), cmd.CommandPath(), msg.Shown(a))
+				return msg.ArgNotChoice(strings.Join(cmd.ValidArgs, ", "), cmd.CommandPath(), a)
 			}
 		}
 		return nil
@@ -255,7 +249,7 @@ func checkFlagValue(name, value string) error {
 		_, err = state.ParseDuration(value)
 	case "backend":
 		if names := registry.Names(); value != "" && !slices.Contains(names, value) {
-			err = msg.BackendUnknown(strings.Join(names, ", "), msg.Shown(value))
+			err = msg.BackendUnknown(strings.Join(names, ", "), value)
 		}
 	}
 	return err
@@ -265,7 +259,7 @@ func checkFlagValue(name, value string) error {
 // its value, or with one it can't take.
 func flagError(c *cobra.Command, err error) error {
 	if e, ok := errors.AsType[*pflag.NotExistError](err); ok {
-		return msg.FlagUnknown(c.CommandPath(), msg.Shown(flagName(e.GetSpecifiedName(), e.GetSpecifiedShortnames())))
+		return msg.FlagUnknown(c.CommandPath(), flagName(e.GetSpecifiedName(), e.GetSpecifiedShortnames()))
 	}
 	if e, ok := errors.AsType[*pflag.ValueRequiredError](err); ok {
 		name := flagName(e.GetSpecifiedName(), e.GetSpecifiedShortnames())
@@ -275,14 +269,14 @@ func flagError(c *cobra.Command, err error) error {
 		if m, ok := errors.AsType[msg.M](e.Unwrap()); ok {
 			return m
 		}
-		name, value := "--"+e.GetFlag().Name, msg.Shown(e.GetValue())
+		name, value := "--"+e.GetFlag().Name, e.GetValue()
 		if e.GetFlag().Value.Type() == "bool" {
 			return msg.FlagBadSwitch(name, value)
 		}
 		return msg.FlagBadValue(name, flagForm(e.GetFlag()), value)
 	}
 	if e, ok := errors.AsType[*pflag.InvalidSyntaxError](err); ok {
-		return msg.FlagUnknown(c.CommandPath(), msg.Shown(e.GetSpecifiedFlag()))
+		return msg.FlagUnknown(c.CommandPath(), e.GetSpecifiedFlag())
 	}
 	return err
 }

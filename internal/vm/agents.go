@@ -106,7 +106,7 @@ func (e Launch) AgentMounts(img string) []string {
 				continue
 			}
 			if strings.Contains(p, ",") {
-				e.Warn(msg.AgentDirComma(msg.Shown(p)))
+				e.Warn(msg.AgentDirComma(p))
 				continue
 			}
 			dirs = append(dirs, p)
@@ -154,13 +154,7 @@ func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 	return nil
 }
 
-func shownList(paths []string) string {
-	shown := make([]string, len(paths))
-	for i, p := range paths {
-		shown[i] = msg.Shown(p)
-	}
-	return strings.Join(shown, ", ")
-}
+func shownList(paths []string) string { return strings.Join(paths, ", ") }
 
 // missing returns what of a isn't in b.
 func missing(a, b []string) []string {

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 )
 
@@ -212,8 +213,8 @@ const (
 
 // logLimit is the forwarder's log, which the VM can make it write to (its
 // ports, its ssh's errors, and its sshd's stderr): limited, so it can't
-// fill the host's disk, and control characters but newlines and tabs
-// shown as '?'.
+// fill the host's disk, and without control characters but newlines and
+// tabs (msg.Printable).
 type logLimit struct {
 	w   io.Writer
 	now func() time.Time
@@ -244,12 +245,7 @@ func (l *logLimit) Write(p []byte) (int, error) {
 		b = fmt.Appendf(b, "devvm ports: %d writes not logged\n", l.dropped)
 		l.dropped = 0
 	}
-	for _, c := range p[:min(len(p), logWriteMax)] {
-		if c < 0x20 && c != '\n' && c != '\t' || c == 0x7f {
-			c = '?'
-		}
-		b = append(b, c)
-	}
+	b = append(b, msg.Printable(string(p[:min(len(p), logWriteMax)]))...)
 	if len(p) > logWriteMax {
 		b = append(b, "…\n"...)
 	}

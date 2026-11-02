@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"unicode"
 
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
@@ -46,16 +45,6 @@ type val struct{ key, value string }
 type spec struct {
 	plural bool
 	fields []string // sorted; "count" when plural
-}
-
-// Shown returns s as a message value: as it is, or quoted like a Go string
-// when it holds a control character (a path a VM made, say), so it can't
-// move the cursor or rewrite what's shown.
-func Shown(s string) string {
-	if strings.IndexFunc(s, unicode.IsControl) < 0 {
-		return s
-	}
-	return strconv.Quote(s)
 }
 
 // ID returns the message's ID, its table name in en.toml.
@@ -108,7 +97,7 @@ func (m M) Names() string {
 	var b strings.Builder
 	b.WriteString(m.id)
 	for _, v := range m.vals {
-		b.WriteString(" " + v.key + "=" + v.value)
+		b.WriteString(" " + v.key + "=" + OneLine(v.value))
 	}
 	return b.String()
 }
@@ -120,9 +109,11 @@ func (m M) Text() string {
 }
 
 func (m M) textIn(b *i18n.Bundle, lang string) string {
+	// Values are made by anyone, a VM included, so each goes on one line
+	// without control characters, here, wherever the message is shown.
 	data := make(map[string]string, len(m.vals))
 	for _, v := range m.vals {
-		data[v.key] = v.value
+		data[v.key] = OneLine(v.value)
 	}
 	lc := &i18n.LocalizeConfig{MessageID: m.id, TemplateData: data}
 	if m.plural {

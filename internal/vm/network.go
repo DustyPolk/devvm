@@ -251,7 +251,7 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 			case err != nil:
 				return err
 			case !ok:
-				e.Warn(msg.RuleMissing(file, msg.Shown(r)))
+				e.Warn(msg.RuleMissing(file, r))
 			case global:
 				e.Info(msg.RuleRemovedGlobal(r))
 			default:

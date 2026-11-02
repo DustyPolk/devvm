@@ -22,7 +22,7 @@ func Rule(rule string, deny bool) (string, error) {
 		rule = "!" + rule
 	}
 	if !proxy.ValidRule(rule) || !deny && strings.HasPrefix(rule, "!") {
-		return "", msg.NotARule(msg.Shown(rule))
+		return "", msg.NotARule(rule)
 	}
 	return rule, nil
 }

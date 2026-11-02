@@ -242,7 +242,7 @@ func Token(name, given string) (string, error) {
 // else in a file only the user can read.
 func (s *Store) Save(ctx context.Context, name, value string) error {
 	if _, ok := Lookup(name); !ok {
-		return msg.NoSecret(msg.Shown(name))
+		return msg.NoSecret(name)
 	}
 	if !s.Keychain {
 		if err := os.MkdirAll(s.Dirs.Secrets(), 0o700); err != nil {
@@ -316,7 +316,7 @@ func (s *Store) Get(ctx context.Context, name string) (string, error) {
 	}
 	v, err := s.Value(ctx, name)
 	if errors.Is(err, ErrNone) {
-		return "", msg.NoSecret(msg.Shown(name))
+		return "", msg.NoSecret(name)
 	}
 	return v, err
 }

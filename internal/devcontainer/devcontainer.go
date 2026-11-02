@@ -168,7 +168,7 @@ func Parse(file string, data []byte, workspace string) (Plan, error) {
 		case keyIgnored:
 			ignored = append(ignored, k)
 		case keyUnknown:
-			unknown = append(unknown, msg.Shown(k))
+			unknown = append(unknown, k)
 		case keyInitialize:
 			p.note(msg.DevcontainerInitialize(file))
 		}
@@ -295,7 +295,7 @@ func (p *parser) features(raw json.RawMessage) error {
 			p.plan.Layers = append(p.plan.Layers, layer)
 		}
 		if hasOptions(feats[id]) {
-			withOptions = append(withOptions, msg.Shown(id))
+			withOptions = append(withOptions, id)
 		}
 	}
 	if len(withOptions) > 0 {
@@ -312,11 +312,11 @@ func (p *parser) feature(id string) (string, error) {
 	case name == dockerInDocker:
 		return image.DockerLayer, nil
 	case name == dockerOutside:
-		return "", msg.DevcontainerDockerOutside(msg.Shown(id), p.file)
+		return "", msg.DevcontainerDockerOutside(id, p.file)
 	case slices.Contains(image.Toolchains, name):
 		return name, nil
 	}
-	return "", msg.DevcontainerFeature(msg.Shown(id), p.file)
+	return "", msg.DevcontainerFeature(id, p.file)
 }
 
 // featureName is a feature's ID without its version: its tag or digest.
@@ -360,7 +360,7 @@ func (p *parser) ports(raw json.RawMessage) error {
 			return err
 		}
 		if !ok {
-			ignored = append(ignored, msg.Shown(string(bytes.TrimSpace(e))))
+			ignored = append(ignored, string(bytes.TrimSpace(e)))
 			continue
 		}
 		if s := strconv.Itoa(port); !slices.Contains(list, s) {
@@ -413,7 +413,7 @@ func (p *parser) env(top map[string]json.RawMessage) error {
 		}
 		for name, v := range m {
 			if !envName.MatchString(name) {
-				return msg.DevcontainerEnvName(p.file, msg.Shown(name))
+				return msg.DevcontainerEnvName(p.file, name)
 			}
 			if v == nil {
 				if k == "containerEnv" {
@@ -456,7 +456,7 @@ func (p *parser) commands(key string, raw json.RawMessage) ([]Command, error) {
 				return nil, err
 			}
 			if len(argv) > 0 {
-				cmds = append(cmds, Command{Name: key + " " + msg.Shown(n), Argv: argv})
+				cmds = append(cmds, Command{Name: key + " " + n, Argv: argv})
 			}
 		}
 		return cmds, nil

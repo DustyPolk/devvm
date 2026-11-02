@@ -347,7 +347,7 @@ func (e Links) resolve(target string) (string, error) {
 	}
 	switch len(vms) {
 	case 0:
-		return "", msg.LinkUnknownTarget(msg.Shown(target))
+		return "", msg.LinkUnknownTarget(target)
 	case 1:
 		return vms[0], nil
 	}
@@ -357,9 +357,9 @@ func (e Links) resolve(target string) (string, error) {
 		if st, err := state.ReadVM(e.Dirs, vm); err == nil && st.Get(state.KeyDir) != "" {
 			dir = st.Get(state.KeyDir)
 		}
-		shown[i] = vm + " in " + msg.Shown(dir)
+		shown[i] = vm + " in " + dir
 	}
-	return "", msg.LinkAmbiguousTarget(msg.Shown(target), strings.Join(shown, ", "))
+	return "", msg.LinkAmbiguousTarget(target, strings.Join(shown, ", "))
 }
 
 // LinkListed is one of the folder's VM's links as devvm link lists it.
@@ -567,7 +567,7 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 		}
 	}
 	if i < 0 {
-		return msg.LinkNotFound(strconv.Itoa(port), msg.Shown(target), t.f.Name)
+		return msg.LinkNotFound(strconv.Itoa(port), target, t.f.Name)
 	}
 	gone := links[i]
 	if gone.Group {

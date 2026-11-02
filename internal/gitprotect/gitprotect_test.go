@@ -257,7 +257,7 @@ func TestNewVMOtherRepoAndCommondir(t *testing.T) {
 	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
 		t.Fatal(err)
 	}
-	if !f.warned(`git_commondir git=`+f.path(".git")+` target="../x\x1b[2J"`) || f.warned("\x1b") {
+	if !f.warned(`git_commondir git=`+f.path(".git")+` target=../x[2J`) || f.warned("\x1b") {
 		t.Errorf("warnings %q", f.warns)
 	}
 }

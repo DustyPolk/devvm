@@ -16,7 +16,7 @@ import (
 func ParseDuration(s string) (time.Duration, error) {
 	const day = 24 * time.Hour
 	units := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": day, "w": 7 * day}
-	bad := msg.BadDuration(msg.Shown(s))
+	bad := msg.BadDuration(s)
 	if len(s) < 2 {
 		return 0, bad
 	}

@@ -16,8 +16,8 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
-	"unicode"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
 )
@@ -281,7 +281,7 @@ func FormatEvent(line string) (string, bool) {
 	if e.Upstream != "" {
 		d += ", through " + e.Upstream
 	}
-	return fmt.Sprintf("%s  %-7s  %s  %s", oneLine(e.Time), what, hostPort(e.Host, e.Port), oneLine(d)), true
+	return fmt.Sprintf("%s  %-7s  %s  %s", msg.OneLine(e.Time), what, hostPort(e.Host, e.Port), msg.OneLine(d)), true
 }
 
 // linkEvent is what devvm network log shows of a link's event, whose host
@@ -324,19 +324,7 @@ func AppendEvent(path, vm string, e Event) error {
 }
 
 func hostPort(host string, port int) string {
-	return net.JoinHostPort(oneLine(host), strconv.Itoa(port))
-}
-
-// oneLine drops every control character from s (C0, newlines and tabs
-// too, DEL and C1): a value the VM's proxy logged, for one line of data
-// output.
-func oneLine(s string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
+	return net.JoinHostPort(msg.OneLine(host), strconv.Itoa(port))
 }
 
 // Block is a host and port a VM's proxy blocked, as devvm network log
@@ -409,7 +397,7 @@ func (l *Log) WriteBlocked(w io.Writer) error {
 		if b.Allow != "" {
 			allow = "devvm network allow " + b.Allow
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%d\t%s\t%s\n", oneLine(b.Last), b.Count, hostPort(b.Host, b.Port), allow)
+		_, _ = fmt.Fprintf(tw, "%s\t%d\t%s\t%s\n", msg.OneLine(b.Last), b.Count, hostPort(b.Host, b.Port), allow)
 	}
 	return tw.Flush()
 }

@@ -232,7 +232,7 @@ func (d *Docker) baseImage(ctx context.Context, f *backend.From) (ref, origin st
 			return "", "", msg.NoDigest(f.Ref)
 		}
 		if !from.Valid(f.Ref) || !from.Valid(f.Digest) {
-			return "", "", msg.BadFrom(msg.Shown(f.Ref))
+			return "", "", msg.BadFrom(f.Ref)
 		}
 		if !strings.Contains(f.Digest, "@") {
 			// Docker's ID: only Docker has it, and only while it's there.

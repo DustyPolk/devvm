@@ -53,13 +53,13 @@ func checkWord(root *cobra.Command, word string) error {
 	img := closest(word, images)
 	switch {
 	case command != "" && img != "":
-		return msg.NoCommandOrImageBoth(command, img, msg.Shown(word))
+		return msg.NoCommandOrImageBoth(command, img, word)
 	case command != "":
-		return msg.NoCommandOrImageCommand(command, msg.Shown(word))
+		return msg.NoCommandOrImageCommand(command, word)
 	case img != "":
-		return msg.NoCommandOrImageImage(img, msg.Shown(word))
+		return msg.NoCommandOrImageImage(img, word)
 	}
-	return msg.NoCommandOrImage(msg.Shown(word))
+	return msg.NoCommandOrImage(word)
 }
 
 // closest is the name in names closest to word, ignoring case, within

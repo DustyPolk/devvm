@@ -101,7 +101,7 @@ func shellWords(words []string) (string, error) {
 	quoted := make([]string, len(words))
 	for i, w := range words {
 		if w == "" || strings.ContainsAny(w, `'\%`) || strings.ContainsFunc(w, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-			return "", msg.DockerSSHPath(msg.Shown(w))
+			return "", msg.DockerSSHPath(w)
 		}
 		quoted[i] = "'" + w + "'"
 	}

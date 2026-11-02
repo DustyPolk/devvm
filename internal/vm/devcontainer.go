@@ -86,7 +86,7 @@ func (e devcontainers) prepare(ctx context.Context, o *Options, vm, dir string) 
 	file, data, err := e.find(dir)
 	switch {
 	case err != nil:
-		return msg.DevcontainerUnreadable(msg.Shown(file)).Because(err)
+		return msg.DevcontainerUnreadable(file).Because(err)
 	case file == "":
 		return nil
 	}
@@ -178,11 +178,11 @@ func (e devcontainers) check(st *state.VM, dir string) {
 	}
 	if was == devcontainerNone {
 		_, nowFile, _ := strings.Cut(now, " ")
-		e.Warn(msg.DevcontainerNew(msg.Shown(nowFile), st.Name()))
+		e.Warn(msg.DevcontainerNew(nowFile, st.Name()))
 		return
 	}
 	_, wasFile, _ := strings.Cut(was, " ")
-	e.Warn(msg.DevcontainerChanged(msg.Shown(wasFile), st.Name()))
+	e.Warn(msg.DevcontainerChanged(wasFile, st.Name()))
 }
 
 // run runs a VM's devcontainer.json commands, once it's set up: those

@@ -238,7 +238,7 @@ func (e clones) cloneChanges(ctx context.Context, b backend.Backend, vm, dir str
 		if wt == dir {
 			e.Say(msg.CloneDirty())
 		} else {
-			e.Say(msg.CloneWorktreeDirty(msg.Shown(wt)))
+			e.Say(msg.CloneWorktreeDirty(wt))
 		}
 		shown += e.showChanges(out, cloneShown-shown)
 	}
@@ -254,13 +254,13 @@ func (e clones) cloneChanges(ctx context.Context, b backend.Backend, vm, dir str
 const worktreeStatus = `[ -d "$1" ] || exit 0; exec git -C "$1" status --porcelain`
 
 // showChanges prints the first n lines of git status's output, each
-// through msg.Shown, and returns how many it printed.
+// through msg.OneLine, and returns how many it printed.
 func (e clones) showChanges(status []byte, n int) int {
 	var shown strings.Builder
 	s := bufio.NewScanner(bytes.NewReader(status))
 	i := 0
 	for ; i < n && s.Scan(); i++ {
-		shown.WriteString(msg.Shown(s.Text()) + "\n")
+		shown.WriteString(msg.OneLine(s.Text()) + "\n")
 	}
 	_, _ = e.Stdout.Write([]byte(shown.String()))
 	return i

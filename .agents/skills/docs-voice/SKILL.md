@@ -48,7 +48,7 @@ Messages use the same voice as the docs, only shorter, so the CLI reads like the
 - **"WARNING:" only when the user has to act.**
 - **The same terms as the docs**, from [Terms](#terms).
 - **Status steps stay as they are:** a few words, lowercase, such as "building image base". Data output isn't a message.
-- **House rules.** `[y/N]` and `[Y/n]` stay literal. Commands are written as devvm x, not quoted. Never write "please", "note that" or "simply". Values the VM made go through `msg.Shown`.
+- **House rules.** `[y/N]` and `[Y/n]` stay literal. Commands are written as devvm x, not quoted. Never write "please", "note that" or "simply". A value renders on one line without control characters (`msg.OneLine`), so a message's template never relies on a value's newlines.
 - **Templates keep their fields,** so no call site changes. If a message can't be accurate without changing a field, change the field and its callers. Long `{{.vm}}` names stay where the template has them.
 - **Both plural forms.** When a message has `one` and `other`, rewrite both.
 

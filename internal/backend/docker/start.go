@@ -84,7 +84,7 @@ func bind(path string, writable bool) (string, error) { return bindAt(path, path
 func bindAt(path, at string, writable bool) (string, error) {
 	for _, p := range []string{path, at} {
 		if strings.ContainsAny(p, ",\"\n") {
-			return "", msg.DockerMountPath(msg.Shown(p))
+			return "", msg.DockerMountPath(p)
 		}
 	}
 	m := "type=bind,src=" + path + ",dst=" + at

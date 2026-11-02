@@ -252,7 +252,7 @@ func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *f
 	nameMax := first.Backend.NameMax()
 	f, err := project.New(e.Dir, nameMax)
 	if bad, ok := errors.AsType[*project.BadPathError](err); ok {
-		return nil, nil, msg.BadPath(msg.Shown(bad.Dir))
+		return nil, nil, msg.BadPath(bad.Dir)
 	} else if errors.Is(err, project.ErrNoRoom) {
 		return nil, nil, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
 	} else if err != nil {
@@ -653,9 +653,9 @@ func (e *Env) checkSetID(dir string) {
 	var root, other []string
 	for _, f := range project.SetIDFiles(dir) {
 		if f.Root {
-			root = append(root, msg.Shown(f.Path))
+			root = append(root, f.Path)
 		} else {
-			other = append(other, msg.Shown(f.Path))
+			other = append(other, f.Path)
 		}
 	}
 	if len(root) > 0 {

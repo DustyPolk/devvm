@@ -386,7 +386,7 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) e
 		if !ok {
 			continue
 		}
-		shown := msg.Shown(filepath.Join(e.Home, rel))
+		shown := filepath.Join(e.Home, rel)
 		out, keys, err := secrets.Redact(format, f.data)
 		if err != nil {
 			s.drop(f.name)

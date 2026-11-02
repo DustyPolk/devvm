@@ -365,7 +365,7 @@ func (e egress) socketMount(sock string) ([]string, string, error) {
 	switch e.d.engineKind() {
 	case kindDesktop:
 		if strings.ContainsAny(sock, ":,\"\n") {
-			return nil, "", msg.DockerMountPath(msg.Shown(sock))
+			return nil, "", msg.DockerMountPath(sock)
 		}
 		if err := e.d.checkShared(sock); err != nil {
 			return nil, "", err

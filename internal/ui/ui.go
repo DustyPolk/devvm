@@ -219,7 +219,7 @@ func (u *UI) DieLogged(m msg.M) {
 	case verbose(u):
 		u.write(u.stderr, u.errStyle.paintLines(sgrDim, msg.LogDetails(path).Line()+"\n"))
 	default:
-		tail := "--- " + msg.LogEnd(path).Line() + "\n" + printable(tailLines(path, 25)) + "---\n"
+		tail := "--- " + msg.LogEnd(path).Line() + "\n" + msg.Printable(tailLines(path, 25)) + "---\n"
 		u.write(u.stderr, u.errStyle.paintLines(sgrDim, tail))
 	}
 	u.Die(m)

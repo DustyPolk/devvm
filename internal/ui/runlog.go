@@ -66,7 +66,7 @@ func (s *stream) Write(p []byte) (int, error) {
 	if n := len(b); n > 0 && b[n-1] == 0xc2 {
 		b, s.held = b[:n-1], []byte{0xc2}
 	}
-	if text := printable(string(b)); text != "" {
+	if text := msg.Printable(string(b)); text != "" {
 		s.u.write(s.u.stderr, s.u.errStyle.paintLines(sgrDim, text))
 	}
 	return len(p), nil

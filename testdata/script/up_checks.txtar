@@ -44,7 +44,7 @@ cd $WORK/a,b
 stderr '^devvm: bad_path dir=/\S*/a,b$'
 cd $WORK
 exec sh -c 'mkdir "$(printf "t\tab")" && cd "$(printf "t\tab")" && ! devvm --no-network-policy base'
-stderr '^devvm: bad_path dir=".*/t\\tab"$'
+stderr '^devvm: bad_path dir=/\S*/tab$'
 
 # The VM's name: the folder's, lowercase, other characters as dashes, at
 # most 20 of them, then the hash of its path.
