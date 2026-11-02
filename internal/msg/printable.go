@@ -8,7 +8,8 @@ import (
 
 // Printable returns s without the control characters that could move the
 // cursor or rewrite what a terminal shows: C0 but newline and tab, DEL,
-// and C1, whether in UTF-8 or as a lone byte. It's for text a VM or a
+// and C1, whether in UTF-8 or as a lone byte, and the bidi controls
+// (U+202E and its kin) that reorder what follows them. It's for text a VM or a
 // build made (its output, a path, a host), and every message value goes
 // through OneLine, its one-line form, when the message renders. Other
 // bytes, invalid UTF-8 among them, stay as they are.
@@ -32,7 +33,7 @@ func clean(s string, lines bool) string {
 			if lines {
 				b.WriteRune(r)
 			}
-		case unicode.IsControl(r):
+		case unicode.IsControl(r), unicode.Is(unicode.Bidi_Control, r):
 		default:
 			b.WriteString(s[i : i+n])
 		}

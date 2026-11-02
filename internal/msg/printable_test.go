@@ -27,6 +27,22 @@ func TestPrintable(t *testing.T) {
 	}
 }
 
+// Bidi controls reorder what follows them, so a VM-made name could read as
+// another: RLO, LRI, PDI, RLM and ALM all go. They're built from their code
+// points so this file holds none of them.
+func TestPrintableBidi(t *testing.T) {
+	t.Parallel()
+	in := "invoice" + string(rune(0x202e)) + "txt.exe a" + string(rune(0x2066)) + "b" +
+		string(rune(0x2069)) + "c" + string(rune(0x200f)) + "d" + string(rune(0x061c)) + "e"
+	want := "invoicetxt.exe abcde"
+	if got := Printable(in); got != want {
+		t.Errorf("Printable(%q) = %q, want %q", in, got, want)
+	}
+	if got := OneLine(in); got != want {
+		t.Errorf("OneLine(%q) = %q, want %q", in, got, want)
+	}
+}
+
 // Every value of a message renders on one line, without control
 // characters, whoever made it: in its text, its segments and its names.
 func TestValuesArePrintable(t *testing.T) {

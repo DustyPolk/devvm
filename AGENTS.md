@@ -91,7 +91,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 ## Messages
 
 - **Messages use the docs voice**, only shorter: the docs-voice skill's Messages and Terms rules.
-- **Every message lives in `locales/en.toml`**, called through its generated function (`msg.NoVM(dir)`); `go generate ./internal/msg` after editing. Only go-i18n's fields (`other`, `one`, `description`); snake_case plain template fields (`{{.vm_name}}`); `one` makes it plural (`count int`). Doc links go in `internal/msg/docs.go`. A message without a caller fails the tests. `msg.M` is an `error`. Never build prose with `fmt`. VM-made values go through `msg.Shown`. A message made from an error carries it (`.Because(err)`), not only `err.Error()`.
+- **Every message lives in `locales/en.toml`**, called through its generated function (`msg.NoVM(dir)`); `go generate ./internal/msg` after editing. Only go-i18n's fields (`other`, `one`, `description`); snake_case plain template fields (`{{.vm_name}}`); `one` makes it plural (`count int`). Doc links go in `internal/msg/docs.go`. A message without a caller fails the tests. `msg.M` is an `error`. Never build prose with `fmt`. Message values render on one line without control or bidi characters (`msg.OneLine`, at render); a VM's text shown as data goes through `msg.Printable`. A message made from an error carries it (`.Because(err)`), not only `err.Error()`.
 - An error or warning is at most two sentences; a prompt gets at most two lines of context.
 - **The mechanism goes in the doc link**, not the message: every warning or error the user can act on has one.
 - Status steps stay a few words, lowercase. Commands are written as devvm x, not quoted. No "please", "note that" or "simply". `[y/N]`/`[Y/n]` stay literal.
