@@ -41,7 +41,7 @@ The VM can change that file back, so for a VM you don't trust, also set the thre
 
 ## Agent forwarding
 
-SSH agent forwarding is off by default. While it's on and you're connected, anything in the VM, coding agents included, can *use* the agent's keys, for example to push or to log in to servers. It can't copy them. Turn it on for one VM when you need git over SSH there.
+SSH agent forwarding is off by default. While it's on and you're connected, or on smolvm whenever the VM runs, anything in the VM, coding agents included, can *use* the agent's keys, for example to push or to log in to servers. It can't copy them. Turn it on for one VM when you need git over SSH there.
 
 ```mermaid
 flowchart TD

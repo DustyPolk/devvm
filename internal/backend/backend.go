@@ -423,6 +423,9 @@ type Instance struct {
 	// AgentFixed is set when its forwarding can't be turned on: it was
 	// made without, on a backend that sets forwarding only then.
 	AgentFixed bool
+	// AgentWhileRunning is set when a forwarded agent is in the VM the
+	// whole time it runs, not only during ssh sessions.
+	AgentWhileRunning bool
 }
 
 // ExecOpts is where a command run in a VM runs and what it's connected to.

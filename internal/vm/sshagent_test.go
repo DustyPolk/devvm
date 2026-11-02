@@ -227,6 +227,35 @@ func TestSetSSHAgent(t *testing.T) {
 	}
 }
 
+// devvm ssh-agent on or devvm warns who can use the keys: while you're
+// connected, or while the VM runs on a backend that forwards the agent
+// the whole time (smolvm).
+func TestSetSSHAgentRisk(t *testing.T) {
+	for _, whileRunning := range []bool{false, true} {
+		e, f, _ := upEnv(t, allNative())
+		e.Agent.Run = (&agentCalls{}).run
+		var warned []string
+		e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+		st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+		vm := st.Name()
+		in := f.Instances[vm]
+		in.AgentWhileRunning = whileRunning
+		f.Instances[vm] = in
+		for _, mode := range []string{sshagent.On, sshagent.Devvm} {
+			if err := (Settings{e}).SetSSHAgent(t.Context(), mode); err != nil {
+				t.Fatal(names(err))
+			}
+		}
+		want := []string{"agent_on_risk vm=" + vm, "agent_devvm_risk vm=" + vm}
+		if whileRunning {
+			want = []string{"agent_on_risk_running vm=" + vm, "agent_devvm_risk_running vm=" + vm}
+		}
+		if !slices.Equal(warned, want) {
+			t.Errorf("while running %v: warned %q, want %q", whileRunning, warned, want)
+		}
+	}
+}
+
 // A backend that emulates turning forwarding on or off (agent-toggle):
 // a new VM is made ready for it only while it's let through (warned when
 // unreviewed), and its state says so; each start says whether the VM gets

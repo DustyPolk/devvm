@@ -530,7 +530,7 @@ func TestAgentToggle(t *testing.T) {
 	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: fw, AgentForwarding: true, AgentToggle: true}); err != nil {
 		t.Fatal(err)
 	}
-	if in, err := s.Inspect(t.Context(), fw); err != nil || !in.AgentForwarding || in.AgentFixed {
+	if in, err := s.Inspect(t.Context(), fw); err != nil || !in.AgentForwarding || in.AgentFixed || !in.AgentWhileRunning {
 		t.Errorf("made on: %+v, %v", in, err)
 	}
 	// Started by Start: the agent devvm chose. Started some other way

@@ -1685,6 +1685,12 @@ other = "While you're connected, anything in {{.vm}} can use the keys in your SS
 [agent_devvm_risk]
 other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent to list them."
 
+[agent_on_risk_running]
+other = "While {{.vm}} runs, anything in it can use the keys in your SSH agent, whether or not you're connected."
+
+[agent_devvm_risk_running]
+other = "While {{.vm}} runs, anything in it can use the keys in devvm's SSH agent, whether or not you're connected. Run devvm ssh-agent to list them."
+
 [agent_set_running]
 description = "mode is on (the user's agent), devvm (devvm's own) or off"
 other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
@@ -1743,7 +1749,7 @@ description = "keys is a space-separated list of the keys' comments"
 other = "devvm's SSH agent holds: {{.keys}}"
 
 [agent_holds_note]
-other = "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
+other = "VMs set to devvm ssh-agent devvm can use these keys while you're connected, or on smolvm while they run, and devvm loads them again after a reboot."
 
 [clone_needs_git]
 other = "--clone needs git, and git isn't installed on this machine."
@@ -2009,7 +2015,7 @@ description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
 other = "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm tools update to build the missing ones."
 
 [agent_dir_comma]
-other = "Lima can't mount paths with a comma, so devvm doesn't mount {{.path}}."
+other = "The agent folder {{.path}} isn't mounted, because devvm doesn't mount a path with a comma."
 
 [agent_dirs_added]
 description = "dirs is a comma-separated list of folders"

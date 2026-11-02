@@ -381,6 +381,9 @@ func (s *Smolvm) instance(m machine) (backend.Instance, error) {
 	return backend.Instance{
 		Name: m.Name, Status: m.status(), Size: m.size(),
 		AgentDirs: slices.Clone(r.AgentDirs), AgentForwarding: r.Forwarding && !r.AgentOff, AgentFixed: !r.Forwarding,
+		// smolvm forwards the agent from the machine's start, not
+		// through ssh sessions.
+		AgentWhileRunning: true,
 	}, nil
 }
 

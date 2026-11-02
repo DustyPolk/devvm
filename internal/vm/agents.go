@@ -95,8 +95,8 @@ func agentsOf(img string) []string {
 
 // AgentMounts returns the host folders a VM with that image mounts: its
 // agents' folders that exist under the home folder. One with a comma in
-// its path is left out, with a warning: Lima splits mount options on
-// commas.
+// its path is left out on every backend, with a warning: Lima splits
+// mount options on commas, and Docker reads mounts as CSV.
 func (e Launch) AgentMounts(img string) []string {
 	var dirs []string
 	for _, a := range agentsOf(img) {

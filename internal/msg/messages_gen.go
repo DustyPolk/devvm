@@ -34,7 +34,12 @@ func AgentDevvmRisk(vm string) M {
 	return M{id: "agent_devvm_risk", vals: []val{{"vm", vm}}}
 }
 
-// AgentDirComma is [agent_dir_comma]: "Lima can't mount paths with a comma, so devvm doesn't mount {{.path}}."
+// AgentDevvmRiskRunning is [agent_devvm_risk_running]: "While {{.vm}} runs, anything in it can use the keys in devvm's SSH agent, whether or not you're connected. Run devvm ssh-agent to list them."
+func AgentDevvmRiskRunning(vm string) M {
+	return M{id: "agent_devvm_risk_running", vals: []val{{"vm", vm}}}
+}
+
+// AgentDirComma is [agent_dir_comma]: "The agent folder {{.path}} isn't mounted, because devvm doesn't mount a path with a comma."
 func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
 }
@@ -59,7 +64,7 @@ func AgentHolds(keys string) M {
 	return M{id: "agent_holds", vals: []val{{"keys", keys}}}
 }
 
-// AgentHoldsNote is [agent_holds_note]: "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
+// AgentHoldsNote is [agent_holds_note]: "VMs set to devvm ssh-agent devvm can use these keys while you're connected, or on smolvm while they run, and devvm loads them again after a reboot."
 func AgentHoldsNote() M {
 	return M{id: "agent_holds_note"}
 }
@@ -122,6 +127,11 @@ func AgentNoKeys() M {
 // AgentOnRisk is [agent_on_risk]: "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 func AgentOnRisk(vm string) M {
 	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
+}
+
+// AgentOnRiskRunning is [agent_on_risk_running]: "While {{.vm}} runs, anything in it can use the keys in your SSH agent, whether or not you're connected."
+func AgentOnRiskRunning(vm string) M {
+	return M{id: "agent_on_risk_running", vals: []val{{"vm", vm}}}
 }
 
 // AgentSetRunning is [agent_set_running]: "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
@@ -3282,6 +3292,7 @@ var specs = map[string]spec{
 	"agent_already":                    {fields: []string{"mode", "vm"}},
 	"agent_confirm_needs_askpass":      {},
 	"agent_devvm_risk":                 {fields: []string{"vm"}},
+	"agent_devvm_risk_running":         {fields: []string{"vm"}},
 	"agent_dir_comma":                  {fields: []string{"path"}},
 	"agent_dirs_added":                 {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":               {fields: []string{"dirs", "vm"}},
@@ -3300,6 +3311,7 @@ var specs = map[string]spec{
 	"agent_next_start":                 {fields: []string{"vm"}},
 	"agent_no_keys":                    {},
 	"agent_on_risk":                    {fields: []string{"vm"}},
+	"agent_on_risk_running":            {fields: []string{"vm"}},
 	"agent_set_running":                {fields: []string{"mode", "vm"}},
 	"agent_set_stopped":                {fields: []string{"mode", "vm"}},
 	"agent_start_failed":               {fields: []string{"sock"}},
