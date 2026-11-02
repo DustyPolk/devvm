@@ -305,6 +305,10 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 			e.Warn(msg.DevcontainerPortsNotForwarded(o.dc.File, o.dc.Ports))
 		}
 	}
+	forward, err := PortsBackend(n.ports)
+	if err != nil {
+		return newVM{}, err
+	}
 	n.builder = e.builder(b, o.From)
 	if n.img, err = e.resolveImage(o.Image, f.Dir, o.dc, n.builder); err != nil {
 		return newVM{}, err
@@ -313,7 +317,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	// from it. Its agents' folders on the host are mounted read-only.
 	n.spec = backend.VMSpec{
 		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
-		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: PortsBackend(n.ports),
+		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: forward,
 		Env: trust.GuestEnv(nil),
 	}
 	layerNeeds, err := e.dockerLayer(b, &n)

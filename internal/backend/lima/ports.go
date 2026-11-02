@@ -71,7 +71,7 @@ func (f forwards) write(vm string, p backend.Ports) error {
 	case p.All:
 		v = portsAll
 	case len(p.Ranges) > 0:
-		v = vmssh.FormatRanges(p.Ranges)
+		v = backend.FormatPortRanges(p.Ranges)
 	}
 	if err := os.MkdirAll(f.Dir, 0o700); err != nil {
 		return err
@@ -92,7 +92,7 @@ func (f forwards) read(vm string) (backend.Ports, error) {
 	case portsNone:
 		return backend.Ports{}, nil
 	default:
-		rs, err := vmssh.ParseRanges(v)
+		rs, err := backend.ParsePortRanges(v)
 		return backend.Ports{Ranges: rs}, err
 	}
 }

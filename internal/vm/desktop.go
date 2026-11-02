@@ -149,7 +149,7 @@ func desktopPassword(st *state.VM) (string, error) {
 // on a new one from 20000 to 59999 that no program and no VM has, which
 // it keeps.
 func (e Desktop) listener(ctx context.Context, st *state.VM) (net.Listener, error) {
-	if p, err := strconv.Atoi(st.Get(KeyDesktopPort)); err == nil && p > 0 && p < 65536 {
+	if p, err := strconv.Atoi(st.Get(KeyDesktopPort)); err == nil && backend.ValidPort(p) {
 		if l, err := platform.ListenLoopback(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(p))); err == nil {
 			return l, nil
 		}

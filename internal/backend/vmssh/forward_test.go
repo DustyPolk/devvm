@@ -478,13 +478,11 @@ func TestFlags(t *testing.T) {
 	if r, err := f.Reserved(); err != nil || !maps.Equal(r, map[int]bool{1: true, 2: true, 3: true}) {
 		t.Errorf("Reserved = %v, %v", r, err)
 	}
-	for _, bad := range []string{"x", "0", "9-1", "70000", ""} {
-		if _, err := ParseRanges(bad); err == nil {
-			t.Errorf("ParseRanges(%q): taken", bad)
+	for _, bad := range []string{"x", "0", "9-1", "70000"} {
+		fl.only = bad
+		if _, err := fl.Forwarder(nil, func(string) (map[int]bool, error) { return nil, nil }, io.Discard); err == nil {
+			t.Errorf("-only %q: taken", bad)
 		}
-	}
-	if FormatRanges(f.Only) != "80,8000-8002" {
-		t.Error(FormatRanges(f.Only))
 	}
 }
 

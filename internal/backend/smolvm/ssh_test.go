@@ -186,12 +186,6 @@ func TestStartNoSSHD(t *testing.T) {
 }
 
 func TestForwards(t *testing.T) {
-	ports := []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8002}}
-	for p, want := range map[int]bool{5173: true, 8000: true, 8002: true, 8003: false, 22: false} {
-		if lists(ports, p) != want {
-			t.Errorf("lists(%d) = %v", p, !want)
-		}
-	}
 	if sshForwardSpec(61022) != "61022:22" {
 		t.Error(sshForwardSpec(61022))
 	}

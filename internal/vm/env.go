@@ -448,7 +448,11 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// The ports its backend forwards at each start (every port: an
 	// emulation on some), which it got when they were set: refused now
 	// unless they may still be used.
-	for _, f := range PortsBackend(orAll(st.Get(KeyPorts))).Features() {
+	ports, err := PortsBackend(st.Get(KeyPorts))
+	if err != nil {
+		return conf, err
+	}
+	for _, f := range ports.Features() {
 		if !e.Registry.Allowed(b, f) {
 			return conf, e.Registry.Require(b, vm, f)
 		}

@@ -118,7 +118,7 @@ func listeningPort(log string) int {
 		rest = rest[:j]
 	}
 	port, err := strconv.Atoi(rest)
-	if err != nil || port < 1 || port > 65535 {
+	if err != nil || !ValidPort(port) {
 		return 0
 	}
 	return port

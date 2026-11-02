@@ -118,7 +118,7 @@ func (f Forwards) Start(vm string, spec Spec) error {
 		"-user", spec.User, "-key", spec.Key, "-known-hosts", kh, "-control", ctl, "-reserve", strings.Join(reserve, ","),
 	})
 	if spec.Only != nil {
-		args = append(args, "-only", FormatRanges(spec.Only))
+		args = append(args, "-only", backend.FormatPortRanges(spec.Only))
 	}
 	pid, err := f.Detach(f.Self, args, out)
 	if err != nil {

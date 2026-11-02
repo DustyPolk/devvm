@@ -69,7 +69,7 @@ func CheckLinkName(name string) error {
 // ParseLinkPort checks a link's PORT: one port, 1 to 65535.
 func ParseLinkPort(v string) (int, error) {
 	p, err := strconv.Atoi(v)
-	if err != nil || p < 1 || p > 65535 || strconv.Itoa(p) != v {
+	if err != nil || !backend.ValidPort(p) || strconv.Itoa(p) != v {
 		return 0, msg.LinkPortInvalid(strconv.Quote(v))
 	}
 	return p, nil
@@ -235,12 +235,8 @@ func publishedIn(ports string, port int) bool {
 	if ports == "" || ports == PortsNone {
 		return false
 	}
-	for _, r := range PortsBackend(ports).Ranges {
-		if port >= r.From && port <= r.To {
-			return true
-		}
-	}
-	return false
+	rs, err := backend.ParsePortRanges(ports)
+	return err == nil && backend.Ports{Ranges: rs}.Has(port)
 }
 
 // linkFeatures are the backend features a link needs on both its VMs,

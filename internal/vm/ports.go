@@ -2,7 +2,6 @@ package vm
 
 import (
 	"context"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,43 +18,19 @@ const (
 	PortsNone = "none"
 )
 
-var portEntry = regexp.MustCompile(`^([0-9]{1,5})(-([0-9]{1,5}))?$`)
-
 // ParsePorts checks which ports to forward, as --ports or the ports file
-// give them: all, none, or ports and ranges (5173,8000-8010). It returns
-// the value without spaces or repeats.
+// give them: all, none, or ports and ranges (5173,8000-8010,
+// backend.ParsePortRanges). It returns the value without spaces or
+// repeats.
 func ParsePorts(v string) (string, error) {
-	s := strings.ReplaceAll(v, " ", "")
-	if s == PortsAll || s == PortsNone {
+	if s := strings.ReplaceAll(v, " ", ""); s == PortsAll || s == PortsNone {
 		return s, nil
 	}
-	bad := msg.PortInvalid(strconv.Quote(v))
-	if s == "" {
-		return "", bad
+	rs, err := backend.ParsePortRanges(v)
+	if err != nil {
+		return "", msg.PortInvalid(strconv.Quote(v)).Because(err)
 	}
-	var out []string
-	for e := range strings.SplitSeq(s, ",") {
-		m := portEntry.FindStringSubmatch(e)
-		if m == nil {
-			return "", bad
-		}
-		a, _ := strconv.Atoi(m[1])
-		b := a
-		if m[3] != "" {
-			b, _ = strconv.Atoi(m[3])
-		}
-		if a < 1 || a > b || b > 65535 {
-			return "", bad
-		}
-		e = strconv.Itoa(a)
-		if a != b {
-			e += "-" + strconv.Itoa(b)
-		}
-		if !slices.Contains(out, e) {
-			out = append(out, e)
-		}
-	}
-	return strings.Join(out, ","), nil
+	return backend.FormatPortRanges(rs), nil
 }
 
 // ParsePortList checks a list of ports and ranges, as devvm ports add and
@@ -94,6 +69,9 @@ func RemovePorts(old, list string) (string, error) {
 	}
 	l, err := ParsePortList(list)
 	if err != nil {
+		return "", err
+	}
+	if old, err = ParsePorts(old); err != nil {
 		return "", err
 	}
 	return dropPorts(old, l, msg.PortNotListed)
@@ -201,7 +179,11 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if err != nil {
 		return err
 	}
-	if err := e.Registry.Require(b, vm, PortsBackend(ports).Features()...); err != nil {
+	p, err := PortsBackend(ports)
+	if err != nil {
+		return err
+	}
+	if err := e.Registry.Require(b, vm, p.Features()...); err != nil {
 		return err
 	}
 	in, err := b.Inspect(ctx, vm)
@@ -220,7 +202,7 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if err := st.Set(KeyPorts, ports); err != nil {
 		return err
 	}
-	if err := b.SetPorts(ctx, vm, PortsBackend(ports), conf); err != nil {
+	if err := b.SetPorts(ctx, vm, p, conf); err != nil {
 		_ = st.Set(KeyPorts, old)
 		return err
 	}
@@ -249,26 +231,21 @@ func (e *Env) forwarding(b backend.Backend, st *state.VM) backend.Confinement {
 	return c
 }
 
-// PortsBackend returns a parsed ports value as the backend has it: "" is
-// all, Lima's default.
-func PortsBackend(v string) backend.Ports {
+// PortsBackend returns a ports value as the backend has it: "" is all,
+// Lima's default. A value that isn't one (a state file edited by hand)
+// is port_invalid.
+func PortsBackend(v string) (backend.Ports, error) {
 	switch v {
 	case "", PortsAll:
-		return backend.Ports{All: true}
+		return backend.Ports{All: true}, nil
 	case PortsNone:
-		return backend.Ports{}
+		return backend.Ports{}, nil
 	}
-	var p backend.Ports
-	for e := range strings.SplitSeq(v, ",") {
-		a, b, ok := strings.Cut(e, "-")
-		from, _ := strconv.Atoi(a)
-		to := from
-		if ok {
-			to, _ = strconv.Atoi(b)
-		}
-		p.Ranges = append(p.Ranges, backend.PortRange{From: from, To: to})
+	rs, err := backend.ParsePortRanges(v)
+	if err != nil {
+		return backend.Ports{}, msg.PortInvalid(strconv.Quote(v)).Because(err)
 	}
-	return p
+	return backend.Ports{Ranges: rs}, nil
 }
 
 // freePorts is the VM's Confinement.Free: its listed ports less those a
@@ -283,7 +260,7 @@ func (e *Env) freePorts(vm string) func(context.Context, []backend.PortRange) []
 			for _, r := range taken {
 				n += r.To - r.From + 1
 			}
-			e.Warn(msg.PortsTaken(n, portsValue(taken), vm))
+			e.Warn(msg.PortsTaken(n, backend.FormatPortRanges(taken), vm))
 		}
 		return free
 	}
@@ -309,17 +286,4 @@ func splitPorts(rs []backend.PortRange, inUse func(int) bool) (free, taken []bac
 		}
 	}
 	return free, taken
-}
-
-// portsValue is ranges as a ports value lists them (5173,8000-8010).
-func portsValue(rs []backend.PortRange) string {
-	var es []string
-	for _, r := range rs {
-		e := strconv.Itoa(r.From)
-		if r.To != r.From {
-			e += "-" + strconv.Itoa(r.To)
-		}
-		es = append(es, e)
-	}
-	return strings.Join(es, ",")
 }

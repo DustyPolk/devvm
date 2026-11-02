@@ -577,20 +577,17 @@ func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 const keyPorts = "ports"
 
 // forwarded returns the host ports a VM forwards, as its state lists them
-// (5173,8000-8010); none for all or none, which name no port.
+// (5173,8000-8010, backend.ParsePortRanges), each entry on its own, so
+// one that isn't a port or a range is skipped and the others are still
+// avoided; none for all or none, which name no port.
 func forwarded(st *state.VM) map[int]bool {
 	out := map[int]bool{}
-	for r := range strings.SplitSeq(st.Get(keyPorts), ",") {
-		from, to, ok := strings.Cut(strings.TrimSpace(r), "-")
-		if !ok {
-			to = from
-		}
-		a, err1 := strconv.Atoi(from)
-		b, err2 := strconv.Atoi(to)
-		if err1 != nil || err2 != nil || a < 1 || b > 65535 || a > b {
+	for e := range strings.SplitSeq(st.Get(keyPorts), ",") {
+		rs, err := backend.ParsePortRanges(e)
+		if err != nil {
 			continue
 		}
-		for n := a; n <= b; n++ {
+		for n := rs[0].From; n <= rs[0].To; n++ {
 			out[n] = true
 		}
 	}

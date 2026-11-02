@@ -259,12 +259,7 @@ func (f *Forwarder) wanted(port int) bool {
 	if f.Only == nil {
 		return port >= minForwardPort
 	}
-	for _, r := range f.Only {
-		if r.From <= port && port <= r.To {
-			return true
-		}
-	}
-	return false
+	return backend.Ports{Ranges: f.Only}.Has(port)
 }
 
 // apply makes the forwards what the VM reports: port to address in the
@@ -609,7 +604,7 @@ func (f *Flags) Forwarder(script []byte, reserved func(vm string) (map[int]bool,
 	var only []backend.PortRange
 	if f.only != "" {
 		var err error
-		if only, err = ParseRanges(f.only); err != nil {
+		if only, err = backend.ParsePortRanges(f.only); err != nil {
 			return nil, err
 		}
 	}
@@ -628,35 +623,4 @@ func (f *Flags) Forwarder(script []byte, reserved func(vm string) (map[int]bool,
 		},
 		Watch: f.watch(script, log), Relay: f.relay, Listen: platform.ListenLoopback,
 	}, nil
-}
-
-// ParseRanges reads ports as devvm ports lists them: 5173,8000-8010.
-func ParseRanges(v string) ([]backend.PortRange, error) {
-	out := []backend.PortRange{}
-	for e := range strings.SplitSeq(v, ",") {
-		a, b, ok := strings.Cut(strings.TrimSpace(e), "-")
-		if !ok {
-			b = a
-		}
-		from, err1 := strconv.Atoi(a)
-		to, err2 := strconv.Atoi(b)
-		if err1 != nil || err2 != nil || from < 1 || to > 65535 || from > to {
-			return nil, fmt.Errorf("%q: not a port or a range", e)
-		}
-		out = append(out, backend.PortRange{From: from, To: to})
-	}
-	return out, nil
-}
-
-// FormatRanges is ranges as devvm ports lists them (ParseRanges).
-func FormatRanges(rs []backend.PortRange) string {
-	var es []string
-	for _, r := range rs {
-		e := strconv.Itoa(r.From)
-		if r.To != r.From {
-			e += "-" + strconv.Itoa(r.To)
-		}
-		es = append(es, e)
-	}
-	return strings.Join(es, ",")
 }

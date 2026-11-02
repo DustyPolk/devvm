@@ -397,7 +397,7 @@ func checkProxy(caps backend.Caps, vm string, c backend.Confinement) error {
 	if s := caps[backend.FeatureEgressProxy]; !s.IsEmulated() {
 		return msg.BackendLacks(Name, string(backend.FeatureEgressProxy), vm)
 	}
-	if c.ProxyPort < 1 || c.ProxyPort > 65535 || c.ProxyPassword == "" {
+	if !backend.ValidPort(c.ProxyPort) || c.ProxyPassword == "" {
 		return fmt.Errorf("docker: %s: no proxy to start it through", vm)
 	}
 	return nil

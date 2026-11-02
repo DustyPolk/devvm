@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
@@ -70,8 +71,12 @@ func publishedPorts(st *state.VM) []int {
 	if v == "" || v == PortsNone {
 		return nil
 	}
+	rs, err := backend.ParsePortRanges(v)
+	if err != nil {
+		return nil
+	}
 	var out []int
-	for _, r := range PortsBackend(v).Ranges {
+	for _, r := range rs {
 		for p := r.From; p <= r.To; p++ {
 			out = append(out, p)
 		}

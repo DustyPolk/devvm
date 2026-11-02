@@ -48,6 +48,7 @@ func TestAddRemovePorts(t *testing.T) {
 		{rm: true, old: "none", list: "5173", err: "port_not_listed port=5173 ports=none"},
 		{rm: true, old: "5173", list: "nope", err: `port_invalid value="nope"`},
 		{rm: true, old: "5173", list: "none", err: `ports_list_needed value="none"`},
+		{rm: true, old: "80,x", list: "80", err: `port_invalid value="80,x"`},
 	} {
 		f, name := AddPorts, "AddPorts"
 		if c.rm {
@@ -71,9 +72,6 @@ func TestSplitPorts(t *testing.T) {
 	}
 	if want := []backend.PortRange{r(5174, 5174), r(8080, 8081)}; !reflect.DeepEqual(taken, want) {
 		t.Errorf("taken %v, want %v", taken, want)
-	}
-	if got := portsValue(taken); got != "5174,8080-8081" {
-		t.Errorf("portsValue = %q", got)
 	}
 }
 
@@ -103,7 +101,11 @@ func TestStartPorts(t *testing.T) {
 					if conf.HostKey == nil {
 						t.Error("started without its host key")
 					}
-					got = conf.Forwarded(t.Context(), PortsBackend(tc.ports))
+					p, err := PortsBackend(tc.ports)
+					if err != nil {
+						t.Fatal(err)
+					}
+					got = conf.Forwarded(t.Context(), p)
 				}
 			}
 			if !reflect.DeepEqual(got, tc.want) {
@@ -202,8 +204,30 @@ func TestPortsBackend(t *testing.T) {
 		"none":           {},
 		"5173,8000-8010": {Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}},
 	} {
-		if got := PortsBackend(in); !reflect.DeepEqual(got, want) {
-			t.Errorf("PortsBackend(%q) = %+v, want %+v", in, got, want)
+		if got, err := PortsBackend(in); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("PortsBackend(%q) = %+v, %v; want %+v", in, got, err, want)
 		}
+	}
+	// A bad entry, as a hand-edited state file has it, is refused, never
+	// port 0.
+	t.Setenv("DEVVM_MESSAGES", "names")
+	for _, bad := range []string{"80,x", "x", "80-y", "5173,,80"} {
+		got, err := PortsBackend(bad)
+		if msg.NamesOf(err) != `port_invalid value="`+bad+`"` || len(got.Ranges) != 0 {
+			t.Errorf("PortsBackend(%q) = %+v, %v", bad, got, msg.NamesOf(err))
+		}
+	}
+}
+
+// A VM whose state lists a port that isn't one doesn't start.
+func TestStartBadPorts(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	e, f, _ := upEnv(t, allNative())
+	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "5173"})
+	if err := st.Set(KeyPorts, "5173,x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.start(t.Context(), f, st, backend.Confinement{}); msg.NamesOf(err) != `port_invalid value="5173,x"` {
+		t.Errorf("start = %v", msg.NamesOf(err))
 	}
 }

@@ -40,6 +40,8 @@ How the forwarder logs in, and when it ends, differs by backend, as the Ports se
 
 The forwarder runs as a hidden devvm command, one process for each VM. devvm starts it after each start of the VM and again with the new ports when you change a running VM's ports, and `devvm stop` stops it. devvm keeps which ports a VM forwards in its own record for the VM, so `devvm ports` changes that record and never the backend's config. The forwarder's log is `<vm>.ports.log` beside that record.
 
+devvm reads every list of ports the same way, whether it comes from `--ports`, the VM's state or the backend's record. Each entry is a port from 1 to 65535 or a range of them, such as `8000-8010`. When the VM's state holds a list that devvm can't read this way, such as a file edited by hand, the VM doesn't start and devvm names the value it couldn't read with `port_invalid`, so a bad entry never becomes a port the VM didn't ask for.
+
 | Backend | Process | Ports record | Log |
 | --- | --- | --- | --- |
 | Lima | `devvm _lima-ports` | `~/.local/share/devvm/lima-vms/<vm>.ports`, which holds `all`, `none` or a list | `~/.local/share/devvm/lima-vms/<vm>.ports.log` |

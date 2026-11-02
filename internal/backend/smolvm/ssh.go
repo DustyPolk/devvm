@@ -48,13 +48,14 @@ func (s *Smolvm) sshKey(vm string) string {
 // every VM's), else the one it had while that's free, else a new one;
 // never one of the VM's listed ports, which its forwarder takes.
 func (s *Smolvm) sshForward(ctx context.Context, vm string, c backend.Confinement, r record) (int, error) {
+	listed := backend.Ports{Ranges: r.Listed}
 	if c.SSHPort > 0 {
-		if lists(r.Listed, c.SSHPort) {
+		if listed.Has(c.SSHPort) {
 			return 0, msg.SmolvmSSHPortForwarded(strconv.Itoa(c.SSHPort), vm)
 		}
 		return c.SSHPort, nil
 	}
-	if r.SSHPort > 0 && !lists(r.Listed, r.SSHPort) && s.PortFree(ctx, r.SSHPort) {
+	if r.SSHPort > 0 && !listed.Has(r.SSHPort) && s.PortFree(ctx, r.SSHPort) {
 		return r.SSHPort, nil
 	}
 	for range 20 {
@@ -62,21 +63,11 @@ func (s *Smolvm) sshForward(ctx context.Context, vm string, c backend.Confinemen
 		if err != nil {
 			return 0, err
 		}
-		if !lists(r.Listed, p) {
+		if !listed.Has(p) {
 			return p, nil
 		}
 	}
 	return 0, errors.New("smolvm: no free port on the host's loopback")
-}
-
-// lists reports whether one of the ranges has the port.
-func lists(rs []backend.PortRange, port int) bool {
-	for _, r := range rs {
-		if r.From <= port && port <= r.To {
-			return true
-		}
-	}
-	return false
 }
 
 // sshForwardSpec is -p's value for a VM's ssh forward.
