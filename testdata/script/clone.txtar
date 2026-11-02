@@ -49,7 +49,7 @@ stderr '^devvm: uncommitted_not_copied branch=main dir=/\S*/web remote=devvm$'
 ! stderr 'git_protect|ssh_remote_hint'
 stub_calls
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] '
-stdout '^ssh -F /\S*/config/devvm/ssh_config devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
+stdout '^ssh -F /\S*/config/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/\S*/config/devvm/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o ForwardAgent=no -o ClearAllForwardings=yes devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! stdout chflags
 exec sh -c 'cat "$VMS"/devvm-web-*'

@@ -20,13 +20,13 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
@@ -189,7 +189,7 @@ func (p *Protector) ignoreSubmodules(ctx context.Context, on bool) error {
 		args = []string{"config", "--file", cfg, "diff.ignoreSubmodules", "all"}
 	}
 	// --unset fails when there's nothing to take out.
-	if err := exec.CommandContext(ctx, "git", args...).Run(); err != nil && on { //nolint:gosec // devvm's own arguments
+	if err := hostgit.Command(ctx, args...).Run(); err != nil && on {
 		return msg.GitConfigFailed(cfg)
 	}
 	return nil
@@ -387,9 +387,10 @@ func isLink(path string) bool {
 
 func isFile(path string) bool { fi, err := os.Stat(path); return err == nil && fi.Mode().IsRegular() }
 
-// git runs git and returns its output; nothing when it fails.
+// git runs git on the host (hostgit) and returns its output; nothing when
+// it fails.
 func git(ctx context.Context, args ...string) []byte {
-	out, err := exec.CommandContext(ctx, "git", args...).Output() //nolint:gosec // devvm's own arguments
+	out, err := hostgit.Output(ctx, args...)
 	if err != nil {
 		return nil
 	}

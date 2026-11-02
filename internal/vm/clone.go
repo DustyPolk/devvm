@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os"
 	"os/exec"
 	"path"
 	"regexp"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
@@ -58,9 +58,10 @@ func isClone(st *state.VM) bool { return st.Get(KeyMode) == ModeClone }
 // devvm's ssh config, which never changes, and the clone's path.
 func cloneURL(vm, dir string) string { return vm + ":" + dir }
 
-// hostGit runs git in dir on the host and returns its output, trimmed.
+// hostGit runs git in dir on the host (hostgit) and returns its output,
+// trimmed.
 func hostGit(ctx context.Context, dir string, args ...string) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...).Output() //nolint:gosec // devvm's own arguments
+	out, err := hostgit.Output(ctx, append([]string{"-C", dir}, args...)...)
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -82,11 +83,17 @@ func checkCloneRepo(ctx context.Context, dir string) error {
 	return nil
 }
 
-// gitSSH is host git run in dir with ssh reading devvm's ssh config only,
-// whose entries check each VM's own host keys.
-func (e clones) gitSSH(ctx context.Context, dir string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...) //nolint:gosec // devvm's own arguments
-	cmd.Env = append(os.Environ(), "GIT_SSH_COMMAND=ssh -F "+shellQuote(e.Dirs.SSHConfig()))
+// gitSSH is host git (hostgit) run in dir with ssh reading devvm's ssh
+// config only, for vm. Whatever host the repo's config rewrites vm's URL
+// to (url.*.insteadOf, remote.URL.url), ssh trusts only the host key
+// devvm pinned for vm itself (HostKeyAlias), forwards nothing (no agent,
+// no ports), and never asks on the terminal (BatchMode), so a VM's sshd
+// can't prompt for a password.
+func (e clones) gitSSH(ctx context.Context, vm, dir string, args ...string) *exec.Cmd {
+	cmd := hostgit.Command(ctx, append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F "+shellQuote(e.Dirs.SSHConfig())+" -o BatchMode=yes"+
+		" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="+shellQuote(e.Dirs.KnownHosts())+" -o GlobalKnownHostsFile=/dev/null"+
+		" -o HostKeyAlias="+shellQuote(vm)+" -o ForwardAgent=no -o ClearAllForwardings=yes")
 	return cmd
 }
 
@@ -116,7 +123,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 		return backend.Logged(msg.CloneSeedFailed(vm))
 	}
 	e.Info(msg.CopyingBranches())
-	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, dir, "push", "-q", cloneURL(vm, dir), "--all")); err != nil {
+	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, vm, dir, "push", "-q", "--no-verify", "--no-recurse-submodules", "--no-signed", cloneURL(vm, dir), "--all")); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -139,7 +146,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 	} else if !ok {
 		e.Warn(msg.FetchUntil(e.Dirs.SSHConfig(), remote))
 	}
-	if dirty, _ := hostGit(ctx, dir, "status", "--porcelain", "--untracked-files=no"); dirty != "" {
+	if dirty, _ := hostgit.Status(ctx, dir, "--porcelain", "--untracked-files=no").Output(); len(bytes.TrimSpace(dirty)) > 0 {
 		e.Warn(msg.UncommittedNotCopied(branch, dir, remote))
 	}
 	e.Info(msg.CloneReady(branch, remote))
@@ -392,13 +399,13 @@ func (e clones) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfe
 	if err := e.sshConfig().Write(ctx); err != nil {
 		return err
 	}
-	args := []string{"fetch", "--no-tags", cloneURL(vm, dir)}
+	args := []string{"fetch", "--no-tags", "--no-recurse-submodules", cloneURL(vm, dir)}
 	saved := make([]string, len(good))
 	for i, br := range good {
 		saved[i] = prefix + "/" + br
 		args = append(args, "refs/heads/"+br+":refs/heads/"+saved[i])
 	}
-	if err := e.LoggedCmd(ctx, msg.Fetching(prefix), e.gitSSH(ctx, dir, args...)); err != nil {
+	if err := e.LoggedCmd(ctx, msg.Fetching(prefix), e.gitSSH(ctx, vm, dir, args...)); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -509,7 +516,7 @@ func (e clones) saveFetched(ctx context.Context, dir, remote string) error {
 	if len(saved) == 0 {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "update-ref", "--stdin") //nolint:gosec // devvm's own arguments
+	cmd := hostgit.Command(ctx, "-C", dir, "update-ref", "--stdin")
 	cmd.Stdin = strings.NewReader(input.String())
 	if err := cmd.Run(); err != nil {
 		return err

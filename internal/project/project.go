@@ -12,12 +12,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
 
+	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/platform"
 )
 
@@ -328,8 +328,7 @@ func SetIDFiles(dir string) []SetIDFile {
 // SSHRemote reports whether dir's repo fetches origin over SSH, which a VM
 // without an SSH agent can't.
 func SSHRemote(ctx context.Context, dir string) bool {
-	out, err := exec.CommandContext(ctx, "git", "config", "--file", //nolint:gosec // devvm's own arguments
-		filepath.Join(dir, ".git", "config"), "--get", "remote.origin.url").Output()
+	out, err := hostgit.Output(ctx, "config", "--file", filepath.Join(dir, ".git", "config"), "--get", "remote.origin.url")
 	if err != nil {
 		return false
 	}

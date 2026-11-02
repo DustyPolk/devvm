@@ -9,13 +9,13 @@ import (
 	"io/fs"
 	"net/netip"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/secrets"
@@ -437,7 +437,7 @@ func hostTZ() string {
 
 // gitConfig is git's setting for key in dir, or "".
 func gitConfig(ctx context.Context, dir, key string) string {
-	cmd := exec.CommandContext(ctx, "git", "config", "--get", key) //nolint:gosec // devvm's own arguments
+	cmd := hostgit.Command(ctx, "config", "--get", key)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {

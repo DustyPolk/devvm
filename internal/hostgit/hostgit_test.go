@@ -1,0 +1,287 @@
+package hostgit
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+)
+
+// git runs plain git in dir, failing the test if it fails, and returns
+// its output, trimmed.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...) //nolint:gosec // the test's own
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// repo is a new repo with a commit, git given a config and identity of
+// its own.
+func repo(t *testing.T) string {
+	t.Helper()
+	for k, v := range map[string]string{
+		"GIT_CONFIG_GLOBAL": os.DevNull, "GIT_CONFIG_NOSYSTEM": "1",
+		"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+	} {
+		t.Setenv(k, v)
+	}
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	git(t, dir, "commit", "-q", "--allow-empty", "-m", "one")
+	return dir
+}
+
+// marker is a program that touches a file and passes its input through,
+// and that file, which it hasn't touched yet.
+func marker(t *testing.T) (prog, ran string) {
+	t.Helper()
+	d := t.TempDir()
+	ran, prog = filepath.Join(d, "ran"), filepath.Join(d, "prog")
+	if err := os.WriteFile(prog, []byte("#!/bin/sh\ntouch '"+ran+"'\ncat\n"), 0o700); err != nil { //nolint:gosec // the test's own script
+		t.Fatal(err)
+	}
+	return prog, ran
+}
+
+// ranOnce reports whether the marker's file is there, and removes it.
+func ranOnce(ran string) bool { return os.Remove(ran) == nil }
+
+// Command's git never asks on the terminal and never runs the repo's
+// fsmonitor, which a repo's config can point at any program.
+func TestCommandNoFsmonitor(t *testing.T) {
+	dir := repo(t)
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+	cmd := Command(t.Context(), "status")
+	if !slices.Contains(cmd.Env, "GIT_TERMINAL_PROMPT=0") || slices.Contains(cmd.Env, "GIT_TERMINAL_PROMPT=1") {
+		t.Errorf("env %q", cmd.Env)
+	}
+	prog, ran := marker(t)
+	git(t, dir, "config", "core.fsmonitor", prog)
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", "f")
+	if !ranOnce(ran) {
+		t.Fatal("plain git didn't run the fsmonitor")
+	}
+	if out, err := Output(t.Context(), "-C", dir, "status", "--porcelain"); err != nil || string(out) != "A  f\n" {
+		t.Fatalf("status %q, %v", out, err)
+	}
+	if ranOnce(ran) {
+		t.Error("ran the repo's fsmonitor")
+	}
+}
+
+// Command's git runs none of the repo's hooks: reference-transaction (any
+// ref update: update-ref, fetch, remote remove) and pre-push, from .git/hooks
+// or a core.hooksPath.
+func TestCommandNoHooks(t *testing.T) {
+	dir := repo(t)
+	prog, ran := marker(t)
+	hooks := filepath.Join(dir, ".git", "hooks")
+	for _, h := range []string{"reference-transaction", "pre-push"} {
+		if err := os.Symlink(prog, filepath.Join(hooks, h)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bare := t.TempDir()
+	git(t, bare, "init", "-q", "--bare")
+	git(t, dir, "update-ref", "refs/heads/plain", "HEAD")
+	if !ranOnce(ran) {
+		t.Fatal("plain git didn't run reference-transaction")
+	}
+	git(t, dir, "push", "-q", bare, "main")
+	if !ranOnce(ran) {
+		t.Fatal("plain git didn't run pre-push")
+	}
+	for _, hp := range []string{"", hooks} {
+		if hp != "" {
+			git(t, dir, "config", "core.hooksPath", hp)
+		}
+		if out, err := Command(t.Context(), "-C", dir, "update-ref", "refs/heads/hardened", "HEAD").CombinedOutput(); err != nil {
+			t.Fatalf("update-ref: %v\n%s", err, out)
+		}
+		if ranOnce(ran) {
+			t.Errorf("hooksPath %q: ran reference-transaction", hp)
+		}
+		// pre-push as git runs it for a push, without one.
+		_ = Command(t.Context(), "-C", dir, "hook", "run", "pre-push").Run()
+		if ranOnce(ran) {
+			t.Errorf("hooksPath %q: ran pre-push", hp)
+		}
+	}
+	// Over ssh only: a push to a path or a file:// URL fails.
+	for _, url := range []string{bare, "file://" + bare, "ext::sh -c true"} {
+		if err := Command(t.Context(), "-C", dir, "push", "-q", url, "main").Run(); err == nil {
+			t.Errorf("pushed to %s", url)
+		}
+	}
+	if ranOnce(ran) {
+		t.Error("a refused push ran a hook")
+	}
+}
+
+// Command's git runs none of the hooks a repo's config names
+// (hook.NAME.command and event), which git 2.54 and newer run.
+func TestCommandNoConfigHooks(t *testing.T) {
+	dir := repo(t)
+	prog, ran := marker(t)
+	git(t, dir, "config", "hook.mine.command", prog)
+	git(t, dir, "config", "hook.mine.event", "reference-transaction")
+	git(t, dir, "config", "--add", "hook.mine.event", "pre-push")
+	git(t, dir, "config", "hook.other.thing.command", prog)
+	git(t, dir, "config", "hook.other.thing.event", "pre-push")
+	git(t, dir, "update-ref", "refs/heads/plain", "HEAD")
+	if !ranOnce(ran) {
+		t.Skip("this git runs no hooks a config names")
+	}
+	if out, err := Command(t.Context(), "-C", dir, "update-ref", "refs/heads/hardened", "HEAD").CombinedOutput(); err != nil {
+		t.Fatalf("update-ref: %v\n%s", err, out)
+	}
+	_ = Command(t.Context(), "-C", dir, "hook", "run", "pre-push").Run()
+	if ranOnce(ran) {
+		t.Error("ran a hook the repo's config names")
+	}
+}
+
+// Command's git fetches nothing for a repo that says it's a partial
+// clone, so neither its core.sshCommand nor ssh runs for an object it
+// lacks.
+func TestCommandNoLazyFetch(t *testing.T) {
+	dir := repo(t)
+	_, ran := marker(t)
+	// An ssh that says it ran and fails, reading nothing.
+	prog := filepath.Join(t.TempDir(), "ssh")
+	if err := os.WriteFile(prog, []byte("#!/bin/sh\ntouch '"+ran+"'\nexit 1\n"), 0o700); err != nil { //nolint:gosec // the test's own script
+		t.Fatal(err)
+	}
+	for _, kv := range [][2]string{
+		{"core.repositoryformatversion", "1"},
+		{"extensions.partialClone", "origin"},
+		{"remote.origin.url", "ssh://example.invalid/r"},
+		{"remote.origin.promisor", "true"},
+		{"core.sshCommand", prog},
+	} {
+		git(t, dir, "config", kv[0], kv[1])
+	}
+	missing := "0123456789abcdef0123456789abcdef01234567"
+	_ = exec.CommandContext(t.Context(), "git", "-C", dir, "cat-file", "-e", missing).Run() //nolint:gosec // the test's own
+	if !ranOnce(ran) {
+		t.Fatal("plain git didn't fetch lazily with the repo's ssh")
+	}
+	if err := Command(t.Context(), "-C", dir, "cat-file", "-e", missing).Run(); err == nil {
+		t.Error("found a missing object")
+	}
+	if ranOnce(ran) {
+		t.Error("ran the repo's core.sshCommand")
+	}
+}
+
+// Command's git ignores the git variables of devvm's environment, such
+// as a GIT_DIR naming another repo.
+func TestCommandIgnoresGitEnv(t *testing.T) {
+	dir, other := repo(t), repo(t)
+	resolved := func(p string) string { r, _ := filepath.EvalSymlinks(p); return r }
+	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
+	t.Setenv("GIT_WORK_TREE", other)
+	if got := git(t, dir, "rev-parse", "--absolute-git-dir"); resolved(got) != resolved(filepath.Join(other, ".git")) {
+		t.Fatalf("plain git: %s", got)
+	}
+	out, err := Output(t.Context(), "-C", dir, "rev-parse", "--absolute-git-dir")
+	if got := strings.TrimSpace(string(out)); err != nil || resolved(got) != resolved(filepath.Join(dir, ".git")) {
+		t.Errorf("rev-parse %q, %v", got, err)
+	}
+	// And relative PATH folders, which git would look in from the repo.
+	if env := environ([]string{"GIT_DIR=x", "GIT_CONFIG_COUNT=1", "HOME=/h", "PATH=/p:.:node_modules/.bin::/q"}); !slices.Equal(env, []string{"HOME=/h", "PATH=/p:/q"}) {
+		t.Errorf("environ = %q", env)
+	}
+}
+
+// Status runs none of the repo's filter drivers on a file whose stat
+// changed, whatever its name or kind, a required one included, and
+// shows the file unchanged.
+func TestStatusNoFilters(t *testing.T) {
+	for _, c := range []struct{ name, kind, required string }{
+		{"x", "clean", ""}, {"a.b", "process", ""}, {"lfs", "clean", "true"}, {"a=b", "clean", ""}, {"Up", "clean", ""},
+	} {
+		t.Run(c.name+"."+c.kind, func(t *testing.T) {
+			dir := repo(t)
+			prog, ran := marker(t)
+			if err := os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("f filter="+c.name+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			git(t, dir, "add", ".")
+			git(t, dir, "commit", "-q", "-m", "two")
+			git(t, dir, "config", "filter."+c.name+"."+c.kind, prog)
+			if c.required != "" {
+				git(t, dir, "config", "filter."+c.name+".required", c.required)
+			}
+			touch := func(n int64) {
+				at := time.Unix(1_600_000_000+n, 0) // a new mtime: git hashes it again
+				if err := os.Chtimes(filepath.Join(dir, "f"), at, at); err != nil {
+					t.Fatal(err)
+				}
+			}
+			touch(1)
+			_ = exec.CommandContext(t.Context(), "git", "-C", dir, "status", "--porcelain").Run() //nolint:gosec // the test's own
+			if !ranOnce(ran) {
+				t.Fatal("plain git status didn't run the filter")
+			}
+			touch(2)
+			out, err := Status(t.Context(), dir, "--porcelain").Output()
+			if err != nil || len(out) != 0 {
+				t.Errorf("status %q, %v", out, err)
+			}
+			if ranOnce(ran) {
+				t.Error("ran the repo's filter")
+			}
+		})
+	}
+}
+
+// Status doesn't enter a submodule, whose own config names filters of
+// its own.
+func TestStatusNoSubmodules(t *testing.T) {
+	dir, sub := repo(t), repo(t)
+	prog, ran := marker(t)
+	if err := os.WriteFile(filepath.Join(sub, ".gitattributes"), []byte("f filter=s\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "f"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, sub, "add", ".")
+	git(t, sub, "commit", "-q", "-m", "two")
+	git(t, dir, "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "s")
+	git(t, dir, "commit", "-q", "-m", "sub")
+	git(t, filepath.Join(dir, "s"), "config", "filter.s.clean", prog)
+	at := time.Unix(1_600_000_001, 0)
+	touch := func() {
+		if err := os.Chtimes(filepath.Join(dir, "s", "f"), at, at); err != nil {
+			t.Fatal(err)
+		}
+		at = at.Add(time.Second)
+	}
+	touch()
+	_ = exec.CommandContext(t.Context(), "git", "-C", dir, "status", "--porcelain").Run() //nolint:gosec // the test's own
+	if !ranOnce(ran) {
+		t.Fatal("plain git status didn't run the submodule's filter")
+	}
+	touch()
+	if out, err := Status(t.Context(), dir, "--porcelain").Output(); err != nil || len(out) != 0 {
+		t.Errorf("status %q, %v", out, err)
+	}
+	if ranOnce(ran) {
+		t.Error("ran the submodule's filter")
+	}
+}

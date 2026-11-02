@@ -120,7 +120,7 @@ func devvm() rules {
 			},
 			{
 				name: "leaves import nothing of devvm's",
-				from: []string{"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild"},
+				from: []string{"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit"},
 				to:   []string{"..."},
 			},
 			{
