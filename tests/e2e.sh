@@ -3201,6 +3201,25 @@ smolnet_fail_closed() {
   ! env -u SMOLVM_INTERCEPTOR_TOKEN SSH_AUTH_SOCK=/dev/null/e2e-no-agent SMOLVM_USAGE=0 smolvm machine start --name "$1" >"$work/e" 2>&1 &&
     [[ $(smol_status "$1") != running ]] && grep -qi interceptor "$work/e"
 }
+# smolnet_dockerd_stale VM DIR: Docker's pid file names another process (dockerd gone, its pid taken)
+# and its run folder is left over, when a launch restarts Docker's daemon (devvm's block in its
+# settings, /etc/conf.d/docker, gone, so the launch writes it again: Alpine's, which has that file):
+# the other process lives, and dockerd starts again, its run folder new.
+smolnet_dockerd_stale() { local out
+  out=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c '
+    pid=$(cat /run/docker.pid) && kill "$pid" && i=0
+    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
+    nohup sleep 900 >/dev/null 2>&1 </dev/null & echo $! > /run/docker.pid
+    mkdir -p /run/docker && touch /run/docker/e2e-stale
+    sed -i "/^# devvm-proxy begin/,/^# devvm-proxy end/d" /etc/conf.d/docker
+    cat /run/docker.pid' </dev/null) || return 1
+  (cd "$2" && printf 'exit\n' | "${U[@]}" "$D" >"$work/last.log" 2>&1) || { tail -5 "$work/last.log"; return 1; }
+  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c '
+    echo "the other process: $(cat /proc/'"$out"'/comm 2>/dev/null || echo gone); pid file: $(cat /run/docker.pid)"
+    [ "$(cat /proc/'"$out"'/comm 2>/dev/null)" = sleep ] && kill '"$out"' && [ ! -e /run/docker/e2e-stale ] || exit 1
+    i=0; while ! docker info >/dev/null 2>&1 && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
+    [ "$(cat "/proc/$(cat /run/docker.pid)/comm")" = dockerd ] && docker info >/dev/null' </dev/null
+}
 # smolnet_widened VM DIR: its allow list widened while it runs (smolvm machine update): devvm shows
 # it unenforced, and its next launch stops it; the one after starts it confined again.
 smolnet_widened() {
@@ -3353,6 +3372,8 @@ check "a VM --from alpine:3 with the docker layer and network policy is made, an
   { tail -5 '$work/last.log'; false; }"
 check "... its Docker, restarted by devvm, pulls through the proxy" in_smol "$va" \
   'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
+check "... a launch restarting it stops no other process its stale pid file names, and clears its run folder" \
+  smolnet_dockerd_stale "$va" "$na"
 (cd "$na" && quiet "${U[@]}" "$D" rm --force --no-export)
 kill "$listener" 2>/dev/null; [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null; listener="" udp_listener=""
 rm -f "$work/listener.auth"

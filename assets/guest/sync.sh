@@ -361,11 +361,13 @@ if command -v dockerd >/dev/null; then
     elif [[ -e /run/openrc/softlevel ]]; then sudo rc-service docker restart >/dev/null
     else
       # No init system (smolvm): stopped, then started as assets/container/services.sh starts it, with
-      # Docker's settings read (devvm's block) and the proxy variables sudo keeps.
+      # Docker's settings read (devvm's block) and the proxy variables sudo keeps. A pid file whose
+      # process isn't dockerd (a pid reused since) names nothing to stop, and Docker's run folder goes.
       sudo sh -c 'pid=$(cat /run/docker.pid 2>/dev/null || true)
-        if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then
+        if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = dockerd ] && kill "$pid" 2>/dev/null; then
           i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
         fi
+        rm -rf /run/docker.pid /run/docker
         [ ! -f /etc/conf.d/docker ] || . /etc/conf.d/docker
         mkdir -p /var/log
         nohup dockerd -p /run/docker.pid >/var/log/dockerd.log 2>&1 </dev/null &'
