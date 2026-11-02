@@ -317,23 +317,32 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 	return l.SetSize(ctx, vm, spec.Size)
 }
 
-// Stop stops a VM; a stopped one is left as it is.
+// Stop stops a VM; a stopped one is left as it is. One Lima reports as
+// broken, such as a VM whose start was cut short before its hostagent
+// answers, is stopped with --force, as limactl stop refuses it.
 func (l *Lima) Stop(ctx context.Context, vm string) error {
 	in, err := l.inspect(ctx, vm)
 	if err != nil {
 		return err
 	}
-	if backend.Status(in.Status) == backend.StatusStopped {
-		l.Forwards.Stop(vm)
-		return nil
+	status := backend.Status(in.Status)
+	if status != backend.StatusStopped {
+		var opts []string
+		if status == statusBroken {
+			opts = []string{"--force"}
+		}
+		err = l.stop(ctx, vm, opts...)
 	}
-	err = l.stop(ctx, vm)
 	l.Forwards.Stop(vm)
 	return err
 }
 
-func (l *Lima) stop(ctx context.Context, vm string) error {
-	if err := l.Runner.Run(ctx, msg.Stopping(vm), l.limactl(ctx, "stop", vm)); err != nil {
+// statusBroken is how Lima reports a VM whose hostagent doesn't answer.
+const statusBroken backend.Status = "Broken"
+
+func (l *Lima) stop(ctx context.Context, vm string, opts ...string) error {
+	args := slices.Concat([]string{"stop"}, opts, []string{vm})
+	if err := l.Runner.Run(ctx, msg.Stopping(vm), l.limactl(ctx, args...)); err != nil {
 		return backend.Logged(msg.StopFailed(vm))
 	}
 	return nil

@@ -1604,6 +1604,9 @@ other = "creating {{.vm}} from {{.image}}"
 [interrupted_vm]
 other = "interrupted: deleting {{.vm}}, which wasn't ready yet"
 
+[interrupted_start]
+other = "interrupted: stopping {{.vm}}, which hadn't finished starting with its network policy"
+
 [ssh_remote_hint]
 other = "The origin remote uses SSH, but {{.vm}} has no SSH agent, so git over SSH won't work in it. Run devvm ssh-agent on to forward yours."
 

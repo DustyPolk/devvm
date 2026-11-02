@@ -1,0 +1,38 @@
+# A start with network policy that's interrupted while its backend waits
+# for the VM (Lima's start, its hostagent running the VM) stops the VM and
+# its proxy: it never runs on without the record of its confined start.
+# What tools add saved stays, and devvm ls shows the policy on.
+
+project net
+exec devvm --network-policy --no-git-protect base
+vm_name NET net
+exec devvm stop
+exec sh -c ': > "$STUB_LOG" && echo "$NET" > "$STUB_DIR/start-hangs-running"'
+! exec devvm tools add claude &u&
+wait_file $STUB_DIR/hanging
+kill -INT u
+wait u
+stdout '^==> interrupted_start vm=devvm-net-[0-9a-f]{14}$'
+rm $STUB_DIR/start-hangs-running
+stub_calls
+stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\n(.*\n)*limactl stop devvm-net-[0-9a-f]{14}$'
+exec sh -c 'grep "^$NET " "$STUB_DIR/instances"'
+stdout ' Stopped$'
+exec sh -c 'pgrep -f "[_]proxy .* -vm $NET " || echo none'
+stdout '^none$'
+catg $VMS/devvm-net-*
+stdout '^net=on$'
+stdout '^image=claude$'
+stdout '^tools=claude-\S+$'
+exec devvm ls --json
+stdout '"net": "on"'
+! stdout unenforced
+
+# The next launch starts it confined, unasked. (Its hostagent here: the
+# test's runner, which runs on.)
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
+exec devvm
+! stderr net_unenforced
+exec devvm ls --json
+stdout '"status": "Running"'
+stdout '"net": "on"'

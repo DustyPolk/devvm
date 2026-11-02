@@ -17,7 +17,9 @@
 # and shell its agent to $STUB_DIR/shell-agent; and
 # with $STUB_DIR/start-fails it fails, leaving the VM running (a degraded
 # start), and with $STUB_DIR/start-hangs it hangs (touching
-# $STUB_DIR/hanging first). clone fails with $STUB_DIR/clone-fails,
+# $STUB_DIR/hanging first); with $STUB_DIR/start-hangs-running, for a
+# VM whose name contains its text, it hangs once the VM runs and has its
+# ha.pid, as Lima's start waits for a VM's ssh while its hostagent runs it. clone fails with $STUB_DIR/clone-fails,
 # leaving its instance (a partial clone), and delete with
 # $STUB_DIR/delete-fails, after deleting it. shell fails with $STUB_DIR/shell-fails (or when its
 # arguments contain $STUB_DIR/shell-fails-on's text) and hangs with
@@ -134,6 +136,10 @@ case ${1:-} in
     ha=$PPID
     [[ ! -f $STUB_DIR/hostagent ]] || ha=$(cat "$STUB_DIR/hostagent")
     echo "$ha" > "$LIMA_HOME/${names[0]}/ha.pid"
+    if [[ -e $STUB_DIR/start-hangs-running && ${names[0]} == *"$(cat "$STUB_DIR/start-hangs-running")"* ]]; then
+      : > "$STUB_DIR/hanging"
+      exec sleep 30
+    fi
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/start-agent-${names[0]}"
     cfg="$LIMA_HOME/${names[0]}/ssh.config"
     [[ -f $cfg ]] || printf 'Host lima-%s\n  IdentityFile "%s/_config/user"\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  NoHostAuthenticationForLocalhost yes\n  PreferredAuthentications publickey\n  BatchMode yes\n  IdentitiesOnly yes\n  User stub\n  ControlMaster auto\n  ControlPath "%s/ssh.sock"\n  ControlPersist yes\n  PermitLocalCommand yes\n  LocalCommand touch /x/ran\n  Hostname 127.0.0.1\n  Port 60022\n' \

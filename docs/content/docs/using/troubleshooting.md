@@ -98,6 +98,8 @@ devvm finds its folders from `HOME`, so it stops when `HOME` is empty or isn't a
 
 On the VM's next launch, devvm offers in a terminal to restart it confined, and if you decline, it warns and goes on. Without a terminal, devvm stops the VM instead, and the next `devvm` starts it confined ([the self-check](../internals/network.md#the-self-check)).
 
+If you press Ctrl+C while devvm starts a VM with network policy, devvm stops the VM and its proxy before it exits, so the VM never runs on without the proxy, and the next `devvm` starts both again confined.
+
 ## A request is blocked
 
 With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm network log --blocked` on this machine, or `devvm-why` in the VM. `devvm network log --blocked` also shows the `devvm network allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).

@@ -2209,6 +2209,19 @@ else
   skip "... and the VM works: ssh, devvm's forwarder (on loopback alone), the proxy, the self-check" "Seatbelt is macOS's"
   skip "the next start puts Lima's ignore rules back" "Seatbelt is macOS's"
 fi
+# Ctrl+C while Lima's start waits for the VM, its hostagent running it: devvm stops the VM and its
+# proxy, so it never runs without the record of its confined start, and ls shows its policy on.
+(cd "$n" && HOME=$nh "$D" stop </dev/null >/dev/null 2>&1)
+(cd "$n" && exec env HOME="$nh" CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake DEVVM_MESSAGES=names "$D" </dev/null >"$work/int.log" 2>&1) &
+ip=$!
+for _ in $(seq 300); do [[ -S $DEVVM_LIMA_HOME/$vm/ha.sock ]] && break; sleep 0.2; done
+kill -INT "$ip" 2>/dev/null
+wait "$ip"; rc=$?
+check "Ctrl+C during its start stops it and its proxy, and ls shows its policy on" bash -c "
+  [[ $rc -eq 130 ]] && grep -qx '==> interrupted_start vm=$vm' '$work/int.log' && [[ \$(status_of '$vm') == Stopped ]] &&
+  ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  '$D' ls | grep -Eq '^$vm +Stopped +[a-z+]*claude[a-z+]* +off +on +- +lima '"
+(cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" >"$work/last.log" 2>&1)
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
   '$D' ls | grep -Eq '^$vm +Running +[a-z+]*claude[a-z+]* +off +on +- +lima ' &&
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&

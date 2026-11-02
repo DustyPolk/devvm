@@ -1659,6 +1659,11 @@ func InterruptedImage(vm string) M {
 	return M{id: "interrupted_image", vals: []val{{"vm", vm}}}
 }
 
+// InterruptedStart is [interrupted_start]: "interrupted: stopping {{.vm}}, which hadn't finished starting with its network policy"
+func InterruptedStart(vm string) M {
+	return M{id: "interrupted_start", vals: []val{{"vm", vm}}}
+}
+
 // InterruptedVM is [interrupted_vm]: "interrupted: deleting {{.vm}}, which wasn't ready yet"
 func InterruptedVM(vm string) M {
 	return M{id: "interrupted_vm", vals: []val{{"vm", vm}}}
@@ -3647,6 +3652,7 @@ var specs = map[string]spec{
 	"images_total":                     {fields: []string{"size"}},
 	"images_unused":                    {fields: []string{"size"}},
 	"interrupted_image":                {fields: []string{"vm"}},
+	"interrupted_start":                {fields: []string{"vm"}},
 	"interrupted_vm":                   {fields: []string{"vm"}},
 	"json_shows_only":                  {fields: []string{"command"}},
 	"kept":                             {fields: []string{"vm"}},

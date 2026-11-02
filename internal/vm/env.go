@@ -511,6 +511,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// sshd.
 	f := e.forwarding(b, st)
 	conf.Free, conf.HostKey = f.Free, f.HostKey
+	if conf.Net == backend.NetProxy {
+		defer e.AddCleanup(undoStart(e, b, vm))()
+	}
 	if err := b.Start(ctx, vm, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)
@@ -525,6 +528,24 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		start = ""
 	}
 	return conf, sshagent.RecordStart(st, mode, start)
+}
+
+// undoStart is a start's cleanup for a VM with network policy: an
+// interrupt can leave it running with its backend's start still waiting
+// for it, so without the record of its confined start (Confined), and
+// it stops the VM and its proxy. The next launch starts both again,
+// confined.
+func undoStart(e *Env, b backend.Backend, vm string) func(context.Context) {
+	return func(ctx context.Context) {
+		if !e.Interrupted() {
+			return
+		}
+		e.Info(msg.InterruptedStart(vm))
+		if err := b.Stop(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
+			e.Warn(msg.StopFailed(vm))
+		}
+		e.Proxy.Stop(vm)
+	}
 }
 
 // runningAgent is the SSH agent choice a running VM runs with: its

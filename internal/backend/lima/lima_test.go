@@ -643,6 +643,27 @@ func TestExecAndShell(t *testing.T) {
 	}
 }
 
+// Against the limactl stub: a VM Lima reports as broken (its start cut
+// short before its hostagent answers) is stopped with --force, which
+// limactl stop alone refuses.
+func TestStubStopBroken(t *testing.T) {
+	l, _, stubs := stubLima(t)
+	vm := "devvm-p-0123456789abcd"
+	stubs.Write(t, "instances", vm+" Broken\n")
+	if err := l.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range stubs.Calls(t) {
+		if c != "limactl list --json" {
+			got = append(got, c)
+		}
+	}
+	if want := []string{"limactl stop --force " + vm}; !slices.Equal(got, want) {
+		t.Errorf("calls %q, want %q", got, want)
+	}
+}
+
 // Against the limactl stub: VMs stop, start and go.
 func TestStubLifecycle(t *testing.T) {
 	l, _, stubs := stubLima(t)
