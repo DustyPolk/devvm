@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,6 +106,193 @@ github.com:22
 		if got, why := p.decide(c.host, c.port); got != c.want {
 			t.Errorf("decide(%s, %d) = %v (%s), want %v", c.host, c.port, got, why, c.want)
 		}
+	}
+}
+
+// ParsePolicy is strict: a line holds one rule, as devvm network allow takes it, a comment, or
+// nothing. Every other line is returned as not a rule, with its number, and the proxy skips it.
+func TestParsePolicy(t *testing.T) {
+	text := "# a comment\n" +
+		"\n" +
+		"example.com\n" +
+		"  *.github.com   # with a comment\n" +
+		"example.com:x\n" + // a port that isn't one: never a host named "example.com:x"
+		"api.example.com:0\n" +
+		"! bad.example.com\n" + // a space after the !
+		"!!worse.example.com\n" +
+		"a b\n" +
+		"*\n" +
+		"a*.example.com\n" +
+		"[::1]\n" +
+		"fe80::1%eth0\n" +
+		"x/y\n" +
+		"example.com:+22\n" +
+		"*.10.0.0.1\n" +
+		"a..example.com\n" +
+		"10.0.0.0/8:8080\n" +
+		"Example.ORG.\n" +
+		"\r\n" +
+		"last.example.com" // no newline at the end
+	type line struct {
+		n    int
+		text string
+		ok   bool
+	}
+	want := []line{
+		{3, "example.com", true},
+		{4, "*.github.com", true},
+		{5, "example.com:x", false},
+		{6, "api.example.com:0", false},
+		{7, "! bad.example.com", false},
+		{8, "!!worse.example.com", false},
+		{9, "a b", false},
+		{10, "*", false},
+		{11, "a*.example.com", false},
+		{12, "[::1]", false},
+		{13, "fe80::1%eth0", false},
+		{14, "x/y", false},
+		{15, "example.com:+22", false},
+		{16, "*.10.0.0.1", false},
+		{17, "a..example.com", false},
+		{18, "10.0.0.0/8:8080", true},
+		{19, "Example.ORG.", true},
+		{21, "last.example.com", true},
+	}
+	var got []line
+	for _, l := range ParsePolicy(text) {
+		got = append(got, line{l.N, l.Text, l.OK})
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("ParsePolicy =\n%v\nwant\n%v", got, want)
+	}
+	// Each line ParsePolicy takes is ValidRule's, and the other way round.
+	for _, l := range ParsePolicy(text) {
+		if ValidRule(l.Text) != l.OK {
+			t.Errorf("line %d %q: ParsePolicy %v, ValidRule %v", l.N, l.Text, l.OK, ValidRule(l.Text))
+		}
+	}
+}
+
+// The proxy reads its policy files through ParsePolicy: it skips each line that isn't a rule,
+// logging the file, the line's number and its text, and keeps the file's rules. A trailing dot
+// in a rule names the same host.
+func TestPolicySkipsBadLines(t *testing.T) {
+	var logged strings.Builder
+	old := logger.Writer()
+	logger.SetOutput(&logged)
+	t.Cleanup(func() { logger.SetOutput(old) })
+	f := filepath.Join(t.TempDir(), "policy")
+	must(t, os.WriteFile(f, []byte("**\nexample.com:x\n!example.org.\n!::ffff:10.0.0.0/104\n"), 0o600))
+	p := newPolicy([]string{f})
+	if ok, why := p.decide("example.org", 443); ok {
+		t.Errorf("example.org allowed (%s): the deny with a trailing dot was skipped", why)
+	}
+	for _, a := range []string{"10.0.0.1", "::ffff:10.0.0.1"} {
+		if !p.addrDenied(netip.MustParseAddr(a), 443) {
+			t.Errorf("%s isn't denied by the IPv4-mapped prefix", a)
+		}
+	}
+	if ok, why := p.decide("other.test", 443); !ok {
+		t.Errorf("other.test blocked: %s", why)
+	}
+	if want := f + `:2: not a rule, skipped: "example.com:x"`; !strings.Contains(logged.String(), want) {
+		t.Errorf("the log has no %q:\n%s", want, logged.String())
+	}
+}
+
+// A line that reads as a deny, starting with !, but isn't a rule makes the policy deny
+// everything, by name and by address, as a refusal no allow rule would lift, naming the file and
+// line; fixing the line lifts it.
+func TestPolicyBrokenDeny(t *testing.T) {
+	var logged strings.Builder
+	old := logger.Writer()
+	logger.SetOutput(&logged)
+	t.Cleanup(func() { logger.SetOutput(old) })
+	dir := t.TempDir()
+	good, f := filepath.Join(dir, "good"), filepath.Join(dir, "policy")
+	must(t, os.WriteFile(good, []byte("**\n10.0.0.0/8\n"), 0o600))
+	must(t, os.WriteFile(f, []byte("ok.test\n! bad.example.com # a space after the !\n"), 0o600))
+	p := newPolicy([]string{good, f})
+	for _, h := range []string{"bad.example.com", "other.test", "10.0.0.1"} {
+		ok, why, refused := p.verdict(h, 443)
+		if ok || !refused || !strings.Contains(why, f+":2 isn't a rule but reads as a deny") {
+			t.Errorf("%s: allowed %v, refused %v (%s)", h, ok, refused, why)
+		}
+	}
+	if !p.addrDenied(netip.MustParseAddr("10.0.0.1"), 443) || p.byName("ok.test", 443) {
+		t.Error("an address or a name still allowed past a broken deny")
+	}
+	if want := f + `:2: not a rule but reads as a deny, so everything is denied: "! bad.example.com"`; !strings.Contains(logged.String(), want) {
+		t.Errorf("the log has no %q:\n%s", want, logged.String())
+	}
+	// Through the proxy: 403, refused, with no allow command.
+	oldPol, oldOut, oldAuth := pol, logOut, proxyAuth
+	var events strings.Builder
+	pol, logOut, proxyAuth = p, &events, ""
+	t.Cleanup(func() { pol, logOut, proxyAuth = oldPol, oldOut, oldAuth })
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodConnect, "http://other.test:443", nil)
+	req.Host = "other.test:443"
+	w := httptest.NewRecorder()
+	handler(w, req)
+	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "network allow") || !strings.Contains(w.Body.String(), "refused") {
+		t.Errorf("answered %d %q", w.Code, w.Body.String())
+	}
+	if !strings.Contains(events.String(), `"refused":true`) {
+		t.Errorf("logged %s", events.String())
+	}
+	// An absolute-form request too.
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://other.test/x", nil)
+	w = httptest.NewRecorder()
+	handler(w, req)
+	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "network allow") {
+		t.Errorf("absolute form: answered %d %q", w.Code, w.Body.String())
+	}
+	if p.addrAllowed(netip.MustParseAddr("10.0.0.1"), 443) {
+		t.Error("an address rule passes the floor past a broken deny")
+	}
+	// Fixed, everything the rules allow is allowed again.
+	must(t, os.WriteFile(f, []byte("ok.test\n!bad.example.com\n"), 0o600))
+	later := time.Now().Add(2 * time.Second)
+	must(t, os.Chtimes(f, later, later))
+	if ok, why := p.decide("other.test", 443); !ok {
+		t.Errorf("other.test still blocked once the line was fixed: %s", why)
+	}
+	if ok, _ := p.decide("bad.example.com", 443); ok {
+		t.Error("bad.example.com allowed once its deny was fixed")
+	}
+}
+
+// A policy file that goes and comes back with the same mtime (renamed back, restored with its
+// times) is read again: its denies, a broken one too, hold again. A leading byte-order mark is
+// no part of the first line.
+func TestPolicyFileBack(t *testing.T) {
+	dir := t.TempDir()
+	f, away := filepath.Join(dir, "policy"), filepath.Join(dir, "away")
+	must(t, os.WriteFile(f, []byte("\xef\xbb\xbf!bad.test\n**\n"), 0o600))
+	p := newPolicy([]string{f})
+	if ok, _ := p.decide("bad.test", 443); ok {
+		t.Fatal("bad.test allowed: the byte-order mark hid its deny")
+	}
+	must(t, os.Rename(f, away))
+	if ok, _ := p.decide("bad.test", 443); ok {
+		t.Fatal("bad.test allowed with no policy file")
+	}
+	must(t, os.Rename(away, f))
+	if ok, why := p.decide("bad.test", 443); ok {
+		t.Errorf("bad.test allowed once its file came back (%s)", why)
+	}
+	// The same with a broken deny, its file back with its old mtime.
+	must(t, os.WriteFile(f, []byte("**\n! bad.test\n"), 0o600))
+	later := time.Now().Add(2 * time.Second)
+	must(t, os.Chtimes(f, later, later))
+	if ok, _, refused := p.verdict("other.test", 443); ok || !refused {
+		t.Fatal("other.test allowed past a broken deny")
+	}
+	must(t, os.Rename(f, away))
+	p.decide("other.test", 443)
+	must(t, os.Rename(away, f))
+	if ok, _, refused := p.verdict("other.test", 443); ok || !refused {
+		t.Error("other.test allowed once the file with a broken deny came back")
 	}
 }
 
@@ -321,6 +509,21 @@ func TestValidRule(t *testing.T) {
 		{"fe80::1%eth0", false},
 		{"x/y", false},
 		{"a\nb", false},
+		{"example.com.", true},
+		{"example.com:+22", false},
+		{"example.com:", false},
+		{"*.10.0.0.1", false},
+		{"a..example.com", false},
+		{".example.com", false},
+		{"[example.com]:22", false},
+		{"[10.0.0.1]:22", false},
+		{"! example.com", false},
+		{"example.com ", false},
+		{"Kevil.com", false}, // the Kelvin sign, which ToLower folds into k
+		{"a\x1b[31mb", false},
+		{"::ffff:10.0.0.0/104", true},
+		{"::ffff:0.0.0.0/80", false},
+		{"127.1", false},
 	} {
 		if got := ValidRule(c.rule); got != c.ok {
 			t.Errorf("ValidRule(%q) = %v; want %v", c.rule, got, c.ok)
@@ -521,7 +724,8 @@ func (s *syncBuffer) String() string {
 }
 
 // The rule syntax: whatever a policy file holds, parsing doesn't panic, a rule's text parses
-// back to the same rule, and a host rule never holds a space or a slash.
+// back to the same rule, a host rule never holds a space or a slash, and ParsePolicy marks a line
+// a rule exactly when ValidRule takes it.
 func FuzzParseRule(f *testing.F) {
 	for _, s := range []string{
 		"example.com", "*.github.com  # c", "github.com:22", "!evil.github.com", "10.1.2.3",
@@ -530,6 +734,11 @@ func FuzzParseRule(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, line string) {
+		for _, l := range ParsePolicy(line) {
+			if l.OK != ValidRule(l.Text) || l.Text == "" || strings.ContainsAny(l.Text, "#\n") {
+				t.Fatalf("%q: line %+v, ValidRule %v", line, l, ValidRule(l.Text))
+			}
+		}
 		r, ok := parseRule(line)
 		if !ok {
 			if ValidRule(line) {
@@ -543,6 +752,9 @@ func FuzzParseRule(f *testing.F) {
 		}
 		if strings.ContainsAny(r.host, " /\\#") {
 			t.Fatalf("%q: host %q", line, r.host)
+		}
+		if h := r.host; h != "" && h != "**" && !strings.HasPrefix(h, "*.") && (!hostOK(h) || !r.matchHost(h)) {
+			t.Fatalf("%q: host %q isn't a host it matches", line, h)
 		}
 		_ = r.matchHost("example.com")
 		_ = r.matchAddr(netip.MustParseAddr("64:ff9b::a00:1"))

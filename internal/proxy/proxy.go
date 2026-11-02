@@ -394,6 +394,10 @@ func block(w http.ResponseWriter, e Event) {
 	w.Header().Set("X-Devvm-Blocked", e.Host)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
+	if e.Refused { // no rule would allow it: no allow command
+		fmt.Fprintf(w, "devvm: %s:%d is refused (%s).\n", e.Host, e.Port, e.Reason)
+		return
+	}
 	fmt.Fprintf(w, "devvm: %s:%d is blocked (%s). Allow it on the host with: devvm network allow %s\n",
 		e.Host, e.Port, e.Reason, ruleFor(e.Host, e.Port))
 }
@@ -418,24 +422,41 @@ func AllowRule(host string, port int) (string, bool) {
 // check runs the policy and the floor; on success it returns the rule that allowed host:port. plain
 // is a plain HTTP request, which goes through HTTP_PROXY's upstream rather than HTTPS_PROXY's.
 func check(ctx context.Context, host string, port int, plain bool) (string, string) {
-	ok, why := pol.decide(host, port)
+	rule, why, _ := checkRefused(ctx, host, port, plain)
+	return rule, why
+}
+
+// checkRefused is check, and whether a refusal is one no allow rule would lift (a broken deny's),
+// which its event marks Refused.
+func checkRefused(ctx context.Context, host string, port int, plain bool) (string, string, bool) {
+	ok, rule, refused := pol.verdict(host, port) // rule: the allowing rule, or why not
 	if !ok {
-		return "", why
+		return "", rule, refused
 	}
+	if why := floorCheck(ctx, host, port, plain); why != "" {
+		return "", why, false
+	}
+	return rule, "", false
+}
+
+// floorCheck is check past the rules for an allowed host: the address floor, or the company
+// proxy's. It returns why not, or "".
+func floorCheck(ctx context.Context, host string, port int, plain bool) string {
 	floor := func() error { _, err := resolve(ctx, host, port); return err }
 	if upstreamFor(host, port, plain) != nil {
 		floor = func() error { return floorUpstream(ctx, host, port) }
 	}
-	if err := floor(); err != nil {
-		if errors.Is(err, errFloor) {
-			return "", "it " + err.Error() + "; allow the address itself to reach it"
-		}
-		if errors.Is(err, errUnresolved) {
-			return "", err.Error()
-		}
-		return "", "can't resolve it: " + err.Error()
+	err := floor()
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errFloor):
+		return "it " + err.Error() + "; allow the address itself to reach it"
+	case errors.Is(err, errUnresolved):
+		return err.Error()
+	default:
+		return "can't resolve it: " + err.Error()
 	}
-	return why, ""
 }
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
@@ -453,9 +474,9 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: "CONNECT"}
-	rule, why := check(r.Context(), host, port, false)
+	rule, why, refused := checkRefused(r.Context(), host, port, false)
 	if why != "" {
-		e.Reason = why
+		e.Reason, e.Refused = why, refused
 		block(w, e)
 		return
 	}
@@ -585,8 +606,8 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
-	if _, why := check(r.Context(), host, port, scheme == "http"); why != "" {
-		e.Reason = why
+	if _, why, refused := checkRefused(r.Context(), host, port, scheme == "http"); why != "" {
+		e.Reason, e.Refused = why, refused
 		block(w, e)
 		return
 	}

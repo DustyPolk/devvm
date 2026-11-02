@@ -80,11 +80,17 @@ A policy file holds one rule per line. `#` starts a comment, and matching ignore
 | `RULE:22`, `[fd00::1]:22`, `10.0.0.0/8:8080` | only that port; without a port, 443 and 80 |
 | `!RULE` | deny: a deny beats any allow |
 
+A rule is plain ASCII with no spaces in it, and a port is a number from 1 to 65535. A host's one trailing dot is dropped, so `example.com.` matches `example.com`. Brackets hold only an IPv6 address, and an address can't follow `*.`. A line that holds anything else, such as `example.com:x`, `a*.example.com` or `! example.com` with a space after the `!`, isn't a rule.
+
+When a line that isn't a rule starts with `!`, it reads as a deny, but the proxy can't tell what it would deny. So while the line is there, the proxy of every VM that reads the file denies every new connection apart from the VM's [links](#links-between-vms), whatever the other rules allow. Connections that are already open stay open. Each refusal names the file and the line, and it suggests no `devvm network allow` command, because no rule would help. Any other line that isn't a rule is skipped, and the file's other lines still apply. The proxy names each such line in its own log.
+
+devvm warns about each line that isn't a rule, with the file and the line's number, and the warning for a broken deny says that the proxies deny everything until it's fixed. It warns when you open a VM with network policy whose proxy reads the file, when `devvm network allow`, `deny` or `rm` changes the file, and in `devvm doctor`. `devvm network` also marks the line. Fix the line or remove it, and the change applies from the next connection.
+
 The proxy never dials a denied address, even for an allowed name that resolves to it or to its NAT64 form. A missing file has no rules. A file that changed but can't be read keeps its last rules, so a deny never lapses.
 
 ### Changing rules
 
-`devvm network` shows this folder's VM's allowlist after its network policy. It prints each of the VM's policy files that has rules, with the file's path after `#`, and then its rules without their comments:
+`devvm network` shows this folder's VM's allowlist after its network policy. It prints each of the VM's policy files that holds more than comments, with the file's path after `#`, and then its rules without their comments. A line that isn't a rule is marked `# not a rule, skipped`, with its line number:
 
 ```text
 on
@@ -93,6 +99,7 @@ on
   github.com
 # /Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy
   example.com
+  example.com:x  # not a rule, skipped (line 2)
 ```
 
 | | |
@@ -108,7 +115,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
 ### devvm network --json
 
-`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy file that has rules, in the order the proxy reads them, with its path and its rules. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`. With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy file that holds more than comments, in the order the proxy reads them, with its path, its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`. With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
 
 ```json
 {
@@ -120,12 +127,19 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
       "rules": [
         "ports.ubuntu.com",
         "github.com"
-      ]
+      ],
+      "not_rules": []
     },
     {
       "file": "/Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy",
       "rules": [
         "example.com"
+      ],
+      "not_rules": [
+        {
+          "line": 2,
+          "text": "example.com:x"
+        }
       ]
     }
   ]

@@ -707,6 +707,29 @@ func TestPrepareCAFails(t *testing.T) {
 	}
 }
 
+// A launch with network policy warns of each line of the VM's policy files
+// that isn't a rule, a broken deny as one.
+func TestPrepareWarnsPolicy(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	var warned []string
+	p.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := os.MkdirAll(filepath.Dir(VMPolicyFile(d, st.Name())), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(VMPolicyFile(d, st.Name()), []byte("ok.test\n! bad.test\na b\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(names(err))
+	}
+	f := VMPolicyFile(d, st.Name())
+	want := []string{"policy_broken_deny file=" + f + " line=2 rule=! bad.test", "policy_not_rule file=" + f + " line=3 rule=a b"}
+	if !slices.Equal(warned, want) {
+		t.Errorf("warned %q; want %q", warned, want)
+	}
+}
+
 // Two devvm runs writing a VM's proxy files at once each write them whole:
 // neither fails, and no temporary file is left.
 func TestWriteUpstreamAtOnce(t *testing.T) {

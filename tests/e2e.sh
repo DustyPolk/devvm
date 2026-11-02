@@ -2016,6 +2016,17 @@ check "devvm network allow applies at once to the running VM's proxy, devvm netw
   '$D' network rm example.com >/dev/null &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
   [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
+# A line that reads as a deny but isn't a rule: the running proxy denies everything, refused with no
+# allow command, devvm network rm warns of it, and once it's gone the allowed host works again.
+# The VM's own file is put back whatever happens, so the checks after this one see its rules.
+check "a deny that isn't a rule makes the running proxy refuse everything until it's gone" bash -c "cd '$n' &&
+  cp '$vms/$vm.policy' '$work/vm.policy' && echo '! example.org' >> '$vms/$vm.policy' &&
+  { [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://github.com/' </dev/null) == 403 ]] &&
+    '$D' network log | grep -q '  BLOCKED  github.com:80  .*reads as a deny' &&
+    '$D' network log --blocked | grep -Eq ' github\.com:80 +-\$' &&
+    DEVVM_MESSAGES=names '$D' network rm nothere.test </dev/null 2>&1 | grep -q '^devvm: policy_broken_deny '; ok=\$?; } ;
+  cp '$work/vm.policy' '$vms/$vm.policy' && [[ \${ok:-1} == 0 ]] &&
+  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://github.com' </dev/null"
 check "DNS fails at once, not after a timeout" in_vm "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
 # Lima's network's DNS (192.168.5.3) and the host's address on it, asked directly, as root could:
 # a refusal or no answer passes, an address for example.com fails.

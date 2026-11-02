@@ -14,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
@@ -47,6 +48,13 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
 				Free: reg.Host.FreeSpace,
 				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
+				Policies: func() []msg.M {
+					dirs, err := paths.FromEnv()
+					if err != nil {
+						return nil
+					}
+					return netpolicy.NotRules(dirs)
+				},
 			}
 			if asJSON {
 				return printJSON(u, d.report(cmd.Context(), reg.All(), b))
@@ -112,7 +120,8 @@ func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Bac
 }
 
 // warnings are doctor's warnings, which never make it fail: another devvm
-// first on PATH, low free space, a small host.
+// first on PATH, low free space, a small host, policy files' lines that
+// aren't rules.
 func (d doctor) warnings(b backend.Backend) []msg.M {
 	var ms []msg.M
 	if m, ok := d.Path.other(); ok {
@@ -121,7 +130,11 @@ func (d doctor) warnings(b backend.Backend) []msg.M {
 	if m, low := (backend.Space{Free: d.Free}).Warning(b); low {
 		ms = append(ms, m)
 	}
-	return append(ms, smallHost(d.Host)...)
+	ms = append(ms, smallHost(d.Host)...)
+	if d.Policies != nil {
+		ms = append(ms, d.Policies()...)
+	}
+	return ms
 }
 
 // The host devvm recommends: base asks for 4 CPUs and 8 GiB.
@@ -135,6 +148,9 @@ type doctor struct {
 	Path onPath
 	Free func(path string) (uint64, error) // free bytes on path's volume
 	Host func() (vm.Host, error)
+	// Policies are the warnings for your policy files' lines that aren't
+	// rules (netpolicy.NotRules); nil for none.
+	Policies func() []msg.M
 }
 
 // run checks b, the backend new VMs get, and lists all's features. It

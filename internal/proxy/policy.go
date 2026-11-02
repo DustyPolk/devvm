@@ -1,9 +1,13 @@
 package proxy
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,27 +32,37 @@ type rule struct {
 	port   int          // 0: 443 and 80
 }
 
-func parseRule(line string) (rule, bool) {
-	line = strings.ToLower(strings.TrimSpace(strings.SplitN(line, "#", 2)[0]))
-	if line == "" {
+// parseRule reads one rule, strictly: s is the whole rule, without a comment or spaces. It
+// refuses anything that wouldn't match as written: a port that isn't 1 to 65535 in digits, a host
+// that isn't a plain name (hostOK, with no empty label), a zone, a wildcard other than a leading
+// "*." or "**", an address under "*.", an IPv4-mapped prefix shorter than the mapping, anything
+// but printable ASCII. A host's one trailing dot is dropped, as requests' are, and a mapped
+// prefix is its IPv4 one.
+func parseRule(s string) (rule, bool) {
+	// Printable ASCII alone: no spaces, and nothing strings.ToLower would fold into ASCII (the
+	// Kelvin sign into k).
+	if s == "" || strings.ContainsAny(s, "#%") || strings.ContainsFunc(s, func(c rune) bool { return c <= ' ' || c > '~' }) {
 		return rule{}, false
 	}
+	line := strings.ToLower(s)
 	r := rule{text: line}
-	if strings.HasPrefix(line, "!") {
-		r.deny = true
-		line = strings.TrimSpace(line[1:])
+	if rest, ok := strings.CutPrefix(line, "!"); ok {
+		r.deny, line = true, rest
 	}
-	// A port suffix: host:port, 1.2.3.4:port, [v6]:port, or cidr:port.
-	if h, p, err := net.SplitHostPort(line); err == nil {
-		if n, err := strconv.Atoi(p); err == nil && n > 0 && n < 65536 {
-			line, r.port = h, n
-		}
-	} else if i := strings.LastIndex(line, ":"); i > 0 && strings.Contains(line, "/") && !strings.Contains(line[:i], ":") {
-		if n, err := strconv.Atoi(line[i+1:]); err == nil && n > 0 && n < 65536 {
-			line, r.port = line[:i], n
-		}
+	line, port, ok := cutPort(line)
+	if !ok {
+		return rule{}, false
 	}
+	r.port = port
 	if p, err := netip.ParsePrefix(line); err == nil {
+		// An IPv4-mapped prefix is its IPv4 one, as matchAddr unmaps what it judges; one
+		// shorter than the mapping's 96 bits isn't a rule.
+		if p.Addr().Is4In6() {
+			if p.Bits() < 96 {
+				return rule{}, false
+			}
+			p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+		}
 		r.prefix = p.Masked()
 		return r, true
 	}
@@ -56,32 +70,85 @@ func parseRule(line string) (rule, bool) {
 		r.prefix = netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen())
 		return r, true
 	}
-	if line == "" || strings.ContainsAny(line, " /\\") {
+	if line == "**" {
+		r.host = line
+		return r, true
+	}
+	h := strings.TrimSuffix(line, ".")
+	name := strings.TrimPrefix(h, "*.")
+	if _, err := netip.ParseAddr(name); err == nil || strings.ContainsAny(name, "[]*") ||
+		slices.Contains(strings.Split(name, "."), "") || !hostOK(name) {
 		return rule{}, false
 	}
-	r.host = line
+	r.host = h
 	return r, true
 }
 
-// ValidRule reports whether s is one rule, as devvm network allow writes it: a
-// host name, *.name, ** or an address or CIDR (no zone), optionally with a
-// port and a leading !, and no spaces or comment. AllowRule's rules are
-// valid.
+// cutPort takes a rule's port off: host:port, 1.2.3.4:port, [v6]:port or cidr:port, the port 1 to
+// 65535 in digits. Without one, the rule is as it was and the port 0. false: a port that isn't one.
+func cutPort(s string) (string, int, bool) {
+	h, p, err := net.SplitHostPort(s)
+	if err == nil && strings.HasPrefix(s, "[") {
+		if a, err := netip.ParseAddr(h); err != nil || !a.Is6() {
+			return "", 0, false // brackets hold an IPv6 address alone
+		}
+	}
+	if err != nil {
+		i := strings.LastIndex(s, ":")
+		if i <= 0 || !strings.Contains(s, "/") || strings.Contains(s[:i], ":") {
+			return s, 0, true // no port, or an IPv6 address
+		}
+		h, p = s[:i], s[i+1:]
+	}
+	n, err := strconv.Atoi(p)
+	if err != nil || strings.Trim(p, "0123456789") != "" || n < 1 || n > 65535 {
+		return "", 0, false
+	}
+	return h, n, true
+}
+
+// ValidRule reports whether s is one rule, as devvm network allow writes it
+// and the proxy takes it from a policy file's line: a host name, *.name, **
+// or an address or CIDR (no zone), optionally with a port and a leading !,
+// and no spaces or comment. AllowRule's rules are valid.
 func ValidRule(s string) bool {
-	if s == "" || strings.ContainsAny(s, "# \t\r\n%") {
-		return false
+	_, ok := parseRule(s)
+	return ok
+}
+
+// A PolicyLine is a line of a policy file that holds more than a comment.
+type PolicyLine struct {
+	N    int    // its number, from 1
+	Text string // as written, without its comment or the spaces around it
+	OK   bool   // whether it's a rule (ValidRule): the proxy skips one that isn't
+}
+
+// ParsePolicy reads a policy file: one rule a line, '#' starting a comment. It returns each line
+// that holds more than a comment, in order, each marked whether it's a rule. The proxy, devvm
+// network and devvm doctor all read policy files with it.
+func ParsePolicy(text string) []PolicyLine {
+	lines, _ := parsePolicy(text)
+	return lines
+}
+
+// parsePolicy is ParsePolicy, with the rules of the lines that are rules.
+func parsePolicy(text string) ([]PolicyLine, []rule) {
+	var (
+		lines []PolicyLine
+		rules []rule
+	)
+	for i, l := range strings.Split(strings.TrimPrefix(text, "\xef\xbb\xbf"), "\n") { // a byte-order mark isn't text
+		s, _, _ := strings.Cut(l, "#")
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		r, ok := parseRule(s)
+		lines = append(lines, PolicyLine{N: i + 1, Text: s, OK: ok})
+		if ok {
+			rules = append(rules, r)
+		}
 	}
-	r, ok := parseRule(s)
-	switch {
-	case !ok:
-		return false
-	case r.prefix.IsValid():
-		return true
-	case r.host == "**":
-		return true
-	}
-	h := strings.TrimPrefix(r.host, "*.")
-	return !strings.ContainsAny(h, "[]") && hostOK(h)
+	return lines, rules
 }
 
 func (r rule) portOK(port int) bool {
@@ -125,20 +192,37 @@ type policy struct {
 	files []string
 	mtime map[string]time.Time
 	rules map[string][]rule
+	// broken is, for each file with one, the first of its lines that starts with ! and isn't a
+	// rule (BrokenDeny): while any file has one, the policy denies everything.
+	broken map[string]PolicyLine
 }
 
 func newPolicy(files []string) *policy {
-	return &policy{files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}}
+	return &policy{files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}, broken: map[string]PolicyLine{}}
 }
 
-func (p *policy) all() []rule {
+// BrokenDeny reports whether l is a line that reads as a deny, starting with !, but isn't a
+// rule. Its proxy can't know what it would deny, so it denies everything while the line is there.
+func BrokenDeny(l PolicyLine) bool { return !l.OK && strings.HasPrefix(l.Text, "!") }
+
+// all returns the policy's rules, and while a file has a broken deny (BrokenDeny), why the policy
+// denies everything.
+func (p *policy) all() ([]rule, string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var out []rule
 	for _, f := range p.files {
 		st, err := os.Stat(f)
-		if err != nil {
-			delete(p.rules, f) // a missing file has no rules
+		if errors.Is(err, fs.ErrNotExist) {
+			// A missing file has no rules, and one that comes back is read again, whatever its
+			// mtime (a rename back, a restore that keeps it).
+			delete(p.rules, f)
+			delete(p.broken, f)
+			delete(p.mtime, f)
+			continue
+		}
+		if err != nil { // keep its last rules and broken deny, as for a read that fails
+			out = append(out, p.rules[f]...)
 			continue
 		}
 		if !st.ModTime().Equal(p.mtime[f]) {
@@ -147,25 +231,53 @@ func (p *policy) all() []rule {
 				out = append(out, p.rules[f]...)
 				continue
 			}
-			var rs []rule
-			for _, l := range strings.Split(string(b), "\n") {
-				if r, ok := parseRule(l); ok {
-					rs = append(rs, r)
-				}
-			}
-			p.rules[f], p.mtime[f] = rs, st.ModTime()
-			logf("policy %s: %d rules", f, len(rs))
+			p.load(f, string(b))
+			p.mtime[f] = st.ModTime()
 		}
 		out = append(out, p.rules[f]...)
 	}
-	return out
+	for _, f := range p.files {
+		if l, ok := p.broken[f]; ok {
+			return out, fmt.Sprintf("%s:%d isn't a rule but reads as a deny (%q), so this VM's proxy denies everything until it's fixed", f, l.N, l.Text)
+		}
+	}
+	return out, ""
+}
+
+// load takes file f's rules from its text b, logging each line that isn't a rule and noting the
+// first broken deny. With p.mu held.
+func (p *policy) load(f, b string) {
+	lines, rs := parsePolicy(b)
+	delete(p.broken, f)
+	for _, l := range lines {
+		switch {
+		case BrokenDeny(l):
+			logf("%s:%d: not a rule but reads as a deny, so everything is denied: %q", f, l.N, l.Text)
+			if _, ok := p.broken[f]; !ok {
+				p.broken[f] = l
+			}
+		case !l.OK:
+			logf("%s:%d: not a rule, skipped: %q", f, l.N, l.Text)
+		}
+	}
+	p.rules[f] = rs
+	logf("policy %s: %d rules", f, len(rs))
 }
 
 // decide whether host:port may be reached. host is a name or an address literal. It returns the
 // matching rule's text, or why not.
 func (p *policy) decide(host string, port int) (bool, string) {
+	ok, why, _ := p.verdict(host, port)
+	return ok, why
+}
+
+// verdict is decide, and whether a refusal is one no allow rule would lift: a broken deny's.
+func (p *policy) verdict(host string, port int) (bool, string, bool) {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	rs := p.all()
+	rs, broken := p.all()
+	if broken != "" {
+		return false, broken, true
+	}
 	addr, err := netip.ParseAddr(strings.Trim(host, "[]"))
 	isAddr := err == nil
 	match := func(r rule) bool {
@@ -179,22 +291,26 @@ func (p *policy) decide(host string, port int) (bool, string) {
 	}
 	for _, r := range rs {
 		if r.deny && match(r) {
-			return false, "denied by " + r.text
+			return false, "denied by " + r.text, false
 		}
 	}
 	for _, r := range rs {
 		if !r.deny && match(r) {
-			return true, r.text
+			return true, r.text, false
 		}
 	}
-	return false, "not on the allowlist"
+	return false, "not on the allowlist", false
 }
 
 // byName: an allow rule that names host, as itself or under *.domain, for port: one that's more
-// than **, which allows any host.
+// than **, which allows any host. None while a deny is broken.
 func (p *policy) byName(host string, port int) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	for _, r := range p.all() {
+	rs, broken := p.all()
+	if broken != "" {
+		return false
+	}
+	for _, r := range rs {
 		if !r.deny && r.host != "**" && r.portOK(port) && r.matchHost(host) {
 			return true
 		}
@@ -207,7 +323,11 @@ func (p *policy) addrAllowed(a netip.Addr, port int) bool {
 	if p.addrDenied(a, port) {
 		return false
 	}
-	for _, r := range p.all() {
+	rs, broken := p.all()
+	if broken != "" {
+		return false
+	}
+	for _, r := range rs {
 		if !r.deny && r.portOK(port) && r.matchAddr(a) {
 			return true
 		}
@@ -215,10 +335,15 @@ func (p *policy) addrAllowed(a netip.Addr, port int) bool {
 	return false
 }
 
-// addrDenied: a deny rule for address a. A deny beats any allow, including a host rule whose name
-// resolves to a, so every address the proxy dials is checked against it.
+// addrDenied: a deny rule for address a, or a broken deny (every address). A deny beats any
+// allow, including a host rule whose name resolves to a, so every address the proxy dials is
+// checked against it.
 func (p *policy) addrDenied(a netip.Addr, port int) bool {
-	for _, r := range p.all() {
+	rs, broken := p.all()
+	if broken != "" {
+		return true
+	}
+	for _, r := range rs {
 		if r.deny && r.portOK(port) && r.matchAddr(a) {
 			return true
 		}

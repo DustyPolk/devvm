@@ -2,12 +2,17 @@ package netpolicy
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 func TestRule(t *testing.T) {
@@ -94,28 +99,112 @@ func TestAddRemoveRule(t *testing.T) {
 	if got := content(empty); got != "x.test\n" {
 		t.Errorf("empty file = %q", got)
 	}
+
+	// rm takes every line with the rule, never a commented-out one; lines
+	// that aren't rules and CRLF endings are kept as they are.
+	mixed := filepath.Join(dir, "mixed")
+	if err := os.WriteFile(mixed, []byte("# a.test\na.test\r\nexample.com:x # bad\r\nA.test # again\nb.test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ok, err = AddRule(mixed, "c.test")
+	step("add beside a line that isn't a rule", ok, true, err)
+	ok, err = RemoveRule(mixed, "a.test")
+	step("remove duplicates", ok, true, err)
+	if got, want := content(mixed), "# a.test\nexample.com:x # bad\r\nb.test\nc.test\n"; got != want {
+		t.Errorf("mixed file = %q; want %q", got, want)
+	}
 }
 
 // WriteRules lists the files with rules, comments and blank lines left
-// out; missing and comment-only files not at all.
+// out, and marks each line that isn't a rule with its number; missing and
+// comment-only files not at all.
 func TestWriteRules(t *testing.T) {
 	dir := t.TempDir()
 	a, b, c := filepath.Join(dir, "a"), filepath.Join(dir, "b"), filepath.Join(dir, "c")
-	if err := os.WriteFile(a, []byte("# head\n\nx.test # why\n  !y.test\n"), 0o600); err != nil {
+	if err := os.WriteFile(a, []byte("# head\n\nx.test # why\n  !y.test\nexample.com:x\na\x1b[31mb\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(b, []byte("# only a comment\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	files, err := ReadRules([]string{a, b, c})
-	if err != nil || len(files) != 1 || files[0].Path != a || strings.Join(files[0].Rules, " ") != "x.test !y.test" {
+	if err != nil || len(files) != 1 || files[0].Path != a || strings.Join(files[0].Rules(), " ") != "x.test !y.test" {
 		t.Fatalf("ReadRules = %+v, %v", files, err)
+	}
+	if bad := files[0].NotRules(); len(bad) != 2 || bad[0].N != 5 || bad[0].Text != "example.com:x" {
+		t.Errorf("NotRules = %+v", bad)
 	}
 	var out strings.Builder
 	if err := WriteRules(&out, files); err != nil {
 		t.Fatal(err)
 	}
-	if want := "# " + a + "\n  x.test\n  !y.test\n"; out.String() != want {
+	// A line's control characters are dropped.
+	if want := "# " + a + "\n  x.test\n  !y.test\n  example.com:x" + notRuleMark + " (line 5)\n" +
+		"  a[31mb" + notRuleMark + " (line 6)\n"; out.String() != want {
 		t.Errorf("WriteRules = %q; want %q", out.String(), want)
+	}
+}
+
+// Every policy file devvm ships parses cleanly: each line a rule, a
+// comment or nothing.
+func TestBuiltinPolicies(t *testing.T) {
+	n := 0
+	err := fs.WalkDir(assets.FS, ".", func(path string, e fs.DirEntry, err error) error {
+		if err != nil || e.IsDir() || filepath.Ext(path) != ".policy" {
+			return err
+		}
+		n++
+		b, err := fs.ReadFile(assets.FS, path)
+		if err != nil {
+			return err
+		}
+		lines := proxy.ParsePolicy(string(b))
+		if len(lines) == 0 {
+			t.Errorf("%s has no rules", path)
+		}
+		for _, l := range lines {
+			if !l.OK {
+				t.Errorf("%s:%d isn't a rule: %q", path, l.N, l.Text)
+			}
+		}
+		return nil
+	})
+	if err != nil || n == 0 {
+		t.Fatalf("%d policy files: %v", n, err)
+	}
+}
+
+// NotRules warns of each line that isn't a rule in the policy files you
+// edit: every VM's, each VM's own and your layers'; one that reads as a
+// deny warns that its VMs' proxies deny everything.
+func TestNotRules(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	root := t.TempDir()
+	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
+	files := map[string]string{
+		d.Policy():                                "ok.test\na b\n",
+		filepath.Join(d.Layers(), "pg.policy"):    "# pg\n*\n",
+		VMPolicyFile(d, "devvm-x-0123456789abcd"): "!!x.test\nfine.test\n",
+		filepath.Join(d.Layers(), "pg.sh"):        "not a policy\n",
+	}
+	for f, s := range files {
+		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got []string
+	for _, m := range NotRules(d) {
+		got = append(got, m.Names())
+	}
+	want := []string{
+		"policy_not_rule file=" + d.Policy() + " line=2 rule=a b",
+		"policy_not_rule file=" + filepath.Join(d.Layers(), "pg.policy") + " line=2 rule=*",
+		"policy_broken_deny file=" + VMPolicyFile(d, "devvm-x-0123456789abcd") + " line=1 rule=!!x.test",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("NotRules =\n%q\nwant\n%q", got, want)
 	}
 }

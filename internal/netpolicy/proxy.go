@@ -257,6 +257,9 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err != nil {
 		return none, err
 	}
+	for _, m := range PolicyWarnings(policies) {
+		p.Warn(m)
+	}
 	files := strings.Join(policies, ",")
 	bin, _ := image.SHA256File(p.Self)
 	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))

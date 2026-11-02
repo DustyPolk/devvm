@@ -2384,9 +2384,19 @@ func PackingImage(vm string) M {
 	return M{id: "packing_image", vals: []val{{"vm", vm}}}
 }
 
+// PolicyBrokenDeny is [policy_broken_deny]: "Line {{.line}} of {{.file}}, {{.rule}}, reads as a deny but isn't a rule, so every VM whose proxy reads that file denies everything until it's fixed. Fix the line or remove it."
+func PolicyBrokenDeny(file string, line string, rule string) M {
+	return M{id: "policy_broken_deny", vals: []val{{"file", file}, {"line", line}, {"rule", rule}}}
+}
+
 // PolicyFailed is [policy_failed]: "Reading or changing the network policy rules failed: {{.reason}}."
 func PolicyFailed(reason string) M {
 	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
+}
+
+// PolicyNotRule is [policy_not_rule]: "Line {{.line}} of {{.file}}, {{.rule}}, isn't a rule, so VMs' proxies skip it. Fix the line or remove it."
+func PolicyNotRule(file string, line string, rule string) M {
+	return M{id: "policy_not_rule", vals: []val{{"file", file}, {"line", line}, {"rule", rule}}}
 }
 
 // PortInvalid is [port_invalid]: "{{.value}} isn't a port list. Use all, none, or ports and ranges such as 5173,8000-8010."
@@ -3782,7 +3792,9 @@ var specs = map[string]spec{
 	"output_failed":                    {fields: []string{"reason"}},
 	"pack_failed":                      {fields: []string{"vm"}},
 	"packing_image":                    {fields: []string{"vm"}},
+	"policy_broken_deny":               {fields: []string{"file", "line", "rule"}},
 	"policy_failed":                    {fields: []string{"reason"}},
+	"policy_not_rule":                  {fields: []string{"file", "line", "rule"}},
 	"port_invalid":                     {fields: []string{"value"}},
 	"port_not_listed":                  {fields: []string{"port", "ports"}},
 	"port_not_published":               {fields: []string{"port", "ports"}},

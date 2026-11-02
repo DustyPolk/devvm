@@ -44,7 +44,7 @@ The signature catches an archive or a `SHA256SUMS` that someone replaced, which 
 
 - `backend` is the backend that doctor checked, the one new VMs get or the one `--backend` names.
 - `problems` has what that backend is missing, each with its `key`, the `fix` command, and the `message` that `devvm doctor` prints for it. The `fix` is a command whose words are separated by spaces, without shell syntax, or `null` when there's none to run, for example when virtualization is turned off in the firmware.
-- `warnings` has the messages of doctor's warnings, which have no keys, because there's nothing for a script to fix. They're about another devvm on `PATH`, low free space, and a machine with less than 8 GiB of memory or fewer than 4 CPUs.
+- `warnings` has the messages of doctor's warnings, which have no keys, because there's nothing for a script to fix. They're about another devvm on `PATH`, low free space, a machine with less than 8 GiB of memory or fewer than 4 CPUs, and each line of `~/.config/devvm/policy`, `~/.config/devvm/layers/*.policy` and `~/.local/share/devvm/vms/*.policy` that isn't a rule (`policy_not_rule`).
 - `docker` says whether Docker is installed, which only `--from` with an image that only Docker has needs.
 - `features` has, for each backend, how it has each feature, as `native`, `emulated`, `unreviewed` or `none`. The example below shows two of Lima's features.
 

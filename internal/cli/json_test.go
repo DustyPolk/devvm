@@ -105,8 +105,13 @@ func TestJSONShapes(t *testing.T) {
 		{"ports", map[string]string{"ports": "all"}, []string{"ports: string"}},
 		{
 			"network",
-			networkOutput{Policy: "on", Allowlist: []policyFileJSON{{File: "/p", Rules: []string{"a.test"}}}},
-			[]string{"allowlist[].file: string", "allowlist[].rules[]: string", "policy: string"},
+			networkOutput{Policy: "on", Allowlist: []policyFileJSON{{
+				File: "/p", Rules: []string{"a.test"}, NotRules: []notRuleJSON{{Line: 2, Text: "a b"}},
+			}}},
+			[]string{
+				"allowlist[].file: string", "allowlist[].not_rules[].line: number", "allowlist[].not_rules[].text: string",
+				"allowlist[].rules[]: string", "policy: string",
+			},
 		},
 		{"network -g", map[string]string{"policy": "ask"}, []string{"policy: string"}},
 		{

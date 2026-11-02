@@ -104,9 +104,19 @@ type networkOutput struct {
 	Allowlist []policyFileJSON `json:"allowlist"`
 }
 
+// policyFileJSON is a policy file: its rules, and its lines that aren't
+// rules, which its proxy skips.
 type policyFileJSON struct {
-	File  string   `json:"file"`
-	Rules []string `json:"rules"`
+	File     string        `json:"file"`
+	Rules    []string      `json:"rules"`
+	NotRules []notRuleJSON `json:"not_rules"`
+}
+
+// notRuleJSON is a policy file's line that isn't a rule: its number, from
+// 1, and its text, comment left out.
+type notRuleJSON struct {
+	Line int    `json:"line"`
+	Text string `json:"text"`
 }
 
 // printNetwork writes the VM's network policy: its line then its rules,
@@ -120,7 +130,11 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 	}
 	out := networkOutput{Policy: s.Policy, Allowlist: []policyFileJSON{}}
 	for _, f := range s.Rules {
-		out.Allowlist = append(out.Allowlist, policyFileJSON{File: f.Path, Rules: f.Rules})
+		j := policyFileJSON{File: f.Path, Rules: append([]string{}, f.Rules()...), NotRules: []notRuleJSON{}}
+		for _, l := range f.NotRules() {
+			j.NotRules = append(j.NotRules, notRuleJSON{Line: l.N, Text: l.Text})
+		}
+		out.Allowlist = append(out.Allowlist, j)
 	}
 	return printJSON(u, out)
 }
