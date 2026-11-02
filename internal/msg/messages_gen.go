@@ -369,6 +369,11 @@ func CloneCheckFailed(vm string) M {
 	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
 }
 
+// CloneCheckNotStarted is [clone_check_not_started]: "{{.vm}} didn't start for the clone check, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
+func CloneCheckNotStarted(vm string) M {
+	return M{id: "clone_check_not_started", vals: []val{{"vm", vm}}}
+}
+
 // CloneCheckSkipped is [clone_check_skipped]: "Without the clone check, deleting {{.vm}} loses the commits on its clone that this repo hasn't fetched, and the clone's uncommitted changes."
 func CloneCheckSkipped(vm string) M {
 	return M{id: "clone_check_skipped", vals: []val{{"vm", vm}}}
@@ -3369,6 +3374,7 @@ var specs = map[string]spec{
 	"claude_token_howto":               {},
 	"claude_token_invalid":             {},
 	"clone_check_failed":               {fields: []string{"vm"}},
+	"clone_check_not_started":          {fields: []string{"vm"}},
 	"clone_check_skipped":              {fields: []string{"vm"}},
 	"clone_detached":                   {},
 	"clone_dirty":                      {},

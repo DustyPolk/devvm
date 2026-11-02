@@ -203,7 +203,7 @@ Values that only name where a secret is stay as they are. Those are an environme
 
 ## The self-check
 
-Network policy holds only while the VM runs on the process that devvm started confined. A process can't leave its sandbox, but `limactl start` starts a new Lima process, unconfined. So on every launch, whether devvm started the VM or found it running, devvm checks two things, from the host:
+Network policy holds only while the VM runs on the process that devvm started confined. A process can't leave its sandbox, but `limactl start` starts a new Lima process, unconfined. So on every launch, and whenever an export or `devvm rm`'s check of a `--clone` VM needs the VM running, whether devvm started the VM or found it running, devvm checks two things, from the host:
 
 1. That the VM still runs on the process devvm started. The VM can't fake this check.
 2. That a direct connection from the VM to the internet fails. The VM answers this check, so it catches only the honest case.

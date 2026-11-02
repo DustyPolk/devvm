@@ -29,7 +29,7 @@ devvm never locks or creates anything through a symlink, because the VM could pl
 
 ## On each launch
 
-Every launch of an existing VM, and `devvm stop`, checks `.git` again. devvm reports each of these once:
+Every launch of an existing VM, every export of its agents' history, and `devvm stop` check `.git` again. devvm reports each of these once:
 
 - A `.git` that was replaced since devvm locked it (`git_replaced`). devvm then does nothing else, so check the new `.git`, and look for the old one, renamed.
 - A repo that appeared in the folder after the VM was made (`git_appeared`), which devvm then locks.

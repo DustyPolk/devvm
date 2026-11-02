@@ -106,20 +106,33 @@ func (t *found) shellDir(ctx context.Context, log io.Writer) string {
 
 // launch takes a VM that exists, made for this folder, through what each
 // launch of it does before its setup: the folder's devcontainer.json
-// compared with the one it was made from; .git checked (and on Linux, set-id
-// files) unless it's a --clone VM, which mounts neither; a stopped VM's
-// size and SSH agent forwarding made what its state asks for; the
-// user's agent checked for keys when the VM forwards it; then it's
-// started if it's stopped and its network policy checked (run). It
-// returns the confinement the VM runs with.
+// compared with the one it was made from, then what every start of it
+// does (startChecked), then its disk use warned about. It returns the
+// confinement the VM runs with.
 func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, error) {
-	vm, st, b := t.f.Name, t.st, t.b
-	in, err := b.Inspect(ctx, vm)
+	devcontainers(e).check(t.st, t.f.Dir)
+	conf, err := e.startChecked(ctx, t)
+	if err == nil {
+		e.warnDisk(ctx, t.b, t.f.Name)
+	}
+	return conf, err
+}
+
+// startChecked takes a VM that exists, made for this folder, through
+// what every start of it by devvm does, a launch's or a command's that
+// runs in it: .git checked (and on Linux, set-id files) unless it's a
+// --clone VM, which mounts neither; a stopped VM's size and SSH agent
+// forwarding made what its state asks for; the user's agent checked for
+// keys when the VM forwards it; then it's started if it's stopped and
+// its network policy checked (run). It returns the confinement the VM
+// runs with.
+func (e Launch) startChecked(ctx context.Context, t *found) (backend.Confinement, error) {
+	st, b := t.st, t.b
+	in, err := b.Inspect(ctx, t.f.Name)
 	if err != nil {
 		return backend.Confinement{}, err
 	}
 	running := in.Status == backend.StatusRunning
-	devcontainers(e).check(st, t.f.Dir)
 	if err := checkGit(ctx, e.Env, t, running); err != nil {
 		return backend.Confinement{}, err
 	}
@@ -132,11 +145,7 @@ func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, erro
 	if sshagent.Mode(st) == sshagent.On {
 		e.checkAgent(ctx)
 	}
-	conf, err := e.run(ctx, b, st)
-	if err == nil {
-		e.warnDisk(ctx, b, vm)
-	}
-	return conf, err
+	return e.run(ctx, b, st)
 }
 
 // warnIgnored warns about the flags only new VMs take.

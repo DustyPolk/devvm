@@ -557,26 +557,12 @@ func (e *Env) checkAgentStart(ctx context.Context, b backend.Backend, st *state.
 	return msg.AgentUnchosenStop(vm)
 }
 
-// ensureRunning starts the VM if it's stopped, confined as its state says;
-// a running one is checked for an agent devvm didn't choose.
+// ensureRunning makes sure the VM runs, for a command that runs in it
+// without a shell (an export, rm's check of a --clone VM): it goes
+// through what a launch's start does (startChecked), .git locked, network
+// policy's self-check and the refusals included.
 func (e *Env) ensureRunning(ctx context.Context, t *found) error {
-	vm, b := t.f.Name, t.b
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
-	if in.Status == backend.StatusRunning {
-		return e.checkAgentStart(ctx, b, t.st)
-	}
-	conf := backend.Confinement{Net: backend.NetDirect}
-	if netpolicy.On(t.st) {
-		conf.Net = backend.NetProxy
-	}
-	if err := e.Registry.Require(b, vm, conf.Features()...); err != nil {
-		return err
-	}
-	e.Info(msg.Starting(vm))
-	_, err = e.start(ctx, b, t.st, conf)
+	_, err := Launch{e}.startChecked(ctx, t)
 	return err
 }
 

@@ -56,6 +56,8 @@ When you run `devvm` in a folder whose VM exists, devvm opens the VM as it is an
 8. The [self-check](network.md#the-self-check) runs, and devvm stops a VM whose network policy doesn't hold.
 9. devvm sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first. On the first launch after the VM started, the `postStartCommand` of the `devcontainer.json` that the VM was made from runs before the shell opens ([commands](../using/devcontainer.md#commands)).
 
+Steps 5 to 8, apart from the `devcontainer.json` check, are what every start of an existing VM by devvm does. So when an export or `devvm rm`'s check of a `--clone` VM needs the VM running, devvm checks `.git`, matches the VM's size and SSH agent forwarding to its state, starts it and runs the self-check in the same way, and it refuses a VM whose state has both network policy and the docker layer, as a launch does.
+
 devvm never starts a VM whose creation didn't finish, because the VM would start without network policy (`vm_unfinished`). That happens when devvm was stopped after it made the VM but before it recorded the network choice. `devvm rm` deletes such a VM.
 
 ## Stopping a VM

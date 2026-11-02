@@ -1827,6 +1827,9 @@ other = "Fetching the branches in {{.vm}} failed, so devvm kept the VM. Run devv
 [clone_check_failed]
 other = "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
 
+[clone_check_not_started]
+other = "{{.vm}} didn't start for the clone check, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
+
 [clone_check_skipped]
 other = "Without the clone check, deleting {{.vm}} loses the commits on its clone that this repo hasn't fetched, and the clone's uncommitted changes."
 

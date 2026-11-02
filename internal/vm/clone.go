@@ -178,7 +178,7 @@ func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	}
 	remote := st.Get(KeyCloneRemote)
 	if err := e.ensureRunning(ctx, t); err != nil {
-		return false, err
+		return false, e.notStarted(ctx, vm, err)
 	}
 	refs, err := e.cloneGit(ctx, b, vm, dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads")
 	if err != nil {
@@ -204,6 +204,23 @@ func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// notStarted is rm's error when the VM didn't start for its clone check
+// (err): what kept it from starting, said, then the way out, devvm rm
+// --no-clone-check, carrying err. An interrupt, or an error that isn't a
+// message, is err as it is.
+func (e clones) notStarted(ctx context.Context, vm string, err error) error {
+	m, ok := errors.AsType[msg.M](err)
+	if ctx.Err() != nil || !ok {
+		return err
+	}
+	e.Warn(m)
+	out := msg.CloneCheckNotStarted(vm).Because(err)
+	if _, logged := errors.AsType[*backend.LoggedError](err); logged {
+		return backend.Logged(out)
+	}
+	return out
 }
 
 // cloneChanges shows the uncommitted changes in the VM's clone and in

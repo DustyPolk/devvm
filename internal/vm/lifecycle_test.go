@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -199,6 +201,77 @@ func TestExport(t *testing.T) {
 	}
 	if _, ok := f.Instances[vm]; !ok {
 		t.Error("deleted")
+	}
+}
+
+// An export starts a stopped VM as a launch does: its .git locked again,
+// network policy's self-check run (it stops a VM that gets out directly),
+// and a VM whose state has both network policy and the docker layer
+// refused.
+func TestExportStartsAsLaunch(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	gitEnv(t)
+	gitIn(t, e.Dir, "init", "-q")
+	var locks []string
+	e.Protector = func(dir string) *gitprotect.Protector {
+		p := gitprotect.New(dir, quiet)
+		p.OS = "darwin"
+		p.Chflags = func(_ context.Context, flags, path string) error {
+			locks = append(locks, flags+" "+path)
+			return nil
+		}
+		return p
+	}
+	direct := false
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		switch {
+		case argv[0] == "curl" && !direct:
+			return errors.New("curl: (7) Failed to connect")
+		case len(argv) == 3 && strings.Contains(argv[2], "tar -czf"):
+			_, err := o.Stdout.Write([]byte("tarball"))
+			return err
+		}
+		return nil
+	}
+	st := existingVM(t, e, Options{Image: "base", NetworkPolicy: true})
+	vm := st.Name()
+	lc := Lifecycle{e}
+	stop := func() {
+		t.Helper()
+		if err := f.Stop(t.Context(), vm); err != nil {
+			t.Fatal(err)
+		}
+		e.Proxy.Stop(vm)
+	}
+	running := func() bool { return f.Instances[vm].Status == backend.StatusRunning }
+
+	stop()
+	locks = nil
+	if err := lc.Export(t.Context(), ""); err != nil {
+		t.Fatal(names(err))
+	}
+	if !slices.Contains(locks, "uchg "+filepath.Join(e.Dir, ".git", "config")) {
+		t.Errorf("locked %q", locks)
+	}
+
+	// Running, then stopped: either way the self-check stops it.
+	direct = true
+	if err := lc.Export(t.Context(), ""); names(err) != "net_direct_route vm="+vm || running() {
+		t.Errorf("running, gets out directly: %v, running %v", names(err), running())
+	}
+	stop()
+	if err := lc.Export(t.Context(), ""); names(err) != "net_direct_route vm="+vm || running() {
+		t.Errorf("gets out directly: %v, running %v", names(err), running())
+	}
+	direct = false
+
+	if err := st.Set(KeyDockerLayer, "sysbox"); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	before := len(f.Calls())
+	if err := lc.Export(t.Context(), ""); names(err) != "net_docker_layer backend=fake vm="+vm || slices.Contains(f.Methods()[before:], "Start") {
+		t.Errorf("docker layer: %v, calls %q", names(err), f.Methods()[before:])
 	}
 }
 

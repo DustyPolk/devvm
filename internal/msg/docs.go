@@ -385,6 +385,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"clone_seed_failed":                "using/clone#whats-copied",
 	"remote_add_failed":                "using/clone#the-remote",
 	"clone_check_failed":               "using/clone#deleting-the-vm",
+	"clone_check_not_started":          "using/clone#deleting-the-vm",
 	"clone_check_skipped":              "using/clone#deleting-the-vm",
 	"fetch_failed":                     "using/clone#deleting-the-vm",
 	"mise_download_failed":             "using/images#shared-tools",

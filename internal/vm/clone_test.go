@@ -2,6 +2,7 @@ package vm
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -183,6 +184,53 @@ func TestCloneRm(t *testing.T) {
 	got := unfetchedRefs(t.Context(), e.Dir, refs)
 	if !slices.Equal(got, []string{"known", "evil", "", "dangling"}) {
 		t.Errorf("unfetched %q", got)
+	}
+}
+
+// rm's check of a stopped --clone VM starts it as a launch does: network
+// policy's self-check stops one that gets out directly, and the VM is
+// kept.
+func TestCloneRmStartsAsLaunch(t *testing.T) {
+	e, f, _ := cloneEnv(t)
+	inner, direct := f.ExecFunc, false
+	f.ExecFunc = func(vm string, argv []string, o backend.ExecOpts) error {
+		if argv[0] == "curl" && !direct {
+			return errors.New("curl: (7) Failed to connect")
+		}
+		return inner(vm, argv, o)
+	}
+	st := existingVM(t, e, Options{Image: "base", NetworkPolicy: true, Clone: true})
+	vm := st.Name()
+	if err := f.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	e.Proxy.Stop(vm)
+	direct = true
+	var warned []string
+	e.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	before := len(f.Calls())
+	err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true})
+	// What kept it from starting is said, then the way out, carrying it.
+	if names(err) != "clone_check_not_started vm="+vm {
+		t.Errorf("gets out directly: %v", names(err))
+	}
+	if !slices.Contains(warned, "net_direct_route vm="+vm) {
+		t.Errorf("warned %q", warned)
+	}
+	if m, ok := errors.AsType[msg.M](errors.Unwrap(err)); !ok || m.Names() != "net_direct_route vm="+vm {
+		t.Errorf("cause %v", errors.Unwrap(err))
+	}
+	// Nothing ran in it but the self-check.
+	for _, c := range f.Calls()[before:] {
+		if c.Method != "Exec" {
+			continue
+		}
+		if argv, _ := c.Args[1].([]string); len(argv) == 0 || argv[0] != "curl" {
+			t.Errorf("ran %q", argv)
+		}
+	}
+	if in, ok := f.Instances[vm]; !ok || in.Status == backend.StatusRunning {
+		t.Errorf("kept %v, %+v", ok, in)
 	}
 }
 
