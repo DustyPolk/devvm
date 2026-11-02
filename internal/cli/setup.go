@@ -84,7 +84,7 @@ func newSetup(u *ui.UI) setup {
 		terminal: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
 		pickOne:  u.PickOne,
 		answer:   u.Answer,
-		host:     func() (vm.Host, error) { return vm.ThisHost(registry.Host()) },
+		host:     func() (vm.Host, error) { return vm.ThisHost(thisHost()) },
 	}
 }
 
@@ -150,7 +150,7 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 
 // saveBackend saves name as the default backend, asking for it when "".
 func (s setup) saveBackend(dirs paths.Dirs, name string) error {
-	reg, err := registry.New(dirs, assets.FS, s.ui)
+	reg, err := newRegistry(dirs, assets.FS, s.ui)
 	if err != nil {
 		return err
 	}

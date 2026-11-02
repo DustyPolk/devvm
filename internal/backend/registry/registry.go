@@ -4,7 +4,6 @@ package registry
 
 import (
 	"io/fs"
-	"os"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/docker"
@@ -14,11 +13,29 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 )
 
-// unreviewed is "allowed" only in the builds tests make (tests/e2e.sh, the
-// CLI tests), set with -ldflags -X: only there does DEVVM_UNREVIEWED let
-// unreviewed emulations through, and do the host's overrides
-// (platform.NewHost) count. Releases never set it.
-var unreviewed = ""
+// Overrides are a test build's stand-ins for the backends, each the value
+// of the environment variable it names, as internal/cli reads them (only
+// in a test build: a release has none). "" leaves the backends' own.
+type Overrides struct {
+	// Host stands in for this machine's size (platform.Overrides).
+	Host platform.Overrides
+	// Unreviewed (DEVVM_UNREVIEWED) names the unreviewed emulations let
+	// through, with a warning each time: for their end-to-end checks.
+	Unreviewed string
+	// DockerKind (DEVVM_DOCKER_KIND) is the kind of Docker's engine
+	// (linux, desktop, other), and DockerProcSys (DEVVM_DOCKER_PROC_SYS)
+	// where its host's /proc/sys is, for the CLI tests' stand-in engine.
+	DockerKind, DockerProcSys string
+	// LinuxBuildURL and LinuxBuildSHA256 (DEVVM_LINUX_BUILD_URL,
+	// DEVVM_LINUX_BUILD_SHA256) stand in for a release's Linux build,
+	// fetched as on macOS whatever the host.
+	LinuxBuildURL, LinuxBuildSHA256 string
+	// KVM (DEVVM_KVM) stands in for Linux's /dev/kvm.
+	KVM string
+	// UbuntuURL (DEVVM_UBUNTU_URL) is where Ubuntu's dated releases are
+	// listed, in place of ubuntu.DefaultURL.
+	UbuntuURL string
+}
 
 // linuxURL and linuxSHA256 are set in a release's macOS builds, with
 // -ldflags -X: its own version's Linux archive, and the SHA-256 of the
@@ -38,51 +55,30 @@ type UI interface {
 
 // New returns the registry of devvm's backends, on devvm's folders, its
 // own files (assets) and u: lima, the default (backend.Default), smolvm
-// and docker (both experimental). In a test build, the unreviewed emulations
-// DEVVM_UNREVIEWED names are let through, with a warning each time: for
-// their end-to-end checks; DEVVM_DOCKER_KIND sets the kind of Docker's
-// engine (linux, desktop, other), and DEVVM_DOCKER_PROC_SYS where its host's
-// /proc/sys is, for the CLI tests' stand-in engine; and
-// DEVVM_LINUX_BUILD_URL with DEVVM_LINUX_BUILD_SHA256 stand in for a
-// release's Linux build, fetched as on macOS whatever the host. The
-// registry's Host is Host's.
-func New(d paths.Dirs, assets fs.FS, u UI) (*backend.Registry, error) {
-	return newFor(d, assets, u, unreviewed, os.Getenv)
-}
-
-// Host returns the host devvm runs on, as this build reads it: a test
-// build's counts the environment's overrides (platform.TestCPUs and the
-// rest), a release's never does.
-func Host() platform.Host { return hostFor(unreviewed, os.Getenv) }
-
-// hostFor is Host for a build whose unreviewed is build, reading the
-// environment with getenv.
-func hostFor(build string, getenv func(string) string) platform.Host {
-	return platform.NewHost(build == "allowed", getenv)
-}
-
-// newFor is New for a build whose unreviewed is build, reading the
-// environment with getenv.
-func newFor(d paths.Dirs, assets fs.FS, u UI, build string, getenv func(string) string) (*backend.Registry, error) {
-	host := hostFor(build, getenv)
+// and docker (both experimental), with a test build's overrides o in place
+// of their own. The registry's Host is o's (platform.NewHost).
+func New(d paths.Dirs, assets fs.FS, u UI, o Overrides) (*backend.Registry, error) {
+	host := platform.NewHost(o.Host)
 	dk := docker.New(d, assets, u)
 	dk.LinuxURL, dk.LinuxSHA256 = linuxURL, linuxSHA256
-	if build == "allowed" && getenv("DEVVM_LINUX_BUILD_URL") != "" {
-		dk.LinuxURL, dk.LinuxSHA256 = getenv("DEVVM_LINUX_BUILD_URL"), getenv("DEVVM_LINUX_BUILD_SHA256")
+	if o.LinuxBuildURL != "" {
+		dk.LinuxURL, dk.LinuxSHA256 = o.LinuxBuildURL, o.LinuxBuildSHA256
 		dk.LinuxOS = "darwin"
 	}
-	r, err := backend.NewRegistry(lima.New(d, assets, u, host), smolvm.New(d, assets, u, host), dk)
+	dk.Kind = o.DockerKind
+	if o.DockerProcSys != "" {
+		dk.ProcSys = o.DockerProcSys
+	}
+	l, s := lima.New(d, assets, u, host, o.UbuntuURL), smolvm.New(d, assets, u, host)
+	if o.KVM != "" {
+		l.KVM, s.KVM = o.KVM, o.KVM
+	}
+	r, err := backend.NewRegistry(l, s, dk)
 	if err != nil {
 		return nil, err
 	}
 	r.Host = host
-	if build == "allowed" {
-		r.Unreviewed = backend.ParseUnreviewed(getenv("DEVVM_UNREVIEWED"))
-		dk.Kind = getenv("DEVVM_DOCKER_KIND")
-		if p := getenv("DEVVM_DOCKER_PROC_SYS"); p != "" {
-			dk.ProcSys = p
-		}
-	}
+	r.Unreviewed = backend.ParseUnreviewed(o.Unreviewed)
 	r.Warn = u.Warn
 	return r, nil
 }

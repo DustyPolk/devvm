@@ -69,12 +69,8 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	tl := tools.New(d, os.DirFS(root), quietUI{}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
-	tl.Getenv = func(k string) string {
-		if k == "DEVVM_HOST_MISE" {
-			return filepath.Join(repo, "testdata", "stubs", "mise")
-		}
-		return ""
-	}
+	tl.Getenv = func(string) string { return "" }
+	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
 	return quiet(&Env{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl}), f
 }
 

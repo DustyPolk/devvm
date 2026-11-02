@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
@@ -290,7 +289,7 @@ func imagesSize(imgs []listedImage) int64 {
 // toolTargets returns what tells the backend and C library a tool image
 // is built for (toolTarget): its record, else a VM's that has it.
 func toolTargets(u *ui.UI, b *build.Env) (func(tools.Listed) (string, string), error) {
-	reg, err := registry.New(b.Dirs, b.Assets, u)
+	reg, err := newRegistry(b.Dirs, b.Assets, u)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +334,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Env) (imageListing, erro
 	if err := from.Check(b.From); err != nil {
 		return out, err
 	}
-	reg, err := registry.New(b.Dirs, b.Assets, u)
+	reg, err := newRegistry(b.Dirs, b.Assets, u)
 	if err != nil {
 		return out, err
 	}

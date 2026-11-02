@@ -80,9 +80,25 @@ The CLI tests stand in a stub for Docker's engine (`testdata/stubs/docker`). A t
 
 These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.
 
+## Test builds
+
+The tests run a test build of devvm, which is one made with `-ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"`, as `tests/e2e.sh` and the CLI tests make theirs. Only a test build reads the environment variables that stand in for what devvm would find on this machine. Releases (GoReleaser, the Homebrew formula) don't set the flag, so a release ignores every one of these variables, whatever its environment says. devvm reads them in one place, `readOverrides` in `internal/cli/overrides.go`, into an `Overrides` struct, and passes each one to the package that uses it:
+
+| Variable | Stands in for |
+| --- | --- |
+| `DEVVM_HOST_MISE` | devvm's pinned and checked mise on the host |
+| `DEVVM_KVM` | Linux's `/dev/kvm` |
+| `DEVVM_UBUNTU_URL` | `https://cloud-images.ubuntu.com/releases/resolute`, where devvm finds Ubuntu's pinned dated release |
+| `DEVVM_UNREVIEWED` | the refusal of unreviewed emulations ([unreviewed emulations](#unreviewed-emulations)) |
+| `DEVVM_DOCKER_KIND`, `DEVVM_DOCKER_PROC_SYS` | the kind of Docker's engine and its host's `/proc/sys` |
+| `DEVVM_LINUX_BUILD_URL`, `DEVVM_LINUX_BUILD_SHA256` | a release's Linux archive and its devvm's SHA-256 |
+| `DEVVM_TEST_CPUS`, `DEVVM_TEST_MEMORY_GIB`, `DEVVM_TEST_FREE_GIB`, `DEVVM_TEST_LIST_TIMEOUT` | this machine's size and how long devvm waits for a backend's listings ([a host of any size](#a-host-of-any-size)) |
+
+The settings that the [environment table](../using/settings.md#environment) lists, such as `DEVVM_LIMA_HOME`, `DEVVM_SECRET_SERVICE` and `DEVVM_NO_TOOL_CHECK`, are yours to set, so every build reads them.
+
 ## Unreviewed emulations
 
-devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a test build, `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A test build is one made with `-ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed"`, as `tests/e2e.sh` and the CLI tests make theirs; releases (GoReleaser, the Homebrew formula) don't set it, so they ignore it:
+devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a [test build](#test-builds), `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A release ignores it:
 
 ```sh
 DEVVM_UNREVIEWED=smolvm:ports-all devvm --backend smolvm base
@@ -102,7 +118,7 @@ devvm reads this machine's CPUs, its memory and the free space on its disks when
 | `DEVVM_TEST_MEMORY_GIB` | the memory, in GiB |
 | `DEVVM_TEST_FREE_GIB` | the free space in GiB, on every disk |
 
-A test build is the same one as for `DEVVM_UNREVIEWED`, and a release ignores all three, so no variable can make devvm see more free space or more memory than this machine has. Each one that isn't set leaves the machine's own value. `internal/cli/script_test.go` sets a large host in every script: 8 CPUs, 16 GiB of memory and 500 GiB free, which is more than base asks for and more than any build checks for. A script that tests a small host sets its own values with `env`, as `small_host.txtar` does with 2 CPUs, 7 GiB and 1 GiB free:
+Only a [test build](#test-builds) reads them, and a release ignores all three, so no variable can make devvm see more free space or more memory than this machine has. Each one that isn't set leaves the machine's own value. `internal/cli/script_test.go` sets a large host in every script: 8 CPUs, 16 GiB of memory and 500 GiB free, which is more than base asks for and more than any build checks for. A script that tests a small host sets its own values with `env`, as `small_host.txtar` does with 2 CPUs, 7 GiB and 1 GiB free:
 
 ```txtar
 env DEVVM_TEST_CPUS=2

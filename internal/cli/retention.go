@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -219,7 +218,7 @@ func retainTools(ctx context.Context, u *ui.UI, b *build.Env, age time.Duration,
 // shareListing lists the share as devvm images and gc do, without asking
 // any backend: current for the default base on every backend.
 func shareListing(ctx context.Context, u *ui.UI, b *build.Env) ([]tools.Listed, error) {
-	reg, err := registry.New(b.Dirs, b.Assets, u)
+	reg, err := newRegistry(b.Dirs, b.Assets, u)
 	if err != nil {
 		return nil, err
 	}

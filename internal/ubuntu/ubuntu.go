@@ -34,8 +34,6 @@ const (
 	Version = "26.04"
 	// DefaultURL is where the series' dated releases are listed.
 	DefaultURL = "https://cloud-images.ubuntu.com/releases/" + Series
-	// URLEnv moves DefaultURL, to a mirror or a file:// folder (tests).
-	URLEnv = "DEVVM_UBUNTU_URL"
 	// Keyring is Ubuntu's cloud image signing key, by its path in devvm's
 	// own files.
 	Keyring = "layers/ubuntu-cloud.gpg"
@@ -143,12 +141,12 @@ type UI interface {
 	Note(msg.M)
 }
 
-// New returns a Finder with devvm's own files (assets), the URL from
-// DEVVM_UBUNTU_URL when it's set, running gpgv and printing through u.
-func New(assets fs.FS, getenv func(string) string, u UI) *Finder {
-	url := DefaultURL
-	if v := getenv(URLEnv); v != "" {
-		url = v
+// New returns a Finder with devvm's own files (assets), at url
+// (DefaultURL when it's "", a file:// folder in tests), running gpgv and
+// printing through u.
+func New(assets fs.FS, url string, u UI) *Finder {
+	if url == "" {
+		url = DefaultURL
 	}
 	gpgv, err := exec.LookPath("gpgv")
 	if err != nil {

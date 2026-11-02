@@ -7,7 +7,6 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -89,7 +88,7 @@ func lsJSON(ls []vm.Listed) lsOutput {
 }
 
 func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error) {
-	reg, err := registry.New(dirs, assets.FS, u)
+	reg, err := newRegistry(dirs, assets.FS, u)
 	if err != nil {
 		return nil, err
 	}

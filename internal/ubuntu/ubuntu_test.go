@@ -285,7 +285,7 @@ func TestRealSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := New(assets.FS, func(string) string { return "file://" + src }, testUI{t})
+	f := New(assets.FS, "file://"+src, testUI{t})
 	f.GPGV, f.Arch = gpgv, "arm64"
 	f.Release, f.Digest = "release-20261016", "sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24"
 	img, err := f.Image(t.Context())
@@ -323,18 +323,13 @@ func TestRealSignature(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	f := New(testAssets, func(string) string { return "" }, testUI{t})
+	f := New(testAssets, "", testUI{t})
 	if f.URL != DefaultURL || f.Assets == nil || f.Release != CloudRelease || f.Digest != CloudDigest(f.Arch) {
 		t.Errorf("default: %+v", f)
 	}
-	f = New(testAssets, func(k string) string {
-		if k == URLEnv {
-			return "file:///tmp/ubuntu/"
-		}
-		return ""
-	}, testUI{t})
+	f = New(testAssets, "file:///tmp/ubuntu/", testUI{t})
 	if f.URL != "file:///tmp/ubuntu" {
-		t.Errorf("%s: %s", URLEnv, f.URL)
+		t.Errorf("moved: %s", f.URL)
 	}
 }
 

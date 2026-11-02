@@ -50,11 +50,12 @@ func newClient() *http.Client {
 	}}
 }
 
-// HostMise returns the path of the host's mise: DEVVM_HOST_MISE when set
-// (tests), else devvm's pinned mise, downloaded once and checked.
+// HostMise returns the path of the host's mise: a test build's stand-in
+// (Mise) when it has one, else devvm's pinned mise, downloaded once and
+// checked.
 func (t Versions) HostMise(ctx context.Context) (string, error) {
-	if p := t.Getenv("DEVVM_HOST_MISE"); p != "" {
-		return p, nil
+	if t.Mise != "" {
+		return t.Mise, nil
 	}
 	var osName string
 	switch t.OS {

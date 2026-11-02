@@ -26,7 +26,7 @@ func TestE2EExecQuoting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l := New(d, assets.FS, testUI{}, platform.Host{})
+	l := New(d, assets.FS, testUI{}, platform.Host{}, "")
 	args := []string{
 		"a b", "  two  spaces ", `"double"`, "'single'", `it's`, "$HOME", "${HOME}", "$(id -u)", "`id -u`",
 		"a\nb", "tab\there", "*", "?", "[ab]", "/*", "~", "~root", `back\slash`, `\n`, "", "-n", "--",

@@ -79,6 +79,9 @@ type Env struct {
 	// FreeSpace returns the free space on the volume holding a path
 	// (platform.Host's), checked before a build; nil checks none.
 	FreeSpace func(path string) (uint64, error)
+	// Mise is a test build's stand-in for devvm's pinned mise on the
+	// host (internal/cli's Overrides); "" in a release.
+	Mise string
 
 	// The host's mise: its download's URL (a format taking the version
 	// and platform) and checksums, by platform.

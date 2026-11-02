@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -94,7 +95,8 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := registry.New(dirs, assets.FS, u)
+	o := readOverrides(os.Getenv)
+	reg, err := registry.New(dirs, assets.FS, u, o.Overrides)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +104,7 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
+	e.Tools.Mise = o.HostMise
 	e.PickFeatures = pickFeatures(u)
 	return e, nil
 }

@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/tools"
@@ -23,7 +22,7 @@ func newRefreshToolsCmd(u *ui.UI) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dirs, err := paths.FromEnv()
 			if err == nil {
-				err = tools.Versions{Env: tools.New(dirs, assets.FS, u, registry.Host())}.Refresh(cmd.Context())
+				err = tools.Versions{Env: newTools(dirs, assets.FS, u, thisHost())}.Refresh(cmd.Context())
 			}
 			fail(u, err, func(string) msg.M { return msg.ToolsCheckFailed() })
 			return nil

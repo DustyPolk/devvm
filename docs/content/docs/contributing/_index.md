@@ -165,7 +165,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `DEVVM_BIN` | the folder of the built `devvm`, alone |
 | `DEVVM_REPO` | the checkout, for the scripts in `scripts/`, which tests copy into a throwaway repo before running, and the scripts in `assets/`, which tests source to check their pieces |
 
-The built `devvm` has the checkout's `assets/` embedded, as a release has, and no test build reads them from elsewhere: a script that needs other files for devvm (layers, features, policies) puts them in the user's folders in the sandbox, as a user would.
+The built `devvm` is a [test build](testing.md#test-builds), so it reads the stand-ins above that a release ignores, such as `DEVVM_KVM` and `DEVVM_HOST_MISE`. It has the checkout's `assets/` embedded, as a release has, and no test build reads them from elsewhere: a script that needs other files for devvm (layers, features, policies) puts them in the user's folders in the sandbox, as a user would.
 
 `$WORK`, the script's own folder, is the current folder.
 

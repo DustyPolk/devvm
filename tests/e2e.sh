@@ -165,8 +165,9 @@ done
 src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
-# A test build: DEVVM_UNREVIEWED counts in it (never in a release).
-testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed")
+# A test build: DEVVM_UNREVIEWED and the other test overrides count in it
+# (never in a release).
+testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes")
 if [[ -n ${DEVVM_E2E_BIN:-} ]]; then
   cp "$DEVVM_E2E_BIN" "$src/devvm" || { echo "e2e: no devvm at $DEVVM_E2E_BIN" >&2; exit 1; }
 else

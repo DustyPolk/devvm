@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/paths"
@@ -121,7 +120,7 @@ func completeBackend(u *ui.UI) cobra.CompletionFunc {
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
-		reg, err := registry.New(dirs, assets.FS, u)
+		reg, err := newRegistry(dirs, assets.FS, u)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}

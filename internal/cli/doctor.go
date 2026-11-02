@@ -13,7 +13,6 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -216,7 +215,7 @@ func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, e
 	if err != nil {
 		return nil, nil, err
 	}
-	reg, err := registry.New(dirs, assets.FS, u)
+	reg, err := newRegistry(dirs, assets.FS, u)
 	if err != nil {
 		return nil, nil, err
 	}

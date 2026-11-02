@@ -23,7 +23,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
 | `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files, `assets.FS` written out where a path is needed |
-| `internal/platform/`, `internal/ubuntu/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads) |
+| `internal/platform/`, `internal/ubuntu/`, `internal/testbuild/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads); whether this is a test build (ldflags: only it reads the test overrides, `cli`'s `readOverrides`) |
 | `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts; the built-in layers, `docker` and `nix`, each with its policy), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`), `container/` (smolvm's and Docker's scripts in containers), `smolvm/`, `docker/` (each one's own) |
 | `internal/structure/` | the structure test (tests only) |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture) |

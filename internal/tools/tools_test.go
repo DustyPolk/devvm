@@ -125,12 +125,8 @@ func newEnv(t *testing.T) env {
 	tl := New(d, os.DirFS(root), quietUI{}, platform.Host{})
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
-	tl.Getenv = func(k string) string {
-		if k == "DEVVM_HOST_MISE" {
-			return repo(t, "testdata", "stubs", "mise")
-		}
-		return ""
-	}
+	tl.Getenv = func(string) string { return "" }
+	tl.Mise = repo(t, "testdata", "stubs", "mise")
 	tl.ShareNote = time.Millisecond
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Info = func(m msg.M) { said = append(said, "==> "+m.Names()) }
@@ -1344,7 +1340,7 @@ func TestHostMise(t *testing.T) {
 	}))
 	defer srv.Close()
 	e := newEnv(t)
-	e.Getenv = func(string) string { return "" }
+	e.Mise = ""
 	e.OS, e.Arch = "linux", "amd64"
 	e.miseURL = srv.URL + "/v%[1]s/mise-v%[1]s-%[2]s"
 	e.miseSums = map[string]string{"linux-x64": strings.Repeat("0", 64)}

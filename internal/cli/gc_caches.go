@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/ui"
@@ -17,7 +16,7 @@ import (
 // own entries too. With only, that backend alone; never one gc skipped,
 // as it couldn't list its images.
 func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map[string]bool) error {
-	reg, err := registry.New(b.Dirs, b.Assets, u)
+	reg, err := newRegistry(b.Dirs, b.Assets, u)
 	if err != nil {
 		return err
 	}

@@ -37,12 +37,10 @@ func TestMemory(t *testing.T) {
 	}
 }
 
-// TestHostOverrides: a test build's Host reads the overrides set, a
-// release's reads the host's own whatever is set.
+// TestHostOverrides: a test build's Host takes its overrides, a
+// release's, which has none, reads the host's own.
 func TestHostOverrides(t *testing.T) {
-	env := map[string]string{TestCPUs: "2", TestMemoryGiB: "7", TestFreeGiB: "10.5"}
-	getenv := func(k string) string { return env[k] }
-	test := NewHost(true, getenv)
+	test := NewHost(Overrides{CPUs: "2", MemoryGiB: "7", FreeGiB: "10.5"})
 	if got := test.CPUs(); got != 2 {
 		t.Errorf("test CPUs = %d, want 2", got)
 	}
@@ -53,7 +51,7 @@ func TestHostOverrides(t *testing.T) {
 		t.Errorf("test FreeSpace = %d, %v, want %d", got, err, uint64(21<<29))
 	}
 
-	release, host := NewHost(false, getenv), Host{}
+	release, host := NewHost(Overrides{}), Host{}
 	if release.CPUs() != host.CPUs() {
 		t.Errorf("release CPUs = %d, want the host's %d", release.CPUs(), host.CPUs())
 	}
@@ -66,7 +64,7 @@ func TestHostOverrides(t *testing.T) {
 	}
 
 	// Unset falls through to the host; a bad number is an error.
-	env = map[string]string{TestMemoryGiB: "lots", TestCPUs: "none"}
+	test = NewHost(Overrides{MemoryGiB: "lots", CPUs: "none"})
 	if test.CPUs() != host.CPUs() {
 		t.Errorf("bad CPUs: %d, want the host's", test.CPUs())
 	}
@@ -78,29 +76,29 @@ func TestHostOverrides(t *testing.T) {
 	}
 }
 
-// TestListTimeout: a test build's positive duration counts; a release's,
-// a bad one, a non-positive one or none give the default.
+// TestListTimeout: a test build's positive duration counts; a bad one, a
+// non-positive one or none give the default.
 func TestListTimeout(t *testing.T) {
 	const def = 30 * time.Second
 	for _, c := range []struct {
-		test bool
 		v    string
 		want time.Duration
 	}{
-		{true, "1s", time.Second},
-		{true, "10m,lima:1s", time.Second},
-		{true, "lima:1s,10m", time.Second},
-		{true, "10m,smolvm:1s", 10 * time.Minute},
-		{true, "smolvm:1s", def},
-		{true, "", def},
-		{true, "soon", def},
-		{true, "0s", def},
-		{true, "-1s", def},
-		{false, "1s", def},
+		{"1s", time.Second},
+		{"10m,lima:1s", time.Second},
+		{"lima:1s,10m", time.Second},
+		{"10m,smolvm:1s", 10 * time.Minute},
+		{"smolvm:1s", def},
+		{"", def},
+		{"soon", def},
+		{"0s", def},
+		{"-1s", def},
 	} {
-		h := NewHost(c.test, func(k string) string { return map[string]string{TestListWait: c.v}[k] })
-		if got := h.ListTimeout("lima", def); got != c.want {
-			t.Errorf("test=%v %q: %v, want %v", c.test, c.v, got, c.want)
+		if got := NewHost(Overrides{ListTimeout: c.v}).ListTimeout("lima", def); got != c.want {
+			t.Errorf("%q: %v, want %v", c.v, got, c.want)
 		}
+	}
+	if got := (Host{}).ListTimeout("lima", def); got != def {
+		t.Errorf("none: %v", got)
 	}
 }

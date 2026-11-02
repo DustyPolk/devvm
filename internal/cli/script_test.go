@@ -28,6 +28,10 @@ import (
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
+// testBuildFlag makes a test build (internal/testbuild), as tests/e2e.sh
+// does.
+const testBuildFlag = "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"
+
 // TestScript runs testdata/script/*.txtar against a built devvm, in a sandbox.
 func TestScript(t *testing.T) {
 	bin := buildDevvm(t)
@@ -67,7 +71,7 @@ func linuxRelease(t *testing.T) linuxBuild {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "devvm")
 	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", out, //nolint:gosec // the test's own folder
-		"-ldflags", "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed", "github.com/w3cj/devvm/cmd/devvm")
+		"-ldflags", testBuildFlag, "github.com/w3cj/devvm/cmd/devvm")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+runtime.GOARCH)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm for Linux: %v\n%s", err, b)
@@ -115,12 +119,13 @@ func (l linuxBuild) serve(ts *testscript.TestScript, neg bool, args []string) {
 }
 
 // buildDevvm builds cmd/devvm, its files embedded, into a temporary folder
-// and returns that folder. It's a test build: DEVVM_UNREVIEWED counts.
+// and returns that folder. It's a test build: the test overrides count
+// (readOverrides).
 func buildDevvm(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	cmd := exec.CommandContext(t.Context(), "go", "install",
-		"-ldflags", "-X github.com/w3cj/devvm/internal/backend/registry.unreviewed=allowed", "github.com/w3cj/devvm/cmd/devvm")
+		"-ldflags", testBuildFlag, "github.com/w3cj/devvm/cmd/devvm")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOBIN="+dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)

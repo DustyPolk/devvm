@@ -65,15 +65,19 @@ type Lima struct {
 	OCINote time.Duration
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
-	// Ubuntu finds Ubuntu's cloud image for base.
-	Ubuntu func(ctx context.Context) (ubuntu.Image, error)
+	// Ubuntu finds Ubuntu's cloud image for base, at UbuntuURL, where
+	// Ubuntu's dated releases are listed (ubuntu.DefaultURL, unless a
+	// test build moves it).
+	Ubuntu    func(ctx context.Context) (ubuntu.Image, error)
+	UbuntuURL string
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
 	// CPUs returns the host's CPU count.
 	CPUs func() int
 	// MacOS returns macOS's version, "" when unknown.
 	MacOS func() string
-	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
+	// KVM is Linux's KVM device: /dev/kvm, unless a test build stands in
+	// for it.
 	KVM string
 	// DockerRunning reports whether Docker runs, for --from images only
 	// it has.
@@ -111,8 +115,10 @@ var (
 )
 
 // New returns the Lima backend for devvm's folders and its own files
-// (assets), on u, sizing base to host.
-func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Lima {
+// (assets), on u, sizing base to host, finding Ubuntu's cloud image at
+// ubuntuURL (ubuntu.DefaultURL when it's "").
+func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string) *Lima {
+	ubuntuURL = strings.TrimRight(cmp.Or(ubuntuURL, ubuntu.DefaultURL), "/")
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -122,8 +128,8 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Lima {
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
-		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: host.Memory, CPUs: host.CPUs,
-		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
+		Ubuntu: ubuntu.New(assets, ubuntuURL, u).Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
+		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,

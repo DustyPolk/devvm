@@ -1,0 +1,49 @@
+package cli
+
+import (
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/backend/lima"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/testbuild"
+	"github.com/w3cj/devvm/internal/ui"
+)
+
+// A release, as this test binary is (built without the test build's
+// flag), reads none of the test overrides, whatever its environment
+// says: its mise is the pinned one, its backends check the real
+// /dev/kvm and its host is this machine. The CLI tests' test build reads
+// them all (the scripts).
+func TestReleaseReadsNoOverrides(t *testing.T) {
+	if testbuild.On() {
+		t.Skip("a test build")
+	}
+	if o := readOverrides(func(string) string { return "/x" }); o != (Overrides{}) {
+		t.Errorf("readOverrides = %+v", o)
+	}
+	for _, k := range []string{
+		"DEVVM_HOST_MISE", "DEVVM_KVM", "DEVVM_UBUNTU_URL", "DEVVM_UNREVIEWED", "DEVVM_DOCKER_KIND", "DEVVM_DOCKER_PROC_SYS",
+		"DEVVM_LINUX_BUILD_URL", "DEVVM_LINUX_BUILD_SHA256", platform.TestCPUs, platform.TestMemoryGiB, platform.TestFreeGiB, platform.TestListWait,
+	} {
+		t.Setenv(k, "1")
+	}
+	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
+	u := ui.New(strings.NewReader(""), io.Discard, io.Discard)
+	if tl := newTools(d, assets.FS, u, thisHost()); tl.Mise != "" {
+		t.Errorf("mise = %q", tl.Mise)
+	}
+	r, err := newRegistry(d, assets.FS, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := r.Lookup("lima"); b.(*lima.Lima).KVM != "/dev/kvm" || len(r.Unreviewed) != 0 {
+		t.Errorf("KVM %q, let through %v", b.(*lima.Lima).KVM, r.Unreviewed)
+	}
+	if got, want := thisHost().CPUs(), (platform.Host{}).CPUs(); got != want {
+		t.Errorf("the host's CPUs = %d, want %d", got, want)
+	}
+}

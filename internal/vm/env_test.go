@@ -81,12 +81,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
 	tl := tools.New(d, assets.FS, testUI{t}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
-	tl.Getenv = func(k string) string {
-		if k == "DEVVM_HOST_MISE" {
-			return filepath.Join(repo, "testdata", "stubs", "mise")
-		}
-		return os.Getenv(k)
-	}
+	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
 	dir := filepath.Join(root, "web")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)

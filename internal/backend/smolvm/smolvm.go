@@ -76,7 +76,8 @@ type Smolvm struct {
 	Memory func() (uint64, error)
 	// CPUs returns the host's CPU count.
 	CPUs func() int
-	// KVM is Linux's KVM device: /dev/kvm, unless DEVVM_KVM is set.
+	// KVM is Linux's KVM device: /dev/kvm, unless a test build stands in
+	// for it.
 	KVM string
 	// Terminal reports whether devvm's input is a terminal (a shell gets
 	// one then).
@@ -119,10 +120,6 @@ var (
 // New returns the smolvm backend for devvm's folders and its own files
 // (assets), on u, sizing base to host.
 func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Smolvm {
-	kvm := os.Getenv("DEVVM_KVM")
-	if kvm == "" {
-		kvm = "/dev/kvm"
-	}
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -132,7 +129,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Smolvm {
 	return &Smolvm{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		Getenv: os.Getenv, User: user.Current, Memory: host.Memory, CPUs: host.CPUs,
-		KVM:      kvm,
+		KVM:      "/dev/kvm",
 		Terminal: u.StdinIsTerminal,
 		FreePort: freePort, PortFree: platform.PortFree,
 		Info: u.Info, Warn: u.Warn,

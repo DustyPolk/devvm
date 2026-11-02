@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -32,7 +31,7 @@ import (
 // that hangs (Docker's engine starting) never holds it up; a test build
 // can set it (platform.TestListWait).
 func spaceTimeout(backend string) time.Duration {
-	return registry.Host().ListTimeout(backend, 30*time.Second)
+	return thisHost().ListTimeout(backend, 30*time.Second)
 }
 
 // What devvm space's KEPT column says of each kind of thing.
@@ -204,7 +203,7 @@ func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
 	if err != nil {
 		return r, err
 	}
-	reg, err := registry.New(b.Dirs, b.Assets, u)
+	reg, err := newRegistry(b.Dirs, b.Assets, u)
 	if err != nil {
 		return r, err
 	}

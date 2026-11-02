@@ -1,6 +1,7 @@
 package lima
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -86,19 +87,16 @@ func (l *Lima) DeleteCache(_ context.Context, entries []backend.CacheEntry) erro
 
 // limaCache tells devvm's entries in Lima's download cache apart.
 type limaCache struct {
-	dirs   paths.Dirs
-	getenv func(string) string
+	dirs      paths.Dirs
+	ubuntuURL string
 }
 
-func (l *Lima) cache() limaCache { return limaCache{dirs: l.Dirs, getenv: l.Getenv} }
+func (l *Lima) cache() limaCache { return limaCache{dirs: l.Dirs, ubuntuURL: l.UbuntuURL} }
 
 // cloudURL is the address devvm downloads Ubuntu's cloud image from, for
 // any dated release.
 func (l limaCache) cloudURL() *regexp.Regexp {
-	base := ubuntu.DefaultURL
-	if v := l.getenv(ubuntu.URLEnv); v != "" {
-		base = v
-	}
+	base := cmp.Or(l.ubuntuURL, ubuntu.DefaultURL)
 	return regexp.MustCompile(`^` + regexp.QuoteMeta(strings.TrimRight(base, "/")) +
 		`/release-[0-9]{8}/ubuntu-` + regexp.QuoteMeta(ubuntu.Version) + `-server-cloudimg-(arm64|amd64)\.img$`)
 }

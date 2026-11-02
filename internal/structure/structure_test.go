@@ -34,7 +34,7 @@ func devvm() rules {
 		},
 		allowedVars: map[string]string{
 			"internal/cli.version":                   ldflags,
-			"internal/backend/registry.unreviewed":   ldflags + ", by test builds only",
+			"internal/testbuild.testBuild":           ldflags + ", by test builds only",
 			"internal/backend/registry.linuxURL":     ldflags + ", by releases' macOS builds only",
 			"internal/backend/registry.linuxSHA256":  ldflags + ", by releases' macOS builds only",
 			"internal/backend.Features":              table,
@@ -120,7 +120,7 @@ func devvm() rules {
 			},
 			{
 				name: "leaves import nothing of devvm's",
-				from: []string{"assets", "locales", "internal/platform", "internal/msg/gen"},
+				from: []string{"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild"},
 				to:   []string{"..."},
 			},
 			{
