@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 func TestFormatEvent(t *testing.T) {
@@ -321,13 +323,13 @@ func TestAppendEvent(t *testing.T) {
 	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("the log: %v, %v", fi, err)
 	}
-	if err := os.Truncate(path, eventLogMax); err != nil {
+	if err := os.Truncate(path, proxy.LogLimit); err != nil {
 		t.Fatal(err)
 	}
 	if err := AppendEvent(path, "devvm-app", Event{Event: "link_limit", Host: "db", Port: 5432, Reason: "256"}); err != nil {
 		t.Fatal(err)
 	}
-	if fi, err := os.Stat(path + ".1"); err != nil || fi.Size() != eventLogMax {
+	if fi, err := os.Stat(path + ".1"); err != nil || fi.Size() != proxy.LogLimit {
 		t.Errorf("the old log: %v, %v", fi, err)
 	}
 	if b, err := os.ReadFile(path); err != nil || strings.Count(string(b), "\n") != 1 || !strings.Contains(string(b), `"link_limit"`) { //nolint:gosec // the test's own file
@@ -340,4 +342,51 @@ func TestAppendEvent(t *testing.T) {
 	if fi, err := os.Stat(nf); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("a new log: %v, %v", fi, err)
 	}
+}
+
+// The event log's two writers, the proxy and devvm _links, rotate it by
+// the same rule: when devvm _links rotates it, the proxy's next line goes
+// into the new log, which devvm network log --follow reads, and its next
+// rotation keeps the old one. Every line is in <vm>.jsonl or its .1.
+func TestAppendEventRotatesUnderTheProxy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "devvm-app.jsonl")
+	p1, p2 := event(1), event(2)
+	// The log ends 10 bytes short of the limit once the proxy's first line is in.
+	pad := strings.Repeat("x", proxy.LogLimit-len(p1)-10-1) + "\n"
+	if err := os.WriteFile(path, []byte(pad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, err := proxy.OpenEventLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	write := func(s string) {
+		t.Helper()
+		if _, err := w.Write([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(p1)
+	if err := AppendEvent(path, "devvm-app", Event{Event: "link", Host: "db", Port: 5432, Target: "devvm-db"}); err != nil {
+		t.Fatal(err)
+	}
+	write(p2)
+	old, cur := readFile(t, path+".1"), readFile(t, path)
+	if old != pad+p1 {
+		t.Errorf(".1: %d bytes, want the padding and the proxy's first line (%d)", len(old), len(pad+p1))
+	}
+	lines := strings.SplitAfter(cur, "\n")
+	if len(lines) != 3 || !strings.Contains(lines[0], `"link"`) || lines[1] != p2 {
+		t.Errorf("the log: %q, want the link's event, then the proxy's second line", cur)
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path) //nolint:gosec // the test's own file
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return string(b)
 }

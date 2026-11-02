@@ -1,32 +1,38 @@
 package proxy
 
 import (
-	"errors"
 	"io"
 	"os"
 	"sync"
+	"syscall"
 )
 
-// logLimit is how large the event log and the proxy's own log grow
+// LogLimit is how large the event log and the proxy's own log grow
 // before they're rotated: the log becomes <log>.1, replacing the one
 // there, and a new one starts. One old file each is kept.
-var logLimit int64 = 10 << 20
+const LogLimit = 10 << 20
 
-// rotating is a log file the proxy rotates once it's past logLimit. Each
-// Write is one whole line (record's and logger's are), and a line never
-// spans two files: the log rotates before the Write that would take it
-// past the limit. Writes are serialized, so none is lost or split by a
-// rotation.
+// rotating is a log file rotated once it's past its limit. Each Write is
+// one whole line (record's and logger's are), and a line never spans two
+// files: the log rotates before the Write that would take it past the
+// limit. Writes are serialized, so none is lost or split by a rotation.
 //
-// The event log (-log) is the proxy's alone: it's renamed to <log>.1 and
-// a new one is opened, which devvm network log --follow follows by name. The proxy's
-// own log (-proxy-log) is also the proxy process's stdout and stderr,
-// which devvm opened, where its last error and any crash go: that file
-// is copied to <log>.1 and emptied instead, so those writes, appended to
+// The event log (-log) has two writers, the proxy and devvm _links
+// (OpenEventLog), each in its own process: it's renamed to <log>.1 and a
+// new one is opened, which devvm network log --follow follows by name.
+// Before each line a writer checks that its open file is still the one
+// at the path, and opens the path again when it isn't (the other writer
+// rotated it, or it was deleted), and it takes the log's size from the
+// file. A rotation holds the file's lock and checks again, so two
+// writers past the limit at once rename it only once. The proxy's own
+// log (-proxy-log) is also the proxy process's stdout and stderr, which
+// devvm opened, where its last error and any crash go: that file is
+// copied to <log>.1 and emptied instead, so those writes, appended to
 // the same file, reach the current log.
 type rotating struct {
-	mu   sync.Mutex
-	path string
+	mu    sync.Mutex
+	path  string
+	limit int64
 	// w is where lines go: the file itself (renamed logs), or the
 	// stderr the proxy was given, which appends to path (copied logs).
 	w    io.Writer
@@ -34,10 +40,14 @@ type rotating struct {
 	size int64
 }
 
+// OpenEventLog opens the event log at path for appending, the user's
+// alone, rotated past LogLimit as the proxy rotates it.
+func OpenEventLog(path string) (io.WriteCloser, error) { return openRotating(path, LogLimit) }
+
 // openRotating opens the event log at path for appending, the user's
 // alone, whatever mode it had.
-func openRotating(path string) (*rotating, error) {
-	r := &rotating{path: path}
+func openRotating(path string, limit int64) (*rotating, error) {
+	r := &rotating{path: path, limit: limit}
 	if err := r.open(); err != nil {
 		return nil, err
 	}
@@ -46,7 +56,7 @@ func openRotating(path string) (*rotating, error) {
 
 // copyRotating rotates path, which w appends to (the proxy's stderr), by
 // copying.
-func copyRotating(path string, w io.Writer) (*rotating, error) {
+func copyRotating(path string, w io.Writer, limit int64) (*rotating, error) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		return nil, err
 	}
@@ -54,7 +64,7 @@ func copyRotating(path string, w io.Writer) (*rotating, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &rotating{path: path, w: w, size: fi.Size()}, nil
+	return &rotating{path: path, limit: limit, w: w, size: fi.Size()}, nil
 }
 
 func (r *rotating) open() error {
@@ -77,7 +87,12 @@ func (r *rotating) open() error {
 func (r *rotating) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.size > 0 && r.size+int64(len(p)) > logLimit {
+	if r.f != nil {
+		// A failed check keeps writing to the open file: a line kept
+		// beats a line in the right file.
+		_ = r.follow()
+	}
+	if r.size > 0 && r.size+int64(len(p)) > r.limit {
 		// A failed rotation keeps writing to the log as it is: a line
 		// kept beats a log of the right size.
 		_ = r.rotate()
@@ -87,22 +102,62 @@ func (r *rotating) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// follow makes the event log's open file the one at its path, opening
+// the path again when the other writer rotated it or it was deleted, and
+// takes the log's size from the file.
+func (r *rotating) follow() error {
+	if !r.current() {
+		return r.reopen()
+	}
+	fi, err := r.f.Stat()
+	if err != nil {
+		return err
+	}
+	r.size = fi.Size()
+	return nil
+}
+
+// current reports whether the open file is still the one at the path.
+func (r *rotating) current() bool {
+	fi, err := r.f.Stat()
+	if err != nil {
+		return false
+	}
+	pi, err := os.Stat(r.path)
+	return err == nil && os.SameFile(fi, pi)
+}
+
+// reopen opens the path, closing the old file once the new one is open.
+func (r *rotating) reopen() error {
+	old := r.f
+	if err := r.open(); err != nil {
+		// The old file still takes the lines.
+		return err
+	}
+	_ = old.Close()
+	return nil
+}
+
 // rotate makes the log <log>.1 and starts a new one.
 func (r *rotating) rotate() error {
 	if r.f == nil {
 		return r.copyOut()
 	}
-	// A log deleted while the proxy writes it starts again too.
-	if err := os.Rename(r.path, r.path+".1"); err != nil && !errors.Is(err, os.ErrNotExist) {
+	// The other writer may be rotating the same file: the lock lets one
+	// rename it, and the other, finding it renamed, opens the new one.
+	fd := int(r.f.Fd())
+	if err := syscall.Flock(fd, syscall.LOCK_EX); err != nil {
 		return err
 	}
-	old := r.f
-	if err := r.open(); err != nil {
-		// The renamed file still takes the lines.
+	var err error
+	if r.current() {
+		err = os.Rename(r.path, r.path+".1")
+	}
+	_ = syscall.Flock(fd, syscall.LOCK_UN)
+	if err != nil {
 		return err
 	}
-	_ = old.Close()
-	return nil
+	return r.reopen()
 }
 
 // copyOut copies the log to <log>.1, the user's alone and written whole,

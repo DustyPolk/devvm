@@ -9,14 +9,6 @@ import (
 	"testing"
 )
 
-// limitLogs sets logLimit for one test.
-func limitLogs(t *testing.T, n int64) {
-	t.Helper()
-	old := logLimit
-	logLimit = n
-	t.Cleanup(func() { logLimit = old })
-}
-
 func readLog(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path) //nolint:gosec // the test's own file
@@ -39,12 +31,11 @@ func modeOf(t *testing.T, path string) os.FileMode {
 // one there, and a new one starts; no line spans two files, and every
 // file is the user's alone, whatever mode the log had.
 func TestRotateRenames(t *testing.T) {
-	limitLogs(t, 30)
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
 	if err := os.WriteFile(path, []byte("old 0123456789\n"), 0o644); err != nil { //nolint:gosec // a log left open to others
 		t.Fatal(err)
 	}
-	r, err := openRotating(path)
+	r, err := openRotating(path, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,13 +73,50 @@ func TestRotateRenames(t *testing.T) {
 	if a, b := readLog(t, path+".1"), readLog(t, path); a != "four\n" || b != long {
 		t.Errorf("a long line: .1 %q, log %q", a, b)
 	}
-	// A log deleted while it's written starts again at the limit.
+	// A log deleted while it's written starts again at its next line.
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
 	write("five\n")
 	if got := readLog(t, path); got != "five\n" {
 		t.Errorf("deleted: log %q", got)
+	}
+}
+
+// The event log's other writer rotated it: the next line goes into the
+// new log, whose size counts from its own, and the next rotation keeps
+// the renamed one's lines.
+func TestRotateFollowsTheOtherWriter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vm.jsonl")
+	r, err := openRotating(path, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	write := func(s string) {
+		t.Helper()
+		if _, err := r.Write([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("proxy 0123456789 01234\n") // 23 bytes
+	if err := os.Rename(path, path+".1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("link\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	write("proxy two\n") // 15 bytes with the other writer's line
+	if a, b := readLog(t, path+".1"), readLog(t, path); a != "proxy 0123456789 01234\n" || b != "link\nproxy two\n" {
+		t.Errorf("rotated by the other writer: .1 %q, log %q", a, b)
+	}
+	// The other writer's line counts toward the limit too.
+	if err := os.WriteFile(path, []byte("link 0123456789 0123456789\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	write("three\n")
+	if a, b := readLog(t, path+".1"), readLog(t, path); a != "link 0123456789 0123456789\n" || b != "three\n" {
+		t.Errorf("rotated past the other writer's line: .1 %q, log %q", a, b)
 	}
 }
 
@@ -99,9 +127,8 @@ func TestRotateConcurrent(t *testing.T) {
 	line := func(w, i int) string { return fmt.Sprintf(`{"writer":%02d,"line":%03d,"pad":"0123456789"}`+"\n", w, i) }
 	total := int64(writers * each * len(line(0, 0)))
 	// One rotation: the first file takes most of the lines.
-	limitLogs(t, total*3/4)
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
-	r, err := openRotating(path)
+	r, err := openRotating(path, total*3/4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +173,6 @@ func TestRotateConcurrent(t *testing.T) {
 // its last error goes to: it's copied to <log>.1 and emptied, so writes
 // that bypass the rotation still reach the current log.
 func TestRotateCopies(t *testing.T) {
-	limitLogs(t, 20)
 	path := filepath.Join(t.TempDir(), "vm.proxy.log")
 	if err := os.WriteFile(path, []byte("started 0123\n"), 0o644); err != nil { //nolint:gosec // a log left open to others
 		t.Fatal(err)
@@ -156,7 +182,7 @@ func TestRotateCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stderr.Close()
-	r, err := copyRotating(path, stderr)
+	r, err := copyRotating(path, stderr, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

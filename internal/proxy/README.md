@@ -34,7 +34,7 @@ It returns when the VM's hostagent is gone.
 | `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `upstream.go` | `-upstream`: a company proxy that allowed requests go through (`CONNECT` by name for tunnels and interception, absolute form for plain HTTP), `NO_PROXY`, and the floor for names it resolves (`floorUpstream`) |
-| `rotate.go` | the logs' rotation past `logLimit` (10 MiB): the event log renamed to `<log>.1`, the proxy's own log, which is also its stderr, copied there and emptied |
+| `rotate.go` | the logs' rotation past `LogLimit` (10 MiB): the event log renamed to `<log>.1` under the file's lock, the proxy's own log, which is also its stderr, copied there and emptied; `OpenEventLog`, the event log's writer, which netpolicy's `AppendEvent` uses too, and which opens the log again before a line once the other writer has rotated it |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
 | `nixcache.go` | `-nix-cache`: the shared Nix cache at `http://devvm.proxy/nix/`, its path pattern (`nixPath`), narinfo checks (`parseNarinfo`), NAR checks, the cap and its trim (`NixCacheUsage`, `TrimNixCache`) |
 | `links.go` | `-links`: the VM's links' list (`LinkList`, `LinkEntry`), their sockets' names (`LinkSocket`, `LinkHash`), matching (`linkFor`), `CONNECT` and absolute-form requests to a link |

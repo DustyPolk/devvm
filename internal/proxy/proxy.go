@@ -776,7 +776,7 @@ func Main(args []string, std IO) error {
 	}
 	logOut = std.Stdout
 	if logPath != "" {
-		f, err := openRotating(logPath)
+		f, err := OpenEventLog(logPath)
 		if err != nil {
 			return err
 		}
@@ -784,7 +784,7 @@ func Main(args []string, std IO) error {
 		logOut = f
 	}
 	if proxyLog != "" {
-		f, err := copyRotating(proxyLog, std.Stderr)
+		f, err := copyRotating(proxyLog, std.Stderr, LogLimit)
 		if err != nil {
 			return err
 		}
