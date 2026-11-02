@@ -395,6 +395,12 @@ func TestLinks(t *testing.T) {
 			t.Errorf("a forward: %q", c)
 		}
 	}
+	// A link is marked failed after its forward command returns, so wait for it.
+	waitFor(t, "api failed", func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return len(f.failed) > 0
+	})
 	f.mu.Lock()
 	if !slices.Equal(f.failed, []string{"api"}) {
 		t.Errorf("failed: %q", f.failed)
