@@ -1,10 +1,14 @@
 #!/bin/bash
 # Hold each package's test coverage to its baseline, in testdata/coverage/<os>.txt (darwin,
 # linux), as each system runs other code and other tests.
-#   scripts/coverage.sh check PERCENTS  fail when a package is below its baseline, or has none
+#   scripts/coverage.sh check PERCENTS  fail when a package is more than a point below its baseline,
+#                                       or has none
 #   scripts/coverage.sh raise PERCENTS  raise each baseline a package went above, add new packages'
-#                                       and drop gone ones'; a package below its baseline fails it,
-#                                       and nothing is written
+#                                       and drop gone ones'; a package more than a point below its
+#                                       baseline fails it, and nothing is written
+# A package within a point below its baseline passes and keeps it: the same tests can cover a
+# little less from run to run (timing, the tools installed), and a baseline never goes down.
+# COVERAGE_TOLERANCE sets that margin, in points (1 by default).
 # PERCENTS is `go tool covdata percent`'s output, one line per package, such as
 #   github.com/w3cj/devvm/internal/msg	coverage: 85.3% of statements
 # scripts/test.sh makes it from the unit tests and the CLI tests together. The baseline has one
@@ -15,6 +19,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 baseline="${COVERAGE_BASELINE:-$root/testdata/coverage/$os.txt}"
 module="github.com/w3cj/devvm"
+tolerance="${COVERAGE_TOLERANCE:-1}"
 
 usage() { echo "usage: scripts/coverage.sh check|raise PERCENTS" >&2; exit 2; }
 [[ $# -eq 2 ]] || usage
@@ -50,16 +55,17 @@ measured() {
 }
 
 # compare reads the baseline, then the measured lines, and prints what each package does: "below
-# PKG HAVE WANT", "new PKG HAVE", "gone PKG WANT", "up PKG HAVE WANT", or "same PKG HAVE".
+# PKG HAVE WANT" (more than the tolerance below), "new PKG HAVE", "gone PKG WANT", "up PKG HAVE
+# WANT", or "same PKG WANT" (at its baseline or within the tolerance below it, so it keeps it).
 compare() {
-  awk '
+  awk -v tol="$tolerance" '
     FILENAME == ARGV[1] { if ($0 !~ /^#/ && NF == 2) want[$1] = $2; next }
     {
       have[$1] = $2
       if (!($1 in want)) print "new", $1, $2
-      else if ($2 + 0 < want[$1] + 0) print "below", $1, $2, want[$1]
+      else if ($2 + tol < want[$1] + 0) print "below", $1, $2, want[$1]
       else if ($2 + 0 > want[$1] + 0) print "up", $1, $2, want[$1]
-      else print "same", $1, $2
+      else print "same", $1, want[$1]
     }
     END { for (p in want) if (!(p in have)) print "gone", p, want[p] }
   ' "$baseline" -
@@ -69,7 +75,7 @@ measured | compare >"$tmp"
 status=0
 while read -r what pkg a b; do
   case $what in
-    below) echo "coverage: $pkg is at $a%, below its baseline of $b%" >&2; status=1 ;;
+    below) echo "coverage: $pkg is at $a%, more than $tolerance below its baseline of $b%" >&2; status=1 ;;
     new) [[ $mode == raise ]] || { echo "coverage: $pkg has no baseline: run mise run coverage" >&2; status=1; } ;;
     gone) [[ $mode == raise ]] || { echo "coverage: $pkg has a baseline but wasn't measured: run mise run coverage" >&2; status=1; } ;;
   esac

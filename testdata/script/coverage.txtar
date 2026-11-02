@@ -26,12 +26,26 @@ exec repo/scripts/coverage.sh check first
 exec repo/scripts/coverage.sh check more
 ! stderr .
 
-# Less: check fails naming the package, and raise writes nothing.
+# Within a point below: check passes, and raise keeps the baseline.
+exec repo/scripts/coverage.sh check within
+! stderr .
+exec repo/scripts/coverage.sh raise within
+! stdout 'internal/msg'
+cmp repo/testdata/coverage/test.txt first.want
+
+# More than a point below: check fails naming the package, and raise writes
+# nothing.
 ! exec repo/scripts/coverage.sh check less
-stderr '^coverage: internal/msg is at 85.2%, below its baseline of 85.3%$'
+stderr '^coverage: internal/msg is at 84.2%, more than 1 below its baseline of 85.3%$'
 ! stderr 'internal/vm'
 ! exec repo/scripts/coverage.sh raise less
 cmp repo/testdata/coverage/test.txt first.want
+
+# COVERAGE_TOLERANCE sets the margin: with none, any drop fails.
+env COVERAGE_TOLERANCE=0
+! exec repo/scripts/coverage.sh check within
+stderr '^coverage: internal/msg is at 84.4%, more than 0 below its baseline of 85.3%$'
+env COVERAGE_TOLERANCE=
 
 # A new package or a gone one: check wants a raise.
 ! exec repo/scripts/coverage.sh check grown
@@ -64,9 +78,13 @@ example.com/other	coverage: 50.0% of statements
 github.com/w3cj/devvm	coverage: 0.0% of statements
 github.com/w3cj/devvm/internal/msg	coverage: 85.4% of statements
 github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
+-- within --
+github.com/w3cj/devvm	coverage: 0.0% of statements
+github.com/w3cj/devvm/internal/msg	coverage: 84.4% of statements
+github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
 -- less --
 github.com/w3cj/devvm	coverage: 0.0% of statements
-github.com/w3cj/devvm/internal/msg	coverage: 85.2% of statements
+github.com/w3cj/devvm/internal/msg	coverage: 84.2% of statements
 github.com/w3cj/devvm/internal/vm	coverage: 70.0% of statements
 -- grown --
 github.com/w3cj/devvm	coverage: 0.0% of statements
