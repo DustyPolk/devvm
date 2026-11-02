@@ -71,7 +71,7 @@ devvm saves secrets in the macOS Keychain, or elsewhere in files only you can re
 
 The secrets work only for that VM. Its proxy needs the VM's own password, and the VM's placeholders end in a random value of the VM's own, which isn't the password, so a placeholder that the VM sends elsewhere gives nothing away. Another VM, or a program on the host that reaches the proxy's port, gets no secret. The password is in files only you can read, and never in a process's arguments or in devvm's run logs, and only you can read the proxy's logs.
 
-The proxy's CA (`~/.local/share/devvm/ca`) is how the proxy reads traffic to the hosts it puts secrets in for. Your machine never trusts the CA, but inside a VM it vouches for any site, so someone with a copy of its key and a place on your network could impersonate sites to your VMs. Only you can read the key, and devvm keeps it out of Time Machine. The CA lasts 30 days, and devvm makes a new one when the current one has under a week left, so a copy goes stale. Keep that folder out of other backup and sync tools as well.
+The proxy's CA (`~/.local/share/devvm/ca`) is how the proxy reads traffic to the hosts it puts secrets in for. Your machine never trusts the CA, but inside a VM it vouches for any site, so someone with a copy of its key and a place on your network could impersonate sites to your VMs. Only you can read the key, and devvm keeps it out of Time Machine. The CA lasts 30 days, and devvm makes a new one when the current one has under a week left, so a copy goes stale. The certificates that the proxy makes with it never outlast it. Keep that folder out of other backup and sync tools as well.
 
 ## What it doesn't protect
 

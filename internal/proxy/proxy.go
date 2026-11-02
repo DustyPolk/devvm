@@ -464,6 +464,9 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		e.Upstream = up.addr
 	}
 	if bs := bindingsFor(host); interceptPorts[port] && len(bs) > 0 && caCert != nil {
+		if caEndedRefusal(w, e) {
+			return
+		}
 		client, buf, err := http.NewResponseController(w).Hijack()
 		if err != nil {
 			return

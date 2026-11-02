@@ -2,12 +2,15 @@ package proxy
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -200,6 +203,78 @@ func TestCARotation(t *testing.T) {
 	}
 	if c := read(); c.SerialNumber.Cmp(big.NewInt(8)) == 0 || c.NotAfter.Sub(c.NotBefore) > 31*24*time.Hour {
 		t.Errorf("a CA valid for 10 years was kept: %v until %v", c.SerialNumber, c.NotAfter)
+	}
+}
+
+// useCA makes the proxy's CA one valid from notBefore to notAfter, for this test, with no leaves
+// minted yet.
+func useCA(t *testing.T, notBefore, notAfter time.Time) {
+	t.Helper()
+	oldCert, oldKey, oldLeafKey, oldLeaves := caCert, caKey, leafKey, leaves
+	t.Cleanup(func() { caCert, caKey, leafKey, leaves = oldCert, oldKey, oldLeafKey, oldLeaves })
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(9), Subject: pkix.Name{CommonName: "test CA"}, NotBefore: notBefore, NotAfter: notAfter,
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	must(t, err)
+	caCert, err = x509.ParseCertificate(der)
+	must(t, err)
+	caKey = key
+	leafKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must(t, err)
+	leaves = map[string]*tls.Certificate{}
+}
+
+// A leaf never outlives the CA that signed it, or starts before it: a VM left running near the CA's
+// end gets leaves that end with it, kept until then, and none once it has ended.
+func TestLeafWithinCA(t *testing.T) {
+	start, end := time.Now().Add(-time.Minute).Truncate(time.Second), time.Now().Add(30*time.Minute).Truncate(time.Second)
+	useCA(t, start, end)
+	c, err := leafFor("api.example.com")
+	must(t, err)
+	if c.Leaf.NotAfter.After(end) || c.Leaf.NotBefore.Before(start) {
+		t.Errorf("a leaf valid %v to %v, from a CA valid %v to %v", c.Leaf.NotBefore, c.Leaf.NotAfter, start, end)
+	}
+	if again, err := leafFor("api.example.com"); err != nil || again != c {
+		t.Errorf("a leaf that ends with its CA was minted again (%v)", err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(caCert)
+	if _, err := c.Leaf.Verify(x509.VerifyOptions{DNSName: "api.example.com", Roots: pool}); err != nil {
+		t.Errorf("the leaf doesn't verify: %v", err)
+	}
+
+	useCA(t, time.Now().Add(-30*24*time.Hour), time.Now().Add(-time.Minute))
+	if c, err := leafFor("api.example.com"); !errors.Is(err, errCAEnded) || c != nil {
+		t.Errorf("a leaf from a CA that has ended: %v, %v", c != nil, err)
+	}
+}
+
+// A tunnel to a host with a bound secret, once the proxy's CA has ended, is refused before it
+// opens: 403 with the reason and no allow command, logged as a refused block.
+func TestInterceptCAEnded(t *testing.T) {
+	port, _, _ := interceptSetup(t, func(http.ResponseWriter, *http.Request) {})
+	var events strings.Builder
+	oldOut := logOut
+	logOut = &events
+	t.Cleanup(func() { logOut = oldOut })
+	useCA(t, time.Now().Add(-30*24*time.Hour), time.Now().Add(-time.Minute))
+	target := net.JoinHostPort("localhost", strconv.Itoa(port))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodConnect, "http://"+target, nil)
+	req.Host = target
+	w := httptest.NewRecorder()
+	handler(w, req)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), caEndedReason) ||
+		strings.Contains(w.Body.String(), "network allow") || w.Header().Get("X-Devvm-Blocked") != "localhost" {
+		t.Errorf("answered %d %q", w.Code, w.Body.String())
+	}
+	var e Event
+	must(t, json.Unmarshal([]byte(events.String()), &e))
+	if e.Event != "blocked" || e.Reason != caEndedReason || !e.Refused || e.Host != "localhost" || e.Port != port {
+		t.Errorf("logged %+v", e)
 	}
 }
 

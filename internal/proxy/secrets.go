@@ -29,6 +29,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -213,8 +214,11 @@ var (
 )
 
 // The CA lasts caLife and is replaced when it has less than caRenew left: a key that leaks (in a
-// backup, say) stops working within weeks. VMs trust a new CA from their next launch; a running
-// proxy keeps the one it started with, which is still valid then.
+// backup, say) stops working within weeks. VMs trust a new CA from their next launch, which starts
+// their proxy again with it. A proxy keeps the CA it started with, as its VM trusts no other, so one
+// whose VM runs past that CA's end can intercept nothing: leafFor mints no leaf past the CA's end,
+// and caEndedRefusal refuses the CONNECT before its tunnel opens, with caEndedReason, which says
+// to open the VM again.
 const (
 	caLife  = 30 * 24 * time.Hour
 	caRenew = 7 * 24 * time.Hour
@@ -329,19 +333,56 @@ func caPEM() []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
 }
 
-// leafFor mints (and caches for a day) a certificate for host, signed by the CA.
+// errCAEnded: the CA is past its NotAfter, so a leaf it signed would verify nowhere.
+var errCAEnded = errors.New("devvm's CA has ended")
+
+// caEndedReason is the log's reason for a tunnel refused because the CA has ended.
+const caEndedReason = "devvm's CA has ended: open the VM again (devvm in its folder) for a new one"
+
+// caEnded reports whether the CA is past its NotAfter at now.
+func caEnded(now time.Time) bool { return !now.Before(caCert.NotAfter) }
+
+// caEndedRefusal refuses a CONNECT to be intercepted (e) once the CA has ended, before the tunnel
+// opens: 403, with the reason and no allow command, since no rule would help, and logged as a
+// refused block. It reports whether it refused.
+func caEndedRefusal(w http.ResponseWriter, e Event) bool {
+	if !caEnded(time.Now()) {
+		return false
+	}
+	e.Event, e.Reason, e.Refused = "blocked", caEndedReason, true
+	record(e)
+	w.Header().Set("X-Devvm-Blocked", e.Host)
+	http.Error(w, "devvm proxy: "+net.JoinHostPort(e.Host, strconv.Itoa(e.Port))+" is refused: "+caEndedReason, http.StatusForbidden)
+	return true
+}
+
+// leafFor mints (and caches) a certificate for host, signed by the CA: for a day, and never past
+// the CA's own NotAfter or before its NotBefore, since a client checks the whole chain. One that
+// ends with the CA is kept until then. Once the CA has ended there's none (errCAEnded).
 func leafFor(host string) (*tls.Certificate, error) {
 	leafMu.Lock()
 	defer leafMu.Unlock()
-	if c, ok := leaves[host]; ok && time.Until(c.Leaf.NotAfter) > time.Hour {
+	now := time.Now()
+	if caEnded(now) {
+		return nil, errCAEnded
+	}
+	if c, ok := leaves[host]; ok && now.Before(c.Leaf.NotAfter) &&
+		(c.Leaf.NotAfter.Sub(now) > time.Hour || c.Leaf.NotAfter.Equal(caCert.NotAfter)) {
 		return c, nil
+	}
+	notBefore, notAfter := now.Add(-time.Hour), now.Add(24*time.Hour)
+	if notBefore.Before(caCert.NotBefore) {
+		notBefore = caCert.NotBefore
+	}
+	if notAfter.After(caCert.NotAfter) {
+		notAfter = caCert.NotAfter
 	}
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: host},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     []string{host},

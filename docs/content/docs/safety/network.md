@@ -196,6 +196,8 @@ devvm saves a secret in the macOS Keychain, or elsewhere in `~/.config/devvm/sec
 
 Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. A VM without network policy gets the real value instead.
 
+To put a secret in, the proxy shows the VM a certificate from devvm's own CA, which each launch installs in the VM and which lasts 30 days. devvm makes a new CA when a launch finds that the current one has under a week left, so a VM that you open with `devvm` in its folder at least once a week always trusts the current one. Connecting with `ssh` alone isn't a launch. When a VM runs past its CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install a new CA, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#how-the-proxy-puts-them-in)).
+
 `devvm secret unuse` and `devvm secret rm` take nothing back from a VM without network policy, because the value it got still works wherever it kept it, and devvm says so on `unuse`. Neither command revokes what a VM made with the secret ([what devvm doesn't protect](../internals/security.md#what-it-doesnt-protect)), so rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos your VMs need.
 
 #### devvm secret --json

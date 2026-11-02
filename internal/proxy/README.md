@@ -32,7 +32,7 @@ It returns when the VM's hostagent is gone.
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
 | `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
 | `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
-| `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, header substitution, values from `-secret-cmd` (cached briefly, never logged) |
+| `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA (a day each, never past the CA's end; once the CA has ended, `CONNECT`s to be intercepted answered `403` and logged as refused with `caEndedReason`), header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `upstream.go` | `-upstream`: a company proxy that allowed requests go through (`CONNECT` by name for tunnels and interception, absolute form for plain HTTP), `NO_PROXY`, and the floor for names it resolves (`floorUpstream`) |
 | `rotate.go` | the logs' rotation past `LogLimit` (10 MiB): the event log renamed to `<log>.1` under the file's lock, the proxy's own log, which is also its stderr, copied there and emptied; `OpenEventLog`, the event log's writer, which netpolicy's `AppendEvent` uses too, and which opens the log again before a line once the other writer has rotated it |
 | `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
