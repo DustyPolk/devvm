@@ -90,7 +90,7 @@ func newGroupJoinCmd(u *ui.UI) *cobra.Command {
 			"by each one's folder name or the name it joined with, as in db:5432 and db.devvm.internal:5432.",
 		Example: examples(
 			"devvm group join web", "join the group web",
-			"devvm group join web --as api2", "join it as api2, when another VM in it has this folder's name",
+			"devvm group join web --as api2", "join it as api2 instead of this folder's name",
 		),
 		Args: cobra.MatchAll(exactArgs(1), groupNameArg),
 		RunE: func(cmd *cobra.Command, args []string) error {

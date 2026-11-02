@@ -3,13 +3,17 @@ package vm
 import (
 	"cmp"
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -94,12 +98,8 @@ func linkedName(links []Link, target, id string) string {
 }
 
 // groupClash is a member that a client gets none of the group's links
-// to, because its name there is taken: Own when one of the links the user
-// made in the client has it, else it's the client's own hostname.
-type groupClash struct {
-	Name, Target string
-	Own          bool
-}
+// to, because one of the links the user made in the client has its name.
+type groupClash struct{ Name, Target string }
 
 // groupLinks returns client's links as its group makes them, from own,
 // the links the user made there, kept as they are, prev, all its links
@@ -108,8 +108,10 @@ type groupClash struct {
 // links to it have, else its name in the group (memberName), and the
 // client's address for it, the one its links to it had in prev, so it
 // stays. A port the user linked already gets no other. A member whose
-// name one of the user's links to another VM has, or that is the client's
-// own hostname, gets none: a clash, the user's link taking precedence.
+// name one of the user's links to another VM has gets none: a clash, the
+// user's link taking precedence. Nor does one whose name is localhost or
+// the client's own hostname, which devvm group join refuses
+// (checkJoinName), so none has it.
 func groupLinks(client *state.VM, own, prev []Link, others []*state.VM) ([]Link, []groupClash) {
 	out := slices.Clone(own)
 	var clashes []groupClash
@@ -123,9 +125,11 @@ func groupLinks(client *state.VM, own, prev []Link, others []*state.VM) ([]Link,
 		name := linkedName(own, target, id)
 		if name == "" {
 			name = memberName(m)
-			taken := slices.ContainsFunc(out, func(l Link) bool { return l.Name == name })
-			if taken || name == host || name == "localhost" {
-				clashes = append(clashes, groupClash{Name: name, Target: target, Own: taken})
+			if name == host || name == "localhost" {
+				continue
+			}
+			if slices.ContainsFunc(out, func(l Link) bool { return l.Name == name }) {
+				clashes = append(clashes, groupClash{Name: name, Target: target})
 				continue
 			}
 		}
@@ -160,12 +164,66 @@ func (e Groups) withGroup(st *state.VM, own, prev []Link) ([]Link, []groupClash,
 // (groupLinks), with what to do.
 func (e Groups) warnClashes(vm string, clashes []groupClash) {
 	for _, c := range clashes {
-		if c.Own {
-			e.Warn(msg.GroupLinkNameClash(c.Name, c.Target, vm))
-		} else {
-			e.Warn(msg.GroupLinkNameHost(c.Name, c.Target, vm))
-		}
+		e.Warn(msg.GroupLinkNameClash(c.Name, c.Target, vm))
 	}
+}
+
+// groupsNote is how long lockGroups waits before it says it's waiting.
+const groupsNote = 200 * time.Millisecond
+
+// groupsLock is the groups lock's file (lockGroups): groups.lock in
+// devvm's data folder.
+func groupsLock(d paths.Dirs) string { return filepath.Join(d.Data, "groups.lock") }
+
+// lockGroups holds devvm's groups lock (groupsLock) until unlock is
+// called or the process ends, waiting for another devvm that holds it
+// until ctx ends, and saying so with info (nil says nothing) after a
+// moment. Each join and leave, and each change that works a group's
+// links out again, holds it throughout, from reading the members' states
+// to writing them, so it reads what the one before wrote: two VMs
+// joining at once are checked one after the other, and all or none
+// holds. It's an OS lock on a file, which the OS lets go of when the
+// process holding it ends, however it ends.
+func lockGroups(ctx context.Context, d paths.Dirs, info func(msg.M)) (unlock func(), err error) {
+	if err := os.MkdirAll(d.Data, 0o700); err != nil {
+		return nil, err
+	}
+	return platform.LockFileWaiting(ctx, groupsLock(d), groupsNote, func() {
+		if info != nil {
+			info(msg.GroupWaiting())
+		}
+	})
+}
+
+// lock holds the groups lock (lockGroups) and reads t's state again, as
+// another devvm may have changed it while this one waited.
+func (e Groups) lock(ctx context.Context, t *found) (unlock func(), err error) {
+	unlock, err = lockGroups(ctx, e.Dirs, e.Info)
+	if err != nil {
+		return nil, err
+	}
+	st, err := state.ReadVM(e.Dirs, t.f.Name)
+	if err == nil && (!st.Exists() || st.Get(KeyNet) == "") {
+		err = msg.VMUnfinished(t.f.Name)
+	}
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+	t.st = st
+	return unlock, nil
+}
+
+// syncOthers gives the other members of t's group their links as the
+// group makes them now (sync), holding the groups lock: devvm link
+// publish and unpublish, once t's state has its ports.
+func (e Groups) syncOthers(ctx context.Context, t *found) error {
+	unlock, err := e.lock(ctx, t)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return e.sync(ctx, t.st.Get(KeyGroup), t.f.Name)
 }
 
 // sync gives each member of group but skip its links as the group makes
@@ -369,37 +427,67 @@ func (e Groups) Show(ctx context.Context) (GroupShown, error) {
 // for its folder part), once it's checked (checkJoin), and gives it and
 // every other member their links to each other's published ports. A VM
 // is in one group at a time.
+//
+// It checks the join before it asks to widen a parent folder's VM, and
+// again once it holds the groups lock (lock), so a VM that joined
+// meanwhile counts.
 func (e Groups) Join(ctx context.Context, group, as string) error {
 	t, err := e.groupVM(ctx)
 	if err != nil {
 		return err
 	}
-	vm := t.f.Name
-	if cur := t.st.Get(KeyGroup); cur != "" {
-		switch {
-		case cur != group:
-			return msg.GroupOther(cur, vm)
-		case as != "" && as != memberName(t.st):
-			return msg.GroupNamed(group, memberName(t.st), vm)
-		}
-		// Joining again gives each member its links as the group makes
-		// them, as a join cut short didn't.
-		e.Info(msg.GroupAlready(group, vm))
-		if err := e.syncVM(ctx, t.st, group, false); err != nil {
+	asked := false
+	if t.st.Get(KeyGroup) == "" {
+		if _, err := e.checkJoin(t, group, as); err != nil {
 			return err
 		}
-		return e.sync(ctx, group, vm)
+		if ok, err := t.widen(e.Env, "devvm group join"); !ok {
+			return err
+		}
+		asked = true
 	}
-	members, err := groupMembers(e.Dirs, group)
+	unlock, err := e.lock(ctx, t)
 	if err != nil {
 		return err
 	}
-	if err := e.checkJoin(t, group, cmp.Or(as, t.f.Slug()), members); err != nil {
+	defer unlock()
+	if cur := t.st.Get(KeyGroup); cur != "" {
+		return e.rejoin(ctx, t, cur, group, as)
+	}
+	members, err := e.checkJoin(t, group, as)
+	if err != nil {
 		return err
 	}
-	if ok, err := t.widen(e.Env, "devvm group join"); !ok {
+	if !asked {
+		if ok, err := t.widen(e.Env, "devvm group join"); !ok {
+			return err
+		}
+	}
+	return e.join(ctx, t, group, as, members)
+}
+
+// rejoin is Join for t, in the group cur already: joining it again gives
+// each member its links as the group makes them, as a join cut short
+// didn't, and joining another, or the same with another name, is refused.
+func (e Groups) rejoin(ctx context.Context, t *found, cur, group, as string) error {
+	vm := t.f.Name
+	switch {
+	case cur != group:
+		return msg.GroupOther(cur, vm)
+	case as != "" && as != memberName(t.st):
+		return msg.GroupNamed(group, memberName(t.st), vm)
+	}
+	e.Info(msg.GroupAlready(group, vm))
+	if err := e.syncVM(ctx, t.st, group, false); err != nil {
 		return err
 	}
+	return e.sync(ctx, group, vm)
+}
+
+// join puts t in group, whose members were members, as as, once checked,
+// and gives each its links.
+func (e Groups) join(ctx context.Context, t *found, group, as string, members []*state.VM) error {
+	vm := t.f.Name
 	if err := t.st.Set(KeyGroupAs, as); err != nil {
 		return err
 	}
@@ -423,26 +511,61 @@ func (e Groups) Join(ctx context.Context, group, as string) error {
 	return nil
 }
 
-// checkJoin checks that client t can join group, whose members are
-// members, as name: every member has network policy or none does, the
-// name is valid and no member has it, as its name or its folder part,
-// and every backend has links.
-func (e Groups) checkJoin(t *found, group, name string, members []*state.VM) error {
+// checkJoin checks that client t can join group as as ("" for its folder
+// part), and returns the group's members: every member has network
+// policy or none does, the names are as checkJoinName wants them, and
+// every backend has links.
+func (e Groups) checkJoin(t *found, group, as string) ([]*state.VM, error) {
 	vm := t.f.Name
-	if err := CheckLinkName(name); err != nil {
-		return err
+	members, err := groupMembers(e.Dirs, group)
+	if err != nil {
+		return nil, err
 	}
-	if name == "localhost" {
-		return msg.GroupNameHost(vm)
+	if err := CheckLinkName(cmp.Or(as, t.f.Slug())); err != nil {
+		return nil, err
 	}
 	on := netpolicy.On(t.st)
 	for _, m := range members {
 		switch {
 		case netpolicy.On(m) == on:
 		case on:
-			return msg.GroupPolicyOff(group, vm)
+			return nil, msg.GroupPolicyOff(group, vm)
 		default:
-			return msg.GroupPolicyOn(group, vm)
+			return nil, msg.GroupPolicyOn(group, vm)
+		}
+	}
+	if err := checkJoinName(group, vm, as, members); err != nil {
+		return nil, err
+	}
+	if err := e.Registry.Require(t.b, vm, linkFeatures()...); err != nil {
+		return nil, err
+	}
+	for _, m := range members {
+		c, err := e.Registry.For(e.Dirs, m, "")
+		if err != nil {
+			return nil, err
+		}
+		if err := e.Registry.Require(c.Backend, m.Name(), linkFeatures()...); err != nil {
+			return nil, err
+		}
+	}
+	return members, nil
+}
+
+// checkJoinName checks the names of vm joining group as as ("" for its
+// folder part) beside its members: its name isn't localhost, no member's
+// name is vm's own hostname, its folder part, which would resolve to vm
+// itself there, and no member has its name, as its name or its own
+// hostname.
+func checkJoinName(group, vm, as string, members []*state.VM) error {
+	host := project.Folder{Name: vm}.Slug()
+	name := cmp.Or(as, host)
+	if name == "localhost" {
+		return msg.GroupNameHost(vm)
+	}
+	for _, m := range members {
+		if memberName(m) == host {
+			return msg.GroupNameHostname(group, m.Name(), host, vm)
 		}
 	}
 	for _, m := range members {
@@ -450,29 +573,23 @@ func (e Groups) checkJoin(t *found, group, name string, members []*state.VM) err
 			return msg.GroupNameTaken(group, m.Name(), name)
 		}
 	}
-	if err := e.Registry.Require(t.b, vm, linkFeatures()...); err != nil {
-		return err
-	}
-	for _, m := range members {
-		c, err := e.Registry.For(e.Dirs, m, "")
-		if err != nil {
-			return err
-		}
-		if err := e.Registry.Require(c.Backend, m.Name(), linkFeatures()...); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
 // Leave takes the folder's VM out of its group, and removes the links the
 // group made, in it and in the other members, naming them. The links the
-// user made stay. The group goes with its last member.
+// user made stay. The group goes with its last member. It holds the
+// groups lock throughout (lock).
 func (e Groups) Leave(ctx context.Context) error {
 	t, err := e.groupVM(ctx)
 	if err != nil {
 		return err
 	}
+	unlock, err := e.lock(ctx, t)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	group := t.st.Get(KeyGroup)
 	if group == "" {
 		return msg.GroupNone(t.f.Name)
@@ -493,6 +610,32 @@ func (e Groups) Leave(ctx context.Context) error {
 		return nil
 	}
 	return e.change(ctx, t.st, group, links, own)
+}
+
+// forget removes vm's state, its own links with it, and every other VM's
+// links to it (unlinkTarget), and takes it out of its group, holding the
+// groups lock throughout: devvm rm.
+func (e Groups) forget(ctx context.Context, vm string) error {
+	unlock, err := lockGroups(ctx, e.Dirs, e.Info)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		return err
+	}
+	group := st.Get(KeyGroup)
+	if err := st.Remove(); err != nil {
+		return err
+	}
+	if err := linkRuns(e).unlinkTarget(ctx, vm); err != nil {
+		return err
+	}
+	if group == "" {
+		return nil
+	}
+	return e.leave(ctx, st, group)
 }
 
 // leave takes st out of group, says so, and gives the other members their

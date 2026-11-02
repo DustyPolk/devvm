@@ -105,13 +105,25 @@ exec devvm group leave
 stdout '^==> group_left group=safe vm=devvm-cache-[0-9a-f]{14}$'
 stdout '^==> group_gone group=safe$'
 
-# Two members with the same folder part: the second needs another name,
-# and still can't reach the first by its own hostname.
+# Two members with the same folder part: the first's name would be the
+# second's own hostname, so the second is refused whatever it joins as,
+# until the first joins again with another name.
 cd $WORK/x/api
 exec devvm group join web
 stdout '^==> group_links_added group=web links=api:80 vm=devvm-app-'
 stdout '^==> group_links_added group=web links=api:80 vm=devvm-db-'
 stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-api-'
+cd $WORK/y/api
+! exec devvm group join web
+stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api vm=devvm-api-[0-9a-f]{14}$'
+! exec devvm group join web --as api2
+stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api vm=devvm-api-[0-9a-f]{14}$'
+exec sh -c 'grep -l "^group=web$" "$VMS"/devvm-api-* | wc -l'
+stdout '^ *1$'
+cd $WORK/x/api
+exec devvm group leave
+exec devvm group join web --as api1
+stdout '^==> group_links_added group=web links=api1:80 vm=devvm-app-'
 cd $WORK/y/api
 ! exec devvm group join web
 stderr '^devvm: group_name_taken group=web member=devvm-api-[0-9a-f]{14} name=api$'
@@ -121,19 +133,27 @@ stderr '^devvm: group_name_taken group=web member=devvm-db-[0-9a-f]{14} name=db$
 stderr '^devvm: group_name_host vm=devvm-api-[0-9a-f]{14}$'
 exec devvm group join web --as api2
 stdout '^==> group_joined group=web '
-stderr '^devvm: group_link_name_host name=api target=devvm-api-[0-9a-f]{14} vm=devvm-api-[0-9a-f]{14}$'
+! stderr group_link_name
 stdout '^==> group_links_added group=web links=api2:3000 vm=devvm-app-'
+stdout '^==> group_links_added group=web links=api1:80, db:5432,8000-8001 vm=devvm-api-'
+# A folder whose name is the name a member joined with: its own hostname
+# would name that member.
+mkdir $WORK/api1
+cd $WORK/api1
+exec devvm --no-network-policy --no-git-protect base
+! exec devvm group join web --as other
+stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api1 vm=devvm-api1-[0-9a-f]{14}$'
 
 # The group: each VM, its name, folder and published ports.
 cd $WORK/app
 exec devvm group
 stdout '\ANAME +VM +FOLDER +PUBLISHED\n'
-stdout '^api +devvm-api-[0-9a-f]{14} +\S*/x/api +80$'
+stdout '^api1 +devvm-api-[0-9a-f]{14} +\S*/x/api +80$'
 stdout '^api2 +devvm-api-[0-9a-f]{14} +\S*/y/api +3000$'
 stdout '^app +devvm-app-[0-9a-f]{14} +\S*/app +none$'
 stdout '^db +devvm-db-[0-9a-f]{14} +\S*/db +5432,8000-8001$'
 exec devvm group --json
-stdout '\A{\n  "version": 1,\n  "group": "web",\n  "members": \[\n    {\n      "name": "api",\n      "vm": "devvm-api-[0-9a-f]{14}",\n      "folder": "\S*/x/api",\n      "published": "80"\n    },\n'
+stdout '\A{\n  "version": 1,\n  "group": "web",\n  "members": \[\n    {\n      "name": "api1",\n      "vm": "devvm-api-[0-9a-f]{14}",\n      "folder": "\S*/x/api",\n      "published": "80"\n    },\n'
 exec devvm link
 stdout '^api2 +3000 +devvm-api-[0-9a-f]{14} +\S*/y/api +Running +yes$'
 stdout '^db +8001 +devvm-db-[0-9a-f]{14} +\S*/db +Running +yes$'
@@ -154,12 +174,12 @@ stdout '^==> link_removed name=pg port=8000 '
 stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-app-'
 # A link of the user's whose name is another member's takes it: the
 # group's links to that member go, said; removed, they come back.
-exec devvm link add ../y/api 3000 --as api
-stdout '^==> link_added name=api port=3000 '
-stderr '^devvm: group_link_name_clash name=api target=devvm-api-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
-stdout '^==> group_links_removed group=web links=api:80, api2:3000 vm=devvm-app-'
-exec devvm link rm api 3000
-stdout '^==> group_links_added group=web links=api:80, api2:3000 vm=devvm-app-'
+exec devvm link add ../y/api 3000 --as api1
+stdout '^==> link_added name=api1 port=3000 '
+stderr '^devvm: group_link_name_clash name=api1 target=devvm-api-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+stdout '^==> group_links_removed group=web links=api1:80, api2:3000 vm=devvm-app-'
+exec devvm link rm api1 3000
+stdout '^==> group_links_added group=web links=api1:80, api2:3000 vm=devvm-app-'
 
 # Published ports reach every member's links at once.
 cd $WORK/db
@@ -183,7 +203,7 @@ cd $WORK/app
 exec devvm link add db 7000
 exec devvm group leave
 stdout '^==> group_left group=web vm=devvm-app-[0-9a-f]{14}$'
-stdout '^==> group_links_removed group=web links=api:80, api2:3000, db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
+stdout '^==> group_links_removed group=web links=api1:80, api2:3000, db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/devvm-app-*'
 stdout '^links=db,7000,devvm-db-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.1$'
 stdout '^group=$'
@@ -206,3 +226,12 @@ exec devvm group leave
 stdout '^==> group_gone group=web$'
 exec sh -c 'grep -l "^group=web$" "$VMS"/* || true'
 ! stdout .
+
+# Two VMs joining one group at once, app without network policy and
+# cache with it: they take turns, so only one gets in.
+exec sh -c '(cd "$WORK/app" && devvm group join race) & (cd "$WORK/cache" && devvm group join race) & wait; true'
+stderr 'devvm: group_policy_o(n|ff) group=race '
+exec sh -c 'grep -l "^group=race$" "$VMS"/* | wc -l'
+stdout '^ *1$'
+exec sh -c 'for d in app cache; do (cd "$WORK/$d" && devvm group leave) || true; done'
+stdout '^==> group_gone group=race$'

@@ -1479,11 +1479,6 @@ func GroupLinkNameClash(name string, target string, vm string) M {
 	return M{id: "group_link_name_clash", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
 }
 
-// GroupLinkNameHost is [group_link_name_host]: "{{.name}} is {{.vm}}'s own hostname, so it gets none of the group's links to {{.target}}. To get them, have {{.target}} join the group again with another --as NAME."
-func GroupLinkNameHost(name string, target string, vm string) M {
-	return M{id: "group_link_name_host", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
-}
-
 // GroupLinksAdded is [group_links_added]: "{{.vm}} reaches {{.links}} through the group {{.group}}."
 func GroupLinksAdded(group string, links string, vm string) M {
 	return M{id: "group_links_added", vals: []val{{"group", group}, {"links", links}, {"vm", vm}}}
@@ -1502,6 +1497,11 @@ func GroupMade(group string, vm string) M {
 // GroupNameHost is [group_name_host]: "The name localhost means each VM itself, so it can't name {{.vm}} in a group. Give the VM another name with --as NAME."
 func GroupNameHost(vm string) M {
 	return M{id: "group_name_host", vals: []val{{"vm", vm}}}
+}
+
+// GroupNameHostname is [group_name_hostname]: "{{.name}} names {{.member}} in the group {{.group}} and is {{.vm}}'s own hostname, so {{.vm}} couldn't reach it by that name. Have {{.member}} leave the group and join again with another --as NAME, or use a folder with another name."
+func GroupNameHostname(group string, member string, name string, vm string) M {
+	return M{id: "group_name_hostname", vals: []val{{"group", group}, {"member", member}, {"name", name}, {"vm", vm}}}
 }
 
 // GroupNameInvalid is [group_name_invalid]: "{{.name}} isn't a group name. Use lowercase letters, digits and dashes, such as web, starting and ending with a letter or digit and not all digits."
@@ -1547,6 +1547,11 @@ func GroupPolicyOn(group string, vm string) M {
 // GroupTrust is [group_trust]: "The group {{.group}} joins the trust of all its VMs. Code in any of them can often run code in the others through the ports they publish, and then has whatever that VM has."
 func GroupTrust(group string) M {
 	return M{id: "group_trust", vals: []val{{"group", group}}}
+}
+
+// GroupWaiting is [group_waiting]: "waiting for another devvm to finish changing a group"
+func GroupWaiting() M {
+	return M{id: "group_waiting"}
 }
 
 // HasTools is [has_tools]: "{{.vm}} has {{.tools}} already"
@@ -3596,11 +3601,11 @@ var specs = map[string]spec{
 	"group_joined":                     {fields: []string{"group", "vm"}},
 	"group_left":                       {fields: []string{"group", "vm"}},
 	"group_link_name_clash":            {fields: []string{"name", "target", "vm"}},
-	"group_link_name_host":             {fields: []string{"name", "target", "vm"}},
 	"group_links_added":                {fields: []string{"group", "links", "vm"}},
 	"group_links_removed":              {fields: []string{"group", "links", "vm"}},
 	"group_made":                       {fields: []string{"group", "vm"}},
 	"group_name_host":                  {fields: []string{"vm"}},
+	"group_name_hostname":              {fields: []string{"group", "member", "name", "vm"}},
 	"group_name_invalid":               {fields: []string{"name"}},
 	"group_name_taken":                 {fields: []string{"group", "member", "name"}},
 	"group_named":                      {fields: []string{"group", "name", "vm"}},
@@ -3610,6 +3615,7 @@ var specs = map[string]spec{
 	"group_policy_off":                 {fields: []string{"group", "vm"}},
 	"group_policy_on":                  {fields: []string{"group", "vm"}},
 	"group_trust":                      {fields: []string{"group"}},
+	"group_waiting":                    {},
 	"has_tools":                        {fields: []string{"tools", "vm"}},
 	"history_failed":                   {fields: []string{"reason"}},
 	"history_not_exported":             {fields: []string{"vm"}},

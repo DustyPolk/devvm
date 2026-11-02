@@ -179,7 +179,7 @@ Programs in the app's VM then reach `db:5432` and `api:8080`, programs in the AP
 
 ```sh
 devvm group join web             # join the group web
-devvm group join web --as api2   # join it as api2, when another VM in it has this folder's name
+devvm group join web --as api2   # join it as api2 instead of this folder's name
 devvm group                      # the group, its VMs and the ports each one publishes
 devvm group leave                # leave it
 ```
@@ -205,8 +205,8 @@ The group's links reach every port that a VM in it publishes, so you publish and
 
 The group's other VMs reach a VM by its folder name, as VM names have it, unless it joined with `--as NAME`. The name follows the rules for [link names](#names), and devvm refuses `localhost`.
 
-- Two VMs in a group can't have the same name, so when another VM in the group has this folder's name, devvm refuses the join until you give this VM another with `--as NAME`. devvm also refuses a name that's another VM's folder name, because that's the other VM's own hostname. To change a VM's name in its group, leave the group, then join it again with `--as NAME`.
-- A VM whose folder name is another VM's name in the group reaches itself at that name, because it's its own hostname, so it gets none of the group's links to that other VM, and devvm warns you of it. To fix that, have the other VM leave the group and join again with another `--as NAME`.
+- Two VMs in a group can't have the same name, so when another VM in the group has the name this VM would join as, devvm refuses the join until you give this VM another with `--as NAME`. devvm also refuses a name that's another VM's folder name, because that's the other VM's own hostname. To change a VM's name in its group, leave the group, then join it again with `--as NAME`.
+- A VM's folder name is its own hostname, so devvm refuses to put a VM in a group where another VM's name is this VM's folder name, whatever `--as NAME` you give, because the name would reach the joining VM itself. For two folders with the same name, such as `~/work/api` and `~/old/api`, have the VM that's in the group leave it and join again with another name, such as `devvm group join web --as api1`, then join the other with `--as api2`. A VM whose folder has a name of its own needs neither.
 - The links that you make with `devvm link add` take precedence over the group's. When you link to a VM in the group yourself, the group's links to that VM take the name your link gives it, and a port that you linked gets no link from the group. When one of your links has the name of another VM in the group, the group's links to that VM go, and devvm warns you of it, until you remove your link with `devvm link rm`.
 
 ### A group joins the trust of all its VMs
@@ -215,7 +215,7 @@ A group joins the trust of every VM in it, as [a link joins the two VMs' trust](
 
 ### Groups and network policy
 
-A group's VMs all have network policy or none do. devvm refuses to put a VM with network policy in a group whose VMs have none, and a VM without network policy in a group whose VMs have it. While a VM is in a group, devvm refuses `devvm network on` and `devvm network off` in its folder, so run `devvm group leave` first.
+A group's VMs all have network policy or none do. devvm refuses to put a VM with network policy in a group whose VMs have none, and a VM without network policy in a group whose VMs have it. It checks joins one at a time, so when two VMs join a group at once, the second is checked against the first, and a devvm that waits for another says so. While a VM is in a group, devvm refuses `devvm network on` and `devvm network off` in its folder, so run `devvm group leave` first.
 
 Because every VM in a group with network policy has it, the group's links keep [the rule](#links-and-network-policy) that a client with network policy links only to a target with network policy. Each of their connections is still refused while the target's network policy isn't in force as it runs, and devvm warns you of such a target when the group makes a link to it.
 

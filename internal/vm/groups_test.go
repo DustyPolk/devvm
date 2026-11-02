@@ -1,11 +1,18 @@
 package vm
 
 import (
+	"context"
+	"errors"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -122,7 +129,7 @@ func TestGroupLinks(t *testing.T) {
 		"web2,9000,devvm-x-0123456789abcd,i9,127.77.0.3" {
 		t.Errorf("with the user's links: %v", got)
 	}
-	if !slices.Equal(clashes, []groupClash{{Name: "web2", Target: api.Name(), Own: true}}) {
+	if !slices.Equal(clashes, []groupClash{{Name: "web2", Target: api.Name()}}) {
 		t.Errorf("clashes = %v", clashes)
 	}
 	added, removed := groupChanged(want, links)
@@ -130,12 +137,136 @@ func TestGroupLinks(t *testing.T) {
 		t.Errorf("changed: %s; %s", shownLinks(added), shownLinks(removed))
 	}
 
-	// A member whose name is the client's own hostname, or localhost.
+	// A member whose name is the client's own hostname, or localhost,
+	// which joins refuse, gets no links there.
 	twin := member(t, d, "devvm-app-fedcba98765432", "3000", "")
 	local := member(t, d, "devvm-local-0123456789abcd", "3000", "localhost")
 	links, clashes = groupLinks(app, nil, nil, []*state.VM{twin, local})
-	if links != nil || !slices.Equal(clashes, []groupClash{{Name: "app", Target: twin.Name()}, {Name: "localhost", Target: local.Name()}}) {
+	if links != nil || clashes != nil {
 		t.Errorf("own hostname: %v, %v", links, clashes)
+	}
+}
+
+// A join's names: never localhost, never a member's name that's the
+// joiner's own hostname, whatever it joins as, and never a name a member
+// has, as its name or its hostname.
+func TestCheckJoinName(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	d := paths.Dirs{Data: t.TempDir()}
+	db := member(t, d, "devvm-db-0123456789abcd", "", "")
+	api := member(t, d, "devvm-api-0123456789abcd", "", "web2")
+	members := []*state.VM{api, db}
+	for _, c := range []struct{ vm, as, want string }{
+		{"devvm-app-0123456789abcd", "", ""},
+		{"devvm-app-0123456789abcd", "pg", ""},
+		// A second VM in a folder called api: api's name is web2.
+		{"devvm-api-fedcba98765432", "api2", ""},
+		{"devvm-app-0123456789abcd", "localhost", "group_name_host vm=devvm-app-0123456789abcd"},
+		// The joiner's own hostname is a member's folder part, or the name
+		// it joined with: no name it joins as helps.
+		{"devvm-db-fedcba98765432", "", "group_name_hostname group=web member=" + db.Name() + " name=db vm=devvm-db-fedcba98765432"},
+		{"devvm-db-fedcba98765432", "db2", "group_name_hostname group=web member=" + db.Name() + " name=db vm=devvm-db-fedcba98765432"},
+		{"devvm-web2-0123456789abcd", "other", "group_name_hostname group=web member=" + api.Name() + " name=web2 vm=devvm-web2-0123456789abcd"},
+		// Its name is a member's, or a member's own hostname.
+		{"devvm-app-0123456789abcd", "db", "group_name_taken group=web member=" + db.Name() + " name=db"},
+		{"devvm-app-0123456789abcd", "web2", "group_name_taken group=web member=" + api.Name() + " name=web2"},
+		{"devvm-app-0123456789abcd", "api", "group_name_taken group=web member=" + api.Name() + " name=api"},
+	} {
+		if got := names(checkJoinName("web", c.vm, c.as, members)); got != c.want {
+			t.Errorf("checkJoinName(%s, %q) = %q; want %q", c.vm, c.as, got, c.want)
+		}
+	}
+}
+
+// The groups lock: another devvm waits for it, says so after a moment,
+// and gets it once the first lets go; one whose context ends first
+// doesn't.
+func TestLockGroups(t *testing.T) {
+	d := paths.Dirs{Data: filepath.Join(t.TempDir(), "data")}
+	unlock, err := lockGroups(t.Context(), d, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := lockGroups(ctx, d, nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("while held: %v", err)
+	}
+	var said []string
+	got := make(chan error, 1)
+	go func() {
+		u, err := lockGroups(t.Context(), d, func(m msg.M) { said = append(said, m.Names()) })
+		if err == nil {
+			u()
+		}
+		got <- err
+	}()
+	select {
+	case err := <-got:
+		t.Fatalf("took the held lock: %v", err)
+	case <-time.After(2 * groupsNote):
+	}
+	unlock()
+	if err := <-got; err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(said, []string{"group_waiting"}) {
+		t.Errorf("said %q", said)
+	}
+	if _, err := os.Stat(filepath.Join(d.Data, "groups.lock")); err != nil {
+		t.Error(err)
+	}
+}
+
+// Two VMs joining one group at once, one with network policy and one
+// without: the groups lock checks one join after the other, so only one
+// gets in, every time.
+func TestGroupJoinsAtOnce(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	off := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	e2 := *e
+	e2.Dir = filepath.Join(filepath.Dir(e.Dir), "api")
+	if err := os.MkdirAll(e2.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{&e2}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+		t.Fatal(names(err))
+	}
+	if err := (Net{&e2}).SetNetwork(t.Context(), true); err != nil {
+		t.Fatal(names(err))
+	}
+	vms, err := state.VMNames(e.Dirs)
+	if err != nil || len(vms) != 2 {
+		t.Fatalf("VMs %q, %v", vms, err)
+	}
+	for range 10 {
+		errs := make([]error, 2)
+		var wg sync.WaitGroup
+		for i, env := range []*Env{e, &e2} {
+			wg.Go(func() { errs[i] = Groups{env}.Join(t.Context(), "web", "") })
+		}
+		wg.Wait()
+		members, err := groupMembers(e.Dirs, "web")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(members) != 1 || (errs[0] == nil) == (errs[1] == nil) {
+			t.Fatalf("members %d, joins %q, %q", len(members), names(errs[0]), names(errs[1]))
+		}
+		for i, env := range []*Env{e, &e2} {
+			want := []string{"group_policy_on group=web vm=", "group_policy_off group=web vm="}[i]
+			if errs[i] != nil && !strings.HasPrefix(names(errs[i]), want) {
+				t.Errorf("join %d: %s", i, names(errs[i]))
+			}
+			if errs[i] == nil {
+				if err := (Groups{env}).Leave(t.Context()); err != nil {
+					t.Fatal(names(err))
+				}
+			}
+		}
+	}
+	if st, _ := state.ReadVM(e.Dirs, off.Name()); st.Get(KeyGroup) != "" {
+		t.Errorf("still in %q", st.Get(KeyGroup))
 	}
 }
 

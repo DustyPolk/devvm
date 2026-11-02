@@ -271,17 +271,8 @@ func (e Lifecycle) forget(ctx context.Context, t *found) error {
 	if err := e.Proxy.Forget(vm); err != nil {
 		return err
 	}
-	group := t.st.Get(KeyGroup)
-	if err := t.st.Remove(); err != nil {
+	if err := Groups(e).forget(ctx, vm); err != nil {
 		return err
-	}
-	if err := linkRuns(e).unlinkTarget(ctx, vm); err != nil {
-		return err
-	}
-	if group != "" {
-		if err := Groups(e).leave(ctx, t.st, group); err != nil {
-			return err
-		}
 	}
 	logs, err := filepath.Glob(filepath.Join(e.Dirs.Logs(), vm+".*"))
 	if err != nil {

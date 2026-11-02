@@ -17,7 +17,7 @@ devvm group join NAME [flags]
 
 ```text
   devvm group join web            # join the group web
-  devvm group join web --as api2  # join it as api2, when another VM in it has this folder's name
+  devvm group join web --as api2  # join it as api2 instead of this folder's name
 ```
 
 ## Options

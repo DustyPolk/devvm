@@ -640,16 +640,15 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	}
 	// The group's other members get links to the ports at once, or lose
 	// them, before the clients with links of their own are named.
-	group := t.st.Get(KeyGroup)
 	if publish {
 		e.Info(msg.Published(ports, t.f.Name))
 		if err := e.publishUnenforced(ctx, t, old); err != nil {
 			return err
 		}
-		return Groups(e).sync(ctx, group, t.f.Name)
+		return Groups(e).syncOthers(ctx, t)
 	}
 	e.Info(msg.Unpublished(l, t.f.Name))
-	if err := Groups(e).sync(ctx, group, t.f.Name); err != nil {
+	if err := Groups(e).syncOthers(ctx, t); err != nil {
 		return err
 	}
 	return e.publishChanged(t, old)

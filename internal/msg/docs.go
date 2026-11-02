@@ -379,7 +379,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"group_name_taken":                 "using/links#names-in-a-group",
 	"group_name_host":                  "using/links#names-in-a-group",
 	"group_link_name_clash":            "using/links#names-in-a-group",
-	"group_link_name_host":             "using/links#names-in-a-group",
+	"group_name_hostname":              "using/links#names-in-a-group",
 	"agent_next_start":                 "using/ssh#agent-forwarding",
 	"ssh_agent_flag_ignored":           "using/ssh#agent-forwarding",
 	"clone_seed_failed":                "using/clone#whats-copied",

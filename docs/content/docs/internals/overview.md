@@ -112,6 +112,7 @@ devvm writes nothing into the project folder. It keeps your settings in `~/.conf
 | `oci-build.lock` | the lock a Lima build of a base [from a container image](images.md#how-its-converted) holds |
 | `tools.lock` | the lock a devvm [writing to the share](images.md#building-tools) or swapping the tools lock holds |
 | `images/locks/<key>` | the lock the devvm [building an image](images.md#building) holds |
+| `groups.lock` | the lock a devvm [joining or leaving a group](design.md#groups), or working its links out again, holds |
 | `run/` | files for running VMs, such as sandbox profiles, proxy pids and the QEMU wrapper |
 | `logs/`, `logs/runs/` | each VM's network log and proxy log, and the [run logs](../using/troubleshooting.md#a-command-fails) |
 | `exports/` | the agents' history that `devvm history export` and `devvm rm` save |

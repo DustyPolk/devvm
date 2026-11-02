@@ -33,7 +33,7 @@
 #                add and rm on a running client, the sockets, the 256-connection cap, a program
 #                holding a link's address, root loosening the client's sshd, a stopped and restarted
 #                target, the target's rm and a VM made again, the three in a group (joined, a port
-#                published to it, leaving), network policy on both and the policy rule's refusals,
+#                published to it, leaving, a VM refused whose hostname is a member's name), network policy on both and the policy rule's refusals,
 #                a group's all-or-none refusals, the log, and nothing left behind (in the --from tier, an
 #                Alpine client's link to port 80 too). --backend smolvm and docker run it too
 #     --only desktop
@@ -884,6 +884,7 @@ link_section() {
   check "a port a member publishes reaches the others' links at once" gp_publish
   check "in a group: devvm network on is refused, so is joining another group, and devvm link rm of the group's link" gp_refused
   check "devvm group leave removes only the group's links, in it and the others, naming them; the user's link stays; the last one's leaving removes the group" gp_leave
+  check "a join is refused when a member's name is the joiner's own hostname, whatever name it joins as" gp_hostname
   check "devvm network on for a target while it runs, then for the client, restarted behind its proxy" lk_policy_on
   check "the target's network policy on but not yet enforced (devvm ls: unenforced): the link's next connection is refused and logged, and devvm link add and the client's launch warn" lk_policy_unenforced
   check "the target restarted behind its proxy" lk_policy_target
@@ -1181,6 +1182,15 @@ gp_leave() { local r=0
     lk_shows "$lk_pc" "^db +47240 +$lk_v1 " link && ! lk_shows "$lk_pc" "^db +47244 " link || r=1
   lk_dv "$lk_p2" link unpublish 47245; lk_end "$lk_v2" 127.0.0.1 47245
   lk_dv "$lk_pc" link unpublish 47246; lk_end "$lk_vc" 127.0.0.1 47246
+  return "$r"; }
+# The client alone in a group as db, the first target's folder part: the target is refused, as
+# itself or another name, and stays out. The client leaves whatever comes of the checks.
+gp_hostname() { local r=0 g=${lk_x}h n1=${lk_x}db
+  lk_dv "$lk_pc" group join "$g" --as "$n1" && lk_said "==> group_made group=$g vm=$lk_vc" || r=1
+  (( r == 0 )) && ! lk_dv "$lk_p1" group join "$g" && lk_said "devvm: group_name_hostname group=$g member=$lk_vc name=$n1 vm=$lk_v1" &&
+    ! lk_dv "$lk_p1" group join "$g" --as "${n1}2" && lk_said "devvm: group_name_hostname group=$g member=$lk_vc name=$n1 vm=$lk_v1" &&
+    ! grep -q "^group=$g" "$vms/$lk_v1" || r=1
+  lk_dv "$lk_pc" group leave && lk_said "==> group_gone group=$g" || r=1
   return "$r"; }
 # All or none, with the client and the first target with network policy and the second without.
 gp_policy() { local r=0 on=${lk_x}on off=${lk_x}off

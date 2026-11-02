@@ -1418,6 +1418,13 @@ other = "{{.name}} already names {{.member}} in the group {{.group}}. Give this 
 [group_name_host]
 other = "The name localhost means each VM itself, so it can't name {{.vm}} in a group. Give the VM another name with --as NAME."
 
+[group_name_hostname]
+description = "name is member's name in the group, its folder name or the name it joined with, which is also vm's own hostname, its folder name"
+other = "{{.name}} names {{.member}} in the group {{.group}} and is {{.vm}}'s own hostname, so {{.vm}} couldn't reach it by that name. Have {{.member}} leave the group and join again with another --as NAME, or use a folder with another name."
+
+[group_waiting]
+other = "waiting for another devvm to finish changing a group"
+
 [group_left]
 other = "{{.vm}} isn't in the group {{.group}} any more."
 
@@ -1434,9 +1441,6 @@ other = "{{.vm}} doesn't reach {{.links}} through the group {{.group}} any more.
 
 [group_link_name_clash]
 other = "{{.vm}} has a link of its own called {{.name}}, so it gets none of the group's links to {{.target}}. To get them, remove that link with devvm link rm."
-
-[group_link_name_host]
-other = "{{.name}} is {{.vm}}'s own hostname, so it gets none of the group's links to {{.target}}. To get them, have {{.target}} join the group again with another --as NAME."
 
 [detected]
 other = "detected a {{.found}} project"
