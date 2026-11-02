@@ -1,8 +1,9 @@
 # devvm git-protect: shows a folder's VM's .git protection, and turns it on,
-# strict or off while the VM is stopped. Strict also keeps host git status
-# and diff out of submodules (diff.ignoreSubmodules=all in .git/config).
-# Locks need macOS: elsewhere on and strict are refused. The chflags stub
-# changes no flags.
+# strict or off while the VM is stopped; a running VM's change is saved and
+# applied when it next stops. Strict also keeps host git status and diff
+# out of submodules (diff.ignoreSubmodules=all in .git/config). Locks need
+# macOS: elsewhere on and strict are refused. The chflags stub changes no
+# flags.
 env DEVVM_MESSAGES=names
 env VMS=$XDG_DATA_HOME/devvm/vms
 
@@ -14,21 +15,51 @@ stderr '^devvm: no_vm_git_protect dir=\S*/web$'
 ! exec devvm git-protect maybe
 stderr '^devvm: arg_not_choice choices=on, strict, off command=devvm git-protect given=maybe$'
 
-# A new VM, running: shown, but not changed on macOS (it could race the
-# locks); elsewhere off, and on is refused.
+# A new VM, running: shown, but on macOS changed only when it next stops
+# (it could race the locks), the last choice kept; elsewhere off, and on
+# is refused.
 exec git init -q
 exec devvm --no-network-policy base
 exec devvm git-protect
 [darwin] stdout '\Aon\n\z'
 [linux] stdout '\Aoff\n\z'
-[darwin] ! exec devvm git-protect off
-[darwin] stderr '^devvm: git_protect_running vm=devvm-web-[0-9a-f]{14}$'
 [linux] exec devvm git-protect off
 [linux] stdout '^==> git_unlocked vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm git-protect strict
-[darwin] stderr '^devvm: git_protect_running vm=devvm-web-[0-9a-f]{14}$'
+[linux] ! exec devvm git-protect strict
 [linux] stderr '^devvm: git_protect_on_needs_macos$'
 [linux] stop 'no locks off macOS'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm git-protect strict
+stdout '^==> git_protect_next_stop mode=strict vm=devvm-web-[0-9a-f]{14}$'
+exec devvm git-protect off
+stdout '^==> git_protect_next_stop mode=off vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout chflags
+exec devvm git-protect
+stdout '\Aon\n\z'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+stdout '^git_protect_next=off$'
+# devvm stop applies it.
+exec devvm stop
+stdout '^==> git_unlocked vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
+exec devvm git-protect
+stdout '\Aoff\n\z'
+exec sh -c 'cat "$VMS"/devvm-web-*'
+! stdout '^git_protect_next=.'
+# Stopped outside devvm: the next launch applies it before the VM starts.
+exec devvm
+exec devvm git-protect on
+stdout '^==> git_protect_next_stop mode=on vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec sh -c ': > "$STUB_LOG"'
+exec devvm
+stdout '^==> git_locked vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^chflags -R -P uchg /\S*/web/\.git/config\n(.*\n)*limactl .*start'
+exec devvm git-protect
+stdout '\Aon\n\z'
 
 # Stopped: strict sets diff.ignoreSubmodules with .git/config unlocked,
 # then locks .git again.

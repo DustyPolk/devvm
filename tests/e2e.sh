@@ -1634,9 +1634,11 @@ if [[ "$(uname -s)" == Darwin ]]; then
       git update-index --add --cacheinfo 160000,\$(git -C vmsub rev-parse HEAD),vmsub' </dev/null &&
     cd '$p' && '$D' stop </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m git_embedded_new git=$p/vmsub/.git | head -1)\" '$work/last.log' &&
     [[ \$(status_of $vm) == Stopped ]] && ls -lOd '$p/vmsub/.git/config' | grep -q uchg"
-  check "git-protect waits for the VM to stop" bash -c "cd '$p' && printf 'exit\n' | '$D' >/dev/null 2>&1 &&
-    [[ \$(status_of $vm) == Running ]] && '$D' git-protect off </dev/null 2>&1 |
-    grep -qF \"\$(m git_protect_running vm=$vm | head -1)\" && ls -lOd '$p/.git/config' | grep -q uchg"
+  check "git-protect on a running VM waits for it to stop, and devvm stop applies it" bash -c "cd '$p' &&
+    printf 'exit\n' | '$D' >/dev/null 2>&1 && [[ \$(status_of $vm) == Running ]] && '$D' git-protect off </dev/null 2>&1 |
+    grep -qF \"\$(m git_protect_next_stop mode=off vm=$vm | head -1)\" && ls -lOd '$p/.git/config' | grep -q uchg &&
+    '$D' stop </dev/null >/dev/null 2>&1 && ! ls -lOd '$p/.git/config' | grep -q uchg &&
+    [[ \$('$D' git-protect 2>/dev/null) == off ]] && printf 'exit\n' | '$D' >/dev/null 2>&1 && [[ \$(status_of $vm) == Running ]]"
   check "stopped outside devvm, its port forwarder ends with it (its lifeline)" bash -c "limactl stop $vm >/dev/null 2>&1 &&
     for i in \$(seq 10); do pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null || exit 0; sleep 1; done; exit 1"
   check "git-protect strict keeps host git status out of submodules" bash -c "limactl stop $vm >/dev/null 2>&1; cd '$p' &&
@@ -1812,8 +1814,8 @@ check "then rm refuses with uncommitted changes in a worktree in the clone, show
   grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' && grep -qx '?? w' '$work/last.log' &&
   ! grep -qF \"\$(m clone_dirty | head -1)\" '$work/last.log' &&
   grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
-in_vm "$vm" "cd '$c' && rm .worktrees/a/w" >/dev/null 2>&1
-check "with nothing left to lose, rm --force deletes it and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
+check "rm --no-clone-check deletes it unchecked after a warning, the worktree's change with it, and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm --force --no-export --no-clone-check </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m clone_check_skipped vm=$vm | head -1)\" '$work/last.log' && ! grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
   [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&
   grep -qF \"\$(m saved_branches 'branches=\"saved/devvm/main\"' | head -1)\" '$work/last.log' && [[ ! -e '$ch/.ssh/config' ]]"

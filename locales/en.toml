@@ -1134,7 +1134,7 @@ other = "{{.vm}} is now {{.image}}"
 other = "exported {{.vm}}'s agent history to {{.file}}"
 
 [rm_export_failed]
-other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm -f to delete it without exporting."
+other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm --no-export to delete it without exporting."
 
 [history_not_exported]
 other = "Exporting {{.vm}}'s agent history failed."
@@ -1819,7 +1819,10 @@ other = "Keeping the branches fetched from the git remote {{.remote}} as local b
 other = "Fetching the branches in {{.vm}} failed, so devvm kept the VM. Run devvm rm again to retry."
 
 [clone_check_failed]
-other = "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it anyway, run devvm rm -f."
+other = "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
+
+[clone_check_skipped]
+other = "Without the clone check, deleting {{.vm}} loses the commits on its clone that this repo hasn't fetched, and the clone's uncommitted changes."
 
 [clone_dirty]
 other = "The VM's clone has uncommitted changes, which will be lost:"
@@ -1861,8 +1864,9 @@ other = "There's no VM for {{.dir}}. Run devvm to make one, or devvm --no-git-pr
 description = "reason is an error from the system, in English"
 other = "Showing or changing .git protection failed: {{.reason}}."
 
-[git_protect_running]
-other = "{{.vm}} is running, and devvm changes .git protection only while the VM is stopped. Run devvm stop first."
+[git_protect_next_stop]
+description = "mode is on, strict or off"
+other = "{{.vm}} is running, so devvm turns its .git protection {{.mode}} when the VM next stops. Run devvm stop or devvm restart to apply it now."
 
 [git_protect_on_needs_macos]
 other = ".git protection needs macOS. To keep a VM out of .git, use devvm --clone."

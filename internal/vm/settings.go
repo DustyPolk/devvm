@@ -30,7 +30,8 @@ func (e Settings) GitProtect(ctx context.Context) (string, error) {
 
 // SetGitProtect turns the folder's VM's .git protection on, strict or
 // off. Locks change only while the VM is stopped, so nothing in it can
-// race them; on and strict lock .git as it is now.
+// race them: a running VM's choice is saved, and set when devvm next
+// finds it stopped (checkGit). On and strict lock .git as it is then.
 func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
 	if err != nil {
@@ -53,9 +54,20 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 			return err
 		}
 		if in.Status == backend.StatusRunning {
-			return msg.GitProtectRunning(vm)
+			if err := gitprotect.SetNext(t.st, mode); err != nil {
+				return err
+			}
+			e.Info(msg.GitProtectNextStop(mode, vm))
+			return nil
 		}
 	}
+	return setGitProtect(ctx, e.Env, p, t, mode)
+}
+
+// setGitProtect sets a stopped VM's .git protection, and says what it
+// did.
+func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *found, mode string) error {
+	vm := t.f.Name
 	if err := p.Set(ctx, t.st, mode); err != nil {
 		return err
 	}
@@ -69,5 +81,26 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	default:
 		e.Info(msg.GitLocked(vm))
 	}
+	return nil
+}
+
+// checkGit is what devvm stop and each launch of an existing VM do for
+// its project folder, unless it's a --clone VM, which mounts none of it:
+// once the VM is stopped, the .git protection chosen while it ran is set;
+// then .git is checked (gitprotect's Check) and, on Linux, set-id files.
+func checkGit(ctx context.Context, e *Env, t *found, running bool) error {
+	if isClone(t.st) {
+		return nil
+	}
+	p := e.Protector(t.f.Dir)
+	if next := gitprotect.Next(t.st); next != "" && !running {
+		if err := setGitProtect(ctx, e, p, t, next); err != nil {
+			return err
+		}
+	}
+	if err := p.Check(ctx, t.st, running); err != nil {
+		return err
+	}
+	e.checkSetID(t.f.Dir)
 	return nil
 }

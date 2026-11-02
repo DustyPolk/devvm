@@ -456,6 +456,31 @@ func TestUnlock(t *testing.T) {
 	}
 }
 
+// A mode saved for a running VM's next stop changes nothing until Set
+// sets a mode, any mode, which drops it; a later SetNext replaces it.
+func TestSetNext(t *testing.T) {
+	f := newFixture(t, "p")
+	mkdirs(t, f.path(".git/hooks"))
+	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+		t.Fatal(err)
+	}
+	f.flags = nil
+	for _, m := range []string{Off, Strict} {
+		if err := SetNext(f.vm, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if Next(f.vm) != Strict || f.p.Mode(f.vm) != On || len(f.flags) > 0 {
+		t.Errorf("saved: next %q, mode %q, flags %q", Next(f.vm), f.p.Mode(f.vm), f.flags)
+	}
+	if err := f.p.Set(t.Context(), f.vm, Off); err != nil {
+		t.Fatal(err)
+	}
+	if Next(f.vm) != "" || f.p.Mode(f.vm) != Off {
+		t.Errorf("set: next %q, mode %q", Next(f.vm), f.p.Mode(f.vm))
+	}
+}
+
 // Off: nothing is locked. On hosts without locks it's off, saying so when
 // there's a .git.
 func TestNewVMOffAndLinux(t *testing.T) {

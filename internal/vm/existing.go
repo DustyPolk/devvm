@@ -120,12 +120,8 @@ func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, erro
 	}
 	running := in.Status == backend.StatusRunning
 	devcontainers(e).check(st, t.f.Dir)
-	// A clone mounts nothing of the folder's.
-	if !isClone(st) {
-		if err := e.Protector(t.f.Dir).Check(ctx, st, running); err != nil {
-			return backend.Confinement{}, err
-		}
-		e.checkSetID(t.f.Dir)
+	if err := checkGit(ctx, e.Env, t, running); err != nil {
+		return backend.Confinement{}, err
 	}
 	if err := e.applySize(ctx, b, st, in); err != nil {
 		return backend.Confinement{}, err

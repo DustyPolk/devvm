@@ -8,7 +8,7 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// newRmCmd is devvm rm [--force] [--no-export].
+// newRmCmd is devvm rm [--force] [--no-export] [--no-clone-check].
 func newRmCmd(u *ui.UI) *cobra.Command {
 	var o vm.RmOptions
 	cmd := &cobra.Command{
@@ -16,11 +16,12 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 		Short: "Delete this folder's VM",
 		Long: "Delete this folder's VM and what devvm keeps for it, after asking in a terminal. " +
 			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export. " +
-			"A --clone VM's work that this repo hasn't fetched is offered for fetching first.",
+			"A --clone VM's work that this repo hasn't fetched is offered for fetching first, unless you give --no-clone-check.",
 		Example: examples(
 			"devvm rm", "delete this folder's VM, after asking",
 			"devvm rm --force", "delete it without asking, as a script must",
 			"devvm rm --no-export", "delete it without exporting the agents' history",
+			"devvm rm --no-clone-check", "delete a --clone VM without checking its clone, losing its unfetched work",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -30,5 +31,6 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 	}
 	addForceFlag(cmd.Flags(), &o.Force)
 	cmd.Flags().BoolVar(&o.NoExport, "no-export", false, "delete without exporting the agents' history first")
+	cmd.Flags().BoolVar(&o.NoCloneCheck, "no-clone-check", false, "delete a --clone VM without checking its clone for unfetched commits and uncommitted changes, which are lost")
 	return cmd
 }

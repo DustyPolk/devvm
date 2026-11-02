@@ -118,13 +118,19 @@ stdout '^\?\? w$'
 stderr '^devvm: no_terminal_delete$'
 
 # --force never skips the checks: with the worktree's change still there,
-# rm keeps the VM; once it's gone, rm deletes it, and a remote the user
-# pointed elsewhere stays.
+# rm keeps the VM. A check that can't read the clone keeps it too, naming
+# --no-clone-check, which deletes it unchecked after a warning, the
+# worktree's change with it; a remote the user pointed elsewhere stays.
 ! exec devvm rm --force --no-export
 stderr '^devvm: no_terminal_delete$'
-exec sh -c 'rm "$STUB_DIR/vmfs$(pwd -P)/.worktrees/a/w"'
+exec sh -c 'mv "$STUB_DIR/vmfs" "$STUB_DIR/vmfs.away"'
+! exec devvm rm --force
+stderr '^devvm: clone_check_failed vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c 'mv "$STUB_DIR/vmfs.away" "$STUB_DIR/vmfs"'
 exec git remote set-url devvm-web https://example.com/mine.git
-exec devvm rm --force
+exec devvm rm --force --no-clone-check
+stderr '^devvm: clone_check_skipped vm=devvm-web-[0-9a-f]{14}$'
+! stdout 'unfetched_commits|clone_dirty|clone_worktree_dirty'
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 ! stdout removed_remote
 exec git remote get-url devvm-web

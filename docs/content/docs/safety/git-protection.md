@@ -14,6 +14,7 @@ git in the VM can commit, branch, check out, stash, fetch and pull, and `git wor
 To run them, stop the VM, unlock `.git`, run the commands on this machine, and lock it again:
 
 ```sh
+devvm stop
 devvm git-protect off
 git config …
 devvm git-protect on
@@ -21,7 +22,7 @@ devvm git-protect on
 
 ## Turning it on or off
 
-`devvm git-protect` shows the VM's protection, which is `on`, `strict`, `off`, or `clone` for a [`--clone`](../using/clone.md) VM, which mounts no `.git`. `devvm git-protect on`, `strict` or `off` changes it, but only while the VM is stopped, because a running VM could race the locks. Launches lock only a stopped VM for the same reason.
+`devvm git-protect` shows the VM's protection, which is `on`, `strict`, `off`, or `clone` for a [`--clone`](../using/clone.md) VM, which mounts no `.git`. `devvm git-protect on`, `strict` or `off` changes it at once when the VM is stopped. A running VM could race the locks, so for a running VM devvm saves your choice and says so, and it applies the choice the next time it finds the VM stopped: at `devvm stop`, at `devvm restart`, or, when the VM was stopped some other way, at the next launch, before the VM starts. Until then, `devvm git-protect` shows the protection the VM has, and a later choice replaces the saved one. Launches lock only a stopped VM for the same reason.
 
 - `on` locks `.git` as it is now and takes it as yours, so a `.git` that was replaced since the last lock isn't reported, and the next launches compare with this one. It reports what [a lock can't stop](../internals/git-protection.md#what-a-lock-cant-stop) and what's [not covered](#not-covered), as devvm did when it made the VM. If the folder has no `.git` yet, devvm locks it on the first launch after one appears.
 - `strict` is `on` plus [strict](#strict).

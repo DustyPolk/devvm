@@ -21,9 +21,9 @@ import (
 type Lifecycle struct{ *Env }
 
 // Stop stops the folder's VM, its proxy and its link session. Then, the
-// VM being stopped,
-// .git is locked again and checked (on Linux, set-id files too) as on a
-// launch that finds it stopped, and its ssh config entry goes.
+// VM being stopped, the .git protection chosen while it ran is set, .git
+// is locked again and checked (on Linux, set-id files too) as on a
+// launch that finds it stopped (checkGit), and its ssh config entry goes.
 func (e Lifecycle) Stop(ctx context.Context) error {
 	t, err := e.folderVM(ctx, msg.NoVM)
 	if err != nil {
@@ -44,11 +44,8 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 	}
 	e.Proxy.Stop(vm)
 	linkRuns(e).stop(ctx, vm)
-	if !isClone(t.st) {
-		if err := e.Protector(t.f.Dir).Check(ctx, t.st, false); err != nil {
-			return err
-		}
-		e.checkSetID(t.f.Dir)
+	if err := checkGit(ctx, e.Env, t, false); err != nil {
+		return err
 	}
 	return e.sshConfig().Write(ctx)
 }
@@ -95,13 +92,17 @@ func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
 type RmOptions struct {
 	Force    bool // --force: no "delete it?" asked, which needs a terminal otherwise
 	NoExport bool // --no-export: the agents' history isn't exported first
+	// NoCloneCheck (--no-clone-check): a --clone VM's clone isn't checked
+	// for work the repo lacks first, which is lost.
+	NoCloneCheck bool
 }
 
 // Rm deletes the folder's VM, after asking in a terminal, or with
 // --force; without either it refuses (force_needed). Its agents' history
 // is exported first unless --no-export: an export that fails keeps it.
 // A --clone VM's branches the repo lacks and uncommitted changes are
-// checked first (cloneRmCheck), which asks only in a terminal. A VM made
+// checked first (cloneRmCheck), which asks only in a terminal, unless
+// --no-clone-check, which warns that they're lost instead. A VM made
 // for an earlier folder at this path, or a parent folder's VM found from
 // a subfolder, is deleted only after asking in a terminal, which --force
 // never answers, and never without one; the earlier folder's isn't
@@ -132,17 +133,21 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		}
 		asked, o.NoExport = true, true
 	}
-	if !asked && !o.Force {
-		if !e.Terminal() {
-			return msg.ForceNeeded("devvm rm")
-		}
-		if !e.Ask(msg.RmConfirm(vm)) {
-			e.Info(msg.Kept(vm))
-			return nil
-		}
+	confirm := !asked && !o.Force
+	if confirm && !e.Terminal() {
+		return msg.ForceNeeded("devvm rm")
 	}
 	// A VM whose creation didn't finish never ran: no history, no work.
-	if st.Get(KeyNet) != "" && isClone(st) && e.sameFolder(t.f, st) {
+	checkClone := st.Get(KeyNet) != "" && isClone(st) && e.sameFolder(t.f, st)
+	if checkClone && o.NoCloneCheck {
+		e.Warn(msg.CloneCheckSkipped(vm))
+		checkClone = false
+	}
+	if confirm && !e.Ask(msg.RmConfirm(vm)) {
+		e.Info(msg.Kept(vm))
+		return nil
+	}
+	if checkClone {
 		keep, err := clones(e).cloneRmCheck(ctx, t)
 		if err != nil || keep {
 			return err

@@ -7,7 +7,7 @@ Delete this folder's VM
 
 ## Synopsis
 
-Delete this folder's VM and what devvm keeps for it, after asking in a terminal. When its image has an agent, devvm first exports the agents' history, unless you give --no-export. A --clone VM's work that this repo hasn't fetched is offered for fetching first.
+Delete this folder's VM and what devvm keeps for it, after asking in a terminal. When its image has an agent, devvm first exports the agents' history, unless you give --no-export. A --clone VM's work that this repo hasn't fetched is offered for fetching first, unless you give --no-clone-check.
 
 ```text
 devvm rm [flags]
@@ -16,17 +16,19 @@ devvm rm [flags]
 ## Examples
 
 ```text
-  devvm rm              # delete this folder's VM, after asking
-  devvm rm --force      # delete it without asking, as a script must
-  devvm rm --no-export  # delete it without exporting the agents' history
+  devvm rm                   # delete this folder's VM, after asking
+  devvm rm --force           # delete it without asking, as a script must
+  devvm rm --no-export       # delete it without exporting the agents' history
+  devvm rm --no-clone-check  # delete a --clone VM without checking its clone, losing its unfetched work
 ```
 
 ## Options
 
 ```text
-  -f, --force       don't ask to confirm, which devvm needs without a terminal
-  -h, --help        help for rm
-      --no-export   delete without exporting the agents' history first
+  -f, --force            don't ask to confirm, which devvm needs without a terminal
+  -h, --help             help for rm
+      --no-clone-check   delete a --clone VM without checking its clone for unfetched commits and uncommitted changes, which are lost
+      --no-export        delete without exporting the agents' history first
 ```
 
 ## Options inherited from parent commands

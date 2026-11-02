@@ -19,7 +19,7 @@ devvm locks these paths:
 
 ### When devvm locks
 
-devvm locks when it creates the VM, and again on each launch that finds the VM stopped and on `devvm stop`, so nothing in the VM can race the locks. A running VM keeps the locks it had, and `devvm stop` or the next launch that finds the VM stopped, such as `devvm restart`, sets new ones.
+devvm locks when it creates the VM, and again on each launch that finds the VM stopped and on `devvm stop`, so nothing in the VM can race the locks. A running VM keeps the locks it had, and `devvm stop` or the next launch that finds the VM stopped, such as `devvm restart`, sets new ones. `devvm git-protect` on a running VM saves the mode in the VM's state (`git_protect_next`), and the same places set it first, then check `.git` under the new mode.
 
 A new VM that's interrupted before its first shell is deleted, and devvm takes its locks off. When `devvm rm` deletes a VM, devvm also takes its locks off.
 

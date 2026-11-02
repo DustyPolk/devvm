@@ -364,9 +364,14 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
-// CloneCheckFailed is [clone_check_failed]: "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it anyway, run devvm rm -f."
+// CloneCheckFailed is [clone_check_failed]: "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
 func CloneCheckFailed(vm string) M {
 	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
+}
+
+// CloneCheckSkipped is [clone_check_skipped]: "Without the clone check, deleting {{.vm}} loses the commits on its clone that this repo hasn't fetched, and the clone's uncommitted changes."
+func CloneCheckSkipped(vm string) M {
+	return M{id: "clone_check_skipped", vals: []val{{"vm", vm}}}
 }
 
 // CloneDetached is [clone_detached]: "--clone needs a branch checked out, and HEAD is detached. Check out a branch, then run devvm --clone again."
@@ -1409,14 +1414,14 @@ func GitProtectNeedsMacosNew() M {
 	return M{id: "git_protect_needs_macos_new"}
 }
 
+// GitProtectNextStop is [git_protect_next_stop]: "{{.vm}} is running, so devvm turns its .git protection {{.mode}} when the VM next stops. Run devvm stop or devvm restart to apply it now."
+func GitProtectNextStop(mode string, vm string) M {
+	return M{id: "git_protect_next_stop", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
 // GitProtectOnNeedsMacos is [git_protect_on_needs_macos]: ".git protection needs macOS. To keep a VM out of .git, use devvm --clone."
 func GitProtectOnNeedsMacos() M {
 	return M{id: "git_protect_on_needs_macos"}
-}
-
-// GitProtectRunning is [git_protect_running]: "{{.vm}} is running, and devvm changes .git protection only while the VM is stopped. Run devvm stop first."
-func GitProtectRunning(vm string) M {
-	return M{id: "git_protect_running", vals: []val{{"vm", vm}}}
 }
 
 // GitReplaced is [git_replaced]: "WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here."
@@ -2569,7 +2574,7 @@ func RmConfirm(vm string) M {
 	return M{id: "rm_confirm", vals: []val{{"vm", vm}}}
 }
 
-// RmExportFailed is [rm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm -f to delete it without exporting."
+// RmExportFailed is [rm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm --no-export to delete it without exporting."
 func RmExportFailed(vm string) M {
 	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
 }
@@ -3359,6 +3364,7 @@ var specs = map[string]spec{
 	"claude_token_howto":               {},
 	"claude_token_invalid":             {},
 	"clone_check_failed":               {fields: []string{"vm"}},
+	"clone_check_skipped":              {fields: []string{"vm"}},
 	"clone_detached":                   {},
 	"clone_dirty":                      {},
 	"clone_needs_git":                  {},
@@ -3567,8 +3573,8 @@ var specs = map[string]spec{
 	"git_protect_failed":               {fields: []string{"reason"}},
 	"git_protect_flag_ignored":         {},
 	"git_protect_needs_macos_new":      {},
+	"git_protect_next_stop":            {fields: []string{"mode", "vm"}},
 	"git_protect_on_needs_macos":       {},
-	"git_protect_running":              {fields: []string{"vm"}},
 	"git_replaced":                     {fields: []string{"git"}},
 	"git_unlocked":                     {fields: []string{"vm"}},
 	"git_worktree_stray":               {fields: []string{"wt"}},

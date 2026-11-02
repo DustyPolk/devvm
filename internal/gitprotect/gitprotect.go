@@ -34,11 +34,12 @@ import (
 
 // Keys of a VM's state that git protection keeps.
 const (
-	KeyGitProtect     = "git_protect"     // on, strict or off
-	KeyGitInode       = "git_inode"       // .git's inode when it was last locked
-	KeyGitEmbedded    = "git_embedded"    // submodule git dirs in the working tree (JSON, relative paths)
-	KeyGitModules     = "git_modules"     // git dirs under .git/modules (JSON, relative paths)
-	KeyGitDelegations = "git_delegations" // a hash of what the locked files hand over to the project folder
+	KeyGitProtect     = "git_protect"      // on, strict or off
+	KeyGitProtectNext = "git_protect_next" // the mode chosen while the VM ran, set when it's next stopped
+	KeyGitInode       = "git_inode"        // .git's inode when it was last locked
+	KeyGitEmbedded    = "git_embedded"     // submodule git dirs in the working tree (JSON, relative paths)
+	KeyGitModules     = "git_modules"      // git dirs under .git/modules (JSON, relative paths)
+	KeyGitDelegations = "git_delegations"  // a hash of what the locked files hand over to the project folder
 )
 
 // maxDepth is how deep submodules of submodules are followed.
@@ -116,11 +117,27 @@ func (p *Protector) Mode(vm *state.VM) string {
 	}
 }
 
+// Next returns the mode chosen for a VM while it ran (SetNext), which
+// the caller sets with Set once it's stopped; "" for none.
+func Next(vm *state.VM) string { return vm.Get(KeyGitProtectNext) }
+
+// SetNext saves mode for a running VM, whose locks can't change until it
+// stops: the caller sets it with Set then, and a later choice replaces it.
+func SetNext(vm *state.VM, mode string) error { return vm.Set(KeyGitProtectNext, mode) }
+
 // Set changes the protection of a stopped VM: on and strict lock .git as
 // it is now, as trusted, and report what a lock can't cover; strict also
 // sets diff.ignoreSubmodules=all in the locked .git/config, which on and
-// off take out again; off unlocks. On and strict need macOS.
+// off take out again; off unlocks. On and strict need macOS. Once it's
+// set, a mode saved for the VM's next stop (SetNext) is dropped.
 func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
+	if err := p.set(ctx, vm, mode); err != nil || Next(vm) == "" {
+		return err
+	}
+	return vm.Set(KeyGitProtectNext, "")
+}
+
+func (p *Protector) set(ctx context.Context, vm *state.VM, mode string) error {
 	was := vm.Get(KeyGitProtect)
 	if mode == Off {
 		p.Unlock(ctx)

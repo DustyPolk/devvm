@@ -87,3 +87,5 @@ Once the checks pass, devvm deletes the VM. If the remote still points at the VM
 The saved branches are named after the remote, as `saved/<remote>/<branch>`, and devvm never overwrites a branch. When a branch is in the way, devvm uses `saved/<remote>-2`, then `-3` and so on, and if it finds no free name, `devvm rm` refuses and keeps the VM ([saved branches](../internals/overview.md#saved-branches)).
 
 `devvm rm --force` skips only the question whether to delete the VM at all, and both checks still run. `devvm rm --no-export` skips the export of the agents' history, and it also leaves both checks as they are.
+
+`devvm rm --no-clone-check` skips both checks, so the VM goes with the commits this repo hasn't fetched and the uncommitted changes, and devvm warns you of that first. Use it when a check can't read the clone, such as when git in the VM is broken, and devvm refuses and keeps the VM. devvm still asks whether to delete the VM unless you also give `--force`, and it still keeps the `devvm/*` branches you fetched as `saved/devvm/` branches.
