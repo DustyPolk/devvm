@@ -146,6 +146,10 @@ func TestJSONShapes(t *testing.T) {
 		},
 		{"link publish", map[string]string{"ports": "5432,8000-8010"}, []string{"ports: string"}},
 		{
+			"group", groupJSON(vm.GroupShown{Group: "web", Members: []vm.GroupMember{{Name: "db", VM: "devvm-db-0123456789abcd", Folder: "/db", Published: "5432"}}}),
+			[]string{"group: string", "members[].folder: string", "members[].name: string", "members[].published: string", "members[].vm: string"},
+		},
+		{
 			"history", historyJSON([]savedExport{{Path: "/e.tar.gz", VM: "devvm-a", Folder: "/a", At: at, Size: 3}}),
 			[]string{"exports[].date: string", "exports[].file: string", "exports[].folder: string", "exports[].size: number", "exports[].vm: string"},
 		},
@@ -233,6 +237,8 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 		"devvm link add":       "it changes a setting",
 		"devvm link rm":        "it changes a setting",
 		"devvm link unpublish": "it changes a setting",
+		"devvm group join":     "it changes a setting",
+		"devvm group leave":    "it changes a setting",
 		"devvm history export": "it writes an export",
 		"devvm layer":          "it prints its help",
 		"devvm layer new":      "it writes a file",

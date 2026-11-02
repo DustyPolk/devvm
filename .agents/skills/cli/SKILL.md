@@ -13,13 +13,13 @@ The reasoning behind most rules is in the [Command Line Interface Guidelines](ht
 
 ## The tree
 
-devvm has 28 commands at the top, plus help, and links between VMs adds group. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
+devvm has 29 commands at the top, plus help. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
 
 | Group | Commands |
 | --- | --- |
 | Your VM | devvm [IMAGE], restart, stop, rm, adopt, ls, code, desktop, host, history, history export [FILE] |
 | Change your VM | tools, tools add\|rm TOOL..., tools update; size, with --cpus, --memory and --disk; ports [all\|none\|LIST], ports add\|rm LIST; network [on\|off], network allow\|deny\|rm RULE..., network log; ssh-agent [on\|devvm\|off], ssh-agent add\|rm KEY_FILE; git-protect [on\|strict\|off]; secret, secret set\|rm\|use\|unuse NAME |
-| Links between VMs | link, link add\|rm TARGET PORT, with --as NAME on add; link publish [PORTS], link unpublish PORTS; group, which links between VMs adds |
+| Links between VMs | group, group join NAME, with --as NAME, group leave; link, link add\|rm TARGET PORT, with --as NAME on add; link publish [PORTS], link unpublish PORTS |
 | Images | images, images rm IMAGE\|KEY..., build IMAGE, rebuild IMAGE, layer new NAME |
 | Disk space | space, gc, retention [KEY=VALUE...] |
 | This machine | setup, doctor, completion SHELL, limactl [ARGS...] |
@@ -57,7 +57,7 @@ Work through this list for each new command, in order, then run [the review](#re
 7. **Output:** when it shows or lists something, give it `jsonFlag`, a struct of its own with snake_case `json` tags, `printJSON`, a row in `TestJSONShapes` and a section with an example on its docs page. Otherwise add it to `withoutJSON` in `internal/cli/json_test.go` with why.
 8. **Help:** write a `Short`, a `Long` of one to three sentences and an `Example` from `examples()`, with the docs-voice skill ([help](judgment.md#help)). Add its path to `commandDocs` in `internal/msg/docs.go`, pointing at the user page that covers it, and add a root command to its group in `commandGroups`.
 9. **Messages:** every message goes in `locales/en.toml`, with the docs-voice skill's Messages rules, and then `go generate ./internal/msg`. A usage error names what the command expected ([usage errors](judgment.md#usage-errors)).
-10. **Reserve its name:** add every new command's and subcommand's name to `image.Reserved` in `internal/image/reserved.go`. Links' and groups' names are there already.
+10. **Reserve its name:** add every new command's and subcommand's name to `image.Reserved` in `internal/image/reserved.go`.
 11. **Register it** with `AddCommand` in `NewRoot` (`internal/cli/root.go`) or under its noun, and write it in its own file, `internal/cli/<command>.go`, named in AGENTS.md's Layout row for `internal/cli`.
 12. **Tests:** add a CLI test in `testdata/script/` for what it does and for each refusal, with `DEVVM_MESSAGES=names`. Add the command's arguments to `argSamples` in `internal/cli/args_test.go` when `TestUseMatchesArgs` asks for them.
 13. **Docs:** add the command to its group's table on the Commands page (`docs/content/docs/getting-started/commands.md`), and to the page that `commandDocs` names, with the docs-voice skill. Then run `mise run cli-docs` and commit the pages it writes.

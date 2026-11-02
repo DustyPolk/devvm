@@ -196,8 +196,11 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm link rm TARGET PORT` | remove one of this folder's VM's links ([details](../using/links.md#removing-a-link)) |
 | `devvm link publish [PORTS]` | show the ports this folder's VM publishes, or offer PORTS to links from any of your other VMs ([details](../using/links.md#publishing-a-port)) |
 | `devvm link unpublish PORTS` | stop offering ports to links ([details](../using/links.md#publishing-a-port)) |
+| `devvm group` | show the group this folder's VM is in, with each of its VMs, the name the others reach it by, its folder and the ports it publishes ([details](../using/links.md#groups)) |
+| `devvm group join NAME [--as NAME]` | put this folder's VM in the group NAME, which its first VM makes, so each VM in the group reaches the ports the others publish ([details](../using/links.md#joining-a-group)) |
+| `devvm group leave` | take this folder's VM out of its group, removing the links the group made ([details](../using/links.md#leaving-a-group)) |
 
-[Links between VMs](../using/links.md) explains what a link reaches, its names, and why a link joins the two VMs' trust.
+[Links between VMs](../using/links.md) explains what a link reaches, its names, groups, and why a link joins the two VMs' trust.
 
 ## Images
 

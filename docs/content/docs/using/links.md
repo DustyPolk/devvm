@@ -12,7 +12,7 @@ cd ~/code/db && devvm link publish 5432    # offer the database's port to links
 cd ~/code/app && devvm link add db 5432    # programs in app's VM reach it as db:5432
 ```
 
-Programs in the app's VM then reach the database as `db:5432` and as `db.devvm.internal:5432`. A link joins the two VMs' trust, so add one only between VMs you'd trust with each other's reach ([below](#a-link-joins-the-two-vms-trust)).
+Programs in the app's VM then reach the database as `db:5432` and as `db.devvm.internal:5432`. A link joins the two VMs' trust, so add one only between VMs you'd trust with each other's reach ([below](#a-link-joins-the-two-vms-trust)). To link several VMs to each other at once, put them in a [group](#groups).
 
 ## Publishing a port
 
@@ -100,6 +100,7 @@ db    8000  devvm-db-71a99b1076d92c  /Users/you/code/db  Running  unpublished
 - `replaced`: the target's folder has another VM, made again since the link was.
 - `unpublished`: the target doesn't publish the port.
 - `policy`: the client has network policy and the target doesn't.
+- `ungrouped`: a [group](#groups) made the link, and the two VMs aren't in that group together any more. You can remove such a link with `devvm link rm`.
 
 `devvm ls` shows how many links each VM has, in its `LINKS` column.
 
@@ -157,6 +158,91 @@ devvm never starts a VM for a link. A connection to a stopped target fails, and 
 `devvm rm` of a target removes every link to it from your other VMs and names the clients that lost one. A VM that you make again in that folder isn't linked, so publish its ports and add the links again. `devvm rm` of a client removes its links, and `devvm stop` of a client ends its links' connections.
 
 A link can't listen when a program in the client already holds its port in a way that covers the link's address, such as a server of the client's own on all its addresses with the same port. That link alone doesn't work, devvm says so, and the client's other links work. Stop that program, then run `devvm restart`.
+
+## Groups
+
+A group is a set of your VMs that reach each other's published ports by name, without a `devvm link add` for each pair. You join each VM in its own folder, and devvm makes the links between them, so every VM in the group gets a link to each port that every other VM in it publishes. A VM is in one group at a time.
+
+For a database in `~/code/db`, an API in `~/code/api` and an app in `~/code/app`, each with a VM:
+
+```sh
+cd ~/code/db && devvm link publish 5432 && devvm group join web
+cd ~/code/api && devvm link publish 8080 && devvm group join web
+cd ~/code/app && devvm group join web
+```
+
+Programs in the app's VM then reach `db:5432` and `api:8080`, programs in the API's VM reach `db:5432`, and programs in the database's VM reach `api:8080`. The links a group makes are links like any other, so what this page says about names, ports, network policy, the link log and stopped targets holds for them too, and `devvm link` lists them.
+
+### Joining a group
+
+`devvm group join NAME` puts this folder's VM in the group NAME. The first VM to join makes the group, and devvm says so. A group's name is made of lowercase letters, digits and dashes, starts and ends with a letter or a digit, and isn't all digits.
+
+```sh
+devvm group join web             # join the group web
+devvm group join web --as api2   # join it as api2, when another VM in it has this folder's name
+devvm group                      # the group, its VMs and the ports each one publishes
+devvm group leave                # leave it
+```
+
+When the VM joins, devvm makes the group's links in it and in each of the group's other VMs, and it names the links that each VM gains. The links reach a running VM at once and a stopped one when it next starts, as [When links change](#when-links-change) describes. devvm refuses a VM that's in another group already, so run `devvm group leave` first, and it refuses a VM whose backend can't carry links. A VM made again in a folder isn't in the group that the folder's old VM was in.
+
+`devvm group` shows the group this folder's VM is in, with one row for each of its VMs:
+
+```text
+NAME  VM                        FOLDER               PUBLISHED
+api   devvm-api-0f3c2a91b7d4e6  /Users/you/code/api  8080
+app   devvm-app-5e1d7c08a2b9f4  /Users/you/code/app  none
+db    devvm-db-71a99b1076d92c   /Users/you/code/db   5432
+```
+
+`NAME` is what the group's other VMs reach that VM by, and `PUBLISHED` is the ports it publishes, or `none`. When this folder's VM isn't in a group, devvm says so.
+
+### Ports in a group
+
+The group's links reach every port that a VM in it publishes, so you publish and unpublish ports in each VM's folder, as [Publishing a port](#publishing-a-port) describes. A port that you publish reaches the links of every other VM in the group, and a port that you take out goes from them, at once on a running VM and at its next start on a stopped one. devvm names the links that each VM gains or loses. A range that you publish gives a link for each port in it.
+
+### Names in a group
+
+The group's other VMs reach a VM by its folder name, as VM names have it, unless it joined with `--as NAME`. The name follows the rules for [link names](#names), and devvm refuses `localhost`.
+
+- Two VMs in a group can't have the same name, so when another VM in the group has this folder's name, devvm refuses the join until you give this VM another with `--as NAME`. devvm also refuses a name that's another VM's folder name, because that's the other VM's own hostname. To change a VM's name in its group, leave the group, then join it again with `--as NAME`.
+- A VM whose folder name is another VM's name in the group reaches itself at that name, because it's its own hostname, so it gets none of the group's links to that other VM, and devvm warns you of it. To fix that, have the other VM leave the group and join again with another `--as NAME`.
+- The links that you make with `devvm link add` take precedence over the group's. When you link to a VM in the group yourself, the group's links to that VM take the name your link gives it, and a port that you linked gets no link from the group. When one of your links has the name of another VM in the group, the group's links to that VM go, and devvm warns you of it, until you remove your link with `devvm link rm`.
+
+### A group joins the trust of all its VMs
+
+A group joins the trust of every VM in it, as [a link joins the two VMs' trust](#a-link-joins-the-two-vms-trust), because code in any of them can often run code in the others through the ports they publish. A VM that joins later gets the same reach into every VM in the group, and they get the same reach into it, so devvm says so on every join. Put VMs in a group only when you'd trust each of them with the others' reach.
+
+### Groups and network policy
+
+A group's VMs all have network policy or none do. devvm refuses to put a VM with network policy in a group whose VMs have none, and a VM without network policy in a group whose VMs have it. While a VM is in a group, devvm refuses `devvm network on` and `devvm network off` in its folder, so run `devvm group leave` first.
+
+Because every VM in a group with network policy has it, the group's links keep [the rule](#links-and-network-policy) that a client with network policy links only to a target with network policy. Each of their connections is still refused while the target's network policy isn't in force as it runs, and devvm warns you of such a target when the group makes a link to it.
+
+### Leaving a group
+
+`devvm group leave` takes this folder's VM out of its group. It removes the links that the group made, in this VM and in the group's other VMs, and names the links that each VM loses. The links that you made with `devvm link add` stay. `devvm link rm` doesn't remove a link that the group made, so leave the group, or unpublish the port in its target's folder.
+
+`devvm rm` of a VM takes it out of its group, and when the group's last VM leaves, the group is gone.
+
+### devvm group --json
+
+`devvm group --json` prints the group as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `group` is the group's name, or `""` when the VM is in none, and `members` is `[]` then. Each of the `members` has its `name` in the group, its `vm`, its `folder`, and the ports it publishes as `published`, written as `devvm link publish` lists them, or `none`.
+
+```json
+{
+  "version": 1,
+  "group": "web",
+  "members": [
+    {
+      "name": "db",
+      "vm": "devvm-db-71a99b1076d92c",
+      "folder": "/Users/you/code/db",
+      "published": "5432"
+    }
+  ]
+}
+```
 
 ## Containers in the VM
 

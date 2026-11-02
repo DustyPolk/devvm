@@ -68,7 +68,9 @@ func (e Net) SetNetworkDefault(mode string) error {
 // SetNetwork turns the folder's VM's network policy on or off, from its
 // next start. Turning it on, its backend must be able to confine the VM
 // to its proxy, and tokens the VM got before stay valid. Either is
-// refused while it would break a link's policy rule (policyLinked).
+// refused while it would break a link's policy rule (policyLinked), and
+// while the VM is in a group, whose VMs all have network policy or none
+// do.
 func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	t, err := e.existing(ctx, "")
 	if err != nil {
@@ -82,6 +84,10 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	if st.Get(KeyNet) == to {
 		e.Info(msg.NetAlready(to, vm))
 		return nil
+	}
+	// A group's members all have network policy or none do.
+	if g := st.Get(KeyGroup); g != "" {
+		return msg.GroupPolicyMixed(g, vm)
 	}
 	// Links' policy rule: a client with network policy links only to a
 	// target with it.

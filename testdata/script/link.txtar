@@ -7,7 +7,7 @@ env VMS=$XDG_DATA_HOME/devvm/vms
 
 # The group shows once its commands exist.
 exec devvm --help
-stdout '^Links between VMs:\n  link '
+stdout '^Links between VMs:\n  group .*\n  link '
 
 # No VM yet.
 mkdir $WORK/app

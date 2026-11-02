@@ -1429,6 +1429,106 @@ func GithubTokenHowto() M {
 	return M{id: "github_token_howto"}
 }
 
+// GroupAlready is [group_already]: "{{.vm}} is in the group {{.group}} already."
+func GroupAlready(group string, vm string) M {
+	return M{id: "group_already", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupFailed is [group_failed]: "Showing or changing the group failed: {{.reason}}."
+func GroupFailed(reason string) M {
+	return M{id: "group_failed", vals: []val{{"reason", reason}}}
+}
+
+// GroupGone is [group_gone]: "The group {{.group}} has no VMs left, so it's gone."
+func GroupGone(group string) M {
+	return M{id: "group_gone", vals: []val{{"group", group}}}
+}
+
+// GroupJoined is [group_joined]: "{{.vm}} is in the group {{.group}}."
+func GroupJoined(group string, vm string) M {
+	return M{id: "group_joined", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupLeft is [group_left]: "{{.vm}} isn't in the group {{.group}} any more."
+func GroupLeft(group string, vm string) M {
+	return M{id: "group_left", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupLinkNameClash is [group_link_name_clash]: "{{.vm}} has a link of its own called {{.name}}, so it gets none of the group's links to {{.target}}. To get them, remove that link with devvm link rm."
+func GroupLinkNameClash(name string, target string, vm string) M {
+	return M{id: "group_link_name_clash", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
+}
+
+// GroupLinkNameHost is [group_link_name_host]: "{{.name}} is {{.vm}}'s own hostname, so it gets none of the group's links to {{.target}}. To get them, have {{.target}} join the group again with another --as NAME."
+func GroupLinkNameHost(name string, target string, vm string) M {
+	return M{id: "group_link_name_host", vals: []val{{"name", name}, {"target", target}, {"vm", vm}}}
+}
+
+// GroupLinksAdded is [group_links_added]: "{{.vm}} reaches {{.links}} through the group {{.group}}."
+func GroupLinksAdded(group string, links string, vm string) M {
+	return M{id: "group_links_added", vals: []val{{"group", group}, {"links", links}, {"vm", vm}}}
+}
+
+// GroupLinksRemoved is [group_links_removed]: "{{.vm}} doesn't reach {{.links}} through the group {{.group}} any more."
+func GroupLinksRemoved(group string, links string, vm string) M {
+	return M{id: "group_links_removed", vals: []val{{"group", group}, {"links", links}, {"vm", vm}}}
+}
+
+// GroupMade is [group_made]: "{{.vm}} is the first VM in the new group {{.group}}."
+func GroupMade(group string, vm string) M {
+	return M{id: "group_made", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupNameHost is [group_name_host]: "The name localhost means each VM itself, so it can't name {{.vm}} in a group. Give the VM another name with --as NAME."
+func GroupNameHost(vm string) M {
+	return M{id: "group_name_host", vals: []val{{"vm", vm}}}
+}
+
+// GroupNameInvalid is [group_name_invalid]: "{{.name}} isn't a group name. Use lowercase letters, digits and dashes, such as web, starting and ending with a letter or digit and not all digits."
+func GroupNameInvalid(name string) M {
+	return M{id: "group_name_invalid", vals: []val{{"name", name}}}
+}
+
+// GroupNameTaken is [group_name_taken]: "{{.name}} already names {{.member}} in the group {{.group}}. Give this VM another name with --as NAME."
+func GroupNameTaken(group string, member string, name string) M {
+	return M{id: "group_name_taken", vals: []val{{"group", group}, {"member", member}, {"name", name}}}
+}
+
+// GroupNamed is [group_named]: "{{.vm}} is in the group {{.group}} already, as {{.name}}. To give it another name, run devvm group leave, then join again with --as NAME."
+func GroupNamed(group string, name string, vm string) M {
+	return M{id: "group_named", vals: []val{{"group", group}, {"name", name}, {"vm", vm}}}
+}
+
+// GroupNone is [group_none]: "{{.vm}} isn't in a group. Run devvm group join NAME to join one."
+func GroupNone(vm string) M {
+	return M{id: "group_none", vals: []val{{"vm", vm}}}
+}
+
+// GroupOther is [group_other]: "{{.vm}} is in the group {{.group}}, and a VM is in one group at a time. Run devvm group leave first."
+func GroupOther(group string, vm string) M {
+	return M{id: "group_other", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupPolicyMixed is [group_policy_mixed]: "{{.vm}} is in the group {{.group}}, whose VMs all have network policy or none do, so its network policy can't change. Run devvm group leave first."
+func GroupPolicyMixed(group string, vm string) M {
+	return M{id: "group_policy_mixed", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupPolicyOff is [group_policy_off]: "The VMs in the group {{.group}} have no network policy and {{.vm}} has it, and a group's VMs all have it or none do. Join a group whose VMs have network policy instead."
+func GroupPolicyOff(group string, vm string) M {
+	return M{id: "group_policy_off", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupPolicyOn is [group_policy_on]: "The VMs in the group {{.group}} have network policy and {{.vm}} doesn't, and a group's VMs all have it or none do. Turn it on with devvm network on first, or join another group."
+func GroupPolicyOn(group string, vm string) M {
+	return M{id: "group_policy_on", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
+// GroupTrust is [group_trust]: "The group {{.group}} joins the trust of all its VMs. Code in any of them can often run code in the others through the ports they publish, and then has whatever that VM has."
+func GroupTrust(group string) M {
+	return M{id: "group_trust", vals: []val{{"group", group}}}
+}
+
 // HasTools is [has_tools]: "{{.vm}} has {{.tools}} already"
 func HasTools(tools string, vm string) M {
 	return M{id: "has_tools", vals: []val{{"tools", tools}, {"vm", vm}}}
@@ -1672,6 +1772,11 @@ func LinkExists(name string, port string, vm string) M {
 // LinkFailed is [link_failed]: "Showing or changing the links failed: {{.reason}}."
 func LinkFailed(reason string) M {
 	return M{id: "link_failed", vals: []val{{"reason", reason}}}
+}
+
+// LinkFromGroup is [link_from_group]: "{{.name}}:{{.port}} is one of the links that the group {{.group}} gives {{.vm}}, so devvm link rm doesn't remove it. To remove the group's links, run devvm group leave."
+func LinkFromGroup(group string, name string, port string, vm string) M {
+	return M{id: "link_from_group", vals: []val{{"group", group}, {"name", name}, {"port", port}, {"vm", vm}}}
 }
 
 // LinkNameHost is [link_name_host]: "{{.name}} already names {{.vm}} itself inside it. Give the link another name with --as NAME."
@@ -2157,6 +2262,11 @@ func NoVM(dir string) M {
 // NoVMGitProtect is [no_vm_git_protect]: "There's no VM for {{.dir}}. Run devvm to make one, or devvm --no-git-protect to make one without .git protection."
 func NoVMGitProtect(dir string) M {
 	return M{id: "no_vm_git_protect", vals: []val{{"dir", dir}}}
+}
+
+// NoVMGroup is [no_vm_group]: "There's no VM for {{.dir}}, so it isn't in a group. Run devvm to make one."
+func NoVMGroup(dir string) M {
+	return M{id: "no_vm_group", vals: []val{{"dir", dir}}}
 }
 
 // NoVMLink is [no_vm_link]: "There's no VM for {{.dir}}, so it has no links or published ports. Run devvm to make one."
@@ -3451,6 +3561,26 @@ var specs = map[string]spec{
 	"git_unlocked":                     {fields: []string{"vm"}},
 	"git_worktree_stray":               {fields: []string{"wt"}},
 	"github_token_howto":               {},
+	"group_already":                    {fields: []string{"group", "vm"}},
+	"group_failed":                     {fields: []string{"reason"}},
+	"group_gone":                       {fields: []string{"group"}},
+	"group_joined":                     {fields: []string{"group", "vm"}},
+	"group_left":                       {fields: []string{"group", "vm"}},
+	"group_link_name_clash":            {fields: []string{"name", "target", "vm"}},
+	"group_link_name_host":             {fields: []string{"name", "target", "vm"}},
+	"group_links_added":                {fields: []string{"group", "links", "vm"}},
+	"group_links_removed":              {fields: []string{"group", "links", "vm"}},
+	"group_made":                       {fields: []string{"group", "vm"}},
+	"group_name_host":                  {fields: []string{"vm"}},
+	"group_name_invalid":               {fields: []string{"name"}},
+	"group_name_taken":                 {fields: []string{"group", "member", "name"}},
+	"group_named":                      {fields: []string{"group", "name", "vm"}},
+	"group_none":                       {fields: []string{"vm"}},
+	"group_other":                      {fields: []string{"group", "vm"}},
+	"group_policy_mixed":               {fields: []string{"group", "vm"}},
+	"group_policy_off":                 {fields: []string{"group", "vm"}},
+	"group_policy_on":                  {fields: []string{"group", "vm"}},
+	"group_trust":                      {fields: []string{"group"}},
 	"has_tools":                        {fields: []string{"tools", "vm"}},
 	"history_failed":                   {fields: []string{"reason"}},
 	"history_not_exported":             {fields: []string{"vm"}},
@@ -3500,6 +3630,7 @@ var specs = map[string]spec{
 	"link_ambiguous_target":            {fields: []string{"target", "vms"}},
 	"link_exists":                      {fields: []string{"name", "port", "vm"}},
 	"link_failed":                      {fields: []string{"reason"}},
+	"link_from_group":                  {fields: []string{"group", "name", "port", "vm"}},
 	"link_name_host":                   {fields: []string{"name", "vm"}},
 	"link_name_invalid":                {fields: []string{"name"}},
 	"link_name_taken":                  {fields: []string{"name", "target", "vm"}},
@@ -3597,6 +3728,7 @@ var specs = map[string]spec{
 	"no_ubuntu_image":                  {fields: []string{"release", "url", "version"}},
 	"no_vm":                            {fields: []string{"dir"}},
 	"no_vm_git_protect":                {fields: []string{"dir"}},
+	"no_vm_group":                      {fields: []string{"dir"}},
 	"no_vm_link":                       {fields: []string{"dir"}},
 	"no_vm_policy":                     {fields: []string{"dir"}},
 	"no_vm_ports":                      {fields: []string{"dir"}},

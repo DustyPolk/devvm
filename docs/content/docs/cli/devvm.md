@@ -60,6 +60,7 @@ devvm [IMAGE] [flags]
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
 - [devvm gc](devvm_gc.md): Delete stale images and unused tool images
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
+- [devvm group](devvm_group.md): Show the group this folder's VM is in
 - [devvm history](devvm_history.md): List the saved exports of agents' history
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools

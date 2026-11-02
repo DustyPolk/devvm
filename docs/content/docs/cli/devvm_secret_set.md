@@ -1,6 +1,6 @@
 ---
 title: devvm secret set
-weight: 38
+weight: 41
 ---
 
 Save the Claude Code token or GitHub token on this machine

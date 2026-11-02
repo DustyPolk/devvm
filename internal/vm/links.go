@@ -47,7 +47,11 @@ type Link struct {
 	Target   string     // the target VM's name
 	TargetID string     // the target's state.KeyID when the link was made
 	Addr     netip.Addr // in 127.77.0.0/16, one per target in this client
+	Group    bool       // the client's group made it (groupLinks), not devvm link add
 }
+
+// linkGroupMark is the sixth field of a link's entry that its group made.
+const linkGroupMark = "group"
 
 // linkName is a link's name: one DNS label, in lowercase.
 var linkName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -107,11 +111,12 @@ func ReadLinks(st *state.VM) ([]Link, error) {
 }
 
 // parseLink reads one of formatLinks's entries:
-// NAME,PORT,TARGET,TARGET_ID,ADDR.
+// NAME,PORT,TARGET,TARGET_ID,ADDR, then ,group for one its group made.
 func parseLink(e string) (Link, error) {
 	f := strings.Split(e, ",")
-	if len(f) != 5 {
-		return Link{}, fmt.Errorf("%q isn't NAME,PORT,TARGET,ID,ADDR", e)
+	group := len(f) == 6 && f[5] == linkGroupMark
+	if len(f) != 5 && !group {
+		return Link{}, fmt.Errorf("%q isn't NAME,PORT,TARGET,ID,ADDR[,group]", e)
 	}
 	port, perr := ParseLinkPort(f[1])
 	addr, aerr := netip.ParseAddr(f[4])
@@ -125,17 +130,27 @@ func parseLink(e string) (Link, error) {
 	case aerr != nil || !IsLinkAddr(addr) || addr != addr.Unmap():
 		return Link{}, fmt.Errorf("%q: the address %q", e, f[4])
 	}
-	return Link{Name: f[0], Port: port, Target: f[2], TargetID: f[3], Addr: addr}, nil
+	return Link{Name: f[0], Port: port, Target: f[2], TargetID: f[3], Addr: addr, Group: group}, nil
 }
 
 // formatLinks is links as KeyLinks holds them: space-separated entries,
-// each NAME,PORT,TARGET,TARGET_ID,ADDR.
+// each formatLink's.
 func formatLinks(links []Link) string {
 	es := make([]string, len(links))
 	for i, l := range links {
-		es[i] = strings.Join([]string{l.Name, strconv.Itoa(l.Port), l.Target, l.TargetID, l.Addr.String()}, ",")
+		es[i] = formatLink(l)
 	}
 	return strings.Join(es, " ")
+}
+
+// formatLink is one link's entry: NAME,PORT,TARGET,TARGET_ID,ADDR, then
+// ,group when its group made it.
+func formatLink(l Link) string {
+	f := []string{l.Name, strconv.Itoa(l.Port), l.Target, l.TargetID, l.Addr.String()}
+	if l.Group {
+		f = append(f, linkGroupMark)
+	}
+	return strings.Join(f, ",")
 }
 
 func sortLinks(links []Link) {
@@ -180,7 +195,15 @@ const (
 	LinkReplaced    = "replaced"    // the target was made again: another ID
 	LinkUnpublished = "unpublished" // the target doesn't publish the port
 	LinkPolicy      = "policy"      // the client has network policy, the target doesn't
+	LinkUngrouped   = "ungrouped"   // a group made it, and the two aren't in one group now
 )
+
+// grouped reports whether a link a group made still has that group: the
+// client and the target are in the same one.
+func grouped(client, target *state.VM) bool {
+	g := client.Get(KeyGroup)
+	return g != "" && target.Get(KeyGroup) == g
+}
 
 // CheckLink reports why a client's link doesn't apply, from the states
 // as they are now ("" when it does), with the target's state: one that
@@ -198,6 +221,8 @@ func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error
 		return LinkUnpublished, tst, nil
 	case netpolicy.On(client) && !netpolicy.On(tst):
 		return LinkPolicy, tst, nil
+	case l.Group && !grouped(client, tst):
+		return LinkUngrouped, tst, nil
 	}
 	return "", tst, nil
 }
@@ -425,13 +450,15 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	if err != nil {
 		return err
 	}
+	// The user's own links decide the name; the group's follow it.
+	own := ownLinks(links)
 	id := tst.Get(state.KeyID)
-	name, err := linkNameFor(t, links, target, id, a.As)
+	name, err := linkNameFor(t, own, target, id, cmp.Or(a.As, linkedName(links, target, id)))
 	if err != nil {
 		return err
 	}
 	port := strconv.Itoa(a.Port)
-	if slices.ContainsFunc(links, func(l Link) bool { return l.Target == target && l.TargetID == id && l.Port == a.Port }) {
+	if slices.ContainsFunc(own, func(l Link) bool { return l.Target == target && l.TargetID == id && l.Port == a.Port }) {
 		e.Info(msg.LinkExists(name, port, client))
 		e.warnUnenforced(ctx, t.st, tst)
 		return nil
@@ -444,10 +471,19 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 		return err
 	}
 	l := Link{Name: name, Port: a.Port, Target: target, TargetID: id, Addr: addr}
-	return e.changeLinks(ctx, t, append(links, l), []Link{l}, func() {
+	all, clashes, err := Groups(e).withGroup(t.st, append(own, l), links)
+	if err != nil {
+		return err
+	}
+	// Only the clash this link makes: the group's links that its name
+	// takes from another member.
+	clashes = slices.DeleteFunc(clashes, func(c groupClash) bool { return c.Name != name })
+	return e.changeLinks(ctx, t, all, []Link{l}, func() {
 		e.Info(msg.LinkAdded(name, port, target, client))
 		e.Note(msg.LinkTrust(target, client))
 		e.warnUnenforced(ctx, t.st, tst)
+		Groups(e).warnClashes(client, clashes)
+		Groups(e).sayChanged(t.st, links, all, nil)
 	})
 }
 
@@ -534,8 +570,29 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 		return msg.LinkNotFound(strconv.Itoa(port), msg.Shown(target), t.f.Name)
 	}
 	gone := links[i]
-	return e.changeLinks(ctx, t, slices.Delete(links, i, i+1), nil, func() {
+	if gone.Group {
+		// One left from a group the two aren't in together, or to a VM
+		// that's gone or made again, goes like any other.
+		why, _, err := CheckLink(e.Dirs, t.st, gone)
+		if err != nil {
+			return err
+		}
+		if why != LinkGone && why != LinkReplaced && why != LinkUngrouped {
+			return msg.LinkFromGroup(t.st.Get(KeyGroup), gone.Name, strconv.Itoa(port), t.f.Name)
+		}
+	}
+	// The group's links follow: a member's port the user linked gets the
+	// group's link again.
+	all, _, err := Groups(e).withGroup(t.st, ownLinks(slices.Delete(slices.Clone(links), i, i+1)), links)
+	if err != nil {
+		return err
+	}
+	regained := slices.DeleteFunc(slices.Clone(all), func(l Link) bool {
+		return !l.Group || l.Target != gone.Target || l.Port != gone.Port
+	})
+	return e.changeLinks(ctx, t, all, regained, func() {
 		e.Info(msg.LinkRemoved(gone.Name, strconv.Itoa(port), t.f.Name))
+		Groups(e).sayChanged(t.st, links, all, regained)
 	})
 }
 
@@ -581,10 +638,19 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	if err := t.st.Set(KeyPublish, stored); err != nil {
 		return err
 	}
+	// The group's other members get links to the ports at once, or lose
+	// them, before the clients with links of their own are named.
+	group := t.st.Get(KeyGroup)
 	if publish {
 		e.Info(msg.Published(ports, t.f.Name))
-		return e.publishUnenforced(ctx, t, old)
+		if err := e.publishUnenforced(ctx, t, old); err != nil {
+			return err
+		}
+		return Groups(e).sync(ctx, group, t.f.Name)
 	}
 	e.Info(msg.Unpublished(l, t.f.Name))
+	if err := Groups(e).sync(ctx, group, t.f.Name); err != nil {
+		return err
+	}
 	return e.publishChanged(t, old)
 }

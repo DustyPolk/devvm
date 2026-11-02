@@ -1,0 +1,519 @@
+package vm
+
+import (
+	"cmp"
+	"context"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// Keys of a VM's state for groups: each member's own state records its
+// group, so a VM made again, which gets new state, is in none.
+const (
+	// KeyGroup is the group the VM is in; unset for none.
+	KeyGroup = "group"
+	// KeyGroupAs is the name the group's other VMs reach it by; unset for
+	// its folder part.
+	KeyGroupAs = "group_as"
+)
+
+// Groups shows and changes the folder's VM's group: VMs that reach each
+// other's published ports by name, through links the group makes in each
+// of them (groupLinks), which carry connections as any link does.
+type Groups struct{ *Env }
+
+// CheckGroupName refuses a group name that isn't one word of lowercase
+// letters, digits and dashes, as a link's name is.
+func CheckGroupName(name string) error {
+	if !linkName.MatchString(name) || strings.Trim(name, "0123456789") == "" {
+		return msg.GroupNameInvalid(strconv.Quote(name))
+	}
+	return nil
+}
+
+// memberName is the name the group's other VMs reach member st by: the
+// name it joined with, else its folder part.
+func memberName(st *state.VM) string {
+	return cmp.Or(st.Get(KeyGroupAs), project.Folder{Name: st.Name()}.Slug())
+}
+
+// groupMembers returns the states of group's members, sorted by VM name:
+// the project VMs whose state names it. "" has none.
+func groupMembers(d paths.Dirs, group string) ([]*state.VM, error) {
+	if group == "" {
+		return nil, nil
+	}
+	var out []*state.VM
+	err := clientStates(d, "", func(st *state.VM, _ []Link) error {
+		if st.Get(KeyGroup) == group {
+			out = append(out, st)
+		}
+		return nil
+	})
+	return out, err
+}
+
+// publishedPorts returns each port a VM publishes, its ranges expanded.
+func publishedPorts(st *state.VM) []int {
+	v := st.Get(KeyPublish)
+	if v == "" || v == PortsNone {
+		return nil
+	}
+	var out []int
+	for _, r := range PortsBackend(v).Ranges {
+		for p := r.From; p <= r.To; p++ {
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// ownLinks returns the links of links that the user made, with devvm link
+// add.
+func ownLinks(links []Link) []Link {
+	return slices.DeleteFunc(slices.Clone(links), func(l Link) bool { return l.Group })
+}
+
+// linkedName returns the name links has for target (its VM name and ID),
+// or "".
+func linkedName(links []Link, target, id string) string {
+	for _, l := range links {
+		if l.Target == target && l.TargetID == id {
+			return l.Name
+		}
+	}
+	return ""
+}
+
+// groupClash is a member that a client gets none of the group's links
+// to, because its name there is taken: Own when one of the links the user
+// made in the client has it, else it's the client's own hostname.
+type groupClash struct {
+	Name, Target string
+	Own          bool
+}
+
+// groupLinks returns client's links as its group makes them, from own,
+// the links the user made there, kept as they are, prev, all its links
+// before, and others, the group's other members: own, then a link to each
+// port each member publishes. A member's links take the name the user's
+// links to it have, else its name in the group (memberName), and the
+// client's address for it, the one its links to it had in prev, so it
+// stays. A port the user linked already gets no other. A member whose
+// name one of the user's links to another VM has, or that is the client's
+// own hostname, gets none: a clash, the user's link taking precedence.
+func groupLinks(client *state.VM, own, prev []Link, others []*state.VM) ([]Link, []groupClash) {
+	out := slices.Clone(own)
+	var clashes []groupClash
+	host := project.Folder{Name: client.Name()}.Slug()
+	for _, m := range others {
+		target, id := m.Name(), m.Get(state.KeyID)
+		ports := publishedPorts(m)
+		if id == "" || len(ports) == 0 {
+			continue
+		}
+		name := linkedName(own, target, id)
+		if name == "" {
+			name = memberName(m)
+			taken := slices.ContainsFunc(out, func(l Link) bool { return l.Name == name })
+			if taken || name == host || name == "localhost" {
+				clashes = append(clashes, groupClash{Name: name, Target: target, Own: taken})
+				continue
+			}
+		}
+		addr, err := linkAddr(append(slices.Clone(prev), out...), target, id)
+		if err != nil {
+			continue // every address of the 65534 has a target
+		}
+		for _, p := range ports {
+			if !slices.ContainsFunc(own, func(l Link) bool { return l.Target == target && l.TargetID == id && l.Port == p }) {
+				out = append(out, Link{Name: name, Port: p, Target: target, TargetID: id, Addr: addr, Group: true})
+			}
+		}
+	}
+	sortLinks(out)
+	return out, clashes
+}
+
+// withGroup returns a VM's links as its group makes them now
+// (groupLinks), from own, the links the user made, and prev, all it had:
+// only own when it's in none.
+func (e Groups) withGroup(st *state.VM, own, prev []Link) ([]Link, []groupClash, error) {
+	members, err := groupMembers(e.Dirs, st.Get(KeyGroup))
+	if err != nil {
+		return nil, nil, err
+	}
+	others := slices.DeleteFunc(members, func(m *state.VM) bool { return m.Name() == st.Name() })
+	out, clashes := groupLinks(st, own, prev, others)
+	return out, clashes, nil
+}
+
+// warnClashes warns of each member a VM gets none of the group's links to
+// (groupLinks), with what to do.
+func (e Groups) warnClashes(vm string, clashes []groupClash) {
+	for _, c := range clashes {
+		if c.Own {
+			e.Warn(msg.GroupLinkNameClash(c.Name, c.Target, vm))
+		} else {
+			e.Warn(msg.GroupLinkNameHost(c.Name, c.Target, vm))
+		}
+	}
+}
+
+// sync gives each member of group but skip its links as the group makes
+// them now (syncVM). "" has none.
+func (e Groups) sync(ctx context.Context, group, skip string) error {
+	members, err := groupMembers(e.Dirs, group)
+	if err != nil {
+		return err
+	}
+	for _, m := range members {
+		if m.Name() == skip {
+			continue
+		}
+		if err := e.syncVM(ctx, m, group, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// syncVM gives st its links as its group makes them now (withGroup), the
+// group's changes named as group's, and with warn, the members it gets no
+// links to warned of.
+func (e Groups) syncVM(ctx context.Context, st *state.VM, group string, warn bool) error {
+	links, err := ReadLinks(st)
+	if err != nil {
+		return err
+	}
+	want, clashes, err := e.withGroup(st, ownLinks(links), links)
+	if err != nil {
+		return err
+	}
+	if warn {
+		e.warnClashes(st.Name(), clashes)
+	}
+	if formatLinks(want) == formatLinks(links) {
+		return nil
+	}
+	return e.change(ctx, st, group, links, want)
+}
+
+// change records a VM's links, before and after the group changed them,
+// says which of group's it gained and lost, warns of a new link's target
+// whose network policy isn't in force (warnUnenforced), and applies them
+// while it runs, as devvm link add does. One it can't apply them to is
+// warned of, and gets them at its next start.
+func (e Groups) change(ctx context.Context, st *state.VM, group string, before, after []Link) error {
+	vm := st.Name()
+	runs := linkRuns(e)
+	from := runs.logSize(vm)
+	if err := writeLinks(st, after); err != nil {
+		return err
+	}
+	added := e.sayChangedIn(group, vm, before, after, nil)
+	var targets []string
+	for _, l := range added {
+		if !slices.Contains(targets, l.Target) {
+			targets = append(targets, l.Target)
+		}
+	}
+	for _, t := range targets {
+		tst, err := state.ReadVM(e.Dirs, t)
+		if err != nil {
+			return err
+		}
+		e.warnUnenforced(ctx, st, tst)
+	}
+	c, err := e.Registry.For(e.Dirs, st, "")
+	if err != nil {
+		e.Warn(msg.LinksUpdateFailed(vm).Because(err))
+		return nil
+	}
+	running, err := runs.apply(ctx, c.Backend, st, added, from)
+	switch {
+	case err != nil:
+		e.Warn(msg.LinksUpdateFailed(vm).Because(err))
+	case !running:
+		e.Info(msg.LinksNextStart(vm))
+	}
+	return nil
+}
+
+// sayChanged says which of the links st's group made it gained and lost
+// when its links went from before to after (groupChanged), with also, the
+// group's links that took the place of the user's, as gained.
+func (e Groups) sayChanged(st *state.VM, before, after, also []Link) {
+	e.sayChangedIn(st.Get(KeyGroup), st.Name(), before, after, also)
+}
+
+// sayChangedIn is sayChanged for vm in group, and returns what it gained.
+func (e Groups) sayChangedIn(group, vm string, before, after, also []Link) []Link {
+	added, removed := groupChanged(before, after)
+	for _, l := range also {
+		if !slices.Contains(added, l) {
+			added = append(added, l)
+		}
+	}
+	if len(added) > 0 {
+		e.Info(msg.GroupLinksAdded(group, shownLinks(added), vm))
+	}
+	if len(removed) > 0 {
+		e.Info(msg.GroupLinksRemoved(group, shownLinks(removed), vm))
+	}
+	return added
+}
+
+// warnUnenforced is Links.warnUnenforced, for the group's links.
+func (e Groups) warnUnenforced(ctx context.Context, client, target *state.VM) {
+	Links(e).warnUnenforced(ctx, client, target)
+}
+
+// groupChanged returns the links a group made that after has and before
+// didn't, and those before had and after doesn't, each by its name and
+// port: a link the user made in its place isn't lost.
+func groupChanged(before, after []Link) (added, removed []Link) {
+	key := func(l Link) string { return l.Name + ":" + strconv.Itoa(l.Port) }
+	has := func(ls []Link, l Link) bool {
+		return slices.ContainsFunc(ls, func(k Link) bool { return key(k) == key(l) })
+	}
+	for _, l := range after {
+		if l.Group && !has(before, l) {
+			added = append(added, l)
+		}
+	}
+	for _, l := range before {
+		if l.Group && !has(after, l) {
+			removed = append(removed, l)
+		}
+	}
+	return added, removed
+}
+
+// shownLinks is links as messages name them: NAME:PORTS for each name,
+// ranges joined, as db:5432,8000-8010, api:80.
+func shownLinks(links []Link) string {
+	ls := slices.Clone(links)
+	sortLinks(ls)
+	var out []string
+	for i := 0; i < len(ls); {
+		j := i
+		var ports []string
+		for j < len(ls) && ls[j].Name == ls[i].Name {
+			k := j
+			for k+1 < len(ls) && ls[k+1].Name == ls[i].Name && ls[k+1].Port == ls[k].Port+1 {
+				k++
+			}
+			p := strconv.Itoa(ls[j].Port)
+			if k > j {
+				p += "-" + strconv.Itoa(ls[k].Port)
+			}
+			ports = append(ports, p)
+			j = k + 1
+		}
+		out = append(out, ls[i].Name+":"+strings.Join(ports, ","))
+		i = j
+	}
+	return strings.Join(out, ", ")
+}
+
+// groupVM finds the folder's VM for devvm group.
+func (e Groups) groupVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMGroup) }
+
+// GroupMember is one of a group's VMs as devvm group lists it.
+type GroupMember struct {
+	Name      string // the name the others reach it by
+	VM        string
+	Folder    string
+	Published string // its published ports, or none
+}
+
+// GroupShown is the folder's VM's group as devvm group shows it: its
+// name, "" for none, and its members.
+type GroupShown struct {
+	VM, Group string
+	Members   []GroupMember
+}
+
+// Show returns the folder's VM's group, with each member's name, folder
+// and published ports, sorted by name.
+func (e Groups) Show(ctx context.Context) (GroupShown, error) {
+	t, err := e.groupVM(ctx)
+	if err != nil {
+		return GroupShown{}, err
+	}
+	g := GroupShown{VM: t.f.Name, Group: t.st.Get(KeyGroup)}
+	members, err := groupMembers(e.Dirs, g.Group)
+	if err != nil {
+		return GroupShown{}, err
+	}
+	for _, m := range members {
+		g.Members = append(g.Members, GroupMember{
+			Name: memberName(m), VM: m.Name(), Folder: m.Get(state.KeyDir),
+			Published: cmp.Or(m.Get(KeyPublish), PortsNone),
+		})
+	}
+	slices.SortFunc(g.Members, func(a, b GroupMember) int { return cmp.Compare(a.Name, b.Name) })
+	return g, nil
+}
+
+// Join puts the folder's VM in group, made by its first member, as as (""
+// for its folder part), once it's checked (checkJoin), and gives it and
+// every other member their links to each other's published ports. A VM
+// is in one group at a time.
+func (e Groups) Join(ctx context.Context, group, as string) error {
+	t, err := e.groupVM(ctx)
+	if err != nil {
+		return err
+	}
+	vm := t.f.Name
+	if cur := t.st.Get(KeyGroup); cur != "" {
+		switch {
+		case cur != group:
+			return msg.GroupOther(cur, vm)
+		case as != "" && as != memberName(t.st):
+			return msg.GroupNamed(group, memberName(t.st), vm)
+		}
+		// Joining again gives each member its links as the group makes
+		// them, as a join cut short didn't.
+		e.Info(msg.GroupAlready(group, vm))
+		if err := e.syncVM(ctx, t.st, group, false); err != nil {
+			return err
+		}
+		return e.sync(ctx, group, vm)
+	}
+	members, err := groupMembers(e.Dirs, group)
+	if err != nil {
+		return err
+	}
+	if err := e.checkJoin(t, group, cmp.Or(as, t.f.Slug()), members); err != nil {
+		return err
+	}
+	if ok, err := t.widen(e.Env, "devvm group join"); !ok {
+		return err
+	}
+	if err := t.st.Set(KeyGroupAs, as); err != nil {
+		return err
+	}
+	if err := t.st.Set(KeyGroup, group); err != nil {
+		return err
+	}
+	if len(members) == 0 {
+		e.Info(msg.GroupMade(group, vm))
+	} else {
+		e.Info(msg.GroupJoined(group, vm))
+	}
+	e.Note(msg.GroupTrust(group))
+	if err := e.syncVM(ctx, t.st, group, true); err != nil {
+		return err
+	}
+	for _, m := range members {
+		if err := e.syncVM(ctx, m, group, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkJoin checks that client t can join group, whose members are
+// members, as name: every member has network policy or none does, the
+// name is valid and no member has it, as its name or its folder part,
+// and every backend has links.
+func (e Groups) checkJoin(t *found, group, name string, members []*state.VM) error {
+	vm := t.f.Name
+	if err := CheckLinkName(name); err != nil {
+		return err
+	}
+	if name == "localhost" {
+		return msg.GroupNameHost(vm)
+	}
+	on := netpolicy.On(t.st)
+	for _, m := range members {
+		switch {
+		case netpolicy.On(m) == on:
+		case on:
+			return msg.GroupPolicyOff(group, vm)
+		default:
+			return msg.GroupPolicyOn(group, vm)
+		}
+	}
+	for _, m := range members {
+		if name == memberName(m) || name == (project.Folder{Name: m.Name()}).Slug() {
+			return msg.GroupNameTaken(group, m.Name(), name)
+		}
+	}
+	if err := e.Registry.Require(t.b, vm, linkFeatures()...); err != nil {
+		return err
+	}
+	for _, m := range members {
+		c, err := e.Registry.For(e.Dirs, m, "")
+		if err != nil {
+			return err
+		}
+		if err := e.Registry.Require(c.Backend, m.Name(), linkFeatures()...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Leave takes the folder's VM out of its group, and removes the links the
+// group made, in it and in the other members, naming them. The links the
+// user made stay. The group goes with its last member.
+func (e Groups) Leave(ctx context.Context) error {
+	t, err := e.groupVM(ctx)
+	if err != nil {
+		return err
+	}
+	group := t.st.Get(KeyGroup)
+	if group == "" {
+		return msg.GroupNone(t.f.Name)
+	}
+	// Its own group links go first, so a leave cut short leaves it none.
+	links, err := ReadLinks(t.st)
+	if err != nil {
+		return err
+	}
+	own := ownLinks(links)
+	if err := writeLinks(t.st, own); err != nil {
+		return err
+	}
+	if err := e.leave(ctx, t.st, group); err != nil {
+		return err
+	}
+	if len(own) == len(links) {
+		return nil
+	}
+	return e.change(ctx, t.st, group, links, own)
+}
+
+// leave takes st out of group, says so, and gives the other members their
+// links without it; the last member's leaving removes the group.
+func (e Groups) leave(ctx context.Context, st *state.VM, group string) error {
+	if st.Exists() {
+		if err := st.Set(KeyGroup, ""); err != nil {
+			return err
+		}
+		if err := st.Set(KeyGroupAs, ""); err != nil {
+			return err
+		}
+	}
+	e.Info(msg.GroupLeft(group, st.Name()))
+	members, err := groupMembers(e.Dirs, group)
+	if err != nil {
+		return err
+	}
+	if len(members) == 0 {
+		e.Info(msg.GroupGone(group))
+		return nil
+	}
+	return e.sync(ctx, group, "")
+}

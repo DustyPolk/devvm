@@ -63,6 +63,7 @@ func TestFlagNames(t *testing.T) {
 		"disk":    "a new VM's is at least the image's, and devvm size's at least what the VM has",
 		"global":  "each setting's -g says which setting new VMs get",
 		"json":    "devvm doctor's also says it succeeds whatever is missing",
+		"as":      "the name a VM reaches another by: devvm link add's for the link's target, devvm group join's for this VM in the others",
 	}
 	u, _, _ := testUI()
 	root := NewRoot(u)

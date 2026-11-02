@@ -63,7 +63,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	addVersion(root)
 	root.AddCommand(newBuildCmd(u), newRebuildCmd(u), newImagesCmd(u), newGCCmd(u), newSpaceCmd(u), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
 		newRestartCmd(u), newStopCmd(u), newToolsCmd(u), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newLimaPortsCmd(u), newSmolvmPortsCmd(u), newDockerPortsCmd(u), newDockerConnectCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
-		newLinkCmd(u), newLinksCmd(u), newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
+		newLinkCmd(u), newGroupCmd(u), newLinksCmd(u), newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
 	addCompletions(root, u)
 	checkCommands(root)
 	addHelp(root)

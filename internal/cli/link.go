@@ -47,7 +47,7 @@ func newLinkCmd(u *ui.UI) *cobra.Command {
 
 // linkOutput is devvm link --json: the VM's links, each with its target's
 // folder and status ("" when unknown) and whether it applies, with why
-// not (gone, replaced, unpublished or policy).
+// not (gone, replaced, unpublished, policy or ungrouped).
 type linkOutput struct {
 	Links []linkEntryJSON `json:"links"`
 }

@@ -1,0 +1,208 @@
+# devvm group: VMs that reach each other's published ports by name,
+# through links the group makes in each of them, kept in their state.
+# A VM is in one group at a time, and a group's VMs all have network
+# policy or none do.
+env DEVVM_MESSAGES=names
+env VMS=$XDG_DATA_HOME/devvm/vms
+
+exec devvm --help
+stdout '^Links between VMs:\n  group .*\n  link '
+
+# No VM yet.
+mkdir $WORK/app
+cd $WORK/app
+! exec devvm group
+stderr '^devvm: no_vm_group dir=\S*/app$'
+
+# Usage errors, before devvm looks for the VM.
+! exec devvm group nope
+stderr '^devvm: no_subcommand command=devvm group commands=join, leave given=nope$'
+! exec devvm group join
+stderr '^devvm: arg_missing args=NAME command=devvm group join$'
+stderr '^usage_help command=devvm group join$'
+! exec devvm group join Web
+stderr '^devvm: group_name_invalid name="Web"$'
+! exec devvm group join 42
+stderr '^devvm: group_name_invalid name="42"$'
+! exec devvm group join web --as Bad_Name
+stderr '^devvm: link_name_invalid name="Bad_Name"$'
+! exec devvm group leave web
+stderr '^devvm: args_none command=devvm group leave given=web$'
+! exec devvm group join --json web
+stderr '^devvm: flag_unknown command=devvm group join flag=--json$'
+! stderr no_vm_group
+
+# The VMs: app, db and two folders called api; cache with network policy.
+exec devvm --no-network-policy --no-git-protect base
+mkdir $WORK/db
+cd $WORK/db
+exec devvm --no-network-policy --no-git-protect base
+exec devvm link publish 5432,8000-8001
+mkdir $WORK/x/api
+cd $WORK/x/api
+exec devvm --no-network-policy --no-git-protect base
+exec devvm link publish 80
+mkdir $WORK/y/api
+cd $WORK/y/api
+exec devvm --no-network-policy --no-git-protect base
+exec devvm link publish 3000
+mkdir $WORK/cache
+cd $WORK/cache
+exec devvm --network-policy --no-git-protect base
+
+# Not in a group: said, and an empty list in JSON.
+cd $WORK/app
+exec devvm group
+stdout '^==> group_none vm=devvm-app-[0-9a-f]{14}$'
+exec devvm group --json
+stdout '\A{\n  "version": 1,\n  "group": "",\n  "members": \[\]\n}\n\z'
+! exec devvm group leave
+stderr '^devvm: group_none vm=devvm-app-[0-9a-f]{14}$'
+
+# The first to join makes the group; the trust is said on every join.
+exec devvm group join web
+stdout '^==> group_made group=web vm=devvm-app-[0-9a-f]{14}$'
+stderr '^group_trust group=web$'
+exec sh -c 'cat "$VMS"/devvm-app-*'
+stdout '^group=web$'
+exec devvm group join web
+stdout '^==> group_already group=web vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm group join web --as other
+stderr '^devvm: group_named group=web name=app vm=devvm-app-[0-9a-f]{14}$'
+! exec devvm group join other
+stderr '^devvm: group_other group=web vm=devvm-app-[0-9a-f]{14}$'
+
+# db joins: app gets a link to each port db publishes, db none to app,
+# which publishes none.
+cd $WORK/db
+exec devvm group join web
+stdout '^==> group_joined group=web vm=devvm-db-[0-9a-f]{14}$'
+stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
+! stdout 'group_links_added .* vm=devvm-db-'
+exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS"/devvm-db-*); db=$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$"); grep -x "links=db,5432,$db,$id,127.77.0.1,group db,8000,$db,$id,127.77.0.1,group db,8001,$db,$id,127.77.0.1,group" "$VMS"/devvm-app-*'
+
+# All or none: cache, with network policy, can't join a group whose VMs
+# have none, and a group of its own refuses those without.
+cd $WORK/cache
+! exec devvm group join web
+stderr '^devvm: group_policy_off group=web vm=devvm-cache-[0-9a-f]{14}$'
+exec devvm group join safe
+stdout '^==> group_made group=safe '
+cd $WORK/y/api
+! exec devvm group join safe
+stderr '^devvm: group_policy_on group=safe vm=devvm-api-[0-9a-f]{14}$'
+# Network policy can't change for a member.
+cd $WORK/cache
+! exec devvm network off
+stderr '^devvm: group_policy_mixed group=safe vm=devvm-cache-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-cache-*'
+stdout '^net=on$'
+cd $WORK/db
+! exec devvm network on
+stderr '^devvm: group_policy_mixed group=web vm=devvm-db-[0-9a-f]{14}$'
+cd $WORK/cache
+exec devvm group leave
+stdout '^==> group_left group=safe vm=devvm-cache-[0-9a-f]{14}$'
+stdout '^==> group_gone group=safe$'
+
+# Two members with the same folder part: the second needs another name,
+# and still can't reach the first by its own hostname.
+cd $WORK/x/api
+exec devvm group join web
+stdout '^==> group_links_added group=web links=api:80 vm=devvm-app-'
+stdout '^==> group_links_added group=web links=api:80 vm=devvm-db-'
+stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-api-'
+cd $WORK/y/api
+! exec devvm group join web
+stderr '^devvm: group_name_taken group=web member=devvm-api-[0-9a-f]{14} name=api$'
+! exec devvm group join web --as db
+stderr '^devvm: group_name_taken group=web member=devvm-db-[0-9a-f]{14} name=db$'
+! exec devvm group join web --as localhost
+stderr '^devvm: group_name_host vm=devvm-api-[0-9a-f]{14}$'
+exec devvm group join web --as api2
+stdout '^==> group_joined group=web '
+stderr '^devvm: group_link_name_host name=api target=devvm-api-[0-9a-f]{14} vm=devvm-api-[0-9a-f]{14}$'
+stdout '^==> group_links_added group=web links=api2:3000 vm=devvm-app-'
+
+# The group: each VM, its name, folder and published ports.
+cd $WORK/app
+exec devvm group
+stdout '\ANAME +VM +FOLDER +PUBLISHED\n'
+stdout '^api +devvm-api-[0-9a-f]{14} +\S*/x/api +80$'
+stdout '^api2 +devvm-api-[0-9a-f]{14} +\S*/y/api +3000$'
+stdout '^app +devvm-app-[0-9a-f]{14} +\S*/app +none$'
+stdout '^db +devvm-db-[0-9a-f]{14} +\S*/db +5432,8000-8001$'
+exec devvm group --json
+stdout '\A{\n  "version": 1,\n  "group": "web",\n  "members": \[\n    {\n      "name": "api",\n      "vm": "devvm-api-[0-9a-f]{14}",\n      "folder": "\S*/x/api",\n      "published": "80"\n    },\n'
+exec devvm link
+stdout '^api2 +3000 +devvm-api-[0-9a-f]{14} +\S*/y/api +Running +yes$'
+stdout '^db +8001 +devvm-db-[0-9a-f]{14} +\S*/db +Running +yes$'
+
+# A group's link isn't devvm link rm's; a link of the user's to a
+# member's port takes its place, and its name names the member; removed,
+# the group's comes back.
+! exec devvm link rm db 8000
+stderr '^devvm: link_from_group group=web name=db port=8000 vm=devvm-app-[0-9a-f]{14}$'
+exec devvm link add db 8000 --as pg
+stdout '^==> link_added name=pg port=8000 '
+stdout '^==> group_links_removed group=web links=db:5432,8000-8001 vm=devvm-app-'
+stdout '^==> group_links_added group=web links=pg:5432,8001 vm=devvm-app-'
+exec sh -c 'grep -o "pg,8000,[^ ]*" "$VMS"/devvm-app-*'
+stdout '^pg,8000,devvm-db-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.1$'
+exec devvm link rm pg 8000
+stdout '^==> link_removed name=pg port=8000 '
+stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-app-'
+# A link of the user's whose name is another member's takes it: the
+# group's links to that member go, said; removed, they come back.
+exec devvm link add ../y/api 3000 --as api
+stdout '^==> link_added name=api port=3000 '
+stderr '^devvm: group_link_name_clash name=api target=devvm-api-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+stdout '^==> group_links_removed group=web links=api:80, api2:3000 vm=devvm-app-'
+exec devvm link rm api 3000
+stdout '^==> group_links_added group=web links=api:80, api2:3000 vm=devvm-app-'
+
+# Published ports reach every member's links at once.
+cd $WORK/db
+exec devvm link publish 6379
+stdout '^==> group_links_added group=web links=db:6379 vm=devvm-app-'
+stdout '^==> group_links_added group=web links=db:6379 vm=devvm-api-'
+exec devvm link unpublish 6379
+stdout '^==> group_links_removed group=web links=db:6379 vm=devvm-app-'
+! stderr unpublished_linked
+
+# A stopped member gets the change at its next start.
+cd $WORK/x/api
+exec devvm stop
+cd $WORK/db
+exec devvm link publish 7000
+stdout '^==> group_links_added group=web links=db:7000 vm=devvm-api-[0-9a-f]{14}$'
+stdout '^==> links_next_start vm=devvm-api-[0-9a-f]{14}$'
+
+# leave: only the group's links go, each named; the user's stay.
+cd $WORK/app
+exec devvm link add db 7000
+exec devvm group leave
+stdout '^==> group_left group=web vm=devvm-app-[0-9a-f]{14}$'
+stdout '^==> group_links_removed group=web links=api:80, api2:3000, db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
+exec sh -c 'cat "$VMS"/devvm-app-*'
+stdout '^links=db,7000,devvm-db-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.1$'
+stdout '^group=$'
+exec devvm group
+stdout '^==> group_none '
+cd $WORK/db
+exec devvm group
+! stdout '^app '
+
+# devvm rm of a member takes it out, and the last one's leaving removes
+# the group.
+cd $WORK/y/api
+exec devvm rm --force --no-export
+stdout '^==> group_left group=web vm=devvm-api-[0-9a-f]{14}$'
+cd $WORK/x/api
+exec devvm group leave
+stdout '^==> group_left group=web '
+cd $WORK/db
+exec devvm group leave
+stdout '^==> group_gone group=web$'
+exec sh -c 'grep -l "^group=web$" "$VMS"/* || true'
+! stdout .

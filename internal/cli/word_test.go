@@ -121,7 +121,7 @@ func TestUnknownWord(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg, "devvm", "layers"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, l := range []string{"pg", "group"} {
+	for _, l := range []string{"pg", "join"} {
 		if err := os.WriteFile(filepath.Join(cfg, "devvm", "layers", l+".sh"), nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +137,7 @@ func TestUnknownWord(t *testing.T) {
 		{[]string{"pyton"}, "no_command_or_image_image image=python word=pyton"},
 		{[]string{"pq"}, "no_command_or_image_both command=gc image=pg word=pq"},
 		{[]string{"xyzzy"}, "no_command_or_image word=xyzzy"},
-		{[]string{"group"}, "layer_is_command file=" + filepath.Join(cfg, "devvm", "layers", "group.sh") + " layer=group"},
+		{[]string{"join"}, "layer_is_command file=" + filepath.Join(cfg, "devvm", "layers", "join.sh") + " layer=join"},
 		{[]string{"help", "tools", "nope"}, "no_subcommand command=devvm tools commands=add, rm, update given=nope"},
 		{[]string{"pg"}, ""},
 		{[]string{"node+sotp"}, ""},

@@ -1361,6 +1361,77 @@ other = "{{.vm}} links to {{.targets}}, which have no network policy, so it can'
 [port_not_published]
 other = "{{.port}} isn't published. The published ports are {{.ports}}."
 
+[link_from_group]
+other = "{{.name}}:{{.port}} is one of the links that the group {{.group}} gives {{.vm}}, so devvm link rm doesn't remove it. To remove the group's links, run devvm group leave."
+
+[no_vm_group]
+other = "There's no VM for {{.dir}}, so it isn't in a group. Run devvm to make one."
+
+[group_failed]
+description = "reason is an error from the system, in English"
+other = "Showing or changing the group failed: {{.reason}}."
+
+[group_name_invalid]
+description = "name is quoted, as given"
+other = "{{.name}} isn't a group name. Use lowercase letters, digits and dashes, such as web, starting and ending with a letter or digit and not all digits."
+
+[group_none]
+other = "{{.vm}} isn't in a group. Run devvm group join NAME to join one."
+
+[group_made]
+other = "{{.vm}} is the first VM in the new group {{.group}}."
+
+[group_joined]
+other = "{{.vm}} is in the group {{.group}}."
+
+[group_already]
+other = "{{.vm}} is in the group {{.group}} already."
+
+[group_other]
+other = "{{.vm}} is in the group {{.group}}, and a VM is in one group at a time. Run devvm group leave first."
+
+[group_named]
+other = "{{.vm}} is in the group {{.group}} already, as {{.name}}. To give it another name, run devvm group leave, then join again with --as NAME."
+
+[group_trust]
+other = "The group {{.group}} joins the trust of all its VMs. Code in any of them can often run code in the others through the ports they publish, and then has whatever that VM has."
+
+[group_policy_on]
+other = "The VMs in the group {{.group}} have network policy and {{.vm}} doesn't, and a group's VMs all have it or none do. Turn it on with devvm network on first, or join another group."
+
+[group_policy_off]
+other = "The VMs in the group {{.group}} have no network policy and {{.vm}} has it, and a group's VMs all have it or none do. Join a group whose VMs have network policy instead."
+
+[group_policy_mixed]
+other = "{{.vm}} is in the group {{.group}}, whose VMs all have network policy or none do, so its network policy can't change. Run devvm group leave first."
+
+[group_name_taken]
+description = "name is the name this VM would join as; member is the VM in the group that has it, as its name or its folder's"
+other = "{{.name}} already names {{.member}} in the group {{.group}}. Give this VM another name with --as NAME."
+
+[group_name_host]
+other = "The name localhost means each VM itself, so it can't name {{.vm}} in a group. Give the VM another name with --as NAME."
+
+[group_left]
+other = "{{.vm}} isn't in the group {{.group}} any more."
+
+[group_gone]
+other = "The group {{.group}} has no VMs left, so it's gone."
+
+[group_links_added]
+description = "links lists the links as NAME:PORTS, comma-separated, as db:5432,8000-8010, api:80"
+other = "{{.vm}} reaches {{.links}} through the group {{.group}}."
+
+[group_links_removed]
+description = "links lists the links as NAME:PORTS, comma-separated, as db:5432,8000-8010, api:80"
+other = "{{.vm}} doesn't reach {{.links}} through the group {{.group}} any more."
+
+[group_link_name_clash]
+other = "{{.vm}} has a link of its own called {{.name}}, so it gets none of the group's links to {{.target}}. To get them, remove that link with devvm link rm."
+
+[group_link_name_host]
+other = "{{.name}} is {{.vm}}'s own hostname, so it gets none of the group's links to {{.target}}. To get them, have {{.target}} join the group again with another --as NAME."
+
 [detected]
 other = "detected a {{.found}} project"
 

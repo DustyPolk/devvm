@@ -300,6 +300,8 @@ A link joins the two VMs' trust. Code in the client can often run code in the ta
 
 The first rule keeps a client's network policy whole, but it doesn't keep the target's data in the target. A client with network policy can read whatever the target's service gives it and send that out through the hosts on its own allowlist. Link two VMs only when you'd trust each with what the other has.
 
+A [group](../using/links.md#groups) links each of its VMs to the ports that the others publish, once you've run `devvm group join` in each VM's folder. Its VMs all have network policy or none do, so every link it makes keeps the first rule, and devvm refuses `devvm network on` and `devvm network off` for a VM while it's in a group. A group joins the trust of all its VMs, so put VMs in one only when you'd trust each with what the others have.
+
 ## Not covered
 
 Anything an allowed host accepts can carry data out, including whatever your secrets allow, such as pushes and API calls.

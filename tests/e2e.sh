@@ -32,8 +32,9 @@
 #                forwarded to this machine), two targets on one port, port 80, publish, unpublish,
 #                add and rm on a running client, the sockets, the 256-connection cap, a program
 #                holding a link's address, root loosening the client's sshd, a stopped and restarted
-#                target, the target's rm and a VM made again, network policy on both and the
-#                policy rule's refusals, the log, and nothing left behind (in the --from tier, an
+#                target, the target's rm and a VM made again, the three in a group (joined, a port
+#                published to it, leaving), network policy on both and the policy rule's refusals,
+#                a group's all-or-none refusals, the log, and nothing left behind (in the --from tier, an
 #                Alpine client's link to port 80 too). --backend smolvm and docker run it too
 #     --only desktop
 #                base with the desktop feature, and a VM with network policy whose desktop devvm
@@ -875,6 +876,13 @@ link_section() {
   check "restarted, it works again, with its new host key" lk_restarted
   check "devvm rm of the target removes the client's link, names the client, and its sockets go; the client's session runs on" lk_rm_target
   check "a VM made again in that folder isn't linked" lk_made_again
+  # Groups: the three VMs, none with network policy, in one group.
+  lk_g=${lk_x}g
+  check "three VMs join a group, the first making it, the trust said on each join: each reaches the ports the others publish by name" gp_join
+  check "devvm group lists the three, each with its name, folder and published ports, and \"version\": 1 in its --json" gp_show
+  check "a port a member publishes reaches the others' links at once" gp_publish
+  check "in a group: devvm network on is refused, so is joining another group, and devvm link rm of the group's link" gp_refused
+  check "devvm group leave removes only the group's links, in it and the others, naming them; the user's link stays; the last one's leaving removes the group" gp_leave
   check "devvm network on for a target while it runs, then for the client, restarted behind its proxy" lk_policy_on
   check "the target's network policy on but not yet enforced (devvm ls: unenforced): the link's next connection is refused and logged, and devvm link add and the client's launch warn" lk_policy_unenforced
   check "the target restarted behind its proxy" lk_policy_target
@@ -891,6 +899,7 @@ link_section() {
   elif [[ $lk_be == lima ]]; then
     skip "a port below 1024 on Lima's Alpine VMs: an Alpine client reaches its link to port 80 on the same port" "Alpine's image comes from the from section"
   fi
+  check "a group is all or none: a VM without network policy is refused by a group with it, and one with it by a group without; two with it reach each other through their group's links" gp_policy
   check "devvm rm of the client leaves no link session, socket, pid file, log or link state" lk_rm_client
   (cd "$lk_p1" && quiet "$D" rm --force --no-export)
   (cd "$lk_p2" && quiet "$D" rm --force --no-export)
@@ -1126,6 +1135,63 @@ lk_alpine() { local pa va r=0
     lk_until 20 lk_gets "$va" "${lk_x}db" 80 "$lk_w1-80" || r=1
   (cd "$pa" && quiet "$D" rm --force --no-export)
   return "$r"; }
+# Groups, on links: the client publishes a port of its own first, so each of the three has one the
+# others reach. The client's own link to the first target, db, names its group links too.
+gp_join() { local n1=${lk_x}db na=${lk_x}app
+  lk_start "$lk_vc" serve 127.0.0.1 47246 "$na-47246" && lk_dv "$lk_pc" link publish 47246 || return 1
+  lk_dv "$lk_pc" group join "$lk_g" && lk_said "==> group_made group=$lk_g vm=$lk_vc" && lk_said "group_trust group=$lk_g" || return 1
+  lk_dv "$lk_p1" group join "$lk_g" && lk_said "==> group_joined group=$lk_g vm=$lk_v1" && lk_said "group_trust group=$lk_g" &&
+    lk_said "==> group_links_added group=$lk_g links=db:80,47241-47242,47244 vm=$lk_vc" &&
+    lk_said "==> group_links_added group=$lk_g links=$na:47246 vm=$lk_v1" || return 1
+  lk_dv "$lk_p2" group join "$lk_g" && lk_said "==> group_joined group=$lk_g vm=$lk_v2" &&
+    lk_said "==> group_links_added group=$lk_g links=$lk_n2:47240 vm=$lk_v1" &&
+    lk_said "==> group_links_added group=$lk_g links=$lk_n2:47240 vm=$lk_vc" &&
+    lk_said "==> group_links_added group=$lk_g links=$na:47246, $n1:80,47240-47242,47244 vm=$lk_v2" || return 1
+  lk_until 15 lk_gets "$lk_v2" "$n1" 47240 "$lk_w1-47240" && lk_until 15 lk_gets "$lk_v2" "$na" 47246 "$na-47246" &&
+    lk_until 15 lk_gets "$lk_v1" "$lk_n2" 47240 "$lk_w2-47240" && lk_until 15 lk_gets "$lk_v1" "$na" 47246 "$na-47246" &&
+    lk_until 15 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" && lk_until 15 lk_gets "$lk_vc" db 47244 "$lk_w1-47244" &&
+    lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && lk_shows "$lk_pc" "^$lk_n2 +47240 +$lk_v2 +$lk_p2 +Running +yes\$" link; }
+gp_show() { local l
+  l=$(cd "$lk_pc" && "$D" group 2>/dev/null); echo "$l"
+  grep -Eq "^${lk_x}db +$lk_v1 +$lk_p1 +80,47240-47242,47244\$" <<<"$l" && grep -Eq "^$lk_n2 +$lk_v2 +$lk_p2 +47240\$" <<<"$l" &&
+    grep -Eq "^${lk_x}app +$lk_vc +$lk_pc +47246\$" <<<"$l" && lk_shows "$lk_pc" '^  "version": 1,$' group --json &&
+    lk_shows "$lk_p2" "^  \"group\": \"$lk_g\",\$" group --json; }
+gp_publish() {
+  lk_start "$lk_v2" serve 127.0.0.1 47245 "$lk_w2-47245" && lk_dv "$lk_p2" link publish 47245 &&
+    lk_said "==> group_links_added group=$lk_g links=$lk_n2:47245 vm=$lk_v1" &&
+    lk_said "==> group_links_added group=$lk_g links=$lk_n2:47245 vm=$lk_vc" || return 1
+  lk_until 15 lk_gets "$lk_v1" "$lk_n2" 47245 "$lk_w2-47245" && lk_until 15 lk_gets "$lk_vc" "$lk_n2" 47245 "$lk_w2-47245"; }
+gp_refused() {
+  ! lk_dv "$lk_p2" network on && lk_said "devvm: group_policy_mixed group=$lk_g vm=$lk_v2" && grep -qx net=off "$vms/$lk_v2" &&
+    ! lk_dv "$lk_p2" group join "${lk_x}other" && lk_said "devvm: group_other group=$lk_g vm=$lk_v2" &&
+    ! lk_dv "$lk_pc" link rm "$lk_n2" 47240 && lk_said "devvm: link_from_group group=$lk_g name=$lk_n2 port=47240 vm=$lk_vc"; }
+# Each leaves, whatever comes of the checks, so the sections after run without a group.
+gp_leave() { local r=0
+  lk_dv "$lk_p2" group leave && lk_said "==> group_left group=$lk_g vm=$lk_v2" &&
+    lk_said "==> group_links_removed group=$lk_g links=$lk_n2:47240,47245 vm=$lk_v1" &&
+    lk_said "==> group_links_removed group=$lk_g links=$lk_n2:47240,47245 vm=$lk_vc" &&
+    lk_said "==> group_links_removed group=$lk_g links=${lk_x}app:47246, ${lk_x}db:80,47240-47242,47244 vm=$lk_v2" || r=1
+  (( r == 0 )) && lk_until 15 lk_not lk_resolves "$lk_v1" "$lk_n2" && lk_until 15 lk_not lk_resolves "$lk_vc" "$lk_n2" &&
+    lk_until 15 lk_not lk_resolves "$lk_v2" "${lk_x}db" || r=1
+  lk_dv "$lk_p1" group leave || r=1
+  lk_dv "$lk_pc" group leave && lk_said "==> group_gone group=$lk_g" || r=1
+  # The client's own link to db stays; the group's to db's other ports go.
+  (( r == 0 )) && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && lk_until 15 lk_not lk_listening "$lk_vc" 127.77.0.1:47244 &&
+    lk_shows "$lk_pc" "^db +47240 +$lk_v1 " link && ! lk_shows "$lk_pc" "^db +47244 " link || r=1
+  lk_dv "$lk_p2" link unpublish 47245; lk_end "$lk_v2" 127.0.0.1 47245
+  lk_dv "$lk_pc" link unpublish 47246; lk_end "$lk_vc" 127.0.0.1 47246
+  return "$r"; }
+# All or none, with the client and the first target with network policy and the second without.
+gp_policy() { local r=0 on=${lk_x}on off=${lk_x}off
+  lk_dv "$lk_pc" group join "$on" && lk_said "==> group_made group=$on vm=$lk_vc" || r=1
+  (( r == 0 )) && ! lk_dv "$lk_p2" group join "$on" && lk_said "devvm: group_policy_on group=$on vm=$lk_v2" || r=1
+  (( r == 0 )) && lk_dv "$lk_p2" group join "$off" && ! lk_dv "$lk_p1" group join "$off" &&
+    lk_said "devvm: group_policy_off group=$off vm=$lk_v1" && ! grep -q "^group=$off" "$vms/$lk_v1" || r=1
+  # The client's own links to db are 47240 and 47242 (lk_proxy_added).
+  (( r == 0 )) && lk_dv "$lk_p1" group join "$on" && lk_said "==> group_links_added group=$on links=db:80,47241,47244 vm=$lk_vc" &&
+    lk_until 15 lk_gets "$lk_vc" db 80 "$lk_w1-80" && lk_curls "$lk_vc" http://db:80/ "$lk_w1-80" || r=1
+  lk_dv "$lk_p1" group leave; lk_dv "$lk_pc" group leave; lk_dv "$lk_p2" group leave
+  (( r == 0 )) && ! grep -q '^group=.' "$vms/$lk_v1" "$vms/$lk_vc" "$vms/$lk_v2"; }
 lk_rm_client() {
   lk_dv "$lk_pc" rm --force --no-export || { tail -5 "$work/last.log"; return 1; }
   lk_until 10 lk_not lk_session "$lk_vc" || { echo "its session runs"; return 1; }

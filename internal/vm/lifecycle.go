@@ -254,7 +254,7 @@ func (e Lifecycle) delete(ctx context.Context, t *found) error {
 // clone's remote or .git's locks, its proxy and its rules, its link
 // session, run files, state (its own links with it) and logs, its host
 // keys and its ssh config entry. Other VMs' links to it go too
-// (unlinkTarget).
+// (unlinkTarget), and it leaves its group.
 func (e Lifecycle) forget(ctx context.Context, t *found) error {
 	vm := t.f.Name
 	if isClone(t.st) {
@@ -266,11 +266,17 @@ func (e Lifecycle) forget(ctx context.Context, t *found) error {
 	if err := e.Proxy.Forget(vm); err != nil {
 		return err
 	}
+	group := t.st.Get(KeyGroup)
 	if err := t.st.Remove(); err != nil {
 		return err
 	}
 	if err := linkRuns(e).unlinkTarget(ctx, vm); err != nil {
 		return err
+	}
+	if group != "" {
+		if err := Groups(e).leave(ctx, t.st, group); err != nil {
+			return err
+		}
 	}
 	logs, err := filepath.Glob(filepath.Join(e.Dirs.Logs(), vm+".*"))
 	if err != nil {

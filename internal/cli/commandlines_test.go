@@ -419,7 +419,7 @@ func proseAfter(c *cobra.Command, w string) error {
 	if !c.HasSubCommands() || slices.Contains(strings.FieldsFunc(c.Use, notWordRune), w) {
 		return nil
 	}
-	if (image.IsReserved(w) && !slices.Contains(englishCommands(), w) && !slices.Contains(toCome(), w)) || slices.Contains(notCommands(), w) {
+	if (image.IsReserved(w) && !slices.Contains(englishCommands(), w)) || slices.Contains(notCommands(), w) {
 		return fmt.Errorf("%s isn't one of %s's commands", w, c.CommandPath())
 	}
 	return nil
@@ -430,10 +430,6 @@ func notWordRune(r rune) bool { return (r < 'a' || r > 'z') && r != '-' }
 // englishCommands are commands' names that prose uses as English after
 // devvm, as in "what devvm set".
 func englishCommands() []string { return []string{"set", "new", "use", "add", "get", "log", "help"} }
-
-// toCome are the words image.Reserved keeps for devvm group, whose
-// commands the cli skill describes before they exist.
-func toCome() []string { return []string{"group", "join", "leave"} }
 
 // notCommands are words a command line might take for a command that
 // devvm doesn't have: the names a noun's bare form and rm stand for, and

@@ -14,6 +14,9 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
 - [devvm gc](devvm_gc.md): Delete stale images and unused tool images
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
+- [devvm group](devvm_group.md): Show the group this folder's VM is in
+- [devvm group join](devvm_group_join.md): Put this folder's VM in a group of VMs
+- [devvm group leave](devvm_group_leave.md): Take this folder's VM out of its group
 - [devvm history](devvm_history.md): List the saved exports of agents' history
 - [devvm history export](devvm_history_export.md): Save this folder's VM's agent history to a .tar.gz
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
