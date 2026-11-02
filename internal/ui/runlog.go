@@ -171,9 +171,10 @@ func (u *UI) LogNote() {
 // too while verbose.
 func (u *UI) LogWriter() io.Writer { return logTo(u, u.openLog()) }
 
-// proxyKey is a VM's proxy key in a proxy URL, which lets a process act as
-// that VM. It's kept out of the run log.
-var proxyKey = regexp.MustCompile(`devvm:[0-9a-f]{32}@`)
+// proxyKey is a VM's proxy key (32 hex digits) or the build proxy's
+// password (64) in a proxy URL, which lets a process act as that VM or
+// build. It's kept out of the run log.
+var proxyKey = regexp.MustCompile(`devvm:[0-9a-f]{32,64}@`)
 
 func redact(s string) string { return proxyKey.ReplaceAllString(s, "devvm:<key>@") }
 

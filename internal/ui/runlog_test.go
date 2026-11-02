@@ -138,12 +138,14 @@ func TestDieLoggedShowsTheLogsEnd(t *testing.T) {
 func TestProxyKeysStayOutOfTheLog(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, "")
+	// A VM's proxy key is 32 hex digits, the build proxy's password 64.
 	key := strings.Repeat("0123456789abcdef", 2)
-	if err := u.logged(t.Context(), msg.M{}, "true", "--set", `.env.HTTP_PROXY="http://devvm:`+key+`@host.lima.internal:3128"`); err != nil {
+	build := strings.Repeat("fedcba9876543210", 4)
+	if err := u.logged(t.Context(), msg.M{}, "true", "--set", `.env.HTTP_PROXY="http://devvm:`+key+`@host.lima.internal:3128"`, "http://devvm:"+build+"@10.0.2.2:3129"); err != nil {
 		t.Fatal(err)
 	}
 	log := readFile(t, u.logPath())
-	if strings.Contains(log, key) || !strings.Contains(log, "http://devvm:<key>@host") {
+	if strings.Contains(log, key) || strings.Contains(log, build) || !strings.Contains(log, "http://devvm:<key>@host") || !strings.Contains(log, "http://devvm:<key>@10.0.2.2") {
 		t.Errorf("log: %q", log)
 	}
 	// Owner-only.
