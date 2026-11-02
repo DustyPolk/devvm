@@ -60,9 +60,9 @@ type Lima struct {
 	Assets fs.FS
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
-	// OCIWait is how long a --from conversion waits between looks at
-	// another's lock.
-	OCIWait time.Duration
+	// OCINote is how long a --from conversion waits for another devvm's
+	// before it says so.
+	OCINote time.Duration
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
 	// Ubuntu finds Ubuntu's cloud image for base.
@@ -121,7 +121,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Lima {
 	}
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Self: self, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCIWait: time.Second, Getenv: os.Getenv,
+		Self: self, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: ubuntu.New(assets, os.Getenv, u).Image, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: cmp.Or(os.Getenv("DEVVM_KVM"), "/dev/kvm"),
 		DockerRunning: from.DockerRunning,

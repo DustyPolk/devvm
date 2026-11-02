@@ -8,55 +8,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/trust"
 )
 
-// shareTries is how many times the share's lock is tried, ShareWait apart,
-// before devvm gives up; it says it's waiting after waitNote tries.
-const (
-	shareTries = 600
-	waitNote   = 3
-)
-
-func (t *Env) shareLock() string { return filepath.Join(t.Dirs.Tools(), ".lock") }
+// shareLock is the share's lock file, in devvm's data folder beside the
+// share, which VMs mount.
+func (t *Env) shareLock() string { return filepath.Join(t.Dirs.Data, "tools.lock") }
 
 // LockShare holds the share's lock, for a build writing tool images or a
-// swap of the lock, until unlock is called or the run ends. Another devvm
-// holding it is waited for.
+// swap of the lock, until unlock is called or the process ends, however
+// it ends: it's an OS lock on an open file. Another devvm holding it is
+// waited for until ctx ends, saying so after ShareNote.
 func (t *Env) LockShare(ctx context.Context) (unlock func(), err error) {
 	if err := os.MkdirAll(t.Dirs.Tools(), 0o700); err != nil {
 		return nil, err
 	}
-	for i := 1; ; i++ {
-		err := os.Mkdir(t.shareLock(), 0o700)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, fs.ErrExist) {
-			return nil, err
-		}
-		if i >= shareTries {
-			return nil, msg.ShareLockHeld(t.Dirs.Tools())
-		}
-		if i == waitNote {
-			t.Info(msg.ShareWaiting(t.Dirs.Tools()))
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(t.ShareWait):
-		}
-	}
-	remove := t.AddCleanup(func(context.Context) { _ = os.Remove(t.shareLock()) })
-	return func() {
-		_ = os.Remove(t.shareLock())
-		remove()
-	}, nil
+	return platform.LockFileWaiting(ctx, t.shareLock(), t.ShareNote, func() { t.Info(msg.ShareWaiting(t.Dirs.Tools())) })
 }
 
 // Built reports whether a tool image is in the share with the hash devvm

@@ -64,8 +64,9 @@ type Env struct {
 	Now      func() time.Time
 	// Detach starts the daily check, which outlives the run.
 	Detach func(path string, args []string, out *os.File) (int, error)
-	// ShareWait is how long the share's lock is waited for between tries.
-	ShareWait time.Duration
+	// ShareNote is how long LockShare waits for another devvm holding the
+	// share's lock before it says so.
+	ShareNote time.Duration
 	// What it prints: Warn says where the run log is too.
 	Info, Warn func(msg.M)
 	// LogNote says where the run log is, once a run; Status shows a status
@@ -120,7 +121,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Env {
 	return &Env{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: platform.StartDetached,
-		ShareWait: time.Second, miseURL: miseURL, miseSums: miseSHA256,
+		ShareNote: 3 * time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
 		FreeSpace: host.FreeSpace,

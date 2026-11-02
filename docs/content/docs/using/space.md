@@ -102,7 +102,8 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `assets/<hash>` | devvm's own files, written out where a program needs them at a path, one folder per version of devvm's files | `devvm gc` deletes the folders of older versions, except one that a running VM's proxy was started with |
 | `run/` | files for running VMs and for builds, such as sandbox profiles, proxy pids and the ports lock | devvm deletes a VM's files when it deletes the VM |
 | `agent.sock` | the socket of [devvm's own SSH agent](ssh.md#devvms-own-agent) | it takes no space |
-| `oci-build.lock` | a folder that holds the pid of the devvm that builds a base from a container image on Lima | devvm deletes it when the build ends |
+| `oci-build.lock` | an empty file that the devvm building a base from a container image on Lima locks, so that one such build runs at a time | it stays, and takes no space |
+| `tools.lock` | an empty file that the devvm building shared tools or updating the tools lock locks, so that one at a time writes to `tools/` | it stays, and takes no space |
 | `making.lock` | an empty file that each devvm making a VM locks, so that `devvm gc --tools` can tell a VM is [being made](images.md#cleaning-up) | it stays, and takes no space |
 | `lima/` | devvm's own [Lima home](../backends/lima.md#devvms-lima-home), with its VMs and images, unless `DEVVM_LIMA_HOME` moves it | see [Lima](#lima) |
 | `lima-vms/` | what the Lima backend sets on each VM: which ports it forwards, and its port forwarder's files | `devvm rm` deletes a VM's files with the VM |

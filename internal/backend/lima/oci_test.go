@@ -3,9 +3,7 @@ package lima
 import (
 	"archive/tar"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -121,51 +119,29 @@ func TestCheckConverted(t *testing.T) {
 }
 
 // Conversions take turns: one waits while another devvm holds the lock,
-// and takes over a lock whose devvm is gone.
+// saying so, and takes it once that one lets go; a lock file nothing
+// holds, as a devvm that crashed leaves it, is taken at once.
 func TestLockOCI(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
-	l.OCIWait = 10 * time.Millisecond
+	l.OCINote = 10 * time.Millisecond
 	var infos []string
 	l.Info = func(m msg.M) { infos = append(infos, m.ID()) }
-	dir := l.Dirs.OCIBuildLock()
 
-	// Held by a process that runs, which ends after a while.
-	holder := exec.CommandContext(t.Context(), "sleep", "30")
-	if err := holder.Start(); err != nil {
-		t.Fatal(err)
+	writeTestFile(t, l.Dirs.OCIBuildLock(), "")
+	unlock, err := l.lockOCI(t.Context())
+	if err != nil || len(infos) != 0 {
+		t.Fatalf("lockOCI on a file nothing holds: %v, infos %q", err, infos)
 	}
-	writeTestFile(t, filepath.Join(dir, "pid"), strconv.Itoa(holder.Process.Pid)+"\n")
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		_ = holder.Process.Kill()
-		_ = holder.Wait()
+		unlock()
 	}()
-	unlock, err := l.lockOCI(t.Context())
+	again, err := l.lockOCI(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(infos) != 1 || infos[0] != "oci_waiting" {
 		t.Errorf("infos: %q", infos)
 	}
-	if data, _ := os.ReadFile(filepath.Join(dir, "pid")); strings.TrimSpace(string(data)) != strconv.Itoa(os.Getpid()) { //nolint:gosec // the test's own file
-		t.Errorf("pid file: %q", data)
-	}
-	unlock()
-	if _, err := os.Stat(dir); err == nil {
-		t.Error("unlock left the lock")
-	}
-
-	// Left by a devvm that's gone: taken at once.
-	infos = nil
-	writeTestFile(t, filepath.Join(dir, "pid"), "999999\n")
-	unlock, err = l.lockOCI(t.Context())
-	if err != nil || len(infos) != 0 {
-		t.Fatalf("lockOCI: %v, infos %q", err, infos)
-	}
-	// Someone else's lock isn't unlocked.
-	writeTestFile(t, filepath.Join(dir, "pid"), "999998\n")
-	unlock()
-	if _, err := os.Stat(dir); err != nil {
-		t.Error("unlock removed another devvm's lock")
-	}
+	again()
 }

@@ -1968,9 +1968,6 @@ other = "checking for newer shared tools"
 [tools_check_failed]
 other = "The check for newer shared tools failed, so devvm uses the versions it last found."
 
-[share_lock_held]
-other = "{{.dir}}/.lock is still held after devvm waited for it. If no other devvm is running, remove it and try again."
-
 [share_waiting]
 other = "waiting for another devvm to finish with {{.dir}}"
 

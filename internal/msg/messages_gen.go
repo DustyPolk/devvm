@@ -2724,11 +2724,6 @@ func SetupFailed(reason string) M {
 	return M{id: "setup_failed", vals: []val{{"reason", reason}}}
 }
 
-// ShareLockHeld is [share_lock_held]: "{{.dir}}/.lock is still held after devvm waited for it. If no other devvm is running, remove it and try again."
-func ShareLockHeld(dir string) M {
-	return M{id: "share_lock_held", vals: []val{{"dir", dir}}}
-}
-
 // ShareWaiting is [share_waiting]: "waiting for another devvm to finish with {{.dir}}"
 func ShareWaiting(dir string) M {
 	return M{id: "share_waiting", vals: []val{{"dir", dir}}}
@@ -3845,7 +3840,6 @@ var specs = map[string]spec{
 	"setid_files":                      {fields: []string{"files"}},
 	"setid_root_files":                 {fields: []string{"files"}},
 	"setup_failed":                     {fields: []string{"reason"}},
-	"share_lock_held":                  {fields: []string{"dir"}},
 	"share_waiting":                    {fields: []string{"dir"}},
 	"size_cpus_prompt":                 {fields: []string{"cpus"}},
 	"size_defaults":                    {fields: []string{"size"}},

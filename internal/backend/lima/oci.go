@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -16,11 +14,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
 )
 
 // OCIVM is the throwaway VM a container image is converted in (--from).
@@ -296,57 +294,13 @@ func ext4(path string) bool {
 	return bytes.Equal(magic, []byte{0x53, 0xef})
 }
 
-// ociWaitNote is how many looks at the lock a conversion takes before it
-// says it's waiting.
-const ociWaitNote = 3
-
-// lockOCI takes the conversion lock: a folder holding its devvm's pid. It
-// waits while that devvm runs, and takes the lock over from one that
-// ended without unlocking (killed, a crash). The unlock leaves another
-// devvm's lock alone.
+// lockOCI takes the conversion lock, an OS lock on a file in devvm's data
+// folder, until unlock is called or devvm ends, however it ends. It waits
+// for another devvm that holds it, saying so after OCINote.
 func (l *Lima) lockOCI(ctx context.Context) (unlock func(), err error) {
-	dir := l.Dirs.OCIBuildLock()
-	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+	path := l.Dirs.OCIBuildLock()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	pidFile := filepath.Join(dir, "pid")
-	holder := func() int {
-		data, err := os.ReadFile(pidFile) //nolint:gosec // devvm's own folder
-		if err != nil {
-			return 0
-		}
-		pid, _ := strconv.Atoi(strings.TrimSpace(string(data)))
-		return pid
-	}
-	for i := 1; ; i++ {
-		err := os.Mkdir(dir, 0o700)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, fs.ErrExist) {
-			return nil, err
-		}
-		if pid := holder(); pid > 0 && !alive(pid) {
-			_ = os.RemoveAll(dir)
-			continue
-		}
-		if i == ociWaitNote {
-			l.Info(msg.OCIWaiting())
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(l.OCIWait):
-		}
-	}
-	me := os.Getpid()
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(me)+"\n"), 0o600); err != nil {
-		_ = os.RemoveAll(dir)
-		return nil, err
-	}
-	return func() {
-		if holder() == me {
-			_ = os.RemoveAll(dir)
-		}
-	}, nil
+	return platform.LockFileWaiting(ctx, path, l.OCINote, func() { l.Info(msg.OCIWaiting()) })
 }

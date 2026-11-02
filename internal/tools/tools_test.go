@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -130,7 +131,7 @@ func newEnv(t *testing.T) env {
 		}
 		return ""
 	}
-	tl.ShareWait = time.Millisecond
+	tl.ShareNote = time.Millisecond
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Info = func(m msg.M) { said = append(said, "==> "+m.Names()) }
 	tl.Warn = func(m msg.M) { said = append(said, "devvm: "+m.Names()) }
@@ -440,7 +441,7 @@ func TestRefresh(t *testing.T) {
 	if !bytes.Equal(read(t, e.Dirs.ToolLock()), newer) {
 		t.Error("the lock isn't the newer one")
 	}
-	if _, err := os.Stat(e.shareLock()); !errors.Is(err, os.ErrNotExist) {
+	if held, _ := platform.LockHeld(e.shareLock()); held {
 		t.Error("the share's lock is still held")
 	}
 	// Check says a failure, and carries on.
@@ -576,7 +577,7 @@ func (e env) noLeftovers(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(e.Dirs.Data, "tools-build.*")); len(left) > 0 {
 		t.Errorf("left %q", left)
 	}
-	if _, err := os.Stat(e.shareLock()); !errors.Is(err, os.ErrNotExist) {
+	if held, _ := platform.LockHeld(e.shareLock()); held {
 		t.Error("the share's lock is still held")
 	}
 }
@@ -630,8 +631,8 @@ func TestBuildFolder(t *testing.T) {
 			!bytes.Equal(read(t, filepath.Join(spec.Out, ".build", "mise.toml")), read(t, e.configFile())) {
 			t.Error("the build's .build folder isn't the lock and mise.toml")
 		}
-		if _, err := os.Stat(e.shareLock()); err != nil {
-			t.Error("the share isn't locked during the build")
+		if held, err := platform.LockHeld(e.shareLock()); !held || err != nil {
+			t.Errorf("the share isn't locked during the build: %v", err)
 		}
 		return nil
 	}
@@ -779,32 +780,91 @@ func (s stored) Floors() backend.Floors {
 	return backend.Floors{Base: 12 << 30, Image: 8 << 30, VM: 4 << 30, Tools: 3 << 30, PerTool: 1 << 30}
 }
 
-// Another devvm holding the share is waited for, then given up on.
+// Another devvm holding the share is waited for, saying so, until it lets
+// go or the run ends; the lock is out of the share VMs mount.
 func TestLockShare(t *testing.T) {
 	e := newEnv(t)
 	unlock, err := e.LockShare(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = e.LockShare(t.Context())
-	if names(err) != "share_lock_held dir="+e.Dirs.Tools() {
+	if filepath.Dir(e.shareLock()) != e.Dirs.Data {
+		t.Errorf("lock %s", e.shareLock())
+	}
+	soon, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	if _, err := e.LockShare(soon); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("LockShare while held = %v", names(err))
 	}
 	if !slices.Contains(*e.said, "==> share_waiting dir="+e.Dirs.Tools()) {
 		t.Errorf("said %q", *e.said)
 	}
+	got := make(chan error, 1)
+	go func() {
+		u, err := e.LockShare(t.Context())
+		if err == nil {
+			u()
+		}
+		got <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
 	unlock()
-	unlock, err = e.LockShare(t.Context())
+	if err := <-got; err != nil {
+		t.Errorf("LockShare once let go = %v", err)
+	}
+}
+
+// shareHolder is set in the environment of the test binary run as
+// TestShareHolder: the data folder whose share it locks.
+const shareHolder = "DEVVM_TEST_SHARE_HOLDER"
+
+// TestShareHolder is a devvm that holds the share's lock until it's
+// killed, when run by TestLockShareKilled.
+func TestShareHolder(t *testing.T) {
+	data := os.Getenv(shareHolder)
+	if data == "" {
+		t.Skip("run by TestLockShareKilled")
+	}
+	e := &Env{
+		Dirs: paths.Dirs{Data: data}, Info: func(msg.M) {},
+		AddCleanup: func(func(context.Context)) func() { return func() {} },
+	}
+	if _, err := e.LockShare(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stdout.WriteString("held\n"); err != nil { //nolint:forbidigo // the helper process tells its parent
+		t.Fatal(err)
+	}
+	time.Sleep(time.Minute)
+}
+
+// A devvm killed while it holds the share's lock lets go of it: the next
+// takes it at once.
+func TestLockShareKilled(t *testing.T) {
+	e := newEnv(t)
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestShareHolder$") //nolint:gosec // the test binary itself
+	cmd.Env = append(os.Environ(), shareHolder+"="+e.Dirs.Data)
+	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	unlock()
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	write(t, filepath.Join(e.shareLock(), "x"), nil)
-	if _, err := e.LockShare(ctx); !errors.Is(err, context.Canceled) {
-		t.Errorf("LockShare canceled = %v", err)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
 	}
+	if line, err := bufio.NewReader(out).ReadString('\n'); err != nil || line != "held\n" {
+		t.Fatalf("helper: %q, %v", line, err)
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Wait()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	unlock, err := e.LockShare(ctx)
+	if err != nil {
+		t.Fatalf("LockShare once its holder was killed = %v", names(err))
+	}
+	unlock()
 }
 
 // gc's list: the tool images List calls unused, neither current nor

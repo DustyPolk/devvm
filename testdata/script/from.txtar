@@ -27,13 +27,16 @@ env DEVVM_FROM=
 # devvm's oci/ (written out in its data folder) read-only, converts exactly
 # that digest; it's deleted before base is
 # created from what it wrote (outside the folder it wrote in), and the
-# temporary folder and the conversion lock go once base has started.
+# temporary folder goes once base has started. The conversion lock's file,
+# left as a devvm that crashed leaves it, holds nothing.
+exec sh -c ': > "$LOCK"'
 exec sh -c 'echo musl > "$STUB_DIR/build-libc"'
 exec devvm --from $PIN build base
 stdout '^==> building_image_from from=node:24@sha256:a{64} image=base key=[0-9a-f]{12}$'
 ! stdout base_build_time
 stdout '^==> converting_in_vm from=node:24@sha256:a{64} vm=devvm-oci-build$'
 stdout '^==> image_ready image=base$'
+! stdout oci_waiting
 stub_calls
 ! stdout '^docker'
 stdout '^gpgv --keyring '
@@ -47,7 +50,6 @@ stdout '^limactl delete -f devvm-oci-build\nlimactl create --tty=false --mount-n
 stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
-! exists $LOCK
 # The builds' proxies are gone, with their files.
 ! exists $XDG_DATA_HOME/devvm/run/builds/devvm-oci-build
 exec sh -c 'ls "$XDG_DATA_HOME/devvm/run/builds"'
@@ -118,7 +120,6 @@ stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- \S*/assets/[0
 exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
 stdout '^# \[1/13\] exporting_docker from=myapp:dev$'
 stdout '^# \[13/13\] stopping vm=devvm-img-'
-! exists $LOCK
 
 # Saved by name: an export that isn't the recorded image (the tag moved
 # since) is refused, before the conversion.
@@ -129,7 +130,6 @@ stub_calls
 ! stdout 'oci/build\.sh'
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
-! exists $LOCK
 exec sh -c 'rm "$STUB_DIR/docker-saved"'
 
 # Docker not running for an image only it has: the recorded ID is kept,
@@ -153,8 +153,8 @@ rm $STUB_DIR/docker-image
 ! exec devvm --from debian:13 build base
 stderr '^devvm: from_unreachable from=debian:13 host=registry-1\.docker\.io$'
 
-# A failed conversion says so, and the build VM, the temporary folder and
-# the lock go.
+# A failed conversion says so, and the build VM and the temporary folder
+# go.
 exec sh -c ': > "$STUB_LOG"; : > "$STUB_DIR/build-fails"'
 ! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_failed from=node:24@sha256:a{64}$'
@@ -163,7 +163,6 @@ stdout '^limactl delete -f devvm-oci-build$'
 ! stdout '--name=devvm-img-'
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
-! exists $LOCK
 exec sh -c 'rm "$STUB_DIR/build-fails"'
 
 # What the image's own code wrote is untrusted: a command line that could
@@ -200,7 +199,6 @@ stdout '^limactl delete -f devvm-oci-build$'
 cmp $STUB_DIR/instances $WORK/before
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
-! exists $LOCK
 
 -- digests --
 myapp:third=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
