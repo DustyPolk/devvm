@@ -26,18 +26,18 @@ The same code and tests run on macOS and Linux; what differs is behind build tag
 
 Test in a Lima VM with nested virtualization, which needs an M3 or newer and macOS 15 or newer. Give it a Lima home of its own, so its VMs stay apart from yours:
 
-1. Make it from Lima's Ubuntu template, with nested virtualization, room for nested VMs, and only the repo mounted, read-only:
+1. Make it from Lima's Ubuntu template, with nested virtualization, room for nested VMs, its user at uid 1000, and only the repo mounted, read-only:
 
    ```sh
    REPO=$(pwd) && cd /tmp
    export LIMA_HOME=~/.lt-linux-go
    limactl create --name=linuxhost --tty=false --vm-type=vz --cpus=8 --memory=16 --disk=150 \
-     --containerd=none --set '.nestedVirtualization=true' --mount "$REPO" template:ubuntu-24.04
+     --containerd=none --set '.nestedVirtualization=true | .user.uid=1000' --mount "$REPO" template:ubuntu-24.04
    limactl edit --tty=false --set '.mounts=[{"location":"'"$REPO"'","writable":false}]' linuxhost
    limactl start --tty=false linuxhost
    ```
 
-   Run it from your checkout of the repo, which the VM mounts at the same path. `--mount` alone keeps the template's home mount, hence the edit.
+   Run it from your checkout of the repo, which the VM mounts at the same path. `--mount` alone keeps the template's home mount, hence the edit. Lima gives the VM's user your Mac's uid unless `user.uid` sets another, and a Mac's first user has uid 501. Most Linux hosts' first user has uid 1000, and so does the user that some container images ship, such as the `ubuntu` user of Ubuntu's images. With the VM's user at uid 1000, the `from` section of `tests/e2e.sh` meets that clash, as devvm does on most Linux hosts.
 
 2. Inside it, install the packages, then Lima and mise from their release tarballs, each checked against its release's checksums (`SHA256SUMS`, `SHASUMS256.txt`) with `sha256sum -c`, and add yourself to the `kvm` and `docker` groups:
 
