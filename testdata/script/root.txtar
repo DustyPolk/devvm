@@ -18,7 +18,6 @@ stdout 'devvm build IMAGE \[flags\]'
 
 # An unknown flag is a usage error: its message on stderr, then the line
 # naming the command's own help.
-env DEVVM_MESSAGES=names
 ! exec devvm --nope
 cmp stderr nope-flag.txt
 ! stdout .

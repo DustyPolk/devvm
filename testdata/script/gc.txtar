@@ -4,10 +4,8 @@
 # them; not a terminal, so
 # it doesn't ask. Never a project VM (one named like an image included),
 # a current image, or a tool image a VM's state lists.
-env DEVVM_MESSAGES=names
 env IMAGES=$XDG_DATA_HOME/devvm/images
 env SHARE=$XDG_DATA_HOME/devvm/tools
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Nothing built.
 exec devvm gc --force
@@ -55,7 +53,7 @@ stdout '^foo .* stale '
 stderr '^images_stale_note count=4$'
 stderr '^images_unused size=\S+$'
 
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm gc --force
 stdout '^gc_images\n'
 stdout '^gc_image image=foo key=[0-9a-f]{12}$'

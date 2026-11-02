@@ -1,11 +1,7 @@
 # devvm in a folder: its VM, created from its image with only the folder
 # mounted, its state, .git protection, started, then a shell in the
 # folder in place of devvm.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
-mkdir $WORK/web
-cd $WORK/web
-exec git init -q
+project web git
 
 # Network policy on and off at once: nothing is built or created.
 ! exec devvm --network-policy --no-network-policy base
@@ -43,7 +39,7 @@ exists $XDG_DATA_HOME/devvm/tools
 # The forwarder pins the host key devvm pinned; the VM forwards every port.
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports; grep -c "^devvm-web-[0-9a-f]* $(cut -d" " -f2- "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts)$" "$XDG_CONFIG_HOME"/devvm/known_hosts'
 stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\nall\n1\n\z'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^image=base$'
 stdout '^dir=/\S*/web$'
 stdout '^folder=[0-9]+:[0-9]+'
@@ -74,25 +70,23 @@ stderr '^devvm: vm_other_folder vm=devvm-web-[0-9a-f]{14} was=/\S*/web$'
 
 # --no-git-protect: nothing locked. An SSH origin gets a hint: the VM
 # has no SSH agent.
-mkdir $WORK/api
-cd $WORK/api
-exec git init -q
+project api git
 exec git remote add origin git@github.com:o/api.git
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --no-network-policy --no-git-protect base
 ! stdout building_image
 stderr '^devvm: ssh_remote_hint vm=devvm-api-[0-9a-f]{14}$'
 ! stderr git_protect_needs_macos_new
 stub_calls
 ! stdout chflags
-exec sh -c 'cat "$VMS"/devvm-api-*'
+catg $VMS/devvm-api-*
 stdout '^git_protect=off$'
 
 # Launches ask only the backends a VM's state names: with only Lima's VMs,
 # neither docker nor smolvm runs, for a new VM or an existing one.
 stub_calls
 ! stdout '^(docker|smolvm) '
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --no-network-policy base
 ! stdout creating_from
 stub_calls
@@ -108,9 +102,7 @@ stdout '^limactl list --json$'
 
 # Ctrl+C before the VM's first shell deletes it and its state, and takes
 # off .git's locks; nothing else.
-mkdir $WORK/slow
-cd $WORK/slow
-exec git init -q
+project slow git
 exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/start-hangs"'
 ! exec devvm --no-network-policy base &u&
 wait_file $STUB_DIR/hanging

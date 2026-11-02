@@ -2,19 +2,15 @@
 # VM keeps its proxy, the self-check runs on every launch, tools shows
 # its tools and tools add, rm and update change them, and rm exports its
 # agents' history first.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
-env VMS=$XDG_DATA_HOME/devvm/vms
-env RUN=$XDG_DATA_HOME/devvm/run
 
 # Network policy: a running VM isn't started again, and the self-check
 # runs again. (Its hostagent here: the test's runner, which runs on, in
 # place of the stub's.)
-mkdir $WORK/net
-cd $WORK/net
+project net
 exec devvm --network-policy --no-git-protect base
-exec sh -c 'n=$(basename "$VMS"/devvm-net-*); echo $PPID > "$LIMA_HOME/$n/ha.pid"; echo "$PPID 1" > "$RUN/$n.started"'
-exec sh -c ': > "$STUB_LOG"'
+vm_name NET net
+exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$RUN/$NET.started"'
+stub_reset
 exec devvm
 ! stdout starting
 stub_calls
@@ -22,27 +18,27 @@ stub_calls
 stdout 'exec ''curl'' ''--noproxy'''
 # Started outside devvm: unenforced, so without a terminal to ask in,
 # devvm stops it. devvm starts it again confined.
-exec sh -c 'n=$(basename "$VMS"/devvm-net-*); limactl stop "$n" && limactl start --tty=false "$n"'
-exec sh -c ': > "$STUB_LOG"'
+exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"'
+stub_reset
 ! exec devvm
 stderr '^devvm: net_unenforced_stop vm=devvm-net-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-net-[0-9a-f]{14}$'
 ! stdout 'tar -xf'
-exec sh -c 'cat "$VMS"/devvm-net-*'
+catg $VMS/devvm-net-*
 stdout '^net_check=unenforced$'
 exec devvm
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-net-*'
+catg $VMS/devvm-net-*
 stdout '^net_check=ok$'
 
 # tools update: with the lock as it is, the tools are the newest; with a
 # newer go upstream, it's built and the VM moves to it. tools shows the
 # VM's version and the lock's newer one, built or not, without going
 # online.
-mkdir $WORK/api
-cd $WORK/api
+project api
 exec devvm --no-network-policy --no-git-protect go
+vm_name API api
 ! exec devvm tools now
 stderr '^devvm: no_subcommand command=devvm tools commands=add, rm, update given=now$'
 exec devvm tools
@@ -53,8 +49,8 @@ exec devvm tools update
 stdout '^==> checking_tools$'
 stdout '^==> tools_newest vm=devvm-api-[0-9a-f]{14}$'
 exec sh -c 'sed "/^\[\[tools.go\]\]/,/^version/ s/^version = .*/version = \"9.9.9\"/" "$MISE_STUB_LOCK" > "$WORK/newer.lock"'
-exec sh -c 'cp "$WORK/newer.lock" "$XDG_DATA_HOME/devvm/mise.lock"'
-exec sh -c ': > "$STUB_LOG"'
+exec sh -c 'cp "$WORK/newer.lock" "$DATA/mise.lock"'
+stub_reset
 exec devvm tools
 stdout '^go +\S+ +9\.9\.9 +no$'
 stub_calls
@@ -63,12 +59,12 @@ env MISE_STUB_LOCK=$WORK/newer.lock
 exec devvm tools update
 stdout '^==> building_tools tools=go 9\.9\.9$'
 stdout '^==> tools_switch vm=devvm-api-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-api-*'
+catg $VMS/devvm-api-*
 stdout '^tools=go-9\.9\.9-[0-9a-f]{12}\.erofs$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 stdout '^go-9\.9\.9-[0-9a-f]{12}\.erofs go 9\.9\.9$'
 # A VM whose tools are older than the lock's is told on launch.
-exec sh -c 'f=$(ls "$VMS"/devvm-api-*); sed "s/^tools=.*/tools=go-1.0.0-0123456789ab.erofs/" "$f" > "$f.new" && mv "$f.new" "$f"'
+exec sh -c 'f="$VMS/$API"; sed "s/^tools=.*/tools=go-1.0.0-0123456789ab.erofs/" "$f" > "$f.new" && mv "$f.new" "$f"'
 exec devvm
 stderr '^devvm: newer_tools tools=go 9\.9\.9$'
 exec devvm tools
@@ -78,15 +74,14 @@ stdout '\A{\n  "version": 1,\n  "tools": \[\n    {\n      "tool": "go",\n      "
 
 # tools rm: the tools leave its name and list, the rest stays; what it
 # lacks is refused, and so is a layer. Names are separate words.
-mkdir $WORK/web
-cd $WORK/web
+project web
 cp $WORK/package.json package.json
 exec devvm --no-network-policy --no-git-protect claude
 ! exec devvm tools rm node+claude
 stderr '^devvm: tools_joined cmd=rm given=node\+claude$'
 exec devvm tools rm claude
 stdout '^==> vm_is_now image=node vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^image=node$'
 stdout '^tools=node-\S+ pnpm-\S+ bun-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
@@ -103,7 +98,7 @@ stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools rm$'
 stderr '^devvm: vm_lacks_tools tools=python claude vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm docker
 stderr '^devvm: vm_lacks_layer image=node\+docker layer=docker vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^image=node$'
 
 # tools add: the tools it lacks join its name and list, those it has are
@@ -117,7 +112,7 @@ stderr '^devvm: unknown_tool tool=docker tools=node python rust go claude codex 
 exec devvm tools add node claude
 stdout '^==> has_tools tools=node vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> vm_is_now image=node\+claude vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^image=node\+claude$'
 stdout '^tools=node-\S+ pnpm-\S+ bun-\S+ claude-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
@@ -128,10 +123,10 @@ exec devvm claude
 # rm: an image with an agent has its history exported first, from the
 # VM, started if it's stopped; a failed export keeps the VM, and -f
 # deletes it without one.
-mkdir $WORK/agent
-cd $WORK/agent
+project agent
 exec devvm --no-network-policy --no-git-protect base+claude
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-agent-*)"'
+vm_name AGENT agent
+exec limactl stop $AGENT
 exec sh -c ': > "$STUB_DIR/shell-fails"'
 ! exec devvm rm --force
 stdout '^==> starting vm=devvm-agent-[0-9a-f]{14}$'
@@ -141,7 +136,7 @@ stdout devvm-agent
 exec sh -c 'ls "$DATA/exports" | wc -l'
 stdout '^ *0$'
 rm $STUB_DIR/shell-fails
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm rm --force
 stdout '^==> exported file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
 stdout '^==> deleted vm=devvm-agent-[0-9a-f]{14}$'

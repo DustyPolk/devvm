@@ -2,7 +2,6 @@
 # itself; devvm space, devvm images and devvm gc show what it takes, and devvm
 # gc deletes its least recently used files while it's over its cap
 # (nix-cache.size), or all of it with --nix-cache.
-env DEVVM_MESSAGES=names
 env CACHE=$XDG_DATA_HOME/devvm/nix-cache
 
 exec devvm _proxy --help

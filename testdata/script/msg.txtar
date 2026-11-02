@@ -1,4 +1,6 @@
 # devvm _msg prints a message's text.
+# Not in names mode, until it's checked below.
+env DEVVM_MESSAGES=
 exec devvm _msg msg_unknown name=x
 stdout '^There''s no message x\.$'
 ! stderr .

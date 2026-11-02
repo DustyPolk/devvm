@@ -3,10 +3,8 @@
 # backend; then the shared tool images by the name images have them by,
 # each with the backend and C library it's built for; then the total.
 # Project VMs aren't images. Listing never resolves the tools lock.
-env DEVVM_MESSAGES=names
 env IMAGES=$XDG_DATA_HOME/devvm/images
 env SHARE=$XDG_DATA_HOME/devvm/tools
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Nothing built: the headers, and every name not installed.
 exec devvm images
@@ -46,7 +44,7 @@ exec devvm build claude
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
 mkdir $VMS
 exec sh -c 'printf "image=claude\ndir=/p\nbackend=smolvm\nlibc=musl\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm images
 # The lock's go isn't built; the old go has the backend and C library of
 # the VM that has it, the oldest none; claude's build says its own.
@@ -80,7 +78,7 @@ exec sh -c '! test -e "$IMAGES/$(cat foo.key)"'
 
 # A key no image has, a name no layer has, what isn't built and shared
 # tools: errors, and nothing is deleted.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 ! exec devvm images rm --force fedcba987654
 stderr '^devvm: unknown_layer '
 ! exec devvm images rm --force base nope

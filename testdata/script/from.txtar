@@ -3,7 +3,6 @@
 # registry, else Docker's ID for an image only Docker has. Registries are
 # never reached here: a pinned digest needs no lookup, and HTTPS_PROXY
 # points at nothing, so every lookup is offline.
-env DEVVM_MESSAGES=names
 env IMAGES=$XDG_DATA_HOME/devvm/images
 env LOCK=$XDG_DATA_HOME/devvm/oci-build.lock
 env TMPDIR=$WORK/tmp
@@ -55,7 +54,7 @@ exec sh -c 'ls "$TMPDIR"'
 exec sh -c 'ls "$XDG_DATA_HOME/devvm/run/builds"'
 ! stdout .
 # Its record: what it came from, and musl from the image.
-exec sh -c 'cat "$IMAGES"/????????????'
+catg $IMAGES/????????????
 stdout '^name=base$'
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^digest=node:24@sha256:a{64}$'
@@ -74,7 +73,8 @@ stdout '^# \[12/12\] stopping vm=devvm-img-'
 
 # Built: reused, without a lookup; a layer on it records where its base
 # came from. Ubuntu's base is another image.
-exec sh -c ': > "$STUB_LOG"; mkdir -p "$XDG_CONFIG_HOME/devvm/layers"; printf "#!/bin/bash\necho foo\n" > "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
+stub_reset
+exec sh -c 'mkdir -p "$CFG/layers"; printf "#!/bin/bash\necho foo\n" > "$CFG/layers/foo.sh"'
 exec devvm --from $PIN build foo
 ! stdout 'building_image_from .*image=base '
 stdout '^==> building_image_from from=node:24@sha256:a{64} image=foo key=[0-9a-f]{12}$'
@@ -88,14 +88,13 @@ exec sh -c 'rm "$STUB_DIR/build-libc"'
 
 # A new VM from it records --from; once it exists, another --from is
 # ignored with a warning, and nothing is built for it.
-mkdir $WORK/web
-cd $WORK/web
+project web
 exec devvm --from $PIN --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/vms/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^from=node:24@sha256:a{64}$'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --from debian:13
 stderr '^devvm: from_ignored vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
@@ -107,7 +106,8 @@ cd $WORK
 
 # An image only Docker has, offline: Docker's ID, recorded; docker save
 # hands it to the build VM, whose build.sh reads it for -.
-exec sh -c ': > "$STUB_LOG"; echo sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd > "$STUB_DIR/docker-image"'
+stub_reset
+exec sh -c 'echo sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd > "$STUB_DIR/docker-image"'
 exec devvm --from myapp:dev build base
 ! stderr from_cached
 stdout '^==> exporting_docker from=myapp:dev$'
@@ -123,7 +123,8 @@ stdout '^# \[13/13\] stopping vm=devvm-img-'
 
 # Saved by name: an export that isn't the recorded image (the tag moved
 # since) is refused, before the conversion.
-exec sh -c ': > "$STUB_LOG"; echo sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee > "$STUB_DIR/docker-saved"'
+stub_reset
+exec sh -c 'echo sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee > "$STUB_DIR/docker-saved"'
 ! exec devvm --from myapp:other build base
 stderr '^devvm: docker_image_changed from=myapp:other$'
 stub_calls
@@ -143,7 +144,7 @@ exec sh -c 'rm "$STUB_DIR/docker-down"'
 
 # Offline: a digest the registry gave before is kept, with a warning;
 # with none, and Docker without the image, the lookup fails.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --from node:24 build base
 stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io$'
 stub_calls
@@ -155,7 +156,8 @@ stderr '^devvm: from_unreachable from=debian:13 host=registry-1\.docker\.io$'
 
 # A failed conversion says so, and the build VM and the temporary folder
 # go.
-exec sh -c ': > "$STUB_LOG"; : > "$STUB_DIR/build-fails"'
+stub_reset
+exec sh -c ': > "$STUB_DIR/build-fails"'
 ! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_failed from=node:24@sha256:a{64}$'
 stub_calls
@@ -169,7 +171,8 @@ exec sh -c 'rm "$STUB_DIR/build-fails"'
 # change Lima's config, a symlink to a host file, an unknown libc, or a
 # disk that isn't raw ext4 (qcow2 can name a host file as its backing
 # file) are refused, and base is never created from them.
-exec sh -c ': > "$STUB_LOG"; printf "root=/dev/vda rw console=hvc0\"\ncopyToHost:\n- guest: /etc/hostname\n  host: /tmp/x\n" > "$STUB_DIR/build-cmdline"'
+stub_reset
+exec sh -c 'printf "root=/dev/vda rw console=hvc0\"\ncopyToHost:\n- guest: /etc/hostname\n  host: /tmp/x\n" > "$STUB_DIR/build-cmdline"'
 ! exec devvm rebuild --force --from $PIN base
 stderr '^devvm: convert_bad_output file=cmdline from=node:24@sha256:a{64}$'
 exec sh -c 'rm "$STUB_DIR/build-cmdline"; echo hostile > "$HOME/secret"; echo "disk.raw $HOME/secret" > "$STUB_DIR/build-symlinks"'
@@ -191,7 +194,8 @@ exec sh -c 'ls "$TMPDIR"'
 
 # Ctrl+C during the conversion deletes the build VM and the temporary
 # folder; nothing is left in Lima.
-exec sh -c ': > "$STUB_LOG"; echo oci/build.sh > "$STUB_DIR/interrupt-on"; cp "$STUB_DIR/instances" "$WORK/before"'
+stub_reset
+exec sh -c 'echo oci/build.sh > "$STUB_DIR/interrupt-on"; cp "$STUB_DIR/instances" "$WORK/before"'
 ! exec devvm rebuild --force --from $PIN base
 ! stderr convert_failed
 stub_calls

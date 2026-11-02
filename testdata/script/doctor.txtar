@@ -2,7 +2,6 @@
 # get what's missing, each backend's features, and whether Docker is
 # there. --json prints what it found as JSON, for scripts, and nothing
 # else.
-env DEVVM_MESSAGES=names
 env ALL=$PATH
 chmod 0755 brew/brew
 chmod 0755 broken/limactl

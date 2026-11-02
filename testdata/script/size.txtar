@@ -1,13 +1,9 @@
 # devvm size: a folder's VM's CPUs, memory and disk, changed at once for a
 # stopped VM, from its next start for a running one; with -g, the size new
 # VMs get (the size file).
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
-env CFG=$XDG_CONFIG_HOME/devvm
 
 # No VM yet.
-mkdir $WORK/web
-cd $WORK/web
+project web
 ! exec devvm size
 stderr '^devvm: no_vm_size dir=\S*/web$'
 ! exec devvm size big
@@ -23,7 +19,7 @@ stderr '^devvm: flag_needs_value flag=--memory form=--memory GiB$'
 
 # -g: the size new VMs get, unset (the image's) until it's set; each change
 # keeps what it leaves unset. No VM is looked at.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm size -g
 cmp stdout $WORK/unset
 exec devvm size -g --cpus 2 --memory 3G
@@ -37,7 +33,7 @@ exec devvm size -g --json
 stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 2\.5\n}\n\z'
 ! exec devvm size -g --json --cpus 4
 stderr '^devvm: json_shows_only command=devvm size$'
-exec sh -c 'cat "$CFG/size"'
+catg $CFG/size
 stdout '^cpus=2$'
 stdout '^memory=2\.5$'
 ! stdout disk
@@ -57,20 +53,21 @@ rm $CFG/size
 # A new VM. Running: devvm size shows what it has, and a change waits for
 # its next start. It has 2 CPUs, which any host running the tests has.
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'echo "2 8589934592 107374182400" > "$STUB_DIR/size-$(basename "$VMS"/devvm-web-*)"'
+vm_name WEB web
+exec sh -c 'echo "2 8589934592 107374182400" > "$STUB_DIR/size-$WEB"'
 exec devvm size
 stdout '\Acpus=2 memory=8GiB disk=100GiB\n\z'
 ! stderr .
 exec devvm size --json
 stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 8,\n  "disk_gib": 100\n}\n\z'
 ! stderr .
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm size --cpus 1 --memory 3
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
 ! stdout vm_size
 stub_calls
 ! stdout 'limactl edit'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/$WEB
 stdout '^cpus=1$'
 stdout '^memory=3$'
 exec devvm size
@@ -93,8 +90,8 @@ stderr '^devvm: too_many_cpus have=8 want=9999$'
 stderr '^devvm: cpus_not_number value="1\.5"$'
 
 # Stopped: changed at once, only what differs.
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec sh -c ': > "$STUB_LOG"'
+exec limactl stop $WEB
+stub_reset
 exec devvm size --cpus 1 --memory 8 --disk 120GiB
 stdout '^==> vm_size size=cpus=1 memory=8GiB disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
 stub_calls

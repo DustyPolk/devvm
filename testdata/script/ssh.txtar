@@ -2,12 +2,9 @@
 # and its full name), checked against its own host keys, read from the VM;
 # Lima's own settings that turn host key checks off, share a connection or
 # run commands left out. The user's ~/.ssh is never touched.
-env DEVVM_MESSAGES=names
-env CFG=$XDG_CONFIG_HOME/devvm
-mkdir $WORK/web
-cd $WORK/web
+project web
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'cat "$CFG/ssh_config"'
+catg $CFG/ssh_config
 stdout '\A# Written by devvm on every launch; edits are overwritten\.\n\nHost devvm-web devvm-web-[0-9a-f]{14}\n'
 stdout '^  HostKeyAlias devvm-web-[0-9a-f]{14}$'
 stdout '^  UserKnownHostsFile "/\S*/config/devvm/known_hosts"$'
@@ -32,7 +29,7 @@ stdout '^  IdentityFile "/\S*/lima/_config/user"$'
 stdout '^  IdentitiesOnly yes$'
 ! stdout 'StrictHostKeyChecking no|/dev/null|NoHostAuthenticationForLocalhost yes'
 ! stdout 'ControlMaster auto|ssh\.sock|ControlPersist|LocalCommand'
-exec sh -c 'cat "$CFG/known_hosts"'
+catg $CFG/known_hosts
 stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 AAAAstubkeydevvmweb[0-9a-f]{14}\n\z'
 exec sh -c 'ls -l "$CFG/ssh_config" "$CFG/known_hosts"'
 ! stdout '^-.{3}[^-]'
@@ -42,13 +39,12 @@ exec sh -c 'ls -l "$CFG/ssh_config" "$CFG/known_hosts"'
 # image (img-foo) is a project VM; images and build VMs aren't listed.
 exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Running$/\1 Stopped/" "$STUB_DIR/instances" > "$STUB_DIR/i" && mv "$STUB_DIR/i" "$STUB_DIR/instances"'
 exec sh -c 'echo "devvm-img-0123456789ab Running" >> "$STUB_DIR/instances" && echo "devvm-tools-build Running" >> "$STUB_DIR/instances"'
-mkdir $WORK/img-foo
-cd $WORK/img-foo
+project img-foo
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'cat "$CFG/ssh_config"'
+catg $CFG/ssh_config
 stdout '^Host devvm-img-foo devvm-img-foo-[0-9a-f]{14}$'
 ! stdout 'devvm-web|devvm-img-0123456789ab|devvm-tools-build'
-exec sh -c 'cat "$CFG/known_hosts"'
+catg $CFG/known_hosts
 stdout '^devvm-web-'
 stdout '^devvm-img-foo-'
 
@@ -57,7 +53,7 @@ exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Stopped$/\1 Running/" "$STUB_DIR/ins
 mkdir $WORK/other/web
 cd $WORK/other/web
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'cat "$CFG/ssh_config"'
+catg $CFG/ssh_config
 stdout -count=2 '^Host devvm-web-[0-9a-f]{14}$'
 ! stdout '^Host devvm-web '
 
@@ -66,19 +62,18 @@ stdout -count=2 '^Host devvm-web-[0-9a-f]{14}$'
 exec sh -c 'n=$(ls "$XDG_DATA_HOME/devvm/vms" | grep "^devvm-img-foo-") && limactl delete -f "$n" && rm "$XDG_DATA_HOME/devvm/vms/$n" && sed "s/^\($n\) .*/\1 ssh-ed25519 AAAAold/" "$CFG/known_hosts" > "$WORK/kh" && cp "$WORK/kh" "$CFG/known_hosts"'
 cd $WORK/img-foo
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'cat "$CFG/known_hosts"'
+catg $CFG/known_hosts
 ! stdout AAAAold
 stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 AAAAstubkeydevvmimgfoo[0-9a-f]{14}$'
 
 # A VM that doesn't show its host keys gets no entry: ssh couldn't check it.
 exec sh -c ': > "$STUB_DIR/hostkeys-fail"'
-mkdir $WORK/nokeys
-cd $WORK/nokeys
+project nokeys
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'cat "$CFG/ssh_config"'
+catg $CFG/ssh_config
 ! stdout devvm-nokeys
 stdout '^Host devvm-img-foo '
-exec sh -c 'cat "$CFG/known_hosts"'
+catg $CFG/known_hosts
 ! stdout devvm-nokeys
 rm $STUB_DIR/hostkeys-fail
 ! exists $HOME/.ssh

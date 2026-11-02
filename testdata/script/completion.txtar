@@ -6,7 +6,6 @@ exec devvm completion zsh
 stdout '^#compdef devvm$'
 exec devvm completion fish
 stdout 'complete -c devvm'
-env DEVVM_MESSAGES=names
 ! exec devvm completion powershell
 stderr '^devvm: arg_not_choice choices=bash, zsh, fish command=devvm completion given=powershell$'
 stderr '^usage_help command=devvm completion$'

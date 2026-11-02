@@ -5,8 +5,6 @@
 # in the clone and its worktrees, keeps fetched work as local branches and removes the remote. (The stubs
 # keep the VM's files in
 # $STUB_DIR/vmfs.)
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 mkdir $WORK/web/sub
 cd $WORK/web
@@ -38,7 +36,7 @@ stub_calls
 # isn't added, and devvm says how to fetch until it is. Uncommitted
 # changes aren't copied, and devvm says so.
 exec sh -c 'echo x > tracked && git add tracked && git commit -qm two && echo y > tracked'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --clone --no-network-policy base
 stdout '^==> copying_branches$'
 stdout '^==> clone_ready branch=main remote=devvm$'
@@ -52,7 +50,7 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 stdout '^ssh -F /\S*/config/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/\S*/config/devvm/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o ForwardAgent=no -o ClearAllForwardings=yes devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! stdout chflags
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^mode=clone$'
 stdout '^clone_remote=devvm$'
 stdout '^seeded=yes$'
@@ -64,7 +62,7 @@ cmp stdout $WORK/vm-branches
 ! exists $HOME/.ssh/config
 
 # Opened again: not copied again. --clone on it is fine.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --clone
 ! stdout 'copying_branches|clone_ready'
 stub_calls

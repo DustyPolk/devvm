@@ -181,12 +181,10 @@ env BREW_PREFIXES=
 
 # devvm itself, installed: its files are in it, and its own check (the
 # sandbox's stubs) finds nothing missing; devvm doctor runs after it.
-env DEVVM_MESSAGES=names
 exec bash real.sh
 stdout '^fzf$'
 stdout '^==> everything devvm needs is installed$'
 stdout '^doctor_ok backend=lima '
-env DEVVM_MESSAGES=
 
 -- lib.sh --
 # Sourced by each case: install.sh's functions, set to install into

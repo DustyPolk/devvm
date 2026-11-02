@@ -4,12 +4,9 @@
 # out of submodules (diff.ignoreSubmodules=all in .git/config). Locks need
 # macOS: elsewhere on and strict are refused. The chflags stub changes no
 # flags.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # No VM yet.
-mkdir $WORK/web
-cd $WORK/web
+project web
 ! exec devvm git-protect
 stderr '^devvm: no_vm_git_protect dir=\S*/web$'
 ! exec devvm git-protect maybe
@@ -20,6 +17,7 @@ stderr '^devvm: arg_not_choice choices=on, strict, off command=devvm git-protect
 # is refused.
 exec git init -q
 exec devvm --no-network-policy base
+vm_name WEB web
 exec devvm git-protect
 [darwin] stdout '\Aon\n\z'
 [linux] stdout '\Aoff\n\z'
@@ -28,7 +26,7 @@ exec devvm git-protect
 [linux] ! exec devvm git-protect strict
 [linux] stderr '^devvm: git_protect_on_needs_macos$'
 [linux] stop 'no locks off macOS'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm git-protect strict
 stdout '^==> git_protect_next_stop mode=strict vm=devvm-web-[0-9a-f]{14}$'
 exec devvm git-protect off
@@ -37,7 +35,7 @@ stub_calls
 ! stdout chflags
 exec devvm git-protect
 stdout '\Aon\n\z'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^git_protect_next=off$'
 # devvm stop applies it.
 exec devvm stop
@@ -46,14 +44,14 @@ stub_calls
 stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 exec devvm git-protect
 stdout '\Aoff\n\z'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 ! stdout '^git_protect_next=.'
 # Stopped outside devvm: the next launch applies it before the VM starts.
 exec devvm
 exec devvm git-protect on
 stdout '^==> git_protect_next_stop mode=on vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec sh -c ': > "$STUB_LOG"'
+exec limactl stop $WEB
+stub_reset
 exec devvm
 stdout '^==> git_locked vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
@@ -77,8 +75,8 @@ rm .git-old
 
 # Stopped: strict sets diff.ignoreSubmodules with .git/config unlocked,
 # then locks .git again.
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec sh -c ': > "$STUB_LOG"'
+exec limactl stop $WEB
+stub_reset
 exec devvm git-protect strict
 stdout '^==> git_locked_strict vm=devvm-web-[0-9a-f]{14}$'
 exec git config --file .git/config diff.ignoreSubmodules
@@ -93,7 +91,7 @@ exec devvm git-protect --json
 stdout '\A{\n  "version": 1,\n  "mode": "strict"\n}\n\z'
 ! exec devvm git-protect --json off
 stderr '^devvm: json_shows_only command=devvm git-protect$'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^git_protect=strict$'
 stdout '^git_inode=[0-9]+$'
 
@@ -104,7 +102,7 @@ stdout '^==> git_locked vm=devvm-web-[0-9a-f]{14}$'
 
 # Off unlocks, and takes it out too; a launch then locks nothing.
 exec devvm git-protect strict
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm git-protect off
 stdout '^==> git_unlocked vm=devvm-web-[0-9a-f]{14}$'
 ! exec git config --file .git/config diff.ignoreSubmodules
@@ -114,8 +112,8 @@ stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 ! stdout ' uchg '
 exec devvm git-protect
 stdout '\Aoff\n\z'
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec sh -c ': > "$STUB_LOG"'
+exec limactl stop $WEB
+stub_reset
 exec devvm
 stub_calls
 ! stdout chflags
@@ -125,27 +123,27 @@ exec devvm --no-git-protect
 stderr '^devvm: git_protect_flag_ignored$'
 
 # Strict is kept on launches, and rm unlocks it.
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
+exec limactl stop $WEB
 exec devvm git-protect strict
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm
 stub_calls
 stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm rm --force --no-export
 stub_calls
 stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 
 # Without a .git yet: locked when one appears.
-mkdir $WORK/nogit
-cd $WORK/nogit
+project nogit
 exec devvm --no-network-policy base
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-nogit-*)"'
+vm_name NOGIT nogit
+exec limactl stop $NOGIT
 exec devvm git-protect on
 stdout '^==> git_lock_later vm=devvm-nogit-[0-9a-f]{14}$'
 
 # A --clone VM mounts no .git: shown as clone, never changed.
-exec sh -c 'echo mode=clone >> "$(ls "$VMS"/devvm-nogit-*)"'
+exec sh -c 'echo mode=clone >> "$VMS/$NOGIT"'
 exec devvm git-protect
 stdout '\Aclone\n\z'
 ! exec devvm git-protect on

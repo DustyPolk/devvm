@@ -1,11 +1,8 @@
 # The shared tools: their versions resolved on first use (the stub mise
 # resolves the fixture lock), built in a throwaway VM from base, moved into
 # the share with their hashes, listed in a VM's state and sent to it.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
 env SHARE=$XDG_DATA_HOME/devvm/tools
-mkdir $WORK/web
-cd $WORK/web
+project web
 cp $WORK/package.json package.json
 
 # An agent named in a node project goes on top of node.
@@ -27,7 +24,7 @@ stdout '^limactl shell --workdir / devvm-tools-build bash -s -- node 24\.21\.0 n
 stdout '^limactl delete -f devvm-tools-build$'
 # The VM is made from base's image, with the share read-only.
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
-exec sh -c 'cat "$DATA"/vms/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^image=node\+claude$'
 stdout '^libc=gnu$'
 stdout '^backend_at=[0-9a-f]{16}$'
@@ -49,12 +46,12 @@ exec tar -tf $STUB_DIR/sync.tar
 stdout '^sync\.sh$'
 stdout '^tools\.sh$'
 # The build's steps are numbered: clone, configure, start, build.sh, delete.
-exec sh -c 'cat "$DATA"/logs/runs/*.log'
+catg $DATA/logs/runs/*.log
 stdout '^# \[4/5\] building_tools_in vm=devvm-tools-build$'
 stdout '^# \[5/5\] deleting vm=devvm-tools-build$'
 
 # Built: nothing to build, nothing to resolve.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm build node+claude
 ! stdout 'building_tools|resolving_tools'
 stub_calls
@@ -62,14 +59,12 @@ stub_calls
 
 # The daily check: a new VM with tools checks first when it's due.
 exec touch -t 202001010000 $DATA/mise.lock.checked
-mkdir $WORK/api
-cd $WORK/api
+project api
 exec devvm --no-network-policy --no-git-protect go
 stdout '^==> checking_tools$'
 stdout '^==> building_tools tools=go 1\.27\.2$'
 # Not again today.
-mkdir $WORK/cli
-cd $WORK/cli
+project cli
 exec devvm --no-network-policy --no-git-protect go+claude
 ! stdout 'checking_tools|building_tools'
 

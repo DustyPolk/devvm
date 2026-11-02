@@ -1,7 +1,6 @@
 # Base image features: chosen the first time anything is built (without a
 # terminal, every one: devvm's own, then the user's), saved in
 # base-features, and run in base after base.sh, in the order chosen.
-env DEVVM_MESSAGES=names
 env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
 rm $CHOSEN
 mkdir $XDG_CONFIG_HOME/devvm/features
@@ -17,7 +16,7 @@ stderr '^devvm: feature_shadowed feature=fzf file=.*/config/devvm/features/fzf\.
 stdout '^==> base_features features=cli-tools fzf omb mine$'
 cmp $CHOSEN all
 cmp $STUB_DIR/scripts ran-all
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
+catg $DATA/logs/runs/*.log
 stdout '^# \[4/9\] running_script script=base\.sh vm=devvm-img-'
 stdout '^# \[5/9\] running_script script=cli-tools\.sh vm=devvm-img-'
 stdout '^# \[8/9\] running_script script=mine\.sh vm=devvm-img-'

@@ -1,9 +1,6 @@
 # ls: project VMs on every backend, by name, with their status, image,
 # .git protection, network policy, backend and folder. Images and build
 # VMs aren't listed; a project VM named like an image is.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
-env RUN=$XDG_DATA_HOME/devvm/run
 
 # No VMs: the header alone, and nothing is asked of a backend but its list.
 exec devvm ls
@@ -14,8 +11,7 @@ stdout '^limactl list --json\nsmolvm machine ls( --state-dir \S+)? --json\n\z'
 
 # A folder named img-foo gives a VM named like an image: listed, while
 # the image it was made from isn't. No network policy: off.
-mkdir $WORK/img-foo
-cd $WORK/img-foo
+project img-foo
 exec devvm --no-network-policy --no-git-protect base
 exec devvm ls
 stdout '^NAME +STATUS +IMAGE +GIT +NET +LINKS +BACKEND +FOLDER\n'
@@ -25,19 +21,19 @@ stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +off +off +- +lima +/\S*/img-
 # Network policy: on while it runs on the hostagent devvm started (here
 # the test's runner, which runs on); started some other way since, or a
 # failed self-check, unenforced. Stopped, it starts confined next time.
-mkdir $WORK/net
-cd $WORK/net
+project net
 exec devvm --network-policy --no-git-protect base
-exec sh -c 'n=$(basename "$VMS"/devvm-net-*); echo $PPID > "$LIMA_HOME/$n/ha.pid"; echo "$PPID 1" > "$RUN/$n.started"'
+vm_name NET net
+exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$RUN/$NET.started"'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Running +base +off +on +- +lima '
-exec sh -c 'n=$(basename "$VMS"/devvm-net-*); limactl stop "$n" && limactl start --tty=false "$n"'
+exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Running +base +off +unenforced +- +lima '
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-net-*)"'
+exec limactl stop $NET
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +off +on +- +lima '
-exec sh -c 'f=$(ls "$VMS"/devvm-net-*); { grep -v ^net_check= "$f"; echo net_check=unenforced; } > "$WORK/st" && mv "$WORK/st" "$f"'
+exec sh -c '{ grep -v ^net_check= "$VMS/$NET"; echo net_check=unenforced; } > "$WORK/st" && mv "$WORK/st" "$VMS/$NET"'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +off +unenforced +- +lima '
 

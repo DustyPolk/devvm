@@ -3,10 +3,7 @@
 # Never a VM that exists, one whose backend doesn't answer, one made in
 # another Lima home, nor one whose state changed in the last hour (it may
 # be being made). Never part of gc's default run.
-env DEVVM_MESSAGES=names
 env DEVVM_DOCKER_KIND=linux
-env DATA=$XDG_DATA_HOME/devvm
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 mkdir $VMS $DATA/logs $DATA/run $DATA/lima-vms
 # This run's Lima home, as a VM's state records it.
@@ -37,7 +34,7 @@ exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/
 exec devvm gc --force
 exists $VMS/devvm-gone-12345612345612
 
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm gc --force --orphans
 stdout '^gc_orphans count=3$'
 stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345612$'

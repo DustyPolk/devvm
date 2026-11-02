@@ -2,8 +2,6 @@
 # backends' own caches, and gc asks before it deletes anything else, so
 # without a terminal and without --force it refuses before deleting
 # anything. The default run never touches the caches.
-env DEVVM_MESSAGES=names
-
 [darwin] mkdir $HOME/Library/Caches/lima/download/by-url-sha256/0123
 [darwin] exec sh -c 'echo x > "$HOME/Library/Caches/lima/download/by-url-sha256/0123/data"'
 mkdir $XDG_DATA_HOME/devvm/mise/2020.1.1

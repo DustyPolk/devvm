@@ -49,14 +49,15 @@ Run the tasks with `mise run <task>`:
 | `lint` | runs `lint:code` and `lint:docs` |
 | `lint:code` | runs golangci-lint, shellcheck, actionlint and zizmor |
 | `lint:docs` | runs the docs linters, the message link check and the command line check, and builds the site, which fails on any warning |
-| `test` | runs the tests with the race detector and coverage |
+| `test` | runs the tests with the race detector, then checks each package's coverage against its [baseline](#coverage) |
+| `coverage` | runs the tests, then raises each package's coverage baseline to what they reach |
 | `vuln` | runs govulncheck |
 | `deadcode` | lists functions nothing calls outside the tests |
 | `cli-docs` | generates the CLI reference |
 | `docs` | generates the CLI reference, then serves the docs site |
 | `e2e` | runs the end-to-end tests against real VMs |
 
-`mise run test` needs a C compiler for the race detector: Xcode Command Line Tools on macOS, gcc on Linux. It gives each package 30 minutes rather than go test's 10, because the CLI tests run the built binary against many stubs and take far longer on a busy machine.
+`mise run test` needs a C compiler for the race detector: Xcode Command Line Tools on macOS, gcc on Linux. It gives each package 30 minutes rather than go test's 10, because the CLI tests run the built binary against many stubs and take far longer on a busy machine. Both test tasks run `scripts/test.sh`, which gives the tests a throwaway `HOME`.
 
 Before and after every change, `mise run fmt && mise run lint && mise run test` must pass.
 
@@ -149,10 +150,11 @@ CLI tests are [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/te
 
 ```txtar
 # An unknown flag fails.
-env DEVVM_MESSAGES=names
 ! exec devvm --nope
 stderr '^devvm: flag_unknown command=devvm flag=--nope$'
 ```
+
+Scripts see messages by their [names](#names-mode), so the example checks which message devvm printed, not its wording. A script that checks a message's text sets `env DEVVM_MESSAGES=` first.
 
 Run one script with `mise exec -- go test ./internal/cli -run TestScript/<name>`.
 
@@ -164,6 +166,9 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 | `XDG_DATA_HOME` | `data/` |
 | `XDG_CONFIG_HOME` | `config/` |
 | `DEVVM_LIMA_HOME`, `LIMA_HOME` | `lima/` (short, for Lima's socket paths) |
+| `DATA`, `VMS`, `RUN` | devvm's data folder, `data/devvm/`, and its `vms/` and `run/` folders |
+| `CFG` | devvm's config folder, `config/devvm/` |
+| `DEVVM_MESSAGES` | `names`, so messages print as their [names](#names-mode) |
 | `STUB_DIR` | `stub/`, for stubs' state |
 | `STUB_LOG` | `stub/calls`, the stubs' call log |
 | `DEVVM_SECRET_SERVICE` | `devvm-test`, the Keychain service name |
@@ -177,7 +182,7 @@ Each script runs in a sandbox under `/tmp`, never the real folders:
 
 The built `devvm` is a [test build](testing.md#test-builds), so it reads the stand-ins above that a release ignores, such as `DEVVM_KVM` and `DEVVM_HOST_MISE`. It has the checkout's `assets/` embedded, as a release has, and no test build reads them from elsewhere: a script that needs other files for devvm (layers, features, policies) puts them in the user's folders in the sandbox, as a user would.
 
-`$WORK`, the script's own folder, is the current folder.
+`$WORK`, the script's own folder, is the current folder. `project NAME` makes the folder `$WORK/NAME` and goes to it, as a project's folder, and `project NAME git` makes it a git repo too. Once devvm has made the folder's VM, `vm_name VAR NAME` sets `$VAR` to the VM's name, which ends in an ID the test can't know, so a script can pass it to a stub (`exec limactl stop $WEB`) or read its state file (`$VMS/$WEB`). `catg GLOB` prints the one file a glob matches, such as a VM's state file (`catg $VMS/devvm-web-*`), and fails when the glob matches none or more than one, so a check never reads two files by mistake. Negated, `! catg GLOB` and `! vm_name VAR NAME` pass when there isn't exactly one.
 
 Tests never touch the network. Downloads are served from a test server (`net/http/httptest`) or read from a `file://` folder. `DEVVM_UBUNTU_URL` replaces `https://cloud-images.ubuntu.com/releases/resolute`, where devvm finds Ubuntu's pinned dated release: point it at a folder with a `release-YYYYMMDD/` folder for the pin, with its `SHA256SUMS` (listing the pinned checksums) and `SHA256SUMS.gpg`, as `file:///path/to/folder`. Container registries (`--from`) are a TLS test server in Go tests; scripts use pinned digests, which need no lookup, or set `HTTPS_PROXY` to a closed port, so lookups fail as offline ones do.
 
@@ -185,7 +190,7 @@ A command left running in the background (`exec devvm … &name&`) can be interr
 
 ### Stubs
 
-`testdata/stubs/` is on `PATH` ahead of the real commands, so tests never run the real tools. A stub is a shell script that appends its command line to `$STUB_LOG` and keeps any state in `$STUB_DIR`. `stub_calls` prints the log for `stdout` or `cmp` to check, and `! stub_calls` fails if anything was logged:
+`testdata/stubs/` is on `PATH` ahead of the real commands, so tests never run the real tools. A stub is a shell script that appends its command line to `$STUB_LOG` and keeps any state in `$STUB_DIR`. `stub_calls` prints the log for `stdout` or `cmp` to check, `! stub_calls` fails if anything was logged, and `stub_reset` empties the log, so the next check sees only the calls after it:
 
 ```txtar
 exec devvm …
@@ -207,6 +212,14 @@ limactl list
 `limactl` keeps its instances in `$STUB_DIR/instances` and fails or hangs on request (its header lists how). Its `shell` is also the shell devvm opens in a VM, which then ends, so a script sees it as devvm's last call. In the shared tools' build VM, its `shell` writes the images `build.sh` is asked for into the build's folder (or, on request, a symlink instead), and it keeps what a VM's setup is sent as `$STUB_DIR/sync.tar`. In the `--from` build VM, its `shell` writes what `oci/build.sh` would (or, on request, a hostile disk, command line, C library or symlink), and a call naming `$STUB_DIR/interrupt-on`'s text interrupts devvm, as Ctrl+C would. `docker` has an image only when `$STUB_DIR/docker-image` holds its ID, and its `save` writes a tarball naming it (or `$STUB_DIR/docker-saved`'s, a tag that moved); it isn't running with `$STUB_DIR/docker-down`. As the Docker backend's engine, a container has an ID and a start time, and `exec` answers the sshd probe (none with `$STUB_DIR/no-sshd`) and the host key's `cat`. `ssh` answers a port forwarder's master with `$STUB_DIR/guest-ports`, and a Docker VM's shell over ssh reads its input and ends. A direct connection from a VM (the self-check's) fails, as a confined VM's does, unless `$STUB_DIR/net-direct` exists. A `--clone` VM's git runs on the host, on `$STUB_DIR/vmfs/<folder>`, and `ssh` pushes to and fetches from there (it fails with `$STUB_DIR/ssh-fails`). `security` stands in for the Keychain: an item is `$STUB_DIR/keychain/<account>`. `tmutil` records exclusions in `$STUB_DIR/tm-excluded`, never in Time Machine. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `gpgv` accepts every signature unless `$STUB_DIR/gpgv-bad` exists. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
 
 devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOME` or devvm's own folders, which it refuses as project folders.
+
+## Coverage
+
+`mise run test` measures each package's test coverage, then fails when a package's coverage is below its line in the baseline, so coverage only goes up. Each system has a baseline of its own, `testdata/coverage/darwin.txt` and `testdata/coverage/linux.txt`, because macOS and Linux run different code and skip different tests. On a system without one, `mise run test` says so and checks nothing. A package's coverage counts its own Go tests and the CLI tests together. `scripts/test.sh` sets `CLI_GOCOVERDIR`, so `TestScript` builds `devvm` with `-cover` for every package of devvm's, and each `devvm` a script runs writes its counters to that folder. `go tool covdata` then merges them with the Go tests' own counters. That way `internal/cli`, and code that only the CLI tests reach, such as a backend's real runner, count as tested. The end-to-end tests don't count.
+
+When a change raises a package's coverage, raise its baseline in the same commit. Run `mise run coverage`, which runs the tests as `mise run test` does, then writes each package's coverage to this system's baseline where it went up, and commit the file. A change that raises coverage on both systems raises both baselines, so run it on a [Linux host](testing.md#linux-hosts) too. It never lowers a line: when a package is below its baseline, it fails and writes nothing. A new package gets its line from `mise run coverage` too, and a package that's gone loses its line there, because `mise run test` fails on both until then. `coverage.txtar` checks `scripts/coverage.sh`, which compares the coverage with the baseline.
+
+There's no target percentage: a package is judged by what's untested in it, not by its number.
 
 ## End-to-end tests
 
@@ -302,10 +315,11 @@ The tests fail when:
 With `DEVVM_MESSAGES=names`, a message prints as its ID and its values in sorted key order, so tests check which message devvm printed and with what, never its wording or language:
 
 ```txtar
-env DEVVM_MESSAGES=names
 ! exec devvm _msg nope
 stderr 'msg_unknown name=nope$'
 ```
+
+Every CLI test runs in names mode unless it sets `env DEVVM_MESSAGES=`, and Go tests that check what devvm printed set `DEVVM_MESSAGES=names` themselves.
 
 `devvm _msg NAME key=value…` prints a message's text (never its names), for end-to-end tests that look for it in a VM's output. It's hidden from the help.
 

@@ -2,6 +2,8 @@
 # its arguments, one per line) with Lima's network restricted. The wrapper's
 # own folder is first on PATH, so it must skip itself; a relative entry names
 # the folder Lima runs in, which holds a planted QEMU.
+# Messages' text, not their names.
+env DEVVM_MESSAGES=
 chmod 0755 wrap/qemu-system-aarch64
 chmod 0755 real/qemu-system-aarch64
 chmod 0755 qemu-system-aarch64

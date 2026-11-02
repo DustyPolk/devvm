@@ -1,6 +1,5 @@
 # What devvm checks before it builds or creates anything: the folder, its
 # path and name, and the image.
-env DEVVM_MESSAGES=names
 
 # A folder that is or holds the home folder or devvm's state is refused,
 # and so is one inside devvm's own folders, unless --unsafe-folder.
@@ -38,8 +37,7 @@ stub_calls
 stdout '^limactl clone .* devvm-layers-[0-9a-f]{14} '
 
 # Lima can't mount paths with a comma or a control character.
-mkdir $WORK/a,b
-cd $WORK/a,b
+project a,b
 ! exec devvm --no-network-policy base
 stderr '^devvm: bad_path dir=/\S*/a,b$'
 cd $WORK
@@ -48,16 +46,13 @@ stderr '^devvm: bad_path dir=/\S*/tab$'
 
 # The VM's name: the folder's, lowercase, other characters as dashes, at
 # most 20 of them, then the hash of its path.
-mkdir $WORK/My_App.v2
-cd $WORK/My_App.v2
+project My_App.v2
 exec devvm --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-my-app-v2-[0-9a-f]{14}$'
-mkdir $WORK/'My App'
-cd $WORK/'My App'
+project 'My App'
 exec devvm --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-my-app-[0-9a-f]{14}$'
-mkdir $WORK/a-very-long-folder-name-for-a-project
-cd $WORK/a-very-long-folder-name-for-a-project
+project a-very-long-folder-name-for-a-project
 exec devvm --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
 # A Lima home too long for any folder's name is refused.
@@ -68,15 +63,13 @@ env DEVVM_LIMA_HOME=$LIMA_HOME
 
 # No image named: the folder's toolchains, detected. Nothing detected and
 # nothing named says which there are.
-mkdir $WORK/empty
-cd $WORK/empty
+project empty
 ! exec devvm --no-network-policy
 stderr '^devvm: no_image_for agents=claude codex opencode dir=/\S*/empty envs=base node python rust go docker foo nix$'
 # A named image skips detection; layers are checked before anything runs.
-mkdir $WORK/node
-cd $WORK/node
+project node
 cp $WORK/package.json package.json
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 ! exec devvm --no-network-policy stray
 ! stdout detected
 stderr '^devvm: no_command_or_image word=stray$'
@@ -88,20 +81,19 @@ stub_calls
 exec devvm --no-network-policy base+foo
 ! stdout detected
 stdout '^==> creating_from image=foo vm=devvm-node-[0-9a-f]{14}$'
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/vms/devvm-node-*'
+catg $VMS/devvm-node-*
 stdout '^image=foo$'
 stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
 
 # A Nix project's files call for the nix layer, after the toolchains, with
 # an agent named on top.
-mkdir $WORK/flake
-cd $WORK/flake
+project flake
 cp $WORK/package.json package.json
 cp $WORK/flake.nix flake.nix
 exec devvm --no-network-policy --no-git-protect claude
 stdout '^==> detected found=node\+nix$'
 stdout '^==> creating_from image=node\+nix\+claude vm=devvm-flake-[0-9a-f]{14}$'
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/vms/devvm-flake-*'
+catg $VMS/devvm-flake-*
 stdout '^chain=base=[0-9a-f]{12} nix=[0-9a-f]{12}$'
 
 # More than one image is a usage error.

@@ -139,6 +139,8 @@ func TestCheckCommandLine(t *testing.T) {
 		{"a.md", "```sh\ndevvm gc --older-than 30\n```", true},
 		{"a.txtar", "exec devvm secret set nope", true},
 		{"a.txtar", "! exec devvm secret set nope", false},
+		{"a.txtar", "project devvm gc --nope", false},
+		{"a.txtar", "# devvm gc --nope", true},
 		{"tests/e2e.sh", `"$D" rm --force --no-export </dev/null`, false},
 		{"tests/e2e.sh", `"$D" rm --yes </dev/null`, true},
 	} {
@@ -245,6 +247,8 @@ func commandLinesIn(path string, text []byte) []commandLine {
 			c, _ := commandPath(words)
 			add(n, line, devvmAt, true, c.HasParent())
 		case txtar && strings.HasPrefix(trimmed, "!"):
+		case txtar && isScriptCmd(trimmed):
+			// one of the scripts' own commands (catg, project…), not devvm's
 		case path == "tests/e2e.sh" && e2eAt.MatchString(line):
 			add(n, line, e2eAt, true, false)
 		default:
@@ -252,6 +256,14 @@ func commandLinesIn(path string, text []byte) []commandLine {
 		}
 	}
 	return out
+}
+
+// isScriptCmd reports whether a script's line runs one of the commands
+// script_test.go adds to testscript's.
+func isScriptCmd(line string) bool {
+	word, _, _ := strings.Cut(line, " ")
+	_, ok := scriptCmds(linuxBuild{})[word]
+	return ok
 }
 
 // commandWords returns the words after each match of at in line, up to

@@ -2,9 +2,7 @@
 # everything of that backend's alone (its images, its shared tool images
 # and those whose backend devvm can't tell, its VMs' leftovers), and goes
 # on with the other backends, succeeding. devvm images still fails.
-env DEVVM_MESSAGES=names
 env SHARE=$XDG_DATA_HOME/devvm/tools
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # foo on Lima, made stale.
 mkdir $XDG_CONFIG_HOME/devvm/layers

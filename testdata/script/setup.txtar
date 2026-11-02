@@ -4,7 +4,6 @@
 # are kept, or every one until they're chosen; --backend and --features
 # without asking). A new choice of features says base rebuilds, and once
 # images are built that devvm gc deletes the old ones.
-env DEVVM_MESSAGES=names
 env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
 
 # Kept: none chosen; no backend or size asked.
@@ -87,11 +86,9 @@ exec cat $CHOSEN
 
 # The network policy saved for new VMs: off makes one without it.
 exec sh -c 'echo off > "$XDG_CONFIG_HOME/devvm/network"'
-mkdir $WORK/off
-cd $WORK/off
-exec git init -q
+project off git
 exec devvm --no-git-protect base
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/vms/devvm-off-*'
+catg $VMS/devvm-off-*
 stdout '^net=off$'
 cd $WORK
 

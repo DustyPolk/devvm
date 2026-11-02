@@ -1,7 +1,6 @@
 # devvm limactl: limactl in devvm's place, on devvm's own Lima home
 # (whatever LIMA_HOME says), run from devvm's data folder; its arguments,
 # flags included, its input and its exit code pass through.
-env DEVVM_MESSAGES=names
 env LIMA_HOME=/elsewhere
 
 exec devvm limactl list -q

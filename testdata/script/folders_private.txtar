@@ -11,7 +11,6 @@ stdout -count=2 '^drwx------[@.+]? '
 stdout '^drwxr-xr-x[@.+]? .*/layers$'
 
 # A folder that can't be made is warned about, and the command goes on.
-env DEVVM_MESSAGES=names
 env XDG_DATA_HOME=$WORK/file
 exec devvm version
 stderr '^devvm: folders_not_private config='$XDG_CONFIG_HOME/devvm' data=.*/file/devvm$'

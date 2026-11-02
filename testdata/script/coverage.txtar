@@ -1,0 +1,86 @@
+# scripts/coverage.sh holds each package's coverage to its baseline, on a
+# scratch copy of the repo's scripts/, with a baseline of the test's own.
+mkdir repo/scripts
+cp $DEVVM_REPO/scripts/coverage.sh repo/scripts/coverage.sh
+chmod 755 repo/scripts/coverage.sh
+
+# This system's baseline is in testdata/coverage/: without one, check says
+# so and passes.
+[darwin] exec repo/scripts/coverage.sh check first
+[darwin] stderr '^coverage: no baseline for darwin, so it isn''t checked: run mise run coverage here to record one$'
+[linux] exec repo/scripts/coverage.sh check first
+[linux] stderr '^coverage: no baseline for linux, so it isn''t checked'
+! exists repo/testdata/coverage
+
+# raise writes one: every measured package's, the module's own as ".",
+# none for a package without statements (which go tool covdata prints
+# with the next package on its line), nor one of another module.
+env COVERAGE_BASELINE=$WORK/repo/testdata/coverage/test.txt
+exec repo/scripts/coverage.sh raise first
+stdout '^coverage: internal/msg added at 85.3%$'
+cmp repo/testdata/coverage/test.txt first.want
+
+# The same, or more: check passes.
+exec repo/scripts/coverage.sh check first
+! stderr .
+exec repo/scripts/coverage.sh check more
+! stderr .
+
+# Less: check fails naming the package, and raise writes nothing.
+! exec repo/scripts/coverage.sh check less
+stderr '^coverage: internal/msg is at 85.2%, below its baseline of 85.3%$'
+! stderr 'internal/vm'
+! exec repo/scripts/coverage.sh raise less
+cmp repo/testdata/coverage/test.txt first.want
+
+# A new package or a gone one: check wants a raise.
+! exec repo/scripts/coverage.sh check grown
+stderr '^coverage: internal/new has no baseline: run mise run coverage$'
+stderr '^coverage: internal/vm has a baseline but wasn''t measured: run mise run coverage$'
+
+# raise moves each baseline up, never down, adds and drops packages.
+exec repo/scripts/coverage.sh raise grown
+stdout '^coverage: internal/msg raised from 85.3% to 90.0%$'
+stdout '^coverage: internal/new added at 10.0%$'
+stdout '^coverage: internal/vm dropped, as it wasn''t measured$'
+! stdout '^coverage: \. '
+cmp repo/testdata/coverage/test.txt grown.want
+
+# Usage errors.
+! exec repo/scripts/coverage.sh
+stderr '^usage: scripts/coverage.sh check\|raise PERCENTS$'
+! exec repo/scripts/coverage.sh lower first
+stderr '^usage: '
+! exec repo/scripts/coverage.sh check missing
+stderr '^coverage: no missing$'
+
+-- first --
+	github.com/w3cj/devvm/assets			github.com/w3cj/devvm		coverage: 0.0% of statements
+github.com/w3cj/devvm/internal/msg	coverage: 85.3% of statements
+github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
+github.com/w3cj/devvm/internal/structure	coverage: [no statements]
+example.com/other	coverage: 50.0% of statements
+-- more --
+github.com/w3cj/devvm	coverage: 0.0% of statements
+github.com/w3cj/devvm/internal/msg	coverage: 85.4% of statements
+github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
+-- less --
+github.com/w3cj/devvm	coverage: 0.0% of statements
+github.com/w3cj/devvm/internal/msg	coverage: 85.2% of statements
+github.com/w3cj/devvm/internal/vm	coverage: 70.0% of statements
+-- grown --
+github.com/w3cj/devvm	coverage: 0.0% of statements
+github.com/w3cj/devvm/internal/msg	coverage: 90.0% of statements
+github.com/w3cj/devvm/internal/new	coverage: 10.0% of statements
+-- first.want --
+# Each package's test coverage, in percent: the unit tests and the CLI tests together.
+# mise run test fails when a package drops below its line; mise run coverage raises them.
+. 0.0
+internal/msg 85.3
+internal/vm 66.4
+-- grown.want --
+# Each package's test coverage, in percent: the unit tests and the CLI tests together.
+# mise run test fails when a package drops below its line; mise run coverage raises them.
+. 0.0
+internal/msg 90.0
+internal/new 10.0

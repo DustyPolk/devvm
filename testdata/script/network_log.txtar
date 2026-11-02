@@ -1,11 +1,9 @@
 # network log: what this folder's VM's proxy allowed and blocked, the last N, or
 # the blocks by host with the command that allows each.
-env DEVVM_MESSAGES=names
 env LOGS=$XDG_DATA_HOME/devvm/logs
 
 # No VM: nothing to show.
-mkdir $WORK/net
-cd $WORK/net
+project net
 ! exec devvm network log
 stderr '^devvm: no_vm dir=\S*/net$'
 
@@ -74,8 +72,7 @@ exec devvm network log
 cmp stdout $WORK/evil.txt
 
 # A VM without network policy logs nothing new, and devvm says so.
-mkdir $WORK/off
-cd $WORK/off
+project off
 exec devvm --no-network-policy --no-git-protect base
 exec devvm network log
 stdout '^==> log_empty vm=devvm-off-[0-9a-f]{14}$'

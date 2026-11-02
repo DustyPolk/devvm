@@ -1,8 +1,6 @@
 # A VM's setup on every launch: the host's settings, its agents' config
 # (never their history), their folders mounted read-only, and tokens: as
 # they are without network policy, placeholders with it.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
 env TZ=Europe/Paris
 env LANG=en_US.UTF-8
 exec git config --global user.name 'Test User'
@@ -20,8 +18,7 @@ cp $WORK/history.jsonl $HOME/.codex/history.jsonl
 # Without network policy: the agents' folders mounted read-only, their
 # files and tokens copied as they are, with a warning naming the MCP
 # servers whose secrets go too.
-mkdir $WORK/plain
-cd $WORK/plain
+project plain
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --no-network-policy --no-git-protect claude+codex
 stderr '^devvm: claude_mcp_secrets_copied servers=srv vm=devvm-plain-[0-9a-f]{14}$'
@@ -51,15 +48,13 @@ stdout '^export LANG=''en_US\.UTF-8''\nexport CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-o
 
 # A Claude token that isn't a setup-token token isn't sent; no token at
 # all is named too.
-mkdir $WORK/badtoken
-cd $WORK/badtoken
+project badtoken
 env CLAUDE_CODE_OAUTH_TOKEN=not-a-setup-token
 exec devvm --no-network-policy --no-git-protect claude
 stderr '^devvm: claude_token_invalid$'
 exec tar -xOf $STUB_DIR/sync.tar env
 ! stdout CLAUDE_CODE_OAUTH_TOKEN
-mkdir $WORK/notoken
-cd $WORK/notoken
+project notoken
 env CLAUDE_CODE_OAUTH_TOKEN=
 exec devvm --no-network-policy --no-git-protect claude
 stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
@@ -68,8 +63,7 @@ stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 # copies with placeholders (the host's files unchanged), and the
 # settings files with their keys taken out; one devvm can't read that way
 # isn't sent.
-mkdir $WORK/net
-cd $WORK/net
+project net
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --network-policy --no-git-protect claude+codex
 stderr '^config_redacted file=\S*/home/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'

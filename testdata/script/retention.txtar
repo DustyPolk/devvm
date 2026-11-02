@@ -3,11 +3,8 @@
 # the file is written; devvm's commands apply the settings once a day,
 # devvm gc --retention at once, each deleting only what its settings name,
 # never a VM nor a tool any VM's state lists.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
 env EXPORTS=$XDG_DATA_HOME/devvm/exports
 env SHARE=$XDG_DATA_HOME/devvm/tools
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 mkdir $EXPORTS
 exec sh -c 'cd "$EXPORTS" && for f in devvm-old-12345612345612-20200101-000000 devvm-new-abcdefabcdefab-20991231-235959; do echo x > $f.tar.gz; done'
@@ -91,9 +88,7 @@ exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.idle'
 
 # While a VM is being made (its start hangs), retention keeps the tools
 # and runs the rest; once its devvm is killed, nothing holds the lock.
-mkdir $WORK/making
-cd $WORK/making
-exec git init -q
+project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
 ! exec devvm --no-network-policy base &u&
 wait_file $STUB_DIR/hanging

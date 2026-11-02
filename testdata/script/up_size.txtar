@@ -1,9 +1,6 @@
 # A new VM's size and ports: the flags, else the defaults in the config
 # folder, else the image's; checked before anything is built.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
-mkdir $WORK/sized
-cd $WORK/sized
+project sized
 
 # Values that aren't sizes or port lists, and sizes this machine can't
 # give or a disk smaller than the image's, are refused.
@@ -46,9 +43,9 @@ exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173,
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
 stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 --disk 120$'
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-sized-*.ports'
+catg $DATA/lima-vms/devvm-sized-*.ports
 stdout '\A5173,8000-8010\n\z'
-exec sh -c 'cat "$VMS"/devvm-sized-*'
+catg $VMS/devvm-sized-*
 stdout '^cpus=2$'
 stdout '^memory=3$'
 stdout '^disk=120$'
@@ -56,36 +53,33 @@ stdout '^ports=5173,8000-8010$'
 
 # The defaults, for what the flags leave unset; nothing for what neither
 # sets. A default of every port stores nothing.
-mkdir $WORK/defaults
-cd $WORK/defaults
+project defaults
 exec sh -c 'echo memory=5 > "$XDG_CONFIG_HOME/devvm/size" && echo none > "$XDG_CONFIG_HOME/devvm/ports"'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --no-network-policy --cpus 2 base
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 5$'
-exec sh -c 'cat "$VMS"/devvm-defaults-*'
+catg $VMS/devvm-defaults-*
 stdout '^cpus=2$'
 stdout '^memory=5$'
 ! stdout 'disk='
 stdout '^ports=none$'
-mkdir $WORK/all
-cd $WORK/all
+project all
 exec sh -c 'echo all > "$XDG_CONFIG_HOME/devvm/ports" && rm "$XDG_CONFIG_HOME/devvm/size"'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --no-network-policy base
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 ! stdout 'limactl edit --tty=false devvm-all'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-all-*.ports "$XDG_DATA_HOME"/devvm/lima-vms/devvm-defaults-*.ports'
 stdout '\Aall\nnone\n\z'
-exec sh -c 'cat "$VMS"/devvm-all-*'
+catg $VMS/devvm-all-*
 ! stdout 'ports|cpus|memory|disk'
 
 # The first run, before base's features are chosen, asks for new VMs'
 # size only in a terminal: without one it asks nothing and saves none.
-mkdir $WORK/first
-cd $WORK/first
+project first
 rm $XDG_CONFIG_HOME/devvm/base-features
 exec devvm --no-network-policy base
 ! stdout 'size_question|size_defaults'

@@ -4,15 +4,10 @@
 # stubs). Every connection devvm opens to a VM
 # carries the agent its mode says, or none. Your own agent is a made-up
 # socket the stubs never answer on.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
-env VMS=$XDG_DATA_HOME/devvm/vms
-env CFG=$XDG_CONFIG_HOME/devvm
 env SSH_AUTH_SOCK=$WORK/user.sock
 
 # No VM yet.
-mkdir $WORK/web
-cd $WORK/web
+project web
 ! exec devvm ssh-agent
 stderr '^devvm: no_vm_ssh_agent dir=\S*/web$'
 ! exec devvm ssh-agent maybe
@@ -24,7 +19,7 @@ exec git init -q
 exec git remote add origin git@github.com:o/r.git
 exec devvm --no-network-policy --no-git-protect base
 stderr '^devvm: ssh_remote_hint vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^ssh_agent=off$'
 stub_calls
 stdout '^limactl clone .* --set \.ssh\.forwardAgent=false '
@@ -42,17 +37,15 @@ stderr '^devvm: ssh_agent_flag_ignored$'
 
 # --ssh-agent: yours, checked first (not running here, with a key in
 # ~/.ssh: it says so), on every connection; no hint for an SSH origin.
-mkdir $WORK/fwd
-cd $WORK/fwd
-exec git init -q
+project fwd git
 exec git remote add origin git@github.com:o/r.git
 mkdir $HOME/.ssh
 exec sh -c 'echo k > "$HOME/.ssh/id_ed25519"'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm --no-network-policy --no-git-protect --ssh-agent base
 ! stderr ssh_remote_hint
 stderr '^devvm: no_ssh_agent$'
-exec sh -c 'cat "$VMS"/devvm-fwd-*'
+catg $VMS/devvm-fwd-*
 stdout '^ssh_agent=on$'
 stub_calls
 stdout '^limactl clone .* --set \.ssh\.forwardAgent=true '
@@ -70,7 +63,7 @@ rm $HOME/.ssh
 # started, the key loaded there, kept 12 hours.
 mkdir $WORK/keys
 exec sh -c 'echo deploy > "$WORK/keys/deploy"'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm ssh-agent add $WORK/keys/deploy
 stdout '^==> agent_holds keys=deploy$'
 stderr '^agent_holds_note$'
@@ -140,7 +133,7 @@ stdout '^Host devvm-fwd devvm-fwd-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent yes\n'
 # connections, and its entry, which names it as the agent, so OpenSSH
 # forwards it however the editor was started.
 rm $STUB_DIR/agent-up
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm restart
 stub_calls
 stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.ssh\.forwardAgent=true$'
@@ -174,7 +167,7 @@ stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 stderr '^devvm: agent_key_not_recorded key=\S*/keys/none$'
 exec sh -c 'cat "$CFG/agent-keys"'
 stdout 'keys/deploy'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm ssh-agent rm $WORK/keys/deploy
 stdout '^==> agent_key_removed key=\S*/keys/deploy$'
 stub_calls

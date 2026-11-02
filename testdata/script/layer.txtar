@@ -1,6 +1,5 @@
 # devvm layer new NAME: a starter script and allowlist in the layers folder;
 # bad, taken and existing names are refused.
-env DEVVM_MESSAGES=names
 env LAYERS=$XDG_CONFIG_HOME/devvm/layers
 
 exec devvm layer new pg

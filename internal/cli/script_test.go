@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -41,21 +42,34 @@ func TestScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	testscript.Run(t, testscript.Params{
-		Dir:                 filepath.Join("..", "..", "testdata", "script"),
+		Dir:                 scriptsDir(),
 		RequireExplicitExec: true,
 		RequireUniqueNames:  true,
 		Setup: func(env *testscript.Env) error {
 			return sandbox(env, bin, stubs)
 		},
-		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
-			"free_port":     freePort,
-			"linux_release": release.serve,
-			"listen_any":    listenAny,
-			"stub_calls":    stubCalls,
-			"wait_file":     waitFile,
-		},
+		Cmds: scriptCmds(release),
 	})
 }
+
+// scriptCmds are the commands devvm's scripts add to testscript's own.
+// TestCommandLines leaves their lines out, as they aren't devvm's.
+func scriptCmds(release linuxBuild) map[string]func(ts *testscript.TestScript, neg bool, args []string) {
+	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
+		"catg":          catGlob,
+		"free_port":     freePort,
+		"linux_release": release.serve,
+		"listen_any":    listenAny,
+		"project":       project,
+		"stub_calls":    stubCalls,
+		"stub_reset":    stubReset,
+		"vm_name":       vmName,
+		"wait_file":     waitFile,
+	}
+}
+
+// scriptsDir is where the scripts are.
+func scriptsDir() string { return filepath.Join("..", "..", "testdata", "script") }
 
 // linuxBuild is a release's Linux archive, for the Linux build devvm
 // fetches: the test build of devvm, built for Linux on this machine's
@@ -124,13 +138,33 @@ func (l linuxBuild) serve(ts *testscript.TestScript, neg bool, args []string) {
 func buildDevvm(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	cmd := exec.CommandContext(t.Context(), "go", "install",
-		"-ldflags", testBuildFlag, "github.com/w3cj/devvm/cmd/devvm")
+	args := []string{"install", "-ldflags", testBuildFlag}
+	if os.Getenv(coverDirVar) != "" {
+		args = append(args, coverFlags()...)
+	}
+	cmd := exec.CommandContext(t.Context(), "go", append(args, "github.com/w3cj/devvm/cmd/devvm")...) //nolint:gosec // go install, with the test's own flags
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOBIN="+dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)
 	}
 	return dir
+}
+
+// coverDirVar names the folder the CLI tests' devvm writes its coverage
+// to, when scripts/test.sh asks for it: devvm is built with -cover for
+// every package of devvm's, so the CLI tests count toward each package's
+// coverage, not only cli's.
+const coverDirVar = "CLI_GOCOVERDIR"
+
+// coverFlags are go build's flags for that: the test binary's own
+// coverage mode (atomic with -race), as go tool covdata merges only
+// data of one mode.
+func coverFlags() []string {
+	mode := testing.CoverMode()
+	if mode == "" {
+		mode = "atomic"
+	}
+	return []string{"-cover", "-covermode=" + mode, "-coverpkg=github.com/w3cj/devvm/..."}
 }
 
 // stopLinkSessions stops the link sessions (devvm _links) of the sandbox
@@ -197,6 +231,12 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		return err
 	}
 	env.Setenv("STUB_LOG", log)
+	// Messages by their names, and devvm's own folders, which scripts read:
+	// a script that checks wording sets DEVVM_MESSAGES= itself.
+	env.Setenv("DEVVM_MESSAGES", "names")
+	for name, dir := range scriptFolders(root) {
+		env.Setenv(name, dir)
+	}
 	// Base's features are chosen (none), so nothing asks.
 	if err := os.MkdirAll(filepath.Join(root, "config", "devvm"), 0o700); err != nil {
 		return err
@@ -240,6 +280,9 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
 	env.Setenv("MISE_STUB_LOCK", filepath.Join(filepath.Dir(stubs), "mise.lock"))
 	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
+	if dir := os.Getenv(coverDirVar); dir != "" {
+		env.Setenv("GOCOVERDIR", dir) // where a -cover devvm writes its coverage
+	}
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		return err
@@ -247,6 +290,19 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	env.Setenv("DEVVM_REPO", repo) // for the repo's own scripts (scripts/, assets/)
 	env.Setenv("PATH", strings.Join([]string{bin, stubs, env.Getenv("PATH")}, string(os.PathListSeparator)))
 	return nil
+}
+
+// scriptFolders are the variables naming devvm's folders in the sandbox
+// at root: DATA its data folder, VMS its VMs' state files, RUN its run
+// folder and CFG its config folder.
+func scriptFolders(root string) map[string]string {
+	data := filepath.Join(root, "data", "devvm")
+	return map[string]string{
+		"DATA": data,
+		"VMS":  filepath.Join(data, "vms"),
+		"RUN":  filepath.Join(data, "run"),
+		"CFG":  filepath.Join(root, "config", "devvm"),
+	}
 }
 
 // fakeHost is the host the test build reads in every script
@@ -345,4 +401,85 @@ func stubCalls(ts *testscript.TestScript, neg bool, args []string) {
 	}
 	_, err := ts.Stdout().Write([]byte(calls))
 	ts.Check(err)
+}
+
+// stubReset forgets the calls the stubs logged so far. It empties stdout
+// and stderr too, as an exec does.
+func stubReset(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) > 0 {
+		ts.Fatalf("usage: stub_reset")
+	}
+	ts.Check(os.WriteFile(ts.Getenv("STUB_LOG"), nil, 0o600))
+	ts.Stdout()
+	ts.Stderr()
+}
+
+// catGlob writes the one file a glob matches to stdout, and fails when it
+// matches none or more than one. Negated, it fails when the glob matches
+// exactly one.
+func catGlob(ts *testscript.TestScript, neg bool, args []string) {
+	if len(args) != 1 {
+		ts.Fatalf("usage: catg GLOB")
+	}
+	files, err := filepath.Glob(ts.MkAbs(args[0]))
+	ts.Check(err)
+	switch {
+	case neg && len(files) == 1:
+		ts.Fatalf("%s matches one file: %s", args[0], files[0])
+	case neg:
+	case len(files) != 1:
+		ts.Fatalf("%s matches %d files, not one: %q", args[0], len(files), files)
+	default:
+		_, err = ts.Stdout().Write([]byte(ts.ReadFile(files[0])))
+		ts.Check(err)
+	}
+}
+
+// vmName sets VAR to the name of the one VM made for the folder NAME:
+// the one state file in $VMS named devvm-NAME-ID. Negated, it fails when
+// there's exactly one.
+func vmName(ts *testscript.TestScript, neg bool, args []string) {
+	if len(args) != 2 {
+		ts.Fatalf("usage: vm_name VAR NAME")
+	}
+	found := vmsFor(ts, args[1])
+	switch {
+	case neg && len(found) == 1:
+		ts.Fatalf("one VM for the folder %s: %s", args[1], found[0])
+	case neg:
+	case len(found) != 1:
+		ts.Fatalf("%d VMs for the folder %s, not one: %q", len(found), args[1], found)
+	default:
+		ts.Setenv(args[0], found[0])
+	}
+}
+
+// vmsFor returns the names of the VMs in $VMS made for the folder name.
+func vmsFor(ts *testscript.TestScript, name string) []string {
+	entries, err := os.ReadDir(ts.Getenv("VMS"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		ts.Fatalf("%v", err)
+	}
+	re := regexp.MustCompile(`^devvm-` + regexp.QuoteMeta(name) + `-[0-9a-f]+$`)
+	var found []string
+	for _, e := range entries {
+		if re.MatchString(e.Name()) {
+			found = append(found, e.Name())
+		}
+	}
+	return found
+}
+
+// project makes the folder $WORK/NAME and goes to it, as a project's
+// folder; with git, it's a repo with nothing committed.
+func project(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) == 0 || len(args) > 2 || len(args) == 2 && args[1] != "git" || strings.ContainsAny(args[0], `/\`) {
+		ts.Fatalf("usage: project NAME [git]")
+	}
+	dir := filepath.Join(ts.Getenv("WORK"), args[0])
+	ts.Check(os.MkdirAll(dir, 0o750))
+	ts.Check(ts.Chdir(dir))
+	if len(args) == 2 {
+		ts.Check(ts.Exec("git", "init", "-q"))
+	}
 }

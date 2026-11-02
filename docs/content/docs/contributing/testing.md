@@ -3,7 +3,7 @@ title: Testing on other hosts
 weight: 1
 ---
 
-For contributors. The everyday tests, CLI tests and end-to-end tests are in [Contributing](_index.md#end-to-end-tests); this page is about running them on a host other than your Mac.
+For contributors. The everyday tests, CLI tests and end-to-end tests are in [Contributing](_index.md#end-to-end-tests), and how to raise a package's coverage baseline is in [Coverage](_index.md#coverage); this page is about running them on a host other than your Mac.
 
 ## What's platform-specific
 

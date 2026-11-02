@@ -2,14 +2,12 @@
 # folder reaches a VM's setup, only the certificates parsed out of it; a
 # file holding anything else fails the launch, naming it; devvm doctor
 # says where a proxy that inspects TLS needs its CA.
-env DEVVM_MESSAGES=names
 env CAS=$XDG_CONFIG_HOME/devvm/ca
 
 # No folder: nothing sent but ca.sh, and every VM's environment points
 # tools at the CAs all the same, set when it's made: its start edits
 # nothing.
-mkdir $WORK/none
-cd $WORK/none
+project none
 exec devvm --no-network-policy --no-git-protect base
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^ca\.sh$'
@@ -23,8 +21,7 @@ stdout '^limactl clone --tty=false \S+ devvm-none-[0-9a-f]{14} .* --set \.env = 
 mkdir $CAS
 cp $WORK/company.pem $CAS/company.pem
 cp $WORK/notes.txt $CAS/notes.txt
-mkdir $WORK/one
-cd $WORK/one
+project one
 exec devvm --no-network-policy --no-git-protect base
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^ca/devvm-extra-1\.crt$'
@@ -35,8 +32,7 @@ cmp stdout $WORK/ca-only.pem
 # A private key fails the launch, naming the file; so does a certificate
 # that isn't a CA's.
 cp $WORK/key.pem $CAS/key.pem
-mkdir $WORK/key
-cd $WORK/key
+project key
 ! exec devvm --no-network-policy --no-git-protect base
 stderr '^devvm: ca_not_certificate file=\S*/config/devvm/ca/key\.pem$'
 rm $CAS/key.pem

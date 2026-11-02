@@ -2,9 +2,7 @@
 # backend and C library, or only the named tools'; never one a VM's state
 # lists (a stopped VM's, or one deleted outside devvm), nor one built in
 # the last hour. Never a VM.
-env DEVVM_MESSAGES=names
 env SHARE=$XDG_DATA_HOME/devvm/tools
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Names go only with --tools, and only images' names for tools.
 ! exec devvm gc --force node
@@ -73,9 +71,7 @@ exec devvm build node
 # While a VM is being made (its start hangs), --tools --recent deletes
 # nothing, and plain --tools keeps every current one, old codex too,
 # saying so; once its devvm is killed, nothing holds the lock.
-mkdir $WORK/making
-cd $WORK/making
-exec git init -q
+project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
 ! exec devvm --no-network-policy base &u&
 wait_file $STUB_DIR/hanging

@@ -6,8 +6,6 @@
 # written to the project folder, and nothing in the file runs on the host.
 # Registries are never reached: HTTPS_PROXY points at nothing, so lookups
 # are offline, and a digest recorded before stands for the registry's.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 env HTTPS_PROXY=http://127.0.0.1:9
 env https_proxy=http://127.0.0.1:9
 env PIN=node:24@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -21,8 +19,7 @@ exec devvm ports -g none
 # a container to build, the host's Docker, a feature devvm has no layer
 # for, invalid JSON (where), an image the registry can't be asked about,
 # an image on this machine's registry (never asked).
-mkdir $WORK/bad
-cd $WORK/bad
+project bad
 cp $WORK/localenv.json .devcontainer.json
 ! exec devvm --no-network-policy
 stderr '^devvm: devcontainer_local_env file=\.devcontainer\.json variable=\$\{localEnv:GITHUB_TOKEN\}$'
@@ -82,7 +79,7 @@ stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/\S*/web'' 
 exec tar -xOf $STUB_DIR/sync.tar env
 stdout '\Aexport GREETING=''it''\\''''s web''\nexport PATH="\$\{PATH\}"'':/opt/web''\n'
 # Its state.
-exec sh -c 'cat "$VMS"/devvm-web-*'
+catg $VMS/devvm-web-*
 stdout '^devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json$'
 stdout '^from=node@sha256:a{64}$'
 stdout '^image=docker\+extra$'
@@ -95,7 +92,7 @@ cmp stdout $WORK/web-ls
 cmp .devcontainer/devcontainer.json $WORK/web.json
 
 # Launched again, running: nothing runs again.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm
 ! stdout running_script
 ! stderr devcontainer
@@ -120,7 +117,7 @@ exec devvm
 
 # Stopped and launched: postStartCommand runs again, the others don't.
 exec devvm stop
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm
 stdout '^==> running_script script=postStartCommand vm=devvm-web-[0-9a-f]{14}$'
 ! stdout 'running_script script=(onCreate|postCreate)'
@@ -130,8 +127,7 @@ stdout 'echo started >> ~/started'
 
 # A command that fails: a warning naming it, the rest of its group skipped,
 # the VM kept and opened; postStartCommand still runs at the start.
-mkdir $WORK/fail
-cd $WORK/fail
+project fail
 cp $WORK/web.json .devcontainer.json
 exec sh -c 'echo "''echo a''" > "$STUB_DIR/shell-fails-on"'
 exec devvm --no-network-policy extra
@@ -144,22 +140,20 @@ rm $STUB_DIR/shell-fails-on
 
 # --no-devcontainer: the file isn't read (this one would be refused), and
 # later changes aren't warned about.
-mkdir $WORK/skip
-cd $WORK/skip
+project skip
 cp $WORK/build.json .devcontainer.json
 exec devvm --no-network-policy --no-devcontainer base
 ! stdout devcontainer_using
-exec sh -c 'cat "$VMS"/devvm-skip-*'
+catg $VMS/devvm-skip-*
 stdout '^devcontainer=off$'
 cp $WORK/web.json .devcontainer.json
 exec devvm
 ! stderr devcontainer
 
 # A VM made without a file: one that appears is warned about.
-mkdir $WORK/plain
-cd $WORK/plain
+project plain
 exec devvm --no-network-policy base
-exec sh -c 'cat "$VMS"/devvm-plain-*'
+catg $VMS/devvm-plain-*
 stdout '^devcontainer=none$'
 cp $WORK/web.json .devcontainer.json
 exec devvm
@@ -167,13 +161,12 @@ stderr '^devvm: devcontainer_new file=\.devcontainer\.json vm=devvm-plain-[0-9a-
 
 # What's given on the command line wins: --from over image, --ports over
 # forwardPorts.
-mkdir $WORK/flags
-cd $WORK/flags
+project flags
 cp $WORK/web.json .devcontainer.json
 exec devvm --no-network-policy --from $PIN --ports 8080 extra
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=ports key=forwardPorts$'
-exec sh -c 'cat "$VMS"/devvm-flags-*'
+catg $VMS/devvm-flags-*
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^ports=8080$'
 

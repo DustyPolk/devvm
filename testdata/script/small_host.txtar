@@ -3,7 +3,6 @@
 # build refuses the disk, base is fitted to the host on Lima and smolvm,
 # and sizes past the host are refused. Registries are never reached: the
 # pinned image needs no lookup, and HTTPS_PROXY points at nothing.
-env DEVVM_MESSAGES=names
 env DEVVM_TEST_CPUS=2
 env DEVVM_TEST_MEMORY_GIB=7
 env DEVVM_TEST_FREE_GIB=1

@@ -1,0 +1,51 @@
+# The scripts' own commands, which every other script uses.
+
+# The sandbox shows messages by name and names devvm's folders.
+exec sh -c 'test "$DEVVM_MESSAGES" = names && test "$DATA" = "$XDG_DATA_HOME/devvm" && test "$VMS" = "$DATA/vms" && test "$RUN" = "$DATA/run" && test "$CFG" = "$XDG_CONFIG_HOME/devvm"'
+
+# stub_reset forgets the stubs' calls, and empties stdout as an exec does.
+exec gpgv x
+stub_calls
+stdout '^gpgv x$'
+stub_reset
+! stdout .
+! stub_calls
+exec gpgv y
+stub_calls
+cmp stdout calls
+
+# catg cats the one file a glob matches; a glob matching none or two
+# fails it.
+mkdir $VMS
+cp state $VMS/devvm-web-0123456789abcd
+catg $VMS/devvm-web-*
+cmp stdout state
+! catg $VMS/devvm-api-*
+cp state $VMS/devvm-web-0123456789abcd.policy
+! catg $VMS/devvm-web-*
+catg $VMS/devvm-web-*[0-9a-f]
+cmp stdout state
+
+# vm_name sets a variable to the one VM made for a folder, leaving out the
+# VM's other files; no VM, or two, fails it.
+vm_name WEB web
+exec echo $WEB
+stdout '^devvm-web-0123456789abcd$'
+! vm_name API api
+cp state $VMS/devvm-web-fedcba98765432
+! vm_name WEB web
+
+# project makes a folder in $WORK and goes to it; with git, a repo.
+project app
+exec pwd
+stdout '/app$'
+! exists .git
+project repo git
+exec pwd
+stdout '/repo$'
+exists .git
+
+-- calls --
+gpgv y
+-- state --
+image=base

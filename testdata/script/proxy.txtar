@@ -7,7 +7,6 @@ exec devvm --help
 ! stdout _proxy
 
 # The proxy refuses to run without the VM's password, or with an empty one.
-env DEVVM_MESSAGES=names
 ! exec devvm _proxy -listen 127.0.0.1:0
 stderr '^devvm: proxy_failed reason=-auth-file is required$'
 ! exec devvm _proxy --auth-file empty

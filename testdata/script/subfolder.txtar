@@ -4,8 +4,6 @@
 # refuses it without a terminal. adopt doesn't look upward, and nothing
 # does from a repo of its own below the parent's folder. Commands that
 # give the parent's VM more access are refused without a terminal.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 mkdir $WORK/app/src/lib
 cd $WORK/app
 exec git init -q
@@ -13,7 +11,7 @@ exec devvm --no-network-policy base
 
 # The parent's VM, its shell in the subfolder.
 cd $WORK/app/src/lib
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm
 stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 ! stdout creating
@@ -28,7 +26,7 @@ stdout '^ *1$'
 stderr '^devvm: no_vm dir=/\S*/app/src/lib$'
 
 # stop: the parent's, named first.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm stop
 stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}\n==> stopped vm=devvm-app-[0-9a-f]{14}$'
 stub_calls
@@ -40,7 +38,7 @@ cd $WORK/app/src
 exec devvm --here --no-network-policy base
 stdout '^==> creating_from image=base vm=devvm-src-[0-9a-f]{14}$'
 ! stdout using_parent_vm
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm
 ! stdout using_parent_vm
 stub_calls
@@ -101,7 +99,7 @@ exec devvm network
 stdout '!bad.example.com'
 ! stdout '^example.com'
 
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 ! exec devvm rm --force --no-export
 stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
 stderr '^devvm: rm_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'

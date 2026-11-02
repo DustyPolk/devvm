@@ -2,16 +2,11 @@
 # ssh standing in for its connections) starts with devvm link add on a
 # running client and with each launch, warns of what it can't carry, and
 # stops with the VM; devvm rm, gc --orphans and devvm ls know of links.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
-env RUN=$XDG_DATA_HOME/devvm/run
 
-mkdir $WORK/db
-cd $WORK/db
+project db
 exec devvm --no-network-policy --no-git-protect base
 exec devvm link publish 5432,80
-mkdir $WORK/app
-cd $WORK/app
+project app
 exec devvm --no-network-policy --no-git-protect base
 exec sh -c 'ls "$RUN" | grep "links.pid" || true'
 ! stdout .
@@ -78,7 +73,7 @@ stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0
 stdout '^==> deleted_link_sockets count=[12]$'
 exec sh -c 'ls "$RUN" | grep "^link-" || true'
 ! stdout .
-exec sh -c 'cat "$VMS"/devvm-app-*'
+catg $VMS/devvm-app-*
 stdout '^links=$'
 
 # devvm rm of the client stops its session and takes its links with it.

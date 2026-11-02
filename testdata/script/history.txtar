@@ -2,11 +2,8 @@
 # file, from the VM, started if it's stopped. A failed export leaves the
 # file it would replace as it was. history: the exports in the exports
 # folder, each with its VM's folder, and nothing else there.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 env EXPORTS=$XDG_DATA_HOME/devvm/exports
-mkdir $WORK/web
-cd $WORK/web
+project web
 ! exec devvm history export
 stderr '^devvm: no_vm dir=\S*/web$'
 ! exec devvm history export a b
@@ -21,8 +18,9 @@ exec devvm history --json
 stdout '\A{\n  "version": 1,\n  "exports": \[\]\n}\n\z'
 
 exec devvm --no-network-policy base
-exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'
-exec sh -c ': > "$STUB_LOG"'
+vm_name WEB web
+exec limactl stop $WEB
+stub_reset
 exec devvm history export
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> exported file=\S*/data/devvm/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'

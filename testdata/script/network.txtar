@@ -1,17 +1,12 @@
 # Network policy for a new VM: the choice, the VM's proxy (devvm _proxy,
 # started before the VM), the confined start, the self-check, and the
 # VM's secrets as the proxy sees them.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
-env VMS=$XDG_DATA_HOME/devvm/vms
-env RUN=$XDG_DATA_HOME/devvm/run
 
 # --no-network-policy: off, with no proxy and no CA.
-mkdir $WORK/off
-cd $WORK/off
+project off
 exec devvm --no-network-policy --no-git-protect base
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-off-*'
+catg $VMS/devvm-off-*
 stdout '^net=off$'
 ! stdout 'proxy_|net_check'
 stub_calls
@@ -22,13 +17,12 @@ stub_calls
 # VM's proxy, then the VM started confined, its environment pointing at
 # the proxy with the VM's key, then the self-check, the setup and the
 # shell.
-mkdir $WORK/net
-cd $WORK/net
-exec sh -c ': > "$STUB_LOG"'
+project net
+stub_reset
 exec devvm --network-policy --no-git-protect base
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
 exists $DATA/ca/ca.pem $DATA/ca/ca.key
-exec sh -c 'cat "$VMS"/devvm-net-*'
+catg $VMS/devvm-net-*
 stdout '^net=on$'
 stdout '^net_check=ok$'
 stdout '^proxy_key=[0-9a-f]{32}$'
@@ -50,9 +44,9 @@ stdout '^-rw-------\S* '
 # The proxy said it listens on that port, for that VM; its password is in
 # a file, never in its arguments.
 exec sh -c 'grep -F "listening on 127.0.0.1:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*) for devvm-net-" "$DATA"/logs/devvm-net-*.proxy.log'
-exec sh -c 'cat "$RUN"/devvm-net-*.proxy.auth'
+catg $RUN/devvm-net-*.proxy.auth
 stdout '^[0-9a-f]{32}$'
-exec sh -c 'cat "$RUN"/devvm-net-*.secrets.json'
+catg $RUN/devvm-net-*.secrets.json
 stdout '^\[\]$'
 # The run log never holds the key.
 exec sh -c 'cat "$DATA"/logs/runs/*.log'
@@ -61,16 +55,16 @@ stdout 'devvm:devvm-proxy-password@'
 
 # A VM devvm started confined that still reaches the internet directly:
 # stopped, no setup, no shell.
-mkdir $WORK/leak
-cd $WORK/leak
-exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/net-direct"'
+project leak
+stub_reset
+exec sh -c ': > "$STUB_DIR/net-direct"'
 ! exec devvm --network-policy --no-git-protect base
 stderr '^devvm: net_direct_route vm=devvm-leak-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-leak-[0-9a-f]{14}$'
 ! stdout 'tar -xf'
 ! stdout 'limactl shell --workdir /\S*/leak'
-exec sh -c 'cat "$VMS"/devvm-leak-*'
+catg $VMS/devvm-leak-*
 stdout '^net_check=unenforced$'
 rm $STUB_DIR/net-direct
 
@@ -78,7 +72,7 @@ rm $STUB_DIR/net-direct
 # took its port) is stopped, never left running without it.
 cd $WORK/net
 exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$pp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 ! exec devvm
 stderr '^devvm: net_proxy_down_stopped vm=devvm-net-[0-9a-f]{14}$'
 stderr '^devvm: proxy_port_taken port=[0-9]+ vm=devvm-net-[0-9a-f]{14}$'
@@ -89,19 +83,18 @@ exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
 
 # Secrets: claude comes with the image. The proxy gets its binding, with
 # the VM's own placeholder and never the token, and its host on 443.
-mkdir $WORK/agent
-cd $WORK/agent
+project agent
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --network-policy --no-git-protect claude
-exec sh -c 'cat "$RUN"/devvm-agent-*.secrets.json'
+catg $RUN/devvm-agent-*.secrets.json
 stdout '^\[\{"name":"claude","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]$'
 ! stdout testfake
 exec sh -c 'grep -F "$(sed -n "s/^proxy_salt=//p" "$VMS"/devvm-agent-*)" "$RUN"/devvm-agent-*.secrets.json'
-exec sh -c 'cat "$RUN"/devvm-agent-*.secrets.policy'
+catg $RUN/devvm-agent-*.secrets.policy
 stdout '^api\.anthropic\.com:443$'
 # Its proxy's policy files: base's, claude's, the user's, the VM's own and
 # its secrets' hosts.
-exec sh -c 'cat "$RUN"/devvm-agent-*.proxy.policy'
+catg $RUN/devvm-agent-*.proxy.policy
 stdout '/data/devvm/assets/[0-9a-f]{16}/layers/base\.policy,\S*/data/devvm/assets/[0-9a-f]{16}/shared-tools/claude\.policy,\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy$'
 env CLAUDE_CODE_OAUTH_TOKEN=
 
@@ -109,19 +102,17 @@ env CLAUDE_CODE_OAUTH_TOKEN=
 # placeholders.
 mkdir $HOME/.codex
 cp $WORK/codex.json $HOME/.codex/auth.json
-mkdir $WORK/codex
-cd $WORK/codex
+project codex
 exec devvm --network-policy --no-git-protect codex
-exec sh -c 'cat "$RUN"/devvm-codex-*.secrets.json'
+catg $RUN/devvm-codex-*.secrets.json
 stdout '"name":"codex-key","hosts":\["api\.openai\.com"\]'
 ! stdout sk-testfake
-exec sh -c 'cat "$RUN"/devvm-codex-*.secrets.policy'
+catg $RUN/devvm-codex-*.secrets.policy
 stdout '^api\.openai\.com:443$'
 
 # devvm network: on, off or unenforced, as devvm ls shows it. on and off
 # change the VM's state, applied when it next starts.
-mkdir $WORK/none
-cd $WORK/none
+project none
 ! exec devvm network
 stderr '^devvm: no_vm dir=\S*/none$'
 ! exec devvm network sideways
@@ -132,7 +123,7 @@ stdout '^off$'
 exec devvm network on
 stdout '^==> net_set_running state=on vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-off-*'
+catg $VMS/devvm-off-*
 stdout '^net=on$'
 exec devvm network on
 stdout '^==> net_already state=on vm=devvm-off-[0-9a-f]{14}$'
@@ -144,19 +135,19 @@ exec devvm network off
 stdout '^==> net_set_running state=off vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
 # Stopped, it changes at its next start.
-exec sh -c 'limactl stop "$(cd "$VMS" && ls devvm-off-* | grep -v "\.")"'
+vm_name OFF off
+exec limactl stop $OFF
 exec devvm network on
 stdout '^==> net_set_stopped state=on vm=devvm-off-[0-9a-f]{14}$'
 exec devvm network
 stdout '^on$'
 
 # Without a flag, and without a terminal to ask in: on, unasked.
-mkdir $WORK/default
-cd $WORK/default
+project default
 exec devvm --no-git-protect base
 stdout '^==> creating_from image=base vm=devvm-default-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask|net_off_'
-exec sh -c 'cat "$VMS"/devvm-default-*'
+catg $VMS/devvm-default-*
 stdout '^net=on$'
 stdout '^net_check=ok$'
 
@@ -182,37 +173,34 @@ exec devvm network -g
 stdout '\Aoff\n\z'
 exec devvm network -g --json
 stdout '\A{\n  "version": 1,\n  "policy": "off"\n}\n\z'
-mkdir $WORK/offsaved
-cd $WORK/offsaved
+project offsaved
 exec devvm --no-git-protect base
 ! stderr 'net_about|net_ask|net_off_'
-exec sh -c 'cat "$VMS"/devvm-offsaved-*'
+catg $VMS/devvm-offsaved-*
 stdout '^net=off$'
-mkdir $WORK/offflag
-cd $WORK/offflag
+project offflag
 exec devvm --network-policy --no-git-protect base
-exec sh -c 'cat "$VMS"/devvm-offflag-*'
+catg $VMS/devvm-offflag-*
 stdout '^net=on$'
 cd $WORK/default
-exec sh -c 'limactl stop "$(cd "$VMS" && ls devvm-default-* | grep -v "\.")"'
+vm_name DEFAULT default
+exec limactl stop $DEFAULT
 exec devvm
-exec sh -c 'cat "$VMS"/devvm-default-*'
+catg $VMS/devvm-default-*
 stdout '^net=on$'
 stdout '^net_check=ok$'
 
 # A saved on: new VMs get it; --no-network-policy beats it.
 exec devvm network -g on
 stdout '^==> network_default mode=on$'
-mkdir $WORK/onsaved
-cd $WORK/onsaved
+project onsaved
 exec devvm --no-git-protect base
 ! stderr 'net_about|net_ask|net_off_'
-exec sh -c 'cat "$VMS"/devvm-onsaved-*'
+catg $VMS/devvm-onsaved-*
 stdout '^net=on$'
-mkdir $WORK/onflag
-cd $WORK/onflag
+project onflag
 exec devvm --no-network-policy --no-git-protect base
-exec sh -c 'cat "$VMS"/devvm-onflag-*'
+catg $VMS/devvm-onflag-*
 stdout '^net=off$'
 
 # ask again, and a file edited by hand that says something else: a new
@@ -225,8 +213,7 @@ stdout '\Aask\n\z'
 exec sh -c 'echo maybe > "$XDG_CONFIG_HOME/devvm/network"'
 ! exec devvm network -g
 stderr '^devvm: net_default_failed reason=\S*/config/devvm/network:1: '
-mkdir $WORK/badsaved
-cd $WORK/badsaved
+project badsaved
 ! exec devvm --no-git-protect base
 stderr '\S*/config/devvm/network:1: '
 exec devvm --network-policy --no-git-protect base

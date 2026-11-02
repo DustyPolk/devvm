@@ -2,15 +2,12 @@
 # through links the group makes in each of them, kept in their state.
 # A VM is in one group at a time, and a group's VMs all have network
 # policy or none do.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 exec devvm --help
 stdout '^Links between VMs:\n  group .*\n  link '
 
 # No VM yet.
-mkdir $WORK/app
-cd $WORK/app
+project app
 ! exec devvm group
 stderr '^devvm: no_vm_group dir=\S*/app$'
 
@@ -34,8 +31,7 @@ stderr '^devvm: flag_unknown command=devvm group join flag=--json$'
 
 # The VMs: app, db and two folders called api; cache with network policy.
 exec devvm --no-network-policy --no-git-protect base
-mkdir $WORK/db
-cd $WORK/db
+project db
 exec devvm --no-network-policy --no-git-protect base
 exec devvm link publish 5432,8000-8001
 mkdir $WORK/x/api
@@ -46,8 +42,7 @@ mkdir $WORK/y/api
 cd $WORK/y/api
 exec devvm --no-network-policy --no-git-protect base
 exec devvm link publish 3000
-mkdir $WORK/cache
-cd $WORK/cache
+project cache
 exec devvm --network-policy --no-git-protect base
 
 # Not in a group: said, and an empty list in JSON.
@@ -63,7 +58,7 @@ stderr '^devvm: group_none vm=devvm-app-[0-9a-f]{14}$'
 exec devvm group join web
 stdout '^==> group_made group=web vm=devvm-app-[0-9a-f]{14}$'
 stderr '^group_trust group=web$'
-exec sh -c 'cat "$VMS"/devvm-app-*'
+catg $VMS/devvm-app-*
 stdout '^group=web$'
 exec devvm group join web
 stdout '^==> group_already group=web vm=devvm-app-[0-9a-f]{14}$'
@@ -79,7 +74,9 @@ exec devvm group join web
 stdout '^==> group_joined group=web vm=devvm-db-[0-9a-f]{14}$'
 stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
 ! stdout 'group_links_added .* vm=devvm-db-'
-exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS"/devvm-db-*); db=$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$"); grep -x "links=db,5432,$db,$id,127.77.0.1,group db,8000,$db,$id,127.77.0.1,group db,8001,$db,$id,127.77.0.1,group" "$VMS"/devvm-app-*'
+vm_name DB db
+vm_name APP app
+exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS/$DB"); grep -x "links=db,5432,$DB,$id,127.77.0.1,group db,8000,$DB,$id,127.77.0.1,group db,8001,$DB,$id,127.77.0.1,group" "$VMS/$APP"'
 
 # All or none: cache, with network policy, can't join a group whose VMs
 # have none, and a group of its own refuses those without.
@@ -95,7 +92,7 @@ stderr '^devvm: group_policy_on group=safe vm=devvm-api-[0-9a-f]{14}$'
 cd $WORK/cache
 ! exec devvm network off
 stderr '^devvm: group_policy_mixed group=safe vm=devvm-cache-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-cache-*'
+catg $VMS/devvm-cache-*
 stdout '^net=on$'
 cd $WORK/db
 ! exec devvm network on
@@ -138,8 +135,7 @@ stdout '^==> group_links_added group=web links=api2:3000 vm=devvm-app-'
 stdout '^==> group_links_added group=web links=api1:80, db:5432,8000-8001 vm=devvm-api-'
 # A folder whose name is the name a member joined with: its own hostname
 # would name that member.
-mkdir $WORK/api1
-cd $WORK/api1
+project api1
 exec devvm --no-network-policy --no-git-protect base
 ! exec devvm group join web --as other
 stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api1 vm=devvm-api1-[0-9a-f]{14}$'
@@ -204,7 +200,7 @@ exec devvm link add db 7000
 exec devvm group leave
 stdout '^==> group_left group=web vm=devvm-app-[0-9a-f]{14}$'
 stdout '^==> group_links_removed group=web links=api1:80, api2:3000, db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
-exec sh -c 'cat "$VMS"/devvm-app-*'
+catg $VMS/devvm-app-*
 stdout '^links=db,7000,devvm-db-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.1$'
 stdout '^group=$'
 exec devvm group

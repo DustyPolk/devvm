@@ -1,7 +1,6 @@
 # devvm rebuild: a new key for the image (its rebuild counter), built from
 # its parent as it is; then the stale images go, the old one and those
 # built on it among them, and nothing else.
-env DEVVM_MESSAGES=names
 env IMAGES=$XDG_DATA_HOME/devvm/images
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
@@ -9,7 +8,7 @@ cp bar.sh $XDG_CONFIG_HOME/devvm/layers/bar.sh
 exec devvm build foo+bar
 exec sh -c 'echo devvm-web-12345612345612 >> "$STUB_DIR/instances"'
 exec sh -c 'for i in base foo foo+bar; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 
 # Not a terminal: it says what goes, and refuses unless --force, which
 # goes ahead.

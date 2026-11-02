@@ -2,16 +2,13 @@
 # the VMs' state on the host. A link records its target's name and ID, its
 # port and the client's address for that target; nothing carries a
 # connection here.
-env DEVVM_MESSAGES=names
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # The group shows once its commands exist.
 exec devvm --help
 stdout '^Links between VMs:\n  group .*\n  link '
 
 # No VM yet.
-mkdir $WORK/app
-cd $WORK/app
+project app
 ! exec devvm link
 stderr '^devvm: no_vm_link dir=\S*/app$'
 ! exec devvm link publish
@@ -45,8 +42,7 @@ stderr '^devvm: flag_unknown command=devvm link add flag=--json$'
 
 # The VMs: app, the client; db, a target; two folders called api.
 exec devvm --no-network-policy --no-git-protect base
-mkdir $WORK/db
-cd $WORK/db
+project db
 exec devvm --no-network-policy --no-git-protect base
 mkdir $WORK/x/api
 cd $WORK/x/api
@@ -71,7 +67,7 @@ exec devvm link publish
 stdout '\A5432,8000-8010\n\z'
 exec devvm link publish --json
 stdout '\A{\n  "version": 1,\n  "ports": "5432,8000-8010"\n}\n\z'
-exec sh -c 'cat "$VMS"/devvm-db-*'
+catg $VMS/devvm-db-*
 stdout '^publish=5432,8000-8010$'
 
 # Refusals: an unpublished port, the VM itself, no VM, a folder name two
@@ -93,7 +89,7 @@ stderr '^devvm: link_unknown_target target=nope$'
 stderr '^devvm: link_unknown_target target=../nope$'
 ! exec devvm link add api 5432
 stderr '^devvm: link_ambiguous_target target=api vms=devvm-api-[0-9a-f]{14} in \S*/api, devvm-api-[0-9a-f]{14} in \S*/api$'
-exec sh -c 'cat "$VMS"/devvm-app-*'
+catg $VMS/devvm-app-*
 ! stdout '^links='
 
 # add: by folder name, its address the first, then the same target's
@@ -105,9 +101,11 @@ exec devvm link add db 5432
 stdout '^==> link_exists name=db port=5432 vm=devvm-app-[0-9a-f]{14}$'
 exec devvm link add ../db 8000
 stdout '^==> link_added name=db port=8000 '
-exec sh -c 'devvm link add "$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$")" 8005'
+vm_name DB db
+exec devvm link add $DB 8005
 stdout '^==> link_added name=db port=8005 '
-exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS"/devvm-db-*); db=$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$"); grep -x "links=db,5432,$db,$id,127.77.0.1 db,8000,$db,$id,127.77.0.1 db,8005,$db,$id,127.77.0.1" "$VMS"/devvm-app-*'
+vm_name APP app
+exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS/$DB"); grep -x "links=db,5432,$DB,$id,127.77.0.1 db,8000,$DB,$id,127.77.0.1 db,8005,$DB,$id,127.77.0.1" "$VMS/$APP"'
 
 # A target has one name in a client, and a name one target; localhost
 # and the client's own hostname are refused.
@@ -124,7 +122,7 @@ stderr '^devvm: link_name_host name=localhost vm=devvm-app-[0-9a-f]{14}$'
 # Another target gets the next address.
 exec devvm link add ../x/api 5432
 stdout '^==> link_added name=api port=5432 target=devvm-api-[0-9a-f]{14} '
-exec sh -c 'cat "$VMS"/devvm-app-*'
+catg $VMS/devvm-app-*
 stdout '^links=api,5432,devvm-api-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.2 db,5432,'
 
 # The list: each target's folder and status, and whether the link
@@ -212,7 +210,7 @@ exec devvm link rm db 8000
 stdout '^==> link_removed name=db port=8000 vm=devvm-app-[0-9a-f]{14}$'
 exec devvm link rm ../db 8001
 stdout '^==> link_removed name=db port=8001 '
-exec sh -c 'devvm link rm "$(cd "$VMS" && ls | grep "^devvm-db-[0-9a-f]*$")" 8002'
+exec devvm link rm $DB 8002
 stdout '^==> link_removed name=db port=8002 '
 exec devvm link rm api 5432
 stdout '^==> link_removed name=api port=5432 '
@@ -231,7 +229,7 @@ stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0
 cd $WORK/app
 exec devvm link
 stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
-exec sh -c 'cat "$VMS"/devvm-app-*'
+catg $VMS/devvm-app-*
 stdout '^links=$'
 cd $WORK/db
 exec devvm --no-network-policy --no-git-protect base

@@ -2,10 +2,7 @@
 # size, whether devvm makes it again, what gc frees of it now and what
 # frees the rest, then a total; the backends' caches apart. It changes
 # nothing: no backend command but listings.
-env DEVVM_MESSAGES=names
-env DATA=$XDG_DATA_HOME/devvm
 env SHARE=$XDG_DATA_HOME/devvm/tools
-env VMS=$XDG_DATA_HOME/devvm/vms
 
 # Nothing yet: devvm's state and the total.
 exec devvm space
@@ -31,7 +28,7 @@ exec sh -c 'echo devvm-p-12345612345612 >> "$STUB_DIR/instances"'
 mkdir $DATA/exports $DATA/logs $DATA/mise/2026.1.1
 exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
 exec sh -c 'echo x > "$DATA/logs/devvm-p-12345612345612.jsonl" && echo x > "$DATA/logs/devvm-gone-12345612345612.proxy.log"'
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm space
 stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm +-$'
 stdout '^images +lima +2 +\S+ +remade +\S+ +gc --backend lima +-$'
@@ -49,7 +46,7 @@ stub_calls
 
 # --backend: that backend's rows alone, with their total, and no other
 # backend asked.
-exec sh -c ': > "$STUB_LOG"'
+stub_reset
 exec devvm space --backend lima
 stdout '^VMs +lima +1 +'
 stdout '^images +lima +2 +'
