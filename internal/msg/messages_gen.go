@@ -2204,12 +2204,12 @@ func NoImageNamedFrom(from string, image string) M {
 	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
 }
 
-// NoInput is [no_input]: "This question needs an answer, and --no-input asks nothing. Give {{.answer}} instead."
+// NoInput is [no_input]: "This question needs an answer, and devvm has no input to read it from. Give {{.answer}} instead."
 func NoInput(answer string) M {
 	return M{id: "no_input", vals: []val{{"answer", answer}}}
 }
 
-// NoInputTerminal is [no_input_terminal]: "Only you can answer this question, in a terminal, and --no-input asks nothing. Run the command again in a terminal without --no-input."
+// NoInputTerminal is [no_input_terminal]: "Only you can answer this question, in a terminal, and devvm has no input to read it from. Run the command again in a terminal without --no-input."
 func NoInputTerminal() M {
 	return M{id: "no_input_terminal"}
 }

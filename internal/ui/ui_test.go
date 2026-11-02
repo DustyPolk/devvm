@@ -212,6 +212,30 @@ func TestSecret(t *testing.T) {
 	}
 }
 
+// At the end of the input, with no answer, a question fails as it does
+// with --no-input: the question shown first unless its prompt was, then
+// what answers it, or a terminal for one only a terminal answers.
+func TestNoAnswer(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		ask  func(u *UI)
+		tty  bool
+		want string
+	}{
+		{func(u *UI) { u.Ask(msg.GCConfirm()) }, false, "gc_confirm\ndevvm: no_input answer=--force\n"},
+		{func(u *UI) { u.Confirm(msg.NetAsk()) }, false, "net_ask\ndevvm: no_input answer=--network-policy or --no-network-policy\n"},
+		{func(u *UI) { u.Answer(msg.SizeCpusPrompt("4")) }, false, "size_cpus_prompt cpus=4\ndevvm: no_input answer=devvm size -g\n"},
+		{func(u *UI) { u.Ask(msg.DeleteAnyway()) }, false, "delete_anyway\ndevvm: no_input_terminal\n"},
+		{func(u *UI) { u.Ask(msg.GCConfirm()) }, true, "gc_confirm [y/N] \ndevvm: no_input answer=--force\n"},
+	} {
+		u, _, errOut := testUI(t, "")
+		u.stdinTTY = tc.tty
+		if code := exitCode(func() { tc.ask(u) }); code != 1 || errOut.String() != tc.want {
+			t.Errorf("exit %d, stderr %q, want 1 and %q", code, errOut, tc.want)
+		}
+	}
+}
+
 // With --no-input every question fails before anything is read, after
 // showing it: naming what answers it, or a terminal for one only a
 // terminal answers.

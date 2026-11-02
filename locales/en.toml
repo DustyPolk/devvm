@@ -84,10 +84,10 @@ other = "{{.command}} --json only shows, so it takes no value. Run it without --
 
 [no_input]
 description = "answer is the flag or command that answers the question, such as --force"
-other = "This question needs an answer, and --no-input asks nothing. Give {{.answer}} instead."
+other = "This question needs an answer, and devvm has no input to read it from. Give {{.answer}} instead."
 
 [no_input_terminal]
-other = "Only you can answer this question, in a terminal, and --no-input asks nothing. Run the command again in a terminal without --no-input."
+other = "Only you can answer this question, in a terminal, and devvm has no input to read it from. Run the command again in a terminal without --no-input."
 
 [force_needed]
 description = "command is the command as typed, such as devvm rm"

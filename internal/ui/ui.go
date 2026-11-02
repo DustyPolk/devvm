@@ -227,10 +227,11 @@ func (u *UI) DieLogged(m msg.M) {
 
 // Ask asks a yes-or-no question, no by default: it's true only for an answer
 // starting with y. No answer at all (the end of input) ends the run with
-// exit code 1, so nothing goes ahead unanswered.
+// exit code 1, naming what answers m as --no-input does, so nothing goes
+// ahead unanswered.
 func (u *UI) Ask(m msg.M) bool {
 	refuseInput(u, m)
-	a := u.answer(u.errStyle.message(m) + " [y/N] ")
+	a := u.answer(m, u.errStyle.message(m)+" [y/N] ")
 	return strings.HasPrefix(a, "y") || strings.HasPrefix(a, "Y")
 }
 
@@ -238,14 +239,13 @@ func (u *UI) Ask(m msg.M) bool {
 // answer starts with n. Without a message it prompts only "[Y/n]", after a
 // question printed on its own. No answer at all ends the run like Ask.
 func (u *UI) Confirm(q ...msg.M) bool {
-	prompt := "[Y/n] "
+	prompt, m := "[Y/n] ", msg.M{}
 	if len(q) > 0 {
-		refuseInput(u, q[0])
-		prompt = u.errStyle.message(q[0]) + " " + prompt
-	} else {
-		refuseInput(u, msg.M{})
+		m = q[0]
+		prompt = u.errStyle.message(m) + " " + prompt
 	}
-	a := u.answer(prompt)
+	refuseInput(u, m)
+	a := u.answer(m, prompt)
 	return !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N")
 }
 
@@ -254,7 +254,7 @@ func (u *UI) Confirm(q ...msg.M) bool {
 // Ask.
 func (u *UI) Answer(prompt msg.M) string {
 	refuseInput(u, prompt)
-	return strings.TrimSpace(u.answer(u.errStyle.message(prompt) + " "))
+	return strings.TrimSpace(u.answer(prompt, u.errStyle.message(prompt)+" "))
 }
 
 // readTerminal reads a line from the terminal without echoing it. A
@@ -298,10 +298,19 @@ func (u *UI) Line() string {
 // first, then no_input naming what answers it (msg.AnswerFor), or
 // no_input_terminal for a question only a terminal answers.
 func refuseInput(u *UI, q msg.M) {
-	if !u.noInput.Load() {
-		return
+	if u.noInput.Load() {
+		unanswered(u, q, false)
 	}
-	if q.ID() != "" {
+}
+
+// unanswered ends the run for q, which has no answer: q's text first
+// unless its prompt is shown, then no_input naming what answers it
+// (msg.AnswerFor), or no_input_terminal for a question only a terminal
+// answers.
+func unanswered(u *UI, q msg.M, shown bool) {
+	if shown {
+		u.write(u.stderr, "\n")
+	} else if q.ID() != "" {
 		u.Note(q)
 	}
 	if a := msg.AnswerFor(q.ID()); a != "" {
@@ -310,15 +319,16 @@ func refuseInput(u *UI, q msg.M) {
 	u.Die(msg.NoInputTerminal())
 }
 
-// answer prints the prompt to stderr when the input is a terminal, and
-// reads a line.
-func (u *UI) answer(prompt string) string {
+// answer prints q's prompt to stderr when the input is a terminal, and
+// reads a line. The end of the input with no answer ends the run, naming
+// what answers q.
+func (u *UI) answer(q msg.M, prompt string) string {
 	if u.stdinTTY {
 		u.write(u.stderr, prompt)
 	}
 	line, err := u.stdin.ReadString('\n')
 	if err != nil && line == "" {
-		exit(1)
+		unanswered(u, q, u.stdinTTY)
 	}
 	return strings.TrimRight(line, "\r\n")
 }

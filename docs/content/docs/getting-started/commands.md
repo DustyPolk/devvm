@@ -272,7 +272,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 
 A few questions protect work that only you can judge, so no flag answers them, and devvm asks them only in a terminal. They are `devvm rm` deleting the VM of a folder this one is inside or the VM made for an earlier folder at this path, a `--clone` VM's commits that this repo hasn't fetched and its uncommitted changes, and a command giving the VM of a folder this one is inside more access. Without a terminal, each of them refuses and says what to run instead.
 
-With `--no-input`, devvm asks nothing even in a terminal. A question it would ask fails instead, after devvm shows the question, and the error names the flag or command that answers it. A question that only a terminal answers fails and tells you to run the command in a terminal without `--no-input`.
+With `--no-input`, devvm asks nothing even in a terminal. A question it would ask fails instead, after devvm shows the question, and the error names the flag or command that answers it. A question that only a terminal answers fails and tells you to run the command in a terminal without `--no-input`. A question also fails this way when devvm reads its answer from a pipe or a file and the input ends before an answer, or when you press Ctrl+D at the prompt.
 
 ## devvm itself
 
