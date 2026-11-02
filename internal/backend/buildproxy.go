@@ -67,10 +67,10 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 	}
 	p := &BuildProxy{Password: hex.EncodeToString(b), dir: dir}
 	auth, policy, logPath := filepath.Join(dir, "auth"), filepath.Join(dir, "policy"), filepath.Join(dir, "proxy.log")
-	if err := writeOwn(auth, []byte(p.Password+"\n")); err != nil {
+	if err := state.WriteFile(auth, []byte(p.Password+"\n")); err != nil {
 		return nil, err
 	}
-	if err := writeOwn(policy, []byte("# a build: any host, not this machine's own or internal addresses\n**\n")); err != nil {
+	if err := state.WriteFile(policy, []byte("# a build: any host, not this machine's own or internal addresses\n**\n")); err != nil {
 		return nil, err
 	}
 	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
@@ -85,7 +85,7 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 	args = append(args, extra...)
 	if upstream != nil {
 		f := filepath.Join(dir, "upstream")
-		if err := writeOwn(f, upstream); err != nil {
+		if err := state.WriteFile(f, upstream); err != nil {
 			return nil, err
 		}
 		args = append(args, "-upstream", f)
@@ -122,12 +122,4 @@ func (p *BuildProxy) Stop() {
 	for _, f := range []string{"auth", "upstream"} {
 		_ = os.Remove(filepath.Join(p.dir, f))
 	}
-}
-
-// writeOwn writes a file whole, the user's alone (mode 600).
-func writeOwn(path string, data []byte) error {
-	if err := state.WriteFile(path, data); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
 }

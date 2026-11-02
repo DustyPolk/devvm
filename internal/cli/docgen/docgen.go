@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra/doc"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // write replaces the Markdown pages in dir with root's reference. dir is
@@ -33,7 +34,7 @@ func write(root *cobra.Command, dir string) error {
 		}
 	}
 	for name, data := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil { //nolint:gosec // a page in the developer's folder
+		if err := state.WriteFile(filepath.Join(dir, name), data); err != nil {
 			return err
 		}
 	}

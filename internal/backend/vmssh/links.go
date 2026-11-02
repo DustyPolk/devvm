@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // Links carries a client VM's links to other VMs' ports (the design
@@ -235,7 +236,7 @@ func (l *Links) Run(ctx context.Context) error {
 	if !l.Alive(ctx) {
 		return fmt.Errorf("%s isn't running", l.VM)
 	}
-	if err := runDir(l.Dir); err != nil {
+	if err := state.PrivateDir(l.Dir); err != nil {
 		return err
 	}
 	if ctl := l.Control("", ""); len(ctl) > controlMax || strings.ContainsAny(ctl, ": \t\n") {
@@ -434,32 +435,12 @@ func (l *Links) writeList(want []Link) {
 	if _, serr := os.Lstat(l.List); serr == nil && bytes.Equal(b, l.listed) {
 		return
 	}
-	if err := writeWhole(l.List, append(b, '\n')); err != nil {
+	// Whole, so the proxy reads the old list or the new one.
+	if err := state.WriteFile(l.List, append(b, '\n')); err != nil {
 		l.logf("%s: %v", l.List, err)
 		return
 	}
 	l.listed = b
-}
-
-// writeWhole writes data to path, mode 600: a file of its own in path's
-// folder, renamed over it, so a reader sees the old list or the new one.
-func writeWhole(path string, data []byte) error {
-	f, err := os.CreateTemp(filepath.Dir(path), ".links-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		_ = os.Remove(tmp)
-	}
-	return err
 }
 
 // add listens on a link's socket and asks the client to listen for it.
@@ -906,26 +887,6 @@ func oneLine(out []byte) string {
 		}
 	}
 	return strings.Join(kept, "; ")
-}
-
-// runDir makes the folder of the sockets, the user's alone (mode 700):
-// one there with another mode gets 700, and anything but a folder there
-// is refused.
-func runDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	fi, err := os.Lstat(dir)
-	if err != nil {
-		return err
-	}
-	if !fi.IsDir() {
-		return fmt.Errorf("%s isn't a folder", dir)
-	}
-	if fi.Mode().Perm() != 0o700 {
-		return os.Chmod(dir, 0o700) //nolint:gosec // a folder: 700 is the user's alone
-	}
-	return nil
 }
 
 // listenSocket listens on a unix socket at path, mode 600, which closing

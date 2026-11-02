@@ -24,6 +24,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 const (
@@ -263,7 +264,7 @@ func (f *Finder) verify(ctx context.Context, release string, sums []byte) error 
 	sumsFile, sigFile, home := filepath.Join(dir, "SHA256SUMS"), filepath.Join(dir, "SHA256SUMS.gpg"), filepath.Join(dir, "gnupg")
 	keyring := filepath.Join(dir, filepath.Base(Keyring))
 	for file, data := range map[string][]byte{sumsFile: sums, sigFile: sig, keyring: key} {
-		if err := os.WriteFile(file, data, 0o600); err != nil {
+		if err := state.WriteFile(file, data); err != nil {
 			return fmt.Errorf("checking Ubuntu's checksums: %w", err)
 		}
 	}

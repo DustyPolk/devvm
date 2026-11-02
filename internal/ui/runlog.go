@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // keepLogs is how many run logs are kept, the newest.
@@ -121,12 +122,8 @@ func (u *UI) KeepRunLogs(n int) {
 }
 
 func createLog(dir string, now time.Time, pid int) (*os.File, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, err
-	}
 	for _, d := range []string{filepath.Dir(dir), dir} {
-		if err := os.Chmod(d, 0o700); err != nil { //nolint:gosec // folders: owner-only with search
-
+		if err := state.PrivateDir(d); err != nil {
 			return nil, err
 		}
 	}

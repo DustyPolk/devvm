@@ -158,10 +158,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	// (VMs trust it from their next start). Kept out of backups: a copy of
 	// its key elsewhere could impersonate any site to VMs.
 	ca := p.Dirs.CA()
-	if err := os.MkdirAll(ca, 0o700); err != nil {
-		return none, err
-	}
-	if err := os.Chmod(ca, 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+	if err := state.PrivateDir(ca); err != nil {
 		return none, err
 	}
 	if err := p.InitCA(ca); err != nil {
@@ -236,10 +233,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	}
 	// The logs hold each VM's requests: the user's alone.
 	for _, d := range []string{p.Dirs.Run(), p.Dirs.Logs()} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			return none, err
-		}
-		if err := os.Chmod(d, 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+		if err := state.PrivateDir(d); err != nil {
 			return none, err
 		}
 	}
@@ -396,10 +390,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	// A VM that reaches the proxy through a socket of the host's: in a
 	// folder of its own, the user's alone.
 	if sock := backend.ProxySocketOf(b, vm); sock != "" {
-		if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
-			return err
-		}
-		if err := os.Chmod(filepath.Dir(sock), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+		if err := state.PrivateDir(filepath.Dir(sock)); err != nil {
 			return err
 		}
 		decider = append(decider, "-listen-unix", sock)

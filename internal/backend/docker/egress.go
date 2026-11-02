@@ -414,12 +414,13 @@ func (e egress) linuxBuild(ctx context.Context) (string, error) {
 		return "", err
 	}
 	dst := linuxCopy(e.d.Dirs, e.d.Arch)
-	want, err := fileSum(src)
+	data, err := os.ReadFile(src) //nolint:gosec // devvm's own build
 	if err != nil {
 		return "", err
 	}
-	if have, err := fileSum(dst); err != nil || have != want {
-		if err := copyFile(src, dst); err != nil {
+	want := sha256.Sum256(data)
+	if have, err := fileSum(dst); err != nil || have != hex.EncodeToString(want[:]) {
+		if err := state.WriteFileMode(dst, data, 0o700); err != nil {
 			return "", err
 		}
 	}
@@ -660,7 +661,7 @@ func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (conte
 		lines = append(lines, k+"="+env[k]+"\n"...)
 	}
 	envFile := filepath.Join(dir, "env")
-	if err := writeOwn(envFile, lines); err != nil {
+	if err := state.WriteFile(envFile, lines); err != nil {
 		return fail(err)
 	}
 	if _, err := e.ownNetwork(ctx, name); err != nil {
@@ -680,14 +681,6 @@ func buildCaps(name, netw string) []string {
 		return []string{"NET_RAW"}
 	}
 	return nil
-}
-
-// writeOwn writes a file whole, the user's alone (mode 600).
-func writeOwn(path string, data []byte) error {
-	if err := state.WriteFile(path, data); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
 }
 
 // buildSudo keeps a build's proxy settings for sudo in its container

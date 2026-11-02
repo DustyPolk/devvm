@@ -15,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // The mise devvm resolves the tools lock with, on the host: pinned, and
@@ -64,7 +65,10 @@ func (t Versions) HostMise(ctx context.Context) (string, error) {
 	}
 	stop := t.Status(msg.DownloadingMise(miseVersion))
 	defer stop()
+	// fetch keeps the download only once its SHA-256 is the pin's, and
+	// leaves nothing when it fails.
 	tmp := path + ".tmp"
+	defer func() { _ = os.Remove(tmp) }()
 	err := fetch.Download(ctx, t.Client, fmt.Sprintf(t.miseURL, miseVersion, platform), tmp, t.miseSums[platform])
 	switch {
 	case errors.Is(err, fetch.ErrChecksum):
@@ -123,7 +127,7 @@ func (t Versions) Resolve(ctx context.Context, out string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "mise.toml"), config, 0o600); err != nil {
+	if err := state.WriteFile(filepath.Join(tmp, "mise.toml"), config); err != nil {
 		return err
 	}
 	cmd, err := miseCmd(ctx, mise, tmp, "lock", "--platform", strings.Join(t.platforms(), ","))
@@ -145,21 +149,10 @@ func (t Versions) Resolve(ctx context.Context, out string) error {
 		}
 	}
 	lock = t.stepBack(ctx, mise, lock, names, specs)
-	if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+	if err := state.WriteFile(out+".toml", config); err != nil {
 		return err
 	}
-	for _, f := range []struct {
-		path string
-		data []byte
-	}{{out + ".toml", config}, {out, lock}} {
-		if err := os.WriteFile(f.path+".tmp", f.data, 0o600); err != nil {
-			return err
-		}
-		if err := os.Rename(f.path+".tmp", f.path); err != nil {
-			return err
-		}
-	}
-	return nil
+	return state.WriteFile(out, lock)
 }
 
 func (t Versions) resolveFailed(ctx context.Context) error {
@@ -262,7 +255,7 @@ func (t Versions) lockVersions(ctx context.Context, mise, tool string, versions 
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	list := `"` + strings.Join(versions, `","`) + `"`
-	if err := os.WriteFile(filepath.Join(dir, "mise.toml"), []byte("[tools]\n"+tool+" = ["+list+"]\n"), 0o600); err != nil {
+	if err := state.WriteFile(filepath.Join(dir, "mise.toml"), []byte("[tools]\n"+tool+" = ["+list+"]\n")); err != nil {
 		return nil
 	}
 	cmd, err := miseCmd(ctx, mise, dir, "lock", "--platform", strings.Join(t.platforms(), ","))

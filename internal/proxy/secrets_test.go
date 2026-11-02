@@ -26,6 +26,39 @@ import (
 	"time"
 )
 
+// writeAtomic replaces a file whole with the mode asked for, a file there
+// with another mode included, and leaves nothing else; one it can't write
+// leaves nothing either.
+func TestWriteAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ca.crt")
+	for _, tc := range []struct {
+		data string
+		mode os.FileMode
+	}{{"one\n", 0o644}, {"two\n", 0o600}, {"three\n", 0o644}} {
+		if err := writeAtomic(path, []byte(tc.data), tc.mode); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(path) //nolint:gosec // the test's own file
+		fi, serr := os.Stat(path)
+		if err != nil || serr != nil || string(b) != tc.data || fi.Mode().Perm() != tc.mode {
+			t.Errorf("%q, %v: %v, %v", b, fi.Mode(), err, serr)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", "f"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeAtomic(filepath.Join(dir, "sub"), []byte("x"), 0o600); err == nil {
+		t.Error("a folder replaced")
+	}
+	if ents, _ := os.ReadDir(dir); len(ents) != 2 {
+		t.Errorf("left %v", ents)
+	}
+}
+
 func fakeSecret(t *testing.T, value string) {
 	t.Helper()
 	old := secretValue

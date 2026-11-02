@@ -608,7 +608,7 @@ func readSize(dir string) (int64, bool) {
 }
 
 func writeSize(dir string, n int64) {
-	_ = os.WriteFile(sizeFile(dir), []byte(strconv.FormatInt(n, 10)+"\n"), 0o600)
+	_ = writeAtomic(sizeFile(dir), []byte(strconv.FormatInt(n, 10)+"\n"), 0o600)
 }
 
 // errNixFull is reserve's refusal when the files being fetched alone leave no room.

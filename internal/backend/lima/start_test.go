@@ -112,6 +112,9 @@ func TestStartConfined(t *testing.T) {
 				if err != nil || strings.Contains(string(sb), "(deny network-bind)") != (tc.c.Net == backend.NetProxy) {
 					t.Errorf("profile (%v):\n%s", err, sb)
 				}
+				if fi, err := os.Stat(l.profileFile("v")); err != nil || fi.Mode().Perm() != 0o600 {
+					t.Errorf("profile: %v, %v", fi.Mode(), err)
+				}
 			}
 			w, ok := envOf(s, "QEMU_SYSTEM_AARCH64")
 			if ok != tc.qemu || ok && w != filepath.Join(l.Dirs.Run(), "qemu", "qemu-system-aarch64") {

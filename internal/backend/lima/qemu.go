@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/shell"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // On Linux hosts Lima runs QEMU, with a user-mode network. A VM that must
@@ -59,11 +60,8 @@ func writeWrapper(dir, self, goarch string) (string, error) {
 	if err := wrapperTmpl.Execute(&b, self); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
 	w := filepath.Join(dir, qemuProgram(goarch))
-	return w, writeFile(w, b.Bytes(), 0o700)
+	return w, state.WriteFileMode(w, b.Bytes(), 0o700)
 }
 
 // guestFwdCmd is the command QEMU runs for each connection to the proxy's

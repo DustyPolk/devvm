@@ -271,8 +271,13 @@ func initCA(dir string) error {
 	return writeAtomic(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)
 }
 
+// writeAtomic replaces path with data, mode mode, whole or not at all: a
+// temporary file in its folder (.<name>.tmp-*), renamed over it. It's the
+// proxy's one writer of whole files (the proxy imports only the standard
+// library, so not devvm's state.WriteFile): the CA, login files, the Nix
+// cache's files and the rotated log.
 func writeAtomic(path string, data []byte, mode os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".devvm-ca-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return err
 	}
@@ -288,7 +293,7 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path) //nolint:gosec // devvm's CA, or a Nix cache file nixPath named
+	return os.Rename(tmp.Name(), path) //nolint:gosec // devvm's own files, or a Nix cache file nixPath named
 }
 
 func loadCA(certPath, keyPath string) error {

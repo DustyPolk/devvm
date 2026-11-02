@@ -108,6 +108,9 @@ func TestStartProxy(t *testing.T) {
 	if b, _ := os.ReadFile(bin); string(b) != "devvm for linux" { //nolint:gosec // the test's own
 		t.Errorf("the Linux build's copy: %q", b)
 	}
+	if fi, err := os.Stat(bin); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("the Linux build's copy: %v, %v", fi.Mode(), err)
+	}
 	for _, c := range calls {
 		if strings.Contains(c, "k3y") {
 			t.Errorf("the password in an argument: %s", c)

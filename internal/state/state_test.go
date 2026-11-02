@@ -119,6 +119,100 @@ func TestParseKV(t *testing.T) {
 	}
 }
 
+// WriteFileMode writes the file whole with the mode asked for, whatever the
+// umask, and replaces one there with another mode; nothing else is left.
+func TestWriteFileMode(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "run")
+	path := filepath.Join(dir, "program")
+	for _, tc := range []struct {
+		data string
+		mode fs.FileMode
+	}{{"#!/bin/sh\n", 0o700}, {"#!/bin/sh\necho\n", 0o700}, {"data\n", 0o600}, {"cert\n", 0o644}, {"again\n", 0o755 | fs.ModeSetuid}} {
+		if err := WriteFileMode(path, []byte(tc.data), tc.mode); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(t, path); got != tc.data {
+			t.Errorf("got %q, want %q", got, tc.data)
+		}
+		if fi, err := os.Stat(path); err != nil || fi.Mode() != tc.mode.Perm() {
+			t.Errorf("%v: mode %v, %v", tc.mode, fi.Mode(), err)
+		}
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
+		t.Errorf("the folder holds %v, %v", entries, err)
+	}
+	if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("folder: %v, %v", fi.Mode(), err)
+	}
+	// A folder that can't be made fails.
+	if err := WriteFileMode(filepath.Join(path, "x"), nil, 0o700); err == nil {
+		t.Error("written under a file")
+	}
+	// One that can't be renamed over leaves no temporary file.
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "f"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFileMode(sub, []byte("x"), 0o700); err == nil {
+		t.Error("a folder replaced")
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 2 {
+		t.Errorf("left %v", entries)
+	}
+}
+
+// PrivateDir makes a folder, with those above it, 700; corrects one there
+// with another mode; and refuses a file, or a link to a folder, leaving
+// what the link points to as it was.
+func TestPrivateDir(t *testing.T) {
+	tmp := t.TempDir()
+	made := filepath.Join(tmp, "a", "b")
+	if err := PrivateDir(made); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(made); err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
+		t.Errorf("made: %v, %v", fi.Mode(), err)
+	}
+	open := filepath.Join(tmp, "open")
+	if err := os.Mkdir(open, 0o755); err != nil { //nolint:gosec // the mode PrivateDir corrects
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(open, "f"), nil, 0o644); err != nil { //nolint:gosec // a mode left as it is
+		t.Fatal(err)
+	}
+	if err := PrivateDir(open); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]fs.FileMode{open: 0o700, filepath.Join(open, "f"): 0o644} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, want %v (%v)", p, fi.Mode(), want, err)
+		}
+	}
+	file := filepath.Join(tmp, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(tmp, "target")
+	if err := os.Mkdir(target, 0o755); err != nil { //nolint:gosec // a mode a link mustn't change
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{file, link, filepath.Join(file, "under")} {
+		if err := PrivateDir(bad); err == nil {
+			t.Errorf("%s: made private", bad)
+		}
+	}
+	if fi, err := os.Stat(target); err != nil || fi.Mode().Perm() != 0o755 {
+		t.Errorf("the link's folder: %v, %v", fi.Mode(), err)
+	}
+}
+
 func TestWriteFileIsAtomicAndPrivate(t *testing.T) {
 	d := testDirs(t)
 	path := d.VMState("devvm-p-1")

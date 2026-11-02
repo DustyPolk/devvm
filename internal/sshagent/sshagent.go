@@ -275,7 +275,7 @@ func (a *Agent) load(ctx context.Context, key, options, pinned string) (string, 
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	copied := filepath.Join(tmp, "key")
-	if err := os.WriteFile(copied, data, 0o600); err != nil { //nolint:gosec // a folder of devvm's own
+	if err := state.WriteFile(copied, data); err != nil {
 		return "", err
 	}
 	out, code := a.Run(ctx, false, "ssh-keygen", "-lf", copied)
@@ -464,7 +464,7 @@ func (a *Agent) unload(ctx context.Context, k state.AgentKey) error {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		if err := os.WriteFile(pub, []byte(line+"\n"), 0o600); err != nil {
+		if err := state.WriteFile(pub, []byte(line+"\n")); err != nil {
 			return err
 		}
 		fp, code := a.Run(ctx, false, "ssh-keygen", "-lf", pub)

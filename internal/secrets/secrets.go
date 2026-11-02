@@ -245,10 +245,7 @@ func (s *Store) Save(ctx context.Context, name, value string) error {
 		return msg.NoSecret(name)
 	}
 	if !s.Keychain {
-		if err := os.MkdirAll(s.Dirs.Secrets(), 0o700); err != nil {
-			return err
-		}
-		if err := os.Chmod(s.Dirs.Secrets(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+		if err := state.PrivateDir(s.Dirs.Secrets()); err != nil {
 			return err
 		}
 		return state.WriteFile(s.File(name), []byte(value+"\n"))

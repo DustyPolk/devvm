@@ -31,3 +31,5 @@ func signals(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) } // wan
 func finds(pid int) (*os.Process, error) { return os.FindProcess(pid) } // want forbidigo
 
 func client() any { return &http.Client{} } // want forbidigo
+
+func writesFile() error { return os.WriteFile("f", nil, 0o600) } // want forbidigo

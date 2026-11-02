@@ -38,6 +38,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // ShareAt is where VMs have the share, read-only, and where the tools
@@ -196,7 +197,7 @@ func (t Versions) touchChecked() error {
 	now := t.Now()
 	err := os.Chtimes(t.checkedFile(), now, now)
 	if errors.Is(err, fs.ErrNotExist) {
-		err = os.WriteFile(t.checkedFile(), nil, 0o600)
+		err = state.WriteFile(t.checkedFile(), nil)
 		if err == nil {
 			err = os.Chtimes(t.checkedFile(), now, now)
 		}
@@ -230,10 +231,7 @@ func (t Versions) RefreshDaily() error {
 	if err := t.touchChecked(); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(t.Dirs.Logs(), 0o700); err != nil {
-		return err
-	}
-	if err := os.Chmod(t.Dirs.Logs(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+	if err := state.PrivateDir(t.Dirs.Logs()); err != nil {
 		return err
 	}
 	out, err := os.OpenFile(t.checkLog(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)

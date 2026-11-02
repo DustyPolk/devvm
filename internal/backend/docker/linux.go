@@ -30,6 +30,7 @@ import (
 	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // linuxMax is the most a Linux build, or its archive, may be.
@@ -119,77 +120,59 @@ func (f linuxFinder) find(ctx context.Context, fetch bool) (string, error) {
 
 // fetch downloads the release's Linux archive and keeps its devvm as
 // Copy, once its SHA-256 is the one this devvm has: the archive is read
-// as it comes, devvm written to a temporary file beside Copy, which is
-// renamed into place only when it matches. A fetch that fails in a way
-// that may pass (fetch.Transient, or an archive cut short) is tried
-// again.
+// as it comes, and devvm is written in place, whole, only when it
+// matches. A fetch that fails in a way that may pass (fetch.Transient, or
+// an archive cut short) is tried again.
 func (f linuxFinder) fetch(ctx context.Context) error {
 	f.Info(msg.DockerLinuxBuildFetching(f.URL))
 	ctx, cancel := context.WithTimeout(ctx, linuxFetchTime)
 	defer cancel()
-	if err := os.MkdirAll(filepath.Dir(f.Copy), 0o700); err != nil {
-		return err
-	}
-	tmp := f.Copy + ".fetch"
-	defer func() { _ = os.Remove(tmp) }()
-	var sum string
+	var data []byte
 	err := fetch.Retry(ctx, linuxRetries, f.RetryDelay, func() (bool, error) {
 		body, err := fetch.Open(ctx, f.Client, f.URL)
 		if err != nil {
 			return fetch.Transient(err), err
 		}
 		defer func() { _ = body.Close() }()
-		sum, err = extractDevvm(io.LimitReader(body, linuxMax), tmp)
+		data, err = extractDevvm(io.LimitReader(body, linuxMax))
 		return !errors.Is(err, errArchive), err
 	})
 	if err != nil {
 		return msg.DockerLinuxBuildFetchFailed(f.URL).Because(err)
 	}
-	if !strings.EqualFold(sum, f.SHA256) {
+	if sum := sha256.Sum256(data); !strings.EqualFold(hex.EncodeToString(sum[:]), f.SHA256) {
 		return msg.DockerLinuxBuildMismatch(f.URL)
 	}
-	if err := os.Chmod(tmp, 0o700); err != nil { //nolint:gosec // a program, the user's alone
-
-		return err
-	}
-	return os.Rename(tmp, f.Copy)
+	return state.WriteFileMode(f.Copy, data, 0o700)
 }
 
-// extractDevvm writes the archive's devvm (a regular file named devvm, at
-// its top or in its one folder) to dst, mode 600, and returns its SHA-256.
-func extractDevvm(r io.Reader, dst string) (string, error) {
+// extractDevvm reads the archive's devvm: a regular file named devvm, at
+// its top or in its one folder.
+func extractDevvm(r io.Reader) ([]byte, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return "", fmt.Errorf("%w: none", errArchive)
+			return nil, fmt.Errorf("%w: none", errArchive)
 		} else if err != nil {
-			return "", err
+			return nil, err
 		}
 		name := path.Clean(strings.TrimPrefix(hdr.Name, "./"))
 		if hdr.Typeflag != tar.TypeReg || path.Base(name) != "devvm" || strings.Count(name, "/") > 1 {
 			continue
 		}
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own folder
+		data, err := io.ReadAll(io.LimitReader(tr, linuxMax+1))
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		h := sha256.New()
-		n, err := io.Copy(io.MultiWriter(out, h), io.LimitReader(tr, linuxMax+1))
-		if cerr := out.Close(); err == nil {
-			err = cerr
+		if len(data) > linuxMax {
+			return nil, fmt.Errorf("%w: more than %d bytes", errArchive, linuxMax)
 		}
-		if err != nil {
-			return "", err
-		}
-		if n > linuxMax {
-			return "", fmt.Errorf("%w: more than %d bytes", errArchive, linuxMax)
-		}
-		return hex.EncodeToString(h.Sum(nil)), nil
+		return data, nil
 	}
 }
 
@@ -205,32 +188,6 @@ func fileSum(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// copyFile copies src to dst whole, executable, through a temporary file
-// renamed over it.
-func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return err
-	}
-	in, err := os.Open(src) //nolint:gosec // devvm's own build
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	tmp := dst + ".tmp"
-	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700) //nolint:gosec // devvm's own folder
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
-		return err
-	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, dst)
 }
 
 // pinFlags is the start of the -X flags that set a release's Linux

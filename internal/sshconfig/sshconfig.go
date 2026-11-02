@@ -372,6 +372,8 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 	case !c.Confirm(msg.AddItNow()):
 		return false, nil
 	}
+	// The user's ~/.ssh, which may be a link (a dotfiles repo's): followed,
+	// as state.PrivateDir, for devvm's own folders, wouldn't.
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		return false, err
 	}

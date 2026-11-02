@@ -13,6 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 )
 
@@ -137,7 +138,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		return err
 	}
 	for name, data := range map[string][]byte{"mise.toml": config, "mise.lock": lock} {
-		if err := os.WriteFile(filepath.Join(build, name), data, 0o600); err != nil {
+		if err := state.WriteFile(filepath.Join(build, name), data); err != nil {
 			return err
 		}
 	}

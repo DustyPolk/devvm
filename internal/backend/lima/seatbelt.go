@@ -2,10 +2,11 @@ package lima
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // sandboxExec is macOS's sandbox-exec, by its full path: never one found
@@ -87,21 +88,5 @@ func sbString(s string) string {
 
 // writeProfile writes a VM's profile into the run folder, owner-only.
 func writeProfile(path string, p profile) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return writeFile(path, []byte(p.render()), 0o600)
-}
-
-// writeFile writes a file whole, through a temporary file renamed over it.
-func writeFile(path string, data []byte, mode os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, mode); err != nil { //nolint:gosec // devvm's own folders
-
-		return err
-	}
-	if err := os.Chmod(tmp, mode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return state.WriteFile(path, []byte(p.render()))
 }

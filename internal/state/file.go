@@ -4,8 +4,10 @@
 // Most are key=value files: one pair per line, split at the first '=', so
 // values may hold '=' but not newlines. Blank lines are skipped. Every write
 // replaces the whole file atomically (a temporary file, then a rename), so a
-// reader never sees half a file. Files are private to the user (0600), and
-// so are the folders devvm creates for them (0700).
+// reader never sees half a file. Files are private to the user (0600, or
+// 0700 for a program devvm runs: WriteFileMode), and so are the folders
+// devvm creates for them (0700: PrivateDir). Every file devvm writes
+// whole goes through WriteFile or WriteFileMode.
 package state
 
 import (
@@ -114,7 +116,8 @@ func checkPair(key, val string, validKey func(string) bool) error {
 
 // MakePrivate makes devvm's data and config folders, and makes both the
 // user's alone (mode 700) whatever mode they had, so nothing beneath them
-// is open to others.
+// is open to others. Unlike PrivateDir, it follows a link there: where
+// these two folders live is the user's choice, a dotfiles repo's say.
 func MakePrivate(d paths.Dirs) error {
 	for _, dir := range []string{d.Data, d.Config} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -127,13 +130,44 @@ func MakePrivate(d paths.Dirs) error {
 	return nil
 }
 
+// PrivateDir makes the folder path, with any folders above it that are
+// missing, and makes it the user's alone (mode 700) whatever mode it had.
+// Anything at path but a folder, a link to one included, is refused, so
+// the mode is never set on what a link points to.
+func PrivateDir(path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return err
+	}
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%s isn't a folder", path)
+	}
+	if fi.Mode().Perm() != 0o700 {
+		return os.Chmod(path, 0o700) //nolint:gosec // a folder: owner-only with search
+	}
+	return nil
+}
+
 // WriteFile replaces path with data atomically, readable only by the
 // user, creating its folder (0700) when it's missing.
 func WriteFile(path string, data []byte) error { return writeFile(path, data) }
 
-// writeFile replaces path with data atomically, creating its folder (0700)
-// when it's missing.
-func writeFile(path string, data []byte) error {
+// WriteFileMode replaces path with data atomically, as WriteFile does, with
+// mode's permissions: 0o700 for a program devvm runs.
+func WriteFileMode(path string, data []byte, mode os.FileMode) error {
+	return writeFileMode(path, data, mode.Perm())
+}
+
+// writeFile replaces path with data atomically, mode 600, creating its
+// folder (0700) when it's missing.
+func writeFile(path string, data []byte) error { return writeFileMode(path, data, 0o600) }
+
+// writeFileMode replaces path with data atomically, mode perm, creating
+// its folder (0700) when it's missing.
+func writeFileMode(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -144,6 +178,9 @@ func writeFile(path string, data []byte) error {
 	}
 	tmp := f.Name()
 	_, err = f.Write(data)
+	if err == nil && perm != 0o600 { // CreateTemp makes it 600
+		err = f.Chmod(perm)
+	}
 	if err == nil {
 		err = f.Sync()
 	}

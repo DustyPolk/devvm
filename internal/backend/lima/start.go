@@ -76,10 +76,7 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 		}
 	}
 	// Its profile, wrapper and records: the user's alone.
-	if err := os.MkdirAll(l.Dirs.Run(), 0o700); err != nil {
-		return err
-	}
-	if err := os.Chmod(l.Dirs.Run(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+	if err := state.PrivateDir(l.Dirs.Run()); err != nil {
 		return err
 	}
 	wrap, env, err := l.confine(vm, c, sshPort, in.backend().AgentForwarding)
@@ -346,10 +343,7 @@ func (l *Lima) recordStart(vm string, n backend.Net) error {
 	} else if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(l.Dirs.Run(), 0o700); err != nil {
-		return err
-	}
-	return writeFile(l.startedFile(vm), fmt.Appendf(nil, "%s %d\n", strings.TrimSpace(string(pid)), n), 0o600)
+	return state.WriteFile(l.startedFile(vm), fmt.Appendf(nil, "%s %d\n", strings.TrimSpace(string(pid)), n))
 }
 
 // Confined reports whether the VM runs on the hostagent Start started

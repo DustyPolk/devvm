@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"sync"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // Call is one call to the fake: the method's name and its arguments after
@@ -182,7 +182,7 @@ func (f *Fake) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	}
 	for i := 2; i < len(spec.Args); i += 3 {
 		file := spec.Args[i]
-		if err := os.WriteFile(filepath.Join(spec.Out, file), []byte("image "+file+"\n"), 0o600); err != nil {
+		if err := state.WriteFile(filepath.Join(spec.Out, file), []byte("image "+file+"\n")); err != nil {
 			return err
 		}
 	}

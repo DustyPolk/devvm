@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // shortDir is a folder whose paths are short enough for sockets: a test's
@@ -132,21 +133,12 @@ func TestLinkFiles(t *testing.T) {
 // closing it removes it.
 func TestListenSocket(t *testing.T) {
 	dir := filepath.Join(shortDir(t), "run")
-	if err := os.Mkdir(dir, 0o755); err != nil { //nolint:gosec // the mode runDir corrects
+	if err := state.PrivateDir(dir); err != nil {
 		t.Fatal(err)
-	}
-	if err := runDir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != 0o700 {
-		t.Fatalf("run folder: %v, %v", fi.Mode(), err)
 	}
 	file := filepath.Join(dir, "f")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
-	}
-	if err := runDir(file); err == nil {
-		t.Error("runDir on a file")
 	}
 	if _, err := listenSocket(t.Context(), file); err == nil {
 		t.Error("a file replaced")

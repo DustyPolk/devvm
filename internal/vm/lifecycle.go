@@ -194,13 +194,14 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
-		return err
-	}
-	if filepath.Dir(file) == e.Dirs.Exports() {
-		if err := os.Chmod(e.Dirs.Exports(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
+	// devvm's exports folder is the user's alone; a folder the user named
+	// keeps its mode.
+	if dir := filepath.Dir(file); dir == e.Dirs.Exports() {
+		if err := state.PrivateDir(dir); err != nil {
 			return err
 		}
+	} else if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
 	}
 	out, err := os.CreateTemp(filepath.Dir(file), ".devvm-export-*")
 	if err != nil {
