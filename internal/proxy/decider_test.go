@@ -183,8 +183,17 @@ func TestDecider(t *testing.T) {
 	if v, _ := ask(bytes.Repeat([]byte{1}, 32), to, req, ""); v != -1 {
 		t.Errorf("without the token: %d", v)
 	}
-	b, _ := os.ReadFile(logFile) //nolint:gosec // the test's own file
-	if !strings.Contains(string(b), `"event":"blocked","host":"1.1.1.1","port":443,"method":"TCP"`) ||
+	// The refusals are logged as they're answered, so wait for the last one checked.
+	blocked := `"event":"blocked","host":"1.1.1.1","port":443,"method":"TCP"`
+	var b []byte
+	for range 200 {
+		b, _ = os.ReadFile(logFile) //nolint:gosec // the test's own file
+		if strings.Contains(string(b), blocked) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(string(b), blocked) ||
 		!strings.Contains(string(b), `"refused":true`) || strings.Contains(string(b), `"host":"100.96.0.1","port":3128`) {
 		t.Errorf("event log = %s", b)
 	}
