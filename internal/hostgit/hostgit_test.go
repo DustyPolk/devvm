@@ -151,6 +151,27 @@ func TestCommandNoConfigHooks(t *testing.T) {
 	}
 }
 
+// Command's git reaches only ssh, even when the repo's config allows
+// another protocol by its own key (protocol.ext.allow) and rewrites the
+// VM's URL to it.
+func TestCommandSSHOnly(t *testing.T) {
+	dir := repo(t)
+	_, ran := marker(t)
+	git(t, dir, "config", "protocol.ext.allow", "always")
+	git(t, dir, "config", "protocol.file.allow", "always")
+	git(t, dir, "config", "url.ext::sh -c touch% "+ran+"% #.insteadOf", "vm:")
+	git(t, dir, "config", "url.ext::sh -c touch% "+ran+"% #.pushInsteadOf", "vm:")
+	for _, args := range [][]string{{"push", "-q", "vm:/x", "HEAD"}, {"fetch", "-q", "vm:/x"}, {"fetch", "-q", t.TempDir()}} {
+		out, err := Command(t.Context(), append([]string{"-C", dir}, args...)...).CombinedOutput()
+		if ranOnce(ran) {
+			t.Errorf("git %v ran the repo's ext:: command", args)
+		}
+		if err == nil {
+			t.Errorf("git %v: reached a protocol that isn't ssh\n%s", args, out)
+		}
+	}
+}
+
 // Command's git fetches nothing for a repo that says it's a partial
 // clone, so neither its core.sshCommand nor ssh runs for an object it
 // lacks.

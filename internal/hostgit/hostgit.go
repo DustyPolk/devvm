@@ -82,14 +82,16 @@ func Status(ctx context.Context, dir string, args ...string) *exec.Cmd {
 
 // command is git with args and the config pairs kv, given in the
 // environment (GIT_CONFIG_COUNT), where a key holds any character. It
-// fetches no missing object of a repo that says it's a partial clone
+// reaches ssh alone (GIT_ALLOW_PROTOCOL), whatever protocol.NAME.allow a
+// repo's config sets, which would beat protocol.allow. It fetches no
+// missing object of a repo that says it's a partial clone
 // (GIT_NO_LAZY_FETCH), and its ssh is false, which reaches nothing, in
 // place of a repo's core.sshCommand, unless the caller sets
 // GIT_SSH_COMMAND after it; that ssh is ssh's own (GIT_SSH_VARIANT),
 // whatever the repo's ssh.variant says.
 func command(ctx context.Context, kv [][2]string, args []string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // devvm's own arguments
-	env := append(environ(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_NO_LAZY_FETCH=1",
+	env := append(environ(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_NO_LAZY_FETCH=1", "GIT_ALLOW_PROTOCOL=ssh",
 		"GIT_SSH_COMMAND=false", "GIT_SSH_VARIANT=ssh", "GIT_CONFIG_COUNT="+strconv.Itoa(len(kv)))
 	for i, p := range kv {
 		n := strconv.Itoa(i)

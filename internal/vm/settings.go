@@ -86,20 +86,22 @@ func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *foun
 
 // checkGit is what devvm stop and each launch of an existing VM do for
 // its project folder, unless it's a --clone VM, which mounts none of it:
-// once the VM is stopped, the .git protection chosen while it ran is set;
-// then .git is checked (gitprotect's Check) and, on Linux, set-id files.
+// .git is checked (gitprotect's Check) under the protection the VM ran
+// with, so what it changed meanwhile is named; then, once the VM is
+// stopped, the protection chosen while it ran is set, and on Linux
+// set-id files are checked.
 func checkGit(ctx context.Context, e *Env, t *found, running bool) error {
 	if isClone(t.st) {
 		return nil
 	}
 	p := e.Protector(t.f.Dir)
+	if err := p.Check(ctx, t.st, running); err != nil {
+		return err
+	}
 	if next := gitprotect.Next(t.st); next != "" && !running {
 		if err := setGitProtect(ctx, e, p, t, next); err != nil {
 			return err
 		}
-	}
-	if err := p.Check(ctx, t.st, running); err != nil {
-		return err
 	}
 	e.checkSetID(t.f.Dir)
 	return nil

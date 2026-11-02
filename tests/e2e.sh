@@ -725,7 +725,9 @@ lk_not() { ! "$@"; }
 # lk_end VM ADDR PORT ends it. lk_serve VM WORD PORTS...: the helper written to the VM, and a server
 # on its 127.0.0.1 on each port, answering WORD-PORT.
 lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid
-  lk_root "$1" "rm -f $f" && lk_bg "$1" "perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-}" && lk_until 20 lk_root "$1" "test -s $f"; }
+  if ! { lk_root "$1" "rm -f $f" && lk_bg "$1" "perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-}" && lk_until 20 lk_root "$1" "test -s $f"; }; then
+    echo "the helper's $2 on $3:$4 in $1 didn't start in 20s"; return 1
+  fi; }
 lk_end() { lk_root "$1" "f=/var/tmp/e2e-link-$2-$3.pid; [ ! -s \$f ] || kill \$(cat \$f); rm -f \$f"; }
 lk_serve() { local vm=$1 w=$2 p; shift 2
   printf '%s\n' "$lk_pl" | lk_put "$vm" /var/tmp/e2e-link.pl || return 1
@@ -1163,8 +1165,11 @@ gp_publish() {
     lk_said "==> group_links_added group=$lk_g links=$lk_n2:47245 vm=$lk_v1" &&
     lk_said "==> group_links_added group=$lk_g links=$lk_n2:47245 vm=$lk_vc" || return 1
   lk_until 15 lk_gets "$lk_v1" "$lk_n2" 47245 "$lk_w2-47245" && lk_until 15 lk_gets "$lk_vc" "$lk_n2" 47245 "$lk_w2-47245"; }
+# Only a member is refused: outside the group, network on would turn the second target's policy on,
+# failing the checks after this one that need it off.
 gp_refused() {
-  ! lk_dv "$lk_p2" network on && lk_said "devvm: group_policy_mixed group=$lk_g vm=$lk_v2" && grep -qx net=off "$vms/$lk_v2" &&
+  grep -qx "group=$lk_g" "$vms/$lk_v2" || { echo "$lk_v2 isn't in $lk_g: network on not tried"; return 1; }
+  ! lk_dv "$lk_p2" network on &&lk_said "devvm: group_policy_mixed group=$lk_g vm=$lk_v2" && grep -qx net=off "$vms/$lk_v2" &&
     ! lk_dv "$lk_p2" group join "${lk_x}other" && lk_said "devvm: group_other group=$lk_g vm=$lk_v2" &&
     ! lk_dv "$lk_pc" link rm "$lk_n2" 47240 && lk_said "devvm: link_from_group group=$lk_g name=$lk_n2 port=47240 vm=$lk_vc"; }
 # Each leaves, whatever comes of the checks, so the sections after run without a group.

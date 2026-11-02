@@ -61,6 +61,20 @@ stdout '^chflags -R -P uchg /\S*/web/\.git/config\n(.*\n)*limactl .*start'
 exec devvm git-protect
 stdout '\Aon\n\z'
 
+# A .git the VM replaced while it ran is named when it stops, before the
+# mode saved meanwhile is set and takes .git as it is.
+exec devvm git-protect strict
+stdout '^==> git_protect_next_stop mode=strict vm=devvm-web-[0-9a-f]{14}$'
+mv .git .git-old
+exec git init -q
+exec devvm stop
+stderr '^devvm: git_replaced git=\S*/web/\.git$'
+stdout '^==> git_locked_strict vm=devvm-web-[0-9a-f]{14}$'
+exec devvm
+exec devvm git-protect
+stdout '\Astrict\n\z'
+rm .git-old
+
 # Stopped: strict sets diff.ignoreSubmodules with .git/config unlocked,
 # then locks .git again.
 exec sh -c 'limactl stop "$(basename "$VMS"/devvm-web-*)"'

@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -26,10 +27,6 @@ import (
 // retainEvery is how often devvm's commands apply the retention settings
 // on their own (devvm gc --retention applies them at once).
 const retainEvery = 24 * time.Hour
-
-// retainLockAge is how old the retention lock is when the devvm holding
-// it is taken to have died.
-const retainLockAge = 10 * time.Minute
 
 // newRetentionCmd is devvm retention [KEY=VALUE...]: the retention
 // settings, shown bare.
@@ -316,24 +313,22 @@ func touchRetention(d paths.Dirs) {
 	}
 }
 
-// lockRetention holds retention's lock, a folder; false when another
-// devvm holds it. A lock older than retainLockAge is a dead devvm's.
+// retentionLock is the file the devvm applying the retention settings
+// locks (lockRetention): retention.lock in devvm's data folder.
+func retentionLock(d paths.Dirs) string { return filepath.Join(d.Data, "retention.lock") }
+
+// lockRetention holds retention's lock (retentionLock) without waiting;
+// false when another devvm holds it. It's an OS file lock, so a devvm
+// that crashed or was killed never leaves it held.
 func lockRetention(d paths.Dirs) (unlock func(), ok bool) {
-	lock := d.RetentionRun() + ".lock"
 	if err := os.MkdirAll(d.Data, 0o700); err != nil {
 		return nil, false
 	}
-	if err := os.Mkdir(lock, 0o700); err != nil {
-		fi, serr := os.Stat(lock)
-		if serr != nil || time.Since(fi.ModTime()) < retainLockAge {
-			return nil, false
-		}
-		_ = os.Remove(lock)
-		if os.Mkdir(lock, 0o700) != nil {
-			return nil, false
-		}
+	unlock, ok, err := platform.TryLockFile(retentionLock(d))
+	if err != nil || !ok {
+		return nil, false
 	}
-	return func() { _ = os.Remove(lock) }, true
+	return unlock, true
 }
 
 // skipsRetention reports whether a command never applies retention on its

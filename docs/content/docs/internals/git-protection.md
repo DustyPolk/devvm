@@ -19,7 +19,7 @@ devvm locks these paths:
 
 ### When devvm locks
 
-devvm locks when it creates the VM, and again on each launch that finds the VM stopped and on `devvm stop`, so nothing in the VM can race the locks. A running VM keeps the locks it had, and `devvm stop` or the next launch that finds the VM stopped, such as `devvm restart`, sets new ones. `devvm git-protect` on a running VM saves the mode in the VM's state (`git_protect_next`), and the same places set it first, then check `.git` under the new mode.
+devvm locks when it creates the VM, and again on each launch that finds the VM stopped and on `devvm stop`, so nothing in the VM can race the locks. A running VM keeps the locks it had, and `devvm stop` or the next launch that finds the VM stopped, such as `devvm restart`, sets new ones. `devvm git-protect` on a running VM saves the mode in the VM's state (`git_protect_next`). The same places first check `.git` under the mode the VM ran with, so a `.git` that the VM replaced meanwhile is still named (`git_replaced`), and then set the new mode, which locks `.git` as it is then.
 
 A new VM that's interrupted before its first shell is deleted, and devvm takes its locks off. When `devvm rm` deletes a VM, devvm also takes its locks off.
 
@@ -53,7 +53,7 @@ devvm's own git commands on the host run no program that a repo's config or `.gi
 - `core.fsmonitor=false`, `core.hooksPath=/dev/null` and `core.alternateRefsCommand=true`, so git runs no fsmonitor, no hook from a hooks folder and no command for an alternate object store's refs.
 - `hook.EVENT.enabled=false` for every event githooks(5) lists, and `hook.NAME.enabled=false` for each hook the repo's config names, so git 2.54 and newer run no hook that a config defines.
 - `filter.NAME.clean`, `smudge` and `process` emptied, and `filter.NAME.required=false`, for each filter driver the repo's config names, so git hashes files without running a filter and doesn't fail on a required one.
-- `protocol.allow=never` and `protocol.ssh.allow=always`, so git reaches nothing but ssh, not a path, `file://`, `ext::`, `git://` or `http`.
+- `protocol.allow=never` and `protocol.ssh.allow=always`, so git reaches nothing but ssh, not a path, `file://`, `ext::`, `git://` or `http`. A repo's config could still allow one protocol by its own key, such as `protocol.ext.allow=always`, which git takes over `protocol.allow`, so devvm also sets `GIT_ALLOW_PROTOCOL=ssh`, which git takes over every `protocol` setting.
 - `maintenance.auto=false` and `gc.auto=0`, so a fetch starts no maintenance or gc.
 
 Its ssh is `false`, which reaches nothing, in place of a repo's `core.sshCommand` (`GIT_SSH_COMMAND=false`, with `GIT_SSH_VARIANT=ssh` over a repo's `ssh.variant`), unless the command is a `--clone` VM's push or fetch, and it fetches nothing lazily (`GIT_NO_LAZY_FETCH=1`), so a repo that says it's a partial clone can't make `git rev-list` or `git status` connect anywhere for an object it lacks.

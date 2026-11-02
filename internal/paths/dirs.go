@@ -187,8 +187,7 @@ func (d Dirs) Backend() string { return filepath.Join(d.Config, "backend") }
 // and after how long.
 func (d Dirs) Retention() string { return filepath.Join(d.Config, "retention") }
 
-// RetentionRun is touched when retention last ran, and held (a folder)
-// while it runs.
+// RetentionRun is touched when retention last ran.
 func (d Dirs) RetentionRun() string { return filepath.Join(d.Data, "retention.run") }
 
 // Layers holds the user's own layers.

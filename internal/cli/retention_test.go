@@ -40,7 +40,7 @@ func TestExportsToRetire(t *testing.T) {
 }
 
 // Retention runs at most once a day, again at once after the clock went
-// back, and never in two devvms at once.
+// back, and never in two devvms at once, however long one takes.
 func TestRetainDueAndLock(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
 	now := time.Now()
@@ -64,16 +64,19 @@ func TestRetainDueAndLock(t *testing.T) {
 	if _, ok := lockRetention(d); ok {
 		t.Error("second lock taken while the first is held")
 	}
-	unlock()
-	if _, ok := lockRetention(d); !ok {
-		t.Error("lock refused once released")
-	}
-	// A dead devvm's lock is taken over.
+	// However long a devvm has held it, another doesn't take it over.
 	old := now.Add(-time.Hour)
-	if err := os.Chtimes(d.RetentionRun()+".lock", old, old); err != nil {
+	if err := os.Chtimes(retentionLock(d), old, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := lockRetention(d); !ok {
-		t.Error("a dead devvm's lock wasn't taken over")
+	if _, ok := lockRetention(d); ok {
+		t.Error("an hour-old lock taken while its devvm holds it")
+	}
+	unlock()
+	unlock, ok = lockRetention(d)
+	if !ok {
+		t.Error("lock refused once released")
+	} else {
+		unlock()
 	}
 }
