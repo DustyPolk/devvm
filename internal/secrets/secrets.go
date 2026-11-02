@@ -251,7 +251,7 @@ func (s *Store) Save(ctx context.Context, name, value string) error {
 		if err := os.Chmod(s.Dirs.Secrets(), 0o700); err != nil { //nolint:gosec // a folder: owner-only with search
 			return err
 		}
-		return writeFile(s.File(name), []byte(value+"\n"))
+		return state.WriteFile(s.File(name), []byte(value+"\n"))
 	}
 	svc, err := s.Service()
 	if err != nil {
@@ -269,6 +269,14 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		return ErrNone
 	}
 	if !s.Keychain {
+		// A save that never finished leaves its value in a temporary file
+		// (state.WriteFile's, .<name>.tmp-*): gone with the secret.
+		tmps, _ := filepath.Glob(filepath.Join(s.Dirs.Secrets(), "."+name+".tmp-*"))
+		for _, f := range tmps {
+			if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
 		if err := os.Remove(s.File(name)); errors.Is(err, os.ErrNotExist) {
 			return ErrNone
 		} else if err != nil {
@@ -484,25 +492,12 @@ func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, login
 	if err := os.MkdirAll(s.Dirs.Run(), 0o700); err != nil {
 		return err
 	}
-	if err := writeFile(BindingsFile(s.Dirs, st.Name()), append(data, '\n')); err != nil {
+	if err := state.WriteFile(BindingsFile(s.Dirs, st.Name()), append(data, '\n')); err != nil {
 		return err
 	}
 	var pol []byte
 	for _, h := range hosts {
 		pol = append(pol, h+"\n"...)
 	}
-	return writeFile(PolicyFile(s.Dirs, st.Name()), pol)
-}
-
-// writeFile writes a file whole and owner-only, through a temporary file
-// renamed over it.
-func writeFile(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return state.WriteFile(PolicyFile(s.Dirs, st.Name()), pol)
 }

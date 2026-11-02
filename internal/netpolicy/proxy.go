@@ -193,11 +193,17 @@ func (p *Proxy) Forget(vm string) error {
 	if err := os.Remove(VMPolicyFile(p.Dirs, vm)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	// Its files, and the temporary files of a write that never finished
+	// (state.WriteFile's, named .<file>.tmp-*).
 	files, err := filepath.Glob(filepath.Join(p.Dirs.Run(), vm+".*"))
 	if err != nil {
 		return err
 	}
-	for _, f := range files {
+	tmps, err := filepath.Glob(filepath.Join(p.Dirs.Run(), "."+vm+".*.tmp-*"))
+	if err != nil {
+		return err
+	}
+	for _, f := range append(files, tmps...) {
 		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -416,7 +422,7 @@ func (p *Proxy) writeUpstream(vm string, cas, upstream []byte) error {
 			}
 			continue
 		}
-		if err := writeFile(path, f.data); err != nil {
+		if err := state.WriteFile(path, f.data); err != nil {
 			return err
 		}
 	}
@@ -429,7 +435,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	// The password and the decider's token go in files: a process's
 	// arguments are visible to other users.
 	auth := p.run(vm, ".auth")
-	if err := writeFile(auth, []byte(conf.ProxyPassword+"\n")); err != nil {
+	if err := state.WriteFile(auth, []byte(conf.ProxyPassword+"\n")); err != nil {
 		return err
 	}
 	var decider []string
@@ -439,7 +445,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 			return fmt.Errorf("%s: no proxy address in the VM", vm)
 		}
 		tok := p.run(vm, ".decider")
-		if err := writeFile(tok, []byte(conf.DeciderToken+"\n")); err != nil {
+		if err := state.WriteFile(tok, []byte(conf.DeciderToken+"\n")); err != nil {
 			return err
 		}
 		decider = []string{"-decider", conf.Decider, "-decider-to", u.Host, "-decider-token-file", tok}
@@ -484,7 +490,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		return err
 	}
 	for _, f := range [][2]string{{".pid", strconv.Itoa(pid)}, {".policy", files}, {".bin", bin}, {".ca", caSum}} {
-		if err := writeFile(p.run(vm, f[0]), []byte(f[1]+"\n")); err != nil {
+		if err := state.WriteFile(p.run(vm, f[0]), []byte(f[1]+"\n")); err != nil {
 			return err
 		}
 	}
@@ -633,17 +639,4 @@ func read(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(b))
-}
-
-// writeFile writes a file whole and owner-only, through a temporary file
-// renamed over it.
-func writeFile(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
 }

@@ -616,12 +616,14 @@ func (e spaceEnv) retainOf(keys ...string) string {
 }
 
 // leftoverFiles are the files devvm keeps for a VM besides its logs: its
-// state, its run files and its backends' records.
+// state, its run files and its backends' records, with the temporary files
+// of a write that never finished (.<file>.tmp-*).
 func leftoverFiles(d paths.Dirs, vm string) []string {
 	files := []string{d.VMState(vm)}
 	for _, dir := range []string{d.Run(), d.LimaVMs(), filepath.Join(d.Smolvm(), "vms"), filepath.Join(d.Docker(), "vms")} {
 		m, _ := filepath.Glob(filepath.Join(dir, vm+".*"))
-		files = append(files, m...)
+		tmps, _ := filepath.Glob(filepath.Join(dir, "."+vm+".*.tmp-*"))
+		files = append(append(files, m...), tmps...)
 	}
 	return files
 }

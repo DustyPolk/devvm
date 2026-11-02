@@ -92,14 +92,16 @@ func TestEntriesIn(t *testing.T) {
 	}
 }
 
-// Leftovers are a VM's state, run files and backend records, never
-// another VM's whose name starts the same.
+// Leftovers are a VM's state, run files and backend records, with the
+// temporary files of its unfinished writes, never another VM's whose name
+// starts the same.
 func TestLeftoverFiles(t *testing.T) {
 	dir := t.TempDir()
 	d := paths.Dirs{Data: dir}
 	files := []string{
 		d.VMState("devvm-a-1"), filepath.Join(d.Run(), "devvm-a-1.proxy.pid"), filepath.Join(d.LimaVMs(), "devvm-a-1.ports"),
-		filepath.Join(d.Run(), "devvm-a-12.proxy.pid"),
+		filepath.Join(d.Run(), ".devvm-a-1.proxy.auth.tmp-123"), filepath.Join(d.Run(), "devvm-a-12.proxy.pid"),
+		filepath.Join(d.Run(), ".devvm-a-12.proxy.auth.tmp-123"),
 	}
 	for _, f := range files {
 		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
@@ -110,7 +112,7 @@ func TestLeftoverFiles(t *testing.T) {
 		}
 	}
 	got := leftoverFiles(d, "devvm-a-1")
-	if len(got) != 3 || strings.Contains(strings.Join(got, " "), "devvm-a-12") {
+	if len(got) != 4 || strings.Contains(strings.Join(got, " "), "devvm-a-12") {
 		t.Errorf("leftoverFiles = %v", got)
 	}
 }

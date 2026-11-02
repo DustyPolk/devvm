@@ -707,6 +707,67 @@ func TestPrepareCAFails(t *testing.T) {
 	}
 }
 
+// Two devvm runs writing a VM's proxy files at once each write them whole:
+// neither fails, and no temporary file is left.
+func TestWriteUpstreamAtOnce(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	if err := os.MkdirAll(d.Run(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 200)
+	for i := range 4 {
+		wg.Go(func() {
+			for range 50 {
+				errs <- p.writeUpstream(st.Name(), []byte("cas "+strconv.Itoa(i)), []byte("up "+strconv.Itoa(i)))
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("writeUpstream: %v", err)
+		}
+	}
+	es, _ := os.ReadDir(d.Run())
+	var left []string
+	for _, e := range es {
+		left = append(left, e.Name())
+	}
+	if want := []string{st.Name() + ".proxy.cas", st.Name() + ".proxy.upstream"}; !slices.Equal(left, want) {
+		t.Errorf("the run folder holds %q; want %q", left, want)
+	}
+	up := p.run(st.Name(), ".upstream")
+	b, err := os.ReadFile(up) //nolint:gosec // the test's own folder
+	if fi, serr := os.Stat(up); err != nil || serr != nil || fi.Mode().Perm() != 0o600 || !regexp.MustCompile(`\Aup [0-3]\z`).Match(b) {
+		t.Errorf("upstream file %q (%v), mode %v (%v)", b, err, fi, serr)
+	}
+}
+
+// A proxy file that can't be written fails the start and leaves no
+// temporary file behind.
+func TestPrepareWriteFails(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	// A folder where the password goes: renaming over it fails.
+	auth := filepath.Join(d.Run(), st.Name()+".proxy.auth")
+	if err := os.MkdirAll(filepath.Join(auth, "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var le *os.LinkError
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); !errors.As(err, &le) || le.New != auth {
+		t.Fatalf("Prepare: %v; want the password's rename failing", err)
+	}
+	es, _ := os.ReadDir(d.Run())
+	for _, e := range es {
+		if strings.Contains(e.Name(), "tmp") {
+			t.Errorf("left in the run folder: %s", e.Name())
+		}
+	}
+}
+
 // PID names only a process running as the VM's proxy.
 func TestPID(t *testing.T) {
 	d, st := sandbox(t, "base")
@@ -737,7 +798,9 @@ func TestForget(t *testing.T) {
 	}
 	pid, _ := p.PID(st.Name())
 	other := filepath.Join(d.Run(), "devvm-other-0123456789abcd.sb")
-	for _, f := range []string{VMPolicyFile(d, st.Name()), other} {
+	// A write that never finished left its temporary file.
+	tmp := filepath.Join(d.Run(), "."+st.Name()+".proxy.auth.tmp-123")
+	for _, f := range []string{VMPolicyFile(d, st.Name()), other, tmp} {
 		if err := os.WriteFile(f, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -748,6 +811,9 @@ func TestForget(t *testing.T) {
 	left, _ := filepath.Glob(filepath.Join(d.Run(), st.Name()+".*"))
 	if _, err := os.Stat(VMPolicyFile(d, st.Name())); !errors.Is(err, os.ErrNotExist) || len(left) > 0 {
 		t.Errorf("left: %q, policy %v", left, err)
+	}
+	if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a temporary file left: %v", err)
 	}
 	if _, err := os.Stat(other); err != nil {
 		t.Errorf("another VM's file: %v", err)

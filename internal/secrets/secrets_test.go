@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
@@ -396,4 +398,82 @@ func TestVMCopies(t *testing.T) {
 	if _, _, err := Redact("toml", []byte("x = \"\"\"\nmulti\n\"\"\"\n")); err == nil {
 		t.Error("Redact took a multi-line TOML string")
 	}
+}
+
+// Two saves of one secret at once each write it whole: neither fails, and
+// the file holds one of their values, with no temporary file left.
+func TestSaveAtOnce(t *testing.T) {
+	ctx := t.Context()
+	s, _ := testStore(t, false, nil)
+	var wg sync.WaitGroup
+	errs := make(chan error, 200)
+	for i := range 4 {
+		wg.Go(func() {
+			for range 50 {
+				errs <- s.Save(ctx, "github", "ghp_"+strconv.Itoa(i))
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+	if v, _ := s.Value(ctx, "github"); !slices.Contains([]string{"ghp_0", "ghp_1", "ghp_2", "ghp_3"}, v) {
+		t.Errorf("Value = %q", v)
+	}
+	if left := dirNames(t, s.Dirs.Secrets()); !slices.Equal(left, []string{"github"}) {
+		t.Errorf("the secrets folder holds %q", left)
+	}
+	if fi, err := os.Stat(s.File("github")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("the secret's file: %v, %v", fi, err)
+	}
+	// A save that never finished left a temporary file: Delete takes it too.
+	if err := os.WriteFile(filepath.Join(s.Dirs.Secrets(), ".github.tmp-123"), []byte("ghp_x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete(ctx, "github"); err != nil {
+		t.Fatal(err)
+	}
+	if left := dirNames(t, s.Dirs.Secrets()); len(left) > 0 {
+		t.Errorf("after Delete, the secrets folder holds %q", left)
+	}
+}
+
+// A VM's files that can't be written leave no temporary file behind.
+func TestWriteFilesFailing(t *testing.T) {
+	s, kc := testStore(t, true, nil)
+	kc["devvm/github"] = "ghp_secret"
+	st, err := state.CreateVM(s.Dirs, "vm1", state.NewVM{Image: "base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = st.Set(KeySecrets, "github")
+	// A folder where the bindings go: renaming over it fails.
+	in := filepath.Join(BindingsFile(s.Dirs, "vm1"), "x")
+	if err := os.MkdirAll(in, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var le *os.LinkError
+	if err := s.WriteFiles(t.Context(), st, strings.Repeat("ab", 16)); !errors.As(err, &le) || le.New != BindingsFile(s.Dirs, "vm1") {
+		t.Fatalf("WriteFiles over a folder: %v; want its rename failing", err)
+	}
+	if left := dirNames(t, s.Dirs.Run()); !slices.Equal(left, []string{filepath.Base(BindingsFile(s.Dirs, "vm1"))}) {
+		t.Errorf("the run folder holds %q", left)
+	}
+}
+
+func dirNames(t *testing.T, dir string) []string {
+	t.Helper()
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range es {
+		out = append(out, e.Name())
+	}
+	return out
 }
