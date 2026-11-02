@@ -110,7 +110,7 @@ func TestStartSSH(t *testing.T) {
 	}
 	s.stubs.Reset(t)
 	c := backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: 3128, ProxyUser: "devvm", ProxyPassword: "pw", SSH: true, SSHPort: 61022,
+		Net: backend.NetProxy, ProxyPort: 3128, ProxyUser: "devvm", ProxyPassword: "proxy-pass!", SSH: true, SSHPort: 61022,
 		Env: map[string]string{"NO_PROXY": "localhost"}, Decider: "127.0.0.1:4000", DeciderToken: strings.Repeat("ab", 32),
 	}
 	if err := s.Start(t.Context(), vm, c); msg.NamesOf(err) != "smolvm_ssh_port_forwarded port=61022 vm="+vm {
@@ -125,7 +125,8 @@ func TestStartSSH(t *testing.T) {
 		!strings.HasSuffix(got[len(got)-2], " -i -- sh -s -- ssh u "+pub+" HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY") {
 		t.Errorf("network policy: %q", got)
 	}
-	if strings.Contains(strings.Join(got, " "), "pw") {
+	// The password has a "!", so no key's base64 or temp path holds it by chance.
+	if strings.Contains(strings.Join(got, " "), "proxy-pass!") {
 		t.Error("the password is in smolvm's arguments")
 	}
 
