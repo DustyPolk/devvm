@@ -56,7 +56,7 @@ Run the tasks with `mise run <task>`:
 | `docs` | generates the CLI reference, then serves the docs site |
 | `e2e` | runs the end-to-end tests against real VMs |
 
-`mise run test` needs a C compiler for the race detector: Xcode Command Line Tools on macOS, gcc on Linux.
+`mise run test` needs a C compiler for the race detector: Xcode Command Line Tools on macOS, gcc on Linux. It gives each package 30 minutes rather than go test's 10, because the CLI tests run the built binary against many stubs and take far longer on a busy machine.
 
 Before and after every change, `mise run fmt && mise run lint && mise run test` must pass.
 
