@@ -3,7 +3,7 @@
 # Alpine image (oci/build.sh). Adds what a container lacks: a kernel and initramfs, an init
 # system, cloud-init (applies Lima's cidata: SSH key, guest agent, mounts, ports), sshd and sudo.
 # Pre-creates the Lima guest user (USER_NAME/USER_UID/USER_HOME in the environment) so later layers
-# can install into its home. Writes the kernel command line the image needs to /etc/devvm/cmdline.
+# can install into its home, in place of an image's own user with that uid. Writes the kernel command line the image needs to /etc/devvm/cmdline.
 set -eu
 # shellcheck source=/dev/null
 . /etc/os-release
@@ -52,6 +52,10 @@ if [ "$family" = debian ]; then
   # Keep the image's apt sources: cloud-init would otherwise rewrite them.
   printf 'datasource_list: [ NoCloud, None ]\napt:\n  preserve_sources_list: true\n' > /etc/cloud/cloud.cfg.d/90-devvm.cfg
   echo "root=/dev/vda rw console=hvc0" > /etc/devvm/cmdline
+  # Another user with the uid (Ubuntu's own ubuntu, 1000, a Linux host's usual uid) goes: files are
+  # told apart by uid.
+  other=$(getent passwd "$USER_UID" | cut -d: -f1 || true)
+  if [ -n "$other" ] && [ "$other" != "$USER_NAME" ]; then userdel -r "$other" 2>/dev/null || userdel "$other"; fi
   useradd --create-home --home-dir "$USER_HOME" --uid "$USER_UID" --shell /bin/bash "$USER_NAME"
 else
   apk add --no-cache linux-virt mkinitfs alpine-base openrc cloud-init e2fsprogs e2fsprogs-extra \
@@ -66,6 +70,8 @@ else
   setup-cloud-init
   echo 'datasource_list: [ NoCloud, None ]' > /etc/cloud/cloud.cfg.d/90-devvm.cfg
   echo "root=/dev/vda rootfstype=ext4 rw console=hvc0 modules=virtio_blk,ext4" > /etc/devvm/cmdline
+  other=$(getent passwd "$USER_UID" | cut -d: -f1 || true)
+  if [ -n "$other" ] && [ "$other" != "$USER_NAME" ]; then deluser --remove-home "$other"; fi
   adduser -D -h "$USER_HOME" -u "$USER_UID" -s /bin/bash "$USER_NAME"
   usermod -p '*' "$USER_NAME"   # no password, but not "locked" (sshd refuses locked accounts)
 fi
