@@ -138,7 +138,9 @@ type targetRun struct {
 // targetRuns shares targets' runs among a link session's connections: one
 // lookup in flight for each target, its answer reused for For after it
 // ends (none when For is 0). A connection whose context ends while it
-// waits finds the target stopped.
+// waits, or while its own lookup runs, finds the target stopped; a lookup
+// cut short that way isn't kept, so the connections waiting on it look
+// again.
 type targetRuns struct {
 	For time.Duration
 	Now func() time.Time
@@ -147,34 +149,47 @@ type targetRuns struct {
 	by map[string]*runLookup // by target and its ID
 }
 
-// runLookup is one lookup of a target's run: done once run is set, at.
+// runLookup is one lookup of a target's run: done once run is set, at, or
+// once it was cut short (cut), its run unknown.
 type runLookup struct {
 	done chan struct{}
 	run  targetRun
 	at   time.Time
+	cut  bool
 }
 
 // get returns the run of the target keyed key, from the lookup in flight
 // for it or one that ended less than For ago, else from look.
 func (r *targetRuns) get(ctx context.Context, key string, look func(context.Context) targetRun) targetRun {
-	r.mu.Lock()
-	lk := r.by[key]
-	if lk != nil {
-		select {
-		case <-lk.done:
-			if r.Now().Sub(lk.at) >= r.For {
-				lk = nil
-			}
-		default:
+	for {
+		lk, mine := r.lookup(key)
+		if mine {
+			return r.run(ctx, key, lk, look)
 		}
-	}
-	if lk != nil {
-		r.mu.Unlock()
 		select {
 		case <-lk.done:
-			return lk.run
+			if !lk.cut {
+				return lk.run
+			}
 		case <-ctx.Done():
 			return targetRun{}
+		}
+	}
+}
+
+// lookup returns the lookup in flight for key or one that ended less than
+// For ago, or else a new one the caller runs (mine).
+func (r *targetRuns) lookup(key string) (lk *runLookup, mine bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if lk := r.by[key]; lk != nil {
+		select {
+		case <-lk.done:
+			if r.Now().Sub(lk.at) < r.For {
+				return lk, false
+			}
+		default:
+			return lk, false
 		}
 	}
 	lk = &runLookup{done: make(chan struct{})}
@@ -182,11 +197,26 @@ func (r *targetRuns) get(ctx context.Context, key string, look func(context.Cont
 		r.by = map[string]*runLookup{}
 	}
 	r.by[key] = lk
-	r.mu.Unlock()
-	lk.run = look(ctx)
-	lk.at = r.Now()
+	return lk, true
+}
+
+// run runs lk, key's lookup, with look. One whose context ended is cut
+// and dropped before it's done, so no connection reuses it.
+func (r *targetRuns) run(ctx context.Context, key string, lk *runLookup, look func(context.Context) targetRun) targetRun {
+	run := look(ctx)
+	if ctx.Err() != nil {
+		r.mu.Lock()
+		if r.by[key] == lk {
+			delete(r.by, key)
+		}
+		r.mu.Unlock()
+		lk.cut = true
+		close(lk.done)
+		return targetRun{}
+	}
+	lk.run, lk.at = run, r.Now()
 	close(lk.done)
-	return lk.run
+	return run
 }
 
 // targetRun asks a target's backend whether it runs, its start, and how

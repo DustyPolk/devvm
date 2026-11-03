@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -260,6 +261,43 @@ func TestLinkRunReused(t *testing.T) {
 	runs.by[target.Name()+" "+target.Get(state.KeyID)] = &runLookup{done: make(chan struct{})}
 	if run := runs.get(ctx, target.Name()+" "+target.Get(state.KeyID), nil); run.start != "" {
 		t.Errorf("a cancelled wait: %+v", run)
+	}
+}
+
+// A lookup whose connection ends while it runs isn't kept: that
+// connection finds the target stopped, while one waiting on the lookup and
+// one coming in the same second get the target's run.
+func TestLinkRunCancelled(t *testing.T) {
+	now := time.Unix(1e9, 0)
+	runs := &targetRuns{For: linkRunFor, Now: func() time.Time { return now }}
+	started := make(chan struct{})
+	var looks atomic.Int32
+	look := func(ctx context.Context) targetRun {
+		if looks.Add(1) == 1 {
+			close(started)
+			<-ctx.Done()
+			return targetRun{}
+		}
+		return targetRun{start: "s"}
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	first := make(chan targetRun)
+	go func() { first <- runs.get(ctx, "k", look) }()
+	<-started
+	waiting := make(chan targetRun)
+	go func() { waiting <- runs.get(t.Context(), "k", look) }()
+	cancel()
+	if run := <-first; run.start != "" {
+		t.Errorf("the cancelled connection: %+v", run)
+	}
+	if run := <-waiting; run.start != "s" {
+		t.Errorf("a connection waiting on the cancelled lookup: %+v", run)
+	}
+	if run := runs.get(t.Context(), "k", look); run.start != "s" {
+		t.Errorf("a connection in the same second: %+v", run)
+	}
+	if n := looks.Load(); n != 2 {
+		t.Errorf("%d lookups, want 2", n)
 	}
 }
 
