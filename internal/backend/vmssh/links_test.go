@@ -651,6 +651,13 @@ func TestLinksList(t *testing.T) {
 	go func() { done <- l.Run(ctx) }()
 	waitFor(t, "the links listed", func() bool { list, _ := read(); return len(list.Links) == 2 })
 	waitFor(t, "db carried", func() bool { return dial(t, l.Socket(db)) != "refused" })
+	// api listens on its socket before the client refuses it, and closes
+	// it after: its refusal is told once the socket is gone.
+	waitFor(t, "api refused", func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return slices.Contains(f.failed, "api")
+	})
 	list, mode := read()
 	want := []proxy.LinkEntry{
 		{Hosts: db.Hosts, Addr: "127.77.0.1", Port: 5432, Target: db.Target, Socket: l.Socket(db)},
