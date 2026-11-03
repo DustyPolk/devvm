@@ -1,21 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 70" role="img" aria-labelledby="art-backends">
-  <title id="art-backends">Three backends, each running a VM: Lima, the default, then smolvm and Docker, both experimental.</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 28" role="img" aria-labelledby="art-backends">
+  <title id="art-backends">Lima, running a VM.</title>
   <!-- Lima: a solid lime border. -->
   <rect class="a" x="7" y="7" width="126" height="14"/>
   <rect class="s" x="8" y="8" width="124" height="12"/>
   <text class="t" x="14" y="18">Lima</text>
   <rect class="f" x="91" y="9" width="35" height="10"/>
   <text class="t" x="98" y="18">VM</text>
-  <text class="a pulse-slow" x="140" y="18">default</text>
-  <!-- smolvm and Docker: dashed borders. -->
-  <rect class="dash" x="7.5" y="28.5" width="125" height="13"/>
-  <text class="t" x="14" y="39">smolvm</text>
-  <rect class="f" x="91" y="30" width="35" height="10"/>
-  <text class="t" x="98" y="39">VM</text>
-  <text class="d" x="140" y="39">experimental</text>
-  <rect class="dash" x="7.5" y="49.5" width="125" height="13"/>
-  <text class="t" x="14" y="60">Docker</text>
-  <rect class="f" x="91" y="51" width="35" height="10"/>
-  <text class="t" x="98" y="60">VM</text>
-  <text class="d" x="140" y="60">experimental</text>
+  <text class="a pulse-slow" x="140" y="18">backend</text>
 </svg>

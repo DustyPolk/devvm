@@ -9,7 +9,7 @@ import (
 )
 
 // A lifeline is the file of the process that runs a VM (Lima's hostagent's
-// ha.pid, smolvm's agent.pid), its pid on the first line, which each start
+// ha.pid), its pid on the first line, which each start
 // writes anew. A process that follows it runs while the file holds what it
 // held when the process first saw it running, and that process runs.
 

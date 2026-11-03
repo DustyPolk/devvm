@@ -14,7 +14,7 @@ import (
 )
 
 // Leftovers are what devvm keeps for VMs their backend no longer has, a
-// VM deleted outside devvm (limactl delete, smolvm machine delete): devvm
+// VM deleted outside devvm (limactl delete): devvm
 // gc --orphans.
 type Leftovers struct{ *Env }
 

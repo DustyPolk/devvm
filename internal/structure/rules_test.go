@@ -174,7 +174,7 @@ func layerCases() []ruleCase {
 		},
 		{
 			name:  "a backend named outside the registry",
-			files: map[string]string{"internal/vm/a.go": imports("vm", "internal/backend/smolvm")},
+			files: map[string]string{"internal/vm/a.go": imports("vm", "internal/backend/lima")},
 			want:  &want{ruleLayers, "name a backend"},
 		},
 		{
@@ -370,7 +370,7 @@ func ownerCases() []ruleCase {
 		},
 		{
 			name:  "HOME through a field",
-			files: map[string]string{"internal/backend/smolvm/a.go": reads("smolvm", "s.Getenv", `"HOME"`)},
+			files: map[string]string{"internal/backend/lima/a.go": reads("lima", "l.Getenv", `"HOME"`)},
 			want:  &want{ruleOwners, "reads HOME"},
 		},
 		{

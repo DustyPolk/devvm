@@ -7,7 +7,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/backend/smolvm"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/settings"
@@ -32,20 +31,19 @@ type Overrides struct {
 // UI is what every backend needs of devvm's UI.
 type UI interface {
 	lima.UI
-	smolvm.UI
 }
 
 // New returns the registry of devvm's backends, on devvm's folders, its
-// own files (assets) and u: lima, the default (backend.Default), and
-// smolvm (experimental), with a test build's overrides o in place of their
-// own. The registry's Host is o's (platform.NewHost).
+// own files (assets) and u: lima, the default (backend.Default), with a
+// test build's overrides o in place of its own. The registry's Host is
+// o's (platform.NewHost).
 func New(d paths.Dirs, assets fs.FS, u UI, o Overrides) (*backend.Registry, error) {
 	host := platform.NewHost(o.Host)
-	l, s := lima.New(d, assets, u, host, o.UbuntuURL), smolvm.New(d, assets, u, host)
+	l := lima.New(d, assets, u, host, o.UbuntuURL)
 	if o.KVM != "" {
-		l.KVM, s.KVM = o.KVM, o.KVM
+		l.KVM = o.KVM
 	}
-	r, err := backend.NewRegistry(l, s)
+	r, err := backend.NewRegistry(l)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +64,4 @@ func defaultBackend(d paths.Dirs) (name, file string, err error) {
 
 // Names are every backend's name, sorted, as New registers them: what
 // --backend takes.
-func Names() []string { return []string{lima.Name, smolvm.Name} }
-
-// Experimental reports whether the backend by that name is experimental:
-// smolvm.
-func Experimental(name string) bool { return name == smolvm.Name }
+func Names() []string { return []string{lima.Name} }

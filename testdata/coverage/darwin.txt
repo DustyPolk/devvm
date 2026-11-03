@@ -5,7 +5,6 @@ internal/backend 95.9
 internal/backend/backendtest 46.3
 internal/backend/lima 88.5
 internal/backend/registry 92.0
-internal/backend/smolvm 73.9
 internal/backend/vmssh 87.5
 internal/build 87.5
 internal/cli 88.4

@@ -230,7 +230,7 @@ func TestSetSSHAgent(t *testing.T) {
 
 // devvm ssh-agent on or devvm warns who can use the keys: while you're
 // connected, or while the VM runs on a backend that forwards the agent
-// the whole time (smolvm).
+// the whole time.
 func TestSetSSHAgentRisk(t *testing.T) {
 	for _, whileRunning := range []bool{false, true} {
 		e, f, _ := upEnv(t, allNative())
@@ -314,70 +314,6 @@ func TestAgentToggleEmulated(t *testing.T) {
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "agent_fixed backend=fake vm="+vm {
 		t.Errorf("fixed, launched on: %s", msg.NamesOf(err))
-	}
-}
-
-// starterFake is a backend whose starts name the VM's agent
-// (backend.AgentStarter): unchosen is AgentUnchosen's answer.
-type starterFake struct {
-	*backendtest.Fake
-	unchosen bool
-}
-
-func (s *starterFake) AgentUnchosen(context.Context, string) (bool, error) { return s.unchosen, nil }
-
-// A running VM that may forward an agent devvm didn't choose (started
-// outside devvm) is stopped by a launch and an export's start, unless it
-// uses the user's agent anyway; on other backends nothing is asked.
-func TestAgentUnchosen(t *testing.T) {
-	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
-	vm := st.Name()
-	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatalf("not an AgentStarter: %s", msg.NamesOf(err))
-	}
-	w := &starterFake{Fake: f, unchosen: true}
-	reg, err := backend.NewRegistry(w)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reg.DefaultBackend = fakeDefault
-	e.Registry = reg
-	stopped := func() bool { return f.Instances[vm].Status != backend.StatusRunning }
-	for _, mode := range []string{sshagent.Off, sshagent.Devvm} {
-		if err := st.Set(sshagent.Key, mode); err != nil {
-			t.Fatal(err)
-		}
-		e.Agent.Run = (&agentCalls{}).run
-		if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "agent_unchosen_stop vm="+vm || !stopped() {
-			t.Errorf("%s: launch %s, stopped %v", mode, msg.NamesOf(err), stopped())
-		}
-		// Started by devvm again: chosen.
-		w.unchosen = false
-		if err := (Launch{e}).Up(t.Context(), Options{}); err != nil || stopped() {
-			t.Fatalf("%s: relaunch %s", mode, msg.NamesOf(err))
-		}
-		w.unchosen = true
-	}
-	// An export's start (ensureRunning) checks a running VM too.
-	fd, err := e.folderVM(t.Context(), msg.NoVM)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := e.ensureRunning(t.Context(), fd); msg.NamesOf(err) != "agent_unchosen_stop vm="+vm || !stopped() {
-		t.Errorf("export: %s, stopped %v", msg.NamesOf(err), stopped())
-	}
-	// The user's agent: nothing to keep from it.
-	w.unchosen = false
-	if err := st.Set(sshagent.Key, sshagent.On); err != nil {
-		t.Fatal(err)
-	}
-	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
-		t.Fatal(msg.NamesOf(err))
-	}
-	w.unchosen = true
-	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil || stopped() {
-		t.Errorf("on: %s, stopped %v", msg.NamesOf(err), stopped())
 	}
 }
 

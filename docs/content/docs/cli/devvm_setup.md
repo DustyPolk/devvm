@@ -17,7 +17,6 @@ devvm setup [flags]
 
 ```text
   devvm setup                        # answer every question
-  devvm setup --backend smolvm       # make smolvm the default backend, without asking
   devvm setup --features omb,fzf     # give base oh-my-bash and fzf, without asking
   devvm setup --features none        # give base no features
   devvm setup --agents claude,codex  # give new VMs Claude Code and Codex, without asking

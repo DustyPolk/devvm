@@ -60,7 +60,7 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 {{< /os-tab >}}
 {{< /os-tabs >}}
 
-The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) needs it. The experimental [smolvm](../backends/smolvm.md#requirements) backend has requirements of its own.
+The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) needs it.
 
 devvm also runs on a smaller machine, because it fits base to the machine. Base asks for 4 CPUs and 8 GiB of memory. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory, which is 4 GiB on an 8 GiB machine. The VMs made from base get the same unless you give them a size, as [size and ports](../using/ports-size.md#size-and-ports) explains. When devvm builds base on such a machine, it says how many CPUs and how much memory base gets. `devvm size -g` sets the size that new VMs get instead, and `devvm doctor` warns when this machine has less than 8 GiB of memory or fewer than 4 CPUs.
 
@@ -111,7 +111,7 @@ Images whose inputs changed are built again the next time you use them. Existing
 
 1. Delete your VMs: `devvm ls`, then `devvm rm` in each folder. For a `--clone` VM, this also removes the `devvm` git remote from the repo.
 2. Delete the images: `devvm gc`, then `devvm images rm` with every name `devvm images` lists. Images built `--from` a container image need the same `--from`: `devvm images rm --from node:24 base`.
-3. Free the backends' caches. In a terminal, `devvm gc --caches` frees devvm's share of them, after asking for each backend. If you don't use a backend yourself, you can also empty its cache: Lima keeps Ubuntu's cloud images in `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux, and `limactl prune` deletes that whole cache. On macOS, smolvm keeps its caches and its machines in `~/Library/Caches/smolvm`, so delete that folder only once `smolvm machine ls` lists no machine you want to keep ([what devvm keeps](../using/space.md#smolvm)).
+3. Free Lima's cache. In a terminal, `devvm gc --caches` frees devvm's share of it, after asking. If you don't use Lima yourself, you can also empty its cache: Lima keeps Ubuntu's cloud images in `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux, and `limactl prune` deletes that whole cache.
 4. Delete your saved secrets: `devvm secret rm NAME` for each one `devvm secret` lists. On macOS they're in the Keychain under the service `devvm`, and on Linux in `~/.local/share/devvm/secrets/`.
 5. Remove devvm itself, with the command for the way you installed it:
 

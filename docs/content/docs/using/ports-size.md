@@ -97,18 +97,18 @@ A VM's disk size is how far the disk can grow, not how much space it takes. A pr
 
 Before devvm builds an image or makes a VM, it checks the free space on the disk that will hold it, and it refuses to start the step when there's less free than the step needs:
 
-| Step | Lima on macOS | Lima on Linux | smolvm |
-| --- | --- | --- | --- |
-| building `base` | 8 GiB | 8 GiB | 4 GiB |
-| building any other image | 2 GiB | 8 GiB | 4 GiB |
-| building shared tool images | 3 GiB, and 0.5 GiB for each tool | 9 GiB, and 0.5 GiB for each tool | 4 GiB, and 0.5 GiB for each tool |
-| making a VM | 2 GiB | 2 GiB | 4 GiB |
+| Step | macOS | Linux |
+| --- | --- | --- |
+| building `base` | 8 GiB | 8 GiB |
+| building any other image | 2 GiB | 8 GiB |
+| building shared tool images | 3 GiB, and 0.5 GiB for each tool | 9 GiB, and 0.5 GiB for each tool |
+| making a VM | 2 GiB | 2 GiB |
 
 devvm rounds each number up to whole GiB, so building one shared tool with Lima on macOS needs 4 GiB, and building all ten needs 8 GiB. Each build checks again before it starts, so the first VM on a Mac, which builds base, needs 8 GiB free.
 
-The numbers leave a margin over what each step took when devvm's tests measured the free space before, during and after it. Most of a step's space is only needed while it runs. On Lima on macOS, base took about 1 GiB with Ubuntu's cloud image already downloaded, and downloading the image takes up to another 0.9 GiB. base's features add up to 2.5 GiB. A build of all ten shared tools took 6 GiB at its peak and kept 1.5 GiB of images. On macOS, an image built on another and a new VM take only what they write. On Linux hosts, an image and the VM that builds shared tools start as a full copy of their parent's disk, but a new VM's disk holds only its own changes. On smolvm, building base or the docker layer, and making a VM from the docker layer, each took about 2 GiB while it ran but kept less than 0.5 GiB, so its numbers are the same for every step. A VM then grows as you work in it, and its disk never shrinks.
+The numbers leave a margin over what each step took when devvm's tests measured the free space before, during and after it. Most of a step's space is only needed while it runs. On Lima on macOS, base took about 1 GiB with Ubuntu's cloud image already downloaded, and downloading the image takes up to another 0.9 GiB. base's features add up to 2.5 GiB. A build of all ten shared tools took 6 GiB at its peak and kept 1.5 GiB of images. On macOS, an image built on another and a new VM take only what they write. On Linux hosts, an image and the VM that builds shared tools start as a full copy of their parent's disk, but a new VM's disk holds only its own changes. A VM then grows as you work in it, and its disk never shrinks.
 
-devvm checks the disk that holds the backend's images and VMs. On Lima, that's the disk of devvm's Lima home. On smolvm, it's the disk of devvm's data folder, and on macOS also that of your home folder, where smolvm keeps its machines. Shared tool images come out into devvm's data folder on every backend, so a tools build also checks that folder's disk, which needs 0.5 GiB and 0.25 GiB for each tool, rounded up: 1 GiB for one tool and 3 GiB for all ten. When devvm's data folder is on a small temporary disk, such as a tmpfs `/tmp` on Linux, devvm checks that disk.
+devvm checks the disk that holds the images and VMs, which is the disk of devvm's Lima home. Shared tool images come out into devvm's data folder, so a tools build also checks that folder's disk, which needs 0.5 GiB and 0.25 GiB for each tool, rounded up: 1 GiB for one tool and 3 GiB for all ten. When devvm's data folder is on a small temporary disk, such as a tmpfs `/tmp` on Linux, devvm checks that disk.
 
 `devvm doctor` also warns when that disk has less free space than building base needs, but the warning doesn't make doctor fail. When devvm refuses, see [Not enough free space](troubleshooting.md#not-enough-free-space) for how to make room.
 

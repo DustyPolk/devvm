@@ -29,9 +29,7 @@ func newBuildCmd(u *ui.UI) *cobra.Command {
 			"An image holds no shared tools: a VM gets those when devvm makes it, or with devvm tools.",
 		Example: examples(
 			"devvm build docker", "build base and the docker layer on it",
-			"devvm build foo+bar", "build base, foo and foo+bar",
-			"devvm build base --backend smolvm", "build base on the smolvm backend",
-		),
+			"devvm build foo+bar", "build base, foo and foo+bar"),
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Build)

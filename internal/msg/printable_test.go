@@ -47,7 +47,7 @@ func TestPrintableBidi(t *testing.T) {
 // characters, whoever made it: in its text, its segments and its names.
 func TestValuesArePrintable(t *testing.T) {
 	hostile := "vm\033[2J\033]0;title\007\ndevvm: \302\233x"
-	m := PortsNoSSH(hostile)
+	m := StopFailed(hostile)
 	t.Setenv("DEVVM_MESSAGES", "")
 	text := m.Text()
 	segs, _ := m.Segments()

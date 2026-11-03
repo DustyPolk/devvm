@@ -151,7 +151,7 @@ func publicOnly(_, address string, _ syscall.RawConn) error {
 
 // nonPublic returns the IPv4 blocks besides Go's own classes that no
 // registry anyone reaches is in: "this network", shared address space
-// (carrier-grade NAT, smolvm's gateway), IETF protocol assignments,
+// (carrier-grade NAT), IETF protocol assignments,
 // benchmarking, and reserved.
 func nonPublic() []netip.Prefix {
 	return []netip.Prefix{

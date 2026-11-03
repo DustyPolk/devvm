@@ -244,22 +244,13 @@ func nixShell(dir string) bool {
 	return strings.Contains(string(data), "mkShell")
 }
 
-// Detect returns the toolchains and the nix layer whose marker files are
-// in dir's top level, in a fixed order: nix also for a default.nix that
-// makes a shell.
-func Detect(dir string) []string {
-	var names []string
-	for _, f := range DetectFiles(dir) {
-		names = append(names, f.Name)
-	}
-	return names
-}
-
 // Found is a toolchain, or the nix layer, that a folder calls for, and the
 // first of its marker files that calls for it.
 type Found struct{ Name, File string }
 
-// DetectFiles is Detect, with the file that calls for each.
+// DetectFiles returns the toolchains and the nix layer whose marker files
+// are in dir's top level, in a fixed order, each with the file that calls
+// for it: nix also for a default.nix that makes a shell.
 func DetectFiles(dir string) []Found {
 	var found []Found
 	for _, m := range markers {

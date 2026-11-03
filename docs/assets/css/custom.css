@@ -490,15 +490,6 @@ html.dark .highlight .chroma .go {
   shape-rendering: crispEdges;
 }
 
-/* Dashed borders (the experimental backends): 1px, on half-pixel coordinates so they stay sharp. */
-.devvm-art .dash {
-  fill: var(--devvm-surface);
-  stroke: var(--devvm-blue);
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-  shape-rendering: crispEdges;
-}
-
 /* The art's animations, slow and in the palette's colors, each marked by a class in the SVG:
    .pulse dims and brightens a lime arrow every 3 s, .pulse-2 and .pulse-3 a step later, so the pulse runs
    along it; .pulse-slow does the same every 4 s; .lit (a text's fill) and .lit-chip (a chip's opacity) light

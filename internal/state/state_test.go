@@ -57,13 +57,13 @@ func TestMakePrivate(t *testing.T) {
 // a file whole, the user's alone.
 func TestBackendsAndTools(t *testing.T) {
 	d := testDirs(t)
-	for i, b := range []string{"lima", "smolvm", ""} {
+	for i, b := range []string{"lima", "qemu", ""} {
 		if _, err := CreateVM(d, "devvm-x-0123456789abc"+string(rune('a'+i)), NewVM{Image: "base", Backend: b, Tools: []string{"node", "claude"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	used, err := Backends(d)
-	if err != nil || !reflect.DeepEqual(used, map[string]bool{"lima": true, "smolvm": true}) {
+	if err != nil || !reflect.DeepEqual(used, map[string]bool{"lima": true, "qemu": true}) {
 		t.Errorf("Backends = %v, %v", used, err)
 	}
 	st, err := ReadVM(d, "devvm-x-0123456789abca")

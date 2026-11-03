@@ -10,7 +10,7 @@ import (
 )
 
 // LifelineMain runs the forwarder of a VM whose sshd is forwarded to a
-// host loopback port (smolvm's, Lima's), as the hidden command name with
+// host loopback port (Lima's), as the hidden command name with
 // its arguments: ports.sh is script, reserved the ports devvm records for
 // VMs (but the VM's own listed ones), and its lines go to log. Besides the
 // forwarder's own flags, it takes the VM's lifeline (daemon.Lifeline),

@@ -592,26 +592,6 @@ func runningAgent(ctx context.Context, b backend.Backend, st *state.VM) (string,
 	return sshagent.Running(st, start), nil
 }
 
-// checkAgentStart stops a running VM that may forward an SSH agent devvm
-// didn't choose for it, its backend says (one started outside devvm, on a
-// backend whose starts name the agent), unless it uses the user's anyway.
-// The stop isn't cancelled with ctx: an interrupt never leaves it running.
-func (e *Env) checkAgentStart(ctx context.Context, b backend.Backend, st *state.VM) error {
-	vm := st.Name()
-	if sshagent.Mode(st) == sshagent.On {
-		return nil
-	}
-	unchosen, err := backend.AgentUnchosen(ctx, b, vm)
-	if err != nil || !unchosen {
-		return err
-	}
-	if err := b.Stop(context.WithoutCancel(ctx), vm); err != nil {
-		return err
-	}
-	e.Proxy.Stop(vm)
-	return msg.AgentUnchosenStop(vm)
-}
-
 // ensureRunning makes sure the VM runs, for a command that runs in it
 // without a shell (an export, rm's check of a --clone VM): it goes
 // through what a launch's start does (startChecked), .git locked, network

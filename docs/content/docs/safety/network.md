@@ -187,9 +187,9 @@ The company proxy sees the name and port of every host the VM reaches, and if it
 
 ### Without network policy
 
-A Lima VM without network policy gets your proxy settings in its environment when it starts and uses the company proxy directly, while smolvm VMs don't get them.
+A VM without network policy gets your proxy settings in its environment when it starts and uses the company proxy directly.
 
-Builds never get your company proxy's settings, and images never keep them. When devvm builds an image, builds the shared tools or converts a `--from` container image on Lima behind a company proxy, the build goes through a proxy of devvm's on this machine, made for that build alone, which goes through your company proxy. The build's commands get only that proxy's address, with a password devvm makes for the build, while they run, and devvm stops the proxy when the build ends. So the code a build runs, which includes a container image's own, never sees your company proxy's address or password. That proxy also runs on this machine, so a company proxy on `localhost`, such as one a VPN client runs, works for builds too. smolvm builds don't get your proxy settings at all.
+Builds never get your company proxy's settings, and images never keep them. When devvm builds an image, builds the shared tools or converts a `--from` container image on Lima behind a company proxy, the build goes through a proxy of devvm's on this machine, made for that build alone, which goes through your company proxy. The build's commands get only that proxy's address, with a password devvm makes for the build, while they run, and devvm stops the proxy when the build ends. So the code a build runs, which includes a container image's own, never sees your company proxy's address or password. That proxy also runs on this machine, so a company proxy on `localhost`, such as one a VPN client runs, works for builds too.
 
 A build's proxy allows any host, as `**` does. It sends a name that this machine can't look up on to the company proxy, so builds work where only the company proxy looks up outside names.
 

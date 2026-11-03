@@ -12,7 +12,7 @@ A VM's state records its choice as `net=on` or `net=off`. When devvm starts a VM
 1. It makes its CA, unless it has one with over a week left, and on macOS it keeps the CA out of Time Machine.
 2. It writes the VM's [secrets](#secrets) as the VM's proxy sees them.
 3. It starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for the proxy to say it's listening.
-4. It starts the VM [confined](lima.md#confinement), with the VM's proxy settings pointing at the proxy. On smolvm the confinement is emulated ([smolvm](smolvm.md#network-policy)).
+4. It starts the VM [confined](lima.md#confinement), with the VM's proxy settings pointing at the proxy.
 5. It runs [the self-check](#the-self-check) before the VM's setup and before its shell.
 6. It sets the VM up, as [the VM's setup](#the-vms-setup) describes. The setup puts devvm's CA in the VM, points the tools that don't read the environment at the proxy, and writes the VM's placeholders and its [agents' logins and settings](#agents-logins-and-settings) with your keys taken out.
 
@@ -24,7 +24,7 @@ devvm makes a VM without network policy, and warns you, when the VM's backend ca
 
 One proxy runs for each VM. It runs on the host as `devvm _proxy`, a hidden command, and listens on a loopback port. The VM reaches nothing else over its network, so every connection the VM makes goes through its proxy. The one other way out of the VM is the [links](ports.md#links-between-vms) you add to it, which this machine carries over ssh to the ports your other VMs publish, so they don't use the VM's network. The proxy is a second entrance to those links, for the VM's HTTP clients ([links through the proxy](#links-through-the-proxy)).
 
-Other programs on the host can also reach that port, so the port alone doesn't identify the VM. Every request must carry the VM's password in `Proxy-Authorization`, with the user `devvm`, or it gets `407`. Each VM has its own random password in its proxy settings. The proxy reads the password from a file only you can read, never from its arguments, which other users can see, and it refuses to start without one. The VM's settings also get the password through files ([Lima](lima.md#a-lima-home-of-its-own), [smolvm](smolvm.md#what-devvm-sets-on-a-vm)).
+Other programs on the host can also reach that port, so the port alone doesn't identify the VM. Every request must carry the VM's password in `Proxy-Authorization`, with the user `devvm`, or it gets `407`. Each VM has its own random password in its proxy settings. The proxy reads the password from a file only you can read, never from its arguments, which other users can see, and it refuses to start without one. The VM's settings also get the password through files ([Lima](lima.md#a-lima-home-of-its-own)).
 
 For each connection, the proxy does the following:
 
@@ -55,8 +55,6 @@ flowchart TD
 ```
 
 A tunnel that the proxy doesn't intercept carries the bytes both ways as they are. When the VM finishes sending, the proxy closes its side of the connection to the far end, so the far end sees the end of what the VM sent and can still answer. The tunnel ends when the far end's bytes end, or when the proxy can't pass them on because the VM's connection has gone, and then the proxy closes both connections. In a tunnel to a host the policy allows, the proxy reads the VM's first five bytes to see whether they start a TLS ClientHello before it passes anything on, so with a protocol whose server speaks first, such as SMTP, the VM gets no answer until it has sent five bytes.
-
-On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)).
 
 ### Links through the proxy
 
@@ -89,7 +87,7 @@ The event log's `upstream` field names the company proxy, by host and port, for 
 
 ### How long a proxy runs
 
-The proxy exits when the VM's Lima hostagent does, which it learns from the hostagent's pid file, the VM's lifeline (`-lifeline`). On smolvm it watches the machine's process instead. The proxy starts before the VM, so it waits for the lifeline to name a process that runs. What the file held when the proxy started is an earlier start's, and the proxy waits past it, but when a new start writes the file and its process is already gone, the proxy exits. Once it follows a start, it runs while the file holds what it held then and that process runs, so a VM started again gets a new proxy. If the hostagent never appears, the proxy exits 15 minutes after it started, and `devvm stop` stops it at once.
+The proxy exits when the VM's Lima hostagent does, which it learns from the hostagent's pid file, the VM's lifeline (`-lifeline`). The proxy starts before the VM, so it waits for the lifeline to name a process that runs. What the file held when the proxy started is an earlier start's, and the proxy waits past it, but when a new start writes the file and its process is already gone, the proxy exits. Once it follows a start, it runs while the file holds what it held then and that process runs, so a VM started again gets a new proxy. If the hostagent never appears, the proxy exits 15 minutes after it started, and `devvm stop` stops it at once.
 
 A VM that starts again gets a new proxy on the same port. A running VM also gets a new proxy when its list of policies changed, when its CA was replaced, when its proxy is from another devvm binary, when the [CAs in your CA folder](#a-companys-ca) changed, or when the [company proxy](#through-a-company-proxy) settings in devvm's environment differ from the ones the proxy started with. To start a new proxy, devvm stops the old one with `SIGTERM`, and with `SIGKILL` when it's still running two seconds later. The old proxy counts as stopped only once its process is gone, not once its arguments can no longer be read, because an ending process loses its memory before its files, and for that moment its port still looks taken by another program, which would fail the launch with `proxy_port_taken`. `SIGKILL` goes only to a process whose arguments devvm can still read as the proxy's, so a proxy still ending gets none, and neither does another process given its pid since, even one whose arguments devvm can't read. If it still runs two seconds after that, devvm stops with `proxy_stop_failed` and starts nothing, because the old proxy would go on with its old settings.
 
@@ -243,10 +241,7 @@ flowchart TD
 
 `devvm ls` and `devvm network` show such a VM's network policy as `unenforced`. That's a VM whose last self-check failed, or a running VM that isn't on the process devvm started confined, which devvm checks on the host each time.
 
-What "the process devvm started" is depends on the backend:
-
-- **Lima:** the VM's Lima process, which devvm starts [confined](lima.md#confinement).
-- **smolvm:** the machine's process, through the proxy's decider. `smolvm machine start` refuses the VM without a decider, and a VM started with someone else's decider isn't confined.
+On Lima, "the process devvm started" is the VM's Lima process, which devvm starts [confined](lima.md#confinement).
 
 ## Log files
 
@@ -279,9 +274,6 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | `-upstream` | a file of `HTTPS_PROXY=`, `HTTP_PROXY=` and `NO_PROXY=` lines (mode 600): reach allowed hosts through that company proxy |
 | `-secrets` | the VM's secret bindings, read again when they change |
 | `-secret-cmd` | the program run as `PROGRAM secret get NAME` for a value |
-| `-decider` | also decide each connection the VM opens, on this loopback address (smolvm's mediated egress) |
-| `-decider-to` | with `-decider`: the proxy's address in the VM, the only destination taken over |
-| `-decider-token-file` | with `-decider`: a file holding the shared key smolvm proves itself with (64 hex digits); required |
 | `-nix-cache` | serve the [shared Nix cache](#the-shared-nix-cache) at `http://devvm.proxy/nix/` from this folder, which it makes, only yours (mode 700) |
 | `-nix-cache-max` | with `-nix-cache`: the cache's cap, in bytes (default 10 GiB) |
 | `-links` | the VM's links' list, which `devvm _links` writes: reach each link through its socket, before any rule ([links through the proxy](#links-through-the-proxy)); a missing list has no links |

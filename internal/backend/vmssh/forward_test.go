@@ -357,17 +357,6 @@ func TestLogLimit(t *testing.T) {
 	}
 }
 
-// What a VM prints is kept up to the cap.
-func TestCapped(t *testing.T) {
-	c := &Capped{Max: 4}
-	if n, err := c.Write([]byte("abc")); n != 3 || err != nil {
-		t.Fatal(n, err)
-	}
-	if n, _ := c.Write([]byte("defg")); n != 4 || c.String() != "abcd" {
-		t.Errorf("kept %q", c.String())
-	}
-}
-
 // While devvm's ports can't be read, nothing new is forwarded.
 func TestForwarderReservedUnknown(t *testing.T) {
 	p := freePorts(t, 1)[0]

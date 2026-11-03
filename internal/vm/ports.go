@@ -188,9 +188,9 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 }
 
 // forwarding is what a running VM's forwarder starts again with when its
-// ports change: the host key its ssh config pins, its proxy's and
-// decider's ports, never forwarded, and its listed ports less those a host
-// program has (freePorts).
+// ports change: the host key its ssh config pins, its proxy's port, never
+// forwarded, and its listed ports less those a host program has
+// (freePorts).
 func (e *Env) forwarding(b backend.Backend, st *state.VM) backend.Confinement {
 	vm := st.Name()
 	c := backend.Confinement{
@@ -198,9 +198,6 @@ func (e *Env) forwarding(b backend.Backend, st *state.VM) backend.Confinement {
 		HostKey: func(ctx context.Context) (string, error) { return e.sshConfig().HostKey(ctx, b, vm) },
 	}
 	c.ProxyPort, _ = strconv.Atoi(st.Get(netpolicy.KeyProxyPort))
-	if p := st.Get(netpolicy.KeyDeciderPort); p != "" {
-		c.Decider = "127.0.0.1:" + p
-	}
 	return c
 }
 

@@ -24,7 +24,7 @@ host_home=$(cat "$s/host_home")
 
 # shellcheck source=/dev/null
 . "$s/vm"
-# Running systemd, else OpenRC (Alpine) or none (smolvm, which may have systemctl installed).
+# Running systemd, else OpenRC (Alpine).
 systemd=false; [[ -d /run/systemd/system ]] && systemd=true
 if [[ -n "$DEVVM_HOSTNAME" && "$(hostname)" != "$DEVVM_HOSTNAME" ]]; then
   if $systemd; then sudo hostnamectl set-hostname "$DEVVM_HOSTNAME"
@@ -44,7 +44,7 @@ link_hosts() {
 }
 link_hosts /etc/hosts "$s/hosts"
 # A link listens on its target's own port, so one below 1024 needs them open to the VM's user, whose
-# sshd binds it. 1024 is the kernel's default (Lima's Alpine VMs, smolvm); Lima's Ubuntu and Debian
+# sshd binds it. 1024 is the kernel's default (Lima's Alpine VMs); Lima's Ubuntu and Debian
 # VMs have 0.
 ports=/proc/sys/net/ipv4/ip_unprivileged_port_start
 if [[ "$(cat "$ports" 2>/dev/null)" == 1024 ]]; then
@@ -219,7 +219,7 @@ docker_proxies() {   # docker_proxies CONFIG [sudo]: set (or remove) the proxy f
   rm -f "$tmp"
 }
 # nix-daemon (the nix layer) does Nix's downloads, and gets nothing of /etc/environment: under systemd
-# a drop-in with the proxy, else its settings file, devvm's alone (services.sh reads it), both removed
+# a drop-in with the proxy, else its settings file, devvm's alone (OpenRC reads it), both removed
 # when network policy is off.
 nixd=/nix/var/nix/profiles/default/bin/nix-daemon
 nix_conf=/etc/systemd/system/nix-daemon.service.d/devvm-proxy.conf
@@ -251,16 +251,6 @@ fi
 if [[ "$nix_before" != "$(cat "$nix_conf" "$nix_cache" 2>/dev/null || true)" ]]; then
   if $systemd; then sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
   elif [[ -x $nixd && -e /run/openrc/softlevel ]]; then sudo rc-service nix-daemon restart >/dev/null
-  elif [[ -x $nixd ]]; then
-    # No init system (smolvm): stopped, then started as assets/container/services.sh starts it.
-    sudo sh -c 'pid=$(cat /run/nix-daemon.pid 2>/dev/null || true)
-      if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = nix-daemon ] && kill "$pid"; then
-        i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
-      fi
-      [ ! -f /etc/conf.d/nix-daemon ] || . /etc/conf.d/nix-daemon
-      mkdir -p /var/log
-      nohup /nix/var/nix/profiles/default/bin/nix-daemon --daemon >/var/log/nix-daemon.log 2>&1 </dev/null &
-      echo $! > /run/nix-daemon.pid'
   fi
 fi
 dropin=/etc/systemd/system/docker.service.d/devvm-proxy.conf
@@ -358,18 +348,6 @@ if command -v dockerd >/dev/null; then
   if [[ "$before" != "$(sudo cat "$dropin" 2>/dev/null || true)" ]]; then
     if $systemd; then sudo systemctl daemon-reload && sudo systemctl restart docker
     elif [[ -e /run/openrc/softlevel ]]; then sudo rc-service docker restart >/dev/null
-    else
-      # No init system (smolvm): stopped, then started as assets/container/services.sh starts it, with
-      # Docker's settings read (devvm's block) and the proxy variables sudo keeps. A pid file whose
-      # process isn't dockerd (a pid reused since) names nothing to stop, and Docker's run folder goes.
-      sudo sh -c 'pid=$(cat /run/docker.pid 2>/dev/null || true)
-        if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = dockerd ] && kill "$pid" 2>/dev/null; then
-          i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
-        fi
-        rm -rf /run/docker.pid /run/docker
-        [ ! -f /etc/conf.d/docker ] || . /etc/conf.d/docker
-        mkdir -p /var/log
-        nohup dockerd -p /run/docker.pid >/var/log/dockerd.log 2>&1 </dev/null &'
     fi
   fi
 fi

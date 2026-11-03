@@ -56,9 +56,7 @@ func newSpaceCmd(u *ui.UI) *cobra.Command {
 			"what devvm gc frees of it now and what frees the rest, then the backends' own caches apart. " +
 			"It changes nothing and starts no VM.",
 		Example: examples(
-			"devvm space", "show what devvm keeps and what frees it",
-			"devvm space --backend smolvm", "only the smolvm backend's",
-			"devvm space --json", "the same as JSON, for scripts",
+			"devvm space", "show what devvm keeps and what frees it", "devvm space --json", "the same as JSON, for scripts",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -565,17 +563,17 @@ func (e spaceEnv) retainOf(keys ...string) string {
 
 // otherState is the disk devvm's other state takes: the VMs' folders (their
 // logs and the orphans' are counted apart, by the caller), images'
-// records, run files, CA, the backends' own files, the tools lock and the
-// --from digests in the cache.
+// records, run files, CA, the tools lock and the --from digests in the
+// cache.
 func otherState(d paths.Dirs) int64 {
 	var n int64
 	for _, p := range []string{
-		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(), d.Smolvm(),
+		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(),
 		d.ToolLock(), d.ToolLockConfig(), d.ToolLockChecked(),
 	} {
 		n += du(p)
 	}
-	return n - du(filepath.Join(d.Smolvm(), "images"))
+	return n
 }
 
 // counted is how many and how much.

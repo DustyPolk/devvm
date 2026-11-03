@@ -33,7 +33,7 @@ func (v VM) Run() string { return filepath.Join(v.Dir, "run") }
 func (v VM) Logs() string { return filepath.Join(v.Dir, "logs") }
 
 // Proxy is one of the files of the VM's network policy proxy in Run,
-// named by ext: .pid, .status, .auth, .decider, .cas, .upstream, and
+// named by ext: .pid, .status, .auth, .cas, .upstream, and
 // what it started with (.policy, .bin, .ca).
 func (v VM) Proxy(ext string) string { return filepath.Join(v.Run(), "proxy"+ext) }
 
@@ -69,21 +69,6 @@ func (v VM) ProxyLog() string { return filepath.Join(v.Logs(), "proxy.log") }
 
 // LinksLog is the VM's link session's own output.
 func (v VM) LinksLog() string { return filepath.Join(v.Logs(), "links.log") }
-
-// Record is what the VM's backend set on it, which the backend itself
-// doesn't show (smolvm's).
-func (v VM) Record() string { return filepath.Join(v.Backend(), "record.json") }
-
-// Key is the ssh key devvm logs in to the VM with, on a backend that
-// gives it one.
-func (v VM) Key() string { return filepath.Join(v.Backend(), "key") }
-
-// KnownHosts is the VM's sshd's host key, as its backend last read it.
-func (v VM) KnownHosts() string { return filepath.Join(v.Backend(), "known_hosts") }
-
-// ProxyURL holds the VM's proxy's address, password and all, for a
-// backend that passes it to the VM's commands by file (smolvm's).
-func (v VM) ProxyURL() string { return filepath.Join(v.Backend(), "proxy") }
 
 // Ports records which of the VM's ports its backend forwards, on a
 // backend whose own config doesn't (Lima's).

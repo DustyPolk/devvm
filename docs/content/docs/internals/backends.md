@@ -3,7 +3,7 @@ title: Backends
 weight: 8
 ---
 
-This page explains how each backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. [Backends](../backends/_index.md) compares the backends to help you choose one.
+This page explains how a backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. devvm runs its VMs on [Lima](../backends/lima.md), and another backend plugs in the same way, through the features below.
 
 ## Features
 
@@ -19,35 +19,31 @@ devvm uses an emulation only once its review has passed, and until then it refus
 
 ### The feature table
 
-| Feature | What it is | Lima | smolvm (experimental) |
-| --- | --- | --- | --- |
-| `build-image` | build images from the layer and feature scripts | native | native: a machine from Ubuntu's container image runs the scripts, and devvm then packs it (`pack create --from-vm`). Each image is a full pack, about 450 MB for `base` ([details](smolvm.md#building-images)) |
-| `build-confinement` | builds reach the internet but not the host's loopback, or nothing | native: Seatbelt on macOS. On Linux, QEMU's `restrict=on` confines a build with no network, but a build with the internet reaches the host's loopback ([details](lima.md#confinement)) | native: its default network refuses the host's loopback, and a build that reaches nothing gets no network |
-| `from` | `base` from a container image (`--from`) | native: devvm converts the image to a disk | native: smolvm boots registry images, by digest |
-| `clone` | a project VM from an image | native: an APFS copy-on-write copy on macOS, and a qcow2 overlay on Linux ([details](lima.md#clones-and-overlays)) | native: a machine from the image's pack ([details](smolvm.md#its-machines)) |
-| `project-mount` | the project folder, read-write | native: virtiofs on macOS, and 9p on Linux | native: virtiofs. Files the VM makes are the user's on the host, with mode 0600 |
-| `agent-folders` | agents' host folders, read-only | native: read-only mounts, enforced by the host | native: read-only mounts, enforced by the host |
-| `tools-share` | the shared tools, read-only | native: a read-only mount, enforced by the host | native: a read-only mount, enforced by the host. The tool images are uncompressed, because its kernel's EROFS has no compression |
-| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt on macOS, and on Linux QEMU's `restrict=on` with a `guestfwd` to the proxy ([details](lima.md#confinement)) | emulated (reviewed): an allow list of the host alone, DNS closed but for one name, and devvm's proxy deciding each connection ([details](smolvm.md#network-policy)) |
-| `ssh` | ssh for editors | native: Lima's ssh forward and config | emulated (reviewed): an sshd of devvm's on a port forwarded from the host's loopback, started after each start with new host keys and the VM's own key alone. Its ssh config entries ask for no forwarding out ([details](smolvm.md#ssh-for-editors)) |
-| `ports` | the listed ports forwarded to the host's loopback | emulated (reviewed): devvm's forwarder over Lima's ssh, for the listed ports alone, with Lima's own forwards off ([details](lima.md#ports)) | emulated (reviewed): devvm's forwarder over the VM's ssh, for the listed ports alone. smolvm forwards nothing itself but the VM's ssh ([details](smolvm.md#ports)) |
-| `ports-all` | every port forwarded, servers on the VM's loopback included | emulated (reviewed): the same forwarder, for whatever listens in the VM from port 1024 up, and never a port the host has ([details](lima.md#ports)) | emulated (reviewed): the same forwarder, for whatever listens in the VM from port 1024 up, and never a port the host has ([details](smolvm.md#ports)) |
-| `agent-forwarding` | ssh-agent forwarding, chosen when the VM is made | native | native |
-| `agent-toggle` | turning a VM's ssh-agent forwarding on or off later | native | emulated (reviewed): every VM is made forwarding, and each start gives it your agent, devvm's, or none, which is a path where no socket can be. devvm stops a VM that was started outside devvm ([details](smolvm.md#ssh-agent-forwarding)) |
-| `cpus` | a VM's CPUs | native | native |
-| `memory` | a VM's memory | native | native |
-| `disk` | a VM's disk size | native: it grows but never shrinks | native: it grows but never shrinks |
-| `docker-layer` | the [docker layer](../using/images.md#built-in-layers): Docker's engine running in the VM | native | native: devvm starts its daemon after each start |
-| `nix-layer` | the [nix layer](../using/images.md#nix): Nix's daemon and its store in the VM, with builds in Nix's sandbox | native ([details](images.md#the-nix-layer)) | native: devvm starts its daemon after each start |
-| `link` | links between VMs: a program in one VM reaches a port another VM publishes, by name | native: a link session of devvm's own over Lima's ssh, with remote forwards to `127.77.0.0/16` alone ([details](ports.md#links-between-vms)) | native: the same link session, over the VM's own ssh ([details](ports.md#links-between-vms)) |
-
-The backends also differ in isolation, which [Backends](../backends/_index.md#comparing-the-backends) compares.
+| Feature | What it is | Lima |
+| --- | --- | --- |
+| `build-image` | build images from the layer and feature scripts | native |
+| `build-confinement` | builds reach the internet but not the host's loopback, or nothing | native: Seatbelt on macOS. On Linux, QEMU's `restrict=on` confines a build with no network, but a build with the internet reaches the host's loopback ([details](lima.md#confinement)) |
+| `from` | `base` from a container image (`--from`) | native: devvm converts the image to a disk |
+| `clone` | a project VM from an image | native: an APFS copy-on-write copy on macOS, and a qcow2 overlay on Linux ([details](lima.md#clones-and-overlays)) |
+| `project-mount` | the project folder, read-write | native: virtiofs on macOS, and 9p on Linux |
+| `agent-folders` | agents' host folders, read-only | native: read-only mounts, enforced by the host |
+| `tools-share` | the shared tools, read-only | native: a read-only mount, enforced by the host |
+| `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt on macOS, and on Linux QEMU's `restrict=on` with a `guestfwd` to the proxy ([details](lima.md#confinement)) |
+| `ssh` | ssh for editors | native: Lima's ssh forward and config |
+| `ports` | the listed ports forwarded to the host's loopback | emulated (reviewed): devvm's forwarder over Lima's ssh, for the listed ports alone, with Lima's own forwards off ([details](lima.md#ports)) |
+| `ports-all` | every port forwarded, servers on the VM's loopback included | emulated (reviewed): the same forwarder, for whatever listens in the VM from port 1024 up, and never a port the host has ([details](lima.md#ports)) |
+| `agent-forwarding` | ssh-agent forwarding, chosen when the VM is made | native |
+| `agent-toggle` | turning a VM's ssh-agent forwarding on or off later | native |
+| `cpus` | a VM's CPUs | native |
+| `memory` | a VM's memory | native |
+| `disk` | a VM's disk size | native: it grows but never shrinks |
+| `docker-layer` | the [docker layer](../using/images.md#built-in-layers): Docker's engine running in the VM | native |
+| `nix-layer` | the [nix layer](../using/images.md#nix): Nix's daemon and its store in the VM, with builds in Nix's sandbox | native ([details](images.md#the-nix-layer)) |
+| `link` | links between VMs: a program in one VM reaches a port another VM publishes, by name | native: a link session of devvm's own over Lima's ssh, with remote forwards to `127.77.0.0/16` alone ([details](ports.md#links-between-vms)) |
 
 ### What each backend emulates
 
-On Lima, devvm emulates forwarding ports, both the listed ones and every one, through its forwarder, and the emulation is reviewed, so devvm forwards ports by the same rules on every backend ([port forwarding](ports.md)). Everything else on Lima is Lima's own.
-
-The smolvm column is tested with smolvm 1.32.2 on an arm64 Mac, and Linux hosts are untested. On smolvm, devvm emulates network policy, ssh for editors, forwarding ports (the listed ones and every one) and turning agent forwarding on or off, and each of these emulations is reviewed.
+On Lima, devvm emulates forwarding ports, both the listed ones and every one, through its forwarder, and the emulation is reviewed ([port forwarding](ports.md)). Everything else on Lima is Lima's own.
 
 ## Missing and unreviewed features
 

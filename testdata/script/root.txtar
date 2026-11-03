@@ -70,7 +70,7 @@ stderr '^devvm: flag_unknown command=devvm restart flag=--backend$'
 stderr '^devvm: flag_unknown command=devvm tools add flag=--from$'
 # A backend that isn't one is refused first too.
 ! exec devvm build --backend nope base
-stderr '^devvm: backend_unknown backends=lima, smolvm name=nope$'
+stderr '^devvm: backend_unknown backends=lima name=nope$'
 stderr '^usage_help command=devvm build$'
 ! stub_calls
 

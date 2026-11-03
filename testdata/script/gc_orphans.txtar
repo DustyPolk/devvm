@@ -5,7 +5,7 @@
 # be being made). Never part of gc's default run.
 
 # Each VM's folder is its name's last 14 characters.
-mkdir $VMS/12345612345601 $VMS/12345612345602 $VMS/12345612345603 $VMS/12345612345604 $VMS/12345612345605 $VMS/12345612345607 $VMS/12345612345608
+mkdir $VMS/12345612345601 $VMS/12345612345602 $VMS/12345612345603 $VMS/12345612345604 $VMS/12345612345605 $VMS/12345612345607
 # This run's Lima home, as a VM's state records it.
 exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16 > at'
 # A Lima VM that exists, and one limactl deleted, with its logs, run and
@@ -19,9 +19,8 @@ exec sh -c 'printf "name=devvm-norec-12345612345605\nimage=base\ndir=/p/norec\nb
 exec sh -c 'cd "$VMS" && for h in 12345612345601 12345612345602; do mkdir $h/logs $h/run $h/backend && echo x > $h/logs/network.jsonl && echo x > $h/run/sandbox.sb && echo x > $h/backend/ports; done'
 exec sh -c 'cd "$VMS" && touch -t 202001010000 12345612345601/state 12345612345602/state 12345612345604/state 12345612345605/state'
 # A VM of a backend this devvm doesn't have (a newer devvm's), which
-# can't be asked; a smolvm VM whose machine is gone.
+# can't be asked.
 exec sh -c 'printf "name=devvm-other-12345612345607\nimage=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/12345612345607/state" && touch -t 202001010000 "$VMS/12345612345607/state"'
-exec sh -c 'printf "name=devvm-smol-12345612345608\nimage=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/12345612345608/state" && touch -t 202001010000 "$VMS/12345612345608/state"'
 
 # The default run leaves them.
 exec devvm gc --force
@@ -29,15 +28,13 @@ exists $VMS/12345612345602/state
 
 stub_reset
 exec devvm gc --force --orphans
-stdout '^gc_orphans count=2$'
+stdout '^gc_orphans count=1$'
 stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345602$'
-stdout '^gc_orphan backend=smolvm dir=/p/smol vm=devvm-smol-12345612345608$'
 stderr '^gc_orphans_unknown backend=nope$'
 stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345604$'
 stderr '^gc_orphan_elsewhere vm=devvm-norec-12345612345605$'
 stderr '^gc_orphan_recent vm=devvm-new-12345612345603$'
 stdout '^==> forgot_orphan vm=devvm-gone-12345612345602$'
-stdout '^==> forgot_orphan vm=devvm-smol-12345612345608$'
 
 # Gone: the orphans' folders (state, logs, run and port files). Left:
 # everything else's.
@@ -50,19 +47,18 @@ exists $VMS/12345612345604/state
 exists $VMS/12345612345603/state
 exists $VMS/12345612345605/state
 exists $VMS/12345612345607/state
-! exists $VMS/12345612345608
 exec sh -c 'grep -c . "$STUB_DIR/instances"'
 stdout '^1$'
 stub_calls
-! stdout 'limactl delete|machine delete'
+! stdout 'limactl delete'
 
-# When a backend a VM's state names doesn't answer, gc warns, leaves its
-# VMs' state alone, and goes on with the others.
-mkdir $VMS/12345612345608
-exec sh -c 'printf "name=devvm-smol-12345612345608\nimage=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/12345612345608/state" && touch -t 202001010000 "$VMS/12345612345608/state"'
-exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
+# When a backend a VM's state names doesn't answer, gc warns and leaves
+# its VMs' state alone.
+mkdir $VMS/12345612345602
+exec sh -c 'printf "name=devvm-gone-12345612345602\nimage=base\ndir=/p/gone\nbackend=lima\nnet=off\nbackend_at=%s\n" "$(cat at)" > "$VMS/12345612345602/state" && touch -t 202001010000 "$VMS/12345612345602/state"'
+exec sh -c 'touch "$STUB_DIR/list-fails"'
 exec devvm gc --force --orphans
-stderr '^devvm: gc_backend_skipped backend=smolvm$'
-stderr '^gc_orphans_unknown backend=smolvm$'
-exists $VMS/12345612345608/state
+stderr '^devvm: gc_backend_skipped backend=lima$'
+stderr '^gc_orphans_unknown backend=lima$'
+exists $VMS/12345612345602/state
 exists $VMS/12345612345604/state

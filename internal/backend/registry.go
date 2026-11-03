@@ -135,5 +135,5 @@ func (r *Registry) For(d paths.Dirs, vm *state.VM, flag string) (Choice, error) 
 	return Choice{Backend: b}, nil
 }
 
-// list is the backends' names for a message: lima, smolvm.
+// list is the backends' names for a message: lima, qemu.
 func (r *Registry) list() string { return strings.Join(r.Names(), ", ") }

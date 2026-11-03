@@ -236,7 +236,7 @@ func TestFlagErrors(t *testing.T) {
 		{[]string{"network", "log", "--lines", "x"}, "flag_bad_value flag=--lines form=N value=x"},
 		{[]string{"--clone=maybe"}, "flag_bad_switch flag=--clone value=maybe"},
 		{[]string{"network", "log", "--blocked", "--follow"}, "flags_exclusive flag=--blocked other=--follow"},
-		{[]string{"build", "--backend", "nope", "base"}, "backend_unknown backends=lima, smolvm name=nope"},
+		{[]string{"build", "--backend", "nope", "base"}, "backend_unknown backends=lima name=nope"},
 		{[]string{"ls", "--cpus", "4"}, "flag_unknown command=devvm ls flag=--cpus"},
 		{[]string{"--ports", ""}, "flag_blank flag=ports"},
 		{[]string{"gc", "--history", "--older-than", "30"}, "bad_duration value=30"},

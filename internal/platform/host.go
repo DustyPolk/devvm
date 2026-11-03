@@ -32,7 +32,7 @@ type Overrides struct {
 // in a test build, DEVVM_TEST_LIST_TIMEOUT's, so the CLI tests don't
 // depend on how loaded the machine is. Its value is comma-separated
 // positive durations, each for every backend ("10m") or for one
-// ("smolvm:1s"); one backend's wins.
+// ("lima:1s"); one backend's wins.
 func (h Host) ListTimeout(backend string, def time.Duration) time.Duration {
 	all, one := time.Duration(0), time.Duration(0)
 	for _, e := range strings.Split(h.o.ListTimeout, ",") {

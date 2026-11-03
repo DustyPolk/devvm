@@ -78,7 +78,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 {{< feature title="Backends" icon="cube" level="3" art="backends" >}}
 
-[Lima](https://lima-vm.io/) runs the VMs by default, and [smolvm](https://smolmachines.com/) is an {{< experimental >}} backend ([backends](docs/backends/_index.md)).
+[Lima](https://lima-vm.io/) runs the VMs, with Apple's Virtualization framework on macOS and QEMU on Linux ([backends](docs/backends/_index.md)).
 
 {{< /feature >}}
 
@@ -145,7 +145,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 ### What does it run on?
 
-`devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs one of the supported [backends](docs/backends/_index.md): Lima 2.0 or newer, the default, which Homebrew installs along with devvm and which on Linux also needs QEMU and access to `/dev/kvm`, or smolvm, which is {{< experimental >}}. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
+`devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs [Lima](docs/backends/_index.md) 2.0 or newer, which Homebrew installs along with devvm and which on Linux also needs QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
 
 ### Does the agent run on my machine?
 

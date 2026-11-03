@@ -44,10 +44,10 @@ func TestColorOn(t *testing.T) {
 
 func TestMessagesColored(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "")
-	linked := msg.PortsNoSSH("v")
+	linked := msg.StopFailed("v")
 	plainText, link := linked.Parts()
 	if link == "" || strings.Contains(plainText, link) {
-		t.Fatalf("ports_no_ssh: want a doc link apart from the text, got %q, %q", plainText, link)
+		t.Fatalf("stop_failed: want a doc link apart from the text, got %q, %q", plainText, link)
 	}
 	// Its value bold, the rest as it is.
 	var text string
@@ -60,7 +60,7 @@ func TestMessagesColored(t *testing.T) {
 		}
 	}
 	if !strings.Contains(text, "\033[1mv\033[0m") || plain(text) != plainText {
-		t.Fatalf("ports_no_ssh's value: %q", text)
+		t.Fatalf("stop_failed's value: %q", text)
 	}
 	for _, tc := range []struct {
 		name          string
@@ -93,7 +93,7 @@ func TestMessagesColored(t *testing.T) {
 
 func TestNamesModeStaysPlain(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	m := msg.PortsNoSSH("v")
+	m := msg.StopFailed("v")
 	if text, link := m.Parts(); text != m.Names() || link != "" || m.String() != m.Names() {
 		t.Errorf("names mode: Parts %q, %q, String %q", text, link, m.String())
 	}
@@ -156,7 +156,7 @@ func TestStatusLineValuesBold(t *testing.T) {
 	u, _, errOut := testUI(t, "")
 	u.stderrTTY, u.errStyle = true, style{true}
 	u.getenv = env{"LC_ALL": "C"}.get
-	m := msg.PortsNoSSH("a-long-vm-name")
+	m := msg.StopFailed("a-long-vm-name")
 	for _, cols := range []int{80, 12} {
 		errOut.Reset()
 		u.termWidth = func() int { return cols }

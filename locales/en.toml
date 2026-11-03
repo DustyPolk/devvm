@@ -132,7 +132,7 @@ description = "feature is a feature's name as the backends page lists it (egress
 other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see which backends have it."
 
 [backend_unreviewed_used]
-description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (smolvm)"
+description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
 other = "{{.vm}} uses the {{.backend}} backend's unreviewed {{.feature}}, because DEVVM_UNREVIEWED asks for it. Use this only for testing."
 
 [backend_unknown]
@@ -236,67 +236,11 @@ other = "The path to devvm's Lima home {{.home}} is too long for {{.vm}}'s name.
 [mount_comma]
 other = "Lima can't mount {{.path}} because its path has a comma."
 
-[smolvm_missing]
-other = "smolvm isn't installed. Install smolvm 1.32 or newer."
-
-[smolvm_missing_fix]
-description = "fix is a command, such as brew install smol-machines/tap/smolvm"
-other = "smolvm isn't installed. Run {{.fix}} to install it."
-
-[smolvm_broken]
-other = "smolvm is installed, but smolvm --version fails. Reinstall smolvm."
-
-[smolvm_broken_fix]
-description = "fix is a command, such as brew reinstall smolvm"
-other = "smolvm is installed, but smolvm --version fails. Run {{.fix}} to reinstall it."
-
-[smolvm_old]
-other = "smolvm {{.version}} is too old. Upgrade to smolvm 1.32 or newer."
-
-[smolvm_old_fix]
-description = "fix is a command, such as brew upgrade smolvm"
-other = "smolvm {{.version}} is too old. Run {{.fix}} to upgrade it."
-
-[smolvm_host_unsupported]
-description = "host is Go's names for the host's system and processor (linux/riscv64)"
-other = "The smolvm backend doesn't run on {{.host}}. Use an arm64 Mac, or Linux on arm64 or x86_64."
-
-[smolvm_machine_foreign]
-other = "smolvm has a machine named {{.vm}} that isn't this devvm's. Delete or rename it with smolvm."
-
-[smolvm_update_failed]
-other = "Changing {{.vm}}'s smolvm settings failed."
-
-[smolvm_script_failed]
-other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}."
-
-[smolvm_from_registry_only]
-other = "The smolvm backend builds only from container images in a registry, and {{.image}} is only in Docker. Push it to a registry."
-
-[smolvm_mount_colon]
-other = "smolvm can't mount {{.path}}, because the path has a colon."
-
-[vm_no_ssh]
-other = "{{.vm}} was started without ssh. Run devvm restart to start it with ssh."
-
-[vm_no_sshd]
-other = "{{.vm}}'s image has no sshd, so the VM runs without ssh. A VM made after you run devvm rebuild has it."
-
-[smolvm_ssh_port_forwarded]
-description = "port is a host port"
-other = "Port {{.port}}, which {{.vm}}'s ssh uses, is also one of its forwarded ports. Leave it out of devvm ports."
-
-[smolvm_no_agent]
-other = "{{.vm}} forwards an SSH agent, but SSH_AUTH_SOCK isn't set. Start an agent, or set SSH_AUTH_SOCK."
-
-[ports_no_ssh]
-other = "{{.vm}} runs without ssh, so devvm forwards none of its ports."
-
 [ports_forward_failed]
 other = "Forwarding {{.vm}}'s ports didn't start. Check {{.log}} for the reason."
 
 [net_off_backend]
-description = "backend is a backend's name (smolvm)"
+description = "backend is a backend's name (lima)"
 other = "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
 
 [disk_low]
@@ -309,15 +253,6 @@ other = "the disk holding {{.dir}} has {{.free}} GiB free, less than the {{.need
 
 [disk_free_unknown]
 other = "couldn't read the free space on the disk holding {{.dir}}"
-
-[creating_from_image]
-other = "creating {{.vm}} from {{.image}}"
-
-[packing_image]
-other = "packing {{.vm}} into its image"
-
-[pack_failed]
-other = "Packing {{.vm}} into its image failed."
 
 [image_missing]
 other = "Image {{.key}} is missing. Run devvm build to build it again."
@@ -454,9 +389,6 @@ other = "new VMs get the {{.backend}} backend"
 
 [backend_help]
 other = "Default backend for new VMs (up/down to choose, enter to confirm):"
-
-[backend_experimental]
-other = "experimental"
 
 [setup_failed]
 description = "reason is an error from the system, in English"
@@ -1601,9 +1533,6 @@ other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}, and it applies
 [agent_next_start]
 other = "{{.vm}}'s SSH agent forwarding changes when it next starts. Run devvm restart to apply it now."
 
-[agent_unchosen_stop]
-other = "Something outside devvm started {{.vm}}, which may have forwarded an SSH agent you didn't choose, so devvm stopped the VM. Run devvm to start it again."
-
 [agent_fixed]
 other = "{{.vm}} was made without SSH agent forwarding, and the {{.backend}} backend can't add it later. To add it, run devvm rm, then devvm --ssh-agent."
 
@@ -1648,7 +1577,7 @@ description = "keys is a space-separated list of the keys' comments"
 other = "devvm's SSH agent holds: {{.keys}}"
 
 [agent_holds_note]
-other = "VMs set to devvm ssh-agent devvm can use these keys while you're connected, or on smolvm while they run, and devvm loads them again after a reboot."
+other = "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
 
 [clone_needs_git]
 other = "--clone needs git, and git isn't installed on this machine."

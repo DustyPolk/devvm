@@ -3,7 +3,7 @@
 # VM. Logs every call to $STUB_LOG, and runs the git command it's given
 # here, on $STUB_DIR/vmfs/DIR (the VM's files, as the limactl stub keeps
 # them). With $STUB_DIR/ssh-fails, or for anything else, it fails as ssh
-# does. A master connection (-M, a smolvm VM's port forwarder's) reads the script it's fed, answers it with $STUB_DIR/guest-ports (what listens in the VM, as /proc/net/tcp has
+# does. A master connection (-M, a VM's port forwarder's) reads the script it's fed, answers it with $STUB_DIR/guest-ports (what listens in the VM, as /proc/net/tcp has
 # it) and ".", then waits to be stopped. A link session's master (-M -N -S CONTROL, devvm _links's)
 # listens on its control socket until it's stopped, and its -O forward and -O cancel work, but for a
 # forward whose ADDRESS:PORT is a line of $STUB_DIR/link-taken, which the VM refuses.

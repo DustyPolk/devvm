@@ -38,15 +38,15 @@ func testRegistry(t *testing.T, names ...string) *backend.Registry {
 }
 
 func TestRegistry(t *testing.T) {
-	r := testRegistry(t, "smolvm", "lima")
-	if got := r.Names(); len(got) != 2 || got[0] != "lima" || got[1] != "smolvm" {
+	r := testRegistry(t, "vz", "lima")
+	if got := r.Names(); len(got) != 2 || got[0] != "lima" || got[1] != "vz" {
 		t.Errorf("Names: %q", got)
 	}
-	if all := r.All(); len(all) != 2 || all[0].Name() != "lima" || all[1].Name() != "smolvm" {
+	if all := r.All(); len(all) != 2 || all[0].Name() != "lima" || all[1].Name() != "vz" {
 		t.Errorf("All: %v", all)
 	}
-	if b, ok := r.Lookup("smolvm"); !ok || b.Name() != "smolvm" {
-		t.Errorf("Lookup(smolvm): %v, %v", b, ok)
+	if b, ok := r.Lookup("vz"); !ok || b.Name() != "vz" {
+		t.Errorf("Lookup(vz): %v, %v", b, ok)
 	}
 	if _, ok := r.Lookup("fake"); ok {
 		t.Error("Lookup(fake): found")
@@ -68,18 +68,18 @@ func TestFor(t *testing.T) {
 		ignored  bool
 	}{
 		{name: "a new VM, nothing set", want: "lima"},
-		{name: "a new VM, the default file", file: "smolvm", want: "smolvm"},
-		{name: "a new VM, --backend", file: "smolvm", flag: "fake", want: "fake"},
-		{name: "an existing VM keeps its backend", file: "fake", recorded: "smolvm", want: "smolvm"},
-		{name: "an existing VM ignores --backend", recorded: "smolvm", flag: "fake", want: "smolvm", ignored: true},
-		{name: "--backend naming its own", recorded: "smolvm", flag: "smolvm", want: "smolvm"},
-		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=fake, lima, smolvm name=sbx"},
-		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=fake, lima, smolvm file=/c/config.toml name=sbx"},
+		{name: "a new VM, the default file", file: "vz", want: "vz"},
+		{name: "a new VM, --backend", file: "vz", flag: "fake", want: "fake"},
+		{name: "an existing VM keeps its backend", file: "fake", recorded: "vz", want: "vz"},
+		{name: "an existing VM ignores --backend", recorded: "vz", flag: "fake", want: "vz", ignored: true},
+		{name: "--backend naming its own", recorded: "vz", flag: "vz", want: "vz"},
+		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=fake, lima, vz name=sbx"},
+		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=fake, lima, vz file=/c/config.toml name=sbx"},
 		{name: "an existing VM on a backend not here", recorded: "qemu", want: "backend_unknown_vm backend=qemu vm=devvm-x-0123456789abcd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
-			r := testRegistry(t, "lima", "smolvm", "fake")
+			r := testRegistry(t, "lima", "vz", "fake")
 			if tc.file != "" {
 				r.DefaultBackend = func() (string, string, error) { return tc.file, "/c/config.toml", nil }
 			}
@@ -109,14 +109,14 @@ func TestUsed(t *testing.T) {
 	}{
 		{name: "no VMs", want: ""},
 		{name: "one backend's", vms: []string{"lima", "lima"}, want: "lima"},
-		{name: "two backends', sorted", vms: []string{"smolvm", "fake", "lima"}, want: "fake lima smolvm"},
-		{name: "unrecorded and unknown backends", vms: []string{"", "qemu", "smolvm"}, want: "smolvm"},
+		{name: "two backends', sorted", vms: []string{"vz", "fake", "lima"}, want: "fake lima vz"},
+		{name: "unrecorded and unknown backends", vms: []string{"", "qemu", "vz"}, want: "vz"},
 		{name: "a VM's policy file", vms: []string{"lima"}, files: "0123456789abc0/policy", want: "lima"},
 		{name: "a folder that isn't a VM's", vms: []string{"lima"}, files: "other/state", want: "lima"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
-			r := testRegistry(t, "lima", "smolvm", "fake")
+			r := testRegistry(t, "lima", "vz", "fake")
 			for i, b := range tc.vms {
 				if _, err := state.CreateVM(d, "devvm-x-0123456789abc"+strconv.Itoa(i), state.NewVM{Image: "base", Backend: b}); err != nil {
 					t.Fatal(err)
@@ -160,9 +160,9 @@ func readVM(t *testing.T, d paths.Dirs, recorded string) *state.VM {
 
 func TestForWithoutTheDefault(t *testing.T) {
 	d := testDirs(t)
-	r := testRegistry(t, "smolvm")
+	r := testRegistry(t, "vz")
 	_, err := r.For(d, readVM(t, d, ""), "")
-	if got, want := msg.NamesOf(err), "backend_unknown backends=smolvm name=lima"; got != want {
+	if got, want := msg.NamesOf(err), "backend_unknown backends=vz name=lima"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

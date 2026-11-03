@@ -16,9 +16,8 @@ devvm space [flags]
 ## Examples
 
 ```text
-  devvm space                   # show what devvm keeps and what frees it
-  devvm space --backend smolvm  # only the smolvm backend's
-  devvm space --json            # the same as JSON, for scripts
+  devvm space         # show what devvm keeps and what frees it
+  devvm space --json  # the same as JSON, for scripts
 ```
 
 ## Options

@@ -15,5 +15,4 @@ These pages explain how devvm does what the other sections describe, for readers
 - [Security model](security.md): what devvm protects on your machine and how, and what it doesn't protect.
 - [Backends](backends.md): each backend's features, native or emulated, and what happens when one is missing.
 - [Lima](lima.md): devvm's Lima home, confinement, clones and port forwarding on Lima.
-- [smolvm](smolvm.md): how devvm builds and runs VMs on smolvm, and what it emulates there.
 - [Design notes](design.md): why devvm is built this way, what failed, and what's still open.

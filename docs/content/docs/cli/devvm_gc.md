@@ -19,7 +19,6 @@ devvm gc [--tool-images [--recent] [TOOL...]] [flags]
   devvm gc                             # delete stale images and unused tools, after asking
   devvm gc --tool-images               # also the current shared tool images no VM has
   devvm gc --history --older-than 30d  # also the history exports 30 days old or more
-  devvm gc --backend smolvm            # delete every image and unused tool of the smolvm backend
   devvm gc --force                     # delete without asking, as a script must
 ```
 

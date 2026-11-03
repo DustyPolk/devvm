@@ -153,9 +153,8 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		// VMs' proxies follow a stub hostagent that's gone before they
 		// look: stop them with the sandbox.
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_proxy -listen .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
-		// And Lima's and smolvm's VMs' port forwarders.
-		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_lima-ports -vm .* -lifeline "+root+"/").Run()   //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
-		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_smolvm-ports -vm .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
+		// And VMs' port forwarders.
+		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_lima-ports -vm .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		// And client VMs' link sessions, named only by their VM: by their
 		// pid files, then the stub ssh's masters they leave.
 		stopLinkSessions(root)
@@ -227,9 +226,6 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	for name, v := range fakeHost() {
 		env.Setenv(name, v)
 	}
-	// The stub smolvm's machines run on this process, which outlives each
-	// command, as smolvm's own does.
-	env.Setenv("SMOLVM_STUB_PID", strconv.Itoa(os.Getpid()))
 	// The shared tools' versions: the stub mise, which resolves the
 	// fixture lock.
 	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))

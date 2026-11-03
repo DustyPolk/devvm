@@ -54,13 +54,13 @@ func wantCodes(t *testing.T, colored string, painted ...string) {
 func TestWriteListColored(t *testing.T) {
 	ls := []vm.Listed{
 		{Name: "devvm-a", Status: string(backend.StatusRunning), Image: "base", Git: "on", Net: "on", Backend: "lima", Folder: "/a"},
-		{Name: "devvm-bb", Status: string(backend.StatusStopped), Image: "docker", Tools: []string{"node", "claude"}, Git: "off", Net: "unenforced", Backend: "smolvm", Folder: "/b", Links: 2},
+		{Name: "devvm-bb", Status: string(backend.StatusStopped), Image: "docker", Tools: []string{"node", "claude"}, Git: "off", Net: "unenforced", Backend: "fake", Folder: "/b", Links: 2},
 		{Name: "devvm-c", Status: "Broken", Git: vm.ModeClone, Backend: "lima", Folder: "/c"},
 	}
 	plain, colored := tables(t, func(tab *ui.Table) error { return writeList(tab, ls) })
 	want := "NAME      STATUS   IMAGE   TOOLS        GIT    NET         LINKS  BACKEND  FOLDER\n" +
 		"devvm-a   Running  base    -            on     on          -      lima     /a\n" +
-		"devvm-bb  Stopped  docker  node,claude  off    unenforced  2      smolvm   /b\n" +
+		"devvm-bb  Stopped  docker  node,claude  off    unenforced  2      fake     /b\n" +
 		"devvm-c   Broken   -       -            clone  -           -      lima     /c\n"
 	if plain != want {
 		t.Errorf("got\n%s\nwant\n%s", plain, want)

@@ -17,7 +17,7 @@ fi
 # the socket, and its relay is the VM's only way in. The clipboard is on or off as asked, changed
 # in place (vncconfig) on a desktop that runs; devvm's relay keeps the viewer's clipboard from the
 # VM when it's off whatever the server says. Then an Xfce session on it, in a D-Bus session of
-# its own (no init system starts one on smolvm and Docker). A run that started nothing prints
+# its own. A run that started nothing prints
 # nothing; its own log is ~/.cache/devvm-desktop.log.
 sudo install -m 755 /dev/stdin /usr/local/bin/devvm-desktop <<'S'
 #!/bin/sh

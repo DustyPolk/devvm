@@ -243,6 +243,15 @@ func touch(t *testing.T, paths ...string) {
 	}
 }
 
+// Detect is DetectFiles' names alone.
+func Detect(dir string) []string {
+	var names []string
+	for _, f := range DetectFiles(dir) {
+		names = append(names, f.Name)
+	}
+	return names
+}
+
 func TestDetect(t *testing.T) {
 	d := t.TempDir()
 	if got := Detect(d); got != nil {

@@ -35,7 +35,7 @@ type Forwards struct {
 	// folders can be too long for a socket.
 	Run string
 	// Cmd is devvm's hidden command that runs a forwarder
-	// (_smolvm-ports), and Self is devvm's binary, which runs it.
+	// (_lima-ports), and Self is devvm's binary, which runs it.
 	Cmd, Self string
 	// Detach starts a process that outlives devvm (daemon.Detach).
 	Detach daemon.Starter

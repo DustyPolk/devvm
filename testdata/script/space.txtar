@@ -59,8 +59,6 @@ stdout '^images +lima +2 +'
 stdout '^tools gnu +lima +'
 ! stdout '^(history|state|mise|tools -) '
 stdout '^total +- +- +\S+ +- +\S+ +- +-$'
-stub_calls
-! stdout smolvm
 ! exec devvm space --backend nope
 stderr '^devvm: backend_unknown '
 
@@ -74,21 +72,21 @@ stdout '"total": \d+'
 # A backend a VM's state names that doesn't answer is named, and its VMs
 # are never leftovers.
 mkdir $VMS/12345612345603
-exec sh -c 'printf "name=devvm-s-12345612345603\nimage=base\ndir=/s\nbackend=smolvm\n" > "$VMS/12345612345603/state"'
-exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
+exec sh -c 'printf "name=devvm-s-12345612345603\nimage=base\ndir=/s\nbackend=lima\n" > "$VMS/12345612345603/state"'
+exec sh -c 'touch "$STUB_DIR/list-fails"'
 exec devvm space
-stderr '^space_backend_unknown backend=smolvm$'
-stdout '^leftover state +- +1 '
+stderr '^space_backend_unknown backend=lima$'
+! stdout '^leftover state '
 
 # A backend slower than the timeout is named the same way, and its VMs
 # aren't leftovers either.
-rm $STUB_DIR/smolvm-ls-fails
-exec sh -c 'touch "$STUB_DIR/smolvm-ls-hangs"'
-env DEVVM_TEST_LIST_TIMEOUT=10m,smolvm:1s
+rm $STUB_DIR/list-fails
+exec sh -c 'touch "$STUB_DIR/list-hangs"'
+env DEVVM_TEST_LIST_TIMEOUT=10m,lima:1s
 exec devvm space
-stderr '^space_backend_unknown backend=smolvm$'
-stdout '^leftover state +- +1 '
-rm $STUB_DIR/smolvm-ls-hangs
+stderr '^space_backend_unknown backend=lima$'
+! stdout '^leftover state '
+rm $STUB_DIR/list-hangs
 env DEVVM_TEST_LIST_TIMEOUT=10m
 
 # Lima's download cache, which every Lima home shares: shown apart.

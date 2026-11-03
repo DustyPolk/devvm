@@ -2,7 +2,8 @@
 # Stand-in for limactl in tests. Logs every call to $STUB_LOG, and the folder
 # and Lima home of the last one to $STUB_DIR/limactl-env. Answers list --json
 # from $STUB_DIR/instances ("name [status]" per line, status defaults to
-# Stopped), which create, clone, start, stop and delete keep up to date;
+# Stopped), which create, clone, start, stop and delete keep up to date,
+# failing with $STUB_DIR/list-fails and hanging with $STUB_DIR/list-hangs;
 # create's template on its input (-) goes to $STUB_DIR/create-template. A
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
@@ -211,6 +212,8 @@ esac
 
 [[ ${1:-} != --version ]] || { echo "limactl version 2.2.1"; exit 0; }
 [[ ${1:-} == list && ${2:-} == --json ]] || exit 0
+[[ ! -e $STUB_DIR/list-fails ]] || exit 1
+[[ ! -e $STUB_DIR/list-hangs ]] || exec sleep 30
 while read -r n st; do
   read -r cpus mem disk < <(cat "$STUB_DIR/size-$n" 2>/dev/null || echo "4 8589934592 107374182400")
   cfg=$(cat "$STUB_DIR/config-$n.json" 2>/dev/null || echo '{}')

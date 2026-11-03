@@ -70,7 +70,7 @@ func TestToolFile(t *testing.T) {
 		{"shared-tools/build.sh", toolRoot("#!/bin/bash\n# edit\n"), func(*Tool) {}},
 		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc = "musl" }},
 		{"the version", root, func(t *Tool) { t.Version = "24.22.0" }},
-		{"the format (smolvm's)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
+		{"the format (plain)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
 		{"a setting in mise.toml", withConfig("#!/bin/bash\n", strings.Replace(miseConfig, "compile = false", "compile = true", 1)), func(*Tool) {}},
 		{"a setting added to mise.toml", withConfig("#!/bin/bash\n", miseConfig+"node.gpg_verify = false\n"), func(*Tool) {}},
 	}

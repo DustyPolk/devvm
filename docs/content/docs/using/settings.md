@@ -26,7 +26,7 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 `~/.config/devvm/config.toml` sets the defaults that new VMs get, and the retention settings, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
-# The backend new VMs get: lima or smolvm.
+# The backend new VMs get: lima.
 backend = "lima"
 
 # Whether new VMs get network policy: ask, on or off.
@@ -97,7 +97,7 @@ devvm reads all of `config.toml` each time it needs a default, and it checks eve
 
 ```sh
 devvm setup                          # asks all five questions
-devvm setup --backend smolvm         # the default backend, without asking
+devvm setup --backend lima           # the default backend, without asking
 devvm setup --features fzf,omb       # base's features, without asking
 devvm setup --features none          # base gets no features
 devvm setup --agents claude,codex    # new VMs' coding agents, without asking

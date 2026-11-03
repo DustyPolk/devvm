@@ -1,3 +1,7 @@
+// Package vmssh is what devvm runs over a VM's ssh on the host: the port
+// forwarder that reaches a Lima VM over Lima's ssh (Forwarder, run
+// detached by Forwards), and the sessions that carry links between VMs
+// (Links).
 package vmssh
 
 import (
@@ -29,10 +33,9 @@ import (
 )
 
 // The forwarder forwards a VM's ports to the host's loopback, by the same
-// rules on every backend: Lima's own forwards share a port a host program
-// has (SO_REUSEADDR), and smolvm's are at most 64 and reach only servers
-// on all of the guest's addresses. It runs on the host, detached (devvm
-// _lima-ports, _smolvm-ports; Forwards), one per VM:
+// rules on every backend, where Lima's own forwards would share a port a
+// host program has (SO_REUSEADDR). It runs on the host, detached (devvm
+// _lima-ports; Forwards), one per VM:
 //
 //   - it reaches the VM only through the VM's sshd, as the VM's user with
 //     its own key, the host key read through the backend at the start and
@@ -46,7 +49,7 @@ import (
 //     (proxy.IsLinkAddr): every port from 1024 up, or the VM's listed ports alone
 //     (Only); never on a port the host has on any address (no SO_REUSEADDR:
 //     platform.ListenExclusive), nor on a port devvm records for any VM
-//     (ssh, proxy, decider, listed forwards) but the VM's own listed ones;
+//     (ssh, proxy, desktop, listed forwards) but the VM's own listed ones;
 //   - every connection starts on the host: the VM opens none to the host
 //     through it, and the master asks for no forwarding into the host;
 //   - it ends once the VM no longer runs as it did when it started (Alive),

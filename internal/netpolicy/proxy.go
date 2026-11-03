@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"math/rand/v2"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -115,8 +113,7 @@ func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 // to go on: devvm's CA, the VM's secret files, its ports, and its proxy
 // running. It returns the confinement its backend starts it with. The proxy
 // follows the host process that runs the VM (b's Lifeline): a VM started
-// again gets a new proxy. On a backend with a decider, the proxy is the
-// decider too, with a token new at each start.
+// again gets a new proxy.
 func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, running bool) (backend.Confinement, error) {
 	vm := st.Name()
 	lifeline := b.Lifeline(ctx, vm)
@@ -188,16 +185,6 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	conf := backend.Confinement{
 		Net: backend.NetProxy, ProxyPort: pp, ProxyPassword: key, Env: Env, SSHPort: sp,
 	}
-	if backend.UsesDecider(b) {
-		dp, err := p.port(ctx, st, KeyDeciderPort, up, running)
-		if err != nil {
-			return none, err
-		}
-		if conf.DeciderToken, err = deciderToken(st, running); err != nil {
-			return none, err
-		}
-		conf.Decider = "127.0.0.1:" + strconv.Itoa(dp)
-	}
 	// The logs hold each VM's requests: the user's alone.
 	for _, d := range []string{p.Dirs.Run(), p.Dirs.VM(vm).Run(), p.Dirs.VM(vm).Logs()} {
 		if err := state.PrivateDir(d); err != nil {
@@ -210,7 +197,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err := p.writeUpstream(vm, cas.Bundle(), upstream); err != nil {
 		return none, err
 	}
-	return conf, p.start(st, b, conf, policies, bin, caSum, lifeline)
+	return conf, p.start(st, conf, policies, bin, caSum, lifeline)
 }
 
 // policyList is a VM's policies (Policies) as its proxy's flags list
@@ -332,25 +319,13 @@ func (p *Proxy) writeUpstream(vm string, cas, upstream []byte) error {
 }
 
 // start starts the VM's proxy as conf has it, and waits for it to listen.
-func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement, policies policyList, bin, caSum, lifeline string) error {
+func (p *Proxy) start(st *state.VM, conf backend.Confinement, policies policyList, bin, caSum, lifeline string) error {
 	vm := st.Name()
-	// The password and the decider's token go in files: a process's
-	// arguments are visible to other users.
+	// The password goes in a file: a process's arguments are visible to
+	// other users.
 	auth := p.run(vm, ".auth")
 	if err := state.WriteFile(auth, []byte(conf.ProxyPassword+"\n")); err != nil {
 		return err
-	}
-	var decider []string
-	if conf.Decider != "" {
-		u, err := url.Parse(b.ProxyURL(conf))
-		if err != nil || u.Host == "" {
-			return fmt.Errorf("%s: no proxy address in the VM", vm)
-		}
-		tok := p.run(vm, ".decider")
-		if err := state.WriteFile(tok, []byte(conf.DeciderToken+"\n")); err != nil {
-			return err
-		}
-		decider = []string{"-decider", conf.Decider, "-decider-to", u.Host, "-decider-token-file", tok}
 	}
 	files := p.Dirs.VM(vm)
 	logPath := files.ProxyLog()
@@ -361,11 +336,11 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	defer func() { _ = out.Close() }()
 	ca := p.Dirs.CA()
 	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
-	args := append([]string{
+	args := []string{
 		"_proxy", "-listen", addr, "-vm", vm, "-builtin-policy", policies.builtin, "-policy", policies.files, "-log", files.EventLog(), "-proxy-log", logPath, "-lifeline", lifeline,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
 		"-secrets", files.Secrets(), "-secret-cmd", p.Self, "-auth-file", auth, "-links", files.LinkList(), "-link-sockets", p.Dirs.Run(),
-	}, decider...)
+	}
 	for _, f := range [][2]string{{".cas", "-upstream-cas"}, {".upstream", "-upstream"}} {
 		if _, err := os.Stat(p.run(vm, f[0])); err == nil {
 			args = append(args, f[1], p.run(vm, f[0]))
@@ -421,10 +396,10 @@ func (p *Proxy) freePort(ctx context.Context) (int, error) {
 	return 0, errors.New("no free port on 127.0.0.1")
 }
 
-// UsedPorts returns the ssh, proxy, decider and desktop ports VMs have, and the
+// UsedPorts returns the ssh, proxy and desktop ports VMs have, and the
 // ports they list to forward, but self's (a VM's name, or ""): what a new
-// one avoids, and what a VM's port forwarder never takes (smolvm's), self
-// being that VM.
+// one avoids, and what a VM's port forwarder never takes, self being that
+// VM.
 func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 	names, err := state.VMNames(d)
 	if err != nil {
@@ -436,7 +411,7 @@ func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 		if err != nil {
 			continue // not a VM's state
 		}
-		for _, k := range []string{KeySSHPort, KeyProxyPort, KeyDeciderPort, KeyDesktopPort} {
+		for _, k := range []string{KeySSHPort, KeyProxyPort, KeyDesktopPort} {
 			if n, err := strconv.Atoi(st.Get(k)); err == nil {
 				used[n] = true
 			}

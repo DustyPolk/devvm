@@ -37,10 +37,10 @@ Some protections hold only with [network policy](network.md) or only on macOS, a
 ### Getting out over the network, with network policy
 
 - **Sending data to the attacker's server.** Most attacks end by sending what they stole to a server the attacker runs. A VM with network policy reaches only its proxy, and the proxy allows only the hosts on the VM's allowlist. devvm leaves storage and paste sites out of the default allowlist on purpose, because they're easy ways to send data out ([allowlists](network.md#allowlists)).
-- **DNS tunnelling.** An attacker can encode data into names and look them up at a DNS server of their own. A VM sends no DNS queries of its own, because names resolve in the proxy on this machine. smolvm leaves [one narrow channel](#network).
+- **DNS tunnelling.** An attacker can encode data into names and look them up at a DNS server of their own. A VM sends no DNS queries of its own, because names resolve in the proxy on this machine.
 - **Services on this machine and your network.** Code in a VM could attack what developers leave open on `localhost`, such as databases, dev servers, Docker's API and other VMs' ports. It could also attack your router, a NAS, or a cloud provider's metadata service at `169.254.169.254`. The proxy refuses this machine's own addresses and internal ones, such as loopback, private, link-local and CGNAT ranges, unless a rule names the address ([the proxy](../internals/network.md#the-proxy)).
 - **DNS rebinding and address tricks.** A name can resolve to a public address when it's checked and to an internal one when it's dialed, and an internal address can hide in an IPv6 or NAT64 form. The proxy dials only the address it checked, and it sees through NAT64 forms ([the proxy](../internals/network.md#the-proxy)).
-- **Going around the proxy.** Root in a VM can change its routes and firewall, but devvm confines the VM from outside it, so nothing in the VM reaches anything but the proxy ([confinement](../internals/lima.md#confinement)). devvm catches a VM started outside devvm, or one given a second network, with [the self-check](../internals/network.md#the-self-check), and stops it. On smolvm, network policy is emulated and reviewed.
+- **Going around the proxy.** Root in a VM can change its routes and firewall, but devvm confines the VM from outside it, so nothing in the VM reaches anything but the proxy ([confinement](../internals/lima.md#confinement)). devvm catches a VM started outside devvm, or one given a second network, with [the self-check](../internals/network.md#the-self-check), and stops it.
 
 ### Spreading beyond the VM
 
@@ -84,7 +84,7 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 
 - **Worms that use your GitHub token.** Shai-Hulud (2025) spread through npm install scripts. It collected npm, GitHub and cloud credentials, then used them to publish repos and new versions of packages. A VM holds no npm or cloud credentials, and with network policy its GitHub token is a placeholder. The proxy still puts the real GitHub token into every request to GitHub's hosts, so a worm in the VM can push, make repos and do whatever else the GitHub token's scope allows. Use a fine-grained GitHub token scoped to the repos the VM needs, or bind none ([saving and binding secrets](network.md#saving-and-binding-secrets)).
 - **Minting credentials with a secret.** A VM that can use a secret can use it to make another credential that outlasts it. The proxy refuses GitHub REST calls that add an SSH key, a deploy key, a self-hosted runner or a webhook with `403`, but it can't refuse everything, such as GitHub's GraphQL API, an OAuth app grant or other services. If a VM may have done this, rotate the secret and check the service's keys, access tokens and runners.
-- **Your SSH agent.** While [agent forwarding](../using/ssh.md#agent-forwarding) is on, anything in the VM can use the agent's keys to push or log in to servers, though it can't copy them. The VM has the agent while you're connected, and on smolvm the whole time the VM runs. `devvm ssh-agent devvm` limits it to the keys you add to [devvm's own agent](../using/ssh.md#devvms-own-agent), and an agent that asks you to approve each use, such as 1Password's or Secretive, narrows it further.
+- **Your SSH agent.** While [agent forwarding](../using/ssh.md#agent-forwarding) is on, anything in the VM can use the agent's keys to push or log in to servers, though it can't copy them. The VM has the agent while you're connected. `devvm ssh-agent devvm` limits it to the keys you add to [devvm's own agent](../using/ssh.md#devvms-own-agent), and an agent that asks you to approve each use, such as 1Password's or Secretive, narrows it further.
 
 ### Git
 
@@ -94,7 +94,6 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 ### Network
 
 - **Domain fronting.** The proxy checks the host name that a TLS connection asks for, but not the `Host` inside the encrypted traffic, so a CDN that serves many sites on one address can route an allowed connection to a site that isn't allowed. The proxy reads the connections to hosts with a bound secret, and it refuses a request in them that names another host.
-- **DNS from smolvm.** On the experimental [smolvm](../internals/smolvm.md#network-policy) backend, a VM's DNS answers only `devvm.invalid`, but smolvm still asks your resolver about that name, which is a narrow way out.
 - **Ports the VM listens on.** devvm forwards the VM's ports to this machine's `localhost`, so a VM could take a port that a program on this machine trusts while that port is free. devvm's forwarder never takes a port that a program on this machine already has, or one that devvm records for a VM, but a program that binds a port on all addresses after devvm forwarded it gets its `localhost` connections sent to the VM. `devvm ports` limits what a VM forwards, and `devvm ports none` forwards nothing ([ports](../using/ports-size.md#ports)).
 - **VS Code's relays.** Over Remote-SSH, VS Code forwards ports and answers git's prompts with your GitHub sign-in. devvm turns both off in the VM's VS Code settings, but the VM can turn them back on, so turn them off in your own VS Code settings as well ([VS Code](../using/ssh.md#vs-code)).
 
@@ -128,6 +127,6 @@ The VM can write anything in the project folder, and devvm locks only `.git`. An
 ### The platform
 
 - **`.git` on Linux hosts.** Linux has no flag a user can set to lock a file, so VMs on Linux hosts have no `.git` protection, and the VM can change hooks and config that run on the host. Use `--clone` there ([Linux hosts](git-protection.md#linux-hosts)).
-- **Escaping the VM.** A bug in Lima, Apple's Virtualization framework or QEMU, or on smolvm in smolvm or libkrun, could let code out of the VM.
+- **Escaping the VM.** A bug in Lima, Apple's Virtualization framework or QEMU could let code out of the VM.
 
 Found a way out of a VM? See [SECURITY.md](https://github.com/w3cj/devvm/blob/main/SECURITY.md).

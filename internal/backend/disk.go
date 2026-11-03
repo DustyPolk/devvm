@@ -37,8 +37,7 @@ func count(n int) uint64 {
 // devvm's data folder, where the images come out on every backend: the
 // images alone, measured with statfs (the folder on its own tmpfs: 184 MB
 // for claude, 194 MB for node, pnpm and bun). Ten tools came to 1.5 GiB as images on Lima, rust alone, the largest,
-// to 0.6 GiB, and seven to 2.6 GiB uncompressed for smolvm, whose own
-// floors are checked on that disk too.
+// to 0.6 GiB.
 func ToolImages(n int) uint64 { return 512<<20 + count(n)*(256<<20) }
 
 // Storage is a backend whose images and VMs are files on the host's own

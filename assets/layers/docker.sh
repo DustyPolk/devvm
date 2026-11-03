@@ -53,13 +53,8 @@ else
   sudo usermod -aG docker "$USER"
 fi
 
-# Running now too, for the rest of the build: systemd started it with the package; OpenRC
-# starts it here; with no init system (smolvm), devvm starts it after each start
-# (assets/container/services.sh), and here.
-if [[ -d /run/systemd/system ]]; then
-  :
-elif [[ -d /run/openrc ]]; then
+# Running now too, for the rest of the build: systemd started it with the package, and OpenRC
+# starts it here.
+if [[ -d /run/openrc ]]; then
   sudo rc-service docker start
-else
-  sudo sh -c 'mkdir -p /var/log && nohup dockerd -p /run/docker.pid >/var/log/dockerd.log 2>&1 </dev/null &'
 fi

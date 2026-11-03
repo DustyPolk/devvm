@@ -20,9 +20,6 @@
 //   - With -links, the VM's links (NAME:PORT, from the list devvm _links writes) go to their
 //     sockets on the host before any rule, their bytes as they are (see links.go).
 //
-// On a backend that asks the host about each connection a VM opens (smolvm), the proxy is also
-// that decider (-decider, decider.go): it takes over connections to itself and refuses the rest.
-//
 // It exits when the VM's hostagent does (-lifeline). Standard library only, and internal/daemon,
 // which is too: it prints nothing itself, but writes to the streams devvm hands Main.
 package proxy
@@ -100,9 +97,6 @@ func newFlags() *flag.FlagSet {
 	fs.BoolVar(&loginSecrets, "login-secrets", false, "with -login claude: print the MCP servers whose settings hold secrets")
 	fs.BoolVar(&loginHosts, "login-hosts", false, "with -login-bindings: print the bindings' hosts as allowlist lines (host:443) instead")
 	fs.StringVar(&authFile, "auth-file", "", "file holding the VM's password: requests need Proxy-Authorization for user devvm with it")
-	fs.StringVar(&deciderAddr, "decider", "", "also decide, on this loopback address, each connection the VM opens (decider.go)")
-	fs.StringVar(&deciderTo, "decider-to", "", "with -decider: the proxy's address in the VM, the only destination taken over")
-	fs.StringVar(&deciderTokenFile, "decider-token-file", "", "with -decider: file holding the token the backend proves itself with (64 hex digits)")
 	fs.StringVar(&nixCacheDir, "nix-cache", "", "serve http://devvm.proxy/nix/, the Nix cache shared with other VMs, from this folder (nixcache.go)")
 	fs.Int64Var(&nixCacheMax, "nix-cache-max", NixCacheDefault, "with -nix-cache: the cache's cap, in bytes")
 	fs.StringVar(&linksFile, "links", "", "the VM's links list, which devvm _links writes: reach them through their sockets, before any rule (links.go)")
@@ -782,25 +776,11 @@ func Main(args []string, std IO) error {
 	if err := loadPolicies(std.FS); err != nil {
 		return err
 	}
-	// The decider listens first: "listening on" means both are.
-	h, to, token, err := startDecider()
-	if err != nil {
-		return err
-	}
 	ln, err := net.Listen("tcp", listen) //nolint:noctx // listens for the proxy's whole life
 	if err != nil {
-		if h != nil {
-			_ = h.Close()
-		}
 		return err
 	}
 	srv := &http.Server{Handler: http.HandlerFunc(handler), ReadHeaderTimeout: 30 * time.Second}
-	if h != nil {
-		defer func() { _ = h.Close() }()
-		logf("deciding on %s for %s, taking over %s", h.Addr(), vmName, to)
-		go serveDecider(h, token, to)
-		go func() { _ = srv.Serve(h) }()
-	}
 	logf("listening on %s for %s", ln.Addr(), vmName)
 	// What devvm waits for as it starts the proxy: the address it listens on.
 	if err := daemon.Ready(ln.Addr().String()); err != nil {

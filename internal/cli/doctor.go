@@ -37,9 +37,7 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 			"because devvm never installs it itself. Then list what each backend can do. " +
 			"doctor fails when something is missing, but never for a warning, such as one about low free space.",
 		Example: examples(
-			"devvm doctor", "check the backend new VMs get",
-			"devvm doctor --backend smolvm", "check the smolvm backend",
-			"devvm doctor --json", "the same as JSON, for scripts",
+			"devvm doctor", "check the backend new VMs get", "devvm doctor --json", "the same as JSON, for scripts",
 		),
 		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,

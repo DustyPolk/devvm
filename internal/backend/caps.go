@@ -103,7 +103,7 @@ type Caps map[Feature]Support
 // refuses every unreviewed emulation.
 type Review struct {
 	// Unreviewed is the unreviewed emulations Require lets through anyway,
-	// as backend:feature (smolvm:egress-proxy): for the end-to-end checks
+	// as backend:feature (lima:ports): for the end-to-end checks
 	// that an emulation's review needs, which set DEVVM_UNREVIEWED.
 	Unreviewed map[string]bool
 	// Warn is told each time one is let through.

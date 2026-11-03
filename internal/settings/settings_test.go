@@ -35,7 +35,7 @@ func write(t *testing.T, path, data string) {
 
 // fullConfig sets every key config.toml has.
 const fullConfig = `# every key
-backend = "smolvm"
+backend = "qemu"
 network = "off"
 ports = "5173, 8000-8010"
 features = ["fzf", "omb"]
@@ -81,7 +81,7 @@ func TestReadConfig(t *testing.T) {
 		got Value
 		v   string
 	}{
-		{KeyBackend, def.Backend, "smolvm"},
+		{KeyBackend, def.Backend, "qemu"},
 		{KeyNetwork, def.Network, "off"},
 		{KeyPorts, def.Ports, "5173,8000-8010"},
 		{KeyCPUs, def.CPUs, "6"},
@@ -145,7 +145,7 @@ func TestConfigRefused(t *testing.T) {
 		{"bad age", "[retention]\nhistory.age = \"30\"\n", 2, "bad_duration"},
 		{"bad size", "[retention]\nnix-cache.size = \"20g\"\n", 2, "a size is a whole number"},
 		{"bad TOML", "backend = lima\n", 1, ""},
-		{"a key twice", "backend = \"lima\"\nbackend = \"smolvm\"\n", 2, ""},
+		{"a key twice", "backend = \"lima\"\nbackend = \"qemu\"\n", 2, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			write(t, d.ConfigFile(), tc.file)
@@ -163,7 +163,7 @@ func TestConfigRefused(t *testing.T) {
 func TestPrecedence(t *testing.T) {
 	d := testDirs(t)
 	saved := Values{
-		Backend: Of("smolvm"), Network: Of("on"), Ports: Of("none"),
+		Backend: Of("qemu"), Network: Of("on"), Ports: Of("none"),
 		Size: SizeValues{CPUs: Of("2"), Memory: Of("4"), Disk: Of("50")}, Features: Of([]string{}), Agents: Of([]string{"codex"}),
 		Retention: map[string]string{RetainHistoryAge: "1d", RetainRunLogs: "3"},
 	}
@@ -179,7 +179,7 @@ func TestPrecedence(t *testing.T) {
 		got  Value
 		want Value
 	}{
-		{def.Backend, Value{"smolvm", FromSettings}},
+		{def.Backend, Value{"qemu", FromSettings}},
 		{def.Network, Value{"off", FromConfig}},
 		{def.Ports, Value{"none", FromSettings}},
 		{def.CPUs, Value{"2", FromSettings}},
@@ -197,7 +197,7 @@ func TestPrecedence(t *testing.T) {
 		def.Retention.Source(RetainRunLogs) != FromSettings || def.Retention.Source(RetainOrphansAge) != FromBuiltin {
 		t.Errorf("retention = %+v", def.Retention)
 	}
-	if v := (Value{"lima", FromConfig}).With("smolvm"); v != (Value{"smolvm", FromFlag}) {
+	if v := (Value{"lima", FromConfig}).With("qemu"); v != (Value{"qemu", FromFlag}) {
 		t.Errorf("With a flag: %+v", v)
 	}
 	if v := (Value{"lima", FromConfig}).With(""); v != (Value{"lima", FromConfig}) {
@@ -227,21 +227,21 @@ func TestSave(t *testing.T) {
 	if _, err := os.Stat(d.Settings()); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("a refused change wrote settings.json: %v", err)
 	}
-	if _, err := Save(d, Values{Backend: Of("smolvm"), Retention: map[string]string{RetainRunLogs: "5", RetainOrphansAge: "1d"}}); err != nil {
+	if _, err := Save(d, Values{Backend: Of("qemu"), Retention: map[string]string{RetainRunLogs: "5", RetainOrphansAge: "1d"}}); err != nil {
 		t.Fatal(err)
 	}
 	def, err := Save(d, Values{Size: SizeValues{CPUs: Of("3")}, Retention: map[string]string{RetainRunLogs: ""}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if def.Backend.Value != "smolvm" || def.CPUs.Value != "3" || def.Retention.RunLogs != 0 || def.Retention.OrphansAge != 24*time.Hour {
+	if def.Backend.Value != "qemu" || def.CPUs.Value != "3" || def.Retention.RunLogs != 0 || def.Retention.OrphansAge != 24*time.Hour {
 		t.Errorf("after two saves: %+v", def)
 	}
 	data, err := os.ReadFile(d.Settings())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\n  \"backend\": \"smolvm\",\n  \"size\": {\n    \"cpus\": \"3\"\n  },\n  \"retention\": {\n    \"orphans.age\": \"1d\"\n  }\n}\n"
+	want := "{\n  \"backend\": \"qemu\",\n  \"size\": {\n    \"cpus\": \"3\"\n  },\n  \"retention\": {\n    \"orphans.age\": \"1d\"\n  }\n}\n"
 	if string(data) != want {
 		t.Errorf("settings.json:\n%s\nwant\n%s", data, want)
 	}
@@ -254,9 +254,9 @@ func TestSave(t *testing.T) {
 // the file and the field, a value devvm can't use.
 func TestReadSaved(t *testing.T) {
 	d := testDirs(t)
-	write(t, d.Settings(), `{"backend": "smolvm", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
+	write(t, d.Settings(), `{"backend": "qemu", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
 	def, err := Read(d)
-	if err != nil || def.Backend != (Value{"smolvm", FromSettings}) || def.Retention.RunLogs != 4 {
+	if err != nil || def.Backend != (Value{"qemu", FromSettings}) || def.Retention.RunLogs != 4 {
 		t.Errorf("unknown fields: %+v, %v", def, err)
 	}
 	for data, reason := range map[string]string{

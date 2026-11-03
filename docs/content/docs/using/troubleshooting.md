@@ -49,7 +49,7 @@ When an image's build fails in its script, or as the build VM starts or stops, d
 devvm limactl shell --start devvm-img-<key>
 ```
 
-`--start` starts the VM first, outside the build's confinement. On smolvm, start and open the machine with smolvm's own commands ([looking inside](../backends/smolvm.md#looking-inside)).
+`--start` starts the VM first, outside the build's confinement.
 
 The next build of that image deletes the VM and starts over, and `devvm gc` also deletes it. A build whose create or clone fails deletes the image, once devvm has shown the end of the log, because there's nothing in the image to look at.
 
@@ -57,7 +57,7 @@ Either way, the images under it, which are already built, stay. devvm deletes an
 
 ## Not enough free space
 
-Before each build and each new VM, devvm checks the free space on the disk that will hold it, and it refuses when there's less than the step needs. With Lima on macOS, that's 8 GiB for base, 2 GiB for another image or a VM, and from 4 GiB for one shared tool to 8 GiB for all ten, and [free space](ports-size.md#free-space) gives the numbers for Linux hosts and smolvm. The message says which folder's disk it checked, how much is free and how much the step needs. Nothing has been built or made yet, so you can make room and run the same command again:
+Before each build and each new VM, devvm checks the free space on the disk that will hold it, and it refuses when there's less than the step needs. With Lima on macOS, that's 8 GiB for base, 2 GiB for another image or a VM, and from 4 GiB for one shared tool to 8 GiB for all ten, and [free space](ports-size.md#free-space) gives the numbers for Linux hosts. The message says which folder's disk it checked, how much is free and how much the step needs. Nothing has been built or made yet, so you can make room and run the same command again:
 
 - `devvm gc` deletes stale and unfinished images and unused shared tool images ([cleaning up](images.md#cleaning-up)).
 - `devvm images` lists the images and shared tool images with the space each takes, and `devvm images rm` deletes those you don't need ([deleting images](images.md#deleting-images)).

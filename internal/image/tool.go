@@ -19,7 +19,7 @@ import (
 )
 
 // Toolchains are the shared toolchains a VM can have, in the fixed order
-// a VM's list holds them (project.Detect's).
+// a VM's list holds them (project.DetectFiles').
 var Toolchains = []string{"node", "python", "rust", "go"}
 
 // Agents are the shared coding agents a VM can have, listed after its

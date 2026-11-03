@@ -1,12 +1,11 @@
 #!/bin/bash
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh), internal/tools/mise.go (devvm's host mise) and
-# internal/ubuntu/ubuntu.go (Ubuntu's container and cloud images).
+# internal/ubuntu/ubuntu.go (Ubuntu's cloud image).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
 # Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer
-#   apt: base's package snapshot, Ubuntu's container image smolvm's base starts from, and
-#        Ubuntu's cloud image Lima's base starts from
+#   apt: base's package snapshot, and Ubuntu's cloud image base starts from
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
 # The shared tools themselves (node, claude, ...) aren't pinned: devvm resolves them per user.
 # Needs curl and jq, and gpgv for apt. Checksums come from upstream's published sums where there are
@@ -95,32 +94,7 @@ pin3() {   # pin3 FILE PREFIX VERSION SHA_ARM64 SHA_AMD64
   set_var "$1" "${2}_sha256_amd64" "$5"
 }
 
-# ubuntu_image sets ubuntu_digest, the digest of Ubuntu's container image (Docker Hub's ubuntu:26.04: its
-# index, hashed here from what the registry sent), and ubuntu_built, when the newest of its linux/arm64
-# and linux/amd64 images was built (their org.opencontainers.image.created, as YYYYMMDDTHHMMSSZ).
-ubuntu_image() {
-  local hub=https://registry-1.docker.io/v2/library/ubuntu auth a m c t
-  auth="Authorization: Bearer $(fetch "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/ubuntu:pull" | jq -r .token)"
-  fetch -H "$auth" -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
-    "$hub/manifests/26.04" > "$tmp/ubuntu-index"
-  ubuntu_digest=sha256:$(sha256 "$tmp/ubuntu-index")
-  ubuntu_built=""
-  for a in arm64 amd64; do
-    m=$(jq -r --arg a "$a" '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a)][0].digest // ""' "$tmp/ubuntu-index")
-    valid ubuntu_digest "$m"
-    c=$(fetch -H "$auth" -H 'Accept: application/vnd.oci.image.manifest.v1+json' "$hub/manifests/$m" |
-      jq -r '.annotations["org.opencontainers.image.created"] // ""')
-    # 2026-10-25T10:30:32.309136+00:00 -> 20261025T103032Z; UTC only.
-    t=$c
-    if [[ $c =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|\+00:00)$ ]]; then
-      t=${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}T${BASH_REMATCH[4]}${BASH_REMATCH[5]}${BASH_REMATCH[6]}Z
-    fi
-    valid ubuntu_built "$t"
-    if [[ $t > $ubuntu_built ]]; then ubuntu_built=$t; fi
-  done
-}
-
-# ubuntu_cloud DATE sets cloud_release, the newest dated release of Ubuntu's cloud image (Lima's base)
+# ubuntu_cloud DATE sets cloud_release, the newest dated release of Ubuntu's cloud image (base's)
 # before DATE (YYYYMMDD), and cloud_arm64 and cloud_amd64, its images' SHA-256s from its SHA256SUMS,
 # once gpgv finds them signed by Ubuntu's cloud image key (assets/layers/ubuntu-cloud.gpg), in a home
 # of its own so no other key counts. Else exit.
@@ -153,26 +127,18 @@ cloud_sum() {
   awk -v f="ubuntu-26.04-server-cloudimg-$1.img" '$2 == f || $2 == "*" f { print $1; exit }' "$tmp/SHA256SUMS"
 }
 
-# The package snapshot base builds from, today's (UTC); Ubuntu's container image smolvm's base starts
-# from, by digest; and Ubuntu's cloud image Lima's base starts from, by dated release and
-# SHA-256. They move together, and only to images made before the snapshot: apt can't install what
-# depends on the exact version of a package newer than the snapshot's.
+# The package snapshot base builds from, today's (UTC), and Ubuntu's cloud image base starts from, by
+# dated release and SHA-256. They move together, and only to an image made before the snapshot: apt
+# can't install what depends on the exact version of a package newer than the snapshot's.
 bump_apt() {
-  local f=assets/layers/base.sh g=internal/ubuntu/ubuntu.go cur new img rel want=false
+  local f=assets/layers/base.sh g=internal/ubuntu/ubuntu.go cur new rel want=false
   cur=$(get $f apt_snapshot); new=$(date -u +%Y%m%dT000000Z)
-  img=$(get_const $g ContainerDigest); rel=$(get_const $g CloudRelease)
-  ubuntu_image
+  rel=$(get_const $g CloudRelease)
   ubuntu_cloud "${new:0:8}"
   if report apt "$cur" "$new"; then want=true; fi
-  if report ubuntu "${img:7:12}" "${ubuntu_digest:7:12}"; then want=true; fi
   if report ubuntu-cloud "$rel" "$cloud_release"; then want=true; fi
   $want || return 0
-  if [[ ! $ubuntu_built < $new ]]; then
-    echo "bump: Ubuntu's image was built at $ubuntu_built, after today's snapshot $new: bump apt tomorrow" >&2
-    exit 1
-  fi
   set_var $f apt_snapshot "$new"
-  set_var $g ContainerDigest "$ubuntu_digest" ubuntu_digest
   set_var $g CloudRelease "$cloud_release" cloud_release
   set_var $g CloudSHA256Arm64 "$cloud_arm64" cloud_sha256_arm64
   set_var $g CloudSHA256Amd64 "$cloud_amd64" cloud_sha256_amd64

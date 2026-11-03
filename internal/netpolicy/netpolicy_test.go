@@ -424,10 +424,6 @@ func TestPrepare(t *testing.T) {
 	if strings.Contains(args, key) || strings.Contains(args, st.Get(KeyProxySalt)) {
 		t.Errorf("the proxy's arguments hold its key or salt: %q", args)
 	}
-	// A backend without a decider gets none.
-	if conf.Decider != "" || conf.DeciderToken != "" || strings.Contains(args, "-decider") || st.Get(KeyDeciderPort) != "" {
-		t.Errorf("a decider without a backend that uses one: %+v, %q", conf, args)
-	}
 	auth := files.Proxy(".auth")
 	b, err := os.ReadFile(auth) //nolint:gosec // the test's own folder
 	if err != nil || strings.TrimSpace(string(b)) != key {
@@ -468,53 +464,6 @@ func TestPrepareWaitsForTheProxy(t *testing.T) {
 	_, err := p.Prepare(t.Context(), lifelined(), st, false)
 	if want := "proxy_start_failed log=" + d.VM(st.Name()).ProxyLog() + " vm=" + st.Name(); msg.NamesOf(err) != want {
 		t.Errorf("Prepare = %v, want %s", msg.NamesOf(err), want)
-	}
-}
-
-// On a backend with a decider, the proxy decides too: on a port of its
-// own, taking over the proxy's address in the VM, with a token in a file
-// (never in its arguments) that's new at each start and kept while the VM
-// runs.
-func TestPrepareDecider(t *testing.T) {
-	d, st := sandbox(t, "base")
-	p, f := testProxy(t, d)
-	b := lifelined()
-	b.Decides = true
-	conf, err := p.Prepare(t.Context(), b, st, false)
-	if err != nil {
-		t.Fatal(msg.NamesOf(err))
-	}
-	dp := st.Get(KeyDeciderPort)
-	tok := st.Get(KeyDeciderToken)
-	if dp == "" || dp == st.Get(KeyProxyPort) || conf.Decider != "127.0.0.1:"+dp ||
-		!regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(tok) || conf.DeciderToken != tok {
-		t.Fatalf("confinement = %+v, state port %s token %s", conf, dp, tok)
-	}
-	pid, _ := p.PID(st.Name())
-	args := strings.Join(f.args[pid], " ")
-	file := d.VM(st.Name()).Proxy(".decider")
-	want := " -decider 127.0.0.1:" + dp + " -decider-to proxy.test:" + st.Get(KeyProxyPort) + " -decider-token-file " + file
-	if !strings.Contains(args, want) || strings.Contains(args, tok) {
-		t.Errorf("the proxy's arguments %q: want %q, and not the token", args, want)
-	}
-	if b, err := os.ReadFile(file); err != nil || strings.TrimSpace(string(b)) != tok { //nolint:gosec // the test's own folder
-		t.Errorf("token file = %q, %v", b, err)
-	} else if fi, _ := os.Stat(file); fi.Mode().Perm() != 0o600 {
-		t.Errorf("token file mode %v", fi.Mode().Perm())
-	}
-	// Running, it keeps its token (its backend holds it); started again,
-	// it gets a new one, on the same port.
-	if conf, err = p.Prepare(t.Context(), b, st, true); err != nil || conf.DeciderToken != tok {
-		t.Errorf("running: %v, token %s, want %s", err, conf.DeciderToken, tok)
-	}
-	if conf, err = p.Prepare(t.Context(), b, st, false); err != nil || conf.DeciderToken == tok || conf.Decider != "127.0.0.1:"+dp {
-		t.Errorf("started again: %v, %+v", err, conf)
-	}
-	// A running VM whose proxy is gone, with the decider's port taken.
-	p.Stop(st.Name())
-	p.Listening = func(_ context.Context, port int) bool { return strconv.Itoa(port) == dp }
-	if _, err := p.Prepare(t.Context(), b, st, true); msg.NamesOf(err) != "proxy_port_taken port="+dp+" vm="+st.Name() {
-		t.Errorf("decider port taken: %v", msg.NamesOf(err))
 	}
 }
 

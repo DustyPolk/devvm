@@ -19,7 +19,7 @@ import (
 func TestToolsOn(t *testing.T) {
 	ts := []tools.Listed{
 		{File: "node-1-0123456789ab.erofs", Backend: "lima", Targeted: true},
-		{File: "go-1.20.0-0123456789ab.erofs", Backend: "smolvm", Targeted: true},
+		{File: "go-1.20.0-0123456789ab.erofs", Backend: "fake", Targeted: true},
 		{File: "go-1.9.0-0123456789ab.erofs"},
 	}
 	files := func(ls []tools.Listed) string {
@@ -30,10 +30,10 @@ func TestToolsOn(t *testing.T) {
 		return strings.Join(out, " ")
 	}
 	for name, want := range map[string]string{
-		"":       "node-1-0123456789ab.erofs go-1.20.0-0123456789ab.erofs go-1.9.0-0123456789ab.erofs",
-		"lima":   "node-1-0123456789ab.erofs",
-		"smolvm": "go-1.20.0-0123456789ab.erofs",
-		"fake":   "",
+		"":     "node-1-0123456789ab.erofs go-1.20.0-0123456789ab.erofs go-1.9.0-0123456789ab.erofs",
+		"lima": "node-1-0123456789ab.erofs",
+		"fake": "go-1.20.0-0123456789ab.erofs",
+		"qemu": "",
 	} {
 		if got := files(toolsOn(name, ts)); got != want {
 			t.Errorf("toolsOn(%q) = %q, want %q", name, got, want)
@@ -158,7 +158,7 @@ func TestWriteSpace(t *testing.T) {
 	r := spaceReport{
 		Rows: []spaceRow{
 			{What: "images", Backend: "lima", Count: 2, Size: 2048, Sized: true, Kept: keptRemade, GC: 1024, Rest: "gc --backend lima"},
-			{What: "VMs", Backend: "smolvm", Count: 1, Kept: keptOnlyCopy, Rest: "devvm rm"},
+			{What: "VMs", Backend: "fake", Count: 1, Kept: keptOnlyCopy, Rest: "devvm rm"},
 			{What: "history", Count: 1, Size: 1024, Sized: true, Kept: keptOnlyCopy, Rest: "gc --history", Retain: "30d", RetainFrees: 1024},
 		},
 		Total:  2048,
@@ -168,7 +168,7 @@ func TestWriteSpace(t *testing.T) {
 	got, colored := tables(t, func(tab *ui.Table) error { return writeSpace(tab, r) })
 	want := "WHAT     BACKEND  COUNT  SIZE  KEPT       GC    FREED BY           RETAIN\n" +
 		"images   lima     2      2.0K  remade     1.0K  gc --backend lima  -\n" +
-		"VMs      smolvm   1      -     only copy  -     devvm rm           -\n" +
+		"VMs      fake     1      -     only copy  -     devvm rm           -\n" +
 		"history  -        1      1.0K  only copy  -     gc --history       30d (1.0K)\n" +
 		"total    -        -      2.0K  -          1.0K  -                  -\n" +
 		"\n" +

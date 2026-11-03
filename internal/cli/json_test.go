@@ -174,7 +174,7 @@ func TestJSONShapes(t *testing.T) {
 			Rows:  []spaceRow{{What: "VMs", Backend: "lima", Count: 1, Size: 1, Sized: true, Kept: keptOnlyCopy, GC: 1, Rest: "devvm rm", Retain: "30d", RetainFrees: 1}},
 			Total: 1, GC: 1,
 			Caches:  []cacheRow{{Backend: "lima", Name: "images", Path: "/c", Count: 1, Size: 1, Sized: true}},
-			Unknown: []string{"smolvm"}, Strays: []strayVM{{Backend: "lima", Name: "devvm-b", Data: "/d"}},
+			Unknown: []string{"qemu"}, Strays: []strayVM{{Backend: "lima", Name: "devvm-b", Data: "/d"}},
 		}, []string{
 			"backends[].backend: string", "backends[].count: number", "backends[].name: string", "backends[].path: string",
 			"backends[].size: number", "backends[].sized: bool",

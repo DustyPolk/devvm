@@ -186,8 +186,8 @@ func TestBumpRebuild(t *testing.T) {
 	if a, b := counter("lima", "node:24", "foo"), counter("lima", "node-24", "foo"); a == "" || b == "" || a == b {
 		t.Errorf("node:24's counter %q, node-24's %q: want two", a, b)
 	}
-	if c := counter("smolvm", "", "foo"); c != "" {
-		t.Errorf("smolvm's foo, never bumped: %q", c)
+	if c := counter("qemu", "", "foo"); c != "" {
+		t.Errorf("qemu's foo, never bumped: %q", c)
 	}
 	rs, err := ReadRebuilds(d)
 	if err != nil || len(rs) != 5 {
@@ -254,7 +254,7 @@ func TestToolImage(t *testing.T) {
 	d := testDirs(t)
 	const file = "go-1.2.0-0123456789ab.erofs"
 	built := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
-	want := ToolImage{SHA256: "aa", Libc: "gnu", Format: "plain-0123456789ab", Backend: "smolvm", Built: built}
+	want := ToolImage{SHA256: "aa", Libc: "gnu", Format: "plain-0123456789ab", Backend: "qemu", Built: built}
 	if err := WriteToolImage(d, file, want); err != nil {
 		t.Fatal(err)
 	}

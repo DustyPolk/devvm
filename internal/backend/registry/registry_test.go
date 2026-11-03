@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/backend/smolvm"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -40,7 +39,7 @@ func (quietUI) StdinIsTerminal() bool                                     { retu
 // them, the backends keep their own, whatever the environment says.
 func TestOverrides(t *testing.T) {
 	for k, v := range map[string]string{
-		"DEVVM_KVM": "/x/kvm", "DEVVM_UBUNTU_URL": "file:///x/ubuntu", "DEVVM_UNREVIEWED": "smolvm:egress-proxy",
+		"DEVVM_KVM": "/x/kvm", "DEVVM_UBUNTU_URL": "file:///x/ubuntu", "DEVVM_UNREVIEWED": "lima:egress-proxy",
 		platform.TestCPUs: "1234",
 	} {
 		t.Setenv(k, v)
@@ -48,7 +47,7 @@ func TestOverrides(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
 	o := Overrides{
 		Host:       platform.Overrides{CPUs: "1234", MemoryGiB: "4321", FreeGiB: "0"},
-		Unreviewed: "smolvm:egress-proxy",
+		Unreviewed: "lima:egress-proxy",
 		KVM:        "/x/kvm", UbuntuURL: "file:///x/ubuntu/",
 	}
 	for _, c := range []struct {
@@ -60,27 +59,24 @@ func TestOverrides(t *testing.T) {
 			t.Fatal(err)
 		}
 		lb, _ := r.Lookup("lima")
-		sb, _ := r.Lookup("smolvm")
-		l, s := lb.(*lima.Lima), sb.(*smolvm.Smolvm)
+		l := lb.(*lima.Lima)
 		mem, _ := r.Host.Memory()
 		free, _ := r.Host.FreeSpace(t.TempDir())
 		for what, got := range map[string]bool{
-			"let through":           r.Unreviewed["smolvm:egress-proxy"],
+			"let through":           r.Unreviewed["lima:egress-proxy"],
 			"lima's KVM":            l.KVM == "/x/kvm",
-			"smolvm's KVM":          s.KVM == "/x/kvm",
 			"lima's Ubuntu":         l.UbuntuURL == "file:///x/ubuntu",
 			"the registry's CPUs":   r.Host.CPUs() == 1234,
 			"the registry's memory": mem == 4321<<30,
 			"the registry's free":   free == 0,
 			"lima's CPUs":           l.CPUs() == 1234,
-			"smolvm's CPUs":         s.CPUs() == 1234,
 		} {
 			if got != c.want {
 				t.Errorf("overrides %v: %s overridden = %v", c.want, what, got)
 			}
 		}
-		if !c.want && (l.KVM != "/dev/kvm" || s.KVM != "/dev/kvm" || l.UbuntuURL != ubuntu.DefaultURL) {
-			t.Errorf("none: KVM %q %q, Ubuntu %q", l.KVM, s.KVM, l.UbuntuURL)
+		if !c.want && (l.KVM != "/dev/kvm" || l.UbuntuURL != ubuntu.DefaultURL) {
+			t.Errorf("none: KVM %q, Ubuntu %q", l.KVM, l.UbuntuURL)
 		}
 	}
 }
@@ -111,16 +107,6 @@ func TestLimaIsTheDefault(t *testing.T) {
 	}
 }
 
-// smolvm is experimental, and Lima and a name that isn't a backend aren't.
-func TestExperimental(t *testing.T) {
-	t.Parallel()
-	for name, want := range map[string]bool{"smolvm": true, "lima": false, "nope": false, "": false} {
-		if got := Experimental(name); got != want {
-			t.Errorf("Experimental(%q) = %v, want %v", name, got, want)
-		}
-	}
-}
-
 // A new VM's backend is settings.json's, then config.toml's over it, and
 // one that isn't registered names the file that set it.
 func TestDefaultBackendFiles(t *testing.T) {
@@ -134,15 +120,15 @@ func TestDefaultBackendFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := settings.Save(d, settings.Values{Backend: settings.Of("smolvm")}); err != nil {
+	if _, err := settings.Save(d, settings.Values{Backend: settings.Of("qemu")}); err != nil {
 		t.Fatal(err)
 	}
-	if c, err := r.For(d, vm, ""); err != nil || c.Backend.Name() != "smolvm" {
-		t.Errorf("settings.json's: %+v, %v", c, err)
+	if _, err := r.For(d, vm, ""); msg.NamesOf(err) != "backend_unknown_default backends=lima file="+d.Settings()+" name=qemu" {
+		t.Errorf("settings.json's: %v", msg.NamesOf(err))
 	}
 	for _, tc := range []struct{ file, want string }{
 		{"backend = \"lima\"\n", "lima"},
-		{"backend = \"qemu\"\n", "backend_unknown_default backends=lima, smolvm file=" + d.ConfigFile() + " name=qemu"},
+		{"backend = \"qemu\"\n", "backend_unknown_default backends=lima file=" + d.ConfigFile() + " name=qemu"},
 	} {
 		if err := os.WriteFile(d.ConfigFile(), []byte(tc.file), 0o600); err != nil {
 			t.Fatal(err)
@@ -162,7 +148,7 @@ func TestDefaultBackendFiles(t *testing.T) {
 // ~/.local/share/devvm) keeps every socket devvm makes within the limit:
 // a VM's folder holds none, and those in the run folder are named by
 // hashes, so no VM's name lengthens them.
-const homeMax = 35
+const homeMax = 37
 
 // Every socket devvm makes for a VM, the longest VM name's included, fits
 // a socket's path under the longest home: devvm's agent, the port
@@ -185,11 +171,10 @@ func TestSocketsFit(t *testing.T) {
 	vm := "devvm-" + strings.Repeat("a", 20) + "-0123456789abcd" // the longest folder part
 	target := "devvm-" + strings.Repeat("b", 20) + "-0123456789abce"
 	lb, _ := r.Lookup("lima")
-	sb, _ := r.Lookup("smolvm")
-	l, s := lb.(*lima.Lima), sb.(*smolvm.Smolvm)
+	l := lb.(*lima.Lima)
 	links := vmssh.Links{VM: vm, Dir: d.Run()}
 	ctls := []string{
-		l.Forwards.Control(vm), s.Forwards.Control(vm),
+		l.Forwards.Control(vm),
 		links.Control("", ""), links.Control(target, "12345 2026-11-03T00:00:00.000000000Z"),
 	}
 	for _, p := range ctls {
@@ -215,8 +200,7 @@ func TestSocketsFit(t *testing.T) {
 		t.Error("a control socket's length depends on the VM's name")
 	}
 	// One more character of home and a control socket is too long.
-	if over := len(l.Forwards.Control(vm)) + 1; over <= vmssh.ControlMax && len(links.Control(target, "x"))+1 <= vmssh.ControlMax &&
-		len(s.Forwards.Control(vm))+1 <= vmssh.ControlMax {
+	if over := len(l.Forwards.Control(vm)) + 1; over <= vmssh.ControlMax && len(links.Control(target, "x"))+1 <= vmssh.ControlMax {
 		t.Errorf("homeMax %d isn't the longest: raise it", homeMax)
 	}
 }

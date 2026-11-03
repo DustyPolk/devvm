@@ -16,9 +16,8 @@ devvm build IMAGE [flags]
 ## Examples
 
 ```text
-  devvm build docker                 # build base and the docker layer on it
-  devvm build foo+bar                # build base, foo and foo+bar
-  devvm build base --backend smolvm  # build base on the smolvm backend
+  devvm build docker   # build base and the docker layer on it
+  devvm build foo+bar  # build base, foo and foo+bar
 ```
 
 ## Options

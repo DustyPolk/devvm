@@ -708,7 +708,7 @@ func TestMainRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sleep.Process.Kill() })
-	// As smolvm writes it: the pid, then its start time (Lima's has the pid alone).
+	// The pid, then more on another line, which the lifeline doesn't read (Lima's has the pid alone).
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(sleep.Process.Pid)+"\n1792910265912021"), 0o600); err != nil {
 		t.Fatal(err)
 	}

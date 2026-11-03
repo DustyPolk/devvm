@@ -7,8 +7,7 @@ import (
 )
 
 // Locator is a backend whose VMs live somewhere that can change between
-// runs of devvm: Lima's home (DEVVM_LIMA_HOME), smolvm's user on macOS
-// (HOME). A VM records
+// runs of devvm: Lima's home (DEVVM_LIMA_HOME). A VM records
 // where it was made (LocationOf), so a run that looks elsewhere never
 // takes it for one its backend lost. A backend whose VMs can't move
 // doesn't implement it.

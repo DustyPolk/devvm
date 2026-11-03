@@ -67,7 +67,7 @@ func PortFree(ctx context.Context, port int) bool {
 
 // PortInUse reports whether a program on the host has a TCP port, on any
 // address, so that a listener on the host's loopback with SO_REUSEADDR
-// (Go's, Lima's, smolvm's forwards) would share it, and take that
+// (Go's, Lima's forwards) would share it, and take that
 // program's loopback connections: listening on 127.0.0.1 or ::1 without it
 // finds the port in use (ListenLoopback). A port that can't be listened on
 // for another reason (one below 1024 on Linux) isn't in use.

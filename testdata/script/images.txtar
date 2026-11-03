@@ -14,7 +14,7 @@ stdout '^opencode +- +- +- +- +- +- +not installed$'
 stderr '^images_total size=0B$'
 ! stderr images_unused
 stub_calls
-stdout '^limactl list --json\nsmolvm machine ls( --state-dir \S+)? --json\n\z'
+stdout '^limactl list --json\n\z'
 
 # base, foo on it, a build that didn't finish, and a project VM.
 mkdir $XDG_CONFIG_HOME/devvm/layers
@@ -33,9 +33,6 @@ stdout '^foo +ubuntu .* +stale +'
 # --backend: that backend's images alone.
 exec devvm images --backend lima
 stdout '^foo +ubuntu .* +stale +\S+ +lima$'
-exec devvm images --backend smolvm
-! stdout ' lima$'
-stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\n'
 
 # Shared tools: each version newest first, how many VMs list it, and
 # whether it's the lock's; the lock's go, not built, and an older one no
@@ -45,15 +42,15 @@ exec devvm --tools none --agents claude --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
 cd $WORK
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
-json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=musl format=plain-0123456789ab backend=smolvm built=2020-01-01T00:00:00Z
+json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=musl backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS/12345612345602
-exec sh -c 'printf "name=devvm-p-12345612345602\nimage=base\ndir=/p\nbackend=smolvm\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345602/state"'
+exec sh -c 'printf "name=devvm-p-12345612345602\nimage=base\ndir=/p\nbackend=lima\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345602/state"'
 stub_reset
 exec devvm images
 # The lock's go isn't built; the old go has the backend and C library its
 # record names, the oldest, without a record, none; claude's build says
 # its own.
-stdout '^go +go +1\.27\.2 +- +- +- +- +not built\ngo +go +1\.20\.0 +smolvm +musl +\S+ +1 +in use\ngo +go +1\.9\.0 +- +- +\S+ +0 +unused\n'
+stdout '^go +go +1\.27\.2 +- +- +- +- +not built\ngo +go +1\.20\.0 +lima +musl +\S+ +1 +in use\ngo +go +1\.9\.0 +- +- +\S+ +0 +unused\n'
 stdout '^claude +claude +2\.1\.295 +lima +gnu +\S+ +1 +current$'
 stderr '^images_total size=\S+$'
 stdout '^node +- '
@@ -62,7 +59,7 @@ stub_calls
 # --json: the same as fields, sizes in bytes; the notes stay on stderr.
 exec devvm images --json
 stdout '^{\n  "version": 1,\n  "images": \[\n    {\n      "name": "base",\n      "from": "ubuntu 26\.04 \(\d{8}\)",\n      "digest": "sha256:[0-9a-f]{64}",\n      "key": "[0-9a-f]{12}",\n      "state": "current",\n      "size": \d+,\n      "sized": true,\n      "backend": "lima"\n'
-stdout '^      "name": "go",\n      "tool": "go",\n      "version": "1\.20\.0",\n      "built": true,\n      "backend": "smolvm",\n      "libc": "musl",\n      "size": \d+,\n      "vms": 1,\n      "state": "in use"\n'
+stdout '^      "name": "go",\n      "tool": "go",\n      "version": "1\.20\.0",\n      "built": true,\n      "backend": "lima",\n      "libc": "musl",\n      "size": \d+,\n      "vms": 1,\n      "state": "in use"\n'
 stdout '^      "name": "go",\n      "tool": "go",\n      "version": "1\.27\.2",\n      "built": false,\n      "size": 0,\n      "vms": 0,\n      "state": "not built"\n'
 stdout '^  "total": \d+,\n  "unused_tools": \d+,\n  "nix_cache": {\n    "files": 0,\n    "size": 0,\n    "cap": \d+\n  }\n}\n\z'
 stderr '^images_total size=\S+$'

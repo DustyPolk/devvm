@@ -31,7 +31,7 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 ! stdout 'devvm-tools-build'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}\nlimactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n'
 stdout '^ssh -F none -M -S \S+/data/devvm/run/lima-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/lima/_config/user .* -o UserKnownHostsFile=\S+/data/devvm/vms/[0-9a-f]{14}/backend/ports\.known_hosts .* -o HostKeyAlias=devvm-web-[0-9a-f]{14} .* -p 60022 -l stub 127\.0\.0\.1 sh -s$'
-! stdout '^(docker|smolvm) '
+! stdout '^docker '
 stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exists $XDG_DATA_HOME/devvm/tools
 ! exists $XDG_DATA_HOME/devvm/mise.lock
@@ -88,16 +88,15 @@ vm_name API api
 catg $API_dir/state
 stdout '^git_protect=off$'
 
-# Launches ask only the backends a VM's state names: with only Lima's VMs,
-# neither docker nor smolvm runs, for a new VM or an existing one.
+# Launches run no docker, which only --from uses, for a new VM or an
+# existing one.
 stub_calls
-! stdout '^(docker|smolvm) '
+! stdout '^docker '
 stub_reset
 exec devvm --no-network-policy
-! stdout creating_from
 stub_calls
 stdout '^limactl list --json$'
-! stdout '^(docker|smolvm) '
+! stdout '^docker '
 
 # Linux hosts: set-id files in the folder are named (they reach the host).
 [linux] mkdir $WORK/setid

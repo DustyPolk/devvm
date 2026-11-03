@@ -7,7 +7,6 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -36,9 +35,7 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 			"In a terminal devvm asks for each, starting from the current choice, and --backend, --features and --agents choose without asking. " +
 			"A new choice of features rebuilds base and the images on it when they're next used.",
 		Example: examples(
-			"devvm setup", "answer every question",
-			"devvm setup --backend smolvm", "make smolvm the default backend, without asking",
-			"devvm setup --features omb,fzf", "give base oh-my-bash and fzf, without asking",
+			"devvm setup", "answer every question", "devvm setup --features omb,fzf", "give base oh-my-bash and fzf, without asking",
 			"devvm setup --features none", "give base no features",
 			"devvm setup --agents claude,codex", "give new VMs Claude Code and Codex, without asking",
 		),
@@ -232,7 +229,7 @@ func (s setup) saveFeatures(dirs paths.Dirs, def settings.Defaults, features *st
 
 // pickBackend asks which backend new VMs get by default, starting from
 // current, the one in effect (backend.Default when it's one devvm doesn't
-// have), the experimental ones marked.
+// have).
 func (s setup) pickBackend(reg *backend.Registry, current string) string {
 	if _, ok := reg.Lookup(current); !ok {
 		current = backend.Default
@@ -241,9 +238,6 @@ func (s setup) pickBackend(reg *backend.Registry, current string) string {
 	choices := make([]ui.Choice, len(names))
 	for i, n := range names {
 		choices[i] = ui.Choice{Name: n, On: n == current}
-		if registry.Experimental(n) {
-			choices[i].Desc = msg.BackendExperimental().String()
-		}
 	}
 	return names[s.pickOne(msg.BackendHelp(), choices)]
 }

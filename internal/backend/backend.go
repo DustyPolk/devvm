@@ -1,5 +1,5 @@
 // Package backend is what runs devvm's VMs: one interface every backend
-// implements (Lima, smolvm), the features each one has (Caps), the
+// implements (Lima's), the features each one has (Caps), the
 // registry of backends and the choice of backend for a VM.
 //
 // A backend only runs what it's told. What a VM is made of (its image, its
@@ -102,8 +102,8 @@ type Backend interface {
 	SetSize(ctx context.Context, vm string, s Size) error
 	// SetPorts changes which of a VM's ports are forwarded: a stopped
 	// VM's from its next start, a running one's at once, its forwarder
-	// started again as Start starts it with c (HostKey, ProxyPort,
-	// Decider, Free) while the VM runs on. Connections open through its
+	// started again as Start starts it with c (HostKey, ProxyPort, Free)
+	// while the VM runs on. Connections open through its
 	// old forwarder end.
 	SetPorts(ctx context.Context, vm string, p Ports, c Confinement) error
 	// SetAgentDirs replaces a stopped VM's agent folder mounts.
@@ -118,44 +118,6 @@ type Backend interface {
 // too: by name, their contents. A backend that puts nothing in doesn't implement it.
 type KeyFiles interface {
 	KeyFiles() map[string][]byte
-}
-
-// Decider is a backend that confines a VM with network policy by asking
-// devvm's proxy about each connection the VM opens (smolvm's mediated
-// egress): the proxy's decider takes over only those to the proxy's address
-// in the VM (ProxyURL's host and port) and refuses the rest. Start with
-// NetProxy then needs Confinement's Decider and DeciderToken. A backend that
-// confines VMs some other way doesn't implement it.
-type Decider interface {
-	UsesDecider() bool
-}
-
-// UsesDecider reports whether b confines VMs through devvm's decider.
-func UsesDecider(b Backend) bool {
-	d, ok := b.(Decider)
-	return ok && d.UsesDecider()
-}
-
-// AgentStarter is a backend whose VM forwards whatever SSH agent the
-// command that starts it names (smolvm's machine start), so a VM started
-// some other way than by Start can have one devvm didn't choose for it. A
-// backend whose agent is the VM's config, or fixed when it's made,
-// doesn't implement it.
-type AgentStarter interface {
-	// AgentUnchosen reports whether a running VM may forward an agent
-	// devvm didn't choose: made forwarding one, and not running on the
-	// process Start last started.
-	AgentUnchosen(ctx context.Context, vm string) (bool, error)
-}
-
-// AgentUnchosen reports whether b's running VM may forward an agent devvm
-// didn't choose for it (AgentStarter); never on other backends.
-func AgentUnchosen(ctx context.Context, b Backend, vm string) (bool, error) {
-	a, ok := b.(AgentStarter)
-	if !ok {
-		return false, nil
-	}
-	return a.AgentUnchosen(ctx, vm)
 }
 
 // Problem is something a backend needs that the host lacks, as devvm
@@ -319,11 +281,6 @@ type Confinement struct {
 	// password the guest's proxy settings carry, with ProxyUser (ProxyURL).
 	ProxyPort     int
 	ProxyPassword string
-	// NetProxy on a backend with a decider (Decider): the proxy's decider,
-	// on host loopback (127.0.0.1:PORT), and the token, 64 hex digits, the
-	// backend proves itself to it with. Never in the VM.
-	Decider      string
-	DeciderToken string
 	// Env is more guest environment, for every login (the proxy's CA
 	// files, NO_PROXY).
 	Env map[string]string

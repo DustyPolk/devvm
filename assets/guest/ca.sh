@@ -14,7 +14,7 @@
 set -eu
 src=${1:-}
 r=${DEVVM_CA_ROOT:-}
-# update-ca-certificates is in sbin, which a machine's exec may leave out (smolvm's).
+# update-ca-certificates is in sbin, which a user's PATH may leave out.
 [ -n "$r" ] || PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 dir=$r/usr/local/share/ca-certificates
 bundle=$r/etc/ssl/certs/ca-certificates.crt

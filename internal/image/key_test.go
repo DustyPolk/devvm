@@ -101,8 +101,8 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 	}{
 		{"base.yaml", "", func(e *env) { e.edit("root/base.yaml") }, all},
 		{"layers/base.sh", "", func(e *env) { e.edit("root/layers/base.sh") }, all},
-		{"the backend", "", func(e *env) { e.in.Backend = "smolvm" }, all},
-		{"a backend's own file", "", func(e *env) { e.in.BackendFiles = map[string][]byte{"container/prepare.sh": []byte("x")} }, all},
+		{"the backend", "", func(e *env) { e.in.Backend = "qemu" }, all},
+		{"a backend's own file", "", func(e *env) { e.in.BackendFiles = map[string][]byte{"ubuntu.img": []byte("x")} }, all},
 		{"no backend files is none", "", func(e *env) { e.in.BackendFiles = map[string][]byte{} }, nil},
 		{"a chosen built-in feature's script", "", func(e *env) { e.edit("root/features/fzf.sh") }, all},
 		{"a chosen user feature's script", "", func(e *env) { e.edit("features/mine.sh") }, all},
@@ -125,7 +125,7 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"oci scripts without --from", "", func(e *env) { e.edit("root/oci/build.sh") }, nil},
 		{"the digest without --from", "", func(e *env) { e.in.FromDigest = "x@sha256:bbbb" }, nil},
 		{"a rebuild counter for --from", "", func(e *env) { e.bump("lima", "node:24", "foo") }, nil},
-		{"another backend's rebuild counter", "", func(e *env) { e.bump("smolvm", "", "base") }, nil},
+		{"another backend's rebuild counter", "", func(e *env) { e.bump("qemu", "", "base") }, nil},
 		{"the tools' build script", "", func(e *env) { e.edit("root/shared-tools/build.sh") }, nil},
 
 		{"the --from digest (a moved tag)", "node:24", func(e *env) { e.in.FromDigest = "node@sha256:bbbb" }, all},
@@ -135,7 +135,7 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"oci/kernel.sh", "node:24", func(e *env) { e.edit("root/oci/kernel.sh") }, all},
 		{"a rebuild counter with --from", "node:24", func(e *env) { e.bump("lima", "node:24", "foo") }, above},
 		{"another --from's counter, once written alike", "node:24", func(e *env) { e.bump("lima", "node-24", "foo") }, nil},
-		{"another backend's counter with --from", "node:24", func(e *env) { e.bump("smolvm", "node:24", "base") }, nil},
+		{"another backend's counter with --from", "node:24", func(e *env) { e.bump("qemu", "node:24", "base") }, nil},
 		{"oci/try.sh", "node:24", func(e *env) { e.edit("root/oci/try.sh") }, nil},
 		{"a rebuild counter without --from", "node:24", func(e *env) { e.bump("lima", "", "foo") }, nil},
 	}

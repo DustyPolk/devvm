@@ -64,7 +64,7 @@ func AgentHolds(keys string) M {
 	return M{id: "agent_holds", vals: []val{{"keys", keys}}}
 }
 
-// AgentHoldsNote is [agent_holds_note]: "VMs set to devvm ssh-agent devvm can use these keys while you're connected, or on smolvm while they run, and devvm loads them again after a reboot."
+// AgentHoldsNote is [agent_holds_note]: "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
 func AgentHoldsNote() M {
 	return M{id: "agent_holds_note"}
 }
@@ -149,11 +149,6 @@ func AgentStartFailed(sock string) M {
 	return M{id: "agent_start_failed", vals: []val{{"sock", sock}}}
 }
 
-// AgentUnchosenStop is [agent_unchosen_stop]: "Something outside devvm started {{.vm}}, which may have forwarded an SSH agent you didn't choose, so devvm stopped the VM. Run devvm to start it again."
-func AgentUnchosenStop(vm string) M {
-	return M{id: "agent_unchosen_stop", vals: []val{{"vm", vm}}}
-}
-
 // AgentUnloadFailed is [agent_unload_failed]: "Removing {{.key}} from devvm's SSH agent failed, so devvm kept it on the list of keys it loads. Run devvm ssh-agent rm {{.key}} again."
 func AgentUnloadFailed(key string) M {
 	return M{id: "agent_unload_failed", vals: []val{{"key", key}}}
@@ -192,11 +187,6 @@ func ArgsNone(command string, given string) M {
 // ArgsTooMany is [args_too_many]: "The command {{.command}} takes {{.args}}, not {{.given}}."
 func ArgsTooMany(args string, command string, given string) M {
 	return M{id: "args_too_many", vals: []val{{"args", args}, {"command", command}, {"given", given}}}
-}
-
-// BackendExperimental is [backend_experimental]: "experimental"
-func BackendExperimental() M {
-	return M{id: "backend_experimental"}
 }
 
 // BackendFlagIgnored is [backend_flag_ignored]: "--backend applies only to new VMs, so {{.vm}} stays on {{.backend}}."
@@ -507,11 +497,6 @@ func Creating(vm string) M {
 // CreatingFrom is [creating_from]: "creating {{.vm}} from {{.image}}"
 func CreatingFrom(image string, vm string) M {
 	return M{id: "creating_from", vals: []val{{"image", image}, {"vm", vm}}}
-}
-
-// CreatingFromImage is [creating_from_image]: "creating {{.vm}} from {{.image}}"
-func CreatingFromImage(image string, vm string) M {
-	return M{id: "creating_from_image", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
 // CreatingFromUbuntu is [creating_from_ubuntu]: "creating {{.vm}} from Ubuntu's cloud image"
@@ -2129,16 +2114,6 @@ func OutputFailed(reason string) M {
 	return M{id: "output_failed", vals: []val{{"reason", reason}}}
 }
 
-// PackFailed is [pack_failed]: "Packing {{.vm}} into its image failed."
-func PackFailed(vm string) M {
-	return M{id: "pack_failed", vals: []val{{"vm", vm}}}
-}
-
-// PackingImage is [packing_image]: "packing {{.vm}} into its image"
-func PackingImage(vm string) M {
-	return M{id: "packing_image", vals: []val{{"vm", vm}}}
-}
-
 // PartNoneAlone is [part_none_alone]: "{{.flag}} takes none alone, or a list of names without it."
 func PartNoneAlone(flag string) M {
 	return M{id: "part_none_alone", vals: []val{{"flag", flag}}}
@@ -2267,11 +2242,6 @@ func PortsForwarding(ports string, vm string) M {
 // PortsListNeeded is [ports_list_needed]: "{{.value}} isn't a list of ports. devvm ports add and rm take ports and ranges, such as 5173,8000-8010."
 func PortsListNeeded(value string) M {
 	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
-}
-
-// PortsNoSSH is [ports_no_ssh]: "{{.vm}} runs without ssh, so devvm forwards none of its ports."
-func PortsNoSSH(vm string) M {
-	return M{id: "ports_no_ssh", vals: []val{{"vm", vm}}}
 }
 
 // PortsNow is [ports_now]: "{{.vm}} forwards {{.ports}}"
@@ -2617,76 +2587,6 @@ func SizePending(size string, vm string) M {
 // SizeQuestion is [size_question]: "This machine has {{.have_cpus}} CPUs and {{.have_memory}} GiB of memory. Type the CPUs and memory new VMs get, or press Enter to keep the size in brackets."
 func SizeQuestion(haveCpus string, haveMemory string) M {
 	return M{id: "size_question", vals: []val{{"have_cpus", haveCpus}, {"have_memory", haveMemory}}}
-}
-
-// SmolvmBroken is [smolvm_broken]: "smolvm is installed, but smolvm --version fails. Reinstall smolvm."
-func SmolvmBroken() M {
-	return M{id: "smolvm_broken"}
-}
-
-// SmolvmBrokenFix is [smolvm_broken_fix]: "smolvm is installed, but smolvm --version fails. Run {{.fix}} to reinstall it."
-func SmolvmBrokenFix(fix string) M {
-	return M{id: "smolvm_broken_fix", vals: []val{{"fix", fix}}}
-}
-
-// SmolvmFromRegistryOnly is [smolvm_from_registry_only]: "The smolvm backend builds only from container images in a registry, and {{.image}} is only in Docker. Push it to a registry."
-func SmolvmFromRegistryOnly(image string) M {
-	return M{id: "smolvm_from_registry_only", vals: []val{{"image", image}}}
-}
-
-// SmolvmHostUnsupported is [smolvm_host_unsupported]: "The smolvm backend doesn't run on {{.host}}. Use an arm64 Mac, or Linux on arm64 or x86_64."
-func SmolvmHostUnsupported(host string) M {
-	return M{id: "smolvm_host_unsupported", vals: []val{{"host", host}}}
-}
-
-// SmolvmMachineForeign is [smolvm_machine_foreign]: "smolvm has a machine named {{.vm}} that isn't this devvm's. Delete or rename it with smolvm."
-func SmolvmMachineForeign(vm string) M {
-	return M{id: "smolvm_machine_foreign", vals: []val{{"vm", vm}}}
-}
-
-// SmolvmMissing is [smolvm_missing]: "smolvm isn't installed. Install smolvm 1.32 or newer."
-func SmolvmMissing() M {
-	return M{id: "smolvm_missing"}
-}
-
-// SmolvmMissingFix is [smolvm_missing_fix]: "smolvm isn't installed. Run {{.fix}} to install it."
-func SmolvmMissingFix(fix string) M {
-	return M{id: "smolvm_missing_fix", vals: []val{{"fix", fix}}}
-}
-
-// SmolvmMountColon is [smolvm_mount_colon]: "smolvm can't mount {{.path}}, because the path has a colon."
-func SmolvmMountColon(path string) M {
-	return M{id: "smolvm_mount_colon", vals: []val{{"path", path}}}
-}
-
-// SmolvmNoAgent is [smolvm_no_agent]: "{{.vm}} forwards an SSH agent, but SSH_AUTH_SOCK isn't set. Start an agent, or set SSH_AUTH_SOCK."
-func SmolvmNoAgent(vm string) M {
-	return M{id: "smolvm_no_agent", vals: []val{{"vm", vm}}}
-}
-
-// SmolvmOld is [smolvm_old]: "smolvm {{.version}} is too old. Upgrade to smolvm 1.32 or newer."
-func SmolvmOld(version string) M {
-	return M{id: "smolvm_old", vals: []val{{"version", version}}}
-}
-
-// SmolvmOldFix is [smolvm_old_fix]: "smolvm {{.version}} is too old. Run {{.fix}} to upgrade it."
-func SmolvmOldFix(fix string, version string) M {
-	return M{id: "smolvm_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
-}
-
-// SmolvmScriptFailed is [smolvm_script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run smolvm machine start --name {{.vm}}, then smolvm machine shell --name {{.vm}}."
-func SmolvmScriptFailed(script string, vm string) M {
-	return M{id: "smolvm_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
-}
-
-// SmolvmSSHPortForwarded is [smolvm_ssh_port_forwarded]: "Port {{.port}}, which {{.vm}}'s ssh uses, is also one of its forwarded ports. Leave it out of devvm ports."
-func SmolvmSSHPortForwarded(port string, vm string) M {
-	return M{id: "smolvm_ssh_port_forwarded", vals: []val{{"port", port}, {"vm", vm}}}
-}
-
-// SmolvmUpdateFailed is [smolvm_update_failed]: "Changing {{.vm}}'s smolvm settings failed."
-func SmolvmUpdateFailed(vm string) M {
-	return M{id: "smolvm_update_failed", vals: []val{{"vm", vm}}}
 }
 
 // SpaceBackendUnknown is [space_backend_unknown]: "{{.backend}} didn't answer, so its VMs and images aren't counted."
@@ -3059,16 +2959,6 @@ func VMNameNoRoom(backend string, max string) M {
 	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
 }
 
-// VMNoSSH is [vm_no_ssh]: "{{.vm}} was started without ssh. Run devvm restart to start it with ssh."
-func VMNoSSH(vm string) M {
-	return M{id: "vm_no_ssh", vals: []val{{"vm", vm}}}
-}
-
-// VMNoSshd is [vm_no_sshd]: "{{.vm}}'s image has no sshd, so the VM runs without ssh. A VM made after you run devvm rebuild has it."
-func VMNoSshd(vm string) M {
-	return M{id: "vm_no_sshd", vals: []val{{"vm", vm}}}
-}
-
 // VMNotRunning is [vm_not_running]: "{{.vm}} isn't running. Start it first."
 func VMNotRunning(vm string) M {
 	return M{id: "vm_not_running", vals: []val{{"vm", vm}}}
@@ -3155,7 +3045,6 @@ var specs = map[string]spec{
 	"agent_set_running":                {fields: []string{"mode", "vm"}},
 	"agent_set_stopped":                {fields: []string{"mode", "vm"}},
 	"agent_start_failed":               {fields: []string{"sock"}},
-	"agent_unchosen_stop":              {fields: []string{"vm"}},
 	"agent_unload_failed":              {fields: []string{"key"}},
 	"agents_help":                      {},
 	"already_stopped":                  {fields: []string{"vm"}},
@@ -3164,7 +3053,6 @@ var specs = map[string]spec{
 	"arg_not_choice":                   {fields: []string{"choices", "command", "given"}},
 	"args_none":                        {fields: []string{"command", "given"}},
 	"args_too_many":                    {fields: []string{"args", "command", "given"}},
-	"backend_experimental":             {},
 	"backend_flag_ignored":             {fields: []string{"backend", "vm"}},
 	"backend_help":                     {},
 	"backend_lacks":                    {fields: []string{"backend", "feature", "vm"}},
@@ -3227,7 +3115,6 @@ var specs = map[string]spec{
 	"cpus_not_number":                  {fields: []string{"flag", "value"}},
 	"creating":                         {fields: []string{"vm"}},
 	"creating_from":                    {fields: []string{"image", "vm"}},
-	"creating_from_image":              {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":             {fields: []string{"vm"}},
 	"custom_layer_remove":              {fields: []string{"layer", "vm"}},
 	"default_agents":                   {fields: []string{"agents"}},
@@ -3551,8 +3438,6 @@ var specs = map[string]spec{
 	"oci_waiting":                      {},
 	"opencode_login_kept":              {fields: []string{"providers"}},
 	"output_failed":                    {fields: []string{"reason"}},
-	"pack_failed":                      {fields: []string{"vm"}},
-	"packing_image":                    {fields: []string{"vm"}},
 	"part_none_alone":                  {fields: []string{"flag"}},
 	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},
 	"parts_flags_ignored":              {fields: []string{"vm"}},
@@ -3579,7 +3464,6 @@ var specs = map[string]spec{
 	"ports_forward_failed":             {fields: []string{"log", "vm"}},
 	"ports_forwarding":                 {fields: []string{"ports", "vm"}},
 	"ports_list_needed":                {fields: []string{"value"}},
-	"ports_no_ssh":                     {fields: []string{"vm"}},
 	"ports_now":                        {fields: []string{"ports", "vm"}},
 	"ports_rm_all":                     {},
 	"ports_taken":                      {plural: true, fields: []string{"count", "ports", "vm"}},
@@ -3649,20 +3533,6 @@ var specs = map[string]spec{
 	"size_not_gib":                     {fields: []string{"flag", "value"}},
 	"size_pending":                     {fields: []string{"size", "vm"}},
 	"size_question":                    {fields: []string{"have_cpus", "have_memory"}},
-	"smolvm_broken":                    {},
-	"smolvm_broken_fix":                {fields: []string{"fix"}},
-	"smolvm_from_registry_only":        {fields: []string{"image"}},
-	"smolvm_host_unsupported":          {fields: []string{"host"}},
-	"smolvm_machine_foreign":           {fields: []string{"vm"}},
-	"smolvm_missing":                   {},
-	"smolvm_missing_fix":               {fields: []string{"fix"}},
-	"smolvm_mount_colon":               {fields: []string{"path"}},
-	"smolvm_no_agent":                  {fields: []string{"vm"}},
-	"smolvm_old":                       {fields: []string{"version"}},
-	"smolvm_old_fix":                   {fields: []string{"fix", "version"}},
-	"smolvm_script_failed":             {fields: []string{"script", "vm"}},
-	"smolvm_ssh_port_forwarded":        {fields: []string{"port", "vm"}},
-	"smolvm_update_failed":             {fields: []string{"vm"}},
 	"space_backend_unknown":            {fields: []string{"backend"}},
 	"space_caches_note":                {},
 	"space_failed":                     {fields: []string{"reason"}},
@@ -3737,8 +3607,6 @@ var specs = map[string]spec{
 	"vm_has_networks":                  {fields: []string{"file", "vm"}},
 	"vm_lacks":                         {fields: []string{"has", "tool", "vm"}},
 	"vm_name_no_room":                  {fields: []string{"backend", "max"}},
-	"vm_no_ssh":                        {fields: []string{"vm"}},
-	"vm_no_sshd":                       {fields: []string{"vm"}},
 	"vm_not_running":                   {fields: []string{"vm"}},
 	"vm_not_stopped":                   {fields: []string{"vm"}},
 	"vm_other_folder":                  {fields: []string{"vm", "was"}},

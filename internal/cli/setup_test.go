@@ -160,7 +160,7 @@ func savedBackend(t *testing.T, d paths.Dirs) string {
 }
 
 // In a terminal, setup with neither flag asks for the backend (starting
-// from the current one, smolvm marked experimental), then the features;
+// from the current one), then the features;
 // --backend, --features or no terminal ask no backend.
 func TestSetupAsksForTheBackend(t *testing.T) {
 	none := ""
@@ -175,15 +175,15 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 		start    string // the choice the picker starts on
 		chosen   bool   // base's features chosen
 	}{
-		{name: "a terminal, nothing set", terminal: true, ask: true, start: "lima", want: "smolvm", chosen: true},
-		{name: "a terminal, smolvm set", terminal: true, current: "smolvm", ask: true, start: "smolvm", want: "smolvm", chosen: true},
-		{name: "a terminal, an unknown one set", terminal: true, current: "qemu", ask: true, start: "lima", want: "smolvm", chosen: true},
+		{name: "a terminal, nothing set", terminal: true, ask: true, start: "lima", want: "lima", chosen: true},
+		{name: "a terminal, lima set", terminal: true, current: "lima", ask: true, start: "lima", want: "lima", chosen: true},
+		{name: "a terminal, an unknown one set", terminal: true, current: "qemu", ask: true, start: "lima", want: "lima", chosen: true},
 		{name: "no terminal", want: "", chosen: true},
 		{name: "--backend", terminal: true, flag: "lima", want: "lima"},
 		{name: "--features", terminal: true, features: &none, current: "lima", want: "lima", chosen: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, d, shown, sized := setupSandbox(t, tc.terminal, "smolvm")
+			s, d, shown, sized := setupSandbox(t, tc.terminal, "lima")
 			if tc.current != "" {
 				save(t, d, settings.Values{Backend: &tc.current})
 			}
@@ -213,7 +213,6 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 			} else if a != nil {
 				want := []ui.Choice{
 					{Name: "lima", On: tc.start == "lima"},
-					{Name: "smolvm", Desc: "backend_experimental", On: tc.start == "smolvm"},
 				}
 				if a.help != "backend_help" || !slices.Equal(a.choices, want) {
 					t.Errorf("shown %q %+v, want backend_help %+v", a.help, a.choices, want)
@@ -232,7 +231,7 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 // What config.toml sets, devvm setup doesn't ask for, saying so, and its
 // flags can't choose (set_in_config); it still asks for the rest.
 func TestSetupConfigSets(t *testing.T) {
-	s, d, shown, sized := setupSandbox(t, true, "smolvm")
+	s, d, shown, sized := setupSandbox(t, true, "lima")
 	u, said, _ := testUI()
 	s.ui = u
 	config := "backend = \"lima\"\nnetwork = \"on\"\nfeatures = []\nagents = [\"codex\"]\n[size]\ncpus = 2\n"

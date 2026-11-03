@@ -23,7 +23,7 @@ func everyFile(t *testing.T, e *Env, vm string) {
 	for _, p := range []string{
 		v.Policy(), v.Proxy(".pid"), v.Proxy(".auth"), v.Profile(), v.Started(), v.Secrets(), v.SecretsPolicy(),
 		v.LinksPID(), v.LinkList(), v.EventLog(), v.EventLog() + ".1", v.ProxyLog(), v.LinksLog(),
-		v.Record(), v.Key(), v.KnownHosts(), v.ProxyURL(), v.Ports(), v.Forwarder(".log"), v.Forwarder(".lock"),
+		v.Ports(), v.Forwarder(".log"), v.Forwarder(".lock"),
 		filepath.Join(v.Run(), ".proxy.auth.tmp-1"), // a write that never finished
 	} {
 		if err := state.WriteFile(p, []byte("x\n")); err != nil {
@@ -132,7 +132,7 @@ func TestCreateClearsFolder(t *testing.T) {
 	if again.Name() != st.Name() || again.Get(state.KeyID) == st.Get(state.KeyID) {
 		t.Errorf("made again: %s (id %s), was %s (id %s)", again.Name(), again.Get(state.KeyID), st.Name(), st.Get(state.KeyID))
 	}
-	for _, p := range []string{e.Dirs.VM(st.Name()).EventLog(), e.Dirs.VM(st.Name()).Policy(), e.Dirs.VM(st.Name()).Record()} {
+	for _, p := range []string{e.Dirs.VM(st.Name()).EventLog(), e.Dirs.VM(st.Name()).Policy(), e.Dirs.VM(st.Name()).Ports()} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Errorf("%s left: %v", p, err)
 		}

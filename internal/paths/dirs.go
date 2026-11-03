@@ -27,7 +27,7 @@ type Dirs struct {
 	// reach devvm's.
 	Lima string
 	// UserCache is the user's cache folder, as os.UserCacheDir finds it
-	// but from Home: where Lima and smolvm keep their own caches, which
+	// but from Home: where Lima keeps its own caches, which
 	// devvm space shows. devvm's own is Cache.
 	UserCache string
 }
@@ -187,13 +187,6 @@ func (d Dirs) MakingLock() string { return filepath.Join(d.Data, "making.lock") 
 
 // LimaVM is a VM's folder in devvm's Lima home.
 func (d Dirs) LimaVM(vm string) string { return filepath.Join(d.Lima, vm) }
-
-// Smolvm holds the smolvm backend's files that aren't one VM's: its images
-// (packs), and on Linux smolvm's own state.
-func (d Dirs) Smolvm() string { return filepath.Join(d.Data, "smolvm") }
-
-// SmolvmImage is an image's folder on smolvm: its pack.
-func (d Dirs) SmolvmImage(key string) string { return filepath.Join(d.Smolvm(), "images", key) }
 
 // ConfigFile is config.toml, the defaults you set by hand: devvm reads it
 // and never writes it.

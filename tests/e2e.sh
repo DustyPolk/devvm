@@ -35,7 +35,7 @@
 #                target, the target's rm and a VM made again, the three in a group (joined, a port
 #                published to it, leaving, a VM refused whose hostname is a member's name), network policy on both and the policy rule's refusals,
 #                a group's all-or-none refusals, the log, and nothing left behind (in the --from tier, an
-#                Alpine client's link to port 80 too). --backend smolvm runs it too
+#                Alpine client's link to port 80 too)
 #     --only desktop
 #                base with the desktop feature, and a VM with network policy whose desktop devvm
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
@@ -51,41 +51,20 @@
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
-#     --backend smolvm
-#                the smolvm backend's own section instead (experimental): base and a layer built as
-#                packs, a project VM's mounts, a file watcher in it seeing this machine's edits (no
-#                deletions), size, listed ports through devvm's forwarder (a server on the VM's loopback reaching this machine, none published by smolvm, never one a
-#                program here has, a running VM's changed at once), no Docker
-#                without the docker layer, agent forwarding, a node VM's
-#                shared tools, agent toggling's emulation (your agent, devvm's or none from each
-#                start, devvm history export's too, none reaching no agent and adding to none, a VM set to
-#                devvm's or none never reaching yours, one started by smolvm machine start from your
-#                shell stopped), ssh for editors' emulation (pinned
-#                host keys of each VM's own, its own key alone, no forwarding out even past a hostile
-#                sshd, devvm host and code, an alpine:3 VM, a --clone VM's push and fetch), network policy's emulation
-#                (a docker VM: nothing but the proxy, Docker's pulls through it, DNS kept on this
-#                machine, failing closed, the policy, ssh opening no way out), every port's (servers on the VM's loopback or all its addresses
-#                reach this machine's loopback alone, never a port of this machine's or devvm's, no
-#                way out with network policy), the nix layer (nix-daemon started after each start,
-#                with the VM's proxy and then without, nix run nixpkgs#hello, a sandboxed build),
-#                links between VMs (the link section's checks, port 80 on smolvm's kernel too),
-#                and that no machine without the sandbox's label is touched. Its machines share your
-#                smolvm (macOS): it deletes only those it made, with the sandbox's label.
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
 # tokens. devvm is built from this checkout into the sandbox, with its files embedded.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network desktop nix from link"
-usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network nix link" backend=lima
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone gc tools network nix link"
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
     --from)  sel=$sections_all ;;
     --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2"); shift
              for s in $sel; do [[ " $sections_all " == *" $s "* ]] || usage; done ;;
-    --backend) case ${2:-} in smolvm) backend=$2 sel=$2 ;; *) usage ;; esac; shift ;;
     *) usage ;;
   esac
   shift
@@ -124,19 +103,17 @@ gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 # (never in a release).
 testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes")
 (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" "${testbuild[@]}" -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-# The features are in base's key, so only a run with from (which checks them) builds them all; desktop,
-# and the smolvm backend's section, which checks devvm desktop, build desktop alone; every other
-# selection shares one smaller base. config.toml chooses them, so nothing asks.
+# The features are in base's key, so only a run with from (which checks them) builds them all; desktop
+# builds desktop alone; every other selection shares one smaller base. config.toml chooses them, so
+# nothing asks.
 features=""
 if want from; then for f in "$root"/assets/features/*.sh; do features="$features $(basename "$f" .sh)"; done
-elif want desktop || [[ $backend != lima ]]; then features=desktop; fi
+elif want desktop; then features=desktop; fi
 toml=""
 for f in $features; do toml="$toml${toml:+, }\"$f\""; done
 printf 'features = [%s]\n' "$toml" > "$XDG_CONFIG_HOME/devvm/config.toml"
 D=$src/devvm
-# The digest of Ubuntu's container image smolvm's base starts from, as devvm pins it.
-ubuntu_pin=$(sed -n 's/^const ContainerDigest = "\(sha256:[0-9a-f]\{64\}\)"$/\1/p' "$root/internal/ubuntu/ubuntu.go")
-# The dated release of Ubuntu's cloud image Lima's base starts from, and its images' SHA-256s.
+# The dated release of Ubuntu's cloud image base starts from, and its images' SHA-256s.
 cloud_pin() { sed -n "s/^const $1 = \"\([0-9a-z-]*\)\"$/\1/p" "$root/internal/ubuntu/ubuntu.go"; }
 cloud_release=$(cloud_pin CloudRelease)
 cloud_sums="$(cloud_pin CloudSHA256Arm64)|$(cloud_pin CloudSHA256Amd64)"
@@ -148,8 +125,6 @@ vms=$XDG_DATA_HOME/devvm/vms         # the VMs' folders, one per VM, named by it
 vmdir() { if [[ $1 =~ ^devvm-.+-[0-9a-f]{14}$ ]]; then echo "$XDG_DATA_HOME/devvm/vms/${1: -14}"
   else echo "$XDG_DATA_HOME/devvm/run/builds/$1"; fi; }
 export -f vmdir
-# A VM's state the port checks write by hand: another VM's listed ports, with no VM behind it.
-rsv_vm=devvm-e2e-reserved-00000000000e2e
 projects=$work/p                     # the project folders, this run's
 share=$XDG_DATA_HOME/devvm/tools     # the shared tool images
 lock=$XDG_DATA_HOME/devvm/mise.lock  # the shared tools' versions, resolved at the start of each run
@@ -161,19 +136,6 @@ lockv() { awk -v t="[[tools.$1]]" '$0 == t { f = 1; next } f && /^version = / { 
 m() { "$D" _msg "$@"; }
 export -f m; export D
 
-# smol_ls: the sandbox's smolvm machines, "NAME STATE" lines: those with its label. smol_others: every
-# other machine smolvm has, "NAME LABEL" (yours, on macOS). smolvm's JSON has each machine's keys
-# sorted, labels before name and state.
-smol_json() { SMOLVM_USAGE=0 smolvm machine ls --json 2>/dev/null | awk '
-  /^  \{/ { lab = ""; n = ""; s = "" }
-  /^      "devvm\.data": / { v = $0; sub(/^[^:]*: "/, "", v); sub(/",?$/, "", v); lab = v }
-  /^    "name": / { v = $0; sub(/^[^:]*: "/, "", v); sub(/",?$/, "", v); n = v }
-  /^    "state": / { v = $0; sub(/^[^:]*: "/, "", v); sub(/",?$/, "", v); s = v }
-  /^  \}/ { print n "\t" s "\t" lab }'; }
-smol_ls() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 == want { print $1, $2 }'; }
-smol_others() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 != want { print $1, $3 }'; }
-smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
-export -f smol_json smol_ls smol_others smol_status
 created=()   # VMs this run made; the only ones it deletes
 # ps_watch: every host process's command line, sampled every 0.1 s into $work/ps.log until
 # ps_unwatch, for checking a secret was in none while devvm ran. ps_unwatch removes the watcher's
@@ -189,14 +151,7 @@ ps_unwatch() { [[ -z $watcher ]] || { rm -f "$work/ps.on"; wait "$watcher" 2>/de
 cleanup() {
   local n
   for n in ${created[@]+"${created[@]}"}; do
-    if [[ $backend == smolvm ]]; then
-      # Only a machine with the sandbox's label, and the image's pack.
-      [[ -z $(smol_status "$n") ]] || SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1
-      rm -rf "$(vmdir "$n")/backend"
-      [[ $n != devvm-img-* ]] || rm -rf "$XDG_DATA_HOME/devvm/smolvm/images/${n#devvm-img-}"
-    else
-      limactl delete -f "$n" >/dev/null 2>&1
-    fi
+    limactl delete -f "$n" >/dev/null 2>&1
     [[ $n != devvm-img-?* ]] || rm -rf "${images:?}/${n#devvm-img-}"
     rm -rf "$(vmdir "$n")"
   done
@@ -209,8 +164,6 @@ cleanup() {
   [[ -z ${ca_server:-} ]] || kill "$ca_server" 2>/dev/null
   [[ -z ${cad:-} ]] || rm -rf "$cad" "$cafolder"   # the run's own CA, and devvm's CA folder in the sandbox
   ps_unwatch
-  [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null
-  [[ -z ${fake:-} ]] || kill "$fake" 2>/dev/null
   [[ -z ${desk:-} ]] || kill "$desk" 2>/dev/null   # a devvm desktop
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
@@ -218,7 +171,7 @@ cleanup() {
   pkill -f "[_]lima-ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # Lima VMs' forwarders, the sandbox's
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_DATA_HOME/devvm/agent-keys.json" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
+    "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
     "$work/corp.auth" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
@@ -520,16 +473,13 @@ for p in AcceptCutText SendCutText; do [ "$(DISPLAY=:1 XAUTHORITY="$HOME/.Xautho
 # desktop_secret: the password, read from the input, is in no file of the VM's (run as root there),
 # its fixed folders searched. Never on a command line: sudo would log it in the VM's journal.
 desktop_secret='read -r pw && [ -n "$pw" ] && ! grep -rlsF -D skip -- "$pw" /home /root /etc /run /tmp /var/log /usr/local'
-# watch_sees RUN VM DIR BY [NESTED [DELETES [FILES]]]: a watcher in the VM on DIR and a subfolder, as a dev
-# server's (RUN VM CMD runs CMD there: in_vm, in_smol), sees a file changed in each, one made
-# and one deleted, by this machine (BY host) or the VM (BY vm), each within 5 s; with NESTED no,
-# never the subfolder's (9p's limit); with DELETES no, not the deletion (smolvm's limit); with FILES yes, it watches the two changed files too, and a change counts when
-# the file's own watch sees it (smolvm's limit: a folder's watch sees a change to a file in it with
-# no name, unless the change comes as the file's creation). The watcher is perl (every base has it) calling inotify itself, so the
-# test VM needs nothing added. It prints its events, and writes them to a file in a folder of
-# DIR's it doesn't watch too, as smolvm's exec passes output on only at the end, and 9p shows this
-# machine a file the VM writes only later; they're in $work/watch.out after. watch_misses RUN VM
-# DIR: the watcher sees none of this machine's (Lima's limit: polling).
+# watch_sees RUN VM DIR BY [NESTED]: a watcher in the VM on DIR and a subfolder, as a dev server's
+# (RUN VM CMD runs CMD there: in_vm), sees a file changed in each, one made and one deleted, by this
+# machine (BY host) or the VM (BY vm), each within 5 s; with NESTED no, never the subfolder's (9p's
+# limit). The watcher is perl (every base has it) calling inotify itself, so the test VM needs
+# nothing added. It prints its events, and writes them to a file in a folder of DIR's it doesn't
+# watch too, as 9p shows this machine a file the VM writes only later; they're in $work/watch.out
+# after. watch_misses RUN VM DIR: the watcher sees none of this machine's (Lima's limit: polling).
 watch_pl='use strict; use IO::Handle;
 my %nr = (x86_64 => [294, 254], aarch64 => [26, 27]);
 chomp(my $m = qx(uname -m));
@@ -567,30 +517,26 @@ watch_do() { if [[ $3 == host ]]; then bash -c "$4"; else "$1" "$2" "$4" >/dev/n
 # wait (Lima's virtiofs keeps the deleted folder's entry), while a name the VM never looked up shows
 # as soon as this machine makes it.
 watch_n=0
-watch_sees() { local w r=1 files="" own="" wd sub
+watch_sees() { local w r=1 wd sub
   watch_n=$((watch_n + 1)); wd=$3/.e2e-watch-$watch_n sub=e2e-sub-$watch_n
   watch_log=$wd/events
   mkdir -p "$3/$sub" "$wd" && printf '%s\n' "$watch_pl" > "$wd/watch.pl" && : > "$watch_log" &&
     echo before > "$3/watched.txt" && echo before > "$3/$sub/nested.txt" || return 1
   : > "$work/watch.missed"
-  # FILES yes: the files' own watches print their events as "MODIFY watched.txt/".
-  if [[ ${7:-no} == yes ]]; then files=" '$3/watched.txt' '$3/$sub/nested.txt'" own='/?'; fi
   # A bound, not the fix: the VM waits up to 20 s for the script to show, then runs it, which fails
   # naming the file if it's still missing.
   "$1" "$2" "for _ in \$(seq 100); do [ -s '$wd/watch.pl' ] && break; sleep 0.2; done
-    LC_ALL=C exec perl '$wd/watch.pl' '$watch_log' '$3' '$3/$sub'$files" > "$work/watch.stream" 2>&1 &
+    LC_ALL=C exec perl '$wd/watch.pl' '$watch_log' '$3' '$3/$sub'" > "$work/watch.stream" 2>&1 &
   w=$!
   for _ in $(seq 60); do watch_events | grep -qx ready && break; sleep 0.5; done
   if watch_events | grep -qx ready; then
     r=0   # each one tried, so the output shows them all
-    # A change may come as a new file (smolvm's): either way, a watcher looks at the file again.
-    watch_do "$1" "$2" "$4" "echo after >> '$3/watched.txt'"; watch_saw "(MODIFY|CLOSE_WRITE|CREATE) watched.txt$own" || r=1
+    watch_do "$1" "$2" "$4" "echo after >> '$3/watched.txt'"; watch_saw "(MODIFY|CLOSE_WRITE|CREATE) watched.txt" || r=1
     watch_do "$1" "$2" "$4" "echo after >> '$3/$sub/nested.txt'"
-    if [[ ${5:-yes} == yes ]]; then watch_saw "(MODIFY|CLOSE_WRITE|CREATE) $sub/nested.txt$own" || r=1; fi
+    if [[ ${5:-yes} == yes ]]; then watch_saw "(MODIFY|CLOSE_WRITE|CREATE) $sub/nested.txt" || r=1; fi
     watch_do "$1" "$2" "$4" "echo made > '$3/made.txt'"; watch_saw '(CREATE|MOVED_TO) made.txt' || r=1
     watch_do "$1" "$2" "$4" "rm '$3/made.txt'"
-    if [[ ${6:-yes} == yes ]]; then watch_saw '(DELETE|MOVED_FROM) made.txt' || r=1
-    else sleep 5; ! watch_events | grep -qE '^(DELETE|MOVED_FROM) made.txt$' || { echo "the deletion was seen" >> "$work/watch.missed"; r=1; }; fi
+    watch_saw '(DELETE|MOVED_FROM) made.txt' || r=1
     # NESTED no: the subfolder's change is never seen, even after the rest.
     if [[ ${5:-yes} == no ]] && watch_events | grep -q " $sub/"; then
       echo "the subfolder's change was seen" >> "$work/watch.missed"; r=1
@@ -604,10 +550,8 @@ watch_sees() { local w r=1 files="" own="" wd sub
   return "$r"; }
 watch_misses() { watch_sees "$1" "$2" "$3" host; grep -qx ready "$work/watch.out" && ! grep -qvx ready "$work/watch.out"; }
 
-# Links between VMs: link_section's checks, the same on each backend, each the end-to-end proof of a
-# row of the design note's threat check (internals/design.md, "Links between VMs"). lk_be is the
-# backend they run on, lk_cli devvm's flag for it.
-lk_be=lima lk_cli=()
+# Links between VMs: link_section's checks, each the end-to-end proof of a row of the design note's
+# threat check (internals/design.md, "Links between VMs").
 # lk_pl: the VMs' helper, /var/tmp/e2e-link.pl (perl: every base has it). serve ADDR PORT WORD
 # answers each connection with an HTTP response whose body is WORD; hold ADDR PORT keeps every
 # connection it accepts open (each writes its pid to /var/tmp/e2e-link-ADDR-PORT.pid); conns HOST
@@ -663,21 +607,14 @@ if ($mode eq "serve" or $mode eq "hold") {
     }
   }
 } else { die "e2e-link.pl: serve, hold, conns or listeners\n" }'
-# lk_user VM CMD: CMD in a login shell as the VM's user, on lk_be; lk_root VM CMD: as root; lk_bg VM
-# CMD: as root, left running; lk_put VM FILE: the input, as FILE in the VM.
-lk_user() { case $lk_be in lima) in_vm "$1" "$2" ;; *) in_smol "$1" "$2" ;; esac; }
-lk_root() { case $lk_be in
-  lima) limactl shell --workdir / "$1" sudo sh -c "$2" </dev/null ;;
-  *) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c "$2" </dev/null ;; esac; }
-lk_bg() { case $lk_be in
-  lima) lk_root "$1" "setsid -f $2 </dev/null >/dev/null 2>&1" ;;
-  *) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- sh -c "$2" </dev/null >/dev/null 2>&1 ;; esac; }
-lk_put() { case $lk_be in
-  lima) limactl shell --workdir / "$1" sudo sh -c 'cat > "$1"' _ "$2" ;;
-  *) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -i -- sh -c 'cat > "$1"' _ "$2" ;; esac; }
-# lk_running VM: it runs, as its backend says.
-lk_running() { case $lk_be in
-  lima) [[ $(status_of "$1") == Running ]] ;; *) [[ $(smol_status "$1") == running ]] ;; esac; }
+# lk_user VM CMD: CMD in a login shell as the VM's user; lk_root VM CMD: as root; lk_bg VM CMD: as
+# root, left running; lk_put VM FILE: the input, as FILE in the VM.
+lk_user() { in_vm "$1" "$2"; }
+lk_root() { limactl shell --workdir / "$1" sudo sh -c "$2" </dev/null; }
+lk_bg() { lk_root "$1" "setsid -f $2 </dev/null >/dev/null 2>&1"; }
+lk_put() { limactl shell --workdir / "$1" sudo sh -c 'cat > "$1"' _ "$2"; }
+# lk_running VM: it runs, as Lima says.
+lk_running() { [[ $(status_of "$1") == Running ]]; }
 # lk_until SECONDS CMD...: CMD, once a second until it passes, for up to SECONDS; lk_not CMD...: CMD fails.
 lk_until() { local n=$1 i; shift; for ((i = 1; i < n; i++)); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done; "$@"; }
 lk_not() { ! "$@"; }
@@ -730,9 +667,7 @@ lk_session() { local p; p=$(pgrep -f -- "[_]links $1\$" | head -1); [[ -n $p ]] 
 lk_master() { local p; p=$(pgrep -f -- "[-]M -S $(lk_ctl "$1") " | head -1); [[ -n $p ]] && echo "$p"; }
 lk_desc() { local p c; for p in "$@"; do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do lk_desc "$c"; done; done; }
 # lk_sshport VM: the host loopback port devvm's ssh reaches it on.
-lk_sshport() { local p; p=$(sed -n 's/^ssh_port=//p' "$(vmdir "$1")/state" 2>/dev/null)
-  [[ -n $p ]] || p=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$1")/backend/record.json" 2>/dev/null)
-  echo "$p"; }
+lk_sshport() { sed -n 's/^ssh_port=//p' "$(vmdir "$1")/state" 2>/dev/null; }
 # lk_host_tcp PIDS: those processes' TCP sockets on this machine, "LOCAL (LISTEN)" or "LOCAL->PEER (STATE)".
 lk_host_tcp() {
   if [[ "$(uname -s)" == Darwin ]]; then lsof -nP -a -p "$1" -iTCP 2>/dev/null | awk 'NR > 1 { print $9, $10 }'
@@ -792,20 +727,19 @@ lk_reconnect() { local m; m=$(lk_master "$1"); [[ -n $m ]] || { echo "no master"
   kill "$m"; lk_until 30 lk_new_master "$1" "$m" && lk_until 30 lk_gets "$1" "$2" "$3" "$4"; }
 lk_new_master() { local n; n=$(lk_master "$1"); [[ -n $n && $n != "$2" ]]; }
 
-# link_section BACKEND PREFIX: the link checks on BACKEND (lima, smolvm), the folders named
-# from PREFIX: PREFIXdb and PREFIXapi the targets, PREFIXapp the client. Three small VMs without
+# link_section PREFIX: the link checks, the folders named from PREFIX: PREFIXdb and PREFIXapi the targets, PREFIXapp the client. Three small VMs without
 # network policy, then network policy on the client and the first target; ports 47240-47249, and 80.
 # devvm runs with a soft limit of 256 open files, macOS's default (a shell of yours may have more),
 # so the link sessions it starts get it too.
 link_section() {
   local nofile; nofile=$(ulimit -S -n); ulimit -S -n 256
-  lk_be=$1 lk_x=$2 lk_cli=(); [[ $lk_be == lima ]] || lk_cli=(--backend "$lk_be")
+  lk_x=$1
   sc=${sc:-$work/ssh}   # rfwd_links's socket forward names a path there
   lk_p1=$(newproj "${lk_x}db") lk_p2=$(newproj "${lk_x}api") lk_pc=$(newproj "${lk_x}app")
   local small=(--no-network-policy --no-git-protect --cpus 2 --memory 2)
-  launch "$lk_p1" exit ${lk_cli[@]+"${lk_cli[@]}"} "${small[@]}" --ports none; lk_v1=$vm
-  launch "$lk_p2" exit ${lk_cli[@]+"${lk_cli[@]}"} "${small[@]}" --ports none; lk_v2=$vm
-  launch "$lk_pc" exit ${lk_cli[@]+"${lk_cli[@]}"} "${small[@]}" --ports all; lk_vc=$vm
+  launch "$lk_p1" exit "${small[@]}" --ports none; lk_v1=$vm
+  launch "$lk_p2" exit "${small[@]}" --ports none; lk_v2=$vm
+  launch "$lk_pc" exit "${small[@]}" --ports all; lk_vc=$vm
   lk_w1=${lk_x}db lk_w2=${lk_x}api lk_n2=${lk_x}api   # the targets' servers' words; the second's link name
   check "two targets that forward no port and a client that forwards every port, without network policy" lk_made
   lk_serve "$lk_v1" "$lk_w1" 47240 47242 47243 47244 47249 80 >/dev/null 2>&1
@@ -814,10 +748,8 @@ link_section() {
   printf '%s\n' "$lk_pl" | lk_put "$lk_vc" /var/tmp/e2e-link.pl >/dev/null 2>&1
   check "sshd -T in every VM: remote forwards on 127.77.*:* alone, at the address asked, no socket forwards, tunnels or X11" \
     lk_sshd_t "$lk_v1" "$lk_v2" "$lk_vc"
-  if [[ $lk_be == lima ]]; then
-    check "Lima's own rules ignore every port of the client's" bash -c "
-      [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $lk_vc) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]]"
-  fi
+  check "Lima's own rules ignore every port of the client's" bash -c "
+    [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $lk_vc) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]]"
   check "devvm link publish offers ports, and lists them, with \"version\": 1 in its --json" lk_publish
   check "a port the target doesn't publish is refused by devvm link add" lk_unpublished_add
   check "devvm link add on the running client applies within seconds: NAME:PORT and NAME.devvm.internal:PORT, by curl and a raw TCP client" lk_add_applies
@@ -866,9 +798,9 @@ link_section() {
   check "devvm network off is refused for a target that a client with network policy links to" lk_off_refused
   check "the rule broken under devvm: the link's next connection is refused, and the client's launch warns and runs on without it" lk_policy_broken
   check "the rule restored, the client's next launch has the link again" lk_policy_back
-  if [[ $lk_be == lima ]] && want from; then
+  if want from; then
     check "a port below 1024 on Lima's Alpine VMs: an Alpine client reaches its link to port 80 on the same port" lk_alpine
-  elif [[ $lk_be == lima ]]; then
+  else
     skip "a port below 1024 on Lima's Alpine VMs: an Alpine client reaches its link to port 80 on the same port" "Alpine's image comes from the from section"
   fi
   check "a group is all or none: a VM without network policy is refused by a group with it, and one with it by a group without; two with it reach each other through their group's links" gp_policy
@@ -1012,9 +944,8 @@ lk_restarted() { local k0 k1
   if ! { lk_up "$lk_p2" && lk_running "$lk_v2" && lk_serve "$lk_v2" "$lk_w2" 47240 80; }; then tail -5 "$work/last.log"; return 1; fi
   k1=$(grep "^$lk_v2 " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
   lk_until 20 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" || return 1
-  # Lima keeps a VM's host keys; smolvm gives it new ones at each start.
-  if [[ $lk_be == lima ]]; then echo "host key kept: $([[ $k0 == "$k1" ]] && echo yes || echo no)"
-  else [[ -n $k1 && $k0 != "$k1" ]] || { echo "the same host key"; return 1; }; fi; }
+  # Lima keeps a VM's host keys.
+  echo "host key kept: $([[ $k0 == "$k1" ]] && echo yes || echo no)"; }
 lk_rm_target() { local s
   s=$(lk_session "$lk_vc")
   lk_dv "$lk_p2" rm --force --no-export && lk_said "==> links_target_gone count=1 vm=$lk_v2 vms=$lk_vc" || return 1
@@ -1023,7 +954,7 @@ lk_rm_target() { local s
     [[ -n $s && $(lk_session "$lk_vc") == "$s" ]] && lk_gets "$lk_vc" db 47240 "$lk_w1-47240"; }
 lk_made_again() { local id0
   id0=$(grep "^links=" "$(vmdir "$lk_vc")/state")
-  launch "$lk_p2" exit ${lk_cli[@]+"${lk_cli[@]}"} --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none
+  launch "$lk_p2" exit --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none
   if ! { [[ $vm == "$lk_v2" ]] && lk_running "$lk_v2"; }; then echo "not made again: ${vm:-none}"; return 1; fi
   ! lk_shows "$lk_pc" "$lk_v2" link && ! lk_resolves "$lk_vc" "$lk_n2" &&
     [[ $(grep "^links=" "$(vmdir "$lk_vc")/state") == "$id0" ]] && lk_dv "$lk_p2" link publish 47240 && lk_serve "$lk_v2" "$lk_w2" 47240; }
@@ -1196,15 +1127,8 @@ lk_rm_client() {
 
 if $clean; then
   section "cleaning cached images"
-  if [[ $backend == smolvm ]]; then
-    # smolvm's images and their records, not Lima's.
-    for n in $(smol_ls | awk '$1 ~ /^devvm-img-/ { print $1 }'); do SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1; done
-    for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do [[ ! -d $k ]] || rm -rf "${images:?}/$(basename "$k")"; done
-    rm -rf "$XDG_DATA_HOME/devvm/smolvm/images"
-  else
-    for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
-    rm -rf "$images" "$share"
-  fi
+  for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
+  rm -rf "$images" "$share"
 fi
 
 if want tools; then
@@ -2548,1064 +2472,7 @@ fi
 # After from, whose Alpine image a link's client starts from in the --from tier.
 if want link; then
 section "links between VMs"
-link_section lima lk
-fi
-
-if want smolvm; then
-# The smolvm backend (experimental): its native features, and a one-line refusal for the rest. Its
-# machines share your smolvm on macOS: only those with the sandbox's label are looked at, and the
-# others must be the same at the end.
-S=(--backend smolvm)
-me=$(id -un)
-others_before=$(smol_others)
-# in_smol VM CMD: CMD in a login shell as the VM's user, as devvm's shell has it.
-in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" -- bash -lc "$2" </dev/null; }
-# smol_home DIR: a home of a check's own that still has your smolvm's machines: on macOS smolvm keeps
-# them under HOME, so its folders there are links to yours (rm -rf of DIR removes only the links).
-smol_home() { mkdir -p "$1/Library/Application Support" "$1/Library/Caches"
-  [[ "$(uname -s)" != Darwin ]] || for d in "Library/Application Support/smolvm" "Library/Caches/smolvm"; do
-    [[ -e "$1/$d" ]] || ln -s "$HOME/$d" "$1/$d"; done; }
-# smol_pid VM: the host process that runs it (the first line of its agent.pid).
-smol_pid() { head -1 "$(SMOLVM_USAGE=0 smolvm machine data-dir --name "$1")/agent.pid" 2>/dev/null; }
-export -f smol_pid
-# smol_nameserver VM: the resolver the VM's resolv.conf names. smolvm's own network without a port
-# forward is TSI, where the VM asks this machine's resolver itself; any forward, or an allow list, is
-# virtio-net, where it asks smolvm's (the gateway, 100.96.0.1). design.md's DNS detection rests on it.
-smol_nameserver() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf </dev/null; }
-# smol_tsi VM: it asks one of this machine's resolvers (not the gateway). The first can be one the VM
-# can't use (an IPv6 link-local address, scoped to this machine's interface): smolvm skips it.
-smol_tsi() { local ns host; ns=$(smol_nameserver "$1"); host=$(awk '$1 == "nameserver" { print $2 }' /etc/resolv.conf)
-  echo "VM's: ${ns:-none}, this machine's: $(paste -sd ' ' - <<<"${host:-none}")"
-  [[ -n $ns && $ns != 100.96.0.1 ]] && grep -qxF -- "$ns" <<<"$host"; }
-smol_vnet() { local ns; ns=$(smol_nameserver "$1"); echo "VM's: ${ns:-none}"; [[ $ns == 100.96.0.1 ]]; }
-# smol_listens_only VM PORT...: the host process that runs it listens on each PORT (the control:
-# what lsof sees), and on no other TCP port.
-smol_listens_only() { local vm=$1 pid l p re=""; shift
-  pid=$(smol_pid "$vm"); [[ $pid =~ ^[0-9]+$ ]] || { echo "no pid"; return 1; }
-  l=$(lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }' | sort -u)
-  echo "listening: ${l:-nothing}; want $*"
-  for p in "$@"; do [[ $p =~ ^[0-9]+$ ]] && grep -q ":$p\$" <<<"$l" || return 1; re+="${re:+|}:$p\$"; done
-  ! grep -qvE "$re" <<<"$l"; }
-section "smolvm: shared tool versions"
-check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
-
-section "smolvm: images"
-check "devvm doctor finds everything smolvm needs" bash -c "'$D' doctor --backend smolvm </dev/null >'$work/last.log' 2>&1 &&
-  '$D' doctor --backend smolvm --json </dev/null | grep -qxF '  \"problems\": [],'"
-check "build base" quiet env DEVVM_MESSAGES=names "$D" "${S[@]}" build base
-kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
-# A cached base: the pack recorded as base, not --from another image (the Alpine checks' bases).
-[[ -n $kb ]] || kb=$(for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do
-  k=$(basename "$k"); [[ $(rec "$k" name) == base && -f $images/$k/record.json && -z $(rec "$k" from) ]] && echo "$k"; done | head -1)
-packs=$XDG_DATA_HOME/devvm/smolvm/images
-check "base is a pack, recorded with Ubuntu's container image by its pinned digest; its build machine is gone" bash -c "
-  [[ -n '$kb' && -n '$ubuntu_pin' && -f '$packs/$kb/image.smolmachine' ]] && [[ \$(rec $kb libc) == gnu ]] &&
-  rec $kb digest | grep -qE '^docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' && [[ -z \$(smol_status devvm-img-$kb) ]]"
-fixture=$layers/e2esmol.sh
-token=e2e-smolvm-ran-$$-$(date +%s)
-printf '#!/bin/bash\necho %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" > "$fixture"
-check "a layer builds from base's pack, its script run as the VM's user" bash -c "'$D' ${S[*]} build e2esmol </dev/null >'$work/last.log' 2>&1 &&
-  grep -qx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
-owned e2esmol
-kf=$(keys_of e2esmol | head -1)
-check "it's a pack too, and devvm images lists both on smolvm" bash -c "[[ -n '$kf' && -f '$packs/$kf/image.smolmachine' ]] &&
-  out=\$('$D' images </dev/null 2>/dev/null) && grep -qE '^base +ubuntu [0-9.]+ +[0-9a-f]{12} +$kb +current +[0-9.]+[KMGT] +smolvm$' <<<\"\$out\" &&
-  grep -qE '^e2esmol +ubuntu [0-9.]+ +[0-9a-f]{12} +$kf +current +[0-9.]+[KMGT] +smolvm$' <<<\"\$out\""
-echo "# edited" >> "$fixture"
-check "rebuild makes a new one and deletes the stale one, not base" bash -c "'$D' ${S[*]} rebuild --force e2esmol </dev/null >/dev/null 2>&1 &&
-  [[ \$(keys_of e2esmol | wc -l) -eq 1 && \$(keys_of e2esmol) != $kf && ! -e '$packs/$kf' && -f '$packs/$kb/image.smolmachine' ]]"
-owned e2esmol
-check "images rm deletes it" bash -c "'$D' ${S[*]} images rm --force e2esmol </dev/null >/dev/null 2>&1 && [[ -z \$(keys_of e2esmol) ]]"
-rm -f "$fixture"
-# The user's CAs: trusted while a build's scripts run, and removed before the machine is packed (the
-# run log shows ca.sh ran after the script).
-e2e_ca
-mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
-catoken=e2e-smol-ca-$$-$(date +%s)
-printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
-  '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt ]]' \
-  'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /etc/ssl/devvm.pem' "$catoken" > "$layers/e2esmolca.sh"
-check "a build trusts the CAs in devvm's CA folder while its scripts run, then takes them out" bash -c "
-  DEVVM_MESSAGES=names '$D' ${S[*]} build e2esmolca </dev/null >'$work/last.log' 2>&1 &&
-  f=\$(grep -lx '$catoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log | tail -1) && [[ -n \$f ]] &&
-  [[ \$(grep -oE 'running_script script=(ca|e2esmolca)\.sh' \"\$f\" | sed 's/.*=//' | paste -sd' ' -) == 'ca.sh e2esmolca.sh ca.sh' ]]"
-owned e2esmolca
-rm -rf "$cafolder" "$layers/e2esmolca.sh"
-printf '#!/bin/bash\nexit 3\n' > "$layers/e2esmolfail.sh"
-DEVVM_MESSAGES=names "$D" "${S[@]}" build e2esmolfail </dev/null >"$work/fail.log" 2>&1; rc=$?
-kx=$(sed -n 's/^==> building_image image=e2esmolfail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
-[[ -z $kx ]] || created+=("devvm-img-$kx")
-check "a failed script keeps its machine, stopped, and says how to look inside" bash -c "
-  [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: smolvm_script_failed script=e2esmolfail\.sh vm=devvm-img-$kx$' '$work/fail.log' &&
-  [[ \$(smol_status devvm-img-$kx) == stopped ]] && '$D' ${S[*]} images rm --force '$kx' </dev/null >/dev/null 2>&1 && [[ -z \$(smol_status devvm-img-$kx) ]]"
-rm -f "$layers/e2esmolfail.sh"
-
-section "smolvm: a base project"
-p=$(newproj smolweb); git -C "$p" init -q
-launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${S[@]}" --no-network-policy --ports 47180,47184 --cpus 2 --memory 3 --disk 120
-check "devvm creates the VM from base's pack, labelled, and opens a shell in the folder as you" bash -c "
-  [[ -n '$vm' && \$(smol_status '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
-  grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=smolvm '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state'"
-check "it gets --cpus, --memory and --disk" in_smol "$vm" \
-  '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
-check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +- +\S+ +off +- +smolvm +$p\$'"
-check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
-  in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -c \"\$1\" </dev/null; }
-  in_smol 'echo from-vm > $p/vm.txt' && grep -qx from-vm '$p/vm.txt' && [[ \$(stat -f %Su '$p/vm.txt' 2>/dev/null || stat -c %U '$p/vm.txt') == '$me' ]]"
-# smolvm passes on this machine's changes and new files, but no deletions: it watches the folder here
-# and fires each change on the file in the VM. A watch on the file sees a change to it, and a watch on
-# its folder sees the folder change, with no name: only a change macOS still reports with the file's
-# creation, a few seconds after it, comes as a new file there. Each event reaches the VM in about
-# 0.1 s, 0.25 s at most in 30 tries at a load of 19, so 5 s is ample.
-check "a watcher in the VM sees files changed and made on this machine, but not deleted" watch_sees in_smol "$vm" "$p" host yes no yes
-check "the shared tools are read-only, even for root" bash -c "! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- touch /mnt/devvm-tools/x </dev/null 2>/dev/null"
-check "hostname is the folder" in_smol "$vm" '[[ $(hostname) == smolweb ]]'
-check "Exec's arguments, folder, input and user reach the VM as given" bash -c "cd '$root' &&
-  DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/smolvm |
-  grep -q -- '--- PASS: TestE2EExecQuoting'"
-# Its desktop (base has the desktop feature), with no init system: devvm desktop starts it.
-desktop_serve "$p"
-check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone" bash -c "[[ -n '$desk_port' ]] && loopback_only '$desk_port'"
-check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
-check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_smol "$vm" "$desktop_in_vm"
-check "the password is in no file of the VM's nor any run log" bash -c '
-  printf "%s\n" "$1" | SMOLVM_USAGE=0 smolvm machine exec --name "$2" -i -- sh -c "$3" && ! grep -rqsF "$1" "${@:4}"' \
-  _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs" "$(vmdir "$vm")/logs"
-desktop_end
-check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
-check "without the docker layer, it has no Docker" in_smol "$vm" '! command -v dockerd && ! command -v docker && [[ ! -e /run/docker.pid ]]'
-check "SSH agent forwarding is off: the agent devvm's commands get, if any, reaches nothing" in_smol "$vm" \
-  '[[ -z ${SSH_AUTH_SOCK:-} ]] || ssh-add -l 2>&1 | grep -qi "communication with agent failed\|error connecting to agent"'
-# A listener on every address (Ubuntu's container image has perl, not python), left running.
-SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e \
-  '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47180", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' \
-  </dev/null >/dev/null 2>&1
-check "the listed port reaches this machine's loopback" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47180 && exit 0; sleep 1; done; exit 1'
-# Listeners on the VM's loopback alone: a listed port (47184), and one not listed (47185).
-for lp in 47184 47185; do SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -d -- perl -MIO::Socket::INET -e \
-  '$p = shift; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:$p", Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { print $c "vm-$p\n"; close $c }' "$lp" \
-  </dev/null >/dev/null 2>&1; done
-check "a listed port's server on the VM's loopback alone reaches this machine's, through devvm's forwarder" bash -c '
-  for i in $(seq 20); do [[ $(nc -w 2 127.0.0.1 47184 </dev/null 2>/dev/null) == vm-47184 ]] && exit 0; sleep 1; done; exit 1'
-check "an unlisted port's doesn't" bash -c 'sleep 3; ! nc -z 127.0.0.1 47185'
-check "made ready to turn agent forwarding on later, and given none: smolvm's socket reaches no agent" bash -c "
-  grep -qx agent_toggle=on '$(vmdir "$vm")/state' && grep -qx ssh_agent=off '$(vmdir "$vm")/state' &&
-  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add -l' </dev/null 2>&1 |
-  grep -qi 'communication with agent failed\|error connecting to agent'"
-check "smolvm publishes none of its ports: its process listens on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$vm")/backend/record.json")"
-check "... and devvm's forwarder forwards the listed ones alone" bash -c "ps -axww -o command= | grep -- '[_]smolvm-ports -vm $vm ' | grep -q -- ' -only 47180,47184\$'"
-# smol_serve VM PORTS...: a server in the VM on each port, every address, left running.
-smol_serve() { local p; for p in "${@:2}"; do SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- perl -MIO::Socket::INET -e \
-  '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:" . shift, Listen => 5, ReuseAddr => 1) or die; while ($c = $s->accept) { close $c }' "$p" \
-  </dev/null >/dev/null 2>&1; done; }
-check "a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted" ports_live "$p" "$vm" 47186 smol_serve smol_pid
-check "a running VM's new size waits for its next start, and applies on restart; its new ports at once" bash -c "cd '$p' &&
-  '$D' size --cpus 3 </dev/null >/dev/null 2>&1 && '$D' ports add 47181 </dev/null >/dev/null 2>&1 &&
-  ps -axww -o command= | grep -- '[_]smolvm-ports -vm $vm ' | grep -q -- ' -only 47180,47184,47181\$' &&
-  printf 'nproc\n' | '$D' restart >'$work/last.log' 2>&1 && grep -qx 3 '$work/last.log' &&
-  [[ \$('$D' ports 2>/dev/null) == 47180,47184,47181 ]]"
-check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$p" "$vm" 47181 47180 smol_serve
-check "a smaller disk is refused" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D' size --disk 100 </dev/null >'$work/last.log' 2>&1 &&
-  grep -q 'disk_shrink' '$work/last.log'"
-check "devvm stop stops it, and devvm starts it again" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
-  [[ \$(smol_status $vm) == stopped ]] && printf 'echo again\n' | '$D' 2>&1 | grep -qx again && [[ \$(smol_status $vm) == running ]]"
-check "rm deletes only this VM, with its state" bash -c "cd '$p' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(smol_status $vm) && ! -e '$(vmdir "$vm")' ]]"
-
-section "smolvm: SSH agent forwarding"
-# Turning it on or off later is emulated (agent-toggle), and reviewed. Its guarantee: a VM set to
-# devvm's agent or none never reaches yours, nor one set to none any agent: nothing listed, nothing
-# added, not even by root; one started outside devvm is stopped. The agents and keys are e2e's own:
-# a throwaway one as yours (ua_sock), and devvm's own in the sandbox with a throwaway key.
-ua_sock=$work/smol-agent.sock da_sock=$XDG_DATA_HOME/devvm/agent.sock
-rm -f "$ua_sock" "$work/smol-key" "$work/smol-key.pub" "$work/smol-dkey" "$work/smol-dkey.pub"
-user_agent_pid=$(ssh-agent -a "$ua_sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
-ssh-keygen -q -t ed25519 -N '' -C e2e-smolvm-user -f "$work/smol-key"
-ssh-keygen -q -t ed25519 -N '' -C e2e-smolvm-devvm -f "$work/smol-dkey"
-SSH_AUTH_SOCK=$ua_sock ssh-add -q "$work/smol-key" 2>/dev/null
-# as_ua [VAR=VALUE...] CMD...: CMD with your (throwaway) agent, as devvm runs from your shell.
-as_ua() { env SSH_AUTH_SOCK="$ua_sock" "$@"; }
-# smol_keys VM: what the VM's agent lists, asked as root through smolvm's agent socket in the VM. Each
-# exec runs from a shell with your agent: smolvm reads it only at a start, so it reaches no VM.
-smol_keys() { SSH_AUTH_SOCK=$ua_sock SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c 'SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add -l' </dev/null 2>&1; }
-# smol_add VM: root in the VM adds a key it made to the agent it's given (e2e-from-vm).
-smol_add() { SSH_AUTH_SOCK=$ua_sock SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c 'rm -f /tmp/vmkey /tmp/vmkey.pub &&
-  ssh-keygen -q -t ed25519 -N "" -C e2e-from-vm -f /tmp/vmkey && SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add /tmp/vmkey' </dev/null 2>&1; }
-# agents_clean: your agent holds only its key, and devvm's (if it runs) only its own: nothing of the VM's.
-agents_clean() { local u d; u=$(SSH_AUTH_SOCK=$ua_sock ssh-add -l 2>&1); d=$(SSH_AUTH_SOCK=$da_sock ssh-add -l 2>&1)
-  echo "yours: $u; devvm's: $d"; [[ $(grep -c . <<<"$u") -eq 1 ]] && grep -q e2e-smolvm-user <<<"$u" && ! grep -q e2e-from-vm <<<"$d"; }
-# smol_only VM COMMENT: the VM's agent lists that key alone.
-smol_only() { local k; k=$(smol_keys "$1"); echo "VM's agent: $k"; [[ $(grep -c . <<<"$k") -eq 1 ]] && grep -q "$2" <<<"$k"; }
-# smol_no_agent VM: the VM has smolvm's agent socket (made forwarding), which reaches no agent at all
-# (not an empty one): nothing answers, none added, root asking; your agent and devvm's are untouched.
-smol_no_agent() { local k a
-  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- test -S /tmp/ssh-agent.sock </dev/null || { echo "no agent socket in the VM"; return 1; }
-  k=$(smol_keys "$1"); echo "VM's agent: $k"
-  grep -qiE 'communication with agent failed|error connecting to agent|could not open a connection' <<<"$k" &&
-    ! grep -qiE 'no identities|SHA256:' <<<"$k" || return 1
-  a=$(smol_add "$1") && { echo "added: $a"; return 1; }
-  echo "adding: $a"; agents_clean; }
-# smol_switch DIR MODE CHECK...: devvm ssh-agent MODE, then devvm restart, from your shell; then CHECK.
-smol_switch() { (cd "$1" && as_ua "$D" ssh-agent "$2" </dev/null >"$work/last.log" 2>&1 &&
-  printf 'exit\n' | as_ua "$D" restart >>"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
-  shift 2; "$@"; }
-# smol_vm_adds VM: root in the VM adds a key of its own to the agent it's given, your agent here (the
-# add check's control); the key is taken out again.
-smol_vm_adds() { local pub
-  smol_add "$1" >/dev/null && SSH_AUTH_SOCK=$ua_sock ssh-add -l | grep -q e2e-from-vm || return 1
-  pub=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- cat /tmp/vmkey.pub </dev/null) && printf '%s\n' "$pub" > "$work/vmkey.pub" &&
-  SSH_AUTH_SOCK=$ua_sock ssh-add -d "$work/vmkey.pub" >/dev/null 2>&1; rm -f "$work/vmkey.pub"; agents_clean; }
-# smol_name_keys VM: what ssh by name lists of the agent its session has, ssh run with yours, then
-# ssh-add's exit code (rc=2: no agent).
-smol_name_keys() { SSH_AUTH_SOCK=$ua_sock ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$1" 'ssh-add -l 2>&1; echo "rc=$?"' </dev/null 2>&1; }
-export -f smol_keys smol_add smol_only smol_no_agent smol_name_keys agents_clean as_ua; export ua_sock da_sock
-
-g=$(newproj smolagent)
-(cd "$g" && printf 'ssh-add -l\n' | as_ua DEVVM_MESSAGES=names "$D" "${S[@]}" --no-network-policy --ports none >"$work/last.log" 2>&1)
-vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
-check "a new VM is made ready to change it, unwarned, and recorded so" bash -c "[[ -n '$vm' ]] &&
-  ! grep -q 'backend_unreviewed' '$work/last.log' &&
-  grep -qx agent_toggle=on '$(vmdir "$vm")/state' && grep -qx ssh_agent=off '$(vmdir "$vm")/state'"
-check "off: started from your shell, with your agent, the VM reaches no agent, and can't add to one" smol_no_agent "$vm"
-check "devvm's own shell has no agent's keys either" bash -c "! grep -q 'e2e-smolvm' '$work/last.log'"
-check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
-  as_ua '$D' ssh-agent add '$work/smol-dkey' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=e2e-smolvm-devvm)\""
-check "ssh-agent devvm while it runs: nothing changes until its next start" bash -c "cd '$g' &&
-  as_ua DEVVM_MESSAGES=names '$D' ssh-agent devvm </dev/null >'$work/e' 2>&1 && grep -q 'agent_set_running mode=devvm vm=$vm\$' '$work/e'"
-check "  still no agent" smol_no_agent "$vm"
-check "  after a launch, ssh by name has none either, until a restart" bash -c "cd '$g' && printf 'exit\n' | as_ua '$D' >'$work/last.log' 2>&1 &&
-  out=\$(smol_name_keys '$vm'); echo \"\$out\"; grep -qx 'rc=2' <<<\"\$out\" && ! grep -q SHA256: <<<\"\$out\""
-check "devvm, after a restart: the VM uses devvm's key alone, never yours" smol_switch "$g" devvm smol_only "$vm" e2e-smolvm-devvm
-check "  so does ssh by name" bash -c "out=\$(smol_name_keys '$vm'); echo \"\$out\"; grep -qx 'rc=0' <<<\"\$out\" &&
-  [[ \$(grep -c SHA256: <<<\"\$out\") -eq 1 ]] && grep -q e2e-smolvm-devvm <<<\"\$out\""
-check "  with devvm's agent ended while it runs: no agent, never yours" bash -c "pkill -f '[s]sh-agent -a $da_sock';
-  for i in \$(seq 20); do [[ ! -S '$da_sock' ]] && break; sleep 0.25; done; smol_no_agent '$vm'"
-check "on, after a restart: your agent's key alone, never devvm's" smol_switch "$g" on smol_only "$vm" e2e-smolvm-user
-check "  root in the VM can add a key to it then (the add check's control)" smol_vm_adds "$vm"
-check "off while it runs, stopped, then started by devvm history export (no launch, its record still forwarding yours): no agent" bash -c "cd '$g' &&
-  as_ua '$D' ssh-agent off </dev/null >/dev/null 2>&1 && as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
-  ! grep -q agent_off '$(vmdir "$vm")/backend/record.json' &&
-  { as_ua '$D' history export '$work/smol-export.tar.gz' </dev/null >'$work/last.log' 2>&1; rm -f '$work/smol-export.tar.gz'; true; } &&
-  [[ \$(smol_status '$vm') == running ]] && smol_no_agent '$vm'"
-check "off, after a restart: no agent again, your agent and devvm's untouched" smol_switch "$g" off smol_no_agent "$vm"
-check "stopped, then smolvm machine start from your shell: the VM, set to off, gets your agent" bash -c "cd '$g' &&
-  as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
-  SSH_AUTH_SOCK='$ua_sock' SMOLVM_USAGE=0 smolvm machine start --name '$vm' </dev/null >/dev/null 2>&1 && smol_only '$vm' e2e-smolvm-user"
-check "  devvm history export stops it, in one line, before anything runs in it" bash -c "cd '$g' &&
-  ! as_ua DEVVM_MESSAGES=names '$D' history export '$work/smol-export.tar.gz' </dev/null 2>'$work/e' && ! test -e '$work/smol-export.tar.gz' &&
-  grep -qx 'devvm: agent_unchosen_stop vm=$vm' '$work/e' && [[ \$(smol_status '$vm') == stopped ]]"
-check "  so does devvm, started that way again; then devvm starts it with none" bash -c "cd '$g' &&
-  SSH_AUTH_SOCK='$ua_sock' SMOLVM_USAGE=0 smolvm machine start --name '$vm' </dev/null >/dev/null 2>&1 &&
-  ! as_ua DEVVM_MESSAGES=names '$D' </dev/null 2>'$work/e' && grep -qx 'devvm: agent_unchosen_stop vm=$vm' '$work/e' &&
-  [[ \$(smol_status '$vm') == stopped ]] && printf 'exit\n' | as_ua '$D' >/dev/null 2>&1 && smol_no_agent '$vm'"
-check "  devvm host on its own start keeps it running" bash -c "cd '$g' &&
-  as_ua DEVVM_MESSAGES=names '$D' host </dev/null >'$work/e' 2>&1 && ! grep -q agent_unchosen '$work/e' && [[ \$(smol_status '$vm') == running ]]"
-(cd "$g" && quiet as_ua "$D" rm --force --no-export)
-g=$(newproj smolfwd)
-(cd "$g" && printf 'ssh-add -l\n' | as_ua "$D" "${S[@]}" --no-network-policy --ports none --ssh-agent >"$work/last.log" 2>&1)
-vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
-check "--ssh-agent: the VM uses the agent it was started with" bash -c "[[ -n '$vm' ]] && grep -q e2e-smolvm-user '$work/last.log'"
-check "with its ssh forward, even with no ports of its own, smolvm's own network is virtio-net: the gateway's resolver" smol_vnet "$vm"
-check "turned off, after a restart: no agent" smol_switch "$g" off smol_no_agent "$vm"
-(cd "$g" && quiet as_ua "$D" rm --force --no-export)
-kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
-pkill -f "[s]sh-agent -a $da_sock"
-rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-dkey" "$work/smol-dkey.pub" "$ua_sock" "$XDG_DATA_HOME/devvm/agent-keys.json"
-
-section "smolvm: ssh for editors"
-# The emulation's guarantee (reviewed): each VM's own host keys, pinned; the VM's own key the only
-# login, as the VM's user; no forwarding that carries the VM's connections out through this machine
-# that devvm's entry lets through; agent forwarding as the entry says.
-# An ~/.ssh/config of the section's own, set up as the docs say, with a Host * that forwards the agent:
-# yours is never read or changed; ssh gets no agent but a throwaway one; a stub code.
-UR=(env)   # an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here
-sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc/home" "$sc/bin"; smol_home "$sc/home"
-dsc=$XDG_DATA_HOME/devvm/ssh_config kh=$XDG_DATA_HOME/devvm/known_hosts
-printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$dsc" > "$sc/config"
-agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
-printf '#!/bin/sh\necho "$*" > %s/code-args\n' "$sc" > "$sc/bin/code"; chmod +x "$sc/bin/code"
-# sshs ARGS...: ssh through the section's config, without an agent. smolssh_port VM: the port its
-# entry names. smolssh_key VM: its pinned host key.
-sshs() { env -u SSH_AUTH_SOCK ssh -F "$sc/config" "$@" </dev/null; }
-smolssh_port() { awk -v h="$1" '$1 == "Host" { on = 0; for (i = 2; i <= NF; i++) if ($i == h) on = 1 } on && $1 == "Port" { print $2; exit }' "$dsc"; }
-smolssh_key() { awk -v n="$1" '$1 == n { print $2, $3 }' "$kh"; }
-# smolssh_loopback PORT: something listens on it, on the host's loopback alone.
-smolssh_loopback() { local l; l=$(lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }' | sort -u)
-  echo "$l"; [[ -n $l ]] && ! grep -vxE "127\.0\.0\.1:$1|\[::1\]:$1" <<<"$l"; }
-# smolssh_pinned VM: the pinned key is the VM's own, its only one, ed25519.
-smolssh_pinned() { local vmk
-  vmk=$(in_smol "$1" 'cat /etc/ssh/ssh_host_*_key.pub' | awk '{ print $1, $2 }')
-  echo "the VM's: $vmk"; echo "pinned: $(smolssh_key "$1")"
-  [[ -n $vmk && $vmk == "$(smolssh_key "$1")" && $vmk == "ssh-ed25519 "* ]]; }
-# smolssh_sshd VM: sshd's settings as it runs them (sshd -T on its config), as decided.
-smolssh_sshd() { local t
-  t=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- /usr/sbin/sshd -T -f /etc/devvm/ssh/sshd_config </dev/null) || return 1
-  echo "$t" | grep -E '^(listenaddress|allowusers|permitrootlogin|authenticationmethods|passwordauthentication|kbdinteractiveauthentication|allowtcpforwarding|allowstreamlocalforwarding|permitlisten|gatewayports|x11forwarding|permittunnel|permituserenvironment|allowagentforwarding) '
-  for want in 'listenaddress 0.0.0.0:22' "allowusers $me" 'permitrootlogin no' 'authenticationmethods publickey' \
-    'passwordauthentication no' 'kbdinteractiveauthentication no' 'allowtcpforwarding yes' 'allowstreamlocalforwarding local' \
-    'permitlisten 127.77.*:*' 'gatewayports clientspecified' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
-    grep -qxF "$want" <<<"$t" || { echo "not $want"; return 1; }
-  done
-  [[ $(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- stat -c '%U %a' /etc/devvm/ssh/sshd_config </dev/null) == 'root 600' ]]; }
-# smolssh_nopass HOST: password and keyboard-interactive logins are refused, publickey alone offered.
-smolssh_nopass() { local out r
-  out=$(env -u SSH_AUTH_SOCK ssh -v -F "$sc/config" -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive \
-    -o BatchMode=yes "$1" true </dev/null 2>&1); r=$?
-  grep -E 'Authentications that can continue|denied' <<<"$out"; echo "rc=$r"
-  (( r == 255 )) && grep -qE 'Authentications that can continue: publickey[[:space:]]*$' <<<"$out" &&
-  ! grep -qE 'Authentications that can continue: .*(password|keyboard)' <<<"$out"; }
-# smolssh_stopped VM DIR: devvm stop drops its entry, and nothing listens on its port after.
-smolssh_stopped() { local p
-  p=$(smolssh_port "$1"); [[ -n $p ]] || { echo "no port"; return 1; }
-  (cd "$2" && "$D" stop </dev/null >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
-  ! grep -q "$1" "$dsc" || { echo "still in the ssh config"; return 1; }
-  for _ in 1 2 3 4 5; do nc -z 127.0.0.1 "$p" 2>/dev/null || return 0; sleep 1; done
-  echo "port $p still listening"; return 1; }
-# smolssh_onlykey VM HOST: another key, root and another user are refused; devvm's logs in (the control).
-smolssh_onlykey() {
-  rm -f "$sc/other" "$sc/other.pub"; ssh-keygen -q -t ed25519 -N '' -f "$sc/other"
-  ! env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile="$kh" -o HostKeyAlias="$1" -o StrictHostKeyChecking=yes \
-    -o BatchMode=yes -o IdentitiesOnly=yes -i "$sc/other" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null &&
-  ! sshs -o BatchMode=yes -l root "$2" true && ! sshs -o BatchMode=yes -l nobody "$2" true && sshs -o BatchMode=yes "$2" true; }
-# smolssh_forwarding HOST: devvm's sshd binds remote forwards only on links' addresses (rfwd_links);
-# a local forward, as editors use, works (the control).
-smolssh_forwarding() {
-  rfwd_links "$1" sshs &&
-  [[ $(sshs -W 127.0.0.1:22 "$1" | head -c 4) == SSH- ]]; }
-# smolssh_lowport VM HOST: the setup opened ports below 1024 to the VM's user (smolvm's kernel starts
-# at 1024), so its sshd binds a link's port 80.
-smolssh_lowport() { local p
-  p=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- cat /proc/sys/net/ipv4/ip_unprivileged_port_start </dev/null)
-  echo "ip_unprivileged_port_start: $p"
-  [[ $p == 0 ]] && sshs -o ExitOnForwardFailure=yes -R 127.77.0.250:80:127.0.0.1:9 "$2" true; }
-# smolssh_hostile VM HOST: root in the VM rewrites its sshd's config to allow remote forwarding, X11
-# and tunnels (with xauth for X11), and restarts it. Through a config of the check's own whose Host *
-# asks for X11 and to add keys to the agent, the session gets no display and the agent no key; the
-# same asked on the command line gets both (the controls), and ssh -R now works (not covered: the
-# entry can't refuse it). Then the agent is emptied; the next start restores sshd.
-smolssh_hostile() { local hc=$sc/hostile-config d keys
-  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n' "$dsc" > "$hc"
-  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c 'apt-get update -q >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends xauth >/dev/null 2>&1 &&
-    c=/etc/devvm/ssh/sshd_config && sed -i -e "s/^AllowTcpForwarding .*/AllowTcpForwarding yes/" -e "s/^AllowStreamLocalForwarding .*/AllowStreamLocalForwarding yes/" \
-      -e "s/^X11Forwarding .*/X11Forwarding yes/" -e "s/^PermitTunnel .*/PermitTunnel yes/" -e "s/^PermitListen .*/PermitListen any/" "$c" &&
-    kill "$(cat /run/devvm-sshd.pid)" && sleep 1 && /usr/sbin/sshd -f "$c" -E /var/log/devvm-sshd.log' </dev/null || { echo "no hostile sshd"; return 1; }
-  sshh() { DISPLAY=:9 SSH_AUTH_SOCK=$sc/agent.sock ssh -F "$hc" -o BatchMode=yes "$@" </dev/null 2>/dev/null; }
-  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
-  d=$(sshh "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
-  echo "through Host *: display $d, agent ${keys:-empty}"
-  [[ $d == x=none && -z $keys ]] || return 1
-  d=$(sshh -Y -o AddKeysToAgent=yes "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
-  echo "asked on the command line: display $d, agent ${keys:-empty}"
-  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
-  [[ $d != x=none && -n $keys ]] || return 1
-  sshh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 "$2" true || { echo "ssh -R refused by the hostile sshd"; return 1; }; }
-# smolssh_squatted VM DIR HOST: its recorded port, taken by another program while it's stopped: its
-# next start forwards another, and ssh reaches it.
-smolssh_squatted() { local p n sq
-  p=$(smolssh_port "$1"); [[ -n $p ]] || { echo "no port"; return 1; }
-  (cd "$2" && "$D" stop </dev/null >/dev/null 2>&1) || return 1
-  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:" . shift, Listen => 5, ReuseAddr => 1) or die; sleep 120' "$p" &
-  sq=$!; sleep 0.5
-  (cd "$2" && printf 'exit\n' | "${UR[@]}" "$D" >"$work/last.log" 2>&1); n=$(smolssh_port "$1")
-  echo "squatted $p, now ${n:-none}"
-  sshs -o BatchMode=yes "$3" true; local r=$?
-  kill "$sq" 2>/dev/null; wait "$sq" 2>/dev/null
-  [[ -n $n && $n != "$p" ]] && (( r == 0 )); }
-# smolssh_nosshd VM DIR: root moves sshd away; devvm's next start warns vm_no_sshd, the VM runs
-# with no entry, and devvm host says so; sshd put back, a start has ssh again (the control).
-smolssh_nosshd() {
-  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null || return 1
-  (cd "$2" && printf 'exit\n' | "${UR[@]}" DEVVM_MESSAGES=names "$D" restart >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
-  if ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/last.log" || [[ $(smol_status "$1") != running ]] || grep -q "$1" "$dsc"; then
-    cat "$work/last.log"; return 1
-  fi
-  if (cd "$2" && "${UR[@]}" DEVVM_MESSAGES=names "$D" host </dev/null 2>"$work/e") || ! grep -qx "devvm: vm_no_sshd vm=$1" "$work/e"; then
-    cat "$work/e"; return 1
-  fi
-  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- mv /usr/sbin/sshd.away /usr/sbin/sshd </dev/null || return 1
-  (cd "$2" && printf 'exit\n' | "${UR[@]}" "$D" restart >"$work/last.log" 2>&1) && grep -q "$1" "$dsc"; }
-# smolssh_otherkey VM OTHER: OTHER's key doesn't log in to VM; VM's own does, the same way (the control).
-smolssh_otherkey() {
-  smolssh_with_key() { env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile="$kh" -o HostKeyAlias="$1" -o StrictHostKeyChecking=yes \
-      -o BatchMode=yes -o IdentitiesOnly=yes -i "$(vmdir "$2")/backend/key" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null 2>/dev/null; }
-  if smolssh_with_key "$1" "$2"; then echo "$2's key logged in to $1"; return 1; fi
-  smolssh_with_key "$1" "$1" || { echo "its own key didn't"; return 1; }; }
-q=$(newproj smolssh); git -C "$q" init -q
-(cd "$q" && printf 'exit\n' | HOME=$sc/home "${UR[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --no-network-policy --ports none >"$work/last.log" 2>&1)
-vm=$(vm_of "$q"); [[ -z $vm ]] || created+=("$vm")
-check "the ssh config lists it by the folder's name, its sshd forwarded from the host's loopback" bash -c "
-  [[ -n '$vm' ]] && ! grep -q 'backend_unreviewed' '$work/last.log' &&
-  grep -q '^Host devvm-smolssh $vm\$' '$dsc'"
-check "... on the host's loopback alone" smolssh_loopback "$(smolssh_port "$vm")"
-check "with its ssh forward, smolvm's own network is virtio-net: the VM asks the gateway's resolver" smol_vnet "$vm"
-check "its host key is pinned, as the VM has it: ed25519, its only one" smolssh_pinned "$vm"
-check "ssh devvm-smolssh reaches it, as the VM's user, with the environment devvm's commands get" bash -c "
-  out=\$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh 'id -un; hostname; echo \$BASH_ENV' </dev/null) &&
-  [[ \$out == '$me'\$'\n'smolssh\$'\n'/etc/profile.d/devvm-tools.sh ]] || { echo \"\$out\"; false; }"
-check "agent forwarding stays off, whatever Host * says" bash -c "
-  SSH_AUTH_SOCK='$sc/agent.sock' ssh -F '$sc/config' devvm-smolssh 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
-check "... while ssh -A forwards it (the control)" bash -c "
-  SSH_AUTH_SOCK='$sc/agent.sock' ssh -A -F '$sc/config' devvm-smolssh 'test -S \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
-check "a changed host key is refused" bash -c "
-  cp '$kh' '$sc/kh' && ssh-keygen -q -t ed25519 -N '' -f '$sc/changed' &&
-  { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/changed.pub')\"; } > '$kh' &&
-  { env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh true </dev/null 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } &&
-  (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
-check "password and keyboard-interactive logins are refused: publickey alone is offered" smolssh_nopass devvm-smolssh
-check "only devvm's key logs in, as the VM's user: another key, root and another user are refused" smolssh_onlykey "$vm" devvm-smolssh
-check "devvm's sshd binds remote forwards only on 127.77.0.0/16 and refuses socket forwards; a local forward, as editors use, works" smolssh_forwarding devvm-smolssh
-check "ports below 1024 are open to the VM's user after the setup, so a remote forward on 127.77.0.250:80 binds" smolssh_lowport "$vm" devvm-smolssh
-check "sshd runs devvm's settings, and its config is root's alone" smolssh_sshd "$vm"
-check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" smolssh_hostile "$vm" devvm-smolssh
-check "devvm host names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
-  HOME='$sc/home' ${UR[*]} '$D' host </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m ssh_host_info dir=$q host=devvm-smolssh | head -1)\" '$work/last.log' &&
-  HOME='$sc/home' PATH='$sc/bin':\$PATH ${UR[*]} '$D' code </dev/null >'$work/last.log' 2>&1 &&
-  [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-smolssh $q' ]]"
-k1=$(smolssh_key "$vm")
-check "restart: new host keys, pinned again, and ssh reaches it" bash -c "cd '$q' &&
-  printf 'exit\n' | ${UR[*]} '$D' restart >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] &&
-  k=\$(awk -v n='$vm' '\$1 == n { print \$2, \$3 }' '$kh') && [[ -n \$k && \$k != '$k1' ]] &&
-  env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh true </dev/null"
-q2=$(newproj smolssh2)
-(cd "$q2" && printf 'exit\n' | "${UR[@]}" "$D" "${S[@]}" --no-network-policy --ports none >"$work/last.log" 2>&1)
-vm2=$(vm_of "$q2"); [[ -z $vm2 ]] || created+=("$vm2")
-check "a VM made from the same image has host keys of its own, and a port of its own" bash -c "
-  [[ -n '$vm2' ]] && a=\$(awk -v n='$vm' '\$1 == n { print \$3 }' '$kh') && b=\$(awk -v n='$vm2' '\$1 == n { print \$3 }' '$kh') &&
-  [[ -n \$a && -n \$b && \$a != \$b ]] && env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-smolssh2 true </dev/null"
-check "... and a key of its own: its key doesn't log in to the other VM, the other's own does (the control)" smolssh_otherkey "$vm" "$vm2"
-check "an image without sshd (root removed it): the next start runs without ssh, warned, and the VM runs" smolssh_nosshd "$vm2" "$q2"
-(cd "$q2" && quiet "${UR[@]}" "$D" rm --force --no-export)
-# Alpine's container image lacks OpenRC and ssh's client, which base's scripts write into.
-qa=$(newproj smolalpine)
-(cd "$qa" && printf 'exit\n' | HOME=$sc/home "${UR[@]}" "$D" "${S[@]}" --from alpine:3 --no-network-policy --ports none >"$work/last.log" 2>&1)
-vma=$(vm_of "$qa"); [[ -z $vma ]] || created+=("$vma")
-check "a VM --from alpine:3 is made, and ssh devvm-smolalpine reaches it, on Alpine, as the VM's user" bash -c "
-  [[ -n '$vma' ]] && grep -qx libc=musl '$(vmdir "$vma")/state' &&
-  out=\$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o BatchMode=yes devvm-smolalpine '. /etc/os-release; echo \$ID; id -un' </dev/null) &&
-  [[ \$out == alpine\$'\n''$me' ]] || { echo \"\${out:-}\"; tail -5 '$work/last.log'; false; }"
-(cd "$qa" && quiet "${UR[@]}" "$D" rm --force --no-export)
-check "its port taken while it's stopped: its next start forwards another, and ssh reaches it" smolssh_squatted "$vm" "$q" devvm-smolssh
-check "devvm stop drops its entry, and nothing listens on its port" smolssh_stopped "$vm" "$q"
-check "rm deletes it, its entry and its pinned keys" bash -c "cd '$q' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-  [[ -z \$(smol_status '$vm') ]] && ! grep -q '$vm' '$dsc' && ! grep -q '^$vm ' '$kh'"
-kill "$agent_pid" 2>/dev/null; agent_pid=""
-
-section "smolvm: --clone"
-# A home of its own: no ~/.ssh/config, so nothing of yours is read or offered the Include line. A
-# throwaway repo, with a branch besides main and a file it doesn't track.
-ch=$work/clone-home; rm -rf "$ch"; mkdir -p "$ch"; smol_home "$ch"
-export GIT_CONFIG_GLOBAL=$ch/.gitconfig GIT_CONFIG_NOSYSTEM=1   # host git: none of your settings
-c=$(newproj smolcloned)
-git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$c" -c user.email=e@e -c user.name=e commit -qm one &&
-  git -C "$c" branch other && echo host-only > "$c/untracked"
-(cd "$c" && printf 'pwd; git branch --show-current\n' | HOME=$ch "${UR[@]}" "$D" "${S[@]}" --clone --no-network-policy --ports none >"$work/last.log" 2>&1)
-vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
-cgit="GIT_SSH_COMMAND='ssh -F $dsc' git -C '$c'"
-# smolclone_seeded VM: its own clone, every branch pushed in over ssh, nothing of the folder mounted.
-smolclone_seeded() {
-  [[ -n $1 ]] && grep -qx mode=clone "$(vmdir "$1")/state" && grep -qx "$c" "$work/last.log" && grep -qx main "$work/last.log" &&
-  [[ $(in_smol "$1" "git -C '$c' branch --format='%(refname:short)'" | tr '\n' ' ') == 'main other ' ]] &&
-  in_smol "$1" "git -C '$c' log --oneline" | grep -q one && in_smol "$1" "[ ! -e '$c/untracked' ]"; }
-check "the VM has its own clone, every branch pushed in over ssh, nothing of the folder mounted, and the shell opens in it" smolclone_seeded "$vm"
-check "the repo has a devvm remote, by the VM's name" bash -c "[[ \$(git -C '$c' remote get-url devvm) == '$vm:$c' ]]"
-in_smol "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
-check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgit fetch -q devvm && git -C '$c' log --oneline devvm/main | grep -q from-vm"
-check "pushing a branch into it works too" bash -c "git -C '$c' branch pushed other && $cgit push -q devvm pushed &&
-  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- git -C '$c' rev-parse -q --verify refs/heads/pushed </dev/null >/dev/null"
-check "rm --force deletes it and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(smol_status '$vm') && ! -e '$(vmdir "$vm")' ]] && ! git -C '$c' remote | grep -q devvm &&
-  git -C '$c' log --oneline saved/devvm/main | grep -q from-vm"
-unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
-
-section "smolvm: network policy"
-# The emulation's guarantee (reviewed): a VM with network policy reaches nothing but its proxy,
-# through devvm's decider; DNS it's refused never leaves this machine; with the proxy gone nothing
-# gets out, and smolvm won't start it without a decider; its policy applies as on Lima. A docker VM,
-# whose daemon goes through the proxy too: no agent, so no login is read. Your own HOME, as smolvm keeps its machines under it. U is what
-# devvm runs with (an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here). Its ssh
-# is checked to open no way out.
-U=(env)
-# smol_root VM CMD: CMD as root in the VM. smol_block VM: the VM's object in smolvm's JSON.
-smol_root() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- bash -c "$2" </dev/null; }
-smol_block() { SMOLVM_USAGE=0 smolvm machine ls --json 2>/dev/null | awk -v n="\"name\": \"$1\"" '
-  /^  \{/ { b = "" } { b = b $0 "\n" } /^  \}/ && index(b, n) { printf "%s", b }'; }
-# smolnet_lists VM: its allow list is the gateway alone, its DNS a name that doesn't exist.
-# smolnet_open VM: it has no allow list.
-smolnet_lists() { local b; b=$(smol_block "$1" | tr -d ' \n')
-  [[ $b == *'"allowed_cidrs":["100.96.0.1/32"]'* && $b == *'"allowed_hosts":["=devvm.invalid"]'* ]]; }
-smolnet_open() { [[ -n $(smol_block "$1") ]] && ! smol_block "$1" | grep -q '"allowed_'; }
-smolnet_closed() { smolnet_lists "$1" && smolnet_direct "$1"; }
-# smolnet_direct VM: every direct connection fails, even as root: an address, a port of an allowed
-# host, IPv6, and the host's loopback through the gateway (the listener, which answers 407).
-smolnet_direct() {
-  ! smol_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1" &&
-  ! smol_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null http://1.1.1.1" &&
-  ! smol_root "$1" "curl -6 --noproxy '*' -sS -m 5 -o /dev/null https://[2606:4700:4700::1111]" &&
-  ! smol_root "$1" "timeout 5 bash -c 'exec 3<>/dev/tcp/140.82.112.3/22 && head -c 4 <&3' | grep -q SSH-" &&
-  [[ $(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/") != 407 ]]
-}
-# The DNS probe, run as root in the VM with a name prefix of this run's ($1): its resolver, and
-# queries straight to the gateway's resolver and 1.1.1.1 (UDP, and TCP to 1.1.1.1) for TXT, ANY,
-# AAAA, HTTPS, an EDNS0 A, a name under devvm.invalid and DEVVM.INVALID; last, devvm.invalid
-# itself, which smolvm sends to this machine's resolver: the detector's positive control.
-dns_probe='n=$1
-# pkt NAME QTYPE [edns]: a query, as printf escapes.
-pkt() { local q="" l t
-  for l in ${1//./ }; do q+=$(printf "\\\\x%02x" "${#l}")$l; done
-  t=$(printf "\\\\x%02x\\\\x%02x" $(($2 >> 8)) $(($2 & 255)))
-  if [[ -n ${3:-} ]]; then
-    printf "%s" "\\x12\\x34\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x01$q\\x00$t\\x00\\x01\\x00\\x00\\x29\\x10\\x00\\x00\\x00\\x00\\x00\\x00\\x00"
-  else
-    printf "%s" "\\x12\\x34\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00$q\\x00$t\\x00\\x01"
-  fi; }
-send() { local p len; p=$(pkt "$@")
-  printf "$p" > /dev/udp/100.96.0.1/53; printf "$p" > /dev/udp/1.1.1.1/53
-  len=$(printf "$p" | wc -c)
-  { printf "\\x00\\x$(printf %02x "$len")"; printf "$p"; } | timeout 3 bash -c "cat > /dev/tcp/1.1.1.1/53"; }
-getent hosts "$n-a.example.com" >/dev/null; echo "resolver rc=$?"
-send "$n-b.example.com" 16; send "$n-c.example.com" 255; send "$n-d.example.com" 28; send "$n-e.example.com" 65
-send "$n-f.example.com" 1 edns; send "x.$n.devvm.invalid" 1; send DEVVM.INVALID 16
-getent hosts "$n-g.example.org" >/dev/null; echo "resolver rc=$?"
-sleep 1; getent hosts devvm.invalid >/dev/null; echo "control rc=$?"'
-printf '%s\n' "$dns_probe" > "$work/dns-probe.sh"
-# The UDP and ICMP probe, as root: datagrams to the host's loopback listener through the gateway, to
-# 1.1.1.1 on 443 and 123, an NTP request to time.cloudflare.com (162.159.200.123) and its reply,
-# and a ping to 1.1.1.1.
-udp_probe='for t in 100.96.0.1/18766 1.1.1.1/443 1.1.1.1/123; do printf devvm-e2e-udp > /dev/udp/$t; done
-if exec 3<>/dev/udp/162.159.200.123/123; then
-  { printf "\\x1b"; head -c 47 /dev/zero; } >&3
-  echo "ntp bytes=$(timeout 3 head -c 48 <&3 | wc -c | tr -d " ")"
-else echo "ntp bytes=0"; fi
-perl -MNet::Ping -e "\$p = Net::Ping->new(q(icmp), 2); print \$p->ping(q(1.1.1.1)) ? qq(ping reply\n) : qq(ping none\n)"'
-printf '%s\n' "$udp_probe" > "$work/udp-probe.sh"
-# smolnet_probe VM SCRIPT ARG: SCRIPT as root in the VM, its output in $work/probe.log, while nettop
-# (macOS) watches the VM's smolvm process (the first line of its agent.pid) on this machine's
-# non-loopback interfaces; prints the flows it had, one per line (closed ones are listed for a while
-# too). smolvm's own record of its DNS decisions during the probe goes to $work/decisions.
-smolnet_probe() {
-  local pid csv=$work/nettop.csv np dec n0
-  dec="$(SMOLVM_USAGE=0 smolvm machine data-dir --name "$1")/egress-decisions.jsonl"
-  pid=$(head -1 "$(dirname "$dec")/agent.pid" 2>/dev/null)
-  [[ $pid =~ ^[0-9]+$ ]] || return 1
-  n0=$(cat "$dec" 2>/dev/null | wc -l)
-  nettop -t external -L 14 -s 1 -n -x -p "$pid" > "$csv" 2>/dev/null &
-  np=$!
-  sleep 2
-  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -i -- bash -s -- "$3" < "$2" > "$work/probe.log" 2>&1
-  wait "$np"
-  tail -n +$((n0 + 1)) "$dec" 2>/dev/null | grep '"transport":"dns"' > "$work/decisions"
-  # Rows: time,what,…: the process (smolvm-bin.PID), or a flow (udp4 LOCAL<->REMOTE).
-  awk -F, 'index($2, "<->") { print $2 }' "$csv" | sort -u
-}
-# smolnet_no_leak VM: refused DNS doesn't leave this machine. No flow beyond loopback, and smolvm
-# refused every probe name (each one seen) and let through only devvm.invalid: the control, which
-# shows the detector sees a query that does go to this machine's resolver (nettop doesn't: smolvm
-# asks it through the system's resolver).
-smolnet_no_leak() {
-  local f n=devvm-e2e-$$-$RANDOM name allowed
-  f=$(smolnet_probe "$1" "$work/dns-probe.sh" "$n") || return 1
-  echo "flows: ${f:-none}"; cat "$work/probe.log"; cat "$work/decisions"
-  [[ -z $f && $(grep -c '^resolver rc=2$' "$work/probe.log") == 2 ]] || return 1
-  allowed=$(grep '"action":"allow"' "$work/decisions" | sed 's/.*"destination":"\([^"]*\)".*/\1/' | tr '[:upper:]' '[:lower:]' | sort -u)
-  [[ $allowed == devvm.invalid ]] || { echo "allowed: $allowed"; return 1; }
-  for name in "$n-a.example.com" "$n-b.example.com" "$n-c.example.com" "$n-d.example.com" "$n-e.example.com" \
-    "$n-f.example.com" "x.$n.devvm.invalid" "$n-g.example.org"; do
-    grep '"action":"deny"' "$work/decisions" | grep -qF "\"destination\":\"$name\"" || { echo "not seen: $name"; return 1; }
-  done
-}
-# smol_raw NAME OPTION...: a machine of the run's own from base's pack, with the sandbox's label and
-# those network options, started: no port forward, which every devvm VM has since its ssh. Deleted
-# at the end, or by smol_raw_rm.
-smol_raw() { local n=$1; shift; created+=("$n")
-  SMOLVM_USAGE=0 smolvm machine create --name "$n" --label "devvm.data=$XDG_DATA_HOME/devvm" --from "$packs/$kb/image.smolmachine" \
-    --cpus 1 --mem 1024 "$@" >/dev/null 2>&1 && SMOLVM_USAGE=0 smolvm machine start --name "$n" >/dev/null 2>&1; }
-smol_raw_rm() { SMOLVM_USAGE=0 smolvm machine delete --name "$1" -f >/dev/null 2>&1; }
-# smolnet_tsi_dns_seen: on smolvm's own network without a forward (TSI, smol_raw), the VM asks this
-# machine's resolver, and the DNS probe's queries are seen to leave: the nettop control.
-smolnet_tsi_dns_seen() { local n=devvm-e2e-tsi r
-  smol_raw "$n" --net || { echo "no machine"; return 1; }
-  smol_tsi "$n" && smolnet_dns_seen "$n"; r=$?
-  smol_raw_rm "$n"; return "$r"; }
-# smolnet_dns_seen VM: on smolvm's own network, the same probe's queries do leave (the control).
-smolnet_dns_seen() { local f; f=$(smolnet_probe "$1" "$work/dns-probe.sh" "devvm-e2e-$$-$RANDOM") || return 1
-  echo "flows: ${f:-none}"; cat "$work/probe.log"; grep -q ':53$' <<<"$f"; }
-# A UDP listener on the host's loopback, 127.0.0.1:18766: each datagram it gets is a line in $work/udp.log.
-smolnet_udp_listen() { : > "$work/udp.log"
-  perl -MIO::Socket::INET -e '$| = 1; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:18766", Proto => "udp") or die;
-    while ($s->recv($d, 2048)) { print "got $d\n" }' >> "$work/udp.log" 2>&1 &
-  udp_listener=$!; sleep 0.5; }
-# smolnet_udp_closed VM: no datagram reaches the host's loopback, NTP gets no answer, nor a ping, and
-# the VM's process has no flow beyond loopback.
-smolnet_udp_closed() { local f
-  f=$(smolnet_probe "$1" "$work/udp-probe.sh" x) || return 1
-  echo "flows: ${f:-none}"; cat "$work/probe.log" "$work/udp.log"
-  [[ -z $f && ! -s $work/udp.log ]] && grep -qx 'ntp bytes=0' "$work/probe.log" && grep -qx 'ping none' "$work/probe.log"; }
-# smolnet_udp_allowed_seen VM: a UDP allow for the NTP server, added live, lets the probe's request
-# out and nettop sees it (the UDP probe's control under network policy); then it's taken away.
-smolnet_udp_allowed_seen() {
-  local f
-  SMOLVM_USAGE=0 smolvm machine update --name "$1" --allow-udp 162.159.200.123/32:123 >/dev/null 2>&1 || return 1
-  f=$(smolnet_probe "$1" "$work/udp-probe.sh" x)
-  SMOLVM_USAGE=0 smolvm machine update --name "$1" --remove-allow-udp 162.159.200.123/32:123 >/dev/null 2>&1 || return 1
-  echo "flows: ${f:-none}"; cat "$work/probe.log"
-  grep -q '<->162\.159\.200\.123:123$' <<<"$f"
-}
-# smolnet_udp_seen VM: on smolvm's own network, the probe's datagrams leave and nettop sees them
-# (the control). bash's /dev/udp reads no reply on that network, so replies aren't counted.
-smolnet_udp_seen() { local f
-  f=$(smolnet_probe "$1" "$work/udp-probe.sh" x) || return 1
-  echo "flows: ${f:-none}"; cat "$work/probe.log"
-  grep -q '<->162\.159\.200\.123:123$' <<<"$f" && grep -q '<->1\.1\.1\.1:443$' <<<"$f"; }
-# smolnet_direct_open VM: on smolvm's own network the direct probes do get out (their control):
-# 1.1.1.1, github's ssh banner, and IPv6 when this machine has it.
-smolnet_direct_open() {
-  smol_root "$1" "curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1" &&
-  smol_root "$1" "timeout 10 bash -c 'exec 3<>/dev/tcp/140.82.112.3/22 && head -c 4 <&3' | grep -q SSH-" || return 1
-  if curl -6 -s -m 5 -o /dev/null 'https://[2606:4700:4700::1111]'; then
-    smol_root "$1" "curl -6 --noproxy '*' -sS -m 10 -o /dev/null https://[2606:4700:4700::1111]"
-  else echo "this machine has no IPv6: not checked"; fi
-}
-# smolnet_fake_decider MODE: a decider of nobody's on the VM's decider port, which answers garbage
-# (garbage), closes without a verdict (silent), allows every connection direct (allow: verdict 0),
-# or takes every one over and answers it itself, 418 (take: verdict 2, the fail-closed probes'
-# positive control); its pid in $fake. It fails, naming the port, unless it listens within 10 s.
-smolnet_fake_decider() {
-  # Each answer's connection is shut for writing, then read to its end (2 s at most) before it's
-  # closed: closing it with smolvm's bytes unread would reset it, losing the answer at times.
-  perl -MIO::Socket::INET -e '$SIG{ALRM} = sub {}; $| = 1; $m = shift; $p = shift; $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1:$p", Listen => 16, ReuseAddr => 1) or die "$@\n";
-    while ($c = $s->accept) { sysread($c, $b, 4096); print $c "\x07garbage" if $m eq "garbage"; print $c "\x00" if $m eq "allow";
-      print $c "\x02HTTP/1.1 418 squatter\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" if $m eq "take"; $c->flush;
-      shutdown($c, 1); alarm 2; 1 while sysread($c, $b, 4096); alarm 0; close $c }' "$1" "$dp" >/dev/null 2>"$work/fake.log" &
-  fake=$!
-  for _ in $(seq 20); do
-    lsof -t -a -p "$fake" -iTCP:"$dp" -sTCP:LISTEN >/dev/null 2>&1 && return 0
-    kill -0 "$fake" 2>/dev/null || break
-    sleep 0.5
-  done
-  echo "the fake decider ($1) isn't listening on 127.0.0.1:$dp: $(cat "$work/fake.log")"
-  kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""; return 1; }
-# smolnet_port_free PORT: nothing listens on PORT within 10 s, else it fails naming it.
-smolnet_port_free() {
-  for _ in $(seq 20); do lsof -t -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 || return 0; sleep 0.5; done
-  echo "port $1 is still listened on: $(lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>&1)"; return 1; }
-# smolnet_nothing_out VM: nothing gets out: not through the proxy, not directly, not to the host's
-# loopback listener through the gateway (which answers 407).
-smolnet_nothing_out() {
-  ! in_smol "$1" 'curl -fsS -m 10 -o /dev/null https://github.com' &&
-  ! smol_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1" &&
-  [[ $(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/") != 407 ]]
-}
-# smolnet_fake_allow_seen VM: a decider of nobody's that allows the connection direct (verdict 0)
-# still gets nothing to the host's loopback listener: smolvm refuses direct connections to the host
-# (direct_target_policy). One that takes the connection over (verdict 2) answers it: the probe sees
-# a fail-open when there is one (its positive control).
-smolnet_fake_allow_seen() {
-  local allow take
-  smolnet_fake_decider allow || return 1
-  allow=$(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/")
-  kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
-  smolnet_fake_decider take || return 1
-  take=$(smol_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://100.96.0.1:18765/")
-  kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
-  [[ $allow != 407 && $take == 418 ]] || { echo "with a decider that allows: $allow (want no 407), that takes over: $take (want 418)"; return 1; }
-}
-# smolnet_fail_closed VM: with its proxy gone nothing gets out, nor with a decider that answers
-# garbage or nothing; and smolvm won't start it without a decider.
-smolnet_fail_closed() {
-  local pid m
-  pid=$(smolnet_proxy "$1") && [[ -n $pid ]] && kill "$pid" && smolnet_port_free "$dp" || return 1
-  if smolnet_proxy "$1" >/dev/null || ! smolnet_nothing_out "$1"; then echo "with the proxy gone"; return 1; fi
-  for m in garbage silent; do
-    smolnet_fake_decider "$m" || return 1
-    smolnet_nothing_out "$1"; local rc=$?
-    kill "$fake" 2>/dev/null; wait "$fake" 2>/dev/null; fake=""
-    (( rc == 0 )) || { echo "with a decider that answers $m"; return 1; }
-  done
-  # The control: a decider that allows everything lets the same probe through to the listener.
-  smolnet_fake_allow_seen "$1" || return 1
-  SMOLVM_USAGE=0 smolvm machine stop --name "$1" >/dev/null 2>&1 &&
-  ! env -u SMOLVM_INTERCEPTOR_TOKEN SSH_AUTH_SOCK=/dev/null/e2e-no-agent SMOLVM_USAGE=0 smolvm machine start --name "$1" >"$work/e" 2>&1 &&
-    [[ $(smol_status "$1") != running ]] && grep -qi interceptor "$work/e"
-}
-# smolnet_dockerd_stale VM DIR: Docker's pid file names another process (dockerd gone, its pid taken)
-# and its run folder is left over, when a launch restarts Docker's daemon (devvm's block in its
-# settings, /etc/conf.d/docker, gone, so the launch writes it again: Alpine's, which has that file):
-# the other process lives, and dockerd starts again, its run folder new.
-smolnet_dockerd_stale() { local out
-  out=$(SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c '
-    pid=$(cat /run/docker.pid) && kill "$pid" && i=0
-    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
-    nohup sleep 900 >/dev/null 2>&1 </dev/null & echo $! > /run/docker.pid
-    mkdir -p /run/docker && touch /run/docker/e2e-stale
-    sed -i "/^# devvm-proxy begin/,/^# devvm-proxy end/d" /etc/conf.d/docker
-    cat /run/docker.pid' </dev/null) || return 1
-  (cd "$2" && printf 'exit\n' | "${U[@]}" "$D" >"$work/last.log" 2>&1) || { tail -5 "$work/last.log"; return 1; }
-  SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c '
-    echo "the other process: $(cat /proc/'"$out"'/comm 2>/dev/null || echo gone); pid file: $(cat /run/docker.pid)"
-    [ "$(cat /proc/'"$out"'/comm 2>/dev/null)" = sleep ] && kill '"$out"' && [ ! -e /run/docker/e2e-stale ] || exit 1
-    i=0; while ! docker info >/dev/null 2>&1 && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done
-    [ "$(cat "/proc/$(cat /run/docker.pid)/comm")" = dockerd ] && docker info >/dev/null' </dev/null
-}
-# smolnet_widened VM DIR: its allow list widened while it runs (smolvm machine update): devvm shows
-# it unenforced, and its next launch stops it; the one after starts it confined again.
-smolnet_widened() {
-  SMOLVM_USAGE=0 smolvm machine update --name "$1" --allow-cidr 1.1.1.1/32 >/dev/null 2>&1 || return 1
-  if ! "$D" ls | grep -Eq "^$1 +Running +\S+ +\S+ +\S+ +unenforced +- +smolvm "; then "$D" ls; return 1; fi
-  if (cd "$2" && printf 'echo e2e-opened\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1) ||
-    ! grep -qx "devvm: net_unenforced_stop vm=$1" "$work/last.log" || [[ $(smol_status "$1") != stopped ]]; then
-    cat "$work/last.log"; return 1
-  fi
-  (cd "$2" && printf 'exit\n' | "${U[@]}" "$D" >"$work/last.log" 2>&1) && [[ $(smol_status "$1") == running ]] &&
-  grep -qx net_check=ok "$(vmdir "$1")/state" && smolnet_lists "$1"
-}
-# The proxy's lifeline-following process for VM, if it runs.
-smolnet_proxy() { pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " 2>/dev/null; }
-# sshn ARGS...: ssh through devvm's ssh config alone, without an agent. smolnet_via VM HOST:PORT: an
-# HTTP request through a local forward (ssh -W) from the VM to HOST:PORT, and the start of what comes
-# back, in 15 s at most.
-sshn() { env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$@"; }
-smolnet_via() { printf 'GET / HTTP/1.0\r\nHost: %s\r\n\r\n' "${2%:*}" |
-  perl -e 'alarm 15; exec @ARGV' env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -W "$2" "$1" 2>/dev/null | head -c 12; }
-smolnet_via_open() { local a; a=$(smolnet_via "$1" 1.1.1.1:80); echo "got: ${a:-nothing}"; [[ $a == HTTP/* ]]; }
-# smolnet_ssh VM: ssh reaches it on its network policy's port; its sessions, a login's or not, get the
-# proxy's settings, and an allowed host works through the proxy from one.
-smolnet_ssh() { local key out
-  key=$(sed -n 's/^proxy_key=//p' "$(vmdir "$1")/state")
-  [[ -n $(smolssh_port "$1") && $(smolssh_port "$1") == "$(sed -n 's/^ssh_port=//p' "$(vmdir "$1")/state")" ]] || { echo "not its ssh_port"; return 1; }
-  out=$(sshn "$1" 'printenv HTTPS_PROXY; printenv NO_PROXY; bash -lc "printenv https_proxy"' </dev/null)
-  [[ $out == "http://devvm:$key@100.96.0.1:"*$'\n'"localhost,127.0.0.1,::1"$'\n'"http://devvm:$key@100.96.0.1:"* ]] || { echo "sessions: ${out//$key/KEY}"; return 1; }
-  sshn "$1" 'curl -fsS -m 20 -o /dev/null https://github.com' </dev/null; }
-# smolnet_ssh_closed VM: ssh opens no way out: a local forward to an outside host or to a service on
-# the host's loopback (which answers 407) gets nothing back, a remote forward on the VM's loopback to
-# that service is refused, and a direct connection from a session fails.
-smolnet_ssh_closed() { local a b
-  a=$(smolnet_via "$1" 1.1.1.1:80) b=$(smolnet_via "$1" 100.96.0.1:18765)
-  echo "1.1.1.1:80: ${a:-nothing}; the host's loopback: ${b:-nothing}"
-  [[ $a != HTTP/* && $b != HTTP/* ]] &&
-  ! sshn -o ExitOnForwardFailure=yes -R 0:127.0.0.1:18765 "$1" true </dev/null &&
-  ! sshn "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1" </dev/null; }
-# A service on the host's own loopback (a devvm _proxy, which answers anything with 407).
-echo listener-key > "$work/listener.auth"
-"$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
-listener=$!
-np=$(newproj smolnet)
-ps_watch
-(cd "$np" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --ports none --no-git-protect --layers docker >"$work/last.log" 2>&1)
-ps_unwatch
-vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
-pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
-dp=$(sed -n 's/^decider_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
-check "--network-policy: the VM runs behind its proxy, which decides for it, and the self-check passed" bash -c "
-  [[ -n '$vm' && -n '$dp' && \$(smol_status '$vm') == running ]] && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
-  ! grep -q 'backend_unreviewed' '$work/last.log' &&
-  pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm .* -decider 127.0.0.1:$dp -decider-to 100.96.0.1:$pp ' >/dev/null"
-# The control: the guest has the password, from the VM's proxy file, in a login and in Docker's
-# daemon, which devvm's services exec started with no login.
-check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
-  key=\$(sed -n 's/^proxy_key=//p' '$(vmdir "$vm")/state') && { [[ \${#key} -eq 64 ]] || { echo no key; false; }; } &&
-  { [[ -s '$work/ps.log' ]] || { echo nothing sampled; false; }; } &&
-  { ! grep -qFf <(echo \"\$key\") '$work/ps.log' || { echo in a process while devvm launched it; false; }; } &&
-  { ! ps -axww -o command= | grep -qFf <(echo \"\$key\") || { echo in a process now; false; }; } &&
-  { grep -qF \":\$key@\" '$(vmdir "$vm")/backend/proxy' || { echo no proxy file; false; }; } &&
-  { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\" || { echo not in a login; false; }; } &&
-  { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'tr \"\\\\0\" \"\\\\n\" < /proc/\$(cat /run/docker.pid)/environ' </dev/null |
-    grep -qF \"https_proxy=http://devvm:\$key@\" || { echo not in the daemon devvm started; false; }; }"
-check "the docker layer's Docker, started by devvm, pulls through the proxy (the layer's allowlist)" in_smol "$vm" \
-  'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
-check "its allow list is the host's gateway alone, and its DNS a name that doesn't exist" smolnet_lists "$vm"
-check "... on virtio-net: it asks the gateway's resolver" smol_vnet "$vm"
-check "an allowed host works, through the proxy" in_smol "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"
-check "another host is blocked by the proxy, and so is another port of an allowed one" bash -c "
-  in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc \"\$1\" </dev/null; }
-  [[ \$(in_smol 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]] &&
-  in_smol 'curl -sS -m 20 -o /dev/null https://example.com' 2>&1 | grep -q 403 &&
-  ! in_smol 'curl -fsS -m 20 -o /dev/null https://github.com:8443'"
-check "direct connections fail, even as root: an address, other ports, IPv6, the host's loopback" smolnet_direct "$vm"
-check "ssh reaches it on its port; its sessions, a login's or not, get the proxy's settings, and an allowed host works" smolnet_ssh "$vm"
-check "ssh opens no way out: a local forward to 1.1.1.1 or the host's loopback gets nothing, a remote forward on the VM's loopback is refused" smolnet_ssh_closed "$vm"
-check "the host's loopback is refused through the proxy too (internal addresses need a rule)" bash -c "
-  [[ \$(SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://100.96.0.1:18765/' </dev/null) == 403 ]]"
-check "DNS fails at once, not after a timeout" in_smol "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
-if [[ "$(uname -s)" == Darwin ]]; then
-  check "refused DNS doesn't leave this machine (TXT, ANY, AAAA, HTTPS, EDNS0, under devvm.invalid): smolvm refuses each, and only devvm.invalid, the control, goes to the resolver" smolnet_no_leak "$vm"
-  smolnet_udp_listen
-  check "UDP and ICMP don't get out: nothing reaches the host's loopback, NTP and ping get no answer" smolnet_udp_closed "$vm"
-  # The ping has no control: smolvm's own network doesn't forward ICMP either.
-  check "... while a UDP allow added live lets the probe's NTP request out (the control), until it's removed" smolnet_udp_allowed_seen "$vm"
-else
-  skip "refused DNS doesn't leave this machine (TXT, ANY, AAAA, HTTPS, EDNS0, under devvm.invalid): smolvm refuses each, and only devvm.invalid, the control, goes to the resolver" "nettop is macOS's"
-  skip "UDP and ICMP don't get out: nothing reaches the host's loopback, NTP and ping get no answer" "nettop is macOS's"
-  skip "... while a UDP allow added live lets the probe's NTP request out (the control), until it's removed" "nettop is macOS's"
-fi
-check "the decider's token is in no host process's arguments, and never reaches the VM" bash -c "
-  tok=\$(sed -n 's/^decider_token=//p' '$(vmdir "$vm")/state') && [[ \${#tok} -eq 64 ]] &&
-  ! ps -axww -o command= | grep -qFf <(echo \"\$tok\") &&
-  ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"grep -rqsF \$tok /etc /run /root /home /tmp /var/log\" </dev/null &&
-  ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"cat /proc/[0-9]*/environ 2>/dev/null | tr '\\\\0' '\\\\n' | grep -qF \$tok\" </dev/null"
-check "devvm network log shows the proxy's block and the direct connection to the host the decider refused" bash -c "cd '$np' &&
-  '$D' network log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' && grep -q '  BLOCKED  100.96.0.1:18765  ' '$work/e' ||
-  { cat '$work/e'; false; }"
-check "devvm network allow applies at once to the running VM's proxy, and rm takes it back" bash -c "cd '$np' &&
-  in_smol() { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc \"\$1\" </dev/null; }
-  pid=\$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') && [[ -n \$pid ]] &&
-  ${U[*]} '$D' network allow example.com </dev/null >/dev/null && in_smol 'curl -fsS -m 20 -o /dev/null https://example.com' &&
-  ${U[*]} '$D' network rm example.com </dev/null >/dev/null &&
-  [[ \$(in_smol 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]] &&
-  [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
-check "its allow list widened while it runs: devvm shows it unenforced, stops it, then starts it confined again" smolnet_widened "$vm" "$np"
-check "with its proxy gone nothing gets out (the host's loopback listener included), nor with a decider that answers garbage or nothing, while one that allows everything lets the probe through (the control); smolvm won't start it without a decider" \
-  smolnet_fail_closed "$vm"
-check "started outside devvm, with a decider of someone else's: devvm stops it and opens nothing" bash -c "
-  SMOLVM_INTERCEPTOR_TOKEN=\$(openssl rand -hex 32) SSH_AUTH_SOCK=/dev/null/e2e-no-agent SMOLVM_USAGE=0 smolvm machine start --name '$vm' --mediated-egress --egress-interceptor 127.0.0.1:9 >/dev/null 2>&1 &&
-  [[ \$(smol_status '$vm') == running ]] && cd '$np' &&
-  ! printf 'echo e2e-opened\n' | ${U[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
-  grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(smol_status '$vm') == stopped ]]"
-check "devvm starts it again confined, and the self-check passes" bash -c "cd '$np' &&
-  printf 'exit\n' | ${U[*]} '$D' >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
-  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && [[ \$('$D' network 2>/dev/null | head -1) == on ]]"
-check "devvm network off: its next start is smolvm's own network, without an allow list, a decider or a proxy" bash -c "cd '$np' &&
-  ${U[*]} '$D' network off </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
-  [[ \$('$D' network | head -1) == off && \$(smol_status '$vm') == running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
-  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
-check "... with no allow list left" smolnet_open "$vm"
-check "... where the direct probes get out (their control): 1.1.1.1, github's ssh, IPv6" smolnet_direct_open "$vm"
-check "... and a local forward through ssh to 1.1.1.1 gets an answer (its control)" smolnet_via_open "$vm"
-check "... on virtio-net, as its ssh forward has it" smol_vnet "$vm"
-# A machine with a port forward (its ssh) is on virtio-net, where smolvm resolves through this
-# machine's system resolver, which nettop can't tie to it: the DNS control runs on a machine without
-# a forward (TSI), as the probe was checked before ssh.
-if [[ "$(uname -s)" == Darwin ]]; then
-  check "... and on TSI (a machine without a forward) the DNS probe's queries leave (its control)" smolnet_tsi_dns_seen
-  check "... and the UDP probe's datagrams leave (its control)" smolnet_udp_seen "$vm"
-else
-  skip "... and on TSI (a machine without a forward) the DNS probe's queries leave (its control)" "nettop is macOS's"
-  skip "... and the UDP probe's datagrams leave (its control)" "nettop is macOS's"
-fi
-check "devvm network on: devvm restart starts it confined again" bash -c "cd '$np' &&
-  ${U[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
-  [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
-check "... its allow list and DNS closed again, and direct connections fail" smolnet_closed "$vm"
-check "rm --force deletes it, its proxy and its state" bash -c "cd '$np' && ${U[*]} '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(smol_status '$vm') && ! -e '$(vmdir "$vm")' ]] && sleep 4 && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
-# Alpine with the docker layer: launching adds devvm's proxy to Docker's settings, so it restarts
-# Docker's daemon, with no init system (not through OpenRC, which isn't running).
-na=$(newproj smolnetalp)
-(cd "$na" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --from alpine:3 --network-policy --ports none --no-git-protect --layers docker >"$work/last.log" 2>&1)
-rc=$?
-va=$(vm_of "$na"); [[ -z $va ]] || created+=("$va")
-check "a VM --from alpine:3 with the docker layer and network policy is made, and the self-check passed" bash -c "
-  [[ $rc -eq 0 && -n '$va' && \$(smol_status '$va') == running ]] && grep -qx net_check=ok '$(vmdir "$va")/state' && grep -qx libc=musl '$(vmdir "$va")/state' ||
-  { tail -5 '$work/last.log'; false; }"
-check "... its Docker, restarted by devvm, pulls through the proxy" in_smol "$va" \
-  'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
-check "... a launch restarting it stops no other process its stale pid file names, and clears its run folder" \
-  smolnet_dockerd_stale "$va" "$na"
-(cd "$na" && quiet "${U[@]}" "$D" rm --force --no-export)
-kill "$listener" 2>/dev/null; [[ -z ${udp_listener:-} ]] || kill "$udp_listener" 2>/dev/null; listener="" udp_listener=""
-rm -f "$work/listener.auth"
-
-section "smolvm: every port"
-# The emulation's guarantee (reviewed): every port a VM listens on, on its loopback or all its
-# addresses, IPv4 or IPv6, reaches this machine's loopback, and only its loopback; never a port this
-# machine has on any address, one below 1024, or one devvm records for a VM, even while it's free;
-# and forwarding opens the VM no way out (with network policy, nothing past its proxy).
-# smolpa_serve VM HOST PORT: a server in the VM, as root, answering "vm-PORT" on HOST (an address of
-# the VM's; :: takes IPv4 too), left running.
-smolpa_serve() { SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- perl -MIO::Socket::IP -e '($h, $p) = @ARGV;
-  $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Listen => 5, ReuseAddr => 1, V6Only => ($h eq "::" ? 0 : 1)) or die "$@";
-  while ($c = $s->accept) { print $c "vm-$p\n"; close $c }' "$2" "$3" </dev/null >/dev/null 2>&1; }
-# smolpa_answers PORT WANT: this machine's 127.0.0.1 and ::1 answer WANT on PORT, within 15 s.
-smolpa_answers() { local a b; for _ in $(seq 15); do
-    a=$(nc -w 2 127.0.0.1 "$1" </dev/null 2>/dev/null); b=$(nc -6 -w 2 ::1 "$1" </dev/null 2>/dev/null)
-    [[ $a == "$2" && $b == "$2" ]] && return 0; sleep 1; done
-  echo "127.0.0.1: ${a:-nothing}, ::1: ${b:-nothing}"; return 1; }
-# smolpa_closed PORT: nothing answers on this machine's loopback on PORT, within 10 s.
-smolpa_closed() { for _ in $(seq 10); do
-    nc -z 127.0.0.1 "$1" 2>/dev/null || nc -6 -z ::1 "$1" 2>/dev/null || return 0; sleep 1; done
-  echo "port $1 still answers"; return 1; }
-# smolpa_forwarder VM: its forwarder's pid. smolpa_log VM: its forwarder's log.
-smolpa_forwarder() { pgrep -f -- "[_]smolvm-ports -vm $1 " | head -1; }
-smolpa_log() { cat "$(vmdir "$1")/backend/ports.log" 2>/dev/null; }
-# smolpa_loopback VM PORT...: its forwarder listens on each PORT, and everything it listens on is on
-# this machine's loopback alone.
-smolpa_loopback() { local vm=$1 pid l p; shift
-  pid=$(smolpa_forwarder "$vm"); [[ -n $pid ]] || { echo "no forwarder"; return 1; }
-  l=$(lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }' | sort -u); echo "$l"
-  for p in "$@"; do grep -qx "127\.0\.0\.1:$p" <<<"$l" && grep -qx "\[::1\]:$p" <<<"$l" || return 1; done
-  ! grep -vE '^(127\.0\.0\.1|\[::1\]):[0-9]+$' <<<"$l"; }
-# smolpa_master VM: its forwarder's ssh reads no configuration of yours, offers the VM's key alone,
-# pins its host key and asks for no forwarding.
-smolpa_master() { local m; m=$(pgrep -fl -- "ssh -F none -M .*HostKeyAlias=$1 " | head -1); echo "$m"
-  [[ -n $m && $m == *"IdentityAgent=none"* && $m == *"StrictHostKeyChecking=yes"* && $m == *"ClearAllForwardings=yes"* &&
-    $m == *"PermitRemoteOpen=none"* && $m == *"ForwardAgent=no"* ]] && ! grep -qE ' -[RLDAXY]( |$)' <<<"$m"; }
-export -f smolpa_answers smolpa_closed smolpa_forwarder smolpa_log
-pa=$(newproj smolall)
-(cd "$pa" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${S[@]}" --no-network-policy --no-git-protect >"$work/last.log" 2>&1)
-vm=$(vm_of "$pa"); [[ -z $vm ]] || created+=("$vm")
-check "the VM forwards every port (the default), with a forwarder of devvm's, none of smolvm's but its ssh's" bash -c "
-  [[ -n '$vm' && \$(smol_status '$vm') == running ]] && ! grep -q backend_unreviewed '$work/last.log' &&
-  ! grep -qE 'ports_(no_ssh|forward_failed)' '$work/last.log' && [[ -n \$(smolpa_forwarder '$vm') ]] && smolpa_log '$vm' | grep -q \"forwarding $vm's ports\""
-check "... its machine's process listening on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$vm")/backend/record.json")"
-check "... its ssh master reading no config of yours, the VM's key alone, its host key pinned, no forwarding asked for" smolpa_master "$vm"
-smolpa_serve "$vm" 127.0.0.1 47391; smolpa_serve "$vm" ::1 47392; smolpa_serve "$vm" 0.0.0.0 47393; smolpa_serve "$vm" :: 47394
-check "a server on the VM's loopback alone reaches this machine's, at 127.0.0.1 and ::1" smolpa_answers 47391 vm-47391
-check "... one on its IPv6 loopback alone" smolpa_answers 47392 vm-47392
-check "... one on all its IPv4 addresses, and one on all its addresses" bash -c "smolpa_answers 47393 vm-47393 && smolpa_answers 47394 vm-47394"
-check "the forwarder listens on this machine's loopback alone" smolpa_loopback "$vm" 47391 47392 47393 47394
-# This machine's own program, on every address, and the VM's server on the same port.
-perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47395", Listen => 5, ReuseAddr => 1) or die;
-  while ($c = $s->accept) { print $c "host-47395\n"; close $c }' </dev/null >/dev/null 2>&1 &
-hostprog=$!
-sleep 0.5
-smolpa_serve "$vm" 127.0.0.1 47395; smolpa_serve "$vm" 0.0.0.0 1023
-check "a port this machine has on any address stays its own, and one below 1024 isn't forwarded" bash -c "
-  for _ in \$(seq 15); do smolpa_log '$vm' | grep -q 'port 47395: not forwarded' && break; sleep 1; done
-  smolpa_log '$vm' | grep -q 'port 47395: not forwarded' && [[ \$(nc -w 2 127.0.0.1 47395 </dev/null) == host-47395 ]] &&
-  ! smolpa_log '$vm' | grep -q 'port 1023' && smolpa_closed 1023"
-kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
-# smolpa_hostserve ADDR PORT: this machine's own program on ADDR (:: takes IPv4 too, as Node's and
-# Go's servers do), answering "host-PORT", left running; its pid in hostprogs.
-hostprogs=()
-smolpa_hostserve() { perl -MIO::Socket::IP -e '($h, $p) = @ARGV;
-    $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Listen => 5, ReuseAddr => 1, V6Only => ($h eq "::" ? 0 : 1)) or die "$@";
-    while ($c = $s->accept) { print $c "host-$p\n"; close $c }' "$1" "$2" </dev/null >/dev/null 2>&1 &
-  hostprogs+=($!); }
-# smolpa_hosts_kept: each of this machine's programs keeps its port, the VM's server on it isn't
-# forwarded, and localhost never reaches two programs: on 127.0.0.1 alone (::1 stays closed), on
-# ::1 alone (127.0.0.1 stays closed), and on every address, IPv4 and IPv6 at once.
-smolpa_hosts_kept() { local vm=$1 p
-  for _ in $(seq 15); do
-    smolpa_log "$vm" | grep -q 'port 47403: not forwarded' && smolpa_log "$vm" | grep -q 'port 47402: not forwarded' && break; sleep 1; done
-  smolpa_log "$vm" | grep -E 'port 4740[123]'
-  for p in 47401 47402 47403; do smolpa_log "$vm" | grep -q "port $p: not forwarded" || { echo "port $p: no refusal logged"; return 1; }; done
-  if [[ $(nc -w 2 127.0.0.1 47401 </dev/null) != host-47401 ]] || nc -6 -z ::1 47401 2>/dev/null; then
-    echo "47401 not the host's alone"; return 1; fi
-  if [[ $(nc -6 -w 2 ::1 47402 </dev/null) != host-47402 ]] || nc -z 127.0.0.1 47402 2>/dev/null; then
-    echo "47402 not the host's alone"; return 1; fi
-  [[ $(nc -w 2 127.0.0.1 47403 </dev/null) == host-47403 && $(nc -6 -w 2 ::1 47403 </dev/null) == host-47403 ]] ||
-    { echo "47403 not the host's"; return 1; }; }
-smolpa_hostserve 127.0.0.1 47401; smolpa_hostserve ::1 47402; smolpa_hostserve :: 47403
-sleep 0.5
-smolpa_serve "$vm" 0.0.0.0 47401; smolpa_serve "$vm" :: 47402; smolpa_serve "$vm" :: 47403
-check "... so does one on its loopback alone, IPv4 or IPv6, and one on every address, IPv4 and IPv6 at once" smolpa_hosts_kept "$vm"
-kill "${hostprogs[@]}" 2>/dev/null; wait "${hostprogs[@]}" 2>/dev/null; hostprogs=()
-# smolpa_not_loopback VM: a server on the VM's own network address alone isn't forwarded, nor a
-# port devvm records for another VM (its listed ports), free on this machine; one on the VM's
-# loopback, started after them, is (the control).
-smolpa_not_loopback() { local vm=$1 ip r=0
-  ip=$(SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -- perl -MIO::Socket::INET -e \
-    'print IO::Socket::INET->new(PeerAddr => "100.96.0.1:9", Proto => "udp")->sockhost' </dev/null 2>/dev/null)
-  [[ $ip =~ ^[0-9.]+$ && $ip != 127.* ]] || { echo "the VM's address: ${ip:-none}"; return 1; }
-  mkdir -p "$(vmdir "$rsv_vm")" && printf 'name=%s\nnet=off\nports=47406\n' "$rsv_vm" > "$(vmdir "$rsv_vm")/state"
-  smolpa_serve "$vm" "$ip" 47404; smolpa_serve "$vm" 0.0.0.0 47406; sleep 2; smolpa_serve "$vm" 127.0.0.1 47405
-  smolpa_answers 47405 vm-47405 || { echo "the control isn't forwarded"; r=1; }
-  smolpa_closed 47404 && smolpa_closed 47406 || r=1
-  ! smolpa_log "$vm" | grep -E 'port (47404|47406)' || r=1
-  rm -rf "$(vmdir "$rsv_vm")"; return "$r"; }
-check "a server on the VM's own address alone isn't forwarded, nor a port another VM lists, while it's free (a loopback server is, the control)" smolpa_not_loopback "$vm"
-check "a server that stops: its forward goes; the others stay" bash -c "
-  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- pkill -f '0.0.0.0 47393' </dev/null &&
-  smolpa_closed 47393 && smolpa_answers 47391 vm-47391"
-check "devvm stop stops the forwarder, and nothing listens on its ports" bash -c "cd '$pa' && '$D' stop </dev/null >/dev/null 2>&1 &&
-  [[ -z \$(smolpa_forwarder '$vm') ]] && smolpa_closed 47391 && smolpa_closed 47394"
-check "started again, it has a new forwarder, which forwards a server started then" bash -c "cd '$pa' &&
-  printf 'exit\n' | '$D' >'$work/last.log' 2>&1 && [[ -n \$(smolpa_forwarder '$vm') ]] &&
-  SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -d -- perl -MIO::Socket::IP -e '\$s = IO::Socket::IP->new(LocalHost => q(127.0.0.1), LocalPort => 47396, Listen => 5) or die; while (\$c = \$s->accept) { print \$c qq(vm-47396\n); close \$c }' </dev/null >/dev/null 2>&1 &&
-  smolpa_answers 47396 vm-47396"
-check "rm deletes it, its forwarder and its files" bash -c "cd '$pa' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-  [[ -z \$(smol_status '$vm') && -z \$(smolpa_forwarder '$vm') ]] && [[ ! -e '$(vmdir "$vm")' ]] && smolpa_closed 47396"
-
-# With network policy: forwarding works, and opens the VM no way out; the forwarder never takes the
-# VM's proxy or decider port, even with the proxy gone. A service on this machine's own loopback
-# (which answers 407) for the direct probes.
-echo listener-key > "$work/listener.auth"
-"$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
-listener=$!
-pn=$(newproj smolallnet)
-(cd "$pn" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --no-git-protect >"$work/last.log" 2>&1)
-vm=$(vm_of "$pn"); [[ -z $vm ]] || created+=("$vm")
-pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
-dp=$(sed -n 's/^decider_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
-smolpa_serve "$vm" 127.0.0.1 47397
-check "with network policy, every port forwarded too, and the self-check passed" bash -c "
-  [[ -n '$vm' && -n '$pp' && -n '$dp' ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' && smolpa_answers 47397 vm-47397"
-check "... direct connections still fail while it forwards, even as root: an address, other ports, IPv6, the host's loopback" smolnet_direct "$vm"
-# smolpa_reserved VM: with its proxy and decider gone, the VM listens on their ports: neither is
-# forwarded (nothing answers there); the next devvm starts the proxy on them again.
-smolpa_reserved() {
-  local pid
-  pid=$(pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 ")
-  [[ -n $pid ]] || { echo "no proxy"; return 1; }
-  kill "$pid" || return 1
-  smolpa_closed "$pp" || return 1
-  smolpa_closed "$dp" || return 1
-  smolpa_serve "$1" 0.0.0.0 "$pp"; smolpa_serve "$1" 0.0.0.0 "$dp"; smolpa_serve "$1" 127.0.0.1 47398
-  smolpa_answers 47398 vm-47398 || { echo "the control: a port of its own isn't forwarded"; return 1; }
-  if nc -z 127.0.0.1 "$pp" 2>/dev/null || nc -z 127.0.0.1 "$dp" 2>/dev/null || smolpa_log "$1" | grep -qE "port ($pp|$dp): forwarded"; then
-    echo "the proxy's or decider's port was forwarded"; smolpa_log "$1" | tail -5; return 1
-  fi
-  (cd "$pn" && printf 'exit\n' | "$D" >"$work/last.log" 2>&1) && grep -qx net_check=ok "$(vmdir "$1")/state" &&
-  pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " >/dev/null; }
-check "with its proxy and decider gone, the VM listening on their ports: neither is forwarded (a port of its own is, the control); devvm starts the proxy on them again" smolpa_reserved "$vm"
-# smolpa_listed_net VM DIR: with network policy and listed ports, 22 among them (the guest port of
-# the VM's sshd): the self-check passes; smolvm publishes its ssh alone, from another port, and ssh
-# by name still reaches the VM; the forwarder forwards the listed ports alone (22 too, unless a
-# program here has it); a listed port's server answers, an unlisted one's doesn't; direct
-# connections still fail.
-smolpa_listed_net() { local vm=$1 sp
-  (cd "$2" && "$D" stop </dev/null >/dev/null 2>&1 && "$D" ports 22,47399 </dev/null >/dev/null 2>&1 &&
-    printf 'exit\n' | "$D" >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
-  grep -qx net_check=ok "$(vmdir "$vm")/state" || { echo "no self-check"; return 1; }
-  sp=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$vm")/backend/record.json")
-  [[ $sp =~ ^[0-9]+$ && $sp != 22 && $sp != 47399 ]] || { echo "ssh port: ${sp:-none}"; return 1; }
-  smol_listens_only "$vm" "$sp" || return 1
-  env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$vm" true </dev/null || { echo "ssh by name failed"; return 1; }
-  pgrep -fl -- "[_]smolvm-ports -vm $vm " | grep -qE -- ' -only (22,)?47399$' || { echo "forwarder's ports"; return 1; }
-  smolpa_serve "$vm" 127.0.0.1 47399; smolpa_serve "$vm" 127.0.0.1 47400
-  smolpa_answers 47399 vm-47399 && smolpa_closed 47400 && smolnet_direct "$vm"; }
-check "with network policy and listed ports, 22 among them: the self-check passes, ssh still reaches the VM from its own port, the listed port alone is forwarded, and direct connections still fail" smolpa_listed_net "$vm" "$pn"
-check "rm --force deletes it, its proxy and its forwarder" bash -c "cd '$pn' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-  [[ -z \$(smol_status '$vm') && -z \$(smolpa_forwarder '$vm') ]] && smolpa_closed 47397"
-kill "$listener" 2>/dev/null; listener=""
-rm -f "$work/listener.auth"
-
-section "smolvm: shared tools"
-t=$(newproj smoltools); echo '{}' > "$t/package.json"
-launch "$t" 'node -v' "${S[@]}" --no-network-policy --ports none --no-git-protect
-check "a node VM: its tools built uncompressed for smolvm, from the share, at the locked versions" bash -c "
-  [[ -n '$vm' ]] && grep -qx image=base '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' && grep -qx v$(lockv node) '$work/last.log' &&
-  for f in \$(sed -n 's/^tools=//p' '$(vmdir "$vm")/state'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"smolvm\",' '$share'/\$f.json || exit 1; done"
-check "node, npm, pnpm and bun work, each a read-only image" in_smol "$vm" \
-  "npm -v && pnpm -v && bun -v && [[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]] && ! touch /opt/devvm/tools/node/$(lockv node)/x 2>/dev/null"
-check "the tools build left no machine behind" bash -c "[[ -z \$(smol_status devvm-tools-build) ]]"
-check "restarted, the tools are mounted again" bash -c "cd '$t' && printf 'node -v\n' | '$D' restart 2>&1 | grep -qx v$(lockv node)"
-(cd "$t" && quiet "$D" rm --force --no-export)
-
-section "smolvm: the nix layer"
-# No init system: devvm starts nix-daemon after each start, with the VM's proxy under network policy
-# (in its settings file), and Nix's builds run in its sandbox, which they'd fail without.
-export -f in_smol; export me
-nx=$(newproj smolnix)
-launch "$nx" exit "${S[@]}" --network-policy --ports none --no-git-protect --layers nix
-nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
-check "a nix VM with network policy: nix-daemon runs, with the VM's proxy" bash -c "
-  [[ -n '$vm' ]] && grep -qx image=nix '$(vmdir "$vm")/state' && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
-  in_smol '$vm' '[[ \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
-    sudo grep -qx \"export http_proxy=\$HTTP_PROXY https_proxy=\$HTTP_PROXY no_proxy=localhost,127.0.0.1,::1\" /etc/conf.d/nix-daemon'"
-check "nix run nixpkgs#hello works through the proxy, and a build runs in Nix's sandbox" in_smol "$vm" "
-  nix run nixpkgs#hello | grep -qx 'Hello, world!' && [[ \$(nix config show sandbox-fallback) == false ]] &&
-  nix build --no-link --impure --expr '$nix_built'"
-check "devvm network off: after devvm restart, nix-daemon runs again without the proxy" bash -c "cd '$nx' &&
-  '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
-  in_smol '$vm' '[[ ! -e /etc/conf.d/nix-daemon && \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
-    ! sudo grep -qa _proxy=http /proc/\$(cat /run/nix-daemon.pid)/environ'"
-(cd "$nx" && quiet "$D" rm --force --no-export)
-
-section "smolvm: links between VMs"
-link_section smolvm slk
-
-check "no machine without the sandbox's label was touched" bash -c "[[ \"\$(smol_others)\" == '$others_before' ]]"
+link_section lk
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

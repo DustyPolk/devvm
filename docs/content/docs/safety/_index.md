@@ -59,7 +59,7 @@ flowchart TB
 | `.git` hooks and config | devvm locks them on macOS, and it reports what a lock can't stop without preventing it ([details](git-protection.md)). With `--clone` they're out of reach. |
 | Your agents' config (skills, settings, logins) | The VM mounts its folders read-only and gets copies of its files, but never your agents' history ([details](../using/coding-agents.md)). |
 | The rest of your home folder, other projects | The VM doesn't mount them. |
-| Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected, though on smolvm it's while the VM runs. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding), [smolvm](../internals/smolvm.md#ssh-agent-forwarding)). |
+| Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding)). |
 | The network, with network policy | The VM reaches allowlisted hosts only, through a proxy on this machine ([details](network.md)). |
 | Your secrets, with network policy | Your GitHub token, Claude Code's token, Codex and opencode logins and Claude Code's MCP secrets stay on this machine, and the proxy puts them into requests ([details](network.md#secrets)). |
 | The network, without network policy | The VM reaches everything this machine reaches, including this machine's own services on `localhost`. |

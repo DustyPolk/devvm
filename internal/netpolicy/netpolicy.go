@@ -25,11 +25,6 @@ const (
 	KeyProxySalt = "proxy_salt" // what ends the VM's placeholders
 	KeySSHPort   = "ssh_port"   // the host port of the VM's ssh (Proxy.SSHPort)
 	KeyProxyPort = "proxy_port" // the host loopback port its proxy listens on
-	// On a backend with a decider (backend.Decider): the host loopback port
-	// the proxy decides on, and the token its backend proves itself with,
-	// new at each start.
-	KeyDeciderPort  = "decider_port"
-	KeyDeciderToken = "decider_token"
 	// The host loopback port devvm desktop serves the VM's desktop on,
 	// which no VM's ssh, proxy or forwards take.
 	KeyDesktopPort = "desktop_port"
@@ -71,16 +66,6 @@ func Key(st *state.VM) (string, error) {
 // not the key itself, so a placeholder the VM sends elsewhere doesn't give
 // its proxy's password away.
 func Salt(st *state.VM) (string, error) { return random(st, KeyProxySalt) }
-
-// deciderToken returns the token the VM's backend proves itself to its
-// proxy's decider with, a new one unless the VM runs (its backend holds the
-// one it started with): 32 random bytes, as 64 hex digits.
-func deciderToken(st *state.VM, running bool) (string, error) {
-	if v := st.Get(KeyDeciderToken); v != "" && running {
-		return v, nil
-	}
-	return newRandom(st, KeyDeciderToken, 32)
-}
 
 func random(st *state.VM, key string) (string, error) {
 	if v := st.Get(key); v != "" {

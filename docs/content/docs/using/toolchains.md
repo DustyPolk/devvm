@@ -56,7 +56,7 @@ A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), 
 
 ### Sharing a team's packages
 
-When your team's projects use one flake for their dev shell, you can put that dev shell's packages into an image, so every VM made from the image starts with them in its store and downloads none of them. VMs made from one image share its disk, because on macOS each VM's disk is a copy-on-write clone of the image's, and on Linux hosts it's an overlay of the image's, so the packages take their space once. This works with the stable Nix that the `nix` layer installs, with network policy or without it, on every backend that has the `nix` layer, which are Lima and smolvm.
+When your team's projects use one flake for their dev shell, you can put that dev shell's packages into an image, so every VM made from the image starts with them in its store and downloads none of them. VMs made from one image share its disk, because on macOS each VM's disk is a copy-on-write clone of the image's, and on Linux hosts it's an overlay of the image's, so the packages take their space once. This works with the stable Nix that the `nix` layer installs, with network policy or without it.
 
 To do it, make a [layer of your own](customizing.md#your-own-layers) that builds the dev shell while the image builds, and give it after `nix`, so that it runs on top of the `nix` layer:
 

@@ -27,7 +27,7 @@ func TestSegments(t *testing.T) {
 		m    M
 		want []string
 	}{
-		{PortsNoSSH("devvm-x-1234"), []string{"devvm-x-1234"}},
+		{StopFailed("devvm-x-1234"), []string{"devvm-x-1234"}},
 		{NoVM("/Users/me/my project"), []string{"/Users/me/my project"}},
 		{LogEnd("/tmp/run.log"), []string{"/tmp/run.log"}},
 		{ImagesStaleNote(1), []string{"1"}},
@@ -55,15 +55,15 @@ func TestSegments(t *testing.T) {
 // text.
 func TestSegmentsOfHostileValues(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "")
-	m := PortsNoSSH("a not a value b")
+	m := StopFailed("a not a value b")
 	segs, _ := m.Segments()
 	vals, text := values(segs)
 	if !slices.Equal(vals, []string{"a not a value b"}) || strings.ContainsAny(text, "") {
 		t.Errorf("markers in a value: %+v", segs)
 	}
 	hostile := "vm\033[2J\033]0;title\007"
-	segs, _ = PortsNoSSH(hostile).Segments()
-	if vals, text := values(segs); !slices.Equal(vals, []string{"vm[2J]0;title"}) || strings.ContainsRune(text, '\033') || text != PortsNoSSH(hostile).Text() {
+	segs, _ = StopFailed(hostile).Segments()
+	if vals, text := values(segs); !slices.Equal(vals, []string{"vm[2J]0;title"}) || strings.ContainsRune(text, '\033') || text != StopFailed(hostile).Text() {
 		t.Errorf("escape codes in a value: %+v", segs)
 	}
 }
@@ -71,7 +71,7 @@ func TestSegmentsOfHostileValues(t *testing.T) {
 // Names mode: the names as one segment, no link, as String has them.
 func TestSegmentsInNamesMode(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	m := PortsNoSSH("v")
+	m := StopFailed("v")
 	segs, link := m.Segments()
 	if len(segs) != 1 || segs[0] != (Segment{Text: m.Names()}) || link != "" || m.String() != m.Names() {
 		t.Errorf("names mode: %+v, %q", segs, link)

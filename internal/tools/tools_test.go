@@ -980,7 +980,7 @@ func TestListTargets(t *testing.T) {
 	for _, f := range []string{goCur, recorded, bare, bad} {
 		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
 	}
-	rec := state.ToolImage{SHA256: "x", Libc: "musl", Format: "plain-0123456789ab", Backend: "smolvm", Built: time.Now()}
+	rec := state.ToolImage{SHA256: "x", Libc: "musl", Format: "plain-0123456789ab", Backend: "qemu", Built: time.Now()}
 	if err := state.WriteToolImage(e.Dirs, recorded, rec); err != nil {
 		t.Fatal(err)
 	}
@@ -997,7 +997,7 @@ func TestListTargets(t *testing.T) {
 	}
 	want := map[string]string{
 		goCur:    "false   ",
-		recorded: "true smolvm musl plain-0123456789ab",
+		recorded: "true qemu musl plain-0123456789ab",
 		bare:     "false   ",
 		bad:      "false   ",
 	}

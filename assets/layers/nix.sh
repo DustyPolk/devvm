@@ -50,10 +50,10 @@ if [[ -n $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -qui
   echo "devvm: Nix's store isn't root's after its install" >&2
   exit 1
 fi
-# Running now too, for the rest of the build: systemd started it; OpenRC (Alpine) gets a service
-# of devvm's, started at each boot and now; with no init system, devvm starts it after each start
-# (assets/container/services.sh), and here. Without systemd, its settings are /etc/conf.d/nix-daemon
-# (guest/sync.sh's: the proxy under network policy), which OpenRC reads for its service.
+# Running now too, for the rest of the build: systemd started it, and OpenRC (Alpine) gets a
+# service of devvm's, started at each boot and now. Under OpenRC, its settings are
+# /etc/conf.d/nix-daemon (guest/sync.sh's: the proxy under network policy), which OpenRC reads
+# for its service.
 if [[ -d /run/systemd/system ]]; then
   sudo systemctl is-active --quiet nix-daemon.socket
 elif [[ -d /run/openrc ]]; then
@@ -71,11 +71,6 @@ RC
   sudo chmod 755 /etc/init.d/nix-daemon
   sudo rc-update add nix-daemon default
   sudo rc-service nix-daemon start
-else
-  sudo sh -c '[ ! -f /etc/conf.d/nix-daemon ] || . /etc/conf.d/nix-daemon
-    mkdir -p /var/log
-    nohup /nix/var/nix/profiles/default/bin/nix-daemon --daemon >/var/log/nix-daemon.log 2>&1 </dev/null &
-    echo $! > /run/nix-daemon.pid'
 fi
 
 # sudo nix: sudo's secure_path, with Nix's default profile last.
