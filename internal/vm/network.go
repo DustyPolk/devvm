@@ -82,7 +82,8 @@ func (c NetworkChoice) Set(mode string) error {
 }
 
 // SetNetwork turns the folder's VM's network policy on or off, from its
-// next start. Turning it on, its backend must be able to confine the VM
+// next start: a running VM's restarts now once the user agrees
+// (restartNow). Turning it on, its backend must be able to confine the VM
 // to its proxy, and tokens the VM got before stay valid. Either is
 // refused while it would break a link's policy rule (policyLinked), and
 // while the VM is in a group, whose VMs all have network policy or none
@@ -128,10 +129,16 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	if err := st.Update(ctx, func(st *state.VM) error { return netpolicy.SetOn(st, on) }); err != nil {
 		return err
 	}
-	if running {
-		e.Info(msg.NetSetRunning(to, vm))
-	} else {
+	switch {
+	case !running:
 		e.Info(msg.NetSetStopped(to, vm))
+	case e.restartNow(vm):
+		if on {
+			e.Note(msg.NetOnOldTokens(vm))
+		}
+		return Launch(e).Restart(ctx, Options{})
+	default:
+		e.Info(msg.NetSetRunning(to, vm))
 	}
 	if on {
 		e.Note(msg.NetOnOldTokens(vm))

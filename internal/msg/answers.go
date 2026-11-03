@@ -27,7 +27,7 @@ func AnswerFor(id string) string {
 		return "devvm network -g"
 	case "load_key":
 		return "devvm ssh-agent add KEY_FILE"
-	case "update_mounts":
+	case "restart_now":
 		return "devvm restart"
 	case "add_it_now":
 		return "--ssh-config"

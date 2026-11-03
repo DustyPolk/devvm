@@ -243,7 +243,8 @@ func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) 
 }
 
 // SetSize changes the folder's VM's size to what s sets: at once when it's
-// stopped, from its next start when it runs. A disk only grows. With
+// stopped; when it runs, after a restart the user agrees to (restartOr),
+// else from its next start. A disk only grows. With
 // global, it changes the size new VMs get instead.
 func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	s, err := s.Parse()
@@ -280,10 +281,12 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	if err != nil {
 		return err
 	}
+	if in.Status == backend.StatusRunning && pendingSize(st, in.Size) != (backend.Size{}) {
+		return e.restartOr(ctx, vm, e.Warn, msg.SizeNextStart(vm))
+	}
 	if err := e.applySize(ctx, b, st, in); err != nil {
 		return err
 	}
-	// Otherwise applySize said it waits for the next start.
 	if in, err = b.Inspect(ctx, vm); err != nil {
 		return err
 	}

@@ -42,10 +42,10 @@ Lima confines every VM to its proxy, so every VM can have network policy, the do
 | | |
 | --- | --- |
 | `devvm network` | print this folder's VM's network policy as `devvm ls` shows it, `on`, `off` or `unenforced`, and then its [allowlist](#changing-rules) |
-| `devvm network on\|off` | change it from the VM's next start, which `devvm restart` gives you |
+| `devvm network on\|off` | change it from the VM's next start, which `devvm restart` gives you, and for a running VM, ask in a terminal whether to restart it now |
 | `devvm network -g [on\|off\|ask]` | show or change what new VMs get |
 
-Until the VM starts again, the change waits. If you turn network policy on while the VM is running, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you turn it off while the VM is running confined, its launches keep it on its proxy with your secrets still out of it, and they warn you that network policy turns off when the VM next starts.
+When the VM is running, devvm asks in a terminal whether to restart it now, which stops anything running in it, and if you answer yes, it restarts the VM as `devvm restart` does, so the change applies at once. If you answer no, or there's no terminal, or you pass `--no-input`, the change waits until the VM starts again. If you turn network policy on while the VM is running, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you turn it off while the VM is running confined, its launches keep it on its proxy with your secrets still out of it, and they warn you that network policy turns off when the VM next starts.
 
 Secrets the VM got while network policy was off still work wherever the VM kept them, so rotate them if that matters.
 

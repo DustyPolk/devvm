@@ -21,6 +21,7 @@ func printed(t *testing.T, e *Env, tty bool) *[]string {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	var got []string
 	e.Terminal = func() bool { return tty }
+	e.CanAsk = e.Terminal
 	e.Warn = func(m msg.M) { got = append(got, m.Names()) }
 	e.Info = e.Warn
 	e.Confirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }
@@ -90,6 +91,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 		tools   string
 		status  backend.Status
 		tty     bool
+		noInput bool
 		have    []string
 		methods []string
 		set     []string
@@ -109,9 +111,13 @@ func TestUpdateAgentDirs(t *testing.T) {
 			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm, "mounts_next_start vm=" + vm},
 		},
 		{
+			name: "a running VM with --no-input changes at its next start", tools: "node claude", status: backend.StatusRunning, tty: true, noInput: true,
+			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm, "mounts_next_start vm=" + vm},
+		},
+		{
 			name: "a running VM restarts once the user agrees", tools: "node claude", status: backend.StatusRunning, tty: true,
 			have: []string{skills}, methods: []string{"Inspect", "Stop", "SetAgentDirs"}, set: []string{skills, mine},
-			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked update_mounts vm=" + vm, "mounts_updated vm=" + vm},
+			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked restart_now vm=" + vm, "mounts_updated vm=" + vm},
 		},
 		{
 			name: "a VM without agents drops leftover agent mounts", tools: "node", status: backend.StatusStopped,
@@ -122,6 +128,9 @@ func TestUpdateAgentDirs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := &Env{Dirs: paths.Dirs{Home: home}}
 			got := printed(t, e, tc.tty)
+			if tc.noInput {
+				e.CanAsk = func() bool { return false }
+			}
 			if tc.name != "nothing changed, nothing edited" {
 				mkdirs(t, home, ".claude/agents")
 			}

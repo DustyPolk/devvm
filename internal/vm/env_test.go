@@ -210,11 +210,13 @@ func vmName(t *testing.T, e *Env) string {
 	return names[0]
 }
 
-// answers gives e's questions a terminal and these answers.
+// answers gives e's questions a terminal, without --no-input, and these
+// answers.
 func answers(t *testing.T, e *Env, yes bool) *[]string {
 	t.Helper()
 	var asked []string
 	e.Terminal = func() bool { return true }
+	e.CanAsk = e.Terminal
 	e.Confirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
 	e.Ask = e.Confirm
 	return &asked

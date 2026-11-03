@@ -51,7 +51,7 @@ flowchart TD
   choice -- "devvm" --> own["devvm's own agent,<br>with only the keys<br>you added"]
 ```
 
-- `devvm --ssh-agent` creates the VM forwarding your agent. `devvm ssh-agent on`, `devvm` or `off` changes it for an existing VM from its next start, which for a running VM is `devvm restart`, and `devvm ssh-agent` shows it.
+- `devvm --ssh-agent` creates the VM forwarding your agent. `devvm ssh-agent on`, `devvm` or `off` changes it for an existing VM from its next start, and `devvm ssh-agent` shows it. For a running VM, devvm asks in a terminal whether to restart it now, as `devvm restart` does, and otherwise, or without a terminal or with `--no-input`, the change waits for `devvm restart` or the VM's next start.
 - The choice applies to devvm's shells and to the ssh entries alike, both as the VM's current start was made with, so a change reaches neither until the VM next starts, whichever folder devvm runs from. For a VM started outside devvm, such as with `limactl start`, they follow the current choice. When forwarding is off, an entry says `ForwardAgent no`, whatever your own `Host *` settings say, and none of devvm's own connections to the VM carry your agent.
 - With forwarding off, git over SSH in the VM fails. devvm says so when it creates a VM for a repo whose `origin` is an SSH URL. Use an HTTPS remote with a GitHub token instead, or turn forwarding on.
 - **No keys loaded.** When a VM forwards your agent, the agent has no keys and `~/.ssh` has one, devvm offers to load it (`ssh-add --apple-use-keychain` on macOS). To keep it loaded across reboots, add `AddKeysToAgent yes`, and `UseKeychain yes` on macOS, under `Host *` in `~/.ssh/config`.

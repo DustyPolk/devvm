@@ -108,8 +108,9 @@ func (e Launch) AgentMounts(tools []string) []string {
 // UpdateAgentDirs makes an existing VM's agent folder mounts match the
 // host's folders, which can appear or go after it's made. A backend
 // changes mounts only while a VM is stopped: a stopped VM is changed at
-// once, a running one after the user agrees to a restart (devvm stops it,
-// and the caller starts it again), else at its next start.
+// once, a running one after the user agrees to a restart (restartNow:
+// devvm stops it, and the caller starts it again), else at its next
+// start.
 func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM) error {
 	vm := st.Name()
 	in, err := b.Inspect(ctx, vm)
@@ -129,7 +130,7 @@ func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 		e.Warn(msg.AgentDirsRemoved(shownList(removed), vm))
 	}
 	if in.Status == backend.StatusRunning {
-		if !e.Terminal() || !e.Confirm(msg.UpdateMounts(vm)) {
+		if !e.restartNow(vm) {
 			e.Warn(msg.MountsNextStart(vm))
 			return nil
 		}

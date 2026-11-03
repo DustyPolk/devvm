@@ -7,7 +7,7 @@ Show or change this folder's VM's size
 
 ## Synopsis
 
-Show this folder's VM's CPUs, memory and disk, or change them with --cpus, --memory and --disk. A stopped VM changes at once, and a running VM changes when it next starts, such as with devvm restart. With -g, show or change the size new VMs get instead.
+Show this folder's VM's CPUs, memory and disk, or change them with --cpus, --memory and --disk. A stopped VM changes at once, and a running VM changes when it next starts, so in a terminal devvm offers to restart it now. With -g, show or change the size new VMs get instead.
 
 ```text
 devvm size [flags]

@@ -2339,6 +2339,11 @@ func ResolvingTools() M {
 	return M{id: "resolving_tools"}
 }
 
+// RestartNow is [restart_now]: "Restarting {{.vm}} applies the change now, and anything running in it stops. Restart it now?"
+func RestartNow(vm string) M {
+	return M{id: "restart_now", vals: []val{{"vm", vm}}}
+}
+
 // RetentionBad is [retention_bad]: "That retention setting is refused, and nothing changed: {{.reason}}."
 func RetentionBad(reason string) M {
 	return M{id: "retention_bad", vals: []val{{"reason", reason}}}
@@ -2882,11 +2887,6 @@ func UnsafeFolderUsed(dir string, holds string) M {
 // UpFailed is [up_failed]: "Opening this folder's VM failed: {{.reason}}."
 func UpFailed(reason string) M {
 	return M{id: "up_failed", vals: []val{{"reason", reason}}}
-}
-
-// UpdateMounts is [update_mounts]: "Updating {{.vm}}'s mounts restarts it, and anything running in it stops. Update them now?"
-func UpdateMounts(vm string) M {
-	return M{id: "update_mounts", vals: []val{{"vm", vm}}}
 }
 
 // UpstreamProxyInvalid is [upstream_proxy_invalid]: "{{.setting}} isn't a proxy setting devvm can read. Set it as http://host:port, or unset it."
@@ -3478,6 +3478,7 @@ var specs = map[string]spec{
 	"remotes_taken":                    {fields: []string{"slug", "vm"}},
 	"removed_remote":                   {fields: []string{"remote"}},
 	"resolving_tools":                  {},
+	"restart_now":                      {fields: []string{"vm"}},
 	"retention_bad":                    {fields: []string{"reason"}},
 	"retention_busy":                   {},
 	"retention_deleted":                {fields: []string{"exports", "nix_files", "orphans", "tools"}},
@@ -3587,7 +3588,6 @@ var specs = map[string]spec{
 	"unsafe_folder_inside":             {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":               {fields: []string{"dir", "holds"}},
 	"up_failed":                        {fields: []string{"reason"}},
-	"update_mounts":                    {fields: []string{"vm"}},
 	"upstream_proxy_invalid":           {fields: []string{"setting"}},
 	"upstream_proxy_scheme":            {fields: []string{"scheme", "setting"}},
 	"usage_error":                      {fields: []string{"reason"}},

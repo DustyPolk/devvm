@@ -351,8 +351,10 @@ func TestWidenParentVM(t *testing.T) {
 		}
 	}
 	// Taking access away asks nothing, and so does network rm of an allow;
-	// rm of a deny asks.
+	// rm of a deny asks. (The restart a running VM's change offers isn't
+	// what this checks.)
 	asked := answers(t, e, false)
+	e.CanAsk = func() bool { return false }
 	if err := n.SetNetwork(t.Context(), true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}

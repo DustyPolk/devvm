@@ -2259,13 +2259,14 @@ check "devvm network off: its next start is direct, without a proxy" bash -c "cd
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == off ]] &&
   [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
-check "devvm network on while it runs: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
-  '$D' network on </dev/null >/dev/null 2>&1 && [[ \$('$D' network | head -1) == unenforced ]] &&
+check "devvm network on while it runs, without a terminal: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
+  '$D' network on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=on vm=$vm | head -1)\" '$work/last.log' &&
+  [[ \$('$D' network | head -1) == unenforced ]] &&
   printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == on ]] &&
   vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
-check "devvm network off while it runs confined: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
-  '$D' network off </dev/null >/dev/null && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+check "devvm network off while it runs confined, without a terminal: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
+  '$D' network off </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=off vm=$vm | head -1)\" '$work/last.log' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m net_off_next_start vm=$vm | head -1)\" '$work/last.log' &&
   pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"

@@ -22,7 +22,7 @@ func newSizeCmd(u *ui.UI) *cobra.Command {
 		Use:   "size",
 		Short: "Show or change this folder's VM's size",
 		Long: "Show this folder's VM's CPUs, memory and disk, or change them with --cpus, --memory and --disk. " +
-			"A stopped VM changes at once, and a running VM changes when it next starts, such as with devvm restart. " +
+			"A stopped VM changes at once, and a running VM changes when it next starts, so in a terminal devvm offers to restart it now. " +
 			"With -g, show or change the size new VMs get instead.",
 		Example: examples(
 			"devvm size", "show the VM's size",

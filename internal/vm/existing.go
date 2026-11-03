@@ -28,6 +28,27 @@ func (e Launch) Restart(ctx context.Context, o Options) error {
 	return e.open(ctx, o, t)
 }
 
+// restartNow reports whether the user agrees to restart the VM vm, which
+// is running, so that a change that applies only when it starts applies
+// at once (restart_now). It asks only where a question with a fallback
+// is asked (CanAsk: a terminal, without --no-input); else it's no, and
+// the caller says when the change applies.
+func (e *Env) restartNow(vm string) bool {
+	return e.CanAsk != nil && e.CanAsk() && e.Confirm(msg.RestartNow(vm))
+}
+
+// restartOr restarts the folder's VM vm, which is running, as devvm
+// restart does once the user agrees (restartNow), so that a setting just
+// changed applies now; otherwise say(later) tells the user when it
+// applies.
+func (e *Env) restartOr(ctx context.Context, vm string, say func(msg.M), later msg.M) error {
+	if !e.restartNow(vm) {
+		say(later)
+		return nil
+	}
+	return Launch{e}.Restart(ctx, Options{})
+}
+
 // open opens a shell in a VM that exists, made for this folder. Flags for
 // new VMs are ignored, with a warning. On the way it warns about images
 // and tools newer than the VM's, matches its agent folder mounts to the

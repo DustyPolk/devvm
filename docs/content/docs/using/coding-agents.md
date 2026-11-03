@@ -74,7 +74,7 @@ flowchart TD
 
 devvm mounts the folders that exist when it creates the VM read-only, at the same path as on this machine, and links them from the VM's home. Absolute paths in them, such as Claude Code's plugin paths, still work. This machine enforces read-only, so even root in the VM can't write to them. devvm doesn't mount a folder whose path has a comma, on any backend, and it warns you. Lima can't mount such a path ([Lima's limits](../backends/lima.md#limits)).
 
-When you make or delete one of these folders on this machine later, devvm notices on the VM's next launch and names the folder. A VM's mounts change only while it's stopped. A stopped VM's mounts change at once. For a running VM, devvm asks in a terminal whether to restart it now, which stops anything running in it, and otherwise the mounts change when the VM next starts, for example with `devvm restart`.
+When you make or delete one of these folders on this machine later, devvm notices on the VM's next launch and names the folder. A VM's mounts change only while it's stopped. A stopped VM's mounts change at once. For a running VM, devvm asks in a terminal whether to restart it now, which stops anything running in it. If you answer no, or there's no terminal, or you pass `--no-input`, the mounts change when the VM next starts, for example with `devvm restart`.
 
 ## Copies
 

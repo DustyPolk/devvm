@@ -68,7 +68,7 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 
 - The flags take the same values as for a new VM and have the same limits, so devvm refuses more CPUs than this machine has and more memory than a VM can have ([size and ports](#size-and-ports)). `devvm size -g` checks a default size in the same way when you set it. A VM that already has more memory keeps it and still starts, because devvm checks a size only when you set one.
 - `devvm size -g` ends each line with where its value came from, after a `#`: the path of [`config.toml`](settings.md#configtoml), `devvm: settings.json` for what `devvm size -g` or `devvm setup` saved, or `devvm: default` for the image's. When `config.toml` sets `cpus`, `memory` or `disk`, `devvm size -g` refuses to change that one and names the file, so edit `config.toml` instead ([where a default comes from](settings.md#where-a-default-comes-from)).
-- A stopped VM changes at once. A running VM keeps its size until it next starts, for example with `devvm restart`, and until then `devvm size` shows what the VM has now and says what changes.
+- A stopped VM changes at once. For a running VM, devvm asks in a terminal whether to restart it now, which stops anything running in it, and if you answer yes, devvm restarts it as `devvm restart` does. Otherwise, and without a terminal or with `--no-input`, the VM keeps its size until it next starts, for example with `devvm restart`, and until then `devvm size` shows what the VM has now and says what changes.
 - Disks grow but never shrink, so devvm refuses a disk smaller than the VM's.
 
 ### Choosing new VMs' size

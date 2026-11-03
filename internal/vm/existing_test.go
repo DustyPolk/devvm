@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/settings"
+	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -139,7 +141,7 @@ func TestToolsAdd(t *testing.T) {
 		t.Errorf("tool_names = %s", get(st, keyToolNames))
 	}
 	ms = f.Methods()[before:]
-	if !slices.Equal(*asked, []string{"update_mounts vm=" + vm}) || !slices.Contains(ms, "Stop") ||
+	if !slices.Equal(*asked, []string{"restart_now vm=" + vm}) || !slices.Contains(ms, "Stop") ||
 		!slices.Contains(f.Instances[vm].AgentDirs, prompts) {
 		t.Errorf("asked %q, calls %q, agent dirs %q", *asked, ms, f.Instances[vm].AgentDirs)
 	}
@@ -381,5 +383,97 @@ func TestRemoveUpdateRestart(t *testing.T) {
 	ms := f.Methods()[before:]
 	if i, j := slices.Index(ms, "Stop"), slices.Index(ms, "Start"); i < 0 || j < i {
 		t.Errorf("restart calls = %q", ms)
+	}
+}
+
+// A setting that a running VM gets only when it next starts offers to
+// restart it, where a question with a default shows: yes restarts it as
+// devvm restart does (stopped, started, a shell opened), and the setting
+// applies; no, no terminal and --no-input each say when it applies, the
+// last two without asking.
+func TestRestartToApply(t *testing.T) {
+	for _, c := range []struct {
+		cmd     string
+		set     func(e *Env) error
+		later   string // its message's names, before vm=
+		applied func(st *state.VM) bool
+	}{
+		{
+			"devvm size --cpus 2", func(e *Env) error { return Settings{e}.SetSize(t.Context(), Size{CPUs: "2"}, false) },
+			"size_next_start", nil,
+		},
+		{
+			"devvm network on", func(e *Env) error { return Net{e}.SetNetwork(t.Context(), true) },
+			"net_set_running state=on", nil,
+		},
+		{
+			"devvm network off", func(e *Env) error { return Net{e}.SetNetwork(t.Context(), false) },
+			"net_set_running state=off", nil,
+		},
+		{
+			"devvm ssh-agent on", func(e *Env) error { return Settings{e}.SetSSHAgent(t.Context(), sshagent.On) },
+			"agent_set_running mode=on", nil,
+		},
+		{
+			"devvm git-protect strict", func(e *Env) error { return Settings{e}.SetGitProtect(t.Context(), gitprotect.Strict) },
+			"git_protect_next_stop mode=strict",
+			func(st *state.VM) bool { return gitprotect.Mode(st) == gitprotect.Strict },
+		},
+	} {
+		for _, a := range []struct {
+			name             string
+			terminal, canAsk bool
+			yes              bool
+		}{
+			{"yes", true, true, true},
+			{"no", true, true, false},
+			{"no terminal", false, false, true},
+			{"--no-input", true, false, true},
+		} {
+			// The name is a folder's (t.TempDir): no spaces or commas.
+			name := strings.Join(strings.Fields(c.cmd+" "+a.name), "-")
+			t.Run(name, func(t *testing.T) {
+				e, f, execs := upEnv(t, allNative())
+				f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
+				f.ExecFunc = noDirect
+				o := Options{NoNetworkPolicy: true}
+				if c.cmd == "devvm network off" {
+					o = Options{NetworkPolicy: true}
+				}
+				st := existingVM(t, e, o)
+				vm := st.Name()
+				in := f.Instances[vm]
+				in.Size = backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}
+				f.Instances[vm] = in
+				var said msg.Recorder
+				e.Info, e.Warn = said.Add, said.Add
+				asked := answers(t, e, a.yes)
+				e.Terminal = func() bool { return a.terminal }
+				e.CanAsk = func() bool { return a.canAsk }
+				before, shells := len(f.Calls()), len(*execs)
+				if err := c.set(e); err != nil {
+					t.Fatal(msg.NamesOf(err))
+				}
+				ms := f.Methods()[before:]
+				i, j := slices.Index(ms, "Stop"), slices.Index(ms, "Start")
+				restarted := i >= 0 && j > i && len(*execs) == shells+1
+				later := c.later + " vm=" + vm
+				switch {
+				case a.canAsk && !slices.Equal(*asked, []string{"restart_now vm=" + vm}):
+					t.Errorf("asked %q", *asked)
+				case !a.canAsk && len(*asked) != 0:
+					t.Errorf("asked %q without a question that shows", *asked)
+				}
+				if want := a.canAsk && a.yes; restarted != want {
+					t.Errorf("restarted = %v, want %v: calls %q", restarted, want, ms)
+				}
+				if slices.Contains(said.Names(), later) == restarted {
+					t.Errorf("said %q", said.Names())
+				}
+				if c.applied != nil && c.applied(reread(t, e, vm)) != restarted {
+					t.Errorf("applied = %v", !restarted)
+				}
+			})
+		}
 	}
 }

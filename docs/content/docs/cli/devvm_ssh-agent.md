@@ -7,7 +7,7 @@ Show or change SSH agent forwarding for this folder's VM
 
 ## Synopsis
 
-Show whether this folder's VM forwards an SSH agent, which is off, on for yours, or devvm for devvm's own with only the keys you added to it, and then those keys. devvm ssh-agent on, devvm or off changes it from the VM's next start, such as with devvm restart. While forwarding is on and you're connected, anything in the VM can use the agent's keys.
+Show whether this folder's VM forwards an SSH agent, which is off, on for yours, or devvm for devvm's own with only the keys you added to it, and then those keys. devvm ssh-agent on, devvm or off changes it from the VM's next start, so in a terminal devvm offers to restart a running VM now. While forwarding is on and you're connected, anything in the VM can use the agent's keys.
 
 ```text
 devvm ssh-agent [on|devvm|off] [flags]

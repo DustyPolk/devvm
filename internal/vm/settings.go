@@ -29,7 +29,8 @@ func (e Settings) GitProtect(ctx context.Context) (string, error) {
 // SetGitProtect turns the folder's VM's .git protection on, strict or
 // off. Locks change only while the VM is stopped, so nothing in it can
 // race them: a running VM's choice is saved, and set when devvm next
-// finds it stopped (checkGit). On and strict lock .git as it is then.
+// finds it stopped (checkGit), which a restart the user agrees to does
+// now (restartOr). On and strict lock .git as it is then.
 func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
 	if err != nil {
@@ -55,8 +56,7 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 			if err := gitprotect.SetNext(ctx, t.st, mode); err != nil {
 				return err
 			}
-			e.Info(msg.GitProtectNextStop(mode, vm))
-			return nil
+			return e.restartOr(ctx, vm, e.Info, msg.GitProtectNextStop(mode, vm))
 		}
 	}
 	return setGitProtect(ctx, e.Env, p, t, mode)

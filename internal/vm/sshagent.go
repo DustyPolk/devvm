@@ -35,7 +35,8 @@ func (e Settings) SSHAgent(ctx context.Context) (string, error) {
 
 // SetSSHAgent changes the folder's VM's SSH agent forwarding, from its
 // next start: off, on (the user's agent) or devvm (devvm's own, started
-// with its keys loaded now).
+// with its keys loaded now). A running VM restarts now once the user
+// agrees (restartOr).
 func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 	t, err := e.agentVM(ctx)
 	if err != nil {
@@ -81,10 +82,9 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		e.Warn(msg.AgentDevvmRisk(vm))
 	}
 	if in.Status == backend.StatusRunning {
-		e.Info(msg.AgentSetRunning(mode, vm))
-	} else {
-		e.Info(msg.AgentSetStopped(mode, vm))
+		return e.restartOr(ctx, vm, e.Info, msg.AgentSetRunning(mode, vm))
 	}
+	e.Info(msg.AgentSetStopped(mode, vm))
 	return nil
 }
 

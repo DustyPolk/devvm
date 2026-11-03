@@ -17,7 +17,7 @@ func newGitProtectCmd(u *ui.UI) *cobra.Command {
 		Short: "Show or change .git protection for this folder's VM",
 		Long: "Show this folder's VM's .git protection, which locks the git hooks and config that run code on this machine, " +
 			"as on, strict, off, or clone for a --clone VM. " +
-			"devvm git-protect on, strict or off changes it at once on a stopped VM, and on a running one when it next stops.",
+			"devvm git-protect on, strict or off changes it at once on a stopped VM, and on a running one when it next stops, so in a terminal devvm offers to restart it now.",
 		Example: examples(
 			"devvm git-protect", "show the VM's .git protection",
 			"devvm git-protect off", "unlock .git, once the VM is stopped",

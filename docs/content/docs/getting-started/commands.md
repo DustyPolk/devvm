@@ -91,6 +91,8 @@ A folder with a `.devcontainer/devcontainer.json` or `.devcontainer.json` gets t
 
 `devvm restart` stops this folder's VM, then starts it and opens a shell in it as devvm does. Some changes apply only when a VM starts, such as a new size for a running VM, a change to its network policy or SSH agent forwarding, or the config folders of an agent that `devvm tools add` added, and a restart applies them.
 
+When you make one of these changes to a running VM with `devvm size`, `devvm network on` or `off` or `devvm ssh-agent`, or change its `.git` protection on macOS with `devvm git-protect`, which waits for the VM to stop, devvm asks in a terminal whether to restart the VM now, because anything running in it stops. If you answer yes, devvm restarts it as `devvm restart` does and opens a shell in it. If you answer no, devvm keeps the change and says that `devvm restart` applies it, and it does the same without asking when there's no terminal or you pass `--no-input`.
+
 `devvm stop` stops this folder's VM and its network policy proxy ([stopping a VM](../internals/overview.md#stopping-a-vm)). Once the VM is stopped, devvm locks its `.git` again and checks it, as a launch that finds the VM stopped does, and it takes the VM's entry out of devvm's [ssh config](../using/ssh.md#ssh-access-by-name). devvm, `devvm restart`, and the commands that need the VM running, such as `devvm host`, start it again.
 
 ### Deleting a VM
@@ -180,7 +182,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`, even while it runs ([details](../using/ports-size.md#ports)) |
 | `devvm ports add\|rm LIST` | forward more ports, or stop forwarding some ([details](../using/ports-size.md#ports)) |
 | `devvm ports -g ...` | show or change what new VMs forward ([details](../using/ports-size.md#ports)) |
-| `devvm network [on\|off]` | show this folder's VM's network policy, `on`, `off` or `unenforced`, and then its allowlist, file by file, or change its network policy from its next start with `devvm restart` ([details](../safety/network.md#turning-it-on-or-off)) |
+| `devvm network [on\|off]` | show this folder's VM's network policy, `on`, `off` or `unenforced`, and then its allowlist, file by file, or change its network policy from its next start, offering to restart a running VM now ([details](../safety/network.md#turning-it-on-or-off)) |
 | `devvm network -g [on\|off\|ask]` | show or change whether new VMs get network policy, which is `ask` until you change it ([details](../safety/network.md#turning-it-on-or-off)) |
 | `devvm network allow\|deny\|rm RULE... [-g]` | add allow or deny rules to this folder's VM's own, or remove them, at once, and with `-g`, change yours for every VM ([details](../safety/network.md#changing-rules)) |
 | `devvm network log [--follow] [-n N] [--blocked]` | show what this folder's VM connected to and what its network policy blocked ([details](../safety/network.md#logs)) |
@@ -199,7 +201,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 `devvm tools add TOOL...` adds shared tools to the folder's VM without the list, each one a separate word, as in `devvm tools add python claude`, and then opens a shell in it. The tools are mounted rather than installed, so nothing in the VM's disk changes.
 
 - devvm builds the shared tools that the share lacks, and they join the VM's list at once.
-- devvm mounts a new agent's config folders, which needs the VM to start again. A stopped VM gets them as it starts, and for a running VM devvm asks before restarting it, because anything running in it stops. If you answer no, or there's no terminal, the VM gets them at its next start.
+- devvm mounts a new agent's config folders, which needs the VM to start again. A stopped VM gets them as it starts, and for a running VM devvm asks before restarting it, because anything running in it stops. If you answer no, there's no terminal or you pass `--no-input`, the VM gets them at its next start.
 - devvm says which of the tools the VM has already and leaves those as they are.
 
 `devvm tools rm TOOL...` takes shared tools out again. A layer can't be added to a VM that exists or taken out of one, because its script changes the VM's disk, so only a new VM gets a layer. To add or drop one, save your work outside the project folder, run `devvm rm`, and make the VM again with the layers you want.
@@ -282,7 +284,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | base's features, on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
 | new VMs' network policy, in `devvm setup` | `devvm network -g` |
 | whether to load an SSH key into your agent | `devvm ssh-agent add KEY_FILE` beforehand |
-| whether to restart a running VM to mount an agent's folders | `devvm restart` afterwards |
+| whether to restart a running VM to mount an agent's folders, or to apply a change from `devvm size`, `devvm network`, `devvm ssh-agent` or `devvm git-protect` | `devvm restart` afterwards, or nothing: without a terminal or with `--no-input`, the change waits for the VM's next start |
 | whether to add the `Include` line to `~/.ssh/config` | `--ssh-config` on `devvm`, `devvm host` and `devvm code` |
 | a Claude Code token or a GitHub token | `devvm secret set NAME --stdin` |
 | whether to delete, in `devvm rm`, `devvm gc`, `devvm gc --caches`, `devvm images rm` and `devvm secret rm` | `--force` |
