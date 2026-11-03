@@ -23,20 +23,26 @@ exec limactl stop $WEB
 stub_reset
 exec devvm host
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
-stdout '^ssh_include_needed line=Include /\S*/config/devvm/ssh_config$'
+stdout '^ssh_include_needed line=Include /\S*/data/devvm/ssh_config$'
 stderr '^devvm: ssh_include_yourself$'
 stdout '^ssh_host_info dir=/\S*/web host=devvm-web$'
 stub_calls
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
 stdout 'tar -xf'
 ! stdout 'limactl shell --workdir /\S*/web devvm-web'
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
 ! exists $HOME/.ssh
 
 # With the line there: nothing asked. A size its state asks for waits for
 # the running VM's next start, as on a launch.
-exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $CFG/ssh_config" > "$HOME/.ssh/config"'
+exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $DATA/ssh_config" > "$HOME/.ssh/config"'
+# ssh by the folder's name reads devvm's ssh config in its data folder
+# through that line: the real ssh resolves the name, connecting to nothing.
+[exec:/usr/bin/ssh] exec /usr/bin/ssh -F $HOME/.ssh/config -G devvm-web
+[exec:/usr/bin/ssh] stdout '^hostname 127\.0\.0\.1$'
+[exec:/usr/bin/ssh] stdout '^userknownhostsfile \S*/data/devvm/known_hosts$'
+[exec:/usr/bin/ssh] stdout '^hostkeyalias devvm-web-[0-9a-f]{14}$'
 exec sh -c 'echo cpus=6 >> "$VMS/$WEB"'
 stub_reset
 exec devvm host

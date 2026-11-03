@@ -11,7 +11,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
 // featureEnv is testEnv with devvm's features fzf and omb, and the
@@ -72,14 +73,34 @@ func TestDescription(t *testing.T) {
 	}
 }
 
-// Until they're chosen, base's key has every feature; the first build
-// chooses them (without a terminal: all of them) and saves the choice,
-// which later builds keep.
-func TestChooseFeatures(t *testing.T) {
-	b := featureEnv(t)
-	if err := os.Remove(b.Dirs.BaseFeatures()); err != nil {
+// saveFeatures saves base's features as devvm setup does; nil leaves them
+// unchosen.
+func saveFeatures(t *testing.T, d paths.Dirs, names []string) {
+	t.Helper()
+	if names == nil {
+		if err := os.Remove(d.Settings()); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			t.Fatal(err)
+		}
+		return
+	}
+	if _, err := settings.Save(d, settings.Values{Features: &names}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// savedFeatures reads base's features as builds do: nil until chosen.
+func savedFeatures(d paths.Dirs) ([]string, error) {
+	def, err := settings.Read(d)
+	return def.Features.Names, err
+}
+
+// Until they're chosen, base's key has every feature; the first build
+// chooses them (without a terminal: all of them) and saves the choice,
+// which later builds keep. config.toml's choice wins, and a build never
+// asks while it's there.
+func TestChooseFeatures(t *testing.T) {
+	b := featureEnv(t)
+	saveFeatures(t, b.Dirs, nil)
 	in, err := b.Inputs()
 	if err != nil || !slices.Equal(in.BaseFeatures, []string{"fzf", "omb", "mine"}) {
 		t.Fatalf("unchosen: %q, %v", in.BaseFeatures, err)
@@ -91,21 +112,33 @@ func TestChooseFeatures(t *testing.T) {
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := state.ReadBaseFeatures(b.Dirs)
+	got, err := savedFeatures(b.Dirs)
 	if err != nil || !slices.Equal(got, []string{"fzf", "omb", "mine"}) {
 		t.Errorf("saved %q, %v", got, err)
 	}
 	if after, err := b.Key("base"); err != nil || after != before {
 		t.Errorf("base's key went from %s to %s (%v)", before, after, err)
 	}
-	if err := state.WriteBaseFeatures(b.Dirs, []string{"omb"}); err != nil {
+	saveFeatures(t, b.Dirs, []string{"omb"})
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
+	}
+	if got, err := savedFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"omb"}) {
+		t.Errorf("a saved choice changed: %q, %v", got, err)
+	}
+	saveFeatures(t, b.Dirs, nil)
+	write(t, b.Dirs.ConfigFile(), "features = [\"fzf\"]\n")
+	if in, err := b.Inputs(); err != nil || !slices.Equal(in.BaseFeatures, []string{"fzf"}) {
+		t.Errorf("config.toml's: %q, %v", in.BaseFeatures, err)
 	}
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := state.ReadBaseFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"omb"}) {
-		t.Errorf("a saved choice changed: %q, %v", got, err)
+	if _, err := os.Stat(b.Dirs.Settings()); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("chose features over config.toml's: %v", err)
+	}
+	if _, err := (Choice{b}).SetFeatures([]string{"omb"}); msg.IDOf(err) != "set_in_config" {
+		t.Errorf("SetFeatures with config.toml's: %v", err)
 	}
 }
 
@@ -115,9 +148,7 @@ func TestChooseFeatures(t *testing.T) {
 func TestDesktopUntilChosen(t *testing.T) {
 	b := featureEnv(t)
 	write(t, filepath.Join(assetsDir(b), "features", "desktop.sh"), "#!/bin/bash\n# a desktop\n")
-	if err := os.Remove(b.Dirs.BaseFeatures()); err != nil {
-		t.Fatal(err)
-	}
+	saveFeatures(t, b.Dirs, nil)
 	if features, _ := b.Features(); !slices.Equal(features, []string{"desktop", "fzf", "omb", "mine"}) {
 		t.Fatalf("Features() = %q", features)
 	}
@@ -128,7 +159,7 @@ func TestDesktopUntilChosen(t *testing.T) {
 	if _, err := (Choice{b}).PickFeatures(); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := state.ReadBaseFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"fzf", "omb", "mine"}) {
+	if got, err := savedFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"fzf", "omb", "mine"}) {
 		t.Errorf("picked from the start: %q, %v", got, err)
 	}
 	if _, err := (Choice{b}).SetFeatures([]string{"desktop", "omb"}); err != nil {
@@ -155,13 +186,9 @@ func TestPickFeatures(t *testing.T) {
 		{"in order", []string{"fzf", "mine"}, []string{"fzf", "mine"}, false},
 		{"no script", []string{"omb", "nope"}, []string{"omb"}, true},
 	} {
-		if tc.saved == nil {
-			_ = os.Remove(b.Dirs.BaseFeatures())
-		} else if err := state.WriteBaseFeatures(b.Dirs, tc.saved); err != nil {
-			t.Fatal(err)
-		}
+		saveFeatures(t, b.Dirs, tc.saved)
 		changed, err := (Choice{b}).PickFeatures()
-		got, rerr := state.ReadBaseFeatures(b.Dirs)
+		got, rerr := savedFeatures(b.Dirs)
 		if err != nil || rerr != nil || !slices.Equal(got, tc.want) || changed != tc.changed {
 			t.Errorf("%s: saved %q, changed %v (%v, %v); want %q, %v", tc.name, got, changed, err, rerr, tc.want, tc.changed)
 		}
@@ -172,9 +199,7 @@ func TestPickFeatures(t *testing.T) {
 // refuses a name that isn't one.
 func TestSetFeatures(t *testing.T) {
 	b := featureEnv(t)
-	if err := state.WriteBaseFeatures(b.Dirs, []string{"omb"}); err != nil {
-		t.Fatal(err)
-	}
+	saveFeatures(t, b.Dirs, []string{"omb"})
 	for _, tc := range []struct {
 		name     string
 		set      []string
@@ -194,12 +219,12 @@ func TestSetFeatures(t *testing.T) {
 			}
 			continue
 		}
-		got, rerr := state.ReadBaseFeatures(b.Dirs)
+		got, rerr := savedFeatures(b.Dirs)
 		if err != nil || rerr != nil || !slices.Equal(got, tc.want) || changed != tc.changed {
 			t.Errorf("%s: saved %q, changed %v (%v, %v); want %q, %v", tc.name, got, changed, err, rerr, tc.want, tc.changed)
 		}
 	}
-	if got, _ := state.ReadBaseFeatures(b.Dirs); len(got) != 0 {
+	if got, _ := savedFeatures(b.Dirs); len(got) != 0 {
 		t.Errorf("a refused choice saved %q", got)
 	}
 }
@@ -208,9 +233,7 @@ func TestSetFeatures(t *testing.T) {
 // chosen, skipping one without a script; a layer runs only its own.
 func TestBuildRunsFeatures(t *testing.T) {
 	b := featureEnv(t)
-	if err := state.WriteBaseFeatures(b.Dirs, []string{"mine", "nope", "fzf"}); err != nil {
-		t.Fatal(err)
-	}
+	saveFeatures(t, b.Dirs, []string{"mine", "nope", "fzf"})
 	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}

@@ -75,23 +75,20 @@ func TestFor(t *testing.T) {
 		{name: "an existing VM ignores --backend", recorded: "smolvm", flag: "docker", want: "smolvm", ignored: true},
 		{name: "--backend naming its own", recorded: "smolvm", flag: "smolvm", want: "smolvm"},
 		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=docker, lima, smolvm name=sbx"},
-		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=docker, lima, smolvm file=$CONFIG/backend name=sbx"},
+		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=docker, lima, smolvm file=/c/config.toml name=sbx"},
 		{name: "an existing VM on a backend not here", recorded: "qemu", want: "backend_unknown_vm backend=qemu vm=devvm-x"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
 			r := testRegistry(t, "lima", "smolvm", "docker")
 			if tc.file != "" {
-				if err := state.WriteBackend(d, tc.file); err != nil {
-					t.Fatal(err)
-				}
+				r.DefaultBackend = func() (string, string, error) { return tc.file, "/c/config.toml", nil }
 			}
 			vm := readVM(t, d, tc.recorded)
 			c, err := r.For(d, vm, tc.flag)
 			if err != nil {
-				want := strings.ReplaceAll(tc.want, "$CONFIG", d.Config)
-				if got := msg.NamesOf(err); got != want {
-					t.Errorf("got %q, want %q", got, want)
+				if got := msg.NamesOf(err); got != tc.want {
+					t.Errorf("got %q, want %q", got, tc.want)
 				}
 				return
 			}
@@ -182,17 +179,13 @@ func TestForStateWithoutBackend(t *testing.T) {
 	}
 }
 
-func TestForBadDefaultFile(t *testing.T) {
+// A new VM's default that can't be read fails, as it was read.
+func TestForBadDefault(t *testing.T) {
 	d := testDirs(t)
-	if err := os.MkdirAll(d.Config, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(d.Backend(), []byte("lima\nsmolvm\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err := testRegistry(t, "lima").For(d, readVM(t, d, ""), "")
-	var ce *state.CorruptError
-	if !errors.As(err, &ce) {
-		t.Errorf("got %v, want a CorruptError", err)
+	r := testRegistry(t, "lima")
+	bad := &state.CorruptError{Path: "/c/config.toml", Line: 1, Reason: "x"}
+	r.DefaultBackend = func() (string, string, error) { return "", "", bad }
+	if _, err := r.For(d, readVM(t, d, ""), ""); !errors.Is(err, bad) {
+		t.Errorf("got %v, want %v", err, bad)
 	}
 }

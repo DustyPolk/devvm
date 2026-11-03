@@ -1,6 +1,6 @@
 # devvm size: a folder's VM's CPUs, memory and disk, changed at once for a
 # stopped VM, from its next start for a running one; with -g, the size new
-# VMs get (the size file).
+# VMs get (config.toml's, else settings.json's) and where each came from.
 
 # No VM yet.
 project web
@@ -11,7 +11,7 @@ stderr '^devvm: args_none command=devvm size given=big$'
 
 # A bad size is refused before devvm looks for the VM.
 ! exec devvm size --cpus many
-stderr '^devvm: cpus_not_number value="many"$'
+stderr '^devvm: cpus_not_number flag=--cpus value="many"$'
 stderr '^usage_help command=devvm size$'
 ! stderr no_vm_size
 ! exec devvm size --memory
@@ -30,25 +30,38 @@ exec devvm size -g
 cmp stdout $WORK/set
 # --json: what's unset left out; it only shows.
 exec devvm size -g --json
-stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 2\.5\n}\n\z'
+stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 2\.5,\n  "sources": {\n    "cpus": "settings.json",\n    "disk": "built-in",\n    "memory": "settings.json"\n  }\n}\n\z'
 ! exec devvm size -g --json --cpus 4
 stderr '^devvm: json_shows_only command=devvm size$'
-catg $CFG/size
-stdout '^cpus=2$'
-stdout '^memory=2\.5$'
-! stdout disk
+grep '^  "size": {\n    "cpus": "2",\n    "memory": "2\.5"\n  },?$' $DATA/settings.json
 ! exec devvm size -g --cpus 9999
 stderr '^devvm: too_many_cpus have=8 want=9999$'
 ! exec devvm size -g --memory 16M
 stderr '^devvm: size_not_gib flag=--memory value="16M"$'
 ! stub_calls
-# A hand-edited size file is refused, to show or change.
-cp $WORK/bad-size $CFG/size
+# config.toml's memory wins, and -g shows where it came from; -g refuses
+# to change it, naming the file and the key, and changes what it leaves.
+cp $WORK/memory.toml $CFG/config.toml
+exec devvm size -g
+stdout '\Acpus=2 # devvm: settings\.json\nmemory=6 # \S*/config/devvm/config\.toml\ndisk= # devvm: default\n\z'
+exec devvm size -g --json
+stdout '"memory": "config.toml"'
+! exec devvm size -g --memory 4
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=size\.memory$'
+! exec devvm size -g --cpus 1 --memory 4
+stderr '^devvm: set_in_config '
+grep '"cpus": "2"' $DATA/settings.json
+exec devvm size -g --cpus 1
+stdout '^==> size_defaults size=cpus=1 memory=6GiB$'
+# A hand-edited config.toml with a bad value is refused, to show or
+# change, naming its line.
+cp $WORK/bad-size.toml $CFG/config.toml
 ! exec devvm size -g
-stderr '^devvm: size_not_gib flag=--memory value="1\$\(touch x\)"$'
+stderr '^devvm: size_failed reason=\S*/config/devvm/config\.toml:3: size_not_gib flag=memory value="1\$\(touch x\)"$'
 ! exec devvm size -g --cpus 2
-stderr '^devvm: size_not_gib '
-rm $CFG/size
+stderr '^devvm: size_failed reason=\S*/config/devvm/config\.toml:3: '
+rm $CFG/config.toml
+cp $WORK/features-none.json $DATA/settings.json
 
 # A new VM. Running: devvm size shows what it has, and a change waits for
 # its next start. It has 2 CPUs, which any host running the tests has.
@@ -87,7 +100,7 @@ stderr '^devvm: disk_shrink have=100 vm=devvm-web-[0-9a-f]{14} want=50$'
 ! exec devvm size --cpus 9999
 stderr '^devvm: too_many_cpus have=8 want=9999$'
 ! exec devvm size --cpus 1.5
-stderr '^devvm: cpus_not_number value="1\.5"$'
+stderr '^devvm: cpus_not_number flag=--cpus value="1\.5"$'
 
 # Stopped: changed at once, only what differs.
 exec limactl stop $WEB
@@ -107,12 +120,19 @@ exec devvm --cpus 3
 stderr '^devvm: size_flags_ignored$'
 
 -- unset --
-cpus=
-memory=
-disk=
+cpus= # devvm: default
+memory= # devvm: default
+disk= # devvm: default
 -- set --
-cpus=2
-memory=2.5
-disk=
--- bad-size --
-memory=1$(touch x)
+cpus=2 # devvm: settings.json
+memory=2.5 # devvm: settings.json
+disk= # devvm: default
+-- features-none.json --
+{"features": []}
+-- memory.toml --
+[size]
+memory = "6GiB"
+-- bad-size.toml --
+# new VMs' size
+[size]
+memory = "1$(touch x)"

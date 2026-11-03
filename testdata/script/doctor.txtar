@@ -25,9 +25,23 @@ stdout '^doctor_ok backend=lima version=\S+\n\z'
 stub_calls
 stdout '^limactl --version\n\z'
 exec devvm doctor --json
-stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "problems": \[\],\n  "warnings": \[\],\n  "docker": true,\n'
+stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "backend_source": "built-in",\n  "problems": \[\],\n  "warnings": \[\],\n  "docker": true,\n'
 stdout '^      "egress-proxy": "emulated",$'
 ! stderr .
+
+# Where the backend came from: a file that sets it is named, and --json
+# says which, or flag for --backend.
+exec devvm setup --backend lima
+exec devvm doctor
+stdout '^doctor_backend_from backend=lima file=\S*/data/devvm/settings\.json$'
+exec devvm doctor --json
+stdout '"backend_source": "settings.json",'
+cp lima.toml $CFG/config.toml
+exec devvm doctor
+stdout '^doctor_backend_from backend=lima file=\S*/config/devvm/config\.toml$'
+exec devvm doctor --json --backend lima
+stdout '"backend_source": "flag",'
+rm $CFG/config.toml
 
 # Another backend, or one devvm doesn't have.
 ! exec devvm doctor --backend nope
@@ -80,6 +94,8 @@ stderr '^devvm: lima_global_config files=\S+/_config/default.yaml$'
 exec devvm doctor --json
 stdout '^  "problems": \[\n    {\n      "key": "lima-config",\n      "fix": null,\n      "message": "lima_global_config files=\S+/_config/default.yaml"\n    }\n  \],$'
 
+-- lima.toml --
+backend = "lima"
 -- brew/brew --
 #!/bin/sh
 -- broken/limactl --

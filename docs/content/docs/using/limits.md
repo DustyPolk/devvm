@@ -22,7 +22,7 @@ These are the things devvm can't do, everywhere and then by host and backend.
 - They have no `.git` protection, so use `--clone` there ([details](../safety/git-protection.md#linux-hosts)).
 - VMs mount the project folder with 9p instead of virtiofs, so file watchers in a VM also miss the VM's own changes in the folder's subfolders, and need polling there ([details](../backends/lima.md#file-watchers)).
 - Set-id bits that root in a VM sets on files in the project folder reach the host, and devvm names such files at each launch and stop ([what to do](troubleshooting.md#devvm-names-set-id-files)).
-- devvm keeps your secrets in files under `~/.config/devvm/secrets/`, which only you can read, instead of the Keychain ([details](settings.md#your-settings)).
+- devvm keeps your secrets in files under `~/.local/share/devvm/secrets/`, which only you can read, instead of the Keychain ([details](settings.md#devvms-state)).
 - devvm has no Time Machine to keep its CA out of, so keep `~/.local/share/devvm/ca` out of your backups ([details](../internals/security.md#secrets-stay-on-the-host)).
 
 ## smolvm

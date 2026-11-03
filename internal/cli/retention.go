@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -46,7 +47,7 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			"devvm gc --retention", "apply the settings now",
 		),
 		Args: showsOnly(func(_ *cobra.Command, args []string) error {
-			if err := state.CheckRetention(args); err != nil {
+			if _, err := settings.ParseRetention(args); err != nil {
 				// A bad duration is bad_duration, as for every flag.
 				if m, ok := errors.AsType[msg.M](err); ok {
 					return m
@@ -59,17 +60,18 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			dirs, err := paths.FromEnv()
 			fail(u, err, msg.RetentionSettingsFailed)
 			if len(args) == 0 {
-				r, err := state.ReadRetention(dirs)
+				def, err := settings.Read(dirs)
 				fail(u, err, msg.RetentionSettingsFailed)
 				if asJSON {
-					return printJSON(u, retentionJSON(r))
+					return printJSON(u, retentionJSON(def.Retention))
 				}
-				_, err = u.Stdout().Write([]byte(retentionShown(r)))
+				_, err = u.Stdout().Write([]byte(retentionShown(dirs, def.Retention)))
 				return err
 			}
-			_, err = state.SetRetention(dirs, args)
+			change, _ := settings.ParseRetention(args) // checked by Args
+			_, err = settings.Save(dirs, settings.Values{Retention: change})
 			fail(u, err, msg.RetentionSettingsFailed)
-			u.Info(msg.RetentionSaved(dirs.Retention()))
+			u.Info(msg.RetentionSaved(dirs.Settings()))
 			return nil
 		},
 	}
@@ -78,34 +80,38 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 }
 
 // retentionShown is every retention setting as KEY=VALUE lines, in the
-// order devvm space shows them, off for one that isn't set.
-func retentionShown(r state.Retention) string {
+// order devvm space shows them, off for one that isn't set, each followed
+// by where it came from.
+func retentionShown(d paths.Dirs, r settings.Retention) string {
 	var b strings.Builder
-	for _, key := range state.RetentionKeys() {
-		b.WriteString(key + "=" + retentionValue(r, key) + "\n")
+	for _, key := range settings.RetentionKeys() {
+		b.WriteString(key + "=" + retentionValue(r, key) + " # " + r.Source(key).Label(d) + "\n")
 	}
 	return b.String()
 }
 
 // retentionValue is a retention setting's value as written, off when it
 // isn't set.
-func retentionValue(r state.Retention, key string) string {
+func retentionValue(r settings.Retention, key string) string {
 	if v := r.Raw[key]; v != "" {
 		return v
 	}
-	return state.RetainOff
+	return settings.RetainOff
 }
 
 // retentionOutput is devvm retention --json: every setting by its key,
-// with its value as written, off when it isn't set.
+// with its value as written, off when it isn't set, and where each came
+// from (a settings.Source).
 type retentionOutput struct {
 	Settings map[string]string `json:"settings"`
+	Sources  map[string]string `json:"sources"`
 }
 
-func retentionJSON(r state.Retention) retentionOutput {
-	out := retentionOutput{Settings: map[string]string{}}
-	for _, key := range state.RetentionKeys() {
+func retentionJSON(r settings.Retention) retentionOutput {
+	out := retentionOutput{Settings: map[string]string{}, Sources: map[string]string{}}
+	for _, key := range settings.RetentionKeys() {
 		out.Settings[key] = retentionValue(r, key)
+		out.Sources[key] = string(r.Source(key))
 	}
 	return out
 }
@@ -128,7 +134,7 @@ func (r retained) report() msg.M {
 // used files while it's over nix-cache.size (or its default). Never a VM,
 // an image, or a tool image any VM's state lists. logs.runs is the run
 // log's own (KeepRunLogs).
-func retain(ctx context.Context, u *ui.UI, b *build.Env, r state.Retention, orphans bool) (retained, error) {
+func retain(ctx context.Context, u *ui.UI, b *build.Env, r settings.Retention, orphans bool) (retained, error) {
 	var done retained
 	now := time.Now()
 	n, err := retainExports(b.Dirs, r, now)
@@ -154,7 +160,7 @@ func retain(ctx context.Context, u *ui.UI, b *build.Env, r state.Retention, orph
 
 // exportsToRetire are the exports history.age and history.count say to
 // delete: those that old, then all but the newest count.
-func exportsToRetire(es []savedExport, r state.Retention, now time.Time) []savedExport {
+func exportsToRetire(es []savedExport, r settings.Retention, now time.Time) []savedExport {
 	var gone []savedExport
 	keep := es
 	if r.ExportsAge > 0 {
@@ -173,7 +179,7 @@ func exportsToRetire(es []savedExport, r state.Retention, now time.Time) []saved
 	return gone
 }
 
-func retainExports(d paths.Dirs, r state.Retention, now time.Time) (int, error) {
+func retainExports(d paths.Dirs, r settings.Retention, now time.Time) (int, error) {
 	if r.ExportsAge == 0 && r.ExportsCount == 0 {
 		return 0, nil
 	}
@@ -261,11 +267,12 @@ func autoRetain(ctx context.Context, u *ui.UI) {
 	if err != nil {
 		return
 	}
-	r, err := state.ReadRetention(d)
+	def, err := settings.Read(d)
 	if err != nil {
 		u.Warn(msg.RetentionUnreadable().Because(err))
 		return
 	}
+	r := def.Retention
 	u.KeepRunLogs(r.RunLogs)
 	if r.Off() || !retainDue(d, time.Now()) {
 		return

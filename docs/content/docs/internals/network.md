@@ -166,7 +166,7 @@ The CA certificates in `~/.config/devvm/ca` ([a company's CA](../using/settings.
 
 ### Where secrets are saved
 
-On macOS, devvm saves a secret in the Keychain, under the service `devvm` and the account `claude` or `github`. It saves it through `security -i`, giving the value on its input, so the value is in no process's arguments. `DEVVM_SECRET_SERVICE` names another service, made of letters, digits, `.`, `_` and `-` only. On other systems, devvm saves a secret in `~/.config/devvm/secrets/<name>`, a file only you can read.
+On macOS, devvm saves a secret in the Keychain, under the service `devvm` and the account `claude` or `github`. It saves it through `security -i`, giving the value on its input, so the value is in no process's arguments. `DEVVM_SECRET_SERVICE` names another service, made of letters, digits, `.`, `_` and `-` only. On other systems, devvm saves a secret in `~/.local/share/devvm/secrets/<name>`, a file only you can read.
 
 ### How the proxy puts them in
 

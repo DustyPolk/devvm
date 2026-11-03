@@ -93,7 +93,7 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 		Use:   "add KEY_FILE",
 		Short: "Load a key into devvm's own SSH agent",
 		Long: "Load a private key into devvm's own SSH agent, starting the agent first, and record it in " +
-			"~/.config/devvm/agent-keys, so devvm loads it again when a VM needs it. " +
+			"~/.local/share/devvm/agent-keys.json, so devvm loads it again when a VM needs it. " +
 			"devvm refuses a key in a folder a VM mounts.",
 		Example: examples(
 			"devvm ssh-agent add ~/.ssh/deploy_key", "load a key for 12 hours at a time",
@@ -120,7 +120,7 @@ func newSSHAgentRmCmd(u *ui.UI) *cobra.Command {
 		Use:   "rm KEY_FILE",
 		Short: "Remove a key from devvm's own SSH agent",
 		Long: "Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from " +
-			"~/.config/devvm/agent-keys, so devvm doesn't load it again. " +
+			"~/.local/share/devvm/agent-keys.json, so devvm doesn't load it again. " +
 			"The key file stays as it is, and it needn't still exist.",
 		Example: examples(
 			"devvm ssh-agent rm ~/.ssh/deploy_key", "take the key out of devvm's own agent",

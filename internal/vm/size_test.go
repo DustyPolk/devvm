@@ -14,35 +14,11 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
+// Parse checks each size as its flag gives it, naming the flag.
 func TestParseSizes(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	for _, tc := range []struct{ in, want, err string }{
-		{"6", "6", ""},
-		{"1.5", "", `cpus_not_number value="1.5"`},
-		{"0", "", `cpus_not_number value="0"`},
-		{"many", "", `cpus_not_number value="many"`},
-	} {
-		got, err := ParseCPUs(tc.in)
-		if got != tc.want || msg.NamesOf(err) != tc.err {
-			t.Errorf("ParseCPUs(%q) = %q, %v", tc.in, got, msg.NamesOf(err))
-		}
-	}
-	for _, tc := range []struct{ in, want, err string }{
-		{"16", "16", ""},
-		{"16G", "16", ""},
-		{"16g", "16", ""},
-		{"200GiB", "200", ""},
-		{"1.5", "1.5", ""},
-		{"0.5", "0.5", ""},
-		{"0", "", `size_not_gib flag=--memory value="0"`},
-		{"16M", "", `size_not_gib flag=--memory value="16M"`},
-		{"lots", "", `size_not_gib flag=--memory value="lots"`},
-		{"1$(touch x)", "", `size_not_gib flag=--memory value="1$(touch x)"`},
-	} {
-		got, err := ParseGiB("--memory", tc.in)
-		if got != tc.want || msg.NamesOf(err) != tc.err {
-			t.Errorf("ParseGiB(%q) = %q, %v", tc.in, got, msg.NamesOf(err))
-		}
+	if _, err := (Size{CPUs: "1.5"}).Parse(); msg.NamesOf(err) != `cpus_not_number flag=--cpus value="1.5"` {
+		t.Errorf("Parse with bad CPUs: %v", msg.NamesOf(err))
 	}
 	s, err := Size{CPUs: "6", Memory: "12G", Disk: "150"}.Parse()
 	if err != nil || s != (Size{CPUs: "6", Memory: "12", Disk: "150"}) {
@@ -203,8 +179,15 @@ func TestSetSize(t *testing.T) {
 	if err := s.SetSize(t.Context(), Size{CPUs: "16"}, true); msg.NamesOf(err) != "too_many_cpus have=8 want=16" {
 		t.Errorf("-g --cpus 16: %s", msg.NamesOf(err))
 	}
-	if got, err := shown(true); err != nil || got != "cpus=2\nmemory=4\ndisk=\n" {
+	if got, err := shown(true); err != nil || got != "cpus=2 # devvm: settings.json\nmemory=4 # devvm: settings.json\ndisk= # devvm: default\n" {
 		t.Errorf("ShowSize -g = %q, %v", got, msg.NamesOf(err))
+	}
+	writeFile(t, e.Dirs.ConfigFile(), "[size]\ndisk = \"80GiB\"\n")
+	if got, err := shown(true); err != nil || !strings.HasSuffix(got, "disk=80 # "+e.Dirs.ConfigFile()+"\n") {
+		t.Errorf("ShowSize -g with config.toml's disk = %q, %v", got, msg.NamesOf(err))
+	}
+	if g, err := s.ShowSize(t.Context(), true); err != nil || g.Sources[KeyDisk] != "config.toml" || g.Sources[KeyCPUs] != "settings.json" {
+		t.Errorf("sources %v, %v", g.Sources, err)
 	}
 }
 
@@ -231,6 +214,7 @@ func TestDiskUsed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reg.DefaultBackend = fakeDefault
 	e.Registry = reg
 	var warned msg.Recorder
 	e.Warn = warned.Add

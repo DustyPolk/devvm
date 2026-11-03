@@ -35,7 +35,7 @@ Turn it on? [Y/n]
 
 `--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
 
-To answer the question for every new VM, save `on` or `off` with `devvm network -g on` or `devvm network -g off`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm makes each new VM that way without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, `on` or `off`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own network policy, and the two flags still choose for one new VM. devvm keeps the answer in `~/.config/devvm/network`, and when that file holds anything else, devvm names the file and refuses to create a VM without one of the flags.
+To answer the question for every new VM, save `on` or `off` with `devvm network -g on` or `devvm network -g off`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm makes each new VM that way without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, `on` or `off`, followed by where it came from after a `#`. `devvm network -g --json` prints it as `policy`, with `source`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own network policy, and the two flags still choose for one new VM. You can also set it with `network` in [`config.toml`](../using/settings.md#configtoml), which wins over the saved answer, and then `devvm network -g` refuses to change it and names the file ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
 
 Some VMs can't have network policy. Those are VMs on a backend that can't confine a VM to its proxy, such as a [Docker](../internals/docker.md#network-policy) engine on another machine, and Docker VMs with the [docker layer](../backends/docker.md#the-docker-layer). devvm doesn't ask about those, and it makes the VM without network policy and warns you. If you pass `--network-policy` for such a VM, devvm refuses before it builds anything, because it never starts a VM you asked network policy for with an open network. For the same reason, it refuses `devvm network on` for a VM on a backend that can't confine it to its proxy.
 
@@ -115,7 +115,15 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
 ### devvm network --json
 
-`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`. With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+
+```json
+{
+  "version": 1,
+  "policy": "on",
+  "source": "config.toml"
+}
+```
 
 ```json
 {
@@ -206,7 +214,7 @@ Agents' logins work the same way. When a VM's image has Codex or opencode and yo
 | `devvm secret use NAME` | lets this folder's VM use the secret |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |
 
-devvm saves a secret in the macOS Keychain, or elsewhere in `~/.config/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). It drops whitespace in a secret's value. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
+devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). It drops whitespace in a secret's value. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
 
 Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. A VM without network policy gets the real value instead.
 

@@ -10,6 +10,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -215,8 +216,8 @@ func TestAgentsChoice(t *testing.T) {
 	if err := c.Set([]string{"codex", "claude"}); err != nil {
 		t.Fatal(err)
 	}
-	if agents, _, _ := state.ReadAgents(e.Dirs); !slices.Equal(agents, []string{"claude", "codex"}) {
-		t.Errorf("saved %q", agents)
+	if def, _ := settings.Read(e.Dirs); !slices.Equal(def.Agents.Names, []string{"claude", "codex"}) {
+		t.Errorf("saved %q", def.Agents.Names)
 	}
 	for given, want := range map[string]string{
 		"claud":  "unknown_part_like flag=--agents given=claud like=claude",
@@ -236,11 +237,28 @@ func TestAgentsChoice(t *testing.T) {
 	if err := c.Ask(); err != nil {
 		t.Fatal(err)
 	}
-	if agents, set, _ := state.ReadAgents(e.Dirs); !set || len(agents) != 0 {
-		t.Errorf("saved %q, %v", agents, set)
+	if def, _ := settings.Read(e.Dirs); !def.Agents.Chosen || len(def.Agents.Names) != 0 {
+		t.Errorf("saved %+v", def.Agents)
 	}
 	if !slices.Equal(said.Names(), []string{"default_agents agents=claude codex", "default_agents_none"}) {
 		t.Errorf("said %q", said.Names())
+	}
+	// config.toml's agents: Set is refused, Ask says so and asks nothing.
+	if err := os.MkdirAll(e.Dirs.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(e.Dirs.ConfigFile(), []byte("agents = [\"codex\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Set([]string{"claude"}); msg.NamesOf(err) != "set_in_config file="+e.Dirs.ConfigFile()+" key=agents" {
+		t.Errorf("Set with config.toml's: %v", msg.NamesOf(err))
+	}
+	c.Pick = func(msg.M, []PickPart) []PickPart { t.Error("asked"); return nil }
+	if err := c.Ask(); err != nil {
+		t.Fatal(err)
+	}
+	if got := said.Names()[len(said.Names())-1]; got != "setup_in_config file="+e.Dirs.ConfigFile()+" key=agents" {
+		t.Errorf("said %q", got)
 	}
 }
 

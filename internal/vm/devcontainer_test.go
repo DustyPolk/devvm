@@ -15,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -64,7 +65,7 @@ func TestUpDevcontainer(t *testing.T) {
 		"onCreateCommand": ["touch", "x"],
 		"postStartCommand": "echo hi",
 	}`)
-	if err := state.WritePorts(e.Dirs, "5173"); err != nil {
+	if _, err := settings.Save(e.Dirs, settings.Values{Ports: settings.Of("5173")}); err != nil {
 		t.Fatal(err)
 	}
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
@@ -223,7 +224,7 @@ func TestChooseNet(t *testing.T) {
 			e.Proxy.Note = func(msg.M) {}
 			e.Proxy.Confirm = func(msg.M) bool { asked = true; return tc.answer }
 			o := tc.o
-			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v")
+			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v", settings.NetworkAsk)
 			got := fmt.Sprint(on)
 			if err != nil {
 				got = msg.NamesOf(err)
@@ -235,11 +236,10 @@ func TestChooseNet(t *testing.T) {
 	}
 }
 
-// What devvm network -g or devvm setup saved: off makes a new VM without network policy,
-// unasked and unwarned even where it couldn't have it; on gives it
-// unasked, and a VM that can't have it is still made without it and
-// warned; either flag beats it, and with one a file that can't be read
-// isn't read.
+// The default (config.toml's, devvm network -g's or devvm setup's): off
+// makes a new VM without network policy, unasked and unwarned even where
+// it couldn't have it; on gives it unasked, and a VM that can't have it
+// is still made without it and warned; either flag beats it.
 func TestChooseNetSaved(t *testing.T) {
 	noEgress := allNative()
 	delete(noEgress, backend.FeatureEgressProxy)
@@ -261,9 +261,6 @@ func TestChooseNetSaved(t *testing.T) {
 		{"on, docker layer", "on", Options{}, nil, true, "false", "net_off_docker_layer backend=fake vm=v"},
 		{"on, no egress-proxy", "on", Options{}, noEgress, false, "false", "net_off_backend backend=fake vm=v"},
 		{"ask", "ask", Options{}, nil, false, "true", ""},
-		{"unknown", "maybe", Options{}, nil, false, "error", ""},
-		{"unknown, --network-policy", "maybe", Options{NetworkPolicy: true}, nil, false, "true", ""},
-		{"unknown, --no-network-policy", "maybe", Options{NoNetworkPolicy: true}, nil, false, "false", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caps := tc.caps
@@ -271,24 +268,18 @@ func TestChooseNetSaved(t *testing.T) {
 				caps = allNative()
 			}
 			e, f, _ := upEnv(t, caps)
-			if err := os.MkdirAll(e.Dirs.Config, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(e.Dirs.Network(), []byte(tc.saved+"\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
 			asked, warned := false, ""
 			e.Warn = func(m msg.M) { warned += m.Names() }
 			e.Proxy.Terminal = func() bool { return true }
 			e.Proxy.Note = func(msg.M) {}
 			e.Proxy.Confirm = func(msg.M) bool { asked = true; return true }
 			o := tc.o
-			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v")
+			on, err := creation{Launch{e}}.chooseNet(&o, tc.dockerVM, f, "v", tc.saved)
 			got := fmt.Sprint(on)
 			if err != nil {
 				got = "error"
 			}
-			if got != tc.want || warned != tc.warned || asked != (tc.saved == state.NetworkAsk) {
+			if got != tc.want || warned != tc.warned || asked != (tc.saved == settings.NetworkAsk) {
 				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (warned %q)", got, asked, warned, tc.want, tc.warned)
 			}
 		})

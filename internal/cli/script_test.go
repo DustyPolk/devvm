@@ -261,11 +261,14 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	for name, dir := range scriptFolders(root) {
 		env.Setenv(name, dir)
 	}
-	// Base's features are chosen (none), so nothing asks.
-	if err := os.MkdirAll(filepath.Join(root, "config", "devvm"), 0o700); err != nil {
-		return err
+	// Base's features are chosen (none), as devvm setup saves them, so
+	// nothing asks.
+	for _, dir := range []string{filepath.Join(root, "config", "devvm"), filepath.Join(root, "data", "devvm")} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
 	}
-	if err := os.WriteFile(filepath.Join(root, "config", "devvm", "base-features"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "data", "devvm", "settings.json"), []byte(`{"features": []}`+"\n"), 0o600); err != nil {
 		return err
 	}
 	// Ubuntu's cloud images: the pinned dated release in a folder, with the

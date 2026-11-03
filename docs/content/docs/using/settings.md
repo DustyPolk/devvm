@@ -3,41 +3,97 @@ title: Settings and files
 weight: 11
 ---
 
-devvm writes nothing into your project folders. It keeps your settings in `~/.config/devvm` and its own state in `~/.local/share/devvm`, and it reads a few environment variables. [Overview](../internals/overview.md#state-files) describes the state files in full.
+devvm writes nothing into your project folders. It keeps the settings you edit in `~/.config/devvm` and everything it writes itself in `~/.local/share/devvm`, and it reads a few environment variables. [Overview](../internals/overview.md#state-files) describes the state files in full.
 
 ## Your settings
 
-`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds your settings. Each file has a command that writes it, and you can also edit the files yourself.
+`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file there. It reads `config.toml` and your own layers, features and CAs, it creates a new layer's files when you run `devvm layer new`, and it changes single lines of `policy` when you add or remove a rule for every VM.
 
 | File | What it holds | Written by |
 | --- | --- | --- |
-| `base-features` | the [features](customizing.md#choosing-features) that base gets, one name per line | `devvm setup` |
-| `backend` | the [default backend](../backends/_index.md#choosing-a-backend) for new VMs | `devvm setup` |
-| `size` | the [size](ports-size.md#size-and-ports) of new VMs | `devvm size -g`, `devvm setup` |
-| `network` | the [network policy](../safety/network.md) that new VMs get: `ask`, `on` or `off` ([devvm setup](#devvm-setup)) | `devvm network -g`, `devvm setup` |
-| `agents` | the [coding agents](#coding-agents-for-new-vms) that new VMs get, space-separated, or `none` | `devvm setup` |
-| `ports` | the [ports](ports-size.md#size-and-ports) that new VMs forward | `devvm ports -g` |
-| `retention` | what devvm deletes on its own, and after how long ([retention](#retention)) | `devvm retention` |
-| `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g` |
-| `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new` |
+| `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save ([config.toml](#configtoml)) | you |
+| `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
+| `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
-| `agent-keys` | the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options | `devvm ssh-agent add` |
-| `ssh_config`, `known_hosts` | the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys | devvm, on each launch and stop |
 
-On Linux hosts, devvm also keeps your [secrets](../safety/network.md#saving-and-binding-secrets) in files under `~/.config/devvm/secrets/`, which only you can read. On macOS they're in the Keychain.
+Edit the files in `~/.config/devvm`, and never edit the ones in `~/.local/share/devvm`. devvm writes those itself and rewrites them whole, so a change you make there can be lost, or can stop devvm from reading the file. To set a default by hand, put it in `config.toml` instead.
 
-Upgrading devvm keeps this folder as it is. Back it up to keep your settings, layers and features, and keep in mind that on Linux hosts it holds your secrets.
+Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles repo, to keep your settings, layers and features.
+
+## config.toml
+
+`~/.config/devvm/config.toml` sets the defaults that new VMs get, and the retention settings, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
+
+```toml
+# The backend new VMs get: lima, smolvm or docker.
+backend = "lima"
+
+# Whether new VMs get network policy: ask, on or off.
+network = "on"
+
+# The ports new VMs forward: all, none, or ports and ranges.
+ports = "5173,8000-8010"
+
+# The features base gets, in the order they run, or [] for none.
+features = ["cli-tools", "fzf", "omb"]
+
+# The coding agents new VMs get, or [] for none.
+agents = ["claude", "codex"]
+
+# New VMs' CPUs, and their memory and disk in GiB.
+[size]
+cpus = 4
+memory = 8
+disk = 100
+
+# What devvm deletes on its own, with the keys devvm retention takes.
+[retention]
+logs.runs = 20
+history.age = "90d"
+history.count = 10
+tools.unused-age = "30d"
+orphans.age = "30d"
+nix-cache.size = "20G"
+```
+
+Each key takes what its command takes. `backend` is the [default backend](../backends/_index.md#choosing-a-backend), as `devvm setup --backend` sets it, and `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, and `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
+
+### Where a default comes from
+
+For each default, devvm uses the first of these that sets it:
+
+1. A flag for one VM, such as `--ports` or `--backend`.
+2. `config.toml`.
+3. What devvm's commands saved: `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save in `~/.local/share/devvm/settings.json`.
+4. devvm's own default.
+
+A command that would save a default that `config.toml` sets refuses, names the file and the key, and changes nothing, because the value in `config.toml` would still win. To change that default, edit it in `config.toml`, or delete it there to let devvm's commands set it again. In a terminal, `devvm setup` doesn't ask about what `config.toml` sets, and it says so.
+
+`devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` show where each value came from, after a `#`. They show `config.toml`'s path for a value from `config.toml`, `devvm: settings.json` for one that a command saved, and `devvm: default` for devvm's own:
+
+```sh
+$ devvm ports -g
+5173,8000-8010 # /Users/you/.config/devvm/config.toml
+$ devvm network -g
+ask # devvm: default
+```
+
+With `--json`, the same commands add `source`, or `sources` for each value of `devvm size -g` and `devvm retention`, which is `config.toml`, `settings.json` or `built-in`. `devvm doctor` names the file that sets the backend it checks, and its `--json` has `backend_source`, which is `flag` for `--backend`.
+
+### When devvm can't read it
+
+devvm reads all of `config.toml` each time it needs a default, and it checks every key and value. A key it doesn't know, such as a typo, a value that a key can't take, and a file that isn't TOML each stop the command, and devvm names the file and the line. Fix the line, and run the command again. A `backend` that names a backend devvm doesn't have stops the command that picks a new VM's backend, and devvm names the file and lists the backends it has.
 
 ## devvm setup
 
-`devvm setup` chooses what new VMs get. In a terminal, it asks five questions, each starting from the current choice, and saves each answer where the command for that setting saves it:
+`devvm setup` chooses what new VMs get. In a terminal, it asks five questions, each starting from the current choice, and saves each answer in `~/.local/share/devvm/settings.json`, as the command for that setting saves it. It skips a question that [`config.toml`](#configtoml) answers, saying so, and it refuses a flag that would change what `config.toml` sets.
 
-1. The [default backend](../backends/_index.md#choosing-a-backend) for new VMs, saved in `backend`.
-2. The [features](customizing.md#choosing-features) that base gets, saved in `base-features`.
-3. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, saved in `size`, as `devvm size -g` saves them.
-4. The [network policy](../safety/network.md) that new VMs get, saved in `network`, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
-5. The [coding agents](#coding-agents-for-new-vms) that new VMs get, saved in `agents`.
+1. The [default backend](../backends/_index.md#choosing-a-backend) for new VMs.
+2. The [features](customizing.md#choosing-features) that base gets.
+3. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, as `devvm size -g` saves them.
+4. The [network policy](../safety/network.md) that new VMs get, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
+5. The [coding agents](#coding-agents-for-new-vms) that new VMs get.
 
 ```sh
 devvm setup                          # asks all five questions
@@ -59,7 +115,7 @@ devvm asks for them on its first run in a terminal, together with the size and b
 
 devvm keeps what it makes until you delete it, and the retention settings tell it to delete some of it on its own. Every setting is off until you set it, so first run `devvm space` to see what each one would free: its `RETAIN` column shows each setting that's on, beside the row it applies to, with what it would delete now ([devvm space](space.md#devvm-space)).
 
-`devvm retention` shows every setting and its value, and `off` for each one that isn't set. `devvm retention KEY=VALUE...` sets them, and `devvm retention KEY=off` turns one off, for example `devvm retention history.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know, and a key with no value such as `history.age=`, and then it writes nothing. The settings are `key=value` lines in `~/.config/devvm/retention`, and when a line can't be read, devvm names the file and the line and applies none of them.
+`devvm retention` shows every setting and its value, and `off` for each one that isn't set. `devvm retention KEY=VALUE...` sets them, and `devvm retention KEY=off` turns one off, for example `devvm retention history.age=90d tools.unused-age=30d`. devvm refuses a key or value it doesn't know, and a key with no value such as `history.age=`, and then it writes nothing. devvm saves the settings in `~/.local/share/devvm/settings.json`. The `[retention]` table of [`config.toml`](#configtoml) sets them too, and a setting there wins over the saved one, so `devvm retention` refuses to change it. Each line that `devvm retention` shows ends with where its value came from, after a `#`. When devvm can't read a file that sets them, it names the file, and the line for `config.toml`, and applies none of them.
 
 | Key | What devvm deletes |
 | --- | --- |
@@ -74,7 +130,7 @@ Ages are [durations](../getting-started/commands.md#flags-and-values), a whole n
 
 ### devvm retention --json
 
-`devvm retention --json` prints the settings as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `settings` has every key with its value as you wrote it, and `off` for each one that isn't set. With `--json` the command only shows, so devvm refuses a `KEY=VALUE` with it.
+`devvm retention --json` prints the settings as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `settings` has every key with its value as you wrote it, and `off` for each one that isn't set. `sources` has every key with where its value came from: `config.toml`, `settings.json` for one that `devvm retention` saved, or `built-in` for one that's off. With `--json` the command only shows, so devvm refuses a `KEY=VALUE` with it.
 
 ```json
 {
@@ -86,6 +142,14 @@ Ages are [durations](../getting-started/commands.md#flags-and-values), a whole n
     "nix-cache.size": "off",
     "orphans.age": "off",
     "tools.unused-age": "30d"
+  },
+  "sources": {
+    "history.age": "config.toml",
+    "history.count": "built-in",
+    "logs.runs": "built-in",
+    "nix-cache.size": "built-in",
+    "orphans.age": "built-in",
+    "tools.unused-age": "settings.json"
   }
 }
 ```
@@ -116,15 +180,19 @@ A CA in the folder can read every TLS connection a VM makes, as it can this mach
 
 ## devvm's state
 
-`~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) holds what devvm makes and keeps for you:
+`~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) holds what devvm makes and keeps for you. devvm writes everything in it, so don't edit it by hand:
 
+- `settings.json`, the defaults that `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save, below [`config.toml`](#configtoml)'s;
+- `ssh_config` and `known_hosts`, the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys, which devvm writes on each launch and stop;
+- `agent-keys.json`, the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options, which `devvm ssh-agent add` and `rm` write;
+- on Linux hosts, your [secrets](../safety/network.md#saving-and-binding-secrets), in files under `secrets/` that only you can read (on macOS they're in the Keychain);
 - each VM's state, its own allowlist and its network logs;
 - the images and their records, and the shared tools;
 - the [run logs](troubleshooting.md#a-command-fails) in `logs/runs/`;
 - the agents' history that `devvm history export` and `devvm rm` save, in `exports/`;
 - devvm's own Lima home (`lima/`), where the Lima backend's VMs and images live.
 
-[What devvm keeps on this machine](space.md) lists everything in this folder, with how each is cleaned up.
+[What devvm keeps on this machine](space.md) lists everything in this folder, with how each is cleaned up. On Linux hosts this folder holds your secrets, so keep that in mind when you back it up.
 
 devvm's Lima home is its own, whatever `LIMA_HOME` says, so Lima settings meant for other VMs never reach devvm's. Set `DEVVM_LIMA_HOME` to move it, for example to a sandbox or to a shorter path.
 

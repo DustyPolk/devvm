@@ -34,6 +34,7 @@ func layerEnv(t *testing.T, caps backend.Caps, runtime string) (*Env, *backendte
 	if err != nil {
 		t.Fatal(err)
 	}
+	reg.DefaultBackend = fakeDefault
 	e.Registry = reg
 	said := &msg.Recorder{}
 	e.Warn = said.Add

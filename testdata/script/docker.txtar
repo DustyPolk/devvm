@@ -216,11 +216,11 @@ stdout '^ssh -F none -M -S \S+/data/devvm/run/docker-[0-9a-f]{16}\.ctl -T .* -o 
 stdout '^ssh -F none -T -o ControlMaster=no -o ControlPath=none .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* -o ProxyCommand=.* -l \S+ devvm-emu-[0-9a-f]{14} cd -- ''\S+/emu'' && exec bash -l$'
 catg $DATA/docker/vms/devvm-emu-*.ports.log
 stdout '^devvm ports: port '$PORT': forwarded$'
-grep '^Host devvm-emu devvm-emu-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  ProxyCommand ''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}''$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
-! grep '^  Port ' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^devvm-emu-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/known_hosts
+grep '^Host devvm-emu devvm-emu-[0-9a-f]{14}$' $DATA/ssh_config
+grep '^  ProxyCommand ''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}''$' $DATA/ssh_config
+grep '^  ForwardAgent yes$' $DATA/ssh_config
+! grep '^  Port ' $DATA/ssh_config
+grep '^devvm-emu-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $DATA/known_hosts
 exec devvm host
 stdout '^ssh_host_info dir=\S+/emu host=devvm-emu$'
 
@@ -233,14 +233,14 @@ stub_reset
 exec devvm
 stub_calls
 stdout '^ssh -F none -T .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* cd -- ''\S+/emu'' && exec bash -l$'
-grep '^  ForwardAgent yes$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  ForwardAgent yes$' $DATA/ssh_config
 exec devvm stop
 ! exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-" | grep -F -- "-key $XDG_DATA_HOME/devvm/"'
 stub_reset
 exec devvm
 stub_calls
 stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- ''\S+/emu'' && exec bash -l$'
-grep '^  ForwardAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^  ForwardAgent no$' $DATA/ssh_config
 
 # Listed ports: through the forwarder too, those alone; one a program on
 # this machine has is left out, warned.
@@ -267,7 +267,7 @@ stdout ' -only '$PORT'$'
 # rm deletes its forwarder, its keys and its entry.
 exec devvm rm --force --no-export
 ! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*'
-! grep devvm-emu $XDG_CONFIG_HOME/devvm/ssh_config
+! grep devvm-emu $DATA/ssh_config
 rm $STUB_DIR/guest-ports
 
 # On Docker Desktop builds' confinement is emulated, and reviewed, as its

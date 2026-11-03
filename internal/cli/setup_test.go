@@ -1,16 +1,15 @@
 package cli
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -54,7 +53,7 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 		pickOne: func(help msg.M, cs []ui.Choice) int {
 			if help.ID() == "network_default_help" {
 				sized = append(sized, pickedNetwork(cs))
-				return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == state.NetworkOff })
+				return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == settings.NetworkOff })
 			}
 			if a != nil {
 				t.Error("asked for the backend twice")
@@ -74,6 +73,24 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 	return s, d, func() *asked { return a }, &sized
 }
 
+// defaults reads the defaults in effect in d.
+func defaults(t *testing.T, d paths.Dirs) settings.Defaults {
+	t.Helper()
+	def, err := settings.Read(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return def
+}
+
+// save saves a default as devvm's commands do.
+func save(t *testing.T, d paths.Dirs, v settings.Values) {
+	t.Helper()
+	if _, err := settings.Save(d, v); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // devvm setup --agents sets new VMs' agents without asking, none for
 // none; in a terminal without flags, it asks for them last.
 func TestSetupAgents(t *testing.T) {
@@ -85,8 +102,8 @@ func TestSetupAgents(t *testing.T) {
 		if err := s.run(setupChoice{agents: partFlag(tc.value)}); err != nil {
 			t.Fatal(err)
 		}
-		if got, set, _ := state.ReadAgents(d); !set || !slices.Equal(got, tc.want) {
-			t.Errorf("--agents %s: saved %q, %v", tc.value, got, set)
+		if got := defaults(t, d).Agents; !got.Chosen || !slices.Equal(got.Names, tc.want) {
+			t.Errorf("--agents %s: saved %+v", tc.value, got)
 		}
 	}
 	if len(*asked) > 0 {
@@ -98,7 +115,7 @@ func TestSetupAgents(t *testing.T) {
 	if n := len(*asked); n == 0 || (*asked)[n-1] != "agents_help" {
 		t.Errorf("asked %q, want agents_help last", *asked)
 	}
-	if got, _, _ := state.ReadAgents(d); !slices.Equal(got, []string{"claude"}) {
+	if got := defaults(t, d).Agents.Names; !slices.Equal(got, []string{"claude"}) {
 		t.Errorf("saved %q", got)
 	}
 }
@@ -120,9 +137,7 @@ func pickedNetwork(cs []ui.Choice) string {
 // The network picker starts from the network policy saved for new VMs.
 func TestSetupNetworkStartsFromSaved(t *testing.T) {
 	s, d, _, picked := setupSandbox(t, true, "lima")
-	if err := state.WriteNetwork(d, state.NetworkOn); err != nil {
-		t.Fatal(err)
-	}
+	save(t, d, settings.Values{Network: settings.Of(settings.NetworkOn)})
 	if err := s.run(setupChoice{}); err != nil {
 		t.Fatal(err)
 	}
@@ -130,19 +145,18 @@ func TestSetupNetworkStartsFromSaved(t *testing.T) {
 	if !slices.Contains(*picked, want) {
 		t.Errorf("pickers %q, want %q", *picked, want)
 	}
-	if mode, err := state.ReadNetwork(d); err != nil || mode != state.NetworkOff {
-		t.Errorf("network policy for new VMs %q, %v", mode, err)
+	if mode := defaults(t, d).Network; mode != (settings.Value{Value: settings.NetworkOff, Source: settings.FromSettings}) {
+		t.Errorf("network policy for new VMs %+v", mode)
 	}
 }
 
-// readBackend is the default backend file's name, "" without one.
-func readBackend(t *testing.T, d paths.Dirs) string {
+// savedBackend is the default backend devvm saved, "" without one.
+func savedBackend(t *testing.T, d paths.Dirs) string {
 	t.Helper()
-	name, err := state.ReadBackend(d)
-	if err != nil {
-		t.Fatal(err)
+	if v := defaults(t, d).Backend; v.Source == settings.FromSettings {
+		return v.Value
 	}
-	return name
+	return ""
 }
 
 // In a terminal, setup with neither flag asks for the backend (starting
@@ -155,11 +169,11 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 		terminal bool
 		flag     string
 		features *string
-		current  string // the default backend file's; "" for none
+		current  string // the default backend saved; "" for none
 		ask      bool
-		want     string // the default backend file's afterwards
+		want     string // the default backend saved afterwards
 		start    string // the choice the picker starts on
-		chosen   bool   // base-features written
+		chosen   bool   // base's features chosen
 	}{
 		{name: "a terminal, nothing set", terminal: true, ask: true, start: "lima", want: "smolvm", chosen: true},
 		{name: "a terminal, smolvm set", terminal: true, current: "smolvm", ask: true, start: "smolvm", want: "smolvm", chosen: true},
@@ -171,9 +185,7 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s, d, shown, sized := setupSandbox(t, tc.terminal, "smolvm")
 			if tc.current != "" {
-				if err := state.WriteBackend(d, tc.current); err != nil {
-					t.Fatal(err)
-				}
+				save(t, d, settings.Values{Backend: &tc.current})
 			}
 			if err := s.run(setupChoice{features: tc.features, backend: tc.flag}); err != nil {
 				t.Fatal(err)
@@ -189,11 +201,12 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 			if !slices.Equal(*sized, wantSized) {
 				t.Errorf("size prompts and network pickers %q, want %q", *sized, wantSized)
 			}
-			if mode, err := state.ReadNetwork(d); err != nil || mode != map[bool]string{true: state.NetworkOff, false: state.NetworkAsk}[tc.ask] {
-				t.Errorf("network policy for new VMs %q, %v", mode, err)
+			def := defaults(t, d)
+			if mode := def.Network.Value; mode != map[bool]string{true: settings.NetworkOff, false: settings.NetworkAsk}[tc.ask] {
+				t.Errorf("network policy for new VMs %q", mode)
 			}
-			if _, err := os.Stat(d.Size()); !errors.Is(err, fs.ErrNotExist) {
-				t.Errorf("Enter wrote the size file: %v", err)
+			if def.CPUs.Source != settings.FromBuiltin || def.Memory.Source != settings.FromBuiltin {
+				t.Errorf("Enter saved a size: %+v %+v", def.CPUs, def.Memory)
 			}
 			if a := shown(); (a != nil) != tc.ask {
 				t.Fatalf("asked %v, want %v", a != nil, tc.ask)
@@ -207,13 +220,46 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 					t.Errorf("shown %q %+v, want backend_help %+v", a.help, a.choices, want)
 				}
 			}
-			if got := readBackend(t, d); got != tc.want {
+			if got := savedBackend(t, d); got != tc.want {
 				t.Errorf("default backend %q, want %q", got, tc.want)
 			}
-			_, err := os.Stat(d.BaseFeatures())
-			if written := !errors.Is(err, fs.ErrNotExist); written != tc.chosen {
-				t.Errorf("base-features written %v, want %v", written, tc.chosen)
+			if def.Features.Chosen != tc.chosen {
+				t.Errorf("base's features chosen %v, want %v", def.Features.Chosen, tc.chosen)
 			}
 		})
+	}
+}
+
+// What config.toml sets, devvm setup doesn't ask for, saying so, and its
+// flags can't choose (set_in_config); it still asks for the rest.
+func TestSetupConfigSets(t *testing.T) {
+	s, d, shown, sized := setupSandbox(t, true, "smolvm")
+	u, said, _ := testUI()
+	s.ui = u
+	config := "backend = \"docker\"\nnetwork = \"on\"\nfeatures = []\nagents = [\"codex\"]\n[size]\ncpus = 2\n"
+	if err := os.MkdirAll(d.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(d.ConfigFile(), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.run(setupChoice{}); err != nil {
+		t.Fatal(err)
+	}
+	if shown() != nil || !slices.Equal(*sized, []string{"size_memory_prompt memory=8"}) {
+		t.Errorf("asked %+v, %q", shown(), *sized)
+	}
+	for _, key := range []string{"backend", "features", "size.cpus", "network", "agents"} {
+		if want := "setup_in_config file=" + d.ConfigFile() + " key=" + key; !strings.Contains(said.String(), want) {
+			t.Errorf("said\n%s\nwant %s", said, want)
+		}
+	}
+	if _, err := os.Stat(d.Settings()); err == nil {
+		t.Error("saved settings.json")
+	}
+	for _, c := range []setupChoice{{backend: "lima"}, {features: &[]string{"none"}[0]}, {agents: partFlag("claude")}} {
+		if err := s.run(c); msg.IDOf(err) != "set_in_config" {
+			t.Errorf("%+v: %v", c, msg.NamesOf(err))
+		}
 	}
 }

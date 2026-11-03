@@ -25,7 +25,7 @@ stub_calls
 stdout '^limactl clone .* --set \.ssh\.forwardAgent=false '
 exec sh -c 'cat "$STUB_DIR"/start-agent-devvm-web-* "$STUB_DIR/shell-agent"'
 stdout '\Aunset\nunset\n\z'
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^  ForwardAgent no$'
 ! stdout IdentityAgent
 exec devvm ssh-agent
@@ -52,7 +52,7 @@ stdout '^limactl clone .* --set \.ssh\.forwardAgent=true '
 stdout '^ssh-add -l SOCK=\S*/user\.sock$'
 exec sh -c 'cat "$STUB_DIR"/start-agent-devvm-fwd-* "$STUB_DIR/shell-agent"'
 stdout '\A\S*/user\.sock\n\S*/user\.sock\n\z'
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^Host devvm-fwd devvm-fwd-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent yes\n'
 ! stdout IdentityAgent
 exec devvm ssh-agent
@@ -67,15 +67,16 @@ stub_reset
 exec devvm ssh-agent add $WORK/keys/deploy
 stdout '^==> agent_holds keys=deploy$'
 stderr '^agent_holds_note$'
-exec sh -c 'cat "$CFG/agent-keys"'
-stdout '\A\S*/keys/deploy\tSHA256:fp-deploy\t\n\z'
+exec sh -c 'cat "$DATA/agent-keys.json"'
+stdout '^      "file": "\S*/keys/deploy",\n      "fingerprint": "SHA256:fp-deploy"\n    }\n'
+! stdout 'lifetime|confirm'
 stub_calls
 stdout '^ssh-agent -a \S*/data/devvm/agent\.sock$'
 stdout '^ssh-add -t 12h key:deploy$'
 ! stdout 'user\.sock'
 exec devvm ssh-agent add $WORK/keys/deploy --lifetime 30m
-exec sh -c 'cat "$CFG/agent-keys"'
-stdout '\A\S*/keys/deploy\tSHA256:fp-deploy\tlifetime=30m\n\z'
+exec sh -c 'cat "$DATA/agent-keys.json"'
+stdout '^      "fingerprint": "SHA256:fp-deploy",\n      "lifetime": "30m"\n'
 exec devvm ssh-agent add $WORK/keys/deploy
 ! exec devvm ssh-agent add $WORK/keys/none
 stderr '^devvm: agent_key_not_found key=\S*/keys/none$'
@@ -84,8 +85,8 @@ stderr '^devvm: bad_duration value=soon$'
 ! exec devvm ssh-agent add $WORK/keys/deploy --lifetime ''
 stderr '^devvm: flag_blank flag=lifetime$'
 exec devvm ssh-agent add $WORK/keys/deploy --lifetime 2w
-exec sh -c 'cat "$CFG/agent-keys"'
-stdout 'lifetime=2w\n\z'
+exec sh -c 'cat "$DATA/agent-keys.json"'
+stdout '"lifetime": "2w"\n'
 exec devvm ssh-agent add $WORK/keys/deploy
 env SSH_ASKPASS=
 ! exec devvm ssh-agent add $WORK/keys/deploy --confirm
@@ -118,12 +119,12 @@ exec devvm
 stderr '^devvm: agent_next_start vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$STUB_DIR/shell-agent"'
 stdout '\Aunset\n\z'
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 cd $WORK/fwd
 exec devvm
 cd $WORK/web
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 stdout '^Host devvm-fwd devvm-fwd-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent yes\n'
 ! stdout IdentityAgent
@@ -141,7 +142,7 @@ stdout '^ssh-agent -a \S*/data/devvm/agent\.sock$'
 stdout '^ssh-add -t 12h key:deploy$'
 exec sh -c 'cat "$STUB_DIR"/start-agent-devvm-web-* "$STUB_DIR/shell-agent"'
 stdout '\A\S*/data/devvm/agent\.sock\n\S*/data/devvm/agent\.sock\n\z'
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent "\S*/data/devvm/agent\.sock"\n  ControlMaster no\n  ControlPath none\n  IdentityAgent "\S*/data/devvm/agent\.sock"\n'
 
 # Off again: from its next start; until then devvm's connections and its
@@ -152,12 +153,12 @@ stdout '^==> agent_set_running mode=off vm=devvm-web-[0-9a-f]{14}$'
 exec devvm
 exec sh -c 'cat "$STUB_DIR/shell-agent"'
 stdout '\A\S*/data/devvm/agent\.sock\n\z'
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent "\S*/data/devvm/agent\.sock"\n'
 exec devvm restart
 exec sh -c 'cat "$STUB_DIR/shell-agent"'
 stdout '\Aunset\n\z'
-exec sh -c 'cat "$CFG/ssh_config"'
+exec sh -c 'cat "$DATA/ssh_config"'
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 
 # devvm ssh-agent rm: the key out of devvm's agent and agent-keys, found
@@ -165,15 +166,16 @@ stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 # refused, and changes nothing.
 ! exec devvm ssh-agent rm $WORK/keys/none
 stderr '^devvm: agent_key_not_recorded key=\S*/keys/none$'
-exec sh -c 'cat "$CFG/agent-keys"'
+exec sh -c 'cat "$DATA/agent-keys.json"'
 stdout 'keys/deploy'
 stub_reset
 exec devvm ssh-agent rm $WORK/keys/deploy
 stdout '^==> agent_key_removed key=\S*/keys/deploy$'
 stub_calls
 stdout '^ssh-add -d key:deploy$'
-exec sh -c 'cat "$CFG/agent-keys"'
-! stdout .
+exec sh -c 'cat "$DATA/agent-keys.json"'
+stdout '"keys": \[\]'
+! stdout deploy
 exists $WORK/keys/deploy
 exec sh -c 'cat "$STUB_DIR/agent-held"'
 ! stdout deploy

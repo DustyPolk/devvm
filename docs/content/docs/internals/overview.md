@@ -96,10 +96,14 @@ On the way up, devvm also notes the nearest folder below the parent's that has a
 
 ## State files
 
-devvm writes nothing into the project folder. It keeps your settings in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), which [your settings](../using/settings.md#your-settings) lists file by file, and its own state in `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`):
+devvm writes nothing into the project folder. It keeps what you edit in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), which [your settings](../using/settings.md#your-settings) lists file by file, and everything it writes itself in `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`):
 
 | Path in `~/.local/share/devvm` | Holds |
 | --- | --- |
+| `settings.json` | the defaults devvm's commands save, below `config.toml`'s ([where a default comes from](../using/settings.md#where-a-default-comes-from)) |
+| `ssh_config`, `known_hosts` | the [ssh config](security.md#ssh-into-vms) for running VMs, and their pinned host keys |
+| `agent-keys.json` | the keys added to [devvm's own SSH agent](../using/ssh.md#devvms-own-agent): each one's file, fingerprint, `confirm` and `lifetime` |
+| `secrets/` | on hosts without a Keychain, each [secret](network.md#where-secrets-are-saved) in a file of its own |
 | `vms/<vm-name>` | each VM's state |
 | `images/<key>/record.json` | each image's record |
 | `images/rebuilds.json` | the [rebuild counters](images.md#rebuilding), by backend, `--from` and image |
@@ -122,4 +126,4 @@ devvm writes nothing into the project folder. It keeps your settings in `~/.conf
 
 A VM's state file records the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. The file lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
 
-Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600), and the programs it keeps to run, such as its mise and QEMU wrapper, are mode 700, as are its folders. Before every command, devvm makes the data folder and `~/.config/devvm` when they're missing and sets both to mode 700, whatever mode they had. A wider mode on anything beneath them then opens nothing to others, and when devvm can't set a folder's mode, it warns and goes on. The folders that hold history, logs, keys or secrets (`exports/`, `logs/`, `logs/runs/`, `run/`, `ca/` and `~/.config/devvm/secrets/`) are set to mode 700 again whenever devvm writes an export, a log, a key or a secret into them, whatever mode they had before. devvm refuses to use one of those folders when it's a symbolic link or not a folder at all, so it never sets the mode of whatever a link points to. The data folder and `~/.config/devvm` may be symbolic links, such as into a dotfiles repo, and devvm follows them. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.
+Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600), and the programs it keeps to run, such as its mise and QEMU wrapper, are mode 700, as are its folders. Before every command, devvm makes the data folder and `~/.config/devvm` when they're missing and sets both to mode 700, whatever mode they had. A wider mode on anything beneath them then opens nothing to others, and when devvm can't set a folder's mode, it warns and goes on. The folders that hold history, logs, keys or secrets (`exports/`, `logs/`, `logs/runs/`, `run/`, `ca/` and `secrets/`) are set to mode 700 again whenever devvm writes an export, a log, a key or a secret into them, whatever mode they had before. devvm refuses to use one of those folders when it's a symbolic link or not a folder at all, so it never sets the mode of whatever a link points to. The data folder and `~/.config/devvm` may be symbolic links, such as into a dotfiles repo, and devvm follows them. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.

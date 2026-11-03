@@ -15,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -202,10 +203,11 @@ func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string
 // gcRetention applies the retention settings now, the VMs' leftovers
 // included, saying what it deleted in one line.
 func gcRetention(ctx context.Context, u *ui.UI, b *build.Env) error {
-	r, err := state.ReadRetention(b.Dirs)
+	def, err := settings.Read(b.Dirs)
 	if err != nil {
 		return err
 	}
+	r := def.Retention
 	if r.Off() {
 		u.Info(msg.RetentionOff())
 		return nil

@@ -1,13 +1,14 @@
-# A new VM's size and ports: the flags, else the defaults in the config
-# folder, else the image's; checked before anything is built.
+# A new VM's size and ports: the flags, else the defaults (config.toml's,
+# else settings.json's), else the image's; checked before anything is
+# built.
 project sized
 
 # Values that aren't sizes or port lists, and sizes this machine can't
 # give or a disk smaller than the image's, are refused.
 ! exec devvm --no-network-policy --cpus 1.5
-stderr '^devvm: cpus_not_number value="1\.5"$'
+stderr '^devvm: cpus_not_number flag=--cpus value="1\.5"$'
 ! exec devvm --no-network-policy --cpus=0
-stderr '^devvm: cpus_not_number value="0"$'
+stderr '^devvm: cpus_not_number flag=--cpus value="0"$'
 ! exec devvm --no-network-policy --memory 16M
 stderr '^devvm: size_not_gib flag=--memory value="16M"$'
 ! exec devvm --no-network-policy --disk lots
@@ -22,17 +23,15 @@ stderr '^devvm: disk_shrink have=100 vm=devvm-sized-[0-9a-f]{14} want=50$'
 stderr '^devvm: port_invalid value="0"$'
 ! exec devvm --no-network-policy --ports 8010-8000
 stderr '^devvm: port_invalid value="8010-8000"$'
-# Hand-edited defaults are checked too.
-mkdir $XDG_CONFIG_HOME/devvm
-cp $WORK/bad-size $XDG_CONFIG_HOME/devvm/size
+# Hand-edited defaults are checked too, naming config.toml's line.
+cp $WORK/bad-size.toml $CFG/config.toml
 ! exec devvm --no-network-policy
-stderr '^devvm: size_not_gib flag=--memory value="1\$\(touch x\)"$'
+stderr '\S*/config/devvm/config\.toml:2: size_not_gib flag=memory value="1\$\(touch x\)"$'
 ! exists x
-rm $XDG_CONFIG_HOME/devvm/size
-cp $WORK/bad-ports $XDG_CONFIG_HOME/devvm/ports
+cp $WORK/bad-ports.toml $CFG/config.toml
 ! exec devvm --no-network-policy
-stderr '^devvm: port_invalid '
-rm $XDG_CONFIG_HOME/devvm/ports
+stderr '\S*/config/devvm/config\.toml:1: port_invalid '
+rm $CFG/config.toml
 stub_calls
 ! stdout 'create|clone'
 
@@ -52,9 +51,12 @@ stdout '^disk=120$'
 stdout '^ports=5173,8000-8010$'
 
 # The defaults, for what the flags leave unset; nothing for what neither
-# sets. A default of every port stores nothing.
+# sets. A default of every port stores nothing. config.toml's memory wins
+# over what devvm size -g saved.
 project defaults
-exec sh -c 'echo memory=5 > "$XDG_CONFIG_HOME/devvm/size" && echo none > "$XDG_CONFIG_HOME/devvm/ports"'
+exec devvm size -g --memory 4
+exec devvm ports -g none
+cp $WORK/memory.toml $CFG/config.toml
 stub_reset
 exec devvm --no-network-policy --cpus 2
 stub_calls
@@ -66,7 +68,8 @@ stdout '^memory=5$'
 ! stdout 'disk='
 stdout '^ports=none$'
 project all
-exec sh -c 'echo all > "$XDG_CONFIG_HOME/devvm/ports" && rm "$XDG_CONFIG_HOME/devvm/size"'
+rm $CFG/config.toml
+cp $WORK/features-none.json $DATA/settings.json
 stub_reset
 exec devvm --no-network-policy
 stub_calls
@@ -80,14 +83,20 @@ catg $VMS/devvm-all-*
 # The first run, before base's features are chosen, asks for new VMs'
 # size only in a terminal: without one it asks nothing and saves none.
 project first
-rm $XDG_CONFIG_HOME/devvm/base-features
+rm $DATA/settings.json
 exec devvm --no-network-policy
 ! stdout 'size_question|size_defaults'
 ! stderr 'size_'
-! exists $XDG_CONFIG_HOME/devvm/size
-exists $XDG_CONFIG_HOME/devvm/base-features
+! grep '"size"' $DATA/settings.json
+grep '"features"' $DATA/settings.json
 
--- bad-size --
-memory=1$(touch x)
--- bad-ports --
-80]}]|.mounts=[{"location":"~"
+-- features-none.json --
+{"features": []}
+-- memory.toml --
+[size]
+memory = 5
+-- bad-size.toml --
+[size]
+memory = "1$(touch x)"
+-- bad-ports.toml --
+ports = "80]}]|.mounts=[{\"location\":\"~\""

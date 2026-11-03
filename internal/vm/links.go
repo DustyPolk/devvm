@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
 )
@@ -71,8 +72,8 @@ func ParseLinkPort(v string) (int, error) {
 // ParsePublish checks the ports devvm link publish and unpublish take:
 // ports and ranges, never all or none. It returns them as ParsePorts does.
 func ParsePublish(v string) (string, error) {
-	l, err := ParsePorts(v)
-	if err != nil || l == PortsAll || l == PortsNone {
+	l, err := settings.ParsePorts(v)
+	if err != nil || l == settings.PortsAll || l == settings.PortsNone {
 		return "", msg.LinkPortsInvalid(strconv.Quote(v))
 	}
 	return l, nil
@@ -207,7 +208,7 @@ func Published(st *state.VM, port int) bool { return publishedIn(st.Get(KeyPubli
 
 // publishedIn reports whether ports, as KeyPublish holds them, has port.
 func publishedIn(ports string, port int) bool {
-	if ports == "" || ports == PortsNone {
+	if ports == "" || ports == settings.PortsNone {
 		return false
 	}
 	rs, err := backend.ParsePortRanges(ports)
@@ -574,7 +575,7 @@ func (e Links) Published(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return cmp.Or(t.st.Get(KeyPublish), PortsNone), nil
+	return cmp.Or(t.st.Get(KeyPublish), settings.PortsNone), nil
 }
 
 // Publish offers list's ports and ranges (ParsePublish) to links from the
@@ -589,7 +590,7 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	if err != nil {
 		return err
 	}
-	old := cmp.Or(t.st.Get(KeyPublish), PortsNone)
+	old := cmp.Or(t.st.Get(KeyPublish), settings.PortsNone)
 	var ports string
 	if publish {
 		if ok, err := t.widen(e.Env, "devvm link publish"); !ok {
@@ -603,7 +604,7 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 		return err
 	}
 	stored := ports
-	if ports == PortsNone {
+	if ports == settings.PortsNone {
 		stored = ""
 	}
 	if err := t.st.Set(KeyPublish, stored); err != nil {

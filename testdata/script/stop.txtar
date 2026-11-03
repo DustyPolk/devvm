@@ -15,7 +15,7 @@ stderr '^devvm: args_none command=devvm stop given=now$'
 exec git init -q
 exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 exec devvm --network-policy
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$RUN"/devvm-web-*.proxy.pid > "$WORK/pid" && kill -0 "$(cat "$WORK/pid")"'
 stub_reset
@@ -26,7 +26,7 @@ stdout '^limactl stop devvm-web-[0-9a-f]{14}$'
 [darwin] stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*chflags -R -P uchg /\S*/web/\.git/hooks$'
 ! stdout 'limactl (start|edit)'
 ! exec sh -c 'kill -0 "$(cat "$WORK/pid")"'
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 ! stdout devvm-web
 
 # Already stopped: said; .git is checked all the same.

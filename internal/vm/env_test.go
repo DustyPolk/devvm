@@ -53,6 +53,10 @@ func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { retur
 
 func (testUI) AddCleanup(func(context.Context)) func() { return func() {} }
 
+// fakeDefault is a test registry's default backend: the fake, which
+// config.toml or settings.json would name.
+func fakeDefault() (name, file string, err error) { return "fake", "", nil }
+
 // upEnv is up on a fake backend, in a temporary sandbox, with a project
 // folder named web.
 func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend.Command) {
@@ -82,9 +86,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := state.WriteBackend(d, "fake"); err != nil {
-		t.Fatal(err)
-	}
+	reg.DefaultBackend = fakeDefault
 	var execs []backend.Command
 	d.Home = filepath.Join(root, "home")
 	e := &Env{

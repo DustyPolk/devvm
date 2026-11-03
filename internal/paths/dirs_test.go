@@ -99,17 +99,14 @@ func TestFiles(t *testing.T) {
 		{d.AgentSock(), "/d/agent.sock"},
 		{d.OCIBuildLock(), "/d/oci-build.lock"},
 		{d.LimaVM("devvm-p-1"), "/l/devvm-p-1"},
-		{d.BaseFeatures(), "/c/base-features"},
-		{d.Size(), "/c/size"},
-		{d.Ports(), "/c/ports"},
-		{d.Network(), "/c/network"},
-		{d.AgentKeys(), "/c/agent-keys"},
-		{d.Backend(), "/c/backend"},
+		{d.ConfigFile(), "/c/config.toml"},
+		{d.Settings(), "/d/settings.json"},
+		{d.AgentKeys(), "/d/agent-keys.json"},
 		{d.Layers(), "/c/layers"},
 		{d.Features(), "/c/features"},
-		{d.Secrets(), "/c/secrets"},
-		{d.SSHConfig(), "/c/ssh_config"},
-		{d.KnownHosts(), "/c/known_hosts"},
+		{d.Secrets(), "/d/secrets"},
+		{d.SSHConfig(), "/d/ssh_config"},
+		{d.KnownHosts(), "/d/known_hosts"},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

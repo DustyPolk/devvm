@@ -7,7 +7,7 @@ Remove a key from devvm's own SSH agent
 
 ## Synopsis
 
-Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from ~/.config/devvm/agent-keys, so devvm doesn't load it again. The key file stays as it is, and it needn't still exist.
+Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from ~/.local/share/devvm/agent-keys.json, so devvm doesn't load it again. The key file stays as it is, and it needn't still exist.
 
 ```text
 devvm ssh-agent rm KEY_FILE [flags]

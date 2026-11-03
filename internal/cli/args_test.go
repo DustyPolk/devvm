@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -136,7 +136,7 @@ func sampleArgs(t *testing.T, use string) [][]string {
 	// a value each argument a Use names takes
 	argSamples := map[string]string{
 		"IMAGE": "node", "KEY": "0123456789ab", "TOOL": "node", "NAME": "github", "RULE": "example.com",
-		"LIST": "5173", "TARGET": "db", "PORT": "5432", "PORTS": "5432,8000-8010", "KEY_FILE": "/k", "FILE": "/f.tar.gz", "KEY=VALUE": state.RetainRunLogs + "=10", "SHELL": "bash",
+		"LIST": "5173", "TARGET": "db", "PORT": "5432", "PORTS": "5432,8000-8010", "KEY_FILE": "/k", "FILE": "/f.tar.gz", "KEY=VALUE": settings.RetainRunLogs + "=10", "SHELL": "bash",
 		"VM": "devvm-app-0123456789abcd",
 	}
 	var all []string
@@ -240,7 +240,7 @@ func TestFlagErrors(t *testing.T) {
 		{[]string{"ls", "--cpus", "4"}, "flag_unknown command=devvm ls flag=--cpus"},
 		{[]string{"--ports", ""}, "flag_blank flag=ports"},
 		{[]string{"gc", "--history", "--older-than", "30"}, "bad_duration value=30"},
-		{[]string{"--cpus", "x"}, `cpus_not_number value="x"`},
+		{[]string{"--cpus", "x"}, `cpus_not_number flag=--cpus value="x"`},
 		{[]string{"--ports", "x"}, `port_invalid value="x"`},
 	} {
 		s := stubbed(nil)

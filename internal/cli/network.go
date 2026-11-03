@@ -9,7 +9,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -36,12 +36,12 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 				return err
 			}
 			switch {
-			case !global && args[0] == state.NetworkAsk:
+			case !global && args[0] == settings.NetworkAsk:
 				return msg.NetAskGlobal()
-			case !slices.Contains(state.NetworkChoices(), args[0]):
-				choices := []string{state.NetworkOn, state.NetworkOff}
+			case !slices.Contains(settings.NetworkChoices(), args[0]):
+				choices := []string{settings.NetworkOn, settings.NetworkOff}
 				if global {
-					choices = state.NetworkChoices()
+					choices = settings.NetworkChoices()
 				}
 				return msg.ArgNotChoice(strings.Join(choices, ", "), cmd.CommandPath(), args[0])
 			}
@@ -52,9 +52,9 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 			case len(args) > 0:
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			case global:
-				return state.NetworkChoices(), cobra.ShellCompDirectiveNoFileComp
+				return settings.NetworkChoices(), cobra.ShellCompDirectiveNoFileComp
 			}
-			return []cobra.Completion{state.NetworkOn, state.NetworkOff}, cobra.ShellCompDirectiveNoFileComp
+			return []cobra.Completion{settings.NetworkOn, settings.NetworkOff}, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			failed := msg.NetworkFailed
@@ -62,7 +62,8 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 				failed = msg.NetDefaultFailed
 			}
 			var (
-				mode  string
+				mode  settings.Value
+				label string
 				shown vm.NetworkShown
 			)
 			withEnv(u, func(env *vm.Env) error {
@@ -71,12 +72,13 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 				switch {
 				case global && len(args) == 0:
 					mode, err = n.NetworkDefault()
+					label = mode.Source.Label(env.Dirs)
 				case global:
 					err = n.SetNetworkDefault(args[0])
 				case len(args) == 0:
 					shown, err = n.Network(cmd.Context())
 				default:
-					err = n.SetNetwork(cmd.Context(), args[0] == state.NetworkOn)
+					err = n.SetNetwork(cmd.Context(), args[0] == settings.NetworkOn)
 				}
 				return err
 			}, failed)
@@ -84,7 +86,7 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 			case len(args) == 1:
 				return nil
 			case global:
-				return printValue(u, asJSON, "policy", mode)
+				return printDefault(u, asJSON, "policy", mode, label)
 			}
 			return printNetwork(u, asJSON, shown)
 		},

@@ -26,6 +26,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 )
@@ -440,11 +441,11 @@ func (p *Proxy) nixCacheArgs(st *state.VM) []string {
 	if !image.HasLayer(st.Get(state.KeyImage), image.NixLayer) {
 		return nil
 	}
-	r, err := state.ReadRetention(p.Dirs)
+	def, err := settings.Read(p.Dirs)
 	if err != nil {
 		p.Warn(msg.RetentionUnreadable().Because(err))
 	}
-	return []string{"-nix-cache", p.Dirs.NixCache(), "-nix-cache-max", strconv.FormatInt(r.NixCacheCap(), 10)}
+	return []string{"-nix-cache", p.Dirs.NixCache(), "-nix-cache-max", strconv.FormatInt(def.Retention.NixCacheCap(), 10)}
 }
 
 // freePort returns a loopback port from 20000 to 59999 no program has

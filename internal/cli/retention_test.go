@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
 // history.age deletes those that old; history.count then keeps the newest;
@@ -23,15 +23,15 @@ func TestExportsToRetire(t *testing.T) {
 		return s
 	}
 	for _, tt := range []struct {
-		r    state.Retention
+		r    settings.Retention
 		want string
 	}{
-		{state.Retention{}, ""},
-		{state.Retention{ExportsAge: 30 * day}, "a"},
-		{state.Retention{ExportsCount: 2}, "ab"},
-		{state.Retention{ExportsAge: 30 * day, ExportsCount: 2}, "ab"},
-		{state.Retention{ExportsAge: 15 * day, ExportsCount: 1}, "abc"},
-		{state.Retention{ExportsCount: 9}, ""},
+		{settings.Retention{}, ""},
+		{settings.Retention{ExportsAge: 30 * day}, "a"},
+		{settings.Retention{ExportsCount: 2}, "ab"},
+		{settings.Retention{ExportsAge: 30 * day, ExportsCount: 2}, "ab"},
+		{settings.Retention{ExportsAge: 15 * day, ExportsCount: 1}, "abc"},
+		{settings.Retention{ExportsCount: 9}, ""},
 	} {
 		if got := vms(exportsToRetire(es, tt.r, now)); got != tt.want {
 			t.Errorf("%+v: got %q, want %q", tt.r, got, tt.want)

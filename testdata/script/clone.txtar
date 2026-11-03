@@ -40,14 +40,14 @@ stub_reset
 exec devvm --clone --no-network-policy
 stdout '^==> copying_branches$'
 stdout '^==> clone_ready branch=main remote=devvm$'
-stdout '^ssh_include_needed line=Include /\S*/config/devvm/ssh_config$'
+stdout '^ssh_include_needed line=Include /\S*/data/devvm/ssh_config$'
 stderr '^devvm: ssh_include_yourself$'
-stderr '^devvm: fetch_until file=/\S*/config/devvm/ssh_config remote=devvm$'
+stderr '^devvm: fetch_until file=/\S*/data/devvm/ssh_config remote=devvm$'
 stderr '^devvm: uncommitted_not_copied branch=main dir=/\S*/web remote=devvm$'
 ! stderr 'git_protect|ssh_remote_hint'
 stub_calls
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] '
-stdout '^ssh -F /\S*/config/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/\S*/config/devvm/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o ForwardAgent=no -o ClearAllForwardings=yes devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
+stdout '^ssh -F /\S*/data/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/\S*/data/devvm/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o ForwardAgent=no -o ClearAllForwardings=yes devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! stdout chflags
 catg $VMS/devvm-web-*

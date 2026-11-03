@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -68,7 +69,7 @@ func groupMembers(d paths.Dirs, group string) ([]*state.VM, error) {
 // publishedPorts returns each port a VM publishes, its ranges expanded.
 func publishedPorts(st *state.VM) []int {
 	v := st.Get(KeyPublish)
-	if v == "" || v == PortsNone {
+	if v == "" || v == settings.PortsNone {
 		return nil
 	}
 	rs, err := backend.ParsePortRanges(v)
@@ -421,7 +422,7 @@ func (e Groups) Show(ctx context.Context) (GroupShown, error) {
 	for _, m := range members {
 		g.Members = append(g.Members, GroupMember{
 			Name: memberName(m), VM: m.Name(), Folder: m.Get(state.KeyDir),
-			Published: cmp.Or(m.Get(KeyPublish), PortsNone),
+			Published: cmp.Or(m.Get(KeyPublish), settings.PortsNone),
 		})
 	}
 	slices.SortFunc(g.Members, func(a, b GroupMember) int { return cmp.Compare(a.Name, b.Name) })

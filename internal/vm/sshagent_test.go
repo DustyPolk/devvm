@@ -341,6 +341,7 @@ func TestAgentUnchosen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reg.DefaultBackend = fakeDefault
 	e.Registry = reg
 	stopped := func() bool { return f.Instances[vm].Status != backend.StatusRunning }
 	for _, mode := range []string{sshagent.Off, sshagent.Devvm} {

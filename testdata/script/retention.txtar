@@ -30,21 +30,20 @@ stderr '^devvm: bad_duration value=30$'
 stderr '^devvm: bad_duration value=forever$'
 exec devvm retention history.age=90m
 exec devvm retention history.age=off
-! exists $XDG_CONFIG_HOME/devvm/retention
+! grep retention $DATA/settings.json
 ! exec devvm retention logs.network.size=10M
 stderr '^devvm: retention_bad '
 ! exec devvm retention history.age=
 stderr '^devvm: retention_bad reason=history\.age= has no value, and history\.age=off turns it off$'
 ! exec devvm retention history.age=30d tools.unused-age=
 stderr '^devvm: retention_bad '
-! exists $XDG_CONFIG_HOME/devvm/retention
+! grep retention $DATA/settings.json
 
-# Set: devvm retention shows them, and devvm space shows each beside its
-# row, with what it would free.
+# Set: devvm retention shows them, and where each came from, and devvm
+# space shows each beside its row, with what it would free.
 exec devvm retention history.age=30d tools.unused-age=1d
-stdout '^==> retention_saved file=\S+/retention$'
-exec cat $XDG_CONFIG_HOME/devvm/retention
-cmp stdout want-retention
+stdout '^==> retention_saved file=\S+/data/devvm/settings\.json$'
+grep '^  "retention": {\n    "history.age": "30d",\n    "tools.unused-age": "1d"\n  }$' $DATA/settings.json
 exec devvm retention
 cmp stdout want-shown
 exec devvm retention --json
@@ -52,7 +51,22 @@ cmp stdout want-shown.json
 ! exec devvm retention --json history.count=5
 stderr '^devvm: json_shows_only command=devvm retention$'
 ! exec devvm retention history.count=x
-cmp $XDG_CONFIG_HOME/devvm/retention want-retention
+grep '^  "retention": {\n    "history.age": "30d",\n    "tools.unused-age": "1d"\n  }$' $DATA/settings.json
+
+# config.toml's settings win, each shown with its path; devvm retention
+# refuses to change one, naming the file and the key, and changes the
+# rest.
+cp config.toml $CFG/config.toml
+exec devvm retention
+stdout '^history\.age=60d # \S*/config/devvm/config\.toml$'
+stdout '^tools\.unused-age=1d # devvm: settings\.json$'
+exec devvm retention --json
+stdout '"history.age": "config.toml",'
+! exec devvm retention history.age=off
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=retention\.history\.age$'
+exec devvm retention history.count=3
+exec devvm retention history.count=off
+rm $CFG/config.toml
 exec devvm space
 stdout '^history +- +2 +\S+ +only copy +- +gc --history +30d \(\S+\)$'
 stdout 'RETAIN'
@@ -111,20 +125,20 @@ stdout '^claude-'
 
 # KEY=off turns a setting off.
 exec devvm retention history.age=off tools.unused-age=off
-! exists $XDG_CONFIG_HOME/devvm/retention
+! grep retention $DATA/settings.json
 exec devvm retention
 cmp stdout $WORK/want-all-off
 
--- want-retention --
-history.age=30d
-tools.unused-age=1d
+-- config.toml --
+[retention]
+history.age = "60d"
 -- want-shown --
-logs.runs=off
-history.age=30d
-history.count=off
-tools.unused-age=1d
-orphans.age=off
-nix-cache.size=off
+logs.runs=off # devvm: default
+history.age=30d # devvm: settings.json
+history.count=off # devvm: default
+tools.unused-age=1d # devvm: settings.json
+orphans.age=off # devvm: default
+nix-cache.size=off # devvm: default
 -- want-shown.json --
 {
   "version": 1,
@@ -135,12 +149,20 @@ nix-cache.size=off
     "nix-cache.size": "off",
     "orphans.age": "off",
     "tools.unused-age": "1d"
+  },
+  "sources": {
+    "history.age": "settings.json",
+    "history.count": "built-in",
+    "logs.runs": "built-in",
+    "nix-cache.size": "built-in",
+    "orphans.age": "built-in",
+    "tools.unused-age": "settings.json"
   }
 }
 -- want-all-off --
-logs.runs=off
-history.age=off
-history.count=off
-tools.unused-age=off
-orphans.age=off
-nix-cache.size=off
+logs.runs=off # devvm: default
+history.age=off # devvm: default
+history.count=off # devvm: default
+tools.unused-age=off # devvm: default
+orphans.age=off # devvm: default
+nix-cache.size=off # devvm: default

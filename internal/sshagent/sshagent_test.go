@@ -2,6 +2,7 @@ package sshagent
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -107,13 +108,58 @@ func writeKey(t *testing.T, path, contents string) {
 	}
 }
 
-func readKeys(t *testing.T, a *Agent) []state.AgentKey {
+func readKeys(t *testing.T, a *Agent) []AddedKey {
 	t.Helper()
-	keys, err := state.ReadAgentKeys(a.Dirs)
+	keys, err := a.added()
 	if err != nil {
 		t.Fatal(err)
 	}
 	return keys
+}
+
+func saveKeys(t *testing.T, a *Agent, keys ...AddedKey) {
+	t.Helper()
+	if err := a.saveAdded(keys); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// agent-keys.json holds each key's file, fingerprint and options as JSON:
+// a missing file has none, and a key devvm can't use is refused by name.
+func TestAddedKeysFile(t *testing.T) {
+	a, _, _, _, _ := testAgent(t)
+	if got := readKeys(t, a); got != nil {
+		t.Fatalf("no file: %+v", got)
+	}
+	want := []AddedKey{
+		{File: "/k/deploy key", Fingerprint: "SHA256:fp-deploy"},
+		{File: "/k/other", Fingerprint: "SHA256:fp-other", AddOptions: AddOptions{Confirm: true, Lifetime: "30m"}},
+	}
+	saveKeys(t, a, want...)
+	data, err := os.ReadFile(a.Dirs.AgentKeys())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"file": "/k/other",`) || !strings.Contains(string(data), `"confirm": true,`) ||
+		!strings.Contains(string(data), `"lifetime": "30m"`) || strings.Contains(string(data), `"confirm": false`) {
+		t.Errorf("file:\n%s", data)
+	}
+	if got := readKeys(t, a); !slices.Equal(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	for _, bad := range []AddedKey{{File: "rel"}, {File: "/k", AddOptions: AddOptions{Lifetime: "soon"}}} {
+		if err := a.saveAdded([]AddedKey{bad}); err == nil {
+			t.Errorf("saveAdded(%+v): want an error", bad)
+		}
+	}
+	for _, data := range []string{`{"keys": [{"file": "key"}]}`, `{"keys": [{"file": "/k", "lifetime": "1y"}]}`, `{"keys": 1}`} {
+		if err := os.WriteFile(a.Dirs.AgentKeys(), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.added(); !errors.As(err, new(*state.CorruptError)) {
+			t.Errorf("%s: got %v, want a CorruptError", data, err)
+		}
+	}
 }
 
 // add records the key and its fingerprint, starts the agent and loads the
@@ -125,7 +171,7 @@ func TestAdd(t *testing.T) {
 	if err := a.Add(t.Context(), key, AddOptions{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if got, want := readKeys(t, a), []state.AgentKey{{File: key, Fingerprint: "SHA256:fp-deploy"}}; !slices.Equal(got, want) {
+	if got, want := readKeys(t, a), []AddedKey{{File: key, Fingerprint: "SHA256:fp-deploy"}}; !slices.Equal(got, want) {
 		t.Errorf("keys = %+v, want %+v", got, want)
 	}
 	if want := []string{"ssh-agent -a " + a.Socket(), "ssh-add -t 12h key:deploy"}; !slices.Equal(f.calls, want) {
@@ -150,7 +196,7 @@ func TestAddOptions(t *testing.T) {
 	if err := a.Add(t.Context(), key, AddOptions{Confirm: true, Lifetime: "30m"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if got := readKeys(t, a); len(got) != 1 || got[0].Options != "confirm lifetime=30m" {
+	if got := readKeys(t, a); len(got) != 1 || got[0].AddOptions != (AddOptions{Confirm: true, Lifetime: "30m"}) {
 		t.Errorf("keys = %+v", got)
 	}
 	if !slices.Contains(f.calls, "ssh-add -c -t 30m key:k") {
@@ -159,7 +205,7 @@ func TestAddOptions(t *testing.T) {
 	if err := a.Add(t.Context(), key, AddOptions{Lifetime: Forever}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if got := readKeys(t, a); len(got) != 1 || got[0].Options != "lifetime=forever" {
+	if got := readKeys(t, a); len(got) != 1 || got[0].AddOptions != (AddOptions{Lifetime: Forever}) {
 		t.Errorf("keys = %+v", got)
 	}
 	if f.calls[len(f.calls)-1] != "ssh-add key:k" {
@@ -192,12 +238,10 @@ func TestEnsure(t *testing.T) {
 	deploy, other := filepath.Join(tmp, "deploy"), filepath.Join(tmp, "other")
 	writeKey(t, deploy, "deploy")
 	writeKey(t, other, "other")
-	if err := state.WriteAgentKeys(a.Dirs, []state.AgentKey{
-		{File: deploy, Fingerprint: "SHA256:fp-deploy"},
-		{File: other, Fingerprint: "SHA256:fp-other", Options: "lifetime=forever"},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	saveKeys(t, a,
+		AddedKey{File: deploy, Fingerprint: "SHA256:fp-deploy"},
+		AddedKey{File: other, Fingerprint: "SHA256:fp-other", AddOptions: AddOptions{Lifetime: Forever}},
+	)
 	if err := a.Ensure(t.Context()); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -258,9 +302,7 @@ func TestEnsurePinned(t *testing.T) {
 	if slices.Contains(f.held, "main") {
 		t.Error("loaded the key the link names now")
 	}
-	if err := state.WriteAgentKeys(a.Dirs, []state.AgentKey{{File: main}}); err != nil {
-		t.Fatal(err)
-	}
+	saveKeys(t, a, AddedKey{File: main})
 	out.lines = nil
 	if err := a.Ensure(t.Context()); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -386,7 +428,7 @@ func TestRemove(t *testing.T) {
 	if err := a.Remove(t.Context(), "a"); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if got, want := readKeys(t, a), []state.AgentKey{{File: k2, Fingerprint: "SHA256:fp-b"}}; !slices.Equal(got, want) {
+	if got, want := readKeys(t, a), []AddedKey{{File: k2, Fingerprint: "SHA256:fp-b"}}; !slices.Equal(got, want) {
 		t.Errorf("keys = %+v, want %+v", got, want)
 	}
 	if !slices.Equal(f.held, []string{"b"}) || !slices.Contains(f.calls, "ssh-add -d key:a") {
@@ -457,7 +499,7 @@ func TestRealAgent(t *testing.T) {
 		t.Errorf("said %q", out.lines)
 	}
 	keys := readKeys(t, a)
-	if len(keys) != 1 || keys[0].File != key || !strings.HasPrefix(keys[0].Fingerprint, "SHA256:") || keys[0].Options != "lifetime=1h" {
+	if len(keys) != 1 || keys[0].File != key || !strings.HasPrefix(keys[0].Fingerprint, "SHA256:") || keys[0].Lifetime != "1h" {
 		t.Errorf("keys = %+v", keys)
 	}
 	var b strings.Builder

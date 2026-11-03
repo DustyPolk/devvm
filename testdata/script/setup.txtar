@@ -2,9 +2,10 @@
 # network policy (all asked in a terminal, which Go tests cover; without
 # one, the backend, size and network policy aren't asked and the features
 # are kept, or every one until they're chosen; --backend and --features
-# without asking). A new choice of features says base rebuilds, and once
-# images are built that devvm gc deletes the old ones.
-env CHOSEN=$XDG_CONFIG_HOME/devvm/base-features
+# without asking), each saved in settings.json. A new choice of features
+# says base rebuilds, and once images are built that devvm gc deletes the
+# old ones.
+env SAVED=$DATA/settings.json
 
 # Kept: none chosen; no backend or size asked.
 exec devvm setup
@@ -12,15 +13,14 @@ stdout '^==> base_features_none$'
 ! stdout base_will_rebuild
 ! stdout default_backend
 ! stdout 'size_question|size_defaults'
-! exists $XDG_CONFIG_HOME/devvm/backend
-! exists $XDG_CONFIG_HOME/devvm/size
-! exists $XDG_CONFIG_HOME/devvm/agents
+! grep '"backend"|"size"|"agents"' $SAVED
+grep '^  "features": \[\]$' $SAVED
 ! stdout default_agents
 ! stderr .
 ! stub_calls
 
 # Unchosen: every feature.
-rm $CHOSEN
+rm $SAVED
 exec devvm setup
 stdout '^==> base_features features=cli-tools fzf omb$'
 ! stdout base_will_rebuild
@@ -31,7 +31,7 @@ stdout '^==> base_features features=fzf omb$'
 stdout '^==> base_will_rebuild$'
 ! stdout gc_old_hint
 ! stdout default_backend
-cmp $CHOSEN fzf-omb
+grep '^  "features": \[\n    "fzf",\n    "omb"\n  \]$' $SAVED
 exec devvm setup --features fzf,omb
 ! stdout base_will_rebuild
 
@@ -57,13 +57,13 @@ stdout '^==> base_features_none$'
 exec devvm setup --backend lima
 stdout '^==> default_backend backend=lima$'
 ! stdout base_features
-cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
+grep '^  "backend": "lima",$' $SAVED
 exec devvm setup --backend lima --features fzf
 stdout '^==> default_backend backend=lima$'
 stdout '^==> base_features features=fzf$'
 ! exec devvm setup --backend nope
 stderr '^devvm: backend_unknown backends=docker, lima, smolvm name=nope$'
-cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
+grep '^  "backend": "lima",$' $SAVED
 
 # New VMs' size is devvm size -g's, and without a terminal nothing asks
 # for it or for new VMs' network policy. Flags for a new VM are devvm
@@ -72,22 +72,20 @@ cmp $XDG_CONFIG_HOME/devvm/backend lima.txt
 stderr '^devvm: flag_unknown command=devvm setup flag=--cpus$'
 ! exec devvm setup --memory 8
 stderr '^devvm: flag_unknown command=devvm setup flag=--memory$'
-! exists $XDG_CONFIG_HOME/devvm/size
-! exists $XDG_CONFIG_HOME/devvm/network
+! grep '"size"|"network"' $SAVED
 
 # --features none chooses none; --features '' is refused, and changes
 # nothing.
 exec devvm setup --features fzf
 ! exec devvm setup --features ''
 stderr '^devvm: flag_blank flag=features$'
-cmp $CHOSEN fzf.txt
+grep '^  "features": \[\n    "fzf"\n  \]$' $SAVED
 exec devvm setup --features none
 stdout '^==> base_features_none$'
-exec cat $CHOSEN
-! stdout .
+grep '^  "features": \[\]$' $SAVED
 
 # The network policy saved for new VMs: off makes one without it.
-exec sh -c 'echo off > "$XDG_CONFIG_HOME/devvm/network"'
+exec devvm network -g off
 project off git
 exec devvm --no-git-protect
 catg $VMS/devvm-off-*
@@ -98,16 +96,16 @@ cd $WORK
 # An agent that isn't one is a usage error, with a did-you-mean.
 exec devvm setup --agents claude,codex
 stdout '^==> default_agents agents=claude codex$'
-grep '^claude codex$' $XDG_CONFIG_HOME/devvm/agents
+grep '^  "agents": \[\n    "claude",\n    "codex"\n  \]$' $SAVED
 exec devvm setup --agents none
 stdout '^==> default_agents_none$'
-grep '^none$' $XDG_CONFIG_HOME/devvm/agents
+grep '^  "agents": \[\]$' $SAVED
 ! exec devvm setup --agents cladue
 stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
 stderr '^usage_help command=devvm setup$'
 ! exec devvm setup --agents node
 stderr '^devvm: part_other_flag flag=--agents given=node other=--tools$'
-grep '^none$' $XDG_CONFIG_HOME/devvm/agents
+grep '^  "agents": \[\]$' $SAVED
 # A new VM made without a terminal gets setup's agents, and says so.
 exec devvm setup --agents codex
 project agents git
@@ -117,18 +115,35 @@ catg $VMS/devvm-agents-*
 stdout '^tool_names=codex$'
 cd $WORK
 
-# An unreadable choice stays for you to fix.
-cp bad $CHOSEN
-! exec devvm setup
-stderr '^devvm: setup_failed reason=.*base-features'
-cmp $CHOSEN bad
+# What config.toml sets wins over settings.json, and devvm setup's flags
+# can't change it: refused, naming the file and the key, with nothing
+# saved.
+cp config.toml $CFG/config.toml
+! exec devvm setup --backend smolvm
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=backend$'
+! exec devvm setup --features omb
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=features$'
+! exec devvm setup --agents claude
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=agents$'
+grep '^  "backend": "lima",$' $SAVED
+grep '^  "agents": \[\n    "codex"\n  \]$' $SAVED
+# Without a terminal, setup keeps config.toml's features, saying so.
+exec devvm setup
+stdout '^==> setup_in_config file=\S*/config/devvm/config\.toml key=features$'
+! stdout base_features
+exec devvm doctor --json
+stdout '"backend": "docker",\n  "backend_source": "config.toml",'
+rm $CFG/config.toml
 
--- fzf-omb --
-fzf
-omb
--- lima.txt --
-lima
--- fzf.txt --
-fzf
--- bad --
-Not_A_Feature
+# An unreadable choice stays for you to fix.
+cp bad.json $SAVED
+! exec devvm setup
+stderr '^devvm: setup_failed reason=\S*/data/devvm/settings\.json: features: not a feature''s name: "Not_A_Feature"$'
+cmp $SAVED bad.json
+
+-- config.toml --
+backend = "docker"
+features = ["fzf"]
+agents = ["opencode"]
+-- bad.json --
+{"features": ["Not_A_Feature"]}

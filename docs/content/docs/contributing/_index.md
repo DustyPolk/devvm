@@ -111,7 +111,7 @@ Everything it holds the code to is in `devvm()` in `internal/structure/structure
 
 ## One owner for each concern
 
-Each concern in devvm has one owner, the package or function that does it, such as `internal/hostgit` for every git command devvm runs on the host, `internal/paths` for every folder and file devvm uses, and `locales/en.toml` for every message. Before you add a helper, a parser, a path, a file reader, a message or a table, find its owner and extend it. A second copy drifts from the first, and then one of them is wrong. AGENTS.md's layout table names the owners, and so do the failures of the checks below.
+Each concern in devvm has one owner, the package or function that does it, such as `internal/hostgit` for every git command devvm runs on the host, `internal/paths` for every folder and file devvm uses, `internal/settings` for every default (`settings.Read` and `settings.Save`, over `config.toml` and `settings.json`, with each value's parser), and `locales/en.toml` for every message. Before you add a helper, a parser, a path, a file reader, a message or a table, find its owner and extend it. A second copy drifts from the first, and then one of them is wrong. AGENTS.md's layout table names the owners, and so do the failures of the checks below.
 
 ### The checks on owners
 
@@ -164,7 +164,7 @@ The tests check every rule that a machine can, as [The CLI rule tests](#the-cli-
 Each command checks its arguments and flags before it does anything else, so a usage error never looks for a VM, applies the retention settings or changes a file. `internal/cli/args.go` holds the checks:
 
 - **A command's `Args`** is one of `noArgs`, `exactArgs(n)`, `maxArgs(n)` and `minArgs(n)`, never Cobra's own validators, whose errors are in English. Each one names the arguments the command's `Use` shows (`KEY_FILE`, `[all|none|LIST]`), and with `ValidArgs` set, it refuses any other value. `noArgs` on a command with commands of its own says the word isn't one of them and lists them.
-- **Values are checked in `Args` too.** A command adds its own check with `cobra.MatchAll`, such as `vm.ParsePorts` for devvm ports or `netpolicy.Rule` for devvm network allow, returning the same message the command would fail with later.
+- **Values are checked in `Args` too.** A command adds its own check with `cobra.MatchAll`, such as `settings.ParsePorts` for devvm ports or `netpolicy.Rule` for devvm network allow, returning the same message the command would fail with later.
 - **Flag values are checked by name** in `checkFlagValue`, because one flag name has one meaning: `--cpus`, `--memory`, `--disk`, `--ports`, `--lifetime`, `--older-than`, `--tools`, `--agents` and `--layers`. Flags that can't be given together are marked with `exclusive(cmd, a, b)`, which `checkFlags` checks first, in place of Cobra's `MarkFlagsMutuallyExclusive` alone.
 - **The parser's own flag errors** (an unknown flag, one without its value, a value its type refuses) become messages in `flagError`, set as the root's `SetFlagErrorFunc`.
 

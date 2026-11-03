@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/paths"
@@ -231,9 +230,4 @@ func isWord(s string) bool {
 		}
 	}
 	return true
-}
-
-// oneOf returns a key check accepting only these keys.
-func oneOf(keys ...string) func(string) bool {
-	return func(k string) bool { return slices.Contains(keys, k) }
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Default is the backend for new VMs when neither --backend nor the
-// default backend file names one.
+// Default is the backend for new VMs when neither --backend nor a file of
+// defaults (config.toml, settings.json) names one.
 const Default = "lima"
 
 // Registry is the backends devvm has, by name, and the review their
@@ -21,8 +21,12 @@ const Default = "lima"
 // memory and free space every check of them reads.
 type Registry struct {
 	Review
-	Host   platform.Host
-	byName map[string]Backend
+	Host platform.Host
+	// DefaultBackend returns the backend new VMs get without --backend,
+	// and the file that names it, "" for Default (internal/settings);
+	// nil is Default.
+	DefaultBackend func() (name, file string, err error)
+	byName         map[string]Backend
 }
 
 // NewRegistry returns a registry holding bs.
@@ -93,8 +97,8 @@ type Choice struct {
 }
 
 // For chooses the backend for vm. A VM that exists runs on the backend
-// its state records. A new one gets flag (--backend), else the one the
-// default backend file names, else Default.
+// its state records. A new one gets flag (--backend), else
+// DefaultBackend's.
 func (r *Registry) For(d paths.Dirs, vm *state.VM, flag string) (Choice, error) {
 	if vm.Exists() {
 		name := vm.Get(state.KeyBackend)
@@ -114,20 +118,19 @@ func (r *Registry) For(d paths.Dirs, vm *state.VM, flag string) (Choice, error) 
 		}
 		return Choice{Backend: b}, nil
 	}
-	name, err := state.ReadBackend(d)
-	if err != nil {
-		return Choice{}, err
-	}
-	if name != "" {
-		b, ok := r.Lookup(name)
-		if !ok {
-			return Choice{}, msg.BackendUnknownDefault(r.list(), d.Backend(), name)
+	name, file := Default, ""
+	if r.DefaultBackend != nil {
+		var err error
+		if name, file, err = r.DefaultBackend(); err != nil {
+			return Choice{}, err
 		}
-		return Choice{Backend: b}, nil
 	}
-	b, ok := r.Lookup(Default)
-	if !ok {
-		return Choice{}, msg.BackendUnknown(r.list(), Default)
+	b, ok := r.Lookup(name)
+	switch {
+	case !ok && file != "":
+		return Choice{}, msg.BackendUnknownDefault(r.list(), file, name)
+	case !ok:
+		return Choice{}, msg.BackendUnknown(r.list(), name)
 	}
 	return Choice{Backend: b}, nil
 }

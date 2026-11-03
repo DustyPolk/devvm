@@ -219,7 +219,7 @@ func (a *Agent) Ensure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	keys, err := state.ReadAgentKeys(a.Dirs)
+	keys, err := a.added()
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func (a *Agent) Ensure(ctx context.Context) error {
 			a.Warn(msg.AgentKeyMounted(k.File, vm))
 			continue
 		}
-		if _, err := a.load(ctx, k.File, k.Options, k.Fingerprint); err != nil {
+		if _, err := a.load(ctx, k); err != nil {
 			if m, ok := errors.AsType[msg.M](err); ok {
 				a.Warn(m)
 				continue
@@ -258,13 +258,14 @@ func (a *Agent) Ensure(ctx context.Context) error {
 	return nil
 }
 
-// load loads key into the agent with its options, if it's still the key
-// with fingerprint pinned (any key, with pinned ""), and returns its
+// load loads k's file into the agent with its options, if it's still the
+// key with k's fingerprint (any key, with none), and returns its
 // fingerprint. The file is read once, into a private copy, and the copy is
 // what's checked and loaded: the path may be a name a VM can change (a
 // link to the user's main key). The copy has nothing beside it, so its
 // public key comes from the private key itself.
-func (a *Agent) load(ctx context.Context, key, options, pinned string) (string, error) {
+func (a *Agent) load(ctx context.Context, k AddedKey) (string, error) {
+	key, pinned := k.File, k.Fingerprint
 	data, err := os.ReadFile(key) //nolint:gosec // a key the user added
 	if err != nil {
 		return "", msg.AgentLoadFailed(key)
@@ -288,16 +289,10 @@ func (a *Agent) load(ctx context.Context, key, options, pinned string) (string, 
 		return "", msg.AgentKeyChanged(key)
 	}
 	argv := []string{"ssh-add"}
-	life := DefaultLifetime
-	for o := range strings.FieldsSeq(options) {
-		switch {
-		case o == "confirm":
-			argv = append(argv, "-c")
-		case strings.HasPrefix(o, "lifetime="):
-			life = strings.TrimPrefix(o, "lifetime=")
-		}
+	if k.Confirm {
+		argv = append(argv, "-c")
 	}
-	if life != Forever {
+	if life := k.lifetime(); life != Forever {
 		argv = append(argv, "-t", life)
 	}
 	if _, code := a.Run(ctx, true, append(argv, copied)...); code != 0 {
@@ -340,8 +335,8 @@ func resolved(path string) string {
 
 // AddOptions are how devvm ssh-agent add loads a key.
 type AddOptions struct {
-	Confirm  bool   // the agent asks before each use, through ssh-askpass
-	Lifetime string // how long it keeps the key: DefaultLifetime when "", or Forever
+	Confirm  bool   `json:"confirm,omitempty"`  // the agent asks before each use, through ssh-askpass
+	Lifetime string `json:"lifetime,omitempty"` // how long it keeps the key: DefaultLifetime when "", or Forever
 }
 
 // Add loads a key into the agent, started first unless it runs, and
@@ -356,20 +351,15 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 	if err != nil {
 		return err
 	}
-	var opts []string
-	if o.Confirm {
-		if a.Getenv("SSH_ASKPASS") == "" {
-			if _, err := a.LookPath("ssh-askpass"); err != nil {
-				return msg.AgentConfirmNeedsAskpass()
-			}
+	if o.Confirm && a.Getenv("SSH_ASKPASS") == "" {
+		if _, err := a.LookPath("ssh-askpass"); err != nil {
+			return msg.AgentConfirmNeedsAskpass()
 		}
-		opts = append(opts, "confirm")
 	}
 	if o.Lifetime != "" {
 		if err := CheckLifetime(o.Lifetime); err != nil {
 			return err
 		}
-		opts = append(opts, "lifetime="+o.Lifetime)
 	}
 	vm, err := a.mountedBy(ctx, key)
 	if err != nil {
@@ -381,17 +371,16 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 	if _, err := a.start(ctx); err != nil {
 		return err
 	}
-	options := strings.Join(opts, " ")
-	fp, err := a.load(ctx, key, options, "")
+	added := AddedKey{File: key, AddOptions: o}
+	if added.Fingerprint, err = a.load(ctx, added); err != nil {
+		return err
+	}
+	keys, err := a.added()
 	if err != nil {
 		return err
 	}
-	keys, err := state.ReadAgentKeys(a.Dirs)
-	if err != nil {
-		return err
-	}
-	keys = slices.DeleteFunc(keys, func(k state.AgentKey) bool { return k.File == key })
-	if err := state.WriteAgentKeys(a.Dirs, append(keys, state.AgentKey{File: key, Fingerprint: fp, Options: options})); err != nil {
+	keys = slices.DeleteFunc(keys, func(k AddedKey) bool { return k.File == key })
+	if err := a.saveAdded(append(keys, added)); err != nil {
 		return err
 	}
 	out, _ := a.list(ctx)
@@ -423,18 +412,18 @@ func (a *Agent) Remove(ctx context.Context, file string) error {
 	if err != nil {
 		return err
 	}
-	keys, err := state.ReadAgentKeys(a.Dirs)
+	keys, err := a.added()
 	if err != nil {
 		return err
 	}
-	i := slices.IndexFunc(keys, func(k state.AgentKey) bool { return k.File == key })
+	i := slices.IndexFunc(keys, func(k AddedKey) bool { return k.File == key })
 	if i < 0 {
 		return msg.AgentKeyNotRecorded(file)
 	}
 	if err := a.unload(ctx, keys[i]); err != nil {
 		return err
 	}
-	if err := state.WriteAgentKeys(a.Dirs, slices.Delete(keys, i, i+1)); err != nil {
+	if err := a.saveAdded(slices.Delete(keys, i, i+1)); err != nil {
 		return err
 	}
 	a.Info(msg.AgentKeyRemoved(key))
@@ -445,7 +434,7 @@ func (a *Agent) Remove(ctx context.Context, file string) error {
 // fingerprint: each public key the agent lists is written to a private
 // file, and the one whose fingerprint is k's is the one ssh-add -d gets.
 // The key's own file isn't read, as it may have changed or be gone.
-func (a *Agent) unload(ctx context.Context, k state.AgentKey) error {
+func (a *Agent) unload(ctx context.Context, k AddedKey) error {
 	out, code := a.list(ctx)
 	if fps, _ := held(out); code != 0 || !slices.Contains(fps, k.Fingerprint) {
 		return nil
@@ -484,11 +473,8 @@ func (a *Agent) unload(ctx context.Context, k state.AgentKey) error {
 // fingerprint and how it's loaded. With none added, it writes nothing and
 // doesn't start the agent.
 func (a *Agent) Keys(ctx context.Context, w io.Writer) error {
-	keys, err := state.ReadAgentKeys(a.Dirs)
+	keys, err := a.KeyList(ctx)
 	if err != nil || len(keys) == 0 {
-		return err
-	}
-	if err := a.Ensure(ctx); err != nil {
 		return err
 	}
 	out, _ := a.list(ctx)
@@ -496,11 +482,11 @@ func (a *Agent) Keys(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	for _, k := range keys {
-		opts := k.Options
-		if !strings.Contains(opts, "lifetime=") {
-			opts = strings.TrimSpace(opts + " lifetime=" + DefaultLifetime)
+		line := k.File + ": " + k.Fingerprint
+		if k.Confirm {
+			line += " confirm"
 		}
-		if _, err := io.WriteString(w, k.File+": "+k.Fingerprint+" "+opts+"\n"); err != nil {
+		if _, err := io.WriteString(w, line+" lifetime="+k.Lifetime+"\n"); err != nil {
 			return err
 		}
 	}
@@ -521,7 +507,7 @@ type ListedKey struct {
 // first, each with whether the agent holds it. With none added, it
 // returns none and doesn't start the agent.
 func (a *Agent) KeyList(ctx context.Context) ([]ListedKey, error) {
-	keys, err := state.ReadAgentKeys(a.Dirs)
+	keys, err := a.added()
 	if err != nil || len(keys) == 0 {
 		return nil, err
 	}
@@ -532,16 +518,10 @@ func (a *Agent) KeyList(ctx context.Context) ([]ListedKey, error) {
 	fps, _ := held(out)
 	listed := make([]ListedKey, 0, len(keys))
 	for _, k := range keys {
-		l := ListedKey{File: k.File, Fingerprint: k.Fingerprint, Lifetime: DefaultLifetime}
-		for _, o := range strings.Fields(k.Options) {
-			if o == "confirm" {
-				l.Confirm = true
-			} else if v, ok := strings.CutPrefix(o, "lifetime="); ok {
-				l.Lifetime = v
-			}
-		}
-		l.Loaded = k.Fingerprint != "" && slices.Contains(fps, k.Fingerprint)
-		listed = append(listed, l)
+		listed = append(listed, ListedKey{
+			File: k.File, Fingerprint: k.Fingerprint, Confirm: k.Confirm, Lifetime: k.lifetime(),
+			Loaded: k.Fingerprint != "" && slices.Contains(fps, k.Fingerprint),
+		})
 	}
 	return listed, nil
 }

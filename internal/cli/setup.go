@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -103,20 +104,25 @@ func newSetup(u *ui.UI) setup {
 // with new VMs' size and network policy before the agents; without one,
 // it keeps the features (every one until they're chosen) and saves them.
 // A change to the features says base rebuilds, and that devvm gc deletes
-// the old images.
+// the old images. What config.toml sets isn't asked for, said, and a flag
+// choosing it is refused (set_in_config).
 func (s setup) run(c setupChoice) error {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return err
 	}
+	def, err := settings.Read(dirs)
+	if err != nil {
+		return err
+	}
 	ask := c.none() && s.terminal()
 	if c.backend != "" || ask {
-		if err := s.saveBackend(dirs, c.backend); err != nil {
+		if err := s.saveBackend(dirs, def, c.backend); err != nil {
 			return err
 		}
 	}
 	if c.features != nil || c.none() {
-		if err := s.saveFeatures(dirs, c.features); err != nil {
+		if err := s.saveFeatures(dirs, def, c.features); err != nil {
 			return err
 		}
 	}
@@ -141,45 +147,54 @@ func (s setup) run(c setupChoice) error {
 	return agents.Ask()
 }
 
+// inConfig reports whether config.toml sets key, saying devvm setup
+// doesn't ask for it when it does.
+func (s setup) inConfig(dirs paths.Dirs, def settings.Defaults, key string) bool {
+	if def.Source(key) != settings.FromConfig {
+		return false
+	}
+	s.ui.Info(msg.SetupInConfig(dirs.ConfigFile(), key))
+	return true
+}
+
 // saveNetwork asks which network policy new VMs get, starting from the
-// saved one, and saves it in the network file new VMs read.
+// one in effect, and saves it (vm.NetworkChoice), unless config.toml sets
+// it.
 func (s setup) saveNetwork(dirs paths.Dirs) error {
-	current, err := state.ReadNetwork(dirs)
-	if err != nil {
+	def, err := settings.Read(dirs)
+	if err != nil || s.inConfig(dirs, def, settings.KeyNetwork) {
 		return err
 	}
-	modes := state.NetworkChoices()
+	modes := settings.NetworkChoices()
 	descs := map[string]msg.M{
-		state.NetworkAsk: msg.NetworkDefaultAsk(),
-		state.NetworkOn:  msg.NetworkDefaultOn(),
-		state.NetworkOff: msg.NetworkDefaultOff(),
+		settings.NetworkAsk: msg.NetworkDefaultAsk(),
+		settings.NetworkOn:  msg.NetworkDefaultOn(),
+		settings.NetworkOff: msg.NetworkDefaultOff(),
 	}
 	choices := make([]ui.Choice, len(modes))
 	for i, m := range modes {
-		choices[i] = ui.Choice{Name: m, Desc: descs[m].String(), On: m == current}
+		choices[i] = ui.Choice{Name: m, Desc: descs[m].String(), On: m == def.Network.Value}
 	}
 	mode := modes[s.pickOne(msg.NetworkDefaultHelp(), choices)]
-	if err := state.WriteNetwork(dirs, mode); err != nil {
-		return err
-	}
-	s.ui.Info(msg.NetworkDefault(mode))
-	return nil
+	return vm.NetworkChoice{Dirs: dirs, Info: s.ui.Info}.Set(mode)
 }
 
-// saveBackend saves name as the default backend, asking for it when "".
-func (s setup) saveBackend(dirs paths.Dirs, name string) error {
+// saveBackend saves name as the default backend, asking for it when "",
+// unless config.toml sets it.
+func (s setup) saveBackend(dirs paths.Dirs, def settings.Defaults, name string) error {
+	if name == "" && s.inConfig(dirs, def, settings.KeyBackend) {
+		return nil
+	}
 	reg, err := newRegistry(dirs, assets.FS, s.ui)
 	if err != nil {
 		return err
 	}
 	if name == "" {
-		if name, err = s.pickBackend(dirs, reg); err != nil {
-			return err
-		}
+		name = s.pickBackend(reg, def.Backend.Value)
 	} else if _, ok := reg.Lookup(name); !ok {
 		return msg.BackendUnknown(strings.Join(reg.Names(), ", "), name)
 	}
-	if err := state.WriteBackend(dirs, name); err != nil {
+	if _, err := settings.Save(dirs, settings.Values{Backend: &name}); err != nil {
 		return err
 	}
 	s.ui.Info(msg.DefaultBackend(name))
@@ -187,8 +202,11 @@ func (s setup) saveBackend(dirs paths.Dirs, name string) error {
 }
 
 // saveFeatures saves base's features: features' list, or asked for when
-// nil.
-func (s setup) saveFeatures(dirs paths.Dirs, features *string) error {
+// nil, unless config.toml sets them.
+func (s setup) saveFeatures(dirs paths.Dirs, def settings.Defaults, features *string) error {
+	if features == nil && s.inConfig(dirs, def, settings.KeyFeatures) {
+		return nil
+	}
 	b := build.Choice{Env: newBuilder(s.ui, dirs, nil, backend.Review{}, nil, "")}
 	var changed bool
 	var err error
@@ -213,13 +231,9 @@ func (s setup) saveFeatures(dirs paths.Dirs, features *string) error {
 }
 
 // pickBackend asks which backend new VMs get by default, starting from
-// the current default (backend.Default unless set, or set to one devvm
-// doesn't have), the experimental ones marked.
-func (s setup) pickBackend(dirs paths.Dirs, reg *backend.Registry) (string, error) {
-	current, err := state.ReadBackend(dirs)
-	if err != nil {
-		return "", err
-	}
+// current, the one in effect (backend.Default when it's one devvm doesn't
+// have), the experimental ones marked.
+func (s setup) pickBackend(reg *backend.Registry, current string) string {
 	if _, ok := reg.Lookup(current); !ok {
 		current = backend.Default
 	}
@@ -231,7 +245,7 @@ func (s setup) pickBackend(dirs paths.Dirs, reg *backend.Registry) (string, erro
 			choices[i].Desc = msg.BackendExperimental().String()
 		}
 	}
-	return names[s.pickOne(msg.BackendHelp(), choices)], nil
+	return names[s.pickOne(msg.BackendHelp(), choices)]
 }
 
 // splitList splits a comma-separated list, dropping empty items.

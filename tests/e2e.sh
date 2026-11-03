@@ -190,10 +190,13 @@ else
 fi
 # The features are in base's key, so only a run with from (which checks them) builds them all; desktop,
 # and the smolvm and Docker backends' sections, which check devvm desktop, build desktop alone; every
-# other selection shares one smaller base.
-if want from; then for f in "$root"/assets/features/*.sh; do basename "$f" .sh; done > "$XDG_CONFIG_HOME/devvm/base-features"
-elif want desktop || [[ $backend != lima ]]; then echo desktop > "$XDG_CONFIG_HOME/devvm/base-features"
-else : > "$XDG_CONFIG_HOME/devvm/base-features"; fi
+# other selection shares one smaller base. config.toml chooses them, so nothing asks.
+features=""
+if want from; then for f in "$root"/assets/features/*.sh; do features="$features $(basename "$f" .sh)"; done
+elif want desktop || [[ $backend != lima ]]; then features=desktop; fi
+toml=""
+for f in $features; do toml="$toml${toml:+, }\"$f\""; done
+printf 'features = [%s]\n' "$toml" > "$XDG_CONFIG_HOME/devvm/config.toml"
 D=$src/devvm
 # The digest of Ubuntu's container image smolvm's and Docker's base start from, as devvm pins it.
 ubuntu_pin=$(sed -n 's/^const ContainerDigest = "\(sha256:[0-9a-f]\{64\}\)"$/\1/p' "$root/internal/ubuntu/ubuntu.go")
@@ -302,7 +305,7 @@ cleanup() {
   for n in ${d_cap:-} ${d_squat:-}; do [[ -z $(d_state "$n") ]] || docker container rm -f "$n" >/dev/null 2>&1; done
   for n in ${d_servers[@]+"${d_servers[@]}"}; do kill "$n" 2>/dev/null; done
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
-  rm -f "$XDG_CONFIG_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
+  rm -f "$XDG_DATA_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${corp:-} ]] || kill "$corp" 2>/dev/null   # the company proxy's stand-in
   [[ -z ${hostprog:-} ]] || kill "$hostprog" 2>/dev/null
@@ -318,7 +321,7 @@ cleanup() {
   pkill -f "[_]docker-ports -vm .* -key $XDG_DATA_HOME/" 2>/dev/null       # Docker VMs' forwarders, the sandbox's
   pkill -f "[_]lima-ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # Lima VMs' forwarders, the sandbox's
   pkill -f "[_]proxy -listen .* -listen-unix $XDG_DATA_HOME/devvm/docker/" 2>/dev/null   # Docker VMs' and builds' proxies
-  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_CONFIG_HOME/devvm/agent-keys" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
+  rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_DATA_HOME/devvm/agent-keys.json" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
     "$work/dns-probe.sh" "$work/d-dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
     "$work/corp.auth" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
@@ -820,7 +823,7 @@ lk_up() { local d=$1; shift; (cd "$d" && printf 'exit\n' | DEVVM_MESSAGES=names 
 lk_shows() { local o; o=$(cd "$1" && "$D" "${@:3}" 2>/dev/null); grep -Eq -- "$2" <<<"$o"; }
 lk_said() { grep -qxF -- "$1" "$work/last.log" || { echo "not said: $1"; tail -5 "$work/last.log"; return 1; }; }
 # lk_ssh ARGS...: ssh through devvm's ssh config, without an agent.
-lk_ssh() { env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$@" </dev/null; }
+lk_ssh() { env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$@" </dev/null; }
 # lk_addr VM NAME: the address its links named NAME listen on, from its state. lk_hash PARTS...: the
 # hash devvm names a link session's files by. lk_sock VM ADDR PORT: a link's socket; lk_ctl VM: the
 # session's control socket. lk_mode PATH: its mode, in octal.
@@ -1115,9 +1118,9 @@ lk_stopped() {
     lk_shows "$lk_pc" "  REFUSED  $lk_n2:47240  to $lk_v2: it isn't running\$" network log -n 100000 &&
     ! lk_running "$lk_v2"; }
 lk_restarted() { local k0 k1
-  k0=$(grep "^$lk_v2 " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  k0=$(grep "^$lk_v2 " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
   if ! { lk_up "$lk_p2" && lk_running "$lk_v2" && lk_serve "$lk_v2" "$lk_w2" 47240 80; }; then tail -5 "$work/last.log"; return 1; fi
-  k1=$(grep "^$lk_v2 " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  k1=$(grep "^$lk_v2 " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
   lk_until 20 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" || return 1
   # Lima keeps a VM's host keys; smolvm and Docker give it new ones at each start.
   if [[ $lk_be == lima ]]; then echo "host key kept: $([[ $k0 == "$k1" ]] && echo yes || echo no)"
@@ -1169,7 +1172,7 @@ lk_boot() { lk_root "$1" 'cat /proc/sys/kernel/random/boot_id; cut -d" " -f22 /p
 lk_via_gets() { local a; a=$(lk_via "$1" "$2" "${4:-}"); echo "$2${4:+ ($4)}: $(paste -sd ' ' - <<<"$a")"
   [[ $(head -1 <<<"$a") == 200 && $(sed -n 2p <<<"$a") == "$3" ]]; }
 lk_proxy_added() { local b0 b1 k0 k1 n
-  b0=$(lk_boot "$lk_vc") k0=$(grep "^$lk_vc " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  b0=$(lk_boot "$lk_vc") k0=$(grep "^$lk_vc " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
   n=$(lk_user "$lk_vc" 'printf "%s|%s" "$NO_PROXY" "$no_proxy"'); echo "NO_PROXY|no_proxy: $n"
   [[ $n == "localhost,127.0.0.1,::1|localhost,127.0.0.1,::1" ]] || return 1
   lk_start "$lk_v1" serve 127.0.0.1 47242 "$lk_w1-47242" &&
@@ -1177,7 +1180,7 @@ lk_proxy_added() { local b0 b1 k0 k1 n
   lk_until 15 lk_via_gets "$lk_vc" http://db:47242/ "$lk_w1-47242" &&
     lk_via_gets "$lk_vc" http://db.devvm.internal:47242/ "$lk_w1-47242" && lk_via_gets "$lk_vc" http://db:47242/ "$lk_w1-47242" -p &&
     lk_curls "$lk_vc" http://db:47242/ "$lk_w1-47242" && lk_gets "$lk_vc" db 47242 "$lk_w1-47242" || return 1
-  b1=$(lk_boot "$lk_vc") k1=$(grep "^$lk_vc " "$XDG_CONFIG_HOME/devvm/known_hosts" | sort)
+  b1=$(lk_boot "$lk_vc") k1=$(grep "^$lk_vc " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
   echo "boot and init before: $(paste -sd ' ' - <<<"$b0"), after: $(paste -sd ' ' - <<<"$b1")"
   [[ -n $b0 && $b0 == "$b1" && $k0 == "$k1" ]] && [[ $(lk_user "$lk_vc" 'printf "%s" "$NO_PROXY"') == localhost,127.0.0.1,::1 ]] &&
     lk_event "$lk_vc" link db 47242 "\"target\":\"$lk_v1\""; }
@@ -1339,7 +1342,6 @@ check "build base" quiet env DEVVM_MESSAGES=names "$D" build base
 # Its key: the build's, else the newest base from Ubuntu's image (from's bases are cached too).
 kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
 if [[ -n $kb ]] && want from; then
-  features=$(tr '\n' ' ' < "$XDG_CONFIG_HOME/devvm/base-features")
   runlog=$(sed -n 's/^ *log_details file=//p' "$work/last.log")
   check "base ran base.sh, then every feature" bash -c "
     for f in base $features; do grep -q \"^# \\[[0-9]*/[0-9]*\\] running_script script=\$f.sh vm=devvm-img-$kb\$\" '$runlog' || exit 1; done"
@@ -1557,7 +1559,7 @@ check "hostname is the folder" bash -c "[[ \$(limactl shell --workdir / $vm host
 check "Lima forwards nothing itself; devvm's forwarder runs, with the host key devvm pinned" bash -c "
   [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
   pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
-  grep -qxF \"\$(cut -d' ' -f2- '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_CONFIG_HOME/devvm/known_hosts'"
+  grep -qxF \"\$(cut -d' ' -f2- '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_DATA_HOME/devvm/known_hosts'"
 # Without network policy too: so no other VM's forwarder takes it before Lima binds it.
 check "its ssh port is the one its state records, on this machine's loopback alone" bash -c "
   sp=\$(sed -n 's/^ssh_port=//p' '$vms/$vm') && [[ -n \$sp ]] && ! grep -qx net=on '$vms/$vm' &&
@@ -1615,10 +1617,10 @@ section "ssh by name"
 # An ~/.ssh/config of its own, set up as the docs say, with a Host * that forwards the agent: yours
 # is never read or changed. ssh gets no agent but a throwaway one.
 sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc"
-printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$XDG_CONFIG_HOME/devvm/ssh_config" > "$sc/config"
-kh=$XDG_CONFIG_HOME/devvm/known_hosts
+printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$XDG_DATA_HOME/devvm/ssh_config" > "$sc/config"
+kh=$XDG_DATA_HOME/devvm/known_hosts
 agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
-check "the ssh config lists it by the folder's name" grep -q "^Host devvm-web $vm\$" "$XDG_CONFIG_HOME/devvm/ssh_config"
+check "the ssh config lists it by the folder's name" grep -q "^Host devvm-web $vm\$" "$XDG_DATA_HOME/devvm/ssh_config"
 check "its host keys are pinned, as the VM has them" bash -c "
   [[ \$(grep -c '^$vm ' '$kh') -gt 0 && \$(grep -c '^$vm ' '$kh') == \$(limactl shell --workdir / $vm sh -c 'cat /etc/ssh/ssh_host_*_key.pub' </dev/null | wc -l | tr -d ' ') ]]"
 check "ssh devvm-web reaches it" bash -c "[[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
@@ -1641,7 +1643,7 @@ lima_sshd() { local t want
   [[ $(env -u SSH_AUTH_SOCK ssh -F "$sc/config" -W 127.0.0.1:22 "$2" </dev/null | head -c 4) == SSH- ]]; }
 check "its sshd binds remote forwards only on 127.77.0.0/16, refuses socket forwards and X11; a local forward works (the control)" lima_sshd "$vm" devvm-web
 check "the entry turns off X11, tunnels and adding keys to an agent, whatever Host * says" bash -c "
-  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n  Tunnel yes\n' '$XDG_CONFIG_HOME/devvm/ssh_config' > '$sc/hostile-config' &&
+  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n  Tunnel yes\n' '$XDG_DATA_HOME/devvm/ssh_config' > '$sc/hostile-config' &&
   g=\$(ssh -G -F '$sc/hostile-config' devvm-web) &&
   grep -qx 'forwardx11 no' <<<\"\$g\" && grep -qx 'forwardx11trusted no' <<<\"\$g\" && grep -qx 'addkeystoagent false' <<<\"\$g\" &&
   grep -qx 'tunnel false' <<<\"\$g\" && grep -qx 'permitremoteopen none' <<<\"\$g\" && grep -qx 'updatehostkeys false' <<<\"\$g\""
@@ -1662,7 +1664,7 @@ fi
 section "an existing VM"
 check "devvm stop stops it and its port forwarder, and drops its ssh config entry" bash -c "cd '$p' && '$D' stop </dev/null >'$work/last.log' 2>&1 &&
   [[ \$(status_of $vm) == Stopped ]] && grep -qF \"\$(m stopped vm=$vm)\" '$work/last.log' && ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
-  ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config'"
+  ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config'"
 # A program here that took its ssh port while it was stopped, on 127.0.0.1 alone and accepting
 # nothing (SO_REUSEADDR, as the port's last connections may still be in TIME_WAIT): the VM gets a
 # new one, recorded, and the program keeps its own.
@@ -1756,7 +1758,7 @@ else
     grep -qF \"\$(m git_protect_on_needs_macos | head -1)\""
 fi
 check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! grep -q '^Host devvm-web ' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config' &&
   ! grep -q '^$vm ' '$kh' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$p/.git/config' | grep -q uchg; } &&
   ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
   [[ -z \$(ls '$XDG_DATA_HOME/devvm/exports' 2>/dev/null) ]]"
@@ -1864,22 +1866,22 @@ check "ssh-agent add loads a key into devvm's own agent" bash -c "
   as_user '$D' ssh-agent add '$sa/devvm-key' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=devvm-e2e-key)\""
 check "ssh-agent devvm while it runs: after a launch, devvm's shell and ssh by name still use yours, until a restart" bash -c "cd '$g' &&
   as_user '$D' ssh-agent devvm </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' >>'$work/last.log' 2>&1 &&
-  [[ \$(as_user ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-user-key ]] &&
+  [[ \$(as_user ssh -F '$XDG_DATA_HOME/devvm/ssh_config' $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-user-key ]] &&
   [[ \$(printf 'ssh-add -l\nexit\n' | as_user '$D' 2>/dev/null | awk '/SHA256:/ { print \$3 }') == devvm-e2e-user-key ]]"
 check "ssh-agent devvm, then restart: the VM uses only that key, not yours" bash -c "cd '$g' &&
   as_user '$D' ssh-agent devvm </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' restart >>'$work/last.log' 2>&1 &&
   [[ \$(as_user limactl shell --workdir / $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-key ]]"
 check "so does an editor connecting by name, whatever agent it has" bash -c "
-  [[ \$(as_user ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-key ]]"
+  [[ \$(as_user ssh -F '$XDG_DATA_HOME/devvm/ssh_config' $vm ssh-add -l </dev/null | awk '{ print \$3 }') == devvm-e2e-key ]]"
 check "ssh-agent off, then restart: no agent in the VM" bash -c "cd '$g' &&
   as_user '$D' ssh-agent off </dev/null >'$work/last.log' 2>&1 && printf 'exit\n' | as_user '$D' restart >>'$work/last.log' 2>&1 &&
   ! as_user limactl shell --workdir / $vm ssh-add -l </dev/null &&
-  grep -A8 '^Host .* $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' | grep -q '^  ForwardAgent no\$'"
+  grep -A8 '^Host .* $vm\$' '$XDG_DATA_HOME/devvm/ssh_config' | grep -q '^  ForwardAgent no\$'"
 check "ssh-agent rm takes the key out of devvm's own agent and its record, and leaves the key file" bash -c "cd '$g' &&
   as_user '$D' ssh-agent </dev/null 2>/dev/null | grep -q devvm-e2e-key &&
   as_user '$D' ssh-agent rm '$sa/devvm-key' </dev/null >'$work/last.log' 2>&1 &&
   ! SSH_AUTH_SOCK='$XDG_DATA_HOME/devvm/agent.sock' ssh-add -l </dev/null | grep -q devvm-e2e-key &&
-  ! grep -q devvm-key '$XDG_CONFIG_HOME/devvm/agent-keys' && [[ -f '$sa/devvm-key' ]] &&
+  ! grep -q devvm-key '$XDG_DATA_HOME/devvm/agent-keys.json' && [[ -f '$sa/devvm-key' ]] &&
   [[ \$(as_user '$D' ssh-agent </dev/null 2>/dev/null) == off ]]"
 check "rm deletes the SSH agent VM" bash -c "cd '$g' && as_user '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
@@ -1897,7 +1899,7 @@ git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$
   git -C "$c" branch other
 (cd "$c" && printf 'pwd; git branch --show-current\n' | HOME=$ch "$D" --clone --no-network-policy >"$work/last.log" 2>&1)
 vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
-cgit="GIT_SSH_COMMAND='ssh -F $XDG_CONFIG_HOME/devvm/ssh_config' git -C '$c'"
+cgit="GIT_SSH_COMMAND='ssh -F $XDG_DATA_HOME/devvm/ssh_config' git -C '$c'"
 check "the VM has its own clone, with every branch, only the shared tools mounted, and the shell opens in it" bash -c "
   [[ -n '$vm' && \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$share ' ]] &&
   [[ \$(limactl shell --workdir / $vm git -C '$c' branch --format='%(refname:short)' </dev/null | tr '\n' ' ') == 'main other ' ]] &&
@@ -1961,8 +1963,8 @@ check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c
   grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$vms/$vm' ]] &&
   ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]]"
 check "retention sets a setting, shows it, and KEY=off turns it off again" bash -c "
-  '$D' retention orphans.age=30d </dev/null >'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=30d' &&
-  '$D' retention orphans.age=off </dev/null >>'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=off'"
+  '$D' retention orphans.age=30d </dev/null >'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=30d # devvm: settings.json' &&
+  '$D' retention orphans.age=off </dev/null >>'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=off # devvm: default'"
 rm -f "$gfix" "$share/$old" "$share/$old.json"
 (cd "$g" && quiet "$D" rm --force --no-export)
 fi
@@ -2083,8 +2085,8 @@ check "the proxy's password was in no host process's arguments while devvm launc
   grep -l 'limactl edit .*devvm:devvm-proxy-password@' '$XDG_DATA_HOME'/devvm/logs/runs/*.log >/dev/null &&
   limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\""
 check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
-  grep -q '^Host devvm-net $vm\$' '$XDG_CONFIG_HOME/devvm/ssh_config' &&
-  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
+  grep -q '^Host devvm-net $vm\$' '$XDG_DATA_HOME/devvm/ssh_config' &&
+  [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_DATA_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
 check "devvm host runs the self-check, which passes, and names it" bash -c "cd '$n' &&
   HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qx net_check=ok '$vms/$vm' &&
   grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log'"
@@ -2308,7 +2310,7 @@ EOF
     { loopback_only 47195 || { echo 'not on loopback alone:'; lsof -nP -iTCP:47195 -sTCP:LISTEN; false; }; } &&
     { pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null || { echo 'no forwarder'; false; }; } &&
     { ! lima_listens tcp 47195 || { echo 'limactl listens'; false; }; } &&
-    { [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_CONFIG_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] || { echo 'ssh failed'; false; }; } &&
+    { [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_DATA_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] || { echo 'ssh failed'; false; }; } &&
     { in_vm '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com' || { echo 'the proxy failed'; false; }; } &&
     { grep -qx net_check=ok '$vms/$vm' || { echo 'no self-check:'; grep '^net' '$vms/$vm'; false; }; }"
   in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4719"; pkill -f "[d]evvm-e2e-udp"' >/dev/null 2>&1
@@ -2870,7 +2872,7 @@ smol_vm_adds() { local pub
   SSH_AUTH_SOCK=$ua_sock ssh-add -d "$work/vmkey.pub" >/dev/null 2>&1; rm -f "$work/vmkey.pub"; agents_clean; }
 # smol_name_keys VM: what ssh by name lists of the agent its session has, ssh run with yours, then
 # ssh-add's exit code (rc=2: no agent).
-smol_name_keys() { SSH_AUTH_SOCK=$ua_sock ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$1" 'ssh-add -l 2>&1; echo "rc=$?"' </dev/null 2>&1; }
+smol_name_keys() { SSH_AUTH_SOCK=$ua_sock ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$1" 'ssh-add -l 2>&1; echo "rc=$?"' </dev/null 2>&1; }
 export -f smol_keys smol_add smol_only smol_no_agent smol_name_keys agents_clean as_ua; export ua_sock da_sock
 
 g=$(newproj smolagent)
@@ -2923,7 +2925,7 @@ check "turned off, after a restart: no agent" smol_switch "$g" off smol_no_agent
 (cd "$g" && quiet as_ua "$D" rm --force --no-export)
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 pkill -f "[s]sh-agent -a $da_sock"
-rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-dkey" "$work/smol-dkey.pub" "$ua_sock" "$XDG_CONFIG_HOME/devvm/agent-keys"
+rm -f "$work/smol-key" "$work/smol-key.pub" "$work/smol-dkey" "$work/smol-dkey.pub" "$ua_sock" "$XDG_DATA_HOME/devvm/agent-keys.json"
 
 section "smolvm: ssh for editors"
 # The emulation's guarantee (reviewed): each VM's own host keys, pinned; the VM's own key the only
@@ -2933,7 +2935,7 @@ section "smolvm: ssh for editors"
 # yours is never read or changed; ssh gets no agent but a throwaway one; a stub code.
 UR=(env)   # an unreviewed emulation would add DEVVM_UNREVIEWED=backend:feature here
 sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc/home" "$sc/bin"; smol_home "$sc/home"
-dsc=$XDG_CONFIG_HOME/devvm/ssh_config kh=$XDG_CONFIG_HOME/devvm/known_hosts
+dsc=$XDG_DATA_HOME/devvm/ssh_config kh=$XDG_DATA_HOME/devvm/known_hosts
 printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$dsc" > "$sc/config"
 agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
 printf '#!/bin/sh\necho "$*" > %s/code-args\n' "$sc" > "$sc/bin/code"; chmod +x "$sc/bin/code"
@@ -3377,9 +3379,9 @@ smolnet_proxy() { pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " 2>/dev/nu
 # sshn ARGS...: ssh through devvm's ssh config alone, without an agent. smolnet_via VM HOST:PORT: an
 # HTTP request through a local forward (ssh -W) from the VM to HOST:PORT, and the start of what comes
 # back, in 15 s at most.
-sshn() { env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$@"; }
+sshn() { env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$@"; }
 smolnet_via() { printf 'GET / HTTP/1.0\r\nHost: %s\r\n\r\n' "${2%:*}" |
-  perl -e 'alarm 15; exec @ARGV' env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -W "$2" "$1" 2>/dev/null | head -c 12; }
+  perl -e 'alarm 15; exec @ARGV' env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -W "$2" "$1" 2>/dev/null | head -c 12; }
 smolnet_via_open() { local a; a=$(smolnet_via "$1" 1.1.1.1:80); echo "got: ${a:-nothing}"; [[ $a == HTTP/* ]]; }
 # smolnet_ssh VM: ssh reaches it on its network policy's port; its sessions, a login's or not, get the
 # proxy's settings, and an allowed host works through the proxy from one.
@@ -3673,7 +3675,7 @@ smolpa_listed_net() { local vm=$1 sp
   sp=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")
   [[ $sp =~ ^[0-9]+$ && $sp != 22 && $sp != 47399 ]] || { echo "ssh port: ${sp:-none}"; return 1; }
   smol_listens_only "$vm" "$sp" || return 1
-  env -u SSH_AUTH_SOCK ssh -F "$XDG_CONFIG_HOME/devvm/ssh_config" -o BatchMode=yes "$vm" true </dev/null || { echo "ssh by name failed"; return 1; }
+  env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$vm" true </dev/null || { echo "ssh by name failed"; return 1; }
   pgrep -fl -- "[_]smolvm-ports -vm $vm " | grep -qE -- ' -only (22,)?47399$' || { echo "forwarder's ports"; return 1; }
   smolpa_serve "$vm" 127.0.0.1 47399; smolpa_serve "$vm" 127.0.0.1 47400
   smolpa_answers 47399 vm-47399 && smolpa_closed 47400 && smolnet_direct "$vm"; }
@@ -4009,7 +4011,7 @@ d_emu_begin() {
   d_real_home=$HOME
   export DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
   sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc/home/.ssh" "$sc/bin"
-  dsc=$XDG_CONFIG_HOME/devvm/ssh_config kh=$XDG_CONFIG_HOME/devvm/known_hosts
+  dsc=$XDG_DATA_HOME/devvm/ssh_config kh=$XDG_DATA_HOME/devvm/known_hosts
   printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$dsc" > "$sc/config"
   cp "$sc/config" "$sc/home/.ssh/config"
   printf '#!/bin/sh\necho "$*" > %s/code-args\n' "$sc" > "$sc/bin/code"; chmod +x "$sc/bin/code"
@@ -4356,7 +4358,7 @@ docker_agent() {
   (cd "$g" && quiet env SSH_AUTH_SOCK="$ua" "$D" rm --force --no-export)
   kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
   pkill -f "[s]sh-agent -a $da"
-  rm -f "$work/d-key" "$work/d-key.pub" "$work/d-dkey" "$work/d-dkey.pub" "$ua" "$XDG_CONFIG_HOME/devvm/agent-keys"
+  rm -f "$work/d-key" "$work/d-key.pub" "$work/d-dkey" "$work/d-dkey.pub" "$ua" "$XDG_DATA_HOME/devvm/agent-keys.json"
 }
 
 # docker_clone NAME: a --clone VM, over its ssh. A throwaway repo, with a branch besides main and a

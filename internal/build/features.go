@@ -14,7 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
 // Features returns the base image features there are: devvm's own
@@ -77,21 +77,22 @@ func (b *Env) FeatureScript(name string) (backend.Script, error) {
 // makes base several hundred MB bigger, for a window few VMs open.
 const desktopFeature = "desktop"
 
-// chosenFeatures returns the features chosen for base: the base-features
-// file's, or until there is one, every feature but desktop.
+// chosenFeatures returns the features chosen for base, as config.toml or
+// settings.json chooses them, or until they're chosen, every feature but
+// desktop.
 func (b *Env) chosenFeatures() ([]string, error) {
-	chosen, err := state.ReadBaseFeatures(b.Dirs)
-	if errors.Is(err, fs.ErrNotExist) {
-		all, _ := b.Features()
-		return slices.DeleteFunc(all, func(f string) bool { return f == desktopFeature }), nil
+	def, err := settings.Read(b.Dirs)
+	if err != nil || def.Features.Chosen {
+		return def.Features.Names, err
 	}
-	return chosen, err
+	all, _ := b.Features()
+	return slices.DeleteFunc(all, func(f string) bool { return f == desktopFeature }), nil
 }
 
 // chooseFeatures asks which features base gets, the first time anything
 // is built (PickFeatures).
 func (b Choice) chooseFeatures() error {
-	if _, err := os.Stat(b.Dirs.BaseFeatures()); !errors.Is(err, fs.ErrNotExist) {
+	if def, err := settings.Read(b.Dirs); err != nil || def.Features.Chosen {
 		return err
 	}
 	_, err := b.PickFeatures()
@@ -163,7 +164,7 @@ func (b Choice) features() []string {
 // saveFeatures saves and prints the chosen features, reporting whether
 // they differ from those before.
 func (b Choice) saveFeatures(before, chosen []string) (bool, error) {
-	if err := state.WriteBaseFeatures(b.Dirs, chosen); err != nil {
+	if _, err := settings.Save(b.Dirs, settings.Values{Features: settings.Of(append([]string{}, chosen...))}); err != nil {
 		return false, err
 	}
 	if len(chosen) == 0 {

@@ -56,7 +56,7 @@ ssh for editors is emulated, and reviewed. `devvm host`, `devvm code`, `--clone`
 
 devvm starts an sshd of its own after each start of the VM ([below](#no-init-system)), with a config of devvm's own, `/etc/devvm/ssh/sshd_config`, which only root can change. The image's own sshd config doesn't apply.
 
-The VM gets a new ed25519 host key at each start, so no two VMs made from one image share one. devvm reads the key through smolvm (`smolvm machine exec`), not over the network, and pins it in `~/.config/devvm/known_hosts`, as on Lima. ssh refuses a key that doesn't match.
+The VM gets a new ed25519 host key at each start, so no two VMs made from one image share one. devvm reads the key through smolvm (`smolvm machine exec`), not over the network, and pins it in `~/.local/share/devvm/known_hosts`, as on Lima. ssh refuses a key that doesn't match.
 
 Only the VM's own key logs in, and only as the VM's user. The key is `~/.local/share/devvm/smolvm/vms/<vm>.key` (mode 600), which devvm makes at the VM's first start with ssh. Its public half is that VM's only authorized key, so the key logs in to no other VM. Passwords, root and other users can't log in. The ssh config entries offer only that key (`IdentitiesOnly yes`), and never your agent's keys.
 

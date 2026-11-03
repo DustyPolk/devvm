@@ -88,7 +88,7 @@ stdout '^devvm ports: forwarding devvm-web-[0-9a-f]{14}''s ports$'
 exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +- +\S+ +off +- +smolvm +\S+/web$'
-grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
+grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $DATA/ssh_config
 
 # A listed port a program on this machine has, on any address, isn't
 # forwarded from a start that finds it so, warned: the forwarder forwards
@@ -193,15 +193,15 @@ stdout '^smolvm machine update( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14}
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
 exec sh -c 'ls -l "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
 stdout '^-rw-------\S* '
-grep '^Host devvm-sshd devvm-sshd-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  Hostname 127\.0\.0\.1$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  Port [0-9]+$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  IdentityFile ".+/smolvm/vms/devvm-sshd-[0-9a-f]{14}\.key"$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  ForwardX11 no$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  AddKeysToAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  IdentitiesOnly yes$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^  ForwardAgent no$' $XDG_CONFIG_HOME/devvm/ssh_config
-grep '^devvm-sshd-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $XDG_CONFIG_HOME/devvm/known_hosts
+grep '^Host devvm-sshd devvm-sshd-[0-9a-f]{14}$' $DATA/ssh_config
+grep '^  Hostname 127\.0\.0\.1$' $DATA/ssh_config
+grep '^  Port [0-9]+$' $DATA/ssh_config
+grep '^  IdentityFile ".+/smolvm/vms/devvm-sshd-[0-9a-f]{14}\.key"$' $DATA/ssh_config
+grep '^  ForwardX11 no$' $DATA/ssh_config
+grep '^  AddKeysToAgent no$' $DATA/ssh_config
+grep '^  IdentitiesOnly yes$' $DATA/ssh_config
+grep '^  ForwardAgent no$' $DATA/ssh_config
+grep '^devvm-sshd-[0-9a-f]{14} ssh-ed25519 AAAAstub$' $DATA/known_hosts
 exec devvm host
 stdout '^ssh_host_info dir=\S+/sshd host=devvm-sshd$'
 # An image without sshd: the start runs the rest without it, warned; no
@@ -212,7 +212,7 @@ exec devvm restart
 stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 stub_calls
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s --$'
-! grep 'devvm-sshd' $XDG_CONFIG_HOME/devvm/ssh_config
+! grep 'devvm-sshd' $DATA/ssh_config
 ! exec devvm host
 stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 rm $STUB_DIR/no-sshd
@@ -255,12 +255,12 @@ exec devvm ssh-agent devvm
 catg $STUB_DIR/smolvm-agent-devvm-agent-*
 stdout '^/dev/null/devvm-no-agent$'
 exec devvm
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout '^Host devvm-agent devvm-agent-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent no\n'
 exec devvm restart
 catg $STUB_DIR/smolvm-agent-devvm-agent-*
 stdout '^\S+/data/devvm/agent\.sock$'
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout '^Host devvm-agent devvm-agent-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent "\S+/data/devvm/agent\.sock"\n'
 exec devvm ssh-agent on
 exec devvm restart

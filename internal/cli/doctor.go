@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
@@ -42,9 +44,10 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reg, b, err := doctorBackend(u, backend)
+			reg, b, from, err := doctorBackend(u, backend)
 			fail(u, err, msg.DoctorFailed)
 			d := doctor{
+				From: from,
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
 				Free: reg.Host.FreeSpace,
 				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
@@ -76,10 +79,13 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 // it's missing, doctor's warnings, whether Docker is installed, and every
 // backend's features.
 type doctorOutput struct {
-	Backend  string        `json:"backend"`
-	Problems []problemJSON `json:"problems"`
-	Warnings []string      `json:"warnings"`
-	Docker   bool          `json:"docker"`
+	Backend string `json:"backend"`
+	// BackendSource is where Backend came from: flag, config.toml,
+	// settings.json or built-in.
+	BackendSource string        `json:"backend_source"`
+	Problems      []problemJSON `json:"problems"`
+	Warnings      []string      `json:"warnings"`
+	Docker        bool          `json:"docker"`
 	// Features is, for each backend, how it has each feature: native,
 	// emulated, unreviewed or none.
 	Features map[string]map[string]string `json:"features"`
@@ -96,7 +102,10 @@ type problemJSON struct {
 // report is what doctor finds, as doctor --json shows it. It prints
 // nothing.
 func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Backend) doctorOutput {
-	out := doctorOutput{Backend: b.Name(), Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{}}
+	out := doctorOutput{
+		Backend: b.Name(), BackendSource: string(cmp.Or(d.From.Source, settings.FromBuiltin)),
+		Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{},
+	}
 	for _, p := range b.Problems(ctx) {
 		j := problemJSON{Key: p.Key, Message: p.Msg.Line()}
 		if p.Fix != "" {
@@ -145,6 +154,8 @@ const (
 
 // doctor is devvm doctor's checks of this machine; tests set its fields.
 type doctor struct {
+	// From is where the backend it checks came from.
+	From backendFrom
 	Path onPath
 	Free func(path string) (uint64, error) // free bytes on path's volume
 	Host func() (vm.Host, error)
@@ -161,6 +172,9 @@ func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b back
 	problems := b.Problems(ctx)
 	if err := writeFeatures(u.Table(), all); err != nil {
 		return err
+	}
+	if d.From.File != "" {
+		u.Say(msg.DoctorBackendFrom(b.Name(), d.From.File))
 	}
 	if _, err := exec.LookPath("docker"); err == nil {
 		u.Say(msg.DockerFound())
@@ -225,21 +239,32 @@ func sayProxyCA(u *ui.UI) {
 }
 
 // doctorBackend returns devvm's backends and the one new VMs get: flag's
-// (--backend), else the default.
-func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, error) {
+// (--backend), else the default, with where it came from.
+func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, backendFrom, error) {
+	var from backendFrom
 	dirs, err := paths.FromEnv()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, from, err
 	}
 	reg, err := newRegistry(dirs, assets.FS, u)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, from, err
 	}
 	c, err := reg.For(dirs, new(state.VM), flag)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, from, err
 	}
-	return reg, c.Backend, nil
+	def, err := settings.Read(dirs)
+	from.Source = def.Backend.With(flag).Source
+	from.File = from.Source.File(dirs)
+	return reg, c.Backend, from, err
+}
+
+// backendFrom is where the backend devvm doctor checks came from, and the
+// file that set it, if one did.
+type backendFrom struct {
+	Source settings.Source
+	File   string
 }
 
 // onPath finds the devvm first on PATH; tests set its fields.

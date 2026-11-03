@@ -499,9 +499,9 @@ func CopyingBranches() M {
 	return M{id: "copying_branches"}
 }
 
-// CpusNotNumber is [cpus_not_number]: "The --cpus flag takes a whole number, not {{.value}}."
-func CpusNotNumber(value string) M {
-	return M{id: "cpus_not_number", vals: []val{{"value", value}}}
+// CpusNotNumber is [cpus_not_number]: "{{.flag}} takes a whole number of CPUs, not {{.value}}."
+func CpusNotNumber(flag string, value string) M {
+	return M{id: "cpus_not_number", vals: []val{{"flag", flag}, {"value", value}}}
 }
 
 // Creating is [creating]: "creating {{.vm}}"
@@ -1012,6 +1012,11 @@ func DockerVolumeFailed(name string) M {
 // DockerVolumeForeign is [docker_volume_foreign]: "Docker has a volume named {{.name}} that isn't this devvm's. Remove it with docker."
 func DockerVolumeForeign(name string) M {
 	return M{id: "docker_volume_foreign", vals: []val{{"name", name}}}
+}
+
+// DoctorBackendFrom is [doctor_backend_from]: "New VMs get the {{.backend}} backend, which {{.file}} sets."
+func DoctorBackendFrom(backend string, file string) M {
+	return M{id: "doctor_backend_from", vals: []val{{"backend", backend}, {"file", file}}}
 }
 
 // DoctorFailed is [doctor_failed]: "Checking what devvm needs failed: {{.reason}}."
@@ -2784,6 +2789,11 @@ func SecretWithClaude(vm string) M {
 	return M{id: "secret_with_claude", vals: []val{{"vm", vm}}}
 }
 
+// SetInConfig is [set_in_config]: "{{.file}} sets {{.key}}, and devvm never changes that file. To change it, edit {{.key}} there, or delete it to let devvm's commands set it."
+func SetInConfig(file string, key string) M {
+	return M{id: "set_in_config", vals: []val{{"file", file}, {"key", key}}}
+}
+
 // SetidFiles is [setid_files]: "The project folder has set-user-id or set-group-id files, which run as their owner for anyone who runs them: {{.files}}. To clear the bits, run chmod u-s,g-s FILE on each one."
 func SetidFiles(files string) M {
 	return M{id: "setid_files", vals: []val{{"files", files}}}
@@ -2797,6 +2807,11 @@ func SetidRootFiles(files string) M {
 // SetupFailed is [setup_failed]: "Saving the settings failed: {{.reason}}."
 func SetupFailed(reason string) M {
 	return M{id: "setup_failed", vals: []val{{"reason", reason}}}
+}
+
+// SetupInConfig is [setup_in_config]: "{{.file}} sets {{.key}}, so devvm setup doesn't ask for it"
+func SetupInConfig(file string, key string) M {
+	return M{id: "setup_in_config", vals: []val{{"file", file}, {"key", key}}}
 }
 
 // ShareWaiting is [share_waiting]: "waiting for another devvm to finish with {{.dir}}"
@@ -3465,7 +3480,7 @@ var specs = map[string]spec{
 	"converting":                       {fields: []string{"from"}},
 	"converting_in_vm":                 {fields: []string{"from", "vm"}},
 	"copying_branches":                 {},
-	"cpus_not_number":                  {fields: []string{"value"}},
+	"cpus_not_number":                  {fields: []string{"flag", "value"}},
 	"creating":                         {fields: []string{"vm"}},
 	"creating_from":                    {fields: []string{"image", "vm"}},
 	"creating_from_image":              {fields: []string{"image", "vm"}},
@@ -3568,6 +3583,7 @@ var specs = map[string]spec{
 	"docker_update_failed":             {fields: []string{"vm"}},
 	"docker_volume_failed":             {fields: []string{"name"}},
 	"docker_volume_foreign":            {fields: []string{"name"}},
+	"doctor_backend_from":              {fields: []string{"backend", "file"}},
 	"doctor_failed":                    {fields: []string{"reason"}},
 	"doctor_ok":                        {fields: []string{"backend", "version"}},
 	"doctor_proxy_ca":                  {fields: []string{"dir"}},
@@ -3922,9 +3938,11 @@ var specs = map[string]spec{
 	"secret_unused":                    {fields: []string{"secret", "vm"}},
 	"secret_used":                      {fields: []string{"secret", "vm"}},
 	"secret_with_claude":               {fields: []string{"vm"}},
+	"set_in_config":                    {fields: []string{"file", "key"}},
 	"setid_files":                      {fields: []string{"files"}},
 	"setid_root_files":                 {fields: []string{"files"}},
 	"setup_failed":                     {fields: []string{"reason"}},
+	"setup_in_config":                  {fields: []string{"file", "key"}},
 	"share_waiting":                    {fields: []string{"dir"}},
 	"size_cpus_prompt":                 {fields: []string{"cpus"}},
 	"size_defaults":                    {fields: []string{"size"}},

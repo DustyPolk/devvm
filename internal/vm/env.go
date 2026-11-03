@@ -47,7 +47,7 @@ const (
 	KeyCPUs      = "cpus"   // the size asked for; unset for the image's
 	KeyMemory    = "memory" // GiB
 	KeyDisk      = "disk"   // GiB
-	KeyPorts     = "ports"  // which ports it forwards (ParsePorts); unset for all
+	KeyPorts     = "ports"  // which ports it forwards (settings.ParsePorts); unset for all
 	// KeyAgentToggle is set when its backend emulates turning its SSH agent
 	// forwarding on or off (made ready for it), which its starts rely on.
 	KeyAgentToggle = "agent_toggle"

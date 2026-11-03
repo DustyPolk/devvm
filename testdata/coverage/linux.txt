@@ -27,6 +27,7 @@ internal/platform 79.7
 internal/project 91.5
 internal/proxy 88.2
 internal/secrets 90.3
+internal/settings 95.0
 internal/shell 100.0
 internal/sshagent 83.4
 internal/sshconfig 84.8

@@ -51,6 +51,54 @@ func TestMakePrivate(t *testing.T) {
 	}
 }
 
+// Backends lists the backends the VMs' states name, and ToolNames a VM's
+// shared tools; a CorruptError names its file and line, WriteFile writes
+// a file whole, the user's alone.
+func TestBackendsAndTools(t *testing.T) {
+	d := testDirs(t)
+	for i, b := range []string{"lima", "smolvm", ""} {
+		if _, err := CreateVM(d, "devvm-x-"+string(rune('a'+i)), NewVM{Image: "base", Backend: b, Tools: []string{"node", "claude"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	used, err := Backends(d)
+	if err != nil || !reflect.DeepEqual(used, map[string]bool{"lima": true, "smolvm": true}) {
+		t.Errorf("Backends = %v, %v", used, err)
+	}
+	st, err := ReadVM(d, "devvm-x-a")
+	if err != nil || !reflect.DeepEqual(st.ToolNames(), []string{"node", "claude"}) {
+		t.Errorf("ToolNames = %q, %v", st.ToolNames(), err)
+	}
+	if none, _ := ReadVM(d, "devvm-none"); none.ToolNames() != nil {
+		t.Errorf("no state: %q", none.ToolNames())
+	}
+	for e, want := range map[*CorruptError]string{{"/f", 3, "bad"}: "/f:3: bad", {"/f", 0, "bad"}: "/f: bad"} {
+		if e.Error() != want {
+			t.Errorf("%q, want %q", e.Error(), want)
+		}
+	}
+	path := filepath.Join(d.Data, "sub", "f")
+	if err := WriteFile(path, []byte("x")); err != nil || read(t, path) != "x" {
+		t.Errorf("WriteFile: %v", err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, %v", fi.Mode().Perm(), err)
+	}
+	// Removing an image: a bad key is refused, and a missing one is no
+	// error.
+	if err := RemoveImage(d, "../x"); err == nil {
+		t.Error("RemoveImage(../x): want an error")
+	}
+	if err := RemoveImage(d, "0123456789ab"); err != nil {
+		t.Errorf("RemoveImage of none: %v", err)
+	}
+	// A state file that can't be read stops Backends.
+	write(t, d.VMState("devvm-x-d"), "not key value\n")
+	if _, err := Backends(d); err == nil {
+		t.Error("Backends with a bad state: want an error")
+	}
+}
+
 func write(t *testing.T, path, data string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

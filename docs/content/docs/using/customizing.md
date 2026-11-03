@@ -67,7 +67,7 @@ Features are optional extras that devvm builds into [`base`](images.md#base) aft
 
 ### Choosing features
 
-The first time devvm builds anything, it asks which features `base` gets, with every one but `desktop` chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature but `desktop`. devvm prints the choice and saves it in `~/.config/devvm/base-features`, one name per line, in the order they run.
+The first time devvm builds anything, it asks which features `base` gets, with every one but `desktop` chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature but `desktop`. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
 
 To change the choice:
 
@@ -77,7 +77,7 @@ devvm setup --features fzf,omb  # without asking
 devvm setup --features none     # without asking, and base gets no features
 ```
 
-In a terminal, `devvm setup` first asks for the [default backend](../backends/_index.md#choosing-a-backend), then for the features, and then for the [CPUs and memory](ports-size.md#choosing-new-vms-size) and the network policy that new VMs get ([devvm setup](settings.md#devvm-setup)). `--features` asks for none of the others. Without a terminal, `devvm setup` keeps the choice. devvm refuses a name that isn't a feature, and an empty `--features ''`, and then nothing changes. You can also edit `base-features` yourself. An empty file chooses none, and devvm skips a name without a script, with a warning.
+In a terminal, `devvm setup` first asks for the [default backend](../backends/_index.md#choosing-a-backend), then for the features, and then for the [CPUs and memory](ports-size.md#choosing-new-vms-size) and the network policy that new VMs get ([devvm setup](settings.md#devvm-setup)). `--features` asks for none of the others. Without a terminal, `devvm setup` keeps the choice. devvm refuses a name that isn't a feature, and an empty `--features ''`, and then nothing changes. You can also choose them by hand with `features` in `config.toml`, such as `features = ["fzf", "omb"]`, which wins over what `devvm setup` saved, and then `devvm setup --features` refuses to change them. `features = []` chooses none, and devvm skips a name without a script, with a warning.
 
 A new choice makes `base` and the images built on it rebuild the next time they're used, and `devvm setup` says so. The old images are then stale, and [`devvm gc`](images.md#cleaning-up) deletes them.
 

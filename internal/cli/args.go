@@ -10,6 +10,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vm"
@@ -237,11 +238,11 @@ func checkFlagValue(name, value string) error {
 	var err error
 	switch name {
 	case "cpus":
-		_, err = vm.ParseCPUs(value)
+		_, err = settings.ParseCPUs("--cpus", value)
 	case "memory", "disk":
-		_, err = vm.ParseGiB("--"+name, value)
+		_, err = settings.ParseGiB("--"+name, value)
 	case "ports":
-		_, err = vm.ParsePorts(value)
+		_, err = settings.ParsePorts(value)
 	case "lifetime":
 		if value != "" {
 			err = sshagent.CheckLifetime(value)

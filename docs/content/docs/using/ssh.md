@@ -9,16 +9,16 @@ You can reach each running VM by name from ssh and from editors such as VS Code,
 
 Each running project VM can be reached as `devvm-<folder>`, as in `ssh devvm-website` or VS Code's *Remote-SSH: Connect to Host*. The name keeps its hash suffix only when two folders share a name, and the VM's full name (`devvm-website-<hash>`) always works as well.
 
-devvm writes these entries to `~/.config/devvm/ssh_config` each time it launches or stops a VM, because a VM's SSH port can change each time it starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
+devvm writes these entries to `~/.local/share/devvm/ssh_config` each time it launches or stops a VM, because a VM's SSH port can change each time it starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
 
 ```text
-Include ~/.config/devvm/ssh_config
+Include ~/.local/share/devvm/ssh_config
 ```
 
-You can also point ssh at the file, as in `ssh -F ~/.config/devvm/ssh_config devvm-website`. `devvm host`, `devvm code` and a new [`--clone`](clone.md) VM offer to add the line in a terminal, and without one, they show it.
+You can also point ssh at the file, as in `ssh -F ~/.local/share/devvm/ssh_config devvm-website`. `devvm host`, `devvm code` and a new [`--clone`](clone.md) VM offer to add the line in a terminal, and without one, they show it.
 
 - **Only running VMs are listed.** A stopped VM's port is free for any program on this machine to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm host` or `devvm` before you connect from an editor.
-- **Each entry checks the VM's own host keys,** which devvm keeps in `~/.config/devvm/known_hosts`. ssh refuses a host key that doesn't match, and a VM whose keys devvm can't read gets no entry.
+- **Each entry checks the VM's own host keys,** which devvm keeps in `~/.local/share/devvm/known_hosts`. ssh refuses a host key that doesn't match, and a VM whose keys devvm can't read gets no entry.
 - **The entries need OpenSSH 8.7 or newer** (`ssh -V`), and an older ssh refuses them.
 - **Keep remote forwards out of `Host *`.** The entries turn off what else your ssh config could share with a VM, but they can't turn off a `RemoteForward` of yours.
 
@@ -65,12 +65,12 @@ devvm's own agent keeps your other keys out of reach, because it holds only the 
 
 - `devvm ssh-agent add ~/.ssh/deploy_key` starts the agent and loads the key. The agent's socket is `~/.local/share/devvm/agent.sock`. `devvm ssh-agent devvm` makes this folder's VM forward that agent instead of yours, in devvm's shells and in the ssh entries alike. The entries name it as the agent, so an editor forwards it however the editor was started.
 - `devvm ssh-agent` shows this folder's VM's choice, and once you've added a key, it then lists the keys devvm's agent holds, as `ssh-add -l` does, and each key you added, with its file, its fingerprint and how it's loaded. It loads the keys the agent lacks before it lists them.
-- `devvm ssh-agent rm ~/.ssh/deploy_key` takes the key out of devvm's agent and out of `~/.config/devvm/agent-keys`, so devvm doesn't load it again. devvm finds the key in the agent by the fingerprint it recorded, so the key file can have changed or be gone, and devvm leaves the file itself as it is. devvm refuses a key you didn't add, and `devvm ssh-agent` lists the ones you did.
+- `devvm ssh-agent rm ~/.ssh/deploy_key` takes the key out of devvm's agent and out of `~/.local/share/devvm/agent-keys.json`, so devvm doesn't load it again. devvm finds the key in the agent by the fingerprint it recorded, so the key file can have changed or be gone, and devvm leaves the file itself as it is. devvm refuses a key you didn't add, and `devvm ssh-agent` lists the ones you did.
 - devvm loads a key again when a VM that uses the agent launches without it, such as after a reboot or once the key's lifetime ran out, and it asks for the key's passphrase if it has one. It does so only while the file holds the key you added. `add` records the key's fingerprint, so devvm doesn't load a file that was replaced since, or a link that was swapped to another key. A key you replaced in place needs `devvm ssh-agent add` again.
 - devvm refuses a key inside a folder a VM mounts, and doesn't load it, because that VM could read it. Keep the keys for devvm's agent outside project folders.
 - An encrypted key in the old PEM format needs converting first, with `ssh-keygen -p -f KEY`, because devvm can't read its fingerprint without the passphrase.
 
-The agent drops each key 12 hours after it loads it, so a VM can't keep using the key indefinitely. `--lifetime 30m` changes that for one key, and it takes a [duration](../getting-started/commands.md#flags-and-values) in minutes, hours, days or weeks, such as `30m`, `8h` or `1d`, or `forever`. `--confirm` makes the agent ask you before each use, such as each push or each login, through an `ssh-askpass` program. macOS doesn't include one, so install it with `brew install theseal/ssh-askpass/ssh-askpass`. devvm keeps the keys and their options in `~/.config/devvm/agent-keys`, and running `devvm ssh-agent add` on the same key again replaces its options.
+The agent drops each key 12 hours after it loads it, so a VM can't keep using the key indefinitely. `--lifetime 30m` changes that for one key, and it takes a [duration](../getting-started/commands.md#flags-and-values) in minutes, hours, days or weeks, such as `30m`, `8h` or `1d`, or `forever`. `--confirm` makes the agent ask you before each use, such as each push or each login, through an `ssh-askpass` program. macOS doesn't include one, so install it with `brew install theseal/ssh-askpass/ssh-askpass`. devvm keeps the keys and their options in `~/.local/share/devvm/agent-keys.json`, and running `devvm ssh-agent add` on the same key again replaces its options.
 
 ### devvm ssh-agent --json
 

@@ -3,19 +3,18 @@ package vm
 import (
 	"errors"
 	"io/fs"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
-// SizeChoice chooses the size new VMs get, the size file devvm size -g
-// writes: from flags (Set), or asked for (Ask). Nothing rebuilds, and
-// existing VMs keep their size.
+// SizeChoice chooses the size new VMs get, which devvm size -g saves in
+// settings.json: from flags (Set), or asked for (Ask). Nothing rebuilds,
+// and existing VMs keep their size.
 type SizeChoice struct {
 	Dirs   paths.Dirs
 	Assets fs.FS // devvm's own files, whose base.yaml sets base's size
@@ -27,9 +26,23 @@ type SizeChoice struct {
 	Say, Warn, Info func(msg.M)
 }
 
+// sizeValues is what s sets, as settings.Save takes it.
+func sizeValues(s Size) settings.Values {
+	var v settings.SizeValues
+	for _, f := range []struct {
+		val string
+		p   **string
+	}{{s.CPUs, &v.CPUs}, {s.Memory, &v.Memory}, {s.Disk, &v.Disk}} {
+		if f.val != "" {
+			*f.p = settings.Of(f.val)
+		}
+	}
+	return settings.Values{Size: v}
+}
+
 // Set saves the CPUs, memory and disk s sets as new VMs' size, after
 // checking them against the host, and keeps what it leaves unset as
-// saved.
+// saved. One config.toml sets is refused (set_in_config).
 func (c SizeChoice) Set(s Size) error {
 	s, err := s.Parse()
 	if err != nil {
@@ -38,40 +51,51 @@ func (c SizeChoice) Set(s Size) error {
 	if err := s.Check(c.Host, 0, ""); err != nil {
 		return err
 	}
-	old, err := readDefaultSize(c.Dirs)
+	def, err := settings.Save(c.Dirs, sizeValues(s))
 	if err != nil {
 		return err
 	}
-	def := s.Or(old)
-	if err := writeDefaultSize(c.Dirs, def); err != nil {
-		return err
-	}
-	c.Info(msg.SizeDefaults(SizeText(def.Backend())))
+	c.Info(msg.SizeDefaults(SizeText(defaultSize(def).Backend())))
 	return nil
 }
 
-// Ask asks for new VMs' CPUs and memory, each starting from the saved
-// size, else base's fitted to the host (Fitted). Enter keeps one; a value
-// the host can't give is said, and asked for again. Only what's typed is
-// saved, so keeping both writes nothing.
+// Ask asks for new VMs' CPUs and memory, each starting from the size in
+// effect, else base's fitted to the host (Fitted), and says it skips one
+// config.toml sets. Enter keeps one; a value the host can't give is said,
+// and asked for again. Only what's typed is saved, so keeping both writes
+// nothing.
 func (c SizeChoice) Ask() error {
-	old, err := readDefaultSize(c.Dirs)
+	def, err := settings.Read(c.Dirs)
 	if err != nil {
 		return err
 	}
-	shown := old.Or(c.Fitted())
+	shown := defaultSize(def).Or(c.Fitted())
 	c.Say(msg.SizeQuestion(strconv.Itoa(c.Host.CPUs), strconv.Itoa(c.Host.MemoryGiB)))
 	var typed Size
-	typed.CPUs = c.ask(msg.SizeCpusPrompt(shown.CPUs), func(v string) (Size, error) {
-		v, err := ParseCPUs(v)
-		return Size{CPUs: v}, err
-	})
-	typed.Memory = c.ask(msg.SizeMemoryPrompt(shown.Memory), func(v string) (Size, error) {
-		v, err := ParseGiB("--memory", v)
-		return Size{Memory: v}, err
-	})
+	for _, q := range []struct {
+		key    string
+		from   settings.Value
+		prompt msg.M
+		into   *string
+		parse  func(string) (Size, error)
+	}{
+		{settings.KeyCPUs, def.CPUs, msg.SizeCpusPrompt(shown.CPUs), &typed.CPUs, func(v string) (Size, error) {
+			v, err := settings.ParseCPUs("--cpus", v)
+			return Size{CPUs: v}, err
+		}},
+		{settings.KeyMemory, def.Memory, msg.SizeMemoryPrompt(shown.Memory), &typed.Memory, func(v string) (Size, error) {
+			v, err := settings.ParseGiB("--memory", v)
+			return Size{Memory: v}, err
+		}},
+	} {
+		if q.from.Source == settings.FromConfig {
+			c.Info(msg.SetupInConfig(c.Dirs.ConfigFile(), q.key))
+			continue
+		}
+		*q.into = c.ask(q.prompt, q.parse)
+	}
 	if typed != (Size{}) {
-		if err := writeDefaultSize(c.Dirs, typed.Or(old)); err != nil {
+		if _, err := settings.Save(c.Dirs, sizeValues(typed)); err != nil {
 			return err
 		}
 	}
@@ -109,24 +133,18 @@ func (c SizeChoice) Fitted() Size {
 	return Size{CPUs: strconv.Itoa(cpus), Memory: strconv.FormatFloat(mem, 'g', -1, 64)}
 }
 
-// writeDefaultSize writes s to d's size file.
-func writeDefaultSize(d paths.Dirs, s Size) error {
-	return state.WriteSize(d, state.Size{CPUs: s.CPUs, Memory: s.Memory, Disk: s.Disk})
-}
-
 // firstRunSize asks for the size new VMs get on devvm's first run, before
-// base's features are first chosen: in a terminal, when no size is saved
-// and the user gave neither --cpus nor --memory. After it, base's
+// base's features are first chosen (def): in a terminal, when nothing sets
+// a size and the user gave neither --cpus nor --memory. After it, base's
 // features are chosen, so it doesn't ask again.
-func (e creation) firstRunSize(given Size) error {
-	if given.CPUs != "" || given.Memory != "" || !e.Interactive() {
+func (e creation) firstRunSize(given Size, def settings.Defaults) error {
+	if given.CPUs != "" || given.Memory != "" || !e.Interactive() || def.Features.Chosen {
 		return nil
 	}
-	if _, err := os.Stat(e.Dirs.BaseFeatures()); !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	if saved, err := state.ReadSize(e.Dirs); err != nil || saved != (state.Size{}) {
-		return err
+	for _, v := range []settings.Value{def.CPUs, def.Memory, def.Disk} {
+		if v.Source != settings.FromBuiltin {
+			return nil
+		}
 	}
 	host, err := e.Host()
 	if err != nil {

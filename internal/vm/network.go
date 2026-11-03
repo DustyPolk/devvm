@@ -11,6 +11,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -47,18 +49,34 @@ func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	return s, err
 }
 
-// NetworkDefault returns whether new VMs get network policy: ask, on or
-// off.
-func (e Net) NetworkDefault() (string, error) { return state.ReadNetwork(e.Dirs) }
+// NetworkDefault returns whether new VMs get network policy (ask, on or
+// off), and where that came from.
+func (e Net) NetworkDefault() (settings.Value, error) {
+	def, err := settings.Read(e.Dirs)
+	return def.Network, err
+}
 
-// SetNetworkDefault saves whether new VMs get network policy (a
-// state.NetworkChoices value), as devvm setup does. The flags of devvm
-// [IMAGE] still choose for one VM.
+// SetNetworkDefault saves whether new VMs get network policy, as devvm
+// setup does (NetworkChoice).
 func (e Net) SetNetworkDefault(mode string) error {
-	if err := state.WriteNetwork(e.Dirs, mode); err != nil {
+	return NetworkChoice{Dirs: e.Dirs, Info: e.Info}.Set(mode)
+}
+
+// NetworkChoice chooses whether new VMs get network policy, which devvm
+// network -g and devvm setup save in settings.json. The flags of devvm
+// still choose for one VM.
+type NetworkChoice struct {
+	Dirs paths.Dirs
+	Info func(msg.M) // says what's saved
+}
+
+// Set saves mode (a settings.NetworkChoices value) as new VMs' network
+// policy; config.toml mustn't set it (set_in_config).
+func (c NetworkChoice) Set(mode string) error {
+	if _, err := settings.Save(c.Dirs, settings.Values{Network: &mode}); err != nil {
 		return err
 	}
-	e.Info(msg.NetworkDefault(mode))
+	c.Info(msg.NetworkDefault(mode))
 	return nil
 }
 

@@ -212,6 +212,10 @@ other = "This machine has {{.have}} GiB of memory, less than the {{.want}} GiB d
 description = "have and want are counts; want is the CPUs devvm recommends"
 other = "This machine has {{.have}} CPUs, fewer than the {{.want}} devvm recommends, so a VM gets all of them unless you give it a size."
 
+[doctor_backend_from]
+description = "file is config.toml's path, or settings.json's for what devvm setup saved"
+other = "New VMs get the {{.backend}} backend, which {{.file}} sets."
+
 [doctor_ok]
 other = "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 
@@ -965,6 +969,14 @@ other = "That retention setting is refused, and nothing changed: {{.reason}}."
 [retention_saved]
 other = "saved the retention settings in {{.file}}"
 
+[set_in_config]
+description = "file is config.toml's path; key is its key, such as size.memory or retention.history.age"
+other = "{{.file}} sets {{.key}}, and devvm never changes that file. To change it, edit {{.key}} there, or delete it to let devvm's commands set it."
+
+[setup_in_config]
+description = "file is config.toml's path; key is its key, such as backend or size.cpus"
+other = "{{.file}} sets {{.key}}, so devvm setup doesn't ask for it"
+
 [retention_settings_failed]
 description = "reason is an error from the system, in English"
 other = "Reading or changing the retention settings failed: {{.reason}}."
@@ -1153,11 +1165,11 @@ other = "{{.dir}} is inside {{.inside}}, one of devvm's own folders, so the VM w
 other = "You passed --unsafe-folder, so the VM gets read-write access to {{.dir}}, which overlaps {{.holds}}."
 
 [cpus_not_number]
-description = "value is quoted, as given"
-other = "The --cpus flag takes a whole number, not {{.value}}."
+description = "flag is --cpus, or config.toml's cpus; value is quoted, as given"
+other = "{{.flag}} takes a whole number of CPUs, not {{.value}}."
 
 [size_not_gib]
-description = "flag is --memory or --disk; value is quoted, as given"
+description = "flag is --memory or --disk, or config.toml's memory or disk; value is quoted, as given"
 other = "{{.flag}} takes a size in GiB, such as 16, 16G or 16GiB, not {{.value}}."
 
 [too_many_cpus]

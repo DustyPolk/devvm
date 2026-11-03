@@ -46,8 +46,9 @@ flowchart TD
 A new VM gets the first of:
 
 1. `--backend`.
-2. The default, which devvm keeps in `~/.config/devvm/backend` as one line with the backend's name.
-3. `lima`.
+2. `backend` in [`config.toml`](../using/settings.md#configtoml), such as `backend = "smolvm"`.
+3. The default that `devvm setup` saved.
+4. `lima`.
 
 To set the default:
 
@@ -56,9 +57,9 @@ devvm setup                  # asks, then for base's features and new VMs' size 
 devvm setup --backend NAME   # without asking; the features, size and network policy stay as they are
 ```
 
-In a terminal, `devvm setup` lists every backend, with the experimental ones marked, starting from the current default. The up and down keys (or `k` and `j`) move, and Enter confirms. devvm saves and prints the choice, then asks for [base's features](../using/customizing.md#choosing-features), for the [CPUs and memory](../using/ports-size.md#choosing-new-vms-size) that new VMs get and for their network policy ([devvm setup](../using/settings.md#devvm-setup)). With `--features` alone, or without a terminal, it doesn't ask for the backend.
+In a terminal, `devvm setup` lists every backend, with the experimental ones marked, starting from the current default. The up and down keys (or `k` and `j`) move, and Enter confirms. devvm saves and prints the choice, then asks for [base's features](../using/customizing.md#choosing-features), for the [CPUs and memory](../using/ports-size.md#choosing-new-vms-size) that new VMs get and for their network policy ([devvm setup](../using/settings.md#devvm-setup)). With `--features` alone, or without a terminal, it doesn't ask for the backend. When `config.toml` sets `backend`, `devvm setup` doesn't ask for it, and `devvm setup --backend` refuses and names the file, so edit `config.toml` instead ([where a default comes from](../using/settings.md#where-a-default-comes-from)). `devvm doctor` names the file that sets the backend it checks, and its `--json` says where it came from in `backend_source`.
 
-A VM's state records its backend, and the VM stays on that backend, so devvm ignores `--backend` on an existing VM. When the backend file or a VM's state names a backend devvm doesn't have, devvm stops and lists the ones it has.
+A VM's state records its backend, and the VM stays on that backend, so devvm ignores `--backend` on an existing VM. When `config.toml`, the saved default or a VM's state names a backend devvm doesn't have, devvm stops and lists the ones it has.
 
 A launch runs only the backends your VMs use. A backend that no VM uses never runs during a launch, so it can't slow one down, even when it isn't running or isn't installed.
 

@@ -13,8 +13,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -105,7 +105,16 @@ func TestJSONShapes(t *testing.T) {
 				"pending.cpus: number", "pending.disk_gib: number", "pending.memory_gib: number",
 			},
 		},
+		{
+			"size -g",
+			sizeJSON(vm.SizeShown{
+				Size: backend.Size{CPUs: 4, MemoryGiB: 8}, Global: true,
+				Sources: map[string]string{"cpus": "config.toml", "memory": "settings.json", "disk": "built-in"},
+			}),
+			[]string{"cpus: number", "memory_gib: number", "sources.cpus: string", "sources.disk: string", "sources.memory: string"},
+		},
 		{"ports", map[string]string{"ports": "all"}, []string{"ports: string"}},
+		{"ports -g", defaultOutput{"ports": "all", "source": "built-in"}, []string{"ports: string", "source: string"}},
 		{
 			"network",
 			// An entry has builtin or file: both set here, for every field.
@@ -117,7 +126,7 @@ func TestJSONShapes(t *testing.T) {
 				"allowlist[].rules[]: string", "policy: string",
 			},
 		},
-		{"network -g", map[string]string{"policy": "ask"}, []string{"policy: string"}},
+		{"network -g", defaultOutput{"policy": "ask", "source": "config.toml"}, []string{"policy: string", "source: string"}},
 		{
 			"network log",
 			logOutput{Events: []logEventJSON{{
@@ -174,15 +183,15 @@ func TestJSONShapes(t *testing.T) {
 			"devvm[].retain: string", "devvm[].retain_frees: number", "devvm[].size: number", "devvm[].sized: bool", "devvm[].what: string",
 			"gc: number", "strays[].backend: string", "strays[].data: string", "strays[].name: string", "total: number", "unknown[]: string",
 		}},
-		{"retention", retentionJSON(state.Retention{}), retentionShape()},
+		{"retention", retentionJSON(settings.Retention{}), retentionShape()},
 		{
 			"doctor",
 			doctorOutput{
-				Backend: "lima", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
+				Backend: "lima", BackendSource: "built-in", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
 				Warnings: []string{"w"}, Docker: yes, Features: map[string]map[string]string{"lima": {"ssh": "native"}},
 			},
 			[]string{
-				"backend: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
+				"backend: string", "backend_source: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
 				"problems[].message: string", "warnings[]: string",
 			},
 		},
@@ -277,11 +286,14 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 	}
 }
 
-// retentionShape is every retention setting's key, a string each.
+// retentionShape is every retention setting's key, a string each, in
+// settings and in sources.
 func retentionShape() []string {
 	var out []string
-	for _, k := range state.RetentionKeys() {
-		out = append(out, "settings."+k+": string")
+	for _, field := range []string{"settings", "sources"} {
+		for _, k := range settings.RetentionKeys() {
+			out = append(out, field+"."+k+": string")
+		}
 	}
 	return out
 }

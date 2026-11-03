@@ -4,7 +4,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -22,11 +22,11 @@ type nixCachePlan struct {
 // nixCacheCap is the shared Nix cache's cap as the retention settings
 // give it: its default, with a warning, when they can't be read.
 func nixCacheCap(u *ui.UI, d paths.Dirs) int64 {
-	r, err := state.ReadRetention(d)
+	def, err := settings.Read(d)
 	if err != nil {
 		u.Warn(msg.RetentionUnreadable().Because(err))
 	}
-	return r.NixCacheCap()
+	return def.Retention.NixCacheCap()
 }
 
 // planNixCache reads what the shared Nix cache holds; all is --nix-cache.

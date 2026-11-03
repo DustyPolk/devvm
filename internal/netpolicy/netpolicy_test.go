@@ -27,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -1051,8 +1052,8 @@ func TestListed(t *testing.T) {
 // Only a VM with the nix layer gets the shared Nix cache, with the cap
 // nix-cache.size gives, or its default.
 func TestNixCacheArgs(t *testing.T) {
-	if state.NixCacheDefault != proxy.NixCacheDefault {
-		t.Errorf("the cap's default: state's %d, the proxy's %d", state.NixCacheDefault, proxy.NixCacheDefault)
+	if settings.NixCacheDefault != proxy.NixCacheDefault {
+		t.Errorf("the cap's default: settings' %d, the proxy's %d", settings.NixCacheDefault, proxy.NixCacheDefault)
 	}
 	d, st := sandbox(t, "base")
 	var warned msg.Recorder
@@ -1063,17 +1064,20 @@ func TestNixCacheArgs(t *testing.T) {
 	if err := st.Set(state.KeyImage, "pg+nix"); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-nix-cache", d.NixCache(), "-nix-cache-max", strconv.FormatInt(state.NixCacheDefault, 10)}
+	want := []string{"-nix-cache", d.NixCache(), "-nix-cache-max", strconv.FormatInt(settings.NixCacheDefault, 10)}
 	if got := p.nixCacheArgs(st); !slices.Equal(got, want) {
 		t.Errorf("node+nix: %q, want %q", got, want)
 	}
-	if _, err := state.SetRetention(d, []string{"nix-cache.size=2G"}); err != nil {
+	if _, err := settings.Save(d, settings.Values{Retention: map[string]string{settings.RetainNixCacheSize: "2G"}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := p.nixCacheArgs(st); got[3] != strconv.FormatInt(2<<30, 10) {
 		t.Errorf("nix-cache.size=2G: %q", got)
 	}
-	if err := os.WriteFile(d.Retention(), []byte("nix-cache.size=lots\n"), 0o600); err != nil {
+	if err := os.MkdirAll(d.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(d.ConfigFile(), []byte("[retention]\nnix-cache.size = \"lots\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := p.nixCacheArgs(st); got[3] != want[3] || len(warned.Names()) != 1 || !strings.HasPrefix(warned.Names()[0], "retention_unreadable") {

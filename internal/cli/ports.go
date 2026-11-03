@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -14,19 +15,31 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 	var global, asJSON bool
 	// run shows the ports without a change, else makes it.
 	run := func(cmd *cobra.Command, c *vm.PortsChange) error {
-		var ports string
+		var (
+			ports string
+			def   settings.Value
+			label string
+		)
 		withEnv(u, func(env *vm.Env) error {
 			s := vm.Settings{Env: env}
-			if c != nil {
+			var err error
+			switch {
+			case c != nil:
 				c.Global = global
 				return s.SetPorts(cmd.Context(), *c)
+			case global:
+				def, err = s.PortsDefault()
+				label = def.Source.Label(env.Dirs)
+			default:
+				ports, err = s.Ports(cmd.Context())
 			}
-			var err error
-			ports, err = s.Ports(cmd.Context(), global)
 			return err
 		}, msg.PortsFailed)
-		if c != nil {
+		switch {
+		case c != nil:
 			return nil
+		case global:
+			return printDefault(u, asJSON, "ports", def, label)
 		}
 		return printValue(u, asJSON, "ports", ports)
 	}
@@ -46,14 +59,14 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			if len(args) == 0 {
 				return nil
 			}
-			_, err := vm.ParsePorts(args[0])
+			_, err := settings.ParsePorts(args[0])
 			return err
 		})),
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			if len(args) > 0 {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
-			return []cobra.Completion{vm.PortsAll, vm.PortsNone}, cobra.ShellCompDirectiveNoFileComp
+			return []cobra.Completion{settings.PortsAll, settings.PortsNone}, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var c *vm.PortsChange

@@ -24,16 +24,25 @@ stderr '^devvm: ports_list_needed value="all"$'
 # No VM is looked at.
 stub_reset
 exec devvm ports -g
-stdout '\Aall\n\z'
+stdout '\Aall # devvm: default\n\z'
 exec devvm ports -g 3000-3999
 stdout '^==> ports_default ports=3000-3999$'
 exec devvm ports add -g 5173
-exec sh -c 'cat "$CFG/ports"'
-stdout '\A3000-3999,5173\n\z'
+grep '^  "ports": "3000-3999,5173",?$' $DATA/settings.json
 exec devvm ports -g
-stdout '\A3000-3999,5173\n\z'
+stdout '\A3000-3999,5173 # devvm: settings\.json\n\z'
 exec devvm ports -g --json
-stdout '\A{\n  "version": 1,\n  "ports": "3000-3999,5173"\n}\n\z'
+stdout '\A{\n  "version": 1,\n  "ports": "3000-3999,5173",\n  "source": "settings.json"\n}\n\z'
+# config.toml's ports win; -g shows where they came from, and refuses to
+# change them, naming the file and the key.
+cp $WORK/ports.toml $CFG/config.toml
+exec devvm ports -g
+stdout '\A8000-8010 # \S*/config/devvm/config\.toml\n\z'
+exec devvm ports -g --json
+stdout '"source": "config.toml"'
+! exec devvm ports add -g 9000
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=ports$'
+rm $CFG/config.toml
 ! exec devvm ports -g --json all
 stderr '^devvm: json_shows_only command=devvm ports$'
 ! exec devvm ports add --json 1
@@ -152,3 +161,6 @@ stdout '^all$'
 stdout '^none$'
 stdout '^add\t'
 stdout '^rm\t'
+
+-- ports.toml --
+ports = "8000-8010"

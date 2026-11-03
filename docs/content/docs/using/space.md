@@ -85,10 +85,14 @@ devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's sh
 
 ## devvm's data folder
 
-devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it, because each time devvm runs, it makes this folder and the settings folder, `~/.config/devvm`, yours alone (mode 700), whatever mode they had, so nothing inside either one is open to others. If devvm can't, for example because someone else owns a folder, it warns and goes on. Whenever devvm writes into the folders that hold history, logs, keys and secrets, which are `exports/`, `logs/`, `logs/runs/`, `run/`, `ca/` and the settings folder's `secrets/`, it makes them only yours again as well, whatever mode they had. Everything in it is devvm's own, and devvm makes all of it again when it's needed, except the exports, which are the only copy of a deleted VM's agent history.
+devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it, because each time devvm runs, it makes this folder and the settings folder, `~/.config/devvm`, yours alone (mode 700), whatever mode they had, so nothing inside either one is open to others. If devvm can't, for example because someone else owns a folder, it warns and goes on. Whenever devvm writes into the folders that hold history, logs, keys and secrets, which are `exports/`, `logs/`, `logs/runs/`, `run/`, `ca/` and `secrets/`, it makes them only yours again as well, whatever mode they had. Everything in it is devvm's own, and devvm makes most of it again when it's needed. The exceptions are the exports, which are the only copy of a deleted VM's agent history, and the defaults, keys and secrets that your commands saved.
 
 | Path | What it is | How it's cleaned up |
 | --- | --- | --- |
+| `settings.json` | the defaults that `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save, below [`config.toml`](settings.md#configtoml)'s | it stays, and takes almost no space |
+| `ssh_config`, `known_hosts` | the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys | devvm takes a VM out when it stops or deletes the VM |
+| `agent-keys.json` | the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options | `devvm ssh-agent rm` takes a key out |
+| `secrets/` | on Linux hosts, your [secrets](../safety/network.md#saving-and-binding-secrets), one file each | `devvm secret rm` deletes one |
 | `vms/<vm>` | each VM's [state](settings.md#devvms-state): its image, folder, backend and settings | `devvm rm` deletes it with the VM |
 | `images/` | a folder for each image, named by its key, which holds the image's record, `record.json`; the [rebuild counters](images.md#rebuilding) in `rebuilds.json`, one for each backend, each image that base starts from and each image; and in `locks/` an empty file for each image that the devvm building it locks, and one, `rebuilds`, that a devvm changing a rebuild counter locks | `devvm gc` and `devvm images rm` delete an image's folder and its lock file with the image |
 | `tools/` | the [shared tools](images.md#shared-tools), one read-only image per tool version, each with a record beside it, `<image>.json`, which holds its checksum, the backend that built it, the C library it's built for, when it was built and, once retention finds that no VM has it, since when | `devvm gc` deletes the versions that no VM has and that aren't the current ones, `devvm gc --tool-images` also the current ones that no VM has, except those built in the last hour, and `devvm gc --tool-images --recent` those too, each with its record |
@@ -144,7 +148,7 @@ A VM can also be the other way around: the backend has it, with devvm's label, b
 
 ## Your settings
 
-`~/.config/devvm` holds your settings, your own layers and features, your company's CA certificates, the ssh config for running VMs and their host keys, and on Linux hosts your secrets. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
+`~/.config/devvm` holds what you edit: `config.toml`, your network policy rules, your own layers and features, and your company's CA certificates. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
 
 ## Lima
 
@@ -173,7 +177,7 @@ Docker also keeps the container image that base starts from, which it pulls as i
 devvm also changes a few things outside its own folders:
 
 - **The Keychain:** on macOS, the [secrets](../safety/network.md#saving-and-binding-secrets) you save are Keychain items under the service `devvm`. `devvm secret rm` deletes one.
-- **`~/.ssh/config`:** when you let it, devvm adds the line `Include ~/.config/devvm/ssh_config` so that ssh reaches VMs by name ([SSH and editors](ssh.md#ssh-access-by-name)).
+- **`~/.ssh/config`:** when you let it, devvm adds the line `Include ~/.local/share/devvm/ssh_config` so that ssh reaches VMs by name ([SSH and editors](ssh.md#ssh-access-by-name)).
 - **Time Machine:** on macOS, devvm keeps `ca/` in its data folder out of Time Machine's backups, because a copy of its key elsewhere could impersonate any site to VMs.
 - **devvm itself:** the install script puts each version in `~/.local/lib/devvm/<version>` and links `~/.local/bin/devvm` to it. A newer install removes older versions that nothing runs ([upgrading](../getting-started/install.md#upgrading)). Homebrew keeps devvm in its own folders.
 

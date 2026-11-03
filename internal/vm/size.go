@@ -5,14 +5,13 @@ import (
 	"context"
 	"io/fs"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -22,49 +21,30 @@ type Size struct {
 	CPUs, Memory, Disk string
 }
 
-var (
-	wholeNumber = regexp.MustCompile(`^[1-9][0-9]*$`)
-	gibNumber   = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
-)
-
-// ParseCPUs checks a CPU count, as given to --cpus.
-func ParseCPUs(v string) (string, error) {
-	if !wholeNumber.MatchString(v) {
-		return "", msg.CpusNotNumber(strconv.Quote(v))
-	}
-	return v, nil
-}
-
-// ParseGiB checks a size in GiB, as given to flag (--memory, --disk): N,
-// NG or NGiB, decimals allowed. It returns N.
-func ParseGiB(flag, v string) (string, error) {
-	n := strings.TrimSuffix(v, "iB")
-	n = strings.TrimSuffix(strings.TrimSuffix(n, "G"), "g")
-	if !gibNumber.MatchString(n) || !strings.ContainsAny(n, "123456789") {
-		return "", msg.SizeNotGib(flag, strconv.Quote(v))
-	}
-	return n, nil
-}
-
-// Parse checks every size set, as flags or a size file give them.
+// Parse checks every size set, as flags give them.
 func (s Size) Parse() (Size, error) {
 	var err error
 	if s.CPUs != "" {
-		if s.CPUs, err = ParseCPUs(s.CPUs); err != nil {
+		if s.CPUs, err = settings.ParseCPUs("--cpus", s.CPUs); err != nil {
 			return Size{}, err
 		}
 	}
 	if s.Memory != "" {
-		if s.Memory, err = ParseGiB("--memory", s.Memory); err != nil {
+		if s.Memory, err = settings.ParseGiB("--memory", s.Memory); err != nil {
 			return Size{}, err
 		}
 	}
 	if s.Disk != "" {
-		if s.Disk, err = ParseGiB("--disk", s.Disk); err != nil {
+		if s.Disk, err = settings.ParseGiB("--disk", s.Disk); err != nil {
 			return Size{}, err
 		}
 	}
 	return s, nil
+}
+
+// defaultSize is the size new VMs get, as def has it.
+func defaultSize(def settings.Defaults) Size {
+	return Size{CPUs: def.CPUs.Value, Memory: def.Memory.Value, Disk: def.Disk.Value}
 }
 
 // Or returns s with what it leaves unset taken from def.
@@ -167,22 +147,9 @@ func SizeText(s backend.Size) string {
 	return strings.Join(f, " ")
 }
 
-// fields returns a size's keys and values, as the size file has them.
+// fields returns a size's keys and values, as a VM's state has them.
 func (s Size) fields() [][2]string {
 	return [][2]string{{KeyCPUs, s.CPUs}, {KeyMemory, s.Memory}, {KeyDisk, s.Disk}}
-}
-
-// defaultSize reads the size new VMs get, checked: the file may have
-// been edited by hand.
-func (e *Env) defaultSize() (Size, error) { return readDefaultSize(e.Dirs) }
-
-// readDefaultSize is defaultSize from d's size file.
-func readDefaultSize(d paths.Dirs) (Size, error) {
-	def, err := state.ReadSize(d)
-	if err != nil {
-		return Size{}, err
-	}
-	return Size{CPUs: def.CPUs, Memory: def.Memory, Disk: def.Disk}.Parse()
 }
 
 // applySize makes a stopped VM's size what its state asks for, where it
@@ -210,16 +177,19 @@ type SizeShown struct {
 	// Pending is what changes at the VM's next start, 0 for what doesn't.
 	Pending backend.Size
 	Global  bool
+	// Sources is where each of -g's came from, by KeyCPUs, KeyMemory and
+	// KeyDisk, and Labels each as text shows it (settings.Source.Label).
+	Sources, Labels map[string]string
 }
 
 // Text is the size as devvm size prints it: cpus=4 memory=8GiB
-// disk=100GiB for a VM, and a key=value line each for -g, empty for the
-// image's.
+// disk=100GiB for a VM, and for -g a key=value line each, empty for the
+// image's, followed by where it came from.
 func (s SizeShown) Text() string {
 	if s.Global {
 		var b strings.Builder
 		for _, kv := range [][2]string{{KeyCPUs, intText(s.CPUs)}, {KeyMemory, gibValue(s.MemoryGiB)}, {KeyDisk, gibValue(s.DiskGiB)}} {
-			b.WriteString(kv[0] + "=" + kv[1] + "\n")
+			b.WriteString(kv[0] + "=" + kv[1] + " # " + s.Labels[kv[0]] + "\n")
 		}
 		return b.String()
 	}
@@ -230,8 +200,8 @@ func (s SizeShown) Text() string {
 	return line + "\n"
 }
 
-// intText and gibValue write a size's numbers as the size file has them,
-// "" for 0.
+// intText and gibValue write a size's numbers as devvm size -g shows
+// them, "" for 0.
 func intText(n int) string {
 	if n == 0 {
 		return ""
@@ -247,14 +217,19 @@ func gibValue(n float64) string {
 }
 
 // ShowSize returns the size of the folder's VM, saying what changes at
-// its next start; with global, the size new VMs get.
+// its next start; with global, the size new VMs get and where each part
+// came from.
 func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) {
 	if global {
-		def, err := e.defaultSize()
+		def, err := settings.Read(e.Dirs)
 		if err != nil {
 			return SizeShown{}, err
 		}
-		return SizeShown{Size: def.Backend(), Global: true}, nil
+		s := SizeShown{Size: defaultSize(def).Backend(), Global: true, Sources: map[string]string{}, Labels: map[string]string{}}
+		for k, v := range map[string]settings.Value{KeyCPUs: def.CPUs, KeyMemory: def.Memory, KeyDisk: def.Disk} {
+			s.Sources[k], s.Labels[k] = string(v.Source), v.Source.Label(e.Dirs)
+		}
+		return s, nil
 	}
 	t, err := e.folderVM(ctx, msg.NoVMSize)
 	if err != nil {

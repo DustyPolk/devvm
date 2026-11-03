@@ -155,8 +155,10 @@ stdout '^net_check=ok$'
 # devvm network -g: what new VMs get, ask until it's saved; ask is only
 # for new VMs.
 exec devvm network -g
-stdout '\Aask\n\z'
-! exists $XDG_CONFIG_HOME/devvm/network
+stdout '\Aask # devvm: default\n\z'
+! grep network $DATA/settings.json
+exec devvm network -g --json
+stdout '\A{\n  "version": 1,\n  "policy": "ask",\n  "source": "built-in"\n}\n\z'
 ! exec devvm network ask
 stderr '^devvm: net_ask_global$'
 ! exec devvm network -g sideways
@@ -168,12 +170,11 @@ stderr '^devvm: args_too_many args=\[on\|off\] command=devvm network given=on of
 # beats it. The VMs that exist keep theirs.
 exec devvm network -g off
 stdout '^==> network_default mode=off$'
-exec cat $XDG_CONFIG_HOME/devvm/network
-stdout '\Aoff\n\z'
+grep '^  "network": "off",?$' $DATA/settings.json
 exec devvm network -g
-stdout '\Aoff\n\z'
+stdout '\Aoff # devvm: settings\.json\n\z'
 exec devvm network -g --json
-stdout '\A{\n  "version": 1,\n  "policy": "off"\n}\n\z'
+stdout '\A{\n  "version": 1,\n  "policy": "off",\n  "source": "settings.json"\n}\n\z'
 project offsaved
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
@@ -204,20 +205,50 @@ exec devvm --no-network-policy --no-git-protect
 catg $VMS/devvm-onflag-*
 stdout '^net=off$'
 
-# ask again, and a file edited by hand that says something else: a new
-# VM without a flag is refused, naming the file, and one with a flag
-# doesn't read it.
+# ask again. config.toml's network wins over what devvm saved, devvm
+# network -g shows it came from there, and devvm network -g refuses to
+# change it, naming the file and the key.
 exec devvm network -g ask
 stdout '^==> network_default mode=ask$'
-exec cat $XDG_CONFIG_HOME/devvm/network
-stdout '\Aask\n\z'
-exec sh -c 'echo maybe > "$XDG_CONFIG_HOME/devvm/network"'
+grep '^  "network": "ask",?$' $DATA/settings.json
+cp $WORK/config-on.toml $CFG/config.toml
+exec devvm network -g
+stdout '\Aon # \S*/config/devvm/config\.toml\n\z'
+exec devvm network -g --json
+stdout '"source": "config.toml"'
+! exec devvm network -g off
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=network$'
+grep '^  "network": "ask",?$' $DATA/settings.json
+project configon
+exec devvm --no-git-protect
+! stderr 'net_about|net_ask|net_off_'
+catg $VMS/devvm-configon-*
+stdout '^net=on$'
+
+# A config.toml edited by hand with a typo: every command that reads it is
+# refused, naming the file and the line, with a flag or without.
+cp $WORK/config-typo.toml $CFG/config.toml
 ! exec devvm network -g
-stderr '^devvm: net_default_failed reason=\S*/config/devvm/network:1: '
+stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:2: unknown key "netwrk"$'
 project badsaved
 ! exec devvm --no-git-protect
-stderr '\S*/config/devvm/network:1: '
+stderr '\S*/config/devvm/config\.toml:2: '
+! exec devvm --network-policy --no-git-protect
+stderr '\S*/config/devvm/config\.toml:2: '
+cp $WORK/config-maybe.toml $CFG/config.toml
+! exec devvm network -g
+stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:1: "maybe" isn''t one of ask, on, off$'
+rm $CFG/config.toml
 exec devvm --network-policy --no-git-protect
+
+-- config-on.toml --
+# new VMs get network policy, whatever devvm network -g says
+network = "on"
+-- config-typo.toml --
+# a typo
+netwrk = "off"
+-- config-maybe.toml --
+network = "maybe"
 
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

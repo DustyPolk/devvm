@@ -464,7 +464,7 @@ func TestEnsureInclude(t *testing.T) {
 	if got := read(t, cfg); got != mine {
 		t.Errorf("~/.ssh/config changed: %q", got)
 	}
-	if want := "Include " + filepath.Join(c.Dirs.Config, "ssh_config"); c.IncludeLine() != want {
+	if want := "Include " + filepath.Join(c.Dirs.Data, "ssh_config"); c.IncludeLine() != want {
 		t.Errorf("IncludeLine = %q, want %q", c.IncludeLine(), want)
 	}
 }

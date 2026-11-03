@@ -2,7 +2,7 @@
 # and sets it up again; flags for new VMs are ignored with a warning, and
 # what its state asks of a stopped VM's size and ports is applied.
 # restart stops it first.
-env KNOWN=$XDG_CONFIG_HOME/devvm/known_hosts
+env KNOWN=$DATA/known_hosts
 project web git
 exec devvm --no-network-policy
 vm_name WEB web
@@ -118,7 +118,7 @@ exec sh -c 'ls "$XDG_DATA_HOME/devvm/logs"'
 exec cat $KNOWN
 ! stdout devvm-web
 stdout devvm-api
-exec cat $XDG_CONFIG_HOME/devvm/ssh_config
+exec cat $DATA/ssh_config
 ! stdout devvm-web
 stdout devvm-api
 ! exec devvm rm --force

@@ -7,7 +7,7 @@ Load a key into devvm's own SSH agent
 
 ## Synopsis
 
-Load a private key into devvm's own SSH agent, starting the agent first, and record it in ~/.config/devvm/agent-keys, so devvm loads it again when a VM needs it. devvm refuses a key in a folder a VM mounts.
+Load a private key into devvm's own SSH agent, starting the agent first, and record it in ~/.local/share/devvm/agent-keys.json, so devvm loads it again when a VM needs it. devvm refuses a key in a folder a VM mounts.
 
 ```text
 devvm ssh-agent add KEY_FILE [flags]

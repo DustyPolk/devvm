@@ -15,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -294,7 +295,7 @@ func TestUpParts(t *testing.T) {
 				}
 			}
 			if tc.setup != nil {
-				if err := state.WriteAgents(e.Dirs, tc.setup); err != nil {
+				if _, err := settings.Save(e.Dirs, settings.Values{Agents: &tc.setup}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -355,8 +356,8 @@ func TestUpPicker(t *testing.T) {
 	if !slices.Equal(asked, []string{"agents_help", "pick_new_help"}) {
 		t.Fatalf("asked %q", asked)
 	}
-	if agents, set, _ := state.ReadAgents(e.Dirs); !set || !slices.Equal(agents, []string{"codex"}) {
-		t.Errorf("setup's agents = %q, %v", agents, set)
+	if def, _ := settings.Read(e.Dirs); !def.Agents.Chosen || !slices.Equal(def.Agents.Names, []string{"codex"}) {
+		t.Errorf("setup's agents = %+v", def.Agents)
 	}
 	rows := map[string]PickRow{}
 	var headings []string
@@ -395,7 +396,7 @@ func TestUpPicker(t *testing.T) {
 func TestUpFlagsSkipPicker(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	e.CanPick = func() bool { return true }
-	if err := state.WriteAgents(e.Dirs, nil); err != nil {
+	if _, err := settings.Save(e.Dirs, settings.Values{Agents: &[]string{}}); err != nil {
 		t.Fatal(err)
 	}
 	e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
@@ -431,6 +432,7 @@ func TestUpRefusesLowSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reg.DefaultBackend = fakeDefault
 	e.Registry = reg
 	for _, tc := range []struct {
 		free uint64
@@ -474,9 +476,7 @@ func TestUpDefaultDiskUnused(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureDisk)
 	e, f, _ := upEnv(t, caps)
-	if err := state.WriteSize(e.Dirs, state.Size{CPUs: "2", Disk: "150"}); err != nil {
-		t.Fatal(err)
-	}
+	saveSize(t, e.Dirs, Size{CPUs: "2", Disk: "150"})
 	var warned msg.Recorder
 	e.Warn = warned.Add
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"}); err != nil {

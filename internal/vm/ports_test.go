@@ -12,23 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-func TestParsePorts(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
-	for in, want := range map[string]string{
-		"all": "all", "none": "none", "5173, 8000-8010,5173": "5173,8000-8010", "0080,3000-3000": "80,3000",
-		" all ": "all",
-	} {
-		if got, err := ParsePorts(in); got != want || err != nil {
-			t.Errorf("ParsePorts(%q) = %q, %v", in, got, err)
-		}
-	}
-	for _, bad := range []string{"", " ", "0", "65536", "8010-8000", "5173,,80", "abc", "80-", "1-2-3", "123456"} {
-		if _, err := ParsePorts(bad); msg.NamesOf(err) != "port_invalid value="+`"`+bad+`"` {
-			t.Errorf("ParsePorts(%q) = %v", bad, msg.NamesOf(err))
-		}
-	}
-}
-
 func TestAddRemovePorts(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, c := range []struct {
@@ -172,7 +155,7 @@ func TestSetPortsRunning(t *testing.T) {
 	if !slices.Equal(infos.Names(), []string{"ports_forwarding ports=5173,8080-8081 vm=" + vm}) || !slices.Equal(warned.Names(), []string{"ports_taken count=1 ports=8080 vm=" + vm}) {
 		t.Errorf("said %q, warned %q", infos.Names(), warned.Names())
 	}
-	if ports, err := s.Ports(t.Context(), false); err != nil || ports != "5173,8080-8081" {
+	if ports, err := s.Ports(t.Context()); err != nil || ports != "5173,8080-8081" {
 		t.Errorf("ports: %q, %v", ports, err)
 	}
 	if err := f.Stop(t.Context(), vm); err != nil {

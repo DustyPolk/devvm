@@ -4,10 +4,10 @@
 # run commands left out. The user's ~/.ssh is never touched.
 project web
 exec devvm --no-network-policy --no-git-protect
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout '\A# Written by devvm on every launch; edits are overwritten\.\n\nHost devvm-web devvm-web-[0-9a-f]{14}\n'
 stdout '^  HostKeyAlias devvm-web-[0-9a-f]{14}$'
-stdout '^  UserKnownHostsFile "/\S*/config/devvm/known_hosts"$'
+stdout '^  UserKnownHostsFile "/\S*/data/devvm/known_hosts"$'
 stdout '^  StrictHostKeyChecking yes$'
 stdout '^  NoHostAuthenticationForLocalhost no$'
 stdout '^  ForwardAgent no$'
@@ -29,9 +29,9 @@ stdout '^  IdentityFile "/\S*/lima/_config/user"$'
 stdout '^  IdentitiesOnly yes$'
 ! stdout 'StrictHostKeyChecking no|/dev/null|NoHostAuthenticationForLocalhost yes'
 ! stdout 'ControlMaster auto|ssh\.sock|ControlPersist|LocalCommand'
-catg $CFG/known_hosts
+catg $DATA/known_hosts
 stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 AAAAstubkeydevvmweb[0-9a-f]{14}\n\z'
-exec sh -c 'ls -l "$CFG/ssh_config" "$CFG/known_hosts"'
+exec sh -c 'ls -l "$DATA/ssh_config" "$DATA/known_hosts"'
 ! stdout '^-.{3}[^-]'
 ! exists $HOME/.ssh
 
@@ -41,10 +41,10 @@ exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Running$/\1 Stopped/" "$STUB_DIR/ins
 exec sh -c 'echo "devvm-img-0123456789ab Running" >> "$STUB_DIR/instances" && echo "devvm-tools-build Running" >> "$STUB_DIR/instances"'
 project img-foo
 exec devvm --no-network-policy --no-git-protect
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout '^Host devvm-img-foo devvm-img-foo-[0-9a-f]{14}$'
 ! stdout 'devvm-web|devvm-img-0123456789ab|devvm-tools-build'
-catg $CFG/known_hosts
+catg $DATA/known_hosts
 stdout '^devvm-web-'
 stdout '^devvm-img-foo-'
 
@@ -53,16 +53,16 @@ exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Stopped$/\1 Running/" "$STUB_DIR/ins
 mkdir $WORK/other/web
 cd $WORK/other/web
 exec devvm --no-network-policy --no-git-protect
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 stdout -count=2 '^Host devvm-web-[0-9a-f]{14}$'
 ! stdout '^Host devvm-web '
 
 # A VM made again under a name whose host keys devvm has: they're read
 # again once it starts, not trusted.
-exec sh -c 'n=$(ls "$XDG_DATA_HOME/devvm/vms" | grep "^devvm-img-foo-") && limactl delete -f "$n" && rm "$XDG_DATA_HOME/devvm/vms/$n" && sed "s/^\($n\) .*/\1 ssh-ed25519 AAAAold/" "$CFG/known_hosts" > "$WORK/kh" && cp "$WORK/kh" "$CFG/known_hosts"'
+exec sh -c 'n=$(ls "$XDG_DATA_HOME/devvm/vms" | grep "^devvm-img-foo-") && limactl delete -f "$n" && rm "$XDG_DATA_HOME/devvm/vms/$n" && sed "s/^\($n\) .*/\1 ssh-ed25519 AAAAold/" "$DATA/known_hosts" > "$WORK/kh" && cp "$WORK/kh" "$DATA/known_hosts"'
 cd $WORK/img-foo
 exec devvm --no-network-policy --no-git-protect
-catg $CFG/known_hosts
+catg $DATA/known_hosts
 ! stdout AAAAold
 stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 AAAAstubkeydevvmimgfoo[0-9a-f]{14}$'
 
@@ -70,10 +70,10 @@ stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 AAAAstubkeydevvmimgfoo[0-9a-f]{1
 exec sh -c ': > "$STUB_DIR/hostkeys-fail"'
 project nokeys
 exec devvm --no-network-policy --no-git-protect
-catg $CFG/ssh_config
+catg $DATA/ssh_config
 ! stdout devvm-nokeys
 stdout '^Host devvm-img-foo '
-catg $CFG/known_hosts
+catg $DATA/known_hosts
 ! stdout devvm-nokeys
 rm $STUB_DIR/hostkeys-fail
 ! exists $HOME/.ssh

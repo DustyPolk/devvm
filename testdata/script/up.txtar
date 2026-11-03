@@ -40,7 +40,7 @@ exists $XDG_DATA_HOME/devvm/tools
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
 [linux] ! stdout chflags
 # The forwarder pins the host key devvm pinned; the VM forwards every port.
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports; grep -c "^devvm-web-[0-9a-f]* $(cut -d" " -f2- "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts)$" "$XDG_CONFIG_HOME"/devvm/known_hosts'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports; grep -c "^devvm-web-[0-9a-f]* $(cut -d" " -f2- "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts)$" "$XDG_DATA_HOME"/devvm/known_hosts'
 stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\nall\n1\n\z'
 catg $VMS/devvm-web-*
 stdout '^image=base$'

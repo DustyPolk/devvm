@@ -169,31 +169,16 @@ func (d Dirs) Docker() string { return filepath.Join(d.Data, "docker") }
 // DockerVM is the record of what the Docker backend set on a VM.
 func (d Dirs) DockerVM(vm string) string { return filepath.Join(d.Docker(), "vms", vm+".json") }
 
-// BaseFeatures lists the features chosen for the base image.
-func (d Dirs) BaseFeatures() string { return filepath.Join(d.Config, "base-features") }
+// ConfigFile is config.toml, the defaults you set by hand: devvm reads it
+// and never writes it.
+func (d Dirs) ConfigFile() string { return filepath.Join(d.Config, "config.toml") }
 
-// Size holds the default size of new VMs.
-func (d Dirs) Size() string { return filepath.Join(d.Config, "size") }
-
-// Ports holds which ports new VMs forward by default.
-func (d Dirs) Ports() string { return filepath.Join(d.Config, "ports") }
-
-// Network holds the network policy new VMs get: ask, on or off.
-func (d Dirs) Network() string { return filepath.Join(d.Config, "network") }
-
-// Agents holds the coding agents new VMs get by default (devvm setup
-// --agents).
-func (d Dirs) Agents() string { return filepath.Join(d.Config, "agents") }
+// Settings is settings.json, the defaults devvm's commands set (devvm
+// setup, devvm size -g, devvm retention…), below config.toml's.
+func (d Dirs) Settings() string { return filepath.Join(d.Data, "settings.json") }
 
 // AgentKeys lists the keys added to devvm's SSH agent.
-func (d Dirs) AgentKeys() string { return filepath.Join(d.Config, "agent-keys") }
-
-// Backend holds the default backend for new VMs.
-func (d Dirs) Backend() string { return filepath.Join(d.Config, "backend") }
-
-// Retention holds the retention settings: what devvm deletes on its own,
-// and after how long.
-func (d Dirs) Retention() string { return filepath.Join(d.Config, "retention") }
+func (d Dirs) AgentKeys() string { return filepath.Join(d.Data, "agent-keys.json") }
 
 // RetentionRun is touched when retention last ran.
 func (d Dirs) RetentionRun() string { return filepath.Join(d.Data, "retention.run") }
@@ -212,10 +197,10 @@ func (d Dirs) Policy() string { return filepath.Join(d.Config, "policy") }
 func (d Dirs) TrustedCAs() string { return filepath.Join(d.Config, "ca") }
 
 // Secrets holds secrets' values on hosts without a Keychain, one file each.
-func (d Dirs) Secrets() string { return filepath.Join(d.Config, "secrets") }
+func (d Dirs) Secrets() string { return filepath.Join(d.Data, "secrets") }
 
 // SSHConfig is the SSH config devvm writes for its VMs.
-func (d Dirs) SSHConfig() string { return filepath.Join(d.Config, "ssh_config") }
+func (d Dirs) SSHConfig() string { return filepath.Join(d.Data, "ssh_config") }
 
 // KnownHosts holds the VMs' SSH host keys.
-func (d Dirs) KnownHosts() string { return filepath.Join(d.Config, "known_hosts") }
+func (d Dirs) KnownHosts() string { return filepath.Join(d.Data, "known_hosts") }

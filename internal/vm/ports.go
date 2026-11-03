@@ -9,38 +9,18 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
-
-// Ports values: every port the VM listens on is forwarded, or none.
-const (
-	PortsAll  = "all"
-	PortsNone = "none"
-)
-
-// ParsePorts checks which ports to forward, as --ports or the ports file
-// give them: all, none, or ports and ranges (5173,8000-8010,
-// backend.ParsePortRanges). It returns the value without spaces or
-// repeats.
-func ParsePorts(v string) (string, error) {
-	if s := strings.ReplaceAll(v, " ", ""); s == PortsAll || s == PortsNone {
-		return s, nil
-	}
-	rs, err := backend.ParsePortRanges(v)
-	if err != nil {
-		return "", msg.PortInvalid(strconv.Quote(v)).Because(err)
-	}
-	return backend.FormatPortRanges(rs), nil
-}
 
 // ParsePortList checks a list of ports and ranges, as devvm ports add and
 // rm take it.
 func ParsePortList(list string) (string, error) {
-	l, err := ParsePorts(list)
+	l, err := settings.ParsePorts(list)
 	if err != nil {
 		return "", err
 	}
-	if l == PortsAll || l == PortsNone {
+	if l == settings.PortsAll || l == settings.PortsNone {
 		return "", msg.PortsListNeeded(strconv.Quote(list))
 	}
 	return l, nil
@@ -53,25 +33,25 @@ func AddPorts(old, list string) (string, error) {
 	switch {
 	case err != nil:
 		return "", err
-	case old == PortsAll:
-		return PortsAll, nil
-	case old == PortsNone:
+	case old == settings.PortsAll:
+		return settings.PortsAll, nil
+	case old == settings.PortsNone:
 		return l, nil
 	}
-	return ParsePorts(old + "," + l)
+	return settings.ParsePorts(old + "," + l)
 }
 
 // RemovePorts returns a parsed ports value without list's ports and
 // ranges, each as listed in it: none once nothing is left.
 func RemovePorts(old, list string) (string, error) {
-	if old == PortsAll {
+	if old == settings.PortsAll {
 		return "", msg.PortsRmAll()
 	}
 	l, err := ParsePortList(list)
 	if err != nil {
 		return "", err
 	}
-	if old, err = ParsePorts(old); err != nil {
+	if old, err = settings.ParsePorts(old); err != nil {
 		return "", err
 	}
 	return dropPorts(old, l, msg.PortNotListed)
@@ -90,7 +70,7 @@ func dropPorts(old, l string, notListed func(port, ports string) msg.M) (string,
 		es = slices.Delete(es, i, i+1)
 	}
 	if len(es) == 0 {
-		return PortsNone, nil
+		return settings.PortsNone, nil
 	}
 	return strings.Join(es, ","), nil
 }
@@ -107,29 +87,19 @@ type PortsChange struct {
 func (c PortsChange) apply(old string, warn func(msg.M)) (string, error) {
 	switch c.Op {
 	case "add":
-		if old == PortsAll {
+		if old == settings.PortsAll {
 			warn(msg.PortsAllAlready())
 		}
 		return AddPorts(old, c.List)
 	case "rm":
 		return RemovePorts(old, c.List)
 	}
-	return ParsePorts(c.List)
-}
-
-// defaultPorts reads what new VMs forward, checked: the file may have
-// been edited by hand.
-func (e *Env) defaultPorts() (string, error) {
-	def, err := state.ReadPorts(e.Dirs)
-	if err != nil || def == "" {
-		return PortsAll, err
-	}
-	return ParsePorts(def)
+	return settings.ParsePorts(c.List)
 }
 
 func orAll(ports string) string {
 	if ports == "" {
-		return PortsAll
+		return settings.PortsAll
 	}
 	return ports
 }
@@ -137,12 +107,9 @@ func orAll(ports string) string {
 // portsVM finds the folder's VM for devvm ports.
 func (e Settings) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
 
-// Ports returns which ports the folder's VM forwards (all, none or a
-// list); with global, what new VMs forward.
-func (e Settings) Ports(ctx context.Context, global bool) (string, error) {
-	if global {
-		return e.defaultPorts()
-	}
+// Ports returns which ports the folder's VM forwards: all, none or a
+// list.
+func (e Settings) Ports(ctx context.Context) (string, error) {
 	t, err := e.portsVM(ctx)
 	if err != nil {
 		return "", err
@@ -150,21 +117,27 @@ func (e Settings) Ports(ctx context.Context, global bool) (string, error) {
 	return orAll(t.st.Get(KeyPorts)), nil
 }
 
+// PortsDefault returns what new VMs forward, and where that came from.
+func (e Settings) PortsDefault() (settings.Value, error) {
+	def, err := settings.Read(e.Dirs)
+	return def.Ports, err
+}
+
 // SetPorts changes which ports the folder's VM forwards: a stopped VM's
 // from its next start, a running one's at once, its forwarder started
 // again while it runs on (forwarding). With c.Global, it changes what new
-// VMs forward instead.
+// VMs forward instead, which config.toml mustn't set.
 func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if c.Global {
-		old, err := e.defaultPorts()
+		old, err := e.PortsDefault()
 		if err != nil {
 			return err
 		}
-		ports, err := c.apply(old, e.Warn)
+		ports, err := c.apply(old.Value, e.Warn)
 		if err != nil {
 			return err
 		}
-		if err := state.WritePorts(e.Dirs, ports); err != nil {
+		if _, err := settings.Save(e.Dirs, settings.Values{Ports: &ports}); err != nil {
 			return err
 		}
 		e.Info(msg.PortsDefault(ports))
@@ -236,9 +209,9 @@ func (e *Env) forwarding(b backend.Backend, st *state.VM) backend.Confinement {
 // is port_invalid.
 func PortsBackend(v string) (backend.Ports, error) {
 	switch v {
-	case "", PortsAll:
+	case "", settings.PortsAll:
 		return backend.Ports{All: true}, nil
-	case PortsNone:
+	case settings.PortsNone:
 		return backend.Ports{}, nil
 	}
 	rs, err := backend.ParsePortRanges(v)

@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -69,7 +70,7 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	}
 	ports := ""
 	if o.Ports != "" {
-		if ports, err = ParsePorts(o.Ports); err != nil {
+		if ports, err = settings.ParsePorts(o.Ports); err != nil {
 			return err
 		}
 	}
@@ -200,7 +201,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := (devcontainers{e.Env}).record(st, o); err != nil {
 		return err
 	}
-	if n.ports != "" && n.ports != PortsAll {
+	if n.ports != "" && n.ports != settings.PortsAll {
 		if err := st.Set(KeyPorts, n.ports); err != nil {
 			return err
 		}
@@ -257,6 +258,24 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	return e.Exec(cmd)
 }
 
+// firstRun asks devvm's first run's questions, new VMs' size and agents
+// (firstRunSize, firstRunAgents), then returns the defaults in effect, a
+// snapshot the rest of the plan reads: the files may be edited by hand
+// while it runs.
+func (e creation) firstRun(o Options, size Size) (settings.Defaults, error) {
+	def, err := settings.Read(e.Dirs)
+	if err != nil {
+		return def, err
+	}
+	if err := e.firstRunSize(size, def); err != nil {
+		return def, err
+	}
+	if err := e.firstRunAgents(o, def); err != nil {
+		return def, err
+	}
+	return settings.Read(e.Dirs)
+}
+
 // plan checks and chooses what a new VM gets, all before the build,
 // which can take minutes: its image, size, ports, network policy (asked
 // for), SSH agent and the backend features it needs, with what the
@@ -273,18 +292,11 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err := (devcontainers{e.Env}).prepare(ctx, o, vm, f.Dir); err != nil {
 		return newVM{}, err
 	}
-	if err := e.firstRunSize(size); err != nil {
-		return newVM{}, err
-	}
-	if err := e.firstRunAgents(*o); err != nil {
-		return newVM{}, err
-	}
-	// Defaults are checked again: the files may be edited by hand.
-	def, err := e.defaultSize()
+	def, err := e.firstRun(*o, size)
 	if err != nil {
 		return newVM{}, err
 	}
-	n := newVM{size: size.Or(def), ports: ports, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
+	n := newVM{size: size.Or(defaultSize(def)), ports: ports, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
 	// A default disk size on a backend that sizes no disks (Docker's) is
 	// left out, said; --disk is refused below.
 	if size.Disk == "" && n.size.Disk != "" && !e.Registry.Allowed(b, backend.FeatureDisk) {
@@ -299,9 +311,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 		return newVM{}, err
 	}
 	if n.ports == "" {
-		if n.ports, err = e.defaultPorts(); err != nil {
-			return newVM{}, err
-		}
+		n.ports = def.Ports.Value
 	}
 	// The user's ports stay a limit the file can't widen: its ports
 	// beyond them are said, not added.
@@ -319,7 +329,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 		return newVM{}, err
 	}
 	n.builder = e.builder(b, o.From)
-	parts, err := e.chooseParts(*o, vm, f.Dir, o.dc, n.builder)
+	parts, err := e.chooseParts(*o, vm, f.Dir, o.dc, n.builder, def)
 	if err != nil {
 		return newVM{}, err
 	}
@@ -335,7 +345,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err != nil {
 		return newVM{}, err
 	}
-	if n.net, err = e.chooseNet(o, n.dockerLayer != "", b, vm); err != nil {
+	if n.net, err = e.chooseNet(o, n.dockerLayer != "", b, vm, def.Network.Value); err != nil {
 		return newVM{}, err
 	}
 	if o.SSHAgent {
@@ -369,24 +379,19 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 }
 
 // chooseNet returns whether a new VM gets network policy: the flags', else
-// the saved choice's (devvm network -g, devvm setup), which isn't read
-// when a flag is given, else asked for, on by default. A saved off makes
-// the VM without it, unsaid. A VM that can't have it is made without it,
-// unasked and said: root in a VM made for the docker layer (dockerVM),
-// named or from a devcontainer.json's docker-in-docker, can change its
-// own network, and b may not confine a VM to its proxy (egress-proxy).
-// --network-policy on such a VM is refused, here or by Require, never
-// dropped.
-func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm string) (bool, error) {
-	saved := state.NetworkAsk
-	if !o.NetworkPolicy && !o.NoNetworkPolicy {
-		var err error
-		if saved, err = state.ReadNetwork(e.Dirs); err != nil {
-			return false, err
-		}
+// the default's (config.toml's, else devvm network -g's or devvm setup's),
+// else asked for, on by default. A default of off makes the VM without
+// it, unsaid. A VM that can't have it is made without it, unasked and
+// said: root in a VM made for the docker layer (dockerVM), named or from
+// a devcontainer.json's docker-in-docker, can change its own network, and
+// b may not confine a VM to its proxy (egress-proxy). --network-policy on
+// such a VM is refused, here or by Require, never dropped.
+func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm, saved string) (bool, error) {
+	if o.NetworkPolicy || o.NoNetworkPolicy {
+		saved = settings.NetworkAsk
 	}
 	switch {
-	case o.NoNetworkPolicy, saved == state.NetworkOff:
+	case o.NoNetworkPolicy, saved == settings.NetworkOff:
 		return false, nil
 	case dockerVM && o.NetworkPolicy:
 		return false, msg.NetDockerLayer(b.Name(), vm)
@@ -399,7 +404,7 @@ func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm str
 	case o.NetworkPolicy:
 		return true, nil
 	}
-	return e.Proxy.Choose(saved == state.NetworkOn, false, vm), nil
+	return e.Proxy.Choose(saved == settings.NetworkOn, false, vm), nil
 }
 
 // dockerLayer chooses the runtime a new VM runs the docker layer under,

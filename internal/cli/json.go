@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -56,6 +57,21 @@ func printValue(u *ui.UI, asJSON bool, key, value string) error {
 		return printJSON(u, map[string]string{key: value})
 	}
 	_, err := io.WriteString(u.Stdout(), value+"\n")
+	return err
+}
+
+// defaultOutput is a default's --json: its value by key, such as ports,
+// and source, where it came from (a settings.Source).
+type defaultOutput map[string]string
+
+// printDefault writes a default in effect, v, as its value then a # and
+// label, where it came from (settings.Source.Label), or with asJSON as a
+// defaultOutput.
+func printDefault(u *ui.UI, asJSON bool, key string, v settings.Value, label string) error {
+	if asJSON {
+		return printJSON(u, defaultOutput{key: v.Value, "source": string(v.Source)})
+	}
+	_, err := io.WriteString(u.Stdout(), v.Value+" # "+label+"\n")
 	return err
 }
 

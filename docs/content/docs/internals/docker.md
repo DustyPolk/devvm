@@ -98,7 +98,7 @@ No sshd listens in the VM. After each start, devvm writes the VM's sshd config (
 
 The way in is `devvm _docker-connect`, which devvm's ssh config names as the VM's `ProxyCommand`. The entry gives it `docker`'s path, devvm's data folder and the engine devvm reaches (`DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CONFIG`), so an editor started without them reaches the same engine. It checks that the container is devvm's (by its label), that it's a VM's and that it's running, and then it runs `docker exec` on the container's ID. A path with a quote, a backslash or a `%` can't go in the entry (`docker_ssh_path`), and a failure to connect is `docker_connect_failed`.
 
-The VM has host keys of its own, which devvm reads through `docker exec` and pins in `~/.config/devvm/known_hosts`, as on Lima, and ssh refuses a key that doesn't match.
+The VM has host keys of its own, which devvm reads through `docker exec` and pins in `~/.local/share/devvm/known_hosts`, as on Lima, and ssh refuses a key that doesn't match.
 
 Only the VM's own key logs in, and only as the VM's user. The key is `~/.local/share/devvm/docker/vms/<vm>.key` (mode 600), and its public half is that VM's only authorized key. Passwords, root and other users can't log in. The entries offer only that key, and never your agent's keys.
 

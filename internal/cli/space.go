@@ -20,6 +20,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -189,7 +190,7 @@ type spaceEnv struct {
 	inUse map[string]int
 	// vms is each backend's VMs, by name, for those that answered.
 	vms map[string]map[string]bool
-	ret state.Retention // the retention settings
+	ret settings.Retention // the retention settings
 	now time.Time
 }
 
@@ -210,11 +211,11 @@ func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
 	if err != nil {
 		return r, err
 	}
-	ret, err := state.ReadRetention(b.Dirs)
+	def, err := settings.Read(b.Dirs)
 	if err != nil {
 		return r, err
 	}
-	e := spaceEnv{u: u, b: b, reg: reg, inUse: inUse, vms: map[string]map[string]bool{}, ret: ret, now: time.Now()}
+	e := spaceEnv{u: u, b: b, reg: reg, inUse: inUse, vms: map[string]map[string]bool{}, ret: def.Retention, now: time.Now()}
 	used, err := state.Backends(b.Dirs)
 	if err != nil {
 		return r, err
@@ -341,7 +342,7 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 		key := be + " " + libc
 		row, ok := byKey[key]
 		if !ok {
-			row = &spaceRow{What: "tools " + cmp.Or(libc, "-"), Backend: be, Sized: true, Kept: keptRemade, Rest: "gc --tool-images", Retain: e.ret.Raw[state.RetainToolsAge]}
+			row = &spaceRow{What: "tools " + cmp.Or(libc, "-"), Backend: be, Sized: true, Kept: keptRemade, Rest: "gc --tool-images", Retain: e.ret.Raw[settings.RetainToolsAge]}
 			byKey[key] = row
 			keys = append(keys, key)
 		}
@@ -423,11 +424,11 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	other := otherState(d) - left.Size
 	exportsRow := spaceRow{
 		What: "history", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --history",
-		Retain: e.retainOf(state.RetainHistoryAge, state.RetainHistoryCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
+		Retain: e.retainOf(settings.RetainHistoryAge, settings.RetainHistoryCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
 	}
 	runsRow := spaceRow{
 		What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog,
-		Rest: "the newest " + strconv.Itoa(cmp.Or(e.ret.RunLogs, 20)) + " stay", Retain: e.retainOf(state.RetainRunLogs),
+		Rest: "the newest " + strconv.Itoa(cmp.Or(e.ret.RunLogs, 20)) + " stay", Retain: e.retainOf(settings.RetainRunLogs),
 		RetainFrees: oldestBeyond(d.RunLogs(), e.ret.RunLogs),
 	}
 	return nonEmpty(
@@ -449,7 +450,7 @@ func (e spaceEnv) nixCacheRow() (spaceRow, error) {
 	over := max(size-e.ret.NixCacheCap(), 0)
 	return spaceRow{
 		What: "Nix cache", Count: n, Size: size, Sized: true, Kept: keptRemade, GC: over, Rest: "gc --nix-cache",
-		Retain: e.retainOf(state.RetainNixCacheSize), RetainFrees: over,
+		Retain: e.retainOf(settings.RetainNixCacheSize), RetainFrees: over,
 	}, err
 }
 
@@ -458,7 +459,7 @@ func (e spaceEnv) nixCacheRow() (spaceRow, error) {
 // network logs'. A VM whose backend didn't answer is never one. The link
 // sessions' sockets that nothing listens on count too, one each.
 func (e spaceEnv) leftovers(ctx context.Context) (spaceRow, error) {
-	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans", Retain: e.retainOf(state.RetainOrphansAge)}
+	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans", Retain: e.retainOf(settings.RetainOrphansAge)}
 	socks, err := vm.LeftoverSockets(ctx, e.b.Dirs)
 	if err != nil {
 		return row, err

@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -109,5 +111,42 @@ func TestLimaIsTheDefault(t *testing.T) {
 	c, err := r.For(d, vm, "")
 	if err != nil || c.Backend.Name() != backend.Default || backend.Default != "lima" {
 		t.Errorf("For a new VM: %+v, %v", c, err)
+	}
+}
+
+// A new VM's backend is settings.json's, then config.toml's over it, and
+// one that isn't registered names the file that set it.
+func TestDefaultBackendFiles(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
+	r, err := New(d, assets.FS, quietUI{}, Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm, err := state.ReadVM(d, "devvm-p-0123456789abcd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := settings.Save(d, settings.Values{Backend: settings.Of("smolvm")}); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := r.For(d, vm, ""); err != nil || c.Backend.Name() != "smolvm" {
+		t.Errorf("settings.json's: %+v, %v", c, err)
+	}
+	for _, tc := range []struct{ file, want string }{
+		{"backend = \"docker\"\n", "docker"},
+		{"backend = \"qemu\"\n", "backend_unknown_default backends=docker, lima, smolvm file=" + d.ConfigFile() + " name=qemu"},
+	} {
+		if err := os.WriteFile(d.ConfigFile(), []byte(tc.file), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c, err := r.For(d, vm, "")
+		got := msg.NamesOf(err)
+		if err == nil {
+			got = c.Backend.Name()
+		}
+		if got != tc.want {
+			t.Errorf("%q: got %q, want %q", tc.file, got, tc.want)
+		}
 	}
 }

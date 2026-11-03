@@ -10,7 +10,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
 // PickRow is one row of the tools picker: a toolchain, an agent or a
@@ -60,10 +60,10 @@ type partsDefault struct {
 }
 
 // defaults works out a new VM's default parts for the folder dir with
-// its devcontainer.json's plan dc (nil for none). A layer a project file
-// alone calls for, such as nix for a flake.nix, isn't one: only its
-// reason is kept, for the picker.
-func (e creation) defaults(dir string, dc *devcontainer.Plan) (partsDefault, error) {
+// its devcontainer.json's plan dc (nil for none), and the agents def
+// chooses. A layer a project file alone calls for, such as nix for a
+// flake.nix, isn't one: only its reason is kept, for the picker.
+func (e creation) defaults(dir string, dc *devcontainer.Plan, def settings.Defaults) partsDefault {
 	d := partsDefault{why: map[string]string{}}
 	for _, f := range project.DetectFiles(dir) {
 		d.why[f.Name] = f.File
@@ -84,25 +84,18 @@ func (e creation) defaults(dir string, dc *devcontainer.Plan) (partsDefault, err
 		}
 	}
 	d.Toolchains = image.SortTools(d.Toolchains)
-	agents, _, err := state.ReadAgents(e.Dirs)
-	if err != nil {
-		return d, err
-	}
-	d.Agents = image.AgentsOf(agents)
+	d.Agents = image.AgentsOf(def.Agents.Names)
 	d.setup = d.Agents
-	return d, nil
+	return d
 }
 
 // chooseParts chooses what a new VM gets of each part: the flags', each
-// the exact list for its part, and the defaults for those left out. In a
-// terminal without any of the flags, the picker shows the defaults
-// checked; otherwise an info line says what the VM gets. The layers are
-// checked against b's.
-func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, b *build.Env) (Parts, error) {
-	d, err := e.defaults(dir, dc)
-	if err != nil {
-		return Parts{}, err
-	}
+// the exact list for its part, and the defaults for those left out (def's
+// agents). In a terminal without any of the flags, the picker shows the
+// defaults checked; otherwise an info line says what the VM gets. The
+// layers are checked against b's.
+func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, b *build.Env, def settings.Defaults) (Parts, error) {
+	d := e.defaults(dir, dc, def)
 	p := d.Parts
 	given := false
 	for _, f := range []struct {
@@ -193,28 +186,35 @@ type AgentsChoice struct {
 }
 
 // Set saves agents as new VMs' agents: none for none. A name that isn't an
-// agent's is refused.
+// agent's is refused, and so is a choice config.toml makes
+// (set_in_config).
 func (c AgentsChoice) Set(agents []string) error {
 	if err := CheckAgents(agents); err != nil {
 		return err
 	}
-	if err := state.WriteAgents(c.Dirs, image.SortTools(agents)); err != nil {
+	sorted := append([]string{}, image.SortTools(agents)...)
+	if _, err := settings.Save(c.Dirs, settings.Values{Agents: &sorted}); err != nil {
 		return err
 	}
-	c.say(image.SortTools(agents))
+	c.say(sorted)
 	return nil
 }
 
-// Ask asks which agents new VMs get, starting from the saved ones, and
-// saves the answer.
+// Ask asks which agents new VMs get, starting from the ones in effect,
+// and saves the answer; when config.toml chooses them, it says so and
+// asks nothing.
 func (c AgentsChoice) Ask() error {
-	saved, _, err := state.ReadAgents(c.Dirs)
+	def, err := settings.Read(c.Dirs)
 	if err != nil {
 		return err
 	}
+	if def.Agents.Source == settings.FromConfig {
+		c.Info(msg.SetupInConfig(c.Dirs.ConfigFile(), settings.KeyAgents))
+		return nil
+	}
 	rows := make([]PickRow, len(image.Agents))
 	for i, a := range image.Agents {
-		rows[i] = PickRow{Name: a, On: slices.Contains(saved, a)}
+		rows[i] = PickRow{Name: a, On: slices.Contains(def.Agents.Names, a)}
 	}
 	got := c.Pick(msg.AgentsHelp(), []PickPart{{Rows: rows}})
 	return c.Set(checked(got[0]))
@@ -249,13 +249,10 @@ func CheckPart(flag string, given, names []string) error {
 }
 
 // firstRunAgents asks which agents new VMs get on devvm's first run in a
-// terminal, until they're chosen, unless --agents chose this VM's.
-func (e creation) firstRunAgents(o Options) error {
-	if o.Agents != nil || !e.CanPick() || e.PickParts == nil {
+// terminal, until they're chosen (def), unless --agents chose this VM's.
+func (e creation) firstRunAgents(o Options, def settings.Defaults) error {
+	if o.Agents != nil || !e.CanPick() || e.PickParts == nil || def.Agents.Chosen {
 		return nil
-	}
-	if _, set, err := state.ReadAgents(e.Dirs); set || err != nil {
-		return err
 	}
 	return AgentsChoice{Dirs: e.Dirs, Pick: e.PickParts, Info: e.Info}.Ask()
 }
