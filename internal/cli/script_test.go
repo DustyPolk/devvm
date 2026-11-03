@@ -152,10 +152,31 @@ func buildDevvm(t *testing.T) string {
 }
 
 // coverDirVar names the folder the CLI tests' devvm writes its coverage
-// to, when scripts/test.sh asks for it: devvm is built with -cover for
+// in, a folder for each script, when scripts/test.sh asks for it: devvm
+// is built with -cover for
 // every package of devvm's, so the CLI tests count toward each package's
 // coverage, not only cli's.
 const coverDirVar = "CLI_GOCOVERDIR"
+
+// scriptCoverDir sets GOCOVERDIR, where a -cover devvm writes its coverage,
+// to a folder of the script's own under CLI_GOCOVERDIR, when that's set.
+// Scripts run in parallel, and devvm runs that start at once in one folder
+// race on the meta-data file: Go names its temporary file by the time, to
+// the microsecond on macOS, so one run's rename fails and devvm prints
+// "coverage meta-data emit failed" on stderr. scripts/test.sh merges the
+// folders.
+func scriptCoverDir(env *testscript.Env) error {
+	parent := os.Getenv(coverDirVar)
+	if parent == "" {
+		return nil
+	}
+	dir, err := os.MkdirTemp(parent, "script.")
+	if err != nil {
+		return err
+	}
+	env.Setenv("GOCOVERDIR", dir)
+	return nil
+}
 
 // coverFlags are go build's flags for that: the test binary's own
 // coverage mode (atomic with -race), as go tool covdata merges only
@@ -281,8 +302,8 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
 	env.Setenv("MISE_STUB_LOCK", filepath.Join(filepath.Dir(stubs), "mise.lock"))
 	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
-	if dir := os.Getenv(coverDirVar); dir != "" {
-		env.Setenv("GOCOVERDIR", dir) // where a -cover devvm writes its coverage
+	if err := scriptCoverDir(env); err != nil {
+		return err
 	}
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

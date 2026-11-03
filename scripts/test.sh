@@ -6,7 +6,7 @@
 # Tests get a throwaway HOME and XDG folders, so none can reach the real ones, no SSH agent, and
 # no color settings of your own. Each package gets 30 minutes, not go test's 10, so the CLI tests
 # finish on a busy machine instead of timing out. Coverage comes from each package's own tests and
-# from the CLI tests' devvm, built with -cover for every package (CLI_GOCOVERDIR), merged with
+# from the CLI tests' devvm, built with -cover for every package (CLI_GOCOVERDIR, a folder for each script), merged with
 # go tool covdata. The baselines are in testdata/coverage/.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,6 +28,14 @@ cd "$root"
 HOME="$home" XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
   CLI_GOCOVERDIR="$cov/cli" \
   gotestsum -- -race -cover -timeout 30m ./... -args -test.gocoverdir="$cov/unit"
-go tool covdata merge -i="$cov/unit,$cov/cli" -o="$cov/merged"
+# Each CLI test script writes its devvm's coverage to a folder of its own under $cov/cli, so
+# devvm runs in parallel scripts don't race on one meta-data file. A script that never ran
+# devvm leaves its folder empty, and it's left out.
+inputs="$cov/unit"
+for dir in "$cov/cli"/*/; do
+  dir="${dir%/}"
+  if [ -d "$dir" ] && [ -n "$(ls -A "$dir")" ]; then inputs="$inputs,$dir"; fi
+done
+go tool covdata merge -i="$inputs" -o="$cov/merged"
 go tool covdata percent -i="$cov/merged" >"$cov/percents"
 scripts/coverage.sh "$mode" "$cov/percents"
