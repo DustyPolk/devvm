@@ -59,17 +59,6 @@ const (
 	EventLinkLimit   = "link_limit"          // refused: maxLinkConns carried already
 )
 
-// IsLinkAddr reports whether a is in 127.77.0.0/16, the links' addresses
-// in a client. internal/vm has its own, which a test keeps the same.
-func IsLinkAddr(a netip.Addr) bool {
-	a = a.Unmap()
-	if !a.Is4() {
-		return false
-	}
-	b := a.As4()
-	return b[0] == 127 && b[1] == 77
-}
-
 // Link is one link a session carries: the client listens on Addr:Port.
 // Name and Target are what its events name: the client's name for it and
 // the target VM. Hosts are the names the VM's proxy takes it by (List).

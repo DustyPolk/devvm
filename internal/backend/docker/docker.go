@@ -541,7 +541,7 @@ func (d *Docker) ProxyURL(c backend.Confinement) string {
 	if c.Net != backend.NetProxy {
 		return ""
 	}
-	return proxyURL(c.ProxyPort, c.ProxyPassword)
+	return backend.ProxyURL(proxyAlias, c.ProxyPort, c.ProxyPassword)
 }
 
 // ProxySocket is where a VM's proxy listens for its relay (egress.go).

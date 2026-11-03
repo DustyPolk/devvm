@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -123,7 +124,7 @@ func linkFor(host string, port int) (LinkEntry, bool) {
 			continue
 		}
 		a, err := netip.ParseAddr(e.Addr)
-		if err != nil || a.String() != e.Addr || !isLinkAddr(a) || port < 1 || port > 65535 ||
+		if err != nil || a.String() != e.Addr || !IsLinkAddr(a) || a != a.Unmap() || port < 1 || port > 65535 ||
 			e.Socket != LinkSocket(filepath.Dir(linksFile), vmName, a, port) {
 			logf("links: %s:%d: not this VM's link's socket", host, port)
 			continue
@@ -133,19 +134,34 @@ func linkFor(host string, port int) (LinkEntry, bool) {
 	return LinkEntry{}, false
 }
 
-// isLinkAddr: a is in 127.77.0.0/16, where every link's address in its client is.
-func isLinkAddr(a netip.Addr) bool {
+// linkNetA and linkNetB are the first two bytes of 127.77.0.0/16, where every link's address in
+// its client is.
+const linkNetA, linkNetB = 127, 77
+
+// IsLinkAddr reports whether a is in 127.77.0.0/16, the links' addresses in a client, as itself
+// or mapped into IPv6.
+func IsLinkAddr(a netip.Addr) bool {
+	a = a.Unmap()
 	b := a.As16()
-	return a.Is4() && b[12] == 127 && b[13] == 77
+	return a.Is4() && b[12] == linkNetA && b[13] == linkNetB
 }
 
-// linkDomain is the domain of the links' long names: a host under it is a link's or nothing.
-const linkDomain = ".devvm.internal"
+// LinkAddr is the address i in 127.77.0.0/16.
+func LinkAddr(i uint16) netip.Addr {
+	b := [4]byte{linkNetA, linkNetB}
+	binary.BigEndian.PutUint16(b[2:], i)
+	return netip.AddrFrom4(b)
+}
 
-// notALink refuses a host under linkDomain that's none of the VM's links: such a name is never
+// LinkDomain is the domain of the links' long names: a client reaches each of its links' targets
+// as NAME.devvm.internal besides NAME. .internal is for private use, so it names no host on the
+// internet, and a host under LinkDomain is a link's or nothing.
+const LinkDomain = "devvm.internal"
+
+// notALink refuses a host under LinkDomain that's none of the VM's links: such a name is never
 // the policy's, so no rule or company proxy sends it anywhere.
 func notALink(w http.ResponseWriter, method, host string, port int) bool {
-	if !strings.HasSuffix(host, linkDomain) && host != strings.TrimPrefix(linkDomain, ".") {
+	if !strings.HasSuffix(host, "."+LinkDomain) && host != LinkDomain {
 		return false
 	}
 	record(Event{Event: "blocked", Host: host, Port: port, Method: method, Reason: "not one of this VM's links", Refused: true})
@@ -195,19 +211,11 @@ func connectLink(w http.ResponseWriter, r *http.Request, host string, port int, 
 		return
 	}
 	defer func() { _ = up.Close() }()
-	client, buf, err := http.NewResponseController(w).Hijack()
+	client, err := hijack(w)
 	if err != nil {
 		return
 	}
-	defer func() { _ = client.Close() }()
-	_, _ = client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
-	go func() {
-		_, _ = io.Copy(up, buf.Reader) // also drains anything bufio already read
-		if t, ok := up.(interface{ CloseWrite() error }); ok {
-			_ = t.CloseWrite()
-		}
-	}()
-	_, _ = io.Copy(client, up)
+	splice(client, up)
 }
 
 // linkDialError: a link's socket didn't answer.

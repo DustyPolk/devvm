@@ -538,7 +538,7 @@ func TestStartConfined(t *testing.T) {
 	s.machine(t, vm, "stopped 4 8192 20 false")
 	tok := strings.Repeat("ab", 32)
 	c := backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: 3128, ProxyUser: "devvm", ProxyPassword: "pw", Env: map[string]string{"NO_PROXY": "localhost"},
+		Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "pw", Env: map[string]string{"NO_PROXY": "localhost"},
 		Decider: "127.0.0.1:4000", DeciderToken: tok,
 	}
 	for _, bad := range []backend.Confinement{

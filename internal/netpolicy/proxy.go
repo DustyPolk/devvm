@@ -219,7 +219,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		return none, err
 	}
 	conf := backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: pp, ProxyUser: ProxyUser, ProxyPassword: key, Env: Env, SSHPort: sp,
+		Net: backend.NetProxy, ProxyPort: pp, ProxyPassword: key, Env: Env, SSHPort: sp,
 	}
 	if backend.UsesDecider(b) {
 		dp, err := p.port(ctx, st, KeyDeciderPort, up, running)

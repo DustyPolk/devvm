@@ -207,7 +207,7 @@ func smallHost(host func() (vm.Host, error)) []msg.M {
 // CAs, that a proxy that inspects TLS needs its CA there: not a problem,
 // as most proxies don't. A folder devvm would refuse is warned about.
 func sayProxyCA(u *ui.UI) {
-	if os.Getenv("HTTPS_PROXY") == "" && os.Getenv("https_proxy") == "" {
+	if backend.ReadHostProxy(os.Getenv).HTTPS == "" {
 		return
 	}
 	dirs, err := paths.FromEnv()

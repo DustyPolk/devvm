@@ -1,0 +1,71 @@
+package proxy
+
+// Tunnels: a CONNECT the proxy carries itself (to a host the policy allows, or to one of the VM's
+// links) and each connection the relay passes on are spliced, their bytes passed as they are both
+// ways (splice); a CONNECT's connection is first taken from the HTTP server (hijack).
+
+import (
+	"bufio"
+	"io"
+	"net"
+	"net/http"
+)
+
+// hijack takes a CONNECT request's connection from the HTTP server and tells the client its tunnel
+// is open. Bytes the client sent after the request, which the server may already have read, are
+// the connection's first.
+func hijack(w http.ResponseWriter) (bufConn, error) {
+	c, buf, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		return bufConn{}, err
+	}
+	if _, err := c.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n")); err != nil {
+		_ = c.Close()
+		return bufConn{}, err
+	}
+	return bufConn{c, buf.Reader}, nil
+}
+
+// splice passes client's bytes to server and server's to client, as they are. The end of what
+// client sends ends what server reads (closeWrite), and server can still answer. Once server's
+// bytes end, or client can't be written to (it went away), splice closes both connections and
+// returns.
+func splice(client, server net.Conn) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = io.Copy(server, client)
+		closeWrite(server)
+	}()
+	_, _ = io.Copy(client, server)
+	_ = client.Close()
+	_ = server.Close()
+	<-done
+}
+
+// closeWrite closes c's writing side, so the other end reads the end of what c sent, or closes c
+// when it can't.
+func closeWrite(c net.Conn) {
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+		return
+	}
+	_ = c.Close()
+}
+
+// bufConn is a connection whose first bytes may already sit in a bufio.Reader: a hijacked one's in
+// the HTTP server's, an upstream tunnel's in what read the upstream's answer.
+type bufConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c bufConn) Read(b []byte) (int, error) { return c.r.Read(b) }
+
+// CloseWrite closes the writing side of the connection underneath, when it has one.
+func (c bufConn) CloseWrite() error {
+	if t, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return t.CloseWrite()
+	}
+	return nil
+}

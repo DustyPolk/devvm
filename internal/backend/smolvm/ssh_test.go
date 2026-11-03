@@ -110,7 +110,7 @@ func TestStartSSH(t *testing.T) {
 	}
 	s.stubs.Reset(t)
 	c := backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: 3128, ProxyUser: "devvm", ProxyPassword: "proxy-pass!", SSH: true, SSHPort: 61022,
+		Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "proxy-pass!", SSH: true, SSHPort: 61022,
 		Env: map[string]string{"NO_PROXY": "localhost"}, Decider: "127.0.0.1:4000", DeciderToken: strings.Repeat("ab", 32),
 	}
 	if err := s.Start(t.Context(), vm, c); msg.NamesOf(err) != "smolvm_ssh_port_forwarded port=61022 vm="+vm {

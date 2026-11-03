@@ -151,17 +151,17 @@ func hostname(vm string) string {
 
 // noClientProxy are container create's and run's options, given to every
 // container devvm makes (VMs, builds, relays, the tools' unpacking), that
-// keep the proxies in
-// the Docker client's config (~/.docker/config.json's proxies, password
-// and all) out of a container's configuration: the client sets them in
-// every container it makes unless the command sets them itself, and a
-// commit keeps them, so a build's image would hold them, and a VM's
-// processes could read them. devvm sets them empty instead; its own
-// commands get the proxy they need (egress.go).
+// keep the proxies in the Docker client's config (~/.docker/config.json's
+// proxies, password and all) out of a container's configuration: the
+// client sets them in every container it makes unless the command sets
+// them itself, and a commit keeps them, so a build's image would hold
+// them, and a VM's processes could read them. devvm sets each of them
+// (backend.ClientProxyVars) empty instead; its own commands get the proxy
+// they need (egress.go).
 func noClientProxy() []string {
 	var out []string
-	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "FTP_PROXY", "NO_PROXY", "ALL_PROXY"} {
-		out = append(out, "-e", k+"=", "-e", strings.ToLower(k)+"=")
+	for _, k := range backend.ClientProxyVars() {
+		out = append(out, "-e", k+"=")
 	}
 	return out
 }

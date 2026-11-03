@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -71,18 +72,13 @@ func TestLinkAddr(t *testing.T) {
 	}
 	var full []Link
 	for i := uint16(1); i < 0xffff; i++ {
-		full = append(full, Link{Target: "t", TargetID: "x", Addr: linkNetAddr(i)})
+		full = append(full, Link{Target: "t", TargetID: "x", Addr: proxy.LinkAddr(i)})
 	}
 	if got, _ := linkAddr(full, "devvm-db-0123456789abcd", "i1"); got.IsValid() {
 		t.Errorf("with every address taken: %v", got)
 	}
 	if got, _ := linkAddr(full[:300], "devvm-db-0123456789abcd", "i1"); got != a("127.77.1.45") {
 		t.Errorf("after 300: %v", got)
-	}
-	for s, want := range map[string]bool{"127.77.0.1": true, "127.77.255.254": true, "::ffff:127.77.0.1": true, "127.0.0.1": false, "127.78.0.1": false, "::1": false} {
-		if got := IsLinkAddr(a(s)); got != want {
-			t.Errorf("IsLinkAddr(%s) = %v", s, got)
-		}
 	}
 }
 

@@ -102,7 +102,7 @@ func (s *Smolvm) Start(ctx context.Context, vm string, c backend.Confinement) er
 		}
 	}
 	env := maps.Clone(c.Env)
-	for _, k := range proxyVars {
+	for _, k := range backend.GuestProxyVars() {
 		delete(env, k) // the proxy file's
 	}
 	// The VM's ssh: forwarded while it's asked for, its sshd run then.

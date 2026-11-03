@@ -353,9 +353,8 @@ const (
 type Confinement struct {
 	Net Net
 	// NetProxy: the port devvm's proxy listens on (host 127.0.0.1), and the
-	// user and password the guest's proxy settings carry.
+	// password the guest's proxy settings carry, with ProxyUser (ProxyURL).
 	ProxyPort     int
-	ProxyUser     string
 	ProxyPassword string
 	// NetProxy on a backend with a decider (Decider): the proxy's decider,
 	// on host loopback (127.0.0.1:PORT), and the token, 64 hex digits, the

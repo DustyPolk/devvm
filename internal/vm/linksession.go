@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -108,7 +109,7 @@ func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
 	}
 	out := make([]vmssh.Link, len(links))
 	for i, l := range links {
-		out[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port, Hosts: []string{l.Name, l.Name + LinkDomain}}
+		out[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port, Hosts: []string{l.Name, l.Name + "." + proxy.LinkDomain}}
 	}
 	return out, nil
 }

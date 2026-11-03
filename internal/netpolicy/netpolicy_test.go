@@ -113,14 +113,13 @@ func TestKeyAndSalt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hex32 := regexp.MustCompile(`^[0-9a-f]{32}$`)
 	ka, _ := Key(a)
 	kb, _ := Key(b)
 	sa, _ := Salt(a)
 	sb, _ := Salt(b)
-	for _, v := range []string{ka, kb, sa, sb} {
-		if !hex32.MatchString(v) {
-			t.Errorf("%q isn't 32 hex digits", v)
+	for v, re := range map[string]string{ka: `^[0-9a-f]{64}$`, kb: `^[0-9a-f]{64}$`, sa: `^[0-9a-f]{32}$`, sb: `^[0-9a-f]{32}$`} {
+		if !regexp.MustCompile(re).MatchString(v) {
+			t.Errorf("%q doesn't match %s", v, re)
 		}
 	}
 	if ka == kb || sa == sb || sa == ka {
@@ -376,7 +375,7 @@ func TestPrepare(t *testing.T) {
 	key := st.Get(KeyProxyKey)
 	sp, _ := strconv.Atoi(st.Get(KeySSHPort))
 	pp, _ := strconv.Atoi(st.Get(KeyProxyPort))
-	if conf.Net != backend.NetProxy || conf.ProxyUser != "devvm" || conf.ProxyPassword != key || key == "" ||
+	if conf.Net != backend.NetProxy || conf.ProxyPassword != key || key == "" ||
 		conf.ProxyPort != pp || pp == 0 || conf.SSHPort != sp || sp == 0 || sp == pp || conf.Env["NO_PROXY"] != "localhost,127.0.0.1,::1" {
 		t.Errorf("confinement = %+v", conf)
 	}

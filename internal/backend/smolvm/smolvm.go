@@ -23,8 +23,6 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -261,10 +259,6 @@ type record struct {
 	NoSSHD bool `json:"no_sshd,omitempty"`
 }
 
-// proxyVars are the guest's proxy variables, which each exec of devvm's
-// gets from the machine's proxy file.
-var proxyVars = []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"}
-
 // proxyFile holds the proxy URL, password and all, of a machine started
 // with network policy: Start writes it (mode 600), or removes it without.
 // devvm's execs name it (machine exec --secret-file), so smolvm reads it
@@ -286,14 +280,15 @@ func (s *Smolvm) setProxyFile(vm, u string) error {
 }
 
 // proxyArgs are machine exec's options that give the command the proxy
-// variables, none when the machine has no proxy file.
+// variables (backend.GuestProxyVars) from the machine's proxy file, none
+// when it has none.
 func (s *Smolvm) proxyArgs(vm string) []string {
 	f := s.proxyFile(vm)
 	if fi, err := os.Stat(f); err != nil || fi.Size() == 0 {
 		return nil
 	}
 	var args []string
-	for _, k := range proxyVars {
+	for _, k := range backend.GuestProxyVars() {
 		args = append(args, "--secret-file", k+"="+f)
 	}
 	return args
@@ -615,11 +610,7 @@ func (s *Smolvm) ProxyURL(c backend.Confinement) string {
 	if c.Net != backend.NetProxy {
 		return ""
 	}
-	u := url.URL{Scheme: "http", Host: net.JoinHostPort(Gateway, strconv.Itoa(c.ProxyPort))}
-	if c.ProxyUser != "" {
-		u.User = url.UserPassword(c.ProxyUser, c.ProxyPassword)
-	}
-	return u.String()
+	return backend.ProxyURL(Gateway, c.ProxyPort, c.ProxyPassword)
 }
 
 // sortedEnv is env as KEY=value, sorted.

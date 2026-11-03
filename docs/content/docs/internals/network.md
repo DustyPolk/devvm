@@ -54,6 +54,8 @@ flowchart TD
   named --> swap["the placeholder swapped<br>for the real value"]
 ```
 
+A tunnel that the proxy doesn't intercept carries the bytes both ways as they are. When the VM finishes sending, the proxy closes its side of the connection to the far end, so the far end sees the end of what the VM sent and can still answer. The tunnel ends when the far end's bytes end, or when the proxy can't pass them on because the VM's connection has gone, and then the proxy closes both connections. In a tunnel to a host the policy allows, the proxy reads the VM's first five bytes to see whether they start a TLS ClientHello before it passes anything on, so with a protocol whose server speaks first, such as SMTP, the VM gets no answer until it has sent five bytes.
+
 On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)). Docker's VMs can't reach the host's loopback, so on Docker the proxy also listens on a unix socket only you can reach, and a relay on the VM's own network passes the VM's connections to that socket, unread ([details](docker.md#network-policy)).
 
 ### Links through the proxy
@@ -297,4 +299,4 @@ These modes each do one thing and exit:
 | `-login … -login-get NAME` | print one value, refreshing an OAuth login when it's due |
 | `-redact json\|toml` | copy standard input to standard output with secret-looking values replaced, their paths on standard error |
 
-`-relay ADDR -relay-to SOCKET` runs a relay instead. It listens on `ADDR` and passes each connection, both ways and unread, to the proxy's unix socket until it's stopped, and it decides nothing. Docker's relay containers run it.
+`-relay ADDR -relay-to SOCKET` runs a relay instead. It listens on `ADDR` and passes each connection, both ways and unread, to the proxy's unix socket until it's stopped, and it decides nothing. Each connection ends as a tunnel does, when the proxy's side of it ends. Docker's relay containers run it.

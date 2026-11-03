@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -149,7 +148,7 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 	// A VM on Lima's own network gets the host's proxy settings from Lima
 	// (propagateProxyEnv), which limactl otherwise runs without.
 	if c.Net == backend.NetDirect {
-		for _, k := range limaProxyVars() {
+		for _, k := range backend.ClientProxyVars() {
 			if v := l.Getenv(k); v != "" {
 				env = append(env, k+"="+v)
 			}
@@ -221,7 +220,7 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts 
 			stand := c
 			stand.ProxyPassword = passwordStandIn
 			sets = append(sets, ".env = "+yqJSON(l.guestEnv(stand)))
-			fill = proxy && c.ProxyUser != ""
+			fill = proxy
 		}
 	}
 	// The host's own proxy settings only for a VM on Lima's own network:
@@ -273,7 +272,7 @@ func (l *Lima) guestEnv(c backend.Confinement) map[string]string {
 	}
 	if c.Net == backend.NetProxy {
 		u := l.proxyURL(c)
-		for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+		for _, k := range backend.GuestProxyVars() {
 			env[k] = u
 		}
 	}
@@ -303,18 +302,14 @@ func (l *Lima) fillPassword(vm string, c backend.Confinement) error {
 	return state.WriteFile(path, bytes.ReplaceAll(data, []byte(from), []byte(to)))
 }
 
-// proxyURL is devvm's proxy as the guest reaches it, with the VM's user and
-// password.
+// proxyURL is devvm's proxy as the guest reaches it, with the VM's
+// password: on macOS the host's address on Lima's network and the proxy's
+// own port, on Linux QEMU's guestfwd address.
 func (l *Lima) proxyURL(c backend.Confinement) string {
-	host := guestFwdAddr
 	if l.OS == "darwin" {
-		host = net.JoinHostPort(proxyHostDarwin, strconv.Itoa(c.ProxyPort))
+		return backend.ProxyURL(proxyHostDarwin, c.ProxyPort, c.ProxyPassword)
 	}
-	u := url.URL{Scheme: "http", Host: host}
-	if c.ProxyUser != "" {
-		u.User = url.UserPassword(c.ProxyUser, c.ProxyPassword)
-	}
-	return u.String()
+	return backend.ProxyURL(guestFwdHost, guestFwdPort, c.ProxyPassword)
 }
 
 // freePort returns a loopback port nothing listens on now, on any address

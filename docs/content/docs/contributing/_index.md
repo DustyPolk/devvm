@@ -137,7 +137,7 @@ One concern still has copies, so it gets its check in the change that gives it o
 
 ### Agreement tests
 
-When two places must agree but can't be one, a test checks that they agree. `TestLinkAddrsAgree` checks that `internal/vm` and `internal/backend/vmssh`, which can't import it, give each link the same addresses. `TestEveryPartHasAPolicy` checks that every image part has its policy, `TestBuiltinPolicies` that every policy devvm ships parses, `TestEveryMessageIsUsed` that every message has a caller, `TestDocLinks` that every doc link is a message and a heading, and `TestReferenceIsCurrent` that the CLI reference matches the commands. A new pair of places that must agree gets such a test.
+When two places must agree but can't be one, a test checks that they agree. `TestEveryPartHasAPolicy` checks that every image part has its policy, `TestBuiltinPolicies` that every policy devvm ships parses, `TestEveryMessageIsUsed` that every message has a caller, `TestDocLinks` that every doc link is a message and a heading, and `TestReferenceIsCurrent` that the CLI reference matches the commands. A new pair of places that must agree gets such a test.
 
 ### The consolidation pass
 

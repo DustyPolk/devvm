@@ -121,7 +121,11 @@ var (
 	proxyAuth = "" // the VM's password; empty: no check
 )
 
-// authorized: the request carries the VM's password (Basic, user devvm). Lima's hostagent makes the
+// ProxyUser is the user every request names with its password, a VM's or a build's own, as devvm's
+// backends put it in a guest's proxy settings.
+const ProxyUser = "devvm"
+
+// authorized: the request carries the VM's password (Basic, user ProxyUser). Lima's hostagent makes the
 // VM's connections, so the port alone can't tell the VM apart from anything else on the host that
 // reaches it: other VMs, other users. Inside an intercepted tunnel there's no proxy header: the
 // CONNECT that opened it was checked.
@@ -134,7 +138,7 @@ func authorized(r *http.Request) bool {
 		return false
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v[6:]))
-	return err == nil && subtle.ConstantTimeCompare(raw, []byte("devvm:"+proxyAuth)) == 1
+	return err == nil && subtle.ConstantTimeCompare(raw, []byte(ProxyUser+":"+proxyAuth)) == 1
 }
 
 var pol *policy
@@ -493,12 +497,11 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		if caEndedRefusal(w, e) {
 			return
 		}
-		client, buf, err := http.NewResponseController(w).Hijack()
+		client, err := hijack(w)
 		if err != nil {
 			return
 		}
-		_, _ = client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
-		intercept(r.Context(), bufConn{client, buf.Reader}, host, port, e)
+		intercept(r.Context(), client, host, port, e)
 		return
 	}
 	up, err := dialOut(r.Context(), host, port)
@@ -507,17 +510,16 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		block(w, e)
 		return
 	}
-	defer up.Close()
-	client, buf, err := http.NewResponseController(w).Hijack()
+	defer func() { _ = up.Close() }()
+	client, err := hijack(w)
 	if err != nil {
 		return
 	}
-	defer client.Close()
-	_, _ = client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+	defer func() { _ = client.Close() }()
 
 	// TLS: the SNI must be the host that was checked (blunts domain fronting). Other protocols
 	// (SSH on :22, …) pass as they are.
-	first, sni, isTLS := peekClientHello(buf.Reader)
+	first, sni, isTLS := peekClientHello(client.r)
 	if isTLS && !sniMatches(sni, host) {
 		e.Event, e.Reason = "blocked", fmt.Sprintf("TLS name %q doesn't match %s", sni, host)
 		record(e)
@@ -526,29 +528,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 	e.Event = "tunnel"
 	record(e)
 	_, _ = up.Write(first)
-	go func() {
-		_, _ = io.Copy(up, buf.Reader) // also drains anything bufio already read
-		if t, ok := up.(interface{ CloseWrite() error }); ok {
-			_ = t.CloseWrite()
-		}
-	}()
-	_, _ = io.Copy(client, up)
-}
-
-// bufConn: a hijacked connection whose first bytes may already sit in the server's bufio.Reader.
-type bufConn struct {
-	net.Conn
-	r *bufio.Reader
-}
-
-func (c bufConn) Read(b []byte) (int, error) { return c.r.Read(b) }
-
-// CloseWrite half-closes the connection underneath, when it can.
-func (c bufConn) CloseWrite() error {
-	if t, ok := c.Conn.(interface{ CloseWrite() error }); ok {
-		return t.CloseWrite()
-	}
-	return nil
+	splice(client, up)
 }
 
 func sniMatches(sni, host string) bool {

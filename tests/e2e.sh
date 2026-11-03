@@ -741,9 +741,12 @@ lk_not() { ! "$@"; }
 # lk_start VM serve|hold ADDR PORT [WORD]: the helper's server in the VM, as root, once it listens;
 # lk_end VM ADDR PORT ends it. lk_serve VM WORD PORTS...: the helper written to the VM, and a server
 # on its 127.0.0.1 on each port, answering WORD-PORT.
-lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid
-  if ! { lk_root "$1" "rm -f $f" && lk_bg "$1" "perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-}" && lk_until 20 lk_root "$1" "test -s $f"; }; then
-    echo "the helper's $2 on $3:$4 in $1 didn't start in 20s"; return 1
+lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid l=/var/tmp/e2e-link-$3-$4.log
+  if ! { lk_root "$1" "rm -f $f $l" && lk_bg "$1" "sh -c 'exec perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-} >$l 2>&1'" &&
+    lk_until 20 lk_root "$1" "test -s $f"; }; then
+    echo "the helper's $2 on $3:$4 in $1 didn't start in 20s; the VM runs: $(lk_running "$1" && echo yes || echo no); its output:"
+    lk_root "$1" "tail -n 20 $l" 2>&1
+    return 1
   fi; }
 lk_end() { lk_root "$1" "f=/var/tmp/e2e-link-$2-$3.pid; [ ! -s \$f ] || kill \$(cat \$f); rm -f \$f"; }
 lk_serve() { local vm=$1 w=$2 p; shift 2
@@ -2003,7 +2006,7 @@ check "--network-policy: the VM runs behind its proxy, and the self-check passed
 # The control: the launch set the VM's environment (limactl edit, the password's stand-in in the
 # run log), and the guest has the password.
 check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
-  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && [[ \${#key} -eq 32 ]] && [[ -s '$work/ps.log' ]] &&
+  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && [[ \${#key} -eq 64 ]] && [[ -s '$work/ps.log' ]] &&
   ! grep -qFf <(echo \"\$key\") '$work/ps.log' && ! ps -axww -o command= | grep -qFf <(echo \"\$key\") &&
   grep -l 'limactl edit .*devvm:devvm-proxy-password@' '$XDG_DATA_HOME'/devvm/logs/runs/*.log >/dev/null &&
   limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\""
@@ -2104,13 +2107,19 @@ check "the company proxy's password is in no process's arguments, log or VM" bas
   ! grep -rqFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' &&
   ! limactl shell --workdir / $vm sudo grep -rqsFf /dev/stdin /etc /home /root <'$work/corp.auth' &&
   ! limactl shell --workdir / $vm bash -lc env </dev/null | grep -qFf '$work/corp.auth'"
+# On a failure it says which step failed, then shows the launch's output, the VM's status and the
+# end of the proxy's own log.
 check "without them, the next launch starts the VM's proxy again, going directly" bash -c "
-  (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy \
-    '$D' >'$work/last.log' 2>&1) &&
-  ! grep -q -- ' -upstream ' <(ps -axww -o command= | grep -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') &&
-  n0=\$(grep -c . '$work/corp.jsonl') &&
-  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
-  [[ \$(grep -c . '$work/corp.jsonl') == \"\$n0\" ]]"
+  { { (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy \
+      '$D' >'$work/last.log' 2>&1) || { echo the launch failed; false; }; } &&
+    { ! grep -q -- ' -upstream ' <(ps -axww -o command= | grep -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') || { echo the proxy still goes upstream; false; }; } &&
+    n0=\$(grep -c . '$work/corp.jsonl') &&
+    { limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null || { echo github.com failed in the VM; false; }; } &&
+    { [[ \$(grep -c . '$work/corp.jsonl') == \"\$n0\" ]] || { echo the company proxy saw it; false; }; }
+  } || {
+    echo \"the VM: \$(status_of '$vm')\"; echo the launch:; tail -n 30 '$work/last.log'
+    echo the proxy log:; tail -n 30 '$XDG_DATA_HOME/devvm/logs/$vm.proxy.log'; false
+  }"
 corp_stop
 check "the proxy refuses anything on the host without the VM's password" bash -c "
   [[ \$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:$pp http://devvm.proxy/blocked) == 407 ]]"
@@ -3322,7 +3331,7 @@ check "--network-policy: the VM runs behind its proxy, which decides for it, and
 # The control: the guest has the password, from the VM's proxy file, in a login and in Docker's
 # daemon, which devvm's services exec started with no login.
 check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
-  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && { [[ \${#key} -eq 32 ]] || { echo no key; false; }; } &&
+  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && { [[ \${#key} -eq 64 ]] || { echo no key; false; }; } &&
   { [[ -s '$work/ps.log' ]] || { echo nothing sampled; false; }; } &&
   { ! grep -qFf <(echo \"\$key\") '$work/ps.log' || { echo in a process while devvm launched it; false; }; } &&
   { ! ps -axww -o command= | grep -qFf <(echo \"\$key\") || { echo in a process now; false; }; } &&

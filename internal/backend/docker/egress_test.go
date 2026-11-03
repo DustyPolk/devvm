@@ -29,7 +29,7 @@ import (
 // proxied is a start through devvm's proxy.
 func proxied() backend.Confinement {
 	return backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: 41000, ProxyUser: "devvm", ProxyPassword: "k3y",
+		Net: backend.NetProxy, ProxyPort: 41000, ProxyPassword: "k3y",
 		Env: map[string]string{"NO_PROXY": "localhost"},
 	}
 }

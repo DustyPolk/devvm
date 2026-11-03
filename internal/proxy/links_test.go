@@ -319,6 +319,10 @@ func TestLinkListRefused(t *testing.T) {
 		"outside the folder":  {Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432, Socket: "/var/run/docker.sock"},
 		"another port's":      {Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432, Socket: LinkSocket(dir, linkVM, netip.MustParseAddr("127.77.0.1"), 5433)},
 		"an address unread":   {Hosts: []string{"db"}, Addr: "127.77.000.1", Port: 5432, Socket: good.Socket},
+		"a mapped address": {
+			Hosts: []string{"db"}, Addr: "::ffff:127.77.0.1", Port: 5432,
+			Socket: LinkSocket(dir, linkVM, netip.MustParseAddr("::ffff:127.77.0.1"), 5432),
+		},
 		"not a link's address": {
 			Hosts: []string{"db"}, Addr: "127.0.0.1", Port: 5432,
 			Socket: LinkSocket(dir, linkVM, netip.MustParseAddr("127.0.0.1"), 5432),

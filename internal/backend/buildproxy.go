@@ -1,14 +1,9 @@
 package backend
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"net"
 	"net/netip"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/w3cj/devvm/internal/daemon"
@@ -25,9 +20,6 @@ import (
 // credentials stay on the host, out of reach of the code a build runs,
 // which is an image's own.
 
-// buildProxyUser is the user in a build proxy's address.
-const buildProxyUser = "devvm"
-
 // ProxyStarter starts build proxies: devvm's own binary (Self), run by
 // Spawn (daemon.Spawn: a process that can outlive devvm, stopped through
 // the process itself), looked at every Tick while it starts, ten times at
@@ -39,7 +31,7 @@ type ProxyStarter struct {
 }
 
 // BuildProxy is one build's proxy: its port on the host's loopback and its
-// password.
+// password, which a build reaches it with (ProxyURL).
 type BuildProxy struct {
 	Port     int
 	Password string
@@ -61,11 +53,11 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	pw, err := NewProxyPassword()
+	if err != nil {
 		return nil, err
 	}
-	p := &BuildProxy{Password: hex.EncodeToString(b), dir: dir}
+	p := &BuildProxy{Password: pw, dir: dir}
 	auth, policy, logPath := filepath.Join(dir, "auth"), filepath.Join(dir, "policy"), filepath.Join(dir, "proxy.log")
 	if err := state.WriteFile(auth, []byte(p.Password+"\n")); err != nil {
 		return nil, err
@@ -101,13 +93,6 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 	}
 	p.Stop()
 	return nil, msg.ProxyStartFailed(logPath, name)
-}
-
-// URL is the proxy's address as a build reaches it, on host, with its
-// user and password.
-func (p *BuildProxy) URL(host string) string {
-	u := url.URL{Scheme: "http", Host: net.JoinHostPort(host, strconv.Itoa(p.Port)), User: url.UserPassword(buildProxyUser, p.Password)}
-	return u.String()
 }
 
 // Stop stops the proxy, through the process Start started (daemon.Handle),

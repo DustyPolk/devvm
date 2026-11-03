@@ -695,18 +695,6 @@ func TestLinksList(t *testing.T) {
 	}
 }
 
-// vmssh's links' addresses are 127.77.0.0/16, unmapped.
-func TestIsLinkAddr(t *testing.T) {
-	for s, want := range map[string]bool{
-		"127.77.0.1": true, "127.77.255.254": true, "127.77.0.0": true, "::ffff:127.77.0.1": true,
-		"127.0.0.1": false, "127.78.0.1": false, "127.76.255.255": false, "::1": false, "10.77.0.1": false,
-	} {
-		if got := IsLinkAddr(netip.MustParseAddr(s)); got != want {
-			t.Errorf("IsLinkAddr(%s) = %v", s, got)
-		}
-	}
-}
-
 // ReadLinksLog finds the links the client refused and says when there's
 // nothing more to wait for: a line for every link, or the session ending
 // or failing.

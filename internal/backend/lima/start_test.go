@@ -42,7 +42,7 @@ const stoppedVM = `{"name":"v","status":"Stopped","config":{"ssh":{"forwardAgent
 
 func TestStartConfined(t *testing.T) {
 	proxy := backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: 23456, ProxyUser: "devvm", ProxyPassword: "0123456789abcdef0123456789abcdef",
+		Net: backend.NetProxy, ProxyPort: 23456, ProxyPassword: "0123456789abcdef0123456789abcdef",
 		SSHPort: 2222, Env: map[string]string{"NO_PROXY": "localhost"},
 	}
 	for _, tc := range []struct {
@@ -170,7 +170,7 @@ func TestStartSetsChangedEnv(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	conf := func(noProxy string) backend.Confinement {
 		return backend.Confinement{
-			Net: backend.NetProxy, ProxyPort: 20001, ProxyUser: "devvm", ProxyPassword: "pw",
+			Net: backend.NetProxy, ProxyPort: 20001, ProxyPassword: "pw",
 			Env: map[string]string{"NO_PROXY": noProxy, "no_proxy": noProxy},
 		}
 	}
@@ -204,6 +204,14 @@ func stoppedWithYAML(t *testing.T, l *Lima, f *fakeRunner) string {
 	if err := os.WriteFile(l.haPIDFile("v"), []byte("12345\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return editWritesYAML(t, l, f)
+}
+
+// editWritesYAML gives v a lima.yaml that limactl edit writes the
+// environment it's given into, as fillPassword then finds it, and returns
+// its path.
+func editWritesYAML(t *testing.T, l *Lima, f *fakeRunner) string {
+	t.Helper()
 	yaml := filepath.Join(l.Dirs.LimaVM("v"), "lima.yaml")
 	if err := os.WriteFile(yaml, []byte("cpus: 4\n"), 0o644); err != nil { //nolint:gosec // as Lima writes it
 		t.Fatal(err)
@@ -289,7 +297,7 @@ func TestFillPassword(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(yaml), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyUser: "devvm", ProxyPassword: "pw"}
+	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw"}
 	for _, tc := range []struct{ name, yaml, password string }{
 		{"no stand-in", "env: {}\n", "pw"},
 		{"an anchor", "env: {HTTP_PROXY: http://devvm:devvm-proxy-password@192.168.5.2:1}\n", "p&w"},
@@ -311,10 +319,11 @@ func TestFillPassword(t *testing.T) {
 // keys at its next boot.
 func TestStartEditsOnlyWhatDiffers(t *testing.T) {
 	l, f, _ := testLima(t, "linux")
-	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 23456, SSHPort: 2222}
+	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 23456, ProxyPassword: "pw", SSHPort: 2222}
+	u := l.proxyURL(c)
 	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"localPort":2222},"propagateProxyEnv":false,"portForwards":` + yqJSON(noForwards()) + `,` +
-		`"hostResolver":{"enabled":false},"dns":["127.0.0.1"],"env":{"HTTPS_PROXY":"http://192.168.5.4:3128","HTTP_PROXY":"http://192.168.5.4:3128",` +
-		`"http_proxy":"http://192.168.5.4:3128","https_proxy":"http://192.168.5.4:3128"}}}`
+		`"hostResolver":{"enabled":false},"dns":["127.0.0.1"],"env":{"HTTPS_PROXY":"` + u + `","HTTP_PROXY":"` + u + `",` +
+		`"http_proxy":"` + u + `","https_proxy":"` + u + `"}}}`
 	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +445,8 @@ func TestProfileAgent(t *testing.T) {
 		if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, SSHPort: 2, AgentSocket: tc.socket}); err != nil {
+		editWritesYAML(t, l, f)
+		if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2, AgentSocket: tc.socket}); err != nil {
 			t.Fatal(err)
 		}
 		b, err := os.ReadFile(l.profileFile("v"))
@@ -516,7 +526,8 @@ func TestConfined(t *testing.T) {
 	if err := os.WriteFile(l.haPIDFile("v"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, SSHPort: 2}); err != nil {
+	editWritesYAML(t, l, f)
+	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2}); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := l.Confined(t.Context(), "v"); !ok || err != nil {

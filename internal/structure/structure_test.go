@@ -41,7 +41,6 @@ func devvm() rules {
 			"internal/backend.Native":                "a Support value, as a const would be",
 			"internal/backend.None":                  "a Support value, as a const would be",
 			"internal/backend/lima.sshLogin":         table,
-			"internal/backend/smolvm.proxyVars":      table,
 			"internal/backend/docker.desktopDefault": table,
 			"internal/backend/docker.connectEnv":     table,
 			"internal/cli.shells":                    table,

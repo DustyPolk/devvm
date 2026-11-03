@@ -349,7 +349,7 @@ func (f *Fake) ProxyURL(c backend.Confinement) string {
 	if c.Net != backend.NetProxy {
 		return ""
 	}
-	return "http://" + c.ProxyUser + ":" + c.ProxyPassword + "@proxy.test:" + strconv.Itoa(c.ProxyPort)
+	return backend.ProxyURL("proxy.test", c.ProxyPort, c.ProxyPassword)
 }
 
 // Shell records the call and returns ShellCmd.

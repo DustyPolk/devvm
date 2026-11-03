@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -23,11 +24,16 @@ import (
 // connects to the proxy, through devvm _qemu connect. When it can't, it
 // refuses to start QEMU: never unrestricted.
 
-// guestFwdAddr is the proxy's address as every guest sees it.
-const guestFwdAddr = "192.168.5.4:3128"
+// guestFwdHost and guestFwdPort are the proxy's address as every guest
+// sees it.
+const (
+	guestFwdHost = "192.168.5.4"
+	guestFwdPort = 3128
+)
 
 // GuestFwdEnv names the variable holding the command QEMU runs for each
-// connection to guestFwdAddr. Unset, nothing is forwarded.
+// connection to the proxy's address in the guest. Unset, nothing is
+// forwarded.
 const GuestFwdEnv = "DEVVM_GUESTFWD"
 
 // qemuArch is QEMU's name for a Go architecture.
@@ -105,7 +111,7 @@ func RestrictNetdev(args []string, guestfwd string) ([]string, error) {
 			if !done && strings.HasPrefix(v, "user,id=net0,") && !strings.Contains(v, "restrict=") {
 				v += ",restrict=on"
 				if guestfwd != "" {
-					v += ",guestfwd=tcp:" + guestFwdAddr + "-cmd:" + strings.ReplaceAll(guestfwd, ",", ",,")
+					v += ",guestfwd=tcp:" + net.JoinHostPort(guestFwdHost, strconv.Itoa(guestFwdPort)) + "-cmd:" + strings.ReplaceAll(guestfwd, ",", ",,")
 				}
 				out[i] = v
 				done = true

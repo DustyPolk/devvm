@@ -25,7 +25,7 @@ exists $DATA/ca/ca.pem $DATA/ca/ca.key
 catg $VMS/devvm-net-*
 stdout '^net=on$'
 stdout '^net_check=ok$'
-stdout '^proxy_key=[0-9a-f]{32}$'
+stdout '^proxy_key=[0-9a-f]{64}$'
 stdout '^proxy_salt=[0-9a-f]{32}$'
 stdout '^ssh_port=[0-9]+$'
 stdout '^proxy_port=[0-9]+$'
@@ -45,13 +45,13 @@ stdout '^-rw-------\S* '
 # a file, never in its arguments.
 exec sh -c 'grep -F "listening on 127.0.0.1:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*) for devvm-net-" "$DATA"/logs/devvm-net-*.proxy.log'
 catg $RUN/devvm-net-*.proxy.auth
-stdout '^[0-9a-f]{32}$'
+stdout '^[0-9a-f]{64}$'
 catg $RUN/devvm-net-*.secrets.json
 stdout '^\[\]$'
 # The run log never holds the key.
 exec sh -c 'cat "$DATA"/logs/runs/*.log'
 stdout 'devvm:devvm-proxy-password@'
-! stdout 'devvm:[0-9a-f]{32}@'
+! stdout 'devvm:[0-9a-f]{64}@'
 
 # A VM devvm started confined that still reaches the internet directly:
 # stopped, no setup, no shell.

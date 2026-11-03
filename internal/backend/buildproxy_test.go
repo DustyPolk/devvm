@@ -38,9 +38,6 @@ func TestProxyStarter(t *testing.T) {
 	if p.Port != 40123 || len(p.Password) != 64 {
 		t.Errorf("port %d, password %q", p.Port, p.Password)
 	}
-	if got, want := p.URL("192.168.5.2"), "http://devvm:"+p.Password+"@192.168.5.2:40123"; got != want {
-		t.Errorf("URL = %q, want %q", got, want)
-	}
 	line := strings.Join(args, " ")
 	for _, want := range []string{
 		"/devvm _proxy -listen 127.0.0.1:0 -vm devvm-img-x -policy " + filepath.Join(dir, "policy"),

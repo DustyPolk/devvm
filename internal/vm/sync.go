@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
@@ -126,20 +127,16 @@ type setupInputs struct {
 
 // GuestLink is one target a client VM reaches through its links: the
 // address devvm chose for that target in the client, in 127.77.0.0/16
-// (LinkNet), and the names the client reaches it by, each one DNS label.
-// The setup adds NAME.devvm.internal for each name itself.
+// (proxy.IsLinkAddr), and the names the client reaches it by, each one DNS
+// label. The setup adds NAME.devvm.internal for each name itself.
 type GuestLink struct {
 	Addr  netip.Addr
 	Names []string
 }
 
-// LinkNet is the range of a client VM's loopback that holds its links'
-// addresses, an address per target.
-func LinkNet() netip.Prefix { return netip.PrefixFrom(netip.AddrFrom4([4]byte{127, 77, 0, 0}), 16) }
-
 // checkLinks refuses links that aren't as devvm makes them, before any of
 // them reaches the VM (vm, its hostname host): an address outside
-// LinkNet or given twice, or a name that isn't one lowercase DNS label, is
+// 127.77.0.0/16 (proxy.IsLinkAddr) or given twice, or a name that isn't one lowercase DNS label, is
 // localhost or the VM's hostname, or is given twice. The setup writes
 // them into /etc/hosts and NO_PROXY as they are.
 func checkLinks(vm, host string, links []GuestLink) error {
@@ -147,7 +144,7 @@ func checkLinks(vm, host string, links []GuestLink) error {
 	var names []string
 	for _, l := range links {
 		bad := func(name string) error { return msg.LinkSetupInvalid(l.Addr.String(), name, vm) }
-		if !l.Addr.Is4() || !LinkNet().Contains(l.Addr) || slices.Contains(addrs, l.Addr) {
+		if !l.Addr.Is4() || !proxy.IsLinkAddr(l.Addr) || slices.Contains(addrs, l.Addr) {
 			return bad(strings.Join(l.Names, " "))
 		}
 		addrs = append(addrs, l.Addr)
@@ -186,7 +183,7 @@ func linkHosts(links []GuestLink) []byte {
 	for _, l := range links {
 		b.WriteString(l.Addr.String())
 		for _, n := range l.Names {
-			b.WriteString(" " + n + " " + n + "." + netpolicy.LinkDomain)
+			b.WriteString(" " + n + " " + n + "." + proxy.LinkDomain)
 		}
 		b.WriteString("\n")
 	}

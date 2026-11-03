@@ -88,7 +88,7 @@ func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend
 		}
 	}
 	c.ProxyPort = p.Port
-	u := p.URL(buildProxyHost)
+	u := backend.ProxyURL(buildProxyHost, p.Port, p.Password)
 	hp := backend.HostProxy{NoProxy: host.NoProxy}
 	if host.HTTPS != "" {
 		hp.HTTPS = u

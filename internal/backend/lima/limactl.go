@@ -47,12 +47,13 @@ func (logRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 // devvm's data folder: Lima writes lima.REJECTED.yaml into the folder it
 // runs in when a config is invalid, and a project folder is the VM's to
 // write, so the VM could have made that name a link to anything. It runs
-// without the host's proxy settings (limaProxyVars): Lima logs them as it
+// without the host's proxy settings (backend.ClientProxyVars, which Lima
+// reads for propagateProxyEnv, each bare, which setEnv removes): Lima logs them as it
 // reads them, password and all, into devvm's run log, and only a VM on
 // Lima's own network gets them (Start puts them back for it).
 func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "limactl", args...) //nolint:gosec // devvm's own arguments
-	cmd.Env = setEnv(os.Environ(), append(limaProxyVars(), "LIMA_HOME="+l.Dirs.Lima)...)
+	cmd.Env = setEnv(os.Environ(), append(backend.ClientProxyVars(), "LIMA_HOME="+l.Dirs.Lima)...)
 	cmd.Dir = l.Dirs.Data
 	if err := os.MkdirAll(l.Dirs.Data, 0o700); err != nil && cmd.Err == nil {
 		cmd.Err = err // the command then fails with it
@@ -81,16 +82,6 @@ func Limactl(d paths.Dirs, args []string) error {
 
 // setEnv returns env with each KEY=value in kvs replacing any value KEY
 // had. A bare KEY removes it.
-// limaProxyVars are the proxy variables Lima reads (propagateProxyEnv),
-// in capitals and lowercase, each bare, which setEnv removes.
-func limaProxyVars() []string {
-	var out []string
-	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "FTP_PROXY", "NO_PROXY", "ALL_PROXY"} {
-		out = append(out, k, strings.ToLower(k))
-	}
-	return out
-}
-
 func setEnv(env []string, kvs ...string) []string {
 	out := slices.Clone(env)
 	for _, kv := range kvs {

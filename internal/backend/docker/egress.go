@@ -41,8 +41,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,12 +74,7 @@ const (
 	// inhibitIPv4 is the bridge driver's option that gives the host no
 	// address on the network.
 	inhibitIPv4 = "com.docker.network.bridge.inhibit_ipv4"
-	// proxyUser is the user in the proxy's address, as netpolicy names it.
-	proxyUser = "devvm"
 )
-
-// proxyVars are the variables that name the proxy.
-func proxyVars() []string { return []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} }
 
 // buildEnv is what a build's commands get besides the proxy's address:
 // no proxy for the container itself, and Node told to use the proxy
@@ -107,13 +100,6 @@ func proxySocket(d paths.Dirs, name string) string {
 	sum := sha256.Sum256([]byte(name))
 	// Named as the relay has it, whose folder a Linux engine mounts.
 	return filepath.Join(d.Docker(), "sock", hex.EncodeToString(sum[:8]), filepath.Base(relaySock))
-}
-
-// proxyURL is the proxy's address as the relay serves it on port, with
-// its user and password.
-func proxyURL(port int, password string) string {
-	u := url.URL{Scheme: "http", Host: net.JoinHostPort(proxyAlias, strconv.Itoa(port)), User: url.UserPassword(proxyUser, password)}
-	return u.String()
 }
 
 // execEnvKey is the context key of a build's env file.
@@ -471,8 +457,8 @@ func proxyEnv(c backend.Confinement) map[string]string {
 	if env == nil {
 		env = map[string]string{}
 	}
-	for _, k := range proxyVars() {
-		env[k] = proxyURL(c.ProxyPort, c.ProxyPassword)
+	for _, k := range backend.GuestProxyVars() {
+		env[k] = backend.ProxyURL(proxyAlias, c.ProxyPort, c.ProxyPassword)
 	}
 	return env
 }
@@ -653,8 +639,8 @@ func (e egress) buildNet(ctx context.Context, name string, n backend.Net) (conte
 		return fail(err)
 	}
 	env := buildEnv()
-	for _, k := range proxyVars() {
-		env[k] = proxyURL(buildPort, proxy.Password)
+	for _, k := range backend.GuestProxyVars() {
+		env[k] = backend.ProxyURL(proxyAlias, buildPort, proxy.Password)
 	}
 	var lines []byte
 	for _, k := range slices.Sorted(maps.Keys(env)) {

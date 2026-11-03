@@ -3,7 +3,6 @@ package vm
 import (
 	"cmp"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -18,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
 )
@@ -31,17 +31,9 @@ const (
 	KeyLinks = "links"
 )
 
-// LinkDomain follows each link's name: the client reaches it as NAME and
-// NAME.devvm.internal.
-const LinkDomain = ".devvm.internal"
-
-// linkNet is the network each client's link addresses are in,
-// 127.77.0.0/16, as its first two bytes.
-const linkNetA, linkNetB = 127, 77
-
 // Link is one of a client VM's links: the client reaches the target's
-// Port at Name (and Name+LinkDomain), on Addr, the address it has for that
-// target.
+// Port at Name (and Name under proxy.LinkDomain), on Addr, the address it
+// has for that target (proxy.IsLinkAddr).
 type Link struct {
 	Name     string     // one DNS label (CheckLinkName)
 	Port     int        // the target's port, which the client listens on too
@@ -86,17 +78,6 @@ func ParsePublish(v string) (string, error) {
 	return l, nil
 }
 
-// IsLinkAddr reports whether a is one of the links' addresses, in
-// 127.77.0.0/16.
-func IsLinkAddr(a netip.Addr) bool {
-	a = a.Unmap()
-	if !a.Is4() {
-		return false
-	}
-	b := a.As4()
-	return b[0] == linkNetA && b[1] == linkNetB
-}
-
 // ReadLinks returns a client VM's links, sorted by name, then port.
 func ReadLinks(st *state.VM) ([]Link, error) {
 	var out []Link
@@ -128,7 +109,7 @@ func parseLink(e string) (Link, error) {
 		return Link{}, fmt.Errorf("%q: the port %q", e, f[1])
 	case !vmname.IsVM(f[2]) || f[3] == "":
 		return Link{}, fmt.Errorf("%q: the target %q, %q", e, f[2], f[3])
-	case aerr != nil || !IsLinkAddr(addr) || addr != addr.Unmap():
+	case aerr != nil || !proxy.IsLinkAddr(addr) || addr != addr.Unmap():
 		return Link{}, fmt.Errorf("%q: the address %q", e, f[4])
 	}
 	return Link{Name: f[0], Port: port, Target: f[2], TargetID: f[3], Addr: addr, Group: group}, nil
@@ -176,18 +157,11 @@ func linkAddr(links []Link, target, id string) (netip.Addr, error) {
 		used[l.Addr] = true
 	}
 	for i := uint16(1); i < 0xffff; i++ {
-		if a := linkNetAddr(i); !used[a] {
+		if a := proxy.LinkAddr(i); !used[a] {
 			return a, nil
 		}
 	}
 	return netip.Addr{}, errors.New("every address in 127.77.0.0/16 has a link")
-}
-
-// linkNetAddr is the address i in 127.77.0.0/16.
-func linkNetAddr(i uint16) netip.Addr {
-	b := [4]byte{linkNetA, linkNetB}
-	binary.BigEndian.PutUint16(b[2:], i)
-	return netip.AddrFrom4(b)
 }
 
 // Why a link doesn't apply, as CheckLink and devvm link have it.

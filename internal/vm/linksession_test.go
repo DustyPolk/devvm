@@ -18,24 +18,6 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// vmssh can't import vm, so it has its own check for the links'
-// addresses: the two agree, on every address a link gets and around them.
-func TestLinkAddrsAgree(t *testing.T) {
-	addrs := []string{"127.0.0.1", "127.76.255.255", "127.78.0.0", "::1", "::ffff:127.77.0.1", "::ffff:127.0.0.1", "10.77.0.1", "0.0.0.0", "::"}
-	for i := range 0x10000 {
-		addrs = append(addrs, linkNetAddr(uint16(i)).String())
-	}
-	for _, s := range addrs {
-		a := netip.MustParseAddr(s)
-		if IsLinkAddr(a) != vmssh.IsLinkAddr(a) {
-			t.Errorf("%s: vm says %v, vmssh %v", s, IsLinkAddr(a), vmssh.IsLinkAddr(a))
-		}
-	}
-	if !vmssh.IsLinkAddr(linkNetAddr(1)) || !vmssh.IsLinkAddr(linkNetAddr(0xfffe)) {
-		t.Error("a link's address isn't vmssh's")
-	}
-}
-
 // linkSessionEnv is an Env with a fake backend whose VMs are app, a
 // client linked to db's port 5432, and db, which publishes it, runs, and
 // has its host key pinned.

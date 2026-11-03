@@ -25,6 +25,7 @@ import (
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 // The forwarder forwards a VM's ports to the host's loopback, by the same
@@ -44,7 +45,7 @@ import (
 //   - it listens on the host's loopback alone (127.0.0.1 and ::1), on the
 //     port the VM listens on, for servers on the VM's loopback or all its
 //     addresses, but never a link's listener, in 127.77.0.0/16
-//     (IsLinkAddr): every port from 1024 up, or the VM's listed ports alone
+//     (proxy.IsLinkAddr): every port from 1024 up, or the VM's listed ports alone
 //     (Only); never on a port the host has on any address (no SO_REUSEADDR:
 //     platform.ListenExclusive), nor on a port devvm records for any VM
 //     (ssh, proxy, decider, listed forwards) but the VM's own listed ones;
@@ -429,7 +430,7 @@ func procAddr(h string) (netip.Addr, bool) {
 }
 
 // dialAddr is where in the VM a forwarded connection to a server on a goes:
-// its loopback alone. A link's listener (IsLinkAddr) is never forwarded,
+// its loopback alone. A link's listener (proxy.IsLinkAddr) is never forwarded,
 // so a link isn't put on the host's loopback.
 func dialAddr(a netip.Addr) (netip.Addr, bool) {
 	switch {
@@ -437,7 +438,7 @@ func dialAddr(a netip.Addr) (netip.Addr, bool) {
 		return netip.MustParseAddr("127.0.0.1"), true
 	case a == netip.IPv6Unspecified():
 		return netip.IPv6Loopback(), true
-	case a.IsLoopback() && !IsLinkAddr(a):
+	case a.IsLoopback() && !proxy.IsLinkAddr(a):
 		return a, true
 	}
 	return netip.Addr{}, false

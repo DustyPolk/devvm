@@ -97,7 +97,7 @@ func freePort(ctx context.Context) (int, error) {
 func servicesArgs(user, pub string, env map[string]string, proxy bool) []string {
 	var first []string
 	if proxy {
-		first = proxyVars
+		first = backend.GuestProxyVars()
 	}
 	return vmssh.ServicesArgs(user, pub, first, env)
 }

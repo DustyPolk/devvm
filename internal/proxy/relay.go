@@ -9,11 +9,9 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -80,30 +78,14 @@ func runRelay(addr, to string) error {
 	}
 }
 
-// relayConn passes c's bytes to a new connection to the socket at to and back, until both
-// directions end.
+// relayConn passes c's bytes to a new connection to the socket at to and back (splice), until the
+// proxy's end.
 func relayConn(c net.Conn, to string) {
-	defer func() { _ = c.Close() }()
 	up, err := net.DialTimeout("unix", to, relayDial) //nolint:noctx // a connection's own dial
 	if err != nil {
+		_ = c.Close()
 		logf("relay: %v", err)
 		return
 	}
-	defer func() { _ = up.Close() }()
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); pipe(up, c) }()
-	go func() { defer wg.Done(); pipe(c, up) }()
-	wg.Wait()
-}
-
-// pipe copies src to dst, then closes dst's writing side (or dst, when it has none), so the other
-// end sees the end of what src sent.
-func pipe(dst, src net.Conn) {
-	_, _ = io.Copy(dst, src)
-	if cw, ok := dst.(interface{ CloseWrite() error }); ok {
-		_ = cw.CloseWrite()
-		return
-	}
-	_ = dst.Close()
+	splice(c, up)
 }

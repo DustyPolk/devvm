@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -35,9 +36,6 @@ const (
 	KeyDesktopPort = "desktop_port"
 )
 
-// ProxyUser is the user in a VM's proxy URL; the VM's key is the password.
-const ProxyUser = "devvm"
-
 // On reports whether a VM has network policy.
 func On(st *state.VM) bool { return st.Get(KeyNet) == "on" }
 
@@ -56,10 +54,19 @@ func (p *Proxy) Choose(on, off bool, vm string) bool {
 	return p.Confirm(msg.NetAsk())
 }
 
-// Key returns the VM's own random key, made the first time it's needed. It's
-// the password for the VM's proxy, so other VMs and programs on the host
-// that reach its port can't use it.
-func Key(st *state.VM) (string, error) { return random(st, KeyProxyKey) }
+// Key returns the VM's own random key, made the first time it's needed
+// (backend.NewProxyPassword). It's the password for the VM's proxy, so
+// other VMs and programs on the host that reach its port can't use it.
+func Key(st *state.VM) (string, error) {
+	if v := st.Get(KeyProxyKey); v != "" {
+		return v, nil
+	}
+	v, err := backend.NewProxyPassword()
+	if err != nil {
+		return "", err
+	}
+	return v, st.Set(KeyProxyKey, v)
+}
 
 // Salt returns what ends the VM's placeholders: random, like the key, and
 // not the key itself, so a placeholder the VM sends elsewhere doesn't give
@@ -137,8 +144,3 @@ var Env = map[string]string{
 // proxy reaches it there (proxy's -links), so links change no VM's
 // environment.
 const NoProxy = "localhost,127.0.0.1,::1"
-
-// LinkDomain is the domain under which a client VM reaches each of its
-// links' targets, as NAME.devvm.internal besides NAME: .internal is
-// reserved for private use, so it names no host on the internet.
-const LinkDomain = "devvm.internal"
