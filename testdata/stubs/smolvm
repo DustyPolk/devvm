@@ -22,7 +22,7 @@
 # fails. start writes the machine's agent.pid with $SMOLVM_STUB_PID (a process that outlives the
 # command, as smolvm's does), else its caller's pid.
 set -euo pipefail
-echo "smolvm $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" smolvm "$@"
 dir=$STUB_DIR/smolvm
 mkdir -p "$dir"
 [[ ${1:-} != --version ]] || { echo "smolvm $(cat "$STUB_DIR/smolvm-version" 2>/dev/null || echo 1.32.2)"; exit 0; }
@@ -140,7 +140,7 @@ case $cmd in
       cat > /dev/null; exit 0
     fi
     if [[ $line == *"bash -s"* || $line == *"sh -s"* ]]; then
-      sed -n 2p >> "$STUB_DIR/scripts"; cat > /dev/null || true
+      "${0%/*}/stub-log" "$STUB_DIR/scripts" "$(sed -n 2p)"; cat > /dev/null || true
       [[ ! -e $STUB_DIR/script-fails || $line != *"bash -s"* ]] || exit 1
     fi ;;
   "pack create")

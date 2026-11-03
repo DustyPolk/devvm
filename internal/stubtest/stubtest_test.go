@@ -4,8 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
@@ -60,6 +62,96 @@ func TestWriteTouchRead(t *testing.T) {
 	}
 	if got := s.Read(t, "missing"); got != "" {
 		t.Errorf("Read missing = %q", got)
+	}
+}
+
+// A stub's long call lands whole in the call log while others write to
+// it: two stubs at once, and this test appending short lines of its own
+// as fast as it can, so a call written in pieces has another's line
+// between them.
+func TestCallLinesWhole(t *testing.T) {
+	s := New(t)
+	const runs = 20
+	args := []string{strings.Repeat("a", 100000), strings.Repeat("b", 100000)}
+	done := make(chan struct{})
+	hammered := make(chan error, 1)
+	go func() { hammered <- hammer(s.Log(), done) }()
+	var wg sync.WaitGroup
+	errs := make(chan error, len(args)*runs)
+	for _, arg := range args {
+		wg.Go(func() {
+			for range runs {
+				errs <- exec.CommandContext(t.Context(), "open", arg).Run() //nolint:gosec // the open stub, with the test's own argument
+			}
+		})
+	}
+	wg.Wait()
+	close(done)
+	close(errs)
+	if err := <-hammered; err != nil {
+		t.Fatal(err)
+	}
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+	}
+	n := 0
+	for _, c := range s.Calls(t) {
+		switch c {
+		case "x":
+		case "open " + args[0], "open " + args[1]:
+			n++
+		default:
+			t.Fatalf("a call's line is mixed with another's: %.60q…", c)
+		}
+	}
+	if n != len(args)*runs {
+		t.Errorf("%d calls logged whole, want %d", n, len(args)*runs)
+	}
+}
+
+// hammer appends the line "x" to log, one write each, until done closes.
+func hammer(log string, done <-chan struct{}) error {
+	f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600) //nolint:gosec // the test's own call log
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case <-done:
+			return f.Close()
+		default:
+		}
+		if _, err := f.WriteString("x\n"); err != nil {
+			_ = f.Close()
+			return err
+		}
+	}
+}
+
+// Every stub logs its calls through stub-log, never with the shell's
+// own append, which can write a long line in pieces.
+func TestStubsLogWithStubLog(t *testing.T) {
+	stubs, err := Folder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := os.ReadDir(stubs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appends := regexp.MustCompile(`>>\s*"?\$\{?(STUB_LOG|STUB_DIR)`)
+	for _, f := range files {
+		b, err := os.ReadFile(filepath.Join(stubs, f.Name())) //nolint:gosec // the repo's own stubs
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if appends.MatchString(line) {
+				t.Errorf("%s:%d appends with the shell, not stub-log: %s", f.Name(), i+1, strings.TrimSpace(line))
+			}
+		}
 	}
 }
 

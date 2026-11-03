@@ -3,7 +3,7 @@
 # the disk is qcow2 (as JSON, backed by the file named in
 # $STUB_DIR/backing-<instance>, if any), create makes the file.
 set -euo pipefail
-echo "qemu-img $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" qemu-img "$@"
 case ${1:-} in
   info)   b=$STUB_DIR/backing-$(basename "$(dirname "${*: -1}")")
           if [[ -f $b ]]; then printf '{"format":"qcow2","backing-filename":"%s"}\n' "$(cat "$b")"

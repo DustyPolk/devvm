@@ -1,4 +1,4 @@
 #!/bin/sh
 # Stand-in for QEMU in tests, so Linux hosts pass devvm's check for it:
 # logs its arguments to $STUB_LOG.
-echo "qemu-system-aarch64 $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" qemu-system-aarch64 "$@"

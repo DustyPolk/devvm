@@ -7,6 +7,6 @@ case ${1:-} in
   isexcluded)
     if grep -Fxq -- "$2" "$STUB_DIR/tm-excluded" 2>/dev/null; then echo "[Excluded]    $2"; else echo "[Included]    $2"; fi ;;
   addexclusion)
-    echo "tmutil $*" >> "$STUB_LOG"
-    echo "$2" >> "$STUB_DIR/tm-excluded" ;;
+    "${0%/*}/stub-log" "$STUB_LOG" tmutil "$@"
+    "${0%/*}/stub-log" "$STUB_DIR/tm-excluded" "$2" ;;
 esac

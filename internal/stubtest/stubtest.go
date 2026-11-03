@@ -2,7 +2,8 @@
 // (testdata/stubs) first on PATH, in place of the host's, with a new
 // folder of their own for one test, and reads and writes what they keep
 // there. The stubs find that folder in STUB_DIR and log each call they
-// get to STUB_LOG, its calls file, one line each.
+// get to STUB_LOG, its calls file, one line each, written whole by
+// stub-log so that stubs running at once never mix their lines.
 package stubtest
 
 import (
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,7 +47,8 @@ func New(t testing.TB, only ...string) *Stubs {
 		if err := os.Mkdir(bin, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		for _, name := range only {
+		// stub-log too, which the stubs run from their own folder.
+		for _, name := range append(slices.Clip(only), "stub-log") {
 			stub := filepath.Join(stubs, name)
 			if _, err := os.Stat(stub); err != nil {
 				t.Fatalf("no stub %s: %v", name, err)

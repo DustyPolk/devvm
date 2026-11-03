@@ -239,7 +239,7 @@ A command left running in the background (`exec devvm … &name&`) can be interr
 
 ### Stubs
 
-`testdata/stubs/` is on `PATH` ahead of the real commands, so tests never run the real tools. A stub is a shell script that appends its command line to `$STUB_LOG` and keeps any state in `$STUB_DIR`. `stub_calls` prints the log for `stdout` or `cmp` to check, `! stub_calls` fails if anything was logged, and `stub_reset` empties the log, so the next check sees only the calls after it:
+`testdata/stubs/` is on `PATH` ahead of the real commands, so tests never run the real tools. A stub is a shell script that appends its command line to `$STUB_LOG` and keeps any state in `$STUB_DIR`. It appends each line with `stub-log`, a small Perl script next to the stubs that writes the whole line in one write, because the shell's `echo` can write a long line in pieces, and another stub running at once could then write its own line between them. `TestStubsLogWithStubLog` fails on a stub that appends to `$STUB_LOG`, or to a list in `$STUB_DIR`, with the shell's `>>`. `stub_calls` prints the log for `stdout` or `cmp` to check, `! stub_calls` fails if anything was logged, and `stub_reset` empties the log, so the next check sees only the calls after it:
 
 ```txtar
 exec devvm …

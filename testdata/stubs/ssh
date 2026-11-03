@@ -9,7 +9,7 @@
 # listens on its control socket until it's stopped, and its -O forward and -O cancel work, but for a
 # forward whose ADDRESS:PORT is a line of $STUB_DIR/link-taken, which the VM refuses.
 set -euo pipefail
-echo "ssh $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" ssh "$@"
 [[ ! -e $STUB_DIR/ssh-fails ]] || exit 255
 if [[ " $* " == *" -M "* && " $* " == *" -N "* ]]; then
   ctl=

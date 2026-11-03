@@ -3,7 +3,7 @@
 # SOCKET "runs" an agent there: $STUB_DIR/agent-up holds its socket, and
 # $STUB_DIR/agent-held the keys it holds (see the ssh-add stub).
 set -euo pipefail
-echo "ssh-agent $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" ssh-agent "$@"
 [[ ${1:-} == -a && -n ${2:-} ]] || exit 1
 echo "$2" > "$STUB_DIR/agent-up"
 : > "$STUB_DIR/agent-held"

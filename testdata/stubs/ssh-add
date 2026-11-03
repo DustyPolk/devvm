@@ -6,7 +6,7 @@
 # SHA256:fp-<contents> with that comment. -L lists the contents as the
 # public keys, and -d FILE deletes the key FILE holds.
 set -euo pipefail
-echo "ssh-add $* SOCK=${SSH_AUTH_SOCK-unset}" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" ssh-add "$@" "SOCK=${SSH_AUTH_SOCK-unset}"
 up=$STUB_DIR/agent-up held=$STUB_DIR/agent-held
 [[ -f $up && "$(cat "$up")" == "${SSH_AUTH_SOCK-}" ]] || exit 2
 if [[ ${1:-} == -l ]]; then
@@ -20,7 +20,7 @@ if [[ ${1:-} == -L ]]; then
   exit 0
 fi
 c=$(cat "${*: -1}")
-echo "ssh-add ${*:1:$#-1} key:$c" | sed 's/ \{2,\}/ /g' >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" "$(echo "ssh-add ${*:1:$#-1} key:$c" | sed 's/ \{2,\}/ /g')"
 if [[ ${1:-} == -d ]]; then
   { grep -vF " SHA256:fp-$c " "$held" || true; } > "$held.new"
   mv "$held.new" "$held"

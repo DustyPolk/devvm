@@ -3,7 +3,7 @@
 # ./mise.lock, or $MISE_STUB_OLDER_LOCK for a mise.toml listing versions (the step back's); with
 # MISE_STUB_FAIL set, it fails like mise offline. `mise ls-remote` prints $MISE_STUB_VERSIONS.
 set -euo pipefail
-echo "mise $*" >> "${STUB_LOG:-/dev/null}"
+"${0%/*}/stub-log" "${STUB_LOG:-/dev/null}" mise "$@"
 # shellcheck disable=SC2086  # one version per word
 case ${1:-} in
   ls-remote) printf '%s\n' ${MISE_STUB_VERSIONS:-}; exit 0 ;;

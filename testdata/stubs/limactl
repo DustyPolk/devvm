@@ -40,7 +40,7 @@
 # devvm, once.
 # Everything else succeeds.
 set -euo pipefail
-echo "limactl $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" limactl "$@"
 echo "cwd=$(pwd -P) LIMA_HOME=${LIMA_HOME:-}" > "$STUB_DIR/limactl-env"
 if [[ -f $STUB_DIR/interrupt-on && "$*" == *"$(cat "$STUB_DIR/interrupt-on")"* ]]; then
   rm "$STUB_DIR/interrupt-on"
@@ -184,7 +184,7 @@ case ${1:-} in
       exec bash -c "$3" "$4" "$STUB_DIR/vmfs$5" "${@:6}"
     fi
     # A script fed to bash -s: its first line after the shebang.
-    if [[ ${*: -2} == "bash -s" || "$*" == *"exec 'bash' '-s'" ]]; then sed -n 2p >> "$STUB_DIR/scripts"; fi
+    if [[ ${*: -2} == "bash -s" || "$*" == *"exec 'bash' '-s'" ]]; then "${0%/*}/stub-log" "$STUB_DIR/scripts" "$(sed -n 2p)"; fi
     # A VM's setup: what it was sent.
     if [[ "$*" == *"tar -xf - "* ]]; then
       cat > "$STUB_DIR/sync.tar"

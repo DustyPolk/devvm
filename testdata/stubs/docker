@@ -25,12 +25,12 @@
 # devvm's block in /etc/environment keeps its input as $STUB_DIR/environment. Every container create
 # and run is also appended to $STUB_DIR/containers-made, which nothing empties.
 set -euo pipefail
-echo "docker $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" docker "$@"
 store=$STUB_DIR/docker
 mkdir -p "$store/containers" "$store/images" "$store/volumes" "$store/networks"
 cmd="${1:-} ${2:-}"
 case "$cmd" in
-  "container create"|"container run") echo "docker $*" >> "$STUB_DIR/containers-made" ;;
+  "container create"|"container run") "${0%/*}/stub-log" "$STUB_DIR/containers-made" docker "$@" ;;
 esac
 case "$cmd" in
   "info "*)
@@ -179,7 +179,7 @@ case "$cmd" in
   "container run")
     cat > /dev/null
     for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} == -- ]] && break; done
-    echo "${args[*]:i+1}" >> "$STUB_DIR/unpacked"
+    "${0%/*}/stub-log" "$STUB_DIR/unpacked" "${args[*]:i+1}"
     [[ ! -e $STUB_DIR/unpack-fails ]] || exit 1
     exit 0 ;;
   "image inspect")
@@ -286,7 +286,7 @@ case $verb in
       cat > /dev/null; exit 0
     fi
     if $input && [[ $line == *"bash -s"* || $line == *"sh -s"* ]]; then
-      sed -n 2p >> "$STUB_DIR/scripts"; cat > /dev/null || true
+      "${0%/*}/stub-log" "$STUB_DIR/scripts" "$(sed -n 2p)"; cat > /dev/null || true
       [[ ! -e $STUB_DIR/script-fails || $line != *"bash -s"* ]] || exit 1
     elif $input; then
       cat > /dev/null || true

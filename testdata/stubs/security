@@ -8,7 +8,7 @@
 # add-generic-password … -a NAME … -w "VALUE" lines from stdin and saves
 # them.
 set -euo pipefail
-echo "security $*" >> "$STUB_LOG"
+"${0%/*}/stub-log" "$STUB_LOG" security "$@"
 kc=$STUB_DIR/keychain
 account=""
 args=("$@")
