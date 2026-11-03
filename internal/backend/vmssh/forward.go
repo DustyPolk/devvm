@@ -112,10 +112,15 @@ func (f *Forwarder) logf(format string, args ...any) {
 }
 
 // Run forwards the VM's ports until ctx ends or the VM no longer runs as
-// it did, making the connection again whenever it's lost.
+// it did, making the connection again whenever it's lost. Its ssh master
+// gets devvm's limit on open files: carrying maxRelays connections, it
+// holds two descriptors for each.
 func (f *Forwarder) Run(ctx context.Context) error {
 	if !f.Alive(ctx) {
 		return fmt.Errorf("%s isn't running", f.VM)
+	}
+	if err := platform.ShareFileLimit(); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

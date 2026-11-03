@@ -744,11 +744,14 @@ lk_not() { ! "$@"; }
 # lk_start VM serve|hold ADDR PORT [WORD]: the helper's server in the VM, as root, once it listens;
 # lk_end VM ADDR PORT ends it. lk_serve VM WORD PORTS...: the helper written to the VM, and a server
 # on its 127.0.0.1 on each port, answering WORD-PORT.
+# The wait ends once it listens (its pid file) or has ended (the wrapper's "exited N" in its log).
+# On a failure: what it printed, and every TCP listener in the VM.
 lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid l=/var/tmp/e2e-link-$3-$4.log
-  if ! { lk_root "$1" "rm -f $f $l" && lk_bg "$1" "sh -c 'exec perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-} >$l 2>&1'" &&
-    lk_until 20 lk_root "$1" "test -s $f"; }; then
-    echo "the helper's $2 on $3:$4 in $1 didn't start in 20s; the VM runs: $(lk_running "$1" && echo yes || echo no); its output:"
-    lk_root "$1" "tail -n 20 $l" 2>&1
+  if ! { lk_root "$1" "rm -f $f $l" && lk_bg "$1" "sh -c 'perl /var/tmp/e2e-link.pl $2 $3 $4 ${5:-} >$l 2>&1; echo exited \$? >>$l'" &&
+    lk_until 20 lk_root "$1" "test -s $f || grep -q '^exited ' $l" && lk_root "$1" "test -s $f"; }; then
+    echo "failed: the helper's $2 on $3:$4 in $1 didn't start; the VM runs: $(lk_running "$1" && echo yes || echo no); its output:"
+    lk_root "$1" "ls -l $f $l; tail -n 20 $l" 2>&1
+    echo "the VM's listeners:"; lk_listens "$1"
     return 1
   fi; }
 lk_end() { lk_root "$1" "f=/var/tmp/e2e-link-$2-$3.pid; [ ! -s \$f ] || kill \$(cat \$f); rm -f \$f"; }
@@ -853,7 +856,10 @@ lk_new_master() { local n; n=$(lk_master "$1"); [[ -n $n && $n != "$2" ]]; }
 # link_section BACKEND PREFIX: the link checks on BACKEND (lima, smolvm, docker), the folders named
 # from PREFIX: PREFIXdb and PREFIXapi the targets, PREFIXapp the client. Three small VMs without
 # network policy, then network policy on the client and the first target; ports 47240-47249, and 80.
+# devvm runs with a soft limit of 256 open files, macOS's default (a shell of yours may have more),
+# so the link sessions it starts get it too.
 link_section() {
+  local nofile; nofile=$(ulimit -S -n); ulimit -S -n 256
   lk_be=$1 lk_x=$2 lk_cli=(); [[ $lk_be == lima ]] || lk_cli=(--backend "$lk_be")
   sc=${sc:-$work/ssh}   # rfwd_links's socket forward names a path there
   lk_p1=$(newproj "${lk_x}db") lk_p2=$(newproj "${lk_x}api") lk_pc=$(newproj "${lk_x}app")
@@ -930,6 +936,7 @@ link_section() {
   check "devvm rm of the client leaves no link session, socket, pid file, log or link state" lk_rm_client
   (cd "$lk_p1" && quiet "$D" rm --force --no-export)
   (cd "$lk_p2" && quiet "$D" rm --force --no-export)
+  ulimit -S -n "$nofile"
 }
 lk_made() { local v
   for v in "$lk_v1" "$lk_v2" "$lk_vc"; do
@@ -1012,16 +1019,20 @@ lk_port_taken() {
   lk_dv "$lk_pc" link add "${lk_x}db" 47242 && lk_said "devvm: link_port_taken name=db port=47242 vm=$lk_vc" || return 1
   lk_gets "$lk_vc" db 47242 squatter && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && lk_end "$lk_vc" 127.77.0.1 47242 &&
     lk_dv "$lk_pc" link rm db 47242; }
-lk_cap() { local out s
+lk_cap() { local out s r=0
   lk_dv "$lk_pc" link add "${lk_x}db" 47241 || { cat "$work/last.log"; return 1; }
   out=$(lk_user "$lk_vc" 'LC_ALL=C perl /var/tmp/e2e-link.pl conns db 47241 257' 2>&1 | grep -E '^(closed:|connection )'); echo "$out"
   echo "events for db:47241: $(grep -F '"host":"db","port":47241,' "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" | sed 's/.*"event":"\([a-z_]*\)".*/\1/' | sort | uniq -c | paste -sd ' ' -)"
+  echo "their reasons: $(grep -F '"host":"db","port":47241,' "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" | grep -v '"event":"link",' |
+    sed -n 's/.*"event":"\([a-z_]*\)".*"reason":"\([^"]*\)".*/\1: \2/p' | sort | uniq -c | cut -c1-200 | paste -sd '|' -)"
   echo "the session's log: $(tail -3 "$XDG_DATA_HOME/devvm/logs/$lk_vc.links.log" | paste -sd '|' -)"
   [[ $out == "closed: 257" ]] && lk_event "$lk_vc" link_limit db 47241 '"reason":"256"' &&
-    lk_shows "$lk_pc" "  REFUSED  db:47241  256 connections carried already\$" network log -n 100000 || return 1
-  # Their relays end once the target's server lets them go.
-  lk_end "$lk_v1" 127.0.0.1 47241 && s=$(lk_session "$lk_vc") &&
-    lk_until 60 lk_few "$s" && lk_dv "$lk_pc" link rm db 47241; }
+    lk_shows "$lk_pc" "  REFUSED  db:47241  256 connections carried already\$" network log -n 100000 || r=1
+  # Their relays end once the target's server lets them go. The link goes whatever came of the
+  # checks: the group's links, later, would leave it out.
+  lk_end "$lk_v1" 127.0.0.1 47241 && s=$(lk_session "$lk_vc") && lk_until 60 lk_few "$s" || r=1
+  lk_dv "$lk_pc" link rm db 47241 || r=1
+  return "$r"; }
 lk_few() { (( $(lk_desc "$1" | wc -l) < 20 )); }
 lk_hostile_listen() {
   # Without the link to port 80, which GatewayPorts yes would put on the client's every address, and
@@ -1163,9 +1174,13 @@ lk_alpine() { local pa va r=0
   (cd "$pa" && quiet "$D" rm --force --no-export)
   return "$r"; }
 # Groups, on links: the client publishes a port of its own first, so each of the three has one the
-# others reach. The client's own link to the first target, db, names its group links too.
-gp_join() { local n1=${lk_x}db na=${lk_x}app
-  lk_start "$lk_vc" serve 127.0.0.1 47246 "$na-47246" && lk_dv "$lk_pc" link publish 47246 || return 1
+# others reach. The client's own link to the first target, db, names its group links too. A server
+# that doesn't start fails this check alone: the three still join, for the checks after.
+gp_join() { local na=${lk_x}app r=0
+  lk_dv "$lk_pc" link publish 47246 || { echo "failed: devvm link publish 47246"; return 1; }
+  lk_start "$lk_vc" serve 127.0.0.1 47246 "$na-47246" || r=1
+  gp_joined && (( r == 0 )); }
+gp_joined() { local n1=${lk_x}db na=${lk_x}app
   lk_dv "$lk_pc" group join "$lk_g" && lk_said "==> group_made group=$lk_g vm=$lk_vc" && lk_said "group_trust group=$lk_g" || return 1
   lk_dv "$lk_p1" group join "$lk_g" && lk_said "==> group_joined group=$lk_g vm=$lk_v1" && lk_said "group_trust group=$lk_g" &&
     lk_said "==> group_links_added group=$lk_g links=db:80,47241-47242,47244 vm=$lk_vc" &&

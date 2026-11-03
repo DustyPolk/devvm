@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -219,11 +220,16 @@ func (l *Links) defaults() {
 
 // Run carries the client's links until ctx ends, the client no longer
 // runs as it did, or it has no links, making its connection again
-// whenever it's lost.
+// whenever it's lost. Its ssh masters get devvm's limit on open files:
+// each receives two descriptors for every connection it carries, up to
+// maxLinkConns.
 func (l *Links) Run(ctx context.Context) error {
 	l.defaults()
 	if !l.Alive(ctx) {
 		return fmt.Errorf("%s isn't running", l.VM)
+	}
+	if err := platform.ShareFileLimit(); err != nil {
+		return err
 	}
 	if err := state.PrivateDir(l.Dir); err != nil {
 		return err
