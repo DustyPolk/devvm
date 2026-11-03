@@ -615,7 +615,11 @@ watch_sees() { local w r=1 files="" own=""
   : > "$work/watch.missed"
   # FILES yes: the files' own watches print their events as "MODIFY watched.txt/".
   if [[ ${7:-no} == yes ]]; then files=" '$3/watched.txt' '$3/e2e-sub/nested.txt'" own='/?'; fi
-  "$1" "$2" "LC_ALL=C exec perl '$3/.e2e-watch/watch.pl' '$watch_log' '$3' '$3/e2e-sub'$files" > "$work/watch.stream" 2>&1 &
+  # The last check deleted .e2e-watch, and the VM can go on seeing it as gone for a while after
+  # this machine writes it again (Lima's virtiofs, right after the check before): the VM waits up
+  # to 20 s for the script, then runs it, which fails naming the file if it's still missing.
+  "$1" "$2" "for _ in \$(seq 100); do [ -s '$3/.e2e-watch/watch.pl' ] && break; sleep 0.2; done
+    LC_ALL=C exec perl '$3/.e2e-watch/watch.pl' '$watch_log' '$3' '$3/e2e-sub'$files" > "$work/watch.stream" 2>&1 &
   w=$!
   for _ in $(seq 60); do watch_events | grep -qx ready && break; sleep 0.5; done
   if watch_events | grep -qx ready; then
