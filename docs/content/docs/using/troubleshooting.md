@@ -104,6 +104,10 @@ On the VM's next launch, devvm offers in a terminal to restart it confined, and 
 
 If you press Ctrl+C while devvm starts a VM with network policy, devvm stops the VM and its proxy before it exits, so the VM never runs on without the proxy, and the next `devvm` starts both again confined.
 
+## The proxy doesn't start
+
+A VM with network policy runs only with its proxy, so when the proxy doesn't start, devvm stops the VM, and the next `devvm` starts both again. When devvm says the proxy didn't start, read the log it names for why. When it says another program took the proxy's port, devvm picks another port the next time it starts the VM, so run `devvm restart`. When the proxy doesn't stop for new settings, run `devvm stop`, then `devvm` ([the proxy](../internals/network.md#the-proxy)).
+
 ## A request is blocked
 
 With network policy, a VM reaches only the hosts on its allowlist. To see what the proxy blocked, run `devvm network log --blocked` on this machine, or `devvm-why` in the VM. `devvm network log --blocked` also shows the `devvm network allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
@@ -145,6 +149,14 @@ When you delete a project folder and make a new one at the same path, such as by
 ## An outdated VM, or newer shared tools
 
 devvm warns on each launch when an image the VM was made from has changed, and it leaves the VM as it is ([outdated VMs](images.md#outdated-vms)). It also warns when there are newer shared tools than the VM's, and `devvm tools update` moves the VM to them ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+
+## A download doesn't check out
+
+devvm checks Ubuntu's cloud image and its own mise against checksums before it uses them, and it refuses a download that doesn't match. Ubuntu's checksums must also carry a valid signature from Ubuntu's cloud image key. When devvm refuses one, try again later, and if it keeps failing, the mirror or the network between may be serving something else. Checking the signature needs `gpgv`, so without it devvm checks only the pinned checksum and says so, and `brew install gnupg` or `apt install gpgv` adds it ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+
+## A new tool release isn't there yet
+
+A shared tool's newest release is sometimes not published for every platform yet, such as for a few days after a Node release. devvm then uses the newest older version that is, and says so, and the next daily check tries the newest again. When a release has no download for a VM's platform yet, try again the next day ([versions](../internals/images.md#versions)).
 
 ## A shared tool doesn't mount
 

@@ -47,6 +47,17 @@ The VM can add a submodule at any time, and `git status` and `git diff` on this 
 
 `devvm git-protect on` and `off` take `diff.ignoreSubmodules` back out.
 
+## When devvm reports .git
+
+Every launch of an existing VM, and `devvm stop`, check `.git` again, and devvm reports what it finds there that it didn't lock. When it names one of these, check it before you run git in the folder, because git on this machine would run what the VM put there:
+
+- **A repo that appeared** in the folder after its VM was made. devvm locks it from then on, but if you didn't make it, check its hooks and config.
+- **Hooks in a folder devvm hadn't locked,** because the folder wasn't there to lock or belongs to a new submodule.
+- **A path that's a symlink or under one.** devvm never locks anything through a symlink, because the VM could point one at a file elsewhere on this machine, so it leaves that path unlocked.
+- **A path that moved while devvm locked it.** devvm leaves it unlocked and takes the lock off wherever it landed, so check `.git`.
+
+[How it works › .git protection](../internals/git-protection.md#on-each-launch) lists every check.
+
 ## Not covered
 
 The lock covers `.git`, and the VM can still put things elsewhere that git on this machine runs. devvm tells you about each of these, so read what it reports before you run git in the folder, and use [`--clone`](../using/clone.md) for a repo you don't trust.

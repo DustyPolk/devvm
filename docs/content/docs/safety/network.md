@@ -210,6 +210,7 @@ Agents' logins work the same way. When a VM's image has Codex or opencode and yo
 | --- | --- |
 | `devvm secret set claude` or `github` | asks for the Claude Code token or the GitHub token without showing it, and saves it (`--stdin` reads a line instead) |
 | `devvm secret rm NAME` | deletes a saved secret |
+| `devvm secret get NAME` | prints a saved secret for a script or a pipe, and refuses when the output is a terminal unless you add `--to-terminal` |
 | `devvm secret` | lists the secrets, whether each is saved, and the VMs using each |
 | `devvm secret use NAME` | lets this folder's VM use the secret |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |

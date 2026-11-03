@@ -87,8 +87,14 @@ func TestEveryMessageIsUsed(t *testing.T) {
 // and anchor exist in docs/content/docs. mise run lint runs it.
 func TestDocLinks(t *testing.T) {
 	dir := filepath.Join(root, "docs", "content", "docs")
-	for _, err := range checkDocLinks(docs, specs, dir) {
+	internal := internalDocLinks()
+	for _, err := range checkDocLinks(docs, specs, dir, internal) {
 		t.Error(err)
+	}
+	for id := range internal {
+		if doc := docs[id]; !strings.HasPrefix(doc, "internals/") && !strings.HasPrefix(doc, "contributing/") {
+			t.Errorf("internalDocLinks[%q]: docs links it to %q, a user page, so drop it from the list", id, doc)
+		}
 	}
 	for _, err := range checkCommandDocs(commandDocs, dir) {
 		t.Error(err)
@@ -123,18 +129,38 @@ func checkCommandDocs(links map[string]string, dir string) []error {
 
 var docRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_/-]*(#[a-z0-9][a-z0-9_-]*)?$`)
 
+// internalDocLinks lists the messages whose doc link may point at a How it
+// works or Contributing page, each with why: they aren't for users to act
+// on. Every other message links to a user page.
+func internalDocLinks() map[string]string {
+	return map[string]string{
+		// Only test builds read DEVVM_UNREVIEWED, so only contributors see it.
+		"backend_unreviewed_used": "for contributors",
+		// Lima's QEMU arguments changed shape: devvm's own failure, nothing the
+		// user can do but report it.
+		"qemu_refused": "internal failure",
+		// The tools' build wrote something other than a plain file: devvm's own
+		// failure.
+		"tool_bad_output": "internal failure",
+	}
+}
+
 // checkDocLinks checks links (message ID to "page#anchor") against the
-// messages in ids and the pages in dir.
-func checkDocLinks(links map[string]string, ids map[string]spec, dir string) []error {
+// messages in ids and the pages in dir, and that only the messages in
+// internal link into internals/ or contributing/.
+func checkDocLinks(links map[string]string, ids map[string]spec, dir string, internal map[string]string) []error {
 	var errs []error
 	for _, id := range slices.Sorted(maps.Keys(links)) {
 		doc := links[id]
+		_, allowed := internal[id]
 		var err error
 		switch _, ok := ids[id]; {
 		case !ok:
 			err = errors.New("no such message in locales/en.toml")
 		case !docRe.MatchString(doc):
 			err = errors.New("not page#anchor")
+		case !allowed && (strings.HasPrefix(doc, "internals/") || strings.HasPrefix(doc, "contributing/")):
+			err = errors.New("not a user page")
 		default:
 			err = checkDoc(dir, doc)
 		}
@@ -267,20 +293,31 @@ func TestCheckDocLinks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "images.md"), []byte("## Where state lives\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ids := map[string]spec{"no_vm": {}, "ready": {}, "gone": {}, "url": {}}
+	if err := os.MkdirAll(filepath.Join(dir, "internals"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "internals", "x.md"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]spec{"no_vm": {}, "ready": {}, "gone": {}, "url": {}, "inside": {}, "allowed": {}, "dev": {}}
 	links := map[string]string{
 		"no_vm":   "images#where-state-lives",
 		"ready":   "images",
 		"gone":    "images#nope",
 		"url":     "https://example.com",
 		"missing": "images",
+		"inside":  "internals/x",
+		"dev":     "contributing/x",
+		"allowed": "internals/x",
 	}
 	var got []string
-	for _, err := range checkDocLinks(links, ids, dir) {
+	for _, err := range checkDocLinks(links, ids, dir, map[string]string{"allowed": "internal failure"}) {
 		got = append(got, err.Error())
 	}
 	want := []string{
+		`docs["dev"] = "contributing/x": not a user page`,
 		`docs["gone"] = "images#nope": images has no heading #nope`,
+		`docs["inside"] = "internals/x": not a user page`,
 		`docs["missing"] = "images": no such message in locales/en.toml`,
 		`docs["url"] = "https://example.com": not page#anchor`,
 	}

@@ -30,6 +30,8 @@ Every command that needs Lima checks these first and stops at the first one that
 
 devvm keeps its VMs and images in a Lima home of its own, `~/.local/share/devvm/lima` (under `$XDG_DATA_HOME` when that's set), whatever `LIMA_HOME` says. Your own Lima VMs stay where they are, and Lima settings you made for them don't reach devvm's VMs. Because of this, a plain `limactl list` doesn't show devvm's VMs, so run `devvm limactl list` instead ([below](#running-limactl)). To keep devvm's VMs somewhere else, such as a sandbox or a shorter path, set `DEVVM_LIMA_HOME` to that folder.
 
+Lima adds `_config/default.yaml` and `_config/override.yaml` from its home to every VM it starts, so devvm refuses to start a VM while devvm's Lima home holds either file, and you move them out of it to go on. devvm also refuses a VM that has a network devvm didn't give it, because a second network would get around the VM's proxy, so remove the `networks:` entries from the file that devvm names ([why](../internals/lima.md#a-lima-home-of-its-own)).
+
 ## Running limactl
 
 `devvm limactl ARGS...` runs `limactl` with ARGS on devvm's Lima home, in devvm's place. Its input, output, terminal and exit code are `limactl`'s, and devvm passes every option on to it, `--help` included. `devvm help limactl` shows devvm's own help for the command.
@@ -65,7 +67,7 @@ Set the variables in the VM's shell or in your project's scripts, before the too
 
 ## Limits
 
-- **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has at most 104 characters. A long Lima home leaves less room for the name, so set `DEVVM_LIMA_HOME` to a shorter folder if devvm says the home is too long.
+- **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has at most 104 characters. A long Lima home leaves less room for the name, so set `DEVVM_LIMA_HOME` to a shorter folder if devvm says the home is too long, or that a VM's name leaves no room for the folder's name ([VM names](../internals/backends.md#vm-names)).
 - **Paths can't contain commas.** Lima and QEMU split mount options on commas, so devvm refuses to mount a project folder whose path has one, and it leaves out an agent's folder whose path has one, with a warning.
 - **Disks can grow but not shrink.**
 - **Mounts on Linux are 9p.** A 9p share mounts once per guest, and file watchers in the VM miss changes in its subfolders ([file watchers](#file-watchers)).

@@ -80,7 +80,7 @@ When you make or delete one of these folders on this machine later, devvm notice
 
 devvm copies the files into the VM's home on every launch, over the VM's own. With [network policy](../safety/network.md), the copies of the logins and settings files have your secrets taken out, and the VM's proxy puts them into requests instead ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)).
 
-devvm merges your MCP servers from `~/.claude.json` into the VM's own, so servers added in the VM stay ([MCP servers](../internals/network.md#mcp-servers)). With network policy, devvm also replaces values under keys that look like secrets in the agents' settings files with `devvm-redacted`, and names what it replaced ([keys in settings files](../internals/network.md#keys-in-settings-files)).
+devvm merges your MCP servers from `~/.claude.json` into the VM's own, so servers added in the VM stay ([MCP servers](../internals/network.md#mcp-servers)). With network policy, devvm also replaces values under keys that look like secrets in the agents' settings files with `devvm-redacted`, and names what it replaced ([keys in settings files](../internals/network.md#keys-in-settings-files)). When devvm can't read a settings file to take its secrets out, the VM doesn't get a copy of it, and when it can't make the copy of a login, it says why. Without network policy, devvm copies the env values and headers of Claude Code's MCP servers unchanged, and it names those servers, so add network policy if they hold secrets the VM shouldn't have.
 
 ### Claude Code login
 
