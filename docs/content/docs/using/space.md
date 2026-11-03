@@ -11,7 +11,7 @@ devvm, the tools it runs and its backends keep files on this machine outside you
 
 | Column | |
 | --- | --- |
-| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `history` for the exports of agents' history, `network logs`, `run logs`, `mise`, `devvm's files` for the copies of devvm's own files, `Nix cache` for the [shared Nix cache](toolchains.md#nix-projects), `leftover state` for what devvm keeps of VMs that their backend no longer has, and `state` for the rest of devvm's data folder |
+| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `history` for the exports of agents' history, `network logs`, `run logs`, `mise`, `Nix cache` for the [shared Nix cache](toolchains.md#nix-projects), `leftover state` for what devvm keeps of VMs that their backend no longer has, and `state` for the rest of devvm's data folder |
 | `BACKEND` | the backend that has them, for VMs, images and shared tools |
 | `COUNT`, `SIZE` | how many there are and the disk they take, in powers of 1024 (`2.1G`) |
 | `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
@@ -99,7 +99,6 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `logs/<vm>.jsonl`, `logs/<vm>.proxy.log` | a VM's network log, which holds its proxy's decisions, and its proxy's own output. Before a log would grow past 10 MiB, the proxy moves it to the same name with `.1` added, replacing the older one, so each log takes at most about 20 MiB, and `devvm network log` reads both | `devvm rm` deletes them with the VM, `.1` files included |
 | `ca/` | the certificate authority that VMs trust for their proxy | devvm makes a new one when the old one has less than a week of its 30 days left |
 | `nix-cache/` | the [shared Nix cache](toolchains.md#nix-projects): the packages that VMs with network policy and the `nix` layer downloaded from Nix's binary cache, once for all of them | the VMs' proxies and `devvm gc` delete its least recently used files while it takes more than its cap, `nix-cache.size`, which is 10 GiB when it's off, and `devvm gc --nix-cache` deletes all of it |
-| `assets/<hash>` | devvm's own files, written out where a program needs them at a path, one folder per version of devvm's files | `devvm gc` deletes the folders of older versions, except one that a running VM's proxy was started with |
 | `run/` | files for running VMs and for builds, such as sandbox profiles, proxy pids and the ports lock | devvm deletes a VM's files when it deletes the VM |
 | `agent.sock` | the socket of [devvm's own SSH agent](ssh.md#devvms-own-agent) | it takes no space |
 | `oci-build.lock` | an empty file that the devvm building a base from a container image on Lima locks, so that one such build runs at a time | it stays, and takes no space |

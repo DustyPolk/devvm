@@ -14,7 +14,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -68,16 +67,6 @@ func writeTestFile(t *testing.T, path, data string) {
 	}
 }
 
-// assetsDir is where l's files are written out.
-func assetsDir(t *testing.T, l *Lima) string {
-	t.Helper()
-	dir, err := state.WriteAssets(l.Dirs, l.Assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
 func checkLines(t *testing.T, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
@@ -90,7 +79,8 @@ func checkLines(t *testing.T, got, want []string) {
 	}
 }
 
-// base: a VM from Ubuntu's image with base.yaml, nothing mounted, started
+// base: a VM from Ubuntu's image with base.yaml on limactl create's
+// input, from devvm's files (none written out), nothing mounted, started
 // in its build sandbox, its script run, flushed and stopped.
 func TestBuildImageBase(t *testing.T) {
 	l, f := buildLima(t, "darwin", "")
@@ -108,13 +98,21 @@ func TestBuildImageBase(t *testing.T) {
 	checkLines(t, f.lines(), []string{
 		"limactl create --tty=false --mount-none --name=" + inst +
 			` --set .images = [{"location":"https://example.com/r/ubuntu.img","arch":"aarch64","digest":"sha256:1111"}]` +
-			" --cpus=4 --memory=8 " + filepath.Join(assetsDir(t, l), "base.yaml"),
+			" --cpus=4 --memory=8 -",
 		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
 		"sandbox-exec -f " + l.profileFile(inst) + " ",
 		"limactl shell " + inst + " bash -s",
 		"limactl shell --workdir / " + inst + " sync",
 		"limactl stop " + inst,
 	})
+	for _, c := range f.calls {
+		if strings.HasPrefix(c.line(), "limactl create") && c.stdin != "cpus: 4\nmemory: 8GiB\n" {
+			t.Errorf("limactl create's input: %q, want base.yaml", c.stdin)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(l.Dirs.Data, "assets")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("devvm's files written out: %v", err)
+	}
 	if p, err := os.ReadFile(l.profileFile(inst)); err != nil || !strings.Contains(string(p), `(deny network-outbound (remote ip "localhost:*"))`) {
 		t.Errorf("the build's profile: %s, %v", p, err)
 	}

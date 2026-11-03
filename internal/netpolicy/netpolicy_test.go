@@ -55,65 +55,42 @@ func TestNoProxy(t *testing.T) {
 	}
 }
 
-func TestPolicyFiles(t *testing.T) {
+// A VM's policies: devvm's built-in ones by name, then the user's files.
+func TestPolicies(t *testing.T) {
 	d := paths.Dirs{Data: "/d", Config: "/c", Lima: "/l"}
-	got := PolicyFiles(d, "/r", "vm1", "node+claude")
-	want := []string{
-		"/r/layers/base.policy", "/r/shared-tools/node.policy", "/r/shared-tools/claude.policy",
-		"/c/policy", "/d/vms/vm1.policy", "/d/run/vm1.secrets.policy",
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("PolicyFiles = %q, want %q", got, want)
-	}
-	// A custom layer's allowlist is the user's, next to its script.
-	got = PolicyFiles(d, "/r", "vm1", "node+pg")
-	if got[2] != "/c/layers/pg.policy" {
-		t.Errorf("a custom layer's policy = %q", got[2])
-	}
-	// A built-in layer's is devvm's.
-	got = PolicyFiles(d, "/r", "vm1", "node+docker")
-	if got[2] != "/r/layers/docker.policy" {
-		t.Errorf("a built-in layer's policy = %q", got[2])
-	}
-	if got := PolicyFiles(d, "/r", "vm1", "base"); len(got) != 4 {
-		t.Errorf("base's PolicyFiles = %q", got)
+	user := []string{"/c/policy", "/d/vms/vm1.policy", "/d/run/vm1.secrets.policy"}
+	for _, c := range []struct {
+		img           string
+		builtin, file []string
+	}{
+		{"node+claude", []string{"layers/base.policy", "shared-tools/node.policy", "shared-tools/claude.policy"}, user},
+		// A custom layer's allowlist is the user's, next to its script.
+		{"node+pg", []string{"layers/base.policy", "shared-tools/node.policy"}, slices.Concat([]string{"/c/layers/pg.policy"}, user)},
+		// A built-in layer's is devvm's.
+		{"node+docker", []string{"layers/base.policy", "shared-tools/node.policy", "layers/docker.policy"}, user},
+		{"base", []string{"layers/base.policy"}, user},
+	} {
+		builtin, files := Policies(d, "vm1", c.img)
+		if !slices.Equal(builtin, c.builtin) || !slices.Equal(files, c.file) {
+			t.Errorf("Policies(%s) = %q, %q; want %q, %q", c.img, builtin, files, c.builtin, c.file)
+		}
 	}
 }
 
-// Every image part devvm has comes with its allowlist.
+// Every image part devvm has comes with its allowlist, in devvm's files.
 func TestEveryPartHasAPolicy(t *testing.T) {
 	for _, p := range slices.Concat([]string{"base"}, image.Toolchains, image.Agents, image.Builtins) {
 		d := paths.Dirs{Data: "/d", Config: "/c"}
-		f := PolicyFiles(d, ".", "vm1", p)
+		builtin, _ := Policies(d, "vm1", p)
 		if p != "base" {
-			f = f[1:]
+			builtin = builtin[1:]
 		}
-		if _, err := fs.Stat(assets.FS, f[0]); err != nil {
+		if len(builtin) != 1 {
+			t.Fatalf("%s's built-in policies: %q", p, builtin)
+		}
+		if _, err := fs.Stat(assets.FS, builtin[0]); err != nil {
 			t.Errorf("%s has no policy: %v", p, err)
 		}
-	}
-}
-
-// The written-out folders of devvm's files that proxies were started with
-// are in use; files elsewhere name none.
-func TestAssetsInUse(t *testing.T) {
-	d := paths.Dirs{Data: t.TempDir(), Config: "/c"}
-	a := d.Assets()
-	for name, files := range map[string]string{
-		"vm1.proxy.policy": a + "/aaaa/layers/base.policy," + a + "/aaaa/shared-tools/node.policy,/c/policy",
-		"vm2.proxy.policy": a + "/bbbb/layers/base.policy",
-		"vm3.proxy.policy": "/elsewhere/cccc/layers/base.policy," + a + "/../dddd/x," + a,
-		"vm4.proxy.bin":    a + "/eeee/layers/base.policy",
-	} {
-		if err := state.WriteFile(filepath.Join(d.Run(), name), []byte(files)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got, want := AssetsInUse(d), map[string]bool{"aaaa": true, "bbbb": true}; !maps.Equal(got, want) {
-		t.Errorf("AssetsInUse = %v, want %v", got, want)
-	}
-	if got := AssetsInUse(paths.Dirs{Data: t.TempDir()}); len(got) != 0 {
-		t.Errorf("no proxies: %v", got)
 	}
 }
 
@@ -400,17 +377,13 @@ func TestPrepare(t *testing.T) {
 		t.Fatal("no proxy runs")
 	}
 	args := strings.Join(f.args[pid], " ")
-	hash, err := state.AssetsHash(assets.FS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	written := filepath.Join(d.Assets(), hash)
-	if _, err := os.Stat(filepath.Join(written, "layers", "base.policy")); err != nil {
-		t.Errorf("base's policy isn't written out: %v", err)
+	// devvm's files stay in the binary: nothing is written out for the proxy.
+	if _, err := os.Stat(filepath.Join(d.Data, "assets")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("devvm's files written out: %v", err)
 	}
 	for _, want := range []string{
-		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() + " -policy " + written + "/layers/base.policy," +
-			written + "/shared-tools/node.policy,",
+		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() +
+			" -builtin-policy layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy -policy " + d.Policy() + ",",
 		" -log " + d.Logs() + "/" + st.Name() + ".jsonl -proxy-log " + d.Logs() + "/" + st.Name() + ".proxy.log -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
 		" -secrets " + d.Run() + "/" + st.Name() + ".secrets.json -secret-cmd /bin/sh -auth-file " + d.Run() + "/" + st.Name() + ".proxy.auth",
 		// Its links' list: in the run folder, devvm's alone, named by the VM.
@@ -577,7 +550,10 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(d.CA(), "ca.pem"), []byte("rotated\n"), 0o600)
 			p.InitCA = func(string) error { return nil }
 		},
+		// Its built-in policies change, then its files alone (a layer of
+		// the user's).
 		func() { _ = st.Set(state.KeyImage, "node+claude") },
+		func() { _ = st.Set(state.KeyImage, "node+claude+pg") },
 	} {
 		change()
 		prepare(true)
@@ -588,8 +564,14 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	if st.Get(KeyProxyPort) != pp {
 		t.Errorf("the port moved: %s, then %s", pp, st.Get(KeyProxyPort))
 	}
+	// What it started with: both lists, a line each.
+	want := "layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy\n" +
+		filepath.Join(d.Layers(), "pg.policy") + "," + d.Policy() + "," + VMPolicyFile(d, st.Name()) + "," + secrets.PolicyFile(d, st.Name()) + "\n"
+	if b, _ := os.ReadFile(filepath.Join(d.Run(), st.Name()+".proxy.policy")); string(b) != want {
+		t.Errorf(".proxy.policy = %q, want %q", b, want)
+	}
 	prepare(false)
-	if f.count() != 5 {
+	if f.count() != 6 {
 		t.Errorf("a stopped VM's proxy didn't start again: %d starts", f.count())
 	}
 	// A running VM whose proxy is gone, with its port taken by another

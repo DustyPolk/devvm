@@ -554,11 +554,6 @@ func Deleted(vm string) M {
 	return M{id: "deleted", vals: []val{{"vm", vm}}}
 }
 
-// DeletedAssets is [deleted_assets]: "deleted {{.count}} old copies of devvm's files"
-func DeletedAssets(count int) M {
-	return M{id: "deleted_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
-}
-
 // DeletedCache is [deleted_cache]: "deleted {{.count}} entries of {{.backend}}'s cache"
 func DeletedCache(backend string, count int) M {
 	return M{id: "deleted_cache", plural: true, count: count, vals: []val{{"backend", backend}, {"count", strconv.Itoa(count)}}}
@@ -1147,11 +1142,6 @@ func FromNotFound(from string, host string) M {
 // FromUnreachable is [from_unreachable]: "{{.host}} didn't answer when devvm looked up {{.from}}. Check that you're online."
 func FromUnreachable(from string, host string) M {
 	return M{id: "from_unreachable", vals: []val{{"from", from}, {"host", host}}}
-}
-
-// GCAssets is [gc_assets]: "{{.count}} old copies of devvm's files are left from earlier versions."
-func GCAssets(count int) M {
-	return M{id: "gc_assets", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
 // GCBackendSkipped is [gc_backend_skipped]: "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
@@ -3431,7 +3421,6 @@ var specs = map[string]spec{
 	"delete_other_folder_vm":           {fields: []string{"vm", "was"}},
 	"delete_parent_vm":                 {fields: []string{"dir", "vm"}},
 	"deleted":                          {fields: []string{"vm"}},
-	"deleted_assets":                   {plural: true, fields: []string{"count"}},
 	"deleted_cache":                    {plural: true, fields: []string{"backend", "count"}},
 	"deleted_history":                  {plural: true, fields: []string{"count"}},
 	"deleted_image":                    {fields: []string{"image", "key"}},
@@ -3550,7 +3539,6 @@ var specs = map[string]spec{
 	"from_ignored":                     {fields: []string{"vm"}},
 	"from_not_found":                   {fields: []string{"from", "host"}},
 	"from_unreachable":                 {fields: []string{"from", "host"}},
-	"gc_assets":                        {plural: true, fields: []string{"count"}},
 	"gc_backend_skipped":               {fields: []string{"backend"}},
 	"gc_cache":                         {plural: true, fields: []string{"backend", "count", "size"}},
 	"gc_cache_confirm":                 {fields: []string{"backend"}},

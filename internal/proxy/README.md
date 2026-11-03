@@ -6,7 +6,7 @@ The VM can reach nothing but this proxy. On macOS its Lima hostagent runs under 
 
 - answers `407` without the VM's password;
 - with `-links`, sends a request for one of the VM's links (`CONNECT db:5432`, `GET http://db:5432/`) to that link's socket on the host before any rule (below);
-- checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy files, then tunnels or forwards allowed ones untouched;
+- checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy, which is devvm's built-in policies, read from the binary, and then the user's policy files, and tunnels or forwards allowed ones untouched;
 - resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address; through a company proxy (`-upstream`), which resolves names itself, it refuses a name when the host's resolver answers with such an address, and a name the host can't resolve when only `**` allows it (unless `-upstream-unresolved`, which builds on Lima and a Linux Docker engine get), and it reads at most 64 KiB of the company proxy's answer to `CONNECT`;
 - requires a TLS ClientHello in a tunnel to name the CONNECT host (SNI);
 - for hosts with a bound secret, swaps the placeholder in one header for the real value: it intercepts their `:443` tunnels, and does the same for absolute-form `https://` requests (everything else passes unread);
@@ -28,7 +28,7 @@ It returns when the VM's hostagent is gone.
 | File | What |
 | --- | --- |
 | `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm network log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
-| `policy.go` | the rule syntax and matching (`ValidRule`: `devvm network allow`, `deny` and `rm` take only these); `ParsePolicy`, the one strict parser of policy files, which `devvm network` and doctor use too: each line that holds more than a comment, with its number and whether it's a rule; policy files are re-read when they change, and each line that isn't a rule is logged and skipped, except one that starts with `!` (`BrokenDeny`), which makes the policy deny everything, as refused blocks naming the file and line, until it's fixed |
+| `policy.go` | the rule syntax and matching (`ValidRule`: `devvm network allow`, `deny` and `rm` take only these); `ParsePolicy`, the one strict parser of policy files, which `devvm network` and doctor use too: each line that holds more than a comment, with its number and whether it's a rule; the built-in policies are read once (`readBuiltins`), every line a rule, and come first in the union; the user's policy files are re-read when they change, and each line that isn't a rule is logged and skipped, except one that starts with `!` (`BrokenDeny`), which makes the policy deny everything, as refused blocks naming the file and line, until it's fixed |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
 | `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
 | `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
@@ -43,10 +43,10 @@ It returns when the VM's hostagent is gone.
 
 ## How devvm runs it
 
-`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and data on its `Stdout`, the proxy's own log lines on its `Stderr`), warns through it about logins copied as they are (`IO.Kept`, `secrets.LoginKept`), and ends an error with its `Die`. The package itself prints nothing.
+`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and data on its `Stdout`, the proxy's own log lines on its `Stderr`) and devvm's own files (`IO.FS`, which is `assets.FS`, so the package never imports `assets`), warns through it about logins copied as they are (`IO.Kept`, `secrets.LoginKept`), and ends an error with its `Die`. The package itself prints nothing.
 
 ```text
-devvm _proxy -listen 127.0.0.1:PORT -vm NAME -policy FILE,FILE,… -log LOG.jsonl -proxy-log PROXY.log -lifeline HA.pid \
+devvm _proxy -listen 127.0.0.1:PORT -vm NAME -builtin-policy NAME,NAME,… -policy FILE,FILE,… -log LOG.jsonl -proxy-log PROXY.log -lifeline HA.pid \
   -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY -links VM.links.json \
   [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] [-listen-unix SOCKET] \
   [-upstream-cas CAS.pem] [-upstream UPSTREAM] [-nix-cache DIR -nix-cache-max BYTES]
@@ -59,7 +59,8 @@ Flags take one dash or two.
 | `-listen` | the VM's proxy port, on loopback |
 | `-listen-unix` | Docker only: also listen on this unix socket, mode 600; a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
-| `-policy` | the policy files, comma-separated, in order; a missing file has no rules |
+| `-builtin-policy` | devvm's built-in policies, comma-separated paths in `IO.FS` (`layers/base.policy`, `shared-tools/node.policy`), in order: read once as the proxy starts, ahead of `-policy`'s files, and never again; one that's missing, or holds a line that isn't a rule, is devvm's bug, so `Main` returns an error and the proxy never listens |
+| `-policy` | the user's policy files, comma-separated, in order, each re-read when it changes; a missing file has no rules |
 | `-log` | the JSON-lines event log, mode 600, rotated past 10 MiB; default stdout |
 | `-proxy-log` | the file the proxy's stderr appends to (devvm opens it for the process): the proxy's own log lines, and its HTTP servers' errors, go through it and rotate past 10 MiB by copying, so the last error, written to stderr after `Main` returns, reaches the current file |
 | `-lifeline` | the hostagent's pid file: return when that process is gone |

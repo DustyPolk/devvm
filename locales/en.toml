@@ -833,10 +833,6 @@ other = "nothing deleted"
 one = "deleted {{.count}} unused tool image"
 other = "deleted {{.count}} unused tool images"
 
-[gc_assets]
-one = "{{.count}} old copy of devvm's files is left from an earlier version."
-other = "{{.count}} old copies of devvm's files are left from earlier versions."
-
 [gc_tools_no_vm]
 description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
 one = "{{.count}} current shared tool image no VM has ({{.size}}): {{.tools}}."
@@ -1007,10 +1003,6 @@ other = "deleted {{.count}} files of the shared Nix cache ({{.size}})"
 [images_nix_cache]
 description = "size and cap are sizes, as 2.1G and 10G"
 other = "The shared Nix cache takes {{.size}} of its {{.cap}} cap. Run devvm gc --nix-cache to empty it."
-
-[deleted_assets]
-one = "deleted {{.count}} old copy of devvm's files"
-other = "deleted {{.count}} old copies of devvm's files"
 
 [vm_outdated]
 description = "changed is a comma-separated list of image names"

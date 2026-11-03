@@ -9,7 +9,7 @@ internal/backend/registry 90.5
 internal/backend/smolvm 73.9
 internal/backend/vmssh 87.5
 internal/build 87.3
-internal/cli 88.1
+internal/cli 88.2
 internal/cli/docgen 85.1
 internal/desktop 77.2
 internal/devcontainer 96.8
@@ -19,15 +19,15 @@ internal/hostgit 100.0
 internal/image 96.1
 internal/msg 66.3
 internal/msg/gen 92.5
-internal/netpolicy 86.9
+internal/netpolicy 87.2
 internal/paths 97.1
 internal/platform 85.5
 internal/project 91.5
-internal/proxy 88.0
+internal/proxy 88.2
 internal/secrets 90.4
 internal/sshagent 83.4
 internal/sshconfig 84.8
-internal/state 90.7
+internal/state 91.8
 internal/stubtest 81.0
 internal/testbuild 100.0
 internal/tools 87.9

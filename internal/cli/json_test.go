@@ -105,11 +105,12 @@ func TestJSONShapes(t *testing.T) {
 		{"ports", map[string]string{"ports": "all"}, []string{"ports: string"}},
 		{
 			"network",
+			// An entry has builtin or file: both set here, for every field.
 			networkOutput{Policy: "on", Allowlist: []policyFileJSON{{
-				File: "/p", Rules: []string{"a.test"}, NotRules: []notRuleJSON{{Line: 2, Text: "a b"}},
+				Builtin: "layers/base.policy", File: "/p", Rules: []string{"a.test"}, NotRules: []notRuleJSON{{Line: 2, Text: "a b"}},
 			}}},
 			[]string{
-				"allowlist[].file: string", "allowlist[].not_rules[].line: number", "allowlist[].not_rules[].text: string",
+				"allowlist[].builtin: string", "allowlist[].file: string", "allowlist[].not_rules[].line: number", "allowlist[].not_rules[].text: string",
 				"allowlist[].rules[]: string", "policy: string",
 			},
 		},

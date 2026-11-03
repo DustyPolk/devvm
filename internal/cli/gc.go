@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
@@ -141,7 +140,6 @@ type gcPlan struct {
 	// forgets them
 	orphans   vm.LeftoverReport
 	leftovers vm.Leftovers
-	assets    []string // old copies of devvm's files no VM's proxy was started with
 	mise      []string // older versions of devvm's own mise
 	nix       nixCachePlan
 	share     tools.Share // where the tool images are
@@ -252,9 +250,7 @@ func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bo
 	return p.skipped, p.run(ctx, u)
 }
 
-// planGC gathers what gc deletes: an old copy of devvm's files only when
-// no VM's proxy was started with its policy files (netpolicy.AssetsInUse).
-// With o.only, it gathers that backend's images, current or not, and its
+// planGC gathers what gc deletes. With o.only, it gathers that backend's images, current or not, and its
 // tool images, and nothing that isn't a backend's.
 func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, error) {
 	p := gcPlan{share: tools.Share{Env: b.Tools}}
@@ -303,13 +299,6 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 		p.tools, p.current = backendTools(p.tools, o.only, target), backendTools(p.current, o.only, target)
 		p.recent = backendTools(p.recent, o.only, target)
 		return p, nil
-	}
-	current, err := state.AssetsHash(b.Assets)
-	if err != nil {
-		return p, err
-	}
-	if p.assets, err = state.StaleAssets(b.Dirs, current, netpolicy.AssetsInUse(b.Dirs)); err != nil {
-		return p, err
 	}
 	if p.mise, err = (tools.Versions{Env: b.Tools}).StaleMise(); err != nil {
 		return p, err
@@ -405,7 +394,7 @@ func (p gcPlan) showRecent(u *ui.UI) bool {
 // empty reports whether gc has nothing to delete; the tool images it
 // keeps for being recent aren't any.
 func (p gcPlan) empty() bool {
-	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.assets)+len(p.mise) == 0 &&
+	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.mise) == 0 &&
 		len(p.orphans.Links)+len(p.orphans.Sockets) == 0 && !p.nix.any()
 }
 
@@ -475,9 +464,6 @@ func (p gcPlan) show(u *ui.UI) {
 	if len(p.current) > 0 {
 		u.Say(msg.GCToolsNoVM(len(p.current), humanSize(toolsSize(p.current)), tools.Label(toolFiles(p.current))))
 	}
-	if len(p.assets) > 0 {
-		u.Say(msg.GCAssets(len(p.assets)))
-	}
 	if len(p.mise) > 0 {
 		u.Say(msg.GCMise(len(p.mise), humanSize(dirsSize(p.mise))))
 	}
@@ -508,12 +494,6 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 	}
 	if err := deleteStale(ctx, u, p.images); err != nil {
 		return err
-	}
-	if err := removeAll(p.assets); err != nil {
-		return err
-	}
-	if len(p.assets) > 0 {
-		u.Info(msg.DeletedAssets(len(p.assets)))
 	}
 	if err := removeAll(p.mise); err != nil {
 		return err

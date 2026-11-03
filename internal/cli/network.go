@@ -21,7 +21,7 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "network [on|off]",
 		Short: "Show or change the network policy of this folder's VM",
-		Long: "Show the network policy of this folder's VM, which is on, off or unenforced, and then its allowlist, file by file. " +
+		Long: "Show the network policy of this folder's VM, which is on, off or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. " +
 			"devvm network on or off changes it from the VM's next start, such as with devvm restart. " +
 			"With -g, show or change whether new VMs get network policy instead: ask, on or off.",
 		Example: examples(
@@ -97,17 +97,18 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 }
 
 // networkOutput is devvm network --json: the VM's network policy and its
-// allowlist, each policy file with rules in the order its proxy reads
-// them.
+// allowlist, each policy with rules in the order its proxy reads them.
 type networkOutput struct {
 	Policy    string           `json:"policy"`
 	Allowlist []policyFileJSON `json:"allowlist"`
 }
 
-// policyFileJSON is a policy file: its rules, and its lines that aren't
-// rules, which its proxy skips.
+// policyFileJSON is a policy: a built-in one, by its name in devvm's
+// files, or one of the user's files, by its path; its rules, and its
+// lines that aren't rules, which its proxy skips.
 type policyFileJSON struct {
-	File     string        `json:"file"`
+	Builtin  string        `json:"builtin,omitempty"`
+	File     string        `json:"file,omitempty"`
 	Rules    []string      `json:"rules"`
 	NotRules []notRuleJSON `json:"not_rules"`
 }
@@ -130,7 +131,12 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 	}
 	out := networkOutput{Policy: s.Policy, Allowlist: []policyFileJSON{}}
 	for _, f := range s.Rules {
-		j := policyFileJSON{File: f.Path, Rules: append([]string{}, f.Rules()...), NotRules: []notRuleJSON{}}
+		j := policyFileJSON{Rules: append([]string{}, f.Rules()...), NotRules: []notRuleJSON{}}
+		if f.Builtin {
+			j.Builtin = f.Path
+		} else {
+			j.File = f.Path
+		}
 		for _, l := range f.NotRules() {
 			j.NotRules = append(j.NotRules, notRuleJSON{Line: l.N, Text: l.Text})
 		}

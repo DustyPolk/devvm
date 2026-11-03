@@ -6,6 +6,7 @@
 // requests must carry the VM's password (-auth-file), and the VM's placeholders end in its own key:
 //
 //   - CONNECT host:port and absolute-form requests (GET http://host/…) are checked against the
+//     policy: devvm's built-in policies, read from its own files (IO.FS) once, and the user's
 //     policy files (see policy.go); allowed ones are tunneled or forwarded, untouched.
 //   - Names are resolved here, and connections to loopback, private, link-local and the host's own
 //     addresses are refused unless a rule names the address (the "floor").
@@ -39,6 +40,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -54,6 +56,7 @@ import (
 var (
 	listen    = "127.0.0.1:0"
 	vmName    = "vm"
+	builtins  = ""
 	policies  = ""
 	logPath   = ""
 	proxyLog  = ""
@@ -78,7 +81,8 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&relayAddr, "relay", "", "relay mode: listen on this address and pass each connection, unread, to -relay-to (relay.go)")
 	fs.StringVar(&relayTo, "relay-to", "", "with -relay: the proxy's unix socket")
 	fs.StringVar(&vmName, "vm", "vm", "VM name, for logs")
-	fs.StringVar(&policies, "policy", "", "policy files, comma-separated (missing files have no rules)")
+	fs.StringVar(&builtins, "builtin-policy", "", "built-in policies, comma-separated paths in devvm's own files (IO.FS): read once, ahead of -policy's; a missing one refuses to start")
+	fs.StringVar(&policies, "policy", "", "the user's policy files, comma-separated, re-read on change (missing files have no rules)")
 	fs.StringVar(&logPath, "log", "", "JSON-lines event log (default: stdout), rotated past 10 MiB (rotate.go)")
 	fs.StringVar(&proxyLog, "proxy-log", "", "the file stderr appends to: the proxy's own log, rotated past 10 MiB by copying (rotate.go)")
 	fs.StringVar(&lifeline, "lifeline", "", "pid file of the VM's hostagent: exit when that process is gone")
@@ -703,16 +707,14 @@ func watchLifeline(path string) {
 	}
 }
 
-// loadPolicies reads the policy files (-policy) and the host's own addresses, and opens the Nix
-// cache (-nix-cache).
-func loadPolicies() error {
-	var files []string
-	for f := range strings.SplitSeq(policies, ",") {
-		if f = strings.TrimSpace(f); f != "" {
-			files = append(files, f)
-		}
+// loadPolicies reads the built-in policies (-builtin-policy) from devvm's files, the user's policy
+// files (-policy) and the host's own addresses, and opens the Nix cache (-nix-cache).
+func loadPolicies(own fs.FS) error {
+	rs, err := readBuiltins(own, splitList(builtins))
+	if err != nil {
+		return err
 	}
-	pol = newPolicy(files)
+	pol = newPolicy(rs, splitList(policies))
 	pol.all()
 	loadOwnAddrs()
 	return openNixCache()
@@ -728,6 +730,8 @@ type IO struct {
 	// Kept is told, with -login-vm, what of an agent's login file the VM's copy holds as it is:
 	// Codex's auth.json keys or opencode's providers devvm doesn't know. Nil: nothing is told.
 	Kept func(agent string, names []string)
+	// FS is devvm's own files (its assets), which -builtin-policy names paths in.
+	FS fs.FS
 }
 
 // Main runs devvm _proxy with args (its flags): the proxy itself, until the VM's hostagent is
@@ -814,7 +818,7 @@ func Main(args []string, std IO) error {
 		}
 		logger.SetOutput(f)
 	}
-	if err := loadPolicies(); err != nil {
+	if err := loadPolicies(std.FS); err != nil {
 		return err
 	}
 	// The decider listens first: "listening on" means both are.

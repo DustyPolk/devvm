@@ -125,12 +125,8 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 				Kernel: &limaKernel{Location: filepath.Join(conv.dir, "kernel"), Cmdline: conv.cmdline},
 				Initrd: &limaFile{Location: filepath.Join(conv.dir, "initrd")},
 			}}
-			assets, err := l.assets()
-			if err != nil {
+			if err := l.create(ctx, msg.Creating(inst), inst, createArgs(inst, images, size)); err != nil {
 				return backend.Built{}, err
-			}
-			if err := l.Runner.Run(ctx, msg.Creating(inst), l.limactl(ctx, createArgs(inst, images, size, assets)...)); err != nil {
-				return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 			}
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
 		}
@@ -237,24 +233,35 @@ func (l *Lima) createFromUbuntu(ctx context.Context, vm string, size backend.Siz
 	if err != nil {
 		return ubuntu.Image{}, err
 	}
-	assets, err := l.assets()
-	if err != nil {
-		return ubuntu.Image{}, err
-	}
 	images := []limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}}
-	if err := l.Runner.Run(ctx, msg.CreatingFromUbuntu(vm), l.limactl(ctx, createArgs(vm, images, size, assets, opts...)...)); err != nil {
-		return ubuntu.Image{}, backend.Logged(msg.VMCreateFailed(vm))
+	if err := l.create(ctx, msg.CreatingFromUbuntu(vm), vm, createArgs(vm, images, size, opts...)); err != nil {
+		return ubuntu.Image{}, err
 	}
 	return img, nil
 }
 
 // createArgs are limactl create's arguments for a VM booting images, with
 // nothing from the host mounted but what opts' --set gives it, size's CPUs
-// and memory, and the rest of base.yaml's settings (from devvm's files,
-// written out in assets).
-func createArgs(vm string, images []limaImage, size backend.Size, assets string, opts ...string) []string {
+// and memory, and the rest of base.yaml's settings, which create gives it
+// on its standard input (-).
+func createArgs(vm string, images []limaImage, size backend.Size, opts ...string) []string {
 	args := append([]string{"create", "--tty=false", "--mount-none", "--name=" + vm, "--set", ".images = " + yqJSON(images)}, opts...)
-	return append(args, "--cpus="+strconv.Itoa(size.CPUs), "--memory="+gibString(size.MemoryGiB), filepath.Join(assets, "base.yaml"))
+	return append(args, "--cpus="+strconv.Itoa(size.CPUs), "--memory="+gibString(size.MemoryGiB), "-")
+}
+
+// create runs limactl create with args (createArgs) as step, base.yaml
+// from devvm's own files on its standard input: no copy of it on disk.
+func (l *Lima) create(ctx context.Context, step msg.M, vm string, args []string) error {
+	yaml, err := fs.ReadFile(l.Assets, "base.yaml")
+	if err != nil {
+		return err
+	}
+	cmd := l.limactl(ctx, args...)
+	cmd.Stdin = bytes.NewReader(yaml)
+	if err := l.Runner.Run(ctx, step, cmd); err != nil {
+		return backend.Logged(msg.VMCreateFailed(vm))
+	}
+	return nil
 }
 
 // limaArch is Lima's name for a Go architecture.

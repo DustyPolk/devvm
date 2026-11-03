@@ -23,7 +23,7 @@ env DEVVM_FROM=
 
 # A pinned digest: no lookup, no Docker. A build VM from Ubuntu's image,
 # with only a folder of devvm's temporary one mounted writable and
-# devvm's oci/ (written out in its data folder) read-only, converts exactly
+# devvm's oci/ (written into that temporary folder) read-only, converts exactly
 # that digest; it's deleted before base is
 # created from what it wrote (outside the folder it wrote in), and the
 # temporary folder goes once base has started. The conversion lock's file,
@@ -39,13 +39,14 @@ stdout '^==> image_ready image=base$'
 stub_calls
 ! stdout '^docker'
 stdout '^gpgv --keyring '
-stdout '^limactl create --tty=false --mount-none --name=devvm-oci-build --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --set \.mounts = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm","writable":true\},\{"location":"/\S*/oci","writable":false\}\] --cpus=4 --memory=8 /\S*/base\.yaml$'
+stdout '^limactl create --tty=false --mount-none --name=devvm-oci-build --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --set \.mounts = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm","writable":true\},\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/oci","writable":false\}\] --cpus=4 --memory=8 -$'
 stdout '^limactl start --tty=false devvm-oci-build$'
 # With HTTPS_PROXY set, the build goes through a proxy of devvm's, which
 # alone has the host's proxy settings: the script reads that proxy's
 # address on its input first, then runs with its arguments.
-stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- /\S*/data/devvm/assets/[0-9a-f]{16}/oci/build\.sh /\S*/data/devvm/assets/[0-9a-f]{16}/oci /\S*/tmp/devvm-oci\.[0-9]+/vm node:24@sha256:a{64} node:24@sha256:a{64} \S+ [0-9]+ /home/\S+\.guest 20G$'
-stdout '^limactl delete -f devvm-oci-build\nlimactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/disk\.raw","arch":"(aarch64|x86_64)","kernel":\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/kernel","cmdline":"root=/dev/vda rw console=hvc0"\},"initrd":\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/initrd"\}\}\] --cpus=4 --memory=8 /\S*/base\.yaml$'
+stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- /\S*/tmp/devvm-oci\.[0-9]+/oci/build\.sh /\S*/tmp/devvm-oci\.[0-9]+/oci /\S*/tmp/devvm-oci\.[0-9]+/vm node:24@sha256:a{64} node:24@sha256:a{64} \S+ [0-9]+ /home/\S+\.guest 20G$'
+stdout '^limactl delete -f devvm-oci-build\nlimactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/disk\.raw","arch":"(aarch64|x86_64)","kernel":\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/kernel","cmdline":"root=/dev/vda rw console=hvc0"\},"initrd":\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm/initrd"\}\}\] --cpus=4 --memory=8 -$'
+cmp $STUB_DIR/create-template $DEVVM_REPO/assets/base.yaml
 stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
@@ -116,7 +117,7 @@ stub_calls
 stdout '^docker image inspect --format \{\{\.Id\}\} myapp:dev$'
 stdout '^docker info$'
 stdout '^docker save -o /\S*/tmp/devvm-oci\.[0-9]+/vm/image\.tar myapp:dev$'
-stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- \S*/assets/[0-9a-f]{16}/oci/build\.sh \S*/assets/[0-9a-f]{16}/oci /\S*/tmp/devvm-oci\.[0-9]+/vm - myapp:dev '
+stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- /\S*/tmp/devvm-oci\.[0-9]+/oci/build\.sh /\S*/tmp/devvm-oci\.[0-9]+/oci /\S*/tmp/devvm-oci\.[0-9]+/vm - myapp:dev '
 exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
 stdout '^# \[1/13\] exporting_docker from=myapp:dev$'
 stdout '^# \[13/13\] stopping vm=devvm-img-'
@@ -148,7 +149,7 @@ stub_reset
 exec devvm --from node:24 build base
 stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io$'
 stub_calls
-stdout ' sudo bash -s -- \S*/assets/[0-9a-f]{16}/oci/build\.sh \S*/assets/[0-9a-f]{16}/oci /\S*/vm node@sha256:a{64} node:24 '
+stdout ' sudo bash -s -- /\S*/tmp/devvm-oci\.[0-9]+/oci/build\.sh /\S*/tmp/devvm-oci\.[0-9]+/oci /\S*/vm node@sha256:a{64} node:24 '
 ! stdout 'docker save'
 rm $STUB_DIR/docker-image
 ! exec devvm --from debian:13 build base

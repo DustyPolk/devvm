@@ -36,7 +36,7 @@ import (
 // (SelfCheck). NewProxy sets every field; tests change them.
 type Proxy struct {
 	Dirs    paths.Dirs
-	Assets  fs.FS  // devvm's own files (assets.FS): layers/, shared-tools/
+	Assets  fs.FS  // devvm's own files (assets.FS), whose built-in policies devvm network shows
 	Self    string // devvm's binary, which runs as the proxy
 	OS      string // the host's, as Go names it
 	Secrets *secrets.Store
@@ -90,36 +90,6 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 }
 
 func (p *Proxy) run(vm, ext string) string { return filepath.Join(p.Dirs.Run(), vm+".proxy"+ext) }
-
-// PolicyFiles returns the policy files of the VM vm, of image img, its
-// proxy reads (PolicyFiles), devvm's own written out for it.
-func (p *Proxy) PolicyFiles(vm, img string) ([]string, error) {
-	assets, err := state.WriteAssets(p.Dirs, p.Assets)
-	if err != nil {
-		return nil, err
-	}
-	return PolicyFiles(p.Dirs, assets, vm, img), nil
-}
-
-// AssetsInUse returns the folders of devvm's files written out
-// (state.WriteAssets) that VMs' proxies were started with, by name: kept
-// while a proxy may still read its policy files there.
-func AssetsInUse(d paths.Dirs) map[string]bool {
-	inUse := map[string]bool{}
-	started, _ := filepath.Glob(filepath.Join(d.Run(), "*.proxy.policy"))
-	for _, f := range started {
-		files, err := os.ReadFile(f) //nolint:gosec // devvm's run folder
-		if err != nil {
-			continue
-		}
-		for file := range strings.SplitSeq(string(files), ",") {
-			if rel, err := filepath.Rel(d.Assets(), file); err == nil && rel != "." && filepath.IsLocal(rel) {
-				inUse[strings.Split(filepath.ToSlash(rel), "/")[0]] = true
-			}
-		}
-	}
-	return inUse
-}
 
 // EventLog is a VM's log of its proxy's decisions (JSON lines).
 func EventLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".jsonl") }
@@ -249,18 +219,16 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		return none, err
 	}
 	// A stopped VM's proxy follows the hostagent it started with: a new
-	// start gets a new one. One whose allowlist files changed (tools added
-	// or removed), from another devvm binary (an upgrade), or holding a CA
+	// start gets a new one. One whose policies changed (tools added or
+	// removed), from another devvm binary (an upgrade, which may change
+	// the built-in policies' rules), or holding a CA
 	// since replaced (which mints certificates the VM no longer trusts
 	// after its next setup) starts again too, on the same port.
-	policies, err := p.PolicyFiles(vm, st.Get(state.KeyImage))
-	if err != nil {
-		return none, err
-	}
-	for _, m := range PolicyWarnings(policies) {
+	builtin, files := Policies(p.Dirs, vm, st.Get(state.KeyImage))
+	for _, m := range PolicyWarnings(files) {
 		p.Warn(m)
 	}
-	files := strings.Join(policies, ",")
+	policies := policyList{builtin: strings.Join(builtin, ","), files: strings.Join(files, ",")}
 	bin, _ := image.SHA256File(p.Self)
 	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))
 	// The user's CAs, which it trusts for its own connections: one whose
@@ -275,7 +243,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err != nil {
 		return none, err
 	}
-	if !running || p.stale(vm, files, bin, caSum, cas.Bundle(), upstream) {
+	if !running || p.stale(vm, policies, bin, caSum, cas.Bundle(), upstream) {
 		// Never the old one kept: it would go on with what it started with.
 		if !p.Stop(vm) {
 			return none, msg.ProxyStopFailed(vm)
@@ -318,18 +286,27 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err := p.writeUpstream(vm, cas.Bundle(), upstream); err != nil {
 		return none, err
 	}
-	return conf, p.start(st, b, conf, files, bin, caSum, lifeline)
+	return conf, p.start(st, b, conf, policies, bin, caSum, lifeline)
 }
 
+// policyList is a VM's policies (Policies) as its proxy's flags list
+// them: the built-in ones (-builtin-policy) and the user's files
+// (-policy), each comma-separated.
+type policyList struct{ builtin, files string }
+
+// record is what the run folder keeps of the policies a proxy started
+// with: both lists, a line each, so a change to either starts it again.
+func (l policyList) record() string { return l.builtin + "\n" + l.files }
+
 // stale reports whether the VM's proxy started with other settings than
-// these: its allowlist files (tools added or removed), devvm's binary (an
+// these: its policies (tools added or removed), devvm's binary (an
 // upgrade), devvm's CA (replaced, so it mints certificates the VM no
 // longer trusts after its next setup), the user's CAs, or the company
 // proxy it goes through.
-func (p *Proxy) stale(vm, files, bin, caSum string, cas, upstream []byte) bool {
+func (p *Proxy) stale(vm string, policies policyList, bin, caSum string, cas, upstream []byte) bool {
 	oldCAs, _ := os.ReadFile(p.run(vm, ".cas"))
 	oldUp, _ := os.ReadFile(p.run(vm, ".upstream"))
-	return read(p.run(vm, ".policy")) != files || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum ||
+	return read(p.run(vm, ".policy")) != policies.record() || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum ||
 		!bytes.Equal(oldCAs, cas) || !bytes.Equal(oldUp, upstream)
 }
 
@@ -433,7 +410,7 @@ func (p *Proxy) writeUpstream(vm string, cas, upstream []byte) error {
 }
 
 // start starts the VM's proxy as conf has it, and waits for it to listen.
-func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement, files, bin, caSum, lifeline string) error {
+func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement, policies policyList, bin, caSum, lifeline string) error {
 	vm := st.Name()
 	// The password and the decider's token go in files: a process's
 	// arguments are visible to other users.
@@ -478,7 +455,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	ca := p.Dirs.CA()
 	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
 	args := append([]string{
-		"_proxy", "-listen", addr, "-vm", vm, "-policy", files, "-log", EventLog(p.Dirs, vm), "-proxy-log", logPath, "-lifeline", lifeline,
+		"_proxy", "-listen", addr, "-vm", vm, "-builtin-policy", policies.builtin, "-policy", policies.files, "-log", EventLog(p.Dirs, vm), "-proxy-log", logPath, "-lifeline", lifeline,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
 		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth, "-links", LinkList(p.Dirs, vm),
 	}, decider...)
@@ -492,7 +469,7 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	if err != nil {
 		return err
 	}
-	for _, f := range [][2]string{{".pid", strconv.Itoa(pid)}, {".policy", files}, {".bin", bin}, {".ca", caSum}} {
+	for _, f := range [][2]string{{".pid", strconv.Itoa(pid)}, {".policy", policies.record()}, {".bin", bin}, {".ca", caSum}} {
 		if err := state.WriteFile(p.run(vm, f[0]), []byte(f[1]+"\n")); err != nil {
 			return err
 		}

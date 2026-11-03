@@ -22,7 +22,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `registry/` (every backend's), `lima/`, `smolvm/`, `docker/` (both experimental), `vmssh/` (their ssh: VMs' keys, the port forwarder, links' sessions) |
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
-| `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files, `assets.FS` written out where a path is needed |
+| `internal/paths/`, `internal/state/` | every folder and file devvm uses; atomic state files |
 | `internal/platform/`, `internal/ubuntu/`, `internal/testbuild/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads); whether this is a test build (ldflags: only it reads the test overrides, `cli`'s `readOverrides`) |
 | `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts; the built-in layers, `docker` and `nix`, each with its policy), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch), `oci/` (`--from`'s conversion; see its `README.md`), `container/` (smolvm's and Docker's scripts in containers), `smolvm/`, `docker/` (each one's own) |
 | `internal/structure/` | the structure test (tests only) |
@@ -47,6 +47,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 - **The gate:** `mise run fmt && mise run lint && mise run test`, all passing, before starting a task and before marking it done; a gate failing at the start gets fixed first. Anything touching VMs also passes `tests/e2e.sh` in the background: the sections for what changed (`--only`, `--backend`).
 - **Nothing in project folders:** state goes in `~/.local/share/devvm` and `~/.config/devvm`.
+- **devvm's own files never get a shared copy on disk:** the proxy reads them from the binary, base.yaml and scripts go on stdin, `--from`'s build writes its scripts into its own temp folder.
 - **Credentials never go into images.** Host agent history never goes into VMs.
 - **Never auto-delete project VMs:** they may hold unsaved work. Warn instead.
 - **The startup check only reports.** Never install host software without asking.

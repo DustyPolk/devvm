@@ -93,26 +93,28 @@ func newRandom(st *state.VM, key string, n int) (string, error) {
 	return v, st.Set(key, v)
 }
 
-// PolicyFiles returns a VM's policy files, in order: base's and each of its
-// image's parts' (a shared tool's from devvm's shared-tools/, a built-in
-// layer's from devvm's layers/, another layer's from the user's layers),
-// the user's own for every VM, the VM's own, and
-// the hosts its secrets imply. devvm's own are in assets, the folder
-// they're written out in. A missing file has no rules.
-func PolicyFiles(d paths.Dirs, assets, vm, img string) []string {
-	files := []string{filepath.Join(assets, "layers", "base.policy")}
+// Policies returns the policies of the VM vm, of image img, in the order
+// its proxy reads them. builtin is devvm's own, as paths in its files
+// (assets.FS), which the proxy reads from the binary: base's, then each
+// image part's that is devvm's (a shared tool's in shared-tools/, a
+// built-in layer's in layers/). files is the user's: each of the image's
+// own layers' policy file, next to its script, the user's own for every
+// VM, the VM's own, and the hosts its secrets imply. A missing file has no
+// rules.
+func Policies(d paths.Dirs, vm, img string) (builtin, files []string) {
+	builtin = []string{"layers/base.policy"}
 	for p := range strings.SplitSeq(img, "+") {
 		switch {
 		case p == "" || p == "base":
 		case image.IsTool(p):
-			files = append(files, filepath.Join(assets, "shared-tools", p+".policy"))
+			builtin = append(builtin, "shared-tools/"+p+".policy")
 		case image.IsBuiltin(p):
-			files = append(files, filepath.Join(assets, "layers", p+".policy"))
+			builtin = append(builtin, "layers/"+p+".policy")
 		default:
 			files = append(files, filepath.Join(d.Layers(), p+".policy"))
 		}
 	}
-	return append(files, d.Policy(), VMPolicyFile(d, vm), secrets.PolicyFile(d, vm))
+	return builtin, append(files, d.Policy(), VMPolicyFile(d, vm), secrets.PolicyFile(d, vm))
 }
 
 // VMPolicyFile holds the rules of one VM's own.

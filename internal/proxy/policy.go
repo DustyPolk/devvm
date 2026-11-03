@@ -186,31 +186,72 @@ func (r rule) matchAddr(a netip.Addr) bool {
 	return ok && r.prefix.Contains(v4)
 }
 
-// policy is the union of several files, each re-read when its mtime changes.
+// policy is the union of devvm's built-in policies, read once, and several files, each re-read when
+// its mtime changes.
 type policy struct {
-	mu    sync.Mutex
-	files []string
-	mtime map[string]time.Time
-	rules map[string][]rule
+	mu sync.Mutex
+	// builtin is the built-in policies' rules (readBuiltins), ahead of the files'.
+	builtin []rule
+	files   []string
+	mtime   map[string]time.Time
+	rules   map[string][]rule
 	// broken is, for each file with one, the first of its lines that starts with ! and isn't a
 	// rule (BrokenDeny): while any file has one, the policy denies everything.
 	broken map[string]PolicyLine
 }
 
-func newPolicy(files []string) *policy {
-	return &policy{files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}, broken: map[string]PolicyLine{}}
+func newPolicy(builtin []rule, files []string) *policy {
+	return &policy{
+		builtin: builtin, files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}, broken: map[string]PolicyLine{},
+	}
+}
+
+// readBuiltins reads the built-in policies names, paths in devvm's own files own, once, in order.
+// Each is devvm's own, so one that's missing or holds a line that isn't a rule is devvm's bug: an
+// error, and the proxy refuses to start, rather than run with fewer rules than devvm meant.
+func readBuiltins(own fs.FS, names []string) ([]rule, error) {
+	if len(names) > 0 && own == nil {
+		return nil, errors.New("-builtin-policy needs devvm's own files")
+	}
+	var out []rule
+	for _, n := range names {
+		b, err := fs.ReadFile(own, n)
+		if err != nil {
+			return nil, fmt.Errorf("built-in policy %s: %w", n, err)
+		}
+		lines, rs := parsePolicy(string(b))
+		for _, l := range lines {
+			if !l.OK {
+				return nil, fmt.Errorf("built-in policy %s:%d isn't a rule: %q", n, l.N, l.Text)
+			}
+		}
+		logf("built-in policy %s: %d rules", n, len(rs))
+		out = append(out, rs...)
+	}
+	return out, nil
+}
+
+// splitList is a comma-separated list's items, spaces around each and empty ones left out.
+func splitList(s string) []string {
+	var out []string
+	for f := range strings.SplitSeq(s, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // BrokenDeny reports whether l is a line that reads as a deny, starting with !, but isn't a
 // rule. Its proxy can't know what it would deny, so it denies everything while the line is there.
 func BrokenDeny(l PolicyLine) bool { return !l.OK && strings.HasPrefix(l.Text, "!") }
 
-// all returns the policy's rules, and while a file has a broken deny (BrokenDeny), why the policy
-// denies everything.
+// all returns the policy's rules, the built-in policies' first, and while a file has a broken deny
+// (BrokenDeny), why the policy denies everything.
 func (p *policy) all() ([]rule, string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var out []rule
+	out := slices.Clone(p.builtin)
 	for _, f := range p.files {
 		st, err := os.Stat(f)
 		if errors.Is(err, fs.ErrNotExist) {

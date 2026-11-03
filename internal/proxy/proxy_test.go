@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -29,7 +31,7 @@ func writePolicy(t *testing.T, rules string) *policy {
 	if err := os.WriteFile(f, []byte(rules), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return newPolicy([]string{f, filepath.Join(t.TempDir(), "missing")})
+	return newPolicy(nil, []string{f, filepath.Join(t.TempDir(), "missing")})
 }
 
 func TestNewBlocks(t *testing.T) {
@@ -183,7 +185,7 @@ func TestPolicySkipsBadLines(t *testing.T) {
 	t.Cleanup(func() { logger.SetOutput(old) })
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("**\nexample.com:x\n!example.org.\n!::ffff:10.0.0.0/104\n"), 0o600))
-	p := newPolicy([]string{f})
+	p := newPolicy(nil, []string{f})
 	if ok, why := p.decide("example.org", 443); ok {
 		t.Errorf("example.org allowed (%s): the deny with a trailing dot was skipped", why)
 	}
@@ -212,7 +214,7 @@ func TestPolicyBrokenDeny(t *testing.T) {
 	good, f := filepath.Join(dir, "good"), filepath.Join(dir, "policy")
 	must(t, os.WriteFile(good, []byte("**\n10.0.0.0/8\n"), 0o600))
 	must(t, os.WriteFile(f, []byte("ok.test\n! bad.example.com # a space after the !\n"), 0o600))
-	p := newPolicy([]string{good, f})
+	p := newPolicy(nil, []string{good, f})
 	for _, h := range []string{"bad.example.com", "other.test", "10.0.0.1"} {
 		ok, why, refused := p.verdict(h, 443)
 		if ok || !refused || !strings.Contains(why, f+":2 isn't a rule but reads as a deny") {
@@ -269,7 +271,7 @@ func TestPolicyFileBack(t *testing.T) {
 	dir := t.TempDir()
 	f, away := filepath.Join(dir, "policy"), filepath.Join(dir, "away")
 	must(t, os.WriteFile(f, []byte("\xef\xbb\xbf!bad.test\n**\n"), 0o600))
-	p := newPolicy([]string{f})
+	p := newPolicy(nil, []string{f})
 	if ok, _ := p.decide("bad.test", 443); ok {
 		t.Fatal("bad.test allowed: the byte-order mark hid its deny")
 	}
@@ -299,7 +301,7 @@ func TestPolicyFileBack(t *testing.T) {
 func TestPolicyReload(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("a.test\n"), 0o600))
-	p := newPolicy([]string{f})
+	p := newPolicy(nil, []string{f})
 	if ok, _ := p.decide("b.test", 443); ok {
 		t.Fatal("b.test allowed before it was added")
 	}
@@ -317,6 +319,63 @@ func TestPolicyReload(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(f, 0o600) })
 	if ok, _ := p.decide("c.test", 443); ok {
 		t.Error("c.test's deny was dropped while its file couldn't be read")
+	}
+}
+
+// Built-in policies come from devvm's own files, read once and ahead of the user's files: a
+// change to the files after the start changes nothing, and a deny in the user's files still
+// beats a built-in allow. One that's missing, or holds a line that isn't a rule, or with no files
+// to read it from, is an error.
+func TestBuiltinPolicies(t *testing.T) {
+	own := fstest.MapFS{
+		"layers/base.policy":       {Data: []byte("# devvm's\nbase.test\n")},
+		"shared-tools/node.policy": {Data: []byte("node.test\n*.node.test:8443\n")},
+		"layers/bad.policy":        {Data: []byte("ok.test\nnot a rule\n")},
+	}
+	rs, err := readBuiltins(own, []string{"layers/base.policy", "shared-tools/node.policy"})
+	if err != nil || len(rs) != 3 {
+		t.Fatalf("readBuiltins = %v, %v", rs, err)
+	}
+	f := filepath.Join(t.TempDir(), "policy")
+	must(t, os.WriteFile(f, []byte("mine.test\n!node.test\n"), 0o600))
+	p := newPolicy(rs, []string{f})
+	all, _ := p.all()
+	var texts []string
+	for _, r := range all {
+		texts = append(texts, r.text)
+	}
+	if want := []string{"base.test", "node.test", "*.node.test:8443", "mine.test", "!node.test"}; !slices.Equal(texts, want) {
+		t.Errorf("rules = %q, want %q", texts, want)
+	}
+	own["layers/base.policy"] = &fstest.MapFile{Data: []byte("**\n")}
+	for _, c := range []struct {
+		host string
+		port int
+		ok   bool
+	}{{"base.test", 443, true}, {"a.node.test", 8443, true}, {"mine.test", 443, true}, {"node.test", 443, false}, {"other.test", 443, false}} {
+		if ok, why := p.decide(c.host, c.port); ok != c.ok {
+			t.Errorf("%s:%d: allowed %v (%s), want %v", c.host, c.port, ok, why, c.ok)
+		}
+	}
+	for _, c := range []struct {
+		own   fs.FS
+		names []string
+		want  string
+	}{
+		{own, []string{"layers/missing.policy"}, "built-in policy layers/missing.policy: "},
+		{own, []string{"layers/base.policy", "layers/bad.policy"}, `built-in policy layers/bad.policy:2 isn't a rule: "not a rule"`},
+		{own, []string{"../policy"}, "built-in policy ../policy: "},
+		{nil, []string{"layers/base.policy"}, "-builtin-policy needs devvm's own files"},
+	} {
+		if _, err := readBuiltins(c.own, c.names); err == nil || !strings.HasPrefix(err.Error(), c.want) {
+			t.Errorf("readBuiltins(%q) = %v, want %q", c.names, err, c.want)
+		}
+	}
+	if rs, err := readBuiltins(nil, nil); err != nil || rs != nil {
+		t.Errorf("no built-ins: %v, %v", rs, err)
+	}
+	if got := splitList(" a, ,b ,"); !slices.Equal(got, []string{"a", "b"}) {
+		t.Errorf("splitList = %q", got)
 	}
 }
 
@@ -619,6 +678,19 @@ func TestMainRefuses(t *testing.T) {
 			t.Errorf("%q: no error", args)
 		}
 	}
+	// A built-in policy devvm's files lack: a devvm bug, so the proxy never listens.
+	key := filepath.Join(t.TempDir(), "key")
+	if err := os.WriteFile(key, []byte("k3y\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	std.FS = fstest.MapFS{"layers/base.policy": {Data: []byte("base.test\n")}}
+	args := []string{"-auth-file", key, "-listen", "127.0.0.1:0", "-builtin-policy", "layers/base.policy,layers/gone.policy"}
+	if err := Main(args, std); err == nil || !strings.Contains(err.Error(), "built-in policy layers/gone.policy") {
+		t.Errorf("a missing built-in: %v", err)
+	}
+	if strings.Contains(errs.String(), "listening on") {
+		t.Errorf("the proxy listened: %s", errs.String())
+	}
 }
 
 // A short run: the proxy listens, logs that it does to stderr, answers with the VM's password, and
@@ -654,7 +726,8 @@ func TestMainRuns(t *testing.T) {
 		done <- Main([]string{
 			"--listen", addr, "-vm", "devvm-x", "-auth-file", key, "-lifeline", pidFile, "-log", logFile,
 			"-policy", filepath.Join(dir, "missing"), "-links", filepath.Join(dir, "devvm-x.links.json"),
-		}, IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: errs})
+			"-builtin-policy", "layers/base.policy",
+		}, IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}})
 	}()
 	pu, _ := url.Parse("http://devvm:k3y@" + addr)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
@@ -701,7 +774,7 @@ func TestMainRuns(t *testing.T) {
 		t.Fatalf("still running after the hostagent was gone: %s", errs.String())
 	}
 	if s := errs.String(); !strings.Contains(s, "devvm proxy: ") || !strings.Contains(s, "listening on "+addr+" for devvm-x") ||
-		!strings.Contains(s, "hostagent is gone") {
+		!strings.Contains(s, "hostagent is gone") || !strings.Contains(s, "built-in policy layers/base.policy: 1 rules") {
 		t.Errorf("stderr = %q", s)
 	}
 }
@@ -813,7 +886,7 @@ func FuzzRequest(f *testing.F) {
 		if err := os.WriteFile(file, []byte(ruleFor(host, port)+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if ok, why := newPolicy([]string{file}).decide(host, port); !ok {
+		if ok, why := newPolicy(nil, []string{file}).decide(host, port); !ok {
 			t.Fatalf("%q: the rule %q doesn't allow %s port %d: %s", raw, ruleFor(host, port), host, port, why)
 		}
 	})

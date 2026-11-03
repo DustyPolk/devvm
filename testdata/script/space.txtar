@@ -40,6 +40,7 @@ stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay +-$'
 stdout '^mise +- +1 +'
 stdout '^leftover state +- +1 +\S+ +leftover +- +gc --orphans +-$'
 stdout '^total +- +- +\S+ +- +\S+ +- +-$'
+! stdout '^devvm.s files'
 ! stderr .
 stub_calls
 ! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'

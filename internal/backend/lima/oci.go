@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -19,6 +20,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // OCIVM is the throwaway VM a container image is converted in (--from).
@@ -42,16 +44,17 @@ type converted struct {
 
 // convert turns spec.From into a disk, kernel and initrd, without Docker
 // (unless only Docker has the image): a throwaway VM from Ubuntu's cloud
-// image runs oci/build.sh, from devvm's files written out and mounted
-// read-only, where crane pulls exactly the recorded digest and bootify.sh
+// image runs oci/build.sh, from devvm's files written into the
+// conversion's own temporary folder (writeScripts) and mounted read-only,
+// where crane pulls exactly the recorded digest and bootify.sh
 // adds what a container lacks. The image's own code runs as
 // root in that VM, so everything it writes is untrusted: it gets only a
 // subfolder of devvm's temporary folder, and what comes out is checked
 // before Lima sees it. One conversion runs at a time. The build VM and
 // the folder go however the run ends. With the user's CAs (trust, a
 // build's Trust.Add), the build VM trusts them, and build.sh has the
-// image's chroot trust them while bootify.sh runs, with devvm's guest
-// folder (ca.sh) mounted read-only too.
+// image's chroot trust them while bootify.sh runs, with guest/ca.sh
+// written and mounted read-only too.
 func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, trust backend.Script) (*converted, error) {
 	if f.Digest == "" {
 		return nil, msg.NoDigest(f.Ref)
@@ -98,11 +101,10 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 	if err := l.deleteIfThere(ctx, OCIVM); err != nil {
 		return nil, err
 	}
-	assets, err := l.assets()
+	oci, guest, err := writeScripts(l.Assets, out, len(trust.Data) > 0)
 	if err != nil {
 		return nil, err
 	}
-	oci, guest := filepath.Join(assets, "oci"), filepath.Join(assets, "guest")
 	ms := []mount{{Location: vmOut, Writable: ptr(true)}, {Location: oci, Writable: ptr(false)}}
 	if len(trust.Data) > 0 {
 		ms = append(ms, mount{Location: guest, Writable: ptr(false)})
@@ -163,6 +165,37 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 		remove()
 	}
 	return c, nil
+}
+
+// writeScripts writes the conversion's scripts from devvm's own files
+// into out, the conversion's own temporary folder: oci/ whole and, with
+// the user's CAs (cas), guest/ca.sh, beside vm/ rather than in it, as the
+// build VM writes vm/. Files are the user's alone (state.WriteFile). It
+// returns the two folders, which the build VM mounts read-only; the
+// conversion's cleanup deletes them with out.
+func writeScripts(own fs.FS, out string, cas bool) (oci, guest string, err error) {
+	var names []string
+	if err := fs.WalkDir(own, "oci", func(name string, e fs.DirEntry, err error) error {
+		if err == nil && e.Type().IsRegular() {
+			names = append(names, name)
+		}
+		return err
+	}); err != nil {
+		return "", "", err
+	}
+	if cas {
+		names = append(names, "guest/ca.sh")
+	}
+	for _, name := range names {
+		data, err := fs.ReadFile(own, name)
+		if err != nil {
+			return "", "", err
+		}
+		if err := state.WriteFile(filepath.Join(out, filepath.FromSlash(name)), data); err != nil {
+			return "", "", err
+		}
+	}
+	return filepath.Join(out, "oci"), filepath.Join(out, "guest"), nil
 }
 
 // exportDocker saves an image only Docker has into dir, as image.tar,

@@ -87,11 +87,13 @@ func RemoveRule(path, rule string) (bool, error) {
 	return true, writeRules(path, kept)
 }
 
-// RuleFile is a policy file and its lines that hold more than a comment,
-// each marked whether it's a rule (proxy.ParsePolicy).
+// RuleFile is a policy and its lines that hold more than a comment, each
+// marked whether it's a rule (proxy.ParsePolicy): a built-in one, by its
+// name in devvm's files, or one of the user's files, by its path.
 type RuleFile struct {
-	Path  string
-	Lines []proxy.PolicyLine
+	Path    string // the file's path, or the built-in policy's name
+	Builtin bool
+	Lines   []proxy.PolicyLine
 }
 
 // Rules are the file's rules, as written, comments left out.
@@ -116,10 +118,20 @@ func (f RuleFile) NotRules() []proxy.PolicyLine {
 	return out
 }
 
-// ReadRules returns each of files that holds more than comments, in
-// order, with its lines.
-func ReadRules(files []string) ([]RuleFile, error) {
+// ReadRules returns each of the policies (Policies) that holds more than
+// comments, in the order its proxy reads them, with its lines: the
+// built-in ones from devvm's files, own, then the user's files from disk.
+func ReadRules(own fs.FS, builtin, files []string) ([]RuleFile, error) {
 	var out []RuleFile
+	for _, n := range builtin {
+		b, err := fs.ReadFile(own, n)
+		if err != nil {
+			return nil, err
+		}
+		if pl := proxy.ParsePolicy(string(b)); len(pl) > 0 {
+			out = append(out, RuleFile{Path: n, Builtin: true, Lines: pl})
+		}
+	}
 	for _, f := range files {
 		lines, err := readRules(f)
 		if err != nil {
@@ -135,12 +147,20 @@ func ReadRules(files []string) ([]RuleFile, error) {
 // notRuleMark follows a line that isn't a rule in WriteRules' output.
 const notRuleMark = "  # not a rule, skipped"
 
-// WriteRules writes each policy file's rules to w: the file's path after
-// #, then its lines, indented, each that isn't a rule marked so, with its
-// line number.
+// builtinMark labels a built-in policy in WriteRules' output, before its
+// name: it comes with devvm, so it has no path.
+const builtinMark = "devvm: "
+
+// WriteRules writes each policy's rules to w: after #, a file's path or
+// a built-in policy's name, labelled so, then its lines, indented, each
+// that isn't a rule marked so, with its line number.
 func WriteRules(w io.Writer, files []RuleFile) error {
 	for _, f := range files {
-		if _, err := fmt.Fprintf(w, "# %s\n", f.Path); err != nil {
+		label := f.Path
+		if f.Builtin {
+			label = builtinMark + f.Path
+		}
+		if _, err := fmt.Fprintf(w, "# %s\n", label); err != nil {
 			return err
 		}
 		for _, l := range f.Lines {
@@ -175,7 +195,7 @@ func NotRules(d paths.Dirs) []msg.M {
 func PolicyWarnings(files []string) []msg.M {
 	var out []msg.M
 	for _, f := range files {
-		rs, err := ReadRules([]string{f})
+		rs, err := ReadRules(nil, nil, []string{f})
 		if err != nil {
 			continue
 		}

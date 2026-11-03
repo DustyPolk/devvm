@@ -27,7 +27,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -56,7 +55,9 @@ type Lima struct {
 	// it's looked at while it starts, ten times at most.
 	Spawn func(path string, args []string, out *os.File) (*os.Process, error)
 	Tick  time.Duration
-	// Assets holds devvm's own files (assets.FS): base.yaml, oci/.
+	// Assets holds devvm's own files (assets.FS): base.yaml, which limactl
+	// create reads on its standard input, and the conversion's oci/, which
+	// each conversion writes into its own temporary folder.
 	Assets fs.FS
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
@@ -139,10 +140,6 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string)
 
 // Name returns lima.
 func (l *Lima) Name() string { return Name }
-
-// assets returns the folder devvm's own files are written out in, for
-// limactl create's base.yaml and the conversion VM's oci/.
-func (l *Lima) assets() (string, error) { return state.WriteAssets(l.Dirs, l.Assets) }
 
 // KeyFiles is the pinned Ubuntu cloud image base starts from, for the
 // host's architecture.

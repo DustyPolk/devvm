@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
@@ -114,9 +115,11 @@ func TestAddRemoveRule(t *testing.T) {
 	}
 }
 
-// WriteRules lists the files with rules, comments and blank lines left
-// out, and marks each line that isn't a rule with its number; missing and
-// comment-only files not at all.
+// WriteRules lists the built-in policies, by name and labelled as
+// devvm's, then the files with rules, comments and blank lines left out,
+// and marks each line that isn't a rule with its number; missing and
+// comment-only files not at all. ReadRules reads the built-in ones from
+// devvm's files alone, never from disk.
 func TestWriteRules(t *testing.T) {
 	dir := t.TempDir()
 	a, b, c := filepath.Join(dir, "a"), filepath.Join(dir, "b"), filepath.Join(dir, "c")
@@ -126,11 +129,13 @@ func TestWriteRules(t *testing.T) {
 	if err := os.WriteFile(b, []byte("# only a comment\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	files, err := ReadRules([]string{a, b, c})
-	if err != nil || len(files) != 1 || files[0].Path != a || strings.Join(files[0].Rules(), " ") != "x.test !y.test" {
+	own := fstest.MapFS{"layers/base.policy": {Data: []byte("# devvm's\nbase.test\n")}, "shared-tools/none.policy": {Data: []byte("# none\n")}}
+	files, err := ReadRules(own, []string{"layers/base.policy", "shared-tools/none.policy"}, []string{a, b, c})
+	if err != nil || len(files) != 2 || files[0].Path != "layers/base.policy" || !files[0].Builtin ||
+		files[1].Path != a || files[1].Builtin || strings.Join(files[1].Rules(), " ") != "x.test !y.test" {
 		t.Fatalf("ReadRules = %+v, %v", files, err)
 	}
-	if bad := files[0].NotRules(); len(bad) != 2 || bad[0].N != 5 || bad[0].Text != "example.com:x" {
+	if bad := files[1].NotRules(); len(bad) != 2 || bad[0].N != 5 || bad[0].Text != "example.com:x" {
 		t.Errorf("NotRules = %+v", bad)
 	}
 	var out strings.Builder
@@ -138,9 +143,20 @@ func TestWriteRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A line's control characters are dropped.
-	if want := "# " + a + "\n  x.test\n  !y.test\n  example.com:x" + notRuleMark + " (line 5)\n" +
+	if want := "# devvm: layers/base.policy\n  base.test\n# " + a + "\n  x.test\n  !y.test\n  example.com:x" + notRuleMark + " (line 5)\n" +
 		"  a[31mb" + notRuleMark + " (line 6)\n"; out.String() != want {
 		t.Errorf("WriteRules = %q; want %q", out.String(), want)
+	}
+	// A built-in devvm's files lack is an error, whatever is on disk.
+	if err := os.MkdirAll(filepath.Join(dir, "layers"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "layers", "gone.policy"), []byte("**\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if _, err := ReadRules(own, []string{"layers/gone.policy"}, nil); err == nil {
+		t.Error("a missing built-in policy was read")
 	}
 }
 

@@ -66,17 +66,20 @@ stdout '^==> rule_removed_global rule=\*\.corp\.test$'
 exec devvm network allow --global '*.corp.test'
 
 # The VM's network policy (on, or unenforced as the stubs leave it), then
-# the rules in effect, file by file, comments left out.
+# the rules in effect, file by file, comments left out: devvm's built-in
+# policies first, by name, then your files, by path.
 exec sh -c 'echo "# mine" >> "$GLOBAL"'
 exec devvm network
-stdout '\A(on|unenforced)\n# \S*/data/devvm/assets/[0-9a-f]{16}/layers/base\.policy\n'
+stdout '\A(on|unenforced)\n# devvm: layers/base\.policy\n'
 stdout '^  github\.com$'
 stdout '^# \S*/config/devvm/policy\n  \*\.corp\.test\n# \S*/vms/devvm-net-[0-9a-f]{14}\.policy\n  !bad\.example\.com\n  example\.com\n'
 ! stdout mine
 ! stderr .
-# --json: the same, each file with its rules; it only shows.
+# --json: the same, each policy with its rules, a built-in one by name;
+# it only shows.
 exec devvm network --json
-stdout '\A{\n  "version": 1,\n  "policy": "(on|unenforced)",\n  "allowlist": \[\n    {\n      "file": "\S*/layers/base\.policy",\n      "rules": \[\n'
+stdout '\A{\n  "version": 1,\n  "policy": "(on|unenforced)",\n  "allowlist": \[\n    {\n      "builtin": "layers/base\.policy",\n      "rules": \[\n'
+! stdout '"file": "\S*/layers/base\.policy"'
 stdout '^      "file": "\S*/vms/devvm-net-[0-9a-f]{14}\.policy",\n      "rules": \[\n        "!bad\.example\.com",\n        "example\.com"\n      \],\n      "not_rules": \[\]\n'
 ! stderr .
 ! exec devvm network --json off
@@ -118,7 +121,7 @@ exec devvm network rm -g ok3.test
 project off
 exec devvm --no-network-policy --no-git-protect base
 exec devvm network
-stdout '\Aoff\n# \S*/layers/base\.policy\n'
+stdout '\Aoff\n# devvm: layers/base\.policy\n'
 ! stderr .
 exec devvm network allow example.com
 stderr '^net_off_policy vm=devvm-off-[0-9a-f]{14}$'

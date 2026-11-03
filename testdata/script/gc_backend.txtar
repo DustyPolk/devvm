@@ -40,7 +40,7 @@ exec devvm gc --backend smolvm --force
 stdout '^gc_image image=base key=[0-9a-f]{12}$'
 stdout -count=1 '^gc_image '
 stdout '^gc_tools count=1 '
-! stdout gc_assets|gc_mise
+! stdout gc_mise
 exec sh -c 'ls "$PACKS" | wc -l'
 stdout '^ *0$'
 exists $SHARE/go-1.2.0-0123456789ab.erofs

@@ -92,10 +92,11 @@ stdout '^\[\{"name":"claude","hosts":\["api\.anthropic\.com"\],"header":"Authori
 exec sh -c 'grep -F "$(sed -n "s/^proxy_salt=//p" "$VMS"/devvm-agent-*)" "$RUN"/devvm-agent-*.secrets.json'
 catg $RUN/devvm-agent-*.secrets.policy
 stdout '^api\.anthropic\.com:443$'
-# Its proxy's policy files: base's, claude's, the user's, the VM's own and
-# its secrets' hosts.
+# Its proxy's policies: base's and claude's built in, read from the
+# binary, then the files: the user's, the VM's own and its secrets' hosts.
 catg $RUN/devvm-agent-*.proxy.policy
-stdout '/data/devvm/assets/[0-9a-f]{16}/layers/base\.policy,\S*/data/devvm/assets/[0-9a-f]{16}/shared-tools/claude\.policy,\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy$'
+stdout '\Alayers/base\.policy,shared-tools/claude\.policy\n\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy\n\z'
+! exists $XDG_DATA_HOME/devvm/assets
 env CLAUDE_CODE_OAUTH_TOKEN=
 
 # A Codex login on the host: its bindings and hosts, with the VM's

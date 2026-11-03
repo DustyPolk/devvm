@@ -1,6 +1,5 @@
 // Package state reads and writes the files devvm keeps its state in: each
-// VM's state, image records, the config files, and devvm's own files
-// written out where a path is needed (WriteAssets).
+// VM's state, image records and the config files.
 //
 // Most are key=value files: one pair per line, split at the first '=', so
 // values may hold '=' but not newlines. Blank lines are skipped. Every write

@@ -124,9 +124,9 @@ devvm refuses a reference it can't read (`bad_from`). When it can't reach the re
 
 The container image's own code runs as root in the build VM, so devvm treats what it writes as hostile:
 
-- The build VM is [confined](lima.md#confinement) like any build, so it reaches the internet, for crane, but not this machine's own services. It mounts only devvm's `oci/` folder ([written out](install.md#devvms-own-files) in `~/.local/share/devvm/assets/<hash>`), read-only, with devvm's `guest/` folder beside it, also read-only, when there are [company CAs](#a-companys-ca-in-builds), and one writable folder of devvm's own, `vm/` in a temporary folder, `devvm-oci.<random>`. devvm writes nothing there itself except an [image only Docker has](#images-only-docker-has), before the VM starts.
+- The build VM is [confined](lima.md#confinement) like any build, so it reaches the internet, for crane, but not this machine's own services. It mounts three folders of the conversion's own temporary folder, `devvm-oci.<random>`, and nothing else. `oci/` holds the conversion's scripts, which devvm writes there from [its own files](install.md#devvms-own-files) for this build alone, and the VM mounts it read-only. `guest/`, also read-only, holds only `ca.sh`, and devvm writes and mounts it only when there are [company CAs](#a-companys-ca-in-builds). `vm/` is the one writable folder, and devvm writes nothing there itself except an [image only Docker has](#images-only-docker-has), before the VM starts. The scripts sit beside `vm/`, never inside it, so what the image writes can't replace them on this machine.
 - devvm checks what comes out once the build VM is gone. Each file must be a regular file, because a link could point Lima at a file on this machine. The kernel command line can hold only letters, digits, spaces and `=,./:_-`, because it goes into Lima's config. The C library must be `gnu` or `musl`. The disk must be raw ext4, because another format, such as qcow2, can name a file on this machine as its backing file. devvm refuses anything else (`convert_bad_output`), and it doesn't create `base`.
-- devvm deletes the build VM and the temporary folder however the run ends, Ctrl+C included.
+- devvm deletes the build VM and the temporary folder, with the scripts it wrote there, however the run ends, Ctrl+C included.
 
 ## Images only Docker has
 

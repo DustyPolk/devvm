@@ -42,11 +42,8 @@ func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	if s.Policy, err = netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning); err != nil {
 		return s, err
 	}
-	files, err := e.Proxy.PolicyFiles(t.f.Name, t.st.Get(state.KeyImage))
-	if err != nil {
-		return s, err
-	}
-	s.Rules, err = netpolicy.ReadRules(files)
+	builtin, files := netpolicy.Policies(e.Dirs, t.f.Name, t.st.Get(state.KeyImage))
+	s.Rules, err = netpolicy.ReadRules(e.Proxy.Assets, builtin, files)
 	return s, err
 }
 

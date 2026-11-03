@@ -17,7 +17,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
@@ -451,7 +450,7 @@ func formatBackend(reg *backend.Registry, format string) string {
 }
 
 // dataRows are the rest of devvm's data folder: exports, logs, devvm's
-// own mise, its files written out, what's left of VMs gone from their
+// own mise, what's left of VMs gone from their
 // backends, and its other state. Each file is counted once.
 func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	d := e.b.Dirs
@@ -468,14 +467,6 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 		return nil, err
 	}
 	mise, err := dirsIn(d.Mise())
-	if err != nil {
-		return nil, err
-	}
-	assets, err := dirsIn(d.Assets())
-	if err != nil {
-		return nil, err
-	}
-	stale, err := e.staleAssets()
 	if err != nil {
 		return nil, err
 	}
@@ -506,7 +497,6 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 		spaceRow{What: "network logs", Count: logs.count, Size: logs.size, Sized: true, Kept: keptLog, Rest: "devvm rm"},
 		runsRow,
 		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, GC: dirsSize(oldMise), Rest: "-"},
-		spaceRow{What: "devvm's files", Count: assets.count, Size: assets.size, Sized: true, Kept: keptRemade, GC: stale, Rest: "-"},
 		nix,
 		left,
 		spaceRow{What: "state", Count: 1, Size: max(other, 0), Sized: true, Kept: keptState, Rest: "-"},
@@ -523,23 +513,6 @@ func (e spaceEnv) nixCacheRow() (spaceRow, error) {
 		What: "Nix cache", Count: n, Size: size, Sized: true, Kept: keptRemade, GC: over, Rest: "gc --nix-cache",
 		Retain: e.retainOf(state.RetainNixCacheSize), RetainFrees: over,
 	}, err
-}
-
-// staleAssets is the disk devvm gc frees of the copies of devvm's files.
-func (e spaceEnv) staleAssets() (int64, error) {
-	current, err := state.AssetsHash(e.b.Assets)
-	if err != nil {
-		return 0, err
-	}
-	old, err := state.StaleAssets(e.b.Dirs, current, netpolicy.AssetsInUse(e.b.Dirs))
-	if err != nil {
-		return 0, err
-	}
-	var n int64
-	for _, dir := range old {
-		n += du(dir)
-	}
-	return n, nil
 }
 
 // leftovers is what devvm keeps for VMs whose backend answered but no

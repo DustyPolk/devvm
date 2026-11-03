@@ -2,7 +2,8 @@
 # Stand-in for limactl in tests. Logs every call to $STUB_LOG, and the folder
 # and Lima home of the last one to $STUB_DIR/limactl-env. Answers list --json
 # from $STUB_DIR/instances ("name [status]" per line, status defaults to
-# Stopped), which create, clone, start, stop and delete keep up to date. A
+# Stopped), which create, clone, start, stop and delete keep up to date;
+# create's template on its input (-) goes to $STUB_DIR/create-template. A
 # VM's config is $STUB_DIR/config-<name>.json, else {}; its size
 # ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
 # and 100 GiB, which edit's --cpus, --memory and --disk change; clone's and edit's
@@ -125,7 +126,9 @@ if [[ ${1:-} == clone || ${1:-} == edit ]]; then
   done
 fi
 case ${1:-} in
-  create) for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done ;;
+  create)
+    for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done
+    [[ ${!#} != - ]] || cat > "$STUB_DIR/create-template" ;;
   clone)
     set_status "${names[1]}" Stopped
     [[ ! -e $STUB_DIR/clone-fails ]] || exit 1 ;;

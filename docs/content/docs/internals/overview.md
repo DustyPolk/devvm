@@ -107,7 +107,6 @@ devvm writes nothing into the project folder. It keeps your settings in `~/.conf
 | `images/from-digests` | the [digests](images.md#digests) of the container images that `--from` bases start from |
 | `tools/`, `mise.lock`, `mise/` | the [shared tools](images.md#the-share), the tools lock and devvm's own mise |
 | `mise.lock.toml`, `mise.lock.checked` | the `mise.toml` the tools lock was resolved from, and when devvm last [checked](images.md#versions) for newer versions |
-| `assets/<hash>` | devvm's own files, [written out](install.md#devvms-own-files) where a path is needed |
 | `ca/` | the certificate authority that VMs trust for the proxy |
 | `oci-build.lock` | the lock a Lima build of a base [from a container image](images.md#how-its-converted) holds |
 | `tools.lock` | the lock a devvm [writing to the share](images.md#building-tools) or swapping the tools lock holds |

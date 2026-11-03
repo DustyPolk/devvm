@@ -2,11 +2,13 @@ package lima
 
 import (
 	"archive/tar"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
@@ -61,6 +63,54 @@ func TestExportIs(t *testing.T) {
 		if got := exportIs(c.file, c.id); got != c.want {
 			t.Errorf("exportIs(%s, %s) = %v", filepath.Base(c.file), c.id, got)
 		}
+	}
+}
+
+// The conversion's scripts are written from devvm's files into its own
+// folder, beside vm/: oci/ whole, owner-only, and guest/ca.sh only with
+// the user's CAs; nothing else of devvm's files.
+func TestWriteScripts(t *testing.T) {
+	own := fstest.MapFS{
+		"oci/build.sh": {Data: []byte("build\n")}, "oci/bootify.sh": {Data: []byte("bootify\n")},
+		"oci/sub/x.sh": {Data: []byte("x\n")}, "guest/ca.sh": {Data: []byte("ca\n")},
+		"guest/sync.sh": {Data: []byte("sync\n")}, "base.yaml": {Data: []byte("cpus: 4\n")},
+	}
+	for _, cas := range []bool{false, true} {
+		out := t.TempDir()
+		oci, guest, err := writeScripts(own, out, cas)
+		if err != nil || oci != filepath.Join(out, "oci") || guest != filepath.Join(out, "guest") {
+			t.Fatalf("writeScripts = %q, %q, %v", oci, guest, err)
+		}
+		var got []string
+		err = filepath.WalkDir(out, func(path string, e fs.DirEntry, err error) error {
+			if err != nil || path == out {
+				return err
+			}
+			fi, err := e.Info()
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(out, path)
+			got = append(got, rel+" "+fi.Mode().Perm().String())
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"oci -rwx------", "oci/bootify.sh -rw-------", "oci/build.sh -rw-------", "oci/sub -rwx------", "oci/sub/x.sh -rw-------"}
+		if cas {
+			want = append([]string{"guest -rwx------", "guest/ca.sh -rw-------"}, want...)
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("cas %v: wrote %q, want %q", cas, got, want)
+		}
+		if b, _ := os.ReadFile(filepath.Join(oci, "build.sh")); string(b) != "build\n" { //nolint:gosec // the test's own folder
+			t.Errorf("build.sh = %q", b)
+		}
+	}
+	// devvm's files lacking ca.sh: an error.
+	if _, _, err := writeScripts(fstest.MapFS{"oci/build.sh": {Data: []byte("b\n")}}, t.TempDir(), true); err == nil {
+		t.Error("no ca.sh, no error")
 	}
 }
 

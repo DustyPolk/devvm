@@ -3,7 +3,6 @@ package vm
 import (
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -26,7 +25,7 @@ func TestNetwork(t *testing.T) {
 	shown := func(want string) {
 		t.Helper()
 		s, err := n.Network(t.Context())
-		if err != nil || s.Policy != want || len(s.Rules) == 0 || !strings.HasSuffix(s.Rules[0].Path, "/layers/base.policy") || len(s.Rules[0].Rules()) == 0 {
+		if err != nil || s.Policy != want || len(s.Rules) == 0 || s.Rules[0].Path != "layers/base.policy" || !s.Rules[0].Builtin || len(s.Rules[0].Rules()) == 0 {
 			t.Errorf("Network = %+v, %v; want %s", s, msg.NamesOf(err), want)
 		}
 	}

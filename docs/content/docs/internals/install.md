@@ -95,7 +95,7 @@ With `--yes`, the script answers yes to every question. Without a terminal and w
 
 ## devvm's own files
 
-devvm is one binary. Its own files are built into it, so a copy of it runs anywhere. They are `base.yaml`, base's scripts and policy, the features, the shared tools' config and build script, what devvm sends into VMs, and `--from`'s conversion. devvm writes out the files that something needs at a path, such as Lima's `base.yaml`, the folder that `--from`'s build VM mounts and the policy files that VMs' proxies read. It writes them to `~/.local/share/devvm/assets/<hash>`, a folder for each version of those files.
+devvm is one binary. Its own files are built into it, so a copy of it runs anywhere. They are `base.yaml`, base's scripts and policy, the features, the shared tools' config and build script, what devvm sends into VMs, and `--from`'s conversion. The binary is the only copy, and devvm never writes them to a folder of its own that outlives a run. Lima gets `base.yaml` on `limactl create`'s standard input, VMs' proxies read devvm's built-in policies from the binary, and `--from`'s build writes the conversion's scripts into its own temporary folder, which it deletes when the build ends. So editing a file on disk can't change devvm's built-in rules or what goes into an image.
 
 ## Upgrading
 

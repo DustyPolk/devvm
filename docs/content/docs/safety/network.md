@@ -55,7 +55,7 @@ On every launch devvm checks on this machine that the VM still runs on the proce
 
 ## Allowlists
 
-The VM's proxy reads several policy files, in order, as one list:
+The VM's proxy reads devvm's built-in policies first and then your policy files, in order, as one list:
 
 - devvm's own rules for every VM, which allow OS packages, mise's version lists and GitHub;
 - devvm's rules for each shared tool in the VM's image (`node`, `claude` and the others), which allow its registries, downloads and APIs;
@@ -65,7 +65,7 @@ The VM's proxy reads several policy files, in order, as one list:
 - `~/.local/share/devvm/vms/<vm>.policy`, the rules for that VM only, which [`devvm network allow`, `deny` and `rm`](#changing-rules) change;
 - the hosts of the VM's secrets and logins, on port 443, which devvm adds.
 
-devvm leaves storage and paste sites out of its defaults on purpose, because they're easy ways to send data out. Rules never come from the project folder, because the VM can write it. The proxy reads each file again when it changes, so an edit applies at once, from the next connection. [How it works](../internals/network.md#policy-files) lists where devvm keeps its own files.
+The first three are built in: they come with devvm, inside its binary, so you can't edit them, and an upgrade of devvm is what changes them. To change what a VM reaches, add your own rules, and to keep a VM from a host that devvm's rules allow, add a deny, which beats any allow. devvm leaves storage and paste sites out of its defaults on purpose, because they're easy ways to send data out. Rules never come from the project folder, because the VM can write it. The proxy reads each of your files again when it changes, so an edit applies at once, from the next connection. [How it works](../internals/network.md#policy-files) lists where each policy comes from.
 
 ### Rules
 
@@ -90,11 +90,11 @@ The proxy never dials a denied address, even for an allowed name that resolves t
 
 ### Changing rules
 
-`devvm network` shows this folder's VM's allowlist after its network policy. It prints each of the VM's policy files that holds more than comments, with the file's path after `#`, and then its rules without their comments. A line that isn't a rule is marked `# not a rule, skipped`, with its line number:
+`devvm network` shows this folder's VM's allowlist after its network policy. It prints each of the VM's policies that holds more than comments, and then its rules without their comments. A built-in policy has its name after `# devvm:`, because it has no file you could edit, and one of your files has its path after `#`. A line that isn't a rule is marked `# not a rule, skipped`, with its line number:
 
 ```text
 on
-# /Users/you/.local/share/devvm/assets/7fdd969856e644e8/layers/base.policy
+# devvm: layers/base.policy
   ports.ubuntu.com
   github.com
 # /Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy
@@ -115,7 +115,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
 
 ### devvm network --json
 
-`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy file that holds more than comments, in the order the proxy reads them, with its path, its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`. With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`. With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
 
 ```json
 {
@@ -123,7 +123,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
   "policy": "on",
   "allowlist": [
     {
-      "file": "/Users/you/.local/share/devvm/assets/7fdd969856e644e8/layers/base.policy",
+      "builtin": "layers/base.policy",
       "rules": [
         "ports.ubuntu.com",
         "github.com"

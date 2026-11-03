@@ -19,6 +19,8 @@ exec devvm --no-network-policy base
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+# None of devvm's own files written out: they stay in the binary.
+! exists $XDG_DATA_HOME/devvm/assets
 # .git unprotected off macOS, and devvm says so.
 [darwin] ! stderr git_protect_needs_macos_new
 [linux] stderr '^devvm: git_protect_needs_macos_new$'

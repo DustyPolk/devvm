@@ -29,7 +29,7 @@ env DEVVM_TEST_FREE_GIB=500
 exec devvm build base
 stdout '^==> base_fitted cpus=2 memory=3\.5$'
 stub_calls
-stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} .* --cpus=2 --memory=3\.5 \S+/base\.yaml$'
+stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} .* --cpus=2 --memory=3\.5 -$'
 exec devvm --backend smolvm --from $PIN build base
 stdout '^==> base_fitted cpus=2 memory=3\.5$'
 stub_calls
