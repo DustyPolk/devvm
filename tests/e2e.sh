@@ -616,40 +616,45 @@ watch_saw() { local end=$((SECONDS + 5))
   echo "nothing for $1 within 5 s" >> "$work/watch.missed"; return 1; }
 # watch_do RUN VM BY CMD: CMD on this machine (BY host) or in the VM.
 watch_do() { if [[ $3 == host ]]; then bash -c "$4"; else "$1" "$2" "$4" >/dev/null; fi; }
-watch_sees() { local w r=1 files="" own=""
-  watch_log=$3/.e2e-watch/events
-  mkdir -p "$3/e2e-sub" "$3/.e2e-watch" && printf '%s\n' "$watch_pl" > "$3/.e2e-watch/watch.pl" && : > "$watch_log" &&
-    echo before > "$3/watched.txt" && echo before > "$3/e2e-sub/nested.txt" || return 1
+# Each call's folders have names of their own, .e2e-watch-N (the script and its log) and e2e-sub-N:
+# a folder deleted and made again under the same name can stay gone in the VM for longer than any
+# wait (Lima's virtiofs keeps the deleted folder's entry), while a name the VM never looked up shows
+# as soon as this machine makes it.
+watch_n=0
+watch_sees() { local w r=1 files="" own="" wd sub
+  watch_n=$((watch_n + 1)); wd=$3/.e2e-watch-$watch_n sub=e2e-sub-$watch_n
+  watch_log=$wd/events
+  mkdir -p "$3/$sub" "$wd" && printf '%s\n' "$watch_pl" > "$wd/watch.pl" && : > "$watch_log" &&
+    echo before > "$3/watched.txt" && echo before > "$3/$sub/nested.txt" || return 1
   : > "$work/watch.missed"
   # FILES yes: the files' own watches print their events as "MODIFY watched.txt/".
-  if [[ ${7:-no} == yes ]]; then files=" '$3/watched.txt' '$3/e2e-sub/nested.txt'" own='/?'; fi
-  # The last check deleted .e2e-watch, and the VM can go on seeing it as gone for a while after
-  # this machine writes it again (Lima's virtiofs, right after the check before): the VM waits up
-  # to 20 s for the script, then runs it, which fails naming the file if it's still missing.
-  "$1" "$2" "for _ in \$(seq 100); do [ -s '$3/.e2e-watch/watch.pl' ] && break; sleep 0.2; done
-    LC_ALL=C exec perl '$3/.e2e-watch/watch.pl' '$watch_log' '$3' '$3/e2e-sub'$files" > "$work/watch.stream" 2>&1 &
+  if [[ ${7:-no} == yes ]]; then files=" '$3/watched.txt' '$3/$sub/nested.txt'" own='/?'; fi
+  # A bound, not the fix: the VM waits up to 20 s for the script to show, then runs it, which fails
+  # naming the file if it's still missing.
+  "$1" "$2" "for _ in \$(seq 100); do [ -s '$wd/watch.pl' ] && break; sleep 0.2; done
+    LC_ALL=C exec perl '$wd/watch.pl' '$watch_log' '$3' '$3/$sub'$files" > "$work/watch.stream" 2>&1 &
   w=$!
   for _ in $(seq 60); do watch_events | grep -qx ready && break; sleep 0.5; done
   if watch_events | grep -qx ready; then
     r=0   # each one tried, so the output shows them all
     # A change may come as a new file (smolvm's): either way, a watcher looks at the file again.
     watch_do "$1" "$2" "$4" "echo after >> '$3/watched.txt'"; watch_saw "(MODIFY|CLOSE_WRITE|CREATE) watched.txt$own" || r=1
-    watch_do "$1" "$2" "$4" "echo after >> '$3/e2e-sub/nested.txt'"
-    if [[ ${5:-yes} == yes ]]; then watch_saw "(MODIFY|CLOSE_WRITE|CREATE) e2e-sub/nested.txt$own" || r=1; fi
+    watch_do "$1" "$2" "$4" "echo after >> '$3/$sub/nested.txt'"
+    if [[ ${5:-yes} == yes ]]; then watch_saw "(MODIFY|CLOSE_WRITE|CREATE) $sub/nested.txt$own" || r=1; fi
     watch_do "$1" "$2" "$4" "echo made > '$3/made.txt'"; watch_saw '(CREATE|MOVED_TO) made.txt' || r=1
     watch_do "$1" "$2" "$4" "rm '$3/made.txt'"
     if [[ ${6:-yes} == yes ]]; then watch_saw '(DELETE|MOVED_FROM) made.txt' || r=1
     else sleep 5; ! watch_events | grep -qE '^(DELETE|MOVED_FROM) made.txt$' || { echo "the deletion was seen" >> "$work/watch.missed"; r=1; }; fi
     # NESTED no: the subfolder's change is never seen, even after the rest.
-    if [[ ${5:-yes} == no ]] && watch_events | grep -q ' e2e-sub/'; then
+    if [[ ${5:-yes} == no ]] && watch_events | grep -q " $sub/"; then
       echo "the subfolder's change was seen" >> "$work/watch.missed"; r=1
     fi
   fi
-  "$1" "$2" "pkill -f '[.]e2e-watch/watch[.]pl'" >/dev/null 2>&1
+  "$1" "$2" "pkill -f '[.]e2e-watch-$watch_n/watch[.]pl'" >/dev/null 2>&1
   kill "$w" 2>/dev/null; wait "$w" 2>/dev/null
   watch_events > "$work/watch.out"
   echo "the watcher saw:"; cat "$work/watch.out" "$work/watch.missed"   # what it missed last
-  rm -rf "$3/.e2e-watch" "$3/watched.txt" "$3/made.txt" "$3/e2e-sub"
+  rm -rf "$wd" "$3/watched.txt" "$3/made.txt" "$3/${sub:?}"
   return "$r"; }
 watch_misses() { watch_sees "$1" "$2" "$3" host; grep -qx ready "$work/watch.out" && ! grep -qvx ready "$work/watch.out"; }
 
