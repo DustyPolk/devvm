@@ -8,7 +8,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -76,7 +75,7 @@ func TestWriteImagesColored(t *testing.T) {
 		{Listed: build.Listed{Name: "node", Key: "k2", State: build.StateStale}, Backend: "lima"},
 	}
 	_, colored := tables(t, func(tab *ui.Table) error {
-		return writeImages(tab, imgs, nil, func(tools.Listed) (string, string) { return "", "" })
+		return writeImages(tab, imgs, nil)
 	})
 	wantCodes(t, colored, "\033[1mIMAGE\033[0m", "\033[2msha256:ab\033[0m", "\033[2mk1\033[0m",
 		"\033[32mcurrent\033[0m", "\033[33mstale\033[0m", "\033[1mNAME\033[0m")

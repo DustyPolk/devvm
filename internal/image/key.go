@@ -15,8 +15,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/w3cj/devvm/internal/paths"
 )
 
 // Base is the image every other one is built on.
@@ -50,9 +48,16 @@ type Inputs struct {
 	From string
 	// FromDigest is From's digest, as recorded when it was looked up.
 	FromDigest string
-	// Rebuilds holds the rebuild counters (paths.Dirs.Rebuilds), named by
-	// paths.RebuildName. Nil when there are none.
-	Rebuilds fs.FS
+	// Rebuilds gives the rebuild counters (paths.Dirs.Rebuilds). Nil when
+	// there are none.
+	Rebuilds Rebuilds
+}
+
+// Rebuilds gives an image's rebuild counter, which its key hashes: the
+// one for the image named name, built on backend, whose base starts from
+// from as given ("" for the backend's own Ubuntu); "" when it has none.
+type Rebuilds interface {
+	Counter(backend, from, name string) string
 }
 
 // Link is one image in a chain and its key.
@@ -238,9 +243,7 @@ func (in Inputs) baseKey() (string, error) {
 			}
 		}
 	}
-	if err := k.rebuild(in, Base); err != nil {
-		return "", err
-	}
+	k.rebuild(in, Base)
 	return k.sum(), nil
 }
 
@@ -257,9 +260,7 @@ func (in Inputs) layerKey(img, layer, parent string) (string, error) {
 	} else if _, err := k.optional("user-layer", in.Layers, layer+".sh"); err != nil {
 		return "", err
 	}
-	if err := k.rebuild(in, img); err != nil {
-		return "", err
-	}
+	k.rebuild(in, img)
 	return k.sum(), nil
 }
 
@@ -315,20 +316,15 @@ func (k keyHash) optional(tag string, fsys fs.FS, name string) (bool, error) {
 	return false, nil
 }
 
-// rebuild hashes the image's rebuild counter, when it has one.
-func (k keyHash) rebuild(in Inputs, img string) error {
+// rebuild hashes the image's rebuild counter on in's backend and base,
+// when it has one.
+func (k keyHash) rebuild(in Inputs, img string) {
 	if in.Rebuilds == nil {
-		return nil
+		return
 	}
-	data, err := fs.ReadFile(in.Rebuilds, paths.RebuildName(img, in.From))
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return nil
-	case err != nil:
-		return err
+	if c := in.Rebuilds.Counter(in.Backend, in.From, img); c != "" {
+		k.field("rebuild", c)
 	}
-	k.bytes("rebuild", data)
-	return nil
 }
 
 // keyLen is how many hex digits an image's or a tool image's key has.

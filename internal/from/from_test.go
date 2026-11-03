@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -80,6 +82,49 @@ func (tl *testLookup) recorded(t *testing.T, ref string) string {
 		t.Fatal(err)
 	}
 	return d
+}
+
+// With the cache gone, the digest is the newest base's record of the
+// same reference, so no key changes; the cache wins while it's there, and
+// a layer's or another reference's record never counts.
+func TestRecordedWithoutTheCache(t *testing.T) {
+	t.Parallel()
+	tl := newTestLookup(t)
+	at := func(h int) time.Time { return time.Date(2026, 11, 1, h, 0, 0, 0, time.UTC) }
+	for key, rec := range map[string]state.Image{
+		"0123456789a1": {Name: "base", From: "node:24", Digest: "node@" + digestOf("a"), Built: at(1)},
+		"0123456789a2": {Name: "base", From: "node:24", Digest: "node@" + digestOf("b"), Built: at(3)},
+		"0123456789a3": {Name: "foo", From: "node:24", Digest: "node@" + digestOf("c"), Built: at(5)},
+		"0123456789a4": {Name: "base", From: "node:25", Digest: "node@" + digestOf("d"), Built: at(5)},
+		"0123456789a5": {Name: "base", From: "node:24", Built: at(6)},
+	} {
+		if err := state.WriteImage(tl.Dirs, key, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if d := tl.recorded(t, "node:24"); d != "node@"+digestOf("b") {
+		t.Errorf("no cache: %q, want the newest base's", d)
+	}
+	if d := tl.recorded(t, "node:26"); d != "" {
+		t.Errorf("no cache, no record: %q", d)
+	}
+	if err := state.SetFromDigest(tl.Dirs, "node:24", "node@"+digestOf("e")); err != nil {
+		t.Fatal(err)
+	}
+	if d := tl.recorded(t, "node:24"); d != "node@"+digestOf("e") {
+		t.Errorf("with the cache: %q", d)
+	}
+	// Offline, a build without the cache keeps the records' digest.
+	if err := os.RemoveAll(tl.Dirs.Cache()); err != nil {
+		t.Fatal(err)
+	}
+	tl.offline(t)
+	if err := tl.Refresh(t.Context(), "node:24"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tl.warned.IDs(); len(got) != 1 || got[0] != "from_cached_unreachable" {
+		t.Errorf("warned %v", got)
+	}
 }
 
 func TestRefreshRecordsTheRegistrysDigestPerTag(t *testing.T) {

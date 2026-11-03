@@ -7,21 +7,18 @@ import (
 	"github.com/w3cj/devvm/internal/ui"
 )
 
-// The tool table: each build's backend and C library, and - for what a
-// row lacks, a tool that isn't built included.
+// The tool table: each build's backend and C library, as its record says,
+// and - for what a row lacks, a tool that isn't built included.
 func TestWriteImagesTools(t *testing.T) {
 	ts := []tools.Listed{
-		{Name: "node", Tool: "node", Version: "24.22.2", File: "a", Built: true, Size: 4096, VMs: 1, State: tools.StateCurrent},
+		{
+			Name: "node", Tool: "node", Version: "24.22.2", File: "a", Built: true, Size: 4096, VMs: 1, State: tools.StateCurrent,
+			Backend: "lima", Target: tools.Target{Libc: "gnu"}, Targeted: true,
+		},
 		{Name: "node", Tool: "node", Version: "24.22.2", File: "b", Built: true, Size: 4096, State: tools.StateCurrent},
 		{Name: "go", Tool: "go", Version: "1.27.2", State: tools.StateNotBuilt},
 	}
-	target := func(t tools.Listed) (string, string) {
-		if t.File == "a" {
-			return "lima", "gnu"
-		}
-		return "", ""
-	}
-	got, colored := tables(t, func(tab *ui.Table) error { return writeImages(tab, nil, ts, target) })
+	got, colored := tables(t, func(tab *ui.Table) error { return writeImages(tab, nil, ts) })
 	want := "IMAGE  FROM  DIGEST  KEY  STATE  SIZE  BACKEND\n\n" +
 		"NAME  TOOL  VERSION  BACKEND  LIBC  SIZE  VMS  STATE\n" +
 		"node  node  24.22.2  lima     gnu   4.0K  1    current\n" +

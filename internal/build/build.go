@@ -94,6 +94,10 @@ func (b *Env) Inputs() (image.Inputs, error) {
 	if kf, ok := b.Backend.(backend.KeyFiles); ok {
 		own = kf.KeyFiles()
 	}
+	rebuilds, err := state.ReadRebuilds(b.Dirs)
+	if err != nil {
+		return image.Inputs{}, err
+	}
 	return image.Inputs{
 		Backend:      b.Backend.Name(),
 		BackendFiles: own,
@@ -101,7 +105,7 @@ func (b *Env) Inputs() (image.Inputs, error) {
 		Layers:       os.DirFS(b.Dirs.Layers()),
 		Features:     os.DirFS(b.Dirs.Features()),
 		BaseFeatures: features,
-		Rebuilds:     os.DirFS(b.Dirs.Rebuilds()),
+		Rebuilds:     rebuilds,
 		From:         b.From,
 		FromDigest:   digest,
 	}, nil
@@ -346,7 +350,7 @@ func (b Builds) build(ctx context.Context, name string) error {
 	}
 	// The record is written last: an image without one didn't finish.
 	// Every image on a --from base records it and its digest.
-	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc}
+	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Built: time.Now().UTC().Truncate(time.Second)}
 	if name == image.Base {
 		rec.Libc = out.Libc
 		if b.From == "" {
@@ -386,6 +390,21 @@ func (b Builds) lockBuild(ctx context.Context, name, key string) (unlock func(),
 	}
 	after := cmp.Or(b.WaitNote, buildWaitNote)
 	return platform.LockFileWaiting(ctx, path, after, func() { b.Info(msg.ImageBuildWaiting(name)) })
+}
+
+// bumpRebuild changes the rebuild counter of the image named name on this
+// backend and base, under the counters' lock: two devvms rebuilding at
+// once each keep their change.
+func (b Builds) bumpRebuild(ctx context.Context, name string) error {
+	if err := os.MkdirAll(b.Dirs.ImageLocks(), 0o700); err != nil {
+		return err
+	}
+	unlock, err := platform.LockFile(ctx, b.Dirs.RebuildsLock())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return state.BumpRebuild(b.Dirs, b.Backend.Name(), b.From, name)
 }
 
 // lockFree holds the lock of the image with key, for deleting it, unless
@@ -560,7 +579,7 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 			return nil
 		}
 	}
-	if err := state.BumpRebuild(b.Dirs, name, b.From); err != nil {
+	if err := b.bumpRebuild(ctx, name); err != nil {
 		return err
 	}
 	if err := b.build(ctx, name); err != nil {

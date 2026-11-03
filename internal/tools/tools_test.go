@@ -26,6 +26,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // Lima's targets: build.sh's own format.
@@ -550,13 +551,25 @@ func (e env) checkHashes(t *testing.T, files []string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fi, err := os.Lstat(p + ".sha256")
-		if err != nil || !fi.Mode().IsRegular() || string(read(t, p+".sha256")) != sum+"\n" {
-			t.Errorf("%s's hash isn't recorded", f)
+		fi, err := os.Lstat(e.Dirs.ToolRecord(f))
+		if err != nil || !fi.Mode().IsRegular() {
+			t.Errorf("%s has no record: %v", f, err)
+			continue
 		}
-		if tg, ok := (Share{e.Env}).readTarget(f); !ok || tg != gnuT {
-			t.Errorf("%s's target: %+v %v, want %+v", f, tg, ok, gnuT)
+		rec, err := state.ReadToolImage(e.Dirs, f)
+		if err != nil || rec.SHA256 != sum || rec.Libc != gnuT.Libc || rec.Format != gnuT.Format || rec.Backend != "fake" ||
+			time.Since(rec.Built) > time.Minute {
+			t.Errorf("%s's record: %+v, %v", f, rec, err)
 		}
+	}
+}
+
+// recorded gives a tool image in the share a record, built at built, for
+// gnu on the fake backend.
+func (e env) recorded(t *testing.T, file string, built time.Time) {
+	t.Helper()
+	if err := state.WriteToolImage(e.Dirs, file, state.ToolImage{SHA256: "x", Libc: "gnu", Backend: "fake", Built: built}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -578,7 +591,7 @@ func TestBuild(t *testing.T) {
 	f := fake()
 	all := e.files(t, "node", "pnpm", "bun", "claude")
 	write(t, filepath.Join(e.Dirs.Tools(), all[1]), []byte("built"))
-	write(t, filepath.Join(e.Dirs.Tools(), all[1]+".sha256"), []byte("x\n"))
+	e.recorded(t, all[1], time.Now())
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -658,7 +671,7 @@ func TestBuildOneBatch(t *testing.T) {
 }
 
 // A build that leaves a symlink instead of an image is refused; one that
-// plants FILE.sha256 as a symlink can't make devvm write through it.
+// plants FILE.json as a symlink can't make devvm write through it.
 func TestBuildHostileOutput(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
@@ -680,7 +693,7 @@ func TestBuildHostileOutput(t *testing.T) {
 		write(t, filepath.Join(spec.Out, file), []byte("image"))
 		// The share is the VM's to write in this scenario, through
 		// whatever it planted.
-		return os.Symlink(victim, filepath.Join(e.Dirs.Tools(), file+".sha256"))
+		return os.Symlink(victim, e.Dirs.ToolRecord(file))
 	}
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, node); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -851,9 +864,10 @@ func TestUnusedAndDelete(t *testing.T) {
 	e.locked(t, fixture(t))
 	cur := e.files(t, "node")[0]
 	old, used := "node-24.1.0-0123456789ab.erofs", "node-24.2.0-0123456789ab.erofs"
-	for _, f := range []string{cur, old, old + ".sha256", used, "x.erofs.tmp", ".lock"} {
+	for _, f := range []string{cur, old, used, "x.erofs.tmp", ".lock"} {
 		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
 	}
+	e.recorded(t, old, time.Now())
 	if err := os.Remove(e.Dirs.ToolLock()); err != nil {
 		t.Fatal(err)
 	}
@@ -879,9 +893,9 @@ func TestUnusedAndDelete(t *testing.T) {
 	if err := e.Delete(got); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{old, old + ".sha256"} {
-		if _, err := os.Stat(filepath.Join(e.Dirs.Tools(), f)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s: %v", f, err)
+	for _, p := range []string{filepath.Join(e.Dirs.Tools(), old), e.Dirs.ToolRecord(old)} {
+		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s: %v", p, err)
 		}
 	}
 	for _, f := range []string{cur, used, "x.erofs.tmp", ".lock"} {
@@ -954,20 +968,23 @@ func TestList(t *testing.T) {
 	}
 }
 
-// What a tool image is built for comes from the record its build left
-// beside it, else from the target it's current for; one with neither, or
-// a record that can't be read, has none. Delete deletes the record too.
+// What a tool image is built for, and the backend that built it, come
+// from the record its build left beside it; one without a record (even a
+// current one), or with a record that can't be read, has none. Delete
+// deletes the record too.
 func TestListTargets(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	goCur := e.files(t, "go")[0]
 	recorded, bare, bad := "go-1.20.0-0123456789ab.erofs", "go-1.9.0-0123456789ab.erofs", "go-1.8.0-0123456789ab.erofs"
-	musl := Target{Libc: "musl", Format: "plain-0123456789ab"}
 	for _, f := range []string{goCur, recorded, bare, bad} {
 		write(t, filepath.Join(e.Dirs.Tools(), f), []byte("x"))
 	}
-	write(t, filepath.Join(e.Dirs.Tools(), recorded+targetExt), []byte(musl.record()))
-	write(t, filepath.Join(e.Dirs.Tools(), bad+targetExt), []byte("libc=other\n"))
+	rec := state.ToolImage{SHA256: "x", Libc: "musl", Format: "plain-0123456789ab", Backend: "smolvm", Built: time.Now()}
+	if err := state.WriteToolImage(e.Dirs, recorded, rec); err != nil {
+		t.Fatal(err)
+	}
+	write(t, e.Dirs.ToolRecord(bad), []byte("libc=musl\n"))
 	ls, err := e.List([]Target{gnuT}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -975,14 +992,14 @@ func TestListTargets(t *testing.T) {
 	got := map[string]string{}
 	for _, l := range ls {
 		if l.Built {
-			got[l.File] = fmt.Sprintf("%v %s %s", l.Targeted, l.Target.Libc, l.Target.Format)
+			got[l.File] = fmt.Sprintf("%v %s %s %s", l.Targeted, l.Backend, l.Target.Libc, l.Target.Format)
 		}
 	}
 	want := map[string]string{
-		goCur:    fmt.Sprintf("true %s %s", gnuT.Libc, gnuT.Format),
-		recorded: "true musl plain-0123456789ab",
-		bare:     "false  ",
-		bad:      "false  ",
+		goCur:    "false   ",
+		recorded: "true smolvm musl plain-0123456789ab",
+		bare:     "false   ",
+		bad:      "false   ",
 	}
 	if !maps.Equal(got, want) {
 		t.Errorf("targets: got %v, want %v", got, want)
@@ -990,7 +1007,7 @@ func TestListTargets(t *testing.T) {
 	if err := e.Delete([]string{recorded}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(e.Dirs.Tools(), recorded+targetExt)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(e.Dirs.ToolRecord(recorded)); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Delete left the record: %v", err)
 	}
 }
@@ -1010,15 +1027,12 @@ func TestNoVM(t *testing.T) {
 		{Name: "codex", File: "codex-1-0123456789ab.erofs", State: StateCurrent},
 	}
 	for _, l := range ls {
-		if l.Name == "codex" {
-			continue // no hash
-		}
-		p := filepath.Join(e.Dirs.Tools(), l.File+".sha256")
-		write(t, p, []byte("x\n"))
-		if l.Name != "claude" { // claude: built just now
-			if err := os.Chtimes(p, old, old); err != nil {
-				t.Fatal(err)
-			}
+		switch l.Name {
+		case "codex": // no record
+		case "claude": // built just now
+			e.recorded(t, l.File, time.Now())
+		default:
+			e.recorded(t, l.File, old)
 		}
 	}
 	files := func(ls []Listed) []string {
@@ -1101,24 +1115,37 @@ func TestMaking(t *testing.T) {
 	}
 }
 
-// Idle records when a current tool image first has no VM and returns it
-// once that's age ago; a VM listing it again drops the record; a record
-// in the future (a clock that went back) deletes nothing.
+// Idle records in a current tool image's record when it first has no VM
+// (idle_since) and returns it once that's age ago; a VM listing it again
+// clears it; a time in the future (a clock that went back) deletes
+// nothing. IdleFor reads it back, changing nothing; an image without a
+// record is skipped.
 func TestIdle(t *testing.T) {
 	e := newEnv(t)
 	old := time.Now().Add(-2 * time.Hour)
 	l := Listed{Name: "go", File: "go-1-0123456789ab.erofs", Built: true, State: StateCurrent}
-	write(t, filepath.Join(e.Dirs.Tools(), l.File+".sha256"), []byte("x\n"))
-	if err := os.Chtimes(filepath.Join(e.Dirs.Tools(), l.File+".sha256"), old, old); err != nil {
-		t.Fatal(err)
-	}
+	e.recorded(t, l.File, old)
+	bare := Listed{Name: "go", File: "go-2-0123456789ab.erofs", Built: true, State: StateCurrent}
 	now := time.Now()
-	idle := filepath.Join(e.Dirs.Tools(), l.File+idleExt)
-	if got, err := e.Idle([]Listed{l}, 24*time.Hour, now); err != nil || len(got) != 0 {
+	idleSince := func() time.Time {
+		t.Helper()
+		rec, err := state.ReadToolImage(e.Dirs, l.File)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rec.IdleSince
+	}
+	if e.IdleFor(l, now) != 0 {
+		t.Error("IdleFor before Idle looked")
+	}
+	if got, err := e.Idle([]Listed{l, bare}, 24*time.Hour, now); err != nil || len(got) != 0 {
 		t.Fatalf("first look: %v, %v", got, err)
 	}
-	if _, err := os.Stat(idle); err != nil {
-		t.Fatalf("no record: %v", err)
+	if since := idleSince(); since.IsZero() || now.Sub(since) > time.Second {
+		t.Fatalf("idle since %s, want %s", since, now)
+	}
+	if d := e.IdleFor(l, now.Add(time.Hour)); d < 59*time.Minute || d > time.Hour+time.Second {
+		t.Errorf("IdleFor an hour later = %s", d)
 	}
 	if got, _ := e.Idle([]Listed{l}, 24*time.Hour, now.Add(25*time.Hour)); len(got) != 1 {
 		t.Errorf("a day later: %v", got)
@@ -1128,11 +1155,17 @@ func TestIdle(t *testing.T) {
 	}
 	used := l
 	used.VMs = 1
+	if e.IdleFor(used, now.Add(time.Hour)) != 0 {
+		t.Error("IdleFor a VM's")
+	}
 	if got, _ := e.Idle([]Listed{used}, 24*time.Hour, now.Add(25*time.Hour)); len(got) != 0 {
 		t.Errorf("a VM's: %v", got)
 	}
-	if _, err := os.Stat(idle); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("a VM's keeps its record: %v", err)
+	if since := idleSince(); !since.IsZero() {
+		t.Errorf("a VM's is still idle since %s", since)
+	}
+	if rec, err := state.ReadToolImage(e.Dirs, l.File); err != nil || rec.SHA256 != "x" || !rec.Built.Equal(old) {
+		t.Errorf("the rest of its record: %+v, %v", rec, err)
 	}
 }
 
@@ -1236,7 +1269,7 @@ func TestShow(t *testing.T) {
 	}
 	claude := e.files(t, "claude")[0]
 	write(t, filepath.Join(e.Dirs.Tools(), claude), nil)
-	write(t, filepath.Join(e.Dirs.Tools(), claude+".sha256"), nil)
+	e.recorded(t, claude, time.Now())
 	if ts, _ := e.Show([]string{"claude-2.0.0-0123456789ab.erofs"}, gnuT); len(ts) != 1 || !ts[0].Built {
 		t.Errorf("Show built = %+v", ts)
 	}

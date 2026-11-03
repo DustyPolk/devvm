@@ -4,14 +4,23 @@
 # anything. The default run never touches the caches.
 [darwin] mkdir $HOME/Library/Caches/lima/download/by-url-sha256/0123
 [darwin] exec sh -c 'echo x > "$HOME/Library/Caches/lima/download/by-url-sha256/0123/data"'
-mkdir $XDG_DATA_HOME/devvm/mise/2020.1.1
-exec touch -t 202001010000 $XDG_DATA_HOME/devvm/mise/2020.1.1
+mkdir $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
+exec touch -t 202001010000 $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
 
 ! exec devvm gc --caches
 stderr '^devvm: force_needed command=devvm gc$'
-exists $XDG_DATA_HOME/devvm/mise/2020.1.1
+exists $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
 [darwin] exists $HOME/Library/Caches/lima/download/by-url-sha256/0123/data
 
 exec devvm gc --force
 stdout '^==> deleted_mise count=1$'
 [darwin] exists $HOME/Library/Caches/lima/download/by-url-sha256/0123/data
+
+# devvm's cache/ may be deleted at any time: gc, space and images go on
+# without it, and nothing makes it until it's needed.
+rm $XDG_DATA_HOME/devvm/cache
+exec devvm gc --force
+stdout '^==> nothing_to_clean$'
+exec devvm space
+exec devvm images
+! exists $XDG_DATA_HOME/devvm/cache

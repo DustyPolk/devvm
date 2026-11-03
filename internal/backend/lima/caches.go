@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
@@ -125,21 +124,12 @@ func (l limaCache) devvmEntry(path string, keep map[string]bool) (string, bool) 
 // recordedURLs are the cloud images devvm's image records name: a base's
 // record keeps its image's address and digest.
 func (l limaCache) recordedURLs() (map[string]bool, error) {
-	entries, err := os.ReadDir(l.dirs.Images())
-	if errors.Is(err, fs.ErrNotExist) {
-		return map[string]bool{}, nil
-	} else if err != nil {
+	recs, err := state.Images(l.dirs)
+	if err != nil {
 		return nil, err
 	}
 	keep := map[string]bool{}
-	for _, e := range entries {
-		if !image.IsKey(e.Name()) {
-			continue
-		}
-		rec, err := state.ReadImage(l.dirs, e.Name())
-		if err != nil {
-			continue
-		}
+	for _, rec := range recs {
 		if f := strings.Fields(rec.Digest); len(f) > 0 {
 			keep[f[0]] = true
 		}

@@ -101,15 +101,15 @@ devvm writes nothing into the project folder. It keeps your settings in `~/.conf
 | Path in `~/.local/share/devvm` | Holds |
 | --- | --- |
 | `vms/<vm-name>` | each VM's state |
-| `images/<key>` | each image's record |
-| `images/rebuilds/` | the [rebuild counters](images.md#rebuilding) |
-| `images/from-digests` | the [digests](images.md#digests) of the container images that `--from` bases start from |
-| `tools/`, `mise.lock`, `mise/` | the [shared tools](images.md#the-share), the tools lock and devvm's own mise |
+| `images/<key>/record.json` | each image's record |
+| `images/rebuilds.json` | the [rebuild counters](images.md#rebuilding), by backend, `--from` and image |
+| `tools/`, `mise.lock` | the [shared tools](images.md#the-share), each image with its record, and the tools lock |
+| `cache/` | what devvm makes again whenever it needs it, so it may be deleted at any time: devvm's own mise (`cache/mise/`), the [shared Nix cache](network.md#the-shared-nix-cache) (`cache/nix-cache/`) and the [digests](images.md#digests) of the container images that `--from` bases start from (`cache/from-digests.json`) |
 | `mise.lock.toml`, `mise.lock.checked` | the `mise.toml` the tools lock was resolved from, and when devvm last [checked](images.md#versions) for newer versions |
 | `ca/` | the certificate authority that VMs trust for the proxy |
 | `oci-build.lock` | the lock a Lima build of a base [from a container image](images.md#how-its-converted) holds |
 | `tools.lock` | the lock a devvm [writing to the share](images.md#building-tools) or swapping the tools lock holds |
-| `images/locks/<key>` | the lock the devvm [building an image](images.md#building) holds |
+| `images/locks/<key>`, `images/locks/rebuilds` | the lock the devvm [building an image](images.md#building) holds, and the one a devvm [changing a rebuild counter](images.md#rebuilding) holds |
 | `groups.lock` | the lock a devvm [joining or leaving a group](design.md#groups), or working its links out again, holds |
 | `run/` | files for running VMs, such as sandbox profiles, proxy pids and the QEMU wrapper |
 | `logs/`, `logs/runs/` | each VM's network log and proxy log, and the [run logs](../using/troubleshooting.md#a-command-fails) |

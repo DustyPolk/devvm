@@ -74,6 +74,21 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	return quiet(&Env{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl}), f
 }
 
+// record reads the record of the image with key, which must say it was
+// built in the last minute, and returns it without that time.
+func record(t *testing.T, b *Env, key string) state.Image {
+	t.Helper()
+	rec, err := state.ReadImage(b.Dirs, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if since := time.Since(rec.Built); since < -time.Second || since > time.Minute {
+		t.Errorf("%s was built at %s", key, rec.Built)
+	}
+	rec.Built = time.Time{}
+	return rec
+}
+
 // assetsDir is the folder of testEnv's devvm's files, its Assets.
 func assetsDir(b *Env) string { return filepath.Join(filepath.Dir(b.Dirs.Data), "root") }
 
@@ -209,13 +224,11 @@ func TestBuild(t *testing.T) {
 			t.Errorf("build %d: %+v, want %+v", i, got, want)
 		}
 	}
-	base, err := state.ReadImage(b.Dirs, chain[0].Key)
-	if err != nil || base != (state.Image{Name: "base", Chain: chain[:1].String(), Digest: f.Built.Origin, Libc: "gnu"}) {
-		t.Errorf("base's record: %+v, %v", base, err)
+	if base := record(t, b, chain[0].Key); base != (state.Image{Name: "base", Chain: chain[:1].String(), Digest: f.Built.Origin, Libc: "gnu"}) {
+		t.Errorf("base's record: %+v", base)
 	}
-	top, err := state.ReadImage(b.Dirs, chain[2].Key)
-	if err != nil || top != (state.Image{Name: "foo+bar", Chain: chain.String(), Libc: "gnu"}) {
-		t.Errorf("foo+bar's record: %+v, %v", top, err)
+	if top := record(t, b, chain[2].Key); top != (state.Image{Name: "foo+bar", Chain: chain.String(), Libc: "gnu"}) {
+		t.Errorf("foo+bar's record: %+v", top)
 	}
 
 	// Built: nothing to do.
@@ -553,6 +566,40 @@ func TestRebuild(t *testing.T) {
 	}
 }
 
+// A rebuild on one backend changes that backend's key alone: another
+// backend's images on the same data folder stay current, so its VMs
+// aren't outdated.
+func TestRebuildIsPerBackend(t *testing.T) {
+	b, _ := testEnv(t)
+	ctx := t.Context()
+	caps := backend.Caps{}
+	for _, f := range backend.Features {
+		caps[f] = backend.Native
+	}
+	other := quiet(&Env{Dirs: b.Dirs, Assets: b.Assets, Backend: backendtest.New("other", caps), Tools: b.Tools})
+	if err := (Builds{other}).Build(ctx, "base"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := other.Chain("base")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (Builds{b}).Rebuild(ctx, "base"); err != nil {
+		t.Fatal(err)
+	}
+	if after, err := other.Chain("base"); err != nil || after.String() != before.String() {
+		t.Errorf("the other backend's base: %s, then %s, %v", before, after, err)
+	}
+	var warned msg.Recorder
+	other.Warn = warned.Add
+	if err := (Builds{other}).WarnIfOutdated(before.String()); err != nil || len(warned.IDs()) != 0 {
+		t.Errorf("the other backend's VM warned %v, %v", warned.IDs(), err)
+	}
+	if imgs, err := (Images{other}).List(ctx); err != nil || len(imgs) != 1 || !imgs[0].Current {
+		t.Errorf("the other backend's images: %+v, %v", imgs, err)
+	}
+}
+
 // An old image the backend won't delete (a VM uses it) stays.
 func TestRebuildKeepsImagesInUse(t *testing.T) {
 	b, f := testEnv(t)
@@ -625,9 +672,9 @@ func TestBuildFrom(t *testing.T) {
 		t.Fatalf("specs: %+v", specs)
 	}
 	for i, name := range []string{"base", "foo"} {
-		rec, err := state.ReadImage(b.Dirs, chain[i].Key)
-		if want := (state.Image{Name: name, Chain: chain[:i+1].String(), From: "node:24", Digest: "node@" + digest, Libc: "musl"}); err != nil || rec != want {
-			t.Errorf("%s's record: %+v, %v; want %+v", name, rec, err, want)
+		rec := record(t, b, chain[i].Key)
+		if want := (state.Image{Name: name, Chain: chain[:i+1].String(), From: "node:24", Digest: "node@" + digest, Libc: "musl"}); rec != want {
+			t.Errorf("%s's record: %+v; want %+v", name, rec, want)
 		}
 	}
 	// Ubuntu's base is another image.
@@ -673,10 +720,14 @@ func TestBuildFromPinned(t *testing.T) {
 	if lookups != 0 {
 		t.Errorf("looked up %d times", lookups)
 	}
-	if _, err := os.Stat(b.Dirs.RebuildFile("base", b.From)); err != nil {
-		t.Error(err)
+	rs, err := state.ReadRebuilds(b.Dirs)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(b.Dirs.RebuildFile("base", "")); err == nil {
+	if rs.Counter(b.Backend.Name(), b.From, "base") == "" {
+		t.Error("no counter for the pinned base")
+	}
+	if rs.Counter(b.Backend.Name(), "", "base") != "" {
 		t.Error("Ubuntu's base was rebuilt")
 	}
 	for _, c := range f.Calls() {

@@ -49,17 +49,15 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 				}
 			}
 			fail(u, err, msg.ImagesFailed)
-			target, err := toolTargets(u, b)
-			fail(u, err, msg.ImagesFailed)
-			ts = toolsOn(only, ts, target)
+			ts = toolsOn(only, ts)
 			nix := nixCacheOf(u, b.Dirs)
 			if only != "" {
 				nix = nixCacheJSON{}
 			}
 			if asJSON {
-				err = printJSON(u, imagesJSON(imgs, ts, target, nix))
+				err = printJSON(u, imagesJSON(imgs, ts, nix))
 			} else {
-				err = writeImages(u.Table(), imgs, ts, target)
+				err = writeImages(u.Table(), imgs, ts)
 			}
 			if err != nil {
 				return err
@@ -147,15 +145,16 @@ func (l imageListing) only(name string) imageListing {
 	return out
 }
 
-// toolsOn is the shared tool images built for the backend named, by
-// target, or all of them when name is "".
-func toolsOn(name string, ts []tools.Listed, target func(tools.Listed) (be, libc string)) []tools.Listed {
+// toolsOn is the shared tool images the backend named built, as their
+// records say, or all of them when name is "". One without a record is
+// never one.
+func toolsOn(name string, ts []tools.Listed) []tools.Listed {
 	if name == "" {
 		return ts
 	}
 	var out []tools.Listed
 	for _, t := range ts {
-		if be, _ := target(t); be == name {
+		if t.Backend == name {
 			out = append(out, t)
 		}
 	}
@@ -232,7 +231,7 @@ type toolImageJSON struct {
 	State   string `json:"state"`
 }
 
-func imagesJSON(imgs []listedImage, ts []tools.Listed, target func(tools.Listed) (be, libc string), nix nixCacheJSON) imagesOutput {
+func imagesJSON(imgs []listedImage, ts []tools.Listed, nix nixCacheJSON) imagesOutput {
 	out := imagesOutput{
 		Images: make([]imageJSON, 0, len(imgs)), Tools: make([]toolImageJSON, 0, len(ts)),
 		Total: imagesSize(imgs) + toolsSize(ts), UnusedTools: toolsSize(tools.Unused(ts)), NixCache: nix,
@@ -251,7 +250,7 @@ func imagesJSON(imgs []listedImage, ts []tools.Listed, target func(tools.Listed)
 		j := toolImageJSON{Name: t.Name, Tool: t.Tool, Version: t.Version, Built: t.Built, State: t.State}
 		if t.Built {
 			j.Size, j.VMs = t.Size, t.VMs
-			j.Backend, j.Libc = target(t)
+			j.Backend, j.Libc = t.Backend, t.Target.Libc
 		}
 		out.Tools = append(out.Tools, j)
 	}
@@ -284,20 +283,6 @@ func imagesSize(imgs []listedImage) int64 {
 		n += l.Size
 	}
 	return n
-}
-
-// toolTargets returns what tells the backend and C library a tool image
-// is built for (toolTarget): its record, else a VM's that has it.
-func toolTargets(u *ui.UI, b *build.Env) (func(tools.Listed) (string, string), error) {
-	reg, err := newRegistry(b.Dirs, b.Assets, u)
-	if err != nil {
-		return nil, err
-	}
-	vms, err := vmToolTargets(b.Dirs)
-	if err != nil {
-		return nil, err
-	}
-	return func(t tools.Listed) (string, string) { return toolTarget(reg, t, vms) }, nil
 }
 
 // toolsSize is the disk the tool images take.
@@ -388,10 +373,10 @@ func (l imageListing) failUnlisted() error {
 }
 
 // writeImages writes the images, then the shared tools with the backend
-// and C library each is built for (target), as tables, each with a header;
-// a value one lacks is -. States are colored by what they mean, digests
-// and keys dim.
-func writeImages(tab *ui.Table, imgs []listedImage, ts []tools.Listed, target func(tools.Listed) (be, libc string)) error {
+// that built each and the C library it's built for, as their records say,
+// as tables, each with a header; a value one lacks is -. States are
+// colored by what they mean, digests and keys dim.
+func writeImages(tab *ui.Table, imgs []listedImage, ts []tools.Listed) error {
 	tab.Header("IMAGE", "FROM", "DIGEST", "KEY", "STATE", "SIZE", "BACKEND")
 	for _, l := range imgs {
 		size := ""
@@ -408,7 +393,7 @@ func writeImages(tab *ui.Table, imgs []listedImage, ts []tools.Listed, target fu
 		size, vms, be, libc := "", "", "", ""
 		if t.Built {
 			size, vms = humanSize(t.Size), strconv.Itoa(t.VMs)
-			be, libc = target(t)
+			be, libc = t.Backend, t.Target.Libc
 		}
 		tab.Row(cell(t.Name), cell(t.Tool), cell(t.Version), cell(be), cell(libc), cell(size), cell(vms), cellAs(t.State, toolStates))
 	}

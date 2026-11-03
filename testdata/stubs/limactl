@@ -68,7 +68,7 @@ for a in "${@:2}"; do
 done
 # The tools build VM: remember the folder it mounts, and its build.sh writes the images there
 # ($STUB_DIR/tools-symlink: a hostile build leaves a symlink instead; tools-hash-symlink: it plants
-# FILE.sha256 as a symlink to that file).
+# FILE.json, a tool image's record, as a symlink to that file).
 if [[ ${1:-} == clone && " $* " == *" devvm-tools-build "* ]]; then
   sed -n 's/.*"location": *"\([^"]*\)".*/\1/p' <<<"$*" > "$STUB_DIR/tools-out"
 fi
@@ -78,7 +78,7 @@ if [[ ${1:-} == shell && " $* " == *" devvm-tools-build bash -s -- "* ]]; then
   for ((i = i + 3; i < ${#args[@]}; i += 3)); do
     if [[ -f $STUB_DIR/tools-symlink ]]; then ln -s "$STUB_DIR/tools-symlink" "$out/${args[i]}"
     else echo "image ${args[i]}" > "$out/${args[i]}"; fi
-    [[ ! -f $STUB_DIR/tools-hash-symlink ]] || ln -s "$STUB_DIR/tools-hash-symlink" "$out/${args[i]}.sha256"
+    [[ ! -f $STUB_DIR/tools-hash-symlink ]] || ln -s "$STUB_DIR/tools-hash-symlink" "$out/${args[i]}.json"
   done
 fi
 # The --from build VM's assets/oci/build.sh: it writes what it would in its OUT

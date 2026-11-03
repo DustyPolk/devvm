@@ -29,7 +29,7 @@ func devvm() rules {
 			"internal/backend/smolvm.Smolvm":    {79, "a backend: backend.Backend's 28 methods, DiskDirs, Floors, Usage, Location, Forget, Strays, DevvmCache, DeleteCache and smolvm's own"},
 			"internal/backend/docker.Docker":    {86, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
 			"internal/backend/backendtest.Fake": {35, "backend.Backend's 28 methods and what tests ask of it"},
-			"internal/paths.Dirs":               {42, "one method per folder or file devvm uses: a list"},
+			"internal/paths.Dirs":               {46, "one method per folder or file devvm uses: a list"},
 			"internal/ui.UI":                    {46, "the one terminal: messages and where they go, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
@@ -59,7 +59,6 @@ func devvm() rules {
 			"internal/secrets.loginKinds":            table,
 			"internal/sshagent.Modes":                table,
 			"internal/state.sizeKeys":                table,
-			"internal/state.imageKeys":               table,
 			"internal/tools.miseSHA256":              table,
 			"internal/trust.Env":                     table,
 			"internal/vm.agentDirsOf":                table,

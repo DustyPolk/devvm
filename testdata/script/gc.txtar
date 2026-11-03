@@ -22,15 +22,19 @@ project agentvm
 exec devvm --no-network-policy --no-git-protect --tools none --agents claude
 exec devvm rm --force --no-export
 cd $WORK
-exec sh -c 'for i in base foo; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
+exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec sh -c 'printf "devvm-img-000000000000\ndevvm-img-111111111111\ndevvm-img-node\ndevvm-img-foo-12345612345612\ndevvm-web-12345612345612\n" >> "$STUB_DIR/instances"'
-exec sh -c 'echo "not a record" > "$IMAGES/111111111111"'
+mkdir $IMAGES/111111111111
+exec sh -c 'echo "not a record" > "$IMAGES/111111111111/record.json"'
 
 # Tool images: claude's (current), an old go a VM lists, one a VM that's
 # gone outside devvm still lists in its state, and an old one nothing
-# lists, with its hash.
-exec sh -c 'cd "$SHARE" && for f in go-1.20.0 go-1.19.0 go-1.9.0; do echo x > $f-0123456789ab.erofs; echo x > $f-0123456789ab.erofs.sha256; done'
+# lists, with its record.
+exec sh -c 'cd "$SHARE" && for f in go-1.20.0 go-1.19.0 go-1.9.0; do echo x > $f-0123456789ab.erofs; done'
+json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
+json_set $SHARE/go-1.19.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
+json_set $SHARE/go-1.9.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS
 exec sh -c 'printf "image=go\ndir=/p\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
 exec sh -c 'printf "image=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$VMS/devvm-gone-12345612345612"'
@@ -40,8 +44,8 @@ exec sh -c 'printf "image=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$
 
 # devvm's own mise: an older version, and one another devvm is
 # downloading (it changed just now).
-mkdir $XDG_DATA_HOME/devvm/mise/2020.1.1 $XDG_DATA_HOME/devvm/mise/2099.1.1
-exec touch -t 202001010000 $XDG_DATA_HOME/devvm/mise/2020.1.1
+mkdir $XDG_DATA_HOME/devvm/cache/mise/2020.1.1 $XDG_DATA_HOME/devvm/cache/mise/2099.1.1
+exec touch -t 202001010000 $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
 
 # devvm images says how many images gc deletes, and what it frees.
 exec devvm images
@@ -59,8 +63,8 @@ stdout '^gc_unfinished key=node$'
 stdout '^gc_tools count=1 size=\S+$'
 stdout '^gc_mise count=1 size=\S+$'
 stdout '^==> deleted_mise count=1$'
-! exists $XDG_DATA_HOME/devvm/mise/2020.1.1
-exists $XDG_DATA_HOME/devvm/mise/2099.1.1
+! exists $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
+exists $XDG_DATA_HOME/devvm/cache/mise/2099.1.1
 stdout -count=1 '^==> deleted_image '
 stdout -count=3 '^==> deleted_unfinished_build '
 stdout '^==> deleted_tools count=1$'
@@ -75,9 +79,9 @@ cmp stdout deleted
 exec sh -c 'grep -c . "$STUB_DIR/instances"'
 stdout '^3$'
 exec sh -c 'grep -q "^devvm-img-$(cat base.key) " "$STUB_DIR/instances" && grep -q "^devvm-img-foo-12345612345612" "$STUB_DIR/instances" && grep -q "^devvm-web-12345612345612" "$STUB_DIR/instances"'
-exec sh -c 'test -f "$IMAGES/$(cat base.key)" && ! test -e "$IMAGES/$(cat foo.key)" && ! test -e "$IMAGES/111111111111"'
+exec sh -c 'test -f "$IMAGES/$(cat base.key)/record.json" && ! test -e "$IMAGES/$(cat foo.key)" && ! test -e "$IMAGES/111111111111"'
 ! exists $SHARE/go-1.9.0-0123456789ab.erofs
-! exists $SHARE/go-1.9.0-0123456789ab.erofs.sha256
+! exists $SHARE/go-1.9.0-0123456789ab.erofs.json
 exists $SHARE/go-1.20.0-0123456789ab.erofs
 exists $SHARE/go-1.19.0-0123456789ab.erofs
 exec sh -c 'ls "$SHARE"/claude-*.erofs'

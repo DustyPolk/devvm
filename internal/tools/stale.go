@@ -33,10 +33,10 @@ func (t Share) NoVMRecent(ls []Listed, names []string) (old, recent []Listed) {
 		if l.State != StateCurrent || l.VMs > 0 || l.File == "" || (len(names) > 0 && !slices.Contains(names, l.Name)) {
 			continue
 		}
-		fi, err := os.Stat(filepath.Join(t.Dirs.Tools(), l.File+".sha256"))
+		rec, err := state.ReadToolImage(t.Dirs, l.File)
 		switch {
 		case err != nil:
-		case t.Now().Sub(fi.ModTime()) < builtRecent:
+		case t.Now().Sub(rec.Built) < builtRecent:
 			recent = append(recent, l)
 		default:
 			old = append(old, l)
@@ -45,14 +45,11 @@ func (t Share) NoVMRecent(ls []Listed, names []string) (old, recent []Listed) {
 	return old, recent
 }
 
-// idleExt is the file beside a current tool image no VM has, made when
-// retention first finds it so: how long it's been idle.
-const idleExt = ".idle"
-
-// Idle keeps the record of how long each current tool image of a List
-// has had no VM, and returns those idle for age or longer (by now), as
-// NoVM picks them: a VM listing it again drops its record. Callers
-// deleting them hold the share's lock from before the List.
+// Idle keeps, in each tool image's record of a List, since when the
+// current ones have had no VM (idle_since, set when retention first finds
+// one so), and returns those idle for age or longer (by now), as NoVM
+// picks them: a VM listing it again clears it. Callers deleting them hold
+// the share's lock from before the List.
 func (t Share) Idle(ls []Listed, age time.Duration, now time.Time) ([]Listed, error) {
 	noVM := map[string]bool{}
 	for _, l := range t.NoVM(ls, nil) {
@@ -63,27 +60,43 @@ func (t Share) Idle(ls []Listed, age time.Duration, now time.Time) ([]Listed, er
 		if !l.Built || l.File == "" {
 			continue
 		}
-		p := filepath.Join(t.Dirs.Tools(), l.File+idleExt)
-		if !noVM[l.File] {
-			if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return nil, err
-			}
-			continue
-		}
-		fi, err := os.Stat(p)
+		rec, err := state.ReadToolImage(t.Dirs, l.File)
 		if errors.Is(err, fs.ErrNotExist) {
-			if err := state.WriteFile(p, nil); err != nil {
-				return nil, err
-			}
-			continue
+			continue // a build moving it in: its record comes next
 		} else if err != nil {
 			return nil, err
 		}
-		if since := now.Sub(fi.ModTime()); since >= age && since >= 0 {
-			out = append(out, l)
+		switch {
+		case !noVM[l.File] && !rec.IdleSince.IsZero():
+			rec.IdleSince = time.Time{}
+		case !noVM[l.File]:
+			continue
+		case rec.IdleSince.IsZero():
+			rec.IdleSince = now.UTC().Truncate(time.Second)
+		default:
+			if since := now.Sub(rec.IdleSince); since >= age && since >= 0 {
+				out = append(out, l)
+			}
+			continue
+		}
+		if err := state.WriteToolImage(t.Dirs, l.File, rec); err != nil {
+			return nil, err
 		}
 	}
 	return out, nil
+}
+
+// IdleFor is how long a current tool image of a List has had no VM, as
+// Idle recorded it; 0 when it hasn't, or a VM has it. It changes nothing.
+func (t Share) IdleFor(l Listed, now time.Time) time.Duration {
+	if l.State != StateCurrent || l.VMs > 0 || l.File == "" {
+		return 0
+	}
+	rec, err := state.ReadToolImage(t.Dirs, l.File)
+	if err != nil || rec.IdleSince.IsZero() {
+		return 0
+	}
+	return max(now.Sub(rec.IdleSince), 0)
 }
 
 // miseRecent is how long a folder of devvm's own mise is left alone after

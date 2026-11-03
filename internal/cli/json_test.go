@@ -80,8 +80,11 @@ func TestJSONShapes(t *testing.T) {
 		{
 			"images", imagesJSON(
 				[]listedImage{{Listed: build.Listed{Image: build.Image{Key: "k", Name: "base"}, SHA256: "ab", State: "current", Origin: "ubuntu 26.04", Size: 1, Sized: true}, Backend: "lima"}},
-				[]tools.Listed{{Name: "node", Tool: "node", Version: "24", Built: true, Size: 2, VMs: 1, State: "current"}},
-				func(tools.Listed) (string, string) { return "lima", "gnu" }, nixCacheJSON{Files: 1, Size: 2, Cap: 3}),
+				[]tools.Listed{{
+					Name: "node", Tool: "node", Version: "24", Built: true, Size: 2, VMs: 1, State: "current",
+					Backend: "lima", Target: tools.Target{Libc: "gnu"}, Targeted: true,
+				}},
+				nixCacheJSON{Files: 1, Size: 2, Cap: 3}),
 			[]string{
 				"images[].backend: string", "images[].digest: string", "images[].from: string", "images[].key: string", "images[].name: string",
 				"images[].size: number", "images[].sized: bool", "images[].state: string",

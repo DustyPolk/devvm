@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
@@ -32,15 +32,14 @@ func (t *Env) LockShare(ctx context.Context) (unlock func(), err error) {
 	return platform.LockFileWaiting(ctx, t.shareLock(), t.ShareNote, func() { t.Info(msg.ShareWaiting(t.Dirs.Tools())) })
 }
 
-// Built reports whether a tool image is in the share with the hash devvm
-// recorded when it moved it in (FILE.sha256).
+// Built reports whether a tool image is in the share with the record
+// devvm wrote when it moved it in (FILE.json).
 func (t Share) Built(file string) bool {
-	for _, p := range []string{file, file + ".sha256"} {
-		if fi, err := os.Stat(filepath.Join(t.Dirs.Tools(), p)); err != nil || !fi.Mode().IsRegular() {
-			return false
-		}
+	if fi, err := os.Stat(filepath.Join(t.Dirs.Tools(), file)); err != nil || !fi.Mode().IsRegular() {
+		return false
 	}
-	return true
+	_, err := state.ReadToolImage(t.Dirs, file)
+	return err == nil
 }
 
 // Build builds the tool images these files name that the share lacks, in
@@ -177,47 +176,16 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		if err != nil {
 			return err
 		}
-		dst := filepath.Join(t.Dirs.Tools(), f)
-		if err := os.Rename(src, dst); err != nil {
+		if err := os.Rename(src, filepath.Join(t.Dirs.Tools(), f)); err != nil {
 			return err
 		}
-		if err := state.WriteFile(dst+".sha256", []byte(sum+"\n")); err != nil {
-			return err
-		}
-		if err := state.WriteFile(dst+targetExt, []byte(tg.record())); err != nil {
+		// Its file name doesn't say what it's built for: the record does.
+		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second)}
+		if err := state.WriteToolImage(t.Dirs, f, rec); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// targetExt is the file beside a tool image naming what it's built for
-// (Target.record): its file name doesn't say.
-const targetExt = ".target"
-
-// record is a target as its file beside a tool image has it.
-func (tg Target) record() string { return "libc=" + tg.Libc + "\nformat=" + tg.Format + "\n" }
-
-// readTarget reads what a tool image in the share is built for; ok is
-// false when there's no record (one built before they were kept) or it
-// can't be read.
-func (t Share) readTarget(file string) (tg Target, ok bool) {
-	data, err := os.ReadFile(filepath.Join(t.Dirs.Tools(), file+targetExt)) //nolint:gosec // the share, devvm's own
-	if err != nil {
-		return Target{}, false
-	}
-	libc, format := "", ""
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if v, found := strings.CutPrefix(line, "libc="); found {
-			libc = v
-		} else if v, found := strings.CutPrefix(line, "format="); found {
-			format = v
-		}
-	}
-	if libc != "gnu" && libc != "musl" {
-		return Target{}, false
-	}
-	return Target{Libc: libc, Format: format}, true
 }
 
 // Unused returns the tool images of a List that it calls unused: neither
@@ -234,7 +202,7 @@ func Unused(ls []Listed) []Listed {
 	return out
 }
 
-// Delete deletes tool images from the share, with their hashes. Only
+// Delete deletes tool images from the share, with their records. Only
 // tool image names are taken, nothing else in the share.
 func (t Share) Delete(files []string) error {
 	for _, f := range files {
@@ -243,8 +211,7 @@ func (t Share) Delete(files []string) error {
 		}
 	}
 	for _, f := range files {
-		p := filepath.Join(t.Dirs.Tools(), f)
-		for _, name := range []string{p, p + ".sha256", p + targetExt, p + idleExt} {
+		for _, name := range []string{filepath.Join(t.Dirs.Tools(), f), t.Dirs.ToolRecord(f)} {
 			if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}

@@ -55,11 +55,11 @@ exec sh -c 'ls "$TMPDIR"'
 exec sh -c 'ls "$XDG_DATA_HOME/devvm/run/builds"'
 ! stdout .
 # Its record: what it came from, and musl from the image.
-catg $IMAGES/????????????
-stdout '^name=base$'
-stdout '^from=node:24@sha256:a{64}$'
-stdout '^digest=node:24@sha256:a{64}$'
-stdout '^libc=musl$'
+catg $IMAGES/????????????/record.json
+stdout '^  "name": "base",$'
+stdout '^  "from": "node:24@sha256:a{64}",$'
+stdout '^  "digest": "node:24@sha256:a{64}",$'
+stdout '^  "libc": "musl",$'
 # Each step numbered: the conversion's five, then base's, with sudo told
 # to keep the build proxy's settings and told no more.
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
@@ -79,10 +79,10 @@ exec sh -c 'mkdir -p "$CFG/layers"; printf "#!/bin/bash\necho foo\n" > "$CFG/lay
 exec devvm --from $PIN build foo
 ! stdout 'building_image_from .*image=base '
 stdout '^==> building_image_from from=node:24@sha256:a{64} image=foo key=[0-9a-f]{12}$'
-exec sh -c 'grep -l "^name=foo$" "$IMAGES"/???????????? | xargs cat'
-stdout '^from=node:24@sha256:a{64}$'
-stdout '^digest=node:24@sha256:a{64}$'
-stdout '^libc=musl$'
+exec sh -c 'grep -lxF "  \"name\": \"foo\"," "$IMAGES"/????????????/record.json | xargs cat'
+stdout '^  "from": "node:24@sha256:a{64}",$'
+stdout '^  "digest": "node:24@sha256:a{64}",$'
+stdout '^  "libc": "musl",$'
 exec devvm build base
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 exec sh -c 'rm "$STUB_DIR/build-libc"'
@@ -112,7 +112,7 @@ exec sh -c 'echo sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 exec devvm --from myapp:dev build base
 ! stderr from_cached
 stdout '^==> exporting_docker from=myapp:dev$'
-grep '^myapp:dev=sha256:d{64}$' $IMAGES/from-digests
+grep '^    "myapp:dev": "sha256:d{64}"' $DATA/cache/from-digests.json
 stub_calls
 stdout '^docker image inspect --format \{\{\.Id\}\} myapp:dev$'
 stdout '^docker info$'
@@ -121,6 +121,17 @@ stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- /\S*/tmp/devv
 exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
 stdout '^# \[1/13\] exporting_docker from=myapp:dev$'
 stdout '^# \[13/13\] stopping vm=devvm-img-'
+
+# The cache may go at any time: the base keeps its key, from the digest
+# its record names, so it stays current, and a build offline keeps it.
+rm $DATA/cache
+exec devvm images
+stdout '^base +myapp:dev +\S+ +[0-9a-f]{12} +current '
+! stdout ' stale '
+stub_reset
+exec devvm --from myapp:dev build base
+stderr '^devvm: from_cached_unreachable from=myapp:dev host=registry-1\.docker\.io$'
+! stdout building_image
 
 # Saved by name: an export that isn't the recorded image (the tag moved
 # since) is refused, before the conversion.
@@ -136,7 +147,7 @@ exec sh -c 'rm "$STUB_DIR/docker-saved"'
 
 # Docker not running for an image only it has: the recorded ID is kept,
 # with a warning, then refused.
-cp digests $IMAGES/from-digests
+cp digests.json $DATA/cache/from-digests.json
 exec sh -c ': > "$STUB_DIR/docker-down"'
 ! exec devvm --from myapp:third build base
 stderr '^devvm: from_cached_unreachable from=myapp:third host=registry-1\.docker\.io$'
@@ -205,6 +216,10 @@ cmp $STUB_DIR/instances $WORK/before
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
 
--- digests --
-myapp:third=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-node:24=node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-- digests.json --
+{
+  "digests": {
+    "myapp:third": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "node:24": "node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

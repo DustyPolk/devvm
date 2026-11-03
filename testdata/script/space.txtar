@@ -23,11 +23,12 @@ exec devvm --tools none --agents claude --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec sh -c 'cd "$SHARE" && echo x > go-1.20.0-0123456789ab.erofs && echo x > go-1.9.0-0123456789ab.erofs'
+json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS
 exec sh -c 'printf "image=base\ndir=/p\nbackend=lima\nlibc=gnu\ntool_names=go\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
 exec sh -c 'printf "image=base\ndir=/q\nbackend=lima\nlibc=gnu\ntool_names=go\n" > "$VMS/devvm-gone-12345612345612"'
 exec sh -c 'echo devvm-p-12345612345612 >> "$STUB_DIR/instances"'
-mkdir $DATA/exports $DATA/logs $DATA/mise/2026.1.1
+mkdir $DATA/exports $DATA/logs $DATA/cache/mise/2026.1.1
 exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
 exec sh -c 'echo x > "$DATA/logs/devvm-p-12345612345612.jsonl" && echo x > "$DATA/logs/devvm-gone-12345612345612.proxy.log"'
 stub_reset

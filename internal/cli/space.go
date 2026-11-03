@@ -331,17 +331,13 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	targets, err := vmToolTargets(e.b.Dirs)
-	if err != nil {
-		return nil, err
-	}
 	byKey := map[string]*spaceRow{}
 	var keys []string
 	for _, t := range ts {
 		if !t.Built {
 			continue
 		}
-		be, libc := toolTarget(e.reg, t, targets)
+		be, libc := t.Backend, t.Target.Libc
 		key := be + " " + libc
 		row, ok := byKey[key]
 		if !ok {
@@ -370,14 +366,7 @@ func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
 // recorded it (Share.Idle); 0 when it hasn't, or a VM has it. It changes
 // nothing.
 func (e spaceEnv) idleFor(t tools.Listed) time.Duration {
-	if t.State != tools.StateCurrent || t.VMs > 0 {
-		return 0
-	}
-	fi, err := os.Stat(filepath.Join(e.b.Dirs.Tools(), t.File+".idle"))
-	if err != nil {
-		return 0
-	}
-	return max(e.now.Sub(fi.ModTime()), 0)
+	return tools.Share{Env: e.b.Tools}.IdleFor(t, e.now)
 }
 
 // listTools lists the share as devvm images and devvm gc do: current for
@@ -396,57 +385,6 @@ func (e spaceEnv) listTools(_ context.Context) ([]tools.Listed, error) {
 		tgs = append(tgs, t)
 	}
 	return tools.Share{Env: e.b.Tools}.List(tgs, e.inUse)
-}
-
-// vmTarget is the backend and C library of a VM that has a tool image.
-type vmTarget struct{ backend, libc string }
-
-// vmToolTargets is, for each tool image a VM's state lists, that VM's
-// backend and C library.
-func vmToolTargets(d paths.Dirs) (map[string]vmTarget, error) {
-	names, err := state.VMNames(d)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]vmTarget{}
-	for _, n := range names {
-		st, err := state.ReadVM(d, n)
-		if err != nil {
-			return nil, err
-		}
-		for _, f := range strings.Fields(st.Get(vm.KeyTools)) {
-			out[f] = vmTarget{backend: st.Get(state.KeyBackend), libc: st.Get(vm.KeyLibc)}
-		}
-	}
-	return out, nil
-}
-
-// toolTarget is the backend and C library a tool image is built for: from
-// its record, else from a VM that has it, else unknown ("").
-func toolTarget(reg *backend.Registry, t tools.Listed, vms map[string]vmTarget) (be, libc string) {
-	if t.Targeted {
-		return formatBackend(reg, t.Target.Format), t.Target.Libc
-	}
-	v := vms[t.File]
-	return v.backend, v.libc
-}
-
-// formatBackend is the backend whose tool images have this format: its
-// ToolFormat, or one of the same kind (plain-, dir-) with another hash,
-// an older devvm's.
-func formatBackend(reg *backend.Registry, format string) string {
-	kind := func(f string) string { k, _, _ := strings.Cut(f, "-"); return k }
-	for _, be := range reg.All() {
-		if be.ToolFormat() == format {
-			return be.Name()
-		}
-	}
-	for _, be := range reg.All() {
-		if f := be.ToolFormat(); f != "" && kind(f) == kind(format) {
-			return be.Name()
-		}
-	}
-	return ""
 }
 
 // dataRows are the rest of devvm's data folder: exports, logs, devvm's
@@ -602,11 +540,12 @@ func leftoverFiles(d paths.Dirs, vm string) []string {
 }
 
 // otherState is the disk devvm's other state takes: its VMs' and images'
-// records, run files, CA, backend records and the tools lock.
+// records, run files, CA, backend records, the tools lock and the --from
+// digests in the cache.
 func otherState(d paths.Dirs) int64 {
 	var n int64
 	for _, p := range []string{
-		d.VMs(), d.Images(), d.Run(), d.CA(), d.LimaVMs(), d.Docker(), d.Smolvm(),
+		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(), d.LimaVMs(), d.Docker(), d.Smolvm(),
 		d.ToolLock(), d.ToolLock() + ".toml", d.ToolLock() + ".checked",
 	} {
 		n += du(p)

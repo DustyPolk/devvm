@@ -24,16 +24,13 @@ func newEnv(t *testing.T, from string) *env {
 	if err := os.CopyFS(dir, os.DirFS("testdata")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, "rebuilds"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	e := &env{t: t, dir: dir, in: Inputs{
 		Backend:      "lima",
 		Assets:       os.DirFS(filepath.Join(dir, "root")),
 		Layers:       os.DirFS(filepath.Join(dir, "layers")),
 		Features:     os.DirFS(filepath.Join(dir, "features")),
 		BaseFeatures: []string{"fzf", "mine"},
-		Rebuilds:     os.DirFS(filepath.Join(dir, "rebuilds")),
+		Rebuilds:     counters{},
 	}}
 	if from != "" {
 		e.in.From = from
@@ -56,6 +53,19 @@ func (e *env) edit(name string) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// counters are rebuild counters by backend, from and name.
+type counters map[[3]string]string
+
+func (c counters) Counter(backend, from, name string) string {
+	return c[[3]string{backend, from, name}]
+}
+
+// bump changes the rebuild counter of name on backend, from.
+func (e *env) bump(backend, from, name string) {
+	c := e.in.Rebuilds.(counters)
+	c[[3]string{backend, from, name}] += "1"
 }
 
 func (e *env) remove(name string) {
@@ -101,12 +111,12 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"a feature dropped", "", func(e *env) { e.in.BaseFeatures = []string{"fzf"} }, all},
 		{"the features' order", "", func(e *env) { e.in.BaseFeatures = []string{"mine", "fzf"} }, all},
 		{"--from", "", func(e *env) { e.in.From = "node:24"; e.in.FromDigest = "node@sha256:aaaa" }, all},
-		{"base's rebuild counter", "", func(e *env) { e.edit("rebuilds/base") }, all},
+		{"base's rebuild counter", "", func(e *env) { e.bump("lima", "", "base") }, all},
 		{"a layer's script", "", func(e *env) { e.edit("layers/foo.sh") }, above},
 		{"a layer's script deleted", "", func(e *env) { e.remove("layers/foo.sh") }, above},
 		{"the top layer's script", "", func(e *env) { e.edit("layers/bar.sh") }, []string{"foo+bar"}},
-		{"a layer's rebuild counter", "", func(e *env) { e.edit("rebuilds/foo") }, above},
-		{"the top layer's rebuild counter", "", func(e *env) { e.edit("rebuilds/foo+bar") }, []string{"foo+bar"}},
+		{"a layer's rebuild counter", "", func(e *env) { e.bump("lima", "", "foo") }, above},
+		{"the top layer's rebuild counter", "", func(e *env) { e.bump("lima", "", "foo+bar") }, []string{"foo+bar"}},
 
 		{"an unchosen feature's script", "", func(e *env) { e.edit("root/features/omb.sh") }, nil},
 		{"a user feature named like a built-in one", "", func(e *env) { e.edit("features/fzf.sh") }, nil},
@@ -114,7 +124,8 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"another layer", "", func(e *env) { e.edit("layers/baz.sh") }, nil},
 		{"oci scripts without --from", "", func(e *env) { e.edit("root/oci/build.sh") }, nil},
 		{"the digest without --from", "", func(e *env) { e.in.FromDigest = "x@sha256:bbbb" }, nil},
-		{"a rebuild counter for --from", "", func(e *env) { e.edit("rebuilds/foo@node-24") }, nil},
+		{"a rebuild counter for --from", "", func(e *env) { e.bump("lima", "node:24", "foo") }, nil},
+		{"another backend's rebuild counter", "", func(e *env) { e.bump("docker", "", "base") }, nil},
 		{"the tools' build script", "", func(e *env) { e.edit("root/shared-tools/build.sh") }, nil},
 
 		{"the --from digest (a moved tag)", "node:24", func(e *env) { e.in.FromDigest = "node@sha256:bbbb" }, all},
@@ -122,9 +133,11 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"oci/build.sh", "node:24", func(e *env) { e.edit("root/oci/build.sh") }, all},
 		{"oci/bootify.sh", "node:24", func(e *env) { e.edit("root/oci/bootify.sh") }, all},
 		{"oci/kernel.sh", "node:24", func(e *env) { e.edit("root/oci/kernel.sh") }, all},
-		{"a rebuild counter with --from", "node:24", func(e *env) { e.edit("rebuilds/foo@node-24") }, above},
+		{"a rebuild counter with --from", "node:24", func(e *env) { e.bump("lima", "node:24", "foo") }, above},
+		{"another --from's counter, once written alike", "node:24", func(e *env) { e.bump("lima", "node-24", "foo") }, nil},
+		{"another backend's counter with --from", "node:24", func(e *env) { e.bump("smolvm", "node:24", "base") }, nil},
 		{"oci/try.sh", "node:24", func(e *env) { e.edit("root/oci/try.sh") }, nil},
-		{"a rebuild counter without --from", "node:24", func(e *env) { e.edit("rebuilds/foo") }, nil},
+		{"a rebuild counter without --from", "node:24", func(e *env) { e.bump("lima", "", "foo") }, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

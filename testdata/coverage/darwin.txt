@@ -4,7 +4,7 @@ cmd/devvm 100.0
 internal/backend 95.9
 internal/backend/backendtest 46.3
 internal/backend/docker 81.2
-internal/backend/lima 88.0
+internal/backend/lima 88.1
 internal/backend/registry 90.5
 internal/backend/smolvm 73.9
 internal/backend/vmssh 87.5
@@ -18,8 +18,8 @@ internal/fetch 96.6
 internal/from 91.3
 internal/gitprotect 91.4
 internal/hostgit 100.0
-internal/image 96.1
-internal/msg 66.4
+internal/image 97.5
+internal/msg 66.5
 internal/msg/gen 92.5
 internal/netpolicy 87.2
 internal/paths 97.1
@@ -30,10 +30,10 @@ internal/secrets 90.8
 internal/shell 100.0
 internal/sshagent 83.4
 internal/sshconfig 84.8
-internal/state 92.9
+internal/state 93.1
 internal/stubtest 81.0
 internal/testbuild 100.0
-internal/tools 89.2
+internal/tools 89.3
 internal/trust 93.9
 internal/ubuntu 92.5
 internal/ui 94.4

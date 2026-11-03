@@ -9,8 +9,8 @@
 env HTTPS_PROXY=http://127.0.0.1:9
 env https_proxy=http://127.0.0.1:9
 env PIN=node:24@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-mkdir $XDG_DATA_HOME/devvm/images
-cp digests $XDG_DATA_HOME/devvm/images/from-digests
+mkdir $XDG_DATA_HOME/devvm/cache
+cp digests.json $XDG_DATA_HOME/devvm/cache/from-digests.json
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp extra.sh $XDG_CONFIG_HOME/devvm/layers/extra.sh
 exec devvm ports -g none
@@ -173,8 +173,8 @@ catg $VMS/devvm-flags-*
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^ports=8080$'
 
--- digests --
-node:24=node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-- digests.json --
+{"digests": {"node:24": "node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
 -- extra.sh --
 #!/bin/bash
 echo extra

@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -61,12 +62,28 @@ func Name(ref string) string {
 }
 
 // Recorded returns the digest base's key has for ref: ref itself when
-// it's pinned, else the one last recorded, "" when there is none.
+// it's pinned, else the one last recorded in the cache, "" when there is
+// none. With the cache gone, it's the digest the newest base built from
+// ref records, so a deleted cache changes no key: the next lookup records
+// it again.
 func Recorded(d paths.Dirs, ref string) (string, error) {
 	if ref == "" || Pinned(ref) {
 		return ref, nil
 	}
-	return state.FromDigest(d, ref)
+	if digest, err := state.FromDigest(d, ref); err != nil || digest != "" {
+		return digest, err
+	}
+	imgs, err := state.Images(d)
+	if err != nil {
+		return "", err
+	}
+	var newest state.Image
+	for _, img := range imgs {
+		if img.Name == image.Base && img.From == ref && img.Digest != "" && !img.Built.Before(newest.Built) {
+			newest = img
+		}
+	}
+	return newest.Digest, nil
 }
 
 // Lookup looks up digests and records them. NewLookup sets every field;

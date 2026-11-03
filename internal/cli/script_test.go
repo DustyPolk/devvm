@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -59,6 +60,7 @@ func scriptCmds(release linuxBuild) map[string]func(ts *testscript.TestScript, n
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
 		"catg":          catGlob,
 		"free_port":     freePort,
+		"json_set":      jsonSet,
 		"linux_release": release.serve,
 		"listen_any":    listenAny,
 		"project":       project,
@@ -482,6 +484,44 @@ func catGlob(ts *testscript.TestScript, neg bool, args []string) {
 	default:
 		_, err = ts.Stdout().Write([]byte(ts.ReadFile(files[0])))
 		ts.Check(err)
+	}
+}
+
+// jsonSet sets string fields in each JSON file GLOB matches, keeping its
+// other fields; a GLOB without a wildcard that matches nothing is made, an
+// object with only these fields. It's how scripts write devvm's JSON
+// records, a tool image's built time say, which they can't touch.
+func jsonSet(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) < 2 {
+		ts.Fatalf("usage: json_set GLOB KEY=VALUE...")
+	}
+	glob := ts.MkAbs(args[0])
+	files, err := filepath.Glob(glob)
+	ts.Check(err)
+	if len(files) == 0 && !strings.ContainsAny(args[0], "*?[") {
+		files = []string{glob}
+	}
+	if len(files) == 0 {
+		ts.Fatalf("%s matches no file", args[0])
+	}
+	for _, f := range files {
+		obj := map[string]any{}
+		if data, err := os.ReadFile(f); err == nil { //nolint:gosec // the script's own file
+			ts.Check(json.Unmarshal(data, &obj))
+		} else if !errors.Is(err, os.ErrNotExist) {
+			ts.Fatalf("%v", err)
+		}
+		for _, kv := range args[1:] {
+			k, v, ok := strings.Cut(kv, "=")
+			if !ok {
+				ts.Fatalf("usage: json_set GLOB KEY=VALUE...")
+			}
+			obj[k] = v
+		}
+		data, err := json.MarshalIndent(obj, "", "  ")
+		ts.Check(err)
+		ts.Check(os.MkdirAll(filepath.Dir(f), 0o700))
+		ts.Check(os.WriteFile(f, append(data, '\n'), 0o600))
 	}
 }
 

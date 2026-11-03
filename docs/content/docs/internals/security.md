@@ -36,7 +36,7 @@ Its docker-in-docker takes network policy away only on Docker, where a VM with t
 
 devvm builds images with nothing from the host mounted, and it confines their builds so that they reach the internet but not your machine's own services ([details](lima.md#confinement)). On Docker Desktop that confinement is emulated and reviewed, through a proxy of devvm's for each build ([details](docker.md#building-images)). Credentials never go into images.
 
-A tool build writes into a folder of its own and never into the shared tools, and devvm checks each tool image, moves it in and records its hash ([details](images.md#building-tools)). devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them. devvm also refuses a VM with a network it didn't give the VM, because that network would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
+A tool build writes into a folder of its own and never into the shared tools, and devvm checks each tool image, moves it in and writes its record, with its hash ([details](images.md#building-tools)). devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them. devvm also refuses a VM with a network it didn't give the VM, because that network would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
 
 ### `.git` protection
 

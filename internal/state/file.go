@@ -1,8 +1,11 @@
 // Package state reads and writes the files devvm keeps its state in: each
-// VM's state, image records and the config files.
+// VM's state, image and tool image records, rebuild counters, the cached
+// --from digests and the config files.
 //
-// Most are key=value files: one pair per line, split at the first '=', so
-// values may hold '=' but not newlines. Blank lines are skipped. Every write
+// The records, the counters and the digests are JSON only devvm writes
+// (json.go): fields a reader doesn't know are ignored. Most of the rest are
+// key=value files: one pair per line, split at the first '=', so values
+// may hold '=' but not newlines. Blank lines are skipped. Every write
 // replaces the whole file atomically (a temporary file, then a rename), so a
 // reader never sees half a file. Files are private to the user (0600, or
 // 0700 for a program devvm runs: WriteFileMode), and so are the folders

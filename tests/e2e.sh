@@ -294,7 +294,8 @@ cleanup() {
     else
       limactl delete -f "$n" >/dev/null 2>&1
     fi
-    rm -f "$images/${n#devvm-img-}" "$vms/$n"
+    [[ $n != devvm-img-?* ]] || rm -rf "${images:?}/${n#devvm-img-}"
+    rm -f "$vms/$n"
   done
   rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
   ! $d_desktop || d_purge
@@ -392,12 +393,17 @@ rfwd_links() { local h=$1 a; shift
 export -f rfwd_links
 section() { echo; echo "== $*"; }
 quiet() { "$@" </dev/null >"$work/last.log" 2>&1; }
+# rec KEY FIELD: a string field of the record of the image with that key, images/KEY/record.json,
+# which devvm writes one field per line; nothing without one.
+rec() { sed -n "s/^  \"$2\": \"\(.*\)\",\{0,1\}\$/\1/p" "$images/$1/record.json" 2>/dev/null; }
 # keys_of IMAGE: the keys of the images recorded under that name, one per line.
-keys_of() { grep -lx "name=$1" "$images"/* 2>/dev/null | while read -r f; do basename "$f"; done; }
+keys_of() { local d; for d in "$images"/*/; do d=${d%/}; [[ $(rec "${d##*/}" name) != "$1" ]] || echo "${d##*/}"; done; }
+# from_record REF: the key of a base built from that --from, whose record rec reads.
+from_record() { local k; for k in $(keys_of base); do [[ $(rec "$k" from) != "$1" ]] || { echo "$k"; return; }; done; }
 # owned IMAGE: the images by that name are this run's, deleted at the end.
 owned() { local k; for k in $(keys_of "$1"); do created+=("devvm-img-$k"); done; }
 status_of() { limactl list --format '{{.Status}}' "$1" 2>/dev/null; }
-export -f keys_of status_of; export images
+export -f rec keys_of from_record status_of; export images
 # no_leak PATH... <STRINGS: none of STRINGS' lines is in a regular file under PATH..., read byte for
 # byte like grep -raF but only where the file has data: a VM's disk is sparse, 100G of mostly holes
 # that grep reads as zeros (over an hour on a slow Mac), and SEEK_DATA/SEEK_HOLE (3 and 4 on Linux,
@@ -1301,7 +1307,7 @@ if $clean; then
   if [[ $backend == smolvm ]]; then
     # smolvm's images and their records, not Lima's.
     for n in $(smol_ls | awk '$1 ~ /^devvm-img-/ { print $1 }'); do SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1; done
-    for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do [[ ! -d $k ]] || rm -f "$images/$(basename "$k")"; done
+    for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do [[ ! -d $k ]] || rm -rf "${images:?}/$(basename "$k")"; done
     rm -rf "$XDG_DATA_HOME/devvm/smolvm/images"
   elif [[ $backend == docker ]]; then
     # This engine's, with the sandbox's label (Docker Desktop's are deleted after each run anyway).
@@ -1350,12 +1356,12 @@ owned e2efix
 kf=$(keys_of e2efix | head -1)
 # A cached base's key: the one the fixture was built on (other selections' bases, with other
 # features, are cached too, and may be newer).
-[[ -n $kb ]] || kb=$(sed -n 's/^chain=base=\([0-9a-f]*\) e2efix=.*$/\1/p' "$images/$kf" 2>/dev/null)
+[[ -n $kb ]] || kb=$(rec "$kf" chain | sed -n 's/^base=\([0-9a-f]*\) e2efix=.*$/\1/p')
 check "base is a stopped image, recorded with Ubuntu's pinned cloud image and its C library" bash -c "
   [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
-  grep -qx 'chain=base=$kb' '$images/$kb' && grep -qx 'libc=gnu' '$images/$kb' && grep -qx 'from=' '$images/$kb' &&
-  [[ -n '$cloud_release' ]] &&
-  grep -qE '^digest=https://cloud-images\.ubuntu\.com/.*/$cloud_release/.*\.img sha256:($cloud_sums)$' '$images/$kb'"
+  [[ \$(rec $kb chain) == 'base=$kb' && \$(rec $kb libc) == gnu && -z \$(rec $kb from) ]] &&
+  grep -qE '^  \"built\": \"[0-9-]+T[0-9:]+Z\"$' '$images/$kb/record.json' && [[ -n '$cloud_release' ]] &&
+  rec $kb digest | grep -qE '^https://cloud-images\.ubuntu\.com/.*/$cloud_release/.*\.img sha256:($cloud_sums)$'"
 check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
 check "devvm limactl runs Lima on devvm's Lima home, whatever LIMA_HOME says, with its exit code" bash -c "
   [[ -n '$kb' ]] && LIMA_HOME='$work/no-lima' '$D' limactl list -q </dev/null | grep -qx devvm-img-$kb &&
@@ -1364,18 +1370,18 @@ check "building base again reuses it" bash -c "out=\$('$D' build base </dev/null
   ! grep -qF \"\$(m building_image image=base key=$kb)\" <<<\"\$out\""
 check "its script ran in its image, cloned from base's" bash -c "
   [[ -n '$kf' && \$(status_of devvm-img-$kf) == Stopped ]] &&
-  grep -qx 'chain=base=$kb e2efix=$kf' '$images/$kf' &&
+  [[ \$(rec $kf chain) == 'base=$kb e2efix=$kf' ]] &&
   grep -qx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
 echo "# edited" >> "$fixture"
 check "editing it builds a new image; base and the old one stay" bash -c "'$D' build e2efix </dev/null >/dev/null 2>&1 &&
-  [[ \$(keys_of e2efix | wc -l) -eq 2 ]] && [[ \$(status_of devvm-img-$kf) == Stopped ]] && [[ -f '$images/$kb' ]]"
+  [[ \$(keys_of e2efix | wc -l) -eq 2 ]] && [[ \$(status_of devvm-img-$kf) == Stopped ]] && [[ -f '$images/$kb/record.json' ]]"
 owned e2efix
 check "rebuild makes a new one and deletes the stale ones, not base" bash -c "'$D' rebuild --force e2efix </dev/null >/dev/null 2>&1 &&
   [[ \$(keys_of e2efix | wc -l) -eq 1 ]] && [[ \$(keys_of e2efix) != $kf ]] && [[ -z \$(status_of devvm-img-$kf) ]] &&
-  [[ \$(status_of devvm-img-$kb) == Stopped ]]"
+  [[ \$(status_of devvm-img-$kb) == Stopped ]] && grep -qF '\"name\": \"e2efix\"' '$images/rebuilds.json'"
 owned e2efix
 kf=$(keys_of e2efix | head -1)
-dg=$(sed -n 's/^digest=.* sha256:\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/p' "$images/$kb" 2>/dev/null)
+dg=$(rec "$kb" digest | sed -n 's/^.* sha256:\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/p')
 check "devvm images lists base and the fixture, current, with Ubuntu's release, digest and size" bash -c "
   out=\$('$D' images </dev/null 2>/dev/null) &&
   grep -qE '^base +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kb +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
@@ -1934,15 +1940,15 @@ owned e2egc
 ko=$(keys_of e2egc | head -1)
 # An old tool image no VM lists: unused only once there's a tools lock.
 old=node-0.0.1-000000000000.erofs
-[[ ! -f $lock ]] || { : > "$share/$old"; : > "$share/$old.sha256"; }
+[[ ! -f $lock ]] || { : > "$share/$old"; printf '{"sha256": "x", "libc": "gnu", "backend": "lima"}\n' > "$share/$old.json"; }
 check "gc deletes the stale image and its record; base and the img-* project VM stay" bash -c "
   [[ -n '$vm' && -n '$kg' && -n '$ko' ]] && '$D' gc --force </dev/null >'$work/last.log' 2>&1 &&
   [[ -z \$(status_of devvm-img-$ko) && ! -e '$images/$ko' ]] &&
-  [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg' ]] && [[ \$(status_of $vm) == Running ]]"
+  [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]] && [[ \$(status_of $vm) == Running ]]"
 if [[ -f $lock ]]; then
-  check "gc deletes a tool image no VM uses, with its hash" bash -c "[[ ! -e '$share/$old' && ! -e '$share/$old.sha256' ]]"
+  check "gc deletes a tool image no VM uses, with its record" bash -c "[[ ! -e '$share/$old' && ! -e '$share/$old.json' ]]"
 else
-  skip "gc deletes a tool image no VM uses, with its hash" "no tools lock yet"
+  skip "gc deletes a tool image no VM uses, with its record" "no tools lock yet"
 fi
 check "gc again finds nothing to clean up" bash -c "'$D' gc </dev/null 2>&1 | grep -qxF \"==> \$(m nothing_to_clean)\""
 check "space lists the Lima VM and images, and changes nothing" bash -c "'$D' space </dev/null 2>/dev/null >'$work/last.log' &&
@@ -1953,11 +1959,11 @@ quiet limactl delete -f "$vm"
 touch -t 202001010000 "$vms/$vm"
 check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c "'$D' gc --orphans --force </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$vms/$vm' ]] &&
-  ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg' ]]"
+  ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]]"
 check "retention sets a setting, shows it, and KEY=off turns it off again" bash -c "
   '$D' retention orphans.age=30d </dev/null >'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=30d' &&
   '$D' retention orphans.age=off </dev/null >>'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=off'"
-rm -f "$gfix" "$share/$old" "$share/$old.sha256"
+rm -f "$gfix" "$share/$old" "$share/$old.json"
 (cd "$g" && quiet "$D" rm --force --no-export)
 fi
 
@@ -1970,7 +1976,7 @@ launch "$t" exit --no-network-policy --no-git-protect
 check "a node VM, with node's shared tools in its state and the share" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' &&
   grep -qx libc=gnu '$vms/$vm' &&
-  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f && -f '$share'/\$f.sha256 ]] || exit 1; done &&
+  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"lima\",' '$share'/\$f.json || exit 1; done &&
   grep -q '^tools=node-$(lockv node)-.* pnpm-$(lockv pnpm)-.* bun-$(lockv bun)-' '$vms/$vm'"
 check "node, npm, pnpm, bun and yarn work, node at the locked version" in_vm "$vm" \
   "[[ \$(node -v) == v$(lockv node) ]] && npm -v && pnpm -v && bun -v && yarn -v"
@@ -2462,7 +2468,7 @@ cat > "$x/flake.nix" <<EOF
 }
 EOF
 # The shared Nix cache starts empty, so the first VM fetches into it and the second gets hits.
-nixcache=$XDG_DATA_HOME/devvm/nix-cache
+nixcache=$XDG_DATA_HOME/devvm/cache/nix-cache
 rm -rf "$nixcache"
 launch "$x" exit --network-policy --no-git-protect --layers nix
 export -f in_vm
@@ -2561,9 +2567,6 @@ chmod 755 "$work/nodocker/docker"
 nd() { PATH="$work/nodocker:$PATH" "$@"; }
 export -f nd in_vm; export work
 [[ -f $lock ]] || quiet "$D" _refresh-tools   # the tools' versions, for lockv
-# from_record REF: base's record for that --from.
-from_record() { grep -lx "from=$1" "$images"/* 2>/dev/null | xargs grep -lx name=base 2>/dev/null | head -1; }
-export -f from_record
 
 f=$(newproj fromdocker); echo '{}' > "$f/package.json"
 fh=$work/from-home; mkdir -p "$fh"   # the Claude Code VM's: no agent config of yours
@@ -2573,7 +2576,7 @@ nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem;
 check "a VM with node, python, Claude Code and the docker and nix layers from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
   grep -qx from=node:24 '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
-  grep -qE '^digest=node@sha256:[0-9a-f]{64}$' \"\$(from_record node:24)\""
+  rec \"\$(from_record node:24)\" digest | grep -qE '^node@sha256:[0-9a-f]{64}$'"
 check "its node, claude and every feature work" in_vm "$vm" \
   'node --version && claude --version && eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 check "python, python3 and claude are the locked versions" in_vm "$vm" \
@@ -2590,7 +2593,7 @@ check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a bu
 # the nix layer's daemon as an OpenRC service of devvm's.
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
 nd launch "$al" exit --from alpine:3 --no-network-policy --layers docker,nix
-check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$vms/$vm' && grep -qx libc=musl \"\$(from_record alpine:3)\""
+check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$vms/$vm' && [[ \$(rec \"\$(from_record alpine:3)\" libc) == musl ]]"
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
@@ -2636,7 +2639,7 @@ check "behind a company proxy, --from's conversion and the builds on it reach it
   grep -q '\"host\":\"dl-cdn\.alpinelinux\.org\"' '$work/corp.jsonl' &&
   grep -q '\"event\":\"tunnel\",\"host\":\"github\.com\"' '$work/corp.jsonl'"
 owned e2ecorp
-kac=$(sed -n 's/^chain=base=\([0-9a-f]*\) e2ecorp=.*$/\1/p' "$images"/* 2>/dev/null | head -1)
+kac=$(for k in $(keys_of e2ecorp); do rec "$k" chain; done | sed -n 's/^base=\([0-9a-f]*\) e2ecorp=.*$/\1/p' | head -1)
 [[ -z $kac ]] || created+=("devvm-img-$kac")
 kcl=$(keys_of e2ecorp | head -1)
 check "what the builds' commands and sudo have is devvm's proxy for the build, with a password of its own" bash -c "
@@ -2706,11 +2709,11 @@ check "build base" quiet env DEVVM_MESSAGES=names "$D" "${S[@]}" build base
 kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
 # A cached base: the pack recorded as base, not --from another image (the Alpine checks' bases).
 [[ -n $kb ]] || kb=$(for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do
-  k=$(basename "$k"); grep -qx name=base "$images/$k" 2>/dev/null && grep -qx from= "$images/$k" && echo "$k"; done | head -1)
+  k=$(basename "$k"); [[ $(rec "$k" name) == base && -f $images/$k/record.json && -z $(rec "$k" from) ]] && echo "$k"; done | head -1)
 packs=$XDG_DATA_HOME/devvm/smolvm/images
 check "base is a pack, recorded with Ubuntu's container image by its pinned digest; its build machine is gone" bash -c "
-  [[ -n '$kb' && -n '$ubuntu_pin' && -f '$packs/$kb/image.smolmachine' ]] && grep -qx libc=gnu '$images/$kb' &&
-  grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' '$images/$kb' && [[ -z \$(smol_status devvm-img-$kb) ]]"
+  [[ -n '$kb' && -n '$ubuntu_pin' && -f '$packs/$kb/image.smolmachine' ]] && [[ \$(rec $kb libc) == gnu ]] &&
+  rec $kb digest | grep -qE '^docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' && [[ -z \$(smol_status devvm-img-$kb) ]]"
 fixture=$layers/e2esmol.sh
 token=e2e-smolvm-ran-$$-$(date +%s)
 printf '#!/bin/bash\necho %s\necho fixture | sudo tee /etc/e2e-fixture\n' "$token" > "$fixture"
@@ -3685,7 +3688,7 @@ t=$(newproj smoltools); echo '{}' > "$t/package.json"
 launch "$t" 'node -v' "${S[@]}" --no-network-policy --ports none --no-git-protect
 check "a node VM: its tools built uncompressed for smolvm, from the share, at the locked versions" bash -c "
   [[ -n '$vm' ]] && grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' && grep -qx v$(lockv node) '$work/last.log' &&
-  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f && -f '$share'/\$f.sha256 ]] || exit 1; done"
+  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"smolvm\",' '$share'/\$f.json || exit 1; done"
 check "node, npm, pnpm and bun work, each a read-only image" in_smol "$vm" \
   "npm -v && pnpm -v && bun -v && [[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]] && ! touch /opt/devvm/tools/node/$(lockv node)/x 2>/dev/null"
 check "the tools build left no machine behind" bash -c "[[ -z \$(smol_status devvm-tools-build) ]]"
@@ -3813,7 +3816,7 @@ docker_tools() {
   launch "$t" 'node -v' "${B[@]}" --no-network-policy --ports none --no-git-protect
   check "a node VM: its tools at the locked versions, in the share, recorded" bash -c "
     [[ -n '$vm' ]] && grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' && grep -qx v$(lockv node) '$work/last.log' &&
-    for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f && -f '$share'/\$f.sha256 ]] || exit 1; done"
+    for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"docker\",' '$share'/\$f.json || exit 1; done"
   check "node, npm, pnpm and bun work, each linked from Docker's tools volume, read-only even for root" bash -c "
     in_d() { docker exec -u '$me' -e HOME=/home/$me.guest -e USER=$me '$vm' bash -lc \"\$1\" </dev/null; }
     in_d 'npm -v && pnpm -v && bun -v' && in_d '[[ \$(readlink /opt/devvm/tools/node/$(lockv node)) == /mnt/devvm-tools/node-$(lockv node)-*.erofs ]]' &&
@@ -4517,8 +4520,8 @@ d_cap=devvm-e2e-cap-$dns
 # d_alpine: Alpine's image by the digest the Alpine base's record names (docker_ssh built it), so no
 # tag is added to Docker Desktop's images; alpine:3 without one.
 d_alpine() { local r f
-  f=$(grep -lx 'from=alpine:3' "$images"/* 2>/dev/null | head -1)
-  r=$([[ -z $f ]] || sed -n 's/^digest=//p' "$f")
+  f=$(from_record alpine:3)
+  r=$([[ -z $f ]] || rec "$f" digest)
   if [[ -n $r ]]; then f=${r%@*}; echo "${f%:*}@${r##*@}"; else echo alpine:3; fi; }
 d_cap_start() { local _
   [[ -z $(d_state "$d_cap") ]] || docker container rm -f "$d_cap" >/dev/null 2>&1
@@ -4695,10 +4698,10 @@ docker_linux() {
     grep -qE '^egress-proxy +emulated ' '$work/last.log' && '$D' doctor --backend docker --json </dev/null | grep -qxF '  \"problems\": [],'"
   check "build base" quiet env DEVVM_MESSAGES=names "$D" "${B[@]}" build base
   kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
-  [[ -n $kb ]] || kb=$(for k in $(keys_of base); do grep -qx from= "$images/$k" && d_img "devvm-$dns:$k" && echo "$k"; done | head -1)
+  [[ -n $kb ]] || kb=$(for k in $(keys_of base); do [[ -z $(rec "$k" from) ]] && d_img "devvm-$dns:$k" && echo "$k"; done | head -1)
   check "base is an image of devvm's, recorded with Ubuntu's container image by its pinned digest; its build container is gone" bash -c "
-    [[ -n '$kb' && -n '$ubuntu_pin' ]] && d_img 'devvm-$dns:$kb' && grep -qx libc=gnu '$images/$kb' &&
-    grep -qE '^digest=docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' '$images/$kb' && [[ -z \$(d_state devvm-img-$kb-$dns) ]]"
+    [[ -n '$kb' && -n '$ubuntu_pin' ]] && d_img 'devvm-$dns:$kb' && [[ \$(rec $kb libc) == gnu ]] &&
+    rec $kb digest | grep -qE '^docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' && [[ -z \$(d_state devvm-img-$kb-$dns) ]]"
   # Build confinement: servers on this machine, on its loopback and on every address, and a layer that
   # tries both through the build container's gateway.
   python3 -m http.server -b 127.0.0.1 47190 >/dev/null 2>&1 & d_servers+=($!)
@@ -4863,7 +4866,7 @@ EOF
 # dd_pulled: the images bases started from, by the digests their records name, which devvm pulled:
 # Docker keeps them (devvm never deletes an image without its label).
 dd_pulled() { local r repo
-  sed -n 's/^digest=//p' "$images"/* 2>/dev/null | sort -u | while read -r r; do
+  for r in "$images"/*/; do r=${r%/}; rec "${r##*/}" digest; done | sort -u | while read -r r; do
     repo=${r%@*}; repo=${repo%:*}
     docker image inspect -f '{{.Id}}' "$repo@${r##*@}" 2>/dev/null | sed 's/^/image /'
   done | sort -u; }

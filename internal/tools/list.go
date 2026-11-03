@@ -12,6 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // The states of a tool image, as devvm images lists them.
@@ -35,9 +36,10 @@ type Listed struct {
 	// State is one of the State constants; "" for an image the VMs don't
 	// list when there's no lock to tell whether it's current.
 	State string
-	// Target is what it's built for, when Targeted: from the record its
-	// build left beside it, else the target it's current for.
+	// Target is what it's built for and Backend the backend that built
+	// it, when Targeted: from the record its build left beside it.
 	Target   Target
+	Backend  string
 	Targeted bool
 }
 
@@ -87,16 +89,14 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 		}
 		for _, tool := range image.GroupTools(name) {
 			// A tool the lock lacks has none.
-			currents := map[string]Target{}
+			currents := map[string]bool{}
 			current := ""
 			for i, tg := range tgs {
 				if lock == nil {
 					break
 				}
 				if f, _ := t.File(lock, tool, tg); f != "" {
-					if _, ok := currents[f]; !ok {
-						currents[f] = tg
-					}
+					currents[f] = true
 					if i == 0 {
 						current = f
 					}
@@ -118,10 +118,9 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 					return nil, err
 				}
 				l := Listed{Name: name, Tool: tool, Version: v, File: f, Built: true, Size: size, VMs: inUse[f]}
-				cur, isCurrent := currents[f]
-				l.Target, l.Targeted = t.readTarget(f)
-				if !l.Targeted && isCurrent {
-					l.Target, l.Targeted = cur, true
+				isCurrent := currents[f]
+				if rec, err := state.ReadToolImage(t.Dirs, f); err == nil {
+					l.Target, l.Backend, l.Targeted = Target{Libc: rec.Libc, Format: rec.Format}, rec.Backend, true
 				}
 				switch {
 				case isCurrent:

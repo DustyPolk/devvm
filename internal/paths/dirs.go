@@ -3,7 +3,6 @@ package paths
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
@@ -68,34 +67,35 @@ func (d Dirs) VMs() string { return filepath.Join(d.Data, "vms") }
 // VMState is one VM's state file.
 func (d Dirs) VMState(vm string) string { return filepath.Join(d.VMs(), vm) }
 
-// Images is the folder of image records, one file per image key.
+// Images is the folder of images' records, one folder per image key.
 func (d Dirs) Images() string { return filepath.Join(d.Data, "images") }
 
-// ImageState is the record of the image with this key.
-func (d Dirs) ImageState(key string) string { return filepath.Join(d.Images(), key) }
+// Image is the folder of the image with this key.
+func (d Dirs) Image(key string) string { return filepath.Join(d.Images(), key) }
+
+// ImageRecord is the record of the image with this key.
+func (d Dirs) ImageRecord(key string) string { return filepath.Join(d.Image(key), "record.json") }
+
+// ImageLocks holds the lock of each image being built, one file per key.
+func (d Dirs) ImageLocks() string { return filepath.Join(d.Images(), "locks") }
+
+// Rebuilds holds the rebuild counters, which go into image keys. They
+// can't be in an image's folder: a counter is an input to the key that
+// names it.
+func (d Dirs) Rebuilds() string { return filepath.Join(d.Images(), "rebuilds.json") }
+
+// RebuildsLock is held by the devvm changing a rebuild counter, which
+// reads Rebuilds and writes it whole.
+func (d Dirs) RebuildsLock() string { return filepath.Join(d.ImageLocks(), "rebuilds") }
+
+// Cache holds what devvm makes again whenever it's needed, which may be
+// deleted at any time: devvm's own mise, the shared Nix cache and the
+// digests --from bases were last looked up at.
+func (d Dirs) Cache() string { return filepath.Join(d.Data, "cache") }
 
 // FromDigests caches the digest of each image a base was built from, per
 // reference.
-func (d Dirs) FromDigests() string { return filepath.Join(d.Images(), "from-digests") }
-
-// Rebuilds is the folder of rebuild counters, which go into image keys.
-func (d Dirs) Rebuilds() string { return filepath.Join(d.Images(), "rebuilds") }
-
-var unsafeName = regexp.MustCompile(`[^A-Za-z0-9.]`)
-
-// RebuildFile is the rebuild counter for an image, kept apart for each
-// image its base starts from (from is empty for the default).
-func (d Dirs) RebuildFile(image, from string) string {
-	return filepath.Join(d.Rebuilds(), RebuildName(image, from))
-}
-
-// RebuildName is the name of an image's rebuild counter in Rebuilds.
-func RebuildName(image, from string) string {
-	if from == "" {
-		return image
-	}
-	return image + "@" + unsafeName.ReplaceAllString(from, "-")
-}
+func (d Dirs) FromDigests() string { return filepath.Join(d.Cache(), "from-digests.json") }
 
 // Run holds files for running VMs: sandbox profiles, proxy pids, the QEMU
 // wrapper.
@@ -116,8 +116,12 @@ func (d Dirs) Tools() string { return filepath.Join(d.Data, "tools") }
 // ToolLock is the lock file the shared tools are resolved into.
 func (d Dirs) ToolLock() string { return filepath.Join(d.Data, "mise.lock") }
 
+// ToolRecord is the record beside a tool image in the share: its hash,
+// what it's built for, when, and since when no VM has had it.
+func (d Dirs) ToolRecord(file string) string { return filepath.Join(d.Tools(), file+".json") }
+
 // Mise holds the mise versions devvm runs on the host.
-func (d Dirs) Mise() string { return filepath.Join(d.Data, "mise") }
+func (d Dirs) Mise() string { return filepath.Join(d.Cache(), "mise") }
 
 // Exports is where exported VM state goes by default.
 func (d Dirs) Exports() string { return filepath.Join(d.Data, "exports") }
@@ -129,7 +133,7 @@ func ExportFolder(export string) string { return strings.TrimSuffix(export, ".ta
 
 // NixCache is the Nix cache VMs with network policy share, which their
 // proxies fill from cache.nixos.org.
-func (d Dirs) NixCache() string { return filepath.Join(d.Data, "nix-cache") }
+func (d Dirs) NixCache() string { return filepath.Join(d.Cache(), "nix-cache") }
 
 // AgentSock is the socket of devvm's own SSH agent.
 func (d Dirs) AgentSock() string { return filepath.Join(d.Data, "agent.sock") }

@@ -25,11 +25,12 @@ stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
 stdout '^limactl shell --workdir / devvm-img-[0-9a-f]{12} sync$'
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
 grep 'Essentials, and mise' $STUB_DIR/scripts
-catg $IMAGES/????????????
-stdout '^name=base$'
-stdout '^chain=base=[0-9a-f]{12}$'
-stdout '^digest=file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img sha256:[0-9a-f]{64}$'
-stdout '^libc=gnu$'
+catg $IMAGES/????????????/record.json
+stdout '^  "name": "base",$'
+stdout '^  "chain": "base=[0-9a-f]{12}",$'
+stdout '^  "digest": "file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img sha256:[0-9a-f]{64}",$'
+stdout '^  "libc": "gnu",$'
+stdout '^  "built": "\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"$'
 
 # Each step is numbered in the run log, and the count is what ran.
 catg $DATA/logs/runs/*.log
@@ -50,7 +51,7 @@ stub_calls
 # An image without a record is a failed build: deleted and built again.
 # With -v, the run log's lines are streamed to stderr as well, numbered
 # steps and commands, and the log still gets them.
-exec sh -c 'rm "$IMAGES"/????????????'
+exec sh -c 'rm "$IMAGES"/????????????/record.json'
 exec devvm -v build base
 stdout '^==> image_leftover image=base key=[0-9a-f]{12}$'
 stderr '^# \[1/5\] creating_from_ubuntu vm=devvm-img-'
@@ -60,8 +61,8 @@ exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
 stdout '^\+ limactl create '
 stub_calls
 stdout '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-catg $IMAGES/????????????
-stdout '^name=base$'
+catg $IMAGES/????????????/record.json
+stdout '^  "name": "base",$'
 
 # A layer is a clone of its parent's image, without host mounts, running
 # the user's script; its record has its whole chain.
@@ -73,9 +74,9 @@ stub_calls
 stdout '^limactl clone --tty=false --mount-none devvm-img-[0-9a-f]{12} devvm-img-[0-9a-f]{12}$'
 ! stdout 'limactl create'
 grep '^echo foo$' $STUB_DIR/scripts
-exec sh -c 'cat "$IMAGES"/????????????'
-stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
-stdout -count=2 '^libc=gnu$'
+exec sh -c 'cat "$IMAGES"/????????????/record.json'
+stdout '^  "chain": "base=[0-9a-f]{12} foo=[0-9a-f]{12}",$'
+stdout -count=2 '^  "libc": "gnu",$'
 
 # Names that aren't base or a layer are refused, before anything runs.
 stub_reset
@@ -106,7 +107,7 @@ stderr '^devvm: script_failed script=bar\.sh vm=devvm-img-[0-9a-f]{12}$'
 stub_calls
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
 ! stdout 'limactl delete'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; grep -c " Stopped$" "$STUB_DIR/instances"; ls "$IMAGES"/???????????? | grep -c .'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; grep -c " Stopped$" "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.json | grep -c .'
 stdout '^3\n3\n2\n$'
 rm $STUB_DIR/shell-fails
 
@@ -132,7 +133,7 @@ stdout '^==> interrupted_image vm=devvm-img-[0-9a-f]{12}$'
 ! stderr script_failed
 stub_calls
 stdout -count=2 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/???????????? | grep -c .'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.json | grep -c .'
 stdout '^2\n2\n$'
 rm $STUB_DIR/shell-hangs
 
@@ -143,7 +144,7 @@ stderr '^devvm: vm_create_failed vm=devvm-img-[0-9a-f]{12}$'
 stdout '^==> unfinished_image vm=devvm-img-[0-9a-f]{12}$'
 stub_calls
 stdout -count=1 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/???????????? | grep -c .'
+exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.json | grep -c .'
 stdout '^2\n2\n$'
 rm $STUB_DIR/clone-fails
 

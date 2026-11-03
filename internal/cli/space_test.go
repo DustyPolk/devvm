@@ -7,61 +7,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
-func fakeRegistry(t *testing.T) *backend.Registry {
-	t.Helper()
-	lima := backendtest.New("lima", backend.Caps{})
-	smol := backendtest.New("smolvm", backend.Caps{})
-	smol.Format = "plain-0123456789ab"
-	dock := backendtest.New("docker", backend.Caps{})
-	dock.Format = "dir-0123456789ab"
-	reg, err := backend.NewRegistry(lima, smol, dock)
-	if err != nil {
-		t.Fatal(err)
+// The tool images on a backend are those whose record names it: one
+// without a record is on none.
+func TestToolsOn(t *testing.T) {
+	ts := []tools.Listed{
+		{File: "node-1-0123456789ab.erofs", Backend: "docker", Targeted: true},
+		{File: "go-1.20.0-0123456789ab.erofs", Backend: "smolvm", Targeted: true},
+		{File: "go-1.9.0-0123456789ab.erofs"},
 	}
-	return reg
-}
-
-// A tool image's backend is the one whose format it has, or one of the
-// same kind with another hash (an older devvm's script).
-func TestFormatBackend(t *testing.T) {
-	reg := fakeRegistry(t)
-	for format, want := range map[string]string{
-		"":                   "lima",
-		"plain-0123456789ab": "smolvm",
-		"plain-ffffffffffff": "smolvm",
-		"dir-ffffffffffff":   "docker",
-		"other-0123":         "",
-	} {
-		if got := formatBackend(reg, format); got != want {
-			t.Errorf("formatBackend(%q) = %q, want %q", format, got, want)
+	files := func(ls []tools.Listed) string {
+		var out []string
+		for _, l := range ls {
+			out = append(out, l.File)
 		}
+		return strings.Join(out, " ")
 	}
-}
-
-// A tool image's target is its record's, else a VM's that has it, else
-// unknown.
-func TestToolTarget(t *testing.T) {
-	reg := fakeRegistry(t)
-	vms := map[string]vmTarget{"go-1.20.0-0123456789ab.erofs": {backend: "smolvm", libc: "musl"}}
-	tests := []struct {
-		l             tools.Listed
-		backend, libc string
-	}{
-		{tools.Listed{File: "node-1-0123456789ab.erofs", Targeted: true, Target: tools.Target{Libc: "gnu", Format: "dir-0123456789ab"}}, "docker", "gnu"},
-		{tools.Listed{File: "go-1.20.0-0123456789ab.erofs"}, "smolvm", "musl"},
-		{tools.Listed{File: "go-1.9.0-0123456789ab.erofs"}, "", ""},
-	}
-	for _, tt := range tests {
-		be, libc := toolTarget(reg, tt.l, vms)
-		if be != tt.backend || libc != tt.libc {
-			t.Errorf("%s: got %q %q, want %q %q", tt.l.File, be, libc, tt.backend, tt.libc)
+	for name, want := range map[string]string{
+		"":       "node-1-0123456789ab.erofs go-1.20.0-0123456789ab.erofs go-1.9.0-0123456789ab.erofs",
+		"docker": "node-1-0123456789ab.erofs",
+		"smolvm": "go-1.20.0-0123456789ab.erofs",
+		"lima":   "",
+	} {
+		if got := files(toolsOn(name, ts)); got != want {
+			t.Errorf("toolsOn(%q) = %q, want %q", name, got, want)
 		}
 	}
 }

@@ -269,9 +269,7 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 			p.current, p.recent = append(p.current, p.recent...), nil
 		}
 	}
-	if err := p.skip(u, b, l.unlisted); err != nil {
-		return p, err
-	}
+	p.skip(u, l.unlisted)
 	if o.history {
 		es, err := exports(b.Dirs)
 		if err != nil {
@@ -291,13 +289,8 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 		p.orphans = withoutSkipped(p.orphans, p.skipped)
 	}
 	if o.only != "" {
-		target, err := toolTargets(u, b)
-		if err != nil {
-			return p, err
-		}
 		p.images = backendImages(imgs, o.only)
-		p.tools, p.current = backendTools(p.tools, o.only, target), backendTools(p.current, o.only, target)
-		p.recent = backendTools(p.recent, o.only, target)
+		p.tools, p.current, p.recent = toolsOn(o.only, p.tools), toolsOn(o.only, p.current), toolsOn(o.only, p.recent)
 		return p, nil
 	}
 	if p.mise, err = (tools.Versions{Env: b.Tools}).StaleMise(); err != nil {
@@ -308,32 +301,27 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 }
 
 // skip warns for each backend a VM uses that couldn't list its images and
-// leaves out its shared tool images, and those whose backend devvm can't
-// tell, which may be its: gc carries on with the other backends.
-func (p *gcPlan) skip(u *ui.UI, b *build.Env, unlisted []unlisted) error {
+// leaves out its shared tool images, and those without a record naming
+// their backend, which may be its: gc carries on with the other backends.
+func (p *gcPlan) skip(u *ui.UI, unlisted []unlisted) {
 	if len(unlisted) == 0 {
-		return nil
+		return
 	}
 	p.skipped = map[string]bool{}
 	for _, s := range unlisted {
 		u.Warn(msg.GCBackendSkipped(s.backend).Because(s.err))
 		p.skipped[s.backend] = true
 	}
-	target, err := toolTargets(u, b)
-	if err != nil {
-		return err
-	}
 	keep := func(ts []tools.Listed) []tools.Listed {
 		var out []tools.Listed
 		for _, t := range ts {
-			if be, _ := target(t); be != "" && !p.skipped[be] {
+			if t.Backend != "" && !p.skipped[t.Backend] {
 				out = append(out, t)
 			}
 		}
 		return out
 	}
 	p.tools, p.current, p.recent = keep(p.tools), keep(p.current), keep(p.recent)
-	return nil
 }
 
 // withoutSkipped moves the orphans of a skipped backend to the backends
@@ -358,18 +346,6 @@ func backendImages(imgs []listedImage, be string) []listedImage {
 	for _, l := range imgs {
 		if l.Backend == be && l.State != build.StateBuilding {
 			out = append(out, l)
-		}
-	}
-	return out
-}
-
-// backendTools are the tool images built for a backend, as target tells;
-// one whose backend devvm can't tell is never one.
-func backendTools(ts []tools.Listed, be string, target func(tools.Listed) (string, string)) []tools.Listed {
-	var out []tools.Listed
-	for _, t := range ts {
-		if b, _ := target(t); b == be {
-			out = append(out, t)
 		}
 	}
 	return out

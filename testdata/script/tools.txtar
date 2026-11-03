@@ -31,11 +31,11 @@ stdout '^tool_names=node claude$'
 stdout '^libc=gnu$'
 stdout '^backend_at=[0-9a-f]{16}$'
 stdout '^tools=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
-# Each image in the share with its hash and what it's built for; nothing
-# left of the build.
-exec sh -c 'cd "$SHARE" && for f in *.erofs; do [ "$(cat "$f.sha256")" = "$({ sha256sum 2>/dev/null || shasum -a 256; } < "$f" | cut -c1-64)" ] || echo "bad $f"; grep -qx libc=gnu "$f.target" || echo "bad target $f"; done; ls | wc -l'
+# Each image in the share with its record: its hash, what it's built for,
+# the backend that built it and when; nothing left of the build.
+exec sh -c 'cd "$SHARE" && for f in *.erofs; do grep -qxF "  \"sha256\": \"$({ sha256sum 2>/dev/null || shasum -a 256; } < "$f" | cut -c1-64)\"," "$f.json" || echo "bad $f"; grep -qxF "  \"libc\": \"gnu\"," "$f.json" && grep -qxF "  \"format\": \"\"," "$f.json" && grep -qxF "  \"backend\": \"lima\"," "$f.json" || echo "bad target $f"; grep -qE "^  \"built\": \"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z\"$" "$f.json" || echo "bad time $f"; done; ls | wc -l'
 ! stdout bad
-stdout '^ *12$'
+stdout '^ *8$'
 ! exists $SHARE/.lock
 exec sh -c 'ls -d "$DATA"/tools-build.* 2>/dev/null || true'
 ! stdout .
@@ -110,7 +110,7 @@ stderr '^devvm: tools_need_resolve$'
 env MISE_STUB_FAIL=
 
 # A build that leaves a symlink instead of an image is refused; one that
-# plants FILE.sha256 as a symlink can't make devvm write through it.
+# plants FILE.json as a symlink can't make devvm write through it.
 exec sh -c 'echo victim > "$STUB_DIR/tools-symlink"'
 ! exec devvm --no-network-policy --no-git-protect --tools python
 stderr '^devvm: tool_bad_output file=python-\S+\.erofs$'
@@ -120,7 +120,7 @@ exec sh -c 'rm "$STUB_DIR/tools-symlink" && echo victim > "$STUB_DIR/tools-hash-
 exec devvm --no-network-policy --no-git-protect --tools python
 exec cat $STUB_DIR/tools-hash-symlink
 stdout '^victim$'
-exec sh -c 'cd "$SHARE" && for f in python-*.erofs uv-*.erofs; do [ -L "$f.sha256" ] && echo link; done; true'
+exec sh -c 'cd "$SHARE" && for f in python-*.erofs uv-*.erofs; do [ -L "$f.json" ] && echo link; done; true'
 ! stdout link
 
 -- package.json --
