@@ -176,14 +176,16 @@ smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
 export -f smol_json smol_ls smol_others smol_status
 created=()   # VMs this run made; the only ones it deletes
 # ps_watch: every host process's command line, sampled every 0.1 s into $work/ps.log until
-# ps_unwatch, for checking a secret was in none while devvm ran.
+# ps_unwatch, for checking a secret was in none while devvm ran. ps_unwatch removes the watcher's
+# $work/ps.on and waits for it to end after its current sample: killing it instead would leave that
+# ps running, which could then record the next check's command line, the secret in its arguments.
 watcher=""
 ps_watch() {
-  : > "$work/ps.log"
-  (while :; do ps -axww -o command= >> "$work/ps.log" 2>/dev/null; sleep 0.1; done) &
+  : > "$work/ps.log"; : > "$work/ps.on"
+  (while [[ -e $work/ps.on ]]; do ps -axww -o command= >> "$work/ps.log" 2>/dev/null; sleep 0.1; done) &
   watcher=$!
 }
-ps_unwatch() { [[ -z $watcher ]] || { kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null; watcher=""; }; }
+ps_unwatch() { [[ -z $watcher ]] || { rm -f "$work/ps.on"; wait "$watcher" 2>/dev/null; watcher=""; }; }
 cleanup() {
   local n
   for n in ${created[@]+"${created[@]}"}; do
