@@ -102,8 +102,8 @@ func NewRegistry() *Registry {
 // names is reached as it is.
 func NewPublicRegistry() *Registry {
 	r := NewRegistry()
-	t, ok := r.Client.Transport.(*http.Transport)
-	if !ok {
+	t := r.Client.Transport()
+	if t == nil {
 		return r
 	}
 	var proxies sync.Map

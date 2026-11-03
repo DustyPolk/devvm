@@ -96,12 +96,12 @@ linters:
           msg: only internal/cli asks whether this is a test build, in readOverrides; take its overrides as fields.
         - pattern: ^(os\.FindProcess|syscall\.Kill|unix\.Kill|os\.Process\.(Kill|Signal))$
           msg: signal processes through internal/daemon (Proc, Handle, Alive, Signal), which checks a pid is still the process it was.
-        - pattern: ^http\.(Client|DefaultClient|DefaultTransport|Get|Head|Post|PostForm)$
-          msg: reach the web through internal/fetch (fetch.NewClient, fetch.Client), which sets the timeout, the redirect policy and retries.
+        - pattern: ^http\.(Client|DefaultClient|DefaultTransport|Transport|Get|Head|Post|PostForm)$
+          msg: reach the web through internal/fetch (fetch.NewClient, and its Transport to change), which sets the timeout, the redirect policy and retries.
         - pattern: ^os\.UserHomeDir$
           msg: take the home folder from paths.Dirs.Home, the one place devvm reads HOME.
-        - pattern: ^os\.WriteFile$
-          msg: write a file whole through state.WriteFile, or state.WriteFileMode for another mode; internal/proxy uses its writeAtomic.
+        - pattern: ^os\.(WriteFile|Create|O_TRUNC)$
+          msg: write a file whole through state.WriteFile, or state.WriteFileMode for another mode, which replace it atomically; internal/proxy uses its writeAtomic; a log or a download streamed into its file says why in a nolint.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -144,12 +144,12 @@ linters:
       # servers' clients.
       - path: ^internal/(fetch|proxy)/|_test\.go$
         linters: [forbidigo]
-        text: http\.
+        text: reach the web through internal/fetch
       # state's own writer; the proxy's (standard library only); the
       # message generator (a leaf); test stubs; and tests' fixtures.
       - path: ^internal/(state|proxy|msg/gen|stubtest)/|_test\.go$
         linters: [forbidigo]
-        text: os\.WriteFile
+        text: os\.(WriteFile|Create|O_TRUNC)
     paths:
       - ^\.agents/
 

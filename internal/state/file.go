@@ -7,7 +7,10 @@
 // reader never sees half a file. Files are private to the user (0600, or
 // 0700 for a program devvm runs: WriteFileMode), and so are the folders
 // devvm creates for them (0700: PrivateDir). Every file devvm writes
-// whole goes through WriteFile or WriteFileMode.
+// whole goes through WriteFile or WriteFileMode, but for those of the
+// packages that are the standard library only: internal/proxy's
+// writeAtomic, and internal/daemon's pid and status files. A log a
+// process writes as it runs, and a download, stream into their files.
 package state
 
 import (

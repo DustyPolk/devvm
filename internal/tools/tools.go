@@ -237,7 +237,7 @@ func (t Versions) RefreshDaily() error {
 	if err := state.PrivateDir(t.Dirs.Logs()); err != nil {
 		return err
 	}
-	out, err := os.OpenFile(t.checkLog(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	out, err := os.OpenFile(t.checkLog(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:forbidigo // the check's log, which it writes as it runs: each check's starts empty
 	if err != nil {
 		return err
 	}

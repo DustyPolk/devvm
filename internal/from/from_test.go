@@ -68,7 +68,7 @@ func newTestLookup(t *testing.T) *testLookup {
 func (tl *testLookup) offline(t *testing.T) {
 	t.Helper()
 	down := httptest.NewTLSServer(http.NotFoundHandler())
-	tl.Registry = &Registry{Client: down.Client(), Base: func(string) string { return down.URL }}
+	tl.Registry = registryAt(down)
 	tl.PublicRegistry = tl.Registry
 	down.Close()
 }

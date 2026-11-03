@@ -584,10 +584,15 @@ func fromEnv(t *testing.T, digest *string, lookups *int) (*Env, *backendtest.Fak
 		w.Header().Set("Docker-Content-Digest", *digest)
 	}))
 	t.Cleanup(srv.Close)
+	reg := from.NewRegistry()
+	if tr, ok := srv.Client().Transport.(*http.Transport); ok {
+		reg.Client.Transport().TLSClientConfig = tr.TLSClientConfig // trusts the test server's certificate
+	}
+	reg.Base = func(string) string { return srv.URL }
 	b.From = "node:24"
 	b.Lookup = &from.Lookup{
 		Dirs:     b.Dirs,
-		Registry: &from.Registry{Client: srv.Client(), Base: func(string) string { return srv.URL }},
+		Registry: reg,
 		DockerID: func(context.Context, string) (string, bool) { t.Error("Docker asked"); return "", false },
 		Warn:     func(m msg.M) { t.Errorf("warned: %s", m.Names()) },
 	}

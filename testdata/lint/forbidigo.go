@@ -36,6 +36,12 @@ func signalsProcess(p *os.Process) error { return p.Signal(os.Interrupt) } // wa
 
 func client() any { return &http.Client{} } // want forbidigo
 
+func transport() any { return &http.Transport{} } // want forbidigo
+
 func home() (string, error) { return os.UserHomeDir() } // want forbidigo
 
 func writesFile() error { return os.WriteFile("f", nil, 0o600) } // want forbidigo
+
+func creates() (*os.File, error) { return os.Create("f") } // want forbidigo
+
+func truncates() (*os.File, error) { return os.OpenFile("f", os.O_WRONLY|os.O_TRUNC, 0o600) } // want forbidigo

@@ -129,9 +129,11 @@ func (p Proc) Ready(status string, pid int, tick time.Duration, tries int) (stri
 }
 
 // writeLine writes s as a file's one line, mode 600, in a single write:
-// a reader that finds no line end yet (readLine) has caught it part-way.
+// a reader that finds no line end yet (readLine, readStatus) has caught it
+// part-way, and takes it as not written yet, as it takes no file. daemon
+// is the standard library only, so it doesn't use state.WriteFile.
 func writeLine(path, s string) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // devvm's own run folder
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:forbidigo,gosec // devvm's own run folder; a part-way line reads as none (readLine, readStatus)
 	if err != nil {
 		return err
 	}

@@ -170,7 +170,7 @@ func New(assets fs.FS, url string, u UI) *Finder {
 // file:// URLs read from disk, and no redirects to another scheme.
 func NewClient() *fetch.Client {
 	c := fetch.NewClient(timeout, fetch.SameScheme)
-	if t, ok := c.Transport.(*http.Transport); ok {
+	if t := c.Transport(); t != nil {
 		// Only DEVVM_UBUNTU_URL can name a file: redirects can't switch to it.
 		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/"))) //nolint:gosec // file:// URLs are absolute paths
 	}

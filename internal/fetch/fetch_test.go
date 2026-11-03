@@ -173,7 +173,8 @@ func TestRedirects(t *testing.T) {
 	t.Cleanup(loop.Close)
 
 	https := NewClient(time.Minute, HTTPSOnly)
-	https.Transport = tls.Client().Transport // trusts the test server's certificate
+	trusting, _ := tls.Client().Transport.(*http.Transport)
+	https.Transport().TLSClientConfig = trusting.TLSClientConfig // trusts the test server's certificate
 	same := NewClient(time.Minute, SameScheme)
 	tests := []struct {
 		name    string
@@ -212,6 +213,31 @@ func TestRedirects(t *testing.T) {
 }
 
 // A read is capped: at the cap it's whole, past it ErrTooLarge.
+// A Client NewClient didn't make sends nothing, and isn't tried again;
+// one NewClient made has its own transport, not net/http's default.
+func TestClientMadeByNewClient(t *testing.T) {
+	t.Parallel()
+	srv, count := failing(t, 0, 0, "ok")
+	for _, c := range []*Client{nil, {}} {
+		if _, err := get(t.Context(), c, srv.URL, 10); !errors.Is(err, ErrNoClient) {
+			t.Errorf("Get on %#v: %v, want ErrNoClient", c, err)
+		}
+		if c.Transport() != nil {
+			t.Errorf("%#v has a transport", c)
+		}
+	}
+	if n := count.Load(); n != 0 {
+		t.Errorf("the server got %d requests, want none", n)
+	}
+	c := NewClient(time.Minute, HTTPSOnly)
+	if c.Transport() == nil || c.Transport() == http.DefaultTransport || c.Transport() == NewClient(time.Minute, HTTPSOnly).Transport() {
+		t.Errorf("NewClient's transport %p isn't its own", c.Transport())
+	}
+	if body, err := Get(t.Context(), c, srv.URL, 10); err != nil || string(body) != "ok" {
+		t.Errorf("Get = %q, %v", body, err)
+	}
+}
+
 func TestReadCapped(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {

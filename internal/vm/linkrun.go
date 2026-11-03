@@ -117,7 +117,7 @@ func (e linkRuns) start(vm string) (int64, error) {
 	}
 	flags := os.O_APPEND | os.O_CREATE | os.O_WRONLY
 	if fi, err := os.Stat(logPath); err == nil && fi.Size() > linksLogMax {
-		flags |= os.O_TRUNC
+		flags |= os.O_TRUNC //nolint:forbidigo // the session's log, which it writes as it runs: started again empty once too long
 	}
 	out, err := os.OpenFile(logPath, flags, 0o600) //nolint:gosec // devvm's own log
 	if err != nil {

@@ -17,9 +17,14 @@ import (
 	"time"
 )
 
-// Client is the HTTP client devvm uses, made by NewClient: other packages
-// name this type, not net/http's.
-type Client = http.Client
+// Client is the HTTP client devvm uses: other packages name this type, not
+// net/http's. Only NewClient makes one that works, so every request has its
+// timeout and its redirect policy; any other, such as &Client{}, fails
+// every request with ErrNoClient.
+type Client struct {
+	hc *http.Client
+	t  *http.Transport
+}
 
 // Redirects is the redirects a client follows.
 type Redirects int
@@ -43,6 +48,8 @@ var (
 	ErrTooLarge = errors.New("too large")
 	// ErrChecksum is a download whose SHA-256 isn't the one asked for.
 	ErrChecksum = errors.New("the SHA-256 doesn't match")
+	// ErrNoClient is a request on a Client that NewClient didn't make.
+	ErrNoClient = errors.New("not a client NewClient made")
 	// errRequest is a request that can't be made, such as one for an
 	// address that isn't one.
 	errRequest = errors.New("no request")
@@ -53,15 +60,34 @@ var (
 // net/http's default transport (environment proxies included), which a
 // caller can change.
 func NewClient(timeout time.Duration, r Redirects) *Client {
-	t, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		t = &http.Transport{}
+	t := &http.Transport{}
+	if d, ok := http.DefaultTransport.(*http.Transport); ok {
+		t = d.Clone()
 	}
 	check := httpsOnly
 	if r == SameScheme {
 		check = sameScheme
 	}
-	return &http.Client{Transport: t.Clone(), Timeout: timeout, CheckRedirect: check}
+	return &Client{hc: &http.Client{Transport: t, Timeout: timeout, CheckRedirect: check}, t: t}
+}
+
+// Do sends req as net/http's Client.Do does, with the client's timeout and
+// redirect policy.
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	if c == nil || c.hc == nil {
+		return nil, ErrNoClient
+	}
+	return c.hc.Do(req)
+}
+
+// Transport is the client's own transport, which a caller may change
+// before its first request: a dialer, a proxy, another scheme. It is nil
+// for a Client NewClient didn't make.
+func (c *Client) Transport() *http.Transport {
+	if c == nil {
+		return nil
+	}
+	return c.t
 }
 
 func httpsOnly(req *http.Request, via []*http.Request) error {
@@ -102,7 +128,8 @@ func TransientStatus(code int) bool {
 // Transient reports whether a request that failed with err may succeed
 // when tried again: one that got no answer or lost it partway, or got a
 // status TransientStatus names. A refused redirect, a request that can't
-// be made, a body over its cap and a SHA-256 that doesn't match are not.
+// be made, a client NewClient didn't make, a body over its cap and a
+// SHA-256 that doesn't match are not.
 func Transient(err error) bool {
 	var se *StatusError
 	switch {
@@ -110,7 +137,8 @@ func Transient(err error) bool {
 		return false
 	case errors.As(err, &se):
 		return TransientStatus(se.Code)
-	case errors.Is(err, ErrRedirect), errors.Is(err, errRequest), errors.Is(err, ErrTooLarge), errors.Is(err, ErrChecksum):
+	case errors.Is(err, ErrRedirect), errors.Is(err, errRequest), errors.Is(err, ErrNoClient),
+		errors.Is(err, ErrTooLarge), errors.Is(err, ErrChecksum):
 		return false
 	}
 	return true
@@ -200,7 +228,7 @@ func Download(ctx context.Context, c *Client, url, path, sum string) (err error)
 		return err
 	}
 	defer func() { _ = body.Close() }()
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // the caller's own path
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:forbidigo,gosec // the caller's own path, a download streamed into it, removed on any failure
 	if err != nil {
 		return err
 	}

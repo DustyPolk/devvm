@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/w3cj/devvm/internal/fetch"
 )
 
 func TestIsDigest(t *testing.T) {
@@ -206,8 +208,21 @@ func TestProxyAddr(t *testing.T) {
 	}
 }
 
-func (f *fakeRegistry) registry() *Registry {
-	return &Registry{Client: f.srv.Client(), Base: func(string) string { return f.srv.URL }}
+func (f *fakeRegistry) registry() *Registry { return registryAt(f.srv) }
+
+// registryAt is a Registry reaching only srv, a TLS test server whose
+// certificate its client trusts, trying again at once.
+func registryAt(srv *httptest.Server) *Registry {
+	return &Registry{Client: trusting(srv), Base: func(string) string { return srv.URL }}
+}
+
+// trusting is NewRegistry's client, trusting srv's certificate.
+func trusting(srv *httptest.Server) *fetch.Client {
+	c := NewRegistry().Client
+	if t, ok := srv.Client().Transport.(*http.Transport); ok {
+		c.Transport().TLSClientConfig = t.TLSClientConfig
+	}
+	return c
 }
 
 func (f *fakeRegistry) set(repoTag, digest string) {
@@ -249,7 +264,7 @@ func TestDigestNotFoundAndUnreachable(t *testing.T) {
 	}
 	// Nothing listening: unreachable, after retries.
 	down := httptest.NewTLSServer(http.NotFoundHandler())
-	r := &Registry{Client: down.Client(), Base: func(string) string { return down.URL }}
+	r := registryAt(down)
 	down.Close()
 	if _, err := r.Digest(t.Context(), "node:24"); !errors.Is(err, ErrUnreachable) {
 		t.Errorf("no registry: %v", err)
@@ -259,7 +274,7 @@ func TestDigestNotFoundAndUnreachable(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer failing.Close()
-	r = &Registry{Client: failing.Client(), Base: func(string) string { return failing.URL }}
+	r = registryAt(failing)
 	if _, err := r.Digest(t.Context(), "node:24"); !errors.Is(err, ErrUnreachable) {
 		t.Errorf("a failing registry: %v", err)
 	}
@@ -312,7 +327,7 @@ func TestDigestRetries(t *testing.T) {
 	t.Cleanup(tls.Close)
 	f.realm = tls.URL + "/token"
 	reg := f.registry()
-	reg.Client = tls.Client()
+	reg.Client = trusting(tls)
 	if _, err := reg.Digest(t.Context(), "node:24"); !errors.Is(err, ErrNotFound) || tokens != 1 {
 		t.Errorf("a 403 for the token: %v, %d requests", err, tokens)
 	}
