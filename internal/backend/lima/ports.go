@@ -12,6 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -55,7 +56,7 @@ func newForwards(d paths.Dirs, self string) forwards {
 	return forwards{
 		Forwards: vmssh.Forwards{
 			Dir: d.LimaVMs(), Run: d.Run(), Prefix: "lima", Cmd: forwarderCmd, Self: self,
-			Detach: platform.StartDetached, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
+			Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
 		},
 		Key: filepath.Join(d.Lima, "_config", "user"),
 	}

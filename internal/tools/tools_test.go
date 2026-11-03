@@ -21,6 +21,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -131,8 +132,8 @@ func newEnv(t *testing.T) env {
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Info = func(m msg.M) { said = append(said, "==> "+m.Names()) }
 	tl.Warn = func(m msg.M) { said = append(said, "devvm: "+m.Names()) }
-	tl.Detach = func(path string, args []string, out *os.File) (int, error) {
-		detached = append(detached, path+" "+strings.Join(args, " ")+" > "+out.Name())
+	tl.Detach = func(c daemon.Cmd) (int, error) {
+		detached = append(detached, c.Path+" "+strings.Join(c.Args, " ")+" > "+c.Out.Name())
 		return 1, nil
 	}
 	return env{Env: tl, Versions: Versions{tl}, Share: Share{tl}, VMs: VMs{tl}, root: root, log: log, said: &said, detach: &detached}

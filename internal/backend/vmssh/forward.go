@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 )
@@ -180,6 +181,10 @@ func (f *Forwarder) session(ctx context.Context) error {
 		report = report[:0]
 		if !ready {
 			f.logf("forwarding %s's ports", f.VM)
+			// What its start waits for (Forwards.Start).
+			if err := daemon.Ready(""); err != nil {
+				f.logf("%v", err)
+			}
 			ready = true
 		}
 	}

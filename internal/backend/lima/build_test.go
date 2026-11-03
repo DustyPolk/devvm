@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -156,19 +156,18 @@ func TestBuildImageLayer(t *testing.T) {
 // fakeProxy makes l's build proxies sleeps that say they listen on port
 // 40000, recording each one's arguments in spawned; stopped gets each one's
 // end.
-func fakeProxy(t *testing.T, l *Lima) (spawned *[][]string, stopped chan error) {
+func fakeProxy(t *testing.T, l *Lima) (spawned *[][]string, stopped chan struct{}) {
 	t.Helper()
-	spawned, stopped = &[][]string{}, make(chan error, 4)
-	l.Spawn = func(path string, args []string, out *os.File) (*os.Process, error) {
-		*spawned = append(*spawned, append([]string{path}, args...))
-		p := exec.CommandContext(t.Context(), "sleep", "60")
-		if err := p.Start(); err != nil {
+	spawned, stopped = &[][]string{}, make(chan struct{}, 4)
+	l.Spawn = func(c daemon.Cmd) (*daemon.Handle, error) {
+		*spawned = append(*spawned, append([]string{c.Path}, c.Args...))
+		h, err := daemon.Spawn(daemon.Cmd{Path: "sleep", Args: []string{"60"}, Out: c.Out})
+		if err != nil {
 			return nil, err
 		}
-		go func() { stopped <- p.Wait() }()
-		t.Cleanup(func() { _ = p.Process.Kill() })
-		_, _ = out.WriteString("devvm proxy: listening on 127.0.0.1:40000 for x\n")
-		return p.Process, nil
+		go func() { <-h.Done(); stopped <- struct{}{} }()
+		t.Cleanup(func() { h.Stop(time.Second) })
+		return h, daemon.WriteStatus(c.Status, h.PID(), "127.0.0.1:40000")
 	}
 	return spawned, stopped
 }
@@ -207,8 +206,7 @@ func TestBuildImageHostProxy(t *testing.T) {
 				t.Errorf("the build's proxy: %s", p)
 			}
 			select {
-			case err := <-stopped:
-				t.Logf("the build's proxy stopped: %v", err)
+			case <-stopped:
 			case <-time.After(2 * time.Second):
 				t.Error("the build's proxy wasn't stopped")
 			}

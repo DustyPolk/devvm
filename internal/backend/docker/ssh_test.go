@@ -12,6 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -202,10 +203,9 @@ func TestPorts(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(short) })
 	s.Forwards.Run = short
 	var args []string
-	s.Forwards.Detach = func(path string, a []string, out *os.File) (int, error) {
-		args = append([]string{path}, a...)
-		_, err := fmt.Fprintf(out, "devvm ports: forwarding %s's ports\n", vm)
-		return os.Getpid(), err
+	s.Forwards.Detach = func(c daemon.Cmd) (int, error) {
+		args = append([]string{c.Path}, c.Args...)
+		return os.Getpid(), daemon.WriteStatus(c.Status, os.Getpid(), "")
 	}
 	var warned msg.Recorder
 	s.Warn = warned.Add
@@ -268,7 +268,7 @@ func TestPorts(t *testing.T) {
 	// One that never says it forwards: warned, the VM runs on.
 	warned.Reset()
 	detach := s.Forwards.Detach
-	s.Forwards.Detach = func(string, []string, *os.File) (int, error) { return os.Getpid(), nil }
+	s.Forwards.Detach = func(daemon.Cmd) (int, error) { return os.Getpid(), nil }
 	start(backend.Confinement{SSH: true})
 	if !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + s.Forwards.Log(vm) + " vm=" + vm}) {
 		t.Errorf("warned %q", warned.Names())

@@ -52,6 +52,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/shell"
@@ -488,7 +489,7 @@ func (e egress) follow(ctx context.Context, id, pidFile string) error {
 		return err
 	}
 	defer func() { _ = out.Close() }()
-	pid, err := e.d.Detach(docker, []string{"container", "wait", id}, out)
+	pid, err := e.d.Detach(daemon.Cmd{Path: docker, Args: []string{"container", "wait", id}, Out: out})
 	if err != nil {
 		return err
 	}

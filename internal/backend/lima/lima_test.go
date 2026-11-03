@@ -18,6 +18,7 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -157,7 +158,7 @@ func limaOn(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder, *stub
 	warned := &msg.Recorder{}
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"
 	l.Getenv = func(string) string { return "" }
-	l.Spawn = func(string, []string, *os.File) (*os.Process, error) { return nil, errors.New("no build proxy here") }
+	l.Spawn = func(daemon.Cmd) (*daemon.Handle, error) { return nil, errors.New("no build proxy here") }
 	l.Tick = time.Millisecond
 	l.MacOS = func() string { return "26.0" }
 	l.KVM = filepath.Join(t.TempDir(), "kvm")

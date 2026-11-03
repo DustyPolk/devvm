@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
@@ -234,7 +236,8 @@ func linkRunsEnv(t *testing.T, logged string) (linkRuns, *[][]string) {
 	var mu sync.Mutex
 	args := map[int][]string{}
 	var started [][]string
-	e.Proxy.Start = func(path string, a []string, out *os.File) (int, error) {
+	e.Proxy.Start = func(c daemon.Cmd) (int, error) {
+		path, a, out := c.Path, c.Args, c.Out
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		if err := cmd.Start(); err != nil {
 			return 0, err
@@ -253,13 +256,6 @@ func linkRunsEnv(t *testing.T, logged string) (linkRuns, *[][]string) {
 		mu.Lock()
 		defer mu.Unlock()
 		return args[pid], nil
-	}
-	e.Proxy.Signal = func(pid int, sig syscall.Signal) error {
-		p, err := os.FindProcess(pid)
-		if err != nil {
-			return err
-		}
-		return p.Signal(sig)
 	}
 	return linkRuns{e}, &started
 }
@@ -301,6 +297,22 @@ func TestLinkRuns(t *testing.T) {
 	if _, ok := r.pid(vm); ok {
 		t.Error("pid 1 is the session")
 	}
+	// Nor is this test, which stopping the session never signals.
+	if err := os.WriteFile(linksPID(r.Dirs, vm), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	signal := r.Proxy.Signal
+	r.Proxy.Signal = func(pid int, sig syscall.Signal) error {
+		if sig != 0 {
+			t.Errorf("signalled %d (%v)", pid, sig)
+		}
+		return signal(pid, sig)
+	}
+	if _, ok := r.pid(vm); ok {
+		t.Error("the test is the session")
+	}
+	r.stop(t.Context(), vm)
+	r.Proxy.Signal = signal
 	if _, _, err := r.ensure(vm); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +321,7 @@ func TestLinkRuns(t *testing.T) {
 		t.Fatal("no session")
 	}
 	r.stop(t.Context(), vm)
-	if _, ok := r.pid(vm); ok || r.Proxy.Signal(pid, 0) == nil && !zombie(pid) {
+	if _, ok := r.pid(vm); ok || daemon.Alive(pid) && !zombie(pid) {
 		t.Errorf("still running: %d", pid)
 	}
 	if _, err := os.Stat(linksPID(r.Dirs, vm)); !os.IsNotExist(err) {
@@ -321,7 +333,7 @@ func TestLinkRuns(t *testing.T) {
 // test's own sleeps are reaped by their Wait.
 func zombie(pid int) bool {
 	for range 50 {
-		if syscall.Kill(pid, 0) != nil {
+		if !daemon.Alive(pid) {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)

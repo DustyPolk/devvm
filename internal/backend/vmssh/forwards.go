@@ -1,7 +1,6 @@
 package vmssh
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,10 +11,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -33,8 +32,8 @@ type Forwards struct {
 	// Cmd is devvm's hidden command that runs a forwarder
 	// (_smolvm-ports), and Self is devvm's binary, which runs it.
 	Cmd, Self string
-	// Detach starts a process that outlives devvm (platform.StartDetached).
-	Detach func(path string, args []string, out *os.File) (int, error)
+	// Detach starts a process that outlives devvm (daemon.Detach).
+	Detach daemon.Starter
 	// Args returns a running process's arguments (platform.ProcessArgs).
 	Args func(pid int) ([]string, error)
 	// Tick is how often a start looks for the forwarder to be ready, 20
@@ -77,8 +76,8 @@ const logMax = 1 << 20
 const controlMax = 104 - 1 - 17
 
 // Start starts the VM's forwarder, after any it had, and waits for it to
-// say it forwards. One that doesn't is left to keep trying, and its log
-// named in the error.
+// say it forwards, in its status file, while it runs. One that doesn't is
+// left to keep trying, and its log named in the error.
 func (f Forwards) Start(vm string, spec Spec) error {
 	f.Stop(vm)
 	ctl := f.Control(vm)
@@ -101,12 +100,10 @@ func (f Forwards) Start(vm string, spec Spec) error {
 	if err != nil {
 		return err
 	}
-	before := fi.Size()
-	if before > logMax {
+	if fi.Size() > logMax {
 		if err := out.Truncate(0); err != nil {
 			return err
 		}
-		before = 0
 	}
 	var reserve []string
 	for _, p := range spec.Reserve {
@@ -120,51 +117,29 @@ func (f Forwards) Start(vm string, spec Spec) error {
 	if spec.Only != nil {
 		args = append(args, "-only", backend.FormatPortRanges(spec.Only))
 	}
-	pid, err := f.Detach(f.Self, args, out)
+	status := f.file(vm, ".ports.status")
+	pid, err := f.proc(vm).Start(f.Detach, daemon.Cmd{Path: f.Self, Args: args, Out: out, Status: status})
 	if err != nil {
 		return err
 	}
-	if err := state.WriteFile(f.file(vm, ".ports.pid"), []byte(strconv.Itoa(pid)+"\n")); err != nil {
-		return err
-	}
-	want := []byte("forwarding " + vm + "'s ports")
-	for range 20 {
-		if b, err := os.ReadFile(f.Log(vm)); err == nil && int64(len(b)) >= before && bytes.Contains(b[before:], want) {
-			return nil
-		}
-		if _, ok := f.pid(vm); !ok {
-			break
-		}
-		time.Sleep(f.Tick)
+	if _, ok := daemon.WaitReady(status, pid, func() bool { return daemon.Alive(pid) }, f.Tick, 20); ok {
+		return nil
 	}
 	return fmt.Errorf("%s: its forwarder isn't forwarding", vm)
 }
 
-// pid returns the VM's forwarder's pid while it runs.
-func (f Forwards) pid(vm string) (int, bool) {
-	b, err := os.ReadFile(f.file(vm, ".ports.pid"))
-	if err != nil {
-		return 0, false
+// proc is the VM's forwarder as a background process: its pid file
+// beside the VM's record, and devvm's hidden command (Cmd) with -vm VM in
+// its arguments.
+func (f Forwards) proc(vm string) daemon.Proc {
+	return daemon.Proc{
+		PIDFile: f.file(vm, ".ports.pid"), Args: f.Args,
+		Is: func(args []string) bool { return daemon.HasFlag(args, f.Cmd, "-vm", vm) },
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || pid <= 0 || !ProcessRuns(pid) {
-		return 0, false
-	}
-	args, err := f.Args(pid)
-	if err != nil || len(args) < 2 || args[1] != f.Cmd {
-		return 0, false
-	}
-	if i := slices.Index(args, "-vm"); i < 0 || i+1 >= len(args) || args[i+1] != vm {
-		return 0, false
-	}
-	return pid, true
 }
 
 // Running reports whether the VM's forwarder runs.
-func (f Forwards) Running(vm string) bool {
-	_, ok := f.pid(vm)
-	return ok
-}
+func (f Forwards) Running(vm string) bool { return f.proc(vm).Running() }
 
 // Lock holds the VM's forwarder's lock until unlock is called: whatever
 // stops its forwarder, asks which ports are free and starts the next one
@@ -182,42 +157,15 @@ func (f Forwards) Lock(ctx context.Context, vm string) (unlock func(), err error
 // Stop stops the VM's forwarder, if it runs, waiting up to two seconds for
 // it to end, then killing it and waiting up to two more: a start that
 // follows finds its ports free.
-func (f Forwards) Stop(vm string) {
-	pid, ok := f.pid(vm)
-	if !ok {
-		return
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return
-	}
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
-		_ = p.Signal(sig)
-		for range 20 {
-			if !ProcessRuns(pid) {
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-}
+func (f Forwards) Stop(vm string) { f.proc(vm).Stop(2 * time.Second) }
 
 // Remove stops the VM's forwarder and deletes its files.
 func (f Forwards) Remove(vm string) error {
 	f.Stop(vm)
-	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log", ".ports.lock"} {
+	for _, ext := range []string{".ports.pid", ".ports.status", ".ports.known_hosts", ".ports.log", ".ports.lock"} {
 		if err := os.Remove(f.file(vm, ext)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
 	return nil
-}
-
-// ProcessRuns reports whether a process runs with that pid.
-func ProcessRuns(pid int) bool {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
 }

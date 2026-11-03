@@ -11,6 +11,7 @@ internal/backend/vmssh 87.5
 internal/build 87.3
 internal/cli 88.2
 internal/cli/docgen 85.1
+internal/daemon 97.7
 internal/desktop 77.2
 internal/devcontainer 96.8
 internal/from 87.1

@@ -21,19 +21,24 @@ linters:
   settings:
     depguard:
       rules:
+        # The proxy, and the background-process helper it uses: the
+        # standard library alone.
         proxy:
           list-mode: strict
           files:
             - "**/internal/proxy/**"
+            - "**/internal/daemon/**"
           allow:
             - $gostd
             - github.com/w3cj/devvm/internal/proxy
+            - github.com/w3cj/devvm/internal/daemon
         main:
           list-mode: strict
           files:
             - $all
             - "!$test"
             - "!**/internal/proxy/**"
+            - "!**/internal/daemon/**"
           allow:
             - $gostd
             - github.com/w3cj/devvm
@@ -53,6 +58,7 @@ linters:
           files:
             - $test
             - "!**/internal/proxy/**"
+            - "!**/internal/daemon/**"
           allow:
             - $gostd
             - github.com/w3cj/devvm
@@ -88,6 +94,8 @@ linters:
           msg: read the host's CPUs, memory and free space through platform.Host, which test builds can override.
         - pattern: ^testbuild\.On$
           msg: only internal/cli asks whether this is a test build, in readOverrides; take its overrides as fields.
+        - pattern: ^(os\.FindProcess|syscall\.Kill|unix\.Kill)$
+          msg: signal processes through internal/daemon (Proc, Handle, Alive, Signal), which checks a pid is still the process it was.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -118,6 +126,9 @@ linters:
       - path: ^internal/cli/
         linters: [forbidigo]
         text: testbuild\.On
+      - path: ^internal/(daemon|platform)/
+        linters: [forbidigo]
+        text: os\.FindProcess|syscall\.Kill|unix\.Kill
     paths:
       - ^\.agents/
 

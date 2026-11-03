@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"syscall"
 
 	"github.com/w3cj/devvm/internal/testbuild"
 )
@@ -23,3 +24,7 @@ func contexts() context.Context { return context.Background() } // want forbidig
 func cpus() int { return runtime.NumCPU() } // want forbidigo
 
 func testBuild() bool { return testbuild.On() } // want forbidigo
+
+func signals(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) } // want forbidigo
+
+func finds(pid int) (*os.Process, error) { return os.FindProcess(pid) } // want forbidigo

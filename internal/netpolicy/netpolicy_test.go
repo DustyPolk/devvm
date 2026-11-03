@@ -21,6 +21,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -260,8 +261,9 @@ type proxies struct {
 	n        int
 }
 
-func (f *proxies) start(t *testing.T) func(string, []string, *os.File) (int, error) {
-	return func(path string, args []string, out *os.File) (int, error) {
+func (f *proxies) start(t *testing.T) daemon.Starter {
+	return func(c daemon.Cmd) (int, error) {
+		path, args := c.Path, c.Args
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")
@@ -277,13 +279,15 @@ func (f *proxies) start(t *testing.T) func(string, []string, *os.File) (int, err
 		pid := cmd.Process.Pid
 		if f.quiet {
 			_ = cmd.Wait()
-			_, _ = fmt.Fprintf(out, "devvm proxy: listen tcp %s: bind: address already in use\n", args[2])
+			_, _ = fmt.Fprintf(c.Out, "devvm proxy: listen tcp %s: bind: address already in use\n", args[2])
 		} else {
 			// Reaped once it ends, as a detached process is.
 			done := make(chan struct{})
 			go func() { _ = cmd.Wait(); close(done) }()
 			t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
-			_, _ = fmt.Fprintf(out, "devvm proxy: listening on %s for %s\n", args[2], args[4])
+			if err := daemon.WriteStatus(c.Status, pid, args[2]); err != nil {
+				return 0, err
+			}
 		}
 		f.args[pid] = append([]string{path}, args...)
 		f.n++
@@ -671,8 +675,8 @@ func TestPrepareStopsTheOldProxy(t *testing.T) {
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if pid, ok := p.PID(st.Name()); !ok || pid == old || alive(old) {
-		t.Errorf("the old proxy %d: alive %v; now %d", old, alive(old), pid)
+	if pid, ok := p.PID(st.Name()); !ok || pid == old || daemon.Alive(old) {
+		t.Errorf("the old proxy %d: alive %v; now %d", old, daemon.Alive(old), pid)
 	}
 	p.Signal = func(int, syscall.Signal) error { return nil } // signals that never arrive
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_stop_failed vm="+st.Name() {
@@ -792,6 +796,21 @@ func TestPID(t *testing.T) {
 	if _, ok := p.PID(st.Name()); ok {
 		t.Error("another program counts")
 	}
+	// Stopping it signals nothing: the pid is another program's now.
+	var signalled []int
+	p.Signal = func(pid int, _ syscall.Signal) error { signalled = append(signalled, pid); return nil }
+	if !p.Stop(st.Name()) || len(signalled) != 0 {
+		t.Errorf("Stop of another program's pid: signalled %v", signalled)
+	}
+	// Nor does a pid file that names no pid, or this test's own.
+	for _, pidFile := range []string{"x\n", "0\n", "-1\n", strconv.Itoa(os.Getpid()) + "\n"} {
+		if err := os.WriteFile(filepath.Join(d.Run(), st.Name()+".proxy.pid"), []byte(pidFile), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := p.PID(st.Name()); ok || !p.Stop(st.Name()) || len(signalled) != 0 {
+			t.Errorf("pid file %q: a proxy, or signalled %v", pidFile, signalled)
+		}
+	}
 }
 
 // Forget stops a VM's proxy and removes what it left; another VM's stay.
@@ -823,7 +842,7 @@ func TestForget(t *testing.T) {
 	if _, err := os.Stat(other); err != nil {
 		t.Errorf("another VM's file: %v", err)
 	}
-	if alive(pid) {
+	if daemon.Alive(pid) {
 		t.Error("the proxy still runs")
 	}
 }

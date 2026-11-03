@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/stubtest"
@@ -33,7 +33,7 @@ type sandbox struct {
 	// and arguments.
 	detached [][]string
 	// spawned is how each process Spawn started ended, once it has.
-	spawned []chan error
+	spawned []<-chan struct{}
 }
 
 func newSandbox(t *testing.T) *sandbox {
@@ -61,22 +61,20 @@ func newSandbox(t *testing.T) *sandbox {
 		Self:     "/devvm", Getenv: func(string) string { return "" },
 		Linux: func(context.Context, bool) (string, error) { return linux, nil },
 		// A sleep stands in for each, a proxy saying it listens.
-		Detach: func(path string, args []string, out *os.File) (int, error) {
-			p, err := s.sleep(t, path, args, out)
+		Detach: func(c daemon.Cmd) (int, error) {
+			h, err := s.sleep(t, c)
 			if err != nil {
 				return 0, err
 			}
-			return p.Pid, nil
+			return h.PID(), nil
 		},
-		Spawn: func(path string, args []string, out *os.File) (*os.Process, error) {
-			return s.sleep(t, path, args, out)
-		},
+		Spawn:    func(c daemon.Cmd) (*daemon.Handle, error) { return s.sleep(t, c) },
 		Tick:     time.Millisecond,
 		LookPath: func(c string) (string, error) { return "/bin/" + c, nil },
 		Forwards: func() vmssh.Forwards {
 			f := newForwards(d, "/devvm")
 			f.Tick = time.Millisecond
-			f.Detach = func(string, []string, *os.File) (int, error) { return 0, errors.New("no forwarder here") }
+			f.Detach = func(daemon.Cmd) (int, error) { return 0, errors.New("no forwarder here") }
 			f.Args = func(int) ([]string, error) { return nil, errors.New("no process") }
 			return f
 		}(),
@@ -108,22 +106,20 @@ func (s *sandbox) calls(t *testing.T) []string {
 	return out
 }
 
-// sleep starts a sleep in place of path with args, recorded (detached,
-// spawned); one for _proxy writes to out that it listens.
-func (s *sandbox) sleep(t *testing.T, path string, args []string, out *os.File) (*os.Process, error) {
-	s.detached = append(s.detached, append([]string{path}, args...))
-	sleep := exec.CommandContext(t.Context(), "sleep", "60")
-	if err := sleep.Start(); err != nil {
+// sleep starts a sleep in place of c, recorded (detached, spawned); one
+// for _proxy says in its status file that it listens.
+func (s *sandbox) sleep(t *testing.T, c daemon.Cmd) (*daemon.Handle, error) {
+	s.detached = append(s.detached, append([]string{c.Path}, c.Args...))
+	h, err := daemon.Spawn(daemon.Cmd{Path: "sleep", Args: []string{"60"}, Out: c.Out})
+	if err != nil {
 		return nil, err
 	}
-	ended := make(chan error, 1)
-	go func() { ended <- sleep.Wait() }()
-	t.Cleanup(func() { _ = sleep.Process.Kill() })
-	s.spawned = append(s.spawned, ended)
-	if slices.Contains(args, "_proxy") {
-		_, _ = out.WriteString("devvm proxy: listening on 127.0.0.1:40000 for x\n")
+	t.Cleanup(func() { h.Stop(time.Second) })
+	s.spawned = append(s.spawned, h.Done())
+	if slices.Contains(c.Args, "_proxy") {
+		return h, daemon.WriteStatus(c.Status, h.PID(), "127.0.0.1:40000")
 	}
-	return sleep.Process, nil
+	return h, nil
 }
 
 // field reads a stub object's field: containers/NAME/status.

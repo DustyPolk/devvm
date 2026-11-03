@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/platform"
 )
 
@@ -495,13 +496,12 @@ func TestForwardsStopKills(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = out.Close() }()
-	p, err := platform.StartDetachedProcess("/bin/sh", []string{"-c", `trap "" TERM; echo ready; while :; do sleep 1; done`}, out)
+	p, err := daemon.Spawn(daemon.Cmd{Path: "/bin/sh", Args: []string{"-c", `trap "" TERM; echo ready; while :; do sleep 1; done`}, Out: out})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = p.Kill() }()
-	ended := make(chan struct{})
-	go func() { _, _ = p.Wait(); close(ended) }()
+	defer p.Stop(0)
+	ended := p.Done()
 	for range 100 {
 		if b, _ := os.ReadFile(out.Name()); strings.Contains(string(b), "ready") {
 			break
@@ -516,7 +516,7 @@ func TestForwardsStopKills(t *testing.T) {
 			return []string{"/devvm", "_x-ports", "-vm", "v"}, nil
 		}
 	}}
-	if err := os.WriteFile(filepath.Join(dir, "v.ports.pid"), []byte(strconv.Itoa(p.Pid)+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "v.ports.pid"), []byte(strconv.Itoa(p.PID())+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	f.Stop("v")
@@ -524,6 +524,26 @@ func TestForwardsStopKills(t *testing.T) {
 	case <-ended:
 	case <-time.After(time.Second):
 		t.Error("still running after Stop")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "v.ports.pid")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its pid file stayed: %v", err)
+	}
+}
+
+// A pid file whose pid another program has now names no forwarder: Stop
+// signals nothing (this test is that program), and neither does one
+// that names no pid.
+func TestForwardsStopReusedPID(t *testing.T) {
+	dir := t.TempDir()
+	f := Forwards{Dir: dir, Cmd: "_x-ports", Args: func(int) ([]string, error) { return []string{"/usr/bin/go", "test"}, nil }}
+	for _, pid := range []string{strconv.Itoa(os.Getpid()), "0", "-1", "x"} {
+		if err := os.WriteFile(filepath.Join(dir, "v.ports.pid"), []byte(pid+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if f.Running("v") {
+			t.Errorf("pid %s: a forwarder", pid)
+		}
+		f.Stop("v")
 	}
 }
 
@@ -541,10 +561,9 @@ func TestForwards(t *testing.T) {
 	running := false
 	f := Forwards{
 		Dir: filepath.Join(short, "vms"), Run: filepath.Join(short, "run"), Prefix: "x", Cmd: "_x-ports", Self: "/devvm",
-		Detach: func(path string, a []string, out *os.File) (int, error) {
-			args = append([]string{path}, a...)
-			_, err := fmt.Fprintf(out, "devvm ports: forwarding v's ports\n")
-			return os.Getpid(), err
+		Detach: func(c daemon.Cmd) (int, error) {
+			args = append([]string{c.Path}, c.Args...)
+			return os.Getpid(), daemon.WriteStatus(c.Status, os.Getpid(), "")
 		},
 		Args: func(int) ([]string, error) {
 			if !running {
@@ -558,9 +577,12 @@ func TestForwards(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := Spec{User: "u", Key: "/k", HostKey: "ssh-ed25519 AAAA", Reserve: []int{0, 22}, Only: []backend.PortRange{{From: 80, To: 81}}, Args: []string{"-a", "b"}}
+	// It's started once it says so in its status file, and still runs.
+	running = true
 	if err := f.Start("v", spec); err != nil {
 		t.Fatal(err)
 	}
+	running = false
 	want := []string{
 		"/devvm", "_x-ports", "-vm", "v", "-a", "b", "-user", "u", "-key", "/k", "-known-hosts", f.KnownHosts("v"),
 		"-control", f.Control("v"), "-reserve", "22", "-only", "80-81",
@@ -604,13 +626,25 @@ func TestForwards(t *testing.T) {
 	if err := f.Remove("v"); err != nil {
 		t.Fatal(err)
 	}
-	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log", ".ports.lock"} {
+	for _, ext := range []string{".ports.pid", ".ports.status", ".ports.known_hosts", ".ports.log", ".ports.lock"} {
 		if _, err := os.Stat(filepath.Join(f.Dir, "v"+ext)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", ext, err)
 		}
 	}
+	// One that says so and has ended: an error.
+	f.Detach = func(c daemon.Cmd) (int, error) {
+		h, err := daemon.Spawn(daemon.Cmd{Path: "true"})
+		if err != nil {
+			return 0, err
+		}
+		<-h.Done()
+		return h.PID(), daemon.WriteStatus(c.Status, h.PID(), "")
+	}
+	if err := f.Start("v", spec); err == nil {
+		t.Error("a forwarder that ended: no error")
+	}
 	// One that never says it forwards: an error, left running.
-	f.Detach = func(string, []string, *os.File) (int, error) { return os.Getpid(), nil }
+	f.Detach = func(daemon.Cmd) (int, error) { return os.Getpid(), nil }
 	running = true
 	f.Tick = time.Microsecond
 	if err := f.Start("v", spec); err == nil {

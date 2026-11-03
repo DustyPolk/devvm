@@ -25,6 +25,7 @@ import (
 
 	"github.com/rogpeppe/go-internal/testscript"
 
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -182,7 +183,7 @@ func stopLinkSessions(root string) {
 			continue
 		}
 		if args, err := platform.ProcessArgs(pid); err == nil && len(args) > 1 && args[1] == "_links" {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
+			_ = daemon.Signal(pid, syscall.SIGKILL)
 		}
 	}
 }

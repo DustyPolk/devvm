@@ -3,36 +3,32 @@ package backend
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
 // A build's proxy starts with its own password, its policy and the
 // company proxy's file, all the user's alone, and none of them in its
-// arguments; it's found by the port its log names. Stop ends it and
-// deletes the password and the company proxy's file, leaving the logs.
+// arguments; it's found by the port its status file names. Stop ends it
+// and deletes the password and the company proxy's file, leaving the
+// logs.
 func TestProxyStarter(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "build")
 	var args []string
-	var ended chan error
-	s := ProxyStarter{Self: "/devvm", Tick: time.Millisecond, Spawn: func(path string, a []string, out *os.File) (*os.Process, error) {
-		args = append([]string{path}, a...)
-		p := exec.CommandContext(t.Context(), "sleep", "60")
-		if err := p.Start(); err != nil {
-			return nil, err
+	var ended <-chan struct{}
+	s := ProxyStarter{Self: "/devvm", Tick: time.Millisecond, Spawn: func(c daemon.Cmd) (*daemon.Handle, error) {
+		args = append([]string{c.Path}, c.Args...)
+		h, err := sleeper(t, c, "127.0.0.1:40123")
+		if err == nil {
+			ended = h.Done()
 		}
-		ended = make(chan error, 1)
-		go func() { ended <- p.Wait() }()
-		t.Cleanup(func() { _ = p.Process.Kill() })
-		_, _ = out.WriteString("devvm proxy: listening on 127.0.0.1:40123 for x\n")
-		return p.Process, nil
+		return h, err
 	}}
 	up := []byte("HTTPS_PROXY=" + corpProxy + "\nHTTP_PROXY=\nNO_PROXY=\n")
 	p, err := s.Start("devvm-img-x", dir, "/run/ha.pid", up, "-listen-unix", "/s.sock")
@@ -67,8 +63,7 @@ func TestProxyStarter(t *testing.T) {
 	}
 	p.Stop()
 	select {
-	case err := <-ended:
-		t.Logf("stopped: %v", err)
+	case <-ended:
 	case <-time.After(2 * time.Second):
 		t.Fatal("not stopped")
 	}
@@ -88,60 +83,68 @@ func TestProxyStarter(t *testing.T) {
 	p.Stop()
 }
 
-// A proxy that never says it listens is stopped, naming its log.
-func TestProxyStarterFails(t *testing.T) {
-	dir := t.TempDir()
-	s := ProxyStarter{Self: "/devvm", Tick: time.Millisecond, Spawn: func(string, []string, *os.File) (*os.Process, error) {
-		p := exec.CommandContext(t.Context(), "sleep", "60")
-		if err := p.Start(); err != nil {
-			return nil, err
-		}
-		go func() { _ = p.Wait() }()
-		return p.Process, nil
-	}}
-	_, err := s.Start("b", dir, "/l", nil)
-	if msg.NamesOf(err) != "proxy_start_failed log="+filepath.Join(dir, "proxy.log")+" vm=b" {
-		t.Errorf("Start = %v", err)
+// sleeper starts a sleep in c's place that says it's ready with say in
+// c's status file ("" for never), stopped when the test ends.
+func sleeper(t *testing.T, c daemon.Cmd, say string) (*daemon.Handle, error) {
+	t.Helper()
+	h, err := daemon.Spawn(daemon.Cmd{Path: "sleep", Args: []string{"60"}, Out: c.Out})
+	if err != nil {
+		return nil, err
 	}
+	t.Cleanup(func() { h.Stop(time.Second) })
+	if say != "" {
+		err = daemon.WriteStatus(c.Status, h.PID(), say)
+	}
+	return h, err
 }
 
-func TestListeningPort(t *testing.T) {
-	for log, want := range map[string]int{
-		"devvm proxy: listening on 127.0.0.1:3128 for b\n": 3128,
-		"devvm proxy: listening on 127.0.0.1:3128\n":       3128,
-		"devvm proxy: loaded\n":                            0,
-		"devvm proxy: listening on 127.0.0.1:x for b\n":    0,
-		"devvm proxy: listening on 127.0.0.1:99999 for b":  0,
-	} {
-		if got := listeningPort(log); got != want {
-			t.Errorf("listeningPort(%q) = %d, want %d", log, got, want)
+// A proxy that never says it listens, or says so of an address that
+// isn't loopback or has no port, is stopped, naming its log; so is one
+// that said it listens but has already ended (another program took the
+// port from it).
+func TestProxyStarterFails(t *testing.T) {
+	for _, say := range []string{"", "192.0.2.1:3128", "127.0.0.1:0", "127.0.0.1:x", "ended"} {
+		dir := t.TempDir()
+		var h *daemon.Handle
+		s := ProxyStarter{Self: "/devvm", Tick: time.Millisecond, Spawn: func(c daemon.Cmd) (*daemon.Handle, error) {
+			if say != "ended" {
+				var err error
+				h, err = sleeper(t, c, say)
+				return h, err
+			}
+			var err error
+			if h, err = daemon.Spawn(daemon.Cmd{Path: "true", Out: c.Out}); err != nil {
+				return nil, err
+			}
+			<-h.Done()
+			return h, daemon.WriteStatus(c.Status, h.PID(), "127.0.0.1:40123")
+		}}
+		_, err := s.Start("b", dir, "/l", nil)
+		if msg.NamesOf(err) != "proxy_start_failed log="+filepath.Join(dir, "proxy.log")+" vm=b" {
+			t.Errorf("%q: Start = %v", say, err)
+		}
+		select {
+		case <-h.Done():
+		case <-time.After(5 * time.Second):
+			t.Errorf("%q: left running", say)
 		}
 	}
 }
 
 // A build's proxy is stopped through the process devvm started: one still
-// running ends; one that has ended and been waited for is left alone (no
-// signal reaches a process given its pid since); none is nothing.
+// running ends; one that has ended is left alone (no signal reaches a
+// process given its pid since); none is nothing.
 func TestBuildProxyStop(t *testing.T) {
-	p := exec.CommandContext(t.Context(), "sleep", "60")
-	if err := p.Start(); err != nil {
+	h, err := daemon.Spawn(daemon.Cmd{Path: "sleep", Args: []string{"60"}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	exited := make(chan error, 1)
-	go func() { exited <- p.Wait() }()
-	bp := &BuildProxy{proc: p.Process, dir: t.TempDir()}
+	bp := &BuildProxy{proc: h, dir: t.TempDir()}
 	bp.Stop()
 	select {
-	case err := <-exited:
-		if ee, ok := errors.AsType[*exec.ExitError](err); !ok || ee.Sys().(syscall.WaitStatus).Signal() != syscall.SIGTERM {
-			t.Errorf("ended: %v, want by SIGTERM", err)
-		}
+	case <-h.Done():
 	case <-time.After(2 * time.Second):
-		_ = p.Process.Kill()
 		t.Fatal("not stopped")
-	}
-	if err := p.Process.Signal(syscall.SIGTERM); !errors.Is(err, os.ErrProcessDone) {
-		t.Errorf("a signal to the ended process: %v, want it refused as done", err)
 	}
 	bp.Stop()
 	var none *BuildProxy

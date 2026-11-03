@@ -19,6 +19,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
 | `internal/trust/` | the user's CAs (`~/.config/devvm/ca`): read and checked, sent to VMs, build VMs' `Trust` scripts, the guest environment |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
+| `internal/daemon/` | devvm's background processes (stdlib only): detached starts, pid files checked against the process's arguments, stopping (TERM, then KILL), readiness by status file, the lifeline; the only place a process is signalled by pid (forbidigo) |
 | `internal/desktop/` | devvm desktop's relay on the host: VNC's password checked here, then an ssh channel to the VM's socket, the viewer's clipboard dropped; passwords |
 | `internal/backend/` | `Backend`, `Caps`, `Require`, the registry; `backendtest/` (fake), `registry/` (every backend's), `lima/`, `smolvm/`, `docker/` (both experimental), `vmssh/` (their ssh: VMs' keys, the port forwarder, links' sessions) |
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
@@ -76,12 +77,12 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Cleanups:** whatever a failure would leave (a build VM, a temp file) registers with the UI's `AddCleanup` and is removed once done; one only for interrupts checks `Interrupted()`. Cleanups get a fresh context.
 - **External commands run with the UI's `LoggedCmd(ctx, step, cmd)`** (a backend's `Runner`): output to the run log, failure via `DieLogged`. `WithSteps(ctx, n)` numbers steps.
 - **OS-specific code goes behind build tags** in `internal/platform` (`*_darwin.go`, `*_linux.go`, `*_other.go`).
-- **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` is stdlib only. Adding one: ask.
+- **Dependencies:** the depguard allowlist (cobra, pflag, cobra/doc, go-i18n, BurntSushi/toml, x/text, x/term, x/sys; go-internal in tests; cobra/doc's own deps never imported directly). `internal/proxy` and `internal/daemon` are stdlib only. Adding one: ask.
 - **External tools are commands, never linked** (`limactl`, `docker`, `security`, `git`, `chflags`…); prefer the standard library to shelling out. Strings into a shell are quoted with `shell.Quote`.
 - **Test seams are fields** tests set (`Host`, `Exec`, `Runner`, `OS`, `Warn`…), never package vars (reassign: no package sets another's); the one exception is `internal/proxy`'s globals (set by `Main`).
 - **The structure test** (`internal/structure`, in `mise run test`) holds types to 24 methods, bans `func init`, allows only constants' kin as package vars, checks the package layers and the owners (host git only in `internal/hostgit`; `DEVVM_` variables only in `readOverrides` and the listed settings; shell quoting only in `internal/shell`, the VM-name grammar only in `internal/vmname`): see [Contributing](docs/content/docs/contributing/_index.md#the-structure-test) before raising a limit or listing an exception.
 - **The CLI reference is generated:** `TestReferenceIsCurrent` fails on a stale one (`mise run cli-docs`).
-- `CGO_ENABLED=0`. `internal/proxy` is unix-only for now (`syscall.Kill`, `Flock`).
+- `CGO_ENABLED=0`. `internal/proxy` and `internal/daemon` are unix-only for now (`syscall.Kill`, `Setsid`, `Flock`).
 
 ## Backends
 

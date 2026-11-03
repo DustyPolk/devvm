@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/stubtest"
 )
@@ -357,8 +358,7 @@ func TestBuildOnDesktop(t *testing.T) {
 		t.Errorf("lifeline: %v", w)
 	}
 	select {
-	case err := <-s.spawned[0]:
-		t.Logf("the build's proxy stopped: %v", err)
+	case <-s.spawned[0]:
 	case <-time.After(2 * time.Second):
 		t.Error("the build's proxy wasn't stopped")
 	}
@@ -490,7 +490,7 @@ func TestBuildProxyFails(t *testing.T) {
 	if ps := s.Problems(t.Context()); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	s.Spawn = func(string, []string, *os.File) (*os.Process, error) { return nil, errors.New("no") }
+	s.Spawn = func(daemon.Cmd) (*daemon.Handle, error) { return nil, errors.New("no") }
 	_, err := s.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet})
 	if err == nil {
 		t.Fatal("no error")

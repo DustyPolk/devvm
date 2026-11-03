@@ -3,7 +3,6 @@ package lima
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 )
 
 // fakeForwarders makes l's forwarders processes of the test's (sleep),
@@ -21,17 +21,16 @@ func fakeForwarders(t *testing.T, l *Lima, vm string) *[][]string {
 	t.Helper()
 	var starts [][]string
 	procs := map[int]bool{}
-	l.Forwards.Detach = func(path string, a []string, out *os.File) (int, error) {
+	l.Forwards.Detach = func(c daemon.Cmd) (int, error) {
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		if err := cmd.Start(); err != nil {
 			return 0, err
 		}
 		go func() { _ = cmd.Wait() }()
 		t.Cleanup(func() { _ = cmd.Process.Kill() })
-		starts = append(starts, append([]string{path}, a...))
+		starts = append(starts, append([]string{c.Path}, c.Args...))
 		procs[cmd.Process.Pid] = true
-		_, err := fmt.Fprintf(out, "devvm ports: forwarding %s's ports\n", vm)
-		return cmd.Process.Pid, err
+		return cmd.Process.Pid, daemon.WriteStatus(c.Status, cmd.Process.Pid, "")
 	}
 	l.Forwards.Args = func(pid int) ([]string, error) {
 		if !procs[pid] {

@@ -146,7 +146,12 @@ func TestLifelineGoneBeforeSeen(t *testing.T) {
 		t.Fatal("returned for an earlier start's pid file")
 	case <-time.After(10 * lifelineTick):
 	}
-	if err := os.WriteFile(pidFile, pid, 0o600); err != nil {
+	// A new start's hostagent, already gone.
+	again := exec.CommandContext(t.Context(), "true")
+	if err := again.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(again.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	select {

@@ -4,12 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"io/fs"
 	"maps"
 	"net/netip"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -19,6 +16,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -378,12 +376,7 @@ func (s *Smolvm) StartID(ctx context.Context, vm string) (string, error) {
 // runsOn reports whether a machine whose lifeline holds cur runs on the
 // process recorded as want: the same, and that process runs.
 func runsOn(cur, want string) bool {
-	if want == "" || cur != want {
-		return false
-	}
-	first, _, _ := strings.Cut(cur, "\n")
-	pid, err := strconv.Atoi(first)
-	return err == nil && pid > 0 && vmssh.ProcessRuns(pid)
+	return want != "" && cur == want && daemon.LifeRuns(cur)
 }
 
 // lifeline returns what the machine's lifeline holds (its pid and start
@@ -393,11 +386,7 @@ func (s *Smolvm) lifeline(ctx context.Context, vm string) (string, error) {
 	if path == "" {
 		return "", nil
 	}
-	b, err := os.ReadFile(path) //nolint:gosec // smolvm's own file for the machine
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
-	return strings.TrimSpace(string(b)), err
+	return daemon.ReadLifeline(path)
 }
 
 // Lifeline is the pid file of the process that runs the machine, in

@@ -45,9 +45,9 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -131,13 +131,13 @@ type Docker struct {
 	// none to fetch. LinuxOS, when set, is the host's system as finding
 	// it has it (test builds': darwin, to fetch on any host).
 	LinuxURL, LinuxSHA256, LinuxOS string
-	// Detach starts a process that outlives devvm
-	// (platform.StartDetached): a VM's lifeline.
-	Detach func(path string, args []string, out *os.File) (int, error)
+	// Detach starts a process that outlives devvm (daemon.Detach): a VM's
+	// lifeline.
+	Detach daemon.Starter
 	// Spawn starts a process that can outlive devvm and returns it
-	// (platform.StartDetachedProcess): a build's proxy, stopped through
-	// it, so never another process given its pid.
-	Spawn func(path string, args []string, out *os.File) (*os.Process, error)
+	// (daemon.Spawn): a build's proxy, stopped through it, so never
+	// another process given its pid.
+	Spawn func(daemon.Cmd) (*daemon.Handle, error)
 	// Tick is how often a build's proxy is looked at while it starts, ten
 	// times at most.
 	Tick time.Duration
@@ -193,7 +193,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 		client: client{Runner: logRunner{u.LoggedCmd}, names: names{Data: d.Data}}, Dirs: d, OS: runtime.GOOS, Arch: runtime.GOARCH, Assets: assets,
 		User: user.Current, Hostname: os.Hostname,
 		Terminal: u.StdinIsTerminal, SharingFile: sharing,
-		Self: self, Detach: platform.StartDetached, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond,
+		Self: self, Detach: daemon.Detach, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond,
 		ProcSys: "/proc/sys", Getenv: os.Getenv, LookPath: exec.LookPath, Forwards: newForwards(d, self),
 		Info: u.Info, Warn: u.Warn,
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,

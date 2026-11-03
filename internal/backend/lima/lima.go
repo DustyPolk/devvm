@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -52,9 +53,9 @@ type Lima struct {
 	// run.
 	Self string
 	// Spawn starts a build's proxy, a process that can outlive devvm,
-	// and returns it (platform.StartDetachedProcess); Tick is how often
-	// it's looked at while it starts, ten times at most.
-	Spawn func(path string, args []string, out *os.File) (*os.Process, error)
+	// and returns it (daemon.Spawn); Tick is how often it's looked at
+	// while it starts, ten times at most.
+	Spawn func(daemon.Cmd) (*daemon.Handle, error)
 	Tick  time.Duration
 	// Assets holds devvm's own files (assets.FS): base.yaml, which limactl
 	// create reads on its standard input, and the conversion's oci/, which
@@ -129,7 +130,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string)
 	}
 	return &Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Self: self, Spawn: platform.StartDetachedProcess, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
+		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: ubuntu.New(assets, ubuntuURL, u).Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,

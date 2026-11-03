@@ -13,10 +13,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
@@ -373,7 +373,7 @@ func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
 	if err != nil || strconv.Itoa(pid) != want || n != strconv.Itoa(int(backend.NetProxy)) {
 		return false, nil //nolint:nilerr // an unreadable pid is no hostagent of devvm's
 	}
-	return alive(pid), nil
+	return daemon.Alive(pid), nil
 }
 
 // StartID is a running VM's hostagent: its pid file, which each start
@@ -404,13 +404,4 @@ func (l *Lima) ProxyURL(c backend.Confinement) string {
 		return ""
 	}
 	return l.proxyURL(c)
-}
-
-// alive reports whether a process runs with that pid.
-func alive(pid int) bool {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
 }

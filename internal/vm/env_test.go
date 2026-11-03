@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -19,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -155,7 +155,8 @@ func testProxy(t *testing.T, d paths.Dirs, home string) *netpolicy.Proxy {
 	p.Terminal = func() bool { return false }
 	var mu sync.Mutex
 	args := map[int][]string{}
-	p.Start = func(path string, a []string, out *os.File) (int, error) {
+	p.Start = func(c daemon.Cmd) (int, error) {
+		path, a := c.Path, c.Args
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		if err := cmd.Start(); err != nil {
 			return 0, err
@@ -166,8 +167,7 @@ func testProxy(t *testing.T, d paths.Dirs, home string) *netpolicy.Proxy {
 		mu.Lock()
 		defer mu.Unlock()
 		args[cmd.Process.Pid] = append([]string{path}, a...)
-		_, err := fmt.Fprintf(out, "devvm proxy: listening on %s for %s\n", a[2], a[4])
-		return cmd.Process.Pid, err
+		return cmd.Process.Pid, daemon.WriteStatus(c.Status, cmd.Process.Pid, a[2])
 	}
 	p.Args = func(pid int) ([]string, error) {
 		mu.Lock()

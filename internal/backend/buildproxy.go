@@ -4,14 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
-	"syscall"
 	"time"
 
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -29,12 +29,12 @@ import (
 const buildProxyUser = "devvm"
 
 // ProxyStarter starts build proxies: devvm's own binary (Self), run by
-// Spawn (platform.StartDetachedProcess: a process that can outlive devvm,
-// stopped through the process itself), looked at every Tick while it
-// starts, ten times at most.
+// Spawn (daemon.Spawn: a process that can outlive devvm, stopped through
+// the process itself), looked at every Tick while it starts, ten times at
+// most.
 type ProxyStarter struct {
 	Self  string
-	Spawn func(path string, args []string, out *os.File) (*os.Process, error)
+	Spawn func(daemon.Cmd) (*daemon.Handle, error)
 	Tick  time.Duration
 }
 
@@ -43,7 +43,7 @@ type ProxyStarter struct {
 type BuildProxy struct {
 	Port     int
 	Password string
-	proc     *os.Process
+	proc     *daemon.Handle
 	dir      string
 }
 
@@ -53,7 +53,7 @@ type BuildProxy struct {
 // goes through the company proxy that upstream names (the -upstream file;
 // nil for none) and ends when the process lifeline's pid file names does,
 // or at Stop. extra are more of its arguments. It returns once the proxy
-// says it listens and still runs.
+// says it listens, in its status file (status), and still runs.
 func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra ...string) (*BuildProxy, error) {
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
@@ -90,38 +90,17 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 		}
 		args = append(args, "-upstream", f)
 	}
-	if p.proc, err = s.Spawn(s.Self, args, out); err != nil {
+	status := filepath.Join(dir, "status")
+	if p.proc, err = s.Spawn(daemon.Cmd{Path: s.Self, Args: args, Out: out, Status: status}); err != nil {
 		return nil, err
 	}
-	for range 10 {
-		b, _ := os.ReadFile(logPath) //nolint:gosec // devvm's own log
-		if port := listeningPort(string(b)); port != 0 && p.proc.Signal(syscall.Signal(0)) == nil {
-			p.Port = port
-			return p, nil
-		}
-		time.Sleep(s.Tick)
+	said, ok := daemon.WaitReady(status, p.proc.PID(), p.proc.Running, s.Tick, 10)
+	if ap, err := netip.ParseAddrPort(said); ok && err == nil && ap.Addr().IsLoopback() && ap.Port() != 0 {
+		p.Port = int(ap.Port())
+		return p, nil
 	}
 	p.Stop()
 	return nil, msg.ProxyStartFailed(logPath, name)
-}
-
-// listeningPort is the loopback port a proxy's log says it listens on; 0
-// before it says so.
-func listeningPort(log string) int {
-	const say = "listening on 127.0.0.1:"
-	i := strings.Index(log, say)
-	if i < 0 {
-		return 0
-	}
-	rest := log[i+len(say):]
-	if j := strings.IndexAny(rest, " \n"); j >= 0 {
-		rest = rest[:j]
-	}
-	port, err := strconv.Atoi(rest)
-	if err != nil || !ValidPort(port) {
-		return 0
-	}
-	return port
 }
 
 // URL is the proxy's address as a build reaches it, on host, with its
@@ -131,17 +110,15 @@ func (p *BuildProxy) URL(host string) string {
 	return u.String()
 }
 
-// Stop stops the proxy, through the process Start started, which devvm
-// hasn't waited for, so the signal reaches it alone, never another process
-// given its pid since; and deletes its password and the company proxy's
-// file, leaving its logs. A nil one is none.
+// Stop stops the proxy, through the process Start started (daemon.Handle),
+// so the signal reaches it alone, never another process given its pid
+// since: SIGTERM, then after two seconds SIGKILL. It deletes its password
+// and the company proxy's file, leaving its logs. A nil one is none.
 func (p *BuildProxy) Stop() {
 	if p == nil {
 		return
 	}
-	if p.proc != nil {
-		_ = p.proc.Signal(syscall.SIGTERM)
-	}
+	p.proc.Stop(2 * time.Second)
 	for _, f := range []string{"auth", "upstream"} {
 		_ = os.Remove(filepath.Join(p.dir, f))
 	}

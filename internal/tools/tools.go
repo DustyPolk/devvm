@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -62,8 +63,9 @@ type Env struct {
 	Getenv   func(string) string
 	Client   *http.Client
 	Now      func() time.Time
-	// Detach starts the daily check, which outlives the run.
-	Detach func(path string, args []string, out *os.File) (int, error)
+	// Detach starts the daily check, which outlives the run
+	// (daemon.Detach).
+	Detach daemon.Starter
 	// ShareNote is how long LockShare waits for another devvm holding the
 	// share's lock before it says so.
 	ShareNote time.Duration
@@ -123,7 +125,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Env {
 	}
 	return &Env{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: platform.StartDetached,
+		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: daemon.Detach,
 		ShareNote: 3 * time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
@@ -239,7 +241,7 @@ func (t Versions) RefreshDaily() error {
 		return err
 	}
 	defer func() { _ = out.Close() }()
-	_, err = t.Detach(t.Self, []string{"_refresh-tools"}, out)
+	_, err = t.Detach(daemon.Cmd{Path: t.Self, Args: []string{"_refresh-tools"}, Out: out})
 	return err
 }
 

@@ -229,40 +229,6 @@ func TestWriteLogFollowRotated(t *testing.T) {
 	}
 }
 
-// A start looks for the proxy's line after what the log had: in the log,
-// or, when the proxy rotated it as it started, in the rest of <log>.1 and
-// the new log.
-func TestLogged(t *testing.T) {
-	t.Parallel()
-	want := []byte("listening on 127.0.0.1:1 for vm")
-	long := strings.Repeat("earlier\n", 10)
-	for _, c := range []struct {
-		old, log string
-		before   int
-		ok       bool
-	}{
-		{"", "before\nlistening on 127.0.0.1:1 for vm\n", 7, true},
-		{"", "listening on 127.0.0.1:1 for vm\nafter\n", 32, false}, // an earlier start's
-		{"before\nlistening on 127.0.0.1:1 for vm\n", "x\n", 7, true},
-		{long, "listening on 127.0.0.1:1 for vm\n", len(long), true},
-		{"listening on 127.0.0.1:1 for vm\n", "x\n", 32, false}, // before what the log had
-		{"before\n", "x\n", 7, false},
-	} {
-		path := filepath.Join(t.TempDir(), "vm.proxy.log")
-		if c.old != "" {
-			if err := os.WriteFile(path+".1", []byte(c.old), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err := os.WriteFile(path, []byte(c.log), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if got := logged(path, int64(c.before), want); got != c.ok {
-			t.Errorf(".1 %q, log %q: %v, want %v", c.old, c.log, got, c.ok)
-		}
-	}
-}
-
 func TestWriteBlocked(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")

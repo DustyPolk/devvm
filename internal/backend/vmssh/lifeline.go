@@ -5,43 +5,16 @@ import (
 	"errors"
 	"flag"
 	"io"
-	"os"
-	"strconv"
-	"strings"
+
+	"github.com/w3cj/devvm/internal/daemon"
 )
-
-// A lifeline is the file of the process that runs a VM (smolvm's
-// agent.pid, Lima's hostagent's ha.pid), its pid on the first line, which
-// each start writes anew: a forwarder runs while it holds what it held
-// when the forwarder started.
-
-// ReadLifeline returns what a lifeline holds, "" when it's gone.
-func ReadLifeline(path string) (string, error) {
-	b, err := os.ReadFile(path) //nolint:gosec // the backend's own file for the VM
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
-	return strings.TrimSpace(string(b)), err
-}
-
-// LifelineHolds reports whether the lifeline still holds life and its
-// process (the first line) runs.
-func LifelineHolds(path, life string) bool {
-	cur, err := ReadLifeline(path)
-	if err != nil || cur != life {
-		return false
-	}
-	first, _, _ := strings.Cut(cur, "\n")
-	pid, err := strconv.Atoi(strings.TrimSpace(first))
-	return err == nil && pid > 0 && ProcessRuns(pid)
-}
 
 // LifelineMain runs the forwarder of a VM whose sshd is forwarded to a
 // host loopback port (smolvm's, Lima's), as the hidden command name with
 // its arguments: ports.sh is script, reserved the ports devvm records for
 // VMs (but the VM's own listed ones), and its lines go to log. Besides the
-// forwarder's own flags, it takes the VM's lifeline, which it runs while
-// it holds, and that port.
+// forwarder's own flags, it takes the VM's lifeline (daemon.Lifeline),
+// which it runs while it holds, and that port.
 func LifelineMain(ctx context.Context, name string, args []string, script []byte, reserved func(vm string) (map[int]bool, error), log io.Writer) error {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(log)
@@ -60,11 +33,12 @@ func LifelineMain(ctx context.Context, name string, args []string, script []byte
 	if err != nil {
 		return err
 	}
-	life, err := ReadLifeline(lifeline)
-	if err != nil || life == "" {
+	// The VM runs as it starts the forwarder: no wait.
+	life, ok := daemon.FollowLifeline(lifeline, 0, f.Tick)
+	if !ok {
 		return errors.New(fl.VM + ": no lifeline at " + lifeline)
 	}
-	f.Alive = func(context.Context) bool { return LifelineHolds(lifeline, life) }
+	f.Alive = func(context.Context) bool { return life.Holds() }
 	f.Every = f.Tick
 	return f.Run(ctx)
 }

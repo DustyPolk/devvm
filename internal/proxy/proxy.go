@@ -25,8 +25,8 @@
 // On one whose VMs can't reach the host's loopback (Docker), it also listens on a unix socket
 // (-listen-unix), which a relay on the VM's own network reaches (-relay, relay.go).
 //
-// It exits when the VM's hostagent does (-lifeline). Standard library only: it prints nothing
-// itself, but writes to the streams devvm hands Main.
+// It exits when the VM's hostagent does (-lifeline). Standard library only, and internal/daemon,
+// which is too: it prints nothing itself, but writes to the streams devvm hands Main.
 package proxy
 
 import (
@@ -49,8 +49,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/w3cj/devvm/internal/daemon"
 )
 
 var (
@@ -680,30 +681,17 @@ func handler(w http.ResponseWriter, r *http.Request) {
 // lifelineTick: how often watchLifeline looks (tests shorten it).
 var lifelineTick = 3 * time.Second
 
-// watchLifeline returns once the hostagent named by the pid file is gone, or never appears. It
-// follows the first hostagent it sees, not later ones: a restarted VM gets a new proxy. A pid file
-// written since it started whose process is already gone (the VM stopped between two looks) is a
-// hostagent gone too; an older one is an earlier start's, and waited past.
+// lifelineWait bounds how long the proxy waits for its VM's lifeline: it starts before the VM does.
+const lifelineWait = 15 * time.Minute
+
+// watchLifeline returns once the VM's lifeline (daemon.Lifeline) no longer holds, or never names a
+// process that runs. It follows the start it first sees running, not later ones: a restarted VM
+// gets a new proxy. A lifeline a start writes whose process is already gone (the VM stopped
+// between two looks) ends it too; what the file held when the proxy started is an earlier
+// start's, and waited past.
 func watchLifeline(path string) {
-	start, pid := time.Now(), 0
-	for range time.Tick(lifelineTick) {
-		if pid == 0 {
-			fi, serr := os.Stat(path)
-			if b, err := os.ReadFile(path); err == nil && serr == nil { //nolint:gosec // devvm names the pid file
-				// The pid is the first line: smolvm's has its start time on a second.
-				first, _, _ := strings.Cut(string(b), "\n")
-				if p, err := strconv.Atoi(strings.TrimSpace(first)); err == nil && p > 0 {
-					if syscall.Kill(p, 0) == nil {
-						pid = p
-					} else if !fi.ModTime().Before(start) {
-						return
-					}
-				}
-			}
-		}
-		if (pid != 0 && syscall.Kill(pid, 0) != nil) || (pid == 0 && time.Since(start) > 15*time.Minute) {
-			return
-		}
+	if l, ok := daemon.FollowLifeline(path, lifelineWait, lifelineTick); ok {
+		l.Wait(lifelineTick)
 	}
 }
 
@@ -853,6 +841,10 @@ func Main(args []string, std IO) error {
 		go func() { _ = srv.Serve(h) }()
 	}
 	logf("listening on %s for %s", ln.Addr(), vmName)
+	// What devvm waits for as it starts the proxy: the address it listens on.
+	if err := daemon.Ready(ln.Addr().String()); err != nil {
+		logf("%v", err)
+	}
 	if lifeline != "" {
 		go func() {
 			watchLifeline(lifeline)

@@ -13,13 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -40,9 +40,9 @@ type Proxy struct {
 	Self    string // devvm's binary, which runs as the proxy
 	OS      string // the host's, as Go names it
 	Secrets *secrets.Store
-	// Start starts path with args in the background, its output in out,
-	// and returns its pid (platform.StartDetached).
-	Start func(path string, args []string, out *os.File) (int, error)
+	// Start starts a process in the background and returns its pid
+	// (daemon.Detach).
+	Start daemon.Starter
 	// Args returns a running process's arguments (platform.ProcessArgs).
 	Args func(pid int) ([]string, error)
 	// ExcludeFromBackup keeps a folder out of backups (macOS).
@@ -54,7 +54,7 @@ type Proxy struct {
 	// Tick is how often a start looks for the proxy to listen, ten times;
 	// a stop waits four Ticks for each signal to end it.
 	Tick time.Duration
-	// Signal sends a process a signal (Stop's).
+	// Signal sends a process a signal (Stop's: daemon.Signal).
 	Signal func(pid int, sig syscall.Signal) error
 	// Getenv reads devvm's environment: the host's proxy settings, which a
 	// VM's proxy goes through (backend.ReadHostProxy).
@@ -79,11 +79,11 @@ type UI interface {
 func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u UI) *Proxy {
 	return &Proxy{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Secrets: store,
-		Start: platform.StartDetached, Args: platform.ProcessArgs, ExcludeFromBackup: platform.ExcludeFromBackup,
+		Start: daemon.Detach, Args: platform.ProcessArgs, ExcludeFromBackup: platform.ExcludeFromBackup,
 		InitCA: func(dir string) error {
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
 		},
-		Listening: listening, Tick: 500 * time.Millisecond, Signal: signal, Getenv: os.Getenv,
+		Listening: listening, Tick: 500 * time.Millisecond, Signal: daemon.Signal, Getenv: os.Getenv,
 		Note: u.Note, Warn: u.Warn, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Terminal: u.StdinIsTerminal,
 	}
@@ -101,60 +101,23 @@ func LinkList(d paths.Dirs, vm string) string { return filepath.Join(d.Run(), vm
 // ProxyLog is a VM's proxy's own output.
 func ProxyLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".proxy.log") }
 
+// proc is the VM's proxy as a background process: its pid file in the run
+// folder, and devvm _proxy -vm VM in its arguments.
+func (p *Proxy) proc(vm string) daemon.Proc {
+	return daemon.Proc{
+		PIDFile: p.run(vm, ".pid"), Args: p.Args, Signal: p.Signal,
+		Is: func(args []string) bool { return daemon.HasFlag(args, "_proxy", "-vm", vm) },
+	}
+}
+
 // PID returns the pid of the VM's running proxy: the process its pid file
 // names, if that still runs as the VM's proxy.
-func (p *Proxy) PID(vm string) (int, bool) {
-	b, err := os.ReadFile(p.run(vm, ".pid"))
-	if err != nil {
-		return 0, false
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || pid <= 0 || !alive(pid) {
-		return 0, false
-	}
-	args, err := p.Args(pid)
-	if err != nil || len(args) < 2 || args[1] != "_proxy" {
-		return 0, false
-	}
-	if i := slices.Index(args, "-vm"); i < 0 || i+1 >= len(args) || args[i+1] != vm {
-		return 0, false
-	}
-	return pid, true
-}
-
-func alive(pid int) bool { return signal(pid, syscall.Signal(0)) == nil }
-
-func signal(pid int, sig syscall.Signal) error {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	return proc.Signal(sig)
-}
+func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 
 // Stop stops the VM's proxy, if it runs: SIGTERM, then after two seconds
 // SIGKILL, waiting up to two more for it to end. It reports whether no
 // proxy of the VM's runs then.
-func (p *Proxy) Stop(vm string) bool {
-	pid, ok := p.PID(vm)
-	if !ok {
-		return true
-	}
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
-		_ = p.Signal(pid, sig)
-		for range 20 {
-			if !alive(pid) {
-				return true
-			}
-			time.Sleep(p.Tick / 5)
-		}
-		// Still the VM's proxy, not a process given its pid since.
-		if _, ok := p.PID(vm); !ok {
-			return true
-		}
-	}
-	return false
-}
+func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 
 // Forget removes what a VM of this name left behind when it was deleted
 // some other way: its proxy, its own rules and its files in the run folder.
@@ -447,11 +410,6 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		return err
 	}
 	defer func() { _ = out.Close() }()
-	fi, err := out.Stat()
-	if err != nil {
-		return err
-	}
-	before := fi.Size()
 	ca := p.Dirs.CA()
 	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
 	args := append([]string{
@@ -465,11 +423,12 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		}
 	}
 	args = append(args, p.nixCacheArgs(st)...)
-	pid, err := p.Start(p.Self, args, out)
+	status := p.run(vm, ".status")
+	pid, err := p.proc(vm).Start(p.Start, daemon.Cmd{Path: p.Self, Args: args, Out: out, Status: status})
 	if err != nil {
 		return err
 	}
-	for _, f := range [][2]string{{".pid", strconv.Itoa(pid)}, {".policy", policies.record()}, {".bin", bin}, {".ca", caSum}} {
+	for _, f := range [][2]string{{".policy", policies.record()}, {".bin", bin}, {".ca", caSum}} {
 		if err := state.WriteFile(p.run(vm, f[0]), []byte(f[1]+"\n")); err != nil {
 			return err
 		}
@@ -477,14 +436,8 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	// Started means this proxy says it listens on the port, and still runs:
 	// another program that took the port first would otherwise get the
 	// VM's traffic.
-	want := []byte("listening on " + addr + " for ")
-	for range 10 {
-		if logged(logPath, before, want) {
-			if _, ok := p.PID(vm); ok {
-				return nil
-			}
-		}
-		time.Sleep(p.Tick)
+	if said, ok := p.proc(vm).Ready(status, pid, p.Tick, 10); ok && said == addr {
+		return nil
 	}
 	return msg.ProxyStartFailed(logPath, vm)
 }
@@ -501,24 +454,6 @@ func (p *Proxy) nixCacheArgs(st *state.VM) []string {
 		p.Warn(msg.RetentionUnreadable().Because(err))
 	}
 	return []string{"-nix-cache", p.Dirs.NixCache(), "-nix-cache-max", strconv.FormatInt(r.NixCacheCap(), 10)}
-}
-
-// logged reports whether a log has want after its first before bytes. A
-// log shorter than that was rotated (copied to <log>.1, then emptied), so
-// the rest of <log>.1 and the whole log count.
-func logged(path string, before int64, want []byte) bool {
-	b, err := os.ReadFile(path) //nolint:gosec // devvm's own log
-	if err != nil {
-		return false
-	}
-	if int64(len(b)) >= before {
-		return bytes.Contains(b[before:], want)
-	}
-	if bytes.Contains(b, want) {
-		return true
-	}
-	old, err := os.ReadFile(path + ".1") //nolint:gosec // devvm's own log
-	return err == nil && int64(len(old)) >= before && bytes.Contains(old[before:], want)
 }
 
 // freePort returns a loopback port from 20000 to 59999 no program has

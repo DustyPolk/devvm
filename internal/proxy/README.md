@@ -1,6 +1,6 @@
 # internal/proxy
 
-The network policy proxy: one process per VM with [network policy](../../docs/content/docs/internals/network.md), on the host, run as `devvm _proxy`. Go, standard library only (depguard enforces it).
+The network policy proxy: one process per VM with [network policy](../../docs/content/docs/internals/network.md), on the host, run as `devvm _proxy`. Go, standard library only, with `internal/daemon`, devvm's background-process helper, which is standard library only too (depguard enforces both).
 
 The VM can reach nothing but this proxy. On macOS its Lima hostagent runs under a Seatbelt profile, on Linux QEMU's network is restricted, and on smolvm the proxy decides each connection. Other programs on the host can reach the port too, so the port alone doesn't identify the VM. Every request must carry the VM's password in `Proxy-Authorization`, with the user `devvm`, and the VM's proxy URL has it. The VM's placeholders end in a random value of its own, which isn't the password, so no other VM's or program's placeholder gets a secret. The proxy refuses to start without `-auth-file`. For each connection it:
 
@@ -21,7 +21,7 @@ For a VM whose image has the nix layer, devvm passes `-nix-cache`, and the VM's 
 
 With `-links`, the proxy is a second entrance to the VM's [links between VMs](../../docs/content/docs/internals/network.md#links-through-the-proxy), beside the ssh remote forward that carries every link. `devvm _links` writes every link the VM has, carried or not, to the list (`LinkList`, JSON, version 1) whenever they change, and leaves it when it ends, so a link with no socket is refused rather than asked of the rules, and the proxy reads it for every request: a regular file, not a symbolic link, that only its owner may write, at most 1 MiB. After the password and before any rule, it lowercases the host, drops one trailing dot, and looks for an entry that names that host (`NAME` or `NAME.devvm.internal`) and port exactly. It takes an entry only when its socket is `LinkSocket` of the list's folder, the VM (`-vm`), the entry's address and its port, which is how `vmssh.Links` names it, and its address is in `127.77.0.0/16`, so the proxy never connects to another VM's link or to any other socket. Any other host under `devvm.internal` gets `403`, logged as a refused block, before the rules. A `CONNECT` is tunneled to the socket as it is, with no SNI check, no interception and no secret, and an absolute-form `http://` request goes there in origin form, without the proxy's headers, over a new connection for each request, which ends when the client gives it up. An `https://` request in absolute form gets `400`. The proxy logs nothing for a link it carried, because `devvm _links` logs it, and when the socket doesn't answer, after a few tries for a full backlog, it answers `502` and logs `link_refused` (`not carried`).
 
-It returns when the VM's hostagent is gone.
+Once it listens, it says so with the address it listens on (`daemon.Ready`) in the status file that devvm names in its environment (`DEVVM_DAEMON_STATUS`), which is what devvm waits for as it starts the proxy. It returns when the VM's hostagent is gone.
 
 ## Files
 
@@ -63,7 +63,7 @@ Flags take one dash or two.
 | `-policy` | the user's policy files, comma-separated, in order, each re-read when it changes; a missing file has no rules |
 | `-log` | the JSON-lines event log, mode 600, rotated past 10 MiB; default stdout |
 | `-proxy-log` | the file the proxy's stderr appends to (devvm opens it for the process): the proxy's own log lines, and its HTTP servers' errors, go through it and rotate past 10 MiB by copying, so the last error, written to stderr after `Main` returns, reaches the current file |
-| `-lifeline` | the hostagent's pid file: return when that process is gone |
+| `-lifeline` | the hostagent's pid file (`daemon.Lifeline`): wait up to 15 minutes for it to name a process that runs, past what it held when the proxy started, and return once it no longer holds what it held then or that process is gone |
 | `-ca`, `-cakey` | devvm's CA, for interception |
 | `-secrets` | the VM's secret bindings (JSON, no values), re-read when they change |
 | `-secret-cmd` | the `devvm` binary, run as `devvm secret get NAME` for a value |

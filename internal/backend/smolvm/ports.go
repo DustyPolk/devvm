@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 )
@@ -15,7 +16,7 @@ import (
 func newForwards(d paths.Dirs, self string) vmssh.Forwards {
 	return vmssh.Forwards{
 		Dir: filepath.Join(d.Smolvm(), "vms"), Run: d.Run(), Prefix: "smolvm", Cmd: forwarderCmd, Self: self,
-		Detach: platform.StartDetached, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
+		Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
 	}
 }
 

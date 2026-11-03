@@ -3,7 +3,6 @@ package smolvm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -99,7 +99,7 @@ func TestStartForwarder(t *testing.T) {
 		t.Fatal(err)
 	}
 	warned.Reset()
-	s.Forwards.Detach = func(string, []string, *os.File) (int, error) { return os.Getpid(), nil }
+	s.Forwards.Detach = func(daemon.Cmd) (int, error) { return os.Getpid(), nil }
 	if err := s.Start(t.Context(), vm, c); err != nil {
 		t.Fatal(err)
 	}
@@ -117,10 +117,10 @@ func TestStartForwarder(t *testing.T) {
 	}
 }
 
-// fakeForwarder makes vm's forwarder one that says it forwards at once,
+// fakeForwarder makes a VM's forwarder one that says it forwards at once,
 // its arguments kept in args, with a short folder for its control socket:
 // a test's temporary one can be too long for one.
-func (s sandbox) fakeForwarder(t *testing.T, vm string, args *[]string) {
+func (s sandbox) fakeForwarder(t *testing.T, _ string, args *[]string) {
 	t.Helper()
 	short, err := os.MkdirTemp("/tmp", "dv")
 	if err != nil {
@@ -128,10 +128,9 @@ func (s sandbox) fakeForwarder(t *testing.T, vm string, args *[]string) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(short) })
 	s.Forwards.Run = short
-	s.Forwards.Detach = func(path string, a []string, out *os.File) (int, error) {
-		*args = append([]string{path}, a...)
-		_, err := fmt.Fprintf(out, "devvm ports: forwarding %s's ports\n", vm)
-		return os.Getpid(), err
+	s.Forwards.Detach = func(c daemon.Cmd) (int, error) {
+		*args = append([]string{c.Path}, c.Args...)
+		return os.Getpid(), daemon.WriteStatus(c.Status, os.Getpid(), "")
 	}
 }
 

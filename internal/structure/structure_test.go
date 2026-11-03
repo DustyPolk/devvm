@@ -92,6 +92,7 @@ func devvm() rules {
 			"DEVVM_MESSAGES":       {[]string{"internal/msg/msg.go", "internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
 			"DEVVM_LOGIN_SALT":     {[]string{"internal/proxy/proxy.go"}, "what devvm gives its own proxy, devvm _proxy"},
 			"DEVVM_GUESTFWD":       {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
+			"DEVVM_DAEMON_STATUS":  {[]string{"internal/daemon/status.go"}, "what devvm gives its own background processes: where each says it's ready"},
 		},
 		layers: []layer{
 			{
@@ -140,15 +141,15 @@ func devvm() rules {
 				to: []string{"..."},
 			},
 			{
-				name: "internal/proxy is standard library only",
-				from: []string{"internal/proxy/..."}, exceptTo: []string{"internal/proxy/..."},
+				name: "internal/proxy is standard library only, with internal/daemon",
+				from: []string{"internal/proxy/..."}, exceptTo: []string{"internal/proxy/...", "internal/daemon"},
 				to: []string{"..."},
 			},
 			{
 				name: "leaves import nothing of devvm's",
 				from: []string{
 					"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit",
-					"internal/shell", "internal/vmname",
+					"internal/shell", "internal/vmname", "internal/daemon",
 				},
 				to: []string{"..."},
 			},

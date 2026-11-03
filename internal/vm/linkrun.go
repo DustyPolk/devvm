@@ -7,13 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
+	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
@@ -24,7 +23,7 @@ import (
 // linkRuns starts and stops client VMs' link sessions: devvm _links VM,
 // one detached process for each running client with links, its output in
 // its log (LinksLog). The proxies' seams start, find and signal them
-// (Proxy.Start, Args and Signal).
+// (Proxy.Start, Args and Signal), through daemon.Proc.
 type linkRuns struct{ *Env }
 
 // LinksLog is a client VM's link session's own output.
@@ -41,42 +40,27 @@ const linksLogMax = 1 << 20
 // or one whose links changed, to say what came of each link.
 const linksReportWait = 10 * time.Second
 
+// proc is vm's link session as a background process: its pid file in the
+// run folder, and devvm _links VM its arguments.
+func (e linkRuns) proc(vm string) daemon.Proc {
+	return daemon.Proc{
+		PIDFile: linksPID(e.Dirs, vm), Args: e.Proxy.Args, Signal: e.Proxy.Signal,
+		Is: func(args []string) bool { return len(args) == 3 && args[1] == "_links" && args[2] == vm },
+	}
+}
+
 // pid returns the pid of vm's running link session: the process its pid
 // file names, if that still runs as vm's devvm _links.
-func (e linkRuns) pid(vm string) (int, bool) {
-	b, err := os.ReadFile(linksPID(e.Dirs, vm))
-	if err != nil {
-		return 0, false
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || pid <= 0 || e.Proxy.Signal(pid, syscall.Signal(0)) != nil {
-		return 0, false
-	}
-	args, err := e.Proxy.Args(pid)
-	if err != nil || len(args) != 3 || args[1] != "_links" || args[2] != vm {
-		return 0, false
-	}
-	return pid, true
-}
+func (e linkRuns) pid(vm string) (int, bool) { return e.proc(vm).PID() }
 
 // stop stops vm's link session, if it runs: SIGTERM, which ends its
 // connections and removes its sockets, then after two seconds SIGKILL.
 func (e linkRuns) stop(ctx context.Context, vm string) {
-	pid, ok := e.pid(vm)
-	if !ok {
+	if !e.proc(vm).Running() {
 		return
 	}
 	defer e.removeSockets(ctx, vm)
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
-		_ = e.Proxy.Signal(pid, sig)
-		for range 20 {
-			if _, ok := e.pid(vm); !ok {
-				_ = os.Remove(linksPID(e.Dirs, vm))
-				return
-			}
-			time.Sleep(e.Proxy.Tick / 5)
-		}
-	}
+	e.proc(vm).Stop(4 * e.Proxy.Tick)
 }
 
 // removeSockets deletes what a session of vm's that was killed leaves
@@ -144,11 +128,10 @@ func (e linkRuns) start(vm string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	pid, err := e.Proxy.Start(e.Proxy.Self, []string{"_links", vm}, out)
-	if err != nil {
+	if _, err := e.proc(vm).Start(e.Proxy.Start, daemon.Cmd{Path: e.Proxy.Self, Args: []string{"_links", vm}, Out: out}); err != nil {
 		return 0, err
 	}
-	return fi.Size(), os.WriteFile(linksPID(e.Dirs, vm), []byte(strconv.Itoa(pid)+"\n"), 0o600)
+	return fi.Size(), nil
 }
 
 // report waits, up to linksReportWait, for vm's link session to say what
