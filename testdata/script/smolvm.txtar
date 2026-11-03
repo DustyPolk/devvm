@@ -39,8 +39,10 @@ stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +smolv
 # (reviewed): none of smolvm's forwards; once its sshd runs, a forwarder of
 # devvm's on the host reaches it over ssh (a master, offering the VM's key
 # alone, its host key read through smolvm and pinned), and forwards what
-# listens in the VM. The ports that listen in it are ones free here.
+# listens in the VM. The ports that listen in it, and the range FIRST-LAST
+# the VM lists later, are ones free here.
 free_port UNLISTED LISTED
+free_port -range FIRST LAST
 project all
 stub_reset
 exec sh -c 'printf "0100007F:%04X\n00000000:0050\n" "$UNLISTED" > "$STUB_DIR/guest-ports"'
@@ -68,13 +70,13 @@ project web
 # forwards none of its ports, only its ssh: devvm's forwarder forwards the
 # listed ports alone (LISTED listens in the VM, and UNLISTED).
 exec sh -c 'printf "0100007F:%04X\n0100007F:%04X\n" "$LISTED" "$UNLISTED" > "$STUB_DIR/guest-ports"'
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports $LISTED,8000-8001 --cpus 2 base
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports $LISTED,$FIRST-$LAST --cpus 2 base
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stderr 'ports_'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --label devvm\.data=\S+ --from \S+/image\.smolmachine --cpus 2 --mem \d+ --storage 100 -v /var/lib/docker -v (\S+)/web:\S+/web -v \S+/data/devvm/tools:/mnt/devvm-tools:ro --ssh-agent$'
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} --net -p [0-9]+:22$'
-! stdout ' -p ('$LISTED'|8000)'
+! stdout ' -p ('$LISTED'|'$FIRST')'
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-web-[0-9a-f]{14}$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i( -t)? -u \S+ -w \S+/web .* bash -l$'
@@ -106,10 +108,10 @@ catg $DATA/smolvm/vms/devvm-web-*.ports.log
 stdout '^devvm ports: port '$LISTED': forwarded$'
 ! stdout 'port '$TAKEN
 exec devvm ports
-stdout '^'$LISTED',8000-8001,'$TAKEN'$'
+stdout '^'$LISTED','$FIRST'-'$LAST','$TAKEN'$'
 # Running: a change starts its forwarder again at once, the VM running on.
 stub_reset
-exec devvm ports rm 8000-8001
+exec devvm ports rm $FIRST-$LAST
 stdout '^==> ports_forwarding ports='$LISTED','$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stub_calls

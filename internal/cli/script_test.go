@@ -389,10 +389,12 @@ func listenAny(ts *testscript.TestScript, neg bool, args []string) {
 
 // freePort sets each VAR to a different port nothing on the host listens
 // on now, for a script that lists ports a start or a change finds free: a
-// fixed one (5173) may be a program's here.
+// fixed one (5173) may be a program's here. -range FIRST LAST sets the
+// two to a range of two such ports, LAST the one after FIRST.
 func freePort(ts *testscript.TestScript, neg bool, args []string) {
+	usage := "usage: free_port VAR... | free_port -range FIRST LAST"
 	if neg || len(args) == 0 {
-		ts.Fatalf("usage: free_port VAR...")
+		ts.Fatalf("%s", usage)
 	}
 	var held []net.Listener
 	defer func() {
@@ -400,11 +402,37 @@ func freePort(ts *testscript.TestScript, neg bool, args []string) {
 			_ = l.Close()
 		}
 	}()
-	for _, v := range args {
-		l, err := net.Listen("tcp", ":0") //nolint:noctx,gosec // every address, so the port is free on each; closed at once
-		ts.Check(err)
+	listen := func(port int) (int, bool) {
+		l, err := net.Listen("tcp", ":"+strconv.Itoa(port)) //nolint:noctx // every address, so the port is free on each; closed at once
+		if err != nil {
+			return 0, false
+		}
 		held = append(held, l)
-		ts.Setenv(v, strconv.Itoa(l.Addr().(*net.TCPAddr).Port))
+		return l.Addr().(*net.TCPAddr).Port, true
+	}
+	if args[0] == "-range" {
+		if len(args) != 3 {
+			ts.Fatalf("%s", usage)
+		}
+		for range 100 {
+			first, ok := listen(0)
+			if !ok || first == 65535 {
+				continue
+			}
+			if _, ok := listen(first + 1); ok {
+				ts.Setenv(args[1], strconv.Itoa(first))
+				ts.Setenv(args[2], strconv.Itoa(first+1))
+				return
+			}
+		}
+		ts.Fatalf("free_port: no two free ports in a row")
+	}
+	for _, v := range args {
+		port, ok := listen(0)
+		if !ok {
+			ts.Fatalf("free_port: no free port")
+		}
+		ts.Setenv(v, strconv.Itoa(port))
 	}
 }
 
