@@ -124,5 +124,37 @@ stdout '^victim$'
 exec sh -c 'cd "$SHARE" && for f in python-*.erofs uv-*.erofs; do [ -L "$f.json" ] && echo link; done; true'
 ! stdout link
 
+# build.sh's wait for its output folder (assets/shared-tools/build.sh's
+# wait_share): there at once, it goes on without mounting; mounted late, it
+# mounts it again from fstab and goes on; never there, it fails after 60
+# tries, naming the folder and mount's error.
+cd $WORK
+exec bash wait-share-test.sh $DEVVM_REPO/assets/shared-tools/build.sh
+cmp stdout wait-share.want
+stderr '^build\.sh: devvm''s output folder isn''t mounted at \S+/share \(no \.build/mise\.lock after 60 s\): mount: \S+/share: unknown filesystem type ''9p''\.$'
+
+-- wait-share-test.sh --
+awk '/^wait_share\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$1" > wait.sh
+[[ -s wait.sh ]] || { echo "no wait_share in $1" >&2; exit 1; }
+. wait.sh
+share=$PWD/share tries=0
+mkdir -p "$share/.build"
+mountpoint() { return 1; }
+sleep() { tries=$((tries + 1)); }
+sudo() {
+  echo "$*" >> calls
+  [[ -e late ]] || { echo "mount: $share: unknown filesystem type '9p'." >&2; return 32; }
+  touch "$share/.build/mise.lock"
+}
+touch "$share/.build/mise.lock" calls
+wait_share && echo "there: $tries, $(wc -l < calls | tr -d ' ') mounts"
+rm "$share/.build/mise.lock"; touch late
+wait_share && echo "late: $tries, $(sed "s|$PWD|.|" calls)"
+rm "$share/.build/mise.lock" late calls; tries=0
+wait_share || echo "never: $tries, $(wc -l < calls | tr -d ' ') mounts"
+-- wait-share.want --
+there: 0, 0 mounts
+late: 1, mount ./share
+never: 60, 60 mounts
 -- package.json --
 {}

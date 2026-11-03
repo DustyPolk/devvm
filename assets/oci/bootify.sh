@@ -17,12 +17,12 @@ mkdir -p /etc/devvm /etc/cloud/cloud.cfg.d
 if [ "$family" = debian ]; then
   export DEBIAN_FRONTEND=noninteractive
   arch=$(dpkg --print-architecture)
-  # On arm64, Virtualization.framework asks the guest to shut down with a GPIO power key, which
-  # needs the gpio_keys driver: Ubuntu's virtual and Debian's generic kernels have it, Debian's
-  # cloud kernel doesn't (Lima's stop then times out and hard-kills the VM, losing unsynced writes).
+  # Debian's generic kernel, not its cloud one, which lacks two things devvm needs: 9p, which
+  # QEMU's mounts on a Linux host use (without it each mount is an empty folder), and on arm64 the
+  # gpio_keys driver, which Virtualization.framework's shutdown key needs (Lima's stop then times
+  # out and hard-kills the VM, losing unsynced writes). Ubuntu's virtual kernel has both.
   if [ "$ID" = ubuntu ]; then extra="linux-image-virtual netplan.io"
-  elif [ "$arch" = arm64 ]; then extra="linux-image-arm64"
-  else extra="linux-image-cloud-$arch"; fi
+  else extra="linux-image-$arch"; fi
   apt-get update
   # shellcheck disable=SC2086  # $extra is a package list
   apt-get install -y --no-install-recommends initramfs-tools $extra \
@@ -51,7 +51,12 @@ if [ "$family" = debian ]; then
   printf '[Resolve]\nLLMNR=no\nMulticastDNS=no\n' > /etc/systemd/resolved.conf.d/devvm.conf
   # Keep the image's apt sources: cloud-init would otherwise rewrite them.
   printf 'datasource_list: [ NoCloud, None ]\napt:\n  preserve_sources_list: true\n' > /etc/cloud/cloud.cfg.d/90-devvm.cfg
-  echo "root=/dev/vda rw console=hvc0" > /etc/devvm/cmdline
+  # Debian keeps the kernel's name for Lima's network card, eth0, the name Lima's config gives it:
+  # udev's name (enp0s4 on QEMU) came up from that config's MAC match before cloud-init renamed
+  # it, the rename failed as busy, and cloud-init's init stage stopped there with no ssh host keys.
+  cmdline="root=/dev/vda rw console=hvc0"
+  [ "$ID" = ubuntu ] || cmdline="$cmdline net.ifnames=0"
+  echo "$cmdline" > /etc/devvm/cmdline
   # Another user with the uid (Ubuntu's own ubuntu, 1000, a Linux host's usual uid) goes: files are
   # told apart by uid.
   other=$(getent passwd "$USER_UID" | cut -d: -f1 || true)

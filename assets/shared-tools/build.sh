@@ -26,6 +26,20 @@ libc=gnu musl=""
 if command -v apk >/dev/null; then libc=musl musl=_musl; fi
 triple=$(uname -m)-unknown-linux-$libc
 sha() { local v="${1}_sha256_$a$musl"; echo "${!v}"; }
+# The output folder, once it's there: Lima mounts it at boot (cloud-init, nofail), so a mount that
+# failed or came late leaves an empty folder. Waits up to 60 s for the lock devvm put in it,
+# mounting it again from fstab while it isn't mounted, then fails naming it and mount's last error.
+wait_share() {
+  local i err=""
+  for (( i = 0; i < 60; i++ )); do
+    [[ -f $share/.build/mise.lock ]] && return 0
+    mountpoint -q "$share" || err=$(sudo mount "$share" 2>&1) || true
+    sleep 1
+  done
+  echo "build.sh: devvm's output folder isn't mounted at $share (no .build/mise.lock after 60 s)${err:+: $err}" >&2
+  return 1
+}
+wait_share
 sudo rm -rf "$work"; sudo mkdir -p "$work"; sudo chown "$USER" "$work"
 cd "$share/.build"
 export MISE_LOCKED=1 MISE_TRUSTED_CONFIG_PATHS="$share/.build" MISE_YES=1
