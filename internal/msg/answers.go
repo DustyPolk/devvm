@@ -35,7 +35,7 @@ func AnswerFor(id string) string {
 		return "devvm rm, then devvm"
 	case "token_prompt":
 		return "--stdin"
-	case "continue", "gc_confirm", "gc_cache_confirm", "adopt_vm", "rm_confirm", "images_rm_confirm", "secret_rm_confirm":
+	case "continue", "gc_confirm", "gc_cache_confirm", "adopt_vm", "rm_confirm", "delete_gone_folder_vm", "images_rm_confirm", "secret_rm_confirm":
 		return "--force"
 	}
 	return ""

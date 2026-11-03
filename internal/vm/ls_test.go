@@ -2,6 +2,8 @@ package vm
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -11,6 +13,23 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
+
+// A folder is gone when nothing is at its path: a file there, or a VM
+// that records no folder, isn't.
+func TestFolderGone(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]bool{
+		dir: false, file: false, "": false, filepath.Join(dir, "gone"): true, filepath.Join(dir, "gone", "deeper"): true,
+	} {
+		if got := FolderGone(&state.VM{Dir: path}); got != want {
+			t.Errorf("FolderGone(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
 
 // ls lists project VMs on every backend, from their state; images, build
 // VMs and a VM without state aside.
@@ -24,11 +43,13 @@ func TestList(t *testing.T) {
 		half  = "devvm-half-0123456789abce"
 		other = "devvm-api-0123456789abc3"
 	)
+	// web's folder is there; the others' are gone.
+	webDir := t.TempDir()
 	for _, v := range []struct {
 		name string
 		kv   map[string]string
 	}{
-		{web, map[string]string{keyImage: "docker", keyToolNames: "node claude", keyDir: "/p/web", KeyNet: "on", keyGitProtect: "on"}},
+		{web, map[string]string{keyImage: "docker", keyToolNames: "node claude", keyDir: webDir, KeyNet: "on", keyGitProtect: "on"}},
 		{img, map[string]string{keyDir: "/p/img-foo", keyFrom: "node:24", KeyNet: "off", keyGitProtect: "off"}},
 		{clone, map[string]string{keyDir: "/p/cl", KeyNet: "on", keyCheck: "unenforced", KeyMode: ModeClone, keyGitProtect: gitprotect.Clone}},
 		{other, map[string]string{keyToolNames: "go", keyDir: "/p/api", KeyNet: "off", keyGitProtect: "on"}},
@@ -69,11 +90,11 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Listed{
-		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "off", Backend: "other", Folder: "/p/api"},
-		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl"},
+		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "off", Backend: "other", Folder: "/p/api", FolderGone: true},
+		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl", FolderGone: true},
 		{Name: half, Status: "Stopped", Backend: "lima"},
-		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo"},
-		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: "/p/web"},
+		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo", FolderGone: true},
+		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: webDir},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("List =\n%+v\nwant\n%+v", got, want)

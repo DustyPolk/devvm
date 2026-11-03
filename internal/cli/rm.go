@@ -8,13 +8,13 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// newRmCmd is devvm rm [--force] [--no-export] [--no-clone-check].
+// newRmCmd is devvm rm [VM] [--force] [--no-export] [--no-clone-check].
 func newRmCmd(u *ui.UI) *cobra.Command {
 	var o vm.RmOptions
 	cmd := &cobra.Command{
-		Use:   "rm",
-		Short: "Delete this folder's VM",
-		Long: "Delete this folder's VM and what devvm keeps for it, after asking in a terminal. " +
+		Use:   "rm [VM]",
+		Short: "Delete this folder's VM, or a VM whose folder is gone",
+		Long: "Delete this folder's VM and what devvm keeps for it, or the VM you name when its folder is gone, after asking in a terminal. " +
 			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export. " +
 			"A --clone VM's work that this repo hasn't fetched is offered for fetching first, unless you give --no-clone-check.",
 		Example: examples(
@@ -22,9 +22,16 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 			"devvm rm --force", "delete it without asking, as a script must",
 			"devvm rm --no-export", "delete it without exporting the agents' history",
 			"devvm rm --no-clone-check", "delete a --clone VM without checking its clone, losing its unfetched work",
+			"devvm rm devvm-web-71a99b1076d92c", "delete a VM whose folder is gone, by its name as devvm ls lists it",
 		),
-		Args: noArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Args: maxArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				name := args[0]
+				withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.RmVM(cmd.Context(), name, o) },
+					func(reason string) msg.M { return msg.RmVMFailed(reason, name) })
+				return nil
+			}
 			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), o) }, msg.RmFailed)
 			return nil
 		},

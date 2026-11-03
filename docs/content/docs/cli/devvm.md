@@ -76,7 +76,7 @@ devvm [flags]
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
-- [devvm rm](devvm_rm.md): Delete this folder's VM
+- [devvm rm](devvm_rm.md): Delete this folder's VM, or a VM whose folder is gone
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
 - [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy, coding agents and layers
 - [devvm size](devvm_size.md): Show or change this folder's VM's size

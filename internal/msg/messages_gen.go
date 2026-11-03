@@ -519,6 +519,11 @@ func DeleteFailed(vm string) M {
 	return M{id: "delete_failed", vals: []val{{"vm", vm}}}
 }
 
+// DeleteGoneFolderVM is [delete_gone_folder_vm]: "{{.vm}} was made for {{.dir}}, which is gone. It may hold that project's work. Delete it?"
+func DeleteGoneFolderVM(dir string, vm string) M {
+	return M{id: "delete_gone_folder_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // DeleteOtherFolderVM is [delete_other_folder_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
 func DeleteOtherFolderVM(vm string, was string) M {
 	return M{id: "delete_other_folder_vm", vals: []val{{"vm", vm}, {"was", was}}}
@@ -2409,9 +2414,44 @@ func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
 }
 
+// RmGoneClone is [rm_gone_clone]: "{{.vm}}'s repo {{.dir}} is gone, so devvm can't fetch the clone's work into it. Run devvm rm {{.vm}} --no-clone-check to delete the VM and that work with it."
+func RmGoneClone(dir string, vm string) M {
+	return M{id: "rm_gone_clone", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// RmGoneStopped is [rm_gone_stopped]: "{{.vm}} is stopped, and starting it to export its agents' history would make {{.dir}} again. Run devvm rm {{.vm}} --no-export to delete it without exporting."
+func RmGoneStopped(dir string, vm string) M {
+	return M{id: "rm_gone_stopped", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // RmParentVM is [rm_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal to confirm."
 func RmParentVM(dir string, vm string) M {
 	return M{id: "rm_parent_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// RmUnknownVM is [rm_unknown_vm]: "There's no VM named {{.name}}. Give a VM's name, as devvm ls lists them, or its ssh alias."
+func RmUnknownVM(name string) M {
+	return M{id: "rm_unknown_vm", vals: []val{{"name", name}}}
+}
+
+// RmVMExportFailed is [rm_vm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm {{.vm}} --no-export to delete it without exporting."
+func RmVMExportFailed(vm string) M {
+	return M{id: "rm_vm_export_failed", vals: []val{{"vm", vm}}}
+}
+
+// RmVMFailed is [rm_vm_failed]: "Deleting {{.vm}} failed: {{.reason}}."
+func RmVMFailed(reason string, vm string) M {
+	return M{id: "rm_vm_failed", vals: []val{{"reason", reason}, {"vm", vm}}}
+}
+
+// RmVMFolderThere is [rm_vm_folder_there]: "{{.vm}} was made for {{.dir}}, which is still there. To delete it, run devvm rm in {{.dir}}."
+func RmVMFolderThere(dir string, vm string) M {
+	return M{id: "rm_vm_folder_there", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// RmVMLost is [rm_vm_lost]: "{{.vm}}'s backend no longer has it. Run devvm gc --orphans to delete what devvm keeps for it."
+func RmVMLost(vm string) M {
+	return M{id: "rm_vm_lost", vals: []val{{"vm", vm}}}
 }
 
 // RuleAdded is [rule_added]: "devvm added {{.rule}} to {{.vm}}'s rules."
@@ -2612,6 +2652,11 @@ func SpaceCachesNote() M {
 // SpaceFailed is [space_failed]: "Reading what devvm keeps failed: {{.reason}}."
 func SpaceFailed(reason string) M {
 	return M{id: "space_failed", vals: []val{{"reason", reason}}}
+}
+
+// SpaceFolderGone is [space_folder_gone]: "{{.vm}} was made for {{.dir}}, which is gone. Run devvm rm {{.vm}} to delete the VM."
+func SpaceFolderGone(dir string, vm string) M {
+	return M{id: "space_folder_gone", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
 // SpaceStray is [space_stray]: "The {{.backend}} backend has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
@@ -3134,6 +3179,7 @@ var specs = map[string]spec{
 	"default_layers_none":              {},
 	"delete_anyway":                    {},
 	"delete_failed":                    {fields: []string{"vm"}},
+	"delete_gone_folder_vm":            {fields: []string{"dir", "vm"}},
 	"delete_other_folder_vm":           {fields: []string{"vm", "was"}},
 	"delete_parent_vm":                 {fields: []string{"dir", "vm"}},
 	"deleted":                          {fields: []string{"vm"}},
@@ -3512,7 +3558,14 @@ var specs = map[string]spec{
 	"rm_confirm":                       {fields: []string{"vm"}},
 	"rm_export_failed":                 {fields: []string{"vm"}},
 	"rm_failed":                        {fields: []string{"reason"}},
+	"rm_gone_clone":                    {fields: []string{"dir", "vm"}},
+	"rm_gone_stopped":                  {fields: []string{"dir", "vm"}},
 	"rm_parent_vm":                     {fields: []string{"dir", "vm"}},
+	"rm_unknown_vm":                    {fields: []string{"name"}},
+	"rm_vm_export_failed":              {fields: []string{"vm"}},
+	"rm_vm_failed":                     {fields: []string{"reason", "vm"}},
+	"rm_vm_folder_there":               {fields: []string{"dir", "vm"}},
+	"rm_vm_lost":                       {fields: []string{"vm"}},
 	"rule_added":                       {fields: []string{"rule", "vm"}},
 	"rule_added_global":                {fields: []string{"rule"}},
 	"rule_missing":                     {fields: []string{"file", "rule"}},
@@ -3553,6 +3606,7 @@ var specs = map[string]spec{
 	"space_backend_unknown":            {fields: []string{"backend"}},
 	"space_caches_note":                {},
 	"space_failed":                     {fields: []string{"reason"}},
+	"space_folder_gone":                {fields: []string{"dir", "vm"}},
 	"space_stray":                      {fields: []string{"backend", "data", "vm"}},
 	"ssh_agent_empty":                  {},
 	"ssh_agent_failed":                 {fields: []string{"reason"}},

@@ -102,6 +102,14 @@ func TestTargets(t *testing.T) {
 			t.Errorf("Targets(%q) = %q, want %q", tc.target, got, tc.want)
 		}
 	}
+	// Named matches a VM's name or alias exactly, never a folder's name.
+	for target, want := range map[string]string{
+		web2.Name: web2.Name, "devvm-web": web.Name, "web": "", "devvm-tools-build": "", "nope": "",
+	} {
+		if got := Named(target, vms); got != want {
+			t.Errorf("Named(%q) = %q, want %q", target, got, want)
+		}
+	}
 	// A VM without a recorded folder is matched by its name's folder part.
 	if got := Targets("web", []Recorded{{Name: web.Name}}); !slices.Equal(got, []string{web.Name}) {
 		t.Errorf("Targets(web) without a folder = %q", got)

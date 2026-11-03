@@ -1,0 +1,172 @@
+# rm VM: a VM whose project folder is gone, named by its name or ssh
+# alias, is deleted from any folder after asking, its agents' history
+# exported first; ls and space mark it. A VM whose folder is there, a name
+# that isn't a VM's, and a VM its backend lost are refused.
+
+# A name that isn't a VM's, and a folder's name, which rm doesn't take.
+! exec devvm rm devvm-nope-0123456789abcd
+stderr '^devvm: rm_unknown_vm name=devvm-nope-0123456789abcd$'
+project web
+exec devvm --no-network-policy --no-git-protect --agents claude
+vm_name WEB web
+project api
+exec devvm --no-network-policy --no-git-protect
+vm_name API api
+! exec devvm rm api --force
+stderr '^devvm: rm_unknown_vm name=api$'
+! exec devvm rm devvm-api devvm-web
+stderr '^devvm: args_too_many '
+
+# Folders that are there: nothing is marked, and rm VM refuses a VM whose
+# folder is there from another folder, naming that folder; named in its
+# own folder, it's rm.
+exec devvm ls
+stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/api\n'
+! stdout gone
+exec devvm ls --json
+stdout '"folder_gone": false'
+! stdout '"folder_gone": true'
+exec devvm space --json
+! stdout folder_gone
+cd $WORK/web
+stub_reset
+! exec devvm rm $API --force
+stderr '^devvm: rm_vm_folder_there dir=/\S*/api vm=devvm-api-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl delete'
+exists $API_dir/vm.json
+cd $WORK/api
+ttyin -stdin $WORK/no.txt
+exec devvm rm $API
+stderr '^rm_confirm vm=devvm-api-[0-9a-f]{14} \[y/N\] '
+exists $API_dir/vm.json
+
+# api's folder goes: ls marks it, in text and --json, and space names it.
+cd $WORK/web
+rm $WORK/api
+exec devvm ls
+stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/api \(gone\)\n'
+stdout '^devvm-web-[0-9a-f]{14} +Running +.* +/\S*/web\n'
+exec devvm ls --json
+stdout '"folder": "/\S*/api",\n      "folder_gone": true,\n'
+stdout '"folder": "/\S*/web",\n      "folder_gone": false,\n'
+exec devvm space
+stderr '^space_folder_gone dir=/\S*/api vm=devvm-api-[0-9a-f]{14}$'
+! stderr 'space_folder_gone .*web'
+exec devvm space --json
+stdout '"folder_gone": \[\n    {\n      "backend": "lima",\n      "name": "devvm-api-[0-9a-f]{14}",\n      "folder": "/\S*/api"\n    }\n  \]'
+# gc never deletes it.
+exec devvm gc --orphans --force
+exists $API_dir/vm.json
+
+# Without a terminal rm VM refuses unless --force; in one, no keeps it,
+# and yes deletes it, by its ssh alias too. Its folder isn't made again.
+stub_reset
+! exec devvm rm $API
+stderr '^devvm: force_needed command=devvm rm$'
+ttyin -stdin $WORK/no.txt
+exec devvm rm $API
+stderr '^delete_gone_folder_vm dir=/\S*/api vm=devvm-api-[0-9a-f]{14} \[y/N\] '
+stdout '==> kept vm=devvm-api-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl delete'
+exists $API_dir/vm.json
+vm_state $API_dir/vm.json
+stdout '^alias=devvm-api$'
+ttyin -stdin $WORK/yes.txt
+exec devvm rm devvm-api
+stdout '==> deleted vm=devvm-api-[0-9a-f]{14}$'
+! stdout exported
+stub_calls
+stdout '^limactl delete -f devvm-api-[0-9a-f]{14}$'
+! stdout 'limactl (start|shell)'
+! exists $API_dir
+! exists $WORK/api
+exec cat $DATA/ssh_config
+! stdout devvm-api
+
+# web has an agent. Stopped, its history can't be exported without
+# starting it, which would make its folder again: refused, unless
+# --no-export. Running, it's exported, then deleted.
+cd $WORK
+rm $WORK/web
+exec limactl stop $WEB
+stub_reset
+! exec devvm rm $WEB --force
+stderr '^devvm: rm_gone_stopped dir=/\S*/web vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (start|delete)'
+exists $WEB_dir/vm.json
+! exists $WORK/web
+exec limactl start --tty=false $WEB
+stub_reset
+exec devvm rm $WEB --force
+stdout '^==> exported file=\S*/data/devvm/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'exec ''bash'' ''-c'' ''cd ~ && ls -d \.claude '
+! stdout 'limactl start'
+! exists $WEB_dir
+! exists $WORK/web
+catg $DATA/exports/devvm-web-*.folder
+stdout '^/\S*/web$'
+
+# A stopped VM with an agent goes with --no-export.
+project agent
+exec devvm --no-network-policy --no-git-protect --agents claude
+vm_name AGENT agent
+exec limactl stop $AGENT
+cd $WORK
+rm $WORK/agent
+exec devvm rm $AGENT --force --no-export
+! stdout exported
+stdout '^==> deleted vm=devvm-agent-[0-9a-f]{14}$'
+! exists $AGENT_dir
+
+# A --clone VM's work can't be fetched into a repo that's gone: refused
+# unless --no-clone-check, which warns.
+mkdir $VMS/0123456789ab01
+cp $WORK/clone.json $VMS/0123456789ab01/vm.json
+exec sh -c 'printf "devvm-cl-0123456789ab01 Running\n" >> "$STUB_DIR/instances"'
+! exec devvm rm devvm-cl-0123456789ab01 --force
+stderr '^devvm: rm_gone_clone dir=/p/cl vm=devvm-cl-0123456789ab01$'
+exec devvm rm devvm-cl-0123456789ab01 --force --no-clone-check --no-export
+stderr '^devvm: clone_check_skipped vm=devvm-cl-0123456789ab01$'
+stdout '^==> deleted vm=devvm-cl-0123456789ab01$'
+! exists $VMS/0123456789ab01
+
+# A VM its backend lost: gc --orphans' to forget.
+mkdir $VMS/0123456789ab02
+cp $WORK/lost.json $VMS/0123456789ab02/vm.json
+! exec devvm rm devvm-lost-0123456789ab02 --force
+stderr '^devvm: rm_vm_lost vm=devvm-lost-0123456789ab02$'
+exists $VMS/0123456789ab02/vm.json
+
+-- yes.txt --
+y
+-- no.txt --
+n
+-- clone.json --
+{
+  "version": 1,
+  "id": "0123456789abcdef0123456789abcd01",
+  "name": "devvm-cl-0123456789ab01",
+  "image": "base",
+  "dir": "/p/cl",
+  "backend": "lima",
+  "created": "2026-01-01T00:00:00Z",
+  "clone": {"on": true},
+  "git": {"mode": "clone"},
+  "net": {"on": false}
+}
+-- lost.json --
+{
+  "version": 1,
+  "id": "0123456789abcdef0123456789abcd02",
+  "name": "devvm-lost-0123456789ab02",
+  "image": "base",
+  "dir": "/p/lost",
+  "backend": "lima",
+  "created": "2026-01-01T00:00:00Z",
+  "net": {"on": false}
+}

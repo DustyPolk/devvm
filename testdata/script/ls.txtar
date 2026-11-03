@@ -41,14 +41,15 @@ exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +/'
 
 # A --clone VM shows clone in GIT, a base from a container image its
-# label, and a VM whose creation didn't finish - for what it lacks.
+# label, and a VM whose creation didn't finish - for what it lacks. Their
+# folders, /p/..., are gone: (gone) after them, and folder_gone in --json.
 mkdir $VMS/0123456789ab01 $VMS/0123456789ab02
 cp $WORK/clone.json $VMS/0123456789ab01/vm.json
 cp $WORK/from.json $VMS/0123456789ab02/vm.json
 exec sh -c 'printf "devvm-cl-0123456789ab01\ndevvm-from-0123456789ab02 Running\ndevvm-half-0123456789ab03\ndevvm-tools-build\n" >> "$STUB_DIR/instances"'
 exec devvm ls
-stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +/p/cl\n'
-stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +/p/from\n'
+stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +/p/cl \(gone\)\n'
+stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +/p/from \(gone\)\n'
 stdout '^devvm-half-0123456789ab03 +Stopped +- +- +- +- +- +-\n'
 ! stdout devvm-tools-build
 # Sorted by name.
@@ -58,7 +59,7 @@ stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net
 exec devvm ls --json
 stdout '^{\n  "version": 1,\n  "vms": \[\n'
 stdout '^      "name": "devvm-cl-0123456789ab01",\n      "status": "Stopped",\n      "image": "base",\n      "tools": \[\n        "node",\n        "claude"\n      \],\n'
-stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "links": 0\n'
+stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_gone": true,\n      "links": 0\n'
 stdout '^      "name": "devvm-half-0123456789ab03",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
 ! stdout '^NAME'
 

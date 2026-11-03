@@ -14,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -166,6 +167,80 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	}
 	if !o.NoExport && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0 {
 		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
+			return err
+		}
+	}
+	return e.delete(ctx, t)
+}
+
+// RmVM deletes the VM that name names, by its name or its ssh alias, when
+// it's this folder's (Rm) or its project folder is gone (FolderGone); a
+// VM whose folder is still there is deleted from that folder. It asks
+// first in a terminal, or deletes with --force, and refuses without
+// either (force_needed), as Rm does. Its agents' history is exported
+// first unless --no-export, which needs the VM running: one stopped would
+// make its folder again as it starts (its backend makes a missing mount's
+// folder), so it's refused instead, unless it's a --clone VM, which
+// mounts none. A --clone VM's work can't be fetched into a repo that's
+// gone, so it's deleted only with --no-clone-check.
+func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
+	all, err := recordedVMs(e.Dirs)
+	if err != nil {
+		return err
+	}
+	vm := project.Named(name, all)
+	if vm == "" {
+		return msg.RmUnknownVM(name)
+	}
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		return err
+	}
+	if st.Dir == e.Dir {
+		return e.Rm(ctx, o)
+	}
+	if !FolderGone(st) {
+		return msg.RmVMFolderThere(st.Dir, vm)
+	}
+	t, err := e.inspect(ctx, project.Folder{Dir: st.Dir, Name: vm}, st)
+	if err != nil {
+		return err
+	}
+	if !t.exists {
+		return msg.RmVMLost(vm)
+	}
+	return e.rmGone(ctx, t, o)
+}
+
+// rmGone deletes t, a VM whose folder is gone, for RmVM.
+func (e Lifecycle) rmGone(ctx context.Context, t *found, o RmOptions) error {
+	vm, st := t.f.Name, t.st
+	clone := st.Finished() && isClone(st)
+	if clone && !o.NoCloneCheck {
+		return msg.RmGoneClone(st.Dir, vm)
+	}
+	export := !o.NoExport && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0
+	if export && !clone {
+		in, err := t.b.Inspect(ctx, vm)
+		if err != nil {
+			return err
+		}
+		if in.Status != backend.StatusRunning {
+			return msg.RmGoneStopped(st.Dir, vm)
+		}
+	}
+	if !o.Force && !e.Terminal() {
+		return msg.ForceNeeded("devvm rm")
+	}
+	if clone {
+		e.Warn(msg.CloneCheckSkipped(vm))
+	}
+	if !o.Force && !e.Ask(msg.DeleteGoneFolderVM(st.Dir, vm)) {
+		e.Info(msg.Kept(vm))
+		return nil
+	}
+	if export {
+		if err := e.export(ctx, t, "", msg.RmVMExportFailed(vm)); err != nil {
 			return err
 		}
 	}

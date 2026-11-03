@@ -65,6 +65,9 @@ func newSpaceCmd(u *ui.UI) *cobra.Command {
 			for _, s := range r.Strays {
 				u.Note(msg.SpaceStray(s.Backend, s.Data, s.Name))
 			}
+			for _, g := range r.FolderGone {
+				u.Note(msg.SpaceFolderGone(g.Folder, g.Name))
+			}
 			if asJSON {
 				// Lists are [] when empty, never null.
 				if r.Rows == nil {
@@ -135,6 +138,17 @@ type spaceReport struct {
 	// Strays are VMs with devvm's label it has no state for: another
 	// devvm's, or this one's whose state is gone. devvm never deletes them.
 	Strays []strayVM `json:"strays,omitempty"`
+	// FolderGone are the VMs whose backend has them and whose project
+	// folder is gone (vm.FolderGone), by name: devvm rm VM deletes one,
+	// and devvm gc never does.
+	FolderGone []goneVM `json:"folder_gone,omitempty"`
+}
+
+// goneVM is a VM whose project folder is gone.
+type goneVM struct {
+	Backend string `json:"backend"`
+	Name    string `json:"name"`
+	Folder  string `json:"folder"`
 }
 
 // strayVM is a VM with devvm's label that this devvm has no state for.
@@ -205,6 +219,9 @@ func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
 		return r, err
 	}
 	r.Rows = append(r.Rows, dataRows...)
+	if r.FolderGone, err = e.folderGone(); err != nil {
+		return r, err
+	}
 	for _, row := range r.Rows {
 		r.Total += row.Size
 		r.GC += row.GC
@@ -467,6 +484,26 @@ func (e spaceEnv) vmFolders() (orphans, rest []string, err error) {
 		}
 	}
 	return orphans, rest, nil
+}
+
+// folderGone are the VMs whose backend answered with them and whose
+// project folder is gone, by name.
+func (e spaceEnv) folderGone() ([]goneVM, error) {
+	_, rest, err := e.vmFolders()
+	if err != nil {
+		return nil, err
+	}
+	var out []goneVM
+	for _, n := range rest {
+		st, err := state.ReadVM(e.b.Dirs, n)
+		if err != nil {
+			return nil, err
+		}
+		if e.vms[st.Backend][n] && vm.FolderGone(st) {
+			out = append(out, goneVM{Backend: st.Backend, Name: n, Folder: st.Dir})
+		}
+	}
+	return out, nil
 }
 
 // vmLogs are the logs of the VMs that aren't orphans: their network logs,

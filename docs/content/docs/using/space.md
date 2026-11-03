@@ -40,7 +40,7 @@ devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's sh
 | `rest` | the row's `FREED BY` |
 | `retain`, `retain_frees` | the retention setting that applies to the row and what it would delete now, both left out when none is on |
 
-`total` and `gc` are the totals row's `SIZE` and `GC`. `backends` has the second table's rows, each with its `backend`, `name`, `path`, `count`, `size` and `sized`. `unknown` names the backends that one of your VMs uses that didn't answer, and `strays` has the [VMs devvm has no state for](#vms-devvm-has-no-state-for), each with its `backend`, `name` and the `data` folder its label names. devvm leaves both out when they're empty.
+`total` and `gc` are the totals row's `SIZE` and `GC`. `backends` has the second table's rows, each with its `backend`, `name`, `path`, `count`, `size` and `sized`. `unknown` names the backends that one of your VMs uses that didn't answer, and `strays` has the [VMs devvm has no state for](#vms-devvm-has-no-state-for), each with its `backend`, `name` and the `data` folder its label names. `folder_gone` has the [VMs whose folder is gone](#vms-whose-folder-is-gone), each with its `backend`, `name` and `folder`. devvm leaves these out when they're empty.
 
 ```json
 {
@@ -146,6 +146,10 @@ Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `
 ### VMs devvm has no state for
 
 A VM can also be the other way around: the backend has it, with devvm's label, but devvm has no state for it. Usually it belongs to another devvm, such as one run with another `XDG_DATA_HOME` for a test or a sandbox. `devvm space` names each one, with the data folder its label names, and devvm never deletes it, because the other devvm may still use it. To delete one yourself, run `devvm limactl delete NAME`.
+
+### VMs whose folder is gone
+
+A VM whose project folder you deleted or moved still takes its disk, and it isn't leftover state, because its backend still has it and it may hold that project's work. `devvm space` names each VM whose backend has it and whose folder is gone, with that folder, and counts it among the `VMs`. Neither `devvm gc` nor retention ever deletes one. `devvm rm VM` deletes it after asking, exporting its agents' history first ([a VM whose folder is gone](../getting-started/commands.md#a-vm-whose-folder-is-gone)).
 
 ### What devvm doctor finds in `vms/`
 

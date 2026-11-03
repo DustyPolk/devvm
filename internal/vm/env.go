@@ -447,6 +447,39 @@ func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
 	return err == nil && st.Dir == f.Dir && st.Folder == id
 }
 
+// FolderGone reports whether the project folder a VM's state records is
+// gone: nothing is at its path, as when the folder was deleted or moved,
+// or is on a disk that isn't connected. A folder made again at that path
+// isn't gone, as sameFolder tells it apart, and neither is one whose path
+// can't be read, or a VM whose state records none. A VM whose folder is
+// gone is deleted only when asked for by name (Lifecycle.RmVM), never on
+// its own.
+func FolderGone(st *state.VM) bool {
+	if st.Dir == "" {
+		return false
+	}
+	_, err := os.Lstat(st.Dir)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// recordedVMs returns the project VMs that have state, as their states
+// record them.
+func recordedVMs(d paths.Dirs) ([]project.Recorded, error) {
+	names, err := state.VMNames(d)
+	if err != nil {
+		return nil, err
+	}
+	var out []project.Recorded
+	for _, n := range names {
+		st, err := state.ReadVM(d, n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, project.Recorded{Name: n, Alias: st.Alias, Dir: st.Dir})
+	}
+	return out, nil
+}
+
 // start starts a stopped VM confined as conf says, and returns the
 // confinement it got. With network policy its proxy starts first, and the
 // backend gets the proxy's confinement; a start that fails stops the proxy

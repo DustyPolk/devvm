@@ -556,6 +556,10 @@ other = "Reading what devvm keeps failed: {{.reason}}."
 [space_backend_unknown]
 other = "The {{.backend}} backend didn't answer, so its VMs and images aren't counted."
 
+[space_folder_gone]
+description = "dir is the folder vm was made for, which is gone"
+other = "{{.vm}} was made for {{.dir}}, which is gone. Run devvm rm {{.vm}} to delete the VM."
+
 [space_stray]
 description = "data is the data folder in the VM's label: another devvm's, or this one's"
 other = "The {{.backend}} backend has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
@@ -784,6 +788,10 @@ other = "Opening this folder's VM failed: {{.reason}}."
 description = "reason is an error from the system, in English"
 other = "Deleting this folder's VM failed: {{.reason}}."
 
+[rm_vm_failed]
+description = "reason is an error from the system, in English; vm is the VM devvm rm VM names"
+other = "Deleting {{.vm}} failed: {{.reason}}."
+
 [adopt_failed]
 description = "reason is an error from the system, in English"
 other = "Adopting this folder's VM failed: {{.reason}}."
@@ -831,6 +839,32 @@ other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it 
 
 [delete_other_folder_vm]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
+
+[rm_unknown_vm]
+description = "name is VM, as given to devvm rm VM"
+other = "There's no VM named {{.name}}. Give a VM's name, as devvm ls lists them, or its ssh alias."
+
+[rm_vm_folder_there]
+description = "dir is the folder vm was made for, which is still there"
+other = "{{.vm}} was made for {{.dir}}, which is still there. To delete it, run devvm rm in {{.dir}}."
+
+[rm_vm_lost]
+other = "{{.vm}}'s backend no longer has it. Run devvm gc --orphans to delete what devvm keeps for it."
+
+[rm_gone_stopped]
+description = "dir is the folder vm was made for, which is gone"
+other = "{{.vm}} is stopped, and starting it to export its agents' history would make {{.dir}} again. Run devvm rm {{.vm}} --no-export to delete it without exporting."
+
+[rm_gone_clone]
+description = "dir is the repo the --clone VM vm was made for, which is gone"
+other = "{{.vm}}'s repo {{.dir}} is gone, so devvm can't fetch the clone's work into it. Run devvm rm {{.vm}} --no-clone-check to delete the VM and that work with it."
+
+[rm_vm_export_failed]
+other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm {{.vm}} --no-export to delete it without exporting."
+
+[delete_gone_folder_vm]
+description = "dir is the folder vm was made for, which is gone"
+other = "{{.vm}} was made for {{.dir}}, which is gone. It may hold that project's work. Delete it?"
 
 [adopt_vm]
 other = "This folder's VM, {{.vm}}, was made for an earlier folder at {{.was}}, which was deleted or replaced.\nUse that VM here, with its files, secrets and allowlist?"

@@ -77,15 +77,24 @@ func ForDir(dir string, all []string) []string {
 // ssh reaches it by, and its project folder.
 type Recorded struct{ Name, Alias, Dir string }
 
+// Named returns the project VM among vms whose name or alias is name, ""
+// when none is.
+func Named(name string, vms []Recorded) string {
+	for _, v := range vms {
+		if vmname.IsVM(v.Name) && (name == v.Name || name == v.Alias) {
+			return v.Name
+		}
+	}
+	return ""
+}
+
 // Targets returns the project VMs among vms that a link's TARGET names
 // when it isn't a path (IsPath), in vms's order: the VM itself for a VM's
 // name or alias, else those whose folder's name has the same Slug, as New
 // makes it, whatever their backend left of it in their names.
 func Targets(target string, vms []Recorded) []string {
-	for _, v := range vms {
-		if vmname.IsVM(v.Name) && (target == v.Name || target == v.Alias) {
-			return []string{v.Name}
-		}
+	if vm := Named(target, vms); vm != "" {
+		return []string{vm}
 	}
 	if vmname.IsVM(target) {
 		return nil

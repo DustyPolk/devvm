@@ -30,6 +30,7 @@ You start the agent in the VM's shell, whose prompt starts with `(devvm)`, so th
 | `devvm restart` | stop this folder's VM, start it again and open a shell in it, for changes that apply only when it starts ([details](#restarting-and-stopping)) |
 | `devvm stop` | stop this folder's VM ([details](#restarting-and-stopping)) |
 | `devvm rm [--force] [--no-export] [--no-clone-check]` | delete this folder's VM after asking, exporting its agents' history first unless `--no-export` ([details](#deleting-a-vm)) |
+| `devvm rm VM [--force] [--no-export] [--no-clone-check]` | delete a VM whose folder is gone, by its name or ssh alias, after asking ([details](#a-vm-whose-folder-is-gone)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
 | `devvm ls` | list the project VMs ([details](#listing-vms)) |
 | `devvm code` | get this folder's VM ready as `devvm host` does, then open its folder in VS Code over Remote-SSH ([VS Code](../using/ssh.md#vs-code)) |
@@ -101,7 +102,7 @@ When you make one of these changes to a running VM with `devvm size`, `devvm net
 
 When the VM has an agent, devvm first exports the agents' history, unless you give `--no-export`, and when the export fails, devvm keeps the VM ([history](../using/coding-agents.md#history)). For a `--clone` VM, devvm offers to fetch the branches this repo hasn't fetched, and it deletes the VM's uncommitted changes only after you confirm. `--no-clone-check` skips that check and warns you that the clone's unfetched commits and uncommitted changes go with the VM ([deleting the VM](../using/clone.md#deleting-the-vm)).
 
-devvm deletes the VM made for an earlier folder at this path only after you confirm ([a folder made again](#a-folder-made-again)). In a folder without a VM of its own, `devvm rm` acts on the VM of the nearest folder with one that this folder is inside, and it names that VM and deletes it only after you confirm ([a subfolder](#a-subfolder)). devvm asks these questions only in a terminal, and `--force` never answers them.
+devvm deletes the VM made for an earlier folder at this path only after you confirm ([a folder made again](#a-folder-made-again)). In a folder without a VM of its own, `devvm rm` acts on the VM of the nearest folder with one that this folder is inside, and it names that VM and deletes it only after you confirm ([a subfolder](#a-subfolder)). devvm asks these questions only in a terminal, and `--force` never answers them. To delete a VM whose folder you deleted or moved, give its name, as in `devvm rm devvm-web-71a99b1076d92c` ([a VM whose folder is gone](#a-vm-whose-folder-is-gone)).
 
 ### A folder made again
 
@@ -109,6 +110,16 @@ A VM belongs to the folder it was made for, which devvm knows by its path and by
 
 - `devvm rm` deletes the VM and never exports its history, because its folder is gone. The VM may hold that project's work, so `--force` never answers this question.
 - `devvm adopt` gives the VM to this folder, with its files, secrets and allowlist. Its `.git` protection starts again, as if `.git` had just appeared. `devvm adopt --force` gives it without asking, which `devvm adopt` needs when there's no terminal.
+
+### A VM whose folder is gone
+
+When you delete or move a project folder, its VM stays, because the VM may hold work that's nowhere else and devvm never deletes a VM on its own. `devvm ls` writes `(gone)` after the folder of each VM whose folder is gone ([listing VMs](#listing-vms)), and `devvm space` names each one with its folder. A folder on a disk that isn't connected counts as gone too, so connect the disk before you delete its VMs. A folder that was deleted and made again at the same path isn't gone, and devvm handles it as [a folder made again](#a-folder-made-again). [A VM whose folder is gone](../internals/overview.md#a-vm-whose-folder-is-gone) explains how devvm tells.
+
+`devvm rm VM` deletes a VM whose folder is gone, and you can run it in any folder. VM is the VM's name, as `devvm ls` lists it, or the alias that ssh reaches it by. In a terminal, devvm names the VM and its folder and asks before deleting it, with no as the default. `--force` deletes it without asking, which `devvm rm VM` needs when there's no terminal. Like `devvm rm`, it deletes what devvm keeps for the VM, and when the VM has an agent, devvm first exports the agents' history unless you give `--no-export` ([history](../using/coding-agents.md#history)).
+
+The export reads the history from the running VM. Starting a stopped VM would make its folder again, because Lima makes a missing folder that a VM mounts, so for a stopped VM with an agent devvm refuses and tells you to run `devvm rm VM --no-export`. If you moved the folder and want the history, move the folder back to its path and run `devvm history export` or `devvm rm` in it. A `--clone` VM mounts no project folder, so devvm starts it to export the history. Its clone's work can't be fetched into a repo that's gone, though, so devvm refuses to delete it unless you give `--no-clone-check`, which deletes the VM and that work with it.
+
+`devvm rm VM` refuses a VM whose folder is still there, including a VM made for an earlier folder at that path, and tells you to run `devvm rm` in that folder. Given this folder's own VM, it does what `devvm rm` does. It also refuses a name that isn't one of your VMs, and a VM that its backend no longer has, for which `devvm gc --orphans` deletes what devvm keeps ([leftovers of a VM deleted outside devvm](../using/space.md#leftovers-of-a-vm-deleted-outside-devvm)).
 
 ### A subfolder
 
@@ -133,13 +144,13 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
 | `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
 | `LINKS` | how many [links](../using/links.md) it has to ports of your other VMs, or `-` for none |
-| `FOLDER` | its project folder |
+| `FOLDER` | its project folder, with `(gone)` after it when nothing is at that path, which `devvm rm VM` deals with ([a VM whose folder is gone](#a-vm-whose-folder-is-gone)) |
 
 A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name and status.
 
 ### devvm ls --json
 
-`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, `tools` is the list of its shared tools, `[]` for none, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. A value the VM's state doesn't have is `""`. `links` is how many links the VM has, `0` for none.
+`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, `tools` is the list of its shared tools, `[]` for none, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. A value the VM's state doesn't have is `""`. `folder` is the folder alone, and `folder_gone` is `true` when nothing is at its path and `false` otherwise. `links` is how many links the VM has, `0` for none.
 
 ```json
 {
@@ -155,6 +166,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
       "net": "on",
       "backend": "lima",
       "folder": "/Users/you/code/website",
+      "folder_gone": false,
       "links": 0
     }
   ]

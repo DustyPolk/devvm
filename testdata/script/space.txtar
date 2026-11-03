@@ -46,7 +46,8 @@ stdout '^mise +1 +'
 stdout '^leftover state +1 +\S+ +leftover +- +gc --orphans +-$'
 stdout '^total +- +\S+ +- +\S+ +- +-$'
 ! stdout '^devvm.s files'
-! stderr .
+# The VM's folder, /p, is gone: named, while the one Lima lost isn't.
+stderr '\Aspace_folder_gone dir=/p vm=devvm-p-12345612345601\n\z'
 stub_calls
 ! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'
 

@@ -42,7 +42,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
-- [devvm rm](devvm_rm.md): Delete this folder's VM
+- [devvm rm](devvm_rm.md): Delete this folder's VM, or a VM whose folder is gone
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
 - [devvm secret rm](devvm_secret_rm.md): Delete a saved secret
 - [devvm secret set](devvm_secret_set.md): Save the Claude Code token or GitHub token on this machine
