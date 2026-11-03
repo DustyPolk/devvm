@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"math/rand/v2"
 	"net"
 	"os"
 	"path/filepath"
@@ -50,6 +49,9 @@ type Proxy struct {
 	InitCA func(dir string) error
 	// Listening reports whether a program has a host loopback port.
 	Listening func(ctx context.Context, port int) bool
+	// Ports is the range new ports come from (platform.ChoosablePorts,
+	// which the zero value means too).
+	Ports platform.PortRange
 	// Tick is how often a start looks for the proxy to listen, ten times;
 	// a stop waits four Ticks for each signal to end it.
 	Tick time.Duration
@@ -82,7 +84,7 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 		InitCA: func(dir string) error {
 			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
 		},
-		Listening: listening, Tick: 500 * time.Millisecond, Signal: daemon.Signal, Getenv: os.Getenv,
+		Listening: listening, Ports: platform.ChoosablePorts(), Tick: 500 * time.Millisecond, Signal: daemon.Signal, Getenv: os.Getenv,
 		Note: u.Note, Warn: u.Warn, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Terminal: u.StdinIsTerminal,
 	}
@@ -380,20 +382,20 @@ func (p *Proxy) nixCacheArgs(st *state.VM) []string {
 	return []string{"-nix-cache", p.Dirs.NixCache(), "-nix-cache-max", strconv.FormatInt(def.Retention.NixCacheCap(), 10)}
 }
 
-// freePort returns a loopback port from 20000 to 59999 no program has
-// (Listening) and no VM has.
+// freePort returns a loopback port of Ports (below the host's ephemeral
+// range) no program has (Listening) and no VM has.
 func (p *Proxy) freePort(ctx context.Context) (int, error) {
 	used, err := UsedPorts(p.Dirs, "")
 	if err != nil {
 		return 0, err
 	}
-	for range 1000 {
-		port := 20000 + rand.IntN(40000) //nolint:gosec // a port, not a secret
-		if !used[port] && !p.Listening(ctx, port) {
-			return port, nil
-		}
+	r := p.Ports
+	if r == (platform.PortRange{}) {
+		r = platform.ChoosablePorts()
 	}
-	return 0, errors.New("no free port on 127.0.0.1")
+	return platform.FreePort(ctx, r, func(ctx context.Context, port int) bool {
+		return !used[port] && !p.Listening(ctx, port)
+	})
 }
 
 // UsedPorts returns the ssh, proxy and desktop ports VMs have, and the

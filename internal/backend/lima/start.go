@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -323,21 +322,11 @@ func (l *Lima) proxyURL(c backend.Confinement) string {
 	return backend.ProxyURL(guestFwdHost, guestFwdPort, c.ProxyPassword)
 }
 
-// freePort returns a loopback port nothing listens on now, on any address
+// freePort returns a loopback port below the host's ephemeral range
+// (platform.ChoosablePorts) nothing listens on now, on any address
 // (platform.PortFree).
 func freePort(ctx context.Context) (int, error) {
-	for range 20 {
-		ln, err := platform.ListenLoopback(ctx, "127.0.0.1:0")
-		if err != nil {
-			return 0, err
-		}
-		port := ln.Addr().(*net.TCPAddr).Port
-		_ = ln.Close()
-		if platform.PortFree(ctx, port) {
-			return port, nil
-		}
-	}
-	return 0, errors.New("lima: no free port on the host's loopback")
+	return platform.FreePort(ctx, platform.ChoosablePorts(), platform.PortFree)
 }
 
 // recordStart notes the hostagent Lima started for the VM, which a

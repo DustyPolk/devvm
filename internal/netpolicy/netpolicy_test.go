@@ -25,6 +25,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/settings"
@@ -220,7 +221,7 @@ func TestFreePort(t *testing.T) {
 	p := &Proxy{Dirs: d, Listening: func(_ context.Context, port int) bool { return port%2 == 0 }}
 	for range 200 {
 		port, err := p.freePort(t.Context())
-		if err != nil || port < 20000 || port >= 60000 || port%2 == 0 || used[port] {
+		if r := platform.ChoosablePorts(); err != nil || port < r.Lo || port > r.Hi || port%2 == 0 || used[port] {
 			t.Fatalf("freePort = %d, %v", port, err)
 		}
 	}
