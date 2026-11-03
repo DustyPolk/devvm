@@ -406,6 +406,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"unknown_part":                     "using/images#what-a-new-vm-gets",
 	"unknown_part_like":                "using/images#what-a-new-vm-gets",
 	"part_none_alone":                  "using/images#what-a-new-vm-gets",
+	"part_other_flag":                  "using/images#what-a-new-vm-gets",
 	"tool_not_layer":                   "using/images#layers",
 	"parts_flags_ignored":              "using/toolchains#adding-and-removing-tools",
 }

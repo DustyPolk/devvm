@@ -179,16 +179,20 @@ func TestPartFlags(t *testing.T) {
 	for _, tc := range []struct{ flag, value, want string }{
 		{"tools", "node,go", ""},
 		{"tools", "none", ""},
-		{"tools", "claude", "unknown_part flag=--tools given=claude names=node python rust go"},
+		{"tools", "claude", "part_other_flag flag=--tools given=claude other=--agents"},
+		{"tools", "node,mine", "part_other_flag flag=--tools given=mine other=--layers"},
+		{"tools", "java", "unknown_part flag=--tools given=java names=node python rust go"},
 		{"tools", "pyhton", "unknown_part_like flag=--tools given=pyhton like=python"},
 		{"tools", "node,none", "part_none_alone flag=--tools"},
 		{"tools", ",", "part_none_alone flag=--tools"},
 		{"agents", "claude,opencode", ""},
 		{"agents", "cladue", "unknown_part_like flag=--agents given=cladue like=claude"},
+		{"agents", "node", "part_other_flag flag=--agents given=node other=--tools"},
 		{"layers", "docker,mine", ""},
 		{"layers", "nix", ""},
 		{"layers", "base", "unknown_part flag=--layers given=base names=docker mine nix"},
-		{"layers", "node", "unknown_part flag=--layers given=node names=docker mine nix"},
+		{"layers", "node", "part_other_flag flag=--layers given=node other=--tools"},
+		{"layers", "codex", "part_other_flag flag=--layers given=codex other=--agents"},
 		{"layers", "mien", "unknown_part_like flag=--layers given=mien like=mine"},
 	} {
 		if got := msg.NamesOf(checkFlagValue(tc.flag, tc.value)); got != tc.want {

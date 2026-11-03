@@ -158,9 +158,9 @@ func partFlag(value string) *[]string {
 }
 
 // checkPartFlag checks the value of --tools, --agents or --layers (flag,
-// as given): none alone, or a comma-separated list of the part's names,
-// each refused with a did-you-mean when it isn't one. The layers are base
-// and devvm's own, and the user's.
+// as given): none alone, or a comma-separated list of the part's names.
+// A name of another part's is refused naming that part's flag, and any
+// other with a did-you-mean. The layers are devvm's own and the user's.
 func checkPartFlag(flag, value string) error {
 	names := splitList(value)
 	if slices.Contains(names, partsNone) && len(names) > 1 || len(names) == 0 {
@@ -169,15 +169,20 @@ func checkPartFlag(flag, value string) error {
 	if value == partsNone {
 		return nil
 	}
-	switch flag {
-	case "--tools":
-		return vm.CheckPart(flag, names, image.Toolchains)
-	case "--agents":
-		return vm.CheckAgents(names)
-	}
 	layers := image.Builtins
 	if dirs, err := paths.FromEnv(); err == nil {
 		layers = (&build.Env{Dirs: dirs}).Layers()[1:]
 	}
-	return vm.CheckPart(flag, names, layers)
+	parts := map[string][]string{"--tools": image.Toolchains, "--agents": image.Agents, "--layers": layers}
+	for _, n := range names {
+		if slices.Contains(parts[flag], n) {
+			continue
+		}
+		for _, other := range []string{"--tools", "--agents", "--layers"} {
+			if other != flag && slices.Contains(parts[other], n) {
+				return msg.PartOtherFlag(flag, n, other)
+			}
+		}
+	}
+	return vm.CheckPart(flag, names, parts[flag])
 }

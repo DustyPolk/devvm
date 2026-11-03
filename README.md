@@ -31,15 +31,15 @@ cd ~/some-project
 devvm
 ```
 
-devvm lists what the new VM can get, with the toolchains your project's files call for already checked. Check a coding agent, such as Claude Code, with the arrow keys and space, then press enter. devvm asks whether the VM gets network policy (answer yes, the default). The first time, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds.
+The first time, devvm asks for the size and the coding agents that new VMs get. Then it lists what this VM can get, with the toolchains your project's files call for and those agents already checked. Check or uncheck a coding agent, such as Claude Code, with the arrow keys and space, then press enter. devvm asks whether the VM gets network policy (answer yes, the default). On that first run, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds.
 
-devvm then opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`. Start the agent there, so it runs in the VM:
+devvm then opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`. Start the agent there, so it runs in the VM. Claude Code needs a Claude Code token before its first start, which [your first VM](https://devvm.dev/docs/getting-started/first-vm/#claude-codes-token) shows how to make on your machine and give to devvm:
 
 ```sh
 claude
 ```
 
-Running `devvm` in the folder again opens a shell in the same VM, and `devvm tools` adds an agent to it. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest, including the Claude Code token, which Claude Code needs first.
+Running `devvm` in the folder again opens a shell in the same VM, and `devvm tools` adds an agent to it. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest.
 
 ## Working on a clone
 

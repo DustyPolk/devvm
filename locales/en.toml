@@ -1468,6 +1468,10 @@ other = "There's no {{.given}} for {{.flag}}. Choose from {{.names}}, or none."
 description = "flag is --tools, --agents or --layers; like is the name closest to given"
 other = "There's no {{.given}} for {{.flag}}. Did you mean {{.like}}?"
 
+[part_other_flag]
+description = "flag and other are --tools, --agents or --layers; other is the one that takes given"
+other = "There's no {{.given}} for {{.flag}}. It goes in {{.other}}, as in devvm {{.other}} {{.given}}."
+
 [part_none_alone]
 description = "flag is --tools, --agents or --layers"
 other = "{{.flag}} takes none alone, or a list of names without it."

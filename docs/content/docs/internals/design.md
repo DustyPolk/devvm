@@ -461,14 +461,14 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 
 **End-to-end checks** (`tests/e2e.sh --backend docker`; Sysbox on the Linux engine, which e2e installs, pinned, in its docker host VM):
 
-- on Docker Desktop: refused in one line, nothing made (`docker_layer_needs_vm`); named for a VM that exists, refused in one line, nothing changed (`vm_lacks_layer`);
+- on Docker Desktop: refused in one line, nothing made (`docker_layer_needs_vm`); given with `--layers docker` to a VM that exists, warned in one line that the flag changes nothing (`parts_flags_ignored`), the VM as it was;
 - on the Linux engine: with network policy, refused in one line, nothing made;
 - runtime `sysbox-runc`, not privileged, said, unwarned, its engine's volumes, its own network, not internal, with the VM alone on it, `docker_layer=sysbox`, `net=off`; root's uid map isn't the identity, its bounding set has `NET_ADMIN` and `NET_RAW`; Docker's engine runs after each start and runs a container as the VM's user, which reaches the internet;
 - a stand-in container of the sandbox's on Docker's default network, then on another network, isn't reached from the VM, even as root, while another container on that network reaches it (the control), and the VM reaches the internet;
 - root in the VM, through its own Docker (a privileged container on the VM's network namespace), sends a datagram to this machine's server on every address through the gateway (it arrives: the control), then routes `127.0.0.1` to the gateway and sends to this machine's server on its loopback, which gets nothing; it turns IPv6 on and reaches this machine's server on `::` through the bridge's link-local address (Not covered);
 - what the VM's user writes in the project folder is the user's; a set-user-id file root makes there is root's on the host, and the next launch names it as root's (`setid_root_files`);
 - `devvm ls` shows it; `devvm network on` refused; restarted, its images kept; `rm` deletes its container, volumes and network;
-- named for a base VM that exists: refused in one line (`vm_lacks_layer`), the VM unchanged (`image=base`, no `docker_layer`, Docker's runtime, still running).
+- given with `--layers docker` to a base VM that exists: warned in one line that the flag changes nothing (`parts_flags_ignored`), the VM unchanged (`image=base`, no `docker_layer`, Docker's runtime, still running).
 
 ## smolvm
 

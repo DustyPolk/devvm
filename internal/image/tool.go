@@ -126,6 +126,11 @@ var (
 	toolVersion = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]*$`)
 )
 
+// ToolName reports whether a shared tool can have that name, as the lock
+// and a tool image's file name have it: a lowercase letter, then
+// lowercase letters and digits.
+func ToolName(s string) bool { return toolName.MatchString(s) }
+
 // ToolVersion reports whether s is shaped like a version as upstream may
 // name one: a letter or digit, then letters, digits and ._+-. It goes into
 // file names, mounts, the build VM's commands and mise's TOML.
@@ -137,7 +142,7 @@ func ToolVersion(s string) bool { return toolVersion.MatchString(s) }
 // devvm's shared-tools/mise.toml, which change what mise installs, the
 // libc and, unless it's build.sh's own, the format.
 func ToolFile(assets fs.FS, t Tool) (string, error) {
-	if !toolName.MatchString(t.Name) {
+	if !ToolName(t.Name) {
 		return "", fmt.Errorf("invalid tool name %q", t.Name)
 	}
 	if !toolVersion.MatchString(t.Version) {
@@ -195,7 +200,7 @@ func ParseToolFile(file string) (tool, version string, ok bool) {
 		return "", "", false
 	}
 	tool, version, ok = strings.Cut(rest[:i], "-")
-	if !ok || !toolName.MatchString(tool) || !toolVersion.MatchString(version) {
+	if !ok || !ToolName(tool) || !ToolVersion(version) {
 		return "", "", false
 	}
 	return tool, version, true

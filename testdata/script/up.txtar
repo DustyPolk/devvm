@@ -127,18 +127,25 @@ stdout '^0$'
 rm $STUB_DIR/start-hangs
 
 # --tools, --agents and --layers: none alone or their part's names, each
-# refused with a did-you-mean before anything runs.
+# refused before anything runs: another part's name with that part's
+# flag, any other with a did-you-mean.
 project parts git
 stub_reset
 ! exec devvm --tools pyhton
 stderr '^devvm: unknown_part_like flag=--tools given=pyhton like=python$'
 stderr '^usage_help command=devvm$'
 ! exec devvm --tools claude
-stderr '^devvm: unknown_part flag=--tools given=claude names=node python rust go$'
+stderr '^devvm: part_other_flag flag=--tools given=claude other=--agents$'
+! exec devvm --tools node,docker
+stderr '^devvm: part_other_flag flag=--tools given=docker other=--layers$'
+! exec devvm --tools java
+stderr '^devvm: unknown_part flag=--tools given=java names=node python rust go$'
 ! exec devvm --agents cladue
 stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
 ! exec devvm --layers node
-stderr '^devvm: unknown_part flag=--layers given=node names=docker nix$'
+stderr '^devvm: part_other_flag flag=--layers given=node other=--tools$'
+! exec devvm --layers mailpit
+stderr '^devvm: unknown_part flag=--layers given=mailpit names=docker nix$'
 ! exec devvm --layers none,docker
 stderr '^devvm: part_none_alone flag=--layers$'
 ! stub_calls

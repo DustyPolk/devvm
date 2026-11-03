@@ -2374,6 +2374,11 @@ func PartNoneAlone(flag string) M {
 	return M{id: "part_none_alone", vals: []val{{"flag", flag}}}
 }
 
+// PartOtherFlag is [part_other_flag]: "There's no {{.given}} for {{.flag}}. It goes in {{.other}}, as in devvm {{.other}} {{.given}}."
+func PartOtherFlag(flag string, given string, other string) M {
+	return M{id: "part_other_flag", vals: []val{{"flag", flag}, {"given", given}, {"other", other}}}
+}
+
 // PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools."
 func PartsFlagsIgnored(vm string) M {
 	return M{id: "parts_flags_ignored", vals: []val{{"vm", vm}}}
@@ -3830,6 +3835,7 @@ var specs = map[string]spec{
 	"pack_failed":                      {fields: []string{"vm"}},
 	"packing_image":                    {fields: []string{"vm"}},
 	"part_none_alone":                  {fields: []string{"flag"}},
+	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},
 	"parts_flags_ignored":              {fields: []string{"vm"}},
 	"pick_agents":                      {},
 	"pick_called_for":                  {fields: []string{"file"}},

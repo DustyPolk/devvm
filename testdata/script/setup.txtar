@@ -105,6 +105,8 @@ grep '^none$' $XDG_CONFIG_HOME/devvm/agents
 ! exec devvm setup --agents cladue
 stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
 stderr '^usage_help command=devvm setup$'
+! exec devvm setup --agents node
+stderr '^devvm: part_other_flag flag=--agents given=node other=--tools$'
 grep '^none$' $XDG_CONFIG_HOME/devvm/agents
 # A new VM made without a terminal gets setup's agents, and says so.
 exec devvm setup --agents codex

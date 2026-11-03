@@ -34,7 +34,7 @@ cd ~/some-project
 devvm
 ```
 
-devvm lists what the new VM can get, with the toolchains your project's files call for already checked. Move with the arrow keys, press space to check Claude Code, Codex or opencode, and press enter:
+devvm lists what the new VM can get, with the toolchains your project's files call for already checked. Move with the arrow keys, press space to check Claude Code, Codex or opencode, and press enter. Here node and Claude Code are checked:
 
 ```text
 Toolchains
@@ -51,14 +51,14 @@ Layers, which a VM gets only when devvm makes it
   [ ] nix        Nix, direnv and nix-direnv
 ```
 
-devvm makes the VM and opens a shell in it, whose prompt starts with `(devvm)`. You're in the VM now, so start your agent there:
+devvm makes the VM and opens a shell in it, whose prompt starts with `(devvm)`. You're in the VM now, so start your agent there. Claude Code needs a Claude Code token before its first start, which [your first VM](docs/getting-started/first-vm.md#claude-codes-token) shows how to make on your machine and give to devvm:
 
 ```sh
 # 4. Start the agent in the VM's shell
 claude
 ```
 
-The agent runs in the VM, and it sees only your project folder. Claude Code needs a Claude Code token first, which [your first VM](docs/getting-started/first-vm.md#claude-codes-token) shows how to give it. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
+The agent runs in the VM, and it sees only your project folder. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
 
 ## What's supported {icon="view-grid"}
 
@@ -149,7 +149,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 ### Does the agent run on my machine?
 
-No. You start the agent in the VM's shell, so it runs in the VM. There it sees only your project folder, and your agents' config, such as their settings and skills, which it gets read-only.
+No. You start the agent in the VM's shell, so it runs in the VM. There it sees only your project folder, and your agents' config from your machine, such as their settings and skills, which it gets read-only.
 
 ### Is it free?
 

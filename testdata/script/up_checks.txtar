@@ -88,7 +88,7 @@ stderr '^usage_help command=devvm$'
 ! exec devvm --no-network-policy --layers fooo
 stderr '^devvm: unknown_part_like flag=--layers given=fooo like=foo$'
 ! exec devvm --no-network-policy --tools claude
-stderr '^devvm: unknown_part flag=--tools given=claude names=node python rust go$'
+stderr '^devvm: part_other_flag flag=--tools given=claude other=--agents$'
 ! exec devvm --no-network-policy --agents cladue
 stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
 ! exec devvm --no-network-policy --tools node,none
