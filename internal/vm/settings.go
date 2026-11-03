@@ -16,16 +16,14 @@ import (
 type Settings struct{ *Env }
 
 // GitProtect returns the folder's VM's .git protection: on, strict, off,
-// or clone for a --clone VM, which mounts no .git.
+// or clone for a --clone VM, which mounts no .git (gitprotect.Mode, as
+// devvm ls shows it).
 func (e Settings) GitProtect(ctx context.Context) (string, error) {
 	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
 	if err != nil {
 		return "", err
 	}
-	if isClone(t.st) {
-		return ModeClone, nil
-	}
-	return e.Protector(t.f.Dir).Mode(t.st), nil
+	return gitprotect.Mode(t.st), nil
 }
 
 // SetGitProtect turns the folder's VM's .git protection on, strict or
@@ -42,7 +40,7 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 		return msg.GitProtectClone(vm)
 	}
 	p := e.Protector(t.f.Dir)
-	if mode == gitprotect.Off && p.Mode(t.st) != gitprotect.Off {
+	if mode == gitprotect.Off && gitprotect.Mode(t.st) != gitprotect.Off {
 		if ok, err := t.widen(e.Env, "devvm git-protect off"); !ok {
 			return err
 		}
@@ -54,7 +52,7 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 			return err
 		}
 		if in.Status == backend.StatusRunning {
-			if err := gitprotect.SetNext(t.st, mode); err != nil {
+			if err := gitprotect.SetNext(ctx, t.st, mode); err != nil {
 				return err
 			}
 			e.Info(msg.GitProtectNextStop(mode, vm))

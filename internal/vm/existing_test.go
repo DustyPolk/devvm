@@ -58,8 +58,8 @@ func TestOpenNetworkPolicy(t *testing.T) {
 		t.Errorf("status %s, execs %d", f.Instances[vm].Status, len(*execs))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
-	if st.Get(netpolicy.KeyCheck) != netpolicy.CheckUnenforced {
-		t.Errorf("net_check = %q", st.Get(netpolicy.KeyCheck))
+	if get(st, keyCheck) != netpolicy.CheckUnenforced {
+		t.Errorf("net_check = %q", get(st, keyCheck))
 	}
 }
 
@@ -84,8 +84,8 @@ func TestPartsFlagsIgnored(t *testing.T) {
 			t.Errorf("Up %+v calls %q", o, ms)
 		}
 	}
-	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyImage) != "base" || st.Get(state.KeyToolNames) != "go" {
-		t.Errorf("image %s, tool_names %s", st.Get(state.KeyImage), st.Get(state.KeyToolNames))
+	if st, _ = state.ReadVM(e.Dirs, vm); st.Image != "base" || get(st, keyToolNames) != "go" {
+		t.Errorf("image %s, tool_names %s", st.Image, get(st, keyToolNames))
 	}
 }
 
@@ -111,8 +111,8 @@ func TestToolsAdd(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
-	if st.Get(state.KeyImage) != "base" || st.Get(state.KeyToolNames) != "go claude" || !strings.Contains(st.Get(KeyTools), " claude-") {
-		t.Errorf("state image=%s tool_names=%s tools=%s", st.Get(state.KeyImage), st.Get(state.KeyToolNames), st.Get(KeyTools))
+	if st.Image != "base" || get(st, keyToolNames) != "go claude" || !strings.Contains(get(st, KeyTools), " claude-") {
+		t.Errorf("state image=%s tool_names=%s tools=%s", st.Image, get(st, keyToolNames), get(st, KeyTools))
 	}
 	ms := f.Methods()[before:]
 	if i, j := slices.Index(ms, "SetAgentDirs"), slices.Index(ms, "Start"); !slices.Contains(ms, "BuildTools") || i < 0 || j < i {
@@ -135,8 +135,8 @@ func TestToolsAdd(t *testing.T) {
 	if err := tl.Add(t.Context(), Options{}, []string{"codex"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyToolNames) != "go claude codex" {
-		t.Errorf("tool_names = %s", st.Get(state.KeyToolNames))
+	if st, _ = state.ReadVM(e.Dirs, vm); get(st, keyToolNames) != "go claude codex" {
+		t.Errorf("tool_names = %s", get(st, keyToolNames))
 	}
 	ms = f.Methods()[before:]
 	if !slices.Equal(*asked, []string{"update_mounts vm=" + vm}) || !slices.Contains(ms, "Stop") ||
@@ -199,8 +199,8 @@ func TestToolsPick(t *testing.T) {
 	if err := tl.Pick(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if st, _ = state.ReadVM(e.Dirs, vm); st.Get(state.KeyToolNames) != "python go" || strings.Contains(st.Get(KeyTools), "claude") {
-		t.Errorf("tool_names=%s tools=%s", st.Get(state.KeyToolNames), st.Get(KeyTools))
+	if st, _ = state.ReadVM(e.Dirs, vm); get(st, keyToolNames) != "python go" || strings.Contains(get(st, KeyTools), "claude") {
+		t.Errorf("tool_names=%s tools=%s", get(st, keyToolNames), get(st, KeyTools))
 	}
 	if ms := f.Methods()[n:]; !slices.Contains(ms, "BuildTools") || len(*execs) != before+1 {
 		t.Errorf("calls %q, execs %d", ms, len(*execs)-before)
@@ -343,8 +343,8 @@ func TestRemoveUpdateRestart(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
-	if st.Get(state.KeyToolNames) != "go" || strings.Contains(st.Get(KeyTools), "claude") {
-		t.Errorf("state tool_names=%s tools=%s", st.Get(state.KeyToolNames), st.Get(KeyTools))
+	if get(st, keyToolNames) != "go" || strings.Contains(get(st, KeyTools), "claude") {
+		t.Errorf("state tool_names=%s tools=%s", get(st, keyToolNames), get(st, KeyTools))
 	}
 	if err := tl.Remove(t.Context(), Options{}, []string{"python"}); msg.NamesOf(err) != "vm_lacks has=go tool=python vm="+vm {
 		t.Errorf("Remove python = %v", msg.NamesOf(err))
@@ -367,12 +367,12 @@ func TestRemoveUpdateRestart(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
-	had := st.Get(KeyTools)
+	had := get(st, KeyTools)
 	if err := tl.Update(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if st, _ = state.ReadVM(e.Dirs, vm); !strings.HasPrefix(had, "claude-") || st.Get(KeyTools) != had {
-		t.Errorf("Update after adding: tools %q, were %q", st.Get(KeyTools), had)
+	if st, _ = state.ReadVM(e.Dirs, vm); !strings.HasPrefix(had, "claude-") || get(st, KeyTools) != had {
+		t.Errorf("Update after adding: tools %q, were %q", get(st, KeyTools), had)
 	}
 	before := len(f.Calls())
 	if err := l.Restart(t.Context(), Options{}); err != nil {

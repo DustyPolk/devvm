@@ -35,8 +35,8 @@ func TestNetwork(t *testing.T) {
 			t.Fatal(msg.NamesOf(err))
 		}
 	}
-	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(KeyNet) != "on" || slices.Contains(f.Methods(), "Stop") {
-		t.Errorf("net=%q, calls %q", st.Get(KeyNet), f.Methods())
+	if st, _ := state.ReadVM(e.Dirs, vm); get(st, KeyNet) != "on" || slices.Contains(f.Methods(), "Stop") {
+		t.Errorf("net=%q, calls %q", get(st, KeyNet), f.Methods())
 	}
 	shown(netpolicy.CheckUnenforced)
 	// Its next launch, without a terminal to offer the restart in, stops
@@ -86,7 +86,7 @@ func TestNetworkRequiresEgressProxy(t *testing.T) {
 	if got := msg.NamesOf(err); got != "backend_unreviewed backend=fake feature=egress-proxy vm="+st.Name() {
 		t.Errorf("Network on = %v", got)
 	}
-	if st, _ := state.ReadVM(e.Dirs, st.Name()); st.Get(KeyNet) != "off" {
-		t.Errorf("net=%q", st.Get(KeyNet))
+	if st, _ := state.ReadVM(e.Dirs, st.Name()); get(st, KeyNet) != "off" {
+		t.Errorf("net=%q", get(st, KeyNet))
 	}
 }

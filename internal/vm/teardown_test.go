@@ -129,8 +129,8 @@ func TestCreateClearsFolder(t *testing.T) {
 	everyFile(t, e, st.Name())
 	delete(f.Instances, st.Name())
 	again := existingVM(t, e, Options{NoNetworkPolicy: true})
-	if again.Name() != st.Name() || again.Get(state.KeyID) == st.Get(state.KeyID) {
-		t.Errorf("made again: %s (id %s), was %s (id %s)", again.Name(), again.Get(state.KeyID), st.Name(), st.Get(state.KeyID))
+	if again.Name() != st.Name() || again.ID == st.ID {
+		t.Errorf("made again: %s (id %s), was %s (id %s)", again.Name(), again.ID, st.Name(), st.ID)
 	}
 	for _, p := range []string{e.Dirs.VM(st.Name()).EventLog(), e.Dirs.VM(st.Name()).Policy(), e.Dirs.VM(st.Name()).Ports()} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
@@ -160,8 +160,8 @@ func TestLookupOtherBackend(t *testing.T) {
 	reg.NewVMs = "other"
 	e.Registry = reg
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
-	if st.Get(state.KeyBackend) != "other" || len(st.Name()) <= f.NameLimit {
-		t.Fatalf("made %s on %s", st.Name(), st.Get(state.KeyBackend))
+	if st.Backend != "other" || len(st.Name()) <= f.NameLimit {
+		t.Fatalf("made %s on %s", st.Name(), st.Backend)
 	}
 	reg.NewVMs = "fake"
 	own, _, err := e.lookup(t.Context(), true)

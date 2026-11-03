@@ -4,13 +4,13 @@ import (
 	"cmp"
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
@@ -72,15 +72,12 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 		return Listed{}, err
 	}
 	l := Listed{
-		Name: in.Name, Status: string(in.Status), Image: st.Get(state.KeyImage), Tools: st.ToolNames(),
-		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(),
-		Folder: st.Get(state.KeyDir), Links: len(strings.Fields(st.Get(KeyLinks))),
+		Name: in.Name, Status: string(in.Status), Image: st.Image, Tools: tools.Names(st),
+		Git: gitprotect.Mode(st), Backend: b.Name(),
+		Folder: st.Dir, Links: len(linksOf(st).Links),
 	}
 	if l.Image != "" {
-		l.From = st.Get(state.KeyFrom)
-	}
-	if isClone(st) {
-		l.Git = ModeClone
+		l.From = st.From
 	}
 	l.Net, err = netpolicy.Listed(ctx, b, st, in.Status == backend.StatusRunning)
 	return l, err
@@ -99,7 +96,7 @@ func ToolsInUse(d paths.Dirs) (map[string]int, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, f := range strings.Fields(st.Get(KeyTools)) {
+		for _, f := range tools.Files(st) {
 			n[f]++
 		}
 	}

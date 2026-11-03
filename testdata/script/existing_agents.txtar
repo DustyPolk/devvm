@@ -28,12 +28,12 @@ stderr '^devvm: net_unenforced_stop vm=devvm-net-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-net-[0-9a-f]{14}$'
 ! stdout 'tar -xf'
-catg $NET_dir/state
-stdout '^net_check=unenforced$'
+vm_state $NET_dir/vm.json
+stdout '^net.made.check=unenforced$'
 exec devvm
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
-catg $NET_dir/state
-stdout '^net_check=ok$'
+vm_state $NET_dir/vm.json
+stdout '^net.made.check=ok$'
 
 # tools update: with the lock as it is, the tools are the newest; with a
 # newer go upstream, it's built and the VM moves to it. tools shows the
@@ -62,12 +62,12 @@ env MISE_STUB_LOCK=$WORK/newer.lock
 exec devvm tools update
 stdout '^==> building_tools tools=go 9\.9\.9$'
 stdout '^==> tools_switch vm=devvm-api-[0-9a-f]{14}$'
-catg $API_dir/state
-stdout '^tools=go-9\.9\.9-[0-9a-f]{12}\.erofs$'
+vm_state $API_dir/vm.json
+stdout '^tools.made.files=go-9\.9\.9-[0-9a-f]{12}\.erofs$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 stdout '^go-9\.9\.9-[0-9a-f]{12}\.erofs go 9\.9\.9$'
 # A VM whose tools are older than the lock's is told on launch.
-exec sh -c 'f="$API_dir/state"; sed "s/^tools=.*/tools=go-1.0.0-0123456789ab.erofs/" "$f" > "$f.new" && mv "$f.new" "$f"'
+json_set $API_dir/vm.json tools.made.files:=["go-1.0.0-0123456789ab.erofs"]
 exec devvm
 stderr '^devvm: newer_tools tools=go 9\.9\.9$'
 exec devvm tools
@@ -86,10 +86,10 @@ vm_name WEB web
 stderr '^devvm: tools_joined cmd=rm given=node,claude$'
 exec devvm tools rm claude
 stdout '^==> vm_tools_now tools=node vm=devvm-web-[0-9a-f]{14}$'
-catg $WEB_dir/state
+vm_state $WEB_dir/vm.json
 stdout '^image=base$'
-stdout '^tool_names=node$'
-stdout '^tools=node-\S+ pnpm-\S+ bun-\S+$'
+stdout '^tools.names=node$'
+stdout '^tools.made.files=node-\S+ pnpm-\S+ bun-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 ! stdout claude
 ! exec devvm tools rm python
@@ -101,8 +101,8 @@ stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools rm$'
 # naming devvm tools, and nothing changes.
 exec devvm --tools python --agents claude
 stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
-catg $WEB_dir/state
-stdout '^tool_names=node$'
+vm_state $WEB_dir/vm.json
+stdout '^tools.names=node$'
 
 # tools add: the tools it lacks join its list, those it has are said;
 # only shared tools, each a separate word.
@@ -115,10 +115,10 @@ stderr '^devvm: unknown_tool tool=docker tools=node python rust go claude codex 
 exec devvm tools add node claude
 stdout '^==> has_tools tools=node vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> vm_tools_now tools=node claude vm=devvm-web-[0-9a-f]{14}$'
-catg $WEB_dir/state
+vm_state $WEB_dir/vm.json
 stdout '^image=base$'
-stdout '^tool_names=node claude$'
-stdout '^tools=node-\S+ pnpm-\S+ bun-\S+ claude-\S+$'
+stdout '^tools.names=node claude$'
+stdout '^tools.made.files=node-\S+ pnpm-\S+ bun-\S+ claude-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 stdout claude
 
@@ -133,7 +133,7 @@ exec sh -c ': > "$STUB_DIR/shell-fails"'
 ! exec devvm rm --force
 stdout '^==> starting vm=devvm-agent-[0-9a-f]{14}$'
 stderr '^devvm: rm_export_failed vm=devvm-agent-[0-9a-f]{14}$'
-exists $AGENT_dir/state
+exists $AGENT_dir/vm.json
 exec sh -c 'ls "$DATA/exports" | wc -l'
 stdout '^ *0$'
 rm $STUB_DIR/shell-fails

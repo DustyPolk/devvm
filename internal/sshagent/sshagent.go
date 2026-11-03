@@ -23,8 +23,42 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Key is a VM's state key for its choice.
-const Key = "ssh_agent"
+// Section is the name of the SSH agent section in a VM's state.
+const Section = "agent"
+
+// InVM is a VM's SSH agent section: its choice, as asked, and what devvm
+// made of it.
+type InVM struct {
+	Mode string `json:"mode,omitempty"` // On, Devvm or Off
+	Made Made   `json:"made,omitzero"`
+}
+
+// Made is what devvm recorded of a VM's SSH agent forwarding.
+type Made struct {
+	// Started is the choice devvm last started it with, and that start:
+	// "<mode>_<start>", the start a hash of what its backend identifies
+	// it by (backend.Backend's StartID).
+	Started string `json:"started,omitempty"`
+	// Toggle is set when its backend emulates turning its forwarding on
+	// or off, and it was made ready for that, which its starts rely on.
+	Toggle bool `json:"toggle,omitempty"`
+}
+
+// Of returns a VM's SSH agent section.
+func Of(st *state.VM) (InVM, error) { return state.Section[InVM](st, Section) }
+
+// Set sets a VM's SSH agent section, in st alone: inside st.Update.
+func Set(st *state.VM, a InVM) error { return state.SetSection(st, Section, a) }
+
+// SetMode sets a VM's choice, in st alone: inside st.Update.
+func SetMode(st *state.VM, mode string) error {
+	a, err := Of(st)
+	if err != nil {
+		return err
+	}
+	a.Mode = mode
+	return Set(st, a)
+}
 
 // A VM's choices.
 const (
@@ -38,9 +72,10 @@ var Modes = []string{On, Devvm, Off}
 
 // Mode is a VM's choice: off unless its state says on or devvm.
 func Mode(st *state.VM) string {
-	switch v := st.Get(Key); v {
+	a, _ := Of(st)
+	switch a.Mode {
 	case On, Devvm:
-		return v
+		return a.Mode
 	}
 	return Off
 }
@@ -48,18 +83,21 @@ func Mode(st *state.VM) string {
 // Forwards reports whether a VM with mode forwards an agent.
 func Forwards(mode string) bool { return mode == On || mode == Devvm }
 
-// StartedKey is a VM's state key for the choice devvm last started it
-// with, and that start: "<mode>_<start>", the start a hash of what its
-// backend identifies it by (backend.Backend's StartID).
-const StartedKey = "ssh_agent_started"
-
 // RecordStart records that devvm started the VM with mode, start
 // identifying that start; "" records none.
-func RecordStart(st *state.VM, mode, start string) error {
-	if start == "" {
-		return st.Set(StartedKey, "")
+func RecordStart(ctx context.Context, st *state.VM, mode, start string) error {
+	started := ""
+	if start != "" {
+		started = mode + "_" + startHash(start)
 	}
-	return st.Set(StartedKey, mode+"_"+startHash(start))
+	return st.Update(ctx, func(st *state.VM) error {
+		a, err := Of(st)
+		if err != nil {
+			return err
+		}
+		a.Made.Started = started
+		return Set(st, a)
+	})
 }
 
 // Running is the choice a VM runs with, start identifying its current
@@ -67,7 +105,8 @@ func RecordStart(st *state.VM, mode, start string) error {
 // waits for the next; else, for a stopped VM or one something else
 // started, its choice.
 func Running(st *state.VM, start string) string {
-	mode, h, ok := strings.Cut(st.Get(StartedKey), "_")
+	a, _ := Of(st)
+	mode, h, ok := strings.Cut(a.Made.Started, "_")
 	if start != "" && ok && h == startHash(start) && slices.Contains(Modes, mode) {
 		return mode
 	}

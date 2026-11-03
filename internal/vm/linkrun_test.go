@@ -18,7 +18,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -42,28 +41,19 @@ func linkVMs(t *testing.T, d paths.Dirs, folders ...string) []*state.VM {
 	t.Helper()
 	var out []*state.VM
 	for _, f := range folders {
-		st, err := state.CreateVM(d, testVM(f), state.NewVM{Image: "base", Backend: "fake"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := st.Set(KeyNet, "off"); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, st)
+		out = append(out, vmState(t, d, testVM(f), withNet(false)))
 	}
 	return out
 }
 
 // linkTo is a link from a client to target's port, at addr.
 func linkTo(target *state.VM, name string, port int, addr string) Link {
-	return Link{Name: name, Port: port, Target: target.Name(), TargetID: target.Get(state.KeyID), Addr: netip.MustParseAddr(addr)}
+	return Link{Name: name, Port: port, Target: target.Name(), TargetID: target.ID, Addr: netip.MustParseAddr(addr)}
 }
 
 func setNet(t *testing.T, st *state.VM, v string) {
 	t.Helper()
-	if err := st.Set(netpolicy.KeyNet, v); err != nil {
-		t.Fatal(err)
-	}
+	change(t, st, withNet(v == "on"))
 }
 
 // A client's guest gets an address and a name for each target, by
@@ -73,7 +63,7 @@ func TestGuestLinks(t *testing.T) {
 	vms := linkVMs(t, d, "app", "db", "api")
 	app, db, api := vms[0], vms[1], vms[2]
 	links := []Link{linkTo(api, "api", 3000, "127.77.0.2"), linkTo(db, "db", 5432, "127.77.0.1"), linkTo(db, "db", 6379, "127.77.0.1")}
-	if err := writeLinks(app, links); err != nil {
+	if err := writeLinks(t.Context(), app, links); err != nil {
 		t.Fatal(err)
 	}
 	show := func(gs []GuestLink) string {
@@ -101,7 +91,7 @@ func TestPolicyLinked(t *testing.T) {
 	vms := linkVMs(t, d, "app", "web", "db")
 	app, web, db := vms[0], vms[1], vms[2]
 	for _, c := range []*state.VM{app, web} {
-		if err := writeLinks(c, []Link{linkTo(db, "db", 5432, "127.77.0.1")}); err != nil {
+		if err := writeLinks(t.Context(), c, []Link{linkTo(db, "db", 5432, "127.77.0.1")}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -121,10 +111,7 @@ func TestPolicyLinked(t *testing.T) {
 	setNet(t, web, "off")
 	check(db, false, "network_off_linked vm="+db.Name()+" vms="+app.Name())
 	// db made again: app's link is to the one before.
-	if _, err := state.CreateVM(d, db.Name(), state.NewVM{Image: "base", Backend: "fake"}); err != nil {
-		t.Fatal(err)
-	}
-	db, _ = state.ReadVM(d, db.Name())
+	db = vmState(t, d, db.Name(), withNet(false))
 	check(db, false, "")
 	setNet(t, app, "off")
 	check(app, true, "")
@@ -136,10 +123,10 @@ func TestUnlinkTarget(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	vms := linkVMs(t, e.Dirs, "app", "web", "db", "api")
 	app, web, db, api := vms[0], vms[1], vms[2], vms[3]
-	if err := writeLinks(app, []Link{linkTo(db, "db", 5432, "127.77.0.1"), linkTo(api, "api", 3000, "127.77.0.2")}); err != nil {
+	if err := writeLinks(t.Context(), app, []Link{linkTo(db, "db", 5432, "127.77.0.1"), linkTo(api, "api", 3000, "127.77.0.2")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeLinks(web, []Link{linkTo(db, "pg", 5432, "127.77.0.1")}); err != nil {
+	if err := writeLinks(t.Context(), web, []Link{linkTo(db, "pg", 5432, "127.77.0.1")}); err != nil {
 		t.Fatal(err)
 	}
 	for _, st := range vms {
@@ -186,13 +173,13 @@ func TestLinkLeftovers(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
 	vms := linkVMs(t, d, "app", "db")
 	app, db := vms[0], vms[1]
-	if err := writeLinks(app, []Link{linkTo(db, "db", 5432, "127.77.0.1")}); err != nil {
+	if err := writeLinks(t.Context(), app, []Link{linkTo(db, "db", 5432, "127.77.0.1")}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := deadLinks(d); err != nil || len(got) != 0 {
 		t.Errorf("deadLinks with db there: %+v, %v", got, err)
 	}
-	if err := db.Remove(); err != nil {
+	if err := db.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	want := DeadLink{Client: app.Name(), Name: "db", Target: db.Name(), Port: 5432}
@@ -370,10 +357,10 @@ func TestLinksAtLaunch(t *testing.T) {
 		t.Fatalf("no links: %v, started %v", err, *started)
 	}
 	links := []Link{linkTo(db, "db", 5432, "127.77.0.1"), linkTo(db, "db", 6379, "127.77.0.1"), linkTo(web, "web", 80, "127.77.0.3"), linkTo(gone, "gone", 1, "127.77.0.4")}
-	if err := writeLinks(app, links); err != nil {
+	if err := writeLinks(t.Context(), app, links); err != nil {
 		t.Fatal(err)
 	}
-	if err := gone.Remove(); err != nil {
+	if err := gone.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	f.Instances[db.Name()] = backend.Instance{Name: db.Name(), Status: backend.StatusStopped}

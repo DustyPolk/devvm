@@ -45,11 +45,11 @@ stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 -
 vm_name SIZED sized
 catg $SIZED_dir/backend/ports
 stdout '\A5173,8000-8010\n\z'
-catg $SIZED_dir/state
-stdout '^cpus=2$'
-stdout '^memory=3$'
-stdout '^disk=120$'
-stdout '^ports=5173,8000-8010$'
+vm_state $SIZED_dir/vm.json
+stdout '^size.cpus=2$'
+stdout '^size.memory=3$'
+stdout '^size.disk=120$'
+stdout '^ports.forward=5173,8000-8010$'
 
 # The defaults, for what the flags leave unset; nothing for what neither
 # sets. A default of every port stores nothing. config.toml's memory wins
@@ -64,11 +64,11 @@ stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 5$'
 vm_name DEFAULTS defaults
-catg $DEFAULTS_dir/state
-stdout '^cpus=2$'
-stdout '^memory=5$'
+vm_state $DEFAULTS_dir/vm.json
+stdout '^size.cpus=2$'
+stdout '^size.memory=5$'
 ! stdout 'disk='
-stdout '^ports=none$'
+stdout '^ports.forward=none$'
 project all
 rm $CFG/config.toml
 cp $WORK/features-none.json $DATA/settings.json
@@ -80,8 +80,8 @@ stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 vm_name ALL all
 exec cat $ALL_dir/backend/ports $DEFAULTS_dir/backend/ports
 stdout '\Aall\nnone\n\z'
-catg $ALL_dir/state
-! stdout 'ports|cpus|memory|disk'
+vm_state $ALL_dir/vm.json
+! stdout '^size\.|^ports\.forward='
 
 # The first run, before base's features are chosen, asks for new VMs'
 # size only in a terminal: without one it asks nothing and saves none.

@@ -104,6 +104,7 @@ func TestFiles(t *testing.T) {
 		{d.NixCache(), "/d/cache/nix-cache"},
 		{d.ToolRecord("go-1.2.0-0123456789ab.erofs"), "/d/tools/go-1.2.0-0123456789ab.erofs.json"},
 		{d.Run(), "/d/run"},
+		{d.ClaimsLock(), "/d/run/claims.lock"},
 		{d.Logs(), "/d/logs"},
 		{d.RunLogs(), "/d/logs/runs"},
 		{d.CA(), "/d/ca"},

@@ -71,9 +71,9 @@ exec devvm --no-network-policy --no-input
 stdout '^==> new_vm_gets layers=none tools=none vm=devvm-empty-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-empty-[0-9a-f]{14}$'
 vm_name EMPTY empty
-catg $EMPTY_dir/state
+vm_state $EMPTY_dir/vm.json
 stdout '^image=base$'
-stdout '^tool_names=$'
+! stdout '^tools.names='
 
 # The flags' values are checked before anything runs: an unknown name
 # with a did-you-mean, none only alone. A word after devvm is no image.
@@ -105,9 +105,9 @@ exec devvm --no-network-policy --layers foo
 stdout '^==> new_vm_gets layers=foo tools=node vm=devvm-node-[0-9a-f]{14}$'
 stdout '^==> creating_from image=foo vm=devvm-node-[0-9a-f]{14}$'
 vm_name NODE node
-catg $NODE_dir/state
+vm_state $NODE_dir/vm.json
 stdout '^image=foo$'
-stdout '^tool_names=node$'
+stdout '^tools.names=node$'
 stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
 
 # A Nix project's flake.nix doesn't give it the nix layer: layers are
@@ -121,17 +121,17 @@ exec devvm --no-network-policy --no-git-protect
 stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-flake-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-flake-[0-9a-f]{14}$'
 vm_name FLAKE flake
-catg $FLAKE_dir/state
-stdout '^tool_names=node claude$'
+vm_state $FLAKE_dir/vm.json
+stdout '^tools.names=node claude$'
 stdout '^chain=base=[0-9a-f]{12}$'
 project flake2
 cp $WORK/package.json package.json
 exec devvm --no-network-policy --no-git-protect --tools none --layers nix
 stdout '^==> new_vm_gets layers=nix tools=claude vm=devvm-flake2-[0-9a-f]{14}$'
 vm_name FLAKE2 flake2
-catg $FLAKE2_dir/state
+vm_state $FLAKE2_dir/vm.json
 stdout '^image=nix$'
-stdout '^tool_names=claude$'
+stdout '^tools.names=claude$'
 
 # Any word is a usage error.
 ! exec devvm xyzzy b

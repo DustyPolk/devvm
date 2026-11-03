@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // testStore is a store in a temporary sandbox, its Keychain a map and its
@@ -131,21 +132,47 @@ func TestSaveDelete(t *testing.T) {
 	}
 }
 
+// newVM writes the state of a VM named name with these shared tools, as
+// up does.
+func newVM(t *testing.T, d paths.Dirs, name string, names ...string) *state.VM {
+	t.Helper()
+	st, err := state.New(d, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Image, st.Dir, st.Backend = "base", "/p", "fake"
+	if err := tools.Set(st, tools.InVM{Names: names}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Create(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// bind binds secrets to a VM, those it had replaced, as devvm does.
+func bind(t *testing.T, st *state.VM, names ...string) {
+	t.Helper()
+	err := st.Update(t.Context(), func(st *state.VM) error { return state.SetSection(st, Section, Bound{Names: names}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Bind adds a secret to a VM's own list once, and takes it out; claude
 // stays with an image that has it.
 func TestBind(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, vm1, state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := newVM(t, d, vm1, "node", "claude")
 	for _, step := range []struct {
 		name string
 		use  bool
 		want string
 	}{{"github", true, "github"}, {"github", true, "github"}, {"claude", true, "github claude"}, {"github", false, "claude"}, {"claude", false, ""}} {
-		if err := Bind(st, step.name, step.use); err != nil || st.Get(KeySecrets) != step.want {
-			t.Errorf("Bind(%s, %v): %q, %v", step.name, step.use, st.Get(KeySecrets), err)
+		err := st.Update(t.Context(), func(st *state.VM) error { return Bind(st, step.name, step.use) })
+		b, _ := Of(st)
+		if got := strings.Join(b.Names, " "); err != nil || got != step.want {
+			t.Errorf("Bind(%s, %v): %q, %v", step.name, step.use, got, err)
 		}
 	}
 	if !slices.Equal(Names(st), []string{"claude"}) || !FromTools(st, "claude") || FromTools(st, "github") {
@@ -237,14 +264,11 @@ func TestGet(t *testing.T) {
 func TestNamesAndLogins(t *testing.T) {
 	s, _ := testStore(t, true, nil)
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, vm1, state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := newVM(t, d, vm1, "node", "claude")
 	if got := Names(st); !slices.Equal(got, []string{"claude"}) {
 		t.Errorf("Names = %q", got)
 	}
-	_ = st.Set(KeySecrets, "github")
+	bind(t, st, "github")
 	if got := Names(st); !slices.Equal(got, []string{"github", "claude"}) {
 		t.Errorf("Names = %q", got)
 	}
@@ -274,11 +298,8 @@ func TestWriteFiles(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_secret"
 	d := s.Dirs
-	st, err := state.CreateVM(d, vm1, state.NewVM{Image: "base", Tools: []string{"node", "codex", "claude"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = st.Set(KeySecrets, "github")
+	st := newVM(t, d, vm1, "node", "codex", "claude")
+	bind(t, st, "github")
 	auth := LoginFile(s.Dirs.Home, "codex")
 	if err := os.MkdirAll(filepath.Dir(auth), 0o700); err != nil {
 		t.Fatal(err)
@@ -329,7 +350,7 @@ func TestWriteFiles(t *testing.T) {
 	// reading any login file, and follows the secrets: unbound, github's
 	// binding and hosts go.
 	s.Login = func([]string, io.Writer) error { t.Error("a refresh read a login"); return errors.New("no") }
-	_ = st.Set(KeySecrets, "")
+	bind(t, st)
 	if err := s.RefreshFiles(t.Context(), st, salt); err != nil {
 		t.Fatal(err)
 	}
@@ -341,10 +362,7 @@ func TestWriteFiles(t *testing.T) {
 		t.Errorf("refreshed policy = %q", pol)
 	}
 	// No secrets at all: an empty list.
-	none, err := state.CreateVM(d, vm2, state.NewVM{Image: "base", Tools: []string{"node"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	none := newVM(t, d, vm2, "node")
 	if err := s.WriteFiles(t.Context(), none, salt); err != nil {
 		t.Fatal(err)
 	}
@@ -436,11 +454,8 @@ func TestSaveAtOnce(t *testing.T) {
 func TestWriteFilesFailing(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_secret"
-	st, err := state.CreateVM(s.Dirs, vm1, state.NewVM{Image: "base"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = st.Set(KeySecrets, "github")
+	st := newVM(t, s.Dirs, vm1)
+	bind(t, st, "github")
 	// A folder where the bindings go: renaming over it fails.
 	in := filepath.Join(s.Dirs.VM(vm1).Secrets(), "x")
 	if err := os.MkdirAll(in, 0o700); err != nil {

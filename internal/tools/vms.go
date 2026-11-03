@@ -8,7 +8,45 @@ import (
 
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
+
+// Section is the name of the shared tools section in a VM's state.
+const Section = "tools"
+
+// InVM is a VM's shared tools section: its shared tools by name, as
+// asked, in their order (image.SortTools), and the tool images devvm gave
+// it.
+type InVM struct {
+	Names []string `json:"names,omitempty"`
+	Made  Made     `json:"made,omitzero"`
+}
+
+// Made is the tool images devvm gave a VM: their files in the share, and
+// the C library its base had, which they're built for.
+type Made struct {
+	Files []string `json:"files,omitempty"`
+	Libc  string   `json:"libc,omitempty"`
+}
+
+// Of returns a VM's shared tools section.
+func Of(st *state.VM) (InVM, error) { return state.Section[InVM](st, Section) }
+
+// Set sets a VM's shared tools section, in st alone: inside st.Update.
+func Set(st *state.VM, t InVM) error { return state.SetSection(st, Section, t) }
+
+// Names returns a VM's shared tools by name: node claude. A section that
+// can't be read (the folder's VM's is checked as it's found) has none.
+func Names(st *state.VM) []string {
+	t, _ := Of(st)
+	return t.Names
+}
+
+// Files returns a VM's tool images, as Names does.
+func Files(st *state.VM) []string {
+	t, _ := Of(st)
+	return t.Made.Files
+}
 
 // VMTool is one of a VM's shared tools, as devvm tools lists it.
 type VMTool struct {

@@ -95,7 +95,7 @@ project agents git
 exec devvm --tools none --agents claude,codex --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
 mkdir $VMS/12345612345612
-exec sh -c 'printf "name=devvm-gone-12345612345612\nimage=base\ndir=/p\nbackend=lima\ntool_names=claude\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345612/state"'
+exec sh -c 'printf "{\"version\": 1, \"id\": \"x\", \"name\": \"devvm-gone-12345612345612\", \"image\": \"base\", \"dir\": \"/p\", \"backend\": \"lima\", \"created\": \"2020-01-01T00:00:00Z\", \"tools\": {\"names\": [\"claude\"], \"made\": {\"files\": [\"%s\"]}}}\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345612/vm.json"'
 json_set $SHARE/*.erofs.json built=2020-01-01T00:00:00Z
 exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'

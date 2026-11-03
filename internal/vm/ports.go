@@ -8,7 +8,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -114,7 +114,7 @@ func (e Settings) Ports(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return orAll(t.st.Get(KeyPorts)), nil
+	return orAll(sectionOf[ports.Ports](t.st, ports.Section).Forward), nil
 }
 
 // PortsDefault returns what new VMs forward, and where that came from.
@@ -133,14 +133,14 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 		if err != nil {
 			return err
 		}
-		ports, err := c.apply(old.Value, e.Warn)
+		list, err := c.apply(old.Value, e.Warn)
 		if err != nil {
 			return err
 		}
-		if _, err := settings.Save(e.Dirs, settings.Values{Ports: &ports}); err != nil {
+		if _, err := settings.Save(e.Dirs, settings.Values{Ports: &list}); err != nil {
 			return err
 		}
-		e.Info(msg.PortsDefault(ports))
+		e.Info(msg.PortsDefault(list))
 		return nil
 	}
 	t, err := e.portsVM(ctx)
@@ -148,11 +148,15 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 		return err
 	}
 	vm, st, b := t.f.Name, t.st, t.b
-	ports, err := c.apply(orAll(st.Get(KeyPorts)), e.Warn)
+	cur, err := ports.Of(st)
 	if err != nil {
 		return err
 	}
-	p, err := PortsBackend(ports)
+	list, err := c.apply(orAll(cur.Forward), e.Warn)
+	if err != nil {
+		return err
+	}
+	p, err := PortsBackend(list)
 	if err != nil {
 		return err
 	}
@@ -169,20 +173,19 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 		conf = e.forwarding(b, st)
 	}
 	// Its state first: other VMs' forwarders never take its listed ports
-	// (netpolicy.UsedPorts), its new ones included before its forwarder
-	// starts with them. Put back when its backend fails.
-	old := st.Get(KeyPorts)
-	if err := st.Set(KeyPorts, ports); err != nil {
+	// (ports.Used), its new ones included before its forwarder starts with
+	// them. Put back when its backend fails.
+	if err := st.Update(ctx, func(st *state.VM) error { return ports.SetForward(st, list) }); err != nil {
 		return err
 	}
 	if err := b.SetPorts(ctx, vm, p, conf); err != nil {
-		_ = st.Set(KeyPorts, old)
+		_ = st.Update(ctx, func(st *state.VM) error { return ports.SetForward(st, cur.Forward) })
 		return err
 	}
 	if running {
-		e.Info(msg.PortsForwarding(ports, vm))
+		e.Info(msg.PortsForwarding(list, vm))
 	} else {
-		e.Info(msg.PortsNow(ports, vm))
+		e.Info(msg.PortsNow(list, vm))
 	}
 	return nil
 }
@@ -197,7 +200,7 @@ func (e *Env) forwarding(b backend.Backend, st *state.VM) backend.Confinement {
 		Free:    e.freePorts(vm),
 		HostKey: func(ctx context.Context) (string, error) { return e.sshConfig().HostKey(ctx, b, vm) },
 	}
-	c.ProxyPort, _ = strconv.Atoi(st.Get(netpolicy.KeyProxyPort))
+	c.ProxyPort = sectionOf[ports.Ports](st, ports.Section).Host.Proxy
 	return c
 }
 

@@ -212,7 +212,7 @@ func (e syncer) checkStartLinks(st *state.VM) error {
 
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
 func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage, error) {
-	vm, names, net := st.Name(), st.ToolNames(), netpolicy.On(st)
+	vm, names, net := st.Name(), tools.Names(st), netpolicy.On(st)
 	slug, files, proxyURL := in.slug, in.files, in.proxyURL
 	if err := checkLinks(vm, slug, in.links); err != nil {
 		return nil, err
@@ -255,8 +255,8 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		{"DEVVM_HOSTNAME", slug},
 		{"DEVVM_TZ", tz},
 		{"DEVVM_LANG", lang},
-		{"DEVVM_GIT_NAME", e.GitConfig(ctx, st.Get(state.KeyDir), "user.name")},
-		{"DEVVM_GIT_EMAIL", e.GitConfig(ctx, st.Get(state.KeyDir), "user.email")},
+		{"DEVVM_GIT_NAME", e.GitConfig(ctx, st.Dir, "user.name")},
+		{"DEVVM_GIT_EMAIL", e.GitConfig(ctx, st.Dir, "user.email")},
 		{"DEVVM_PROXY", proxyURL},
 		{"DEVVM_NO_PROXY", netpolicy.NoProxy},
 	}
@@ -302,7 +302,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	var salt string
 	if net {
 		var err error
-		if salt, err = netpolicy.Salt(st); err != nil {
+		if salt, err = netpolicy.Salt(ctx, st); err != nil {
 			return nil, err
 		}
 	}

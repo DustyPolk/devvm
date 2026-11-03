@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/sshagent"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // defaultKeys are the keys in ~/.ssh offered for loading, in order.
@@ -70,7 +71,7 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 			return msg.AgentFixed(b.Name(), vm)
 		}
 	}
-	if err := st.Set(sshagent.Key, mode); err != nil {
+	if err := st.Update(ctx, func(st *state.VM) error { return sshagent.SetMode(st, mode) }); err != nil {
 		return err
 	}
 	switch mode {

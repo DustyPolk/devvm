@@ -47,7 +47,7 @@ stdout '^before$'
 exec ls -A out
 stdout '^h\.tar\.gz\n\z'
 vm_name WEB web
-exists $WEB_dir/state
+exists $WEB_dir/vm.json
 
 # history lists the exports folder's: its own export with its folder, one
 # devvm has no folder for as -, and never another file there or one of

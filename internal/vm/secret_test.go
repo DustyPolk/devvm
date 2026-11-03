@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -58,11 +57,11 @@ func TestSecrets(t *testing.T) {
 	if err := n.SecretUse(ctx, "github", false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(secrets.KeySecrets) != "" {
-		t.Errorf("secrets=%q", st.Get(secrets.KeySecrets))
+	if st, _ := state.ReadVM(e.Dirs, vm); get(st, keySecrets) != "" {
+		t.Errorf("secrets=%q", get(st, keySecrets))
 	}
 	// A VM with Claude Code always uses the Claude Code token.
-	if err := st.Set(state.KeyToolNames, "claude"); err != nil {
+	if err := set(t, st, keyToolNames, "claude"); err != nil {
 		t.Fatal(err)
 	}
 	if err := n.SecretUse(ctx, "claude", false); msg.NamesOf(err) != "secret_with_claude vm="+vm {

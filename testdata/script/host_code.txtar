@@ -43,7 +43,7 @@ exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $DATA/ssh_config" > "$HOME/.s
 [exec:/usr/bin/ssh] stdout '^hostname 127\.0\.0\.1$'
 [exec:/usr/bin/ssh] stdout '^userknownhostsfile \S*/data/devvm/known_hosts$'
 [exec:/usr/bin/ssh] stdout '^hostkeyalias devvm-web-[0-9a-f]{14}$'
-exec sh -c 'echo cpus=6 >> "$WEB_dir/state"'
+json_set $WEB_dir/vm.json size.cpus=6
 stub_reset
 exec devvm host
 ! stdout 'starting|ssh_include'

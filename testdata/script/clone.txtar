@@ -51,11 +51,11 @@ stdout '^ssh -F /\S*/data/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChec
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! stdout chflags
 vm_name WEB web
-catg $WEB_dir/state
-stdout '^mode=clone$'
-stdout '^clone_remote=devvm$'
-stdout '^seeded=yes$'
-! stdout git_protect
+vm_state $WEB_dir/vm.json
+stdout '^clone.on=true$'
+stdout '^clone.made.remote=devvm$'
+stdout '^clone.made.seeded=true$'
+stdout '^git.mode=clone$'
 exec git remote get-url devvm
 stdout '^devvm-web-[0-9a-f]{14}:/\S*/web$'
 exec sh -c 'c="$STUB_DIR/vmfs$(pwd -P)"; git -C "$c" branch --show-current && git -C "$c" branch --format="%(refname:short)" && cat "$c/tracked"'

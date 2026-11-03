@@ -94,12 +94,9 @@ type Choice struct {
 
 // For chooses the backend for vm. A VM that exists runs on the backend
 // its state records, and a new one gets NewVMs, else Default.
-func (r *Registry) For(d paths.Dirs, vm *state.VM) (Choice, error) {
+func (r *Registry) For(vm *state.VM) (Choice, error) {
 	if vm.Exists() {
-		name := vm.Get(state.KeyBackend)
-		if name == "" {
-			return Choice{}, &state.CorruptError{Path: d.VM(vm.Name()).State(), Reason: "no " + state.KeyBackend + "="}
-		}
+		name := vm.Backend
 		b, ok := r.Lookup(name)
 		if !ok {
 			return Choice{}, msg.BackendUnknownVM(name, vm.Name())

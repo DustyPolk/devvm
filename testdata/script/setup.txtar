@@ -79,8 +79,8 @@ exec devvm network -g off
 project off git
 exec devvm --no-git-protect
 vm_name OFF off
-catg $OFF_dir/state
-stdout '^net=off$'
+vm_state $OFF_dir/vm.json
+stdout '^net.on=false$'
 cd $WORK
 
 # --agents: the coding agents new VMs get, without asking; none for none.
@@ -103,8 +103,8 @@ project agents git
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-agents-[0-9a-f]{14}$'
 vm_name AGENTS agents
-catg $AGENTS_dir/state
-stdout '^tool_names=codex$'
+vm_state $AGENTS_dir/vm.json
+stdout '^tools.names=codex$'
 cd $WORK
 
 # --layers: the layers new VMs get, bottom first as given, without
@@ -129,7 +129,7 @@ project layers git
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> new_vm_gets layers=desktop tools=codex vm=devvm-layers-[0-9a-f]{14}$'
 vm_name LAYERS layers
-catg $LAYERS_dir/state
+vm_state $LAYERS_dir/vm.json
 stdout '^image=desktop$'
 project layersflag git
 exec devvm --no-network-policy --no-git-protect --layers docker

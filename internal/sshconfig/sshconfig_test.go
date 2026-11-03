@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -26,17 +27,60 @@ const (
 )
 
 // made makes each VM's state, with the alias ChooseAlias gives it then,
-// as up does, in order.
+// as up does (under the claims lock), in order.
 func made(t *testing.T, d paths.Dirs, vms ...string) {
 	t.Helper()
 	for _, vm := range vms {
-		alias, err := ChooseAlias(d, vm)
+		create(t, d, vm)
+	}
+}
+
+// create makes vm's state as up does: its alias chosen under the claims
+// lock.
+func create(t *testing.T, d paths.Dirs, vm string) {
+	t.Helper()
+	st, err := state.New(d, vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Image, st.Dir, st.Backend = "base", "/p", "lima"
+	err = st.Create(t.Context(), func(st *state.VM) error {
+		var err error
+		st.Alias, err = ChooseAlias(d, vm)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Two VMs of one folder's name made at once never take one alias: each
+// chooses under the claims lock.
+func TestChooseAliasTogether(t *testing.T) {
+	c, _ := testConfig(t)
+	d := c.Dirs
+	vms := []string{"devvm-web-aaaaaaaaaaaaa1", "devvm-web-aaaaaaaaaaaaa2", "devvm-web-aaaaaaaaaaaaa3", "devvm-web-aaaaaaaaaaaaa4"}
+	var wg sync.WaitGroup
+	for _, vm := range vms {
+		wg.Go(func() { create(t, d, vm) })
+	}
+	wg.Wait()
+	short := 0
+	for _, vm := range vms {
+		st, err := state.ReadVM(d, vm)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := state.CreateVM(d, vm, state.NewVM{Image: "base", Alias: alias}); err != nil {
-			t.Fatal(err)
+		switch st.Alias {
+		case "devvm-web":
+			short++
+		case vm:
+		default:
+			t.Errorf("%s: alias %q", vm, st.Alias)
 		}
+	}
+	if short != 1 {
+		t.Errorf("%d VMs took devvm-web, want 1", short)
 	}
 }
 
@@ -62,7 +106,7 @@ func TestChooseAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Remove(); err != nil {
+	if err := st.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if c.Host(web2) != web2 {
@@ -126,8 +170,12 @@ func read(t *testing.T, path string) string {
 func setAgent(t *testing.T, c *Config, vm, mode string) {
 	t.Helper()
 	st, err := state.ReadVM(c.Dirs, vm)
+	if err == nil && !st.Exists() {
+		create(t, c.Dirs, vm)
+		st, err = state.ReadVM(c.Dirs, vm)
+	}
 	if err == nil {
-		err = st.Set(sshagent.Key, mode)
+		err = st.Update(t.Context(), func(st *state.VM) error { return sshagent.SetMode(st, mode) })
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +226,7 @@ func TestWriteAgentStarted(t *testing.T) {
 	}
 	start, err := f.StartID(t.Context(), web)
 	if err == nil {
-		err = sshagent.RecordStart(st, sshagent.Off, start)
+		err = sshagent.RecordStart(t.Context(), st, sshagent.Off, start)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -296,7 +344,7 @@ Host devvm-web ` + web + `
 	if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, "\nHost devvm-web "+web+"\n") || !strings.Contains(got, "\nHost "+web2+"\n") {
 		t.Errorf("ssh config with two web folders:\n%s", got)
 	}
-	if st, err := state.ReadVM(c.Dirs, web2); err != nil || st.Set(state.KeyAlias, "devvm-web") != nil {
+	if st, err := state.ReadVM(c.Dirs, web2); err != nil || st.Update(t.Context(), func(st *state.VM) error { st.Alias = "devvm-web"; return nil }) != nil {
 		t.Fatal(err)
 	}
 	if err := c.Write(t.Context()); err != nil {

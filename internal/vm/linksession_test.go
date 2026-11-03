@@ -37,19 +37,10 @@ func linkSessionEnv(t *testing.T) (Links, *backendtest.Fake, *state.VM, *state.V
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base", Backend: "fake"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, err := state.CreateVM(d, "devvm-db-0123456789abc2", state.NewVM{Image: "base", Backend: "fake"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := target.Set(KeyPublish, "5432"); err != nil {
-		t.Fatal(err)
-	}
-	l := Link{Name: "db", Port: 5432, Target: target.Name(), TargetID: target.Get(state.KeyID), Addr: netip.MustParseAddr("127.77.0.1")}
-	if err := writeLinks(client, []Link{l}); err != nil {
+	client := vmState(t, d, "devvm-app-0123456789abc1")
+	target := vmState(t, d, "devvm-db-0123456789abc2", withPublish("5432"))
+	l := Link{Name: "db", Port: 5432, Target: target.Name(), TargetID: target.ID, Addr: netip.MustParseAddr("127.77.0.1")}
+	if err := writeLinks(t.Context(), client, []Link{l}); err != nil {
 		t.Fatal(err)
 	}
 	for _, vm := range []string{client.Name(), target.Name()} {
@@ -116,11 +107,11 @@ func TestLinkConn(t *testing.T) {
 	f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: backend.StatusRunning}
 
 	// The policy rule: a client with network policy, a target without.
-	if err := client.Set(KeyNet, "on"); err != nil {
+	if err := set(t, client, KeyNet, "on"); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkPolicy)
-	if err := target.Set(netpolicy.KeyNet, "on"); err != nil {
+	if err := set(t, target, KeyNet, "on"); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
@@ -132,54 +123,52 @@ func TestLinkConn(t *testing.T) {
 	f.Unconfined = true
 	check(vmssh.EventLinkRefused, LinkUnenforced)
 	f.Unconfined = false
-	if err := target.Set(netpolicy.KeyCheck, netpolicy.CheckUnenforced); err != nil {
+	if err := set(t, target, keyCheck, netpolicy.CheckUnenforced); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkUnenforced)
 	f.Unconfined = true
-	if err := client.Set(KeyNet, "off"); err != nil {
+	if err := set(t, client, KeyNet, "off"); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
 	f.Unconfined = false
-	if err := client.Set(KeyNet, "on"); err != nil {
+	if err := set(t, client, KeyNet, "on"); err != nil {
 		t.Fatal(err)
 	}
-	if err := target.Set(netpolicy.KeyCheck, netpolicy.CheckOK); err != nil {
+	if err := set(t, target, keyCheck, netpolicy.CheckOK); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
 
-	if err := target.Set(KeyPublish, "80"); err != nil {
+	if err := set(t, target, KeyPublish, "80"); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkUnpublished)
-	if err := target.Set(KeyPublish, "5432"); err != nil {
+	if err := set(t, target, KeyPublish, "5432"); err != nil {
 		t.Fatal(err)
 	}
 
 	// The link removed from the client, then another address's.
-	if err := writeLinks(client, nil); err != nil {
+	if err := writeLinks(t.Context(), client, nil); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkRemoved)
 	other := l
 	other.Addr = netip.MustParseAddr("127.77.0.2")
-	if err := writeLinks(client, []Link{other}); err != nil {
+	if err := writeLinks(t.Context(), client, []Link{other}); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkRemoved)
-	if err := writeLinks(client, []Link{l}); err != nil {
+	if err := writeLinks(t.Context(), client, []Link{l}); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
 
 	// The target made again, then gone.
-	if _, err := state.CreateVM(e.Dirs, target.Name(), state.NewVM{Image: "base", Backend: "fake"}); err != nil {
-		t.Fatal(err)
-	}
+	vmState(t, e.Dirs, target.Name(), withPublish("5432"))
 	check(vmssh.EventLinkRefused, LinkReplaced)
-	if err := target.Remove(); err != nil {
+	if err := target.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkGone)
@@ -237,11 +226,11 @@ func TestLinkRunReused(t *testing.T) {
 	f.Unconfined = true
 	check(vmssh.EventLinkRefused, LinkUnenforced)
 	f.Unconfined = false
-	if err := target.Set(KeyPublish, "80"); err != nil {
+	if err := set(t, target, KeyPublish, "80"); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkUnpublished)
-	if err := target.Set(KeyPublish, "5432"); err != nil {
+	if err := set(t, target, KeyPublish, "5432"); err != nil {
 		t.Fatal(err)
 	}
 	now = now.Add(linkRunFor - time.Millisecond)
@@ -253,8 +242,8 @@ func TestLinkRunReused(t *testing.T) {
 	// flight finds the target stopped.
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	runs.by[target.Name()+" "+target.Get(state.KeyID)] = &runLookup{done: make(chan struct{})}
-	if run := runs.get(ctx, target.Name()+" "+target.Get(state.KeyID), nil); run.start != "" {
+	runs.by[target.Name()+" "+target.ID] = &runLookup{done: make(chan struct{})}
+	if run := runs.get(ctx, target.Name()+" "+target.ID, nil); run.start != "" {
 		t.Errorf("a cancelled wait: %+v", run)
 	}
 }
@@ -327,7 +316,7 @@ func TestWarnUnenforced(t *testing.T) {
 		if c.failed {
 			check = netpolicy.CheckUnenforced
 		}
-		if err := target.Set(netpolicy.KeyCheck, check); err != nil {
+		if err := set(t, target, keyCheck, check); err != nil {
 			t.Fatal(err)
 		}
 		f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: c.status}
@@ -356,7 +345,7 @@ func TestSessionLinks(t *testing.T) {
 	if err != nil || len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("sessionLinks = %+v, %v", got, err)
 	}
-	if err := client.Remove(); err != nil {
+	if err := client.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := e.sessionLinks(client.Name()); err != nil || len(got) != 0 {

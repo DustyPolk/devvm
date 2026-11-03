@@ -116,7 +116,7 @@ func TestSetPortsRunning(t *testing.T) {
 	e.Warn = warned.Add
 	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
 	vm := st.Name()
-	if err := st.Set("proxy_port", "30001"); err != nil {
+	if err := set(t, st, "proxy_port", "30001"); err != nil {
 		t.Fatal(err)
 	}
 	e.PortInUse = func(_ context.Context, p int) bool { return p == 8080 }
@@ -175,8 +175,8 @@ func TestSetPortsRunning(t *testing.T) {
 	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); msg.NamesOf(err) != "vm_not_stopped vm="+vm || len(infos.Names()) != 0 {
 		t.Errorf("backend failed: %v, said %q", err, infos.Names())
 	}
-	if now, err := state.ReadVM(e.Dirs, vm); err != nil || now.Get(KeyPorts) != "none" {
-		t.Errorf("backend failed: state ports=%q, %v", now.Get(KeyPorts), err)
+	if now, err := state.ReadVM(e.Dirs, vm); err != nil || get(now, KeyPorts) != "none" {
+		t.Errorf("backend failed: state ports=%q, %v", get(now, KeyPorts), err)
 	}
 }
 
@@ -207,7 +207,7 @@ func TestStartBadPorts(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	e, f, _ := upEnv(t, allNative())
 	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
-	if err := st.Set(KeyPorts, "5173,x"); err != nil {
+	if err := set(t, st, KeyPorts, "5173,x"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.start(t.Context(), f, st, backend.Confinement{}); msg.NamesOf(err) != `port_invalid value="5173,x"` {

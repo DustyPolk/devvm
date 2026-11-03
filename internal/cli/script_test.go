@@ -58,6 +58,7 @@ func scriptCmds() map[string]func(ts *testscript.TestScript, neg bool, args []st
 		"stub_calls": stubCalls,
 		"stub_reset": stubReset,
 		"vm_name":    vmName,
+		"vm_state":   vmState,
 		"wait_file":  waitFile,
 	}
 }
@@ -414,10 +415,12 @@ func catGlob(ts *testscript.TestScript, neg bool, args []string) {
 	}
 }
 
-// jsonSet sets string fields in each JSON file GLOB matches, keeping its
-// other fields; a GLOB without a wildcard that matches nothing is made, an
-// object with only these fields. It's how scripts write devvm's JSON
-// records, a tool image's built time say, which they can't touch.
+// jsonSet sets fields in each JSON file GLOB matches, keeping its other
+// fields; a GLOB without a wildcard that matches nothing is made, an
+// object with only these fields. KEY=VALUE sets a string, KEY:=JSON any
+// value; a dotted KEY (net.on) is a field of an object, made when it's
+// missing. It's how scripts write devvm's JSON records, a tool image's
+// built time or a VM's state say, which they can't touch.
 func jsonSet(ts *testscript.TestScript, neg bool, args []string) {
 	if neg || len(args) < 2 {
 		ts.Fatalf("usage: json_set GLOB KEY=VALUE...")
@@ -443,7 +446,23 @@ func jsonSet(ts *testscript.TestScript, neg bool, args []string) {
 			if !ok {
 				ts.Fatalf("usage: json_set GLOB KEY=VALUE...")
 			}
-			obj[k] = v
+			var val any = v
+			if raw, isRaw := strings.CutSuffix(k, ":"); isRaw {
+				k = raw
+				ts.Check(json.Unmarshal([]byte(v), &val))
+			}
+			// A dotted key is a field of an object, made when it's missing.
+			at := obj
+			parts := strings.Split(k, ".")
+			for _, p := range parts[:len(parts)-1] {
+				next, _ := at[p].(map[string]any)
+				if next == nil {
+					next = map[string]any{}
+					at[p] = next
+				}
+				at = next
+			}
+			at[parts[len(parts)-1]] = val
 		}
 		data, err := json.MarshalIndent(obj, "", "  ")
 		ts.Check(err)
@@ -475,18 +494,68 @@ func vmName(ts *testscript.TestScript, neg bool, args []string) {
 // vmsFor returns the names of the VMs whose states in $VMS record a name
 // made for the folder name.
 func vmsFor(ts *testscript.TestScript, name string) []string {
-	states, err := filepath.Glob(filepath.Join(ts.Getenv("VMS"), "*", "state"))
+	states, err := filepath.Glob(filepath.Join(ts.Getenv("VMS"), "*", "vm.json"))
 	if err != nil {
 		ts.Fatalf("%v", err)
 	}
-	re := regexp.MustCompile(`(?m)^name=(devvm-` + regexp.QuoteMeta(name) + `-[0-9a-f]+)$`)
+	re := regexp.MustCompile(`^devvm-` + regexp.QuoteMeta(name) + `-[0-9a-f]+$`)
 	var found []string
 	for _, s := range states {
-		if m := re.FindStringSubmatch(ts.ReadFile(s)); m != nil {
-			found = append(found, m[1])
+		var st struct{ Name string }
+		if json.Unmarshal([]byte(ts.ReadFile(s)), &st) == nil && re.MatchString(st.Name) {
+			found = append(found, st.Name)
 		}
 	}
 	return found
+}
+
+// vmState prints the one VM state (vm.json) GLOB matches as KEY=VALUE
+// lines, sorted, for scripts to match: a section's fields dotted
+// (net.on=true, ports.host.ssh=23456), a list of strings space-separated,
+// a list of objects by index (links.links.0.name=db), strings as they
+// are and anything else as JSON.
+func vmState(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: vm_state GLOB")
+	}
+	files, err := filepath.Glob(ts.MkAbs(args[0]))
+	ts.Check(err)
+	if len(files) != 1 {
+		ts.Fatalf("%s matches %d files, not one: %q", args[0], len(files), files)
+	}
+	var v any
+	ts.Check(json.Unmarshal([]byte(ts.ReadFile(files[0])), &v))
+	var lines []string
+	var flat func(prefix string, v any)
+	flat = func(prefix string, v any) {
+		switch v := v.(type) {
+		case map[string]any:
+			for k, f := range v {
+				flat(strings.TrimPrefix(prefix+"."+k, "."), f)
+			}
+		case []any:
+			var words []string
+			for i, e := range v {
+				if s, ok := e.(string); ok {
+					words = append(words, s)
+				} else {
+					flat(prefix+"."+strconv.Itoa(i), e)
+				}
+			}
+			if len(words) > 0 || len(v) == 0 {
+				lines = append(lines, prefix+"="+strings.Join(words, " "))
+			}
+		case string:
+			lines = append(lines, prefix+"="+v)
+		default:
+			b, _ := json.Marshal(v)
+			lines = append(lines, prefix+"="+string(b))
+		}
+	}
+	flat("", v)
+	slices.Sort(lines)
+	_, err = ts.Stdout().Write([]byte(strings.Join(lines, "\n") + "\n"))
+	ts.Check(err)
 }
 
 // project makes the folder $WORK/NAME and goes to it, as a project's

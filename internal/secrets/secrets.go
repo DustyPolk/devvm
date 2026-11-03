@@ -24,11 +24,20 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
-// KeySecrets is the VM state key listing the secrets bound to it,
-// space-separated (claude comes with its image).
-const KeySecrets = "secrets"
+// Section is the name of the secrets section in a VM's state.
+const Section = "secrets"
+
+// Bound is a VM's secrets section: the secrets bound to it, as asked
+// (claude comes with its shared tools).
+type Bound struct {
+	Names []string `json:"names,omitempty"`
+}
+
+// Of returns a VM's secrets section.
+func Of(st *state.VM) (Bound, error) { return state.Section[Bound](st, Section) }
 
 // Secret is a token devvm keeps on the host: the hosts it's for, the header
 // the proxy puts it in, and the environment variable a VM finds its
@@ -327,8 +336,11 @@ func (s *Store) Get(ctx context.Context, name string) (string, error) {
 
 // Names returns the secrets a VM uses: those bound to it, then claude when
 // it has Claude Code.
+// A section that can't be read (the folder's VM's is checked as it's
+// found) binds none.
 func Names(st *state.VM) []string {
-	names := strings.Fields(st.Get(KeySecrets))
+	b, _ := Of(st)
+	names := slices.Clone(b.Names)
 	if FromTools(st, "claude") && !slices.Contains(names, "claude") {
 		names = append(names, "claude")
 	}
@@ -338,17 +350,21 @@ func Names(st *state.VM) []string {
 // FromTools reports whether a VM uses the secret because of its shared
 // tools: claude, when it has Claude Code.
 func FromTools(st *state.VM, name string) bool {
-	return name == "claude" && slices.Contains(st.ToolNames(), "claude")
+	return name == "claude" && slices.Contains(tools.Names(st), "claude")
 }
 
-// Bind binds a secret to a VM (use), or unbinds it: claude stays with a
-// VM that has Claude Code.
+// Bind binds a secret to a VM (use), or unbinds it, in st alone: inside
+// st.Update. claude stays with a VM that has Claude Code.
 func Bind(st *state.VM, name string, use bool) error {
-	names := slices.DeleteFunc(strings.Fields(st.Get(KeySecrets)), func(n string) bool { return n == name })
-	if use {
-		names = append(names, name)
+	b, err := Of(st)
+	if err != nil {
+		return err
 	}
-	return st.Set(KeySecrets, strings.Join(names, " "))
+	b.Names = slices.DeleteFunc(b.Names, func(n string) bool { return n == name })
+	if use {
+		b.Names = append(b.Names, name)
+	}
+	return state.SetSection(st, Section, b)
 }
 
 // Logins returns the login kinds a VM with these shared tools uses: its
@@ -383,7 +399,7 @@ func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error
 	var logins []json.RawMessage
 	var hosts []string
 	// A login the helper can't read has no bindings.
-	for _, kind := range s.Logins(st.ToolNames()) {
+	for _, kind := range s.Logins(tools.Names(st)) {
 		args := []string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-bindings", "-login-salt", salt}
 		var out bytes.Buffer
 		var bs []json.RawMessage

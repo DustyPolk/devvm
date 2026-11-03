@@ -20,15 +20,9 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Keys of a VM's state for groups: each member's own state records its
-// group, so a VM made again, which gets new state, is in none.
-const (
-	// KeyGroup is the group the VM is in; unset for none.
-	KeyGroup = "group"
-	// KeyGroupAs is the name the group's other VMs reach it by; unset for
-	// its folder part.
-	KeyGroupAs = "group_as"
-)
+// groupOf is the group a VM is in, as its links section records it; ""
+// for none.
+func groupOf(st *state.VM) string { return linksOf(st).Group }
 
 // Groups shows and changes the folder's VM's group: VMs that reach each
 // other's published ports by name, through links the group makes in each
@@ -47,7 +41,7 @@ func CheckGroupName(name string) error {
 // memberName is the name the group's other VMs reach member st by: the
 // name it joined with, else its folder part.
 func memberName(st *state.VM) string {
-	return cmp.Or(st.Get(KeyGroupAs), project.Folder{Name: st.Name()}.Slug())
+	return cmp.Or(linksOf(st).GroupAs, project.Folder{Name: st.Name()}.Slug())
 }
 
 // groupMembers returns the states of group's members, sorted by VM name:
@@ -58,7 +52,7 @@ func groupMembers(d paths.Dirs, group string) ([]*state.VM, error) {
 	}
 	var out []*state.VM
 	err := clientStates(d, "", func(st *state.VM, _ []Link) error {
-		if st.Get(KeyGroup) == group {
+		if groupOf(st) == group {
 			out = append(out, st)
 		}
 		return nil
@@ -68,7 +62,7 @@ func groupMembers(d paths.Dirs, group string) ([]*state.VM, error) {
 
 // publishedPorts returns each port a VM publishes, its ranges expanded.
 func publishedPorts(st *state.VM) []int {
-	v := st.Get(KeyPublish)
+	v := linksOf(st).Publish
 	if v == "" || v == settings.PortsNone {
 		return nil
 	}
@@ -123,7 +117,7 @@ func groupLinks(client *state.VM, own, prev []Link, others []*state.VM) ([]Link,
 	var clashes []groupClash
 	host := project.Folder{Name: client.Name()}.Slug()
 	for _, m := range others {
-		target, id := m.Name(), m.Get(state.KeyID)
+		target, id := m.Name(), m.ID
 		ports := publishedPorts(m)
 		if id == "" || len(ports) == 0 {
 			continue
@@ -157,7 +151,7 @@ func groupLinks(client *state.VM, own, prev []Link, others []*state.VM) ([]Link,
 // (groupLinks), from own, the links the user made, and prev, all it had:
 // only own when it's in none.
 func (e Groups) withGroup(st *state.VM, own, prev []Link) ([]Link, []groupClash, error) {
-	members, err := groupMembers(e.Dirs, st.Get(KeyGroup))
+	members, err := groupMembers(e.Dirs, groupOf(st))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -209,7 +203,7 @@ func (e Groups) lock(ctx context.Context, t *found) (unlock func(), err error) {
 		return nil, err
 	}
 	st, err := state.ReadVM(e.Dirs, t.f.Name)
-	if err == nil && (!st.Exists() || st.Get(KeyNet) == "") {
+	if err == nil && !st.Finished() {
 		err = msg.VMUnfinished(t.f.Name)
 	}
 	if err != nil {
@@ -229,7 +223,7 @@ func (e Groups) syncOthers(ctx context.Context, t *found) error {
 		return err
 	}
 	defer unlock()
-	return e.sync(ctx, t.st.Get(KeyGroup), t.f.Name)
+	return e.sync(ctx, groupOf(t.st), t.f.Name)
 }
 
 // sync gives each member of group but skip its links as the group makes
@@ -265,7 +259,7 @@ func (e Groups) syncVM(ctx context.Context, st *state.VM, group string, warn boo
 	if warn {
 		e.warnClashes(st.Name(), clashes)
 	}
-	if formatLinks(want) == formatLinks(links) {
+	if slices.Equal(want, links) {
 		return nil
 	}
 	return e.change(ctx, st, group, links, want)
@@ -280,7 +274,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 	vm := st.Name()
 	runs := linkRuns(e)
 	from := runs.logSize(vm)
-	if err := writeLinks(st, after); err != nil {
+	if err := writeLinks(ctx, st, after); err != nil {
 		return err
 	}
 	added := e.sayChangedIn(group, vm, before, after, nil)
@@ -297,7 +291,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 		}
 		e.warnUnenforced(ctx, st, tst)
 	}
-	c, err := e.Registry.For(e.Dirs, st)
+	c, err := e.Registry.For(st)
 	if err != nil {
 		e.Warn(msg.LinksUpdateFailed(vm).Because(err))
 		return nil
@@ -316,7 +310,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 // when its links went from before to after (groupChanged), with also, the
 // group's links that took the place of the user's, as gained.
 func (e Groups) sayChanged(st *state.VM, before, after, also []Link) {
-	e.sayChangedIn(st.Get(KeyGroup), st.Name(), before, after, also)
+	e.sayChangedIn(groupOf(st), st.Name(), before, after, also)
 }
 
 // sayChangedIn is sayChanged for vm in group, and returns what it gained.
@@ -414,15 +408,15 @@ func (e Groups) Show(ctx context.Context) (GroupShown, error) {
 	if err != nil {
 		return GroupShown{}, err
 	}
-	g := GroupShown{VM: t.f.Name, Group: t.st.Get(KeyGroup)}
+	g := GroupShown{VM: t.f.Name, Group: groupOf(t.st)}
 	members, err := groupMembers(e.Dirs, g.Group)
 	if err != nil {
 		return GroupShown{}, err
 	}
 	for _, m := range members {
 		g.Members = append(g.Members, GroupMember{
-			Name: memberName(m), VM: m.Name(), Folder: m.Get(state.KeyDir),
-			Published: cmp.Or(m.Get(KeyPublish), settings.PortsNone),
+			Name: memberName(m), VM: m.Name(), Folder: m.Dir,
+			Published: cmp.Or(linksOf(m).Publish, settings.PortsNone),
 		})
 	}
 	slices.SortFunc(g.Members, func(a, b GroupMember) int { return cmp.Compare(a.Name, b.Name) })
@@ -443,7 +437,7 @@ func (e Groups) Join(ctx context.Context, group, as string) error {
 		return err
 	}
 	asked := false
-	if t.st.Get(KeyGroup) == "" {
+	if groupOf(t.st) == "" {
 		if _, err := e.checkJoin(t, group, as); err != nil {
 			return err
 		}
@@ -457,7 +451,7 @@ func (e Groups) Join(ctx context.Context, group, as string) error {
 		return err
 	}
 	defer unlock()
-	if cur := t.st.Get(KeyGroup); cur != "" {
+	if cur := groupOf(t.st); cur != "" {
 		return e.rejoin(ctx, t, cur, group, as)
 	}
 	members, err := e.checkJoin(t, group, as)
@@ -494,10 +488,7 @@ func (e Groups) rejoin(ctx context.Context, t *found, cur, group, as string) err
 // and gives each its links.
 func (e Groups) join(ctx context.Context, t *found, group, as string, members []*state.VM) error {
 	vm := t.f.Name
-	if err := t.st.Set(KeyGroupAs, as); err != nil {
-		return err
-	}
-	if err := t.st.Set(KeyGroup, group); err != nil {
+	if err := update(ctx, t.st, linksSection, func(l *linksInVM) error { l.Group, l.GroupAs = group, as; return nil }); err != nil {
 		return err
 	}
 	if len(members) == 0 {
@@ -547,7 +538,7 @@ func (e Groups) checkJoin(t *found, group, as string) ([]*state.VM, error) {
 		return nil, err
 	}
 	for _, m := range members {
-		c, err := e.Registry.For(e.Dirs, m)
+		c, err := e.Registry.For(m)
 		if err != nil {
 			return nil, err
 		}
@@ -596,20 +587,25 @@ func (e Groups) Leave(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	group := t.st.Get(KeyGroup)
+	group := groupOf(t.st)
 	if group == "" {
 		return msg.GroupNone(t.f.Name)
 	}
-	// Its own group links go first, so a leave cut short leaves it none.
+	// Its own group links go with its group, at once, so a leave cut
+	// short leaves it none.
 	links, err := ReadLinks(t.st)
 	if err != nil {
 		return err
 	}
 	own := ownLinks(links)
-	if err := writeLinks(t.st, own); err != nil {
+	err = update(ctx, t.st, linksSection, func(l *linksInVM) error {
+		l.Links, l.Group, l.GroupAs = ownLinks(l.Links), "", ""
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-	if err := e.leave(ctx, t.st, group); err != nil {
+	if err := e.left(ctx, t.f.Name, group); err != nil {
 		return err
 	}
 	if len(own) == len(links) {
@@ -631,8 +627,8 @@ func (e Groups) forget(ctx context.Context, vm string) error {
 	if err != nil {
 		return err
 	}
-	group := st.Get(KeyGroup)
-	if err := st.Remove(); err != nil {
+	group := groupOf(st)
+	if err := st.Remove(ctx); err != nil {
 		return err
 	}
 	if err := linkRuns(e).unlinkTarget(ctx, vm); err != nil {
@@ -641,21 +637,14 @@ func (e Groups) forget(ctx context.Context, vm string) error {
 	if group == "" {
 		return nil
 	}
-	return e.leave(ctx, st, group)
+	return e.left(ctx, vm, group)
 }
 
-// leave takes st out of group, says so, and gives the other members their
-// links without it; the last member's leaving removes the group.
-func (e Groups) leave(ctx context.Context, st *state.VM, group string) error {
-	if st.Exists() {
-		if err := st.Set(KeyGroup, ""); err != nil {
-			return err
-		}
-		if err := st.Set(KeyGroupAs, ""); err != nil {
-			return err
-		}
-	}
-	e.Info(msg.GroupLeft(group, st.Name()))
+// left says vm left group, which its state no longer records, and gives
+// the other members their links without it; the last member's leaving
+// removes the group.
+func (e Groups) left(ctx context.Context, vm, group string) error {
+	e.Info(msg.GroupLeft(group, vm))
 	members, err := groupMembers(e.Dirs, group)
 	if err != nil {
 		return err

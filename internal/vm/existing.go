@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"slices"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
@@ -37,21 +36,20 @@ func (e Launch) Restart(ctx context.Context, o Options) error {
 // VM.
 func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	vm, st, b := t.f.Name, t.st, t.b
-	if !st.Exists() || st.Get(KeyNet) == "" {
+	if !st.Finished() {
 		return msg.VMUnfinished(vm)
 	}
 	if o.Clone && !isClone(st) {
 		return msg.CloneNeedsNewVM(vm)
 	}
-	if o.From != "" && o.From != st.Get(state.KeyFrom) {
+	if o.From != "" && o.From != st.From {
 		e.Warn(msg.FromIgnored(vm))
 	}
-	builder := e.builder(b, st.Get(state.KeyFrom))
-	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Get(state.KeyChain)); err != nil {
+	builder := e.builder(b, st.From)
+	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Chain); err != nil {
 		return err
 	}
-	have := strings.Fields(st.Get(KeyTools))
-	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, st.ToolNames(), have, toolTarget(b, st)); err != nil {
+	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, tools.Names(st), tools.Files(st), toolTarget(b, st)); err != nil {
 		return err
 	}
 	if err := (tools.Versions{Env: e.Tools}).RefreshDaily(); err != nil {
@@ -190,7 +188,7 @@ func (e Launch) applyAgent(ctx context.Context, b backend.Backend, st *state.VM,
 // network policy was turned off keeps it until it starts again.
 func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
 	vm := st.Name()
-	if st.Get(KeyNet) == "" {
+	if !st.Finished() {
 		return backend.Confinement{}, msg.VMUnfinished(vm)
 	}
 	conf := backend.Confinement{Net: backend.NetProxy}
@@ -261,7 +259,8 @@ func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM
 // toolTarget is what a VM's tool images are built for: its base's C
 // library and its backend's format.
 func toolTarget(b backend.Backend, st *state.VM) tools.Target {
-	return tools.Target{Libc: st.Get(KeyLibc), Format: b.ToolFormat()}
+	t, _ := tools.Of(st)
+	return tools.Target{Libc: t.Made.Libc, Format: b.ToolFormat()}
 }
 
 // buildTools builds the tool images the share lacks of files, from base's

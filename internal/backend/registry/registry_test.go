@@ -114,7 +114,7 @@ func TestLimaIsTheDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := r.For(d, vm)
+	c, err := r.For(vm)
 	if err != nil || c.Backend.Name() != backend.Default || backend.Default != "lima" {
 		t.Errorf("For a new VM: %+v, %v", c, err)
 	}

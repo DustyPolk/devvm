@@ -8,14 +8,14 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
 // forwarderMain runs a backend's port forwarder (main) with its
 // arguments, ports.sh and the ports devvm records for VMs, which it never
-// forwards (netpolicy.UsedPorts) but its VM's own listed ones; its log
+// forwards (ports.Used) but its VM's own listed ones; its log
 // lines are data, written to devvm's stderr.
 type forwarderMain func(args []string, script []byte, reserved func(vm string) (map[int]bool, error)) error
 
@@ -38,7 +38,7 @@ func newForwarderCmd(u *ui.UI, use, short string, run func(cmd *cobra.Command) f
 			if err != nil {
 				fail(err)
 			}
-			reserved := func(vm string) (map[int]bool, error) { return netpolicy.UsedPorts(d, vm) }
+			reserved := func(vm string) (map[int]bool, error) { return ports.Used(d, vm) }
 			if err := run(cmd)(args, script, reserved); err != nil {
 				fail(err)
 			}

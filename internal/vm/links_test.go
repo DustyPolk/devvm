@@ -8,11 +8,9 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
 )
 
 func TestLinkArgs(t *testing.T) {
@@ -86,10 +84,7 @@ func TestLinkAddr(t *testing.T) {
 // else is refused.
 func TestReadLinks(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := vmState(t, d, "devvm-app-0123456789abc1")
 	if ls, err := ReadLinks(st); err != nil || ls != nil {
 		t.Errorf("no links: %v, %v", ls, err)
 	}
@@ -98,10 +93,10 @@ func TestReadLinks(t *testing.T) {
 		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: netip.MustParseAddr("127.77.0.1")},
 		{Name: "db", Port: 6379, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: netip.MustParseAddr("127.77.0.1")},
 	}
-	if err := writeLinks(st, []Link{want[2], want[0], want[1]}); err != nil {
+	if err := writeLinks(t.Context(), st, []Link{want[2], want[0], want[1]}); err != nil {
 		t.Fatal(err)
 	}
-	if v := st.Get(KeyLinks); v != "api,80,devvm-api-0123456789abc3,i2,127.77.0.2 db,5432,devvm-db-0123456789abc2,i1,127.77.0.1 db,6379,devvm-db-0123456789abc2,i1,127.77.0.1" {
+	if v := get(st, KeyLinks); v != "api,80,devvm-api-0123456789abc3,i2,127.77.0.2 db,5432,devvm-db-0123456789abc2,i1,127.77.0.1 db,6379,devvm-db-0123456789abc2,i1,127.77.0.1" {
 		t.Errorf("links = %q", v)
 	}
 	if got, err := ReadLinks(st); err != nil || !slices.Equal(got, want) {
@@ -116,7 +111,7 @@ func TestReadLinks(t *testing.T) {
 		"db,5432,devvm-db-0123456789abc2,i1,127.0.0.1",
 		"db,5432,devvm-db-0123456789abc2,i1,::ffff:127.77.0.1",
 	} {
-		if err := st.Set(KeyLinks, bad); err != nil {
+		if err := set(t, st, KeyLinks, bad); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := ReadLinks(st); err == nil {
@@ -129,15 +124,9 @@ func TestReadLinks(t *testing.T) {
 // its published ports and the two VMs' network policy.
 func TestCheckLink(t *testing.T) {
 	d := paths.Dirs{Data: filepath.Join(t.TempDir(), "data")}
-	client, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, err := state.CreateVM(d, "devvm-db-0123456789abc2", state.NewVM{Image: "base"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	l := Link{Name: "db", Port: 5432, Target: target.Name(), TargetID: target.Get(state.KeyID)}
+	client := vmState(t, d, "devvm-app-0123456789abc1")
+	target := vmState(t, d, "devvm-db-0123456789abc2")
+	l := Link{Name: "db", Port: 5432, Target: target.Name(), TargetID: target.ID}
 	check := func(want string) {
 		t.Helper()
 		if got, _, err := CheckLink(d, client, l); err != nil || got != want {
@@ -146,33 +135,31 @@ func TestCheckLink(t *testing.T) {
 	}
 	check(LinkUnpublished)
 	for _, ports := range []string{"5000-6000", "80,5432"} {
-		if err := target.Set(KeyPublish, ports); err != nil {
+		if err := set(t, target, KeyPublish, ports); err != nil {
 			t.Fatal(err)
 		}
 		check("")
 	}
-	if err := client.Set(KeyNet, "on"); err != nil {
+	if err := set(t, client, KeyNet, "on"); err != nil {
 		t.Fatal(err)
 	}
 	check(LinkPolicy)
-	if err := target.Set(netpolicy.KeyNet, "on"); err != nil {
+	if err := set(t, target, KeyNet, "on"); err != nil {
 		t.Fatal(err)
 	}
 	check("")
 	// A client without network policy may link to a target with it.
-	if err := client.Set(KeyNet, "off"); err != nil {
+	if err := set(t, client, KeyNet, "off"); err != nil {
 		t.Fatal(err)
 	}
 	check("")
-	if err := target.Set(KeyPublish, ""); err != nil {
+	if err := set(t, target, KeyPublish, ""); err != nil {
 		t.Fatal(err)
 	}
 	check(LinkUnpublished)
-	if _, err := state.CreateVM(d, target.Name(), state.NewVM{Image: "base"}); err != nil {
-		t.Fatal(err)
-	}
+	vmState(t, d, target.Name())
 	check(LinkReplaced)
-	if err := target.Remove(); err != nil {
+	if err := target.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	check(LinkGone)

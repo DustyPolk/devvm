@@ -60,7 +60,7 @@ func linkClients(d paths.Dirs, target, id string, picks func(client *state.VM, l
 func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
 	vm := st.Name()
 	if !on {
-		clients, err := linkClients(d, vm, st.Get(state.KeyID), func(c *state.VM, _ Link) bool { return netpolicy.On(c) })
+		clients, err := linkClients(d, vm, st.ID, func(c *state.VM, _ Link) bool { return netpolicy.On(c) })
 		if err != nil || len(clients) == 0 {
 			return err
 		}
@@ -76,7 +76,7 @@ func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
 		if err != nil {
 			return err
 		}
-		if tst.Exists() && tst.Get(state.KeyID) == l.TargetID && !netpolicy.On(tst) && !slices.Contains(targets, l.Target) {
+		if tst.Exists() && tst.ID == l.TargetID && !netpolicy.On(tst) && !slices.Contains(targets, l.Target) {
 			targets = append(targets, l.Target)
 		}
 	}
@@ -90,15 +90,19 @@ func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
 // forgets, from every client's state, names the clients that lost one,
 // and gives each running one its links as they are now (apply). One that
 // can't be given them is warned of, and gets them at its next start.
+// Each client's state changes under its own lock, read again there, one
+// client at a time: the lock rule for a change across VMs.
 func (e linkRuns) unlinkTarget(ctx context.Context, target string) error {
 	var lost []*state.VM
 	err := clientStates(e.Dirs, target, func(st *state.VM, links []Link) error {
-		kept := slices.DeleteFunc(slices.Clone(links), func(l Link) bool { return l.Target == target })
-		if len(kept) == len(links) {
+		if !slices.ContainsFunc(links, func(l Link) bool { return l.Target == target }) {
 			return nil
 		}
 		lost = append(lost, st)
-		return writeLinks(st, kept)
+		return update(ctx, st, linksSection, func(l *linksInVM) error {
+			l.Links = slices.DeleteFunc(l.Links, func(l Link) bool { return l.Target == target })
+			return nil
+		})
 	})
 	if err != nil || len(lost) == 0 {
 		return err
@@ -109,7 +113,7 @@ func (e linkRuns) unlinkTarget(ctx context.Context, target string) error {
 	}
 	e.Info(msg.LinksTargetGone(len(lost), target, strings.Join(names, ", ")))
 	for _, st := range lost {
-		c, err := e.Registry.For(e.Dirs, st)
+		c, err := e.Registry.For(st)
 		if err == nil {
 			_, err = e.apply(ctx, c.Backend, st, nil, 0)
 		}

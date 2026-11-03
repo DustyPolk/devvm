@@ -88,8 +88,8 @@ func TestUpClone(t *testing.T) {
 	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.Project != "" || spec.Tools == "" {
 		t.Errorf("spec %+v", spec)
 	}
-	for k, want := range map[string]string{KeyMode: ModeClone, KeySeeded: "yes", KeyCloneRemote: "devvm", gitprotect.KeyGitProtect: ""} {
-		if got := st.Get(k); got != want {
+	for k, want := range map[string]string{KeyMode: ModeClone, KeySeeded: "yes", KeyCloneRemote: "devvm", keyGitProtect: gitprotect.Clone} {
+		if got := get(st, k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}

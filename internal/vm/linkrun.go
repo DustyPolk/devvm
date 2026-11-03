@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -18,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // linkRuns starts and stops client VMs' link sessions: devvm _links VM,
@@ -211,7 +211,7 @@ func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) e
 			e.Warn(msg.LinkPolicyMismatch(l.Target, st.Name()))
 			continue
 		}
-		c, err := e.Registry.For(e.Dirs, tst)
+		c, err := e.Registry.For(tst)
 		if err != nil {
 			return err
 		}
@@ -245,7 +245,7 @@ func guestLinks(d paths.Dirs, st *state.VM) ([]GuestLink, error) {
 		if err != nil {
 			return nil, err
 		}
-		if tst.Get(state.KeyID) == l.TargetID && policyBroken(st, tst) ||
+		if tst.ID == l.TargetID && policyBroken(st, tst) ||
 			slices.ContainsFunc(out, func(g GuestLink) bool { return g.Addr == l.Addr }) {
 			continue
 		}
@@ -297,7 +297,7 @@ func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, ad
 		return true, err
 	}
 	slug := project.Folder{Name: vm}.Slug()
-	if err := syncer(e).sync(ctx, b, st, slug, strings.Fields(st.Get(KeyTools)), conf); err != nil {
+	if err := syncer(e).sync(ctx, b, st, slug, tools.Files(st), conf); err != nil {
 		return true, err
 	}
 	links, err := ReadLinks(st)

@@ -4,7 +4,9 @@ import "path/filepath"
 
 // VM is the folder of one VM's files (Dirs.VM), and each file in it:
 //
-//	state     its state
+//	vm.json   its state: what it was made from and asked for, and what
+//	          devvm made for it (state.VM)
+//	lock      held by each change to vm.json
 //	policy    its own network policy rules
 //	backend/  its backend's files: what it set (record.json), the ssh
 //	          key and host key it logs in with, its port forwarder's
@@ -16,8 +18,12 @@ import "path/filepath"
 // the sockets VMs need are in the run folder, by hash.
 type VM struct{ Dir string }
 
-// State is the VM's state file.
-func (v VM) State() string { return filepath.Join(v.Dir, "state") }
+// State is the VM's state file, vm.json.
+func (v VM) State() string { return filepath.Join(v.Dir, "vm.json") }
+
+// Lock is the lock file each change to the VM's state holds (flock), so
+// two devvms changing one VM at once lose neither's change.
+func (v VM) Lock() string { return filepath.Join(v.Dir, "lock") }
 
 // Policy holds the VM's own network policy rules.
 func (v VM) Policy() string { return filepath.Join(v.Dir, "policy") }

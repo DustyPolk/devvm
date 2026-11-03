@@ -27,16 +27,6 @@ import (
 // config. The clone is at the folder's path in the VM, so shells and
 // editors open in the same place.
 
-// Keys of a --clone VM's state.
-const (
-	KeyMode        = "mode"         // clone, for a --clone VM; unset for one that mounts its folder
-	KeyCloneRemote = "clone_remote" // the repo's remote for the VM
-	KeySeeded      = "seeded"       // yes once the host's branches are in the VM
-)
-
-// ModeClone is KeyMode for a --clone VM.
-const ModeClone = "clone"
-
 // cloneShown is how many of the clone's uncommitted changes rm shows, in
 // all its worktrees.
 const cloneShown = 20
@@ -54,7 +44,7 @@ var objectName = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
 type clones struct{ *Env }
 
 // isClone reports whether the VM has its own clone of the repo.
-func isClone(st *state.VM) bool { return st.Get(KeyMode) == ModeClone }
+func isClone(st *state.VM) bool { return sectionOf[cloneInVM](st, cloneSection).On }
 
 // cloneURL is the remote URL of vm's clone of dir: the VM's full name in
 // devvm's ssh config, which never changes, and the clone's path.
@@ -132,7 +122,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 		return backend.Logged(msg.CloneSeedFailed(vm))
 	}
 	// Recorded first: rm and an interrupt remove it, if it's the VM's.
-	if err := st.Set(KeyCloneRemote, remote); err != nil {
+	if err := update(ctx, st, cloneSection, func(c *cloneInVM) error { c.Made.Remote = remote; return nil }); err != nil {
 		return err
 	}
 	if _, ok := remoteURL(ctx, dir, remote); !ok {
@@ -140,7 +130,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 			return msg.RemoteAddFailed(remote)
 		}
 	}
-	if err := st.Set(KeySeeded, "yes"); err != nil {
+	if err := update(ctx, st, cloneSection, func(c *cloneInVM) error { c.Made.Seeded = true; return nil }); err != nil {
 		return err
 	}
 	if ok, err := e.sshConfig().EnsureInclude(e.Dirs.Home); err != nil {
@@ -182,10 +172,11 @@ func remoteURL(ctx context.Context, dir, name string) (string, bool) {
 // nothing of its own.
 func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	vm, st, b, dir := t.f.Name, t.st, t.b, t.f.Dir
-	if st.Get(KeySeeded) == "" {
+	c := sectionOf[cloneInVM](st, cloneSection)
+	if !c.Made.Seeded {
 		return false, nil
 	}
-	remote := st.Get(KeyCloneRemote)
+	remote := c.Made.Remote
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return false, e.notStarted(ctx, vm, err)
 	}

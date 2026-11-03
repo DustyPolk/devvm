@@ -200,7 +200,7 @@ func TestNotRules(t *testing.T) {
 	files := map[string]string{
 		d.Policy():                                "ok.test\na b\n",
 		filepath.Join(d.Layers(), "pg.policy"):    "# pg\n*\n",
-		d.VM("devvm-x-0123456789abcd").State():    "name=devvm-x-0123456789abcd\n",
+		d.VM("devvm-x-0123456789abcd").State():    `{"version": 1, "id": "x", "name": "devvm-x-0123456789abcd", "image": "base", "dir": "/x", "backend": "fake"}`,
 		d.VM("devvm-x-0123456789abcd").Policy():   "!!x.test\nfine.test\n",
 		filepath.Join(d.Layers(), "pg.sh"):        "not a policy\n",
 		filepath.Join(d.VMs(), "other", "policy"): "!!not.a.vm\n",

@@ -26,7 +26,7 @@ func (e Tools) List(ctx context.Context) ([]tools.VMTool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tools.VMs{Env: e.Env.Tools}.Show(strings.Fields(t.st.Get(KeyTools)), toolTarget(t.b, t.st))
+	return tools.VMs{Env: e.Env.Tools}.Show(tools.Files(t.st), toolTarget(t.b, t.st))
 }
 
 // Add adds shared tools (node, claude) to the folder's VM, then opens it
@@ -59,23 +59,20 @@ func (e Tools) Change(ctx context.Context, o Options, add, gone []string) error 
 	return Launch(e).open(ctx, o, t)
 }
 
-// change records Change's changes in the VM's state, building what it
-// adds first.
+// change records Change's changes in the VM's state, at once, building
+// what it adds first. It holds the lock VMs being made hold until the
+// state lists what it adds, so gc keeps their images.
 func (e Tools) change(ctx context.Context, t *found, add, gone []string) error {
 	vm, st := t.f.Name, t.st
+	have := tools.Names(st)
 	if len(gone) > 0 {
-		names, files, err := tools.Remove(vm, st.Get(state.KeyImage), st.ToolNames(), strings.Fields(st.Get(KeyTools)), gone)
+		// Refused before anything is built.
+		names, _, err := tools.Remove(vm, st.Image, have, tools.Files(st), gone)
 		if err != nil {
 			return err
 		}
-		if err := st.Set(KeyTools, strings.Join(files, " ")); err != nil {
-			return err
-		}
-		if err := st.Set(state.KeyToolNames, strings.Join(names, " ")); err != nil {
-			return err
-		}
+		have = names
 	}
-	have := st.ToolNames()
 	var added, had []string
 	for _, n := range add {
 		switch {
@@ -88,40 +85,55 @@ func (e Tools) change(ctx context.Context, t *found, add, gone []string) error {
 	if len(had) > 0 {
 		e.Info(msg.HasTools(strings.Join(had, " "), vm))
 	}
-	if len(added) > 0 {
-		if err := e.add(ctx, t, added); err != nil {
-			return err
-		}
+	if len(added) == 0 && len(gone) == 0 {
+		return nil
 	}
-	if len(added) > 0 || len(gone) > 0 {
-		e.Info(msg.VMToolsNow(listOrNone(st.ToolNames()), vm))
-	}
-	return nil
-}
-
-// add builds what the share lacks of the tools named, then records them
-// in the VM's state: its shared tools and their files. It holds the lock
-// VMs being made hold until the state lists them, so gc keeps them.
-func (e Tools) add(ctx context.Context, t *found, names []string) error {
-	st := t.st
 	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
 	if err != nil {
 		return err
 	}
 	defer unmaking()
-	tg := toolTarget(t.b, st)
-	files, err := tools.Versions{Env: e.Env.Tools}.Files(ctx, names, tg)
+	files, err := e.build(ctx, t, added)
 	if err != nil {
 		return err
 	}
-	builder := e.builder(t.b, st.Get(state.KeyFrom))
-	if err := Launch(e).buildTools(ctx, builder, tg, files); err != nil {
+	err = st.Update(ctx, func(st *state.VM) error {
+		in, err := tools.Of(st)
+		if err != nil {
+			return err
+		}
+		if len(gone) > 0 {
+			if in.Names, in.Made.Files, err = tools.Remove(vm, st.Image, in.Names, in.Made.Files, gone); err != nil {
+				return err
+			}
+		}
+		in.Names = image.SortTools(slices.Compact(slices.Sorted(slices.Values(slices.Concat(in.Names, added)))))
+		for _, f := range files {
+			if !slices.Contains(in.Made.Files, f) {
+				in.Made.Files = append(in.Made.Files, f)
+			}
+		}
+		return tools.Set(st, in)
+	})
+	if err != nil {
 		return err
 	}
-	if err := st.Set(KeyTools, strings.Join(append(strings.Fields(st.Get(KeyTools)), files...), " ")); err != nil {
-		return err
+	e.Info(msg.VMToolsNow(listOrNone(tools.Names(st)), vm))
+	return nil
+}
+
+// build builds what the share lacks of the tools named, and returns their
+// tool images' files.
+func (e Tools) build(ctx context.Context, t *found, names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
 	}
-	return st.Set(state.KeyToolNames, strings.Join(image.SortTools(slices.Concat(st.ToolNames(), names)), " "))
+	tg := toolTarget(t.b, t.st)
+	files, err := tools.Versions{Env: e.Env.Tools}.Files(ctx, names, tg)
+	if err != nil {
+		return nil, err
+	}
+	return files, Launch(e).buildTools(ctx, e.builder(t.b, t.st.From), tg, files)
 }
 
 // Pick shows the picker for the folder's VM, its toolchains and agents
@@ -133,7 +145,7 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 		return err
 	}
 	vm, st := t.f.Name, t.st
-	have := st.ToolNames()
+	have := tools.Names(st)
 	row := func(name string) PickRow { return PickRow{Name: name, On: slices.Contains(have, name)} }
 	var toolchains, agents, layers []PickRow
 	for _, n := range image.Toolchains {
@@ -142,9 +154,9 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 	for _, n := range image.Agents {
 		agents = append(agents, row(n))
 	}
-	b := e.builder(t.b, st.Get(state.KeyFrom))
-	for _, l := range layerRows(b, st.Get(state.KeyImage)) {
-		layers = append(layers, PickRow{Name: l, Desc: layerDesc(l), On: image.HasLayer(st.Get(state.KeyImage), l), Fixed: true})
+	b := e.builder(t.b, st.From)
+	for _, l := range layerRows(b, st.Image) {
+		layers = append(layers, PickRow{Name: l, Desc: layerDesc(l), On: image.HasLayer(st.Image, l), Fixed: true})
 	}
 	got := e.PickParts(msg.PickVMHelp(vm), []PickPart{
 		{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayers(), layers},
@@ -191,7 +203,7 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 		return err
 	}
 	vm, st := t.f.Name, t.st
-	builder := e.builder(t.b, st.Get(state.KeyFrom))
+	builder := e.builder(t.b, st.From)
 	tg := toolTarget(t.b, st)
 	buildFn := func(ctx context.Context, files []string) error { return Launch(e).buildTools(ctx, builder, tg, files) }
 	// Held until its state lists the new tools, as a new VM's.
@@ -199,9 +211,16 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
-	files, changed, err := tools.VMs{Env: e.Env.Tools}.Update(ctx, buildFn, vm, st.ToolNames(), strings.Fields(st.Get(KeyTools)), tg)
+	files, changed, err := tools.VMs{Env: e.Env.Tools}.Update(ctx, buildFn, vm, tools.Names(st), tools.Files(st), tg)
 	if err == nil && changed {
-		err = st.Set(KeyTools, strings.Join(files, " "))
+		err = st.Update(ctx, func(st *state.VM) error {
+			in, err := tools.Of(st)
+			if err != nil {
+				return err
+			}
+			in.Made.Files = files
+			return tools.Set(st, in)
+		})
 	}
 	unmaking()
 	if err != nil {

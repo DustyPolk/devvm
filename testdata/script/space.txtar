@@ -25,8 +25,8 @@ exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec sh -c 'cd "$SHARE" && echo x > go-1.20.0-0123456789ab.erofs && echo x > go-1.9.0-0123456789ab.erofs'
 json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS/12345612345601/logs $VMS/12345612345602/logs
-exec sh -c 'printf "name=devvm-p-12345612345601\nimage=base\ndir=/p\nbackend=lima\nlibc=gnu\ntool_names=go\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/12345612345601/state"'
-exec sh -c 'printf "name=devvm-gone-12345612345602\nimage=base\ndir=/q\nbackend=lima\nlibc=gnu\ntool_names=go\n" > "$VMS/12345612345602/state"'
+json_set $VMS/12345612345601/vm.json version:=1 id=p name=devvm-p-12345612345601 image=base dir=/p backend=lima created=2020-01-01T00:00:00Z tools.names:=["go"] tools.made.libc=gnu tools.made.files:=["go-1.20.0-0123456789ab.erofs"]
+json_set $VMS/12345612345602/vm.json version:=1 id=gone name=devvm-gone-12345612345602 image=base dir=/q backend=lima created=2020-01-01T00:00:00Z tools.names:=["go"] tools.made.libc=gnu
 exec sh -c 'echo devvm-p-12345612345601 >> "$STUB_DIR/instances"'
 mkdir $DATA/exports $DATA/logs $DATA/cache/mise/2026.1.1
 exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
@@ -64,7 +64,7 @@ stdout '"total": \d+'
 # A backend a VM's state names that doesn't answer is named, and its VMs
 # are never leftovers.
 mkdir $VMS/12345612345603
-exec sh -c 'printf "name=devvm-s-12345612345603\nimage=base\ndir=/s\nbackend=lima\n" > "$VMS/12345612345603/state"'
+json_set $VMS/12345612345603/vm.json version:=1 id=s name=devvm-s-12345612345603 image=base dir=/s backend=lima created=2020-01-01T00:00:00Z
 exec sh -c 'touch "$STUB_DIR/list-fails"'
 exec devvm space
 stderr '^space_backend_unknown backend=lima$'

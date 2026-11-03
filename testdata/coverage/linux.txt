@@ -22,6 +22,7 @@ internal/msg/gen 92.5
 internal/netpolicy 87.1
 internal/paths 97.1
 internal/platform 79.7
+internal/ports 76.7
 internal/project 91.5
 internal/proxy 88.2
 internal/secrets 90.3

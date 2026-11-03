@@ -108,7 +108,7 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 			return err
 		}
 	}
-	if err := secrets.Bind(st, name, use); err != nil {
+	if err := st.Update(ctx, func(st *state.VM) error { return secrets.Bind(st, name, use) }); err != nil {
 		return err
 	}
 	if err := e.Proxy.RefreshSecrets(ctx, vm); err != nil {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net"
 	"os/exec"
 	"strconv"
@@ -15,19 +14,10 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/desktop"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/state"
 )
-
-// KeyDesktopPassword is the VM's desktop's password (desktop.NewPassword),
-// made the first time devvm desktop runs and kept with the VM's state,
-// never sent to the VM: devvm's relay checks it.
-const KeyDesktopPassword = "desktop_password"
-
-// KeyDesktopPort is the host loopback port devvm desktop serves the VM's
-// desktop on, kept so a viewer finds it at the same address each time.
-const KeyDesktopPort = netpolicy.KeyDesktopPort
 
 // DesktopOptions is how devvm desktop opens the VM's desktop.
 type DesktopOptions struct {
@@ -69,7 +59,7 @@ func (e Desktop) Open(ctx context.Context, o DesktopOptions) error {
 		}
 		return msg.DesktopNoLayer(vm)
 	}
-	password, err := desktopPassword(t.st)
+	password, err := desktopPassword(ctx, t.st)
 	if err != nil {
 		return err
 	}
@@ -131,47 +121,49 @@ func (e Desktop) serve(ctx context.Context, r *desktop.Relay, l net.Listener, b 
 	return err
 }
 
-// desktopPassword returns the VM's desktop's password, made and kept the
-// first time.
-func desktopPassword(st *state.VM) (string, error) {
-	if p := st.Get(KeyDesktopPassword); desktop.ValidPassword(p) {
+// desktopPassword returns the VM's desktop's password (desktop.NewPassword),
+// made the first time devvm desktop runs and kept in its state's desktop
+// section, never sent to the VM: devvm's relay checks it.
+func desktopPassword(ctx context.Context, st *state.VM) (string, error) {
+	if p := sectionOf[desktopInVM](st, desktopSection).Made.Password; desktop.ValidPassword(p) {
 		return p, nil
 	}
 	p, err := desktop.NewPassword()
 	if err != nil {
 		return "", err
 	}
-	return p, st.Set(KeyDesktopPassword, p)
+	err = update(ctx, st, desktopSection, func(d *desktopInVM) error {
+		// One another devvm made meanwhile is kept.
+		if desktop.ValidPassword(d.Made.Password) {
+			p = d.Made.Password
+		}
+		d.Made.Password = p
+		return nil
+	})
+	return p, err
 }
 
-// listener listens on this machine's loopback (127.0.0.1 alone)
-// for the VM's desktop: on the port it had, while no program has it, else
-// on a new one from 20000 to 59999 that no program and no VM has, which
-// it keeps.
+// listener listens on this machine's loopback (127.0.0.1 alone) for the
+// VM's desktop: on the port it had, while no program has it, else on a
+// new one the allocator chooses (ports.Allocator), which it keeps, so a
+// viewer finds it at the same address each time.
 func (e Desktop) listener(ctx context.Context, st *state.VM) (net.Listener, error) {
-	if p, err := strconv.Atoi(st.Get(KeyDesktopPort)); err == nil && backend.ValidPort(p) {
-		if l, err := platform.ListenLoopback(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(p))); err == nil {
+	listen := func(p int) (net.Listener, error) {
+		return platform.ListenLoopback(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+	}
+	if p := sectionOf[ports.Ports](st, ports.Section).Host.Desktop; backend.ValidPort(p) {
+		if l, err := listen(p); err == nil {
 			return l, nil
 		}
 	}
-	used, err := netpolicy.UsedPorts(e.Dirs, "")
-	if err != nil {
-		return nil, err
-	}
-	for range 100 {
-		p := 20000 + rand.IntN(40000) //nolint:gosec // a port, not a secret
-		if used[p] {
-			continue
-		}
-		l, err := platform.ListenLoopback(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+	for range 10 {
+		p, err := e.Proxy.Ports().Choose(ctx, st, ports.Desktop, func(int, ports.Ports) bool { return false })
 		if err != nil {
-			continue
-		}
-		if err := st.Set(KeyDesktopPort, strconv.Itoa(p)); err != nil {
-			_ = l.Close()
 			return nil, err
 		}
-		return l, nil
+		if l, err := listen(p); err == nil {
+			return l, nil
+		}
 	}
 	return nil, errors.New("no free port on 127.0.0.1")
 }

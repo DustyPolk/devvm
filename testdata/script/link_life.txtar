@@ -66,7 +66,7 @@ exec sh -c 'kill -9 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm space
 stdout '^leftover state +[12] '
-rm $DB_dir/state
+rm $DB_dir/vm.json
 exec devvm gc --orphans --force
 stdout '^gc_dead_links count=1$'
 stdout '^gc_dead_link name=db port=5432 target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
@@ -75,8 +75,8 @@ stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0
 stdout '^==> deleted_link_sockets count=[12]$'
 exec sh -c 'ls "$RUN" | grep "^link-" || true'
 ! stdout .
-exec cat $APP_dir/state
-stdout '^links=$'
+vm_state $APP_dir/vm.json
+! stdout '^links\.links'
 
 # devvm rm of the client stops its session and takes its links with it.
 exec devvm rm --force --no-export

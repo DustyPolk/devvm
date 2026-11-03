@@ -8,7 +8,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -27,39 +26,26 @@ func TestList(t *testing.T) {
 	)
 	for _, v := range []struct {
 		name string
-		n    state.NewVM
 		kv   map[string]string
 	}{
-		{
-			web,
-			state.NewVM{Image: "docker", Tools: []string{"node", "claude"}, Dir: "/p/web", Backend: "lima"},
-			map[string]string{netpolicy.KeyNet: "on", gitprotect.KeyGitProtect: "on"},
-		},
-		{
-			img,
-			state.NewVM{Image: "base", Dir: "/p/img-foo", From: "node:24", Backend: "lima"},
-			map[string]string{netpolicy.KeyNet: "off", gitprotect.KeyGitProtect: "off"},
-		},
-		{
-			clone,
-			state.NewVM{Image: "base", Dir: "/p/cl", Backend: "lima"},
-			map[string]string{netpolicy.KeyNet: "on", netpolicy.KeyCheck: "unenforced", KeyMode: ModeClone},
-		},
-		{
-			other,
-			state.NewVM{Image: "base", Tools: []string{"go"}, Dir: "/p/api", Backend: "other"},
-			map[string]string{netpolicy.KeyNet: "off", gitprotect.KeyGitProtect: "on"},
-		},
+		{web, map[string]string{keyImage: "docker", keyToolNames: "node claude", keyDir: "/p/web", KeyNet: "on", keyGitProtect: "on"}},
+		{img, map[string]string{keyDir: "/p/img-foo", keyFrom: "node:24", KeyNet: "off", keyGitProtect: "off"}},
+		{clone, map[string]string{keyDir: "/p/cl", KeyNet: "on", keyCheck: "unenforced", KeyMode: ModeClone, keyGitProtect: gitprotect.Clone}},
+		{other, map[string]string{keyToolNames: "go", keyDir: "/p/api", KeyNet: "off", keyGitProtect: "on"}},
 	} {
-		st, err := state.CreateVM(d, v.name, v.n)
-		if err != nil {
-			t.Fatal(err)
+		be := "lima"
+		if v.name == other {
+			be = "other"
 		}
-		for k, val := range v.kv {
-			if err := st.Set(k, val); err != nil {
-				t.Fatal(err)
+		vmState(t, d, v.name, func(st *state.VM) error {
+			st.Backend = be
+			for k, val := range v.kv {
+				if err := setField(st, k, val); err != nil {
+					return err
+				}
 			}
-		}
+			return nil
+		})
 	}
 	lima := backendtest.New("lima", nil)
 	lima.Unconfined = true
@@ -101,9 +87,7 @@ func TestList(t *testing.T) {
 	if got, err := List(t.Context(), d, reg); err != nil || got != nil {
 		t.Errorf("unused broken backend: %v, %v", got, err)
 	}
-	if _, err := state.CreateVM(d, "devvm-b-0123456789abcd", state.NewVM{Backend: "broken"}); err != nil {
-		t.Fatal(err)
-	}
+	vmState(t, d, "devvm-b-0123456789abcd", func(st *state.VM) error { st.Backend = "broken"; return nil })
 	if _, err := List(t.Context(), d, reg); err == nil || err.Error() != "list failed" {
 		t.Errorf("used broken backend: %v", err)
 	}

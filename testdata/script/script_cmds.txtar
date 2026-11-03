@@ -17,27 +17,47 @@ cmp stdout calls
 # catg cats the one file a glob matches; a glob matching none or two
 # fails it.
 mkdir $VMS/0123456789abcd
-cp state $VMS/0123456789abcd/state
-catg $VMS/*/state
-cmp stdout state
+cp vm.json $VMS/0123456789abcd/vm.json
+catg $VMS/*/vm.json
+cmp stdout vm.json
 ! catg $VMS/*/policy
-cp state $VMS/0123456789abcd/policy
+cp vm.json $VMS/0123456789abcd/policy
 ! catg $VMS/0123456789abcd/*
-catg $VMS/*/state
-cmp stdout state
+catg $VMS/*/vm.json
+cmp stdout vm.json
 
 # vm_name sets a variable to the one VM whose state records a name made
 # for a folder, and VAR_dir to its folder; a folder without state, another
 # folder's VM, no VM or two fail it.
 mkdir $VMS/0123456789abce
-cp policy $VMS/0123456789abce/state
+cp policy $VMS/0123456789abce/vm.json
 vm_name WEB web
 exec echo $WEB $WEB_dir
 stdout '^devvm-web-0123456789abcd .*/vms/0123456789abcd$'
 ! vm_name API api
 mkdir $VMS/fedcba98765432
-cp other $VMS/fedcba98765432/state
+cp other.json $VMS/fedcba98765432/vm.json
 ! vm_name WEB web
+
+# vm_state prints a VM's state as sorted KEY=VALUE lines: a section's
+# fields dotted, a list of strings space-separated, a list of objects by
+# index, anything but a string as JSON.
+vm_state $VMS/0123456789abcd/vm.json
+cmp stdout flat
+
+# json_set sets strings, any JSON with :=, and fields of objects by dotted
+# keys, made when they're missing; the rest stays.
+json_set $VMS/0123456789abcd/vm.json image=docker net.made.check=ok ports.host:={"ssh":2222} version:=2
+vm_state $VMS/0123456789abcd/vm.json
+stdout '^image=docker$'
+stdout '^net.made.check=ok$'
+stdout '^net.on=true$'
+stdout '^ports.host.ssh=2222$'
+stdout '^version=2$'
+stdout '^tools.names=node claude$'
+json_set $WORK/new.json a.b=c
+exec cat $WORK/new.json
+stdout '"a": \{\n    "b": "c"\n  \}'
 
 # project makes a folder in $WORK and goes to it; with git, a repo.
 project app
@@ -51,11 +71,32 @@ exists .git
 
 -- calls --
 gpgv y
--- state --
-name=devvm-web-0123456789abcd
+-- vm.json --
+{
+  "version": 1,
+  "id": "x",
+  "name": "devvm-web-0123456789abcd",
+  "image": "base",
+  "dir": "/p",
+  "backend": "lima",
+  "net": {"on": true},
+  "tools": {"names": ["node", "claude"]},
+  "links": {"links": [{"name": "db", "port": 5432}]},
+  "secrets": {"names": []}
+}
+-- flat --
+backend=lima
+dir=/p
+id=x
 image=base
+links.links.0.name=db
+links.links.0.port=5432
+name=devvm-web-0123456789abcd
+net.on=true
+secrets.names=
+tools.names=node claude
+version=1
 -- policy --
 example.com
--- other --
-name=devvm-web-fedcba98765432
-image=base
+-- other.json --
+{"version": 1, "id": "y", "name": "devvm-web-fedcba98765432", "image": "base", "dir": "/q", "backend": "lima"}

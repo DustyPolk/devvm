@@ -118,7 +118,7 @@ devvm then deletes the build VM and creates `base` from the disk, booting its ke
 
 ## Digests
 
-`base` is keyed by the container image's digest, not its tag. When devvm builds, it asks the image's registry for the digest anonymously, with a `HEAD` request for the image's manifest, which doesn't count against Docker Hub's pull limit. When the registry asks for a token, devvm gets one from the registry's token service, at an `https` address only. The digest goes into `base`'s key, and devvm records it for each container image in its cache, `~/.local/share/devvm/cache/from-digests.json`, and in the record of each image it builds on that base. An existing VM's state records what its base was made from (`from=`).
+`base` is keyed by the container image's digest, not its tag. When devvm builds, it asks the image's registry for the digest anonymously, with a `HEAD` request for the image's manifest, which doesn't count against Docker Hub's pull limit. When the registry asks for a token, devvm gets one from the registry's token service, at an `https` address only. The digest goes into `base`'s key, and devvm records it for each container image in its cache, `~/.local/share/devvm/cache/from-digests.json`, and in the record of each image it builds on that base. An existing VM's state records what its base was made from (`from`).
 
 The cache may be deleted at any time. Without it, devvm takes the digest from the record of the newest base built from the same container image, so every key stays as it was, and images stay current until a lookup finds that the tag has moved. The next lookup writes the cache again.
 
@@ -152,7 +152,7 @@ devvm builds the tool images that a VM's shared tools need when it makes the VM,
 
 Each tool image is named `<tool>-<version>-<key>.erofs`. Its key hashes the tool's entry in the tools lock (its version, its downloads and their checksums), `assets/shared-tools/build.sh`, the `[settings]` table of `assets/shared-tools/mise.toml`, the C library the image is built for and the backend's format. The settings are in the key because they change what mise installs, such as `python.compile`, and the key reads what they say, so a comment or another way of writing the same settings leaves it as it is. Lima's format is `build.sh`'s own, compressed EROFS, which adds nothing to the key. A new version, a new download, an edited build script or a changed setting builds the image again, and a base with a different C library, such as Alpine's musl, gets an image of its own, and so would a VM on another backend. When the lock has no download of a tool for the VM's platform, devvm doesn't build it and says to try again later (`tool_unbuilt`).
 
-An image is base and its layers alone, and a VM's shared tools are a list in its state (`tool_names`) beside its image. `build.CheckLayers` refuses a shared tool's name in an image name (`tool_not_layer`), so `devvm build`, `devvm rebuild` and `devvm images rm` refuse one, because shared tools aren't images and their versions come from the lock.
+An image is base and its layers alone, and a VM's shared tools are a list in its state (the `tools` section's `names`) beside its image. `build.CheckLayers` refuses a shared tool's name in an image name (`tool_not_layer`), so `devvm build`, `devvm rebuild` and `devvm images rm` refuse one, because shared tools aren't images and their versions come from the lock.
 
 ## A company's CA in builds
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -17,28 +16,6 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
-)
-
-// Keys of a VM's state for the project's devcontainer.json.
-const (
-	// KeyDevcontainer is the file the VM was made from: its SHA-256 and
-	// path ("<sum> <file>"), devcontainerNone or devcontainerOff.
-	KeyDevcontainer = "devcontainer"
-	// KeyDevcontainerEnv is its variables (devcontainer.Var), JSON.
-	KeyDevcontainerEnv = "devcontainer_env"
-	// KeyDevcontainerCreate is the commands it runs once, JSON, until
-	// they've run.
-	KeyDevcontainerCreate = "devcontainer_create"
-	// KeyDevcontainerStart is the commands it runs at each start, JSON.
-	KeyDevcontainerStart = "devcontainer_start"
-	// KeyDevcontainerStarted is the start they last ran at, hashed.
-	KeyDevcontainerStarted = "devcontainer_started"
-)
-
-// KeyDevcontainer's values besides a file's.
-const (
-	devcontainerNone = "none" // made without one
-	devcontainerOff  = "off"  // made with --no-devcontainer
 )
 
 // devcontainerUnreadable is the sum of a file that can't be read now.
@@ -120,67 +97,40 @@ func (e devcontainers) prepare(ctx context.Context, o *Options, vm, dir string) 
 	return nil
 }
 
-// record writes what a new VM was made from into its state: the file and
-// what it maps to of the VM's own (its variables, its commands), or none.
+// record sets what a new VM is made from in its state, before it's
+// written: the file and what it maps to of the VM's own (its variables,
+// its commands), or none.
 func (e devcontainers) record(st *state.VM, o Options) error {
-	switch {
-	case o.NoDevcontainer:
-		return st.Set(KeyDevcontainer, devcontainerOff)
-	case o.dc == nil:
-		return st.Set(KeyDevcontainer, devcontainerNone)
+	d := devcontainerInVM{Off: o.NoDevcontainer}
+	if p := o.dc; p != nil && !o.NoDevcontainer {
+		d.File, d.Sum, d.Env, d.Create, d.Start = p.File, p.Sum, p.Env, p.Create, p.Start
 	}
-	p := o.dc
-	for _, kv := range []struct {
-		key string
-		v   any
-		set bool
-	}{
-		{KeyDevcontainerEnv, p.Env, len(p.Env) > 0},
-		{KeyDevcontainerCreate, p.Create, len(p.Create) > 0},
-		{KeyDevcontainerStart, p.Start, len(p.Start) > 0},
-	} {
-		if !kv.set {
-			continue
-		}
-		var b strings.Builder
-		enc := json.NewEncoder(&b)
-		enc.SetEscapeHTML(false)
-		if err := enc.Encode(kv.v); err != nil {
-			return err
-		}
-		if err := st.Set(kv.key, strings.TrimSuffix(b.String(), "\n")); err != nil {
-			return err
-		}
-	}
-	return st.Set(KeyDevcontainer, p.Sum+" "+p.File)
+	return state.SetSection(st, devcontainerSection, d)
 }
 
 // check warns, once a launch, when the folder's devcontainer.json isn't
 // the one the VM was made from (changed, gone, or new): nothing in it
 // changes an existing VM.
 func (e devcontainers) check(st *state.VM, dir string) {
-	was := st.Get(KeyDevcontainer)
-	if was == "" || was == devcontainerOff {
+	was := sectionOf[devcontainerInVM](st, devcontainerSection)
+	if was.Off {
 		return
 	}
 	file, data, err := e.find(dir)
-	now := devcontainerNone
+	sum := ""
 	switch {
 	case err != nil:
-		now = devcontainerUnreadable + " " + file
+		sum = devcontainerUnreadable
 	case file != "":
-		now = devcontainer.Sum(data) + " " + file
+		sum = devcontainer.Sum(data)
 	}
-	if now == was {
-		return
+	switch {
+	case file == was.File && sum == was.Sum:
+	case was.File == "":
+		e.Warn(msg.DevcontainerNew(file, st.Name()))
+	default:
+		e.Warn(msg.DevcontainerChanged(was.File, st.Name()))
 	}
-	if was == devcontainerNone {
-		_, nowFile, _ := strings.Cut(now, " ")
-		e.Warn(msg.DevcontainerNew(nowFile, st.Name()))
-		return
-	}
-	_, wasFile, _ := strings.Cut(was, " ")
-	e.Warn(msg.DevcontainerChanged(wasFile, st.Name()))
 }
 
 // run runs a VM's devcontainer.json commands, once it's set up: those
@@ -190,21 +140,18 @@ func (e devcontainers) check(st *state.VM, dir string) {
 // user, in the project folder; one that fails is said, and those after it
 // in its group don't run.
 func (e devcontainers) run(ctx context.Context, b backend.Backend, st *state.VM, dir string) error {
-	once, err := commands(st, KeyDevcontainerCreate)
-	if err != nil {
-		return err
-	}
-	if len(once) > 0 {
-		if err := st.Set(KeyDevcontainerCreate, ""); err != nil {
+	d := sectionOf[devcontainerInVM](st, devcontainerSection)
+	if len(d.Create) > 0 && !d.Made.Created {
+		// Recorded first: a run cut short never runs them again.
+		if err := update(ctx, st, devcontainerSection, func(d *devcontainerInVM) error { d.Made.Created = true; return nil }); err != nil {
 			return err
 		}
-		if err := e.runAll(ctx, b, st.Name(), dir, once); err != nil {
+		if err := e.runAll(ctx, b, st.Name(), dir, d.Create); err != nil {
 			return err
 		}
 	}
-	start, err := commands(st, KeyDevcontainerStart)
-	if err != nil || len(start) == 0 {
-		return err
+	if len(d.Start) == 0 {
+		return nil
 	}
 	id, err := b.StartID(ctx, st.Name())
 	if err != nil || id == "" {
@@ -212,13 +159,13 @@ func (e devcontainers) run(ctx context.Context, b backend.Backend, st *state.VM,
 	}
 	sum := sha256.Sum256([]byte(id))
 	started := hex.EncodeToString(sum[:16])
-	if st.Get(KeyDevcontainerStarted) == started {
+	if d.Made.Started == started {
 		return nil
 	}
-	if err := st.Set(KeyDevcontainerStarted, started); err != nil {
+	if err := update(ctx, st, devcontainerSection, func(d *devcontainerInVM) error { d.Made.Started = started; return nil }); err != nil {
 		return err
 	}
-	return e.runAll(ctx, b, st.Name(), dir, start)
+	return e.runAll(ctx, b, st.Name(), dir, d.Start)
 }
 
 // runAll runs commands in the VM in order, their output in the run log,
@@ -240,32 +187,15 @@ func (e devcontainers) runAll(ctx context.Context, b backend.Backend, vm, dir st
 	return nil
 }
 
-// commands reads a state key's commands.
-func commands(st *state.VM, key string) ([]devcontainer.Command, error) {
-	v := st.Get(key)
-	if v == "" {
-		return nil, nil
-	}
-	var cmds []devcontainer.Command
-	if err := json.Unmarshal([]byte(v), &cmds); err != nil {
-		return nil, err
-	}
-	return cmds, nil
-}
-
 // devcontainerEnv is the exports of a VM's devcontainer.json variables,
 // for its environment file; a name that isn't one is left out.
 func devcontainerEnv(st *state.VM) (string, error) {
-	v := st.Get(KeyDevcontainerEnv)
-	if v == "" {
-		return "", nil
-	}
-	var vars []devcontainer.Var
-	if err := json.Unmarshal([]byte(v), &vars); err != nil {
+	d, err := state.Section[devcontainerInVM](st, devcontainerSection)
+	if err != nil {
 		return "", err
 	}
 	var out strings.Builder
-	for _, v := range vars {
+	for _, v := range d.Env {
 		if shell.EnvName(v.Name) {
 			out.WriteString("export " + v.Name + "=" + v.Value + "\n")
 		}

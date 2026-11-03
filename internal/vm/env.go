@@ -26,6 +26,7 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
@@ -34,23 +35,6 @@ import (
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/vmname"
-)
-
-// Keys of a VM's state that up writes, besides state's own.
-const (
-	KeyNet   = netpolicy.KeyNet // network policy: on or off
-	KeyLibc  = "libc"           // the C library its base had, which its tools are built for
-	KeyTools = "tools"          // its shared tool images, space-separated
-	// KeyBackendAt is where its backend kept it when it was made
-	// (backend.LocationOf): unset on a backend whose VMs can't move.
-	KeyBackendAt = "backend_at"
-	KeyCPUs      = "cpus"   // the size asked for; unset for the image's
-	KeyMemory    = "memory" // GiB
-	KeyDisk      = "disk"   // GiB
-	KeyPorts     = "ports"  // which ports it forwards (settings.ParsePorts); unset for all
-	// KeyAgentToggle is set when its backend emulates turning its SSH agent
-	// forwarding on or off (made ready for it), which its starts rely on.
-	KeyAgentToggle = "agent_toggle"
 )
 
 // Env is what the commands on a folder's VM run with, shared by Launch,
@@ -277,13 +261,12 @@ func (e vmFolders) state(dir string) (project.Folder, *state.VM, error) {
 		}
 		return project.Folder{}, nil, err
 	}
-	h := project.Hash(dir)
-	st, err := state.ReadHash(e.Dirs, h)
+	st, err := state.ReadHash(e.Dirs, project.Hash(dir))
+	if err == nil {
+		err = checkState(st)
+	}
 	if err != nil {
 		return project.Folder{}, nil, err
-	}
-	if st.Exists() && !vmname.IsVM(st.Name()) {
-		return project.Folder{}, nil, &state.CorruptError{Path: paths.VM{Dir: e.Dirs.VMDir(h)}.State(), Reason: "no " + state.KeyName + "="}
 	}
 	return project.Folder{Dir: dir, Name: st.Name()}, st, nil
 }
@@ -291,7 +274,7 @@ func (e vmFolders) state(dir string) (project.Folder, *state.VM, error) {
 // newName is the name a new VM for dir gets: fitting the names of the
 // backend it would be made on.
 func (e vmFolders) newName(dir string) (project.Folder, error) {
-	first, err := e.Registry.For(e.Dirs, new(state.VM))
+	first, err := e.Registry.For(new(state.VM))
 	if err != nil {
 		return project.Folder{}, err
 	}
@@ -353,7 +336,7 @@ func hasGit(dir string) bool {
 // its state records, else a new VM's. One that exists gets devvm's
 // connections carrying its SSH agent.
 func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM) (*found, error) {
-	choice, err := e.Registry.For(e.Dirs, st)
+	choice, err := e.Registry.For(st)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +383,7 @@ func (e *Env) existing(ctx context.Context) (*found, error) {
 	if err := e.checkFolder(t.f, t.st); err != nil {
 		return nil, err
 	}
-	if !t.st.Exists() || t.st.Get(KeyNet) == "" {
+	if !t.st.Finished() {
 		return nil, msg.VMUnfinished(t.f.Name)
 	}
 	return t, nil
@@ -420,7 +403,7 @@ func (e *Env) folderVM(ctx context.Context, noVM func(dir string) msg.M) (*found
 	if err := e.checkFolder(t.f, t.st); err != nil {
 		return nil, err
 	}
-	if !t.st.Exists() || t.st.Get(KeyNet) == "" {
+	if !t.st.Finished() {
 		return nil, msg.VMUnfinished(t.f.Name)
 	}
 	return t, nil
@@ -431,7 +414,7 @@ func (e *Env) folderVM(ctx context.Context, noVM func(dir string) msg.M) (*found
 // the old one's disk.
 func (e *Env) checkFolder(f project.Folder, st *state.VM) error {
 	if !e.sameFolder(f, st) {
-		return msg.VMOtherFolder(f.Name, st.Get(state.KeyDir))
+		return msg.VMOtherFolder(f.Name, st.Dir)
 	}
 	return nil
 }
@@ -457,7 +440,7 @@ func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
 		return true
 	}
 	id, err := platform.FolderID(f.Dir)
-	return err == nil && st.Get(state.KeyDir) == f.Dir && st.Get(state.KeyFolder) == id
+	return err == nil && st.Dir == f.Dir && st.Folder == id
 }
 
 // start starts a stopped VM confined as conf says, and returns the
@@ -465,28 +448,33 @@ func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
 // backend gets the proxy's confinement; a start that fails stops the proxy
 // again. Without it, a proxy left from when it had it stops. Its host keys
 // are read again once it runs: a VM whose backend config changed can get
-// new ones when it boots. A VM without a network choice never starts: its
-// creation didn't finish, and it would start without network policy.
+// new ones when it boots. A VM whose creation didn't finish never starts.
 func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
 	vm := st.Name()
-	if st.Get(KeyNet) == "" {
+	if !st.Finished() {
 		return conf, msg.VMUnfinished(vm)
 	}
 	// The ports its backend forwards at each start (every port: an
 	// emulation on some), which it got when they were set: refused now
 	// unless they may still be used.
-	ports, err := PortsBackend(st.Get(KeyPorts))
+	p, err := ports.Of(st)
 	if err != nil {
 		return conf, err
 	}
-	for _, f := range ports.Features() {
+	forward, err := PortsBackend(p.Forward)
+	if err != nil {
+		return conf, err
+	}
+	for _, f := range forward.Features() {
 		if !e.Registry.Allowed(b, f) {
 			return conf, e.Registry.Require(b, vm, f)
 		}
 	}
 	// So does one whose backend emulates turning its SSH agent forwarding
 	// on or off, made ready for it.
-	if st.Get(KeyAgentToggle) != "" && !e.Registry.Allowed(b, backend.FeatureAgentToggle) {
+	if a, err := sshagent.Of(st); err != nil {
+		return conf, err
+	} else if a.Made.Toggle && !e.Registry.Allowed(b, backend.FeatureAgentToggle) {
 		return conf, e.Registry.Require(b, vm, backend.FeatureAgentToggle)
 	}
 	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
@@ -512,7 +500,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		e.Proxy.Stop(vm)
 		// Its ssh port, as the proxy's confinement has it: recorded, so
 		// other VMs' forwarders never take it before its backend binds it.
-		sp, err := e.Proxy.SSHPort(ctx, st, false)
+		sp, err := e.Proxy.Ports().SSH(ctx, st, false)
 		if err != nil {
 			return conf, err
 		}
@@ -558,7 +546,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	if err != nil {
 		start = ""
 	}
-	return conf, sshagent.RecordStart(st, mode, start)
+	return conf, sshagent.RecordStart(ctx, st, mode, start)
 }
 
 // undoStart is a start's cleanup for a VM with network policy: an
@@ -642,8 +630,8 @@ func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
 			if err != nil {
 				return nil, err
 			}
-			if dir := st.Get(state.KeyDir); dir != "" && !isClone(st) {
-				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: dir})
+			if st.Dir != "" && !isClone(st) {
+				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: st.Dir})
 			}
 			for _, d := range append(slices.Clone(in.AgentDirs), e.Dirs.Tools()) {
 				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: d})

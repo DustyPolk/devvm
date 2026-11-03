@@ -27,7 +27,7 @@ func devvm() rules {
 		largeTypes: map[string]large{
 			"internal/backend/lima.Lima":        {75, "a backend: backend.Backend's 28 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Forget, Strays, DevvmCache, DeleteCache and Lima's own"},
 			"internal/backend/backendtest.Fake": {34, "backend.Backend's 28 methods and what tests ask of it"},
-			"internal/paths.Dirs":               {39, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs":               {40, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":                    {46, "the one terminal: messages and where they go, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
@@ -148,8 +148,8 @@ func devvm() rules {
 				to: []string{"..."},
 			},
 			{
-				name: "internal/state imports only internal/msg, internal/paths and internal/vmname",
-				from: []string{"internal/state"}, exceptTo: []string{"internal/msg", "internal/paths", "internal/vmname"},
+				name: "internal/state imports only internal/msg, internal/paths, internal/platform and internal/vmname",
+				from: []string{"internal/state"}, exceptTo: []string{"internal/msg", "internal/paths", "internal/platform", "internal/vmname"},
 				to: []string{"..."},
 			},
 			{

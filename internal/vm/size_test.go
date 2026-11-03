@@ -126,8 +126,8 @@ func TestSetSize(t *testing.T) {
 	if ms := f.Methods()[before:]; slices.Contains(ms, "SetSize") {
 		t.Errorf("a running VM was changed: %q", ms)
 	}
-	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(KeyCPUs) != "2" || st.Get(KeyMemory) != "8" {
-		t.Errorf("state cpus=%q memory=%q", st.Get(KeyCPUs), st.Get(KeyMemory))
+	if st, _ := state.ReadVM(e.Dirs, vm); get(st, KeyCPUs) != "2" || get(st, KeyMemory) != "8" {
+		t.Errorf("state cpus=%q memory=%q", get(st, KeyCPUs), get(st, KeyMemory))
 	}
 	st, _ = state.ReadVM(e.Dirs, vm)
 	if p := pendingSize(st, f.Instances[vm].Size); p != (backend.Size{CPUs: 2}) {
@@ -143,8 +143,8 @@ func TestSetSize(t *testing.T) {
 	if err := s.SetSize(t.Context(), Size{Disk: "200"}, false); !strings.HasPrefix(msg.NamesOf(err), "backend_lacks ") {
 		t.Errorf("without the feature: %s", msg.NamesOf(err))
 	}
-	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(KeyDisk) != "" {
-		t.Errorf("disk=%q", st.Get(KeyDisk))
+	if st, _ := state.ReadVM(e.Dirs, vm); get(st, KeyDisk) != "" {
+		t.Errorf("disk=%q", get(st, KeyDisk))
 	}
 	f.Capabilities = allNative()
 

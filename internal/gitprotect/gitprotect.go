@@ -16,7 +16,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -32,15 +31,60 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Keys of a VM's state that git protection keeps.
-const (
-	KeyGitProtect     = "git_protect"      // on, strict or off
-	KeyGitProtectNext = "git_protect_next" // the mode chosen while the VM ran, set when it's next stopped
-	KeyGitInode       = "git_inode"        // .git's inode when it was last locked
-	KeyGitEmbedded    = "git_embedded"     // submodule git dirs in the working tree (JSON, relative paths)
-	KeyGitModules     = "git_modules"      // git dirs under .git/modules (JSON, relative paths)
-	KeyGitDelegations = "git_delegations"  // a hash of what the locked files hand over to the project folder
-)
+// Section is the name of the .git protection section in a VM's state.
+const Section = "git"
+
+// InVM is a VM's .git protection section: its mode, as asked (recorded
+// before its backend makes it, so it's never unset), the mode chosen
+// while it ran, and what protecting it found.
+type InVM struct {
+	Mode string `json:"mode"`           // On, Strict, Off, or Clone for a --clone VM
+	Next string `json:"next,omitempty"` // the mode chosen while the VM ran, set when it's next stopped
+	Made Made   `json:"made,omitzero"`
+}
+
+// Made is what protecting a VM's .git found, and checks compare with.
+type Made struct {
+	// Protected is set once its protection was set up as a new VM's
+	// (NewVM) or turned on: until then, there's nothing to compare with.
+	Protected bool `json:"protected,omitempty"`
+	// GitID is .git's identity (platform.FolderID) when it was last
+	// locked.
+	GitID string `json:"git_id,omitempty"`
+	// GitDirs is the git dirs besides .git that it locked, relative to
+	// the project folder: those under .git/modules and the submodules'
+	// in the working tree.
+	GitDirs []string `json:"git_dirs,omitempty"`
+	// Delegations is a hash of what the locked files hand over to the
+	// project folder.
+	Delegations string `json:"delegations,omitempty"`
+}
+
+// Of returns a VM's .git protection section.
+func Of(st *state.VM) (InVM, error) { return state.Section[InVM](st, Section) }
+
+// Set sets a VM's .git protection section, in st alone: inside
+// st.Update.
+func Set(st *state.VM, g InVM) error { return state.SetSection(st, Section, g) }
+
+// Mode returns a VM's .git protection: on, strict, off, or clone for a
+// --clone VM, which mounts no .git; "" when it can't be read.
+func Mode(st *state.VM) string {
+	g, _ := Of(st)
+	return g.Mode
+}
+
+// record changes the VM's section as f says, under its lock.
+func record(ctx context.Context, vm *state.VM, f func(*InVM)) error {
+	return vm.Update(ctx, func(vm *state.VM) error {
+		g, err := Of(vm)
+		if err != nil {
+			return err
+		}
+		f(&g)
+		return Set(vm, g)
+	})
+}
 
 // maxDepth is how deep submodules of submodules are followed.
 const maxDepth = 8
@@ -70,27 +114,35 @@ func New(dir, home string, warn func(msg.M)) *Protector {
 	}
 }
 
-// NewVM sets up protection for a VM just made for the folder, stopped:
-// off when asked, or on hosts without locks (saying so when there's a
-// .git); otherwise on, with .git locked and what a lock can't cover
-// reported.
-func (p *Protector) NewVM(ctx context.Context, vm *state.VM, off bool) error {
+// NewMode is the protection a new VM gets, recorded before its backend
+// makes it: off when asked, or on hosts without locks (saying so when
+// there's a .git); otherwise on, which NewVM sets up once it's made.
+func (p *Protector) NewMode(off bool) string {
 	switch {
 	case off:
-		return vm.Set(KeyGitProtect, Off)
+		return Off
 	case p.OS != "darwin":
-		if err := vm.Set(KeyGitProtect, Off); err != nil {
-			return err
-		}
 		if exists(p.git()) {
 			p.Warn(msg.GitProtectNeedsMacosNew())
 		}
-		return nil
+		return Off
 	}
-	if err := vm.Set(KeyGitProtect, On); err != nil {
+	return On
+}
+
+// NewVM sets up the protection of a VM just made for the folder,
+// stopped, as its mode says (NewMode): on locks .git and reports what a
+// lock can't cover.
+func (p *Protector) NewVM(ctx context.Context, vm *state.VM) error {
+	g, err := Of(vm)
+	if err != nil || g.Mode != On && g.Mode != Strict || p.OS != "darwin" {
 		return err
 	}
-	return p.protect(ctx, vm, whyNew, false)
+	made, err := p.protect(ctx, g, whyNew, false)
+	if err != nil {
+		return err
+	}
+	return record(ctx, vm, func(g *InVM) { g.Made = made })
 }
 
 // Modes of .git protection, as devvm git-protect takes them. Strict is on,
@@ -101,52 +153,45 @@ const (
 	Off    = "off"
 )
 
+// Clone is the mode of a --clone VM, which mounts no .git to protect.
+const Clone = "clone"
+
 // Modes are the modes devvm git-protect takes.
 var Modes = []string{On, Strict, Off}
 
-// Mode returns the VM's protection: on, strict or off. One never set up
-// gets it at its next launch, as a new VM does.
-func (p *Protector) Mode(vm *state.VM) string {
-	switch m := vm.Get(KeyGitProtect); {
-	case m != "":
-		return m
-	case p.OS == "darwin":
-		return On
-	default:
-		return Off
-	}
-}
-
 // Next returns the mode chosen for a VM while it ran (SetNext), which
 // the caller sets with Set once it's stopped; "" for none.
-func Next(vm *state.VM) string { return vm.Get(KeyGitProtectNext) }
+func Next(vm *state.VM) string {
+	g, _ := Of(vm)
+	return g.Next
+}
 
 // SetNext saves mode for a running VM, whose locks can't change until it
 // stops: the caller sets it with Set then, and a later choice replaces it.
-func SetNext(vm *state.VM, mode string) error { return vm.Set(KeyGitProtectNext, mode) }
+func SetNext(ctx context.Context, vm *state.VM, mode string) error {
+	return record(ctx, vm, func(g *InVM) { g.Next = mode })
+}
 
 // Set changes the protection of a stopped VM: on and strict lock .git as
 // it is now, as trusted, and report what a lock can't cover; strict also
 // sets diff.ignoreSubmodules=all in the locked .git/config, which on and
 // off take out again; off unlocks. On and strict need macOS. Once it's
-// set, a mode saved for the VM's next stop (SetNext) is dropped.
+// set, a mode saved for the VM's next stop (SetNext) is dropped: both
+// are recorded at once.
 func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
-	if err := p.set(ctx, vm, mode); err != nil || Next(vm) == "" {
+	g, err := Of(vm)
+	if err != nil {
 		return err
 	}
-	return vm.Set(KeyGitProtectNext, "")
-}
-
-func (p *Protector) set(ctx context.Context, vm *state.VM, mode string) error {
-	was := vm.Get(KeyGitProtect)
+	was := g.Mode
 	if mode == Off {
-		p.Unlock(ctx)
+		p.Unlock(ctx, vm)
 		if was == Strict {
 			if err := p.ignoreSubmodules(ctx, false); err != nil {
 				return err
 			}
 		}
-		return vm.Set(KeyGitProtect, Off)
+		return record(ctx, vm, func(g *InVM) { g.Mode, g.Next = Off, "" })
 	}
 	if p.OS != "darwin" {
 		return msg.GitProtectOnNeedsMacos()
@@ -160,12 +205,12 @@ func (p *Protector) set(ctx context.Context, vm *state.VM, mode string) error {
 			return err
 		}
 	}
-	for _, kv := range [][2]string{{KeyGitProtect, mode}, {KeyGitInode, ""}} {
-		if err := vm.Set(kv[0], kv[1]); err != nil {
-			return err
-		}
+	g.Mode = mode
+	made, err := p.protect(ctx, g, whyOn, false)
+	if err != nil {
+		return err
 	}
-	return p.protect(ctx, vm, whyOn, false)
+	return record(ctx, vm, func(g *InVM) { g.Mode, g.Next, g.Made = mode, "", made })
 }
 
 // ignoreSubmodules sets diff.ignoreSubmodules=all in .git/config, or takes
@@ -216,22 +261,25 @@ func (p *Protector) warnDelegations(ds []delegation) {
 // folder when they change. Locks are set only while the VM is stopped
 // (running), so nothing in it can race them; a running VM gets them at
 // its next start. A VM whose protection was never set up (its creation
-// stopped short) gets it as a new VM does.
+// stopped short, or devvm adopt moved it) gets it as a new VM does.
 func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error {
-	switch vm.Get(KeyGitProtect) {
-	case "":
+	g, err := Of(vm)
+	switch {
+	case err != nil:
+		return err
+	case g.Mode != On && g.Mode != Strict, p.OS != "darwin":
+		return nil
+	case !g.Made.Protected:
 		if running {
 			return nil
 		}
-		return p.NewVM(ctx, vm, false)
-	case On, Strict:
-	default:
-		return nil
+		return p.NewVM(ctx, vm)
 	}
-	if p.OS != "darwin" {
-		return nil
+	made, err := p.protect(ctx, g, whyCheck, running)
+	if err != nil {
+		return err
 	}
-	return p.protect(ctx, vm, whyCheck, running)
+	return record(ctx, vm, func(g *InVM) { g.Made = made })
 }
 
 // why is what protect runs for.
@@ -243,19 +291,20 @@ const (
 	whyCheck            // a launch of an existing VM
 )
 
-// protect locks .git, unless running, and reports what a lock can't stop.
-// A new VM's submodules are recorded, not reported; a check reports what
-// changed since the last one, and the hooks path and delegations only
-// when they change.
-func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bool) error {
+// protect locks .git, unless running, and reports what a lock can't stop;
+// it returns what it found (g's Made, as it is now), for the caller to
+// record with the mode it set. A new VM's git dirs are recorded, not
+// reported; a check reports what changed since the last one, and the
+// hooks path and delegations only when they change.
+func (p *Protector) protect(ctx context.Context, rec InVM, w why, running bool) (Made, error) {
 	g := p.git()
+	was := rec.Made
 	if !exists(g) {
-		return nil
+		return Made{Protected: true, GitDirs: was.GitDirs, Delegations: was.Delegations}, nil
 	}
-	was := vm.Get(KeyGitInode)
-	if w == whyCheck && was != "" && was != inode(g) {
+	if w == whyCheck && was.GitID != "" && was.GitID != folderID(g) {
 		p.Warn(msg.GitReplaced(g))
-		return nil
+		return was, nil
 	}
 	if isDir(g) && exists(filepath.Join(g, "commondir")) {
 		target, _ := os.ReadFile(filepath.Join(g, "commondir")) //nolint:gosec // the project's own
@@ -264,34 +313,20 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 	for _, s := range p.worktreeStrays() {
 		p.Warn(msg.GitWorktreeStray(s))
 	}
-	if was == "" && w == whyCheck {
+	if was.GitID == "" && w == whyCheck {
 		p.Warn(msg.GitAppeared())
 	}
 	emb := p.embedded(ctx)
-	seen, _ := p.list(vm.Get(KeyGitEmbedded))
-	for _, d := range emb.inside {
-		if w != whyNew && !slices.Contains(seen, d) {
+	// Git dirs that appeared since the last time, once there was one:
+	// before that, nothing to compare with.
+	seen := p.abs(was.GitDirs)
+	dirs := p.lockedDirs(emb)
+	for _, d := range dirs {
+		if w != whyNew && was.Protected && !slices.Contains(seen, d) {
 			p.Warn(msg.GitEmbeddedNew(d))
 		}
 	}
-	if err := vm.Set(KeyGitEmbedded, p.relList(emb.inside)); err != nil {
-		return err
-	}
-	// Nothing recorded yet: nothing to compare with.
-	seen, recorded := p.list(vm.Get(KeyGitModules))
-	var mods []string
-	for _, d := range p.gitDirs() {
-		if d == g {
-			continue
-		}
-		mods = append(mods, d)
-		if w != whyNew && recorded && !slices.Contains(seen, d) {
-			p.Warn(msg.GitEmbeddedNew(d))
-		}
-	}
-	if err := vm.Set(KeyGitModules, p.relList(mods)); err != nil {
-		return err
-	}
+	made := Made{Protected: true, GitID: was.GitID, GitDirs: p.rel(dirs)}
 	// Hooks in a hooks folder that isn't locked appeared since the last
 	// lock (there was no folder to lock, or it's a new submodule's), so the
 	// VM may have made them.
@@ -303,9 +338,8 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 		}
 	}
 	if !running {
-		if err := p.lock(ctx, vm, emb); err != nil {
-			return err
-		}
+		p.lock(ctx, emb)
+		made.GitID = folderID(g)
 	}
 	if w != whyCheck {
 		if hp := gitConfig(ctx, filepath.Join(g, "config"), "core.hooksPath"); hp != "" && p.hooksPathInside(hp) {
@@ -313,24 +347,43 @@ func (p *Protector) protect(ctx context.Context, vm *state.VM, w why, running bo
 		}
 	}
 	ds := p.delegations(ctx, emb)
-	sum := delegationsSum(ds)
-	if w != whyCheck || sum != vm.Get(KeyGitDelegations) {
+	made.Delegations = delegationsSum(ds)
+	if w != whyCheck || made.Delegations != was.Delegations {
 		p.warnDelegations(ds)
 	}
-	return vm.Set(KeyGitDelegations, sum)
+	return made, nil
 }
 
-// list reads a state value relList wrote, as absolute paths; ok is false
-// when there's none.
-func (p *Protector) list(v string) (paths []string, ok bool) {
-	var rel []string
-	if v == "" || json.Unmarshal([]byte(v), &rel) != nil {
-		return nil, false
+// lockedDirs are the git dirs protect locks besides .git: those under
+// .git/modules (gitDirs) and the submodules' in the working tree.
+func (p *Protector) lockedDirs(emb embeds) []string {
+	var out []string
+	for _, d := range p.gitDirs() {
+		if d != p.git() {
+			out = append(out, d)
+		}
 	}
+	return append(out, emb.inside...)
+}
+
+// abs is git dirs as Made records them, relative to the project folder,
+// as absolute paths.
+func (p *Protector) abs(rel []string) []string {
+	out := make([]string, 0, len(rel))
 	for _, r := range rel {
-		paths = append(paths, filepath.Join(p.Dir, r))
+		out = append(out, filepath.Join(p.Dir, r))
 	}
-	return paths, true
+	return out
+}
+
+// rel is git dirs in the project folder as Made records them: relative
+// to it.
+func (p *Protector) rel(dirs []string) []string {
+	var out []string
+	for _, d := range dirs {
+		out = append(out, strings.TrimPrefix(d, p.Dir+"/"))
+	}
+	return out
 }
 
 // hasHooks reports whether a hooks folder has a file that isn't one of
@@ -348,12 +401,26 @@ func hasHooks(dir string) bool {
 }
 
 // Unlock takes the locks off, for a VM that's being deleted or turned
-// off. Like locking, it never acts through a symlink.
-func (p *Protector) Unlock(ctx context.Context) {
+// off: what's to lock now, and the hooks and config of every git dir its
+// state records locking (vm; nil for none), which the VM may since have
+// dropped from its index. Like locking, it never acts through a symlink.
+func (p *Protector) Unlock(ctx context.Context, vm *state.VM) {
 	if p.OS != "darwin" {
 		return
 	}
-	for _, path := range p.paths(ctx, p.embedded(ctx)) {
+	todo := p.paths(ctx, p.embedded(ctx))
+	if vm != nil {
+		g, _ := Of(vm)
+		for _, d := range p.abs(g.Made.GitDirs) {
+			todo = append(todo, filepath.Join(d, "hooks"), filepath.Join(d, "config"))
+		}
+	}
+	done := map[string]bool{}
+	for _, path := range todo {
+		if done[path] {
+			continue
+		}
+		done[path] = true
 		if _, err := os.Lstat(path); err == nil && p.realInDir(path) {
 			p.flag(ctx, "nouchg", path)
 		}
@@ -361,20 +428,6 @@ func (p *Protector) Unlock(ctx context.Context) {
 }
 
 func (p *Protector) git() string { return filepath.Join(p.Dir, ".git") }
-
-// relList is paths in the project folder as a state value: a JSON list of
-// their paths relative to it.
-func (p *Protector) relList(paths []string) string {
-	rel := []string{}
-	for _, d := range paths {
-		rel = append(rel, strings.TrimPrefix(d, p.Dir+"/"))
-	}
-	b, err := json.Marshal(rel)
-	if err != nil {
-		panic(err) // strings: always encodable
-	}
-	return string(b)
-}
 
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
 
@@ -706,9 +759,8 @@ func (p *Protector) realInDir(path string) bool {
 }
 
 // lock locks the paths to protect, which only happens while the VM is
-// stopped, so nothing in it can race the checks; then it records .git's
-// inode.
-func (p *Protector) lock(ctx context.Context, vm *state.VM, emb embeds) error {
+// stopped, so nothing in it can race the checks.
+func (p *Protector) lock(ctx context.Context, emb embeds) {
 	for _, path := range p.paths(ctx, emb) {
 		if !p.realInDir(path) {
 			p.Warn(msg.GitNotLocked(path))
@@ -730,7 +782,6 @@ func (p *Protector) lock(ctx context.Context, vm *state.VM, emb embeds) error {
 			p.flag(ctx, "uchg", path)
 		}
 	}
-	return vm.Set(KeyGitInode, inode(p.git()))
 }
 
 // flag sets a flag on a path realInDir passed, then checks it again.
@@ -762,7 +813,8 @@ func devIno(path string) string {
 	return platform.DevIno(fi)
 }
 
-func inode(path string) string {
-	_, ino, _ := strings.Cut(devIno(path), ":")
-	return ino
+// folderID is what's at path as platform.FolderID has it, or "".
+func folderID(path string) string {
+	id, _ := platform.FolderID(path)
+	return id
 }

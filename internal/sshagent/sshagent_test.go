@@ -527,17 +527,42 @@ func TestRealAgent(t *testing.T) {
 
 func TestMode(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir()}
-	st, err := state.CreateVM(d, "devvm-web-0123456789abcd", state.NewVM{})
+	st, err := state.New(d, "devvm-web-0123456789abcd")
 	if err != nil {
 		t.Fatal(err)
 	}
+	st.Image, st.Dir, st.Backend = "base", "/p", "lima"
+	if err := st.Create(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
 	for val, want := range map[string]string{"": Off, "off": Off, "on": On, "devvm": Devvm, "bogus": Off} {
-		if err := st.Set(Key, val); err != nil {
+		if err := st.Update(t.Context(), func(st *state.VM) error { return SetMode(st, val) }); err != nil {
 			t.Fatal(err)
 		}
 		if got := Mode(st); got != want {
 			t.Errorf("Mode(%q) = %q, want %q", val, got, want)
 		}
+	}
+	// What devvm made of it: the start it last started with, kept by a
+	// change of its choice.
+	if err := RecordStart(t.Context(), st, Devvm, "start-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Update(t.Context(), func(st *state.VM) error { return SetMode(st, On) }); err != nil {
+		t.Fatal(err)
+	}
+	again, err := state.ReadVM(d, st.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Running(again, "start-1") != Devvm || Running(again, "start-2") != On {
+		t.Errorf("Running = %q, %q; want devvm for its start, else on", Running(again, "start-1"), Running(again, "start-2"))
+	}
+	if err := RecordStart(t.Context(), st, Off, ""); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := Of(st); a.Made.Started != "" {
+		t.Errorf("no start recorded: %q", a.Made.Started)
 	}
 }
 

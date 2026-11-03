@@ -124,7 +124,7 @@ func vmStatuses(s string) ui.Role {
 
 func gitModes(s string) ui.Role {
 	switch s {
-	case gitprotect.On, gitprotect.Strict, vm.ModeClone:
+	case gitprotect.On, gitprotect.Strict, gitprotect.Clone:
 		return ui.Good
 	}
 	return ui.Plain

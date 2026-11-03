@@ -121,10 +121,15 @@ func (d Dirs) Cache() string { return filepath.Join(d.Data, "cache") }
 func (d Dirs) FromDigests() string { return filepath.Join(d.Cache(), "from-digests.json") }
 
 // Run holds what running VMs need that isn't one VM's, or whose path
-// must be short: the QEMU wrapper, the ports lock, the port forwarders'
+// must be short: the QEMU wrapper, the claims lock, the port forwarders'
 // and link sessions' sockets, named by hashes (a socket's path is at most
 // SocketMax characters), and build VMs' folders (VM).
 func (d Dirs) Run() string { return filepath.Join(d.Data, "run") }
+
+// ClaimsLock is held while a VM claims what no two VMs may have: its ssh
+// alias as it's made, and the host ports devvm chooses for it. It's taken
+// after the VM's own lock (VM.Lock), never before.
+func (d Dirs) ClaimsLock() string { return filepath.Join(d.Run(), "claims.lock") }
 
 // SocketMax is the longest unix socket path macOS takes (Linux takes
 // 108). ssh adds 17 characters to a control socket's while it makes it.

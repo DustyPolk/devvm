@@ -60,8 +60,9 @@ func New(d paths.Dirs, reg *backend.Registry) *Config {
 // ChooseAlias is the name ssh and editors will reach a new VM, vm, by
 // besides its own: devvm-<folder>, as its name has the folder's name,
 // unless another VM's state records that alias; then the VM's own name.
-// It's chosen once, as the VM is made (state.KeyAlias), so a VM's alias
-// never changes when others come and go.
+// It's chosen once, as the VM is made (state.VM.Alias), so a VM's alias
+// never changes when others come and go, inside the claim of the VM's
+// state.VM.Create, so two VMs made at once never choose one alias.
 func ChooseAlias(d paths.Dirs, vm string) (string, error) {
 	slug, _ := vmname.SlugOf(vm)
 	short := vmname.Prefix + slug
@@ -77,7 +78,7 @@ func ChooseAlias(d paths.Dirs, vm string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if st.Get(state.KeyAlias) == short {
+		if st.Alias == short {
 			return vm, nil
 		}
 	}
@@ -87,8 +88,8 @@ func ChooseAlias(d paths.Dirs, vm string) (string, error) {
 // Host is the name ssh and editors reach vm by: the alias its state
 // records, else its own name.
 func (c *Config) Host(vm string) string {
-	if st, err := state.ReadVM(c.Dirs, vm); err == nil && st.Get(state.KeyAlias) != "" {
-		return st.Get(state.KeyAlias)
+	if st, err := state.ReadVM(c.Dirs, vm); err == nil && st.Alias != "" {
+		return st.Alias
 	}
 	return vm
 }

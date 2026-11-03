@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // What each agent shares from the host, as paths relative to the home
@@ -115,7 +116,7 @@ func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 	if err != nil {
 		return err
 	}
-	want := e.AgentMounts(st.ToolNames())
+	want := e.AgentMounts(tools.Names(st))
 	added := missing(want, in.AgentDirs)
 	removed := missing(in.AgentDirs, want)
 	if len(added) == 0 && len(removed) == 0 {

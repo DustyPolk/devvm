@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/desktop"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -16,10 +18,7 @@ func desktopVM(t *testing.T) (paths.Dirs, *state.VM) {
 	t.Helper()
 	root := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	st, err := state.CreateVM(d, "devvm-p-00000000000000", state.NewVM{Image: "base"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := vmState(t, d, "devvm-p-00000000000000")
 	return d, st
 }
 
@@ -27,7 +26,7 @@ func desktopVM(t *testing.T) (paths.Dirs, *state.VM) {
 // makes is made again.
 func TestDesktopPassword(t *testing.T) {
 	d, st := desktopVM(t)
-	p1, err := desktopPassword(st)
+	p1, err := desktopPassword(t.Context(), st)
 	if err != nil || !desktop.ValidPassword(p1) {
 		t.Fatalf("desktopPassword = %q, %v", p1, err)
 	}
@@ -35,14 +34,14 @@ func TestDesktopPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p2, _ := desktopPassword(again); p2 != p1 {
+	if p2, _ := desktopPassword(t.Context(), again); p2 != p1 {
 		t.Errorf("second desktopPassword = %q, want %q", p2, p1)
 	}
 	for _, bad := range []string{"short", "has spaces!", "ABCDEFGH"} {
-		if err := again.Set(KeyDesktopPassword, bad); err != nil {
+		if err := set(t, again, KeyDesktopPassword, bad); err != nil {
 			t.Fatal(err)
 		}
-		if p, _ := desktopPassword(again); p == bad || !desktop.ValidPassword(p) {
+		if p, _ := desktopPassword(t.Context(), again); p == bad || !desktop.ValidPassword(p) {
 			t.Errorf("with %q kept: desktopPassword = %q", bad, p)
 		}
 	}
@@ -52,14 +51,14 @@ func TestDesktopPassword(t *testing.T) {
 // it's free, else on a new one, which is kept.
 func TestDesktopListener(t *testing.T) {
 	d, st := desktopVM(t)
-	e := Desktop{&Env{Dirs: d}}
+	e := Desktop{&Env{Dirs: d, Proxy: &netpolicy.Proxy{Dirs: d, Listening: ports.Listening}}}
 	l, err := e.listener(t.Context(), st)
 	if err != nil {
 		t.Fatal(err)
 	}
 	addr := l.Addr().(*net.TCPAddr)
-	if !addr.IP.Equal(net.IPv4(127, 0, 0, 1)) || st.Get(KeyDesktopPort) != strconv.Itoa(addr.Port) {
-		t.Fatalf("listening on %v, kept %q", addr, st.Get(KeyDesktopPort))
+	if !addr.IP.Equal(net.IPv4(127, 0, 0, 1)) || get(st, KeyDesktopPort) != strconv.Itoa(addr.Port) {
+		t.Fatalf("listening on %v, kept %q", addr, get(st, KeyDesktopPort))
 	}
 	// Taken (by the first): another one, kept in its place.
 	l2, err := e.listener(t.Context(), st)
@@ -67,8 +66,8 @@ func TestDesktopListener(t *testing.T) {
 		t.Fatal(err)
 	}
 	p2 := l2.Addr().(*net.TCPAddr).Port
-	if p2 == addr.Port || st.Get(KeyDesktopPort) != strconv.Itoa(p2) {
-		t.Errorf("second on %d, kept %q", p2, st.Get(KeyDesktopPort))
+	if p2 == addr.Port || get(st, KeyDesktopPort) != strconv.Itoa(p2) {
+		t.Errorf("second on %d, kept %q", p2, get(st, KeyDesktopPort))
 	}
 	_ = l.Close()
 	_ = l2.Close()

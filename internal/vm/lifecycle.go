@@ -15,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // Lifecycle stops the folder's VM, gives it to the folder, exports its
@@ -68,7 +69,7 @@ func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
 		e.Info(msg.VMAlreadyHere(vm))
 		return nil
 	}
-	was := st.Get(state.KeyDir)
+	was := st.Dir
 	switch {
 	case force:
 	case !e.Terminal():
@@ -80,10 +81,19 @@ func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	for _, kv := range [][2]string{{state.KeyDir, t.f.Dir}, {state.KeyFolder, id}, {gitprotect.KeyGitInode, ""}} {
-		if err := st.Set(kv[0], kv[1]); err != nil {
+	// Its folder, and .git's protection set up as a new VM's at its next
+	// launch, at once.
+	err = st.Update(ctx, func(st *state.VM) error {
+		st.Dir, st.Folder = t.f.Dir, id
+		g, err := gitprotect.Of(st)
+		if err != nil {
 			return err
 		}
+		g.Made = gitprotect.Made{}
+		return gitprotect.Set(st, g)
+	})
+	if err != nil {
+		return err
 	}
 	e.Info(msg.VMAdopted(t.f.Dir, vm))
 	return nil
@@ -125,7 +135,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		asked = true
 	}
 	if !e.sameFolder(t.f, st) {
-		was := st.Get(state.KeyDir)
+		was := st.Dir
 		if !e.Terminal() {
 			return msg.VMOtherFolderRm(vm, was)
 		}
@@ -139,7 +149,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		return msg.ForceNeeded("devvm rm")
 	}
 	// A VM whose creation didn't finish never ran: no history, no work.
-	checkClone := st.Get(KeyNet) != "" && isClone(st) && e.sameFolder(t.f, st)
+	checkClone := st.Finished() && isClone(st) && e.sameFolder(t.f, st)
 	if checkClone && o.NoCloneCheck {
 		e.Warn(msg.CloneCheckSkipped(vm))
 		checkClone = false
@@ -154,7 +164,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 			return err
 		}
 	}
-	if !o.NoExport && st.Get(KeyNet) != "" && len(image.AgentsOf(st.ToolNames())) > 0 {
+	if !o.NoExport && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0 {
 		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
 			return err
 		}

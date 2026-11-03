@@ -224,7 +224,7 @@ func doctorBackend(u *ui.UI) (*backend.Registry, backend.Backend, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	c, err := reg.For(dirs, new(state.VM))
+	c, err := reg.For(new(state.VM))
 	if err != nil {
 		return nil, nil, err
 	}

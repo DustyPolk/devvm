@@ -94,7 +94,7 @@ exec devvm --from $PIN --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
 vm_name WEB web
-catg $WEB_dir/state
+vm_state $WEB_dir/vm.json
 stdout '^from=node:24@sha256:a{64}$'
 stub_reset
 exec devvm --from debian:13

@@ -26,12 +26,12 @@ stderr '^devvm: size_flags_ignored$'
 stderr '^devvm: ports_flag_ignored$'
 exec devvm --no-git-protect
 stderr '^devvm: git_protect_flag_ignored$'
-exec grep -c '^net=off$' $WEB_dir/state
-stdout '^1$'
+vm_state $WEB_dir/vm.json
+stdout '^net.on=false$'
 
 # A size its state asks for: a running VM's waits for its next start; a
 # stopped one's is applied once.
-exec sh -c 'printf "cpus=6\n" >> "$WEB_dir/state"'
+json_set $WEB_dir/vm.json size.cpus=6
 stub_reset
 exec devvm
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
@@ -73,16 +73,16 @@ stderr '^devvm: args_none command=devvm restart given=base$'
 exec devvm --tools go --layers docker
 stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
 ! stdout new_vm_gets
-catg $WEB_dir/state
+vm_state $WEB_dir/vm.json
 stdout '^image=base$'
-! stdout '^tool_names=.'
+! stdout '^tools.names=.'
 # Without them, nothing is said.
 exec devvm
 ! stderr parts_flags_ignored
 
-# A VM without a network choice didn't finish being made: never started
-# (it would start without network policy); rm deletes it.
-exec sh -c 'f="$WEB_dir/state"; grep -v "^net=" "$f" > "$f.new" && mv "$f.new" "$f"'
+# A VM whose creation didn't finish (its state records no created time)
+# never starts; rm deletes it.
+json_set $WEB_dir/vm.json created:=null
 exec limactl stop $WEB
 stub_reset
 ! exec devvm
@@ -110,7 +110,7 @@ stdout '^limactl delete -f devvm-web-[0-9a-f]{14}$'
 ! stdout 'limactl (start|shell)'
 [darwin] stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 ! exists $WEB_dir
-exists $API_dir/state
+exists $API_dir/vm.json
 exec cat $KNOWN
 ! stdout devvm-web
 stdout devvm-api
@@ -156,4 +156,4 @@ stderr '^devvm: vm_other_folder '
 stub_calls
 ! stdout 'limactl (delete|stop|start)'
 vm_name SITE site
-exists $SITE_dir/state
+exists $SITE_dir/vm.json

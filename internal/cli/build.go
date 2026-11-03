@@ -105,7 +105,7 @@ func builder(u *ui.UI) (*build.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := reg.For(dirs, new(state.VM))
+	c, err := reg.For(new(state.VM))
 	if err != nil {
 		return nil, err
 	}

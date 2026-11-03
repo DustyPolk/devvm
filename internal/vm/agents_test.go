@@ -74,10 +74,7 @@ func agentVM(t *testing.T, tools string, status backend.Status, dirs ...string) 
 	t.Helper()
 	root := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	st, err := state.CreateVM(d, "devvm-p-00000000000000", state.NewVM{Image: "base", Tools: strings.Fields(tools)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := vmState(t, d, "devvm-p-00000000000000", withTools(strings.Fields(tools)...))
 	f := backendtest.New("fake", allNative())
 	f.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: status, AgentDirs: dirs}
 	return f, st

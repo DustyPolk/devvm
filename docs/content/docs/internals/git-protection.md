@@ -19,9 +19,11 @@ devvm locks these paths:
 
 ### When devvm locks
 
-devvm locks when it creates the VM, and again on each launch that finds the VM stopped and on `devvm stop`, so nothing in the VM can race the locks. A running VM keeps the locks it had, and `devvm stop` or the next launch that finds the VM stopped, such as `devvm restart`, sets new ones. `devvm git-protect` on a running VM saves the mode in the VM's state (`git_protect_next`). The same places first check `.git` under the mode the VM ran with, so a `.git` that the VM replaced meanwhile is still named (`git_replaced`), and then set the new mode, which locks `.git` as it is then.
+devvm records a new VM's mode in its state before its backend makes the VM, so the mode is never unset: on with locks (macOS), off when you pass `--no-git-protect` or on hosts without locks, and `clone` for a `--clone` VM, which mounts no `.git`. devvm locks once the backend has made the VM, and again on each launch that finds the VM stopped and on `devvm stop`, so nothing in the VM can race the locks. A VM whose creation stopped before its first locks, or that `devvm adopt` moved to this folder, is locked on its next launch as a new VM is, without reports. A running VM keeps the locks it had, and `devvm stop` or the next launch that finds the VM stopped, such as `devvm restart`, sets new ones. `devvm git-protect` on a running VM saves the mode in the VM's state (the `git` section's `next`).
 
-A new VM that's interrupted before its first shell is deleted, and devvm takes its locks off. When `devvm rm` deletes a VM, devvm also takes its locks off.
+Each time it locks, devvm records in the VM's state what it locked and found: the identity of `.git` (its device and inode), every git folder it locked besides `.git` (those under `.git/modules` and the submodules' in the working tree, in one list), and a hash of what the locked files hand over to the project folder. The next check compares with those, so it reports what changed since. The same places first check `.git` under the mode the VM ran with, so a `.git` that the VM replaced meanwhile is still named (`git_replaced`), and then set the new mode, which locks `.git` as it is then.
+
+A new VM that's interrupted before its first shell is deleted, and devvm takes its locks off. When `devvm rm` deletes a VM, devvm also takes its locks off. It unlocks what it would lock now and every git folder the VM's state records locking, so a submodule whose entry the VM dropped from the index since is unlocked too.
 
 ### Symlinks
 
@@ -33,7 +35,7 @@ Every launch of an existing VM, every export of its agents' history, and `devvm 
 
 - A `.git` that was replaced since devvm locked it (`git_replaced`). devvm then does nothing else, so check the new `.git`, and look for the old one, renamed.
 - A repo that appeared in the folder after the VM was made (`git_appeared`), which devvm then locks.
-- A submodule git folder that appeared, in the working tree or under `.git/modules` (`git_embedded_new`), which devvm then locks.
+- A submodule git folder that appeared, in the working tree or under `.git/modules` (`git_embedded_new`), which devvm then locks. devvm compares with the git folders it recorded last time, so `devvm git-protect on` after a VM was made without protection names none: it locks `.git` as it is then, as trusted.
 - Hooks in a hooks folder that wasn't locked, because it wasn't there to lock or belongs to a new submodule (`git_hooks_unlocked`).
 
 devvm also reports these, the first two on every launch and the last when they change:

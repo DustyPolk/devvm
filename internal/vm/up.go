@@ -5,8 +5,8 @@ import (
 	"errors"
 	"os"
 	"slices"
-	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
@@ -14,7 +14,9 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
@@ -116,7 +118,8 @@ type newVM struct {
 	ports   string
 	net     bool
 	agent   string // sshagent.On or Off
-	mode    string // ModeClone, or ""
+	clone   bool   // --clone
+	git     string // its .git protection (gitprotect.Protector.NewMode), or gitprotect.Clone
 	spec    backend.VMSpec
 	conf    backend.Confinement
 	builder *build.Env
@@ -178,54 +181,48 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := (vmFolders{e.Env}).clear(ctx, vm); err != nil {
 		return err
 	}
-	// Its alias, chosen now for good, as its name was.
-	alias, err := sshconfig.ChooseAlias(e.Dirs, vm)
-	if err != nil {
-		return err
-	}
 	var locking atomic.Bool
 	done := e.AddCleanup(e.undoCreate(b, f, &locking))
-	// The state first, with the network choice: if a later step fails,
-	// the VM never starts without it.
-	st, err := state.CreateVM(e.Dirs, vm, state.NewVM{
-		Image: n.img, Tools: n.tools, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(), Alias: alias,
-	})
+	// Its whole state first, written once, with all it was asked for: if
+	// a later step fails, it never starts, as its creation didn't finish
+	// (Created).
+	st, err := state.New(e.Dirs, vm)
 	if err != nil {
 		return err
 	}
-	if at, _ := backend.LocationOf(b); at != "" {
-		if err := st.Set(KeyBackendAt, at); err != nil {
-			return err
-		}
-	}
+	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img, f.Dir, id, chain.String(), o.From, b.Name()
+	st.BackendAt, _ = backend.LocationOf(b)
 	if err := n.record(st, tg.Libc, files); err != nil {
 		return err
 	}
 	if err := (devcontainers{e.Env}).record(st, o); err != nil {
 		return err
 	}
-	if n.ports != "" && n.ports != settings.PortsAll {
-		if err := st.Set(KeyPorts, n.ports); err != nil {
-			return err
-		}
+	// Its alias, chosen now for good, as its name was, under the claims
+	// lock: two VMs made at once never take one.
+	err = st.Create(ctx, func(st *state.VM) error {
+		var err error
+		st.Alias, err = sshconfig.ChooseAlias(e.Dirs, vm)
+		return err
+	})
+	if err != nil {
+		return err
 	}
 	// Its ssh port from the start, as its starts have it: none of its
 	// listed ports, recorded above.
-	if n.spec.SSHPort, err = e.Proxy.SSHPort(ctx, st, false); err != nil {
+	if n.spec.SSHPort, err = e.Proxy.Ports().SSH(ctx, st, false); err != nil {
 		return err
 	}
 	if err := b.CreateVM(ctx, chain.Key(), n.spec); err != nil {
 		return err
 	}
-	if n.spec.AgentToggle && b.Caps()[backend.FeatureAgentToggle].IsEmulated() {
-		if err := st.Set(KeyAgentToggle, "on"); err != nil {
-			return err
-		}
+	if err := e.created(ctx, b, st, n.spec.AgentToggle); err != nil {
+		return err
 	}
 	// A clone has no .git of the host's to protect, and no origin.
 	if !o.Clone {
 		locking.Store(!o.NoGitProtect)
-		if err := e.Protector(f.Dir).NewVM(ctx, st, o.NoGitProtect); err != nil {
+		if err := e.Protector(f.Dir).NewVM(ctx, st); err != nil {
 			return err
 		}
 		if !o.SSHAgent && project.SSHRemote(ctx, f.Dir) {
@@ -259,6 +256,25 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	done()
 	unmaking()
 	return e.Exec(cmd)
+}
+
+// created records that the backend made the VM, with toggle when it was
+// made ready for devvm ssh-agent to change its forwarding and the backend
+// emulates that, which its starts rely on: from now on it starts.
+func (e creation) created(ctx context.Context, b backend.Backend, st *state.VM, toggle bool) error {
+	toggle = toggle && b.Caps()[backend.FeatureAgentToggle].IsEmulated()
+	return st.Update(ctx, func(st *state.VM) error {
+		st.Created = time.Now().UTC()
+		if !toggle {
+			return nil
+		}
+		a, err := sshagent.Of(st)
+		if err != nil {
+			return err
+		}
+		a.Made.Toggle = true
+		return sshagent.Set(st, a)
+	})
 }
 
 // firstRun asks devvm's first run's questions, new VMs' size and agents
@@ -344,7 +360,9 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	}
 	e.useAgent(n.agent)
 	if o.Clone {
-		n.spec.Project, n.spec.CloneAt, n.mode = "", f.Dir, ModeClone
+		n.spec.Project, n.spec.CloneAt, n.clone, n.git = "", f.Dir, true, gitprotect.Clone
+	} else {
+		n.git = e.Protector(f.Dir).NewMode(o.NoGitProtect)
 	}
 	if n.net {
 		n.conf.Net = backend.NetProxy
@@ -390,27 +408,23 @@ func (e creation) chooseNet(o *Options, b backend.Backend, vm, saved string) boo
 	return e.Proxy.Choose(saved == settings.NetworkOn, false, vm)
 }
 
-// record writes a new VM's choices into its state, with the libc and
-// tool files it was given.
+// record sets a new VM's choices in its state, before it's written, with
+// the libc and tool files it was given: each package's section.
 func (n newVM) record(st *state.VM, libc string, files []string) error {
-	netState := "off"
-	if n.net {
-		netState = "on"
+	forward := n.ports
+	if forward == settings.PortsAll {
+		forward = ""
 	}
-	for _, kv := range [][2]string{
-		{KeyNet, netState},
-		{KeyMode, n.mode},
-		{sshagent.Key, n.agent},
-		{KeyLibc, libc},
-		{KeyTools, strings.Join(files, " ")},
-		{KeyCPUs, n.size.CPUs},
-		{KeyMemory, n.size.Memory},
-		{KeyDisk, n.size.Disk},
+	for _, err := range []error{
+		netpolicy.Set(st, netpolicy.Net{On: n.net}),
+		gitprotect.Set(st, gitprotect.InVM{Mode: n.git}),
+		sshagent.Set(st, sshagent.InVM{Mode: n.agent}),
+		tools.Set(st, tools.InVM{Names: n.tools, Made: tools.Made{Files: files, Libc: libc}}),
+		ports.Set(st, ports.Ports{Forward: forward}),
+		state.SetSection(st, sizeSection, n.size),
+		state.SetSection(st, cloneSection, cloneInVM{On: n.clone}),
 	} {
-		if kv[1] == "" {
-			continue
-		}
-		if err := st.Set(kv[0], kv[1]); err != nil {
+		if err != nil {
 			return err
 		}
 	}
@@ -420,8 +434,8 @@ func (n newVM) record(st *state.VM, libc string, files []string) error {
 // undoCreate is create's cleanup. Until its first shell nothing of
 // anyone's is in the VM: an interrupt deletes it, then what devvm keeps
 // for it (teardown), and takes off .git's locks (once locking is set,
-// whether or not its state records them yet), or removes the repo's
-// remote for its clone.
+// even when its state can't be read), or removes the repo's remote for
+// its clone.
 func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomic.Bool) func(context.Context) {
 	vm := f.Name
 	return func(ctx context.Context) {
@@ -438,8 +452,8 @@ func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomi
 		if err != nil {
 			st = new(state.VM)
 		}
-		if m := st.Get(gitprotect.KeyGitProtect); locking.Load() && m != gitprotect.On && m != gitprotect.Strict {
-			e.Protector(f.Dir).Unlock(ctx)
+		if m := gitprotect.Mode(st); locking.Load() && m != gitprotect.On && m != gitprotect.Strict {
+			e.Protector(f.Dir).Unlock(ctx, st)
 		}
 		if deleted {
 			_ = vmFolders{e.Env}.teardown(ctx, &found{f: f, st: st, b: b}, false)
@@ -461,7 +475,7 @@ func (e Launch) setUp(ctx context.Context, b backend.Backend, st *state.VM, f pr
 // a --clone VM's clone made if it isn't yet, then its devcontainer.json's
 // commands run (devcontainers.run).
 func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) error {
-	if err := syncer(e).sync(ctx, b, st, f.Slug(), strings.Fields(st.Get(KeyTools)), conf); err != nil {
+	if err := syncer(e).sync(ctx, b, st, f.Slug(), tools.Files(st), conf); err != nil {
 		return err
 	}
 	if err := e.sshConfig().Write(ctx); err != nil {
@@ -471,7 +485,7 @@ func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f 
 	if err := linkRuns(e).atLaunch(ctx, b, st); err != nil {
 		return err
 	}
-	if isClone(st) && st.Get(KeySeeded) == "" {
+	if c := sectionOf[cloneInVM](st, cloneSection); c.On && !c.Made.Seeded {
 		if err := clones(e).seedClone(ctx, b, st, f); err != nil {
 			return err
 		}

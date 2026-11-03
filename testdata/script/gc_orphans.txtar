@@ -13,18 +13,19 @@ exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | { sha256sum 2>/dev/null || shasum -a 
 # where it was made while this run's home isn't the default; one being
 # made.
 exec sh -c 'echo devvm-live-12345612345601 >> "$STUB_DIR/instances"'
-exec sh -c 'for v in live:01 gone:02 new:03; do printf "name=devvm-${v%:*}-123456123456${v#*:}\nimage=base\ndir=/p/${v%:*}\nbackend=lima\nnet=off\nbackend_at=%s\n" "$(cat at)" > "$VMS/123456123456${v#*:}/state"; done'
-exec sh -c 'printf "name=devvm-moved-12345612345604\nimage=base\ndir=/p/moved\nbackend=lima\nnet=off\nbackend_at=0000000000000000\n" > "$VMS/12345612345604/state"'
-exec sh -c 'printf "name=devvm-norec-12345612345605\nimage=base\ndir=/p/norec\nbackend=lima\nnet=off\n" > "$VMS/12345612345605/state"'
+exec sh -c 'for v in live:01 gone:02 new:03; do sh $WORK/vmjson "devvm-${v%:*}-123456123456${v#*:}" "/p/${v%:*}" lima "$(cat at)"; done'
+exec sh $WORK/vmjson devvm-moved-12345612345604 /p/moved lima 0000000000000000
+exec sh $WORK/vmjson devvm-norec-12345612345605 /p/norec lima
 exec sh -c 'cd "$VMS" && for h in 12345612345601 12345612345602; do mkdir $h/logs $h/run $h/backend && echo x > $h/logs/network.jsonl && echo x > $h/run/sandbox.sb && echo x > $h/backend/ports; done'
-exec sh -c 'cd "$VMS" && touch -t 202001010000 12345612345601/state 12345612345602/state 12345612345604/state 12345612345605/state'
+exec sh -c 'cd "$VMS" && touch -t 202001010000 12345612345601/vm.json 12345612345602/vm.json 12345612345604/vm.json 12345612345605/vm.json'
 # A VM of a backend this devvm doesn't have (a newer devvm's), which
 # can't be asked.
-exec sh -c 'printf "name=devvm-other-12345612345607\nimage=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/12345612345607/state" && touch -t 202001010000 "$VMS/12345612345607/state"'
+exec sh $WORK/vmjson devvm-other-12345612345607 /p/other nope
+exec touch -t 202001010000 $VMS/12345612345607/vm.json
 
 # The default run leaves them.
 exec devvm gc --force
-exists $VMS/12345612345602/state
+exists $VMS/12345612345602/vm.json
 
 stub_reset
 exec devvm gc --force --orphans
@@ -39,14 +40,14 @@ stdout '^==> forgot_orphan vm=devvm-gone-12345612345602$'
 # Gone: the orphans' folders (state, logs, run and port files). Left:
 # everything else's.
 ! exists $VMS/12345612345602
-exists $VMS/12345612345601/state
+exists $VMS/12345612345601/vm.json
 exists $VMS/12345612345601/logs/network.jsonl
 exists $VMS/12345612345601/run/sandbox.sb
 exists $VMS/12345612345601/backend/ports
-exists $VMS/12345612345604/state
-exists $VMS/12345612345603/state
-exists $VMS/12345612345605/state
-exists $VMS/12345612345607/state
+exists $VMS/12345612345604/vm.json
+exists $VMS/12345612345603/vm.json
+exists $VMS/12345612345605/vm.json
+exists $VMS/12345612345607/vm.json
 exec sh -c 'grep -c . "$STUB_DIR/instances"'
 stdout '^1$'
 stub_calls
@@ -55,10 +56,17 @@ stub_calls
 # When a backend a VM's state names doesn't answer, gc warns and leaves
 # its VMs' state alone.
 mkdir $VMS/12345612345602
-exec sh -c 'printf "name=devvm-gone-12345612345602\nimage=base\ndir=/p/gone\nbackend=lima\nnet=off\nbackend_at=%s\n" "$(cat at)" > "$VMS/12345612345602/state" && touch -t 202001010000 "$VMS/12345612345602/state"'
+exec sh -c 'sh $WORK/vmjson devvm-gone-12345612345602 /p/gone lima "$(cat at)" && touch -t 202001010000 "$VMS/12345612345602/vm.json"'
 exec sh -c 'touch "$STUB_DIR/list-fails"'
 exec devvm gc --force --orphans
 stderr '^devvm: gc_backend_skipped backend=lima$'
 stderr '^gc_orphans_unknown backend=lima$'
-exists $VMS/12345612345602/state
-exists $VMS/12345612345604/state
+exists $VMS/12345612345602/vm.json
+exists $VMS/12345612345604/vm.json
+
+-- vmjson --
+# vmjson NAME DIR BACKEND [BACKEND_AT]: a finished VM's state, without
+# network policy, in its folder in $VMS.
+at=
+[ -z "$4" ] || at=", \"backend_at\": \"$4\""
+printf '{"version": 1, "id": "x", "name": "%s", "image": "base", "dir": "%s", "backend": "%s"%s, "created": "2020-01-01T00:00:00Z", "net": {"on": false}}\n' "$1" "$2" "$3" "$at" > "$VMS/${1##*-}/vm.json"

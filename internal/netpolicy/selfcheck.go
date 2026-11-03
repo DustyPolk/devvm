@@ -43,9 +43,9 @@ func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, 
 		return err
 	}
 	if ok {
-		return st.Set(KeyCheck, CheckOK)
+		return setCheck(ctx, st, CheckOK)
 	}
-	if err := st.Set(KeyCheck, CheckUnenforced); err != nil {
+	if err := setCheck(ctx, st, CheckUnenforced); err != nil {
 		return err
 	}
 	confined, err := b.Confined(ctx, vm)
@@ -73,21 +73,36 @@ func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, 
 	} else if !ok {
 		return p.stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
 	}
-	return st.Set(KeyCheck, CheckOK)
+	return setCheck(ctx, st, CheckOK)
+}
+
+// setCheck records the self-check's result in the VM's state.
+func setCheck(ctx context.Context, st *state.VM, result string) error {
+	return st.Update(ctx, func(st *state.VM) error {
+		n, err := Of(st)
+		if err != nil {
+			return err
+		}
+		n.Made.Check = result
+		return Set(st, n)
+	})
 }
 
 // Listed is a VM's network policy as devvm ls shows it: off, on, or
 // unenforced: on, but the last self-check failed, or the VM runs but not
 // confined (started some other way since). A stopped VM starts confined
 // next time, unless that self-check failed. "" when its creation didn't
-// record it.
+// finish.
 func Listed(ctx context.Context, b backend.Backend, st *state.VM, running bool) (string, error) {
+	n, err := Of(st)
 	switch {
-	case st.Get(KeyNet) == "":
+	case err != nil:
+		return "", err
+	case !st.Finished():
 		return "", nil
-	case !On(st):
+	case !n.On:
 		return "off", nil
-	case st.Get(KeyCheck) == CheckUnenforced:
+	case n.Made.Check == CheckUnenforced:
 		return CheckUnenforced, nil
 	case !running:
 		return "on", nil

@@ -51,8 +51,8 @@ exec devvm link publish 5432
 mkdir $WORK/y/api
 cd $WORK/y/api
 exec devvm --no-network-policy --no-git-protect
-exec sh -c 'cat "$VMS"/*/state'
-stdout '^id=[0-9a-f]{32}$'
+exec sh -c 'cat "$VMS"/*/vm.json'
+stdout '^  "id": "[0-9a-f]{32}",$'
 vm_name APP app
 vm_name DB db
 
@@ -69,8 +69,8 @@ exec devvm link publish
 stdout '\A5432,8000-8010\n\z'
 exec devvm link publish --json
 stdout '\A{\n  "version": 1,\n  "ports": "5432,8000-8010"\n}\n\z'
-exec cat $DB_dir/state
-stdout '^publish=5432,8000-8010$'
+vm_state $DB_dir/vm.json
+stdout '^links.publish=5432,8000-8010$'
 
 # Refusals: an unpublished port, the VM itself, no VM, a folder name two
 # VMs have.
@@ -91,8 +91,8 @@ stderr '^devvm: link_unknown_target target=nope$'
 stderr '^devvm: link_unknown_target target=../nope$'
 ! exec devvm link add api 5432
 stderr '^devvm: link_ambiguous_target target=api vms=devvm-api-[0-9a-f]{14} in \S*/api, devvm-api-[0-9a-f]{14} in \S*/api$'
-exec cat $APP_dir/state
-! stdout '^links='
+vm_state $APP_dir/vm.json
+! stdout '^links\.links'
 
 # add: by folder name, its address the first, then the same target's
 # other ports by path or VM name, sharing it.
@@ -105,7 +105,13 @@ exec devvm link add ../db 8000
 stdout '^==> link_added name=db port=8000 '
 exec devvm link add $DB 8005
 stdout '^==> link_added name=db port=8005 '
-exec sh -c 'id=$(sed -n "s/^id=//p" "$DB_dir/state"); grep -x "links=db,5432,$DB,$id,127.77.0.1 db,8000,$DB,$id,127.77.0.1 db,8005,$DB,$id,127.77.0.1" "$APP_dir/state"'
+vm_state $APP_dir/vm.json
+stdout '^links\.links\.0\.name=db\n(?s:.*)^links\.links\.0\.port=5432\n'
+stdout '^links\.links\.1\.name=db\n(?s:.*)^links\.links\.1\.port=8000\n'
+stdout '^links\.links\.2\.name=db\n(?s:.*)^links\.links\.2\.port=8005\n'
+stdout -count=3 '^links\.links\.[0-2]\.addr=127\.77\.0\.1$'
+! stdout '^links\.links\.3\.'
+exec sh -c 'id=$(sed -n "s/^  \"id\": \"\(.*\)\",\$/\1/p" "$DB_dir/vm.json"); test "$(grep -c "\"target\": \"$DB\"" "$APP_dir/vm.json") $(grep -c "\"target_id\": \"$id\"" "$APP_dir/vm.json")" = "3 3"'
 
 # A target has one name in a client, and a name one target; localhost
 # and the client's own hostname are refused.
@@ -122,8 +128,9 @@ stderr '^devvm: link_name_host name=localhost vm=devvm-app-[0-9a-f]{14}$'
 # Another target gets the next address.
 exec devvm link add ../x/api 5432
 stdout '^==> link_added name=api port=5432 target=devvm-api-[0-9a-f]{14} '
-exec cat $APP_dir/state
-stdout '^links=api,5432,devvm-api-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.2 db,5432,'
+vm_state $APP_dir/vm.json
+stdout '^links\.links\.0\.addr=127\.77\.0\.2\nlinks\.links\.0\.name=api\nlinks\.links\.0\.port=5432\nlinks\.links\.0\.target=devvm-api-[0-9a-f]{14}\nlinks\.links\.0\.target_id=[0-9a-f]{32}\n'
+stdout '^links\.links\.1\.name=db\n'
 
 # The list: each target's folder and status, and whether the link
 # applies.
@@ -229,8 +236,8 @@ stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0
 cd $WORK/app
 exec devvm link
 stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
-exec cat $APP_dir/state
-stdout '^links=$'
+vm_state $APP_dir/vm.json
+! stdout '^links\.links'
 cd $WORK/db
 exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 5432

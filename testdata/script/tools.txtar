@@ -26,12 +26,12 @@ stdout '^limactl delete -f devvm-tools-build$'
 # The VM is made from base's image, with the share read-only.
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
 vm_name WEB web
-catg $WEB_dir/state
+vm_state $WEB_dir/vm.json
 stdout '^image=base$'
-stdout '^tool_names=node claude$'
-stdout '^libc=gnu$'
+stdout '^tools.names=node claude$'
+stdout '^tools.made.libc=gnu$'
 stdout '^backend_at=[0-9a-f]{16}$'
-stdout '^tools=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
+stdout '^tools.made.files=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
 # Each image in the share with its record: its hash, what it's built for,
 # the backend that built it and when; nothing left of the build.
 exec sh -c 'cd "$SHARE" && for f in *.erofs; do grep -qxF "  \"sha256\": \"$({ sha256sum 2>/dev/null || shasum -a 256; } < "$f" | cut -c1-64)\"," "$f.json" || echo "bad $f"; grep -qxF "  \"libc\": \"gnu\"," "$f.json" && grep -qxF "  \"format\": \"\"," "$f.json" && grep -qxF "  \"backend\": \"lima\"," "$f.json" || echo "bad target $f"; grep -qE "^  \"built\": \"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z\"$" "$f.json" || echo "bad time $f"; done; ls | wc -l'
@@ -64,15 +64,15 @@ stdout '^TOOL +VERSION +NEWER +BUILT$'
 stdout '^claude +2\.1\.295 '
 exec devvm tools rm claude
 stdout '^==> vm_tools_now tools=node vm=devvm-web-[0-9a-f]{14}$'
-catg $WEB_dir/state
-stdout '^tool_names=node$'
+vm_state $WEB_dir/vm.json
+stdout '^tools.names=node$'
 ! stdout 'claude-'
 exec devvm tools add claude
 ! stdout 'building_tools|resolving_tools'
 stdout '^==> vm_tools_now tools=node claude vm=devvm-web-[0-9a-f]{14}$'
-catg $WEB_dir/state
-stdout '^tool_names=node claude$'
-stdout '^tools=.*claude-2\.1\.295-[0-9a-f]{12}\.erofs'
+vm_state $WEB_dir/vm.json
+stdout '^tools.names=node claude$'
+stdout '^tools.made.files=.*claude-2\.1\.295-[0-9a-f]{12}\.erofs'
 stub_calls
 ! stdout 'devvm-tools-build|mise'
 

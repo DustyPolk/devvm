@@ -26,9 +26,9 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	e.Proxy.Stop(vm)
 	linkRuns(e).stop(ctx, vm)
 	if isClone(t.st) {
-		clones(e).removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
-	} else if m := t.st.Get(gitprotect.KeyGitProtect); m == gitprotect.On || m == gitprotect.Strict {
-		e.Protector(t.f.Dir).Unlock(ctx)
+		clones(e).removeRemote(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
+	} else if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
+		e.Protector(t.f.Dir).Unlock(ctx, t.st)
 	}
 	if err := Groups(e).forget(ctx, vm); err != nil {
 		return err

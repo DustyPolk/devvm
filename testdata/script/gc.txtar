@@ -36,8 +36,8 @@ json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima
 json_set $SHARE/go-1.19.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 json_set $SHARE/go-1.9.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS/12345612345603 $VMS/12345612345604
-exec sh -c 'printf "name=devvm-p-12345612345603\nimage=go\ndir=/p\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/12345612345603/state"'
-exec sh -c 'printf "name=devvm-gone-12345612345604\nimage=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$VMS/12345612345604/state"'
+json_set $VMS/12345612345603/vm.json version:=1 id=x name=devvm-p-12345612345603 image=go dir=/p backend=lima tools.made.files:=["go-1.20.0-0123456789ab.erofs"]
+json_set $VMS/12345612345604/vm.json version:=1 id=y name=devvm-gone-12345612345604 image=go dir=/q backend=lima tools.made.files:=["go-1.19.0-0123456789ab.erofs"]
 
 # The builds wrote none of devvm's own files out: they stay in the binary.
 ! exists $XDG_DATA_HOME/devvm/assets

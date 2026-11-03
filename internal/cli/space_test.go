@@ -53,7 +53,12 @@ func TestLeftoverFolders(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := state.CreateVM(d, vm, state.NewVM{Image: "base", Backend: be}); err != nil {
+		st, err := state.New(d, vm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st.Image, st.Dir, st.Backend = "base", "/p", be
+		if err := st.Create(t.Context(), nil); err != nil {
 			t.Fatal(err)
 		}
 	}

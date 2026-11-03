@@ -8,6 +8,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -55,7 +56,7 @@ func TestWriteListColored(t *testing.T) {
 	ls := []vm.Listed{
 		{Name: "devvm-a", Status: string(backend.StatusRunning), Image: "base", Git: "on", Net: "on", Backend: "lima", Folder: "/a"},
 		{Name: "devvm-bb", Status: string(backend.StatusStopped), Image: "docker", Tools: []string{"node", "claude"}, Git: "off", Net: "unenforced", Backend: "fake", Folder: "/b", Links: 2},
-		{Name: "devvm-c", Status: "Broken", Git: vm.ModeClone, Backend: "lima", Folder: "/c"},
+		{Name: "devvm-c", Status: "Broken", Git: gitprotect.Clone, Backend: "lima", Folder: "/c"},
 	}
 	plain, colored := tables(t, func(tab *ui.Table) error { return writeList(tab, ls) })
 	want := "NAME      STATUS   IMAGE   TOOLS        GIT    NET         LINKS  FOLDER\n" +

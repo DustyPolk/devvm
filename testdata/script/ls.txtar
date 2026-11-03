@@ -36,15 +36,15 @@ stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +unenforced +- +/'
 exec limactl stop $NET
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +on +- +/'
-exec sh -c '{ grep -v ^net_check= "$NET_dir/state"; echo net_check=unenforced; } > "$WORK/st" && mv "$WORK/st" "$NET_dir/state"'
+json_set $NET_dir/vm.json net.made.check=unenforced
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +/'
 
 # A --clone VM shows clone in GIT, a base from a container image its
 # label, and a VM whose creation didn't finish - for what it lacks.
 mkdir $VMS/0123456789ab01 $VMS/0123456789ab02
-cp $WORK/clone.state $VMS/0123456789ab01/state
-cp $WORK/from.state $VMS/0123456789ab02/state
+cp $WORK/clone.json $VMS/0123456789ab01/vm.json
+cp $WORK/from.json $VMS/0123456789ab02/vm.json
 exec sh -c 'printf "devvm-cl-0123456789ab01\ndevvm-from-0123456789ab02 Running\ndevvm-half-0123456789ab03\ndevvm-tools-build\n" >> "$STUB_DIR/instances"'
 exec devvm ls
 stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +/p/cl\n'
@@ -81,19 +81,30 @@ cmp stdout $WORK/none.json
 }
 -- header.txt --
 NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  FOLDER
--- clone.state --
-name=devvm-cl-0123456789ab01
-image=base
-tool_names=node claude
-dir=/p/cl
-backend=lima
-net=on
-mode=clone
--- from.state --
-name=devvm-from-0123456789ab02
-image=base
-dir=/p/from
-from=node:24
-backend=lima
-net=off
-git_protect=on
+-- clone.json --
+{
+  "version": 1,
+  "id": "0123456789abcdef0123456789abcd01",
+  "name": "devvm-cl-0123456789ab01",
+  "image": "base",
+  "dir": "/p/cl",
+  "backend": "lima",
+  "created": "2026-01-01T00:00:00Z",
+  "clone": {"on": true},
+  "git": {"mode": "clone"},
+  "net": {"on": true},
+  "tools": {"names": ["node", "claude"]}
+}
+-- from.json --
+{
+  "version": 1,
+  "id": "0123456789abcdef0123456789abcd02",
+  "name": "devvm-from-0123456789ab02",
+  "image": "base",
+  "from": "node:24",
+  "dir": "/p/from",
+  "backend": "lima",
+  "created": "2026-01-01T00:00:00Z",
+  "git": {"mode": "on"},
+  "net": {"on": false}
+}

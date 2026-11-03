@@ -22,8 +22,8 @@ cp $WORK/no-layer $STUB_DIR/shell-fails-on
 ! exec devvm desktop --no-open
 stderr '^devvm: desktop_no_layer vm=devvm-plain-[0-9a-f]{14}$'
 ! stdout desktop_ready
-catg $PLAIN_dir/state
-! stdout 'desktop_(port|password)='
+vm_state $PLAIN_dir/vm.json
+! stdout '^(ports\.host\.desktop|desktop\.made\.password)='
 rm $STUB_DIR/shell-fails-on
 
 # --layers desktop: the VM's image is desktop, built on base by the
@@ -34,7 +34,7 @@ stdout '^==> building_image image=desktop key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=desktop vm=devvm-desk-[0-9a-f]{14}$'
 grep '^# desktop: a built-in layer' $STUB_DIR/scripts
 vm_name DESK desk
-catg $DESK_dir/state
+vm_state $DESK_dir/vm.json
 stdout '^image=desktop$'
 
 # A stopped VM: started, its desktop started with the clipboard off, and
@@ -42,7 +42,7 @@ stdout '^image=desktop$'
 exec limactl stop $DESK
 stub_reset
 ! exec devvm desktop --no-open &d&
-exec sh $WORK/waitfor 'grep -q "^desktop_port=" "$DESK_dir/state" && nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$DESK_dir/state")"'
+exec sh $WORK/waitfor 'p=$(sed -n "s/^ *\"desktop\": \([0-9][0-9]*\).*/\1/p" "$DESK_dir/vm.json") && [ -n "$p" ] && nc -z 127.0.0.1 "$p"'
 kill -INT d
 wait d
 stdout '^==> starting vm=devvm-desk-[0-9a-f]{14}$'
@@ -51,9 +51,9 @@ stub_calls
 stdout '^limactl start --tty=false devvm-desk-[0-9a-f]{14}$'
 stdout 'exec ''/usr/local/bin/devvm-desktop'' ''start'' ''off''$'
 ! stdout '^open '
-exec sh -c 'grep "^desktop_" "$DESK_dir/state"'
-stdout '^desktop_password=[a-z2-9]{8}$'
-stdout '^desktop_port=[0-9]+$'
+exec sh -c 'grep -E "\"desktop\": [0-9]|\"password\": " "$DESK_dir/vm.json"'
+stdout '^ *"password": "[a-z2-9]{8}"$'
+stdout '^ *"desktop": [0-9]+,?$'
 cp stdout $WORK/state1
 
 # A running VM, the clipboard asked for: the same password and port. On
@@ -61,7 +61,7 @@ cp stdout $WORK/state1
 # about.
 stub_reset
 ! exec devvm desktop --clipboard &d&
-exec sh $WORK/waitfor 'nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$WORK/state1")"'
+exec sh $WORK/waitfor 'nc -z 127.0.0.1 "$(sed -n "s/^ *\"desktop\": \([0-9][0-9]*\).*/\1/p" "$WORK/state1")"'
 [darwin] exec sh $WORK/waitfor 'grep -q "^open " "$STUB_LOG"'
 kill -INT d
 wait d
@@ -70,7 +70,7 @@ stub_calls
 stdout 'exec ''/usr/local/bin/devvm-desktop'' ''start'' ''on''$'
 [darwin] stdout '^open vnc://127\.0\.0\.1:[0-9]+$'
 [!darwin] ! stdout '^open '
-exec sh -c 'grep "^desktop_" "$DESK_dir/state"'
+exec sh -c 'grep -E "\"desktop\": [0-9]|\"password\": " "$DESK_dir/vm.json"'
 cmp stdout $WORK/state1
 [darwin] exec sh -c ': > "$STUB_DIR/open-fails" && : > "$STUB_LOG"'
 [darwin] ! exec devvm desktop &d&
@@ -83,7 +83,7 @@ cmp stdout $WORK/state1
 
 # The VM stops: so does devvm desktop, saying so.
 exec devvm desktop --no-open &d&
-exec sh $WORK/waitfor 'nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$WORK/state1")"'
+exec sh $WORK/waitfor 'nc -z 127.0.0.1 "$(sed -n "s/^ *\"desktop\": \([0-9][0-9]*\).*/\1/p" "$WORK/state1")"'
 exec limactl stop $DESK
 wait d
 stdout '^==> desktop_vm_stopped vm=devvm-desk-[0-9a-f]{14}$'

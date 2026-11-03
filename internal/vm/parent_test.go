@@ -96,8 +96,8 @@ func TestLookupParents(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st.Get(state.KeyDir) == src {
-			if err := st.Set(state.KeyFolder, "1:2"); err != nil {
+		if st.Dir == src {
+			if err := set(t, st, keyFolder, "1:2"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -200,7 +200,7 @@ func TestShellDir(t *testing.T) {
 	if got := p.shellDir(t.Context(), io.Discard); got != src {
 		t.Errorf("shellDir = %q, want %q", got, src)
 	}
-	if err := p.st.Set(KeyMode, ModeClone); err != nil {
+	if err := set(t, p.st, KeyMode, ModeClone); err != nil {
 		t.Fatal(err)
 	}
 	var missing bool
@@ -292,7 +292,7 @@ func TestWidenParentVM(t *testing.T) {
 	if err := (Net{e}).SetNetwork(t.Context(), true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if err := st.Set(gitprotect.KeyGitProtect, gitprotect.On); err != nil {
+	if err := set(t, st, keyGitProtect, gitprotect.On); err != nil {
 		t.Fatal(err)
 	}
 	subfolder(t, e, web, "src")
@@ -304,7 +304,7 @@ func TestWidenParentVM(t *testing.T) {
 	}{
 		{
 			"devvm network off", func() error { return n.SetNetwork(t.Context(), false) },
-			func() bool { return reread(t, e, vm).Get(KeyNet) == "off" },
+			func() bool { return get(reread(t, e, vm), KeyNet) == "off" },
 		},
 		{
 			"devvm secret use", func() error { return n.SecretUse(t.Context(), "github", true) },
@@ -320,7 +320,7 @@ func TestWidenParentVM(t *testing.T) {
 		},
 		{
 			"devvm git-protect off", func() error { return s.SetGitProtect(t.Context(), gitprotect.Off) },
-			func() bool { return reread(t, e, vm).Get(gitprotect.KeyGitProtect) == gitprotect.Off },
+			func() bool { return gitprotect.Mode(reread(t, e, vm)) == gitprotect.Off },
 		},
 	}
 	for _, c := range cases {

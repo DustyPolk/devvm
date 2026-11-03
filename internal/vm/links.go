@@ -23,29 +23,21 @@ import (
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
-// Keys of a VM's state for links between VMs.
-const (
-	// KeyPublish is the ports and ranges the VM offers to links from the
-	// user's other VMs (ParsePorts, never all); unset for none.
-	KeyPublish = "publish"
-	// KeyLinks is the VM's links, as a client: formatLinks's entries.
-	KeyLinks = "links"
-)
-
-// Link is one of a client VM's links: the client reaches the target's
-// Port at Name (and Name under proxy.LinkDomain), on Addr, the address it
-// has for that target (proxy.IsLinkAddr).
+// Link is one of a client VM's links, as its links section holds them:
+// the client reaches the target's Port at Name (and Name under
+// proxy.LinkDomain), on Addr, the address it has for that target
+// (proxy.IsLinkAddr).
 type Link struct {
-	Name     string     // one DNS label (CheckLinkName)
-	Port     int        // the target's port, which the client listens on too
-	Target   string     // the target VM's name
-	TargetID string     // the target's state.KeyID when the link was made
-	Addr     netip.Addr // in 127.77.0.0/16, one per target in this client
-	Group    bool       // the client's group made it (groupLinks), not devvm link add
+	Name     string     `json:"name"`            // one DNS label (CheckLinkName)
+	Port     int        `json:"port"`            // the target's port, which the client listens on too
+	Target   string     `json:"target"`          // the target VM's name
+	TargetID string     `json:"target_id"`       // the target's state.VM.ID when the link was made
+	Addr     netip.Addr `json:"addr"`            // in 127.77.0.0/16, one per target in this client
+	Group    bool       `json:"group,omitempty"` // the client's group made it (groupLinks), not devvm link add
 }
 
-// linkGroupMark is the sixth field of a link's entry that its group made.
-const linkGroupMark = "group"
+// linksOf is a VM's links section (sectionOf).
+func linksOf(st *state.VM) linksInVM { return sectionOf[linksInVM](st, linksSection) }
 
 // linkName is a link's name: one DNS label, in lowercase.
 var linkName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -79,61 +71,37 @@ func ParsePublish(v string) (string, error) {
 	return l, nil
 }
 
-// ReadLinks returns a client VM's links, sorted by name, then port.
+// ReadLinks returns a client VM's links, sorted by name, then port. A
+// link that isn't one (checkLink) is an error naming the VM.
 func ReadLinks(st *state.VM) ([]Link, error) {
-	var out []Link
-	for e := range strings.FieldsSeq(st.Get(KeyLinks)) {
-		l, err := parseLink(e)
-		if err != nil {
+	l, err := state.Section[linksInVM](st, linksSection)
+	if err != nil {
+		return nil, err
+	}
+	out := slices.Clone(l.Links)
+	for _, l := range out {
+		if err := checkLink(l); err != nil {
 			return nil, fmt.Errorf("%s's links: %w", st.Name(), err)
 		}
-		out = append(out, l)
 	}
 	sortLinks(out)
 	return out, nil
 }
 
-// parseLink reads one of formatLinks's entries:
-// NAME,PORT,TARGET,TARGET_ID,ADDR, then ,group for one its group made.
-func parseLink(e string) (Link, error) {
-	f := strings.Split(e, ",")
-	group := len(f) == 6 && f[5] == linkGroupMark
-	if len(f) != 5 && !group {
-		return Link{}, fmt.Errorf("%q isn't NAME,PORT,TARGET,ID,ADDR[,group]", e)
-	}
-	port, perr := ParseLinkPort(f[1])
-	addr, aerr := netip.ParseAddr(f[4])
+// checkLink refuses a link whose name, port, target or address isn't
+// one.
+func checkLink(l Link) error {
 	switch {
-	case CheckLinkName(f[0]) != nil:
-		return Link{}, fmt.Errorf("%q: the name %q", e, f[0])
-	case perr != nil:
-		return Link{}, fmt.Errorf("%q: the port %q", e, f[1])
-	case !vmname.IsVM(f[2]) || f[3] == "":
-		return Link{}, fmt.Errorf("%q: the target %q, %q", e, f[2], f[3])
-	case aerr != nil || !proxy.IsLinkAddr(addr) || addr != addr.Unmap():
-		return Link{}, fmt.Errorf("%q: the address %q", e, f[4])
+	case CheckLinkName(l.Name) != nil:
+		return fmt.Errorf("the name %q", l.Name)
+	case !backend.ValidPort(l.Port):
+		return fmt.Errorf("%s: the port %d", l.Name, l.Port)
+	case !vmname.IsVM(l.Target) || l.TargetID == "":
+		return fmt.Errorf("%s: the target %q, %q", l.Name, l.Target, l.TargetID)
+	case !proxy.IsLinkAddr(l.Addr) || l.Addr != l.Addr.Unmap():
+		return fmt.Errorf("%s: the address %q", l.Name, l.Addr)
 	}
-	return Link{Name: f[0], Port: port, Target: f[2], TargetID: f[3], Addr: addr, Group: group}, nil
-}
-
-// formatLinks is links as KeyLinks holds them: space-separated entries,
-// each formatLink's.
-func formatLinks(links []Link) string {
-	es := make([]string, len(links))
-	for i, l := range links {
-		es[i] = formatLink(l)
-	}
-	return strings.Join(es, " ")
-}
-
-// formatLink is one link's entry: NAME,PORT,TARGET,TARGET_ID,ADDR, then
-// ,group when its group made it.
-func formatLink(l Link) string {
-	f := []string{l.Name, strconv.Itoa(l.Port), l.Target, l.TargetID, l.Addr.String()}
-	if l.Group {
-		f = append(f, linkGroupMark)
-	}
-	return strings.Join(f, ",")
+	return nil
 }
 
 func sortLinks(links []Link) {
@@ -141,9 +109,10 @@ func sortLinks(links []Link) {
 }
 
 // writeLinks records a client VM's links in its state.
-func writeLinks(st *state.VM, links []Link) error {
+func writeLinks(ctx context.Context, st *state.VM, links []Link) error {
+	links = slices.Clone(links)
 	sortLinks(links)
-	return st.Set(KeyLinks, formatLinks(links))
+	return update(ctx, st, linksSection, func(l *linksInVM) error { l.Links = links; return nil })
 }
 
 // linkAddr returns the client's address for a target (its VM name and
@@ -177,8 +146,8 @@ const (
 // grouped reports whether a link a group made still has that group: the
 // client and the target are in the same one.
 func grouped(client, target *state.VM) bool {
-	g := client.Get(KeyGroup)
-	return g != "" && target.Get(KeyGroup) == g
+	g := groupOf(client)
+	return g != "" && groupOf(target) == g
 }
 
 // CheckLink reports why a client's link doesn't apply, from the states
@@ -191,7 +160,7 @@ func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error
 		return "", nil, err
 	case !tst.Exists():
 		return LinkGone, tst, nil
-	case tst.Get(state.KeyID) != l.TargetID:
+	case tst.ID != l.TargetID:
 		return LinkReplaced, tst, nil
 	case !Published(tst, l.Port):
 		return LinkUnpublished, tst, nil
@@ -204,9 +173,10 @@ func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error
 }
 
 // Published reports whether a VM publishes port.
-func Published(st *state.VM, port int) bool { return publishedIn(st.Get(KeyPublish), port) }
+func Published(st *state.VM, port int) bool { return publishedIn(linksOf(st).Publish, port) }
 
-// publishedIn reports whether ports, as KeyPublish holds them, has port.
+// publishedIn reports whether ports, as linksInVM.Publish holds them, has
+// port.
 func publishedIn(ports string, port int) bool {
 	if ports == "" || ports == settings.PortsNone {
 		return false
@@ -240,7 +210,7 @@ func (e Links) linkVM(ctx context.Context) (*found, error) { return e.folderVM(c
 func (e Links) changeLinks(ctx context.Context, t *found, links, added []Link, said func()) error {
 	runs := linkRuns(e)
 	from := runs.logSize(t.f.Name)
-	if err := writeLinks(t.st, links); err != nil {
+	if err := writeLinks(ctx, t.st, links); err != nil {
 		return err
 	}
 	said()
@@ -252,10 +222,10 @@ func (e Links) changeLinks(ctx context.Context, t *found, links, added []Link, s
 }
 
 // publishChanged names the clients that link to ports of target t that it
-// published before (old, as KeyPublish had it) and doesn't now: their next
-// connections to those ports are refused.
+// published before (old, as its links section had it) and doesn't now:
+// their next connections to those ports are refused.
 func (e Links) publishChanged(t *found, old string) error {
-	id := t.st.Get(state.KeyID)
+	id := t.st.ID
 	clients, err := linkClients(e.Dirs, t.f.Name, id, func(_ *state.VM, l Link) bool {
 		return publishedIn(old, l.Port) && !Published(t.st, l.Port)
 	})
@@ -272,7 +242,7 @@ func (e Links) publishChanged(t *found, old string) error {
 // (warnUnenforced): those links' connections are refused until t starts
 // again.
 func (e Links) publishUnenforced(ctx context.Context, t *found, old string) error {
-	clients, err := linkClients(e.Dirs, t.f.Name, t.st.Get(state.KeyID), func(c *state.VM, l Link) bool {
+	clients, err := linkClients(e.Dirs, t.f.Name, t.st.ID, func(c *state.VM, l Link) bool {
 		return netpolicy.On(c) && !publishedIn(old, l.Port) && Published(t.st, l.Port)
 	})
 	if err != nil {
@@ -301,7 +271,7 @@ func (e Links) projectVMs() ([]project.Recorded, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, project.Recorded{Name: n, Alias: st.Get(state.KeyAlias), Dir: st.Get(state.KeyDir)})
+		out = append(out, project.Recorded{Name: n, Alias: st.Alias, Dir: st.Dir})
 	}
 	return out, nil
 }
@@ -339,8 +309,8 @@ func (e Links) resolve(target string) (string, error) {
 	shown := make([]string, len(vms))
 	for i, vm := range vms {
 		dir := "-"
-		if st, err := state.ReadVM(e.Dirs, vm); err == nil && st.Get(state.KeyDir) != "" {
-			dir = st.Get(state.KeyDir)
+		if st, err := state.ReadVM(e.Dirs, vm); err == nil && st.Dir != "" {
+			dir = st.Dir
 		}
 		shown[i] = vm + " in " + dir
 	}
@@ -374,7 +344,7 @@ func (e Links) List(ctx context.Context) ([]LinkListed, error) {
 		if err != nil {
 			return nil, err
 		}
-		ll := LinkListed{Name: l.Name, Target: l.Target, Port: l.Port, Reason: why, Folder: tst.Get(state.KeyDir)}
+		ll := LinkListed{Name: l.Name, Target: l.Target, Port: l.Port, Reason: why, Folder: tst.Dir}
 		if tst.Exists() {
 			s, ok := status[l.Target]
 			if !ok {
@@ -391,7 +361,7 @@ func (e Links) List(ctx context.Context) ([]LinkListed, error) {
 // targetStatus is a target's status as its backend reports it: "" when it
 // can't say, or doesn't have the VM.
 func (e Links) targetStatus(ctx context.Context, tst *state.VM) string {
-	c, err := e.Registry.For(e.Dirs, tst)
+	c, err := e.Registry.For(tst)
 	if err != nil {
 		return ""
 	}
@@ -437,7 +407,7 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	}
 	// The user's own links decide the name; the group's follow it.
 	own := ownLinks(links)
-	id := tst.Get(state.KeyID)
+	id := tst.ID
 	name, err := linkNameFor(t, own, target, id, cmp.Or(a.As, linkedName(links, target, id)))
 	if err != nil {
 		return err
@@ -480,7 +450,7 @@ func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error)
 	if err != nil {
 		return nil, err
 	}
-	if tst.Get(state.KeyID) == "" || tst.Get(KeyNet) == "" {
+	if !tst.Finished() {
 		return nil, msg.VMUnfinished(target)
 	}
 	if !Published(tst, port) {
@@ -489,7 +459,7 @@ func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error)
 	if netpolicy.On(t.st) && !netpolicy.On(tst) {
 		return nil, msg.LinkPolicyMismatch(target, t.f.Name)
 	}
-	c, err := e.Registry.For(e.Dirs, tst)
+	c, err := e.Registry.For(tst)
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +533,7 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 			return err
 		}
 		if why != LinkGone && why != LinkReplaced && why != LinkUngrouped {
-			return msg.LinkFromGroup(t.st.Get(KeyGroup), gone.Name, strconv.Itoa(port), t.f.Name)
+			return msg.LinkFromGroup(groupOf(t.st), gone.Name, strconv.Itoa(port), t.f.Name)
 		}
 	}
 	// The group's links follow: a member's port the user linked gets the
@@ -588,7 +558,7 @@ func (e Links) Published(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return cmp.Or(t.st.Get(KeyPublish), settings.PortsNone), nil
+	return cmp.Or(linksOf(t.st).Publish, settings.PortsNone), nil
 }
 
 // Publish offers list's ports and ranges (ParsePublish) to links from the
@@ -603,24 +573,29 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	if err != nil {
 		return err
 	}
-	old := cmp.Or(t.st.Get(KeyPublish), settings.PortsNone)
-	var ports string
 	if publish {
 		if ok, err := t.widen(e.Env, "devvm link publish"); !ok {
 			return err
 		}
-		ports, err = AddPorts(old, l)
-	} else {
-		ports, err = dropPorts(old, l, msg.PortNotPublished)
 	}
-	if err != nil {
+	// Worked out from the state as it is under the VM's lock, so another
+	// devvm's change meanwhile is kept.
+	var old, ports string
+	err = update(ctx, t.st, linksSection, func(s *linksInVM) error {
+		old = cmp.Or(s.Publish, settings.PortsNone)
+		var err error
+		if publish {
+			ports, err = AddPorts(old, l)
+		} else {
+			ports, err = dropPorts(old, l, msg.PortNotPublished)
+		}
+		s.Publish = ports
+		if ports == settings.PortsNone {
+			s.Publish = ""
+		}
 		return err
-	}
-	stored := ports
-	if ports == settings.PortsNone {
-		stored = ""
-	}
-	if err := t.st.Set(KeyPublish, stored); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	// The group's other members get links to the ports at once, or lose

@@ -7,7 +7,7 @@ This page explains how devvm confines a VM to its proxy, what the proxy does wit
 
 ## Starting a VM with network policy
 
-A VM's state records its choice as `net=on` or `net=off`. When devvm starts a VM with network policy, it takes these steps in order:
+A VM's state records its choice in its `net` section, as `"on": true` or `"on": false`. When devvm starts a VM with network policy, it takes these steps in order:
 
 1. It makes its CA, unless it has one with over a week left, and on macOS it keeps the CA out of Time Machine.
 2. It writes the VM's [secrets](#secrets) as the VM's proxy sees them.
@@ -214,7 +214,7 @@ Network policy holds only while the VM runs on the process that devvm started co
 1. That the VM still runs on the process devvm started. The VM can't fake this check.
 2. That a direct connection from the VM to the internet fails. The VM answers this check, so it catches only the honest case.
 
-devvm records the result in the VM's state, as `net_check=ok` or `net_check=unenforced`. When the check fails, what devvm does depends on why:
+devvm records the result in the VM's state, as `ok` or `unenforced` in the `net` section's `made.check`. When the check fails, what devvm does depends on why:
 
 - **The VM wasn't started confined,** because it was started outside devvm or has been running since before `devvm network on`. In a terminal, devvm offers to restart the VM confined (`net_unenforced_restart`), and if you decline, it warns you and goes on (`net_unenforced`). Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell (`net_unenforced_stop`). The next `devvm` starts the VM confined.
 - **The VM was started confined, yet it gets out,** because it reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help, so devvm stops the VM and ends (`net_direct_route`).
@@ -225,8 +225,8 @@ This is the check, and what devvm does when it fails:
 flowchart TD
   launch["every launch"] --> proc["on the process<br>devvm started?"]
   proc -- "yes" --> direct["a direct connection<br>from the VM fails?"]
-  direct -- "yes" --> ok["net_check=ok"]
-  proc -- "no" --> un["net_check=unenforced"]
+  direct -- "yes" --> ok["check: ok"]
+  proc -- "no" --> un["check: unenforced"]
   direct -- "no" --> un
   un --> confined["started confined?"]
   confined -- "yes: another<br>way out" --> route["stops the VM<br>and ends"]
@@ -235,7 +235,7 @@ flowchart TD
   term -- "yes" --> offer["restart it confined?"]
   offer -- "no" --> warn["warns, goes on"]
   offer -- "yes" --> again["enforced now?"]
-  again -- "yes" --> ok2["net_check=ok"]
+  again -- "yes" --> ok2["check: ok"]
   again -- "no" --> stop
 ```
 

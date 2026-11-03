@@ -14,11 +14,21 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Size is a VM's size as devvm stores it: CPUs a whole number, memory and
-// disk in GiB (decimals allowed). "" is unset.
+// Size is a VM's size as devvm stores it, its state's size section (what
+// was asked for): CPUs a whole number, memory and disk in GiB (decimals
+// allowed). "" is unset: the image's.
 type Size struct {
-	CPUs, Memory, Disk string
+	CPUs   string `json:"cpus,omitempty"`
+	Memory string `json:"memory,omitempty"`
+	Disk   string `json:"disk,omitempty"`
 }
+
+// The parts of a size, as devvm size shows them and base.yaml names them.
+const (
+	KeyCPUs   = "cpus"
+	KeyMemory = "memory" // GiB
+	KeyDisk   = "disk"   // GiB
+)
 
 // Parse checks every size set, as flags give them.
 func (s Size) Parse() (Size, error) {
@@ -116,7 +126,7 @@ func (s Size) Backend() backend.Size {
 // lacks: zero where it matches. Disks only grow, so a smaller one asked
 // for is had.
 func pendingSize(st *state.VM, has backend.Size) backend.Size {
-	want := Size{CPUs: st.Get(KeyCPUs), Memory: st.Get(KeyMemory), Disk: st.Get(KeyDisk)}.Backend()
+	want := sectionOf[Size](st, sizeSection).Backend()
 	var p backend.Size
 	if want.CPUs != 0 && want.CPUs != has.CPUs {
 		p.CPUs = want.CPUs
@@ -144,11 +154,6 @@ func SizeText(s backend.Size) string {
 		f = append(f, KeyDisk+"="+strconv.FormatFloat(s.DiskGiB, 'g', -1, 64)+"GiB")
 	}
 	return strings.Join(f, " ")
-}
-
-// fields returns a size's keys and values, as a VM's state has them.
-func (s Size) fields() [][2]string {
-	return [][2]string{{KeyCPUs, s.CPUs}, {KeyMemory, s.Memory}, {KeyDisk, s.Disk}}
 }
 
 // applySize makes a stopped VM's size what its state asks for, where it
@@ -267,13 +272,13 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	if err := s.Check(host, in.Size.DiskGiB, vm); err != nil {
 		return err
 	}
-	for _, kv := range s.fields() {
-		if kv[1] == "" {
-			continue
-		}
-		if err := st.Set(kv[0], kv[1]); err != nil {
-			return err
-		}
+	// What s sets, at once; what it doesn't set stays as asked before.
+	err = update(ctx, st, sizeSection, func(had *Size) error {
+		*had = s.Or(*had)
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	if err := e.applySize(ctx, b, st, in); err != nil {
 		return err

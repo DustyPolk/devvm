@@ -66,7 +66,7 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 		if err != nil {
 			return r, err
 		}
-		bname := st.Get(state.KeyBackend)
+		bname := st.Backend
 		b, ok := e.Registry.Lookup(bname)
 		if !ok {
 			r.unknown(bname)
@@ -103,7 +103,7 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 			r.Recent = append(r.Recent, n)
 			continue
 		}
-		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Get(state.KeyDir), Changed: fi.ModTime()})
+		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Dir, Changed: fi.ModTime()})
 	}
 	if r.Links, err = deadLinks(e.Dirs); err != nil {
 		return r, err
@@ -190,8 +190,8 @@ func gone(ctx context.Context, b backend.Backend, vm string) (bool, error) {
 // the backend looks in its default place.
 func madeHere(st *state.VM, b backend.Backend) bool {
 	cur, isDefault := backend.LocationOf(b)
-	if at := st.Get(KeyBackendAt); at != "" {
-		return at == cur
+	if st.BackendAt != "" {
+		return st.BackendAt == cur
 	}
 	return isDefault
 }
@@ -205,7 +205,7 @@ func (e Leftovers) Forget(ctx context.Context, o Orphan) error {
 	if err != nil {
 		return err
 	}
-	b, ok := e.Registry.Lookup(st.Get(state.KeyBackend))
+	b, ok := e.Registry.Lookup(st.Backend)
 	if !st.Exists() || !ok || b.Name() != o.Backend {
 		return fmt.Errorf("%s: its state changed", o.Name)
 	}
@@ -214,6 +214,6 @@ func (e Leftovers) Forget(ctx context.Context, o Orphan) error {
 	} else if !isGone {
 		return fmt.Errorf("%s: its backend has it", o.Name)
 	}
-	t := &found{f: project.Folder{Name: o.Name, Dir: st.Get(state.KeyDir)}, st: st, b: b}
+	t := &found{f: project.Folder{Name: o.Name, Dir: st.Dir}, st: st, b: b}
 	return vmFolders(e).teardown(ctx, t, true)
 }

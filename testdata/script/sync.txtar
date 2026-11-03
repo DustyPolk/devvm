@@ -79,8 +79,8 @@ stdout devvm-redacted
 stdout '"OPENAI_API_KEY": *"sk-devvm-proxy-managed'
 ! stdout projects
 vm_name NET net
-exec sh -c 'salt=$(sed -n "s/^proxy_salt=//p" "$NET_dir/state"); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
-exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$NET_dir/state"); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
+exec sh -c 'salt=$(sed -n "s/.*\"proxy_salt\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm.json"); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
+exec sh -c 'key=$(sed -n "s/.*\"proxy_key\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm.json"); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
 cmp $HOME/.codex/auth.json $WORK/codex.json
 cmp $HOME/.claude.json $WORK/claude.json
 
@@ -113,7 +113,7 @@ exec devvm --no-network-policy --no-git-protect
 # The report tools.sh writes when it fails, listing each file named ('' for
 # the VM's first tool image) after lines of its own, and with a last line
 # cut short.
-first=$(sed -n 's/^tools=//p' "$FAILS_dir/state")
+first=$(sed -n '/"files": \[/{n;s/.*"\([^"]*\)".*/\1/p;}' "$FAILS_dir/vm.json")
 {
   echo "devvm-tools: can't mount something"
   printf '%s\n' "${first%% *} and more"

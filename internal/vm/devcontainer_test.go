@@ -16,7 +16,6 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/state"
 )
 
 // devcontainerEnv is up on a fake backend with a devcontainer.json in the
@@ -70,15 +69,15 @@ func TestUpDevcontainer(t *testing.T) {
 	}
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	for k, want := range map[string]string{
-		state.KeyFrom: "node@sha256:" + strings.Repeat("a", 64), KeyPorts: "5173",
+		keyFrom: "node@sha256:" + strings.Repeat("a", 64), KeyPorts: "5173",
 		KeyDevcontainerCreate: "", KeyDevcontainerEnv: `[{"name":"A","value":"'web'"}]`,
 	} {
-		if got := st.Get(k); got != want {
+		if got := get(st, k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}
-	if !strings.HasSuffix(st.Get(KeyDevcontainer), " .devcontainer.json") {
-		t.Errorf("devcontainer = %q", st.Get(KeyDevcontainer))
+	if !strings.HasSuffix(get(st, KeyDevcontainer), " .devcontainer.json") {
+		t.Errorf("devcontainer = %q", get(st, KeyDevcontainer))
 	}
 	cmds, dirs := commandsRun(f)
 	if want := []string{"touch x", "sh -c echo hi"}; !slices.Equal(cmds, want) {
@@ -271,11 +270,8 @@ func TestChooseNetSaved(t *testing.T) {
 
 func TestDevcontainerEnvFromState(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	st, err := state.CreateVM(e.Dirs, "devvm-x-0123456789abcd", state.NewVM{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Set(KeyDevcontainerEnv, `[{"name":"A","value":"'x'"},{"name":"B;rm","value":"'y'"}]`); err != nil {
+	st := vmState(t, e.Dirs, "devvm-x-0123456789abcd")
+	if err := set(t, st, KeyDevcontainerEnv, `[{"name":"A","value":"'x'"},{"name":"B;rm","value":"'y'"}]`); err != nil {
 		t.Fatal(err)
 	}
 	got, err := devcontainerEnv(st)

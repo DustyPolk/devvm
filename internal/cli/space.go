@@ -460,7 +460,7 @@ func (e spaceEnv) vmFolders() (orphans, rest []string, err error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		if have, asked := e.vms[st.Get(state.KeyBackend)]; asked && !have[n] {
+		if have, asked := e.vms[st.Backend]; asked && !have[n] {
 			orphans = append(orphans, n)
 		} else {
 			rest = append(rest, n)

@@ -13,7 +13,6 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
 )
 
 // rm asks first in a terminal and refuses without one, unless --force;
@@ -104,7 +103,7 @@ func TestRm(t *testing.T) {
 
 	// Another folder at the same path.
 	st = existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true})
-	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
+	if err := set(t, st, keyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
 	asked := answers(t, e, false)
@@ -276,7 +275,7 @@ func TestAdopt(t *testing.T) {
 	if err := lc.Adopt(t.Context(), false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
+	if err := set(t, st, keyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.Up(t.Context(), Options{}); msg.NamesOf(err) != "vm_other_folder vm="+st.Name()+" was="+e.Dir {
@@ -294,7 +293,7 @@ func TestAdopt(t *testing.T) {
 		t.Errorf("Up adopted = %v", msg.NamesOf(err))
 	}
 	// --force adopts without asking, and without a terminal.
-	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
+	if err := set(t, st, keyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
 	e.Terminal = func() bool { return false }

@@ -43,23 +43,29 @@ exists $XDG_DATA_HOME/devvm/tools
 vm_name WEB web
 exec sh -c 'cat "$WEB_dir/backend/ports.known_hosts" "$WEB_dir/backend/ports"; grep -c "^$WEB $(cut -d" " -f2- "$WEB_dir/backend/ports.known_hosts")$" "$XDG_DATA_HOME"/devvm/known_hosts'
 stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\nall\n1\n\z'
-catg $WEB_dir/state
+vm_state $WEB_dir/vm.json
+stdout '^version=1$'
+stdout '^id=[0-9a-f]{32}$'
 stdout '^name=devvm-web-[0-9a-f]{14}$'
+stdout '^alias=devvm-web$'
 stdout '^image=base$'
 stdout '^dir=/\S*/web$'
 stdout '^folder=[0-9]+:[0-9]+'
 stdout '^chain=base=[0-9a-f]{12}$'
 stdout '^backend=lima$'
-stdout '^net=off$'
-stdout '^libc=gnu$'
-! stdout '^tools='
-[darwin] stdout '^git_protect=on$'
-[darwin] stdout '^git_inode=[0-9]+$'
-[linux] stdout '^git_protect=off$'
-! stdout 'cpus=|memory=|disk=|ports='
+stdout '^created=\d{4}-'
+stdout '^net.on=false$'
+stdout '^tools.made.libc=gnu$'
+! stdout '^tools.made.files='
+[darwin] stdout '^git.mode=on$'
+[darwin] stdout '^git.made.git_id=[0-9]+:[0-9]+$'
+[darwin] stdout '^git.made.protected=true$'
+[linux] stdout '^git.mode=off$'
+! stdout '^size\.|^ports\.forward='
+stdout '^ports.host.ssh=[1-9][0-9]+$'
 # Its ssh port is devvm's, recorded before the clone that sets it, so
 # other VMs' forwarders never take it.
-exec sh -c 'p=$(sed -n "s/^ssh_port=//p" "$WEB_dir/state") && grep -c -- "^limactl clone .* --set \.ssh\.localPort=$p " "$STUB_LOG"'
+exec sh -c 'p=$(sed -n "s/.*\"ssh\": \([0-9]*\).*/\1/p" "$WEB_dir/vm.json") && grep -c -- "^limactl clone .* --set \.ssh\.localPort=$p " "$STUB_LOG"'
 stdout '^1$'
 # limactl ran from devvm's data folder, never the project folder.
 exec cat $STUB_DIR/limactl-env
@@ -85,8 +91,8 @@ stderr '^devvm: ssh_remote_hint vm=devvm-api-[0-9a-f]{14}$'
 stub_calls
 ! stdout chflags
 vm_name API api
-catg $API_dir/state
-stdout '^git_protect=off$'
+vm_state $API_dir/vm.json
+stdout '^git.mode=off$'
 
 # Launches run no docker, which only --from uses, for a new VM or an
 # existing one.
@@ -121,9 +127,9 @@ stdout '^limactl delete -f devvm-slow-[0-9a-f]{14}$'
 ! stdout 'delete -f devvm-(web|api)'
 ! stdout 'nouchg /\S*/(web|api)/'
 ! stdout 'limactl shell --workdir'
-exec sh -c 'cat "$VMS"/*/state'
+exec sh -c 'cat "$VMS"/*/vm.json'
 ! stdout devvm-slow
-stdout '^name=devvm-web-'
+stdout '"name": "devvm-web-'
 exec sh -c 'grep -c devvm-slow "$STUB_DIR/instances" || true'
 stdout '^0$'
 rm $STUB_DIR/start-hangs
@@ -163,9 +169,9 @@ exec devvm --no-network-policy --no-git-protect --no-input
 stdout '^==> new_vm_gets layers=none tools=node codex vm=devvm-dflt-[0-9a-f]{14}$'
 stdout -count=1 new_vm_gets
 vm_name DFLT dflt
-catg $DFLT_dir/state
+vm_state $DFLT_dir/vm.json
 stdout '^image=base$'
-stdout '^tool_names=node codex$'
+stdout '^tools.names=node codex$'
 
 # Each flag is the exact list for its part, none for none, and the rest
 # keep their defaults.
@@ -174,9 +180,9 @@ exec sh -c 'echo "{}" > package.json'
 exec devvm --no-network-policy --no-git-protect --tools go --agents none
 stdout '^==> new_vm_gets layers=none tools=go vm=devvm-flags-[0-9a-f]{14}$'
 vm_name FLAGS flags
-catg $FLAGS_dir/state
+vm_state $FLAGS_dir/vm.json
 stdout '^image=base$'
-stdout '^tool_names=go$'
+stdout '^tools.names=go$'
 project nonetools git
 exec sh -c 'echo "{}" > package.json'
 exec devvm --no-network-policy --no-git-protect --tools none

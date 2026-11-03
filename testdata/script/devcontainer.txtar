@@ -81,13 +81,15 @@ exec tar -xOf $STUB_DIR/sync.tar env
 stdout '\Aexport GREETING=''it''\\''''s web''\nexport PATH="\$\{PATH\}"'':/opt/web''\n'
 # Its state.
 vm_name WEB web
-catg $WEB_dir/state
-stdout '^devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json$'
+vm_state $WEB_dir/vm.json
+stdout '^devcontainer.file=\.devcontainer/devcontainer\.json$'
+stdout '^devcontainer.sum=[0-9a-f]{64}$'
 stdout '^from=node@sha256:a{64}$'
 stdout '^image=docker\+extra$'
-stdout '^ports=none$'
-stdout '^devcontainer_create=$'
-stdout '^devcontainer_start=\[\{"name":"postStartCommand","argv":\["sh","-c","echo started >> ~/started"\]\}\]$'
+stdout '^ports.forward=none$'
+stdout '^devcontainer.made.created=true$'
+stdout '^devcontainer.start.0.name=postStartCommand$'
+stdout '^devcontainer.start.0.argv=sh -c echo started >> ~/started$'
 # Nothing in the project folder but what was there.
 exec ls -A
 cmp stdout $WORK/web-ls
@@ -149,8 +151,8 @@ cp $WORK/build.json .devcontainer.json
 exec devvm --no-network-policy --no-devcontainer
 ! stdout devcontainer_using
 vm_name SKIP skip
-catg $SKIP_dir/state
-stdout '^devcontainer=off$'
+vm_state $SKIP_dir/vm.json
+stdout '^devcontainer.off=true$'
 cp $WORK/web.json .devcontainer.json
 exec devvm
 ! stderr devcontainer
@@ -159,8 +161,8 @@ exec devvm
 project plain
 exec devvm --no-network-policy
 vm_name PLAIN plain
-catg $PLAIN_dir/state
-stdout '^devcontainer=none$'
+vm_state $PLAIN_dir/vm.json
+! stdout '^devcontainer\.'
 cp $WORK/web.json .devcontainer.json
 exec devvm
 stderr '^devvm: devcontainer_new file=\.devcontainer\.json vm=devvm-plain-[0-9a-f]{14}$'
@@ -173,9 +175,9 @@ exec devvm --no-network-policy --from $PIN --ports 8080
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=ports key=forwardPorts$'
 vm_name FLAGS flags
-catg $FLAGS_dir/state
+vm_state $FLAGS_dir/vm.json
 stdout '^from=node:24@sha256:a{64}$'
-stdout '^ports=8080$'
+stdout '^ports.forward=8080$'
 
 -- digests.json --
 {"digests": {"node:24": "node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}

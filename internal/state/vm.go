@@ -1,16 +1,22 @@
 package state
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
+	"path/filepath"
 	"slices"
-	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
@@ -33,7 +39,7 @@ func VMNames(d paths.Dirs) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if v.Exists() && v.Name() != "" {
+		if v.Exists() {
 			names = append(names, v.Name())
 		}
 	}
@@ -54,38 +60,15 @@ func Backends(d paths.Dirs) (map[string]bool, error) {
 		if err != nil {
 			return nil, err
 		}
-		if name := st.Get(KeyBackend); name != "" {
-			used[name] = true
-		}
+		used[st.Backend] = true
 	}
 	return used, nil
 }
 
-// Keys of a VM's state. Other lowercase keys (a-z, 0-9, _) may be set too.
-const (
-	// KeyName is the VM's name, chosen when it's made for the backend it's
-	// made on (project.New), and never again: a folder's VM is found by
-	// its hash (ReadHash), whatever name that backend gave it.
-	KeyName = "name"
-	// KeyAlias is the name ssh and editors reach it by besides its own,
-	// chosen when it's made (sshconfig.ChooseAlias), and never again.
-	KeyAlias = "alias"
-	KeyImage = "image" // the image the VM was made from: base, or its layers joined with +
-	KeyDir   = "dir"   // the project folder
-	// KeyToolNames is the VM's shared tools by name, space-separated, in
-	// their order (image.SortTools): node claude. Its tool images are
-	// KeyTools in internal/vm.
-	KeyToolNames = "tool_names"
-	KeyFolder    = "folder"  // the project folder's identity, to notice it was replaced
-	KeyChain     = "chain"   // its image's build chain
-	KeyFrom      = "from"    // the image its base started from, if not the default
-	KeyBackend   = "backend" // the backend running it
-	// KeyID is a random ID CreateVM gives every VM, so a link can tell a
-	// VM made again in the same folder from the one it linked.
-	KeyID = "id"
-)
+// vmVersion is the version of vm.json's format that this devvm writes.
+const vmVersion = 1
 
-// newID is a VM's KeyID: 128 random bits, in hex.
+// newID is a VM's ID: 128 random bits, in hex.
 func newID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -94,42 +77,91 @@ func newID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-// VM is one VM's state, a key=value file in its folder. It lives as long
-// as the VM: creating a VM replaces it, and removing the VM removes it.
+// VM is one VM's state, vm.json in its folder (paths.VM.State): the core
+// fields every VM has, here, and one section for each package that keeps
+// something of the VM's (net, git, ports…), which that package decodes
+// into its own type (Section) and changes (SetSection) inside Update.
+// It lives as long as the VM: creating a VM replaces it, and removing the
+// VM removes it. Reads take no lock: every write replaces the file whole.
 type VM struct {
-	name string
-	// path is its state file; "" for a name whose folder is another VM's
-	// (ReadVM), which is never written.
-	path   string
-	kv     kv
+	// ID is a random ID Create gives every VM, so a link can tell a VM
+	// made again in the same folder from the one it linked.
+	ID string
+	// Alias is the name ssh and editors reach it by besides its own,
+	// chosen when it's made (sshconfig.ChooseAlias), and never again.
+	Alias  string
+	Image  string // the image the VM was made from: base, or its layers joined with +
+	Chain  string // its image's build chain
+	From   string // the image its base started from, if not the default
+	Dir    string // the project folder
+	Folder string // the project folder's identity (platform.FolderID), to notice it was replaced
+	// Backend is the backend running it; BackendAt where that backend
+	// kept it when it was made (backend.LocationOf), "" on a backend
+	// whose VMs can't move.
+	Backend, BackendAt string
+	// Created is when its backend finished making it: zero for a VM whose
+	// creation didn't finish, which never starts.
+	Created time.Time
+
+	// name is the VM's name, chosen when it's made for the backend it's
+	// made on (project.New), and never again: a folder's VM is found by
+	// its hash (ReadHash), whatever name that backend gave it.
+	name     string
+	sections map[string]json.RawMessage
+	// file is its folder's files; Dir "" for a name whose folder is
+	// another VM's (ReadVM), which is never written.
+	file   paths.VM
+	claims string // the claims lock (paths.Dirs.ClaimsLock)
 	exists bool
 }
 
-// NewVM is what a VM's state starts with: Tools are its shared tools'
-// names, Alias the name ssh reaches it by (KeyAlias).
-type NewVM struct {
-	Image, Dir, Folder, Chain, From, Backend, Alias string
-	Tools                                           []string
+// core is vm.json's core fields, as the file has them.
+type core struct {
+	Version   int       `json:"version"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Alias     string    `json:"alias,omitempty"`
+	Image     string    `json:"image"`
+	Chain     string    `json:"chain,omitempty"`
+	From      string    `json:"from,omitempty"`
+	Dir       string    `json:"dir"`
+	Folder    string    `json:"folder,omitempty"`
+	Backend   string    `json:"backend"`
+	BackendAt string    `json:"backend_at,omitempty"`
+	Created   time.Time `json:"created,omitzero"`
+}
+
+// coreFields are the names of core's fields, which no section takes.
+func coreFields() []string {
+	return []string{"version", "id", "name", "alias", "image", "chain", "from", "dir", "folder", "backend", "backend_at", "created"}
+}
+
+// New is a new VM's state, not written yet: Create writes it, once its
+// fields and sections are set.
+func New(d paths.Dirs, name string) (*VM, error) {
+	if !vmname.IsVM(name) {
+		return nil, fmt.Errorf("invalid VM name %q", name)
+	}
+	return &VM{name: name, file: d.VM(name), claims: d.ClaimsLock()}, nil
 }
 
 // ReadHash reads the state in the VM folder named by hash (a project
 // folder's, project.Hash). A folder with no state file has empty state:
-// every key reads as "", Name too, and Exists reports false.
+// every field is empty, Name too, and Exists reports false.
 func ReadHash(d paths.Dirs, hash string) (*VM, error) {
 	if !vmname.IsHash(hash) {
 		return nil, fmt.Errorf("invalid VM hash %q", hash)
 	}
-	v := &VM{path: paths.VM{Dir: d.VMDir(hash)}.State()}
+	v := &VM{file: paths.VM{Dir: d.VMDir(hash)}, claims: d.ClaimsLock()}
 	if err := v.load(); err != nil {
 		return nil, err
 	}
-	v.name = v.kv.get(KeyName)
 	return v, nil
 }
 
 // ReadVM reads the state of the project VM named name, in the folder its
-// name's hash names. A VM with no state file has empty state: every key
-// reads as "", and Exists reports false; so does one whose folder records
+// name's hash names. A VM with no state file has empty state: every field
+// is empty, and Exists reports false; so does one whose folder records
 // another name, whose state is never written through this one.
 func ReadVM(d paths.Dirs, name string) (*VM, error) {
 	h, ok := vmname.HashOf(name)
@@ -140,62 +172,88 @@ func ReadVM(d paths.Dirs, name string) (*VM, error) {
 	if err != nil {
 		return nil, err
 	}
-	if v.exists && v.name != "" && v.name != name {
-		return &VM{name: name, kv: newKV()}, nil
+	if v.exists && v.name != name {
+		return &VM{name: name}, nil
 	}
 	v.name = name
 	return v, nil
 }
 
+// load reads the VM's state file again, into v.
 func (v *VM) load() error {
-	if v.path == "" {
-		v.kv, v.exists = newKV(), false
-		return nil
-	}
-	k, err := readKV(v.path, isWord)
+	data, err := os.ReadFile(v.file.State())
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		v.kv, v.exists = newKV(), false
+		*v = VM{name: v.name, file: v.file, claims: v.claims}
 		return nil
 	case err != nil:
 		return err
 	}
-	v.kv, v.exists = k, true
+	return v.decode(data)
+}
+
+// decode reads a state file's contents into v: a file that isn't a JSON
+// object, or lacks a core field, is a CorruptError.
+func (v *VM) decode(data []byte) error {
+	path := v.file.State()
+	var all map[string]json.RawMessage
+	var c core
+	if err := json.Unmarshal(data, &all); err != nil || all == nil {
+		return &CorruptError{Path: path, Reason: "not a JSON object"}
+	}
+	if err := json.Unmarshal(data, &c); err != nil {
+		return &CorruptError{Path: path, Reason: err.Error()}
+	}
+	for f, missing := range map[string]bool{
+		"version": c.Version < 1, "id": c.ID == "", "name": !vmname.IsVM(c.Name),
+		"image": c.Image == "", "dir": c.Dir == "", "backend": c.Backend == "",
+	} {
+		if missing {
+			return &CorruptError{Path: path, Reason: "no " + f}
+		}
+	}
+	for _, f := range coreFields() {
+		delete(all, f)
+	}
+	*v = VM{
+		ID: c.ID, Alias: c.Alias, Image: c.Image, Chain: c.Chain, From: c.From, Dir: c.Dir, Folder: c.Folder,
+		Backend: c.Backend, BackendAt: c.BackendAt, Created: c.Created,
+		name: c.Name, sections: all, file: v.file, claims: v.claims, exists: true,
+	}
 	return nil
 }
 
-// CreateVM writes a new project VM's state, replacing any its folder had,
-// with its name, its alias and a new KeyID.
-func CreateVM(d paths.Dirs, name string, n NewVM) (*VM, error) {
-	if !vmname.IsVM(name) {
-		return nil, fmt.Errorf("invalid VM name %q", name)
-	}
-	id, err := newID()
+// encode is v as its state file has it: the core fields, then the
+// sections by name, indented.
+func (v *VM) encode() ([]byte, error) {
+	c, err := json.Marshal(core{
+		Version: vmVersion, ID: v.ID, Name: v.name, Alias: v.Alias, Image: v.Image, Chain: v.Chain, From: v.From,
+		Dir: v.Dir, Folder: v.Folder, Backend: v.Backend, BackendAt: v.BackendAt, Created: v.Created,
+	})
 	if err != nil {
 		return nil, err
 	}
-	v := &VM{name: name, path: d.VM(name).State(), kv: newKV()}
-	for _, p := range [][2]string{
-		{KeyName, name},
-		{KeyAlias, n.Alias},
-		{KeyID, id},
-		{KeyImage, n.Image},
-		{KeyToolNames, strings.Join(n.Tools, " ")},
-		{KeyDir, n.Dir},
-		{KeyFolder, n.Folder},
-		{KeyChain, n.Chain},
-		{KeyFrom, n.From},
-		{KeyBackend, n.Backend},
-	} {
-		if err := checkPair(p[0], p[1], isWord); err != nil {
-			return nil, err
-		}
-		v.kv.set(p[0], p[1])
+	var b bytes.Buffer
+	b.Write(c[:len(c)-1]) // without its }
+	names := make([]string, 0, len(v.sections))
+	for n := range v.sections {
+		names = append(names, n)
 	}
-	if err := v.write(); err != nil {
+	slices.Sort(names)
+	for _, n := range names {
+		k, _ := json.Marshal(n)
+		b.WriteByte(',')
+		b.Write(k)
+		b.WriteByte(':')
+		b.Write(v.sections[n])
+	}
+	b.WriteByte('}')
+	var out bytes.Buffer
+	if err := json.Indent(&out, b.Bytes(), "", "  "); err != nil {
 		return nil, err
 	}
-	return v, nil
+	out.WriteByte('\n')
+	return out.Bytes(), nil
 }
 
 // Name is the VM's name.
@@ -204,54 +262,163 @@ func (v *VM) Name() string { return v.name }
 // Exists reports whether the VM has a state file.
 func (v *VM) Exists() bool { return v.exists }
 
-// Get returns a key's value, or "" when it isn't set.
-func (v *VM) Get(key string) string { return v.kv.get(key) }
+// Finished reports whether the VM's creation finished (Created).
+func (v *VM) Finished() bool { return v.exists && !v.Created.IsZero() }
 
-// ToolNames returns the VM's shared tools by name (KeyToolNames): node
-// claude.
-func (v *VM) ToolNames() []string {
-	if v.Get(KeyToolNames) == "" {
-		return nil
+// Section decodes the VM's section name into a T: the zero T when it has
+// none. A section that isn't a T is a CorruptError naming the file.
+func Section[T any](v *VM, name string) (T, error) {
+	var t T
+	raw, ok := v.sections[name]
+	if !ok {
+		return t, nil
 	}
-	return strings.Fields(v.Get(KeyToolNames))
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return t, &CorruptError{Path: v.file.State(), Reason: name + ": " + err.Error()}
+	}
+	return t, nil
 }
 
-// Set sets a key and writes the state file. It reads the file again first,
-// so keys another devvm set since are kept.
-func (v *VM) Set(key, val string) error {
-	if err := checkPair(key, val, isWord); err != nil {
+// SetSection sets the VM's section name to val, in v alone: Update writes
+// it. A val that encodes as {} removes the section.
+func SetSection(v *VM, name string, val any) error {
+	if slices.Contains(coreFields(), name) {
+		return fmt.Errorf("%q is a core field, not a section", name)
+	}
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(val); err != nil {
 		return err
 	}
-	if v.path == "" {
+	raw := bytes.TrimSuffix(b.Bytes(), []byte("\n"))
+	if string(raw) == "{}" || string(raw) == "null" {
+		delete(v.sections, name)
+		return nil
+	}
+	if v.sections == nil {
+		v.sections = map[string]json.RawMessage{}
+	}
+	v.sections[name] = raw
+	return nil
+}
+
+// Create writes a new VM's whole state (New), replacing any its folder
+// had, with a new ID, under the VM's lock. claim, when it isn't nil,
+// runs first under the claims lock too, which is held until the state is
+// written: what it chooses that no two VMs may have (the VM's ssh alias)
+// it reads from the others' states, which no other devvm changes
+// meanwhile.
+func (v *VM) Create(ctx context.Context, claim func(*VM) error) error {
+	id, err := newID()
+	if err != nil {
+		return err
+	}
+	return v.locked(ctx, claim != nil, func() error {
+		if claim != nil {
+			if err := claim(v); err != nil {
+				return err
+			}
+		}
+		v.ID = id
+		return v.write()
+	})
+}
+
+// Update changes the VM's state under its lock (paths.VM.Lock): it reads
+// the state again, so what another devvm wrote meanwhile is kept, applies
+// f, and writes the state once, so a command's changes land together or
+// not at all. A failed f writes nothing. v then holds the state as
+// written, or as read when f or the write failed. A VM without state, or whose folder
+// records another name, is refused. f takes no other lock.
+func (v *VM) Update(ctx context.Context, f func(*VM) error) error {
+	return v.update(ctx, false, f)
+}
+
+// Claim is Update holding the claims lock too, until the state is
+// written: f chooses what no two VMs may have (a host port), reading the
+// other VMs' states, which no other devvm changes meanwhile.
+func (v *VM) Claim(ctx context.Context, f func(*VM) error) error {
+	return v.update(ctx, true, f)
+}
+
+func (v *VM) update(ctx context.Context, claims bool, f func(*VM) error) error {
+	if v.file.Dir == "" {
 		return fmt.Errorf("%s: its folder is another VM's", v.name)
 	}
-	if err := v.load(); err != nil {
+	name := v.name
+	return v.locked(ctx, claims, func() error {
+		if err := v.load(); err != nil {
+			return err
+		}
+		if !v.exists || v.name != name {
+			v.name = name
+			return fmt.Errorf("%s: no state: %w", name, fs.ErrNotExist)
+		}
+		was := *v
+		was.sections = maps.Clone(v.sections)
+		err := f(v)
+		if err == nil {
+			err = v.write()
+		}
+		if err != nil {
+			*v = was
+		}
+		return err
+	})
+}
+
+// locked runs f holding the VM's lock, and with claims the claims lock
+// after it.
+func (v *VM) locked(ctx context.Context, claims bool, f func() error) error {
+	if err := PrivateDir(v.file.Dir); err != nil {
 		return err
 	}
-	if v.kv.get(KeyName) == "" && v.name != "" {
-		v.kv.set(KeyName, v.name)
+	unlock, err := platform.LockFile(ctx, v.file.Lock())
+	if err != nil {
+		return err
 	}
-	v.kv.set(key, val)
-	return v.write()
+	defer unlock()
+	if claims {
+		if err := PrivateDir(filepath.Dir(v.claims)); err != nil {
+			return err
+		}
+		unclaim, err := platform.LockFile(ctx, v.claims)
+		if err != nil {
+			return err
+		}
+		defer unclaim()
+	}
+	return f()
 }
 
 func (v *VM) write() error {
-	if err := writeFile(v.path, v.kv.bytes()); err != nil {
+	data, err := v.encode()
+	if err != nil {
+		return err
+	}
+	if err := writeFile(v.file.State(), data); err != nil {
 		return err
 	}
 	v.exists = true
 	return nil
 }
 
-// Remove deletes the VM's state file, if it has one: the rest of its
-// folder is its teardown's.
-func (v *VM) Remove() error {
-	if v.path == "" {
+// Remove deletes the VM's state file under its lock, if it has one: the
+// rest of its folder is its teardown's.
+func (v *VM) Remove(ctx context.Context) error {
+	if v.file.Dir == "" {
 		return nil
 	}
-	if err := removeFile(v.path); err != nil {
-		return err
+	if _, err := os.Stat(v.file.State()); errors.Is(err, fs.ErrNotExist) {
+		*v = VM{name: v.name, file: v.file, claims: v.claims}
+		return nil
 	}
-	v.kv, v.exists = newKV(), false
-	return nil
+	return v.locked(ctx, false, func() error {
+		if err := removeFile(v.file.State()); err != nil {
+			return err
+		}
+		*v = VM{name: v.name, file: v.file, claims: v.claims}
+		return nil
+	})
 }

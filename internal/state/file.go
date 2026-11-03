@@ -1,13 +1,11 @@
 // Package state reads and writes the files devvm keeps its state in: each
-// VM's state, image and tool image records, rebuild counters, the cached
-// --from digests and the config files.
+// VM's state (vm.json), image and tool image records, rebuild counters and
+// the cached --from digests.
 //
-// The records, the counters and the digests are JSON only devvm writes
-// (json.go): fields a reader doesn't know are ignored. Most of the rest are
-// key=value files: one pair per line, split at the first '=', so values
-// may hold '=' but not newlines. Blank lines are skipped. Every write
-// replaces the whole file atomically (a temporary file, then a rename), so a
-// reader never sees half a file. Files are private to the user (0600, or
+// All of them are JSON only devvm writes (json.go): fields a reader
+// doesn't know are ignored. Every write replaces the whole file atomically
+// (a temporary file, then a rename), so a reader never sees half a file
+// and reads take no lock; a VM's state changes under its lock (VM.Update). Files are private to the user (0600, or
 // 0700 for a program devvm runs: WriteFileMode), and so are the folders
 // devvm creates for them (0700: PrivateDir). Every file devvm writes
 // whole goes through WriteFile or WriteFileMode, but for those of the
@@ -17,7 +15,6 @@
 package state
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -39,84 +36,6 @@ func (e *CorruptError) Error() string {
 		return fmt.Sprintf("%s: %s", e.Path, e.Reason)
 	}
 	return fmt.Sprintf("%s:%d: %s", e.Path, e.Line, e.Reason)
-}
-
-// kv is a key=value file's pairs, in file order.
-type kv struct {
-	keys []string
-	vals map[string]string
-}
-
-func newKV() kv { return kv{vals: map[string]string{}} }
-
-func (k *kv) get(key string) string { return k.vals[key] }
-
-func (k *kv) set(key, val string) {
-	if _, ok := k.vals[key]; !ok {
-		k.keys = append(k.keys, key)
-	}
-	k.vals[key] = val
-}
-
-func (k *kv) bytes() []byte {
-	var b bytes.Buffer
-	for _, key := range k.keys {
-		b.WriteString(key)
-		b.WriteByte('=')
-		b.WriteString(k.vals[key])
-		b.WriteByte('\n')
-	}
-	return b.Bytes()
-}
-
-// lines splits a file into lines, without their line endings.
-func lines(data []byte) []string {
-	s := strings.ReplaceAll(string(data), "\r\n", "\n")
-	return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-}
-
-// parseKV reads a key=value file's contents. validKey says which keys the
-// file may hold.
-func parseKV(path string, data []byte, validKey func(string) bool) (kv, error) {
-	k := newKV()
-	for i, line := range lines(data) {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		key, val, ok := strings.Cut(line, "=")
-		switch {
-		case !ok:
-			return kv{}, &CorruptError{path, i + 1, "not key=value"}
-		case !validKey(key):
-			return kv{}, &CorruptError{path, i + 1, fmt.Sprintf("unknown key %q", key)}
-		}
-		if _, dup := k.vals[key]; dup {
-			return kv{}, &CorruptError{path, i + 1, fmt.Sprintf("%s is set twice", key)}
-		}
-		k.set(key, val)
-	}
-	return k, nil
-}
-
-// readKV reads a key=value file. A missing file is an error that matches
-// fs.ErrNotExist.
-func readKV(path string, validKey func(string) bool) (kv, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // paths come from paths.Dirs
-	if err != nil {
-		return kv{}, err
-	}
-	return parseKV(path, data, validKey)
-}
-
-// checkPair refuses a pair that wouldn't read back as written.
-func checkPair(key, val string, validKey func(string) bool) error {
-	if !validKey(key) {
-		return fmt.Errorf("invalid state key %q", key)
-	}
-	if strings.ContainsAny(val, "\n\r") {
-		return fmt.Errorf("state value for %s has a line break", key)
-	}
-	return nil
 }
 
 // MakePrivate makes devvm's data and config folders, and makes both the
@@ -216,18 +135,4 @@ func checkName(what, name string) error {
 		return fmt.Errorf("invalid %s %q", what, name)
 	}
 	return nil
-}
-
-// isWord reports whether s is a lowercase word: a-z first, then a-z, 0-9
-// or _.
-func isWord(s string) bool {
-	if s == "" || s[0] < 'a' || s[0] > 'z' {
-		return false
-	}
-	for _, c := range s {
-		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' {
-			return false
-		}
-	}
-	return true
 }

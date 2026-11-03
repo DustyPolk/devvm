@@ -21,7 +21,8 @@ json_set $SHARE/go-1.2.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima 
 
 # A Lima VM that's gone, so Lima is used; then Lima stops answering.
 mkdir $VMS/12345612345612
-exec sh -c 'printf "name=devvm-gone-12345612345612\nimage=base\ndir=/p/gone\nbackend=lima\nnet=off\n" > "$VMS/12345612345612/state" && touch -t 202001010000 "$VMS/12345612345612/state"'
+json_set $VMS/12345612345612/vm.json version:=1 id=x name=devvm-gone-12345612345612 image=base dir=/p/gone backend=lima created=2020-01-01T00:00:00Z net.on:=false
+exec touch -t 202001010000 $VMS/12345612345612/vm.json
 exec sh -c 'touch "$STUB_DIR/list-fails"'
 
 exec devvm gc --force --orphans
@@ -30,7 +31,7 @@ stderr '^gc_orphans_unknown backend=lima$'
 ! stderr gc_failed
 ! stdout '^gc_image '
 ! stdout '^gc_orphan'
-exists $VMS/12345612345612/state
+exists $VMS/12345612345612/vm.json
 exists $SHARE/go-1.2.0-0123456789ab.erofs
 exists $SHARE/go-1.3.0-0123456789ab.erofs
 

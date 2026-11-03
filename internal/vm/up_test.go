@@ -12,9 +12,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
-	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -54,14 +52,14 @@ func TestUp(t *testing.T) {
 	// Without network policy too, its ssh port is devvm's: recorded, made
 	// with it and started on it.
 	c, _ := start.Args[1].(backend.Confinement)
-	if sp := st.Get(netpolicy.KeySSHPort); c.Net != backend.NetDirect || sp == "" || strconv.Itoa(c.SSHPort) != sp || strconv.Itoa(spec.SSHPort) != sp {
+	if sp := get(st, keySSHPort); c.Net != backend.NetDirect || sp == "" || strconv.Itoa(c.SSHPort) != sp || strconv.Itoa(spec.SSHPort) != sp {
 		t.Errorf("Start confinement = %+v, VMSpec's ssh port %d, state's %q", c, spec.SSHPort, sp)
 	}
 	for k, v := range map[string]string{
-		state.KeyImage: "base", state.KeyDir: e.Dir, state.KeyBackend: "fake", KeyNet: "off", KeyCPUs: "2",
-		KeyPorts: "none", gitprotect.KeyGitProtect: "on",
+		keyImage: "base", keyDir: e.Dir, keyBackend: "fake", KeyNet: "off", KeyCPUs: "2",
+		KeyPorts: "none", keyGitProtect: "on",
 	} {
-		if got := st.Get(k); got != v {
+		if got := get(st, k); got != v {
 			t.Errorf("state %s = %q, want %q", k, got, v)
 		}
 	}
@@ -106,12 +104,12 @@ func TestUpNetworkPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, _ := call(f, "Start").Args[1].(backend.Confinement)
-	if c.Net != backend.NetProxy || c.ProxyPassword != st.Get(netpolicy.KeyProxyKey) ||
-		strconv.Itoa(c.ProxyPort) != st.Get(netpolicy.KeyProxyPort) || strconv.Itoa(c.SSHPort) != st.Get(netpolicy.KeySSHPort) {
+	if c.Net != backend.NetProxy || c.ProxyPassword != get(st, keyProxyKey) ||
+		strconv.Itoa(c.ProxyPort) != get(st, keyProxyPort) || strconv.Itoa(c.SSHPort) != get(st, keySSHPort) {
 		t.Errorf("Start confinement = %+v", c)
 	}
-	if st.Get(KeyNet) != "on" || st.Get(netpolicy.KeyCheck) != "ok" {
-		t.Errorf("state net=%q net_check=%q", st.Get(KeyNet), st.Get(netpolicy.KeyCheck))
+	if get(st, KeyNet) != "on" || get(st, keyCheck) != "ok" {
+		t.Errorf("state net=%q net_check=%q", get(st, KeyNet), get(st, keyCheck))
 	}
 	if _, ok := e.Proxy.PID(spec.Name); !ok {
 		t.Error("its proxy doesn't run")
@@ -138,8 +136,8 @@ func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 		t.Error("left running")
 	}
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if st.Get(netpolicy.KeyCheck) != "unenforced" {
-		t.Errorf("net_check = %q", st.Get(netpolicy.KeyCheck))
+	if get(st, keyCheck) != "unenforced" {
+		t.Errorf("net_check = %q", get(st, keyCheck))
 	}
 }
 
@@ -153,8 +151,8 @@ func TestUpKeepsTheNetworkChoice(t *testing.T) {
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if st.Get(KeyNet) != "on" || slices.Contains(f.Methods(), "Start") {
-		t.Errorf("net=%q, calls %q", st.Get(KeyNet), f.Methods())
+	if get(st, KeyNet) != "on" || slices.Contains(f.Methods(), "Start") {
+		t.Errorf("net=%q, calls %q", get(st, KeyNet), f.Methods())
 	}
 }
 
@@ -195,8 +193,8 @@ func TestUpWithoutEgressProxy(t *testing.T) {
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if st.Get(KeyNet) != "off" || !slices.Contains(warned.Names(), "net_off_backend backend=fake vm="+spec.Name) {
-		t.Errorf("net=%q, warned %q", st.Get(KeyNet), warned.Names())
+	if get(st, KeyNet) != "off" || !slices.Contains(warned.Names(), "net_off_backend backend=fake vm="+spec.Name) {
+		t.Errorf("net=%q, warned %q", get(st, KeyNet), warned.Names())
 	}
 }
 
@@ -236,8 +234,8 @@ func TestUpTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Get(state.KeyImage) != "base" || !slices.Equal(st.ToolNames(), []string{"node", "claude"}) || st.Get(KeyLibc) != "gnu" || st.Get(KeyTools) != strings.Join(files, " ") {
-		t.Errorf("state image=%q tool_names=%q libc=%q tools=%q", st.Get(state.KeyImage), st.ToolNames(), st.Get(KeyLibc), st.Get(KeyTools))
+	if get(st, keyImage) != "base" || !slices.Equal(tools.Names(st), []string{"node", "claude"}) || get(st, KeyLibc) != "gnu" || get(st, KeyTools) != strings.Join(files, " ") {
+		t.Errorf("state image=%q tool_names=%q libc=%q tools=%q", get(st, keyImage), tools.Names(st), get(st, KeyLibc), get(st, KeyTools))
 	}
 	// Made from base's image: the tools aren't layers.
 	if img, _ := call(f, "CreateVM").Args[0].(string); img != call(f, "BuildImage").Args[0].(backend.ImageSpec).Key {
@@ -323,8 +321,8 @@ func TestUpParts(t *testing.T) {
 			}
 			spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 			st, _ := state.ReadVM(e.Dirs, spec.Name)
-			if st.Get(state.KeyImage) != tc.img || st.Get(state.KeyToolNames) != tc.tools {
-				t.Errorf("image=%q tool_names=%q, want %q and %q", st.Get(state.KeyImage), st.Get(state.KeyToolNames), tc.img, tc.tools)
+			if get(st, keyImage) != tc.img || get(st, keyToolNames) != tc.tools {
+				t.Errorf("image=%q tool_names=%q, want %q and %q", get(st, keyImage), get(st, keyToolNames), tc.img, tc.tools)
 			}
 			if !slices.Contains(said.Names(), "new_vm_gets "+tc.gets+" vm="+spec.Name) {
 				t.Errorf("said %q, want new_vm_gets %s", said.Names(), tc.gets)
@@ -442,8 +440,8 @@ func TestUpPicker(t *testing.T) {
 	// setup's layers keep their order, bottom first, under the one added.
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if st.Get(state.KeyImage) != "nix+desktop+docker" || st.Get(state.KeyToolNames) != "node python codex" {
-		t.Errorf("image=%q tool_names=%q", st.Get(state.KeyImage), st.Get(state.KeyToolNames))
+	if get(st, keyImage) != "nix+desktop+docker" || get(st, keyToolNames) != "node python codex" {
+		t.Errorf("image=%q tool_names=%q", get(st, keyImage), get(st, keyToolNames))
 	}
 	if slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets") }) {
 		t.Errorf("said %q", said.Names())

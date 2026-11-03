@@ -65,8 +65,8 @@ exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 free_port P Q
 exec devvm --no-network-policy --no-git-protect
 vm_name WEB web
-catg $WEB_dir/state
-! stdout '^ports'
+vm_state $WEB_dir/vm.json
+! stdout '^ports\.forward'
 exec devvm ports
 stdout '\Aall\n\z'
 ! stderr .
@@ -109,8 +109,8 @@ exec devvm ports rm $P
 stdout '^==> ports_now ports=8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 exec devvm ports rm 8000-8010
 stdout '^==> ports_now ports=none vm=devvm-web-[0-9a-f]{14}$'
-catg $WEB_dir/state
-stdout '^ports=none$'
+vm_state $WEB_dir/vm.json
+stdout '^ports\.forward=none$'
 ! exec devvm ports rm 5173
 stderr '^devvm: port_not_listed port=5173 ports=none$'
 ! exec devvm ports 0

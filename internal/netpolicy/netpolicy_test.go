@@ -25,11 +25,12 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // sandbox returns devvm's folders in a temporary folder, and a VM's state
@@ -43,11 +44,79 @@ func sandbox(t *testing.T, img string, tools ...string) (paths.Dirs, *state.VM) 
 	root := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", root) // the run log
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	st, err := state.CreateVM(d, "devvm-web-0123456789abcd", state.NewVM{Image: img, Tools: tools, Dir: "/w", Backend: "fake"})
+	return d, newVM(t, d, "devvm-web-0123456789abcd", img, tools...)
+}
+
+// newVM writes the state of a VM named name, made from img with these
+// shared tools, as up does.
+func newVM(t *testing.T, d paths.Dirs, name, img string, names ...string) *state.VM {
+	t.Helper()
+	st, err := state.New(d, name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d, st
+	st.Image, st.Dir, st.Backend, st.Created = img, "/w", "fake", time.Now()
+	if err := tools.Set(st, tools.InVM{Names: names}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Create(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// change changes a VM's state as f says, as devvm does.
+func change(t *testing.T, st *state.VM, f func(*state.VM) error) {
+	t.Helper()
+	if err := st.Update(t.Context(), f); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// setNet sets a VM's network policy section as f says.
+func setNet(t *testing.T, st *state.VM, f func(*Net)) {
+	t.Helper()
+	change(t, st, func(st *state.VM) error {
+		n, err := Of(st)
+		if err != nil {
+			return err
+		}
+		f(&n)
+		return Set(st, n)
+	})
+}
+
+// netOf is a VM's network policy section.
+func netOf(t *testing.T, st *state.VM) Net {
+	t.Helper()
+	n, err := Of(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// hostPorts is the host ports devvm chose for a VM.
+func hostPorts(t *testing.T, st *state.VM) ports.Host {
+	t.Helper()
+	p, err := ports.Of(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.Host
+}
+
+// setPorts sets a VM's ports section as f says.
+func setPorts(t *testing.T, st *state.VM, f func(*ports.Ports)) {
+	t.Helper()
+	change(t, st, func(st *state.VM) error {
+		p, err := ports.Of(st)
+		if err != nil {
+			return err
+		}
+		f(&p)
+		return ports.Set(st, p)
+	})
 }
 
 // A VM with network policy reaches only itself without its proxy: its
@@ -121,14 +190,11 @@ func TestEveryPartHasAPolicy(t *testing.T) {
 // of its placeholders), kept.
 func TestKeyAndSalt(t *testing.T) {
 	d, a := sandbox(t, "base")
-	b, err := state.CreateVM(d, "devvm-api-0123456789abc7", state.NewVM{Image: "base", Dir: "/a", Backend: "fake"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ka, _ := Key(a)
-	kb, _ := Key(b)
-	sa, _ := Salt(a)
-	sb, _ := Salt(b)
+	b := newVM(t, d, "devvm-api-0123456789abc7", "base")
+	ka, _ := Key(t.Context(), a)
+	kb, _ := Key(t.Context(), b)
+	sa, _ := Salt(t.Context(), a)
+	sb, _ := Salt(t.Context(), b)
 	for v, re := range map[string]string{ka: `^[0-9a-f]{64}$`, kb: `^[0-9a-f]{64}$`, sa: `^[0-9a-f]{32}$`, sb: `^[0-9a-f]{32}$`} {
 		if !regexp.MustCompile(re).MatchString(v) {
 			t.Errorf("%q doesn't match %s", v, re)
@@ -138,7 +204,7 @@ func TestKeyAndSalt(t *testing.T) {
 		t.Errorf("keys %s %s, salts %s %s: not each its own", ka, kb, sa, sb)
 	}
 	again, _ := state.ReadVM(d, a.Name())
-	if k, _ := Key(again); k != ka {
+	if k, _ := Key(t.Context(), again); k != ka {
 		t.Errorf("key not kept: %s, then %s", ka, k)
 	}
 	claude, _ := secrets.Lookup("claude")
@@ -181,83 +247,6 @@ func TestChoose(t *testing.T) {
 	}
 	if want := "net_about vm=vm,net_ask,net_about vm=vm,net_ask"; strings.Join(said, ",") != want {
 		t.Errorf("said %v, want %s", said, want)
-	}
-}
-
-// UsedPorts lists the ports VMs have; freePort avoids them.
-func TestFreePort(t *testing.T) {
-	d, st := sandbox(t, "base")
-	if err := st.Set(KeySSHPort, "23456"); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Set(KeyProxyPort, "34567"); err != nil {
-		t.Fatal(err)
-	}
-	used, err := UsedPorts(d, "")
-	if err != nil || !used[23456] || !used[34567] || len(used) != 2 {
-		t.Errorf("UsedPorts = %v, %v", used, err)
-	}
-	// And the ports VMs forward, entries that aren't ports skipped: all
-	// and none name none.
-	if err := st.Set(keyPorts, "5173,40000-40002, 41000, bad,9-1"); err != nil {
-		t.Fatal(err)
-	}
-	used, err = UsedPorts(d, "")
-	if err != nil || len(used) != 7 || !used[5173] || !used[40000] || !used[40002] || !used[41000] {
-		t.Errorf("UsedPorts with forwards = %v, %v", used, err)
-	}
-	// The VM's own forwarder: its listed ports aren't reserved from it,
-	// its ssh and proxy ports are.
-	used, err = UsedPorts(d, st.Name())
-	if err != nil || len(used) != 2 || !used[23456] || !used[34567] {
-		t.Errorf("UsedPorts for its own forwarder = %v, %v", used, err)
-	}
-	if err := st.Set(keyPorts, "all"); err != nil {
-		t.Fatal(err)
-	}
-	if got := forwarded(st); len(got) != 0 {
-		t.Errorf("forwarded with all = %v", got)
-	}
-	p := &Proxy{Dirs: d, Listening: func(_ context.Context, port int) bool { return port%2 == 0 }}
-	for range 200 {
-		port, err := p.freePort(t.Context())
-		if r := platform.ChoosablePorts(); err != nil || port < r.Lo || port > r.Hi || port%2 == 0 || used[port] {
-			t.Fatalf("freePort = %d, %v", port, err)
-		}
-	}
-}
-
-// A VM's ssh port: chosen once and recorded, kept while it's free, or
-// while the VM runs on it; a stopped VM gets a new one when another
-// program has it, or it lists it to forward.
-func TestSSHPort(t *testing.T) {
-	d, st := sandbox(t, "base")
-	taken := 0
-	p := &Proxy{Dirs: d, Listening: func(_ context.Context, port int) bool { return port == taken || port%2 == 0 }}
-	sp, err := p.SSHPort(t.Context(), st, false)
-	if err != nil || sp == 0 || sp%2 == 0 || st.Get(KeySSHPort) != strconv.Itoa(sp) {
-		t.Fatalf("new: %d, %v, state %q", sp, err, st.Get(KeySSHPort))
-	}
-	if got, err := p.SSHPort(t.Context(), st, false); err != nil || got != sp {
-		t.Errorf("free: %d, %v, want %d", got, err, sp)
-	}
-	// Another program has it: kept while the VM runs (its backend has
-	// it), a new one once it's stopped.
-	taken = sp
-	if got, err := p.SSHPort(t.Context(), st, true); err != nil || got != sp {
-		t.Errorf("running: %d, %v, want %d", got, err, sp)
-	}
-	got, err := p.SSHPort(t.Context(), st, false)
-	if err != nil || got == sp || st.Get(KeySSHPort) != strconv.Itoa(got) {
-		t.Errorf("taken: %d (had %d), %v, state %q", got, sp, err, st.Get(KeySSHPort))
-	}
-	// One of its own forwards.
-	sp = got
-	if err := st.Set(keyPorts, strconv.Itoa(sp)); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := p.SSHPort(t.Context(), st, false); err != nil || got == sp || st.Get(KeySSHPort) != strconv.Itoa(got) {
-		t.Errorf("forwarded: %d (had %d), %v", got, sp, err)
 	}
 }
 
@@ -385,9 +374,8 @@ func TestPrepare(t *testing.T) {
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	key := st.Get(KeyProxyKey)
-	sp, _ := strconv.Atoi(st.Get(KeySSHPort))
-	pp, _ := strconv.Atoi(st.Get(KeyProxyPort))
+	key := netOf(t, st).Made.ProxyKey
+	sp, pp := hostPorts(t, st).SSH, hostPorts(t, st).Proxy
 	if conf.Net != backend.NetProxy || conf.ProxyPassword != key || key == "" ||
 		conf.ProxyPort != pp || pp == 0 || conf.SSHPort != sp || sp == 0 || sp == pp || conf.Env["NO_PROXY"] != "localhost,127.0.0.1,::1" {
 		t.Errorf("confinement = %+v", conf)
@@ -422,7 +410,7 @@ func TestPrepare(t *testing.T) {
 		}
 	}
 	// The key and salt are in no process's arguments.
-	if strings.Contains(args, key) || strings.Contains(args, st.Get(KeyProxySalt)) {
+	if strings.Contains(args, key) || strings.Contains(args, netOf(t, st).Made.ProxySalt) {
 		t.Errorf("the proxy's arguments hold its key or salt: %q", args)
 	}
 	auth := files.Proxy(".auth")
@@ -447,11 +435,9 @@ func TestPrepare(t *testing.T) {
 	// Its ssh port is one of its own forwards now: a new one, as its
 	// backend would refuse it.
 	p.Stop(st.Name())
-	if err := st.Set(keyPorts, st.Get(KeySSHPort)); err != nil {
-		t.Fatal(err)
-	}
+	setPorts(t, st, func(p *ports.Ports) { p.Forward = strconv.Itoa(p.Host.SSH) })
 	conf, err = p.Prepare(t.Context(), lima, st, false)
-	if err != nil || conf.SSHPort == sp || st.Get(KeySSHPort) != strconv.Itoa(conf.SSHPort) {
+	if err != nil || conf.SSHPort == sp || hostPorts(t, st).SSH != conf.SSHPort {
 		t.Errorf("forwarded ssh port: %d (had %d), %v", conf.SSHPort, sp, err)
 	}
 }
@@ -481,7 +467,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		}
 	}
 	prepare(false)
-	pp := st.Get(KeyProxyPort)
+	pp := strconv.Itoa(hostPorts(t, st).Proxy)
 	prepare(true)
 	if f.count() != 1 {
 		t.Fatalf("a running VM's proxy started again: %d starts", f.count())
@@ -494,8 +480,10 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		},
 		// Its built-in policies change, then its files alone (a layer of
 		// the user's).
-		func() { _ = st.Set(state.KeyToolNames, "node claude") },
-		func() { _ = st.Set(state.KeyImage, "pg") },
+		func() {
+			change(t, st, func(st *state.VM) error { return tools.Set(st, tools.InVM{Names: []string{"node", "claude"}}) })
+		},
+		func() { change(t, st, func(st *state.VM) error { st.Image = "pg"; return nil }) },
 	} {
 		change()
 		prepare(true)
@@ -503,8 +491,8 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 			t.Errorf("change %d: %d starts", i, f.count())
 		}
 	}
-	if st.Get(KeyProxyPort) != pp {
-		t.Errorf("the port moved: %s, then %s", pp, st.Get(KeyProxyPort))
+	if got := strconv.Itoa(hostPorts(t, st).Proxy); got != pp {
+		t.Errorf("the port moved: %s, then %s", pp, got)
 	}
 	// What it started with: both lists, a line each.
 	want := "layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy\n" +
@@ -524,8 +512,8 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		t.Errorf("port taken: %v", msg.NamesOf(err))
 	}
 	// Stopped, it moves.
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil || st.Get(KeyProxyPort) == pp {
-		t.Errorf("stopped with its port taken: %v, port %s", err, st.Get(KeyProxyPort))
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil || strconv.Itoa(hostPorts(t, st).Proxy) == pp {
+		t.Errorf("stopped with its port taken: %v, port %d", err, hostPorts(t, st).Proxy)
 	}
 }
 
@@ -762,17 +750,10 @@ func TestRefreshSecrets(t *testing.T) {
 	d, st := sandbox(t, "base", "node")
 	p, _ := testProxy(t, d)
 	ctx := t.Context()
-	if err := st.Set(secrets.KeySecrets, "github"); err != nil {
-		t.Fatal(err)
-	}
-	other, err := state.CreateVM(d, "devvm-other-0123456789abc9", state.NewVM{Image: "base", Tools: []string{"node"}, Dir: "/o", Backend: "fake"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := other.Set(secrets.KeySecrets, "github"); err != nil {
-		t.Fatal(err)
-	}
-	salt, _ := Salt(st)
+	change(t, st, func(st *state.VM) error { return secrets.Bind(st, "github", true) })
+	other := newVM(t, d, "devvm-other-0123456789abc9", "base", "node")
+	change(t, other, func(st *state.VM) error { return secrets.Bind(st, "github", true) })
+	salt, _ := Salt(ctx, st)
 	if err := p.Secrets.WriteFiles(ctx, st, salt); err != nil {
 		t.Fatal(err)
 	}
@@ -866,11 +847,8 @@ func TestSelfCheck(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := paths.Dirs{Data: t.TempDir()}
-			st, err := state.CreateVM(d, vmV, state.NewVM{Image: "base"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			_ = st.Set(KeyNet, "on")
+			st := newVM(t, d, vmV, "base")
+			setNet(t, st, func(n *Net) { n.On = true })
 			f := backendtest.New("fake", nil)
 			f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
 			f.Unconfined = tc.unconfined
@@ -882,7 +860,7 @@ func TestSelfCheck(t *testing.T) {
 			}
 			p := &Proxy{Warn: func(msg.M) {}, Confirm: func(msg.M) bool { return tc.yes }, Terminal: func() bool { return tc.tty }}
 			restarted := false
-			err = p.SelfCheck(t.Context(), f, st, func(context.Context) error {
+			err := p.SelfCheck(t.Context(), f, st, func(context.Context) error {
 				restarted = true
 				f.Unconfined = !tc.fixed
 				return f.Start(t.Context(), vmV, backend.Confinement{Net: backend.NetProxy})
@@ -890,8 +868,8 @@ func TestSelfCheck(t *testing.T) {
 			if msg.NamesOf(err) != tc.want {
 				t.Errorf("SelfCheck = %v, want %q", msg.NamesOf(err), tc.want)
 			}
-			if st.Get(KeyCheck) != tc.check {
-				t.Errorf("net_check = %q", st.Get(KeyCheck))
+			if got := netOf(t, st).Made.Check; got != tc.check {
+				t.Errorf("check = %q", got)
 			}
 			if got := slices.Contains(f.Methods(), "Stop"); got != tc.stops || restarted != tc.restarts {
 				t.Errorf("stopped %v, restarted %v: %q", got, restarted, f.Methods())
@@ -903,7 +881,7 @@ func TestSelfCheck(t *testing.T) {
 	}
 	// Without network policy, nothing is checked.
 	d := paths.Dirs{Data: t.TempDir()}
-	st, _ := state.CreateVM(d, vmV, state.NewVM{Image: "base"})
+	st := newVM(t, d, vmV, "base")
 	f := backendtest.New("fake", nil)
 	if err := (&Proxy{}).SelfCheck(t.Context(), f, st, nil); err != nil || len(f.Calls()) > 0 {
 		t.Errorf("no policy: %v, %q", err, f.Methods())
@@ -930,12 +908,11 @@ func TestListed(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := paths.Dirs{Data: t.TempDir()}
-			st, _ := state.CreateVM(d, vmV, state.NewVM{Image: "base"})
-			for k, v := range map[string]string{KeyNet: tc.net, KeyCheck: tc.check} {
-				if v != "" {
-					_ = st.Set(k, v)
-				}
+			st := newVM(t, d, vmV, "base")
+			if tc.net == "" {
+				change(t, st, func(st *state.VM) error { st.Created = time.Time{}; return nil })
 			}
+			setNet(t, st, func(n *Net) { n.On, n.Made.Check = tc.net == "on", tc.check })
 			f := backendtest.New("fake", nil)
 			f.Unconfined = tc.unconfined
 			got, err := Listed(t.Context(), f, st, tc.running)
@@ -961,9 +938,7 @@ func TestNixCacheArgs(t *testing.T) {
 	if got := p.nixCacheArgs(st); got != nil {
 		t.Errorf("base: %q", got)
 	}
-	if err := st.Set(state.KeyImage, "pg+nix"); err != nil {
-		t.Fatal(err)
-	}
+	change(t, st, func(st *state.VM) error { st.Image = "pg+nix"; return nil })
 	want := []string{"-nix-cache", d.NixCache(), "-nix-cache-max", strconv.FormatInt(settings.NixCacheDefault, 10)}
 	if got := p.nixCacheArgs(st); !slices.Equal(got, want) {
 		t.Errorf("node+nix: %q, want %q", got, want)

@@ -44,7 +44,7 @@ cd $WORK
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
 json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=musl backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS/12345612345602
-exec sh -c 'printf "name=devvm-p-12345612345602\nimage=base\ndir=/p\nbackend=lima\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345602/state"'
+exec sh -c 'printf "{\"version\": 1, \"id\": \"x\", \"name\": \"devvm-p-12345612345602\", \"image\": \"base\", \"dir\": \"/p\", \"backend\": \"lima\", \"created\": \"2020-01-01T00:00:00Z\", \"tools\": {\"names\": [\"claude\", \"go\"], \"made\": {\"libc\": \"musl\", \"files\": [\"%s\", \"go-1.20.0-0123456789ab.erofs\"]}}}\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345602/vm.json"'
 stub_reset
 exec devvm images
 # The lock's go isn't built; the old go has the C library its record

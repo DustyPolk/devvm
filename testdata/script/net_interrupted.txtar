@@ -20,11 +20,11 @@ exec sh -c 'grep "^$NET " "$STUB_DIR/instances"'
 stdout ' Stopped$'
 exec sh -c 'pgrep -f "[_]proxy .* -vm $NET " || echo none'
 stdout '^none$'
-exec cat $NET_dir/state
-stdout '^net=on$'
+vm_state $NET_dir/vm.json
+stdout '^net.on=true$'
 stdout '^image=base$'
-stdout '^tool_names=claude$'
-stdout '^tools=claude-\S+$'
+stdout '^tools.names=claude$'
+stdout '^tools.made.files=claude-\S+$'
 exec devvm ls --json
 stdout '"net": "on"'
 ! stdout unenforced

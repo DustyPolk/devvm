@@ -11,7 +11,8 @@ import (
 func TestVMFiles(t *testing.T) {
 	v := Dirs{Data: "/d"}.VM("devvm-p-0123456789abcd")
 	want := map[string]string{
-		v.State():                     "state",
+		v.State():                     "vm.json",
+		v.Lock():                      "lock",
 		v.Policy():                    "policy",
 		v.Backend():                   "backend",
 		v.Run():                       "run",
@@ -34,8 +35,8 @@ func TestVMFiles(t *testing.T) {
 		v.Forwarder(".lock"):          "backend/ports.lock",
 		filepath.Join(v.Dir, "other"): "other",
 	}
-	if len(want) != 22 {
-		t.Fatalf("%d paths, want 22: two are the same", len(want))
+	if len(want) != 23 {
+		t.Fatalf("%d paths, want 23: two are the same", len(want))
 	}
 	for got, rel := range want {
 		if got != filepath.Join("/d/vms/0123456789abcd", rel) {

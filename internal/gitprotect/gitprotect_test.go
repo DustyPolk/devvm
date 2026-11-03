@@ -48,11 +48,39 @@ func newFixture(t *testing.T, name string) *fixture {
 		Locked: func(path string) bool { return f.immutable[path] },
 		Warn:   f.warns.Add,
 	}
-	f.vm, err = state.CreateVM(paths.Dirs{Data: filepath.Join(root, "data")}, "devvm-p-0123456789abcd", state.NewVM{Image: "base"})
+	f.vm, err = state.New(paths.Dirs{Data: filepath.Join(root, "data")}, "devvm-p-0123456789abcd")
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.vm.Image, f.vm.Dir, f.vm.Backend = "base", f.dir, "fake"
+	if err := f.vm.Create(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
 	return f
+}
+
+// newVM sets up protection as up does for a VM just made: its mode
+// (NewMode), recorded, then NewVM.
+func (f *fixture) newVM(off bool) error {
+	mode := f.p.NewMode(off)
+	if err := record(f.t.Context(), f.vm, func(g *InVM) { g.Mode = mode }); err != nil {
+		return err
+	}
+	return f.p.NewVM(f.t.Context(), f.vm)
+}
+
+// section is the VM's .git protection section, as its state has it.
+func (f *fixture) section() InVM {
+	f.t.Helper()
+	again, err := state.ReadVM(paths.Dirs{Data: filepath.Join(f.root, "data")}, f.vm.Name())
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	g, err := Of(again)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return g
 }
 
 func (f *fixture) path(rel string) string { return filepath.Join(f.dir, rel) }
@@ -161,9 +189,7 @@ func TestLockNeverThroughSymlinks(t *testing.T) {
 	symlink(t, filepath.Join(out, "marker"), f.path(".git/worktrees/x/config.worktree")) // dangling
 	symlink(t, out, f.path(".git/worktrees/y"))
 	write(t, filepath.Join(out, "commondir"), "")
-	if err := f.p.lock(t.Context(), f.vm, embeds{}); err != nil {
-		t.Fatal(err)
-	}
+	f.p.lock(t.Context(), embeds{})
 	for _, p := range []string{filepath.Join(out, "marker"), filepath.Join(out, "config.worktree")} {
 		if _, err := os.Lstat(p); err == nil {
 			t.Errorf("%s was created", p)
@@ -199,7 +225,7 @@ func TestLockCreatesMissingHooks(t *testing.T) {
 	mkdirs(t, f.path(".git/modules/s/objects"), f.path(".git/modules/s/refs"))
 	write(t, f.path(".git/modules/s/HEAD"), "")
 	write(t, f.path(".git/modules/s/config"), "")
-	if err := f.p.lock(t.Context(), f.vm, embeds{}); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{".git/hooks", ".git/modules/s/hooks"} {
@@ -207,8 +233,12 @@ func TestLockCreatesMissingHooks(t *testing.T) {
 			t.Errorf("%s: %v, locks %q", p, err, f.flags)
 		}
 	}
-	if got, want := f.vm.Get(KeyGitInode), inode(f.path(".git")); got == "" || got != want {
-		t.Errorf("git_inode = %q, want %q", got, want)
+	// What it locked is recorded: .git's identity, and its one git dir
+	// besides .git.
+	g := f.section()
+	if want := folderID(f.path(".git")); g.Made.GitID == "" || g.Made.GitID != want || !g.Made.Protected ||
+		!slices.Equal(g.Made.GitDirs, []string{".git/modules/s"}) {
+		t.Errorf("recorded %+v, want git_id %q", g.Made, want)
 	}
 }
 
@@ -218,9 +248,7 @@ func TestLockOnlyRealPaths(t *testing.T) {
 	mkdirs(t, f.path(".git/hooks"))
 	write(t, f.path("cfg"), "[core]\n")
 	symlink(t, "../cfg", f.path(".git/config"))
-	if err := f.p.lock(t.Context(), f.vm, embeds{}); err != nil {
-		t.Fatal(err)
-	}
+	f.p.lock(t.Context(), embeds{})
 	if !f.warned("git_not_locked path="+f.path(".git/config")) || f.locked(f.path(".git/config")) || f.locked(f.path("cfg")) {
 		t.Errorf("warnings %q, locks %q", f.warns.Names(), f.flags)
 	}
@@ -237,7 +265,7 @@ func TestNewVMOtherRepoAndCommondir(t *testing.T) {
 	mkdirs(t, filepath.Join(other, ".git", "hooks"))
 	write(t, filepath.Join(other, ".git", "config"), "")
 	symlink(t, filepath.Join(other, ".git"), f.path(".git"))
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	if !f.warned("git_not_locked path=" + f.path(".git/config")) {
@@ -254,7 +282,7 @@ func TestNewVMOtherRepoAndCommondir(t *testing.T) {
 	mkdirs(t, f.path(".git"))
 	write(t, f.path(".git/commondir"), "../x\x1b[2J\n")
 	f.warns.Reset()
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	if !f.warned(`git_commondir git=`+f.path(".git")+` target=../x[2J`) || f.warned("\x1b") {
@@ -336,7 +364,7 @@ func TestNewVMDelegations(t *testing.T) {
 	f.git(f.dir, "config", "--file", cfg, "--add", "include.path", filepath.Join(f.p.Home, "outside.gitconfig"))
 	mkdirs(t, f.path("scripts"), f.path(".git/hooks"))
 	symlink(t, "../../scripts/pre-commit", f.path(".git/hooks/pre-commit"))
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
@@ -351,8 +379,8 @@ func TestNewVMDelegations(t *testing.T) {
 	if f.warned("outside.gitconfig") {
 		t.Errorf("an include outside the project was reported: %q", f.warns.Names())
 	}
-	if f.vm.Get(KeyGitDelegations) == delegationsSum(nil) {
-		t.Error("git_delegations is the empty list's")
+	if f.section().Made.Delegations == delegationsSum(nil) {
+		t.Error("delegations is the empty list's")
 	}
 }
 
@@ -367,14 +395,14 @@ func TestNewVMGitdirOutside(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(t, f.path("sub/.git"), "gitdir: "+filepath.Join(out, "sub.git")+"\n")
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	if want := "git_gitdir_outside git=" + filepath.Join(out, "sub.git") + " sub=" + f.path("sub"); !f.warned(want) {
 		t.Errorf("warnings %q lack %s", f.warns.Names(), want)
 	}
-	if got := f.vm.Get(KeyGitEmbedded); got != `[".gitdirs/rel"]` {
-		t.Errorf("git_embedded = %s", got)
+	if got := f.section().Made.GitDirs; !slices.Equal(got, []string{".gitdirs/rel"}) {
+		t.Errorf("git_dirs = %q", got)
 	}
 }
 
@@ -444,15 +472,46 @@ func TestUnlock(t *testing.T) {
 	other := filepath.Join(f.root, "other")
 	write(t, other, "")
 	symlink(t, other, f.path(".git/config"))
-	f.p.Unlock(t.Context())
+	f.p.Unlock(t.Context(), nil)
 	if !slices.Equal(f.flags, []string{"nouchg " + f.path(".git/hooks")}) {
 		t.Errorf("flags %q", f.flags)
 	}
 	f.flags = nil
 	f.p.OS = "linux"
-	f.p.Unlock(t.Context())
+	f.p.Unlock(t.Context(), f.vm)
 	if len(f.flags) > 0 {
 		t.Errorf("linux: flags %q", f.flags)
+	}
+}
+
+// Unlock takes off the locks of every git dir the VM's state recorded
+// locking too, not only those found now: one whose gitlink the VM dropped
+// from the index isn't found again, and stays locked otherwise.
+func TestUnlockRecorded(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	embeddedRepo(f)
+	if err := f.newVM(false); err != nil {
+		t.Fatal(err)
+	}
+	dirs := f.section().Made.GitDirs
+	if len(dirs) == 0 {
+		t.Fatal("no git dir besides .git recorded")
+	}
+	inside := filepath.Join(f.dir, dirs[len(dirs)-1])
+	if !f.locked(filepath.Join(inside, "hooks")) {
+		t.Fatalf("%s's hooks weren't locked: %q", inside, f.flags)
+	}
+	// The VM drops every gitlink from the index: the submodule's git dir
+	// isn't found now.
+	f.git(f.dir, "rm", "-q", "-f", "--cached", "-r", ".")
+	if slices.Contains(f.p.lockedDirs(f.p.embedded(t.Context())), inside) {
+		t.Fatalf("%s is still found", inside)
+	}
+	f.flags = nil
+	f.p.Unlock(t.Context(), f.vm)
+	if f.locked(filepath.Join(inside, "hooks")) {
+		t.Errorf("%s's hooks stay locked: %q", inside, f.flags)
 	}
 }
 
@@ -461,23 +520,23 @@ func TestUnlock(t *testing.T) {
 func TestSetNext(t *testing.T) {
 	f := newFixture(t, "p")
 	mkdirs(t, f.path(".git/hooks"))
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	f.flags = nil
 	for _, m := range []string{Off, Strict} {
-		if err := SetNext(f.vm, m); err != nil {
+		if err := SetNext(t.Context(), f.vm, m); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if Next(f.vm) != Strict || f.p.Mode(f.vm) != On || len(f.flags) > 0 {
-		t.Errorf("saved: next %q, mode %q, flags %q", Next(f.vm), f.p.Mode(f.vm), f.flags)
+	if Next(f.vm) != Strict || Mode(f.vm) != On || len(f.flags) > 0 {
+		t.Errorf("saved: next %q, mode %q, flags %q", Next(f.vm), Mode(f.vm), f.flags)
 	}
 	if err := f.p.Set(t.Context(), f.vm, Off); err != nil {
 		t.Fatal(err)
 	}
-	if Next(f.vm) != "" || f.p.Mode(f.vm) != Off {
-		t.Errorf("set: next %q, mode %q", Next(f.vm), f.p.Mode(f.vm))
+	if Next(f.vm) != "" || Mode(f.vm) != Off {
+		t.Errorf("set: next %q, mode %q", Next(f.vm), Mode(f.vm))
 	}
 }
 
@@ -486,29 +545,29 @@ func TestSetNext(t *testing.T) {
 func TestNewVMOffAndLinux(t *testing.T) {
 	f := newFixture(t, "p")
 	mkdirs(t, f.path(".git/hooks"))
-	if err := f.p.NewVM(t.Context(), f.vm, true); err != nil {
+	if err := f.newVM(true); err != nil {
 		t.Fatal(err)
 	}
-	if f.vm.Get(KeyGitProtect) != "off" || len(f.flags) > 0 || len(f.warns.Names()) > 0 {
-		t.Errorf("off: %s, locks %q, warnings %q", f.vm.Get(KeyGitProtect), f.flags, f.warns.Names())
+	if Mode(f.vm) != "off" || len(f.flags) > 0 || len(f.warns.Names()) > 0 {
+		t.Errorf("off: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
 	}
 	f.p.OS = "linux"
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
-	if f.vm.Get(KeyGitProtect) != "off" || len(f.flags) > 0 || !slices.Equal(f.warns.Names(), []string{"git_protect_needs_macos_new"}) {
-		t.Errorf("linux: %s, locks %q, warnings %q", f.vm.Get(KeyGitProtect), f.flags, f.warns.Names())
+	if Mode(f.vm) != "off" || len(f.flags) > 0 || !slices.Equal(f.warns.Names(), []string{"git_protect_needs_macos_new"}) {
+		t.Errorf("linux: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
 	}
 	if err := os.RemoveAll(f.path(".git")); err != nil {
 		t.Fatal(err)
 	}
 	f.warns.Reset()
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil || len(f.warns.Names()) > 0 {
+	if err := f.newVM(false); err != nil || len(f.warns.Names()) > 0 {
 		t.Errorf("linux without .git: %v, warnings %q", err, f.warns.Names())
 	}
 	f.p.OS = "darwin"
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil || f.vm.Get(KeyGitProtect) != "on" || len(f.flags) > 0 {
-		t.Errorf("no .git: %v, %s, locks %q", err, f.vm.Get(KeyGitProtect), f.flags)
+	if err := f.newVM(false); err != nil || Mode(f.vm) != "on" || len(f.flags) > 0 {
+		t.Errorf("no .git: %v, %s, locks %q", err, Mode(f.vm), f.flags)
 	}
 }
 
@@ -523,7 +582,7 @@ func TestRealLocks(t *testing.T) {
 	t.Cleanup(func() { _ = exec.Command("chflags", "-R", "nouchg", f.root).Run() }) //nolint:noctx,gosec // cleanup, of the test's own folder
 	f.p.Chflags = New(f.dir, f.p.Home, nil).Chflags
 	f.git(f.root, "init", "-q", "--template=", f.dir)
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(f.path(".git/hooks/x"), 0o700); err == nil {
@@ -559,7 +618,7 @@ func (f *fixture) checked(running bool) {
 func TestCheckReplacedAndAppeared(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	f.git(f.dir, "init", "-q")
@@ -587,7 +646,7 @@ func TestCheckHooksUnlocked(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	f.git(f.root, "init", "-q", "--template=", f.dir)
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(f.path(".git/hooks")); err != nil {
@@ -619,7 +678,7 @@ func TestCheckSubmodules(t *testing.T) {
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
 	f.git(f.dir, "commit", "-q", "--allow-empty", "-m", "x")
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	embeddedRepo(f)
@@ -644,7 +703,8 @@ func TestCheckSubmodules(t *testing.T) {
 	}
 	mkdirs(t, f.path(".git/modules"))
 	cp(".git/modules/old")
-	if err := f.vm.Set(KeyGitModules, ""); err != nil {
+	// Nothing recorded yet (never set up): nothing to compare with.
+	if err := record(t.Context(), f.vm, func(g *InVM) { g.Made = Made{} }); err != nil {
 		t.Fatal(err)
 	}
 	f.checked(false)
@@ -666,7 +726,7 @@ func TestCheckDelegationsAndCommondir(t *testing.T) {
 	f.git(f.dir, "init", "-q")
 	cfg := f.path(".git/config")
 	f.git(f.dir, "config", "--file", cfg, "include.path", "../shared.gitconfig")
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	f.checked(false)
@@ -687,20 +747,24 @@ func TestCheckDelegationsAndCommondir(t *testing.T) {
 }
 
 // Off, or on a host without locks: nothing. Never set up (its creation
-// stopped short): set up as new, unless it runs.
+// stopped short after its mode was recorded): set up as new, unless it
+// runs.
 func TestCheckOffAndUnset(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
+	if err := record(t.Context(), f.vm, func(g *InVM) { g.Mode = On }); err != nil {
+		t.Fatal(err)
+	}
 	f.checked(true)
-	if f.vm.Get(KeyGitProtect) != "" || len(f.flags) > 0 {
-		t.Errorf("unset, running: %s, locks %q", f.vm.Get(KeyGitProtect), f.flags)
+	if f.section().Made.Protected || len(f.flags) > 0 {
+		t.Errorf("unset, running: %+v, locks %q", f.section(), f.flags)
 	}
 	f.checked(false)
-	if f.vm.Get(KeyGitProtect) != "on" || !f.locked(f.path(".git/config")) {
-		t.Errorf("unset: %s, locks %q", f.vm.Get(KeyGitProtect), f.flags)
+	if g := f.section(); g.Mode != On || !g.Made.Protected || !f.locked(f.path(".git/config")) || f.warned("git_appeared") {
+		t.Errorf("unset: %+v, locks %q, warnings %q", g, f.flags, f.warns.Names())
 	}
-	if err := f.vm.Set(KeyGitProtect, "off"); err != nil {
+	if err := record(t.Context(), f.vm, func(g *InVM) { g.Mode = Off }); err != nil {
 		t.Fatal(err)
 	}
 	f.checked(false)
@@ -733,13 +797,13 @@ func TestSet(t *testing.T) {
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
 	f.git(f.dir, "config", "--file", f.path(".git/config"), "include.path", "../x.gitconfig")
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := f.path(".git/config")
 	f.set(Strict)
-	if f.ignoreSubmodules() != "all" || f.vm.Get(KeyGitProtect) != Strict || f.p.Mode(f.vm) != Strict {
-		t.Errorf("strict: diff.ignoreSubmodules=%q, mode %s", f.ignoreSubmodules(), f.p.Mode(f.vm))
+	if f.ignoreSubmodules() != "all" || Mode(f.vm) != Strict || Mode(f.vm) != Strict {
+		t.Errorf("strict: diff.ignoreSubmodules=%q, mode %s", f.ignoreSubmodules(), Mode(f.vm))
 	}
 	if !slices.Equal(f.flags[:1], []string{"nouchg " + cfg}) || !f.locked(cfg) {
 		t.Errorf("strict: locks %q", f.flags)
@@ -748,13 +812,13 @@ func TestSet(t *testing.T) {
 		t.Errorf("strict: warnings %q", f.warns.Names())
 	}
 	f.set(On)
-	if f.ignoreSubmodules() != "" || f.vm.Get(KeyGitProtect) != On || !f.locked(cfg) {
-		t.Errorf("on: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), f.vm.Get(KeyGitProtect), f.flags)
+	if f.ignoreSubmodules() != "" || Mode(f.vm) != On || !f.locked(cfg) {
+		t.Errorf("on: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), Mode(f.vm), f.flags)
 	}
 	f.set(Strict)
 	f.set(Off)
-	if f.ignoreSubmodules() != "" || f.vm.Get(KeyGitProtect) != Off || !slices.Contains(f.flags, "nouchg "+cfg) || f.locked(cfg) {
-		t.Errorf("off: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), f.vm.Get(KeyGitProtect), f.flags)
+	if f.ignoreSubmodules() != "" || Mode(f.vm) != Off || !slices.Contains(f.flags, "nouchg "+cfg) || f.locked(cfg) {
+		t.Errorf("off: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), Mode(f.vm), f.flags)
 	}
 	// Off again, and checks, lock nothing.
 	f.checked(false)
@@ -772,8 +836,8 @@ func TestSet(t *testing.T) {
 	if f.warned("git_replaced") || f.warned("git_appeared") || !f.warned("git_embedded_new git="+f.path("sub/.git")) {
 		t.Errorf("replaced: warnings %q", f.warns.Names())
 	}
-	if !f.locked(cfg) || !f.locked(f.path("sub/.git/config")) || f.vm.Get(KeyGitInode) != inode(f.path(".git")) {
-		t.Errorf("replaced: locks %q, inode %s", f.flags, f.vm.Get(KeyGitInode))
+	if !f.locked(cfg) || !f.locked(f.path("sub/.git/config")) || f.section().Made.GitID != folderID(f.path(".git")) {
+		t.Errorf("replaced: locks %q, git_id %s", f.flags, f.section().Made.GitID)
 	}
 	f.checked(false)
 	if len(f.warns.Names()) > 0 {
@@ -787,7 +851,7 @@ func TestSetStrictFails(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
-	if err := f.p.NewVM(t.Context(), f.vm, false); err != nil {
+	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := f.path(".git/config")
@@ -797,8 +861,8 @@ func TestSetStrictFails(t *testing.T) {
 	if err == nil || err.(msg.M).Names() != "git_config_failed config="+cfg { //nolint:errorlint,forcetypeassert // a message
 		t.Fatalf("err = %v", err)
 	}
-	if !slices.Equal(f.flags, []string{"nouchg " + cfg, "uchg " + cfg}) || f.vm.Get(KeyGitProtect) != On {
-		t.Errorf("locks %q, mode %s", f.flags, f.vm.Get(KeyGitProtect))
+	if !slices.Equal(f.flags, []string{"nouchg " + cfg, "uchg " + cfg}) || Mode(f.vm) != On {
+		t.Errorf("locks %q, mode %s", f.flags, Mode(f.vm))
 	}
 }
 
@@ -807,8 +871,8 @@ func TestSetStrictFails(t *testing.T) {
 func TestSetLinuxAndNoGit(t *testing.T) {
 	f := newFixture(t, "p")
 	f.p.OS = "linux"
-	if f.p.Mode(f.vm) != Off {
-		t.Errorf("unset on linux: %s", f.p.Mode(f.vm))
+	if err := f.newVM(false); err != nil || Mode(f.vm) != Off {
+		t.Errorf("new on linux: %s, %v", Mode(f.vm), err)
 	}
 	for _, m := range []string{On, Strict} {
 		if err := f.p.Set(t.Context(), f.vm, m); err == nil || err.(msg.M).Names() != "git_protect_on_needs_macos" { //nolint:errorlint,forcetypeassert // a message
@@ -816,13 +880,13 @@ func TestSetLinuxAndNoGit(t *testing.T) {
 		}
 	}
 	f.set(Off)
-	if f.vm.Get(KeyGitProtect) != Off || len(f.flags) > 0 {
-		t.Errorf("off on linux: %s, locks %q", f.vm.Get(KeyGitProtect), f.flags)
+	if Mode(f.vm) != Off || len(f.flags) > 0 {
+		t.Errorf("off on linux: %s, locks %q", Mode(f.vm), f.flags)
 	}
 	f.p.OS = "darwin"
 	f.set(Strict)
-	if f.vm.Get(KeyGitProtect) != Strict || len(f.flags)+len(f.warns.Names()) > 0 {
-		t.Errorf("no .git: %s, locks %q, warnings %q", f.vm.Get(KeyGitProtect), f.flags, f.warns.Names())
+	if Mode(f.vm) != Strict || len(f.flags)+len(f.warns.Names()) > 0 {
+		t.Errorf("no .git: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
 	}
 }
 

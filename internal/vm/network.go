@@ -14,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // Net shows and changes the folder's VM's network policy, its network log
@@ -44,7 +45,7 @@ func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	if s.Policy, err = netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning); err != nil {
 		return s, err
 	}
-	builtin, files := netpolicy.Policies(e.Dirs, t.f.Name, t.st.Get(state.KeyImage), t.st.ToolNames())
+	builtin, files := netpolicy.Policies(e.Dirs, t.f.Name, t.st.Image, tools.Names(t.st))
 	s.Rules, err = netpolicy.ReadRules(e.Proxy.Assets, builtin, files)
 	return s, err
 }
@@ -96,12 +97,12 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	if on {
 		to = "on"
 	}
-	if st.Get(KeyNet) == to {
+	if netpolicy.On(st) == on {
 		e.Info(msg.NetAlready(to, vm))
 		return nil
 	}
 	// A group's members all have network policy or none do.
-	if g := st.Get(KeyGroup); g != "" {
+	if g := groupOf(st); g != "" {
 		return msg.GroupPolicyMixed(g, vm)
 	}
 	// Links' policy rule: a client with network policy links only to a
@@ -124,7 +125,7 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 			return err
 		}
 	}
-	if err := st.Set(KeyNet, to); err != nil {
+	if err := st.Update(ctx, func(st *state.VM) error { return netpolicy.SetOn(st, on) }); err != nil {
 		return err
 	}
 	if running {
