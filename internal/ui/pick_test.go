@@ -212,6 +212,23 @@ func TestCanPick(t *testing.T) {
 	}
 }
 
+// CanAsk needs a terminal on stdin alone, without --no-input.
+func TestCanAsk(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	if CanAsk(u) {
+		t.Error("CanAsk without a terminal")
+	}
+	u.stdinTTY = true
+	if !CanAsk(u) {
+		t.Error("not CanAsk with a terminal on stdin")
+	}
+	u.SetFlags(Flags{NoInput: true})
+	if CanAsk(u) {
+		t.Error("CanAsk with --no-input")
+	}
+}
+
 func TestPickOneWithoutTerminal(t *testing.T) {
 	t.Parallel()
 	u, out, _ := testUI(t, "j\r")

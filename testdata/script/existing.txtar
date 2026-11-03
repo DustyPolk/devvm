@@ -81,7 +81,7 @@ exec devvm
 ! stderr parts_flags_ignored
 
 # A VM whose creation didn't finish (its state records no created time)
-# never starts; rm deletes it.
+# never starts: without a terminal devvm refuses it, and rm deletes it.
 json_set $WEB_dir/vm.json created:=null
 exec limactl stop $WEB
 stub_reset
@@ -91,6 +91,28 @@ stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (start|stop)'
+# With --no-input in a terminal, nothing is asked either.
+ttyin -stdin $WORK/yes.txt
+! exec devvm --no-input
+stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
+! stderr remake_unfinished
+# In a terminal devvm offers to delete it and make it again: no keeps it.
+ttyin -stdin $WORK/no.txt
+! exec devvm --no-network-policy
+stderr '^remake_unfinished vm=devvm-web-[0-9a-f]{14} \[y/N\] devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (start|stop|delete|clone|create)'
+exists $WEB_dir/vm.json
+# Yes deletes it, then makes it again, finished this time.
+stub_reset
+ttyin -stdin $WORK/yes.txt
+exec devvm --no-network-policy
+stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl delete -f devvm-web-[0-9a-f]{14}\n(.*\n)*limactl clone --tty=false \S+ devvm-web-[0-9a-f]{14} (.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+! stdout '^created=$'
+stdout '^created=.'
 
 # rm: base has no agents, so nothing is exported; only this VM is
 # deleted, with its state, logs (the rotated ones too), host keys and ssh config entry, and .git's
@@ -157,3 +179,8 @@ stub_calls
 ! stdout 'limactl (delete|stop|start)'
 vm_name SITE site
 exists $SITE_dir/vm.json
+
+-- yes.txt --
+y
+-- no.txt --
+n

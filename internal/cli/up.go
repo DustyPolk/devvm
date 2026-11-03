@@ -112,6 +112,7 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 	e.Tools.Mise = o.HostMise
 	e.PickFeatures = pickFeatures(u)
 	e.PickParts = pickParts(u)
+	e.CanAsk = func() bool { return ui.CanAsk(u) }
 	return e, nil
 }
 

@@ -89,13 +89,14 @@ type Env struct {
 	// tools picker (nil shows none); Terminal reports whether it can ask,
 	// Interactive whether someone can also see the question (stdout's a
 	// terminal too), CanPick whether the picker shows, which also needs no
-	// --no-input; Answer asks for a value.
-	Info, Warn, Note, Say          func(msg.M)
-	Ask, Confirm                   func(msg.M) bool
-	Answer                         func(msg.M) string
-	PickFeatures                   func([]build.Feature) []build.Feature
-	PickParts                      func(msg.M, []PickPart) []PickPart
-	Terminal, Interactive, CanPick func() bool
+	// --no-input, CanAsk whether a question with a fallback is asked (a
+	// terminal, no --no-input; set by its caller); Answer asks for a value.
+	Info, Warn, Note, Say                  func(msg.M)
+	Ask, Confirm                           func(msg.M) bool
+	Answer                                 func(msg.M) string
+	PickFeatures                           func([]build.Feature) []build.Feature
+	PickParts                              func(msg.M, []PickPart) []PickPart
+	Terminal, Interactive, CanPick, CanAsk func() bool
 	// AddInclude is --ssh-config: devvm's Include line goes in
 	// ~/.ssh/config, when it's missing, without asking.
 	AddInclude bool

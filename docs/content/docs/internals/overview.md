@@ -57,7 +57,7 @@ When you run `devvm` in a folder whose VM exists, devvm opens the VM as it is an
 
 Steps 4 to 7, apart from the `devcontainer.json` check, are what every start of an existing VM by devvm does. So when an export or `devvm rm`'s check of a `--clone` VM needs the VM running, devvm checks `.git`, matches the VM's size and SSH agent forwarding to its state, starts it and runs the self-check in the same way.
 
-devvm never starts a VM whose creation didn't finish, because the VM would start without network policy (`vm_unfinished`). That happens when devvm was stopped after it made the VM but before it recorded the network choice. `devvm rm` deletes such a VM.
+devvm never starts a VM whose creation didn't finish, because the VM would start without network policy (`vm_unfinished`). That happens when devvm was stopped after it made the VM but before it recorded the network choice. In a terminal and without `--no-input`, devvm asks whether to delete such a VM and make it again (`remake_unfinished`, `[y/N]`), and yes deletes it as `devvm rm` does, then makes the VM as for a folder without one. Otherwise, and for a parent folder's VM, devvm refuses, and `devvm rm` deletes such a VM.
 
 ## Stopping a VM
 

@@ -87,7 +87,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"vm_other_folder":                  "getting-started/commands#a-folder-made-again",
 	"vm_other_folder_rm":               "getting-started/commands#a-folder-made-again",
 	"vm_other_folder_adopt":            "getting-started/commands#a-folder-made-again",
-	"vm_unfinished":                    "internals/overview#an-existing-vm",
+	"vm_unfinished":                    "using/troubleshooting#a-vm-whose-creation-didnt-finish",
 	"use_parent_vm":                    "getting-started/commands#a-subfolder",
 	"using_parent_vm":                  "getting-started/commands#a-subfolder",
 	"rm_parent_vm":                     "getting-started/commands#a-subfolder",

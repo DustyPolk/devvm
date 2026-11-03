@@ -90,7 +90,25 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	if err := e.checkFolder(t.f, t.st); err != nil {
 		return err
 	}
+	if remakeUnfinished(e.Env, t) {
+		if err := Lifecycle(e).delete(ctx, t); err != nil {
+			return err
+		}
+		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
+	}
 	return e.open(ctx, o, t)
+}
+
+// remakeUnfinished reports whether up deletes t, a VM whose creation
+// didn't finish, and makes it again: asked in a terminal, without
+// --no-input ([y/N]). It never ran a shell, so nothing of the user's is in
+// it. A finished VM is opened; an unfinished one not asked about (a parent
+// folder's, or no question) or kept is refused (vm_unfinished).
+func remakeUnfinished(e *Env, t *found) bool {
+	if t.st.Finished() || t.sub != "" || e.CanAsk == nil || !e.CanAsk() {
+		return false
+	}
+	return e.Ask(msg.RemakeUnfinished(t.f.Name))
 }
 
 // useParent reports whether up opens the parent folder's VM p in this

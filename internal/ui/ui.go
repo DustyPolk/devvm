@@ -133,6 +133,12 @@ func (u *UI) StdoutIsTerminal() bool { return u.stdoutTTY }
 // one, its caller takes the default instead of asking.
 func (u *UI) CanPick() bool { return u.stdinTTY && u.stdoutTTY && !u.noInput.Load() }
 
+// CanAsk reports whether a yes-or-no question that has something to fall
+// back on is asked: in a terminal, without --no-input. Without one, its
+// caller does what it would without the question. A function, not a
+// method, to keep UI within its methods.
+func CanAsk(u *UI) bool { return u.stdinTTY && !u.noInput.Load() }
+
 // Stdout is where data output goes: tables, values, help. Not messages: they
 // go through Say and the rest.
 func (u *UI) Stdout() io.Writer { return lockedWriter{u, u.stdout} }

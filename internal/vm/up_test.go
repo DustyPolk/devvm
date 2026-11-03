@@ -9,10 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -544,5 +547,47 @@ func TestUpDiskNeedsDisk(t *testing.T) {
 	err = (Launch{e2}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
 		t.Errorf("--disk: %v", got)
+	}
+}
+
+// Only an unfinished VM of this folder's own is offered a delete and
+// remake, and only when the question can be asked: a finished VM never.
+func TestRemakeUnfinished(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		finished, ask   bool
+		sub             string
+		canAsk, offered bool
+	}{
+		{name: "finished", finished: true, canAsk: true, ask: true},
+		{name: "unfinished, yes", canAsk: true, ask: true, offered: true},
+		{name: "unfinished, no", canAsk: true},
+		{name: "no question", ask: true},
+		{name: "parent's", sub: "/p/sub", canAsk: true, ask: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
+			st := vmState(t, d, "devvm-p-00000000000000", func(st *state.VM) error {
+				if !tc.finished {
+					st.Created = time.Time{}
+				}
+				return nil
+			})
+			asked := false
+			e := &Env{
+				CanAsk: func() bool { return tc.canAsk },
+				Ask:    func(msg.M) bool { asked = true; return tc.ask },
+			}
+			got := remakeUnfinished(e, &found{f: project.Folder{Name: st.Name()}, st: st, sub: tc.sub})
+			if got != tc.offered {
+				t.Errorf("remakeUnfinished = %v, want %v", got, tc.offered)
+			}
+			if asked != (!tc.finished && tc.canAsk && tc.sub == "") {
+				t.Errorf("asked = %v", asked)
+			}
+		})
 	}
 }

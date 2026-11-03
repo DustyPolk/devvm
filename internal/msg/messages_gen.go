@@ -2309,6 +2309,11 @@ func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
 }
 
+// RemakeUnfinished is [remake_unfinished]: "Creating {{.vm}} didn't finish, so nothing of yours is in it.\nDelete {{.vm}} and make it again?"
+func RemakeUnfinished(vm string) M {
+	return M{id: "remake_unfinished", vals: []val{{"vm", vm}}}
+}
+
 // RemoteAddFailed is [remote_add_failed]: "Adding the git remote {{.remote}} failed. Run devvm again to retry."
 func RemoteAddFailed(remote string) M {
 	return M{id: "remote_add_failed", vals: []val{{"remote", remote}}}
@@ -3467,6 +3472,7 @@ var specs = map[string]spec{
 	"reading_images":                   {},
 	"reading_space":                    {},
 	"rebuild_replaces":                 {fields: []string{"above", "image"}},
+	"remake_unfinished":                {fields: []string{"vm"}},
 	"remote_add_failed":                {fields: []string{"remote"}},
 	"remote_kept":                      {fields: []string{"remote"}},
 	"remotes_taken":                    {fields: []string{"slug", "vm"}},

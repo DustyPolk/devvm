@@ -840,6 +840,9 @@ other = "{{.parent}} has a VM, {{.vm}}, and {{.dir}} is inside it.\nOpen {{.vm}}
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
 other = "using {{.vm}}, made for {{.dir}}"
 
+[remake_unfinished]
+other = "Creating {{.vm}} didn't finish, so nothing of yours is in it.\nDelete {{.vm}} and make it again?"
+
 [vm_unfinished]
 other = "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."
 

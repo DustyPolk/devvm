@@ -31,6 +31,8 @@ func AnswerFor(id string) string {
 		return "devvm restart"
 	case "add_it_now":
 		return "--ssh-config"
+	case "remake_unfinished":
+		return "devvm rm, then devvm"
 	case "token_prompt":
 		return "--stdin"
 	case "continue", "gc_confirm", "gc_cache_confirm", "adopt_vm", "rm_confirm", "images_rm_confirm", "secret_rm_confirm":
