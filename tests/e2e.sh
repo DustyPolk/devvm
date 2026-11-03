@@ -69,15 +69,69 @@ while (( $# )); do
   esac
   shift
 done
-# OpenSSL first on PATH, before anything is built: the CA checks' HTTPS server is openssl s_server,
-# and LibreSSL's (macOS's /usr/bin/openssl) cuts the VM's OpenSSL client off mid-request.
+want() { [[ " $sel " == *" $1 "* ]]; }
+
+# Every host command and perl module the chosen sections use, checked before anything is built:
+# each missing one is named with what installs it (Homebrew on macOS, apt-get or dnf on Linux), then
+# e2e stops. Commands every macOS and Linux system has (bash, awk, sed, grep, find, coreutils) aren't
+# checked.
+missing=()
+host_os=$(uname -s)
+# pkg BREW APT DNF: the command that installs a package, with this system's package manager.
+pkg() {
+  if [[ $host_os == Darwin ]]; then echo "brew install $1"
+  elif command -v apt-get >/dev/null 2>&1; then echo "sudo apt-get install $2"
+  elif command -v dnf >/dev/null 2>&1; then echo "sudo dnf install $3"
+  else echo "your distribution's package for it ($2 on Debian, $3 on Fedora)"; fi
+}
+# need CMD BREW APT DNF: CMD is on PATH, else it's missing, with what installs it.
+need() { command -v "$1" >/dev/null 2>&1 || missing+=("$1: $(pkg "$2" "$3" "$4")"); }
+# need_pm MODULE BREW APT DNF: perl loads MODULE (Fedora splits perl into a package per module).
+need_pm() { perl -M"$1" -e 1 >/dev/null 2>&1 || missing+=("perl's $1: $(pkg "$2" "$3" "$4")"); }
+# The VM's limactl and devvm's build (go, or mise, which installs the repo's pinned go).
+if [[ $host_os == Darwin ]]; then need limactl lima - -
+else command -v limactl >/dev/null 2>&1 || missing+=("limactl: Lima's release tarball (https://lima-vm.io/docs/installation/)"); fi
+command -v go >/dev/null 2>&1 || command -v mise >/dev/null 2>&1 ||
+  missing+=("go: mise (https://mise.jdx.dev), then mise install in the repo")
+need git git git git
+need pgrep proctools procps procps-ng
+need pkill proctools procps procps-ng
+# OpenSSL first on PATH: the CA checks' HTTPS server is openssl s_server, and LibreSSL's (macOS's
+# /usr/bin/openssl) cuts the VM's OpenSSL client off mid-request.
 ossl=$(openssl version 2>/dev/null)
 if [[ $ossl != OpenSSL* ]]; then
   fix='brew install openssl@3, then put $(brew --prefix openssl@3)/bin first on PATH'
-  [[ "$(uname -s)" == Darwin ]] || fix="install your distribution's openssl package"
-  echo "e2e: openssl is ${ossl:-missing}, and e2e needs OpenSSL: $fix" >&2; exit 1
+  [[ $host_os == Darwin ]] || fix=$(pkg openssl@3 openssl openssl)
+  missing+=("openssl${ossl:+ (OpenSSL, not $ossl)}: $fix")
 fi
-want() { [[ " $sel " == *" $1 "* ]]; }
+# Ports and listeners on this machine: nc, and lsof on macOS or ss on Linux.
+if want project || want network || want desktop || want link; then need nc netcat netcat-openbsd nmap-ncat; fi
+if want project || want network || want link; then
+  if [[ $host_os == Darwin ]]; then need lsof lsof - -; else need ss - iproute2 iproute; fi
+fi
+if want network || want link; then need curl curl curl curl; fi
+if want project || want clone || want link; then need ssh openssh openssh-client openssh-clients; fi
+if want project; then
+  for c in ssh-agent ssh-add ssh-keygen; do need "$c" openssh openssh-client openssh-clients; done
+  need tar gnu-tar tar tar
+fi
+# The sandbox check binds ports with python3 (macOS only).
+if want network && [[ $host_os == Darwin ]]; then need python3 python - -; fi
+if want link && ! command -v shasum >/dev/null 2>&1; then need sha256sum coreutils coreutils coreutils; fi
+# perl: no_leak reads disks with File::Find (images, nix, from), and a program on this machine holds
+# a VM's port with IO::Socket::INET (project).
+if want images || want project || want nix || want from; then
+  need perl perl perl perl
+  if command -v perl >/dev/null 2>&1; then
+    if want images || want nix || want from; then need_pm File::Find perl perl perl-File-Find; fi
+    if want project; then need_pm IO::Socket::INET perl perl-base perl-IO; fi
+  fi
+fi
+if (( ${#missing[@]} )); then
+  echo "e2e: the chosen sections need these, which this machine lacks:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  exit 1
+fi
 
 # Its own Lima home (other sandboxes' images aren't its own), for devvm and for its own limactl calls.
 export DEVVM_LIMA_HOME=${DEVVM_E2E_LIMA_HOME:-$HOME/.lt-e2e-go}

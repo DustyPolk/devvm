@@ -285,7 +285,7 @@ There's no target percentage: a package is judged by what's untested in it, not 
 
 ## End-to-end tests
 
-`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. It builds `devvm` from the checkout into its sandbox, its files embedded, and runs every check through that binary:
+`tests/e2e.sh` runs devvm against real VMs, so it needs Lima and takes minutes: run it in the background. First it checks that this machine has every command the chosen sections use, and it names each one that's missing with what installs it ([the list](testing.md#whats-platform-specific)). Then it builds `devvm` from the checkout into its sandbox, its files embedded, and runs every check through that binary:
 
 | | |
 | --- | --- |
