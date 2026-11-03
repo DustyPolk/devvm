@@ -86,7 +86,7 @@ stderr '^usage_help command=devvm$'
 ! exec devvm --no-network-policy node
 stderr '^devvm: no_command_part flags=--tools node word=node$'
 ! exec devvm --no-network-policy --layers stray
-stderr '^devvm: unknown_part flag=--layers given=stray names=docker foo nix$'
+stderr '^devvm: unknown_part flag=--layers given=stray names=desktop docker foo nix$'
 stderr '^usage_help command=devvm$'
 ! exec devvm --no-network-policy --layers fooo
 stderr '^devvm: unknown_part_like flag=--layers given=fooo like=foo$'

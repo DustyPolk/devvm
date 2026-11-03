@@ -43,9 +43,12 @@ stdout '^==> building_image image=base key='
 exec devvm gc --force
 stdout '^gc_image image=base key='
 
-# A name that isn't a feature changes nothing.
+# A name that isn't a feature changes nothing: desktop is a layer.
 ! exec devvm setup --features fzf,nope
-stderr '^devvm: no_feature feature=nope features=cli-tools desktop fzf omb$'
+stderr '^devvm: no_feature feature=nope features=cli-tools fzf omb$'
+! stdout base_features
+! exec devvm setup --features desktop
+stderr '^devvm: no_feature feature=desktop features=cli-tools fzf omb$'
 ! stdout base_features
 exec devvm setup
 stdout '^==> base_features_none$'

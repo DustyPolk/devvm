@@ -3,17 +3,20 @@ title: A VM's desktop
 weight: 8
 ---
 
-A VM has no screen of its own, but with the `desktop` feature it gets an Xfce desktop, which `devvm desktop` opens in a window on this machine. This page covers adding the desktop, opening it, its password and the clipboard, and what it costs. [The desktop](../internals/desktop.md) explains how devvm keeps it to this machine.
+A VM has no screen of its own, but with the `desktop` layer it gets an Xfce desktop, which `devvm desktop` opens in a window on this machine. This page covers adding the desktop, opening it, its password and the clipboard, and what it costs. [The desktop](../internals/desktop.md) explains how devvm keeps it to this machine.
 
 ## Adding the desktop
 
-The desktop is one of base's [features](customizing.md#base-image-features), so `base` and every VM made from it get it once you choose it. devvm never chooses it for you, because it makes `base` about 370 MB bigger. To add it, run `devvm setup` and turn on `desktop` in the picker, or name every feature you want:
+The desktop is one of devvm's [built-in layers](images.md#built-in-layers), so only the VMs you choose it for get it, and `base` and the other VMs stay without it. To add it to a new VM, check `desktop` under Layers in the list devvm shows for a new VM, or name it with `--layers`:
 
 ```sh
-devvm setup --features omb,fzf,cli-tools,desktop
+devvm --layers desktop          # a VM of base with the desktop
+devvm --layers docker,desktop   # the desktop on top of the docker layer
 ```
 
-The new choice rebuilds `base`, and the images built on it, the next time they're used. A VM keeps the image it was made from, so a VM made before you chose the desktop has none, and `devvm desktop` says so. To give it one, save any work the VM holds outside the project folder, then run `devvm rm` and `devvm` to make a new VM.
+devvm builds the `desktop` image the first time a VM needs it, and VMs that choose it share that image. `--layers` is the exact list of the VM's layers, so name every layer you want the VM to have.
+
+A VM keeps the layers it was made with, so a VM made without the desktop has none, and `devvm desktop` says so. To give it one, save any work the VM holds outside the project folder, then run `devvm rm`, and make the VM again with `desktop` among its layers.
 
 The desktop works on base, and on a base made `--from` a Debian, Ubuntu or Alpine image.
 
@@ -56,12 +59,12 @@ The clipboard isn't shared unless you add `--clipboard`. With sharing on, what y
 
 ## What it costs
 
-- About 370 MB more in `base`, which every VM made from it shares.
+- About 370 MB of disk for the `desktop` image, which every VM with the layer shares, while `base` and the VMs without the layer stay that much smaller.
 - About 500 MB of the VM's memory while its desktop runs, which it does from your first `devvm desktop` until the VM stops. A VM whose desktop you never open uses none.
 
 ## When the desktop doesn't open
 
-- **The VM has no desktop:** its image was built without the `desktop` feature. [Add it](#adding-the-desktop), then make the VM again.
+- **The VM has no desktop:** it was made without the `desktop` layer. Make the VM again with the layer, as [adding the desktop](#adding-the-desktop) explains.
 - **The desktop didn't start:** devvm shows the end of its run log. The desktop's own log is `~/.cache/devvm-desktop.log` in the VM.
 - **Screen Sharing didn't open:** open the address devvm shows in Screen Sharing yourself, by typing it into Finder's Go > Connect to Server, or in another VNC viewer.
 - **Screen Sharing says the password is wrong:** use the password `devvm desktop` shows for this VM. Each VM has its own.

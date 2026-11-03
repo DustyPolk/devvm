@@ -147,7 +147,7 @@ stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
 ! exec devvm --layers node
 stderr '^devvm: part_other_flag flag=--layers given=node other=--tools$'
 ! exec devvm --layers mailpit
-stderr '^devvm: unknown_part flag=--layers given=mailpit names=docker nix$'
+stderr '^devvm: unknown_part flag=--layers given=mailpit names=desktop docker nix$'
 ! exec devvm --layers none,docker
 stderr '^devvm: part_none_alone flag=--layers$'
 ! stub_calls

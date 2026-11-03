@@ -161,7 +161,8 @@ func TestWriteRules(t *testing.T) {
 }
 
 // Every policy file devvm ships parses cleanly: each line a rule, a
-// comment or nothing.
+// comment or nothing. Only the desktop layer's has no rules, as its
+// packages come from base's hosts, and its comment says so.
 func TestBuiltinPolicies(t *testing.T) {
 	n := 0
 	err := fs.WalkDir(assets.FS, ".", func(path string, e fs.DirEntry, err error) error {
@@ -174,7 +175,7 @@ func TestBuiltinPolicies(t *testing.T) {
 			return err
 		}
 		lines := proxy.ParsePolicy(string(b))
-		if len(lines) == 0 {
+		if len(lines) == 0 && (path != "layers/desktop.policy" || !strings.HasPrefix(string(b), "# desktop: ")) {
 			t.Errorf("%s has no rules", path)
 		}
 		for _, l := range lines {

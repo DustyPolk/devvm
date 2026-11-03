@@ -37,7 +37,8 @@ func TestCompleteParts(t *testing.T) {
 		{"tools", "node,p", []string{"node,python"}},
 		{"agents", "c", []string{"claude", "codex"}},
 		{"agents", "n", []string{"none"}},
-		{"layers", "", []string{"docker", "nix", "none"}},
+		{"layers", "", []string{"desktop", "docker", "nix", "none"}},
+		{"layers", "de", []string{"desktop"}},
 	} {
 		if got, _ := completeParts(tc.flag)(nil, nil, tc.in); !slices.Equal(got, tc.want) {
 			t.Errorf("--%s %q = %q, want %q", tc.flag, tc.in, got, tc.want)

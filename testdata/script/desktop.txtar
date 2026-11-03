@@ -1,27 +1,41 @@
 # devvm desktop: the folder's VM launched as devvm host does (started when
-# it's stopped, set up, in devvm's ssh config), its desktop feature's
+# it's stopped, set up, in devvm's ssh config), its desktop layer's
 # devvm-desktop started, clipboard off unless asked for, then its desktop
 # served on this machine's 127.0.0.1 with the VM's password, both kept in
-# its state, until Ctrl+C or the VM stops. A VM without the feature is
+# its state, until Ctrl+C or the VM stops. A VM without the layer is
 # refused, and on macOS Screen Sharing (a stub open) gets the address.
 
 # No VM.
-project desk
+project plain
 ! exec devvm desktop
-stderr '^devvm: no_vm dir=\S*/desk$'
+stderr '^devvm: no_vm dir=\S*/plain$'
 ! exec devvm desktop now
 stderr '^devvm: args_none command=devvm desktop given=now$'
 
-# A VM without the desktop feature: refused, nothing served.
+# A VM without the desktop layer: refused, nothing served. base has no
+# desktop: its build doesn't run the layer's script.
 exec devvm --no-network-policy --no-git-protect
-vm_name DESK desk
-cp $WORK/no-feature $STUB_DIR/shell-fails-on
+vm_name PLAIN plain
+grep '^# Essentials, and mise' $STUB_DIR/scripts
+! grep '^# desktop: ' $STUB_DIR/scripts
+cp $WORK/no-layer $STUB_DIR/shell-fails-on
 ! exec devvm desktop --no-open
-stderr '^devvm: desktop_no_feature vm=devvm-desk-[0-9a-f]{14}$'
+stderr '^devvm: desktop_no_layer vm=devvm-plain-[0-9a-f]{14}$'
 ! stdout desktop_ready
-catg $DESK_dir/state
+catg $PLAIN_dir/state
 ! stdout 'desktop_(port|password)='
 rm $STUB_DIR/shell-fails-on
+
+# --layers desktop: the VM's image is desktop, built on base by the
+# layer's script.
+project desk
+exec devvm --no-network-policy --no-git-protect --layers desktop
+stdout '^==> building_image image=desktop key=[0-9a-f]{12}$'
+stdout '^==> creating_from image=desktop vm=devvm-desk-[0-9a-f]{14}$'
+grep '^# desktop: a built-in layer' $STUB_DIR/scripts
+vm_name DESK desk
+catg $DESK_dir/state
+stdout '^image=desktop$'
 
 # A stopped VM: started, its desktop started with the clipboard off, and
 # served on a port of 127.0.0.1 until Ctrl+C.
@@ -88,7 +102,7 @@ until sh -c "$1"; do
   [ "$i" -lt 900 ] || exit 1
   sleep 0.1
 done
--- no-feature --
+-- no-layer --
 'test' '-x' '/usr/local/bin/devvm-desktop'
 -- start-fails --
 /usr/local/bin/devvm-desktop' 'start'

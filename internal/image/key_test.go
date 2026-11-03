@@ -1,6 +1,7 @@
 package image
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -320,6 +321,28 @@ func TestKeyOfTheRealFiles(t *testing.T) {
 		if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(key) {
 			t.Errorf("%s: key %q", name, key)
 		}
+	}
+}
+
+// The built-in layers are desktop, docker and nix, sorted, each a script
+// in devvm's own layers/, and none of them is one of base's features.
+func TestBuiltins(t *testing.T) {
+	if want := []string{"desktop", "docker", "nix"}; !slices.Equal(Builtins, want) {
+		t.Errorf("Builtins = %q, want %q", Builtins, want)
+	}
+	for _, name := range Builtins {
+		if !IsBuiltin(name) || !LayerName(name) {
+			t.Errorf("%s: IsBuiltin %v, LayerName %v", name, IsBuiltin(name), LayerName(name))
+		}
+		if _, err := fs.Stat(assets.FS, "layers/"+name+".sh"); err != nil {
+			t.Errorf("%s has no script: %v", name, err)
+		}
+		if _, err := fs.Stat(assets.FS, "features/"+name+".sh"); err == nil {
+			t.Errorf("%s is one of base's features too", name)
+		}
+	}
+	if IsBuiltin("base") || IsBuiltin("mine") {
+		t.Error("IsBuiltin took base or a layer of the user's")
 	}
 }
 

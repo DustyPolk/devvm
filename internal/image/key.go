@@ -121,15 +121,19 @@ func LayerName(name string) bool {
 	return name != Base && !IsTool(name) && layerName.MatchString(name)
 }
 
+// DesktopLayer is the built-in layer with an Xfce desktop, which devvm
+// desktop opens.
+const DesktopLayer = "desktop"
+
 // DockerLayer is the built-in layer with Docker's engine.
 const DockerLayer = "docker"
 
 // NixLayer is the built-in layer with Nix, direnv and nix-direnv.
 const NixLayer = "nix"
 
-// Builtins are the layers devvm ships, layers/<name>.sh in its own files:
-// chosen like the user's, whose layers can't take their names.
-var Builtins = []string{DockerLayer, NixLayer}
+// Builtins are the layers devvm ships, layers/<name>.sh in its own files,
+// sorted: chosen like the user's, whose layers can't take their names.
+var Builtins = []string{DesktopLayer, DockerLayer, NixLayer}
 
 // HasLayer reports whether an image's name has the layer.
 func HasLayer(name, layer string) bool { return slices.Contains(strings.Split(name, "+"), layer) }

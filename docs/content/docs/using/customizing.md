@@ -63,11 +63,12 @@ Features are optional extras that devvm builds into [`base`](images.md#base) aft
 | `omb` | [oh-my-bash](https://ohmybash.github.io/): a themed prompt, completions and aliases, with auto-update off |
 | `fzf` | fuzzy Ctrl-R history and Ctrl-T file search |
 | `cli-tools` | bat, fd, eza, zoxide (`z`), btop, tree, tldr |
-| `desktop` | an Xfce desktop, which [`devvm desktop`](desktop.md) opens in Screen Sharing, about 370 MB |
+
+The desktop that [`devvm desktop`](desktop.md) opens isn't a feature but a [built-in layer](images.md#built-in-layers), `desktop`, so only the VMs you choose it for get it.
 
 ### Choosing features
 
-The first time devvm builds anything, it asks which features `base` gets, with every one but `desktop` chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature but `desktop`. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
+The first time devvm builds anything, it asks which features `base` gets, with every one chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
 
 To change the choice:
 

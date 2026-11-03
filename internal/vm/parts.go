@@ -155,6 +155,8 @@ func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
 // layerDesc is what a layer is, as the picker says it.
 func layerDesc(layer string) string {
 	switch layer {
+	case image.DesktopLayer:
+		return msg.PickLayerDesktop().Line()
 	case image.DockerLayer:
 		return msg.PickLayerDocker().Line()
 	case image.NixLayer:

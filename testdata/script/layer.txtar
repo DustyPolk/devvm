@@ -15,7 +15,7 @@ stdout '^pg$'
 exec devvm __complete --layers p
 stdout '^pg$'
 ! exec devvm build nope
-stderr '^devvm: unknown_layer layer=nope layers=base docker nix pg$'
+stderr '^devvm: unknown_layer layer=nope layers=base desktop docker nix pg$'
 # A shared tool is no layer: an image holds none.
 ! exec devvm build node+pg
 stderr '^devvm: tool_not_layer tool=node$'

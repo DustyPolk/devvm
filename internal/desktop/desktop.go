@@ -1,7 +1,7 @@
 // Package desktop is devvm desktop's side on this machine: the VNC
 // connections a viewer makes to this machine's loopback, each checked
 // against the VM's password here, before anything reaches the VM, then
-// carried to the VM's VNC server (its desktop feature's, on a socket in the
+// carried to the VM's VNC server (its desktop layer's, on a socket in the
 // VM, never a port) over the VM's ssh, with the viewer's clipboard kept from
 // the VM unless it's asked for.
 //
@@ -16,11 +16,11 @@ import (
 	"strings"
 )
 
-// Socket is where the desktop feature's VNC server listens in the VM: a
+// Socket is where the desktop layer's VNC server listens in the VM: a
 // socket in a folder of the VM's user's own (0700), the socket 0600.
 const Socket = "/run/devvm-desktop/vnc.sock"
 
-// Command is the desktop feature's command in the VM: devvm-desktop start
+// Command is the desktop layer's command in the VM: devvm-desktop start
 // on|off starts its desktop unless it runs, the clipboard as asked.
 const Command = "/usr/local/bin/devvm-desktop"
 

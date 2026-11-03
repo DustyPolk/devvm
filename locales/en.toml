@@ -1205,6 +1205,9 @@ other = "for {{.file}}"
 [pick_setup_agent]
 other = "from devvm setup"
 
+[pick_layer_desktop]
+other = "an Xfce desktop, which devvm desktop opens"
+
 [pick_layer_docker]
 other = "Docker's engine, CLI, BuildKit and Compose"
 
@@ -1433,8 +1436,8 @@ other = "Opening this folder's VM in VS Code failed: {{.reason}}."
 description = "reason is an error from the system, in English"
 other = "Opening this folder's VM's desktop failed: {{.reason}}."
 
-[desktop_no_feature]
-other = "{{.vm}} has no desktop. Choose the desktop feature with devvm setup, then make the VM again with devvm rm and devvm."
+[desktop_no_layer]
+other = "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop."
 
 [desktop_start_failed]
 other = "{{.vm}}'s desktop didn't start."

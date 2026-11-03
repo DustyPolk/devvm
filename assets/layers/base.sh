@@ -24,8 +24,9 @@ if command -v apk >/dev/null; then
   musl=_musl
 else
 musl=""
-# The snapshot holds for the whole build (features install packages too); guest/sync.sh removes it in
-# project VMs, so they get current updates.
+# The snapshot holds for the whole build (features install packages too), and for the layers built on
+# base, which start from a copy of its image; guest/sync.sh removes it in project VMs, so they get
+# current updates.
 echo "APT::Snapshot \"$apt_snapshot\";" | sudo tee /etc/apt/apt.conf.d/50devvm-snapshot >/dev/null
 # The snapshot servers answer 502 or 503 now and then, and a connection can stall without closing:
 # each download is tried again (with a growing delay), and one that sends nothing for 30 s fails.

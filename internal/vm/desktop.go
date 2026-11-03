@@ -51,7 +51,7 @@ const (
 type Desktop struct{ *Env }
 
 // Open gets the folder's VM ready as devvm host does (ready), starts its
-// desktop (the desktop feature's devvm-desktop), and serves it on this
+// desktop (the desktop layer's devvm-desktop), and serves it on this
 // machine's loopback through devvm's relay (desktop.Relay), each viewer
 // checked against the VM's password before anything reaches the VM, until
 // ctx ends (Ctrl+C) or the VM stops. On macOS it opens the address in
@@ -67,7 +67,7 @@ func (e Desktop) Open(ctx context.Context, o DesktopOptions) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return msg.DesktopNoFeature(vm)
+		return msg.DesktopNoLayer(vm)
 	}
 	password, err := desktopPassword(t.st)
 	if err != nil {

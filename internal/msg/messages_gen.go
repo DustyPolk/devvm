@@ -574,9 +574,9 @@ func DesktopFailed(reason string) M {
 	return M{id: "desktop_failed", vals: []val{{"reason", reason}}}
 }
 
-// DesktopNoFeature is [desktop_no_feature]: "{{.vm}} has no desktop. Choose the desktop feature with devvm setup, then make the VM again with devvm rm and devvm."
-func DesktopNoFeature(vm string) M {
-	return M{id: "desktop_no_feature", vals: []val{{"vm", vm}}}
+// DesktopNoLayer is [desktop_no_layer]: "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop."
+func DesktopNoLayer(vm string) M {
+	return M{id: "desktop_no_layer", vals: []val{{"vm", vm}}}
 }
 
 // DesktopOpenFailed is [desktop_open_failed]: "Screen Sharing didn't open. Open {{.url}} in a VNC viewer instead."
@@ -2099,6 +2099,11 @@ func PickCalledFor(file string) M {
 	return M{id: "pick_called_for", vals: []val{{"file", file}}}
 }
 
+// PickLayerDesktop is [pick_layer_desktop]: "an Xfce desktop, which devvm desktop opens"
+func PickLayerDesktop() M {
+	return M{id: "pick_layer_desktop"}
+}
+
 // PickLayerDocker is [pick_layer_docker]: "Docker's engine, CLI, BuildKit and Compose"
 func PickLayerDocker() M {
 	return M{id: "pick_layer_docker"}
@@ -3090,7 +3095,7 @@ var specs = map[string]spec{
 	"deleted_unfinished_build":         {fields: []string{"key"}},
 	"deleting":                         {fields: []string{"vm"}},
 	"desktop_failed":                   {fields: []string{"reason"}},
-	"desktop_no_feature":               {fields: []string{"vm"}},
+	"desktop_no_layer":                 {fields: []string{"vm"}},
 	"desktop_open_failed":              {fields: []string{"url"}},
 	"desktop_ready":                    {fields: []string{"address", "password", "vm"}},
 	"desktop_start_failed":             {fields: []string{"vm"}},
@@ -3395,6 +3400,7 @@ var specs = map[string]spec{
 	"parts_flags_ignored":              {fields: []string{"vm"}},
 	"pick_agents":                      {},
 	"pick_called_for":                  {fields: []string{"file"}},
+	"pick_layer_desktop":               {},
 	"pick_layer_docker":                {},
 	"pick_layer_nix":                   {},
 	"pick_layer_yours":                 {},

@@ -7,7 +7,7 @@ Open this folder's VM's desktop in a VNC viewer
 
 ## Synopsis
 
-Start the desktop of this folder's VM, which needs base's desktop feature, and serve it on this machine's 127.0.0.1 with a password of the VM's own until you press Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm shows.
+Start the desktop of this folder's VM, which needs the desktop layer, and serve it on this machine's 127.0.0.1 with a password of the VM's own until you press Ctrl+C or the VM stops. On macOS, Screen Sharing opens it and asks for the password, which devvm shows.
 
 ```text
 devvm desktop [flags]

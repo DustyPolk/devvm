@@ -37,7 +37,11 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 
 ### Built-in layers
 
-devvm ships two layers, `docker` and `nix`. You choose them like any other layer, in the list devvm shows for a new VM or as in `devvm --layers docker`, and you build one with `devvm build nix`. Like any layer, only a new VM gets them ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
+devvm ships three layers, `desktop`, `docker` and `nix`. You choose them like any other layer, in the list devvm shows for a new VM or as in `devvm --layers docker`, and you build one with `devvm build nix`. Like any layer, only a new VM gets them ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `desktop.sh`, `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
+
+#### desktop
+
+The `desktop` layer installs an Xfce desktop with TigerVNC's server, which [`devvm desktop`](desktop.md) opens in Screen Sharing, and adds about 370 MB to the image. Its packages come from the same pinned package snapshot as base's, and on a base made `--from alpine`, it installs Alpine's own packages, which aren't pinned. It needs no hosts of its own with network policy, and a VM without the layer has no desktop.
 
 #### docker
 

@@ -37,7 +37,8 @@
 #                a group's all-or-none refusals, the log, and nothing left behind (in the --from tier, an
 #                Alpine client's link to port 80 too)
 #     --only desktop
-#                base with the desktop feature, and a VM with network policy whose desktop devvm
+#                a base VM without a desktop (devvm desktop refused), then a VM with the desktop
+#                layer and network policy whose desktop devvm
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
 #                password let in, the VM's server on its user's own socket and no TCP port, the
 #                clipboard off, the password in no file, log or process's arguments, no way out of the
@@ -46,7 +47,8 @@
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python, the docker and nix layers and claude) and
 #                alpine:3 (musl tools, the docker layer on OpenRC, the nix layer's daemon an OpenRC service,
-#                through the proxy once network policy is on), each with every feature, and builds base from ubuntu:26.04, with a
+#                through the proxy once network policy is on, the desktop layer's programs), each with every
+#                feature, and builds base from ubuntu:26.04, with a
 #                docker that isn't running
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
@@ -157,12 +159,10 @@ gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 # (never in a release).
 testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes")
 (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" "${testbuild[@]}" -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-# The features are in base's key, so only a run with from (which checks them) builds them all; desktop
-# builds desktop alone; every other selection shares one smaller base. config.toml chooses them, so
-# nothing asks.
+# The features are in base's key, so only a run with from (which checks them) builds them all; every
+# other selection shares one smaller base. config.toml chooses them, so nothing asks.
 features=""
-if want from; then for f in "$root"/assets/features/*.sh; do features="$features $(basename "$f" .sh)"; done
-elif want desktop; then features=desktop; fi
+if want from; then for f in "$root"/assets/features/*.sh; do features="$features $(basename "$f" .sh)"; done; fi
 toml=""
 for f in $features; do toml="$toml${toml:+, }\"$f\""; done
 printf 'features = [%s]\n' "$toml" > "$XDG_CONFIG_HOME/devvm/config.toml"
@@ -2234,13 +2234,24 @@ fi
 
 if want desktop; then
 section "desktop"
-# A base VM with network policy, base having the desktop feature: devvm desktop serves its desktop
-# on this machine's loopback alone, a viewer checked against its password here; the VM's server
-# listens on a socket of its user's alone, never a port, and gets no way out. Then root in the VM
-# replaces the server with one that asks for no password and records what reaches it: a viewer
-# still needs the password, and its clipboard still never reaches the VM.
+# base has no desktop: a VM of base has none of its programs, and devvm desktop refuses it, naming the
+# layer.
+b=$(newproj nodesk)
+launch "$b" exit --no-network-policy --no-git-protect --layers none
+check "a VM of base has none of the desktop's programs" bash -c "[[ -n '$vm' ]] && grep -qx image=base '$(vmdir "$vm")/state' &&
+  limactl shell --workdir / '$vm' bash -c '! command -v Xvnc && ! command -v startxfce4 && [[ ! -e /usr/local/bin/devvm-desktop ]]' </dev/null"
+check "... and devvm desktop refuses it, naming the layer" bash -c "
+  ! (cd '$b' && DEVVM_MESSAGES=names '$D' desktop --no-open </dev/null >'$work/last.log' 2>&1) &&
+  grep -qx 'devvm: desktop_no_layer vm=$vm' '$work/last.log'"
+(cd "$b" && quiet "$D" rm --force --no-export)
+# A VM with the desktop layer and network policy: devvm desktop serves its desktop on this machine's
+# loopback alone, a viewer checked against its password here; the VM's server listens on a socket of
+# its user's alone, never a port, and gets no way out. Then root in the VM replaces the server with
+# one that asks for no password and records what reaches it: a viewer still needs the password, and
+# its clipboard still never reaches the VM.
 p=$(newproj desk)
-launch "$p" exit --network-policy --no-git-protect
+launch "$p" exit --network-policy --no-git-protect --layers desktop
+check "--layers desktop makes a VM of the desktop image" bash -c "[[ -n '$vm' ]] && grep -qx image=desktop '$(vmdir "$vm")/state'"
 ps_watch
 desktop_serve "$p"
 ps_unwatch
@@ -2455,13 +2466,15 @@ check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a bu
 (cd "$f" && HOME=$fh quiet "$D" rm --force --no-export)
 
 # Alpine: apk, OpenRC and musl, so its own (musl) tool images; the docker layer from Alpine's packages;
-# the nix layer's daemon as an OpenRC service of devvm's.
+# the nix layer's daemon as an OpenRC service of devvm's; the desktop layer from Alpine's packages.
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
-nd launch "$al" exit --from alpine:3 --no-network-policy --layers docker,nix
+nd launch "$al" exit --from alpine:3 --no-network-policy --layers docker,nix,desktop
 check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$(vmdir "$vm")/state' && [[ \$(rec \"\$(from_record alpine:3)\" libc) == musl ]]"
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
+check "the desktop layer's programs are in it (Alpine's packages)" in_vm "$vm" \
+  'command -v Xvnc && command -v startxfce4 && command -v vncconfig && [[ -x /usr/local/bin/devvm-desktop ]]'
 check "ports below 1024 are open to the VM's user after the setup (Alpine's kernel starts at 1024)" in_vm "$vm" \
   '[[ $(cat /proc/sys/net/ipv4/ip_unprivileged_port_start) == 0 ]]'
 check "and every feature" in_vm "$vm" 'eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'

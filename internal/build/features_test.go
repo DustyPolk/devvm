@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
@@ -142,31 +143,25 @@ func TestChooseFeatures(t *testing.T) {
 	}
 }
 
-// devvm's desktop feature is the one feature not chosen until it's
-// chosen: unchosen, base's key leaves it out, and the picker starts with
-// it off; once chosen, it's kept.
-func TestDesktopUntilChosen(t *testing.T) {
+// devvm's own features are cli-tools, fzf and omb: desktop is a layer.
+// Until a choice is made, base gets every one of them, and a choice of
+// desktop is refused.
+func TestOwnFeatures(t *testing.T) {
 	b := featureEnv(t)
-	write(t, filepath.Join(assetsDir(b), "features", "desktop.sh"), "#!/bin/bash\n# a desktop\n")
+	b.Assets = assets.FS
+	if err := os.Remove(filepath.Join(b.Dirs.Features(), "fzf.sh")); err != nil {
+		t.Fatal(err)
+	}
 	saveFeatures(t, b.Dirs, nil)
-	if features, _ := b.Features(); !slices.Equal(features, []string{"desktop", "fzf", "omb", "mine"}) {
-		t.Fatalf("Features() = %q", features)
+	want := []string{"cli-tools", "fzf", "omb", "mine"}
+	if features, shadowed := b.Features(); !slices.Equal(features, want) || shadowed != nil {
+		t.Errorf("Features() = %q, %q; want %q", features, shadowed, want)
 	}
-	in, err := b.Inputs()
-	if err != nil || !slices.Equal(in.BaseFeatures, []string{"fzf", "omb", "mine"}) {
-		t.Errorf("unchosen: %q, %v", in.BaseFeatures, err)
+	if in, err := b.Inputs(); err != nil || !slices.Equal(in.BaseFeatures, want) {
+		t.Errorf("unchosen: %q, %v; want %q", in.BaseFeatures, err, want)
 	}
-	if _, err := (Choice{b}).PickFeatures(); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := savedFeatures(b.Dirs); err != nil || !slices.Equal(got, []string{"fzf", "omb", "mine"}) {
-		t.Errorf("picked from the start: %q, %v", got, err)
-	}
-	if _, err := (Choice{b}).SetFeatures([]string{"desktop", "omb"}); err != nil {
-		t.Fatal(err)
-	}
-	if in, err := b.Inputs(); err != nil || !slices.Equal(in.BaseFeatures, []string{"desktop", "omb"}) {
-		t.Errorf("chosen: %q, %v", in.BaseFeatures, err)
+	if _, err := (Choice{b}).SetFeatures([]string{"desktop"}); msg.IDOf(err) != "no_feature" {
+		t.Errorf("SetFeatures(desktop) = %v, want no_feature", err)
 	}
 }
 

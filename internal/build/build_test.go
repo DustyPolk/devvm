@@ -137,13 +137,13 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	// layer's is the built-in one, listed once.
 	write(t, filepath.Join(b.Dirs.Layers(), "node.sh"), "")
 	write(t, filepath.Join(b.Dirs.Layers(), "docker.sh"), "")
-	if got, want := b.Layers(), []string{"base", "bar", "docker", "foo", "nix"}; !slices.Equal(got, want) {
+	if got, want := b.Layers(), []string{"base", "bar", "desktop", "docker", "foo", "nix"}; !slices.Equal(got, want) {
 		t.Errorf("Layers() = %q, want %q", got, want)
 	}
-	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("stray", "base bar docker foo nix").Error() {
+	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("stray", "base bar desktop docker foo nix").Error() {
 		t.Errorf("CheckLayers(stray) = %v", err)
 	}
-	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "docker", "foo+docker", "nix", "docker+nix"} {
+	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "docker", "foo+docker", "nix", "docker+nix", "desktop", "foo+desktop"} {
 		if err := b.CheckLayers(ok); err != nil {
 			t.Errorf("CheckLayers(%q): %v", ok, err)
 		}

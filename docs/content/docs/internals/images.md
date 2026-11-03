@@ -78,7 +78,7 @@ The pinned release and its SHA-256 are part of base's key, so a new pin rebuilds
 
 `assets/base.yaml` holds base's VM settings, which are 4 CPUs, 8 GiB of memory and a 100 GiB disk, and devvm fits the CPUs and memory to the host ([base's size](#bases-size)). `assets/layers/base.sh` installs base, and the optional [features](../using/customizing.md) you chose follow it.
 
-Each download in `assets/layers/base.sh` is pinned to a version and a SHA-256 at the top of the script, and the build fails if a checksum doesn't match. Each feature pins its downloads in the same way, at the top of its script, `assets/features/<name>.sh` in the repo, which is built into devvm. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and project VMs use the live archive ([base](../using/images.md#base)).
+Each download in `assets/layers/base.sh` is pinned to a version and a SHA-256 at the top of the script, and the build fails if a checksum doesn't match. Each feature pins its downloads in the same way, at the top of its script, `assets/features/<name>.sh` in the repo, which is built into devvm. While base builds, apt's packages come from a dated snapshot of Ubuntu's archive (`apt_snapshot`, from snapshot.ubuntu.com), and project VMs use the live archive ([base](../using/images.md#base)). `base.sh` sets the snapshot in `/etc/apt/apt.conf.d/50devvm-snapshot`, which stays in base's image, so a layer built on base, which starts from a copy of that image, installs from the same snapshot and the package lists base fetched through it. Only a project VM's setup, `assets/guest/sync.sh`, removes the file, and it never runs in a build.
 
 ## Base's size
 
@@ -87,6 +87,10 @@ devvm fits base's CPUs and memory to the host with one rule that every backend u
 - **Lima** passes the fitted size to `limactl create` as `--cpus` and `--memory`, for base and for the VM that converts a `--from` image. The images built on base are clones of it, so they and their VMs keep that size.
 
 A size you set with `--cpus`, `--memory` or `devvm size -g` replaces the fitted one. devvm checks that size against the same rule, so it refuses more memory than the host's whole GiB less 2, or half of them on a host of 4 GiB or less, and the fitted memory always passes ([size](../using/ports-size.md#size-and-ports)). The fitted size isn't in image keys, because the host's size doesn't change what an image holds.
+
+## The desktop layer
+
+The built-in [`desktop` layer](../using/images.md#desktop)'s script is `assets/layers/desktop.sh`, and its allowlist is `assets/layers/desktop.policy`, which has no rules, because the layer downloads nothing of its own and its packages come from the distribution's archive, which base's allowlist has. On Ubuntu and on Debian releases whose apt has snapshots, those packages come from base's snapshot (above), so the same image key means the same packages. On `--from alpine`, the script installs Alpine's own packages, which aren't pinned. Besides Xfce and TigerVNC, the script writes `/usr/local/bin/devvm-desktop`, which [`devvm desktop`](desktop.md#in-the-vm) runs in the VM. The layer needs no backend feature of its own, because it runs on any VM that can build an image and reach its ssh.
 
 ## The docker layer
 

@@ -81,9 +81,9 @@ stdout -count=2 '^  "libc": "gnu",$'
 # Names that aren't base or a layer are refused, before anything runs.
 stub_reset
 ! exec devvm build foo+stray
-stderr '^devvm: unknown_layer layer=stray layers=base bar docker foo nix$'
+stderr '^devvm: unknown_layer layer=stray layers=base bar desktop docker foo nix$'
 ! exec devvm rebuild ../../x
-stderr '^devvm: unknown_layer layer=\.\./\.\./x layers=base bar docker foo nix$'
+stderr '^devvm: unknown_layer layer=\.\./\.\./x layers=base bar desktop docker foo nix$'
 ! exec devvm build
 stderr '^devvm: arg_missing args=IMAGE command=devvm build$'
 # An image holds base and layers alone: a shared tool's name is refused,

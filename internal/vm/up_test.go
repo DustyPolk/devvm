@@ -345,7 +345,7 @@ func TestUpPicker(t *testing.T) {
 			out[i] = PickPart{Heading: p.Heading, Rows: slices.Clone(p.Rows)}
 		}
 		out[0].Rows[1].On = true // python
-		out[2].Rows[0].On = true // docker
+		out[2].Rows[1].On = true // docker
 		return out
 	}
 	var said msg.Recorder
@@ -370,13 +370,21 @@ func TestUpPicker(t *testing.T) {
 	if !slices.Equal(headings, []string{"pick_toolchains", "pick_agents", "pick_layers"}) {
 		t.Errorf("headings %q", headings)
 	}
+	var layers []string
+	for _, r := range shown[2].Rows {
+		layers = append(layers, r.Name)
+	}
+	if !slices.Equal(layers, []string{"desktop", "docker", "nix"}) {
+		t.Errorf("layers %q", layers)
+	}
 	for name, want := range map[string]PickRow{
-		"node":   {Name: "node", Desc: "pick_called_for file=package.json", On: true},
-		"python": {Name: "python"},
-		"codex":  {Name: "codex", Desc: "pick_setup_agent", On: true},
-		"claude": {Name: "claude"},
-		"docker": {Name: "docker", Desc: "pick_layer_docker"},
-		"nix":    {Name: "nix", Desc: "pick_called_for file=flake.nix"},
+		"desktop": {Name: "desktop", Desc: "pick_layer_desktop"},
+		"node":    {Name: "node", Desc: "pick_called_for file=package.json", On: true},
+		"python":  {Name: "python"},
+		"codex":   {Name: "codex", Desc: "pick_setup_agent", On: true},
+		"claude":  {Name: "claude"},
+		"docker":  {Name: "docker", Desc: "pick_layer_docker"},
+		"nix":     {Name: "nix", Desc: "pick_called_for file=flake.nix"},
 	} {
 		if rows[name] != want {
 			t.Errorf("row %s = %+v, want %+v", name, rows[name], want)
