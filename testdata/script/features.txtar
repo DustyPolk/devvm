@@ -47,8 +47,9 @@ stdout '^# \[4/7\] running_script script=base\.sh vm=devvm-img-'
 stdout '^# \[5/7\] running_script script=fzf\.sh vm=devvm-img-'
 stdout '^# \[6/7\] running_script script=omb\.sh vm=devvm-img-'
 stdout '^# \[7/7\] stopping vm=devvm-img-'
-stdout '^# \[4/5\] running_script script=foo\.sh vm=devvm-img-'
-! stdout '\[8/7\]|\[6/5\]'
+[darwin] stdout '^# \[4/5\] running_script script=foo\.sh vm=devvm-img-'
+[linux] stdout '^# \[3/4\] running_script script=foo\.sh vm=devvm-img-'
+! stdout '\[8/7\]|\[6/5\]|\[5/4\]'
 
 # None chosen: base runs only base.sh.
 cp none.toml $CFG/config.toml

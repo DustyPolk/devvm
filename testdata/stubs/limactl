@@ -5,11 +5,13 @@
 # Stopped), which create, clone, start, stop and delete keep up to date,
 # failing with $STUB_DIR/list-fails and hanging with $STUB_DIR/list-hangs;
 # create's template on its input (-) goes to $STUB_DIR/create-template. A
-# VM's config is $STUB_DIR/config-<name>.json, else {}; its size
-# ("CPUS MEMORY DISK", in bytes) $STUB_DIR/size-<name>, else 4 CPUs, 8 GiB
-# and 100 GiB, which edit's --cpus, --memory and --disk change; clone's and edit's
-# --set .env goes into $LIMA_HOME/<name>/lima.yaml, and their --set .portForwards
-# and --set .ssh.localPort into its config (list shows lima.yaml's env too), which delete forgets. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
+# VM's size ("CPUS MEMORY DISK", in bytes) is $STUB_DIR/size-<name>, else 4
+# CPUs, 8 GiB and 100 GiB, which create's --cpus= and --memory= set and
+# edit's --cpus, --memory and --disk change. create's, clone's and edit's --set
+# go into its config (set_config, below: list shows it, with lima.yaml's env),
+# which a clone copies from its source, --mount-none takes the mounts out of,
+# and delete forgets with $LIMA_HOME/<name>. The TestLimactlStubContract test
+# in internal/backend/lima checks all this against real Lima. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
 # host keys, read with a shell, are one made-up key per VM, unless
 # $STUB_DIR/hostkeys-fail exists.
@@ -102,30 +104,76 @@ if [[ ${1:-} == shell && " $* " == *"/oci/build.sh "* ]]; then
   fi
   exit 0
 fi
-# A VM's port forwards, as clone and edit set them (--set .portForwards = RULES), go into the
-# config list shows ($STUB_DIR/ports-<name>.json).
-if [[ ${1:-} == clone || ${1:-} == edit ]]; then
-  target=${names[0]:-}
-  [[ $1 != clone ]] || target=${names[1]:-}
-  args=("$@")
-  for ((i = 0; i < ${#args[@]} - 1; i++)); do
-    if [[ ${args[i]} == --set && ${args[i + 1]} == ".portForwards = "* ]]; then
-      echo "${args[i + 1]#.portForwards = }" > "$STUB_DIR/ports-$target.json"
-    fi
-    if [[ ${args[i]} == --set && ${args[i + 1]} == ".ssh.localPort="* ]]; then
-      echo "${args[i + 1]#.ssh.localPort=}" > "$STUB_DIR/sshport-$target"
-    fi
-    # The environment goes into the VM's lima.yaml, an env: line of its own.
-    v=${args[i + 1]}
-    if [[ ${args[i]} == --set && ($v == ".env = "* || $v == "del(.env)") ]]; then
-      y="$LIMA_HOME/$target/lima.yaml"
+# set_config NAME EXPR: a --set's expression, in the forms devvm writes (.KEY = JSON, .KEY=JSON,
+# del(.KEY)), into NAME's config: $STUB_DIR/config-<name>/KEY holds KEY's JSON, a.b for a's b.
+# The environment goes into the VM's lima.yaml instead, an env: line of its own.
+set_config() {
+  local d="$STUB_DIR/config-$1" e=$2 k v y
+  mkdir -p "$d"
+  case $e in
+    ".env = "* | "del(.env)")
+      y="$LIMA_HOME/$1/lima.yaml"
       mkdir -p "$(dirname "$y")"
       { [[ ! -f $y ]] || grep -v '^env:' "$y" || true
-        [[ $v == "del(.env)" ]] || echo "env: ${v#.env = }"; } > "$y.new"
-      mv "$y.new" "$y"
-    fi
+        [[ $e == "del(.env)" ]] || echo "env: ${e#.env = }"; } > "$y.new"
+      mv "$y.new" "$y" ;;
+    "del(."*")")
+      k=${e#del(.}; k=${k%)}
+      rm -rf "${d:?}/$k" "$d/$k".* ;;
+    .*=*)
+      k=${e%%=*}; k=${k% }; k=${k#.}
+      v=${e#*=}; v=${v# }
+      echo "$v" > "$d/$k" ;;
+  esac
+}
+# config_json NAME: NAME's config as list --json shows it, with lima.yaml's env.
+config_json() {
+  local d="$STUB_DIR/config-$1" out="" sub f k p ev
+  for f in "$d"/*; do
+    [[ -e $f ]] || continue
+    k=${f##*/}
+    [[ $k != *.* ]] || continue
+    out+=",\"$k\":$(cat "$f")"
   done
-fi
+  for p in ssh hostResolver; do
+    sub=""
+    for f in "$d/$p".*; do
+      if [[ -e $f ]]; then sub+=",\"${f##*/"$p".}\":$(cat "$f")"; fi
+    done
+    [[ -z $sub ]] || out+=",\"$p\":{${sub#,}}"
+  done
+  ev=$(sed -n 's/^env: //p' "$LIMA_HOME/$1/lima.yaml" 2>/dev/null || true)
+  [[ -z $ev ]] || out+=",\"env\":$ev"
+  echo "{${out#,}}"
+}
+# create, clone and edit: a clone starts with its source's config, size and lima.yaml;
+# --mount-none drops the mounts, then each --set applies, as Lima's do; create's
+# --cpus=N and --memory=GiB set its size.
+case ${1:-} in
+  create | clone | edit)
+    target=${names[0]:-}
+    if [[ $1 == clone ]]; then
+      target=${names[1]:-}
+      rm -rf "${STUB_DIR:?}/config-$target"
+      [[ ! -d $STUB_DIR/config-${names[0]} ]] || cp -R "$STUB_DIR/config-${names[0]}" "$STUB_DIR/config-$target"
+      [[ ! -f $STUB_DIR/size-${names[0]} ]] || cp "$STUB_DIR/size-${names[0]}" "$STUB_DIR/size-$target"
+      if [[ -f $LIMA_HOME/${names[0]}/lima.yaml ]]; then
+        mkdir -p "$LIMA_HOME/$target"
+        cp "$LIMA_HOME/${names[0]}/lima.yaml" "$LIMA_HOME/$target/lima.yaml"
+      fi
+    fi
+    [[ " $* " != *" --mount-none "* ]] || rm -f "$STUB_DIR/config-$target/mounts"
+    args=("$@")
+    cpus=4 mem=8589934592
+    for ((i = 0; i < ${#args[@]}; i++)); do
+      case ${args[i]} in
+        --set) set_config "$target" "${args[i + 1]}" ;;
+        --cpus=*) cpus=${args[i]#--cpus=} ;;
+        --memory=*) mem=$(awk -v g="${args[i]#--memory=}" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
+      esac
+    done
+    [[ $1 != create ]] || echo "$cpus $mem 107374182400" > "$STUB_DIR/size-$target" ;;
+esac
 case ${1:-} in
   create)
     for n in "${names[@]+"${names[@]}"}"; do [[ -f $n ]] || set_status "$n" Stopped; done
@@ -164,7 +212,7 @@ case ${1:-} in
     done
     echo "$cpus $mem $disk" > "$STUB_DIR/size-${names[0]}" ;;
   delete)
-    for n in "${names[@]}"; do set_status "$n"; rm -f "$STUB_DIR/ports-$n.json" "$STUB_DIR/sshport-$n"; done
+    for n in "${names[@]}"; do set_status "$n"; rm -rf "${STUB_DIR:?}/config-$n" "$STUB_DIR/size-$n" "${LIMA_HOME:?}/$n"; done
     [[ ! -e $STUB_DIR/delete-fails ]] || exit 1 ;;
   shell)
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/shell-agent"
@@ -214,20 +262,9 @@ esac
 [[ ${1:-} == list && ${2:-} == --json ]] || exit 0
 [[ ! -e $STUB_DIR/list-fails ]] || exit 1
 [[ ! -e $STUB_DIR/list-hangs ]] || exec sleep 30
+# Sorted by name, as Lima lists its instances.
 while read -r n st; do
   read -r cpus mem disk < <(cat "$STUB_DIR/size-$n" 2>/dev/null || echo "4 8589934592 107374182400")
-  cfg=$(cat "$STUB_DIR/config-$n.json" 2>/dev/null || echo '{}')
-  pf=$(cat "$STUB_DIR/ports-$n.json" 2>/dev/null || true)
-  if [[ -n $pf && $cfg == '{}' ]]; then cfg="{\"portForwards\":$pf}"
-  elif [[ -n $pf ]]; then cfg="{\"portForwards\":$pf,${cfg#\{}"; fi
-  # Its ssh port, ahead of the config's own ssh settings, which JSON merges into it.
-  sp=$(cat "$STUB_DIR/sshport-$n" 2>/dev/null || true)
-  if [[ -n $sp && $cfg == '{}' ]]; then cfg="{\"ssh\":{\"localPort\":$sp}}"
-  elif [[ -n $sp ]]; then cfg="{\"ssh\":{\"localPort\":$sp},${cfg#\{}"; fi
-  # Its environment, as its lima.yaml has it.
-  ev=$(sed -n 's/^env: //p' "$LIMA_HOME/$n/lima.yaml" 2>/dev/null || true)
-  if [[ -n $ev && $cfg == '{}' ]]; then cfg="{\"env\":$ev}"
-  elif [[ -n $ev ]]; then cfg="{\"env\":$ev,${cfg#\{}"; fi
   printf '{"name":"%s","status":"%s","dir":"%s","cpus":%s,"memory":%s,"disk":%s,"sshLocalPort":60022,"sshConfigFile":"%s","config":%s}\n' \
-    "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$LIMA_HOME/$n/ssh.config" "$cfg"
-done < "$inst"
+    "$n" "${st:-Stopped}" "$LIMA_HOME/$n" "$cpus" "$mem" "$disk" "$LIMA_HOME/$n/ssh.config" "$(config_json "$n")"
+done < <(LC_ALL=C sort "$inst")

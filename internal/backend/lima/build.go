@@ -49,6 +49,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		return backend.Built{}, err
 	}
 	parent := ImagePrefix + spec.Parent
+	edits := true // base's config is new: Start edits it
 	if spec.Parent != "" {
 		// Its parent stays as it is: stopped, as clones need.
 		in, err := l.inspect(ctx, parent)
@@ -57,6 +58,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		} else if err != nil {
 			return backend.Built{}, err
 		}
+		edits = cloneEdits(l, in.Config, spec.Net)
 		if backend.Status(in.Status) != backend.StatusStopped {
 			if err := l.stop(ctx, parent); err != nil {
 				return backend.Built{}, err
@@ -70,11 +72,13 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 			l.unfinished(ctx, inst)
 		}
 	})
-	// Its steps: create or clone, configure and start (Start's edit is
-	// always there for a build: its ports, and on macOS its ssh port),
-	// each script, stop; with --from, the conversion's first, and an
-	// image only Docker has its export.
-	steps := 4 + len(spec.Scripts)
+	// Its steps: create or clone, configure (when Start edits it) and
+	// start, each script, stop; with --from, the conversion's first, and
+	// an image only Docker has its export.
+	steps := 3 + len(spec.Scripts)
+	if edits {
+		steps++
+	}
 	if !spec.Trust.None() {
 		steps += 2
 	}
@@ -225,6 +229,18 @@ func convertedImages(dir, cmdline, goarch string) []limaImage {
 		Kernel: &limaKernel{Location: filepath.Join(dir, "kernel"), Cmdline: cmdline},
 		Initrd: &limaFile{Location: filepath.Join(dir, "initrd")},
 	}}
+}
+
+// cloneEdits reports whether Start edits a build VM cloned from an image
+// whose config is cfg, started with network n, for its step count: on
+// macOS always (its ssh port, new at each start), on Linux only when the
+// image's own build left its config otherwise, as a clone keeps it.
+func cloneEdits(l *Lima, cfg *config, n backend.Net) bool {
+	if l.OS == "darwin" {
+		return true
+	}
+	sets, _ := l.startSets(cfg, backend.Confinement{Net: n}, 0)
+	return len(sets) > 0
 }
 
 // layerArgs are limactl clone's arguments for a layer's instance (inst):

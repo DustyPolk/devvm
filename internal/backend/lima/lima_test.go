@@ -450,7 +450,7 @@ func TestCreateVM(t *testing.T) {
 		"limactl stop devvm-img-0123456789ab",
 		`limactl clone --tty=false devvm-img-0123456789ab devvm-p-0123456789abcd --mount-none` +
 			` --set .mounts = [{"location":"/my project","writable":true},{"location":"/h/.claude","writable":false},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools","writable":false}]` +
-			` --set .ssh.forwardAgent=true --set .ssh.localPort=23456 --set ` + noForwardsSet(),
+			` --set .ssh.forwardAgent=true --set .ssh.localPort=23456 --set ` + noForwardsSet() + ` --set .propagateProxyEnv=true`,
 		"limactl edit --tty=false devvm-p-0123456789abcd --cpus 6 --disk 150",
 	}
 	if got := f.lines(); !slices.Equal(got, want) {

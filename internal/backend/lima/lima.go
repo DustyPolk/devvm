@@ -288,13 +288,16 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 	}
 	// --mount-none: the image's own mounts (the template's home folder)
 	// would otherwise stay. Lima applies --set after it. Its environment
-	// too, so a start without network policy edits nothing (Start).
+	// and the host's proxy settings too (the image's build turned those
+	// off, and a clone keeps its config), so a start without network
+	// policy edits nothing (Start).
 	args := []string{
 		"clone", "--tty=false", src, vm, "--mount-none",
 		"--set", mounts,
 		"--set", ".ssh.forwardAgent=" + strconv.FormatBool(spec.AgentForwarding),
 		"--set", ".ssh.localPort=" + strconv.Itoa(spec.SSHPort),
 		"--set", noForwardsSet(),
+		"--set", ".propagateProxyEnv=true",
 	}
 	if len(spec.Env) > 0 {
 		args = append(args, "--set", ".env = "+yqJSON(spec.Env))

@@ -24,9 +24,9 @@ stdout -count=2 '^==> deleted_old_image image=foo(\+bar)? key=[0-9a-f]{12}$'
 grep '\{\n      "backend": "lima",\n      "from": "",\n      "name": "foo",\n      "counter": "\d{14}-[0-9a-f]{8}"\n    \}' $IMAGES/rebuilds.json
 stub_calls
 stdout '^limactl clone --tty=false --mount-none devvm-img-[0-9a-f]{12} devvm-img-[0-9a-f]{12}$'
-exec sh -c 'echo "limactl delete -f devvm-img-$(cat foo.key)"; echo "limactl delete -f devvm-img-$(cat foo+bar.key)"'
+exec sh -c '{ echo "limactl delete -f devvm-img-$(cat foo.key)"; echo "limactl delete -f devvm-img-$(cat foo+bar.key)"; } | sort'
 cp stdout want-deleted
-exec sh -c 'grep "^limactl delete" "$STUB_LOG"'
+exec sh -c 'grep "^limactl delete" "$STUB_LOG" | sort'
 cmp stdout want-deleted
 
 # What's left: base, the new foo and the project VM. foo+bar builds again
