@@ -271,6 +271,53 @@ func TestDigestNotFoundAndUnreachable(t *testing.T) {
 	}
 }
 
+// A failure that may pass is tried again; a refusal (4xx) isn't, and
+// neither is a redirect to plain http, which NewClient refuses.
+func TestDigestRetries(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	var heads, tokens int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/redirect/") {
+			http.Redirect(w, r, strings.TrimPrefix(r.URL.Path, "/redirect"), http.StatusFound) //nolint:gosec // the test's own server
+			return
+		}
+		heads++
+		if heads < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Docker-Content-Digest", digestOf("b"))
+	}))
+	t.Cleanup(srv.Close)
+	r := &Registry{Client: NewRegistry().Client, Base: func(string) string { return srv.URL }}
+	if d, err := r.Digest(t.Context(), "node:24"); err != nil || d != digestOf("b") || heads != 3 {
+		t.Errorf("after two 503s: %q, %v, %d requests", d, err, heads)
+	}
+	r.Base = func(string) string { return srv.URL + "/redirect" }
+	heads = 0
+	if _, err := r.Digest(t.Context(), "node:24"); !errors.Is(err, ErrNotFound) || heads != 0 {
+		t.Errorf("a redirect to http: %v, %d requests", err, heads)
+	}
+	// A token service's 403 is asked once.
+	f := newFakeRegistry(t)
+	tls := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		tokens++
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(tls.Close)
+	f.realm = tls.URL + "/token"
+	reg := f.registry()
+	reg.Client = tls.Client()
+	if _, err := reg.Digest(t.Context(), "node:24"); !errors.Is(err, ErrNotFound) || tokens != 1 {
+		t.Errorf("a 403 for the token: %v, %d requests", err, tokens)
+	}
+}
+
 // A registry can't point devvm's token request at a host file or a plain
 // http address: the realm must be https.
 func TestDigestRealmMustBeHTTPS(t *testing.T) {

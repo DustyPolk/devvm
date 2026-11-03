@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
+	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -61,7 +61,7 @@ type Env struct {
 	// OS and Arch are the host's, as Go names them.
 	OS, Arch string
 	Getenv   func(string) string
-	Client   *http.Client
+	Client   *fetch.Client
 	Now      func() time.Time
 	// Detach starts the daily check, which outlives the run
 	// (daemon.Detach).

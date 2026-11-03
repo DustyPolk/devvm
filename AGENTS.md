@@ -13,6 +13,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/project/`, `internal/gitprotect/`, `internal/hostgit/` | a project folder (VM name, unsafe folders, detection, set-id files); `.git` protection; every host git command devvm runs (no fsmonitor, hooks or filters, ssh only, no `GIT_*` of the environment, no prompts) |
 | `internal/sshconfig/`, `internal/sshagent/` | the ssh config for running VMs by name, their pinned host keys, the `~/.ssh/config` Include line; each VM's SSH agent choice, devvm's own agent and its keys |
 | `internal/build/`, `internal/image/` | building and rebuilding images, their records; image keys and names (pure) |
+| `internal/fetch/` | every HTTP client (stdlib): `NewClient` (timeout, `HTTPSOnly`/`SameScheme`), `Retry`/`Transient`, `ReadCapped`, `Get`, `Download` (checks the SHA-256) |
 | `internal/from/` | `--from`: references, registry digests (anonymous token), Docker's IDs, the recorded digests |
 | `internal/devcontainer/` | a project's devcontainer.json (pure): finding it, JSONC, mapping it to a new VM's plan, refusals |
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |

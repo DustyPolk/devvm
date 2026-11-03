@@ -2,12 +2,8 @@ package tools
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +12,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
@@ -36,19 +33,9 @@ const miseURL = "https://github.com/jdx/mise/releases/download/v%[1]s/mise-v%[1]
 // downloadTimeout bounds mise's download, start to end.
 const downloadTimeout = 10 * time.Minute
 
-// newClient is the client mise is downloaded with: https only, redirects
-// included.
-func newClient() *http.Client {
-	return &http.Client{Timeout: downloadTimeout, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return errors.New("too many redirects")
-		}
-		if req.URL.Scheme != "https" {
-			return fmt.Errorf("redirect to %s refused", req.URL.Scheme)
-		}
-		return nil
-	}}
-}
+// newClient is the client mise is downloaded with: redirects to https
+// only.
+func newClient() *fetch.Client { return fetch.NewClient(downloadTimeout, fetch.HTTPSOnly) }
 
 // HostMise returns the path of the host's mise: a test build's stand-in
 // (Mise) when it has one, else devvm's pinned mise, downloaded once and
@@ -78,48 +65,19 @@ func (t Versions) HostMise(ctx context.Context) (string, error) {
 	stop := t.Status(msg.DownloadingMise(miseVersion))
 	defer stop()
 	tmp := path + ".tmp"
-	sum, err := t.download(ctx, fmt.Sprintf(t.miseURL, miseVersion, platform), tmp)
-	if err != nil {
-		_ = os.Remove(tmp)
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		return "", msg.MiseDownloadFailed(miseVersion)
-	}
-	if want := t.miseSums[platform]; want == "" || sum != want {
-		_ = os.Remove(tmp)
+	err := fetch.Download(ctx, t.Client, fmt.Sprintf(t.miseURL, miseVersion, platform), tmp, t.miseSums[platform])
+	switch {
+	case errors.Is(err, fetch.ErrChecksum):
 		return "", msg.MiseChecksum(miseVersion)
+	case err != nil && ctx.Err() != nil:
+		return "", ctx.Err()
+	case err != nil:
+		return "", msg.MiseDownloadFailed(miseVersion)
 	}
 	if err := os.Chmod(tmp, 0o700); err != nil { //nolint:gosec // a program: the user runs it
 		return "", err
 	}
 	return path, os.Rename(tmp, path)
-}
-
-// download writes url's body to path and returns its SHA-256.
-func (t Versions) download(ctx context.Context, url, path string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return "", err
-	}
-	resp, err := t.Client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s: %s", url, resp.Status)
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // devvm's own folder
-	if err != nil {
-		return "", err
-	}
-	h := sha256.New()
-	_, err = io.Copy(io.MultiWriter(f, h), resp.Body)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	return hex.EncodeToString(h.Sum(nil)), err
 }
 
 // miseCmd returns mise running in dir, a folder of devvm's own, with its

@@ -15,6 +15,7 @@ import (
 	"testing/fstest"
 
 	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -387,7 +388,7 @@ func TestRedirects(t *testing.T) {
 		t.Errorf("same scheme: %v", err)
 	}
 	f := finder(srv.URL+"/file", "arm64", &fakeGPGV{}, &notes)
-	if _, err := f.fetch(t.Context(), f.URL+"/"); !errors.Is(err, errRedirect) {
+	if _, err := f.fetch(t.Context(), f.URL+"/"); !errors.Is(err, fetch.ErrRedirect) {
 		t.Errorf("to file://: got %v, want a refused redirect", err)
 	}
 	if _, err := f.Image(t.Context()); err == nil {

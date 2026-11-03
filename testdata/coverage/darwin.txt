@@ -3,7 +3,7 @@
 cmd/devvm 100.0
 internal/backend 95.8
 internal/backend/backendtest 46.3
-internal/backend/docker 80.8
+internal/backend/docker 81.1
 internal/backend/lima 87.7
 internal/backend/registry 90.5
 internal/backend/smolvm 73.9
@@ -14,7 +14,8 @@ internal/cli/docgen 85.1
 internal/daemon 97.7
 internal/desktop 77.2
 internal/devcontainer 96.8
-internal/from 87.1
+internal/fetch 95.2
+internal/from 91.3
 internal/gitprotect 91.4
 internal/hostgit 100.0
 internal/image 96.1
@@ -32,9 +33,9 @@ internal/sshconfig 84.8
 internal/state 91.8
 internal/stubtest 81.0
 internal/testbuild 100.0
-internal/tools 87.9
+internal/tools 88.6
 internal/trust 93.9
-internal/ubuntu 88.7
+internal/ubuntu 92.5
 internal/ui 93.8
 internal/vm 85.5
 internal/vmname 100.0

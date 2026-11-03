@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/w3cj/devvm/internal/fetch"
 )
 
 // DockerHub is the registry of references that name none.
@@ -78,26 +79,20 @@ func IsDigest(s string) bool { return digestPattern.MatchString(s) }
 
 // Registry asks registries for image digests, anonymously.
 type Registry struct {
-	Client *http.Client
+	Client *fetch.Client
 	// Base is the address of the registry at host: https://host.
 	Base func(host string) string
 	// RetryDelay is the wait before the first retry; it doubles after each.
 	RetryDelay time.Duration
 }
 
-// NewRegistry returns a Registry on the internet.
+// NewRegistry returns a Registry on the internet: a timeout per request,
+// and redirects to https only.
 func NewRegistry() *Registry {
-	return &Registry{Client: NewClient(), Base: func(host string) string { return "https://" + host }, RetryDelay: time.Second}
-}
-
-// NewClient returns the HTTP client a Registry uses: a timeout per
-// request, and redirects to https only.
-func NewClient() *http.Client {
-	t, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		t = &http.Transport{}
+	return &Registry{
+		Client: fetch.NewClient(timeout, fetch.HTTPSOnly), Base: func(host string) string { return "https://" + host },
+		RetryDelay: time.Second,
 	}
-	return &http.Client{Transport: t.Clone(), Timeout: timeout, CheckRedirect: httpsOnly}
 }
 
 // NewPublicRegistry returns a Registry that reaches only the internet's
@@ -182,19 +177,6 @@ func publicAddr(ip netip.Addr) bool {
 	return true
 }
 
-// errRedirect is a redirect refused: trying again won't help.
-var errRedirect = errors.New("redirect refused")
-
-func httpsOnly(req *http.Request, via []*http.Request) error {
-	if len(via) >= 10 {
-		return fmt.Errorf("%w: too many", errRedirect)
-	}
-	if req.URL.Scheme != "https" {
-		return fmt.Errorf("%w: to %s", errRedirect, req.URL.Scheme)
-	}
-	return nil
-}
-
 // Digest returns the digest (sha256:…) of the image a reference names,
 // from a HEAD request for its manifest, which doesn't count against
 // Docker Hub's pull limit. A registry that asks for a token gets an
@@ -248,10 +230,10 @@ func (r *Registry) head(ctx context.Context, u, token string) (answer, error) {
 		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
-			return !errors.Is(err, errRedirect), err
+			return fetch.Transient(err), err
 		}
 		_ = resp.Body.Close()
-		if transient(resp.StatusCode) {
+		if fetch.TransientStatus(resp.StatusCode) {
 			return true, fmt.Errorf("%s: %s", u, resp.Status)
 		}
 		a = answer{status: resp.StatusCode, digest: resp.Header.Get("Docker-Content-Digest")}
@@ -289,30 +271,18 @@ func (r *Registry) token(ctx context.Context, p Ref, challenge string) (string, 
 
 	var token string
 	err = r.retry(ctx, func() (bool, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, realm.String(), http.NoBody)
+		body, err := fetch.Get(ctx, r.Client, realm.String(), maxToken)
 		if err != nil {
-			return false, fmt.Errorf("%w: %w", ErrNotFound, err)
-		}
-		resp, err := r.Client.Do(req)
-		if err != nil {
-			return !errors.Is(err, errRedirect), err
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if transient(resp.StatusCode) {
-			return true, fmt.Errorf("%s: %s", realm.Host, resp.Status)
-		}
-		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("%w: no token: %s", ErrNotFound, resp.Status)
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxToken+1))
-		if err != nil {
+			if !fetch.Transient(err) {
+				return false, fmt.Errorf("%w: no token: %w", ErrNotFound, err)
+			}
 			return true, err
 		}
 		var t struct {
 			Token       string `json:"token"`
 			AccessToken string `json:"access_token"`
 		}
-		if len(body) > maxToken || json.Unmarshal(body, &t) != nil {
+		if json.Unmarshal(body, &t) != nil {
 			return false, fmt.Errorf("%w: no token", ErrNotFound)
 		}
 		token = t.Token
@@ -330,37 +300,25 @@ func (r *Registry) token(ctx context.Context, p Ref, challenge string) (string, 
 // tokenPattern is what a token can be in a header: printable, no spaces.
 var tokenPattern = regexp.MustCompile(`^[!-~]+$`)
 
-func transient(code int) bool {
-	return code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || code >= 500
-}
-
 // retry runs try until it succeeds, fails for good, or has been retried
-// retries times. A failure that never got an answer, or kept getting a
-// server error, is ErrUnreachable.
+// retries times (fetch.Retry). A failure that never got an answer, or kept
+// getting a server error, is ErrUnreachable; any other is ErrNotFound.
 func (r *Registry) retry(ctx context.Context, try func() (again bool, err error)) error {
-	delay := r.RetryDelay
-	for n := 0; ; n++ {
-		again, err := try()
-		if err == nil {
-			return nil
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if errors.Is(err, ErrNotFound) {
-			return err
-		}
-		if !again {
-			return fmt.Errorf("%w: %w", ErrNotFound, err)
-		}
-		if n == retries {
-			return fmt.Errorf("%w: %w", ErrUnreachable, err)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-		}
-		delay *= 2
+	again := false
+	err := fetch.Retry(ctx, retries, r.RetryDelay, func() (bool, error) {
+		var err error
+		again, err = try()
+		return again && !errors.Is(err, ErrNotFound), err
+	})
+	switch {
+	case err == nil:
+		return nil
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case errors.Is(err, ErrNotFound):
+		return err
+	case !again:
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
+	return fmt.Errorf("%w: %w", ErrUnreachable, err)
 }

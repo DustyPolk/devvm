@@ -96,6 +96,8 @@ linters:
           msg: only internal/cli asks whether this is a test build, in readOverrides; take its overrides as fields.
         - pattern: ^(os\.FindProcess|syscall\.Kill|unix\.Kill)$
           msg: signal processes through internal/daemon (Proc, Handle, Alive, Signal), which checks a pid is still the process it was.
+        - pattern: ^http\.(Client|DefaultClient|DefaultTransport|Get|Head|Post|PostForm)$
+          msg: reach the web through internal/fetch (fetch.NewClient, fetch.Client), which sets the timeout, the redirect policy and retries.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -129,6 +131,11 @@ linters:
       - path: ^internal/(daemon|platform)/
         linters: [forbidigo]
         text: os\.FindProcess|syscall\.Kill|unix\.Kill
+      # The proxy is the standard library only, and tests make their own
+      # servers' clients.
+      - path: ^internal/(fetch|proxy)/|_test\.go$
+        linters: [forbidigo]
+        text: http\.
     paths:
       - ^\.agents/
 

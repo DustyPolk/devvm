@@ -6,6 +6,7 @@ package lint
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"syscall"
@@ -28,3 +29,5 @@ func testBuild() bool { return testbuild.On() } // want forbidigo
 func signals(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) } // want forbidigo
 
 func finds(pid int) (*os.Process, error) { return os.FindProcess(pid) } // want forbidigo
+
+func client() any { return &http.Client{} } // want forbidigo

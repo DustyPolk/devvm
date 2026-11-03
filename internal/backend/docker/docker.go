@@ -207,7 +207,7 @@ func New(d paths.Dirs, assets fs.FS, u UI) *Docker {
 		}
 		return linuxFinder{
 			Self: dk.Self, GOOS: goos, GOARCH: dk.Arch, URL: dk.LinuxURL, SHA256: dk.LinuxSHA256,
-			Copy: linuxCopy(dk.Dirs, dk.Arch), Info: dk.Info,
+			Copy: linuxCopy(dk.Dirs, dk.Arch), Client: newLinuxClient(), RetryDelay: time.Second, Info: dk.Info,
 		}.find(ctx, fetch)
 	}
 	return dk

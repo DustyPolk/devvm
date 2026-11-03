@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -587,7 +588,7 @@ func TestFetchLinux(t *testing.T) {
 	var infos msg.Recorder
 	f := linuxFinder{
 		Self: self, GOOS: "darwin", GOARCH: "arm64", URL: srv.URL + "/devvm-1.0.0-linux-arm64.tar.gz", SHA256: pin,
-		Copy: filepath.Join(dir, "data", "devvm-linux-arm64"), Info: infos.Add,
+		Copy: filepath.Join(dir, "data", "devvm-linux-arm64"), Client: newLinuxClient(), Info: infos.Add,
 	}
 	if _, err := f.find(t.Context(), false); !errors.Is(err, errUnfetched) || len(infos.IDs()) != 0 {
 		t.Errorf("without fetch: %v, %v", err, infos.IDs())
@@ -615,5 +616,84 @@ func TestFetchLinux(t *testing.T) {
 	// -ldflags compare without the pin's flags.
 	if withoutPin(`-s -w -X github.com/w3cj/devvm/internal/cli.version=1 -X `+pinFlags+`URL=u -X `+pinFlags+`SHA256=s`) != "-s -w -X github.com/w3cj/devvm/internal/cli.version=1" {
 		t.Error("withoutPin")
+	}
+}
+
+// A fetch that fails in a way that may pass (a 503, an archive cut short)
+// is tried again; a 404, a redirect to plain http and an archive without
+// a devvm aren't.
+func TestFetchLinuxRetries(t *testing.T) {
+	body := []byte("devvm for linux, a stand-in")
+	sum := sha256.Sum256(body)
+	archive := linuxArchive(t, body)
+	var empty bytes.Buffer
+	gz := gzip.NewWriter(&empty)
+	if err := tar.NewWriter(gz).Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	calls := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls[r.URL.Path]++
+		n := calls[r.URL.Path]
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/flaky":
+			if n == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			_, _ = w.Write(archive)
+		case "/short":
+			if n == 1 {
+				_, _ = w.Write(archive[:len(archive)/2])
+				return
+			}
+			_, _ = w.Write(archive)
+		case "/redirect":
+			http.Redirect(w, r, "/flaky", http.StatusFound)
+		case "/empty":
+			_, _ = w.Write(empty.Bytes())
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	tests := []struct {
+		path, want string
+		calls      int
+	}{
+		// The stand-in isn't a Go build: docker_linux_build_other is a fetch
+		// that worked.
+		{"/flaky", "docker_linux_build_other", 2},
+		{"/short", "docker_linux_build_other", 2},
+		{"/missing", "docker_linux_build_fetch_failed", 1},
+		{"/redirect", "docker_linux_build_fetch_failed", 1},
+		{"/empty", "docker_linux_build_fetch_failed", 1},
+	}
+	for _, tt := range tests {
+		f := linuxFinder{
+			Self: filepath.Join(dir, "devvm"), GOOS: "darwin", GOARCH: "arm64", URL: srv.URL + tt.path, SHA256: hex.EncodeToString(sum[:]),
+			Copy: filepath.Join(dir, "data", "devvm-linux-arm64"), Client: newLinuxClient(), RetryDelay: time.Millisecond, Info: func(msg.M) {},
+		}
+		if err := os.WriteFile(f.Self, []byte("devvm"), 0o700); err != nil { //nolint:gosec // a stand-in
+			t.Fatal(err)
+		}
+		if _, err := f.find(t.Context(), true); msg.IDOf(err) != tt.want {
+			t.Errorf("%s: %v, want %s", tt.path, err, tt.want)
+		}
+		mu.Lock()
+		if calls[tt.path] != tt.calls {
+			t.Errorf("%s: %d requests, want %d", tt.path, calls[tt.path], tt.calls)
+		}
+		mu.Unlock()
+	}
+	if calls["/flaky"] != 2 {
+		t.Errorf("the redirect was followed: %d requests for /flaky", calls["/flaky"])
 	}
 }

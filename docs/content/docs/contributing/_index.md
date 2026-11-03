@@ -69,7 +69,7 @@ golangci-lint enforces the [Go conventions](https://github.com/w3cj/devvm/blob/m
 
 | Rule | Enforces |
 | --- | --- |
-| forbidigo | only `internal/ui` prints (`fmt.Print*`, `os.Stdout`, `os.Stderr`); only `cmd/devvm` calls `os.Exit`; only `internal/ui` and `cmd/devvm` make a context (`context.Background`, `context.TODO`), every other function takes its caller's; only `internal/platform` reads the host's CPUs, memory and free space, which the rest reads through `platform.Host`; only `internal/cli` calls `testbuild.On`; only `internal/daemon` and `internal/platform` signal a process by its pid (`os.FindProcess`, `syscall.Kill`, `unix.Kill`) |
+| forbidigo | only `internal/ui` prints (`fmt.Print*`, `os.Stdout`, `os.Stderr`); only `cmd/devvm` calls `os.Exit`; only `internal/ui` and `cmd/devvm` make a context (`context.Background`, `context.TODO`), every other function takes its caller's; only `internal/platform` reads the host's CPUs, memory and free space, which the rest reads through `platform.Host`; only `internal/cli` calls `testbuild.On`; only `internal/daemon` and `internal/platform` signal a process by its pid (`os.FindProcess`, `syscall.Kill`, `unix.Kill`); only `internal/fetch` makes an HTTP client (`http.Client`, `http.DefaultClient`, `http.DefaultTransport`, `http.Get` and the like), which the rest names as `fetch.Client` |
 | depguard | the allowed modules; `internal/proxy` uses only the standard library and `internal/daemon`, which uses only the standard library too; only `cmd/devvm` and `internal/cli` import `internal/ui` |
 | nolintlint | every `//nolint` names its linters and says why, and is still needed |
 | reassign | no package reassigns another package's variables, tests included |
@@ -97,7 +97,7 @@ The layers:
 - `internal/backend/...` imports none of `internal/vm`, `build`, `tools`, `netpolicy`, `secrets`, `project`, `gitprotect`, `sshconfig` or `sshagent`.
 - Only `internal/backend/registry` and `internal/cli` import a backend (`lima`, `smolvm`, `docker`); only tests import `backendtest` and `internal/stubtest`, and `internal/stubtest` imports only `internal/msg`.
 - `internal/proxy` imports no other devvm package but `internal/daemon`.
-- `assets`, `locales`, `internal/platform`, `internal/msg/gen`, `internal/testbuild`, `internal/hostgit`, `internal/shell`, `internal/vmname` and `internal/daemon` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg` and `internal/paths`; `internal/image` only `assets`, `internal/msg` and `internal/paths`; `internal/devcontainer` only `internal/image`, `internal/msg` and `internal/shell`.
+- `assets`, `locales`, `internal/platform`, `internal/msg/gen`, `internal/testbuild`, `internal/hostgit`, `internal/shell`, `internal/vmname`, `internal/daemon` and `internal/fetch` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg` and `internal/paths`; `internal/image` only `assets`, `internal/msg` and `internal/paths`; `internal/devcontainer` only `internal/image`, `internal/msg` and `internal/shell`.
 
 Everything it holds the code to is in `devvm()` in `internal/structure/structure_test.go`:
 
@@ -121,6 +121,7 @@ An owner gets a check only when a second copy would be a bug or a security hole,
 | --- | --- | --- |
 | forbidigo, `testbuild.On` | `internal/cli`, whose `readOverrides` is the only code that asks whether this is a test build | nowhere: other packages take the overrides as fields |
 | forbidigo, `os.FindProcess`, `syscall.Kill` and `unix.Kill` | `internal/daemon`, which signals a background process only while its pid file and its arguments say it's still that process (`Proc`), or through the process it started (`Handle`) | `internal/platform` |
+| forbidigo, HTTP clients | `internal/fetch`, whose `NewClient` sets each client's timeout and redirect policy (`HTTPSOnly` or `SameScheme`), and whose `Retry`, `Transient`, `ReadCapped`, `Get` and `Download` try again after the failures that may pass, cap what a body may hold and check a download's SHA-256 before anything uses it | `internal/proxy`, which is the standard library only, and tests, which make their own servers' clients |
 | the structure test's `owners`, git | `internal/hostgit`, which runs git without the repo's fsmonitor, hooks or filters, over ssh only, without the environment's `GIT_*` variables and prompts | tests, which run git to make their repos |
 | the structure test's `owners`, `DEVVM_` variables | `readOverrides` in `internal/cli/overrides.go`, which reads a test build's stand-ins, while a release reads none | the settings in `envSettings`, and tests |
 | the structure test's `owners`, shell quoting | `internal/shell`, whose `Quote` and `QuoteJoin` quote words for a POSIX shell, so a value never runs as a command | tests |
@@ -130,7 +131,7 @@ forbidigo matches only the function a call names, so the checks that look at a c
 
 The structure test also finds a copy of an owner's code by its text, in `literals`. A string literal outside tests that holds `'\''`, the escaped quote a shell quoter writes, belongs in `internal/shell`, and one that holds `[0-9a-f]{14}`, the hash at the end of a project VM's name, belongs in `internal/vmname`. A quote written as a rune, such as `'\''` in Go, isn't a string literal, so it doesn't count.
 
-Three concerns still have copies, so each gets its check in the change that gives it one owner: writing devvm's state files, through `internal/state` alone; HTTP clients; and running external commands, through the UI's `LoggedCmd`, a backend's runner and `internal/hostgit`.
+Two concerns still have copies, so each gets its check in the change that gives it one owner: writing devvm's state files, through `internal/state` alone, and running external commands, through the UI's `LoggedCmd`, a backend's runner and `internal/hostgit`.
 
 ### Agreement tests
 

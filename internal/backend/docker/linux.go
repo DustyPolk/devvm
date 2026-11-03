@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 )
@@ -35,12 +35,23 @@ import (
 // linuxMax is the most a Linux build, or its archive, may be.
 const linuxMax = 256 << 20
 
-// linuxFetchTime is how long a fetch may take.
+// linuxFetchTime is how long a fetch may take, its retries included.
 const linuxFetchTime = 10 * time.Minute
+
+// linuxRetries is how many times a fetch that may pass is tried again.
+const linuxRetries = 2
+
+// newLinuxClient is the client devvm's Linux build is fetched with:
+// redirects to https only.
+func newLinuxClient() *fetch.Client { return fetch.NewClient(linuxFetchTime, fetch.HTTPSOnly) }
 
 // errUnfetched is a release's Linux build not fetched yet, which only a
 // Docker VM's start fetches.
 var errUnfetched = errors.New("devvm's Linux build isn't fetched yet")
+
+// errArchive is an archive without a devvm devvm can take: fetching it
+// again won't help.
+var errArchive = errors.New("the archive's devvm")
 
 // linuxCopy is where devvm's data folder keeps devvm's Linux build: the
 // copy Docker mounts, and a fetched one.
@@ -56,6 +67,10 @@ type linuxFinder struct {
 	URL, SHA256 string
 	// Copy is where a fetched one is kept (linuxCopy).
 	Copy string
+	// Client fetches it (newLinuxClient), trying again after failures that
+	// may pass, RetryDelay before the first retry, doubling after each.
+	Client     *fetch.Client
+	RetryDelay time.Duration
 	// Info shows what's being done.
 	Info func(msg.M)
 }
@@ -105,32 +120,30 @@ func (f linuxFinder) find(ctx context.Context, fetch bool) (string, error) {
 // fetch downloads the release's Linux archive and keeps its devvm as
 // Copy, once its SHA-256 is the one this devvm has: the archive is read
 // as it comes, devvm written to a temporary file beside Copy, which is
-// renamed into place only when it matches.
+// renamed into place only when it matches. A fetch that fails in a way
+// that may pass (fetch.Transient, or an archive cut short) is tried
+// again.
 func (f linuxFinder) fetch(ctx context.Context) error {
 	f.Info(msg.DockerLinuxBuildFetching(f.URL))
 	ctx, cancel := context.WithTimeout(ctx, linuxFetchTime)
 	defer cancel()
-	failed := msg.DockerLinuxBuildFetchFailed(f.URL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.URL, nil)
-	if err != nil {
-		return failed.Because(err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return failed.Because(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return failed.Because(fmt.Errorf("%s: %s", f.URL, resp.Status))
-	}
 	if err := os.MkdirAll(filepath.Dir(f.Copy), 0o700); err != nil {
 		return err
 	}
 	tmp := f.Copy + ".fetch"
 	defer func() { _ = os.Remove(tmp) }()
-	sum, err := extractDevvm(io.LimitReader(resp.Body, linuxMax), tmp)
+	var sum string
+	err := fetch.Retry(ctx, linuxRetries, f.RetryDelay, func() (bool, error) {
+		body, err := fetch.Open(ctx, f.Client, f.URL)
+		if err != nil {
+			return fetch.Transient(err), err
+		}
+		defer func() { _ = body.Close() }()
+		sum, err = extractDevvm(io.LimitReader(body, linuxMax), tmp)
+		return !errors.Is(err, errArchive), err
+	})
 	if err != nil {
-		return failed.Because(err)
+		return msg.DockerLinuxBuildFetchFailed(f.URL).Because(err)
 	}
 	if !strings.EqualFold(sum, f.SHA256) {
 		return msg.DockerLinuxBuildMismatch(f.URL)
@@ -153,7 +166,7 @@ func extractDevvm(r io.Reader, dst string) (string, error) {
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return "", errors.New("no devvm in the archive")
+			return "", fmt.Errorf("%w: none", errArchive)
 		} else if err != nil {
 			return "", err
 		}
@@ -174,7 +187,7 @@ func extractDevvm(r io.Reader, dst string) (string, error) {
 			return "", err
 		}
 		if n > linuxMax {
-			return "", errors.New("devvm in the archive is too large")
+			return "", fmt.Errorf("%w: more than %d bytes", errArchive, linuxMax)
 		}
 		return hex.EncodeToString(h.Sum(nil)), nil
 	}

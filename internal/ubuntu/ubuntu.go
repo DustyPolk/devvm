@@ -11,9 +11,7 @@ package ubuntu
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -24,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -124,7 +123,7 @@ type Finder struct {
 	// amd64).
 	Arch string
 	// Client fetches the listing and the checksums.
-	Client *http.Client
+	Client *fetch.Client
 	// RetryDelay is the wait before the first retry; it doubles after each.
 	RetryDelay time.Duration
 	// GPGV is gpgv's path, "" when it isn't installed.
@@ -168,28 +167,13 @@ func New(assets fs.FS, url string, u UI) *Finder {
 
 // NewClient returns the HTTP client a Finder uses: a timeout per request,
 // file:// URLs read from disk, and no redirects to another scheme.
-func NewClient() *http.Client {
-	t, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		t = &http.Transport{}
+func NewClient() *fetch.Client {
+	c := fetch.NewClient(timeout, fetch.SameScheme)
+	if t, ok := c.Transport.(*http.Transport); ok {
+		// Only DEVVM_UBUNTU_URL can name a file: redirects can't switch to it.
+		t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/"))) //nolint:gosec // file:// URLs are absolute paths
 	}
-	t = t.Clone()
-	// Only DEVVM_UBUNTU_URL can name a file: redirects can't switch to it.
-	t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/"))) //nolint:gosec // file:// URLs are absolute paths
-	return &http.Client{Transport: t, Timeout: timeout, CheckRedirect: sameScheme}
-}
-
-// errRedirect is a redirect refused: trying again won't help.
-var errRedirect = errors.New("redirect refused")
-
-func sameScheme(req *http.Request, via []*http.Request) error {
-	if len(via) >= 10 {
-		return fmt.Errorf("%w: too many", errRedirect)
-	}
-	if req.URL.Scheme != via[0].URL.Scheme {
-		return fmt.Errorf("%w: from %s to %s", errRedirect, via[0].URL.Scheme, req.URL.Scheme)
-	}
-	return nil
+	return c
 }
 
 // File is the image's file name in a release.
@@ -298,47 +282,16 @@ func (f *Finder) verify(ctx context.Context, release string, sums []byte) error 
 }
 
 // fetch returns what's at u, trying again after failures that may pass
-// (no answer, 408, 429, 5xx).
+// (fetch.Transient: no answer, 408, 429, 5xx).
 func (f *Finder) fetch(ctx context.Context, u string) ([]byte, error) {
-	delay := f.RetryDelay
-	for try := 0; ; try++ {
-		body, again, err := f.get(ctx, u)
-		if err == nil || !again || try == retries {
-			return body, err
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-		}
-		delay *= 2
-	}
-}
-
-func (f *Finder) get(ctx context.Context, u string) (body []byte, again bool, err error) {
-	if err := ctx.Err(); err != nil { // file:// reads don't watch the context
-		return nil, false, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
+	var body []byte
+	err := fetch.Retry(ctx, retries, f.RetryDelay, func() (bool, error) {
+		var err error
+		body, err = fetch.Get(ctx, f.Client, u, maxBody)
+		return fetch.Transient(err), err
+	})
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	resp, err := f.Client.Do(req)
-	if err != nil {
-		return nil, ctx.Err() == nil && !errors.Is(err, errRedirect), err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		c := resp.StatusCode
-		return nil, c == http.StatusRequestTimeout || c == http.StatusTooManyRequests || c >= 500,
-			fmt.Errorf("%s: %s", u, resp.Status)
-	}
-	body, err = io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
-	if err != nil {
-		return nil, ctx.Err() == nil, err
-	}
-	if len(body) > maxBody {
-		return nil, false, fmt.Errorf("%s: more than %d bytes", u, maxBody)
-	}
-	return body, false, nil
+	return body, nil
 }

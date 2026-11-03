@@ -1354,6 +1354,31 @@ func TestHostMise(t *testing.T) {
 	}
 }
 
+// mise's download follows redirects to https only, and keeps nothing it
+// refused.
+func TestHostMiseRedirect(t *testing.T) {
+	var got int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/mise" {
+			got++
+			_, _ = w.Write([]byte("mise"))
+			return
+		}
+		http.Redirect(w, r, "/mise", http.StatusFound)
+	}))
+	defer srv.Close()
+	e := newEnv(t)
+	e.Mise = ""
+	e.OS, e.Arch = "linux", "amd64"
+	e.miseURL = srv.URL + "/v%[1]s/%[2]s"
+	if _, err := e.HostMise(t.Context()); msg.NamesOf(err) != "mise_download_failed version="+miseVersion || got != 0 {
+		t.Errorf("a redirect to http = %v, %d requests", msg.NamesOf(err), got)
+	}
+	if ents, _ := os.ReadDir(filepath.Join(e.Dirs.Mise(), miseVersion)); len(ents) != 0 {
+		t.Errorf("left %v", ents)
+	}
+}
+
 func writeTemp(t *testing.T, data []byte) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "f")
