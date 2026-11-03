@@ -41,7 +41,7 @@ devvm ships two layers, `docker` and `nix`. You choose them like any other layer
 
 #### docker
 
-The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker.
+The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker. A VM with the layer gets network policy like any other, because its containers' connections go through the VM's network, which devvm confines from outside the VM ([network policy](../safety/network.md)).
 
 #### nix
 
@@ -53,7 +53,7 @@ The `nix` layer works on a base from Ubuntu, Debian or Alpine. On a base made `-
 
 The toolchains and coding agents are shared tools, not image layers. A VM of any image can have them, in any mix, such as node, python and Claude Code on base, or go and Codex on `foo`. A VM's state lists its shared tools apart from its image. [Toolchains](toolchains.md) lists node, python, rust and go, with what each brings, and [supported agents](coding-agents.md#supported-agents) lists claude, codex and opencode.
 
-devvm builds each tool version once and mounts it read-only into every VM that has it, so any mix of tools works without building anything new, and ten VMs with node share one copy of it. The builds are in `~/.local/share/devvm/tools`. Each backend and each C library gets a build of its own, so when an Alpine VM and an Ubuntu VM both have node 24, `devvm images` lists two builds of that version ([what devvm keeps](space.md#shared-tools)). [mise](https://mise.jdx.dev) runs the tools:
+devvm builds each tool version once and mounts it read-only into every VM that has it, so any mix of tools works without building anything new, and ten VMs with node share one copy of it. The builds are in `~/.local/share/devvm/tools`. Each C library gets a build of its own, so when an Alpine VM and an Ubuntu VM both have node 24, `devvm images` lists two builds of that version ([what devvm keeps](space.md#shared-tools)). [mise](https://mise.jdx.dev) runs the tools:
 
 - **They work as usual.** `node`, `npm i -g` (into `~/.npm-global`), `pnpm`, `yarn`, `pip` and `uv`, `go install` (into `~/go/bin`) and `cargo` work from any shell, including `bash -c` from agents and from editors over SSH.
 - **A project's own version files win.** `.nvmrc`, `.node-version`, `.python-version`, `rust-toolchain.toml` and the `toolchain` line in `go.mod` pick their version, which installs into the VM the first time it's used. mise also reads a `mise.toml` in the project folder, and devvm trusts it without asking, because the folder is yours.
@@ -206,7 +206,7 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 - `devvm gc --history` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm history export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than DURATION` keeps those newer than that [duration](../getting-started/commands.md#flags-and-values), such as `12h`, `30d` or `2w`. gc never deletes exports without `--history`.
 - `devvm gc --nix-cache` also deletes the rest of the shared Nix cache. VMs download its packages again when they need them.
 - `devvm gc --orphans` also deletes what devvm keeps for VMs that their backend no longer has, such as one you deleted with `limactl delete` instead of `devvm rm`, and with it the hold their state has on their shared tools ([leftovers](space.md#leftovers-of-a-vm-deleted-outside-devvm)).
-- `devvm gc --caches` then frees devvm's share of Lima's own caches, such as its downloads of Ubuntu's cloud image, after asking, or without asking with `--force`, which it needs without a terminal ([the backends' caches](space.md#the-backends-caches)).
+- `devvm gc --caches` then frees devvm's share of Lima's own caches, such as its downloads of Ubuntu's cloud image, after asking, or without asking with `--force`, which it needs without a terminal ([Lima's caches](space.md#limas-caches)).
 - `devvm gc --retention` then applies the [retention settings](settings.md#retention) at once, which devvm otherwise applies at most once a day. They're all off until you set them.
 - When Lima can't list its images while one of your VMs uses it, for example because Lima isn't installed, gc warns and leaves Lima's images, shared tools, VM leftovers and caches alone. It also leaves the shared tools whose record doesn't name the backend that built them, because they may be Lima's. gc still succeeds, so run `devvm doctor` to see what's wrong with Lima, then run gc again once it answers. `devvm images` fails instead, because it lists all the images or none.
 - gc never deletes VMs, and it keeps current images, which `devvm images rm` deletes ([deleting images](#deleting-images)). Without `--tool-images` it keeps the current shared tools. It always keeps every shared tool that any VM has, including a stopped VM's and that of a VM deleted outside devvm whose state is left, until `--orphans` deletes that state.

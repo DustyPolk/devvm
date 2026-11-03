@@ -73,14 +73,10 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 	if err := st.Set(sshagent.Key, mode); err != nil {
 		return err
 	}
-	switch {
-	case mode == sshagent.On && in.AgentWhileRunning:
-		e.Warn(msg.AgentOnRiskRunning(vm))
-	case mode == sshagent.On:
+	switch mode {
+	case sshagent.On:
 		e.Warn(msg.AgentOnRisk(vm))
-	case mode == sshagent.Devvm && in.AgentWhileRunning:
-		e.Warn(msg.AgentDevvmRiskRunning(vm))
-	case mode == sshagent.Devvm:
+	case sshagent.Devvm:
 		e.Warn(msg.AgentDevvmRisk(vm))
 	}
 	if in.Status == backend.StatusRunning {

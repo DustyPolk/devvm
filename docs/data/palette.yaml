@@ -21,7 +21,7 @@
   use: The prompt in the logo for light backgrounds.
 - var: blue
   name: Blue
-  use: Commands, notes and experimental backends.
+  use: Commands and notes.
 - var: red
   name: Red
   use: Only what an attack has reached, in the home page's art.

@@ -15,7 +15,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
@@ -69,13 +68,10 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 // it's missing, doctor's warnings, whether Docker is installed, and every
 // backend's features.
 type doctorOutput struct {
-	Backend string `json:"backend"`
-	// BackendSource is where Backend came from: built-in, as no setting
-	// chooses it.
-	BackendSource string        `json:"backend_source"`
-	Problems      []problemJSON `json:"problems"`
-	Warnings      []string      `json:"warnings"`
-	Docker        bool          `json:"docker"`
+	Backend  string        `json:"backend"`
+	Problems []problemJSON `json:"problems"`
+	Warnings []string      `json:"warnings"`
+	Docker   bool          `json:"docker"`
 	// Features is, for each backend, how it has each feature: native,
 	// emulated, unreviewed or none.
 	Features map[string]map[string]string `json:"features"`
@@ -93,7 +89,7 @@ type problemJSON struct {
 // nothing.
 func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Backend) doctorOutput {
 	out := doctorOutput{
-		Backend: b.Name(), BackendSource: string(settings.FromBuiltin),
+		Backend:  b.Name(),
 		Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{},
 	}
 	for _, p := range b.Problems(ctx) {

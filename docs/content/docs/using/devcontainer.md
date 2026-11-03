@@ -20,7 +20,7 @@ The settings devvm supports are the container image to start from, the features 
 
 ## When it's read
 
-- **Only when the folder's VM is made**, on every backend. Comments and trailing commas are allowed. devvm reads the file only within the folder, so it doesn't follow a link out of the folder, and it reads only a regular file of up to 1 MiB. devvm never writes anything to the project folder.
+- **Only when the folder's VM is made.** Comments and trailing commas are allowed. devvm reads the file only within the folder, so it doesn't follow a link out of the folder, and it reads only a regular file of up to 1 MiB. devvm never writes anything to the project folder.
 - **What you give on the command line wins.** `--from` wins over `image`, which wins over `$DEVVM_FROM`, and `--ports` wins over `forwardPorts`, and devvm says so in one line for each. The toolchains and layers that the features map to are checked by default in the list devvm shows for the new VM, each row naming the file, and you can uncheck them there. `--tools` and `--layers` replace them, as they replace any part's default ([what a new VM gets](images.md#what-a-new-vm-gets)).
 - **An existing VM never changes.** Its state records the file's SHA-256. When the file differs from it on a launch, or is gone, or has appeared since, devvm warns once, and running `devvm rm` and then `devvm` makes the VM again from the file as it is. devvm doesn't check a VM made with `--no-devcontainer`.
 
@@ -46,7 +46,7 @@ When devvm refuses something in the file, it stops with one line that names the 
 
 | Property | What devvm does |
 | --- | --- |
-| `image` | The VM's base starts from it, as with [`--from`](from.md), where the backend can. devvm uses only an image that its registry gives anyone who asks anonymously, pinned to that digest. It never uses an image only Docker has, one only your registry login reaches, or one on this machine or its network, which is `localhost` or a registry whose address is loopback, private or link-local, by name or as it resolves. |
+| `image` | The VM's base starts from it, as with [`--from`](from.md). devvm uses only an image that its registry gives anyone who asks anonymously, pinned to that digest. It never uses an image only Docker has, one only your registry login reaches, or one on this machine or its network, which is `localhost` or a registry whose address is loopback, private or link-local, by name or as it resolves. |
 | `features` | `ghcr.io/devcontainers/features/docker-in-docker` is devvm's [docker layer](images.md#built-in-layers). `node`, `python`, `rust` and `go` under `ghcr.io/devcontainers/features/` are the [shared toolchains](images.md#shared-tools). devvm ignores their options and says so in one line. It refuses `docker-outside-of-docker`, which is this machine's Docker, and every other feature. devvm never fetches or runs a feature's script. |
 | `forwardPorts` | devvm forwards numbers, `localhost:N` and `127.0.0.1:N` as far as your ports allow ([ports](ports-size.md#ports)). With every port forwarded, which is the default, they're among them. devvm names the ones your ports leave out in one line and never adds them, and `devvm ports add` forwards them. It ignores other hosts' ports and says so in one line. |
 | `containerEnv`, `remoteEnv` | The VM's environment, which login shells and the commands below get. `remoteEnv` wins over `containerEnv`, and devvm's own variables, such as `LANG` and secrets, win over both. A `remoteEnv` of `null` sets nothing. |

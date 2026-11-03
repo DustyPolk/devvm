@@ -228,32 +228,23 @@ func TestSetSSHAgent(t *testing.T) {
 	}
 }
 
-// devvm ssh-agent on or devvm warns who can use the keys: while you're
-// connected, or while the VM runs on a backend that forwards the agent
-// the whole time.
+// devvm ssh-agent on or devvm warns who can use the keys while you're
+// connected.
 func TestSetSSHAgentRisk(t *testing.T) {
-	for _, whileRunning := range []bool{false, true} {
-		e, f, _ := upEnv(t, allNative())
-		e.Agent.Run = (&agentCalls{}).run
-		var warned msg.Recorder
-		e.Warn = warned.Add
-		st := existingVM(t, e, Options{NoNetworkPolicy: true})
-		vm := st.Name()
-		in := f.Instances[vm]
-		in.AgentWhileRunning = whileRunning
-		f.Instances[vm] = in
-		for _, mode := range []string{sshagent.On, sshagent.Devvm} {
-			if err := (Settings{e}).SetSSHAgent(t.Context(), mode); err != nil {
-				t.Fatal(msg.NamesOf(err))
-			}
+	e, _, _ := upEnv(t, allNative())
+	e.Agent.Run = (&agentCalls{}).run
+	var warned msg.Recorder
+	e.Warn = warned.Add
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	vm := st.Name()
+	for _, mode := range []string{sshagent.On, sshagent.Devvm} {
+		if err := (Settings{e}).SetSSHAgent(t.Context(), mode); err != nil {
+			t.Fatal(msg.NamesOf(err))
 		}
-		want := []string{"agent_on_risk vm=" + vm, "agent_devvm_risk vm=" + vm}
-		if whileRunning {
-			want = []string{"agent_on_risk_running vm=" + vm, "agent_devvm_risk_running vm=" + vm}
-		}
-		if !slices.Equal(warned.Names(), want) {
-			t.Errorf("while running %v: warned %q, want %q", whileRunning, warned.Names(), want)
-		}
+	}
+	want := []string{"agent_on_risk vm=" + vm, "agent_devvm_risk vm=" + vm}
+	if !slices.Equal(warned.Names(), want) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
 }
 

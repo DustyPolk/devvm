@@ -10,6 +10,6 @@ The docs are in the order you'll need them: getting devvm running, using it day 
 {{< section-card path="safety" >}}The habits that keep you safe, network policy, `.git` protection, and what devvm does about each attack.{{< /section-card >}}
 {{< section-card path="backends" >}}What runs the VMs: Lima.{{< /section-card >}}
 {{< section-card path="cli" >}}Every command, with its arguments and flags.{{< /section-card >}}
-{{< section-card path="internals" >}}How devvm builds images, forwards ports, enforces network policy and protects `.git`, on each backend.{{< /section-card >}}
+{{< section-card path="internals" >}}How devvm builds images, forwards ports, enforces network policy and protects `.git`.{{< /section-card >}}
 {{< section-card path="contributing" >}}Building, testing and writing docs, other hosts, and releases.{{< /section-card >}}
 {{< /cards >}}

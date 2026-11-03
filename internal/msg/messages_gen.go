@@ -34,11 +34,6 @@ func AgentDevvmRisk(vm string) M {
 	return M{id: "agent_devvm_risk", vals: []val{{"vm", vm}}}
 }
 
-// AgentDevvmRiskRunning is [agent_devvm_risk_running]: "While {{.vm}} runs, anything in it can use the keys in devvm's SSH agent, whether or not you're connected. Run devvm ssh-agent to list them."
-func AgentDevvmRiskRunning(vm string) M {
-	return M{id: "agent_devvm_risk_running", vals: []val{{"vm", vm}}}
-}
-
 // AgentDirComma is [agent_dir_comma]: "The agent folder {{.path}} isn't mounted, because devvm doesn't mount a path with a comma."
 func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
@@ -129,11 +124,6 @@ func AgentOnRisk(vm string) M {
 	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
 }
 
-// AgentOnRiskRunning is [agent_on_risk_running]: "While {{.vm}} runs, anything in it can use the keys in your SSH agent, whether or not you're connected."
-func AgentOnRiskRunning(vm string) M {
-	return M{id: "agent_on_risk_running", vals: []val{{"vm", vm}}}
-}
-
 // AgentSetRunning is [agent_set_running]: "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
 func AgentSetRunning(mode string, vm string) M {
 	return M{id: "agent_set_running", vals: []val{{"mode", mode}, {"vm", vm}}}
@@ -189,7 +179,7 @@ func ArgsTooMany(args string, command string, given string) M {
 	return M{id: "args_too_many", vals: []val{{"args", args}, {"command", command}, {"given", given}}}
 }
 
-// BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see which backends do."
+// BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see the features it has."
 func BackendLacks(backend string, feature string, vm string) M {
 	return M{id: "backend_lacks", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
@@ -199,7 +189,7 @@ func BackendUnknownVM(backend string, vm string) M {
 	return M{id: "backend_unknown_vm", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// BackendUnreviewed is [backend_unreviewed]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see which backends have it."
+// BackendUnreviewed is [backend_unreviewed]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see the features it has."
 func BackendUnreviewed(backend string, feature string, vm string) M {
 	return M{id: "backend_unreviewed", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
 }
@@ -904,7 +894,7 @@ func FromUnreachable(from string, host string) M {
 	return M{id: "from_unreachable", vals: []val{{"from", from}, {"host", host}}}
 }
 
-// GCBackendSkipped is [gc_backend_skipped]: "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
+// GCBackendSkipped is [gc_backend_skipped]: "The {{.backend}} backend can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
 func GCBackendSkipped(backend string) M {
 	return M{id: "gc_backend_skipped", vals: []val{{"backend", backend}}}
 }
@@ -1019,7 +1009,7 @@ func GCOrphans(count int) M {
 	return M{id: "gc_orphans", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
-// GCOrphansUnknown is [gc_orphans_unknown]: "{{.backend}} didn't answer, so devvm gc --orphans leaves its VMs' state alone."
+// GCOrphansUnknown is [gc_orphans_unknown]: "The {{.backend}} backend didn't answer, so devvm gc --orphans leaves its VMs' state alone."
 func GCOrphansUnknown(backend string) M {
 	return M{id: "gc_orphans_unknown", vals: []val{{"backend", backend}}}
 }
@@ -2559,12 +2549,12 @@ func SizeQuestion(haveCpus string, haveMemory string) M {
 	return M{id: "size_question", vals: []val{{"have_cpus", haveCpus}, {"have_memory", haveMemory}}}
 }
 
-// SpaceBackendUnknown is [space_backend_unknown]: "{{.backend}} didn't answer, so its VMs and images aren't counted."
+// SpaceBackendUnknown is [space_backend_unknown]: "The {{.backend}} backend didn't answer, so its VMs and images aren't counted."
 func SpaceBackendUnknown(backend string) M {
 	return M{id: "space_backend_unknown", vals: []val{{"backend", backend}}}
 }
 
-// SpaceCachesNote is [space_caches_note]: "The backends' caches can also hold your own downloads, so devvm counts them apart."
+// SpaceCachesNote is [space_caches_note]: "Lima's caches can also hold your own downloads, so devvm counts them apart."
 func SpaceCachesNote() M {
 	return M{id: "space_caches_note"}
 }
@@ -2574,7 +2564,7 @@ func SpaceFailed(reason string) M {
 	return M{id: "space_failed", vals: []val{{"reason", reason}}}
 }
 
-// SpaceStray is [space_stray]: "{{.backend}} has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
+// SpaceStray is [space_stray]: "The {{.backend}} backend has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
 func SpaceStray(backend string, data string, vm string) M {
 	return M{id: "space_stray", vals: []val{{"backend", backend}, {"data", data}, {"vm", vm}}}
 }
@@ -2992,7 +2982,6 @@ var specs = map[string]spec{
 	"agent_already":                    {fields: []string{"mode", "vm"}},
 	"agent_confirm_needs_askpass":      {},
 	"agent_devvm_risk":                 {fields: []string{"vm"}},
-	"agent_devvm_risk_running":         {fields: []string{"vm"}},
 	"agent_dir_comma":                  {fields: []string{"path"}},
 	"agent_dirs_added":                 {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":               {fields: []string{"dirs", "vm"}},
@@ -3011,7 +3000,6 @@ var specs = map[string]spec{
 	"agent_next_start":                 {fields: []string{"vm"}},
 	"agent_no_keys":                    {},
 	"agent_on_risk":                    {fields: []string{"vm"}},
-	"agent_on_risk_running":            {fields: []string{"vm"}},
 	"agent_set_running":                {fields: []string{"mode", "vm"}},
 	"agent_set_stopped":                {fields: []string{"mode", "vm"}},
 	"agent_start_failed":               {fields: []string{"sock"}},

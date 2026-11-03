@@ -1099,30 +1099,6 @@ html.dark .hextra-card:hover .hextra-card-icon .devvm-icon {
   color: var(--devvm-text-secondary);
 }
 
-/* The experimental badge ({{< experimental >}}): the flask and the word in Departure Mono at its 11px, in
-   the blue, in a thin rounded box that sits on the text's line. */
-.devvm-experimental {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 6px;
-  border: 1px solid var(--devvm-blue);
-  border-radius: 9999px;
-  font-family: var(--devvm-font-pixel);
-  font-size: 11px;
-  font-weight: 400;
-  font-synthesis: none;
-  line-height: 16px;
-  color: var(--devvm-blue);
-  vertical-align: middle;
-  white-space: nowrap;
-}
-
-.devvm-experimental .devvm-icon {
-  width: 12px;
-  height: 12px;
-}
-
 /* Callouts (GitHub's > [!NOTE], > [!TIP] and > [!WARNING], the blockquote alert render hook): a panel on
    the surface color, with a line down its left side and a title in the type's color: blue for a note, the
    soft lime for a tip and the lime for a warning. */

@@ -186,11 +186,11 @@ func TestJSONShapes(t *testing.T) {
 		{
 			"doctor",
 			doctorOutput{
-				Backend: "lima", BackendSource: "built-in", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
+				Backend: "lima", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
 				Warnings: []string{"w"}, Docker: yes, Features: map[string]map[string]string{"lima": {"ssh": "native"}},
 			},
 			[]string{
-				"backend: string", "backend_source: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
+				"backend: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
 				"problems[].message: string", "warnings[]: string",
 			},
 		},

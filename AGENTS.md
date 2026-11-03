@@ -30,7 +30,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/platform/`, `internal/ubuntu/`, `internal/testbuild/` | build-tagged OS code; finding and verifying Ubuntu's cloud image (never downloads); whether this is a test build (ldflags: only it reads the test overrides, `cli`'s `readOverrides`) |
 | `assets/` | the files devvm ships, embedded (`assets.FS`, passed to constructors by `cli`): `base.yaml`, `layers/` (base's Lima template and scripts; the built-in layers, `docker` and `nix`, each with its policy), `features/` (base's optional ones), `shared-tools/` (`mise.toml`, `build.sh`, `*.policy`), `guest/` (in-VM scripts sent on every launch, and the port forwarder's `ports.sh`), `oci/` (`--from`'s conversion; see its `README.md`) |
 | `internal/structure/` | the structure test (tests only) |
-| `internal/stubtest/` | Go tests' stubs on `PATH` (tests only): their folder, calls and files, `ExecRunner`; `msg.Recorder` and `msg.NamesOf` are tests' too, `backendtest.Stored` a fake with disks |
+| `internal/stubtest/` | Go tests' stubs on `PATH` (tests only): their folder, calls and files, `ExecRunner`; `msg.Recorder`, `msg.IDOf` and `msg.NamesOf` are tests' too, `backendtest.Stored` a fake with disks |
 | `testdata/` | `script/*.txtar` (CLI tests), `stubs/` (host commands; see each header), `mise.lock` (fixture), `coverage/<os>.txt` (each package's coverage baseline, per system), `lint/` (a line breaking each forbidigo rule, which `lint:code` checks) |
 | `tests/e2e.sh` | end-to-end tests on real VMs (bash 3.2) |
 | `scripts/`, `packaging/`, `.goreleaser.yaml`, `VERSION`, `CHANGELOG.md` | `bump.sh` (pins), `release.sh` (signed-tag checks around GoReleaser, then minisign), `test.sh` and `coverage.sh` (mise's test tasks); the Homebrew formula; `VERSION` is read by the scripts only |
@@ -45,7 +45,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 ## Tasks
 
-`mise run <task>`: `fmt`; `lint` (`lint:code`: Go, shellcheck, workflows with actionlint and zizmor; `lint:docs`: docs, `TestDocLinks`, `TestCommandLines`); `test` (`scripts/test.sh`: `-race`, in a throwaway `HOME`; needs a C compiler; then each package's coverage, unit and CLI tests merged, against `testdata/coverage/<os>.txt`); `coverage` (the same, then raises the baselines it beat: commit them with the change); `vuln`; `deadcode` (lists only `backendtest`, `stubtest`, `msg.NamesOf` and `msg.Recorder`, which tests use; anything else gets a caller or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/`); `e2e`.
+`mise run <task>`: `fmt`; `lint` (`lint:code`: Go, shellcheck, workflows with actionlint and zizmor; `lint:docs`: docs, `TestDocLinks`, `TestCommandLines`); `test` (`scripts/test.sh`: `-race`, in a throwaway `HOME`; needs a C compiler; then each package's coverage, unit and CLI tests merged, against `testdata/coverage/<os>.txt`); `coverage` (the same, then raises the baselines it beat: commit them with the change); `vuln`; `deadcode` (lists only `backendtest`, `stubtest`, `msg.IDOf`, `msg.NamesOf` and `msg.Recorder`, which tests use; anything else gets a caller or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/`); `e2e`.
 
 ## Rules
 

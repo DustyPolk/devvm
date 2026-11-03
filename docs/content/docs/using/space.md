@@ -20,7 +20,7 @@ devvm, the tools it runs and Lima keep files on this machine outside your projec
 
 Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. When Lima doesn't answer while one of your VMs uses it, devvm says so, and its VMs and images aren't counted.
 
-### The backends' caches
+### Lima's caches
 
 The second table lists the caches that belong to Lima, with what each cache holds, how many entries it has, its size and where it is. That's Lima's download cache. devvm's builds fill it, but it can also hold your own downloads, so it isn't in the total. The [Lima](#lima) section below says what it holds.
 

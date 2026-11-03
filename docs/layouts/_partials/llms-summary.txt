@@ -1,11 +1,10 @@
 {{- /* A page's line in llms.txt, as plain text on one line: its description, else its first paragraph, cut
-   at 200 characters. The experimental badge is left out, since the page's title says it. truncate
-   escapes what it's given, so the text is unescaped again after it. */ -}}
+   at 200 characters. truncate escapes what it's given, so the text is unescaped again after it. */ -}}
 {{- $text := "" -}}
 {{- with .Description -}}
   {{- $text = . | plainify | htmlUnescape | replaceRE `\s+` " " | strings.TrimSpace -}}
 {{- else -}}
-  {{- $html := .Summary | replaceRE `<span class="devvm-experimental">[\s\S]*?</span>` "" -}}
+  {{- $html := .Summary -}}
   {{- $first := "" -}}
   {{- range findRE `<p>[\s\S]*?</p>` $html -}}
     {{- if and (not $first) (trim (. | plainify) " \n") }}{{ $first = . }}{{ end -}}

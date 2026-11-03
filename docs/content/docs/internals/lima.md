@@ -69,7 +69,7 @@ Builds are also confined, because they run code devvm didn't write. On macOS a b
 
 ## Ports
 
-devvm's forwarder forwards a Lima VM's ports by the same rules as on every backend, which [Port forwarding](ports.md) sets out. On Lima this is an emulation, and it's reviewed ([design](design.md#ports-on-lima)). devvm doesn't use Lima's own forwards because they listen with `SO_REUSEADDR`, and on macOS such a forward takes `127.0.0.1:PORT` while a program on the host has `*:PORT`, along with that program's `localhost` connections.
+devvm's forwarder forwards a Lima VM's ports by the rules that [Port forwarding](ports.md) sets out. On Lima this is an emulation, and it's reviewed ([design](design.md#ports-on-lima)). devvm doesn't use Lima's own forwards because they listen with `SO_REUSEADDR`, and on macOS such a forward takes `127.0.0.1:PORT` while a program on the host has `*:PORT`, along with that program's `localhost` connections.
 
 So Lima forwards nothing. Each VM's `portForwards` are rules that ignore every guest port, TCP and UDP, on `127.0.0.1` (which also covers `::1`), `0.0.0.0` and `::`. Lima's own ssh is its VM driver's forward, not a rule, so it keeps working. devvm sets the rules when it makes the VM, and a start sets them again only where they differ, because any change gives the VM new ssh host keys at its next boot. On macOS, a VM with network policy doesn't rely on the rules alone, because its sandbox refuses the Lima process every port but its ssh port ([confinement](#confinement)).
 

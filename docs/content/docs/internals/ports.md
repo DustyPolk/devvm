@@ -3,9 +3,9 @@ title: Port forwarding
 weight: 4
 ---
 
-This page explains how devvm's forwarder forwards a VM's ports to this machine, which ports it never takes, and how it runs on each backend. [Ports and size](../using/ports-size.md#ports) covers choosing a VM's ports with `--ports` and `devvm ports`.
+This page explains how devvm's forwarder forwards a VM's ports to this machine, which ports it never takes, and how it runs. [Ports and size](../using/ports-size.md#ports) covers choosing a VM's ports with `--ports` and `devvm ports`.
 
-devvm's forwarder forwards ports by the same rules on every backend, and devvm uses no backend's own forwards for a VM's ports. [Lima](lima.md#ports) explains why, and what devvm sets on Lima instead.
+devvm forwards a VM's ports with its own forwarder, never with Lima's own forwards. [Lima](lima.md#ports) explains why, and what devvm sets on Lima instead.
 
 ## What it forwards
 
@@ -17,7 +17,7 @@ The forwarder never forwards a server on an address in `127.77.0.0/16`, on any V
 
 The forwarder never takes a port that a program on this machine has on any address. That program keeps the port and its `localhost` connections, and the forward waits until the VM's server stops and starts again.
 
-The forwarder also never takes a port that devvm records for a VM, even while that port is free. Those are the ssh, proxy and desktop ports that devvm chooses for VMs, the VM's own ssh port, and the ports other VMs list. A Lima VM without network policy has an ssh port that Lima picks and devvm doesn't record, but Lima holds that port, so the forwarder can't take it.
+The forwarder also never takes a port that devvm records for a VM, even while that port is free. Those are the ssh, proxy and desktop ports that devvm chooses for VMs, the VM's own ssh port, and the ports other VMs list. devvm chooses and records every VM's ssh port, with network policy or without, so no forwarder takes it in the seconds before Lima binds it ([the threat check](design.md#ports-on-lima)).
 
 When a start, or a change of a running VM's ports, finds that a program on this machine has a listed port, devvm doesn't forward that port and warns you (`ports_taken`). The VM starts or runs on all the same, and the next start or change that finds the port free forwards it again. [Ports](../using/ports-size.md#ports) says what happens to a program that binds a port on all addresses after the forwarder has forwarded it.
 
@@ -34,7 +34,7 @@ flowchart TD
   sshd -- "127.0.0.1:5173,<br>its own loopback" --> server["your server, in the VM"]
 ```
 
-How the forwarder logs in, and when it ends, depends on the backend, as Lima's [Ports](lima.md#ports) section describes.
+How the forwarder logs in, and when it ends, is up to the backend, as Lima's [Ports](lima.md#ports) section describes.
 
 ## Its process and files
 

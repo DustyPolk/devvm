@@ -32,7 +32,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 
 ### Ports on Lima
 
-**The guarantee:** when a VM forwards every port, each TCP port from 1024 up that a server in it listens on, on its loopback or on all its addresses, is forwarded to the same port on the host's loopback, and only to its loopback. When a VM lists its ports, only those are forwarded, however many it lists, by the same rules. The forwarder never takes a port that a program on the host has on any address when the forward is made, or a port devvm records for another VM. Forwarding gives the VM no way out that it doesn't already have, because every connection starts on the host. Lima's own forwards listen with `SO_REUSEADDR`, so on macOS, whenever a server in the VM starts, Lima takes `127.0.0.1:PORT` while a program on the host has `*:PORT`, and that program's loopback connections go with it. That's why Lima forwards nothing and devvm's forwarder forwards by the same rules on every backend. On macOS, a VM with network policy doesn't depend on Lima for that, because its hostagent's sandbox refuses it every port but its ssh port, so Lima can't forward a port of the VM's even if it ignored its rules. The emulation is reviewed, with the threat check's findings fixed or listed below, which is why the host key read is capped, reports are paced and the log is limited, and the end-to-end checks prove the rest.
+**The guarantee:** when a VM forwards every port, each TCP port from 1024 up that a server in it listens on, on its loopback or on all its addresses, is forwarded to the same port on the host's loopback, and only to its loopback. When a VM lists its ports, only those are forwarded, however many it lists, by the same rules. The forwarder never takes a port that a program on the host has on any address when the forward is made, or a port devvm records for another VM. Forwarding gives the VM no way out that it doesn't already have, because every connection starts on the host. Lima's own forwards listen with `SO_REUSEADDR`, so on macOS, whenever a server in the VM starts, Lima takes `127.0.0.1:PORT` while a program on the host has `*:PORT`, and that program's loopback connections go with it. That's why Lima forwards nothing and devvm's forwarder forwards the VM's ports instead. On macOS, a VM with network policy doesn't depend on Lima for that, because its hostagent's sandbox refuses it every port but its ssh port, so Lima can't forward a port of the VM's even if it ignored its rules. The emulation is reviewed, with the threat check's findings fixed or listed below, which is why the host key read is capped, reports are paced and the log is limited, and the end-to-end checks prove the rest.
 
 **What it's built from:**
 
@@ -103,7 +103,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 
 ## devcontainer.json
 
-A new VM gets what the project's `devcontainer.json` says, as far as devvm does it ([its page](../using/devcontainer.md)), on every backend.
+A new VM gets what the project's `devcontainer.json` says, as far as devvm does it ([its page](../using/devcontainer.md)).
 
 **The guarantee:** nothing from the file runs on or reaches this machine: it reads none of its environment, files, credentials, Docker images or registry logins, adds no mount, writes nothing to the project folder, and weakens no confinement (network policy, `.git` protection). It shapes only what's in a new VM and what runs in it, as the VM's user. devvm's own handling of it (reading, parsing, state, the environment file, commands, ports, the image lookup) can't be turned against this machine or devvm. Reviewed: the threat check's leads are fixed, ruled out or listed below.
 
@@ -114,13 +114,13 @@ A new VM gets what the project's `devcontainer.json` says, as far as devvm does 
 - **Reading:** only in the folder, through `os.Root` (a link out of it isn't followed, `..` included), opened without blocking (a FIFO the VM made in its place opens at once and is refused) and checked as a regular file on the open descriptor, at most 1 MiB. It's read once, at `plan`; what the VM is made from is the parsed plan, recorded in its state, never the file read again. Later launches only hash it and warn.
 - **Parsing:** comments and trailing commas are blanked at the same offsets, strings untouched, then `encoding/json`; values of the wrong kind, a NUL, an environment variable's name that isn't one, and every variable devvm doesn't fill in are refused before anything's made, `${localEnv:…}`/`${env:…}` above all. Nothing is filled in from this machine: `${containerWorkspaceFolder}` is the folder's path (the same in the VM), `${containerEnv:X}` the VM's own `X`, left to its shell.
 - **Mapped, or refused, or ignored:** `build`/Dockerfiles/Compose are refused; `initializeCommand` never runs; `mounts`, `runArgs`, `privileged`, `capAdd`, `securityOpt`, `workspaceMount` and the rest are ignored, named. Features map only to devvm's own layers (docker-in-docker to the docker layer, four toolchains); no feature's script is fetched, `docker-outside-of-docker` is refused, everything else too.
-- **The image:** `--from`'s path, but only an image its registry gives anyone: asked anonymously (`from.Lookup.Public`, never Docker's store), pinned to that digest, which every backend pulls by. A registry named `localhost` or by an address that isn't the internet's is refused by name, and the lookup's client (`from.NewPublicRegistry`) connects only to the internet's addresses, whatever a name resolves to, its token service's included; offline, only a registry digest recorded for that reference stands in.
+- **The image:** `--from`'s path, but only an image its registry gives anyone: asked anonymously (`from.Lookup.Public`, never Docker's store), pinned to that digest, which the build pulls by. A registry named `localhost` or by an address that isn't the internet's is refused by name, and the lookup's client (`from.NewPublicRegistry`) connects only to the internet's addresses, whatever a name resolves to, its token service's included; offline, only a registry digest recorded for that reference stands in.
 - **The docker layer:** the backend's own rules for it, as when it's named; the file never takes network policy away.
 - **The environment:** each variable's value is built as a shell word (single-quoted text, `"${X}"` for the VM's own), stored as JSON in the VM's state, and written as `export NAME=word` into the VM's environment file before devvm's own (which win); a name is checked again when it's written.
 - **Commands:** stored as argv in the VM's state; run by the backend's `Exec` (on Lima, one `sh -c` string, each word in single quotes), as the VM's user, in the folder, after the self-check, `.git`'s locks and a `--clone` VM's clone: confined like anything in the VM. Their output goes to the run log, shown only through `printable`.
 - **Ports:** only numbers and `localhost:N`/`127.0.0.1:N`, and never beyond the user's ports (`devvm ports -g`, or `--ports`, which wins): with every port forwarded, the default, they're among them; ports the user's list leaves out are said (`devvm ports add` forwards them), not added (`devcontainer_ports_not_forwarded`). Forwarded on this machine's loopback as any listed port, never a host port of another program's (`ports_taken`).
 
-**What it relies on:** `os.Root` and `O_NONBLOCK`; `encoding/json`; each backend's `Exec` passing arguments unchanged; the registry's digest naming what's pulled (a pull checks it); the backend's own confinement of the VM and its builds.
+**What it relies on:** `os.Root` and `O_NONBLOCK`; `encoding/json`; Lima's `Exec` passing arguments unchanged; the registry's digest naming what's pulled (a pull checks it); the backend's own confinement of the VM and its builds.
 
 **What could break it:** a backend whose `Exec` runs its arguments through a host shell; a new property mapped without the same review; a host proxy that reaches this machine or its network for a public-looking name (Not covered).
 
@@ -138,7 +138,7 @@ A new VM gets what the project's `devcontainer.json` says, as far as devvm does 
 - **Reading** (a link out, `..`, a FIFO, a device, a huge file, a swap between the check and the read): ruled out: `os.Root`, a non-blocking open, the descriptor's own `Stat`, 1 MiB; one read per new VM; unit-tested (links, a FIFO).
 - **Variables** (`${localEnv:…}`, `${env:…}`, nested or unterminated): ruled out: refused, or left as text for the VM's shell; nothing is read from this machine.
 - **The environment file and state** (newlines, quotes, `$()`, a name like `A;rm`): ruled out: values are shell words, JSON-escaped in state (one line), names checked twice; the file is the VM's own.
-- **Command quoting** (`'`, newlines, an argument starting with `-`): ruled out: every backend runs `bash -lc 'exec "$@"'` with the argv after it, and Lima quotes each word.
+- **Command quoting** (`'`, newlines, an argument starting with `-`): ruled out: devvm runs `bash -lc 'exec "$@"'` with the argv after it, and Lima quotes each word.
 - **Messages** (the file's values in this machine's terminal): ruled out: every message value goes through `msg.OneLine` as it renders, the image through `from.Valid`, errors' causes aren't printed, the log tail goes through `msg.Printable`.
 - **Commands before confinement:** ruled out: they run after the self-check (which stops a VM whose policy fails), `.git`'s locks, and a clone's seeding.
 - **A digest the registry made up** (`Docker-Content-Digest`): ruled out: `sha256:` and 64 hex digits, and every pull checks content against it.
@@ -179,7 +179,7 @@ The build's policy is `**` alone, so on its own the build's proxy would refuse e
 
 ## The desktop
 
-`devvm desktop` shows a VM's desktop on this machine with VNC, on every backend, and keeps two things: no one on this machine or the network reaches the desktop without the VM's password, and the desktop gives the VM no new way out. Both hold whatever the VM's own server does, because root in the VM can replace it ([how](desktop.md)).
+`devvm desktop` shows a VM's desktop on this machine with VNC, and keeps two things: no one on this machine or the network reaches the desktop without the VM's password, and the desktop gives the VM no new way out. Both hold whatever the VM's own server does, because root in the VM can replace it ([how](desktop.md)).
 
 **What it's built from:** the `desktop` feature (`assets/features/desktop.sh`): Xfce and TigerVNC's `Xvnc` from base's package snapshot, and `/usr/local/bin/devvm-desktop`, which starts `Xvnc` on a socket of the VM's user's own (`/run/devvm-desktop/vnc.sock`, mode 600 in a 700 folder), with no TCP port and no password, then an Xfce session. On this machine, `internal/desktop`'s `Relay`, which `devvm desktop` runs (`internal/vm/desktop.go`): a listener on `127.0.0.1` alone (`platform.ListenLoopback`, without address reuse), on the port the VM's state records (`desktop_port`, among `netpolicy.UsedPorts`), and for each viewer that passes its check, an `ssh -W` channel to the socket through devvm's ssh config's entry for the VM. The feature isn't chosen until you choose it (`desktopFeature`), because it adds about 370 MB to base.
 
@@ -233,7 +233,7 @@ VMs with network policy and the nix layer share their downloads from cache.nixos
 **Options weighed:**
 
 - **Nix's local overlay store**, the VM's store over a read-only lower store shared from the host. It works on Lima, but it's still experimental in Nix 2.35, the lower store can't change while it's mounted, so sharing new paths means remounting, and a garbage collection by a daemon not set up for it writes whiteouts that hide lower paths from that VM for good.
-- **Packages fetched into an image**, by a custom layer that runs `nix build` while the image builds ([the recipe](../using/toolchains.md#sharing-a-teams-packages)). Clones share them on disk at no cost, on every backend, but only what's in the image, and a changed `flake.lock` needs a rebuild.
+- **Packages fetched into an image**, by a custom layer that runs `nix build` while the image builds ([the recipe](../using/toolchains.md#sharing-a-teams-packages)). Clones share them on disk at no cost, but only what's in the image, and a changed `flake.lock` needs a rebuild.
 - **VMs without network policy:** they get no shared cache, and fetch from cache.nixos.org directly. Weighed and not chosen: a cache-only `devvm _proxy` per VM (on loopback, with the VM's password), which runs something new on the host for each VM that otherwise has none; a shared loopback listener without a password, ruled out, because anything on the host or any VM that reaches the host's loopback could use it; and the cache folder mounted read-only into VMs, which leaves the VM's Nix to read the files and the host with nothing to fill it.
 
 **Review** (the security-audit skill, on `nixcache.go`, its callers and the VM's setup):
@@ -292,11 +292,11 @@ A link lets a program in one VM, the client, reach a TCP service in another VM, 
 
 **Why not a shared network, the proxy, or a host port:**
 
-- **A network shared between VMs** would bypass the proxy and every backend's confinement. On Lima it needs a root helper, and QEMU can't make one.
+- **A network shared between VMs** would bypass the proxy and the VMs' confinement. On Lima it needs a root helper, and QEMU can't make one.
 - **`CONNECT` through the proxy as the only way in** would work only for VMs with network policy, and a raw TCP client in every VM would need a tool of devvm's to make the connection. The proxy is a second entrance instead, for HTTP clients, beside the ssh forward that carries every link on every VM.
 - **The target's port forwarded to the host's localhost** is refused by the proxy's floor, is reached by any VM without network policy and any program on the host, and is a port that a host program can take first.
 
-**What the prototype showed.** devvm's prototype ran in the e2e sandbox on every backend, and nothing needed the link feature off:
+**What the prototype showed.** devvm's prototype ran in the e2e sandbox, and nothing needed the link feature off:
 
 - macOS's ssh 10.3p1 and Linux hosts' ssh 9.6p1 and 10.2p1 accept `-R 127.77.x.y:PORT:<unix socket>`, and `-O forward` and `-O cancel` work on a master started with `ClearAllForwardings=yes`. A cancel keeps open connections, ending the master drops them, and a session keeps the `PermitListen` it connected with.
 - sshd 9.2p1 (Debian 12, `--from`), 10.2p1 (Ubuntu 26.04) and 10.3p1 (Alpine), with `GatewayPorts clientspecified` and `PermitListen` naming one address, bind that address alone and refuse `0.0.0.0`, `127.0.0.1`, `::1`, `localhost`, `*`, other ports and port 0. The glob `127.77.*:*` works the same way and matches the requested address as text.
@@ -350,7 +350,7 @@ A link lets a program in one VM, the client, reach a TCP service in another VM, 
 | Links changing on a running client | `-O forward` and `-O cancel`, the setup over ssh, and the proxy's list | devvm link add and devvm link rm on a running client apply within seconds, and with network policy, through the proxy too, without a restart |
 | Two targets on one port | An address per target | Two targets publishing the same port are each reached by their own name |
 | A link left behind | `devvm stop` and `devvm rm` end the process and its sockets, and `gc --orphans` finds leftovers | Removing either VM leaves no `devvm _links` process, socket or link state |
-| Links on every backend and both network policy choices | The same mechanism everywhere | The section runs with both VMs with network policy and both without, a port below 1024 such as 80 on Lima's Alpine VMs, and `devvm network log` shows link events with and without network policy |
+| Links with both network policy choices | The same mechanism with both | The section runs with both VMs with network policy and both without, a port below 1024 such as 80 on Lima's Alpine VMs, and `devvm network log` shows link events with and without network policy |
 
 ### Groups
 

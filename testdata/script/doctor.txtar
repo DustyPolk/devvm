@@ -24,7 +24,7 @@ stdout '^doctor_ok backend=lima version=\S+\n\z'
 stub_calls
 stdout '^limactl --version\n\z'
 exec devvm doctor --json
-stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "backend_source": "built-in",\n  "problems": \[\],\n  "warnings": \[\],\n  "docker": true,\n'
+stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "problems": \[\],\n  "warnings": \[\],\n  "docker": true,\n'
 stdout '^      "ports": "emulated",$'
 ! stderr .
 

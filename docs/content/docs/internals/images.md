@@ -158,7 +158,7 @@ A build's `ImageSpec.Trust` holds two scripts made from `ca.sh`, which run as ro
 
 - **Lima:** `Add` runs right after the start, through `sudo sh`, then base's or the layer's scripts, then `Remove`, before the final `sync` and the stop.
 - **Lima with `--from`:** the conversion's build VM, which is deleted afterwards, also runs `Add`. `oci/build.sh` gets `ca.sh`, from devvm's `guest/` folder mounted read-only, and runs it in the image's chroot with the CAs before `bootify.sh` and without them after it, so that Alpine's `apk` reaches its HTTPS mirrors. The converted base then builds as Lima's does.
-- **Shared tools:** `ToolsSpec.Trust.Add` runs before `build.sh` on every backend. devvm deletes the build VM and keeps only its output folder, so it needs no `Remove`.
+- **Shared tools:** `ToolsSpec.Trust.Add` runs before `build.sh`. devvm deletes the build VM and keeps only its output folder, so it needs no `Remove`.
 
 An image is therefore the same with or without CAs, which is why its key holds none of them, and a tool image's key stays its lock entry, `build.sh`, mise's settings and the C library. When there are CAs, the build's numbered steps include the two scripts. A layer script that copies the system's bundle elsewhere keeps that copy.
 

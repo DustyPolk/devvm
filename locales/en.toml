@@ -125,11 +125,11 @@ other = "Writing the run log in {{.dir}} failed: {{.reason}}."
 
 [backend_lacks]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
-other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see which backends do."
+other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see the features it has."
 
 [backend_unreviewed]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
-other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see which backends have it."
+other = "{{.vm}} needs {{.feature}}, and the {{.backend}} backend only emulates it without a review. Run devvm doctor to see the features it has."
 
 [backend_unreviewed_used]
 description = "feature is a feature's name as the backends page lists it (egress-proxy); backend is a backend's name (lima)"
@@ -554,14 +554,14 @@ description = "reason is an error from the system, in English"
 other = "Reading what devvm keeps failed: {{.reason}}."
 
 [space_backend_unknown]
-other = "{{.backend}} didn't answer, so its VMs and images aren't counted."
+other = "The {{.backend}} backend didn't answer, so its VMs and images aren't counted."
 
 [space_stray]
 description = "data is the data folder in the VM's label: another devvm's, or this one's"
-other = "{{.backend}} has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
+other = "The {{.backend}} backend has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
 
 [space_caches_note]
-other = "The backends' caches can also hold your own downloads, so devvm counts them apart."
+other = "Lima's caches can also hold your own downloads, so devvm counts them apart."
 
 [gc_failed]
 description = "reason is an error from the system, in English"
@@ -667,11 +667,11 @@ one = "deleted {{.count}} socket of a link session"
 other = "deleted {{.count}} sockets of link sessions"
 
 [gc_backend_skipped]
-description = "backend is a backend a VM's state names, which couldn't list its images; gc goes on with the other backends"
-other = "{{.backend}} can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
+description = "backend is a backend a VM's state names, which couldn't list its images"
+other = "The {{.backend}} backend can't list its images, so devvm gc leaves its images, shared tools, leftovers and caches alone. Run devvm doctor to see why."
 
 [gc_orphans_unknown]
-other = "{{.backend}} didn't answer, so devvm gc --orphans leaves its VMs' state alone."
+other = "The {{.backend}} backend didn't answer, so devvm gc --orphans leaves its VMs' state alone."
 
 [gc_orphan_elsewhere]
 other = "{{.vm}} was made in another Lima home or HOME than this run's, so its state stays."
@@ -725,7 +725,7 @@ description = "file is config.toml's path; key is its key, such as size.memory o
 other = "{{.file}} sets {{.key}}, and devvm never changes that file. To change it, edit {{.key}} there, or delete it to let devvm's commands set it."
 
 [setup_in_config]
-description = "file is config.toml's path; key is its key, such as backend or size.cpus"
+description = "file is config.toml's path; key is its key, such as features or size.cpus"
 other = "{{.file}} sets {{.key}}, so devvm setup doesn't ask for it"
 
 [retention_settings_failed]
@@ -1496,12 +1496,6 @@ other = "While you're connected, anything in {{.vm}} can use the keys in your SS
 
 [agent_devvm_risk]
 other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent to list them."
-
-[agent_on_risk_running]
-other = "While {{.vm}} runs, anything in it can use the keys in your SSH agent, whether or not you're connected."
-
-[agent_devvm_risk_running]
-other = "While {{.vm}} runs, anything in it can use the keys in devvm's SSH agent, whether or not you're connected. Run devvm ssh-agent to list them."
 
 [agent_set_running]
 description = "mode is on (the user's agent), devvm (devvm's own) or off"
