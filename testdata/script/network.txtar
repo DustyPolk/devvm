@@ -4,7 +4,7 @@
 
 # --no-network-policy: off, with no proxy and no CA.
 project off
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 catg $VMS/devvm-off-*
 stdout '^net=off$'
@@ -19,7 +19,7 @@ stub_calls
 # shell.
 project net
 stub_reset
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
 exists $DATA/ca/ca.pem $DATA/ca/ca.key
 catg $VMS/devvm-net-*
@@ -58,7 +58,7 @@ stdout 'devvm:devvm-proxy-password@'
 project leak
 stub_reset
 exec sh -c ': > "$STUB_DIR/net-direct"'
-! exec devvm --network-policy --no-git-protect base
+! exec devvm --network-policy --no-git-protect
 stderr '^devvm: net_direct_route vm=devvm-leak-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-leak-[0-9a-f]{14}$'
@@ -81,11 +81,11 @@ stdout '^limactl stop devvm-net-[0-9a-f]{14}$'
 ! stdout 'limactl shell --workdir /\S*/net'
 exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
 
-# Secrets: claude comes with the image. The proxy gets its binding, with
+# Secrets: claude comes with Claude Code. The proxy gets its binding, with
 # the VM's own placeholder and never the token, and its host on 443.
 project agent
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --network-policy --no-git-protect claude
+exec devvm --network-policy --no-git-protect --agents claude
 catg $RUN/devvm-agent-*.secrets.json
 stdout '^\[\{"name":"claude","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]$'
 ! stdout testfake
@@ -104,7 +104,7 @@ env CLAUDE_CODE_OAUTH_TOKEN=
 mkdir $HOME/.codex
 cp $WORK/codex.json $HOME/.codex/auth.json
 project codex
-exec devvm --network-policy --no-git-protect codex
+exec devvm --network-policy --no-git-protect --agents codex
 catg $RUN/devvm-codex-*.secrets.json
 stdout '"name":"codex-key","hosts":\["api\.openai\.com"\]'
 ! stdout sk-testfake
@@ -145,7 +145,7 @@ stdout '^on$'
 
 # Without a flag, and without a terminal to ask in: on, unasked.
 project default
-exec devvm --no-git-protect base
+exec devvm --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-default-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask|net_off_'
 catg $VMS/devvm-default-*
@@ -175,12 +175,12 @@ stdout '\Aoff\n\z'
 exec devvm network -g --json
 stdout '\A{\n  "version": 1,\n  "policy": "off"\n}\n\z'
 project offsaved
-exec devvm --no-git-protect base
+exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
 catg $VMS/devvm-offsaved-*
 stdout '^net=off$'
 project offflag
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 catg $VMS/devvm-offflag-*
 stdout '^net=on$'
 cd $WORK/default
@@ -195,12 +195,12 @@ stdout '^net_check=ok$'
 exec devvm network -g on
 stdout '^==> network_default mode=on$'
 project onsaved
-exec devvm --no-git-protect base
+exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
 catg $VMS/devvm-onsaved-*
 stdout '^net=on$'
 project onflag
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 catg $VMS/devvm-onflag-*
 stdout '^net=off$'
 
@@ -215,9 +215,9 @@ exec sh -c 'echo maybe > "$XDG_CONFIG_HOME/devvm/network"'
 ! exec devvm network -g
 stderr '^devvm: net_default_failed reason=\S*/config/devvm/network:1: '
 project badsaved
-! exec devvm --no-git-protect base
+! exec devvm --no-git-protect
 stderr '\S*/config/devvm/network:1: '
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

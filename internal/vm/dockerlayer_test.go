@@ -56,12 +56,12 @@ func saidAny(all []string, prefix string) bool {
 // anything is built; with network policy, refused too.
 func TestUpDockerLayerRefused(t *testing.T) {
 	e, f, _ := layerEnv(t, noLayerCaps(), "")
-	err := Launch{e}.Up(t.Context(), Options{Image: "docker", Ports: "none"})
+	err := Launch{e}.Up(t.Context(), Options{Layers: &[]string{"docker"}, Ports: "none"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "docker_layer_needs_vm vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	e2, _, _ := layerEnv(t, allNative(), "sysbox")
-	err = Launch{e2}.Up(t.Context(), Options{Image: "docker", Ports: "none", NetworkPolicy: true})
+	err = Launch{e2}.Up(t.Context(), Options{Layers: &[]string{"docker"}, Ports: "none", NetworkPolicy: true})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "net_docker_layer backend=fake vm=devvm-web-") {
 		t.Errorf("with network policy: %v", got)
 	}
@@ -69,7 +69,7 @@ func TestUpDockerLayerRefused(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureDockerLayer] = backend.Emulated(false)
 	e3, _, _ := layerEnv(t, caps, "sysbox")
-	err = Launch{e3}.Up(t.Context(), Options{Image: "docker", Ports: "none"})
+	err = Launch{e3}.Up(t.Context(), Options{Layers: &[]string{"docker"}, Ports: "none"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=docker-layer vm=devvm-web-") {
 		t.Errorf("unreviewed: %v", got)
 	}
@@ -82,7 +82,7 @@ func TestUpDockerLayerRefused(t *testing.T) {
 // policy, now or later; ls shows it.
 func TestUpDockerLayerRuntime(t *testing.T) {
 	e, f, said := layerEnv(t, allNative(), "sysbox")
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "docker", Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{"docker"}, Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)

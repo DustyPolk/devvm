@@ -15,7 +15,7 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 		Use:   "layer",
 		Short: "Make image layers of your own",
 		Long: "Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base. " +
-			"An image names them as it names the shared tools and devvm's built-in layers, such as node+docker+NAME.",
+			"An image names them as it names devvm's built-in layers, bottom first, such as docker+NAME, and a new VM gets them with --layers.",
 		Example: examples(
 			"devvm layer new mailpit", "start a layer named mailpit",
 		),
@@ -31,7 +31,7 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 		Example: examples(
 			"devvm layer new mailpit", "start the mailpit layer, then edit its script",
 			"devvm build mailpit", "build its image",
-			"devvm node+mailpit", "create a VM with node and the layer",
+			"devvm --layers mailpit", "create a VM with the layer",
 		),
 		Args: cobra.MatchAll(exactArgs(1), func(_ *cobra.Command, args []string) error {
 			return build.CheckLayerName(args[0])

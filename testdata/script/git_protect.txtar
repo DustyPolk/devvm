@@ -16,7 +16,7 @@ stderr '^devvm: arg_not_choice choices=on, strict, off command=devvm git-protect
 # (it could race the locks), the last choice kept; elsewhere off, and on
 # is refused.
 exec git init -q
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 vm_name WEB web
 exec devvm git-protect
 [darwin] stdout '\Aon\n\z'
@@ -136,7 +136,7 @@ stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 
 # Without a .git yet: locked when one appears.
 project nogit
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 vm_name NOGIT nogit
 exec limactl stop $NOGIT
 exec devvm git-protect on

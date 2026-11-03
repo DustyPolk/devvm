@@ -239,17 +239,33 @@ func nixShell(dir string) bool {
 // in dir's top level, in a fixed order: nix also for a default.nix that
 // makes a shell.
 func Detect(dir string) []string {
-	var found []string
+	var names []string
+	for _, f := range DetectFiles(dir) {
+		names = append(names, f.Name)
+	}
+	return names
+}
+
+// Found is a toolchain, or the nix layer, that a folder calls for, and the
+// first of its marker files that calls for it.
+type Found struct{ Name, File string }
+
+// DetectFiles is Detect, with the file that calls for each.
+func DetectFiles(dir string) []Found {
+	var found []Found
 	for _, m := range markers {
-		hit := m.part == "nix" && nixShell(dir)
+		file := ""
 		for _, f := range m.files {
 			if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
-				hit = true
+				file = f
 				break
 			}
 		}
-		if hit {
-			found = append(found, m.part)
+		if file == "" && m.part == "nix" && nixShell(dir) {
+			file = "default.nix"
+		}
+		if file != "" {
+			found = append(found, Found{m.part, file})
 		}
 	}
 	return found

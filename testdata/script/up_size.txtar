@@ -4,33 +4,33 @@ project sized
 
 # Values that aren't sizes or port lists, and sizes this machine can't
 # give or a disk smaller than the image's, are refused.
-! exec devvm --no-network-policy --cpus 1.5 base
+! exec devvm --no-network-policy --cpus 1.5
 stderr '^devvm: cpus_not_number value="1\.5"$'
-! exec devvm --no-network-policy --cpus=0 base
+! exec devvm --no-network-policy --cpus=0
 stderr '^devvm: cpus_not_number value="0"$'
-! exec devvm --no-network-policy --memory 16M base
+! exec devvm --no-network-policy --memory 16M
 stderr '^devvm: size_not_gib flag=--memory value="16M"$'
-! exec devvm --no-network-policy --disk lots base
+! exec devvm --no-network-policy --disk lots
 stderr '^devvm: size_not_gib flag=--disk value="lots"$'
-! exec devvm --no-network-policy --cpus 9999 base
+! exec devvm --no-network-policy --cpus 9999
 stderr '^devvm: too_many_cpus have=8 want=9999$'
-! exec devvm --no-network-policy --memory 99999 base
+! exec devvm --no-network-policy --memory 99999
 stderr '^devvm: too_much_memory have=16 max=14 want=99999$'
-! exec devvm --no-network-policy --disk 50GiB base
+! exec devvm --no-network-policy --disk 50GiB
 stderr '^devvm: disk_shrink have=100 vm=devvm-sized-[0-9a-f]{14} want=50$'
-! exec devvm --no-network-policy --ports 0 base
+! exec devvm --no-network-policy --ports 0
 stderr '^devvm: port_invalid value="0"$'
-! exec devvm --no-network-policy --ports 8010-8000 base
+! exec devvm --no-network-policy --ports 8010-8000
 stderr '^devvm: port_invalid value="8010-8000"$'
 # Hand-edited defaults are checked too.
 mkdir $XDG_CONFIG_HOME/devvm
 cp $WORK/bad-size $XDG_CONFIG_HOME/devvm/size
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: size_not_gib flag=--memory value="1\$\(touch x\)"$'
 ! exists x
 rm $XDG_CONFIG_HOME/devvm/size
 cp $WORK/bad-ports $XDG_CONFIG_HOME/devvm/ports
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: port_invalid '
 rm $XDG_CONFIG_HOME/devvm/ports
 stub_calls
@@ -39,7 +39,7 @@ stub_calls
 # The flags: the VM's size changes after the clone, and its state says so;
 # the ports it forwards are recorded as it's cloned, Lima's own forwards
 # off.
-exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173, 8000-8010,5173' base
+exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173, 8000-8010,5173'
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
 stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 --disk 120$'
@@ -56,7 +56,7 @@ stdout '^ports=5173,8000-8010$'
 project defaults
 exec sh -c 'echo memory=5 > "$XDG_CONFIG_HOME/devvm/size" && echo none > "$XDG_CONFIG_HOME/devvm/ports"'
 stub_reset
-exec devvm --no-network-policy --cpus 2 base
+exec devvm --no-network-policy --cpus 2
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 5$'
@@ -68,7 +68,7 @@ stdout '^ports=none$'
 project all
 exec sh -c 'echo all > "$XDG_CONFIG_HOME/devvm/ports" && rm "$XDG_CONFIG_HOME/devvm/size"'
 stub_reset
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 ! stdout 'limactl edit --tty=false devvm-all'
@@ -81,7 +81,7 @@ catg $VMS/devvm-all-*
 # size only in a terminal: without one it asks nothing and saves none.
 project first
 rm $XDG_CONFIG_HOME/devvm/base-features
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 ! stdout 'size_question|size_defaults'
 ! stderr 'size_'
 ! exists $XDG_CONFIG_HOME/devvm/size

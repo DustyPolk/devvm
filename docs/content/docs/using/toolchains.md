@@ -3,7 +3,7 @@ title: Toolchains
 weight: 2
 ---
 
-devvm has four toolchains: node, python, rust and go. A new VM gets the ones its folder's files call for, or the ones you name, as in `devvm node+python`. Each section below says what the toolchain brings and how devvm chooses it. A project that gets its toolchain from Nix uses the `nix` layer, which [Nix projects](#nix-projects) covers.
+devvm has four toolchains: node, python, rust and go. A new VM gets the ones you check in the list devvm shows for it, where those its folder's files call for are checked already, or the ones you give with `--tools`, as in `devvm --tools node,python` ([what a new VM gets](images.md#what-a-new-vm-gets)). Each section below says what the toolchain brings and which files make devvm choose it. A project that gets its toolchain from Nix uses the `nix` layer, which [Nix projects](#nix-projects) covers.
 
 ## node
 
@@ -43,7 +43,7 @@ go brings the newest Go release, and devvm turns Go's telemetry off in the VM.
 
 ## Nix projects
 
-A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. devvm chooses it for a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`. It goes after the toolchains the folder calls for, so a folder with `package.json` and `flake.nix` gets `node+nix`, and you can also name it, as in `devvm nix`.
+A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. For a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`, the list devvm shows for a new VM names that file in the `nix` row, and you check it there. A layer isn't checked by default, so a VM made without a terminal gets it only with `--layers nix`, as in `devvm --layers nix` in a folder with `package.json` and `flake.nix`, which gives node on the `nix` layer.
 
 - **Dev shells.** Put `use flake` (or `use nix` for a `shell.nix`) in the project's `.envrc` and run `direnv allow` in the VM once. From then on, each shell that changes into the folder loads the dev shell, and leaving the folder unloads it. This works in your terminal and in the terminals of editors connected over SSH.
 - **The flake's tools come first.** While the dev shell is loaded, its tools are ahead of the shared tools on the `PATH`, so a flake's `node` wins over the shared node, and the shared tools come back when you leave the folder.
@@ -58,12 +58,12 @@ A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), 
 
 When your team's projects use one flake for their dev shell, you can put that dev shell's packages into an image, so every VM made from the image starts with them in its store and downloads none of them. VMs made from one image share its disk, because on macOS each VM's disk is a copy-on-write clone of the image's, and on Linux hosts it's an overlay of the image's, so the packages take their space once. This works with the stable Nix that the `nix` layer installs, with network policy or without it, on every backend that has the `nix` layer, which are Lima and smolvm.
 
-To do it, make a [layer of your own](customizing.md#your-own-layers) that builds the dev shell while the image builds, and name it after `nix` in the image, so that it runs on top of the `nix` layer:
+To do it, make a [layer of your own](customizing.md#your-own-layers) that builds the dev shell while the image builds, and give it after `nix`, so that it runs on top of the `nix` layer:
 
 ```sh
 devvm layer new myteam
 $EDITOR ~/.config/devvm/layers/myteam.sh
-devvm nix+myteam         # or devvm node+nix+myteam
+devvm --layers nix,myteam   # a new VM of the image nix+myteam
 ```
 
 Put these lines in `~/.config/devvm/layers/myteam.sh`, below the starter's `set -euo pipefail`, with your team's flake at the commit you want:
@@ -92,11 +92,15 @@ What this doesn't cover:
 
 The toolchains are [shared tools](images.md#shared-tools), like the [coding agents](coding-agents.md#supported-agents), so they aren't part of any image. devvm builds each version once and mounts it read-only into every VM that has it, and [mise](https://mise.jdx.dev) runs it, so `node`, `python`, `cargo` and `go` work from any shell in the VM, including `bash -c` from agents and from editors over SSH. Because the shared copy is read-only, a toolchain can't update itself, and anything you install globally goes into your home in the VM, as each section above says.
 
-devvm follows each toolchain's newest release, and Node 24 for node. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm tools update` moves a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [Which image a new VM gets](images.md#which-image-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
+devvm follows each toolchain's newest release, and Node 24 for node. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm tools update` moves a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [What a new VM gets](images.md#what-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
 
 ## Adding and removing tools
 
-A new VM gets the shared tools its image names, the toolchains and the [coding agents](coding-agents.md#supported-agents), and keeps those versions. On each launch, devvm warns when there are newer ones. `devvm tools` shows the tools of this folder's VM in a table, one row per tool, with node's pnpm and bun and python's uv in rows of their own:
+A new VM gets the shared tools chosen when devvm makes it, the toolchains and the [coding agents](coding-agents.md#supported-agents), and keeps those versions. On each launch, devvm warns when there are newer ones.
+
+In a terminal, `devvm tools` shows the same list as for a new VM, with this folder's VM's toolchains and agents checked and its layers greyed out, because a VM gets its layers only when devvm makes it. Check and uncheck the tools, and press enter: devvm adds and takes out what changed, as `devvm tools add` and `devvm tools rm` do, then opens a shell in the VM. When a new agent's config folders need the running VM to start again, devvm asks first. When nothing changed, devvm says so and opens nothing.
+
+Without a terminal, or with `--no-input` or `--json`, `devvm tools` shows the tools of this folder's VM in a table, one row per tool, with node's pnpm and bun and python's uv in rows of their own:
 
 | Column | |
 | --- | --- |
@@ -105,7 +109,7 @@ A new VM gets the shared tools its image names, the toolchains and the [coding a
 | `NEWER` | the version in devvm's tools lock when the VM has another build, which is usually a newer version, or `-` when the VM has the lock's build |
 | `BUILT` | `yes` when that newer version is built, `no` when `devvm tools update` builds it first, or `-` |
 
-`devvm tools` changes nothing and starts no VM. It reads the tools lock as it is, without going online, so a release that came out since devvm last checked isn't in it yet.
+The table changes nothing and starts no VM. devvm reads the tools lock as it is, without going online, so a release that came out since devvm last checked isn't in it yet.
 
 ### devvm tools --json
 
@@ -129,10 +133,10 @@ A new VM gets the shared tools its image names, the toolchains and the [coding a
 }
 ```
 
-The commands below change the VM's tools. They don't change the VM's disk, because its tools are mounted, so a change takes effect when devvm then opens a shell in the VM. Each takes the tools' names as separate words, as in `devvm tools add python claude`, and devvm refuses names joined with `+`.
+The commands below change the VM's tools from a script or the command line. They don't change the VM's disk, because its tools are mounted, so a change takes effect when devvm then opens a shell in the VM. Each takes the tools' names as separate words, as in `devvm tools add python claude`, and devvm refuses names joined with `+` or a comma.
 
 - `devvm tools add TOOL...` builds the tools that the share lacks and adds them to the VM. A new agent's config folders are mounted too, which needs the VM to start again, so for a running VM devvm asks before restarting it ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
 - `devvm tools rm TOOL...` takes tools out. What the VM installed itself, such as other versions or global packages, stays.
 - `devvm tools update` checks upstream for newer versions, builds what's missing, and moves the VM to them. When the VM already has the newest versions, it builds any of them that are missing.
 
-`devvm IMAGE` adds nothing to a VM that exists. When IMAGE names shared tools the VM lacks, devvm stops, changes nothing and names the `devvm tools add` command that adds them. Layers aren't shared tools, so `devvm tools` can't add or take out a layer such as `docker` or `nix`. A VM gets its layers when devvm makes it, so to change them, save your work outside the project folder, run `devvm rm`, and make the VM again with the image you want.
+`--tools`, `--agents` and `--layers` choose only what a new VM gets, so on a VM that exists they change nothing, and devvm warns and names `devvm tools`. Layers aren't shared tools, so `devvm tools` can't add or take out a layer such as `docker` or `nix`. A VM gets its layers when devvm makes it, so to change them, save your work outside the project folder, run `devvm rm`, and make the VM again with the layers you want.

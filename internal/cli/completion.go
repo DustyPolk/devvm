@@ -21,7 +21,7 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
 		Use:   "completion SHELL",
 		Short: "Print the shell completion script for bash, zsh or fish",
-		Long: "Print the script that completes devvm's commands, flags and image names in SHELL, which is bash, zsh or fish. " +
+		Long: "Print the script that completes devvm's commands, flags, image names and shared tools in SHELL, which is bash, zsh or fish. " +
 			"Load it from your shell's startup file.",
 		Example: examples(
 			"source <(devvm completion bash)", "in ~/.bashrc, with the bash-completion package installed",
@@ -45,8 +45,9 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 }
 
 // addCompletions sets how the shell completes root's commands' arguments
-// and flags: image names for IMAGE, backend names
-// for --backend, and no file names, which none of them take.
+// and flags: image names for IMAGE, the toolchains, agents and layers for
+// --tools, --agents and --layers, backend names for --backend, and no
+// file names, which none of them take.
 func addCompletions(root *cobra.Command, u *ui.UI) {
 	backendNames := completeBackend(u)
 	root.CompletionOptions.DisableDefaultCmd = true
@@ -57,9 +58,12 @@ func addCompletions(root *cobra.Command, u *ui.UI) {
 			c.ValidArgsFunction = completeImage
 		case "setup":
 			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
+			_ = c.RegisterFlagCompletionFunc("agents", completeParts("agents"))
 		}
 	}
-	root.ValidArgsFunction = completeImage
+	for _, flag := range []string{"tools", "agents", "layers"} {
+		_ = root.RegisterFlagCompletionFunc(flag, completeParts(flag))
+	}
 	completeBackendFlags(root, backendNames)
 	_ = root.RegisterFlagCompletionFunc("ports", cobra.FixedCompletions([]string{"all", "none"}, cobra.ShellCompDirectiveNoFileComp))
 }
@@ -75,18 +79,43 @@ func completeBackendFlags(c *cobra.Command, names cobra.CompletionFunc) {
 	}
 }
 
-// completeImage completes IMAGE: base, the toolchains, your layers and
-// the agents, after the parts already given.
+// completeImage completes IMAGE: base and the layers, after the layers
+// already given.
 func completeImage(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	if len(args) > 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	dirs, err := paths.FromEnv()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+	return joined(toComplete, layerNames(true)), cobra.ShellCompDirectiveNoFileComp
+}
+
+// layerNames is the layers there are, built-in and the user's, with base
+// first when withBase.
+func layerNames(withBase bool) []string {
+	layers := slices.Concat([]string{image.Base}, image.Builtins)
+	if dirs, err := paths.FromEnv(); err == nil {
+		layers = (&build.Env{Dirs: dirs}).Layers()
 	}
-	b := &build.Env{Dirs: dirs}
-	return joined(toComplete, slices.Concat(b.Environments(), image.Agents)), cobra.ShellCompDirectiveNoFileComp
+	if withBase {
+		return layers
+	}
+	return layers[1:]
+}
+
+// completeParts returns what completes --tools, --agents and --layers
+// (flag): a comma-separated list of the part's names, after those already
+// given, or none.
+func completeParts(flag string) cobra.CompletionFunc {
+	return func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		names := map[string][]string{"tools": image.Toolchains, "agents": image.Agents}[flag]
+		if flag == "layers" {
+			names = layerNames(false)
+		}
+		out := joinedBy(",", toComplete, names)
+		if strings.HasPrefix(partsNone, toComplete) {
+			out = append(out, partsNone)
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
+	}
 }
 
 // completeToolNames completes TOOL...: the toolchains and the agents not
@@ -129,8 +158,8 @@ func completeBackend(u *ui.UI) cobra.CompletionFunc {
 }
 
 // joined completes the last of the +-joined parts in toComplete with the
-// names it starts, leaving out the parts already given: node+c gives
-// node+claude and node+codex.
+// names it starts, leaving out the parts already given: docker+f gives
+// docker+foo and docker+fop.
 func joined(toComplete string, names []string) []cobra.Completion {
 	return joinedBy("+", toComplete, names)
 }

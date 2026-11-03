@@ -540,43 +540,31 @@ other = "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the o
 other = "gpgv isn't installed, so devvm can't check the signature on Ubuntu's checksums. devvm still checks the image against its pinned checksum. To check the signature too, run brew install gnupg, or apt install gpgv."
 
 [unknown_layer]
-description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
-other = "There's no layer or shared tool {{.layer}}. Choose from {{.envs}} and the agents {{.agents}}."
+description = "layers is a space-separated list of base, the built-in layers and the user's"
+other = "There's no layer {{.layer}}. Choose from {{.layers}}."
+
+[tool_not_layer]
+other = "{{.tool}} is a shared tool, and an image holds only base and layers. Choose a VM's shared tools when devvm makes it, or with devvm tools."
 
 [layer_name_invalid]
 other = "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
 
 [layer_name_reserved]
-other = "{{.layer}} is the name of one of devvm's own images. Choose another name for your layer."
+other = "{{.layer}} is the name of base, a built-in layer or a shared tool. Choose another name for your layer."
 
-[layer_name_command]
-other = "{{.layer}} is a word devvm keeps for its commands. Choose another name for your layer."
+[no_command]
+description = "word is what was typed after devvm, which isn't a command"
+other = "There's no command devvm {{.word}}. Run devvm --help to see the commands."
 
-[layer_is_command]
-description = "file is the layer's script in the layers folder"
-other = "Your layer {{.file}} is named {{.layer}}, a word devvm keeps for its commands, so devvm can't use it. Rename the file."
-
-[no_command_or_image]
-description = "word is what was typed after devvm: neither a command nor an image's name"
-other = "There's no devvm command or image named {{.word}}."
-
-[no_command_or_image_command]
+[no_command_like]
 description = "command is the devvm command closest to word"
-other = "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}}?"
-
-[no_command_or_image_image]
-description = "image is the image name closest to word"
-other = "There's no devvm command or image named {{.word}}. Did you mean the image {{.image}}?"
-
-[no_command_or_image_both]
-description = "command is the devvm command and image the image name closest to word"
-other = "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}} or the image {{.image}}?"
+other = "There's no command devvm {{.word}}. Did you mean devvm {{.command}}?"
 
 [layer_exists]
 other = "{{.file}} already exists. Edit it, or choose another name."
 
 [layer_created]
-other = "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm node+{{.layer}} to start a VM with it."
+other = "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm --layers {{.layer}} to make a VM with it."
 
 [layer_new_failed]
 description = "reason is an error from the system, in English"
@@ -774,9 +762,6 @@ other = "There's no image {{.image}}. Run devvm images to list them."
 [no_image_named_from]
 other = "There's no image {{.image}} from {{.from}}. Run devvm images to list them."
 
-[tools_not_images_rm]
-other = "{{.image}} names shared tools, and shared tools aren't images. Name the image under them, and run devvm gc to delete unused shared tool images."
-
 [images_stale_note]
 one = "{{.count}} image is stale or unfinished. Run devvm gc to delete it."
 other = "{{.count}} images are stale or unfinished. Run devvm gc to delete them."
@@ -844,22 +829,22 @@ other = "deleted {{.count}} tool images no VM had"
 
 [gc_tools_recent]
 description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
-one = "{{.count}} current shared tool image no VM has stays because it was built in the last hour: {{.tools}}. Run devvm gc --tools --recent to delete it now."
-other = "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tools --recent to delete them now."
+one = "{{.count}} current shared tool image no VM has stays because it was built in the last hour: {{.tools}}. Run devvm gc --tool-images --recent to delete it now."
+other = "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tool-images --recent to delete them now."
 
 [gc_tools_making]
 description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
-one = "{{.count}} current shared tool image no VM has stays because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tools again once that's done."
-other = "{{.count}} current shared tool images no VM has stay because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tools again once that's done."
+one = "{{.count}} current shared tool image no VM has stays because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tool-images again once that's done."
+other = "{{.count}} current shared tool images no VM has stay because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tool-images again once that's done."
 
 [gc_names_need_tools]
-other = "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.tool}}."
+other = "Tool names such as {{.tool}} go with --tool-images. Run devvm gc --tool-images {{.tool}}."
 
 [gc_recent_needs_tools]
-other = "--recent goes with --tools. Run devvm gc --tools --recent."
+other = "--recent goes with --tool-images. Run devvm gc --tool-images --recent."
 
 [gc_recent_making]
-other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --recent again once that's done."
+other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tool-images --recent again once that's done."
 
 [unknown_tool]
 other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."
@@ -1109,13 +1094,8 @@ other = "The --ports flag applies only to new VMs. To change this VM's ports, ru
 [size_next_start]
 other = "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 
-[vm_lacks_tools]
-description = "tools is a space-separated list of shared tools: python claude"
-other = "{{.vm}} doesn't have {{.tools}}. Run devvm tools add {{.tools}} to add them."
-
-[vm_lacks_layer]
-description = "image is the VM's image with what was asked for: node+docker"
-other = "{{.vm}} doesn't have the {{.layer}} layer, and only a new VM can get a layer. Save your work outside the project folder, then run devvm rm and devvm {{.image}}."
+[parts_flags_ignored]
+other = "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools."
 
 [has_tools]
 description = "tools is a space-separated list of shared tools: python claude"
@@ -1125,8 +1105,9 @@ other = "{{.vm}} has {{.tools}} already"
 description = "cmd is the devvm tools subcommand: add or rm"
 other = "{{.given}} joins shared tools with +. Give them as separate words, such as devvm tools {{.cmd}} node claude."
 
-[vm_is_now]
-other = "{{.vm}} is now {{.image}}"
+[vm_tools_now]
+description = "tools is a space-separated list of the VM's shared tools, or none"
+other = "{{.vm}}'s shared tools are now {{.tools}}"
 
 [exported]
 other = "exported {{.vm}}'s agent history to {{.file}}"
@@ -1434,12 +1415,62 @@ other = "{{.vm}} doesn't reach {{.links}} through the group {{.group}} any more.
 [group_link_name_clash]
 other = "{{.vm}} has a link of its own called {{.name}}, so it gets none of the group's links to {{.target}}. To get them, remove that link with devvm link rm."
 
-[detected]
-other = "detected a {{.found}} project"
+[new_vm_gets]
+description = "tools and layers are space-separated lists of names, or none"
+other = "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its layers. To choose others, give --tools, --agents and --layers."
 
-[no_image_for]
-description = "envs (base, the toolchains, the built-in layers and the user's) and agents are space-separated lists of names"
-other = "{{.dir}} doesn't show which image it needs. Name one as devvm IMAGE, joining any of {{.envs}} and the agents {{.agents}} with +."
+[pick_new_help]
+other = "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
+
+[pick_vm_help]
+other = "Choose {{.vm}}'s shared tools. Use up and down to move, space to toggle and enter to confirm."
+
+[pick_toolchains]
+other = "Toolchains"
+
+[pick_agents]
+other = "Coding agents, which you start in the VM's shell"
+
+[pick_layers]
+other = "Layers, which a VM gets only when devvm makes it"
+
+[pick_called_for]
+description = "file is the project's file that calls for the toolchain or layer, such as package.json"
+other = "for {{.file}}"
+
+[pick_setup_agent]
+other = "from devvm setup"
+
+[pick_layer_docker]
+other = "Docker's engine, CLI, BuildKit and Compose"
+
+[pick_layer_nix]
+other = "Nix, direnv and nix-direnv"
+
+[pick_layer_yours]
+other = "your layer"
+
+[agents_help]
+other = "Pick the coding agents new VMs get. Use up and down to move, space to toggle and enter to confirm."
+
+[default_agents]
+description = "agents is a space-separated list of agents"
+other = "New VMs get these coding agents: {{.agents}}. To change them, run devvm setup --agents."
+
+[default_agents_none]
+other = "New VMs get no coding agents. To choose some, run devvm setup --agents."
+
+[unknown_part]
+description = "flag is --tools, --agents or --layers; names is a space-separated list of what it takes"
+other = "There's no {{.given}} for {{.flag}}. Choose from {{.names}}, or none."
+
+[unknown_part_like]
+description = "flag is --tools, --agents or --layers; like is the name closest to given"
+other = "There's no {{.given}} for {{.flag}}. Did you mean {{.like}}?"
+
+[part_none_alone]
+description = "flag is --tools, --agents or --layers"
+other = "{{.flag}} takes none alone, or a list of names without it."
 
 [net_about]
 other = "Network policy for {{.vm}}:\n  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\n  off: it reaches anything this machine can"
@@ -1941,10 +1972,6 @@ other = "WARNING: Hooks appeared in {{.hooks}}, a folder devvm hadn't locked, si
 [git_gitdir_outside]
 other = "The submodule {{.sub}} keeps its git folder outside the project, at {{.git}}, so devvm can't lock it. git status on this machine still reads its config."
 
-[tools_not_images]
-description = "tools is a space-separated list of shared tools (node claude)"
-other = "Shared tools aren't images, and the tools lock sets their versions, so devvm can't rebuild {{.tools}}. Rebuild the image under them instead, such as with devvm rebuild base."
-
 [downloading_mise]
 other = "downloading mise {{.version}}"
 
@@ -2008,8 +2035,8 @@ description = "tools lists tools and versions: claude 2.1.295, codex 0.162.0"
 other = "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
 
 [vm_lacks]
-description = "has is a space-separated list of the VM's layers and tools"
-other = "{{.vm}} doesn't have {{.layer}}. It has {{.has}}."
+description = "has is a space-separated list of the VM's shared tools, or none"
+other = "{{.vm}} doesn't have the shared tool {{.tool}}. Its shared tools are {{.has}}."
 
 [custom_layer_remove]
 other = "You can't remove a layer from {{.vm}}. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again."
@@ -2145,8 +2172,8 @@ other = "{{.vm}} uses the {{.secret}} secret from its next launch."
 [secret_unused]
 other = "{{.vm}} doesn't use the {{.secret}} secret any more."
 
-[secret_with_image]
-other = "{{.vm}}'s image has claude, so the VM always uses the Claude Code token."
+[secret_with_claude]
+other = "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
 
 [secret_unuse_copied]
 other = "Network policy is off for {{.vm}}, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."

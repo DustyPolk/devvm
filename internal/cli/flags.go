@@ -29,6 +29,12 @@ func addFromFlag(f *pflag.FlagSet, p *string) {
 	f.StringVar(p, "from", "", "the container `IMAGE` base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)")
 }
 
+// addAgentsFlag adds --agents, a list of coding agents: a new VM's, or
+// new VMs' default with devvm setup. usage says whose.
+func addAgentsFlag(f *pflag.FlagSet, p *string, usage string) {
+	f.StringVar(p, "agents", "", usage)
+}
+
 // addForceFlag adds -f/--force, which only skips a confirmation.
 func addForceFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which devvm needs without a terminal")

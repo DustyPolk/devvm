@@ -81,12 +81,12 @@ func TestDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.ImageKeys = append(f.ImageKeys, "000000000000")
-	for _, refs := range [][]string{{"node"}, {"foo+claude"}, {"bar"}, {"nope"}, {"fedcba987654"}, {"000000000000", "bar"}} {
+	for _, refs := range [][]string{{"node"}, {"foo+codex"}, {"bar"}, {"nope"}, {"fedcba987654"}, {"000000000000", "bar"}} {
 		if err := (Images{b}).Delete(ctx, refs); err == nil {
 			t.Errorf("Delete %q: no error", refs)
 		}
 	}
-	if msg.IDOf((Images{b}).Delete(ctx, []string{"node"})) != "tools_not_images_rm" || msg.IDOf((Images{b}).Delete(ctx, []string{"bar"})) != "no_image_named" ||
+	if msg.IDOf((Images{b}).Delete(ctx, []string{"node"})) != "tool_not_layer" || msg.IDOf((Images{b}).Delete(ctx, []string{"bar"})) != "no_image_named" ||
 		msg.IDOf((Images{b}).Delete(ctx, []string{"nope"})) != "unknown_layer" {
 		t.Error("Delete: not the messages expected")
 	}

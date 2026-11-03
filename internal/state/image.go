@@ -17,7 +17,7 @@ import (
 // the image is built, so an image without one is left over from a failed
 // build.
 type Image struct {
-	Name   string // the image's name: base, node, node+claude
+	Name   string // the image's name: base, docker, docker+foo
 	Chain  string // its build chain: name=key pairs, base first, space-separated
 	From   string // the image base started from, if not the default
 	Digest string // what base started from: the From image's digest, or the cloud image's

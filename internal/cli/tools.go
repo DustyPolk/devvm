@@ -19,16 +19,21 @@ func newToolsCmd(u *ui.UI) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "tools",
-		Short: "Show this folder's VM's shared tools",
-		Long: "Show the shared tools of this folder's VM, each with its version and any newer version in devvm's tools lock. " +
-			"It changes nothing, starts no VM and doesn't go online.",
+		Short: "Show or choose this folder's VM's shared tools",
+		Long: "In a terminal, choose the toolchains and coding agents of this folder's VM in a list, which shows its layers too, then open a shell in it. " +
+			"Without a terminal, or with --json, show its shared tools, each with its version and any newer version in devvm's tools lock, " +
+			"which changes nothing, starts no VM and doesn't go online.",
 		Example: examples(
-			"devvm tools", "show the VM's shared tools",
+			"devvm tools", "choose the VM's shared tools, or show them without a terminal",
 			"devvm tools add python claude", "add python and Claude Code to the VM",
 			"devvm tools update", "move the VM to the newest versions",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !asJSON && u.CanPick() {
+				withEnv(u, func(env *vm.Env) error { return vm.Tools{Env: env}.Pick(cmd.Context(), vm.Options{}) }, msg.UpFailed)
+				return nil
+			}
 			var ts []tools.VMTool
 			withEnv(u, func(env *vm.Env) error {
 				var err error
@@ -145,8 +150,8 @@ func newToolsUpdateCmd(u *ui.UI) *cobra.Command {
 }
 
 // toolNames takes one or more TOOLs, each a word of its own: one joined
-// with + is refused, naming sub, the devvm tools command (add, rm). add
-// takes only shared tools' names.
+// with + or a comma is refused, naming sub, the devvm tools command (add,
+// rm). add takes only shared tools' names.
 func toolNames(sub string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := minArgs(1)(cmd, args); err != nil {
@@ -154,7 +159,7 @@ func toolNames(sub string) cobra.PositionalArgs {
 		}
 		names := slices.Concat(image.Toolchains, image.Agents)
 		for _, a := range args {
-			if strings.Contains(a, "+") {
+			if strings.ContainsAny(a, "+,") {
 				return msg.ToolsJoined(sub, a)
 			}
 			if sub == "add" && !slices.Contains(names, a) {

@@ -107,7 +107,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Info:   quiet, Warn: quiet, Note: quiet, Say: quiet,
 		Ask: unasked(t), Confirm: unasked(t),
 		PickFeatures: func(fs []build.Feature) []build.Feature { return fs },
-		Terminal:     func() bool { return false }, Interactive: func() bool { return false },
+		Terminal:     func() bool { return false }, Interactive: func() bool { return false }, CanPick: func() bool { return false },
 		Answer: func(m msg.M) string { t.Errorf("asked %s", m.Names()); return "" },
 		Stdout: io.Discard, LogNote: func() {}, LogWriter: testUI{t}.LogWriter, LoggedCmd: testUI{t}.LoggedCmd,
 		AddCleanup: testUI{t}.AddCleanup, Interrupted: testUI{t}.Interrupted,

@@ -61,15 +61,15 @@ stdout '^base +ubuntu:26\.04@sha256:a+ +a{12} +[0-9a-f]{12} +current +\S+ +docke
 # on this Linux engine (on Docker Desktop, to use a VM backend).
 project web
 stub_reset
-! exec devvm --backend docker --from $PIN --no-network-policy --ports none --disk 200 base
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none --disk 200
 stderr '^devvm: backend_lacks backend=docker feature=disk vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none --layers docker
 stderr '^devvm: docker_layer_no_sysbox vm=devvm-web-[0-9a-f]{14}$'
 env DEVVM_DOCKER_KIND=desktop
-! exec devvm --backend docker --from $PIN --no-network-policy --ports none docker
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none --layers docker
 stderr '^devvm: docker_layer_needs_vm vm=devvm-web-[0-9a-f]{14}$'
 env DEVVM_DOCKER_KIND=linux
-! exec devvm --backend docker --from $PIN --no-network-policy --ports none nix
+! exec devvm --backend docker --from $PIN --no-network-policy --ports none --layers nix
 stderr '^devvm: backend_lacks backend=docker feature=nix-layer vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm --backend docker --from $PIN build nix
 stderr '^devvm: backend_lacks backend=docker feature=nix-layer vm=\S+$'
@@ -84,7 +84,7 @@ stub_calls
 # size doesn't apply to it, said.
 exec devvm size -g --disk 150
 stub_reset
-exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+exec devvm --backend docker --from $PIN --no-network-policy --ports none
 stderr '^devvm: size_disk_default_unused backend=docker vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
@@ -98,7 +98,7 @@ stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- 
 ! stderr backend_unreviewed
 exists $STUB_DIR/sync.tar
 exec devvm ls
-stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +- +docker +\S+/web$'
+stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +- +\S+ +off +- +docker +\S+/web$'
 catg $VMS/devvm-web-*
 stdout '^backend=docker$'
 ! stdout '^disk='
@@ -148,10 +148,10 @@ exec devvm doctor --backend docker
 stdout '^docker-layer +emulated +native +native$'
 stdout '^docker_sysbox$'
 project sysbox
-! exec devvm --backend docker --from $PIN --network-policy --ports none docker
+! exec devvm --backend docker --from $PIN --network-policy --ports none --layers docker
 stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
 stub_reset
-exec devvm --backend docker --from $PIN --ports none docker
+exec devvm --backend docker --from $PIN --ports none --layers docker
 stdout '^==> docker_layer_runtime backend=docker runtime=sysbox vm=devvm-sysbox-[0-9a-f]{14}$'
 stderr '^devvm: net_off_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask'
@@ -167,8 +167,8 @@ catg $VMS/devvm-sysbox-*
 stdout '^docker_layer=sysbox$'
 stdout '^net=off$'
 exec devvm ls
-[darwin] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +on +off +- +docker \(sysbox\) +\S+/sysbox$'
-[linux] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +off +off +- +docker \(sysbox\) +\S+/sysbox$'
+[darwin] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +- +on +off +- +docker \(sysbox\) +\S+/sysbox$'
+[linux] stdout '^devvm-sysbox-[0-9a-f]{14} +Running +.*image=docker +- +off +off +- +docker \(sysbox\) +\S+/sysbox$'
 ! exec devvm network on
 stderr '^devvm: net_docker_layer backend=docker vm=devvm-sysbox-[0-9a-f]{14}$'
 exec devvm rm --force --no-export
@@ -177,10 +177,10 @@ stdout '^docker volume rm devvm-sysbox-[0-9a-f]{14}-docker$'
 stdout '^docker volume rm devvm-sysbox-[0-9a-f]{14}-containerd$'
 stdout '^docker network rm devvm-sysbox-[0-9a-f]{14}-docker-net$'
 project inplace
-exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+exec devvm --backend docker --from $PIN --no-network-policy --ports none
 stub_reset
-! exec devvm docker
-stderr '^devvm: vm_lacks_layer image=docker layer=docker vm=devvm-inplace-[0-9a-f]{14}$'
+exec devvm --layers docker
+stderr '^devvm: parts_flags_ignored vm=devvm-inplace-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'docker container (stop|commit|create)'
 exec devvm rm --force --no-export
@@ -188,7 +188,7 @@ exec devvm rm --force --no-export
 # off): refused.
 exec sh -c 'echo 1 > "$DEVVM_DOCKER_PROC_SYS/net/ipv4/conf/br-id-net-devvm/route_localnet"'
 project localnet
-! exec devvm --backend docker --from $PIN --ports none docker
+! exec devvm --backend docker --from $PIN --ports none --layers docker
 stderr '^devvm: docker_route_localnet vm=devvm-localnet-[0-9a-f]{14}$'
 ! exec sh -c 'ls -d "$STUB_DIR"/docker/containers/devvm-localnet-*'
 rm $STUB_DIR/docker-sysbox
@@ -204,7 +204,7 @@ free_port PORT
 project emu
 stub_reset
 exec sh -c 'printf "0100007F:%04X\n" "$PORT" > "$STUB_DIR/guest-ports"'
-exec devvm --backend docker --from $PIN --no-network-policy --ssh-agent base
+exec devvm --backend docker --from $PIN --no-network-policy --ssh-agent
 ! stderr backend_unreviewed
 ! stderr 'ports_(no_ssh|forward_failed)'
 stub_calls
@@ -279,7 +279,7 @@ exec devvm doctor --backend docker
 stdout '^docker_engine_desktop version=29\.1\.3$'
 stdout '^build-confinement +emulated +native +native$'
 stdout '^egress-proxy +emulated +native +emulated$'
-exec devvm --backend docker --from $PIN --no-network-policy --ports none base
+exec devvm --backend docker --from $PIN --no-network-policy --ports none
 ! stderr backend_unreviewed
 stdout '^==> creating_from image=base vm=devvm-desk-[0-9a-f]{14}$'
 exec devvm rm --force --no-export
@@ -289,10 +289,10 @@ exec devvm rm --force --no-export
 # --network-policy is refused before anything is made.
 env DEVVM_DOCKER_KIND=other
 project other
-! exec devvm --backend docker --from $PIN --network-policy --ports none base
+! exec devvm --backend docker --from $PIN --network-policy --ports none
 stderr '^devvm: backend_lacks backend=docker feature=egress-proxy vm=devvm-other-[0-9a-f]{14}$'
 ! exec sh -c 'ls -d "$STUB_DIR"/docker/containers/devvm-other-*'
-exec devvm --backend docker --from $PIN --ports none base
+exec devvm --backend docker --from $PIN --ports none
 stderr '^devvm: net_off_backend backend=docker vm=devvm-other-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask'
 catg $VMS/devvm-other-*
@@ -310,13 +310,13 @@ linux_release mismatch
 exec devvm doctor --backend docker
 ! stdout docker_linux_build
 ! exists $XDG_DATA_HOME/devvm/docker/bin/devvm-linux-$LINUX_ARCH
-! exec devvm --backend docker --from $PIN --network-policy --ports none base
+! exec devvm --backend docker --from $PIN --network-policy --ports none
 stdout '^==> docker_linux_build_fetching url=http://127\.0\.0\.1:\d+/devvm-0\.0\.0-linux-\w+\.tar\.gz$'
 stderr '^devvm: docker_linux_build_mismatch url=http://127\.0\.0\.1:\d+/devvm-0\.0\.0-linux-\w+\.tar\.gz$'
 ! exists $XDG_DATA_HOME/devvm/docker/bin/devvm-linux-$LINUX_ARCH
 exec devvm rm --force --no-export
 linux_release match
-! exec devvm --backend docker --from $PIN --network-policy --ports none base
+! exec devvm --backend docker --from $PIN --network-policy --ports none
 stdout '^==> docker_linux_build_fetching url='
 ! stderr docker_linux_build
 # The stub's VM answers the self-check's direct connection, so devvm stops

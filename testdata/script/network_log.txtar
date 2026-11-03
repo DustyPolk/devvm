@@ -8,7 +8,7 @@ project net
 stderr '^devvm: no_vm dir=\S*/net$'
 
 # A VM with network policy that logged nothing yet.
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 exec devvm network log
 stdout '^==> log_empty vm=devvm-net-[0-9a-f]{14}$'
 ! stderr .
@@ -73,7 +73,7 @@ cmp stdout $WORK/evil.txt
 
 # A VM without network policy logs nothing new, and devvm says so.
 project off
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm network log
 stdout '^==> log_empty vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_off_log vm=devvm-off-[0-9a-f]{14}$'

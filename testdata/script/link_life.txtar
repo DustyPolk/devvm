@@ -4,10 +4,10 @@
 # stops with the VM; devvm rm, gc --orphans and devvm ls know of links.
 
 project db
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 5432,80
 project app
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec sh -c 'ls "$RUN" | grep "links.pid" || true'
 ! stdout .
 
@@ -20,9 +20,9 @@ exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.0\.1:5432: ca
 exec sh -c 'kill -0 "$(cat "$RUN"/devvm-app-*.links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm ls
-stdout '^NAME +STATUS +IMAGE +GIT +NET +LINKS +BACKEND +FOLDER$'
-stdout '^devvm-app-[0-9a-f]{14} +Running +base +off +off +1 +lima '
-stdout '^devvm-db-[0-9a-f]{14} +Running +base +off +off +- +lima '
+stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +BACKEND +FOLDER$'
+stdout '^devvm-app-[0-9a-f]{14} +Running +base +- +off +off +1 +lima '
+stdout '^devvm-db-[0-9a-f]{14} +Running +base +- +off +off +- +lima '
 exec devvm ls --json
 stdout '"links": 1'
 

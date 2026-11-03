@@ -11,7 +11,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -27,12 +26,10 @@ func (e Launch) Restart(ctx context.Context, o Options) error {
 	if err := t.b.Stop(ctx, t.f.Name); err != nil {
 		return err
 	}
-	o.Image = ""
 	return e.open(ctx, o, t)
 }
 
-// open opens a shell in a VM that exists, made for this folder. An image
-// named that the VM lacks some of is refused (lacks). Flags for
+// open opens a shell in a VM that exists, made for this folder. Flags for
 // new VMs are ignored, with a warning. On the way it warns about images
 // and tools newer than the VM's, matches its agent folder mounts to the
 // host's (--clone on a VM that mounts the folder is refused); then it
@@ -53,16 +50,11 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 		e.Warn(msg.FromIgnored(vm))
 	}
 	builder := e.builder(b, st.Get(state.KeyFrom))
-	if o.Image != "" {
-		if err := e.lacks(o.Image, t, builder); err != nil {
-			return err
-		}
-	}
 	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Get(state.KeyChain)); err != nil {
 		return err
 	}
 	have := strings.Fields(st.Get(KeyTools))
-	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, st.Get(state.KeyImage), have, toolTarget(b, st)); err != nil {
+	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, st.ToolNames(), have, toolTarget(b, st)); err != nil {
 		return err
 	}
 	if err := (tools.Versions{Env: e.Tools}).RefreshDaily(); err != nil {
@@ -71,7 +63,7 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err := e.UpdateAgentDirs(ctx, b, st); err != nil {
 		return err
 	}
-	e.warnIgnored(o)
+	e.warnIgnored(o, vm)
 	conf, err := e.launch(ctx, t)
 	if err != nil {
 		return err
@@ -148,8 +140,11 @@ func (e Launch) startChecked(ctx context.Context, t *found) (backend.Confinement
 	return e.run(ctx, b, st)
 }
 
-// warnIgnored warns about the flags only new VMs take.
-func (e Launch) warnIgnored(o Options) {
+// warnIgnored warns about the flags only new VMs take, on the VM vm.
+func (e Launch) warnIgnored(o Options, vm string) {
+	if o.Toolchains != nil || o.Agents != nil || o.Layers != nil {
+		e.Warn(msg.PartsFlagsIgnored(vm))
+	}
 	if o.NetworkPolicy || o.NoNetworkPolicy {
 		e.Warn(msg.NetFlagIgnored())
 	}
@@ -283,48 +278,6 @@ func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM
 		return err
 	}
 	return e.Agent.Ensure(ctx)
-}
-
-// lacks refuses an image want names (as for a new VM: agents alone go on
-// top of the folder's toolchains) when the VM lacks some of it, as naming
-// an image adds nothing to a VM that exists: a layer it lacks, which only
-// a new VM can have, else the shared tools it lacks, with the devvm tools
-// add command that adds them.
-func (e Launch) lacks(want string, t *found, builder *build.Env) error {
-	vm := t.f.Name
-	wanted, err := e.wantedImage(want, t.f.Dir, builder)
-	if err != nil {
-		return err
-	}
-	have := strings.Split(t.st.Get(state.KeyImage), "+")
-	var missing []string
-	for p := range strings.SplitSeq(wanted, "+") {
-		if p != image.Base && !slices.Contains(have, p) {
-			missing = append(missing, p)
-		}
-	}
-	for _, p := range missing {
-		if !image.IsTool(p) {
-			// The image a new VM would need: what it has, and what want names.
-			return msg.VMLacksLayer(image.Normalize(t.st.Get(state.KeyImage)+"+"+wanted), p, vm)
-		}
-	}
-	if len(missing) > 0 {
-		return msg.VMLacksTools(strings.Join(missing, " "), vm)
-	}
-	return nil
-}
-
-// wantedImage is the image want names for this folder, as for a new VM,
-// without saying what it detected.
-func (e Launch) wantedImage(want, dir string, b *build.Env) (string, error) {
-	if needsDetection(want) {
-		if found := project.Detect(dir); len(found) > 0 {
-			want = strings.Join(append(found, want), "+")
-		}
-	}
-	img := image.Normalize(want)
-	return img, b.CheckLayers(img)
 }
 
 // toolTarget is what a VM's tool images are built for: its base's C

@@ -17,7 +17,11 @@ stdout '^==> nothing_to_clean$'
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 exec devvm build foo
-exec devvm build claude
+# claude's tools, built for a VM with Claude Code, deleted since.
+project agentvm
+exec devvm --no-network-policy --no-git-protect --tools none --agents claude
+exec devvm rm --force --no-export
+cd $WORK
 exec sh -c 'for i in base foo; do grep -lx "name=$i" "$IMAGES"/* | xargs basename > "$i.key"; done'
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec sh -c 'printf "devvm-img-000000000000\ndevvm-img-111111111111\ndevvm-img-node\ndevvm-img-foo-12345612345612\ndevvm-web-12345612345612\n" >> "$STUB_DIR/instances"'

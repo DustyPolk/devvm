@@ -4,12 +4,26 @@ weight: 6
 description: "devvm runs Claude Code, Codex and opencode in VMs, with your config for each agent from this machine but never your history. This page covers which agents devvm supports, what each VM gets from this machine, the agents' logins and their history."
 ---
 
+## Running an agent
+
+An agent runs where you start it, so you start it in the VM's shell, not on this machine. On this machine, devvm opens the VM's shell, and the VM's prompt starts with `(devvm)`:
+
+```console
+~/some-project $ devvm
+(devvm) ~/some-project $ claude
+```
+
+In the VM the agent sees only your project folder, and your agents' config, which it gets read-only. Whatever it runs, such as a script a package installs, runs in the VM too.
+
 ## Supported agents
 
+A new VM gets an agent when you check it in the list that devvm shows as it makes the VM, or when you name it with `--agents`. A VM that exists gets one from `devvm tools`, which shows the same list with the VM's agents checked, or from `devvm tools add`:
+
 ```sh
-devvm claude     # a VM with the project's toolchain and Claude Code, or Claude Code added to the folder's VM
-devvm codex      # the same, with Codex
-devvm opencode   # the same, with opencode
+devvm                          # a new VM: check claude, codex or opencode in the list
+devvm --agents claude,codex    # a new VM with Claude Code and Codex, without the list
+devvm tools                    # the VM that exists: check or uncheck its agents in the list
+devvm tools add opencode       # the VM that exists: add opencode without the list
 ```
 
 In the VM, you run the agent as `claude`, `codex` or `opencode`.
@@ -22,11 +36,15 @@ In the VM, you run the agent as `claude`, `codex` or `opencode`.
 
 Claude Code's telemetry hosts aren't on its allowlist, because blocking them costs nothing. opencode talks to the model provider you choose, so with network policy you allow that provider's API host yourself, such as `devvm network allow api.anthropic.com` ([changing rules](../safety/network.md#changing-rules)).
 
-Agents are [shared tools](images.md#shared-tools), like the toolchains, so you can combine them with any image and with each other, as in `devvm node+claude+codex`. devvm follows each agent's newest release, because agents release several times a week, and `devvm tools update` moves a VM to newer versions ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+Agents are [shared tools](images.md#shared-tools), like the toolchains, so you can combine them with any layers and with each other, as in `devvm --tools node --agents claude,codex`. devvm follows each agent's newest release, because agents release several times a week, and `devvm tools update` moves a VM to newer versions ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+
+### Setup's default agents
+
+`devvm setup` chooses the agents that the list checks for every new VM, and that a new VM gets without a terminal. devvm asks for them on its first run in a terminal and again in `devvm setup`'s questions, and `devvm setup --agents claude,codex` or `devvm setup --agents none` sets them without asking. They're a setting for new VMs only, so a VM that exists keeps its agents ([devvm setup](settings.md#devvm-setup)).
 
 ## Config from this machine
 
-When a VM's image has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history. Transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
+When a VM has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history. Transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 
 ```mermaid
 flowchart TD
@@ -71,7 +89,7 @@ Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use 
 1. Run `claude setup-token` on this machine and approve in the browser.
 2. Run `devvm secret set claude` and paste the Claude Code token that `claude setup-token` printed (`sk-ant-oat01-…`), not the code the browser shows.
 
-devvm saves the Claude Code token with the other [secrets](../safety/network.md#saving-and-binding-secrets), and it puts it in the environment of every VM whose image has `claude`, as `CLAUDE_CODE_OAUTH_TOKEN`, from the VM's next launch. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment wins over the saved one. devvm neither saves nor sends a Claude Code token that isn't a setup token. With network policy the VM gets a placeholder of its own, and its proxy puts the Claude Code token into requests, and without network policy the VM gets the Claude Code token itself. devvm never copies a `~/.claude/.credentials.json`.
+devvm saves the Claude Code token with the other [secrets](../safety/network.md#saving-and-binding-secrets), and it puts it in the environment of every VM that has `claude`, as `CLAUDE_CODE_OAUTH_TOKEN`, from the VM's next launch. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment wins over the saved one. devvm neither saves nor sends a Claude Code token that isn't a setup token. With network policy the VM gets a placeholder of its own, and its proxy puts the Claude Code token into requests, and without network policy the VM gets the Claude Code token itself. devvm never copies a `~/.claude/.credentials.json`.
 
 ### Codex and opencode logins
 
@@ -79,7 +97,7 @@ With network policy, the VM's `auth.json` holds placeholders, and its proxy hold
 
 ## History
 
-Each VM's transcripts and sessions stay in that VM. `devvm history export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM whose image has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. An export in that folder gets a `<vm>-<date>-<time>.folder` file beside it, which names the VM's project folder.
+Each VM's transcripts and sessions stay in that VM. `devvm history export [FILE]` saves them, and `devvm rm` saves them before it deletes a VM that has an agent. The export is a `.tar.gz` of `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode` in the VM, written to FILE or to `~/.local/share/devvm/exports/<vm>-<date>-<time>.tar.gz`. An export in that folder gets a `<vm>-<date>-<time>.folder` file beside it, which names the VM's project folder.
 
 `devvm history` lists the exports in `~/.local/share/devvm/exports`, oldest first, in a table with a header. It shows each export's file, the VM it's of, that VM's folder, the date and time devvm wrote it, and its size, with `-` for a folder devvm has no record of. Exports you wrote to a FILE of your own aren't listed, and `devvm history` changes nothing and starts no VM.
 

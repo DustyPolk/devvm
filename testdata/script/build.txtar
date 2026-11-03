@@ -80,11 +80,19 @@ stdout -count=2 '^libc=gnu$'
 # Names that aren't base or a layer are refused, before anything runs.
 stub_reset
 ! exec devvm build foo+stray
-stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar docker foo nix layer=stray$'
+stderr '^devvm: unknown_layer layer=stray layers=base bar docker foo nix$'
 ! exec devvm rebuild ../../x
-stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go bar docker foo nix layer=\.\./\.\./x$'
+stderr '^devvm: unknown_layer layer=\.\./\.\./x layers=base bar docker foo nix$'
 ! exec devvm build
 stderr '^devvm: arg_missing args=IMAGE command=devvm build$'
+# An image holds base and layers alone: a shared tool's name is refused,
+# naming it.
+! exec devvm build node
+stderr '^devvm: tool_not_layer tool=node$'
+! exec devvm build foo+claude
+stderr '^devvm: tool_not_layer tool=claude$'
+! exec devvm rebuild node
+stderr '^devvm: tool_not_layer tool=node$'
 ! stub_calls
 
 # A failed script: the end of the run log, and the image's VM kept,

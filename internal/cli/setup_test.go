@@ -62,10 +62,45 @@ func setupSandbox(t *testing.T, terminal bool, answer string) (setup, paths.Dirs
 			a = &asked{help.String(), slices.Clone(cs)}
 			return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == answer })
 		},
+		// The agents' question checks Claude Code.
+		pick: func(help msg.M, parts []vm.PickPart) []vm.PickPart {
+			sized = append(sized, help.ID())
+			parts[0].Rows[0].On = true
+			return parts
+		},
 		answer: func(m msg.M) string { sized = append(sized, m.Names()); return "" },
 		host:   func() (vm.Host, error) { return vm.Host{CPUs: 8, MemoryGiB: 32}, nil },
 	}
 	return s, d, func() *asked { return a }, &sized
+}
+
+// devvm setup --agents sets new VMs' agents without asking, none for
+// none; in a terminal without flags, it asks for them last.
+func TestSetupAgents(t *testing.T) {
+	s, d, _, asked := setupSandbox(t, true, "lima")
+	for _, tc := range []struct {
+		value string
+		want  []string
+	}{{"codex,claude", []string{"claude", "codex"}}, {"none", []string{}}} {
+		if err := s.run(setupChoice{agents: partFlag(tc.value)}); err != nil {
+			t.Fatal(err)
+		}
+		if got, set, _ := state.ReadAgents(d); !set || !slices.Equal(got, tc.want) {
+			t.Errorf("--agents %s: saved %q, %v", tc.value, got, set)
+		}
+	}
+	if len(*asked) > 0 {
+		t.Errorf("asked %q", *asked)
+	}
+	if err := s.run(setupChoice{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(*asked); n == 0 || (*asked)[n-1] != "agents_help" {
+		t.Errorf("asked %q, want agents_help last", *asked)
+	}
+	if got, _, _ := state.ReadAgents(d); !slices.Equal(got, []string{"claude"}) {
+		t.Errorf("saved %q", got)
+	}
 }
 
 // pickedNetwork is the network picker's choices, as names, the one it
@@ -148,6 +183,7 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 				wantSized = []string{
 					"size_cpus_prompt cpus=4", "size_memory_prompt memory=8",
 					"network *ask:network_default_ask on:network_default_on off:network_default_off",
+					"agents_help",
 				}
 			}
 			if !slices.Equal(*sized, wantSized) {

@@ -18,7 +18,7 @@ devvm layer new NAME [flags]
 ```text
   devvm layer new mailpit  # start the mailpit layer, then edit its script
   devvm build mailpit      # build its image
-  devvm node+mailpit       # create a VM with node and the layer
+  devvm --layers mailpit   # create a VM with the layer
 ```
 
 ## Options

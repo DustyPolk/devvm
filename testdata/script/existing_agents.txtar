@@ -7,7 +7,7 @@
 # runs again. (Its hostagent here: the test's runner, which runs on, in
 # place of the stub's.)
 project net
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 vm_name NET net
 exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$RUN/$NET.started"'
 stub_reset
@@ -37,7 +37,7 @@ stdout '^net_check=ok$'
 # VM's version and the lock's newer one, built or not, without going
 # online.
 project api
-exec devvm --no-network-policy --no-git-protect go
+exec devvm --no-network-policy --no-git-protect --tools go
 vm_name API api
 ! exec devvm tools now
 stderr '^devvm: no_subcommand command=devvm tools commands=add, rm, update given=now$'
@@ -72,37 +72,36 @@ stdout '^go +1\.0\.0 +9\.9\.9 +yes$'
 exec devvm tools --json
 stdout '\A{\n  "version": 1,\n  "tools": \[\n    {\n      "tool": "go",\n      "version": "1\.0\.0",\n      "newer": "9\.9\.9",\n      "newer_built": true\n    }\n  \]\n}\n\z'
 
-# tools rm: the tools leave its name and list, the rest stays; what it
-# lacks is refused, and so is a layer. Names are separate words.
+# tools rm: the tools leave its list and their files, the rest stays;
+# what it lacks is refused. Names are separate words.
 project web
 cp $WORK/package.json package.json
-exec devvm --no-network-policy --no-git-protect claude
-! exec devvm tools rm node+claude
-stderr '^devvm: tools_joined cmd=rm given=node\+claude$'
+exec devvm --no-network-policy --no-git-protect --agents claude
+stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm tools rm node,claude
+stderr '^devvm: tools_joined cmd=rm given=node,claude$'
 exec devvm tools rm claude
-stdout '^==> vm_is_now image=node vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> vm_tools_now tools=node vm=devvm-web-[0-9a-f]{14}$'
 catg $VMS/devvm-web-*
-stdout '^image=node$'
+stdout '^image=base$'
+stdout '^tool_names=node$'
 stdout '^tools=node-\S+ pnpm-\S+ bun-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 ! stdout claude
 ! exec devvm tools rm python
-stderr '^devvm: vm_lacks has=node layer=python vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: vm_lacks has=node tool=python vm=devvm-web-[0-9a-f]{14}$'
 ! exec devvm tools rm
 stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools rm$'
 
-# devvm IMAGE adds nothing to a VM that exists: what it lacks is refused,
-# naming the shared tools tools add adds, or a layer only a new VM gets;
-# nothing changes.
-! exec devvm python+claude
-stderr '^devvm: vm_lacks_tools tools=python claude vm=devvm-web-[0-9a-f]{14}$'
-! exec devvm docker
-stderr '^devvm: vm_lacks_layer image=node\+docker layer=docker vm=devvm-web-[0-9a-f]{14}$'
+# The flags add nothing to a VM that exists: it opens with a warning
+# naming devvm tools, and nothing changes.
+exec devvm --tools python --agents claude
+stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
 catg $VMS/devvm-web-*
-stdout '^image=node$'
+stdout '^tool_names=node$'
 
-# tools add: the tools it lacks join its name and list, those it has are
-# said; only shared tools, each a separate word.
+# tools add: the tools it lacks join its list, those it has are said;
+# only shared tools, each a separate word.
 ! exec devvm tools add
 stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools add$'
 ! exec devvm tools add python+claude
@@ -111,20 +110,19 @@ stderr '^devvm: tools_joined cmd=add given=python\+claude$'
 stderr '^devvm: unknown_tool tool=docker tools=node python rust go claude codex opencode$'
 exec devvm tools add node claude
 stdout '^==> has_tools tools=node vm=devvm-web-[0-9a-f]{14}$'
-stdout '^==> vm_is_now image=node\+claude vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> vm_tools_now tools=node claude vm=devvm-web-[0-9a-f]{14}$'
 catg $VMS/devvm-web-*
-stdout '^image=node\+claude$'
+stdout '^image=base$'
+stdout '^tool_names=node claude$'
 stdout '^tools=node-\S+ pnpm-\S+ bun-\S+ claude-\S+$'
 exec tar -xOf $STUB_DIR/sync.tar tools
 stdout claude
-exec devvm claude
-! stderr vm_lacks
 
-# rm: an image with an agent has its history exported first, from the
-# VM, started if it's stopped; a failed export keeps the VM, and -f
-# deletes it without one.
+# rm: a VM with an agent has its history exported first, from the VM,
+# started if it's stopped; a failed export keeps the VM, and -f deletes
+# it without one.
 project agent
-exec devvm --no-network-policy --no-git-protect base+claude
+exec devvm --no-network-policy --no-git-protect --agents claude
 vm_name AGENT agent
 exec limactl stop $AGENT
 exec sh -c ': > "$STUB_DIR/shell-fails"'

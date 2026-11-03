@@ -123,6 +123,45 @@ func WriteNetwork(d paths.Dirs, mode string) error {
 	return writeValue(d.Network(), mode)
 }
 
+// agentsNone is how the agents file says new VMs get no agents.
+const agentsNone = "none"
+
+var agentName = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
+
+// ReadAgents reads the coding agents new VMs get by default, as devvm
+// setup chose them: set is false until they're chosen, and then agents
+// may be none. Callers check the names are agents'.
+func ReadAgents(d paths.Dirs) (agents []string, set bool, err error) {
+	v, err := readValue(d.Agents())
+	if err != nil || v == "" {
+		return nil, false, err
+	}
+	if v == agentsNone {
+		return []string{}, true, nil
+	}
+	for _, a := range strings.Fields(v) {
+		if !agentName.MatchString(a) || slices.Contains(agents, a) {
+			return nil, false, &CorruptError{Path: d.Agents(), Line: 1, Reason: fmt.Sprintf("invalid or repeated agent %q", a)}
+		}
+		agents = append(agents, a)
+	}
+	return agents, true, nil
+}
+
+// WriteAgents writes the coding agents new VMs get by default: none when
+// there are none.
+func WriteAgents(d paths.Dirs, agents []string) error {
+	for i, a := range agents {
+		if !agentName.MatchString(a) || slices.Contains(agents[:i], a) {
+			return fmt.Errorf("invalid or repeated agent %q", a)
+		}
+	}
+	if len(agents) == 0 {
+		return writeValue(d.Agents(), agentsNone)
+	}
+	return writeValue(d.Agents(), strings.Join(agents, " "))
+}
+
 var featureName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // ReadBaseFeatures reads the features chosen for the base image, one per

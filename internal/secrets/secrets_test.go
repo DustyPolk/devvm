@@ -135,7 +135,7 @@ func TestSaveDelete(t *testing.T) {
 // stays with an image that has it.
 func TestBind(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "node+claude"})
+	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestBind(t *testing.T) {
 			t.Errorf("Bind(%s, %v): %q, %v", step.name, step.use, st.Get(KeySecrets), err)
 		}
 	}
-	if !slices.Equal(Names(st), []string{"claude"}) || !FromImage(st, "claude") || FromImage(st, "github") {
+	if !slices.Equal(Names(st), []string{"claude"}) || !FromTools(st, "claude") || FromTools(st, "github") {
 		t.Errorf("Names = %q", Names(st))
 	}
 }
@@ -237,7 +237,7 @@ func TestGet(t *testing.T) {
 func TestNamesAndLogins(t *testing.T) {
 	s, _ := testStore(t, true, nil)
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "node+claude"})
+	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestNamesAndLogins(t *testing.T) {
 	if got := Names(st); !slices.Equal(got, []string{"github", "claude"}) {
 		t.Errorf("Names = %q", got)
 	}
-	if got := s.Logins("node+codex+claude"); got != nil {
+	if got := s.Logins([]string{"node", "codex", "claude"}); got != nil {
 		t.Errorf("Logins without files = %q", got)
 	}
 	for _, k := range loginKinds {
@@ -260,10 +260,10 @@ func TestNamesAndLogins(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := s.Logins("node+codex+claude"); !slices.Equal(got, []string{"codex", "claude"}) {
+	if got := s.Logins([]string{"node", "codex", "claude"}); !slices.Equal(got, []string{"codex", "claude"}) {
 		t.Errorf("Logins = %q", got)
 	}
-	if got := s.Logins("node"); got != nil {
+	if got := s.Logins([]string{"node"}); got != nil {
 		t.Errorf("Logins without agents = %q", got)
 	}
 }
@@ -274,7 +274,7 @@ func TestWriteFiles(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_secret"
 	d := s.Dirs
-	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "node+codex+claude"})
+	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "base", Tools: []string{"node", "codex", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestWriteFiles(t *testing.T) {
 		t.Errorf("refreshed policy = %q", pol)
 	}
 	// No secrets at all: an empty list.
-	none, err := state.CreateVM(d, "vm2", state.NewVM{Image: "node"})
+	none, err := state.CreateVM(d, "vm2", state.NewVM{Image: "base", Tools: []string{"node"}})
 	if err != nil {
 		t.Fatal(err)
 	}

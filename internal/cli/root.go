@@ -21,15 +21,15 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	uf := new(upFlags)
 	fl := new(ui.Flags)
 	root := &cobra.Command{
-		Use:   "devvm [IMAGE]",
+		Use:   "devvm",
 		Short: "Open a shell in this folder's VM, creating it first",
 		Long: "Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. " +
-			"A new VM gets IMAGE, such as node+claude, or else the toolchains the folder's files call for with any agents IMAGE names, " +
-			"and devvm builds the image first if it isn't built. " +
+			"In a terminal you choose a new VM's toolchains, coding agents and layers in a list, and --tools, --agents and --layers choose them without it. " +
 			"The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.",
 		Example: examples(
-			"devvm", "open this folder's VM, creating it with the toolchains the folder needs",
-			"devvm node+claude", "create the VM with node and Claude Code",
+			"devvm", "open this folder's VM, choosing what a new one gets",
+			"devvm --agents claude", "create the VM with Claude Code and the toolchains the folder needs",
+			"devvm --tools node --agents none --layers docker", "create the VM with node and the docker layer alone",
 			"devvm --clone", "create the VM with its own clone of this repo",
 			"devvm ls", "list every VM",
 		),
@@ -45,16 +45,11 @@ func NewRoot(u *ui.UI) *cobra.Command {
 				autoRetain(cmd.Context(), u)
 			}
 		},
-		Args: cobra.MatchAll(maxArgs(1), func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return nil
-			}
-			return checkWord(cmd, args[0])
-		}),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return up(cmd.Context(), u, uf, args)
+		Args: noArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return up(cmd.Context(), u, uf)
 		},
-		SuggestionsMinimumDistance: suggestDistance,
+		SuggestionsMinimumDistance: msg.SuggestDistance,
 	}
 	root.SetOut(u.Stdout())
 	root.PersistentFlags().BoolVarP(&fl.Verbose, "verbose", "v", false, "show the output of the commands devvm runs instead of a status line")
@@ -121,11 +116,10 @@ func execute(ctx context.Context, u *ui.UI, root *cobra.Command, args []string) 
 		u.Error(m)
 		return 1
 	}
-	// Anything else is the parser's, before the command ran. A word that's
-	// neither a command nor an image is devvm's, whichever command (help)
-	// refused it.
+	// Anything else is the parser's, before the command ran. A word that
+	// isn't a command is devvm's, whichever command (help) refused it.
 	e := usage(err)
-	if strings.HasPrefix(e.m.ID(), "no_command_or_image") {
+	if strings.HasPrefix(e.m.ID(), "no_command") {
 		cmd = root
 	}
 	printUsage(u, cmd, e)

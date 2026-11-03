@@ -52,7 +52,7 @@ rm $CFG/size
 
 # A new VM. Running: devvm size shows what it has, and a change waits for
 # its next start. It has 2 CPUs, which any host running the tests has.
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 vm_name WEB web
 exec sh -c 'echo "2 8589934592 107374182400" > "$STUB_DIR/size-$WEB"'
 exec devvm size

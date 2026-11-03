@@ -125,13 +125,10 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	if got, want := b.Layers(), []string{"base", "bar", "docker", "foo", "nix"}; !slices.Equal(got, want) {
 		t.Errorf("Layers() = %q, want %q", got, want)
 	}
-	if got, want := b.Environments(), []string{"base", "node", "python", "rust", "go", "bar", "docker", "foo", "nix"}; !slices.Equal(got, want) {
-		t.Errorf("Environments() = %q, want %q", got, want)
-	}
-	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("claude codex opencode", "base node python rust go bar docker foo nix", "stray").Error() {
+	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("stray", "base bar docker foo nix").Error() {
 		t.Errorf("CheckLayers(stray) = %v", err)
 	}
-	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "node+foo+claude", "go", "docker", "node+docker", "nix", "node+nix+claude"} {
+	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "docker", "foo+docker", "nix", "docker+nix"} {
 		if err := b.CheckLayers(ok); err != nil {
 			t.Errorf("CheckLayers(%q): %v", ok, err)
 		}
@@ -143,60 +140,33 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	}
 }
 
-// A name with tools builds its image (base and its layers, not the tools)
-// and the missing tool images, from base's image, for base's libc.
-func TestBuildTools(t *testing.T) {
-	b, f := testEnv(t)
-	f.Built.Libc = "musl"
-	if err := (Builds{b}).Build(t.Context(), "claude+foo+node"); err != nil {
-		t.Fatal(err)
-	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images", "BuildImage", "BuildImage", "BuildTools"}) {
-		t.Fatalf("calls = %q", ms)
-	}
-	chain, err := b.Chain("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var spec backend.ToolsSpec
-	for _, c := range f.Calls() {
-		if c.Method == "BuildTools" {
-			spec, _ = c.Args[0].(backend.ToolsSpec)
-		}
-	}
-	if spec.Base != chain[0].Key || len(spec.Args) != 12 || spec.Args[0] != "node" || spec.Args[9] != "claude" {
-		t.Errorf("tools spec = %+v", spec)
-	}
-	tg, err := b.ToolTarget()
-	if tg.Libc != "musl" || tg.Format != "" || err != nil {
-		t.Errorf("ToolTarget = %+v, %v", tg, err)
-	}
-	files, err := tools.Versions{Env: b.Tools}.Files(t.Context(), []string{"node", "claude"}, tg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, file := range files {
-		if !(tools.Share{Env: b.Tools}).Built(file) || !slices.Contains(spec.Args, file) {
-			t.Errorf("%s: not built for musl", file)
-		}
-	}
-	// Built: nothing to do.
-	n := len(f.Calls())
-	if err := (Builds{b}).Build(t.Context(), "node+foo+claude"); err != nil || slices.Contains(f.Methods()[n:], "BuildTools") {
-		t.Errorf("built again: %v %q", err, f.Methods()[n:])
-	}
-}
-
-// The shared tools aren't images: the lock versions them, so they aren't
-// rebuilt.
-func TestRebuildRefusesTools(t *testing.T) {
+// An image is base and layers alone: build and rebuild refuse a shared
+// tool's name, naming it, before anything runs.
+func TestBuildRefusesTools(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	b, f := testEnv(t)
-	if err := (Builds{b}).Rebuild(t.Context(), "node+claude"); err == nil || err.Error() != "tools_not_images tools=node claude" {
-		t.Errorf("Rebuild = %v", err)
+	for _, name := range []string{"node", "foo+claude", "go+foo"} {
+		tool := map[string]string{"node": "node", "foo+claude": "claude", "go+foo": "go"}[name]
+		for verb, do := range map[string]func(context.Context, string) error{"Build": Builds{b}.Build, "Rebuild": Builds{b}.Rebuild} {
+			if err := do(t.Context(), name); err == nil || err.Error() != "tool_not_layer tool="+tool {
+				t.Errorf("%s(%q) = %v", verb, name, err)
+			}
+		}
 	}
 	if len(f.Calls()) > 0 {
 		t.Errorf("calls = %q", f.Methods())
+	}
+}
+
+// The shared tools of a new VM are built for base's libc as it's built.
+func TestToolTarget(t *testing.T) {
+	b, f := testEnv(t)
+	f.Built.Libc = "musl"
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+		t.Fatal(err)
+	}
+	if tg, err := b.ToolTarget(); tg.Libc != "musl" || tg.Format != "" || err != nil {
+		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
 }
 

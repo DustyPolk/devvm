@@ -32,7 +32,7 @@ func TestList(t *testing.T) {
 	}{
 		{
 			web,
-			state.NewVM{Image: "node+claude", Dir: "/p/web", Backend: "lima"},
+			state.NewVM{Image: "docker", Tools: []string{"node", "claude"}, Dir: "/p/web", Backend: "lima"},
 			map[string]string{netpolicy.KeyNet: "on", gitprotect.KeyGitProtect: "on"},
 		},
 		{
@@ -47,7 +47,7 @@ func TestList(t *testing.T) {
 		},
 		{
 			other,
-			state.NewVM{Image: "go", Dir: "/p/api", Backend: "other"},
+			state.NewVM{Image: "base", Tools: []string{"go"}, Dir: "/p/api", Backend: "other"},
 			map[string]string{netpolicy.KeyNet: "off", gitprotect.KeyGitProtect: "on"},
 		},
 	} {
@@ -83,11 +83,11 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Listed{
-		{Name: other, Status: "Running", Image: "go", Git: "on", Net: "off", Backend: "other", Folder: "/p/api"},
+		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "off", Backend: "other", Folder: "/p/api"},
 		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl"},
 		{Name: half, Status: "Stopped", Backend: "lima"},
 		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo"},
-		{Name: web, Status: "Running", Image: "node+claude", Git: "on", Net: "unenforced", Backend: "lima", Folder: "/p/web"},
+		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: "/p/web"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("List =\n%+v\nwant\n%+v", got, want)

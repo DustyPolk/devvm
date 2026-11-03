@@ -326,23 +326,23 @@ func (s *Store) Get(ctx context.Context, name string) (string, error) {
 }
 
 // Names returns the secrets a VM uses: those bound to it, then claude when
-// its image has claude.
+// it has Claude Code.
 func Names(st *state.VM) []string {
 	names := strings.Fields(st.Get(KeySecrets))
-	if FromImage(st, "claude") && !slices.Contains(names, "claude") {
+	if FromTools(st, "claude") && !slices.Contains(names, "claude") {
 		names = append(names, "claude")
 	}
 	return names
 }
 
-// FromImage reports whether a VM uses the secret because of its image:
-// claude, when the image has claude.
-func FromImage(st *state.VM, name string) bool {
-	return name == "claude" && slices.Contains(agents(st.Get(state.KeyImage)), "claude")
+// FromTools reports whether a VM uses the secret because of its shared
+// tools: claude, when it has Claude Code.
+func FromTools(st *state.VM, name string) bool {
+	return name == "claude" && slices.Contains(st.ToolNames(), "claude")
 }
 
 // Bind binds a secret to a VM (use), or unbinds it: claude stays with a
-// VM whose image has claude.
+// VM that has Claude Code.
 func Bind(st *state.VM, name string, use bool) error {
 	names := slices.DeleteFunc(strings.Fields(st.Get(KeySecrets)), func(n string) bool { return n == name })
 	if use {
@@ -351,21 +351,10 @@ func Bind(st *state.VM, name string, use bool) error {
 	return st.Set(KeySecrets, strings.Join(names, " "))
 }
 
-// agents returns the agents an image name holds.
-func agents(img string) []string {
-	var as []string
-	for p := range strings.SplitSeq(img, "+") {
-		if image.IsAgent(p) {
-			as = append(as, p)
-		}
-	}
-	return as
-}
-
-// Logins returns the login kinds a VM with that image uses: its agents'
-// (codex, opencode, claude) that have a login file on the host.
-func (s *Store) Logins(img string) []string {
-	as := agents(img)
+// Logins returns the login kinds a VM with these shared tools uses: its
+// agents' (codex, opencode, claude) that have a login file on the host.
+func (s *Store) Logins(tools []string) []string {
+	as := image.AgentsOf(tools)
 	var kinds []string
 	for _, k := range loginKinds {
 		if !slices.Contains(as, k) {
@@ -405,7 +394,7 @@ func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error
 	var logins []json.RawMessage
 	var hosts []string
 	// A login the helper can't read has no bindings.
-	for _, kind := range s.Logins(st.Get(state.KeyImage)) {
+	for _, kind := range s.Logins(st.ToolNames()) {
 		args := []string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-bindings", "-login-salt", salt}
 		var out bytes.Buffer
 		var bs []json.RawMessage

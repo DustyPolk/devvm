@@ -7,24 +7,26 @@ Open a shell in this folder's VM, creating it first
 
 ## Synopsis
 
-Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. A new VM gets IMAGE, such as node+claude, or else the toolchains the folder's files call for with any agents IMAGE names, and devvm builds the image first if it isn't built. The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.
+Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. In a terminal you choose a new VM's toolchains, coding agents and layers in a list, and --tools, --agents and --layers choose them without it. The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.
 
 ```text
-devvm [IMAGE] [flags]
+devvm [flags]
 ```
 
 ## Examples
 
 ```text
-  devvm              # open this folder's VM, creating it with the toolchains the folder needs
-  devvm node+claude  # create the VM with node and Claude Code
-  devvm --clone      # create the VM with its own clone of this repo
-  devvm ls           # list every VM
+  devvm                                             # open this folder's VM, choosing what a new one gets
+  devvm --agents claude                             # create the VM with Claude Code and the toolchains the folder needs
+  devvm --tools node --agents none --layers docker  # create the VM with node and the docker layer alone
+  devvm --clone                                     # create the VM with its own clone of this repo
+  devvm ls                                          # list every VM
 ```
 
 ## Options
 
 ```text
+      --agents LIST         the LIST of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)
       --backend NAME        the backend NAME to use (default: devvm setup's, else lima)
       --clone               create the VM with its own clone of this repo instead of mounting the folder
       --cpus N              the N CPUs the VM gets (default: devvm size -g, else the image's)
@@ -32,6 +34,7 @@ devvm [IMAGE] [flags]
       --from IMAGE          the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
   -h, --help                help for devvm
       --here                create a VM for this folder even when a folder it's inside has one
+      --layers LIST         the LIST of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: none)
       --memory GiB          the VM's memory in GiB, such as 16 or 16G (default: devvm size -g, else the image's)
       --network-policy      create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)
       --no-devcontainer     create the VM without reading the folder's devcontainer.json
@@ -41,6 +44,7 @@ devvm [IMAGE] [flags]
       --ports PORTS         the PORTS the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)
       --ssh-agent           create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected
       --ssh-config          add devvm's Include line to ~/.ssh/config without asking
+      --tools LIST          the LIST of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)
       --unsafe-folder       mount a folder devvm refuses, such as your home folder
   -v, --verbose             show the output of the commands devvm runs instead of a status line
       --version             print devvm's version
@@ -75,9 +79,9 @@ devvm [IMAGE] [flags]
 - [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
-- [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy
+- [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size, network policy and coding agents
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm stop](devvm_stop.md): Stop this folder's VM
-- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools
+- [devvm tools](devvm_tools.md): Show or choose this folder's VM's shared tools

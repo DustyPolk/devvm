@@ -166,40 +166,45 @@ func TestSHA256File(t *testing.T) {
 	}
 }
 
-// Toolchains in their fixed order, then layers as given, then agents;
-// base dropped, and base alone for nothing else.
+// Layers as given, each once; base dropped, and base alone for nothing
+// else.
 func TestNormalize(t *testing.T) {
 	for in, want := range map[string]string{
-		"base":                      "base",
-		"base+foo":                  "foo",
-		"foo+base+bar":              "foo+bar",
-		"foo+bar":                   "foo+bar",
-		"claude+python+node":        "node+python+claude",
-		"opencode+mytool+go+claude": "go+mytool+claude+opencode",
-		"base+claude":               "claude",
-		"":                          "", // CheckLayers refuses it
+		"base":         "base",
+		"base+foo":     "foo",
+		"foo+base+bar": "foo+bar",
+		"foo+bar":      "foo+bar",
+		"bar+foo":      "bar+foo",
+		"foo+bar+foo":  "foo+bar",
+		"":             "", // CheckLayers refuses it
 	} {
 		if got := Normalize(in); got != want {
 			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
 		}
 	}
+	if got := Of(nil); got != Base {
+		t.Errorf("Of(nil) = %q", got)
+	}
+	if got := strings.Join(LayersOf("foo+bar"), " "); got != "foo bar" || LayersOf(Base) != nil {
+		t.Errorf("LayersOf = %q, %q", got, LayersOf(Base))
+	}
 }
 
-// An image name's two halves: its image (base and layers) and its shared
-// tools; and the tools behind each tool name.
-func TestWithoutToolsAndToolsOf(t *testing.T) {
-	for in, want := range map[string][2]string{
-		"node+claude":         {"base", "node claude"},
-		"node+foo+bar+claude": {"foo+bar", "node claude"},
-		"base":                {"base", ""},
-		"foo":                 {"foo", ""},
+// A VM's shared tools in their order, the agents among them, and the
+// tools behind each tool name.
+func TestSortToolsAndGroups(t *testing.T) {
+	for in, want := range map[string]string{
+		"claude python node": "node python claude",
+		"opencode go claude": "go claude opencode",
+		"node foo node":      "node",
+		"":                   "",
 	} {
-		if got := WithoutTools(in); got != want[0] {
-			t.Errorf("WithoutTools(%q) = %q, want %q", in, got, want[0])
+		if got := strings.Join(SortTools(strings.Fields(in)), " "); got != want {
+			t.Errorf("SortTools(%q) = %q, want %q", in, got, want)
 		}
-		if got := strings.Join(ToolsOf(in), " "); got != want[1] {
-			t.Errorf("ToolsOf(%q) = %q, want %q", in, got, want[1])
-		}
+	}
+	if got := strings.Join(AgentsOf([]string{"node", "codex", "claude"}), " "); got != "codex claude" {
+		t.Errorf("AgentsOf = %q", got)
 	}
 	for name, want := range map[string]string{"node": "node pnpm bun", "python": "python uv", "go": "go", "claude": "claude"} {
 		if got := strings.Join(GroupTools(name), " "); got != want {

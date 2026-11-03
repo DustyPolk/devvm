@@ -128,6 +128,11 @@ func (u *UI) StdinIsTerminal() bool { return u.stdinTTY }
 // someone could see it.
 func (u *UI) StdoutIsTerminal() bool { return u.stdoutTTY }
 
+// CanPick reports whether a question that has a default to fall back on
+// is shown: in a terminal someone can see, without --no-input. Without
+// one, its caller takes the default instead of asking.
+func (u *UI) CanPick() bool { return u.stdinTTY && u.stdoutTTY && !u.noInput.Load() }
+
 // Stdout is where data output goes: tables, values, help. Not messages: they
 // go through Say and the rest.
 func (u *UI) Stdout() io.Writer { return lockedWriter{u, u.stdout} }

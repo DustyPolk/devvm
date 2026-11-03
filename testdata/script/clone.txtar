@@ -11,18 +11,18 @@ cd $WORK/web
 
 # Not a repo, not its top folder, no commits, HEAD detached: refused
 # before anything is built.
-! exec devvm --clone --no-network-policy base
+! exec devvm --clone --no-network-policy
 stderr '^devvm: clone_not_top dir=/\S*/web$'
 exec git init -q -b main
 cd sub
-! exec devvm --clone --no-network-policy base
+! exec devvm --clone --no-network-policy
 stderr '^devvm: clone_not_top dir=/\S*/web/sub$'
 cd ..
-! exec devvm --clone --no-network-policy base
+! exec devvm --clone --no-network-policy
 stderr '^devvm: clone_no_commits$'
 exec git commit -q --allow-empty -m one
 exec git checkout -q --detach
-! exec devvm --clone --no-network-policy base
+! exec devvm --clone --no-network-policy
 stderr '^devvm: clone_detached$'
 exec git checkout -q main
 exec git branch other
@@ -37,7 +37,7 @@ stub_calls
 # changes aren't copied, and devvm says so.
 exec sh -c 'echo x > tracked && git add tracked && git commit -qm two && echo y > tracked'
 stub_reset
-exec devvm --clone --no-network-policy base
+exec devvm --clone --no-network-policy
 stdout '^==> copying_branches$'
 stdout '^==> clone_ready branch=main remote=devvm$'
 stdout '^ssh_include_needed line=Include /\S*/config/devvm/ssh_config$'
@@ -80,7 +80,7 @@ stdout '^==> removed_remote remote=devvm$'
 # own commit isn't fetched: without a terminal rm refuses and keeps it.
 rm $STUB_DIR/vmfs
 exec git remote add devvm https://example.com/other.git
-exec devvm --clone --no-network-policy base
+exec devvm --clone --no-network-policy
 stdout '^==> clone_ready branch=main remote=devvm-web$'
 exec git remote get-url devvm
 stdout '^https://example.com/other.git$'
@@ -140,7 +140,7 @@ exec git remote remove devvm
 # launch copies again.
 rm $STUB_DIR/vmfs
 exec sh -c 'touch "$STUB_DIR/ssh-fails"'
-! exec devvm --clone --no-network-policy base
+! exec devvm --clone --no-network-policy
 stderr '^devvm: clone_seed_failed vm=devvm-web-[0-9a-f]{14}$'
 ! exec git remote get-url devvm
 rm $STUB_DIR/ssh-fails
@@ -162,7 +162,7 @@ exec git for-each-ref refs/remotes
 exec git branch -D saved/devvm/main
 
 # A VM that mounts the folder: --clone on it is refused.
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 ! exec devvm --clone
 stderr '^devvm: clone_needs_new_vm vm=devvm-web-[0-9a-f]{14}$'
 exec devvm rm --force --no-export

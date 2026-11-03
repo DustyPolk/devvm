@@ -7,7 +7,7 @@ Print the shell completion script for bash, zsh or fish
 
 ## Synopsis
 
-Print the script that completes devvm's commands, flags and image names in SHELL, which is bash, zsh or fish. Load it from your shell's startup file.
+Print the script that completes devvm's commands, flags, image names and shared tools in SHELL, which is bash, zsh or fish. Load it from your shell's startup file.
 
 ```text
 devvm completion SHELL [flags]

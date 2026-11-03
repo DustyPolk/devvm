@@ -1183,26 +1183,29 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-// devvm tools rm: the tools leave the VM's name and list, the rest stays;
-// what it lacks, and custom layers, are refused.
+// devvm tools rm: the tools leave the VM's list and its tool files, the
+// rest stays; what it lacks, and its layers, are refused.
 func TestRemove(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	t.Setenv("DEVVM_MESSAGES", "names")
 	vm := "devvm-p-abc123abc123ab"
 	all := e.files(t, "node", "pnpm", "bun", "python", "uv", "claude")
-	img, files, err := Remove(vm, "node+python+claude", all, []string{"python", "claude"})
-	if err != nil || img != "node" || !slices.Equal(files, all[:3]) {
-		t.Errorf("Remove = %q, %q, %v", img, files, err)
+	names, files, err := Remove(vm, "base", []string{"node", "python", "claude"}, all, []string{"python", "claude"})
+	if err != nil || !slices.Equal(names, []string{"node"}) || !slices.Equal(files, all[:3]) {
+		t.Errorf("Remove = %q, %q, %v", names, files, err)
 	}
-	img, files, err = Remove(vm, img, files, []string{"node"})
-	if err != nil || img != "base" || len(files) != 0 {
-		t.Errorf("Remove the last = %q, %q, %v", img, files, err)
+	names, files, err = Remove(vm, "base", names, files, []string{"node"})
+	if err != nil || len(names) != 0 || len(files) != 0 {
+		t.Errorf("Remove the last = %q, %q, %v", names, files, err)
 	}
-	if _, _, err := Remove(vm, "node+foo", nil, []string{"python"}); msg.NamesOf(err) != "vm_lacks has=node foo layer=python vm="+vm {
+	if _, _, err := Remove(vm, "foo", []string{"node", "go"}, nil, []string{"python"}); msg.NamesOf(err) != "vm_lacks has=node go tool=python vm="+vm {
 		t.Errorf("Remove what it lacks = %v", msg.NamesOf(err))
 	}
-	if _, _, err := Remove(vm, "node+foo", nil, []string{"foo"}); msg.NamesOf(err) != "custom_layer_remove layer=foo vm="+vm {
+	if _, _, err := Remove(vm, "base", nil, nil, []string{"python"}); msg.NamesOf(err) != "vm_lacks has=none tool=python vm="+vm {
+		t.Errorf("Remove from none = %v", msg.NamesOf(err))
+	}
+	if _, _, err := Remove(vm, "foo", []string{"node"}, nil, []string{"foo"}); msg.NamesOf(err) != "custom_layer_remove layer=foo vm="+vm {
 		t.Errorf("Remove a layer = %v", msg.NamesOf(err))
 	}
 }
@@ -1244,7 +1247,7 @@ func TestWarnNewer(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	have := append(e.files(t, "node", "pnpm", "bun"), "claude-2.0.0-0123456789ab.erofs")
-	if err := e.WarnNewer(t.Context(), "node+claude", have, gnuT); err != nil {
+	if err := e.WarnNewer(t.Context(), []string{"node", "claude"}, have, gnuT); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"devvm: newer_tools tools=claude " + Lock(fixture(t)).Version("claude")}
@@ -1252,7 +1255,7 @@ func TestWarnNewer(t *testing.T) {
 		t.Errorf("said %q, want %q", *e.said, want)
 	}
 	*e.said = nil
-	if err := e.WarnNewer(t.Context(), "node+claude", e.files(t, "node", "pnpm", "bun", "claude"), gnuT); err != nil || len(*e.said) > 0 {
+	if err := e.WarnNewer(t.Context(), []string{"node", "claude"}, e.files(t, "node", "pnpm", "bun", "claude"), gnuT); err != nil || len(*e.said) > 0 {
 		t.Errorf("said %q, %v", *e.said, err)
 	}
 }
@@ -1270,7 +1273,7 @@ func TestUpdate(t *testing.T) {
 	}
 	vm := "devvm-p-abc123abc123ab"
 	before := e.files(t, "go")
-	files, changed, err := e.Update(t.Context(), build, vm, "go", before, gnuT)
+	files, changed, err := e.Update(t.Context(), build, vm, []string{"go"}, before, gnuT)
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -1281,7 +1284,7 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("said %q", *e.said)
 	}
 	*e.said = nil
-	if again, changed, err := e.Update(t.Context(), build, vm, "go", files, gnuT); err != nil || changed || !slices.Equal(again, files) {
+	if again, changed, err := e.Update(t.Context(), build, vm, []string{"go"}, files, gnuT); err != nil || changed || !slices.Equal(again, files) {
 		t.Errorf("Update again = %q, %v, %v", again, changed, err)
 	}
 	if !slices.Contains(*e.said, "==> tools_newest vm="+vm) {
@@ -1292,7 +1295,7 @@ func TestUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	*e.said = nil
-	if again, changed, err := e.Update(t.Context(), build, vm, "go", files, gnuT); err != nil || changed || !slices.Equal(again, files) {
+	if again, changed, err := e.Update(t.Context(), build, vm, []string{"go"}, files, gnuT); err != nil || changed || !slices.Equal(again, files) {
 		t.Errorf("Update gone = %q, %v, %v", again, changed, err)
 	}
 	if !slices.Contains(*e.said, "==> building_tools tools=go 9.9.9") || !slices.Contains(*e.said, "==> tools_newest vm="+vm) || !e.Built(files[0]) {
@@ -1300,7 +1303,7 @@ func TestUpdate(t *testing.T) {
 	}
 	t.Setenv("MISE_STUB_FAIL", "1")
 	*e.said = nil
-	if _, changed, err := e.Update(t.Context(), build, vm, "go", before, gnuT); err != nil || !changed {
+	if _, changed, err := e.Update(t.Context(), build, vm, []string{"go"}, before, gnuT); err != nil || !changed {
 		t.Errorf("Update offline = %v, %v", changed, err)
 	}
 	if !slices.Contains(*e.said, "devvm: tools_check_failed") {

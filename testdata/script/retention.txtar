@@ -75,10 +75,12 @@ stderr '^retention_deleted exports=1 '
 
 # Tools: a current build no VM has is recorded idle, deleted a day later;
 # one a VM's state lists stays.
-exec devvm build claude
-exec devvm build codex
-mkdir $VMS
-exec sh -c 'printf "image=claude\ndir=/p\nbackend=lima\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
+# A VM made with the two agents builds their tool images; once it's gone
+# no VM has them.
+project agents git
+exec devvm --tools none --agents claude,codex --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
+exec sh -c 'printf "image=base\ndir=/p\nbackend=lima\ntool_names=claude\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 *.sha256'
 exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'
@@ -90,7 +92,7 @@ exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.idle'
 # and runs the rest; once its devvm is killed, nothing holds the lock.
 project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
-! exec devvm --no-network-policy base &u&
+! exec devvm --no-network-policy &u&
 wait_file $STUB_DIR/hanging
 exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'

@@ -223,13 +223,13 @@ func TestLockGroups(t *testing.T) {
 // gets in, every time.
 func TestGroupJoinsAtOnce(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	off := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	off := existingVM(t, e, Options{NoNetworkPolicy: true})
 	e2 := *e
 	e2.Dir = filepath.Join(filepath.Dir(e.Dir), "api")
 	if err := os.MkdirAll(e2.Dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Launch{&e2}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{&e2}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if err := (Net{&e2}).SetNetwork(t.Context(), true); err != nil {

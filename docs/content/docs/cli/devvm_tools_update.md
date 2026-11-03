@@ -38,4 +38,4 @@ devvm tools update [flags]
 
 ## See also
 
-- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools
+- [devvm tools](devvm_tools.md): Show or choose this folder's VM's shared tools

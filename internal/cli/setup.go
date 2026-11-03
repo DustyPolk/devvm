@@ -20,29 +20,34 @@ import (
 // features.
 const featuresNone = "none"
 
-// newSetupCmd is devvm setup [--backend NAME] [--features LIST|none]. Its
-// --backend is its own, in place of the root's for new VMs.
+// newSetupCmd is devvm setup [--backend NAME] [--features LIST|none]
+// [--agents LIST|none]. Its --backend is its own, in place of the root's
+// for new VMs, and its --agents chooses new VMs' default.
 func newSetupCmd(u *ui.UI) *cobra.Command {
 	var (
-		features string
-		c        setupChoice
+		features, agents string
+		c                setupChoice
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Choose the default backend, base's features, and new VMs' size and network policy",
-		Long: "Choose the backend new VMs get by default, the features base gets, and new VMs' CPUs, memory and network policy. " +
-			"In a terminal devvm asks for each, starting from the current choice, and --backend and --features choose without asking. " +
+		Short: "Choose the default backend, base's features, and new VMs' size, network policy and coding agents",
+		Long: "Choose the backend new VMs get by default, the features base gets, and new VMs' CPUs, memory, network policy and coding agents. " +
+			"In a terminal devvm asks for each, starting from the current choice, and --backend, --features and --agents choose without asking. " +
 			"A new choice of features rebuilds base and the images on it when they're next used.",
 		Example: examples(
 			"devvm setup", "answer every question",
 			"devvm setup --backend smolvm", "make smolvm the default backend, without asking",
 			"devvm setup --features omb,fzf", "give base oh-my-bash and fzf, without asking",
 			"devvm setup --features none", "give base no features",
+			"devvm setup --agents claude,codex", "give new VMs Claude Code and Codex, without asking",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if cmd.Flags().Changed("features") {
 				c.features = &features
+			}
+			if cmd.Flags().Changed("agents") {
+				c.agents = partFlag(agents)
 			}
 			fail(u, newSetup(u).run(c), msg.SetupFailed)
 			return nil
@@ -51,28 +56,32 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&features, "features", "", "the `LIST` of features base gets, such as fzf,omb, or none")
 	f.StringVar(&c.backend, "backend", "", "the backend `NAME` new VMs get by default")
+	addAgentsFlag(f, &agents, "the `LIST` of coding agents new VMs get by default, such as claude,codex, or none")
 	return cmd
 }
 
-// setupChoice is what devvm setup's flags choose: base's features (nil
-// for none given) and the default backend ("" for none given).
+// setupChoice is what devvm setup's flags choose: base's features and new
+// VMs' agents (nil for none given) and the default backend ("" for none
+// given).
 type setupChoice struct {
 	features *string
+	agents   *[]string
 	backend  string
 }
 
 // none reports whether no flag chose anything.
 func (c setupChoice) none() bool {
-	return c.features == nil && c.backend == ""
+	return c.features == nil && c.agents == nil && c.backend == ""
 }
 
 // setup is devvm setup's run: the UI it prints through, whether it's in a
-// terminal, how it asks for the backend, the size and the network policy,
-// and the host the size is checked against.
+// terminal, how it asks for the backend, the size, the network policy and
+// the agents, and the host the size is checked against.
 type setup struct {
 	ui       *ui.UI
 	terminal func() bool
 	pickOne  func(msg.M, []ui.Choice) int
+	pick     func(msg.M, []vm.PickPart) []vm.PickPart
 	answer   func(msg.M) string
 	host     func() (vm.Host, error)
 }
@@ -83,16 +92,18 @@ func newSetup(u *ui.UI) setup {
 		ui:       u,
 		terminal: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
 		pickOne:  u.PickOne,
+		pick:     pickParts(u),
 		answer:   u.Answer,
 		host:     func() (vm.Host, error) { return vm.ThisHost(thisHost()) },
 	}
 }
 
-// run saves what c chooses: the default backend, then base's features.
-// With nothing chosen, it asks in a terminal for those, then new VMs' size
-// and network policy; without one, it keeps the features (every one until
-// they're chosen) and saves them. A change to the features says base
-// rebuilds, and that devvm gc deletes the old images.
+// run saves what c chooses: the default backend, base's features, then
+// new VMs' agents. With nothing chosen, it asks in a terminal for those,
+// with new VMs' size and network policy before the agents; without one,
+// it keeps the features (every one until they're chosen) and saves them.
+// A change to the features says base rebuilds, and that devvm gc deletes
+// the old images.
 func (s setup) run(c setupChoice) error {
 	dirs, err := paths.FromEnv()
 	if err != nil {
@@ -109,6 +120,10 @@ func (s setup) run(c setupChoice) error {
 			return err
 		}
 	}
+	agents := vm.AgentsChoice{Dirs: dirs, Pick: s.pick, Info: s.ui.Info}
+	if c.agents != nil {
+		return agents.Set(*c.agents)
+	}
 	if !ask {
 		return nil
 	}
@@ -120,7 +135,10 @@ func (s setup) run(c setupChoice) error {
 	if err := sc.Ask(); err != nil {
 		return err
 	}
-	return s.saveNetwork(dirs)
+	if err := s.saveNetwork(dirs); err != nil {
+		return err
+	}
+	return agents.Ask()
 }
 
 // saveNetwork asks which network policy new VMs get, starting from the

@@ -1,5 +1,5 @@
 #!/bin/bash
-# nix: a built-in layer (devvm nix, devvm node+nix). Nix, multi-user, with the VM's own store and
+# nix: a built-in layer (devvm --layers nix). Nix, multi-user, with the VM's own store and
 # daemon and flakes on; direnv and nix-direnv, so a project's .envrc (use flake, use nix) loads its dev
 # shell in the VM's shells.
 # shellcheck disable=SC2034  # the checksums are read through sha()

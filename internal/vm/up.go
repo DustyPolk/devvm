@@ -24,20 +24,23 @@ import (
 
 // Options is what up was asked for.
 type Options struct {
-	Image           string // the image a new VM gets, as given; "" to detect it
-	Backend         string // --backend: a new VM's backend
-	NetworkPolicy   bool   // --network-policy
-	NoNetworkPolicy bool   // --no-network-policy
-	Size            Size   // --cpus, --memory, --disk as given
-	Ports           string // --ports as given
-	UnsafeFolder    bool   // --unsafe-folder
-	NoGitProtect    bool   // --no-git-protect
-	Clone           bool   // --clone
-	SSHAgent        bool   // --ssh-agent: a new VM forwards the user's SSH agent
-	From            string // --from, or its default: the container image a new VM's base starts from
-	FromSet         bool   // --from was given, not its default
-	NoDevcontainer  bool   // --no-devcontainer: a new VM ignores the folder's devcontainer.json
-	Here            bool   // --here: a new VM for this folder, without a parent folder's VM asked about
+	// Toolchains, Agents and Layers are --tools, --agents and --layers:
+	// each the exact list of its part a new VM gets, empty for none; nil
+	// for the part's default.
+	Toolchains, Agents, Layers *[]string
+	Backend                    string // --backend: a new VM's backend
+	NetworkPolicy              bool   // --network-policy
+	NoNetworkPolicy            bool   // --no-network-policy
+	Size                       Size   // --cpus, --memory, --disk as given
+	Ports                      string // --ports as given
+	UnsafeFolder               bool   // --unsafe-folder
+	NoGitProtect               bool   // --no-git-protect
+	Clone                      bool   // --clone
+	SSHAgent                   bool   // --ssh-agent: a new VM forwards the user's SSH agent
+	From                       string // --from, or its default: the container image a new VM's base starts from
+	FromSet                    bool   // --from was given, not its default
+	NoDevcontainer             bool   // --no-devcontainer: a new VM ignores the folder's devcontainer.json
+	Here                       bool   // --here: a new VM for this folder, without a parent folder's VM asked about
 	// dc is what the folder's devcontainer.json says a new VM gets
 	// (devcontainers.prepare); nil without one.
 	dc *devcontainer.Plan
@@ -106,7 +109,8 @@ func useParent(e *Env, p *found) bool {
 // newVM is what create checked and chose for a new VM before building
 // anything.
 type newVM struct {
-	img   string
+	img   string   // its image: base and its layers
+	tools []string // its shared tools
 	size  Size
 	ports string
 	net   bool
@@ -130,7 +134,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		return err
 	}
 	// Held from before its tools are picked until it's made, so neither
-	// devvm gc --tools nor retention deletes any of them meanwhile.
+	// devvm gc --tool-images nor retention deletes any of them meanwhile.
 	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
 	if err != nil {
 		return err
@@ -138,15 +142,14 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	defer unmaking()
 	// A new VM gets the newest tools: check now when the daily check is
 	// due.
-	groups := image.ToolsOf(n.img)
 	versions := tools.Versions{Env: e.Tools}
-	if len(groups) > 0 && versions.CheckDue() {
+	if len(n.tools) > 0 && versions.CheckDue() {
 		versions.Check(ctx)
 	}
 	if err := (build.Builds{Env: n.builder}).Build(ctx, n.img); err != nil {
 		return err
 	}
-	chain, err := n.builder.Chain(image.WithoutTools(n.img))
+	chain, err := n.builder.Chain(n.img)
 	if err != nil {
 		return err
 	}
@@ -154,8 +157,11 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
-	files, err := versions.Files(ctx, groups, tg)
+	files, err := versions.Files(ctx, n.tools, tg)
 	if err != nil {
+		return err
+	}
+	if err := e.buildTools(ctx, n.builder, tg, files); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(e.Dirs.Tools(), 0o700); err != nil {
@@ -173,7 +179,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	// The state first, with the network choice: if a later step fails,
 	// the VM never starts without it.
 	st, err := state.CreateVM(e.Dirs, vm, state.NewVM{
-		Image: n.img, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(),
+		Image: n.img, Tools: n.tools, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(),
 	})
 	if err != nil {
 		return err
@@ -270,6 +276,9 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err := e.firstRunSize(size); err != nil {
 		return newVM{}, err
 	}
+	if err := e.firstRunAgents(*o); err != nil {
+		return newVM{}, err
+	}
 	// Defaults are checked again: the files may be edited by hand.
 	def, err := e.defaultSize()
 	if err != nil {
@@ -310,13 +319,15 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 		return newVM{}, err
 	}
 	n.builder = e.builder(b, o.From)
-	if n.img, err = e.resolveImage(o.Image, f.Dir, o.dc, n.builder); err != nil {
+	parts, err := e.chooseParts(*o, vm, f.Dir, o.dc, n.builder)
+	if err != nil {
 		return newVM{}, err
 	}
+	n.img, n.tools = parts.image(), parts.tools()
 	// Every VM has the share, read-only: a tool added later is mounted
 	// from it. Its agents' folders on the host are mounted read-only.
 	n.spec = backend.VMSpec{
-		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.img), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
+		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.tools), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
 		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: forward,
 		Env: trust.GuestEnv(nil),
 	}
@@ -511,52 +522,4 @@ func (e Launch) checkUnsafe(dir string, unsafe bool) error {
 		e.Warn(msg.UnsafeFolderUsed(dir, inside))
 	}
 	return nil
-}
-
-// resolveImage returns the image a new VM gets, in canonical order: the
-// one named, or with nothing but agents named, the folder's toolchains
-// and the agents on top (devvm claude in a node project is node+claude).
-// base is a choice of its own: nothing is detected over it. With a
-// devcontainer.json (dc), the layers its features map to go under it, and
-// nothing named or detected is base.
-func (e Launch) resolveImage(want, dir string, dc *devcontainer.Plan, b *build.Env) (string, error) {
-	var layers []string
-	if dc != nil {
-		layers = dc.Layers
-	}
-	if needsDetection(want) {
-		found := project.Detect(dir)
-		switch {
-		case len(found) > 0:
-			e.Info(msg.Detected(strings.Join(found, "+")))
-			if want != "" {
-				found = append(found, want)
-			}
-			want = strings.Join(found, "+")
-		case want == "" && dc == nil:
-			return "", msg.NoImageFor(strings.Join(image.Agents, " "), dir, strings.Join(b.Environments(), " "))
-		}
-	}
-	var parts []string
-	for _, p := range slices.Concat(layers, strings.Split(want, "+")) {
-		if p != "" && !slices.Contains(parts, p) {
-			parts = append(parts, p)
-		}
-	}
-	img := image.Normalize(strings.Join(parts, "+"))
-	return img, b.CheckLayers(img)
-}
-
-// needsDetection reports whether an image name names only agents, or
-// nothing: the folder's toolchains then go under them.
-func needsDetection(want string) bool {
-	if want == "" {
-		return true
-	}
-	for p := range strings.SplitSeq(want, "+") {
-		if !image.IsAgent(p) {
-			return false
-		}
-	}
-	return true
 }

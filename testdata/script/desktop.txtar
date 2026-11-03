@@ -13,7 +13,7 @@ stderr '^devvm: no_vm dir=\S*/desk$'
 stderr '^devvm: args_none command=devvm desktop given=now$'
 
 # A VM without the desktop feature: refused, nothing served.
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 vm_name DESK desk
 cp $WORK/no-feature $STUB_DIR/shell-fails-on
 ! exec devvm desktop --no-open

@@ -48,25 +48,24 @@ func (t VMs) Show(files []string, tg Target) ([]VMTool, error) {
 	return out, nil
 }
 
-// Remove takes shared tools out of a VM made from imageName with these
-// tool files: it returns the VM's image name and tool files without them.
-// What the VM installed itself stays. A custom layer ran its script into
-// the VM's disk, so it can't be removed, and neither can anything the VM
-// lacks.
-func Remove(vm, imageName string, files []string, gone []string) (string, []string, error) {
-	have := strings.Split(imageName, "+")
+// Remove takes shared tools out of a VM with these shared tools (names)
+// and tool files, made from img: it returns the VM's shared tools and
+// tool files without them. What the VM installed itself stays. A layer
+// ran its script into the VM's disk, so it can't be removed, and neither
+// can a shared tool the VM lacks.
+func Remove(vm, img string, names, files, gone []string) ([]string, []string, error) {
 	var drop []string
 	for _, n := range gone {
-		if !slices.Contains(have, n) {
-			return "", nil, msg.VMLacks(strings.Join(have, " "), n, vm)
-		}
-		if !image.IsTool(n) {
-			return "", nil, msg.CustomLayerRemove(n, vm)
+		switch {
+		case image.HasLayer(img, n):
+			return nil, nil, msg.CustomLayerRemove(n, vm)
+		case !slices.Contains(names, n):
+			return nil, nil, msg.VMLacks(listOrNone(names), n, vm)
 		}
 		drop = append(drop, image.GroupTools(n)...)
 	}
-	rest := []string{image.Base}
-	for _, h := range have {
+	var rest []string
+	for _, h := range names {
 		if !slices.Contains(gone, h) {
 			rest = append(rest, h)
 		}
@@ -78,13 +77,22 @@ func Remove(vm, imageName string, files []string, gone []string) (string, []stri
 			kept = append(kept, f)
 		}
 	}
-	return image.Normalize(strings.Join(rest, "+")), kept, nil
+	return rest, kept, nil
 }
 
-// Newer returns the tools of an image name at the lock's versions that a
-// VM with these tool files doesn't have, as "claude 2.1.295".
-func (t VMs) Newer(ctx context.Context, imageName string, have []string, tg Target) ([]string, error) {
-	files, err := Versions(t).Files(ctx, image.ToolsOf(imageName), tg)
+// listOrNone is names as a message shows a list of them: space-separated,
+// or none.
+func listOrNone(names []string) string {
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, " ")
+}
+
+// Newer returns the shared tools names at the lock's versions that a VM
+// with these tool files doesn't have, as "claude 2.1.295".
+func (t VMs) Newer(ctx context.Context, names, have []string, tg Target) ([]string, error) {
+	files, err := Versions(t).Files(ctx, names, tg)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +108,8 @@ func (t VMs) Newer(ctx context.Context, imageName string, have []string, tg Targ
 // WarnNewer warns when there are newer shared tools than a VM's: moving
 // to them is cheap, as nothing in the VM's disk changes. It never changes
 // the VM.
-func (t VMs) WarnNewer(ctx context.Context, imageName string, have []string, tg Target) error {
-	newer, err := t.Newer(ctx, imageName, have, tg)
+func (t VMs) WarnNewer(ctx context.Context, names, have []string, tg Target) error {
+	newer, err := t.Newer(ctx, names, have, tg)
 	if err != nil {
 		return err
 	}
@@ -111,17 +119,17 @@ func (t VMs) WarnNewer(ctx context.Context, imageName string, have []string, tg 
 	return nil
 }
 
-// Update moves a VM to the newest shared tools for its image name: it
+// Update moves a VM to the newest of its shared tools (names): it
 // checks upstream first (unless there's no lock yet: resolving it is
 // checking), has build build what the share lacks of them (the VM's own,
 // when they're the newest and one is gone from the share), and returns the
 // VM's new tool files. changed is false when they were the newest already.
-func (t VMs) Update(ctx context.Context, build func(context.Context, []string) error, vm, imageName string, have []string, tg Target) (files []string, changed bool, err error) {
+func (t VMs) Update(ctx context.Context, build func(context.Context, []string) error, vm string, names, have []string, tg Target) (files []string, changed bool, err error) {
 	versions := Versions(t)
 	if _, err := os.Stat(t.Dirs.ToolLock()); err == nil {
 		versions.Check(ctx)
 	}
-	if files, err = versions.Files(ctx, image.ToolsOf(imageName), tg); err != nil {
+	if files, err = versions.Files(ctx, names, tg); err != nil {
 		return nil, false, err
 	}
 	if err := build(ctx, files); err != nil {

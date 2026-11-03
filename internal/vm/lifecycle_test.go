@@ -21,7 +21,7 @@ import (
 func TestRmConfirms(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	vm := existingVM(t, e, Options{Image: "claude", NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}).Name()
 	if err := lc.Rm(t.Context(), RmOptions{}); msg.NamesOf(err) != "force_needed command=devvm rm" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
@@ -51,7 +51,7 @@ func TestRmConfirms(t *testing.T) {
 func TestRm(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	st := existingVM(t, e, Options{Image: "claude", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true})
 	vm := st.Name()
 	f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
 		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
@@ -103,7 +103,7 @@ func TestRm(t *testing.T) {
 	}
 
 	// Another folder at the same path.
-	st = existingVM(t, e, Options{Image: "claude", NoNetworkPolicy: true})
+	st = existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true})
 	if err := st.Set(state.KeyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestRm(t *testing.T) {
 func TestExport(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	vm := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
 	tarball := "tarball"
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
@@ -234,7 +234,7 @@ func TestExportStartsAsLaunch(t *testing.T) {
 		}
 		return nil
 	}
-	st := existingVM(t, e, Options{Image: "base", NetworkPolicy: true})
+	st := existingVM(t, e, Options{NetworkPolicy: true})
 	vm := st.Name()
 	lc := Lifecycle{e}
 	stop := func() {
@@ -281,7 +281,7 @@ func TestExportStartsAsLaunch(t *testing.T) {
 func TestAdopt(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	lc, l := Lifecycle{e}, Launch{e}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	if err := lc.Adopt(t.Context(), false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}

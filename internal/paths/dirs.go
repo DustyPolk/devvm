@@ -138,7 +138,7 @@ func (d Dirs) AgentSock() string { return filepath.Join(d.Data, "agent.sock") }
 func (d Dirs) OCIBuildLock() string { return filepath.Join(d.Data, "oci-build.lock") }
 
 // MakingLock is held, shared, by each devvm making a VM or giving one new
-// shared tools, and tried exclusively by devvm gc --tools --force.
+// shared tools, and tried exclusively by devvm gc --tool-images --force.
 func (d Dirs) MakingLock() string { return filepath.Join(d.Data, "making.lock") }
 
 // LimaVM is a VM's folder in devvm's Lima home.
@@ -176,6 +176,10 @@ func (d Dirs) Ports() string { return filepath.Join(d.Config, "ports") }
 
 // Network holds the network policy new VMs get: ask, on or off.
 func (d Dirs) Network() string { return filepath.Join(d.Config, "network") }
+
+// Agents holds the coding agents new VMs get by default (devvm setup
+// --agents).
+func (d Dirs) Agents() string { return filepath.Join(d.Config, "agents") }
 
 // AgentKeys lists the keys added to devvm's SSH agent.
 func (d Dirs) AgentKeys() string { return filepath.Join(d.Config, "agent-keys") }

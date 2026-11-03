@@ -88,7 +88,7 @@ func TestFeaturesNeeded(t *testing.T) {
 			"the nix layer", backend.ImageSpec{Image: "node+nix", Net: backend.NetInternet}.Features(),
 			f(backend.FeatureBuildImage, backend.FeatureNixLayer, backend.FeatureBuildConfinement),
 		},
-		{"a VM of docker and nix", backend.ImageFeatures("docker+nix+claude"), f(backend.FeatureDockerLayer, backend.FeatureNixLayer)},
+		{"a VM of docker and nix", backend.ImageFeatures("docker+nix+foo"), f(backend.FeatureDockerLayer, backend.FeatureNixLayer)},
 		{"a VM of neither", backend.ImageFeatures("node+nixos"), nil},
 		{"a --clone VM forwarding nothing", backend.VMSpec{Name: "v"}.Features(), f(backend.FeatureClone)},
 		{"a VM with everything", backend.VMSpec{

@@ -1,35 +1,35 @@
-# gc --tools: also the current tool images no VM's state lists, on every
+# gc --tool-images: also the current tool images no VM's state lists, on every
 # backend and C library, or only the named tools'; never one a VM's state
 # lists (a stopped VM's, or one deleted outside devvm), nor one built in
 # the last hour. Never a VM.
 env SHARE=$XDG_DATA_HOME/devvm/tools
 
-# Names go only with --tools, and only images' names for tools.
+# Names go only with --tool-images, and only shared tools' names.
 ! exec devvm gc --force node
 stderr '^devvm: gc_names_need_tools tool=node$'
-! exec devvm gc --force --tools nope
+! exec devvm gc --force --tool-images nope
 stderr '^devvm: unknown_tool tool=nope '
 
-# node (node, pnpm, bun), claude and codex, all current. A VM deleted
-# outside devvm still lists claude in its state; codex was built just now.
-exec devvm build node
-exec devvm build claude
-exec devvm build codex
-mkdir $VMS
-exec sh -c 'printf "image=claude\ndir=/p\nbackend=lima\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
+# node (node, pnpm, bun), claude and codex, all current, built for a VM
+# that's gone since. A VM deleted outside devvm still lists claude in its
+# state; codex was built just now.
+project tl
+exec devvm --tools node --agents claude,codex --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
+exec sh -c 'printf "image=base\ndir=/p\nbackend=lima\ntool_names=claude\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 node-*.sha256 pnpm-*.sha256 bun-*.sha256 claude-*.sha256'
 
 # Plain gc keeps every current one.
 exec devvm gc --force
 stdout '^==> nothing_to_clean$'
 
-# --tools claude: claude is a VM's, so nothing.
-exec devvm gc --force --tools claude
+# --tool-images claude: claude is a VM's, so nothing.
+exec devvm gc --force --tool-images claude
 stdout '^==> nothing_to_clean$'
 
-# --tools: node's three, not claude's (a VM's) nor codex's (just built),
+# --tool-images: node's three, not claude's (a VM's) nor codex's (just built),
 # which it names with the list.
-exec devvm gc --force --tools
+exec devvm gc --force --tool-images
 stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
 stdout '^==> gc_tools_recent count=1 tools=codex \S+$'
 stdout '^==> deleted_tools_no_vm count=3$'
@@ -40,23 +40,24 @@ stdout '^codex-'
 ! exists $SHARE/.lock
 
 # Only codex is left of them: gc names it in place of nothing_to_clean.
-exec devvm gc --force --tools
+exec devvm gc --force --tool-images
 stdout '^==> gc_tools_recent count=1 tools=codex \S+$'
 ! stdout 'nothing_to_clean|deleted_'
 
-# Plain gc never names it, and --recent goes only with --tools.
+# Plain gc never names it, and --recent goes only with --tool-images.
 exec devvm gc --force
 stdout '^==> nothing_to_clean$'
 ! stdout gc_tools_recent
 ! exec devvm gc --recent
 stderr '^devvm: gc_recent_needs_tools$'
 
-# A VM that names node later builds it again.
-exec devvm build node
+# A VM that gets node later builds it again.
+exec devvm --tools node --agents none --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
 exec sh -c 'cd "$SHARE" && ls node-*.erofs'
 
-# --tools --recent with a name: only that tool's, built just now.
-exec devvm gc --force --tools --recent node
+# --tool-images --recent with a name: only that tool's, built just now.
+exec devvm gc --force --tool-images --recent node
 stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
 stdout '^==> deleted_tools_no_vm count=3$'
 ! stdout gc_tools_recent
@@ -66,19 +67,20 @@ stdout '^codex-'
 
 # codex is old now, and node's three are built again just now.
 exec sh -c 'cd "$SHARE" && touch -t 202001010000 codex-*.sha256'
-exec devvm build node
+exec devvm --tools node --agents none --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
 
-# While a VM is being made (its start hangs), --tools --recent deletes
-# nothing, and plain --tools keeps every current one, old codex too,
+# While a VM is being made (its start hangs), --tool-images --recent deletes
+# nothing, and plain --tool-images keeps every current one, old codex too,
 # saying so; once its devvm is killed, nothing holds the lock.
 project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
-! exec devvm --no-network-policy base &u&
+! exec devvm --no-network-policy &u&
 wait_file $STUB_DIR/hanging
-! exec devvm gc --force --tools --recent
+! exec devvm gc --force --tool-images --recent
 stderr '^devvm: gc_recent_making$'
 ! stdout 'deleted_'
-exec devvm gc --force --tools
+exec devvm gc --force --tool-images
 stdout '^==> gc_tools_making count=4 tools=codex \S+, node \S+, pnpm \S+, bun \S+$'
 ! stdout 'gc_tools_no_vm|gc_tools_recent|deleted_|nothing_to_clean'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
@@ -88,19 +90,19 @@ kill -KILL u
 wait u
 rm $STUB_DIR/start-hangs
 
-# Plain --tools again: old codex goes, node's three stay (just built).
-exec devvm gc --force --tools
+# Plain --tool-images again: old codex goes, node's three stay (just built).
+exec devvm gc --force --tool-images
 stdout '^gc_tools_no_vm count=1 size=\S+ tools=codex \S+$'
 stdout '^==> gc_tools_recent count=3 tools=node \S+, pnpm \S+, bun \S+$'
 stdout '^==> deleted_tools_no_vm count=1$'
 
-# --tools --recent: node's three too, but never claude (a VM's). Without
+# --tool-images --recent: node's three too, but never claude (a VM's). Without
 # a terminal, gc deletes nothing unless --force.
-! exec devvm gc --tools --recent
+! exec devvm gc --tool-images --recent
 stderr '^devvm: force_needed command=devvm gc$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
 stdout '^node-'
-exec devvm gc --force --tools --recent
+exec devvm gc --force --tool-images --recent
 stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
 stdout '^==> deleted_tools_no_vm count=3$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'

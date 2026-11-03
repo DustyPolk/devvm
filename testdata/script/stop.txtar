@@ -14,7 +14,7 @@ stderr '^devvm: args_none command=devvm stop given=now$'
 # stopped; the stub's would be gone after devvm.)
 exec git init -q
 exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
-exec devvm --network-policy base
+exec devvm --network-policy
 catg $CFG/ssh_config
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$RUN"/devvm-web-*.proxy.pid > "$WORK/pid" && kill -0 "$(cat "$WORK/pid")"'

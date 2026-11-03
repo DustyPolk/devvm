@@ -14,6 +14,8 @@ stdout '^==> base_features_none$'
 ! stdout 'size_question|size_defaults'
 ! exists $XDG_CONFIG_HOME/devvm/backend
 ! exists $XDG_CONFIG_HOME/devvm/size
+! exists $XDG_CONFIG_HOME/devvm/agents
+! stdout default_agents
 ! stderr .
 ! stub_calls
 
@@ -87,9 +89,30 @@ exec cat $CHOSEN
 # The network policy saved for new VMs: off makes one without it.
 exec sh -c 'echo off > "$XDG_CONFIG_HOME/devvm/network"'
 project off git
-exec devvm --no-git-protect base
+exec devvm --no-git-protect
 catg $VMS/devvm-off-*
 stdout '^net=off$'
+cd $WORK
+
+# --agents: the coding agents new VMs get, without asking; none for none.
+# An agent that isn't one is a usage error, with a did-you-mean.
+exec devvm setup --agents claude,codex
+stdout '^==> default_agents agents=claude codex$'
+grep '^claude codex$' $XDG_CONFIG_HOME/devvm/agents
+exec devvm setup --agents none
+stdout '^==> default_agents_none$'
+grep '^none$' $XDG_CONFIG_HOME/devvm/agents
+! exec devvm setup --agents cladue
+stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
+stderr '^usage_help command=devvm setup$'
+grep '^none$' $XDG_CONFIG_HOME/devvm/agents
+# A new VM made without a terminal gets setup's agents, and says so.
+exec devvm setup --agents codex
+project agents git
+exec devvm --no-network-policy --no-git-protect
+stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-agents-[0-9a-f]{14}$'
+catg $VMS/devvm-agents-*
+stdout '^tool_names=codex$'
 cd $WORK
 
 # An unreadable choice stays for you to fix.

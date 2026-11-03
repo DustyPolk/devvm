@@ -10,6 +10,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -153,7 +154,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 			return err
 		}
 	}
-	if !o.NoExport && st.Get(KeyNet) != "" && len(agentsOf(st.Get(state.KeyImage))) > 0 {
+	if !o.NoExport && st.Get(KeyNet) != "" && len(image.AgentsOf(st.ToolNames())) > 0 {
 		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
 			return err
 		}

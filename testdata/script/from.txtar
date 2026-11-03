@@ -90,7 +90,7 @@ exec sh -c 'rm "$STUB_DIR/build-libc"'
 # A new VM from it records --from; once it exists, another --from is
 # ignored with a warning, and nothing is built for it.
 project web
-exec devvm --from $PIN --no-network-policy base
+exec devvm --from $PIN --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
 catg $VMS/devvm-web-*

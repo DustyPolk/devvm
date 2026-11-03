@@ -110,11 +110,10 @@ func (in Inputs) Outdated(chain Chain) ([]string, error) {
 }
 
 // LayerName reports whether a layer can have that name: lowercase letters,
-// digits and dashes, starting with a letter or digit, and neither base, a
-// shared tool's name nor a word devvm keeps for its commands. Image names
-// join layers with +.
+// digits and dashes, starting with a letter or digit, and neither base nor
+// a shared tool's name. Image names join layers with +.
 func LayerName(name string) bool {
-	return name != Base && !IsTool(name) && !IsReserved(name) && layerName.MatchString(name)
+	return name != Base && !IsTool(name) && layerName.MatchString(name)
 }
 
 // DockerLayer is the built-in layer with Docker's engine.

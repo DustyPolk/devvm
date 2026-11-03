@@ -3,11 +3,11 @@ title: devvm setup
 weight: 44
 ---
 
-Choose the default backend, base's features, and new VMs' size and network policy
+Choose the default backend, base's features, and new VMs' size, network policy and coding agents
 
 ## Synopsis
 
-Choose the backend new VMs get by default, the features base gets, and new VMs' CPUs, memory and network policy. In a terminal devvm asks for each, starting from the current choice, and --backend and --features choose without asking. A new choice of features rebuilds base and the images on it when they're next used.
+Choose the backend new VMs get by default, the features base gets, and new VMs' CPUs, memory, network policy and coding agents. In a terminal devvm asks for each, starting from the current choice, and --backend, --features and --agents choose without asking. A new choice of features rebuilds base and the images on it when they're next used.
 
 ```text
 devvm setup [flags]
@@ -16,15 +16,17 @@ devvm setup [flags]
 ## Examples
 
 ```text
-  devvm setup                     # answer every question
-  devvm setup --backend smolvm    # make smolvm the default backend, without asking
-  devvm setup --features omb,fzf  # give base oh-my-bash and fzf, without asking
-  devvm setup --features none     # give base no features
+  devvm setup                        # answer every question
+  devvm setup --backend smolvm       # make smolvm the default backend, without asking
+  devvm setup --features omb,fzf     # give base oh-my-bash and fzf, without asking
+  devvm setup --features none        # give base no features
+  devvm setup --agents claude,codex  # give new VMs Claude Code and Codex, without asking
 ```
 
 ## Options
 
 ```text
+      --agents LIST     the LIST of coding agents new VMs get by default, such as claude,codex, or none
       --backend NAME    the backend NAME new VMs get by default
       --features LIST   the LIST of features base gets, such as fzf,omb, or none
   -h, --help            help for setup

@@ -41,16 +41,16 @@ stderr '^devvm: flag_unknown command=devvm link add flag=--json$'
 ! stderr no_vm_link
 
 # The VMs: app, the client; db, a target; two folders called api.
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 project db
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 mkdir $WORK/x/api
 cd $WORK/x/api
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 5432
 mkdir $WORK/y/api
 cd $WORK/y/api
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec sh -c 'cat "$VMS"/devvm-*'
 stdout '^id=[0-9a-f]{32}$'
 
@@ -232,7 +232,7 @@ stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
 catg $VMS/devvm-app-*
 stdout '^links=$'
 cd $WORK/db
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 5432
 cd $WORK/app
 exec devvm link

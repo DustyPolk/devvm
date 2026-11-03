@@ -15,6 +15,12 @@ func AnswerFor(id string) string {
 		return "devvm size -g"
 	case "features_help":
 		return "devvm setup --features"
+	case "agents_help":
+		return "devvm setup --agents"
+	case "pick_new_help":
+		return "--tools, --agents and --layers"
+	case "pick_vm_help":
+		return "devvm tools add or devvm tools rm"
 	case "backend_help":
 		return "devvm setup --backend"
 	case "network_default_help":

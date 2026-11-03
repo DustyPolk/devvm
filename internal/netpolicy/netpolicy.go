@@ -100,21 +100,25 @@ func newRandom(st *state.VM, key string, n int) (string, error) {
 	return v, st.Set(key, v)
 }
 
-// Policies returns the policies of the VM vm, of image img, in the order
-// its proxy reads them. builtin is devvm's own, as paths in its files
-// (assets.FS), which the proxy reads from the binary: base's, then each
-// image part's that is devvm's (a shared tool's in shared-tools/, a
-// built-in layer's in layers/). files is the user's: each of the image's
+// Policies returns the policies of the VM vm, of image img with these
+// shared tools, in the order its proxy reads them. builtin is devvm's own,
+// as paths in its files (assets.FS), which the proxy reads from the
+// binary: base's, then each shared tool's in shared-tools/, then each
+// built-in layer's in layers/. files is the user's: each of the image's
 // own layers' policy file, next to its script, the user's own for every
 // VM, the VM's own, and the hosts its secrets imply. A missing file has no
 // rules.
-func Policies(d paths.Dirs, vm, img string) (builtin, files []string) {
+func Policies(d paths.Dirs, vm, img string, tools []string) (builtin, files []string) {
 	builtin = []string{"layers/base.policy"}
+	for _, t := range tools {
+		// Only a shared tool's name names a file of devvm's.
+		if image.IsTool(t) {
+			builtin = append(builtin, "shared-tools/"+t+".policy")
+		}
+	}
 	for p := range strings.SplitSeq(img, "+") {
 		switch {
-		case p == "" || p == "base":
-		case image.IsTool(p):
-			builtin = append(builtin, "shared-tools/"+p+".policy")
+		case p == "" || p == "base" || image.IsTool(p):
 		case image.IsBuiltin(p):
 			builtin = append(builtin, "layers/"+p+".policy")
 		case image.LayerName(p):

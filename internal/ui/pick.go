@@ -13,10 +13,19 @@ import (
 )
 
 // Choice is one of the items Pick shows: a name, what it is, and whether
-// it's chosen.
+// it's chosen. A Fixed one is shown greyed out as it is: the cursor skips
+// it, and it can't be toggled.
 type Choice struct {
 	Name, Desc string
 	On         bool
+	Fixed      bool
+}
+
+// Section is a heading and the choices under it, as Pick shows them. A
+// section whose Heading is the zero message has no heading.
+type Section struct {
+	Heading msg.M
+	Choices []Choice
 }
 
 // rawTerminal puts the terminal devvm reads from into raw mode, returning
@@ -29,12 +38,16 @@ func rawTerminal() (restore func(), err error) {
 	return func() { _ = term.Restore(fd(os.Stdin), old) }, nil
 }
 
-// Pick shows the choices under help and lets the user toggle them: up and
-// down (or k and j) move, space toggles, enter confirms. It returns them
-// as chosen. Without a terminal to read from and print to, it returns
-// them as given. Ctrl+C ends the run as interrupted.
-func (u *UI) Pick(help msg.M, choices []Choice) []Choice {
-	out := slices.Clone(choices)
+// Pick shows the sections' choices under help, each section under its
+// heading, and lets the user toggle them: up and down (or k and j) move
+// over every choice but the fixed ones, space toggles, enter confirms. It
+// returns the sections as chosen. Without a terminal to read from and
+// print to, it returns them as given. Ctrl+C ends the run as interrupted.
+func (u *UI) Pick(help msg.M, sections []Section) []Section {
+	out := make([]Section, len(sections))
+	for i, s := range sections {
+		out[i] = Section{Heading: s.Heading, Choices: slices.Clone(s.Choices)}
+	}
 	u.pick(help, out, false)
 	return out
 }
@@ -50,14 +63,18 @@ func (u *UI) PickOne(help msg.M, choices []Choice) int {
 	for i := range out {
 		out[i].On = i == start
 	}
-	u.pick(help, out, true)
+	u.pick(help, []Section{{Choices: out}}, true)
 	return max(slices.IndexFunc(out, func(c Choice) bool { return c.On }), 0)
 }
 
-// pick runs pickLoop on the terminal, choices changed in place; without
-// one it leaves them as they are.
-func (u *UI) pick(help msg.M, choices []Choice, one bool) {
-	if len(choices) == 0 || !u.stdinTTY || !u.stdoutTTY {
+// pick runs pickLoop on the terminal, the sections' choices changed in
+// place; without one it leaves them as they are.
+func (u *UI) pick(help msg.M, sections []Section, one bool) {
+	n := 0
+	for _, s := range sections {
+		n += len(s.Choices)
+	}
+	if n == 0 || !u.stdinTTY || !u.stdoutTTY {
 		return
 	}
 	refuseInput(u, help)
@@ -67,7 +84,7 @@ func (u *UI) pick(help msg.M, choices []Choice, one bool) {
 	}
 	// In raw mode a line ends with \r\n; the cursor is hidden meanwhile.
 	u.write(u.stdout, strings.ReplaceAll(u.outStyle.message(help), "\n", "\r\n")+"\r\n\033[?25l")
-	ok := u.pickLoop(u.stdin, choices, one)
+	ok := u.pickLoop(u.stdin, sections, one)
 	u.write(u.stdout, "\033[?25h")
 	restore()
 	if !ok {
@@ -77,29 +94,79 @@ func (u *UI) pick(help msg.M, choices []Choice, one bool) {
 	}
 }
 
-// pickLoop draws the choices and reads keys until enter (or the end of
-// the input), toggling choices in place, or with one, moving the one
-// that's on with the cursor. It's false on Ctrl+C.
-func (u *UI) pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
-	cur, n := 0, len(choices)
+// picking is what pickLoop draws and moves over: every choice in order,
+// and the ones the cursor can reach.
+type picking struct {
+	sections []Section
+	rows     []*Choice
+	movable  []int // indexes into rows
+	one      bool
+}
+
+func newPicking(sections []Section, one bool) *picking {
+	p := &picking{sections: sections, one: one}
+	for i := range sections {
+		for j := range sections[i].Choices {
+			c := &sections[i].Choices[j]
+			if !c.Fixed {
+				p.movable = append(p.movable, len(p.rows))
+			}
+			p.rows = append(p.rows, c)
+		}
+	}
+	return p
+}
+
+// draw writes the headings and rows, the cursor at the movable row cur
+// (-1 for none), and returns how many lines it wrote.
+func (p *picking) draw(s style, cur int) (string, int) {
 	open, on, closed := "[", "x", "]"
-	if one {
-		cur = max(slices.IndexFunc(choices, func(c Choice) bool { return c.On }), 0)
+	if p.one {
 		open, on, closed = "(", "*", ")"
 	}
-	for {
-		var b strings.Builder
-		for i, c := range choices {
+	var b strings.Builder
+	lines, row := 0, 0
+	for _, sec := range p.sections {
+		if sec.Heading.ID() != "" {
+			fmt.Fprintf(&b, "\033[2K%s\r\n", s.paint(sgrBold, msg.OneLine(sec.Heading.Line())))
+			lines++
+		}
+		for _, c := range sec.Choices {
 			mark, ptr := " ", " "
 			if c.On {
 				mark = on
 			}
-			if i == cur {
+			if cur >= 0 && p.movable[cur] == row {
 				ptr = ">"
 			}
-			fmt.Fprintf(&b, "\033[2K%s %s%s%s %-10s %s\r\n", ptr, open, mark, closed, msg.OneLine(c.Name), msg.OneLine(c.Desc))
+			line := fmt.Sprintf("%s %s%s%s %-10s %s", ptr, open, mark, closed, msg.OneLine(c.Name), msg.OneLine(c.Desc))
+			if c.Fixed {
+				line = s.paint(sgrDim, line)
+			}
+			b.WriteString("\033[2K" + line + "\r\n")
+			lines++
+			row++
 		}
-		u.write(u.stdout, b.String())
+	}
+	return b.String(), lines
+}
+
+// pickLoop draws the choices and reads keys until enter (or the end of
+// the input), toggling choices in place, or with one, moving the one
+// that's on with the cursor. It's false on Ctrl+C.
+func (u *UI) pickLoop(in *bufio.Reader, sections []Section, one bool) bool {
+	p := newPicking(sections, one)
+	n := len(p.movable)
+	cur := -1
+	if n > 0 {
+		cur = 0
+	}
+	if one && n > 0 {
+		cur = max(slices.IndexFunc(p.movable, func(r int) bool { return p.rows[r].On }), 0)
+	}
+	for {
+		out, lines := p.draw(u.outStyle, cur)
+		u.write(u.stdout, out)
 		key, err := in.ReadByte()
 		if err != nil {
 			return true
@@ -110,29 +177,38 @@ func (u *UI) pickLoop(in *bufio.Reader, choices []Choice, one bool) bool {
 		case '\r', '\n':
 			return true
 		case ' ':
-			if !one {
-				choices[cur].On = !choices[cur].On
+			if !one && cur >= 0 {
+				c := p.rows[p.movable[cur]]
+				c.On = !c.On
 			}
 		case 'k':
-			cur = (cur + n - 1) % n
+			cur = step(cur, n, -1)
 		case 'j':
-			cur = (cur + 1) % n
+			cur = step(cur, n, 1)
 		case 0x1b: // an arrow: ESC [ A or ESC [ B
 			if seq, err := in.Peek(2); err == nil && seq[0] == '[' {
 				switch seq[1] {
 				case 'A':
-					cur = (cur + n - 1) % n
+					cur = step(cur, n, -1)
 				case 'B':
-					cur = (cur + 1) % n
+					cur = step(cur, n, 1)
 				}
 				_, _ = in.Discard(2)
 			}
 		}
 		if one {
-			for i := range choices {
-				choices[i].On = i == cur
+			for i, r := range p.movable {
+				p.rows[r].On = i == cur
 			}
 		}
-		u.write(u.stdout, fmt.Sprintf("\033[%dA", n))
+		u.write(u.stdout, fmt.Sprintf("\033[%dA", lines))
 	}
+}
+
+// step moves the cursor cur by d over n rows, wrapping; -1 (none) stays.
+func step(cur, n, d int) int {
+	if cur < 0 {
+		return cur
+	}
+	return (cur + n + d) % n
 }

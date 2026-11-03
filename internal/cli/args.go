@@ -131,10 +131,13 @@ func argsOf(c *cobra.Command) string {
 func shownArgs(args []string) string { return strings.Join(args, " ") }
 
 // noArgs takes no arguments. A command with commands of its own says the
-// word isn't one of them.
+// word isn't one of them; devvm itself suggests the closest (checkWord).
 func noArgs(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
+	}
+	if !cmd.HasParent() {
+		return checkWord(cmd, args[0])
 	}
 	if cmd.HasAvailableSubCommands() {
 		var names []string
@@ -251,6 +254,8 @@ func checkFlagValue(name, value string) error {
 		if names := registry.Names(); value != "" && !slices.Contains(names, value) {
 			err = msg.BackendUnknown(strings.Join(names, ", "), value)
 		}
+	case "tools", "agents", "layers":
+		err = checkPartFlag("--"+name, value)
 	}
 	return err
 }

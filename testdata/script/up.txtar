@@ -4,7 +4,7 @@
 project web git
 
 # Network policy on and off at once: nothing is built or created.
-! exec devvm --network-policy --no-network-policy base
+! exec devvm --network-policy --no-network-policy
 stderr '^devvm: flags_exclusive flag=--network-policy other=--no-network-policy$'
 stub_calls
 ! stdout 'create|clone|start'
@@ -15,7 +15,8 @@ stub_calls
 # forwards off; started, its host key pinned and its ports forwarded by
 # devvm's forwarder over Lima's ssh, set up, and devvm's last act is the
 # shell, in the folder.
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
+stdout '^==> new_vm_gets layers=none tools=none vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
@@ -67,7 +68,7 @@ cd $WORK
 rm web
 mkdir web
 cd web
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: vm_other_folder vm=devvm-web-[0-9a-f]{14} was=/\S*/web$'
 
 # --no-git-protect: nothing locked. An SSH origin gets a hint: the VM
@@ -75,7 +76,7 @@ stderr '^devvm: vm_other_folder vm=devvm-web-[0-9a-f]{14} was=/\S*/web$'
 project api git
 exec git remote add origin git@github.com:o/api.git
 stub_reset
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 ! stdout building_image
 stderr '^devvm: ssh_remote_hint vm=devvm-api-[0-9a-f]{14}$'
 ! stderr git_protect_needs_macos_new
@@ -89,7 +90,7 @@ stdout '^git_protect=off$'
 stub_calls
 ! stdout '^(docker|smolvm) '
 stub_reset
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 ! stdout creating_from
 stub_calls
 stdout '^limactl list --json$'
@@ -99,14 +100,14 @@ stdout '^limactl list --json$'
 [linux] mkdir $WORK/setid
 [linux] cd $WORK/setid
 [linux] exec sh -c 'touch tool && chmod u+s tool'
-[linux] exec devvm --no-network-policy base
+[linux] exec devvm --no-network-policy
 [linux] stderr '^devvm: setid_files files=/\S*/setid/tool$'
 
 # Ctrl+C before the VM's first shell deletes it and its state, and takes
 # off .git's locks; nothing else.
 project slow git
 exec sh -c ': > "$STUB_LOG" && : > "$STUB_DIR/start-hangs"'
-! exec devvm --no-network-policy base &u&
+! exec devvm --no-network-policy &u&
 wait_file $STUB_DIR/hanging
 kill -INT u
 wait u
@@ -124,3 +125,48 @@ stdout devvm-web
 exec sh -c 'grep -c devvm-slow "$STUB_DIR/instances" || true'
 stdout '^0$'
 rm $STUB_DIR/start-hangs
+
+# --tools, --agents and --layers: none alone or their part's names, each
+# refused with a did-you-mean before anything runs.
+project parts git
+stub_reset
+! exec devvm --tools pyhton
+stderr '^devvm: unknown_part_like flag=--tools given=pyhton like=python$'
+stderr '^usage_help command=devvm$'
+! exec devvm --tools claude
+stderr '^devvm: unknown_part flag=--tools given=claude names=node python rust go$'
+! exec devvm --agents cladue
+stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
+! exec devvm --layers node
+stderr '^devvm: unknown_part flag=--layers given=node names=docker nix$'
+! exec devvm --layers none,docker
+stderr '^devvm: part_none_alone flag=--layers$'
+! stub_calls
+! exists $VMS/devvm-parts-*
+
+# Without a terminal a new VM gets the defaults, said in one line: the
+# toolchains the folder's files call for, devvm setup's agents, no
+# layers; the same with --no-input.
+project dflt git
+exec sh -c 'echo "{}" > package.json'
+exec devvm setup --agents codex
+exec devvm --no-network-policy --no-git-protect --no-input
+stdout '^==> new_vm_gets layers=none tools=node codex vm=devvm-dflt-[0-9a-f]{14}$'
+stdout -count=1 new_vm_gets
+catg $VMS/devvm-dflt-*
+stdout '^image=base$'
+stdout '^tool_names=node codex$'
+
+# Each flag is the exact list for its part, none for none, and the rest
+# keep their defaults.
+project flags git
+exec sh -c 'echo "{}" > package.json'
+exec devvm --no-network-policy --no-git-protect --tools go --agents none
+stdout '^==> new_vm_gets layers=none tools=go vm=devvm-flags-[0-9a-f]{14}$'
+catg $VMS/devvm-flags-*
+stdout '^image=base$'
+stdout '^tool_names=go$'
+project nonetools git
+exec sh -c 'echo "{}" > package.json'
+exec devvm --no-network-policy --no-git-protect --tools none
+stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-nonetools-[0-9a-f]{14}$'

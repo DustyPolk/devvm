@@ -6,7 +6,7 @@ weight: 10
 By default `base` starts from Ubuntu 26.04's cloud image. `--from IMAGE` starts it from a Debian-, Ubuntu- or Alpine-based container image instead, such as `node:24`, `python:3.13`, `debian:13`, `alpine:3` or an image you built yourself. Use it when your project needs a distribution or a system package set that Ubuntu doesn't give you.
 
 ```sh
-devvm --from node:24 claude          # a new VM whose base is node:24
+devvm --from node:24                 # a new VM whose base is node:24
 devvm build --from alpine:3 base     # just the image
 DEVVM_FROM=node:24 devvm             # a default for every new VM and build
 ```

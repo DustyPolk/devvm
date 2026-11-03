@@ -223,7 +223,7 @@ func (e *LoggedError) Unwrap() error { return e.Msg }
 
 // ImageSpec is an image to build.
 type ImageSpec struct {
-	Image   string   // its name: base, or base's layers joined with + (node+claude)
+	Image   string   // its name: base, or base's layers joined with + (docker+foo)
 	Key     string   // its key (image.Key); the backend stores it under it
 	Parent  string   // its parent's key; "" for base
 	From    *From    // base only: the container image it starts from; nil for Ubuntu

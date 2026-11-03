@@ -16,6 +16,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/hostgit"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/proxy"
@@ -211,7 +212,7 @@ func (e syncer) checkStartLinks(st *state.VM) error {
 
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
 func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage, error) {
-	vm, img, net := st.Name(), st.Get(state.KeyImage), netpolicy.On(st)
+	vm, names, net := st.Name(), st.ToolNames(), netpolicy.On(st)
 	slug, files, proxyURL := in.slug, in.files, in.proxyURL
 	if err := checkLinks(vm, slug, in.links); err != nil {
 		return nil, err
@@ -272,7 +273,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 
 	// The agents' config: folders to link to their mounts, files copied.
 	// Never their history.
-	agents := agentsOf(img)
+	agents := image.AgentsOf(names)
 	var links bytes.Buffer
 	for _, a := range agents {
 		for _, rel := range agentDirs(e.Dirs.Home, a) {
@@ -336,7 +337,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	}
 
 	if net {
-		if err := e.stageNet(s, store, vm, img, salt); err != nil {
+		if err := e.stageNet(s, store, vm, names, salt); err != nil {
 			return nil, err
 		}
 	}
@@ -354,13 +355,13 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 // logins' copies with placeholders ending in its salt, and its agents'
 // settings files with the values under secret-looking keys taken out (one
 // that can't be read that way isn't sent).
-func (e syncer) stageNet(s *stage, store *secrets.Store, vm, img, salt string) error {
+func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
 	ca, err := os.ReadFile(filepath.Join(e.Dirs.CA(), "ca.pem"))
 	if err != nil {
 		return err
 	}
 	s.put("ca/devvm-proxy.crt", 0o644, ca)
-	for _, kind := range store.Logins(img) {
+	for _, kind := range store.Logins(tools) {
 		data, err := store.VMLogin(kind, salt)
 		if err != nil {
 			return msg.LoginCopyFailed(kind, err.Error(), vm).Because(err)

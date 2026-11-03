@@ -38,7 +38,7 @@ A setting is a value devvm keeps, which a user reads and changes. Each setting i
 - **With `-g`, it shows or changes what new VMs get.** devvm size -g --memory 16, devvm ports -g none and devvm network -g on change the defaults. A setting takes `-g` only when new VMs get a default for it, so devvm git-protect and devvm ssh-agent have none, and devvm retention is about the whole machine.
 - **With `--json`, it only shows.** `showsOnly` refuses a value, so devvm network --json off is a usage error and changes nothing.
 
-The commands that are settings are size, ports, network, ssh-agent, git-protect and retention. tools isn't one, because its value is a list that devvm tools add and devvm tools rm change. setup isn't one either: it asks the first-run questions, and its flags, `--backend` and `--features`, answer the two that no other command sets.
+The commands that are settings are size, ports, network, ssh-agent, git-protect and retention. tools isn't one, because its value is a list that devvm tools add and devvm tools rm change, and that devvm tools shows in a terminal as a picker whose changes become add and rm. setup isn't one either: it asks the first-run questions, and its flags, `--backend`, `--features` and `--agents`, answer the three that no other command sets.
 
 A command is a setting when its bare form shows one value and the user can type the new value after its name. When the value is a list that grows and shrinks, give it add and rm, as devvm ports has besides devvm ports LIST.
 
@@ -48,14 +48,14 @@ A command is a setting when its bare form shows one value and the user can type 
 
 A positional argument is a thing the command acts on, and everything else is a flag.
 
-- **Things acted on are arguments.** devvm build node+claude builds that image, devvm secret rm github deletes that secret, and devvm link add db 5432 links to that VM's port.
-- **How a command acts is a flag.** devvm link add db 5432 --as postgres names the link postgres, which changes how the link is made but isn't what's linked. devvm gc --history deletes more kinds of things, and devvm network log --blocked shows one kind of entry.
-- **Each thing is a word of its own.** devvm tools add python claude takes two tools, not python,claude or python+claude, and devvm images rm IMAGE|KEY... takes as many images as you give it. A `+` only ever joins an image's parts, as in node+claude.
+- **Things acted on are arguments.** devvm build foo+bar builds that image, devvm secret rm github deletes that secret, and devvm link add db 5432 links to that VM's port.
+- **How a command acts is a flag.** devvm link add db 5432 --as postgres names the link postgres, which changes how the link is made but isn't what's linked. devvm gc --history deletes more kinds of things, and devvm network log --blocked shows one kind of entry. devvm acts on this folder's VM, so what a new VM gets is how it makes the VM: devvm --agents claude --layers docker, never a word after devvm.
+- **Each thing is a word of its own.** devvm tools add python claude takes two tools, never joined with a comma or a `+`, and devvm images rm IMAGE|KEY... takes as many images as you give it. A `+` only ever joins an image's layers, as in foo+bar.
 - **One value is one word, even when it's a list.** devvm ports 5173,8000-8010 sets one value, the ports to forward, so its list is one word with commas, as `--features omb,fzf` is.
 - **Fixed positions read in the order a user says them.** devvm link add TARGET PORT names what it links to, then which of its ports.
 - **A free-form argument goes after a verb.** devvm secret set NAME and devvm link add TARGET PORT put the name after a subcommand, so a secret or a VM called `add` can't be read as a command. A bare noun's own argument is only a fixed word or a value no subcommand can look like, such as devvm network on or devvm ports 5173.
 
-Write the arguments in the `Use` as a user types them: `PLACEHOLDER`s in capitals, words in lower case, `[]` for an optional one, `|` between choices and `...` for one or more. A `Use` shows arguments only, so `gc [--tools [--recent] [TOOL...]]` shows its flags only because `TOOL...` needs `--tools`.
+Write the arguments in the `Use` as a user types them: `PLACEHOLDER`s in capitals, words in lower case, `[]` for an optional one, `|` between choices and `...` for one or more. A `Use` shows arguments only, so `gc [--tool-images [--recent] [TOOL...]]` shows its flags only because `TOOL...` needs `--tool-images`.
 
 **In a review:** is each argument a thing the command acts on, and would moving any of them to a flag make the command clearer?
 
@@ -65,7 +65,7 @@ A command that deletes something the user can't get back asks first, and a scrip
 
 - **It calls `confirmed`.** devvm gc, devvm gc --caches, devvm images rm and devvm secret rm call `confirmed(u, force, "devvm x", ask)` in `internal/cli`, which returns true with `--force`, asks the question in a terminal, and without a terminal refuses with `force_needed`, naming the command. That refusal is a failure, exit 1, not a usage error. devvm rm and devvm rebuild do the same in `internal/vm` and `internal/build`, because their question comes after they find the VM or the images, and a new command uses `confirmed` unless it has the same reason.
 - **It takes `--force` from `addForceFlag`, which only skips the question.** devvm gc --force deletes exactly what devvm gc lists and asks about. `--force` never deletes more, never skips a safety check that isn't the question, and never answers another question.
-- **Deleting more takes a flag of its own.** devvm gc deletes stale images and unused tool images, and each wider kind has its own flag: `--tools` for the current tools no VM has, with `--recent` for those built in the last hour, `--history` for agents' history exports, `--orphans` for what devvm keeps for VMs that their backend no longer has, `--nix-cache` for the shared Nix cache and `--caches` for the backends' own caches. A user reads what a command deletes from its flags.
+- **Deleting more takes a flag of its own.** devvm gc deletes stale images and unused tool images, and each wider kind has its own flag: `--tool-images` for the current shared tool images no VM has, with `--recent` for those built in the last hour, `--history` for agents' history exports, `--orphans` for what devvm keeps for VMs that their backend no longer has, `--nix-cache` for the shared Nix cache and `--caches` for the backends' own caches. A user reads what a command deletes from its flags.
 - **Skipping a step takes a flag of its own too.** devvm rm exports the agents' history first, and `--no-export` skips the export, so devvm rm --force still exports.
 - **Its question's ID answers to `--force`** in `msg.AnswerFor`, so `--no-input` names `--force`. A question that protects work only the user can judge, such as devvm rm deleting the VM of a folder this one is inside, has no flag, and goes in `terminalOnly` with why.
 

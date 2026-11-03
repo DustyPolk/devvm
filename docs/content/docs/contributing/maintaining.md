@@ -12,7 +12,7 @@ For maintainers: version bumps and releases. Run the scripts with mise, which pu
 - `mise` moves base's mise (`assets/layers/base.sh`) and devvm's host mise (`internal/tools/mise.go`) together: the host one writes the lock base's installs from.
 - The shared tools aren't pinned: holds go in `assets/shared-tools/mise.toml` (`node = "24"` stays on that major). `testdata/mise.lock` is a fixed lock for the tests.
 - `assets/layers/ubuntu-cloud.gpg` is Ubuntu's cloud image signing key (fingerprint `D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`), from keyserver.ubuntu.com. If Ubuntu changes it, base builds stop with `ubuntu_bad_signature`: fetch the new key, check its fingerprint against Ubuntu's announcement, and replace the file (`gpg --export FPR`).
-- Edited scripts change image keys, so the affected images rebuild on next use. Build them in a sandbox of their own (`LIMA_HOME`, `DEVVM_LIMA_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`) before committing (`devvm build node+python+…`), then `devvm gc`, and run the [end-to-end tests](_index.md#end-to-end-tests).
+- Edited scripts change image keys, so the affected images rebuild on next use. Build them in a sandbox of their own (`LIMA_HOME`, `DEVVM_LIMA_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`) before committing (`devvm build docker`, or a VM made with the tools whose build script changed), then `devvm gc`, and run the [end-to-end tests](_index.md#end-to-end-tests).
 
 ## Releasing
 

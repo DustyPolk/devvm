@@ -254,6 +254,11 @@ func TestDetect(t *testing.T) {
 	if got := Detect(d); !slices.Equal(got, []string{"node", "python", "go", "nix"}) {
 		t.Errorf("Detect with flake.nix = %v", got)
 	}
+	// Each with the first of its files that calls for it.
+	want := []Found{{"node", "package.json"}, {"python", "pyproject.toml"}, {"go", "go.mod"}, {"nix", "flake.nix"}}
+	if got := DetectFiles(d); !slices.Equal(got, want) {
+		t.Errorf("DetectFiles = %v, want %v", got, want)
+	}
 }
 
 // A default.nix calls for nix only when it makes a shell, and only as a

@@ -159,6 +159,11 @@ func AgentUnloadFailed(key string) M {
 	return M{id: "agent_unload_failed", vals: []val{{"key", key}}}
 }
 
+// AgentsHelp is [agents_help]: "Pick the coding agents new VMs get. Use up and down to move, space to toggle and enter to confirm."
+func AgentsHelp() M {
+	return M{id: "agents_help"}
+}
+
 // AlreadyStopped is [already_stopped]: "{{.vm}} is already stopped"
 func AlreadyStopped(vm string) M {
 	return M{id: "already_stopped", vals: []val{{"vm", vm}}}
@@ -524,6 +529,16 @@ func CustomLayerRemove(layer string, vm string) M {
 	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
 }
 
+// DefaultAgents is [default_agents]: "New VMs get these coding agents: {{.agents}}. To change them, run devvm setup --agents."
+func DefaultAgents(agents string) M {
+	return M{id: "default_agents", vals: []val{{"agents", agents}}}
+}
+
+// DefaultAgentsNone is [default_agents_none]: "New VMs get no coding agents. To choose some, run devvm setup --agents."
+func DefaultAgentsNone() M {
+	return M{id: "default_agents_none"}
+}
+
 // DefaultBackend is [default_backend]: "new VMs get the {{.backend}} backend"
 func DefaultBackend(backend string) M {
 	return M{id: "default_backend", vals: []val{{"backend", backend}}}
@@ -637,11 +652,6 @@ func DesktopStartFailed(vm string) M {
 // DesktopVMStopped is [desktop_vm_stopped]: "{{.vm}} stopped, and its desktop with it."
 func DesktopVMStopped(vm string) M {
 	return M{id: "desktop_vm_stopped", vals: []val{{"vm", vm}}}
-}
-
-// Detected is [detected]: "detected a {{.found}} project"
-func Detected(found string) M {
-	return M{id: "detected", vals: []val{{"found", found}}}
 }
 
 // DevcontainerBadValue is [devcontainer_bad_value]: "{{.file}} has a value for {{.key}} that devcontainer.json doesn't allow. Fix it, or run devvm --no-devcontainer."
@@ -1214,7 +1224,7 @@ func GCMise(count int, size string) M {
 	return M{id: "gc_mise", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
-// GCNamesNeedTools is [gc_names_need_tools]: "Tool names such as {{.tool}} go with --tools. Run devvm gc --tools {{.tool}}."
+// GCNamesNeedTools is [gc_names_need_tools]: "Tool names such as {{.tool}} go with --tool-images. Run devvm gc --tool-images {{.tool}}."
 func GCNamesNeedTools(tool string) M {
 	return M{id: "gc_names_need_tools", vals: []val{{"tool", tool}}}
 }
@@ -1284,12 +1294,12 @@ func GCOrphansUnknown(backend string) M {
 	return M{id: "gc_orphans_unknown", vals: []val{{"backend", backend}}}
 }
 
-// GCRecentMaking is [gc_recent_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tools --recent again once that's done."
+// GCRecentMaking is [gc_recent_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tool-images --recent again once that's done."
 func GCRecentMaking() M {
 	return M{id: "gc_recent_making"}
 }
 
-// GCRecentNeedsTools is [gc_recent_needs_tools]: "--recent goes with --tools. Run devvm gc --tools --recent."
+// GCRecentNeedsTools is [gc_recent_needs_tools]: "--recent goes with --tool-images. Run devvm gc --tool-images --recent."
 func GCRecentNeedsTools() M {
 	return M{id: "gc_recent_needs_tools"}
 }
@@ -1299,7 +1309,7 @@ func GCTools(count int, size string) M {
 	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
-// GCToolsMaking is [gc_tools_making]: "{{.count}} current shared tool images no VM has stay because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tools again once that's done."
+// GCToolsMaking is [gc_tools_making]: "{{.count}} current shared tool images no VM has stay because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tool-images again once that's done."
 func GCToolsMaking(count int, tools string) M {
 	return M{id: "gc_tools_making", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"tools", tools}}}
 }
@@ -1309,7 +1319,7 @@ func GCToolsNoVM(count int, size string, tools string) M {
 	return M{id: "gc_tools_no_vm", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}, {"tools", tools}}}
 }
 
-// GCToolsRecent is [gc_tools_recent]: "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tools --recent to delete them now."
+// GCToolsRecent is [gc_tools_recent]: "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tool-images --recent to delete them now."
 func GCToolsRecent(count int, tools string) M {
 	return M{id: "gc_tools_recent", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"tools", tools}}}
 }
@@ -1689,7 +1699,7 @@ func KVMAccess(fix string) M {
 	return M{id: "kvm_access", vals: []val{{"fix", fix}}}
 }
 
-// LayerCreated is [layer_created]: "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm node+{{.layer}} to start a VM with it."
+// LayerCreated is [layer_created]: "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm --layers {{.layer}} to make a VM with it."
 func LayerCreated(layer string, policy string, script string) M {
 	return M{id: "layer_created", vals: []val{{"layer", layer}, {"policy", policy}, {"script", script}}}
 }
@@ -1699,22 +1709,12 @@ func LayerExists(file string) M {
 	return M{id: "layer_exists", vals: []val{{"file", file}}}
 }
 
-// LayerIsCommand is [layer_is_command]: "Your layer {{.file}} is named {{.layer}}, a word devvm keeps for its commands, so devvm can't use it. Rename the file."
-func LayerIsCommand(file string, layer string) M {
-	return M{id: "layer_is_command", vals: []val{{"file", file}, {"layer", layer}}}
-}
-
-// LayerNameCommand is [layer_name_command]: "{{.layer}} is a word devvm keeps for its commands. Choose another name for your layer."
-func LayerNameCommand(layer string) M {
-	return M{id: "layer_name_command", vals: []val{{"layer", layer}}}
-}
-
 // LayerNameInvalid is [layer_name_invalid]: "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
 func LayerNameInvalid(layer string) M {
 	return M{id: "layer_name_invalid", vals: []val{{"layer", layer}}}
 }
 
-// LayerNameReserved is [layer_name_reserved]: "{{.layer}} is the name of one of devvm's own images. Choose another name for your layer."
+// LayerNameReserved is [layer_name_reserved]: "{{.layer}} is the name of base, a built-in layer or a shared tool. Choose another name for your layer."
 func LayerNameReserved(layer string) M {
 	return M{id: "layer_name_reserved", vals: []val{{"layer", layer}}}
 }
@@ -2164,6 +2164,11 @@ func NetworkOnLinked(targets string, vm string) M {
 	return M{id: "network_on_linked", vals: []val{{"targets", targets}, {"vm", vm}}}
 }
 
+// NewVMGets is [new_vm_gets]: "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its layers. To choose others, give --tools, --agents and --layers."
+func NewVMGets(layers string, tools string, vm string) M {
+	return M{id: "new_vm_gets", vals: []val{{"layers", layers}, {"tools", tools}, {"vm", vm}}}
+}
+
 // NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
 func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
@@ -2179,24 +2184,14 @@ func NoCodeCommand(host string) M {
 	return M{id: "no_code_command", vals: []val{{"host", host}}}
 }
 
-// NoCommandOrImage is [no_command_or_image]: "There's no devvm command or image named {{.word}}."
-func NoCommandOrImage(word string) M {
-	return M{id: "no_command_or_image", vals: []val{{"word", word}}}
+// NoCommand is [no_command]: "There's no command devvm {{.word}}. Run devvm --help to see the commands."
+func NoCommand(word string) M {
+	return M{id: "no_command", vals: []val{{"word", word}}}
 }
 
-// NoCommandOrImageBoth is [no_command_or_image_both]: "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}} or the image {{.image}}?"
-func NoCommandOrImageBoth(command string, image string, word string) M {
-	return M{id: "no_command_or_image_both", vals: []val{{"command", command}, {"image", image}, {"word", word}}}
-}
-
-// NoCommandOrImageCommand is [no_command_or_image_command]: "There's no devvm command or image named {{.word}}. Did you mean devvm {{.command}}?"
-func NoCommandOrImageCommand(command string, word string) M {
-	return M{id: "no_command_or_image_command", vals: []val{{"command", command}, {"word", word}}}
-}
-
-// NoCommandOrImageImage is [no_command_or_image_image]: "There's no devvm command or image named {{.word}}. Did you mean the image {{.image}}?"
-func NoCommandOrImageImage(image string, word string) M {
-	return M{id: "no_command_or_image_image", vals: []val{{"image", image}, {"word", word}}}
+// NoCommandLike is [no_command_like]: "There's no command devvm {{.word}}. Did you mean devvm {{.command}}?"
+func NoCommandLike(command string, word string) M {
+	return M{id: "no_command_like", vals: []val{{"command", command}, {"word", word}}}
 }
 
 // NoDevcontainerFlagIgnored is [no_devcontainer_flag_ignored]: "The --no-devcontainer flag applies only to new VMs."
@@ -2217,11 +2212,6 @@ func NoFeature(feature string, features string) M {
 // NoGithubToken is [no_github_token]: "{{.vm}} uses github, but no GitHub token is saved. Run devvm secret set github."
 func NoGithubToken(vm string) M {
 	return M{id: "no_github_token", vals: []val{{"vm", vm}}}
-}
-
-// NoImageFor is [no_image_for]: "{{.dir}} doesn't show which image it needs. Name one as devvm IMAGE, joining any of {{.envs}} and the agents {{.agents}} with +."
-func NoImageFor(agents string, dir string, envs string) M {
-	return M{id: "no_image_for", vals: []val{{"agents", agents}, {"dir", dir}, {"envs", envs}}}
 }
 
 // NoImageNamed is [no_image_named]: "There's no image {{.image}}. Run devvm images to list them."
@@ -2377,6 +2367,66 @@ func PackFailed(vm string) M {
 // PackingImage is [packing_image]: "packing {{.vm}} into its image"
 func PackingImage(vm string) M {
 	return M{id: "packing_image", vals: []val{{"vm", vm}}}
+}
+
+// PartNoneAlone is [part_none_alone]: "{{.flag}} takes none alone, or a list of names without it."
+func PartNoneAlone(flag string) M {
+	return M{id: "part_none_alone", vals: []val{{"flag", flag}}}
+}
+
+// PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools."
+func PartsFlagsIgnored(vm string) M {
+	return M{id: "parts_flags_ignored", vals: []val{{"vm", vm}}}
+}
+
+// PickAgents is [pick_agents]: "Coding agents, which you start in the VM's shell"
+func PickAgents() M {
+	return M{id: "pick_agents"}
+}
+
+// PickCalledFor is [pick_called_for]: "for {{.file}}"
+func PickCalledFor(file string) M {
+	return M{id: "pick_called_for", vals: []val{{"file", file}}}
+}
+
+// PickLayerDocker is [pick_layer_docker]: "Docker's engine, CLI, BuildKit and Compose"
+func PickLayerDocker() M {
+	return M{id: "pick_layer_docker"}
+}
+
+// PickLayerNix is [pick_layer_nix]: "Nix, direnv and nix-direnv"
+func PickLayerNix() M {
+	return M{id: "pick_layer_nix"}
+}
+
+// PickLayerYours is [pick_layer_yours]: "your layer"
+func PickLayerYours() M {
+	return M{id: "pick_layer_yours"}
+}
+
+// PickLayers is [pick_layers]: "Layers, which a VM gets only when devvm makes it"
+func PickLayers() M {
+	return M{id: "pick_layers"}
+}
+
+// PickNewHelp is [pick_new_help]: "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
+func PickNewHelp(vm string) M {
+	return M{id: "pick_new_help", vals: []val{{"vm", vm}}}
+}
+
+// PickSetupAgent is [pick_setup_agent]: "from devvm setup"
+func PickSetupAgent() M {
+	return M{id: "pick_setup_agent"}
+}
+
+// PickToolchains is [pick_toolchains]: "Toolchains"
+func PickToolchains() M {
+	return M{id: "pick_toolchains"}
+}
+
+// PickVMHelp is [pick_vm_help]: "Choose {{.vm}}'s shared tools. Use up and down to move, space to toggle and enter to confirm."
+func PickVMHelp(vm string) M {
+	return M{id: "pick_vm_help", vals: []val{{"vm", vm}}}
 }
 
 // PolicyBrokenDeny is [policy_broken_deny]: "Line {{.line}} of {{.file}}, {{.rule}}, reads as a deny but isn't a rule, so every VM whose proxy reads that file denies everything until it's fixed. Fix the line or remove it."
@@ -2719,9 +2769,9 @@ func SecretUsed(secret string, vm string) M {
 	return M{id: "secret_used", vals: []val{{"secret", secret}, {"vm", vm}}}
 }
 
-// SecretWithImage is [secret_with_image]: "{{.vm}}'s image has claude, so the VM always uses the Claude Code token."
-func SecretWithImage(vm string) M {
-	return M{id: "secret_with_image", vals: []val{{"vm", vm}}}
+// SecretWithClaude is [secret_with_claude]: "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
+func SecretWithClaude(vm string) M {
+	return M{id: "secret_with_claude", vals: []val{{"vm", vm}}}
 }
 
 // SetidFiles is [setid_files]: "The project folder has set-user-id or set-group-id files, which run as their owner for anyone who runs them: {{.files}}. To clear the bits, run chmod u-s,g-s FILE on each one."
@@ -3009,6 +3059,11 @@ func ToolNoDownload(tool string, version string) M {
 	return M{id: "tool_no_download", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
+// ToolNotLayer is [tool_not_layer]: "{{.tool}} is a shared tool, and an image holds only base and layers. Choose a VM's shared tools when devvm makes it, or with devvm tools."
+func ToolNotLayer(tool string) M {
+	return M{id: "tool_not_layer", vals: []val{{"tool", tool}}}
+}
+
 // ToolNotLocked is [tool_not_locked]: "The tools lock {{.lock}} has no version of {{.tool}}. Run devvm tools update to resolve the shared tools again."
 func ToolNotLocked(lock string, tool string) M {
 	return M{id: "tool_not_locked", vals: []val{{"lock", lock}, {"tool", tool}}}
@@ -3057,16 +3112,6 @@ func ToolsNeedResolve() M {
 // ToolsNewest is [tools_newest]: "{{.vm}} has the newest shared tools."
 func ToolsNewest(vm string) M {
 	return M{id: "tools_newest", vals: []val{{"vm", vm}}}
-}
-
-// ToolsNotImages is [tools_not_images]: "Shared tools aren't images, and the tools lock sets their versions, so devvm can't rebuild {{.tools}}. Rebuild the image under them instead, such as with devvm rebuild base."
-func ToolsNotImages(tools string) M {
-	return M{id: "tools_not_images", vals: []val{{"tools", tools}}}
-}
-
-// ToolsNotImagesRm is [tools_not_images_rm]: "{{.image}} names shared tools, and shared tools aren't images. Name the image under them, and run devvm gc to delete unused shared tool images."
-func ToolsNotImagesRm(image string) M {
-	return M{id: "tools_not_images_rm", vals: []val{{"image", image}}}
 }
 
 // ToolsResolveFailed is [tools_resolve_failed]: "Resolving the shared tools' versions failed. Check that you're online."
@@ -3119,9 +3164,19 @@ func UnknownFeature(feature string) M {
 	return M{id: "unknown_feature", vals: []val{{"feature", feature}}}
 }
 
-// UnknownLayer is [unknown_layer]: "There's no layer or shared tool {{.layer}}. Choose from {{.envs}} and the agents {{.agents}}."
-func UnknownLayer(agents string, envs string, layer string) M {
-	return M{id: "unknown_layer", vals: []val{{"agents", agents}, {"envs", envs}, {"layer", layer}}}
+// UnknownLayer is [unknown_layer]: "There's no layer {{.layer}}. Choose from {{.layers}}."
+func UnknownLayer(layer string, layers string) M {
+	return M{id: "unknown_layer", vals: []val{{"layer", layer}, {"layers", layers}}}
+}
+
+// UnknownPart is [unknown_part]: "There's no {{.given}} for {{.flag}}. Choose from {{.names}}, or none."
+func UnknownPart(flag string, given string, names string) M {
+	return M{id: "unknown_part", vals: []val{{"flag", flag}, {"given", given}, {"names", names}}}
+}
+
+// UnknownPartLike is [unknown_part_like]: "There's no {{.given}} for {{.flag}}. Did you mean {{.like}}?"
+func UnknownPartLike(flag string, given string, like string) M {
+	return M{id: "unknown_part_like", vals: []val{{"flag", flag}, {"given", given}, {"like", like}}}
 }
 
 // UnknownTool is [unknown_tool]: "There's no shared tool named {{.tool}}. The names are {{.tools}}."
@@ -3224,24 +3279,9 @@ func VMHasNetworks(file string, vm string) M {
 	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// VMIsNow is [vm_is_now]: "{{.vm}} is now {{.image}}"
-func VMIsNow(image string, vm string) M {
-	return M{id: "vm_is_now", vals: []val{{"image", image}, {"vm", vm}}}
-}
-
-// VMLacks is [vm_lacks]: "{{.vm}} doesn't have {{.layer}}. It has {{.has}}."
-func VMLacks(has string, layer string, vm string) M {
-	return M{id: "vm_lacks", vals: []val{{"has", has}, {"layer", layer}, {"vm", vm}}}
-}
-
-// VMLacksLayer is [vm_lacks_layer]: "{{.vm}} doesn't have the {{.layer}} layer, and only a new VM can get a layer. Save your work outside the project folder, then run devvm rm and devvm {{.image}}."
-func VMLacksLayer(image string, layer string, vm string) M {
-	return M{id: "vm_lacks_layer", vals: []val{{"image", image}, {"layer", layer}, {"vm", vm}}}
-}
-
-// VMLacksTools is [vm_lacks_tools]: "{{.vm}} doesn't have {{.tools}}. Run devvm tools add {{.tools}} to add them."
-func VMLacksTools(tools string, vm string) M {
-	return M{id: "vm_lacks_tools", vals: []val{{"tools", tools}, {"vm", vm}}}
+// VMLacks is [vm_lacks]: "{{.vm}} doesn't have the shared tool {{.tool}}. Its shared tools are {{.has}}."
+func VMLacks(has string, tool string, vm string) M {
+	return M{id: "vm_lacks", vals: []val{{"has", has}, {"tool", tool}, {"vm", vm}}}
 }
 
 // VMNameNoRoom is [vm_name_no_room]: "The {{.backend}} backend's VM names have at most {{.max}} characters, which leaves no room for the folder's name."
@@ -3294,6 +3334,11 @@ func VMSize(size string, vm string) M {
 	return M{id: "vm_size", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
+// VMToolsNow is [vm_tools_now]: "{{.vm}}'s shared tools are now {{.tools}}"
+func VMToolsNow(tools string, vm string) M {
+	return M{id: "vm_tools_now", vals: []val{{"tools", tools}, {"vm", vm}}}
+}
+
 // VMUnfinished is [vm_unfinished]: "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."
 func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
@@ -3342,6 +3387,7 @@ var specs = map[string]spec{
 	"agent_start_failed":               {fields: []string{"sock"}},
 	"agent_unchosen_stop":              {fields: []string{"vm"}},
 	"agent_unload_failed":              {fields: []string{"key"}},
+	"agents_help":                      {},
 	"already_stopped":                  {fields: []string{"vm"}},
 	"arg_blank":                        {fields: []string{"command"}},
 	"arg_missing":                      {fields: []string{"args", "command"}},
@@ -3415,6 +3461,8 @@ var specs = map[string]spec{
 	"creating_from_image":              {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":             {fields: []string{"vm"}},
 	"custom_layer_remove":              {fields: []string{"layer", "vm"}},
+	"default_agents":                   {fields: []string{"agents"}},
+	"default_agents_none":              {},
 	"default_backend":                  {fields: []string{"backend"}},
 	"delete_anyway":                    {},
 	"delete_failed":                    {fields: []string{"vm"}},
@@ -3438,7 +3486,6 @@ var specs = map[string]spec{
 	"desktop_ready":                    {fields: []string{"address", "password", "vm"}},
 	"desktop_start_failed":             {fields: []string{"vm"}},
 	"desktop_vm_stopped":               {fields: []string{"vm"}},
-	"detected":                         {fields: []string{"found"}},
 	"devcontainer_bad_value":           {fields: []string{"file", "key"}},
 	"devcontainer_build":               {fields: []string{"file", "key"}},
 	"devcontainer_changed":             {fields: []string{"file", "vm"}},
@@ -3650,8 +3697,6 @@ var specs = map[string]spec{
 	"kvm_access":                       {fields: []string{"fix"}},
 	"layer_created":                    {fields: []string{"layer", "policy", "script"}},
 	"layer_exists":                     {fields: []string{"file"}},
-	"layer_is_command":                 {fields: []string{"file", "layer"}},
-	"layer_name_command":               {fields: []string{"layer"}},
 	"layer_name_invalid":               {fields: []string{"layer"}},
 	"layer_name_reserved":              {fields: []string{"layer"}},
 	"layer_new_failed":                 {fields: []string{"reason"}},
@@ -3743,18 +3788,16 @@ var specs = map[string]spec{
 	"network_failed":                   {fields: []string{"reason"}},
 	"network_off_linked":               {fields: []string{"vm", "vms"}},
 	"network_on_linked":                {fields: []string{"targets", "vm"}},
+	"new_vm_gets":                      {fields: []string{"layers", "tools", "vm"}},
 	"newer_tools":                      {fields: []string{"tools"}},
 	"no_claude_token":                  {fields: []string{"vm"}},
 	"no_code_command":                  {fields: []string{"host"}},
-	"no_command_or_image":              {fields: []string{"word"}},
-	"no_command_or_image_both":         {fields: []string{"command", "image", "word"}},
-	"no_command_or_image_command":      {fields: []string{"command", "word"}},
-	"no_command_or_image_image":        {fields: []string{"image", "word"}},
+	"no_command":                       {fields: []string{"word"}},
+	"no_command_like":                  {fields: []string{"command", "word"}},
 	"no_devcontainer_flag_ignored":     {},
 	"no_digest":                        {fields: []string{"from"}},
 	"no_feature":                       {fields: []string{"feature", "features"}},
 	"no_github_token":                  {fields: []string{"vm"}},
-	"no_image_for":                     {fields: []string{"agents", "dir", "envs"}},
 	"no_image_named":                   {fields: []string{"image"}},
 	"no_image_named_from":              {fields: []string{"from", "image"}},
 	"no_input":                         {fields: []string{"answer"}},
@@ -3786,6 +3829,18 @@ var specs = map[string]spec{
 	"output_failed":                    {fields: []string{"reason"}},
 	"pack_failed":                      {fields: []string{"vm"}},
 	"packing_image":                    {fields: []string{"vm"}},
+	"part_none_alone":                  {fields: []string{"flag"}},
+	"parts_flags_ignored":              {fields: []string{"vm"}},
+	"pick_agents":                      {},
+	"pick_called_for":                  {fields: []string{"file"}},
+	"pick_layer_docker":                {},
+	"pick_layer_nix":                   {},
+	"pick_layer_yours":                 {},
+	"pick_layers":                      {},
+	"pick_new_help":                    {fields: []string{"vm"}},
+	"pick_setup_agent":                 {},
+	"pick_toolchains":                  {},
+	"pick_vm_help":                     {fields: []string{"vm"}},
 	"policy_broken_deny":               {fields: []string{"file", "line", "rule"}},
 	"policy_failed":                    {fields: []string{"reason"}},
 	"policy_not_rule":                  {fields: []string{"file", "line", "rule"}},
@@ -3854,7 +3909,7 @@ var specs = map[string]spec{
 	"secret_unuse_copied":              {fields: []string{"secret", "vm"}},
 	"secret_unused":                    {fields: []string{"secret", "vm"}},
 	"secret_used":                      {fields: []string{"secret", "vm"}},
-	"secret_with_image":                {fields: []string{"vm"}},
+	"secret_with_claude":               {fields: []string{"vm"}},
 	"setid_files":                      {fields: []string{"files"}},
 	"setid_root_files":                 {fields: []string{"files"}},
 	"setup_failed":                     {fields: []string{"reason"}},
@@ -3912,6 +3967,7 @@ var specs = map[string]spec{
 	"tool_bad_output":                  {fields: []string{"file"}},
 	"tool_bad_version":                 {fields: []string{"tool", "version"}},
 	"tool_no_download":                 {fields: []string{"tool", "version"}},
+	"tool_not_layer":                   {fields: []string{"tool"}},
 	"tool_not_locked":                  {fields: []string{"lock", "tool"}},
 	"tool_stepped_back":                {fields: []string{"older", "tool", "version"}},
 	"tool_unbuilt":                     {fields: []string{"tool", "version"}},
@@ -3922,8 +3978,6 @@ var specs = map[string]spec{
 	"tools_joined":                     {fields: []string{"cmd", "given"}},
 	"tools_need_resolve":               {},
 	"tools_newest":                     {fields: []string{"vm"}},
-	"tools_not_images":                 {fields: []string{"tools"}},
-	"tools_not_images_rm":              {fields: []string{"image"}},
 	"tools_resolve_failed":             {},
 	"tools_switch":                     {fields: []string{"vm"}},
 	"tools_unmounted":                  {fields: []string{"tools", "vm"}},
@@ -3934,7 +3988,9 @@ var specs = map[string]spec{
 	"unfetched_commits":                {fields: []string{"refs"}},
 	"unfinished_image":                 {fields: []string{"vm"}},
 	"unknown_feature":                  {fields: []string{"feature"}},
-	"unknown_layer":                    {fields: []string{"agents", "envs", "layer"}},
+	"unknown_layer":                    {fields: []string{"layer", "layers"}},
+	"unknown_part":                     {fields: []string{"flag", "given", "names"}},
+	"unknown_part_like":                {fields: []string{"flag", "given", "like"}},
 	"unknown_tool":                     {fields: []string{"tool", "tools"}},
 	"unpacking_tools":                  {},
 	"unpublished":                      {fields: []string{"ports", "vm"}},
@@ -3955,10 +4011,7 @@ var specs = map[string]spec{
 	"vm_already_here":                  {fields: []string{"vm"}},
 	"vm_create_failed":                 {fields: []string{"vm"}},
 	"vm_has_networks":                  {fields: []string{"file", "vm"}},
-	"vm_is_now":                        {fields: []string{"image", "vm"}},
-	"vm_lacks":                         {fields: []string{"has", "layer", "vm"}},
-	"vm_lacks_layer":                   {fields: []string{"image", "layer", "vm"}},
-	"vm_lacks_tools":                   {fields: []string{"tools", "vm"}},
+	"vm_lacks":                         {fields: []string{"has", "tool", "vm"}},
 	"vm_name_no_room":                  {fields: []string{"backend", "max"}},
 	"vm_no_ssh":                        {fields: []string{"vm"}},
 	"vm_no_sshd":                       {fields: []string{"vm"}},
@@ -3969,6 +4022,7 @@ var specs = map[string]spec{
 	"vm_other_folder_rm":               {fields: []string{"vm", "was"}},
 	"vm_outdated":                      {fields: []string{"changed"}},
 	"vm_size":                          {fields: []string{"size", "vm"}},
+	"vm_tools_now":                     {fields: []string{"tools", "vm"}},
 	"vm_unfinished":                    {fields: []string{"vm"}},
 	"widen_parent_vm":                  {fields: []string{"cmd", "dir", "vm"}},
 	"widen_parent_vm_refused":          {fields: []string{"cmd", "dir", "vm"}},

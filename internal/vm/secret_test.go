@@ -15,7 +15,7 @@ import (
 func TestSecrets(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	n := Net{e}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	ctx := t.Context()
 	list := func() string {
@@ -61,11 +61,11 @@ func TestSecrets(t *testing.T) {
 	if st, _ := state.ReadVM(e.Dirs, vm); st.Get(secrets.KeySecrets) != "" {
 		t.Errorf("secrets=%q", st.Get(secrets.KeySecrets))
 	}
-	// An image with claude always uses the Claude token.
-	if err := st.Set(state.KeyImage, "base+claude"); err != nil {
+	// A VM with Claude Code always uses the Claude Code token.
+	if err := st.Set(state.KeyToolNames, "claude"); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SecretUse(ctx, "claude", false); msg.NamesOf(err) != "secret_with_image vm="+vm {
+	if err := n.SecretUse(ctx, "claude", false); msg.NamesOf(err) != "secret_with_claude vm="+vm {
 		t.Errorf("SecretUse(claude, false) = %v", msg.NamesOf(err))
 	}
 	if got := list(); !strings.Contains(got, "claude no "+vm+"\n") {

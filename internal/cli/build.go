@@ -24,11 +24,11 @@ func newBuildCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build IMAGE",
 		Short: "Build an image and the images under it, unless they're built",
-		Long: "Build an image, the images under it and the shared tools it names, unless they're built. " +
-			"IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base, " +
-			"with any shared tools, such as node+foo+claude.",
+		Long: "Build an image and the images under it, unless they're built. " +
+			"IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base. " +
+			"An image holds no shared tools: a VM gets those when devvm makes it, or with devvm tools.",
 		Example: examples(
-			"devvm build node+claude", "build base and the node and Claude Code tools",
+			"devvm build docker", "build base and the docker layer on it",
 			"devvm build foo+bar", "build base, foo and foo+bar",
 			"devvm build base --backend smolvm", "build base on the smolvm backend",
 		),
@@ -133,12 +133,12 @@ func pickFeatures(u *ui.UI) func([]build.Feature) []build.Feature {
 	return func(fs []build.Feature) []build.Feature {
 		choices := make([]ui.Choice, len(fs))
 		for i, f := range fs {
-			choices[i] = ui.Choice(f)
+			choices[i] = ui.Choice{Name: f.Name, Desc: f.Desc, On: f.On}
 		}
-		picked := u.Pick(msg.FeaturesHelp(), choices)
+		picked := u.Pick(msg.FeaturesHelp(), []ui.Section{{Choices: choices}})[0].Choices
 		out := make([]build.Feature, len(picked))
 		for i, c := range picked {
-			out[i] = build.Feature(c)
+			out[i] = build.Feature{Name: c.Name, Desc: c.Desc, On: c.On}
 		}
 		return out
 	}

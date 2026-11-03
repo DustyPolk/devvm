@@ -82,24 +82,13 @@ func readDir(dir string) []os.DirEntry {
 	return slices.DeleteFunc(es, func(e os.DirEntry) bool { return strings.IndexFunc(e.Name(), unicode.IsControl) >= 0 })
 }
 
-// agentsOf returns the agents an image name holds, in its order.
-func agentsOf(img string) []string {
-	var as []string
-	for p := range strings.SplitSeq(img, "+") {
-		if image.IsAgent(p) {
-			as = append(as, p)
-		}
-	}
-	return as
-}
-
-// AgentMounts returns the host folders a VM with that image mounts: its
-// agents' folders that exist under the home folder. One with a comma in
-// its path is left out on every backend, with a warning: Lima splits
-// mount options on commas, and Docker reads mounts as CSV.
-func (e Launch) AgentMounts(img string) []string {
+// AgentMounts returns the host folders a VM with these shared tools
+// mounts: its agents' folders that exist under the home folder. One with a
+// comma in its path is left out on every backend, with a warning: Lima
+// splits mount options on commas, and Docker reads mounts as CSV.
+func (e Launch) AgentMounts(tools []string) []string {
 	var dirs []string
-	for _, a := range agentsOf(img) {
+	for _, a := range image.AgentsOf(tools) {
 		for _, rel := range agentDirs(e.Dirs.Home, a) {
 			p := filepath.Join(e.Dirs.Home, rel)
 			if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
@@ -126,7 +115,7 @@ func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 	if err != nil {
 		return err
 	}
-	want := e.AgentMounts(st.Get(state.KeyImage))
+	want := e.AgentMounts(st.ToolNames())
 	added := missing(want, in.AgentDirs)
 	removed := missing(in.AgentDirs, want)
 	if len(added) == 0 && len(removed) == 0 {

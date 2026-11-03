@@ -179,26 +179,17 @@ func (b *Env) isLayer(layer string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// Environments returns what an image can be made of besides the agents:
-// base, the toolchains, the built-in layers and the user's.
-func (b *Env) Environments() []string {
-	layers := b.Layers()
-	return slices.Concat(layers[:1], image.Toolchains, layers[1:])
-}
-
-// CheckLayers refuses an image name with a part that isn't base, a shared
-// tool, a built-in layer or one of the user's layers. Names become file names: nothing else
-// gets past it. A layer of the user's named with a word devvm keeps for
-// its commands is refused, naming its file.
+// CheckLayers refuses an image name with a part that isn't base, a
+// built-in layer or one of the user's layers: a shared tool's name says
+// shared tools go in a VM, not an image. Names become file names: nothing
+// else gets past it.
 func (b *Env) CheckLayers(name string) error {
 	for p := range strings.SplitSeq(name, "+") {
-		if image.IsReserved(p) {
-			if fi, err := os.Stat(b.userLayer(p)); err == nil && fi.Mode().IsRegular() {
-				return msg.LayerIsCommand(b.userLayer(p), p)
-			}
-		}
-		if p != image.Base && !image.IsTool(p) && (!image.LayerName(p) || !b.isLayer(p)) {
-			return msg.UnknownLayer(strings.Join(image.Agents, " "), strings.Join(b.Environments(), " "), p)
+		switch {
+		case image.IsTool(p):
+			return msg.ToolNotLayer(p)
+		case p != image.Base && (!image.LayerName(p) || !b.isLayer(p)):
+			return msg.UnknownLayer(p, strings.Join(b.Layers(), " "))
 		}
 	}
 	return nil
@@ -234,9 +225,7 @@ func (b *Env) ToolTarget() (tools.Target, error) {
 	return tools.Target{Libc: libc, Format: b.Backend.ToolFormat()}, nil
 }
 
-// Build builds an image name's image, and the images under it, unless
-// they're built; then the shared tool images it names that the share
-// lacks.
+// Build builds an image, and the images under it, unless they're built.
 func (b Builds) Build(ctx context.Context, name string) error {
 	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
@@ -246,26 +235,7 @@ func (b Builds) Build(ctx context.Context, name string) error {
 	if err := Choice(b).chooseFeatures(); err != nil {
 		return err
 	}
-	if err := b.build(ctx, image.WithoutTools(name)); err != nil {
-		return err
-	}
-	groups := image.ToolsOf(name)
-	if len(groups) == 0 {
-		return nil
-	}
-	tg, err := b.ToolTarget()
-	if err != nil {
-		return err
-	}
-	files, err := tools.Versions{Env: b.Tools}.Files(ctx, groups, tg)
-	if err != nil {
-		return err
-	}
-	base, err := b.Key(image.Base)
-	if err != nil {
-		return err
-	}
-	return tools.Share{Env: b.Tools}.Build(ctx, b.Review, b.Backend, base, tg, files)
+	return b.build(ctx, name)
 }
 
 func (b Builds) build(ctx context.Context, name string) error {
@@ -561,10 +531,6 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
 		return err
-	}
-	// The tools lock versions the shared tools: they aren't rebuilt.
-	if t := image.ToolsOf(name); len(t) > 0 {
-		return msg.ToolsNotImages(strings.Join(t, " "))
 	}
 	if err := Choice(b).chooseFeatures(); err != nil {
 		return err

@@ -18,12 +18,14 @@ stdout '^total +- +- +\S+ +- +- +- +-\n'
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 exec devvm build foo
-exec devvm build claude
+project ag
+exec devvm --tools none --agents claude --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec sh -c 'cd "$SHARE" && echo x > go-1.20.0-0123456789ab.erofs && echo x > go-1.9.0-0123456789ab.erofs'
 mkdir $VMS
-exec sh -c 'printf "image=go\ndir=/p\nbackend=lima\nlibc=gnu\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
-exec sh -c 'printf "image=go\ndir=/q\nbackend=lima\nlibc=gnu\n" > "$VMS/devvm-gone-12345612345612"'
+exec sh -c 'printf "image=base\ndir=/p\nbackend=lima\nlibc=gnu\ntool_names=go\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
+exec sh -c 'printf "image=base\ndir=/q\nbackend=lima\nlibc=gnu\ntool_names=go\n" > "$VMS/devvm-gone-12345612345612"'
 exec sh -c 'echo devvm-p-12345612345612 >> "$STUB_DIR/instances"'
 mkdir $DATA/exports $DATA/logs $DATA/mise/2026.1.1
 exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
@@ -32,8 +34,8 @@ stub_reset
 exec devvm space
 stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm +-$'
 stdout '^images +lima +2 +\S+ +remade +\S+ +gc --backend lima +-$'
-stdout '^tools gnu +lima +\d+ +\S+ +remade +- +gc --tools +-$'
-stdout '^tools - +- +1 +\S+ +remade +\S+ +gc --tools +-$'
+stdout '^tools gnu +lima +\d+ +\S+ +remade +- +gc --tool-images +-$'
+stdout '^tools - +- +1 +\S+ +remade +\S+ +gc --tool-images +-$'
 stdout '^history +- +1 +\S+ +only copy +- +gc --history +-$'
 stdout '^network logs +- +2 +\S+ +log +- +devvm rm +-$'
 stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay +-$'

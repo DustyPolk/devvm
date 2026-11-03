@@ -18,7 +18,7 @@ cmp $GLOBAL $WORK/global.policy
 
 # allow, deny (a deny gets its !, once) and rm edit the VM's own file;
 # a rule already there isn't added again, in any case.
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 exec devvm network allow example.com api.example.com:8443
 stdout '^==> rule_added rule=example\.com vm=devvm-net-[0-9a-f]{14}$'
 stdout '^==> rule_added rule=api\.example\.com:8443 vm=devvm-net-[0-9a-f]{14}$'
@@ -119,7 +119,7 @@ exec devvm network rm -g ok3.test
 # A VM without network policy: devvm network shows it off, with its
 # rules, and changing them says they don't apply.
 project off
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm network
 stdout '\Aoff\n# devvm: layers/base\.policy\n'
 ! stderr .
@@ -129,7 +129,7 @@ stderr '^net_off_policy vm=devvm-off-[0-9a-f]{14}$'
 # A new VM doesn't get the rules of one by its name deleted outside devvm.
 vm_name OFF off
 exec limactl delete $OFF
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 exec sh -c 'ls "$VMS"'
 ! stdout 'devvm-off-.*\.policy'

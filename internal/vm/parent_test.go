@@ -52,14 +52,14 @@ func lookupVM(t *testing.T, e *Env) (dir, sub string) {
 func TestLookupParents(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
-	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	existingVM(t, e, Options{NoNetworkPolicy: true})
 	lib := subfolder(t, e, web, "src/lib")
 	if dir, sub := lookupVM(t, e); dir != web || sub != lib {
 		t.Errorf("from src/lib: %q for %q, want web's", dir, sub)
 	}
 	// The nearest one wins.
 	subfolder(t, e, web, "src")
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Here: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Here: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	src := e.Dir
@@ -140,7 +140,7 @@ func vmNames(t *testing.T, e *Env) []string {
 func TestUpInSubfolder(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
-	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	existingVM(t, e, Options{NoNetworkPolicy: true})
 	var infos msg.Recorder
 	e.Info = infos.Add
 	src := subfolder(t, e, web, "src")
@@ -166,7 +166,7 @@ func TestUpInSubfolder(t *testing.T) {
 		t.Errorf("%d VMs after yes", n)
 	}
 	answers(t, e, false)
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 2 {
@@ -176,14 +176,14 @@ func TestUpInSubfolder(t *testing.T) {
 	// repo), nothing asked.
 	subfolder(t, e, web, "tests")
 	asked = answers(t, e, true)
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Clone: true}); err == nil ||
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Clone: true}); err == nil ||
 		strings.HasPrefix(msg.NamesOf(err), "clone_needs_new_vm") || len(*asked) != 0 {
 		t.Errorf("--clone: %v, asked %q", msg.NamesOf(err), *asked)
 	}
 	// --here: a new VM, nothing asked.
 	subfolder(t, e, web, "docs")
 	asked = answers(t, e, true)
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Here: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Here: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if len(*asked) != 0 || len(vmNames(t, e)) != 3 {
@@ -196,7 +196,7 @@ func TestUpInSubfolder(t *testing.T) {
 func TestShellDir(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
-	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	existingVM(t, e, Options{NoNetworkPolicy: true})
 	src := subfolder(t, e, web, "src")
 	_, p, err := e.lookup(t.Context(), "", true)
 	if err != nil || p == nil {
@@ -236,7 +236,7 @@ func TestShellDir(t *testing.T) {
 func TestCommandsInSubfolder(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
-	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := vmName(t, e)
 	var infos msg.Recorder
 	e.Info = infos.Add
@@ -292,7 +292,7 @@ func TestWidenParentVM(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.ExecFunc = noDirect
 	web := e.Dir
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := (Net{e}).SetNetwork(t.Context(), true); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -415,7 +415,7 @@ func policyHas(t *testing.T, e *Env, vm, rule string) bool {
 func TestSubfolderRepo(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
-	existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := vmName(t, e)
 	src := subfolder(t, e, web, "pkg/src")
 	pkg := filepath.Dir(src)
@@ -450,7 +450,7 @@ func TestSubfolderRepo(t *testing.T) {
 		t.Errorf("Shell = %v, %d VMs", c.Args, len(vmNames(t, e)))
 	}
 	answers(t, e, false)
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 2 {
@@ -460,7 +460,7 @@ func TestSubfolderRepo(t *testing.T) {
 	subfolder(t, e, web, "pkg/docs")
 	e.Terminal = func() bool { return false }
 	e.Ask, e.Confirm = unasked(t), unasked(t)
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if n := len(vmNames(t, e)); n != 3 {

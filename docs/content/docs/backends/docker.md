@@ -76,7 +76,7 @@ Use a VM backend (Lima or smolvm) for any of these.
 
 ## The docker layer
 
-The [docker layer](../using/images.md#built-in-layers), as in `devvm node+docker`, runs Docker inside a Docker VM only under Sysbox, on a Linux engine on your machine with Sysbox's runtime (`sysbox-runc`). `devvm doctor --backend docker` reports whether the engine has it. Anywhere else, devvm refuses the layer before anything changes, so use a VM backend, Lima or smolvm, which run Docker inside with nothing more given up. Docker Desktop has no Sysbox.
+The [docker layer](../using/images.md#built-in-layers), as in `devvm --layers docker`, runs Docker inside a Docker VM only under Sysbox, on a Linux engine on your machine with Sysbox's runtime (`sysbox-runc`). `devvm doctor --backend docker` reports whether the engine has it. Anywhere else, devvm refuses the layer before anything changes, so use a VM backend, Lima or smolvm, which run Docker inside with nothing more given up. Docker Desktop has no Sysbox.
 
 Docker's engine needs more than devvm gives its other containers, and Sysbox gives it that without `--privileged`, in a user namespace of the VM's own. devvm never runs a container `--privileged`, because root in a privileged container has every capability and every device, without Docker's seccomp or AppArmor profile. It can load kernel modules and write the engine's disks, so on Linux it's, in effect, root on your machine. On Docker Desktop it's root of Desktop's VM, with every container in it and the folders Desktop shares, your home among them. Sysbox's own code is part of the boundary.
 

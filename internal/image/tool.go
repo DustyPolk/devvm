@@ -18,15 +18,16 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// Toolchains are the shared toolchains an image name can hold, in the
-// fixed order names list them (project.Detect's).
+// Toolchains are the shared toolchains a VM can have, in the fixed order
+// a VM's list holds them (project.Detect's).
 var Toolchains = []string{"node", "python", "rust", "go"}
 
-// Agents are the shared coding agents an image name can hold, listed last.
+// Agents are the shared coding agents a VM can have, listed after its
+// toolchains.
 var Agents = []string{"claude", "codex", "opencode"}
 
-// IsTool reports whether a name in an image name is a shared tool's (a
-// toolchain or an agent) rather than a layer's.
+// IsTool reports whether a name is a shared tool's (a toolchain or an
+// agent) rather than a layer's.
 func IsTool(name string) bool {
 	return slices.Contains(Toolchains, name) || slices.Contains(Agents, name)
 }
@@ -34,7 +35,31 @@ func IsTool(name string) bool {
 // IsAgent reports whether a name is an agent's.
 func IsAgent(name string) bool { return slices.Contains(Agents, name) }
 
-// GroupTools returns the tools in the lock behind a name image names take:
+// SortTools returns shared tools' names in a VM's order, each once: the
+// toolchains in their fixed order, then the agents. Names that aren't
+// shared tools are left out.
+func SortTools(names []string) []string {
+	var out []string
+	for _, t := range slices.Concat(Toolchains, Agents) {
+		if slices.Contains(names, t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// AgentsOf returns the agents among shared tools' names, in their order.
+func AgentsOf(names []string) []string {
+	var out []string
+	for _, n := range names {
+		if IsAgent(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// GroupTools returns the tools in the lock behind a shared tool's name:
 // node is node, pnpm and bun; python is python and uv.
 func GroupTools(name string) []string {
 	switch name {
@@ -46,38 +71,24 @@ func GroupTools(name string) []string {
 	return []string{name}
 }
 
-// ToolsOf returns an image name's shared tools, in its order:
-// node+foo+claude's are node and claude.
-func ToolsOf(name string) []string {
-	var out []string
-	for p := range strings.SplitSeq(name, "+") {
-		if IsTool(p) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // Normalize returns an image name's canonical form, so the same layers
-// and tools always make one image: the toolchains in their fixed order,
-// then the layers bottom-up as given, then the agents, without base, which
-// every image is built on; base alone when there's nothing else.
+// always make one image: the layers bottom-up as given, each once, without
+// base, which every image is built on; base alone when there's nothing
+// else. An empty name stays empty, for CheckLayers to refuse.
 func Normalize(name string) string {
-	given := strings.Split(name, "+")
+	if name == "" {
+		return ""
+	}
+	return Of(strings.Split(name, "+"))
+}
+
+// Of is the image with these layers, bottom-up: base when there are none.
+// base and repeats are dropped.
+func Of(layers []string) string {
 	var parts []string
-	for _, t := range Toolchains {
-		if slices.Contains(given, t) {
-			parts = append(parts, t)
-		}
-	}
-	for _, p := range given {
-		if p != Base && !IsTool(p) {
+	for _, p := range layers {
+		if p != Base && p != "" && !slices.Contains(parts, p) {
 			parts = append(parts, p)
-		}
-	}
-	for _, a := range Agents {
-		if slices.Contains(given, a) {
-			parts = append(parts, a)
 		}
 	}
 	if len(parts) == 0 {
@@ -86,20 +97,12 @@ func Normalize(name string) string {
 	return strings.Join(parts, "+")
 }
 
-// WithoutTools returns the image an image name is built from: base and its
-// layers, without the shared tools. node+foo+claude's is foo; node's is
-// base.
-func WithoutTools(name string) string {
-	var parts []string
-	for p := range strings.SplitSeq(name, "+") {
-		if p != Base && !IsTool(p) {
-			parts = append(parts, p)
-		}
+// LayersOf is an image's layers, bottom-up: none for base.
+func LayersOf(name string) []string {
+	if name == Base || name == "" {
+		return nil
 	}
-	if len(parts) == 0 {
-		return Base
-	}
-	return strings.Join(parts, "+")
+	return strings.Split(name, "+")
 }
 
 // Tool is a shared tool at the version the tools lock gives it.

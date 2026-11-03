@@ -103,7 +103,7 @@ The settings that the [environment table](../using/settings.md#environment) list
 devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a [test build](#test-builds), `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A release ignores it:
 
 ```sh
-DEVVM_UNREVIEWED=smolvm:ports-all devvm --backend smolvm base
+DEVVM_UNREVIEWED=smolvm:ports-all devvm --backend smolvm
 ```
 
 It's for tests only, of an emulation before its review: none needs it now, as every emulation is reviewed. It never makes a feature a backend lacks usable, and `devvm doctor` still shows the feature `unreviewed`.

@@ -26,7 +26,7 @@ func (t Share) NoVM(ls []Listed, names []string) []Listed {
 }
 
 // NoVMRecent is NoVM, also returning the ones it keeps because they were
-// built in the last hour: devvm gc --tools says so, and with --force
+// built in the last hour: devvm gc --tool-images says so, and with --force
 // deletes them too.
 func (t Share) NoVMRecent(ls []Listed, names []string) (old, recent []Listed) {
 	for _, l := range ls {

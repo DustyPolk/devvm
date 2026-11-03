@@ -67,7 +67,7 @@ func TestUpDevcontainer(t *testing.T) {
 	if err := state.WritePorts(e.Dirs, "5173"); err != nil {
 		t.Fatal(err)
 	}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	for k, want := range map[string]string{
 		state.KeyFrom: "node@sha256:" + strings.Repeat("a", 64), KeyPorts: "5173",
 		KeyDevcontainerCreate: "", KeyDevcontainerEnv: `[{"name":"A","value":"'web'"}]`,
@@ -139,7 +139,7 @@ func TestUpDevcontainerCommandFails(t *testing.T) {
 		}
 		return nil
 	}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	if want := "devcontainer_command_failed command=onCreateCommand vm=" + st.Name(); !slices.Equal(warned.Names(), []string{want}) {
 		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
@@ -157,7 +157,7 @@ func TestUpDevcontainerRefused(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, f, _ := devcontainerTestEnv(t, tc.src)
-			err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true})
+			err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true})
 			if got := msg.NamesOf(err); got != tc.want {
 				t.Errorf("error = %s, want %s", got, tc.want)
 			}
@@ -197,10 +197,10 @@ func TestChooseNet(t *testing.T) {
 		{"no", Options{}, nil, false, true, false, "false", true, ""},
 		{"--network-policy", Options{NetworkPolicy: true}, nil, false, true, false, "true", false, ""},
 		{"--no-network-policy", Options{NoNetworkPolicy: true}, nil, false, false, true, "false", false, ""},
-		{"named", Options{Image: "docker"}, nil, true, true, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
-		{"named, no terminal", Options{Image: "docker"}, nil, true, false, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
-		{"named, --network-policy", Options{NetworkPolicy: true, Image: "docker"}, nil, true, true, true, "net_docker_layer backend=fake vm=v", false, ""},
-		{"named, --no-network-policy", Options{NoNetworkPolicy: true, Image: "docker"}, nil, true, true, true, "false", false, ""},
+		{"named", Options{Layers: &[]string{"docker"}}, nil, true, true, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
+		{"named, no terminal", Options{Layers: &[]string{"docker"}}, nil, true, false, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
+		{"named, --network-policy", Options{NetworkPolicy: true, Layers: &[]string{"docker"}}, nil, true, true, true, "net_docker_layer backend=fake vm=v", false, ""},
+		{"named, --no-network-policy", Options{NoNetworkPolicy: true, Layers: &[]string{"docker"}}, nil, true, true, true, "false", false, ""},
 		{"the file's", Options{dc: dc}, nil, true, true, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
 		{"the file's, no terminal", Options{dc: dc}, nil, true, false, true, "false", false, "net_off_docker_layer backend=fake vm=v"},
 		{"the file's, --network-policy", Options{dc: dc, NetworkPolicy: true}, nil, true, true, true, "net_docker_layer backend=fake vm=v", false, ""},

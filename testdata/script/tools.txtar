@@ -5,12 +5,13 @@ env SHARE=$XDG_DATA_HOME/devvm/tools
 project web
 cp $WORK/package.json package.json
 
-# An agent named in a node project goes on top of node.
-exec devvm --no-network-policy --no-git-protect claude
-stdout '^==> detected found=node$'
+# An agent chosen in a node project goes with node: the VM's image is
+# base, and its shared tools are a list in its state.
+exec devvm --no-network-policy --no-git-protect --agents claude
+stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> resolving_tools$'
 stdout '^==> building_tools tools=node 24\.21\.0, pnpm 12\.10\.1, bun 1\.4\.2, claude 2\.1\.295$'
-stdout '^==> creating_from image=node\+claude vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 cmp $DATA/mise.lock $MISE_STUB_LOCK
 exists $DATA/mise.lock.toml
 exists $DATA/mise.lock.checked
@@ -25,7 +26,8 @@ stdout '^limactl delete -f devvm-tools-build$'
 # The VM is made from base's image, with the share read-only.
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
 catg $VMS/devvm-web-*
-stdout '^image=node\+claude$'
+stdout '^image=base$'
+stdout '^tool_names=node claude$'
 stdout '^libc=gnu$'
 stdout '^backend_at=[0-9a-f]{16}$'
 stdout '^tools=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
@@ -50,27 +52,40 @@ catg $DATA/logs/runs/*.log
 stdout '^# \[4/5\] building_tools_in vm=devvm-tools-build$'
 stdout '^# \[5/5\] deleting vm=devvm-tools-build$'
 
-# Built: nothing to build, nothing to resolve.
+# Without a terminal, devvm tools lists the VM's tools; add and rm change
+# its list and its tool files, built ones not built again.
 stub_reset
-exec devvm build node+claude
+exec devvm tools
+stdout '^TOOL +VERSION +NEWER +BUILT$'
+stdout '^claude +2\.1\.295 '
+exec devvm tools rm claude
+stdout '^==> vm_tools_now tools=node vm=devvm-web-[0-9a-f]{14}$'
+catg $VMS/devvm-web-*
+stdout '^tool_names=node$'
+! stdout 'claude-'
+exec devvm tools add claude
 ! stdout 'building_tools|resolving_tools'
+stdout '^==> vm_tools_now tools=node claude vm=devvm-web-[0-9a-f]{14}$'
+catg $VMS/devvm-web-*
+stdout '^tool_names=node claude$'
+stdout '^tools=.*claude-2\.1\.295-[0-9a-f]{12}\.erofs'
 stub_calls
 ! stdout 'devvm-tools-build|mise'
 
 # The daily check: a new VM with tools checks first when it's due.
 exec touch -t 202001010000 $DATA/mise.lock.checked
 project api
-exec devvm --no-network-policy --no-git-protect go
+exec devvm --no-network-policy --no-git-protect --tools go
 stdout '^==> checking_tools$'
 stdout '^==> building_tools tools=go 1\.27\.2$'
 # Not again today.
 project cli
-exec devvm --no-network-policy --no-git-protect go+claude
+exec devvm --no-network-policy --no-git-protect --tools go --agents claude
 ! stdout 'checking_tools|building_tools'
 
-# The shared tools aren't images: rebuild refuses them.
-! exec devvm rebuild node+claude
-stderr '^devvm: tools_not_images tools=node claude$'
+# The shared tools aren't images: build and rebuild refuse them.
+! exec devvm rebuild node
+stderr '^devvm: tool_not_layer tool=node$'
 
 # The daily check's job, run by hand: a failure leaves the lock.
 env MISE_STUB_FAIL=1
@@ -86,7 +101,8 @@ exec devvm --help
 # Offline with no lock yet: what's needed, and mise's error from the log.
 rm $DATA/mise.lock
 env MISE_STUB_FAIL=1
-! exec devvm build python
+project py
+! exec devvm --no-network-policy --no-git-protect --tools python
 stdout '^==> resolving_tools$'
 stderr 'failed to fetch versions: offline'
 stderr '^devvm: tools_need_resolve$'
@@ -96,12 +112,12 @@ env MISE_STUB_FAIL=
 # A build that leaves a symlink instead of an image is refused; one that
 # plants FILE.sha256 as a symlink can't make devvm write through it.
 exec sh -c 'echo victim > "$STUB_DIR/tools-symlink"'
-! exec devvm build python
+! exec devvm --no-network-policy --no-git-protect --tools python
 stderr '^devvm: tool_bad_output file=python-\S+\.erofs$'
 exec sh -c 'ls "$SHARE"'
 ! stdout python
 exec sh -c 'rm "$STUB_DIR/tools-symlink" && echo victim > "$STUB_DIR/tools-hash-symlink"'
-exec devvm build python
+exec devvm --no-network-policy --no-git-protect --tools python
 exec cat $STUB_DIR/tools-hash-symlink
 stdout '^victim$'
 exec sh -c 'cd "$SHARE" && for f in python-*.erofs uv-*.erofs; do [ -L "$f.sha256" ] && echo link; done; true'

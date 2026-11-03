@@ -46,7 +46,7 @@ free_port -range FIRST LAST
 project all
 stub_reset
 exec sh -c 'printf "0100007F:%04X\n00000000:0050\n" "$UNLISTED" > "$STUB_DIR/guest-ports"'
-exec devvm --backend smolvm --from $PIN --no-network-policy base
+exec devvm --backend smolvm --from $PIN --no-network-policy
 ! stderr 'backend_unreviewed'
 ! stderr 'ports_'
 stub_calls
@@ -70,7 +70,7 @@ project web
 # forwards none of its ports, only its ssh: devvm's forwarder forwards the
 # listed ports alone (LISTED listens in the VM, and UNLISTED).
 exec sh -c 'printf "0100007F:%04X\n0100007F:%04X\n" "$LISTED" "$UNLISTED" > "$STUB_DIR/guest-ports"'
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports $LISTED,$FIRST-$LAST --cpus 2 base
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports $LISTED,$FIRST-$LAST --cpus 2
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stderr 'ports_'
 stub_calls
@@ -87,7 +87,7 @@ stdout '^devvm ports: forwarding devvm-web-[0-9a-f]{14}''s ports$'
 ! stdout 'port '$UNLISTED':'
 exists $STUB_DIR/sync.tar
 exec devvm ls
-stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +\S+ +off +- +smolvm +\S+/web$'
+stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +- +\S+ +off +- +smolvm +\S+/web$'
 grep '^Host devvm-web devvm-web-[0-9a-f]{14}$' $XDG_CONFIG_HOME/devvm/ssh_config
 
 # A listed port a program on this machine has, on any address, isn't
@@ -144,7 +144,7 @@ exec devvm ls
 # self-check passes.
 project pol
 stub_reset
-exec devvm --backend smolvm --from $PIN --network-policy --ports none base
+exec devvm --backend smolvm --from $PIN --network-policy --ports none
 ! stderr 'backend_unreviewed'
 catg $VMS/devvm-pol-*
 stdout '^net=on$'
@@ -186,7 +186,7 @@ stdout '^==> deleted vm=devvm-pol-[0-9a-f]{14}$'
 # smolvm and pinned.
 project sshd
 stub_reset
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173 base
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173
 ! stderr 'backend_unreviewed'
 stub_calls
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} --net -p [0-9]+:22$'
@@ -224,7 +224,7 @@ stdout '^==> deleted vm=devvm-sshd-[0-9a-f]{14}$'
 # smolvm's.
 project many
 stub_reset
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports 22,3000-3100 base
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports 22,3000-3100
 ! stderr 'backend_unreviewed'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-many-[0-9a-f]{14} .* --ssh-agent$'
@@ -241,7 +241,7 @@ exec devvm rm --force --no-export
 env SSH_AUTH_SOCK=$WORK/user.sock
 project agent
 stub_reset
-exec devvm --backend smolvm --from $PIN --no-network-policy --ports none base
+exec devvm --backend smolvm --from $PIN --no-network-policy --ports none
 ! stderr 'backend_unreviewed'
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-agent-[0-9a-f]{14} .* --ssh-agent$'

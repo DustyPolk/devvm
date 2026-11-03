@@ -349,6 +349,8 @@ func TestLayerName(t *testing.T) {
 		"base": false, "": false, "-x": false, "Foo": false, "a_b": false, "a+b": false, "../x": false,
 		// Shared tools' names aren't layers'.
 		"node": false, "go": false, "claude": false, "pnpm": true,
+		// Command names are layers' too: devvm takes no image as a word.
+		"build": true, "ls": true,
 	} {
 		if got := LayerName(name); got != want {
 			t.Errorf("LayerName(%q) = %v", name, got)

@@ -9,30 +9,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-
-	"github.com/w3cj/devvm/internal/image"
 )
-
-// Every command's name, hidden or not, and help's, is a word devvm keeps:
-// no layer can take one.
-func TestEveryCommandReserved(t *testing.T) {
-	t.Parallel()
-	u, _, _ := testUI()
-	names := []string{"help"}
-	var walk func(c *cobra.Command)
-	walk = func(c *cobra.Command) {
-		for _, sub := range c.Commands() {
-			names = append(names, sub.Name())
-			walk(sub)
-		}
-	}
-	walk(NewRoot(u))
-	for _, n := range names {
-		if !image.IsReserved(n) {
-			t.Errorf("command %s isn't in image.Reserved", n)
-		}
-	}
-}
 
 var (
 	// commandName is a command's name: lower-case words joined by -.
@@ -78,41 +55,11 @@ func TestCommandNames(t *testing.T) {
 	})
 }
 
-// Base, the shared tools and the built-in layers are images, so none is
-// a word devvm keeps for its commands.
-func TestImagesNotReserved(t *testing.T) {
-	t.Parallel()
-	for _, n := range slices.Concat([]string{image.Base}, image.Toolchains, image.Agents, image.Builtins) {
-		if image.IsReserved(n) {
-			t.Errorf("%s is an image's name and a reserved word", n)
-		}
-	}
-}
-
-func TestLevenshtein(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		a, b string
-		want int
-	}{
-		{"", "", 0}, {"stop", "stop", 0}, {"sotp", "stop", 2}, {"nodee", "node", 1}, {"", "ab", 2}, {"kitten", "sitting", 3},
-	} {
-		if got := levenshtein(tc.a, tc.b); got != tc.want {
-			t.Errorf("levenshtein(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
-		}
-	}
-	if got := closest("Pyhton", []string{"node", "python"}); got != "python" {
-		t.Errorf("closest(Pyhton) = %q, want python", got)
-	}
-	if got := closest("zzz", []string{"node", "python"}); got != "" {
-		t.Errorf("closest(zzz) = %q, want none", got)
-	}
-}
-
-// devvm WORD, devvm WORD --help and devvm help WORD, for a word that's
-// neither a command nor an image, fail alike: a usage error suggesting
-// the closest command or image, naming devvm --help, and nothing runs.
-// An image's name, joined with + or not, goes on to up.
+// devvm WORD, devvm WORD --help and devvm help WORD, for a word that isn't
+// a command, fail alike: a usage error suggesting the closest command,
+// naming devvm --help, and nothing runs. An image's or a shared tool's
+// name is no command either, nor is a layer of the user's: devvm takes
+// no word, and a layer may have a command's name.
 func TestUnknownWord(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	cfg := t.TempDir()
@@ -128,32 +75,32 @@ func TestUnknownWord(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		args []string
-		want string // the first line; "" for up running
+		want string // the first line
 	}{
-		{[]string{"stoop"}, "no_command_or_image_command command=stop word=stoop"},
-		{[]string{"stoop", "--help"}, "no_command_or_image_command command=stop word=stoop"},
-		{[]string{"help", "stoop"}, "no_command_or_image_command command=stop word=stoop"},
-		{[]string{"imagse"}, "no_command_or_image_command command=images word=imagse"},
-		{[]string{"pyton"}, "no_command_or_image_image image=python word=pyton"},
-		{[]string{"pq"}, "no_command_or_image_both command=gc image=pg word=pq"},
-		{[]string{"xyzzy"}, "no_command_or_image word=xyzzy"},
-		{[]string{"join"}, "layer_is_command file=" + filepath.Join(cfg, "devvm", "layers", "join.sh") + " layer=join"},
+		{[]string{"stoop"}, "no_command_like command=stop word=stoop"},
+		{[]string{"stoop", "--help"}, "no_command_like command=stop word=stoop"},
+		{[]string{"help", "stoop"}, "no_command_like command=stop word=stoop"},
+		{[]string{"imagse"}, "no_command_like command=images word=imagse"},
+		{[]string{"xyzzy"}, "no_command word=xyzzy"},
+		{[]string{"node"}, "no_command_like command=code word=node"},
+		{[]string{"claude"}, "no_command word=claude"},
+		{[]string{"base"}, "no_command word=base"},
+		{[]string{"docker"}, "no_command_like command=doctor word=docker"},
+		{[]string{"pg"}, "no_command_like command=gc word=pg"},
+		{[]string{"node+claude"}, "no_command word=node+claude"},
 		{[]string{"help", "tools", "nope"}, "no_subcommand command=devvm tools commands=add, rm, update given=nope"},
-		{[]string{"pg"}, ""},
-		{[]string{"node+sotp"}, ""},
-		{[]string{"claude"}, ""},
 	} {
 		s := stubbed(nil)
 		code := s.run(t, tc.args...)
 		got, _, _ := strings.Cut(s.errOut.String(), "\n")
-		if tc.want == "" {
-			if code != 0 || !slices.Equal(s.ran, []string{"devvm"}) {
-				t.Errorf("devvm %q: exit %d, ran %q, stderr %q; want up run", tc.args, code, s.ran, s.errOut)
-			}
-			continue
-		}
 		if code != usageCode || len(s.ran) > 0 || got != "devvm: "+tc.want {
 			t.Errorf("devvm %q: exit %d, ran %q, stderr %q; want %d and %q", tc.args, code, s.ran, s.errOut, usageCode, tc.want)
 		}
+	}
+	// A layer named like a command is the command's word, and the layer's
+	// name for --layers.
+	s := stubbed(nil)
+	if code := s.run(t, "--layers", "join"); code != 0 || !slices.Equal(s.ran, []string{"devvm"}) {
+		t.Errorf("devvm --layers join: exit %d, ran %q, stderr %q", code, s.ran, s.errOut)
 	}
 }

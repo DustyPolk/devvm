@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -50,16 +51,16 @@ func TestAgentMounts(t *testing.T) {
 	want := []string{
 		filepath.Join(home, ".claude/skills"), filepath.Join(home, ".claude/agents"), filepath.Join(home, ".config/opencode/my agents"),
 	}
-	if ms := (Launch{e}).AgentMounts("node+claude+opencode"); !slices.Equal(ms, want) {
+	if ms := (Launch{e}).AgentMounts([]string{"node", "claude", "opencode"}); !slices.Equal(ms, want) {
 		t.Errorf("AgentMounts = %q, want %q", ms, want)
 	}
-	if ms := (Launch{e}).AgentMounts("node"); ms != nil {
+	if ms := (Launch{e}).AgentMounts([]string{"node"}); ms != nil {
 		t.Errorf("AgentMounts without agents = %q", ms)
 	}
 	comma := filepath.Join(t.TempDir(), "a,b")
 	mkdirs(t, comma, ".codex/prompts")
 	e.Dirs.Home = comma
-	if ms := (Launch{e}).AgentMounts("codex"); ms != nil {
+	if ms := (Launch{e}).AgentMounts([]string{"codex"}); ms != nil {
 		t.Errorf("AgentMounts with a comma = %q", ms)
 	}
 	if !slices.Equal(*got, []string{"agent_dir_comma path=" + filepath.Join(comma, ".codex/prompts")}) {
@@ -67,13 +68,13 @@ func TestAgentMounts(t *testing.T) {
 	}
 }
 
-// agentVM is a VM of that image on a fake backend, its agent mounts and
-// status as given.
-func agentVM(t *testing.T, img string, status backend.Status, dirs ...string) (*backendtest.Fake, *state.VM) {
+// agentVM is a VM with these shared tools (space-separated) on a fake
+// backend, its agent mounts and status as given.
+func agentVM(t *testing.T, tools string, status backend.Status, dirs ...string) (*backendtest.Fake, *state.VM) {
 	t.Helper()
 	root := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	st, err := state.CreateVM(d, "devvm-p-00000000000000", state.NewVM{Image: img})
+	st, err := state.CreateVM(d, "devvm-p-00000000000000", state.NewVM{Image: "base", Tools: strings.Fields(tools)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 	vm := "devvm-p-00000000000000"
 	for _, tc := range []struct {
 		name    string
-		img     string
+		tools   string
 		status  backend.Status
 		tty     bool
 		have    []string
@@ -98,25 +99,25 @@ func TestUpdateAgentDirs(t *testing.T) {
 		printed []string
 	}{
 		{
-			name: "nothing changed, nothing edited", img: "node+claude", status: backend.StatusStopped,
+			name: "nothing changed, nothing edited", tools: "node claude", status: backend.StatusStopped,
 			have: []string{skills}, methods: []string{"Inspect"},
 		},
 		{
-			name: "a stopped VM gets new folders and loses gone ones", img: "node+claude", status: backend.StatusStopped,
+			name: "a stopped VM gets new folders and loses gone ones", tools: "node claude", status: backend.StatusStopped,
 			have: []string{skills, commands}, methods: []string{"Inspect", "SetAgentDirs"}, set: []string{skills, mine},
 			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "agent_dirs_removed dirs=" + commands + " vm=" + vm, "mounts_updated vm=" + vm},
 		},
 		{
-			name: "a running VM without a terminal changes at its next start", img: "node+claude", status: backend.StatusRunning,
+			name: "a running VM without a terminal changes at its next start", tools: "node claude", status: backend.StatusRunning,
 			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm, "mounts_next_start vm=" + vm},
 		},
 		{
-			name: "a running VM restarts once the user agrees", img: "node+claude", status: backend.StatusRunning, tty: true,
+			name: "a running VM restarts once the user agrees", tools: "node claude", status: backend.StatusRunning, tty: true,
 			have: []string{skills}, methods: []string{"Inspect", "Stop", "SetAgentDirs"}, set: []string{skills, mine},
 			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked update_mounts vm=" + vm, "mounts_updated vm=" + vm},
 		},
 		{
-			name: "an image without agents drops leftover agent mounts", img: "node", status: backend.StatusStopped,
+			name: "a VM without agents drops leftover agent mounts", tools: "node", status: backend.StatusStopped,
 			have: []string{filepath.Join(home, ".codex/prompts")}, methods: []string{"Inspect", "SetAgentDirs"},
 			printed: []string{"agent_dirs_removed dirs=" + filepath.Join(home, ".codex/prompts") + " vm=" + vm, "mounts_updated vm=" + vm},
 		},
@@ -127,7 +128,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 			if tc.name != "nothing changed, nothing edited" {
 				mkdirs(t, home, ".claude/agents")
 			}
-			f, st := agentVM(t, tc.img, tc.status, tc.have...)
+			f, st := agentVM(t, tc.tools, tc.status, tc.have...)
 			if err := (Launch{e}).UpdateAgentDirs(t.Context(), f, st); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}

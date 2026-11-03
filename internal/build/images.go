@@ -122,9 +122,6 @@ func (b Images) Delete(ctx context.Context, refs []string) error {
 			label = b.recordName(ref)
 		} else {
 			label = image.Normalize(ref)
-			if len(image.ToolsOf(label)) > 0 {
-				return msg.ToolsNotImagesRm(label)
-			}
 			if err := b.CheckLayers(label); err != nil {
 				return err
 			}

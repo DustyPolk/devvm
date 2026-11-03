@@ -11,25 +11,39 @@ stderr '^devvm: arg_not_choice choices=bash, zsh, fish command=devvm completion 
 stderr '^usage_help command=devvm completion$'
 ! stdout .
 
-# The commands users run, not the hidden ones, with image names for IMAGE.
+# The commands users run, not the hidden ones; devvm takes no image.
 exec devvm __complete ''
 stdout '^build\t'
 stdout '^completion\t'
-stdout '^base$'
-stdout '^claude$'
+! stdout '^base$'
+! stdout '^claude$'
 ! stdout '^_'
 ! stdout '^version'
 stdout '^:4$'
 
-# Your layers are image names; the parts given are left out.
+# Your layers are image names, and shared tools aren't; the layers given
+# are left out.
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
-exec devvm __complete build node+
-stdout '^node\+foo$'
-stdout '^node\+claude$'
-! stdout '^node\+node$'
-exec devvm __complete node+c
-cmp stdout node-c.txt
+exec devvm __complete build docker+
+stdout '^docker\+foo$'
+stdout '^docker\+nix$'
+! stdout '^docker\+docker$'
+! stdout 'claude|node'
+
+# --tools, --agents and --layers: comma-separated lists of their part's
+# names, and none.
+exec devvm __complete --agents claude,c
+cmp stdout agents-c.txt
+exec devvm __complete --layers ''
+stdout '^foo$'
+stdout '^none$'
+! stdout '^base$'
+exec devvm __complete --tools n
+stdout '^node$'
+stdout '^none$'
+exec devvm __complete setup --agents ''
+stdout '^opencode$'
 
 # tools add and rm take shared tools only, each a word of its own, those
 # given left out.
@@ -64,7 +78,6 @@ stdout '^fish$'
 
 -- foo.sh --
 #!/bin/bash
--- node-c.txt --
-node+claude
-node+codex
+-- agents-c.txt --
+claude,codex
 :4

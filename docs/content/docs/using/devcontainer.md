@@ -21,7 +21,7 @@ The settings devvm supports are the container image to start from, the features 
 ## When it's read
 
 - **Only when the folder's VM is made**, on every backend. Comments and trailing commas are allowed. devvm reads the file only within the folder, so it doesn't follow a link out of the folder, and it reads only a regular file of up to 1 MiB. devvm never writes anything to the project folder.
-- **What you give on the command line wins.** `--from` wins over `image`, which wins over `$DEVVM_FROM`, and `--ports` wins over `forwardPorts`, and devvm says so in one line for each. The layers that IMAGE names go on top of the features' layers, as in `devvm claude`, and with a `devcontainer.json`, a folder whose toolchain devvm can't tell gets `base`.
+- **What you give on the command line wins.** `--from` wins over `image`, which wins over `$DEVVM_FROM`, and `--ports` wins over `forwardPorts`, and devvm says so in one line for each. The toolchains and layers that the features map to are checked by default in the list devvm shows for the new VM, each row naming the file, and you can uncheck them there. `--tools` and `--layers` replace them, as they replace any part's default ([what a new VM gets](images.md#what-a-new-vm-gets)).
 - **An existing VM never changes.** Its state records the file's SHA-256. When the file differs from it on a launch, or is gone, or has appeared since, devvm warns once, and running `devvm rm` and then `devvm` makes the VM again from the file as it is. devvm doesn't check a VM made with `--no-devcontainer`.
 
 A new VM takes each of these from the first place that sets it.

@@ -20,7 +20,7 @@ cp $WORK/history.jsonl $HOME/.codex/history.jsonl
 # servers whose secrets go too.
 project plain
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --no-network-policy --no-git-protect claude+codex
+exec devvm --no-network-policy --no-git-protect --agents claude,codex
 stderr '^devvm: claude_mcp_secrets_copied servers=srv vm=devvm-plain-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true\},\{"location":"\S*/home/\.claude/skills","writable":false\},\{"location":"\S*/home/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
@@ -50,13 +50,13 @@ stdout '^export LANG=''en_US\.UTF-8''\nexport CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-o
 # all is named too.
 project badtoken
 env CLAUDE_CODE_OAUTH_TOKEN=not-a-setup-token
-exec devvm --no-network-policy --no-git-protect claude
+exec devvm --no-network-policy --no-git-protect --agents claude
 stderr '^devvm: claude_token_invalid$'
 exec tar -xOf $STUB_DIR/sync.tar env
 ! stdout CLAUDE_CODE_OAUTH_TOKEN
 project notoken
 env CLAUDE_CODE_OAUTH_TOKEN=
-exec devvm --no-network-policy --no-git-protect claude
+exec devvm --no-network-policy --no-git-protect --agents claude
 stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 
 # With network policy: devvm's CA, the VM's own placeholders, the logins'
@@ -65,7 +65,7 @@ stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 # isn't sent.
 project net
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --network-policy --no-git-protect claude+codex
+exec devvm --network-policy --no-git-protect --agents claude,codex
 stderr '^config_redacted file=\S*/home/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'
 stderr '^devvm: config_not_copied file=\S*/home/\.codex/config\.toml vm=devvm-net-[0-9a-f]{14}$'
 ! stderr claude_mcp_secrets_copied
@@ -88,7 +88,7 @@ mkdir $WORK/tmp $WORK/fails
 cd $WORK/fails
 env TMPDIR=$WORK/tmp
 exec sh -c ': > "$STUB_DIR/shell-fails"'
-! exec devvm --no-network-policy --no-git-protect claude
+! exec devvm --no-network-policy --no-git-protect --agents claude
 stderr '^devvm: sync_failed vm=devvm-fails-[0-9a-f]{14}$'
 exec sh -c 'ls -A "$TMPDIR"'
 ! stdout .

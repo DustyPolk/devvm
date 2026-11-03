@@ -10,13 +10,15 @@ You customize images with your own layers, which add what a project needs, and w
 ```sh
 devvm layer new mailpit    # writes ~/.config/devvm/layers/mailpit.sh and mailpit.policy
 $EDITOR ~/.config/devvm/layers/mailpit.sh
-devvm node+mailpit         # a VM with node and your layer; or devvm build mailpit
+devvm --layers mailpit     # a new VM with your layer; or devvm build mailpit
 ```
+
+In a terminal, a new VM's list also shows your layers under Layers, so you can check `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)).
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that bash runs once as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and also `NAME.policy` next to it unless that file exists. It refuses to overwrite a script that exists.
 
-- **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`docker` or `nix`) or a shared tool's name (`node`, `claude` and so on). It also can't be a word devvm keeps for its commands, such as `stop`, `log` or `add`, so `devvm stop` always runs the command. devvm refuses a layer file already in the folder with such a name wherever an image names it, and you rename the file to use it.
-- Built-in layers go in the same image names as yours, as in `devvm node+docker+mailpit`.
+- **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`docker` or `nix`) or a shared tool's name (`node`, `claude` and so on). A command's name, such as `log`, is fine, because devvm takes layers only through `--layers`, the list and image names.
+- Built-in layers go in the same image names as yours, bottom first, as in `devvm --layers docker,mailpit`, which makes the image `docker+mailpit`.
 - Put PATH changes in `~/.profile`.
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.
 - `NAME.policy` lists the hosts that VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.

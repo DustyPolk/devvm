@@ -93,7 +93,7 @@ func TestStartPorts(t *testing.T) {
 			e.PortInUse = func(_ context.Context, p int) bool { return p == 5174 || p == 8080 }
 			var warned msg.Recorder
 			e.Warn = warned.Add
-			st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: tc.ports})
+			st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: tc.ports})
 			var got []backend.PortRange
 			for _, c := range f.Calls() {
 				if c.Method == "Start" {
@@ -131,7 +131,7 @@ func TestSetPortsRunning(t *testing.T) {
 	var infos, warned msg.Recorder
 	e.Info = infos.Add
 	e.Warn = warned.Add
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "5173"})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
 	vm := st.Name()
 	if err := st.Set("proxy_port", "30001"); err != nil {
 		t.Fatal(err)
@@ -223,7 +223,7 @@ func TestPortsBackend(t *testing.T) {
 func TestStartBadPorts(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "5173"})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
 	if err := st.Set(KeyPorts, "5173,x"); err != nil {
 		t.Fatal(err)
 	}

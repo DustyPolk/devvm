@@ -2,6 +2,7 @@ package cli
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -62,13 +63,15 @@ type lsOutput struct {
 }
 
 type vmJSON struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Image   string `json:"image"`
-	From    string `json:"from,omitempty"`
-	Git     string `json:"git"`
-	Net     string `json:"net"`
-	Backend string `json:"backend"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Image  string `json:"image"`
+	// Tools is its shared tools: node, claude.
+	Tools   []string `json:"tools"`
+	From    string   `json:"from,omitempty"`
+	Git     string   `json:"git"`
+	Net     string   `json:"net"`
+	Backend string   `json:"backend"`
 	// DockerLayer is the runtime a docker VM runs the docker layer under.
 	DockerLayer string `json:"docker_layer,omitempty"`
 	Folder      string `json:"folder"`
@@ -80,7 +83,7 @@ func lsJSON(ls []vm.Listed) lsOutput {
 	out := lsOutput{VMs: make([]vmJSON, 0, len(ls))}
 	for _, l := range ls {
 		out.VMs = append(out.VMs, vmJSON{
-			Name: l.Name, Status: l.Status, Image: l.Image, From: l.From, Git: l.Git, Net: l.Net,
+			Name: l.Name, Status: l.Status, Image: l.Image, Tools: append([]string{}, l.Tools...), From: l.From, Git: l.Git, Net: l.Net,
 			Backend: l.Backend, DockerLayer: l.DockerLayer, Folder: l.Folder, Links: l.Links,
 		})
 	}
@@ -96,10 +99,11 @@ func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error)
 }
 
 // writeList writes the VMs as a table, a header first; a value a VM lacks
-// is -, and so is LINKS for a VM without links. A VM's status, .git
-// protection and network policy are colored by what they mean.
+// is -, and so are TOOLS for a VM without shared tools and LINKS for one
+// without links. A VM's status, .git protection and network policy are
+// colored by what they mean.
 func writeList(tab *ui.Table, ls []vm.Listed) error {
-	tab.Header("NAME", "STATUS", "IMAGE", "GIT", "NET", "LINKS", "BACKEND", "FOLDER")
+	tab.Header("NAME", "STATUS", "IMAGE", "TOOLS", "GIT", "NET", "LINKS", "BACKEND", "FOLDER")
 	for _, l := range ls {
 		backend := l.Backend
 		if l.DockerLayer != "" {
@@ -113,7 +117,7 @@ func writeList(tab *ui.Table, ls []vm.Listed) error {
 		if l.Links > 0 {
 			links = strconv.Itoa(l.Links)
 		}
-		tab.Row(cell(l.Name), cellAs(l.Status, vmStatuses), cell(image), cellAs(l.Git, gitModes),
+		tab.Row(cell(l.Name), cellAs(l.Status, vmStatuses), cell(image), cell(strings.Join(l.Tools, ",")), cellAs(l.Git, gitModes),
 			cellAs(l.Net, netModes), cell(links), cell(backend), cell(l.Folder))
 	}
 	return tab.Flush()

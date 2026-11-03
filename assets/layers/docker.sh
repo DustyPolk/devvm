@@ -1,5 +1,5 @@
 #!/bin/bash
-# docker: a built-in layer (devvm node+docker). Docker's engine, CLI, BuildKit and Compose, the VM's
+# docker: a built-in layer (devvm --layers docker). Docker's engine, CLI, BuildKit and Compose, the VM's
 # user in the docker group, the daemon started at each boot.
 set -euxo pipefail
 # Pinned downloads (scripts/bump.sh updates them). Docker's repository has no snapshots: its packages

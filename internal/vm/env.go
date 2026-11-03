@@ -106,14 +106,17 @@ type Env struct {
 	// its NO_PROXY (checkLinks checks them first); nil gives none.
 	Links func(st *state.VM) ([]GuestLink, error)
 	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
-	// asks which features base gets (build.Env.Pick); Terminal reports
-	// whether it can ask, Interactive whether someone can also see the
-	// question (stdout's a terminal too); Answer asks for a value.
-	Info, Warn, Note, Say func(msg.M)
-	Ask, Confirm          func(msg.M) bool
-	Answer                func(msg.M) string
-	PickFeatures          func([]build.Feature) []build.Feature
-	Terminal, Interactive func() bool
+	// asks which features base gets (build.Env.Pick), PickParts shows the
+	// tools picker (nil shows none); Terminal reports whether it can ask,
+	// Interactive whether someone can also see the question (stdout's a
+	// terminal too), CanPick whether the picker shows, which also needs no
+	// --no-input; Answer asks for a value.
+	Info, Warn, Note, Say          func(msg.M)
+	Ask, Confirm                   func(msg.M) bool
+	Answer                         func(msg.M) string
+	PickFeatures                   func([]build.Feature) []build.Feature
+	PickParts                      func(msg.M, []PickPart) []PickPart
+	Terminal, Interactive, CanPick func() bool
 	// AddInclude is --ssh-config: devvm's Include line goes in
 	// ~/.ssh/config, when it's missing, without asking.
 	AddInclude bool
@@ -141,13 +144,15 @@ type UI interface {
 	Ask(msg.M) bool
 	Answer(msg.M) string
 	StdoutIsTerminal() bool
+	CanPick() bool
 	Interrupted() bool
 	Stdout() io.Writer
 	Stderr() io.Writer
 }
 
 // NewEnv returns the environment up runs in here, with devvm's own files
-// (assets), devvm being self, on u. Its caller sets PickFeatures.
+// (assets), devvm being self, on u. Its caller sets PickFeatures and
+// PickParts.
 func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -165,8 +170,8 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
 		Info:   u.Info, Warn: u.Warn, Note: u.Note, Say: u.Say,
 		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Answer: u.Answer, Terminal: u.StdinIsTerminal,
-		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
-		Stdout:      u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
+		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() }, CanPick: u.CanPick,
+		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
 	}

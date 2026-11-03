@@ -417,7 +417,7 @@ func TestBuildLayerFails(t *testing.T) {
 	s.image(t, baseKey)
 	s.stubs.Touch(t, "script-fails")
 	_, err := s.BuildImage(t.Context(), backend.ImageSpec{
-		Image: "base+node", Key: nodeKey, Parent: baseKey, Net: backend.NetInternet,
+		Image: "foo", Key: nodeKey, Parent: baseKey, Net: backend.NetInternet,
 		Scripts: []backend.Script{{Name: "node.sh", Data: []byte("#!/bin/bash\n# node\n")}},
 	})
 	inst := s.buildName(nodeKey)

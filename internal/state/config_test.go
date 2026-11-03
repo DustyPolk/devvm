@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -82,6 +83,33 @@ func TestBackend(t *testing.T) {
 
 // The network policy new VMs get: ask without a file; ask, on or off
 // written; anything else refused, and a file holding it corrupt.
+// The agents new VMs get: unset until chosen, then a list or none.
+func TestAgents(t *testing.T) {
+	d := testDirs(t)
+	if got, set, err := ReadAgents(d); err != nil || set || got != nil {
+		t.Fatalf("no file: got %q, %v, %v", got, set, err)
+	}
+	for _, want := range [][]string{{"claude", "codex"}, {}} {
+		if err := WriteAgents(d, want); err != nil {
+			t.Fatal(err)
+		}
+		if got, set, err := ReadAgents(d); err != nil || !set || !slices.Equal(got, want) {
+			t.Errorf("%q: got %q, %v, %v", want, got, set, err)
+		}
+	}
+	if s := read(t, d.Agents()); s != "none\n" {
+		t.Errorf("file: %q", s)
+	}
+	for _, bad := range [][]string{{"Claude"}, {"claude", "claude"}, {""}} {
+		if err := WriteAgents(d, bad); err == nil {
+			t.Errorf("WriteAgents(%q): want an error", bad)
+		}
+	}
+	write(t, d.Agents(), "claude claude\n")
+	_, _, err := ReadAgents(d)
+	wantCorrupt(t, err, d.Agents(), 1)
+}
+
 func TestNetwork(t *testing.T) {
 	d := testDirs(t)
 	if got, err := ReadNetwork(d); err != nil || got != NetworkAsk {

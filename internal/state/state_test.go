@@ -245,11 +245,11 @@ func TestWriteFileIsAtomicAndPrivate(t *testing.T) {
 func TestVMSetGet(t *testing.T) {
 	d := testDirs(t)
 	name := "devvm-x-00000000000000"
-	v, err := CreateVM(d, name, NewVM{Image: "node", Dir: "/p", Chain: "base=abc node=def", Backend: "lima"})
+	v, err := CreateVM(d, name, NewVM{Image: "foo", Dir: "/p", Chain: "base=abc foo=def", Backend: "lima", Tools: []string{"node", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := v.Get(KeyChain); got != "base=abc node=def" {
+	if got := v.Get(KeyChain); got != "base=abc foo=def" {
 		t.Errorf("chain = %q", got)
 	}
 	for _, val := range []string{"on", "off"} {
@@ -261,7 +261,7 @@ func TestVMSetGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for key, want := range map[string]string{"ssh_agent": "off", KeyImage: "node", KeyDir: "/p", KeyBackend: "lima", KeyFrom: ""} {
+	for key, want := range map[string]string{"ssh_agent": "off", KeyImage: "foo", KeyToolNames: "node claude", KeyDir: "/p", KeyBackend: "lima", KeyFrom: ""} {
 		if got := again.Get(key); got != want {
 			t.Errorf("%s = %q, want %q", key, got, want)
 		}

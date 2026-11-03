@@ -52,7 +52,7 @@ stdout '^  "docker": false,$'
 stderr '^devvm: lima_missing$'
 mkdir p
 cd p
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: lima_missing$'
 cd ..
 

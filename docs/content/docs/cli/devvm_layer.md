@@ -7,7 +7,7 @@ Make image layers of your own
 
 ## Synopsis
 
-Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base. An image names them as it names the shared tools and devvm's built-in layers, such as node+docker+NAME.
+Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base. An image names them as it names devvm's built-in layers, bottom first, such as docker+NAME, and a new VM gets them with --layers.
 
 ```text
 devvm layer [flags]

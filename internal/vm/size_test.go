@@ -139,7 +139,7 @@ func TestSetSize(t *testing.T) {
 	if _, err := shown(false); msg.NamesOf(err) != "no_vm_size dir="+e.Dir {
 		t.Errorf("no VM: %s", msg.NamesOf(err))
 	}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	in := f.Instances[vm]
 	in.Size = backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}
@@ -234,7 +234,7 @@ func TestDiskUsed(t *testing.T) {
 	e.Registry = reg
 	var warned msg.Recorder
 	e.Warn = warned.Add
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "none"})
 	in := f.Instances[st.Name()]
 	in.Size = backend.Size{CPUs: 4, MemoryGiB: 8}
 	f.Instances[st.Name()] = in

@@ -4,7 +4,7 @@
 # restart stops it first.
 env KNOWN=$XDG_CONFIG_HOME/devvm/known_hosts
 project web git
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 vm_name WEB web
 
 # Running: opened without a start, its host keys kept, set up again.
@@ -70,15 +70,17 @@ stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! exec devvm restart base
 stderr '^devvm: args_none command=devvm restart given=base$'
 
-# An image naming what it lacks is refused, naming the command that adds
-# its shared tools, and nothing changes.
-! exec devvm go
-stderr '^devvm: vm_lacks_tools tools=go vm=devvm-web-[0-9a-f]{14}$'
+# --tools, --agents and --layers change nothing on a VM that exists: it
+# opens as it is, warning that devvm tools changes its shared tools.
+exec devvm --tools go --layers docker
+stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
+! stdout new_vm_gets
 catg $VMS/devvm-web-*
 stdout '^image=base$'
-# Naming what it has opens it.
-exec devvm base
-! stderr vm_lacks
+! stdout '^tool_names=.'
+# Without them, nothing is said.
+exec devvm
+! stderr parts_flags_ignored
 
 # A VM without a network choice didn't finish being made: never started
 # (it would start without network policy); rm deletes it.
@@ -96,7 +98,7 @@ stub_calls
 # deleted, with its state, logs (the rotated ones too), host keys and ssh config entry, and .git's
 # locks taken off.
 project api
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 cd $WORK/web
 exec sh -c 'l="$DATA/logs/$WEB" && touch "$l.jsonl" "$l.jsonl.1" "$l.proxy.log" "$l.proxy.log.1"'
 stub_reset
@@ -142,7 +144,7 @@ rm $STUB_DIR/delete-fails
 # A folder made again at the same path: rm and adopt ask first, so
 # without a terminal neither deletes nor takes the VM over.
 project site
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 cd $WORK
 rm site
 mkdir site

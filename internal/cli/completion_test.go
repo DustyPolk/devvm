@@ -6,20 +6,41 @@ import (
 )
 
 func TestJoined(t *testing.T) {
-	names := []string{"base", "node", "python", "foo", "claude", "codex"}
+	names := []string{"base", "docker", "nix", "foo", "fop"}
 	for _, tc := range []struct {
 		in   string
 		want []string
 	}{
 		{"", names},
-		{"n", []string{"node"}},
-		{"node+", []string{"node+base", "node+python", "node+foo", "node+claude", "node+codex"}},
-		{"node+c", []string{"node+claude", "node+codex"}},
-		{"node+claude+c", []string{"node+claude+codex"}},
+		{"d", []string{"docker"}},
+		{"docker+", []string{"docker+base", "docker+nix", "docker+foo", "docker+fop"}},
+		{"docker+f", []string{"docker+foo", "docker+fop"}},
+		{"docker+foo+f", []string{"docker+foo+fop"}},
 		{"x", nil},
 	} {
 		if got := joined(tc.in, names); !slices.Equal(got, tc.want) {
 			t.Errorf("joined(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// --tools, --agents and --layers complete a comma-separated list of their
+// part's names, and none.
+func TestCompleteParts(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for _, tc := range []struct {
+		flag, in string
+		want     []string
+	}{
+		{"tools", "", []string{"node", "python", "rust", "go", "none"}},
+		{"tools", "node,p", []string{"node,python"}},
+		{"agents", "c", []string{"claude", "codex"}},
+		{"agents", "n", []string{"none"}},
+		{"layers", "", []string{"docker", "nix", "none"}},
+	} {
+		if got, _ := completeParts(tc.flag)(nil, nil, tc.in); !slices.Equal(got, tc.want) {
+			t.Errorf("--%s %q = %q, want %q", tc.flag, tc.in, got, tc.want)
 		}
 	}
 }

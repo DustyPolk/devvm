@@ -83,7 +83,7 @@ func TestUpLinks(t *testing.T) {
 	e.Links = func(*state.VM) ([]GuestLink, error) {
 		return []GuestLink{{netip.MustParseAddr("127.77.0.2"), []string{"db", "pg"}}}, nil
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := "localhost,127.0.0.1,::1"
@@ -106,7 +106,7 @@ func TestUpLinksInvalid(t *testing.T) {
 	e.Links = func(*state.VM) ([]GuestLink, error) {
 		return []GuestLink{{netip.MustParseAddr("127.0.0.1"), []string{"db"}}}, nil
 	}
-	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	if msg.NamesOf(err) != "link_setup_invalid address=127.0.0.1 name=db vm="+spec.Name {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
@@ -125,7 +125,7 @@ func TestUpLinksNoPolicy(t *testing.T) {
 	e.Links = func(*state.VM) ([]GuestLink, error) {
 		return []GuestLink{{netip.MustParseAddr("127.77.0.9"), []string{"api"}}}, nil
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Env["NO_PROXY"] != "" {

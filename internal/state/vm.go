@@ -51,12 +51,16 @@ func Backends(d paths.Dirs) (map[string]bool, error) {
 
 // Keys of a VM's state. Other lowercase keys (a-z, 0-9, _) may be set too.
 const (
-	KeyImage   = "image"   // the image the VM was made from, plus layers added in place
-	KeyDir     = "dir"     // the project folder
-	KeyFolder  = "folder"  // the project folder's identity, to notice it was replaced
-	KeyChain   = "chain"   // its image's build chain
-	KeyFrom    = "from"    // the image its base started from, if not the default
-	KeyBackend = "backend" // the backend running it
+	KeyImage = "image" // the image the VM was made from: base, or its layers joined with +
+	KeyDir   = "dir"   // the project folder
+	// KeyToolNames is the VM's shared tools by name, space-separated, in
+	// their order (image.SortTools): node claude. Its tool images are
+	// KeyTools in internal/vm.
+	KeyToolNames = "tool_names"
+	KeyFolder    = "folder"  // the project folder's identity, to notice it was replaced
+	KeyChain     = "chain"   // its image's build chain
+	KeyFrom      = "from"    // the image its base started from, if not the default
+	KeyBackend   = "backend" // the backend running it
 	// KeyID is a random ID CreateVM gives every VM, so a link can tell a
 	// VM made again in the same folder from the one it linked.
 	KeyID = "id"
@@ -80,9 +84,11 @@ type VM struct {
 	exists bool
 }
 
-// NewVM is what a VM's state starts with.
+// NewVM is what a VM's state starts with: Tools are its shared tools'
+// names.
 type NewVM struct {
 	Image, Dir, Folder, Chain, From, Backend string
+	Tools                                    []string
 }
 
 // ReadVM reads a VM's state. A VM with no state file has empty state:
@@ -122,6 +128,7 @@ func CreateVM(d paths.Dirs, name string, n NewVM) (*VM, error) {
 	for _, p := range [][2]string{
 		{KeyID, id},
 		{KeyImage, n.Image},
+		{KeyToolNames, strings.Join(n.Tools, " ")},
 		{KeyDir, n.Dir},
 		{KeyFolder, n.Folder},
 		{KeyChain, n.Chain},
@@ -147,6 +154,15 @@ func (v *VM) Exists() bool { return v.exists }
 
 // Get returns a key's value, or "" when it isn't set.
 func (v *VM) Get(key string) string { return v.kv.get(key) }
+
+// ToolNames returns the VM's shared tools by name (KeyToolNames): node
+// claude.
+func (v *VM) ToolNames() []string {
+	if v.Get(KeyToolNames) == "" {
+		return nil
+	}
+	return strings.Fields(v.Get(KeyToolNames))
+}
 
 // Set sets a key and writes the state file. It reads the file again first,
 // so keys another devvm set since are kept.

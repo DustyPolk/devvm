@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 364 196" role="img" aria-labelledby="art-sandbox">
+  <title id="art-sandbox">On your machine, you run devvm in ~/web, and ~/.ssh, ~/.aws and ~/Documents stay out of the VM. In the VM's shell, whose prompt starts with (devvm), you run claude: the agent runs there, with the project folder mounted read-write and your agents' skills and settings read-only. Its network goes through a proxy on your machine, which adds your token and lets out to the internet only what its allowlist allows.</title>
+  <!-- Your machine, where you run devvm. -->
+  <text class="m" x="7" y="11">your machine</text>
+  <rect class="f" x="7" y="14" width="301" height="176"/>
+  <rect class="bg" x="8" y="15" width="299" height="174"/>
+  <text class="m" x="14" y="33">~/web $</text>
+  <text class="t" x="70" y="33">devvm</text>
+  <text class="d" x="14" y="51">× ~/.ssh</text>
+  <text class="d" x="84" y="51">× ~/.aws</text>
+  <text class="d" x="154" y="51">× ~/Documents</text>
+  <!-- The VM, its shell, where the agent runs, and what it mounts. -->
+  <text class="m" x="14" y="70">VM</text>
+  <rect class="f" x="14" y="73" width="182" height="110"/>
+  <rect class="s" x="15" y="74" width="180" height="108"/>
+  <text class="m" x="21" y="92">(devvm) ~/web $</text>
+  <text class="t" x="133" y="92">claude</text>
+  <text class="a blink" x="182" y="92">█</text>
+  <text class="t" x="21" y="120">~/web</text>
+  <text class="a" x="91" y="120">rw</text>
+  <text class="t" x="21" y="141">skills</text>
+  <text class="m" x="91" y="141">ro</text>
+  <text class="t" x="21" y="162">settings</text>
+  <text class="m" x="91" y="162">ro</text>
+  <!-- The token, added at the proxy, which never lets it into the VM. -->
+  <rect class="a" x="217" y="94" width="49" height="14"/>
+  <text class="k" x="224" y="105">token</text>
+  <rect class="m" x="240" y="108" width="2" height="14"/>
+  <!-- Out through the proxy, which checks the allowlist, both on your machine. A block travels it, under
+       the proxy, down to the allowlist and back, then out. -->
+  <rect class="m" x="196" y="128" width="21" height="2"/>
+  <rect class="m" x="240" y="136" width="2" height="14"/>
+  <rect class="t mover mover-egress" x="196" y="127" width="4" height="4"/>
+  <rect class="f" x="217" y="122" width="49" height="14"/>
+  <text class="t" x="224" y="133">proxy</text>
+  <rect class="f" x="210" y="150" width="77" height="14"/>
+  <text class="t" x="217" y="161">allowlist</text>
+  <rect class="a pulse" x="266" y="127" width="56" height="4"/>
+  <polygon class="a pulse pulse-2" points="322,122 336,129 322,136"/>
+  <!-- The internet: a pixel globe, its meridian and three latitudes. -->
+  <circle class="o" cx="352.5" cy="129.5" r="10"/>
+  <ellipse class="o" cx="352.5" cy="129.5" rx="4" ry="10"/>
+  <line class="o" x1="342.5" y1="129.5" x2="362.5" y2="129.5"/>
+  <line class="o" x1="344.5" y1="124.5" x2="360.5" y2="124.5"/>
+  <line class="o" x1="344.5" y1="134.5" x2="360.5" y2="134.5"/>
+</svg>

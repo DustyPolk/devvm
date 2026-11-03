@@ -1,36 +1,36 @@
 # What devvm checks before it builds or creates anything: the folder, its
-# path and name, and the image.
+# path and name, and its toolchains, agents and layers.
 
 # A folder that is or holds the home folder or devvm's state is refused,
 # and so is one inside devvm's own folders, unless --unsafe-folder.
 cd $HOME
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: unsafe_folder dir=/\S*/home holds=\S*/home$'
 cd $XDG_DATA_HOME
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: unsafe_folder dir=/\S*/data holds=\S*/data/devvm$'
 cd $XDG_CONFIG_HOME
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: unsafe_folder dir=/\S*/config holds=\S*/config/devvm$'
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp $WORK/config/foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 cd $XDG_CONFIG_HOME/devvm/layers
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: unsafe_folder_inside dir=/\S*/config/devvm/layers inside=\S*/config/devvm$'
 mkdir $DEVVM_LIMA_HOME/x
 cd $DEVVM_LIMA_HOME/x
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: unsafe_folder_inside dir=/\S*/lima/x inside=\S*/lima$'
 stub_calls
 ! stdout 'create|clone'
 # A project in the home folder is fine; --unsafe-folder mounts it anyway.
 mkdir $HOME/proj
 cd $HOME/proj
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 ! stderr unsafe_folder
 stdout '^==> creating_from image=base vm=devvm-proj-[0-9a-f]{14}$'
 cd $XDG_CONFIG_HOME/devvm/layers
-exec devvm --unsafe-folder --no-network-policy base
+exec devvm --unsafe-folder --no-network-policy
 stderr '^devvm: unsafe_folder_used dir=/\S*/config/devvm/layers holds=\S*/config/devvm$'
 ! stderr 'unsafe_folder_inside'
 stub_calls
@@ -38,67 +38,98 @@ stdout '^limactl clone .* devvm-layers-[0-9a-f]{14} '
 
 # Lima can't mount paths with a comma or a control character.
 project a,b
-! exec devvm --no-network-policy base
+! exec devvm --no-network-policy
 stderr '^devvm: bad_path dir=/\S*/a,b$'
 cd $WORK
-exec sh -c 'mkdir "$(printf "t\tab")" && cd "$(printf "t\tab")" && ! devvm --no-network-policy base'
+exec sh -c 'mkdir "$(printf "t\tab")" && cd "$(printf "t\tab")" && ! devvm --no-network-policy'
 stderr '^devvm: bad_path dir=/\S*/tab$'
 
 # The VM's name: the folder's, lowercase, other characters as dashes, at
 # most 20 of them, then the hash of its path.
 project My_App.v2
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-my-app-v2-[0-9a-f]{14}$'
 project 'My App'
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-my-app-[0-9a-f]{14}$'
 project a-very-long-folder-name-for-a-project
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
 # A Lima home too long for any folder's name is refused.
 env DEVVM_LIMA_HOME=/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-! exec devvm base
+! exec devvm
 stderr '^devvm: vm_name_no_room backend=lima max=[0-9]+$'
 env DEVVM_LIMA_HOME=$LIMA_HOME
 
-# No image named: the folder's toolchains, detected. Nothing detected and
-# nothing named says which there are.
+# Without a terminal, a new VM gets the defaults: nothing detected is base
+# with no shared tools, said in one line naming the flags. --no-input is
+# the same in a terminal.
 project empty
-! exec devvm --no-network-policy
-stderr '^devvm: no_image_for agents=claude codex opencode dir=/\S*/empty envs=base node python rust go docker foo nix$'
-# A named image skips detection; layers are checked before anything runs.
+exec devvm --no-network-policy --no-input
+stdout '^==> new_vm_gets layers=none tools=none vm=devvm-empty-[0-9a-f]{14}$'
+stdout '^==> creating_from image=base vm=devvm-empty-[0-9a-f]{14}$'
+catg $VMS/devvm-empty-*
+stdout '^image=base$'
+stdout '^tool_names=$'
+
+# The flags' values are checked before anything runs: an unknown name
+# with a did-you-mean, none only alone. A word after devvm is no image.
 project node
 cp $WORK/package.json package.json
 stub_reset
 ! exec devvm --no-network-policy stray
-! stdout detected
-stderr '^devvm: no_command_or_image word=stray$'
+stderr '^devvm: no_command word=stray$'
 stderr '^usage_help command=devvm$'
-! exec devvm --no-network-policy node+stray
-stderr '^devvm: unknown_layer agents=claude codex opencode envs=base node python rust go docker foo nix layer=stray$'
+! exec devvm --no-network-policy node
+stderr '^devvm: no_command_like command=code word=node$'
+! exec devvm --no-network-policy --layers stray
+stderr '^devvm: unknown_part flag=--layers given=stray names=docker foo nix$'
+stderr '^usage_help command=devvm$'
+! exec devvm --no-network-policy --layers fooo
+stderr '^devvm: unknown_part_like flag=--layers given=fooo like=foo$'
+! exec devvm --no-network-policy --tools claude
+stderr '^devvm: unknown_part flag=--tools given=claude names=node python rust go$'
+! exec devvm --no-network-policy --agents cladue
+stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
+! exec devvm --no-network-policy --tools node,none
+stderr '^devvm: part_none_alone flag=--tools$'
 stub_calls
 ! stdout 'create|clone|start'
-exec devvm --no-network-policy base+foo
-! stdout detected
+! exists $VMS/devvm-node-*
+# Each flag is the exact list of its part: --layers alone keeps the
+# toolchains the folder calls for.
+exec devvm --no-network-policy --layers foo
+stdout '^==> new_vm_gets layers=foo tools=node vm=devvm-node-[0-9a-f]{14}$'
 stdout '^==> creating_from image=foo vm=devvm-node-[0-9a-f]{14}$'
 catg $VMS/devvm-node-*
 stdout '^image=foo$'
+stdout '^tool_names=node$'
 stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
 
-# A Nix project's files call for the nix layer, after the toolchains, with
-# an agent named on top.
+# A Nix project's flake.nix doesn't give it the nix layer: layers are
+# chosen. The toolchains detected are the default, setup's agents join
+# them, and --tools none takes the toolchains out.
 project flake
 cp $WORK/package.json package.json
 cp $WORK/flake.nix flake.nix
-exec devvm --no-network-policy --no-git-protect claude
-stdout '^==> detected found=node\+nix$'
-stdout '^==> creating_from image=node\+nix\+claude vm=devvm-flake-[0-9a-f]{14}$'
+exec devvm setup --agents claude
+exec devvm --no-network-policy --no-git-protect
+stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-flake-[0-9a-f]{14}$'
+stdout '^==> creating_from image=base vm=devvm-flake-[0-9a-f]{14}$'
 catg $VMS/devvm-flake-*
-stdout '^chain=base=[0-9a-f]{12} nix=[0-9a-f]{12}$'
+stdout '^tool_names=node claude$'
+stdout '^chain=base=[0-9a-f]{12}$'
+project flake2
+cp $WORK/package.json package.json
+exec devvm --no-network-policy --no-git-protect --tools none --layers nix
+stdout '^==> new_vm_gets layers=nix tools=claude vm=devvm-flake2-[0-9a-f]{14}$'
+catg $VMS/devvm-flake2-*
+stdout '^image=nix$'
+stdout '^tool_names=claude$'
 
-# More than one image is a usage error.
-! exec devvm a b
-stderr '^devvm: args_too_many args=\[IMAGE\] command=devvm given=a b$'
+# Any word is a usage error.
+! exec devvm xyzzy b
+stderr '^devvm: no_command word=xyzzy$'
 
 -- package.json --
 {}

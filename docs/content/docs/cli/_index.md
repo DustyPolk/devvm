@@ -48,14 +48,14 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm secret set](devvm_secret_set.md): Save the Claude Code token or GitHub token on this machine
 - [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a secret
 - [devvm secret use](devvm_secret_use.md): Let this folder's VM use a secret
-- [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size and network policy
+- [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size, network policy and coding agents
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm ssh-agent add](devvm_ssh-agent_add.md): Load a key into devvm's own SSH agent
 - [devvm ssh-agent rm](devvm_ssh-agent_rm.md): Remove a key from devvm's own SSH agent
 - [devvm stop](devvm_stop.md): Stop this folder's VM
-- [devvm tools](devvm_tools.md): Show this folder's VM's shared tools
+- [devvm tools](devvm_tools.md): Show or choose this folder's VM's shared tools
 - [devvm tools add](devvm_tools_add.md): Add shared tools to this folder's VM, then open a shell in it
 - [devvm tools rm](devvm_tools_rm.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm tools update](devvm_tools_update.md): Move this folder's VM to the newest shared tools, then open a shell in it

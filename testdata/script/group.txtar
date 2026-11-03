@@ -30,20 +30,20 @@ stderr '^devvm: flag_unknown command=devvm group join flag=--json$'
 ! stderr no_vm_group
 
 # The VMs: app, db and two folders called api; cache with network policy.
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 project db
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 5432,8000-8001
 mkdir $WORK/x/api
 cd $WORK/x/api
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 80
 mkdir $WORK/y/api
 cd $WORK/y/api
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 3000
 project cache
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 
 # Not in a group: said, and an empty list in JSON.
 cd $WORK/app
@@ -136,7 +136,7 @@ stdout '^==> group_links_added group=web links=api1:80, db:5432,8000-8001 vm=dev
 # A folder whose name is the name a member joined with: its own hostname
 # would name that member.
 project api1
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 ! exec devvm group join web --as other
 stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api1 vm=devvm-api1-[0-9a-f]{14}$'
 

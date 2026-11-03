@@ -184,7 +184,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	// the built-in policies' rules), or holding a CA
 	// since replaced (which mints certificates the VM no longer trusts
 	// after its next setup) starts again too, on the same port.
-	builtin, files := Policies(p.Dirs, vm, st.Get(state.KeyImage))
+	builtin, files := Policies(p.Dirs, vm, st.Get(state.KeyImage), st.ToolNames())
 	for _, m := range PolicyWarnings(files) {
 		p.Warn(m)
 	}

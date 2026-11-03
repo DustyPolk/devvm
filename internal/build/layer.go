@@ -16,7 +16,7 @@ import (
 // layerScript is the script a new layer starts with; NAME is its name.
 const layerScript = `#!/bin/bash
 # NAME: a devvm layer. devvm runs it once, with bash as the VM's user (who has sudo), in an image
-# on top of base: devvm build NAME, or devvm node+NAME for a VM. Editing it rebuilds that image,
+# on top of base: devvm build NAME builds it, and a new VM gets it with --layers NAME. Editing it rebuilds that image,
 # and the ones built on it, on next use.
 # - Put PATH changes in ~/.profile.
 # - Download with devvm-fetch URL SHA256 OUT: it fails when the checksum doesn't match.
@@ -32,14 +32,12 @@ const layerPolicy = `# Hosts a VM with the NAME layer can reach with network pol
 `
 
 // CheckLayerName refuses a name a new layer can't have: base's, a shared
-// tool's or a built-in layer's, a word devvm keeps for its commands, or
-// one that isn't lowercase letters, digits and dashes.
+// tool's or a built-in layer's, or one that isn't lowercase letters,
+// digits and dashes.
 func CheckLayerName(name string) error {
 	switch {
 	case name == image.Base || image.IsTool(name) || image.IsBuiltin(name):
 		return msg.LayerNameReserved(name)
-	case image.IsReserved(name):
-		return msg.LayerNameCommand(name)
 	case !image.LayerName(name):
 		return msg.LayerNameInvalid(name)
 	}

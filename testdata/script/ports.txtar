@@ -54,7 +54,7 @@ exec devvm ports -g all
 # a fixed one may be a program's, which a running VM's change leaves out.)
 exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 free_port P Q
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 vm_name WEB web
 catg $VMS/devvm-web-*
 ! stdout '^ports'

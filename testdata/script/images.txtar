@@ -39,11 +39,14 @@ stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\n'
 
 # Shared tools: each version newest first, how many VMs list it, and
 # whether it's the lock's; the lock's go, not built, and an older one no
-# VM uses.
-exec devvm build claude
+# VM uses. claude's built for a VM that's gone since.
+project ag
+exec devvm --tools none --agents claude --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
+cd $WORK
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
 mkdir $VMS
-exec sh -c 'printf "image=claude\ndir=/p\nbackend=smolvm\nlibc=musl\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
+exec sh -c 'printf "image=base\ndir=/p\nbackend=smolvm\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
 stub_reset
 exec devvm images
 # The lock's go isn't built; the old go has the backend and C library of
@@ -86,7 +89,7 @@ stderr '^devvm: unknown_layer .*layer=nope'
 ! exec devvm images rm --force foo
 stderr '^devvm: no_image_named image=foo$'
 ! exec devvm images rm --force node+foo
-stderr '^devvm: tools_not_images_rm image=node\+foo$'
+stderr '^devvm: tool_not_layer tool=node$'
 ! exec devvm images rm --force --from node:24 base
 stderr '^devvm: no_image_named_from '
 ! exec devvm images rm

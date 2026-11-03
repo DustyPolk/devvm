@@ -7,7 +7,7 @@ Build an image and the images under it, unless they're built
 
 ## Synopsis
 
-Build an image, the images under it and the shared tools it names, unless they're built. IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base, with any shared tools, such as node+foo+claude.
+Build an image and the images under it, unless they're built. IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base. An image holds no shared tools: a VM gets those when devvm makes it, or with devvm tools.
 
 ```text
 devvm build IMAGE [flags]
@@ -16,7 +16,7 @@ devvm build IMAGE [flags]
 ## Examples
 
 ```text
-  devvm build node+claude            # build base and the node and Claude Code tools
+  devvm build docker                 # build base and the docker layer on it
   devvm build foo+bar                # build base, foo and foo+bar
   devvm build base --backend smolvm  # build base on the smolvm backend
 ```

@@ -19,7 +19,7 @@ func TestNetwork(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	n, l := Net{e}, Launch{e}
 	shown := func(want string) {
@@ -81,7 +81,7 @@ func TestNetworkRequiresEgressProxy(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
 	e, _, _ := upEnv(t, caps)
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	err := Net{e}.SetNetwork(t.Context(), true)
 	if got := msg.NamesOf(err); got != "backend_unreviewed backend=fake feature=egress-proxy vm="+st.Name() {
 		t.Errorf("Network on = %v", got)

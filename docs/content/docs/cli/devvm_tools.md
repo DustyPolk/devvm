@@ -3,11 +3,11 @@ title: devvm tools
 weight: 51
 ---
 
-Show this folder's VM's shared tools
+Show or choose this folder's VM's shared tools
 
 ## Synopsis
 
-Show the shared tools of this folder's VM, each with its version and any newer version in devvm's tools lock. It changes nothing, starts no VM and doesn't go online.
+In a terminal, choose the toolchains and coding agents of this folder's VM in a list, which shows its layers too, then open a shell in it. Without a terminal, or with --json, show its shared tools, each with its version and any newer version in devvm's tools lock, which changes nothing, starts no VM and doesn't go online.
 
 ```text
 devvm tools [flags]
@@ -16,7 +16,7 @@ devvm tools [flags]
 ## Examples
 
 ```text
-  devvm tools                    # show the VM's shared tools
+  devvm tools                    # choose the VM's shared tools, or show them without a terminal
   devvm tools add python claude  # add python and Claude Code to the VM
   devvm tools update             # move the VM to the newest versions
 ```

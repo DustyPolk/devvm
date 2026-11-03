@@ -23,7 +23,7 @@ import (
 // without network policy, and the backend's shell run.
 func TestUp(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Size: Size{CPUs: "2"}, Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Size: Size{CPUs: "2"}, Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()
@@ -92,7 +92,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Exec", "List", "SSH", "Shell"}
@@ -124,7 +124,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 // stopped: no setup, no shell.
 func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
-	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	if msg.NamesOf(err) != "net_direct_route vm="+spec.Name {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
@@ -147,7 +147,7 @@ func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 func TestUpKeepsTheNetworkChoice(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.Errs = map[string]error{"CreateVM": errors.New("clone failed")}
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NetworkPolicy: true}); err == nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err == nil {
 		t.Fatal("Up succeeded")
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
@@ -163,7 +163,7 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
@@ -171,7 +171,7 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 		t.Errorf("calls = %q", f.Methods())
 	}
 	// Without network policy it doesn't need it.
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Errorf("Up without network policy = %v", msg.NamesOf(err))
 	}
 }
@@ -182,14 +182,14 @@ func TestUpWithoutEgressProxy(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureEgressProxy)
 	e, f, _ := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{Image: "base", NetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=egress-proxy vm=devvm-web-") ||
 		slices.Contains(f.Methods(), "BuildImage") {
 		t.Errorf("Up --network-policy = %v, calls %q", got, f.Methods())
 	}
 	var warned msg.Recorder
 	e.Warn = warned.Add
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
@@ -199,18 +199,23 @@ func TestUpWithoutEgressProxy(t *testing.T) {
 	}
 }
 
-// Agents go on top of the folder's toolchains; the shared tools are built
+// --agents goes with the folder's toolchains; the shared tools are built
 // from base, listed in the VM's state with base's libc, and sent to the VM
-// to mount.
+// to mount. The image is base: tools aren't layers.
 func TestUpTools(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	if err := os.WriteFile(filepath.Join(e.Dir, "package.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "claude", NoNetworkPolicy: true}); err != nil {
+	var said msg.Recorder
+	e.Info = said.Add
+	if err := (Launch{e}).Up(t.Context(), Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "BuildTools", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}) {
+	if !slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets layers=none tools=node claude vm=") }) {
+		t.Errorf("said %q", said.Names())
+	}
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	lock, err := os.ReadFile(e.Dirs.ToolLock())
@@ -230,8 +235,8 @@ func TestUpTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Get(state.KeyImage) != "node+claude" || st.Get(KeyLibc) != "gnu" || st.Get(KeyTools) != strings.Join(files, " ") {
-		t.Errorf("state image=%q libc=%q tools=%q", st.Get(state.KeyImage), st.Get(KeyLibc), st.Get(KeyTools))
+	if st.Get(state.KeyImage) != "base" || !slices.Equal(st.ToolNames(), []string{"node", "claude"}) || st.Get(KeyLibc) != "gnu" || st.Get(KeyTools) != strings.Join(files, " ") {
+		t.Errorf("state image=%q tool_names=%q libc=%q tools=%q", st.Get(state.KeyImage), st.ToolNames(), st.Get(KeyLibc), st.Get(KeyTools))
 	}
 	// Made from base's image: the tools aren't layers.
 	if img, _ := call(f, "CreateVM").Args[0].(string); img != call(f, "BuildImage").Args[0].(backend.ImageSpec).Key {
@@ -247,16 +252,158 @@ func TestUpTools(t *testing.T) {
 	}
 }
 
-// Only agents, or nothing, need the folder's toolchains under them; a
-// toolchain, a layer or base is a choice of its own.
-func TestNeedsDetection(t *testing.T) {
-	for in, want := range map[string]bool{
-		"": true, "claude": true, "claude+codex": true,
-		"node+claude": false, "python+claude": false, "base": false, "base+claude": false, "foo": false,
+// A new VM's defaults: the toolchains the folder's files call for, devvm
+// setup's agents, and no layers, the nix layer a flake.nix calls for
+// included; each flag replaces its part, none with an empty list. Without
+// a terminal one line says what the VM gets.
+func TestUpParts(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		o                    Options
+		img, tools, gets     string
+		setup                []string // devvm setup's agents; nil for unset
+		withFlake, withLayer bool
+	}{
+		{name: "the defaults", img: "base", tools: "node go", gets: "layers=none tools=node go", withFlake: true},
+		{name: "setup's agents", setup: []string{"codex"}, img: "base", tools: "node go codex", gets: "layers=none tools=node go codex"},
+		{name: "setup's none", setup: []string{}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
+		{name: "--tools", o: Options{Toolchains: &[]string{"python"}}, img: "base", tools: "python", gets: "layers=none tools=python"},
+		{name: "--tools none", o: Options{Toolchains: &[]string{}}, setup: []string{"claude"}, img: "base", tools: "claude", gets: "layers=none tools=claude"},
+		{name: "--agents none", o: Options{Agents: &[]string{}}, setup: []string{"claude"}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
+		{name: "--layers", o: Options{Layers: &[]string{"mine", "nix"}}, img: "mine+nix", tools: "node go", gets: "layers=mine nix tools=node go", withLayer: true},
+		{name: "all none", o: Options{Toolchains: &[]string{}, Agents: &[]string{}, Layers: &[]string{}}, img: "base", gets: "layers=none tools=none"},
 	} {
-		if got := needsDetection(in); got != want {
-			t.Errorf("needsDetection(%q) = %v", in, got)
+		t.Run(tc.name, func(t *testing.T) {
+			e, f, _ := upEnv(t, allNative())
+			for _, file := range []string{"package.json", "go.mod"} {
+				if err := os.WriteFile(filepath.Join(e.Dir, file), nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.withFlake {
+				if err := os.WriteFile(filepath.Join(e.Dir, "flake.nix"), nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.withLayer {
+				if err := os.MkdirAll(e.Dirs.Layers(), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(e.Dirs.Layers(), "mine.sh"), []byte("#!/bin/bash\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.setup != nil {
+				if err := state.WriteAgents(e.Dirs, tc.setup); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var said msg.Recorder
+			e.Info = said.Add
+			o := tc.o
+			o.NoNetworkPolicy, o.Ports = true, "none"
+			if err := (Launch{e}).Up(t.Context(), o); err != nil {
+				t.Fatal(msg.NamesOf(err))
+			}
+			spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+			st, _ := state.ReadVM(e.Dirs, spec.Name)
+			if st.Get(state.KeyImage) != tc.img || st.Get(state.KeyToolNames) != tc.tools {
+				t.Errorf("image=%q tool_names=%q, want %q and %q", st.Get(state.KeyImage), st.Get(state.KeyToolNames), tc.img, tc.tools)
+			}
+			if !slices.Contains(said.Names(), "new_vm_gets "+tc.gets+" vm="+spec.Name) {
+				t.Errorf("said %q, want new_vm_gets %s", said.Names(), tc.gets)
+			}
+		})
+	}
+}
+
+// In a terminal without the flags, the picker shows the defaults checked,
+// each detected toolchain naming its file and setup's agents saying so,
+// the layers unchecked but the nix layer naming the flake.nix; what's
+// checked is what the VM gets, and no line says it. On the first run it
+// asks for setup's agents first.
+func TestUpPicker(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	for _, file := range []string{"package.json", "flake.nix"} {
+		if err := os.WriteFile(filepath.Join(e.Dir, file), nil, 0o600); err != nil {
+			t.Fatal(err)
 		}
+	}
+	e.CanPick = func() bool { return true }
+	var asked []string
+	var shown []PickPart
+	e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
+		asked = append(asked, help.ID())
+		if help.ID() == "agents_help" {
+			parts[0].Rows[1].On = true // codex
+			return parts
+		}
+		shown = parts
+		out := make([]PickPart, len(parts))
+		for i, p := range parts {
+			out[i] = PickPart{Heading: p.Heading, Rows: slices.Clone(p.Rows)}
+		}
+		out[0].Rows[1].On = true // python
+		out[2].Rows[0].On = true // docker
+		return out
+	}
+	var said msg.Recorder
+	e.Info = said.Add
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Equal(asked, []string{"agents_help", "pick_new_help"}) {
+		t.Fatalf("asked %q", asked)
+	}
+	if agents, set, _ := state.ReadAgents(e.Dirs); !set || !slices.Equal(agents, []string{"codex"}) {
+		t.Errorf("setup's agents = %q, %v", agents, set)
+	}
+	rows := map[string]PickRow{}
+	var headings []string
+	for _, p := range shown {
+		headings = append(headings, p.Heading.ID())
+		for _, r := range p.Rows {
+			rows[r.Name] = r
+		}
+	}
+	if !slices.Equal(headings, []string{"pick_toolchains", "pick_agents", "pick_layers"}) {
+		t.Errorf("headings %q", headings)
+	}
+	for name, want := range map[string]PickRow{
+		"node":   {Name: "node", Desc: "pick_called_for file=package.json", On: true},
+		"python": {Name: "python"},
+		"codex":  {Name: "codex", Desc: "pick_setup_agent", On: true},
+		"claude": {Name: "claude"},
+		"docker": {Name: "docker", Desc: "pick_layer_docker"},
+		"nix":    {Name: "nix", Desc: "pick_called_for file=flake.nix"},
+	} {
+		if rows[name] != want {
+			t.Errorf("row %s = %+v, want %+v", name, rows[name], want)
+		}
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	st, _ := state.ReadVM(e.Dirs, spec.Name)
+	if st.Get(state.KeyImage) != "docker" || st.Get(state.KeyToolNames) != "node python codex" {
+		t.Errorf("image=%q tool_names=%q", st.Get(state.KeyImage), st.Get(state.KeyToolNames))
+	}
+	if slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets") }) {
+		t.Errorf("said %q", said.Names())
+	}
+}
+
+// Any of the flags skips the picker.
+func TestUpFlagsSkipPicker(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	e.CanPick = func() bool { return true }
+	if err := state.WriteAgents(e.Dirs, nil); err != nil {
+		t.Fatal(err)
+	}
+	e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
+		t.Errorf("asked %s", help.Names())
+		return parts
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, NoNetworkPolicy: true, Ports: "none"}); err != nil {
+		t.Fatal(msg.NamesOf(err))
 	}
 }
 
@@ -266,7 +413,7 @@ func TestUpRequires(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureProjectMount)
 	e, f, execs := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{NoNetworkPolicy: true})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=project-mount vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
@@ -293,7 +440,7 @@ func TestUpRefusesLowSpace(t *testing.T) {
 		{12<<30 - 1, "disk_low dir=" + e.Dirs.Lima + " free=11.9 name=base need=12"},
 	} {
 		e.FreeSpace = func(string) (uint64, error) { return tc.free, nil }
-		err := Launch{e}.Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"})
+		err := Launch{e}.Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"})
 		if got := msg.NamesOf(err); !strings.HasPrefix(got, tc.want) {
 			t.Errorf("with %d free: Up = %v, want %s…", tc.free, got, tc.want)
 		}
@@ -312,7 +459,7 @@ func TestUpRequiresDockerLayer(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureDockerLayer)
 	e, f, _ := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{Image: "docker", NoNetworkPolicy: true, Ports: "none"})
+	err := Launch{e}.Up(t.Context(), Options{Layers: &[]string{"docker"}, NoNetworkPolicy: true, Ports: "none"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
@@ -332,7 +479,7 @@ func TestUpDefaultDiskUnused(t *testing.T) {
 	}
 	var warned msg.Recorder
 	e.Warn = warned.Add
-	if err := (Launch{e}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
@@ -346,7 +493,7 @@ func TestUpDefaultDiskUnused(t *testing.T) {
 		t.Errorf("state disk=%q cpus=%q", st.Get(KeyDisk), st.Get(KeyCPUs))
 	}
 	e2, _, _ := upEnv(t, caps)
-	err := (Launch{e2}).Up(t.Context(), Options{Image: "base", NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
+	err := (Launch{e2}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
 		t.Errorf("--disk: %v", got)
 	}

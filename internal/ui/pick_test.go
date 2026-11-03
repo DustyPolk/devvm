@@ -9,7 +9,7 @@ import (
 )
 
 func choices() []Choice {
-	return []Choice{{"a", "first", true}, {"b", "second", true}, {"c", "third\x1b[2J", false}}
+	return []Choice{{Name: "a", Desc: "first", On: true}, {Name: "b", Desc: "second", On: true}, {Name: "c", Desc: "third\x1b[2J"}}
 }
 
 func onOf(cs []Choice) []string {
@@ -51,7 +51,7 @@ func TestPickKeys(t *testing.T) {
 			u, out, _ := testUI(t, tc.keys)
 			restored := pickTerminal(u)
 			in := choices()
-			got := u.Pick(msg.MsgUnknown("x"), in)
+			got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: in}})[0].Choices
 			if !slices.Equal(onOf(got), tc.want) {
 				t.Errorf("chosen %q, want %q", onOf(got), tc.want)
 			}
@@ -92,7 +92,7 @@ func TestPickOneKeys(t *testing.T) {
 			t.Parallel()
 			u, out, _ := testUI(t, tc.keys)
 			restored := pickTerminal(u)
-			in := []Choice{{"a", "first", false}, {"b", "second", false}, {"c", "third", false}}
+			in := []Choice{{Name: "a", Desc: "first"}, {Name: "b", Desc: "second"}, {Name: "c", Desc: "third"}}
 			if tc.start >= 0 {
 				in[tc.start].On = true
 			}
@@ -114,6 +114,104 @@ func TestPickOneKeys(t *testing.T) {
 	}
 }
 
+// sections are two headed sections and one without a heading, with fixed
+// rows the cursor skips: x (on) and z (off).
+func sections() []Section {
+	return []Section{
+		{Heading: msg.MsgUnknown("top"), Choices: []Choice{{Name: "a", On: true}, {Name: "x", On: true, Fixed: true}, {Name: "b"}}},
+		{Heading: msg.MsgUnknown("bottom"), Choices: []Choice{{Name: "z", Fixed: true}, {Name: "c"}}},
+		{Choices: []Choice{{Name: "d"}}},
+	}
+}
+
+func onOfAll(ss []Section) []string {
+	var on []string
+	for _, s := range ss {
+		on = append(on, onOf(s.Choices)...)
+	}
+	return on
+}
+
+func TestPickSectionsKeys(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, keys string
+		want       []string
+	}{
+		{"enter keeps them, the fixed too", "\r", []string{"a", "x"}},
+		{"space toggles the first", " \r", []string{"x"}},
+		// a, b, c, d: j skips x, and z in the next section.
+		{"j skips the fixed rows", "j \r", []string{"a", "x", "b"}},
+		{"j twice crosses a heading", "jj \r", []string{"a", "x", "c"}},
+		{"down thrice reaches the section without a heading", "\x1b[B\x1b[B\x1b[B \r", []string{"a", "x", "d"}},
+		{"up wraps to the last", "k \r", []string{"a", "x", "d"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u, out, _ := testUI(t, tc.keys)
+			pickTerminal(u)
+			in := sections()
+			got := u.Pick(msg.MsgUnknown("x"), in)
+			if !slices.Equal(onOfAll(got), tc.want) {
+				t.Errorf("chosen %q, want %q", onOfAll(got), tc.want)
+			}
+			if !slices.Equal(onOfAll(in), []string{"a", "x"}) {
+				t.Error("Pick changed its argument")
+			}
+			s := out.String()
+			for _, line := range []string{"msg_unknown name=top\r\n", "msg_unknown name=bottom\r\n", "  [x] x          \r\n", "  [ ] z          \r\n"} {
+				if !strings.Contains(s, line) {
+					t.Errorf("output %q: no line %q", s, line)
+				}
+			}
+			// Each redraw moves up over the headings too: 2 headings, 6 rows.
+			if tc.keys != "\r" && !strings.Contains(s, "\033[8A") {
+				t.Errorf("output %q: doesn't move up 8 lines", s)
+			}
+		})
+	}
+}
+
+// Fixed rows are greyed out where the output has color.
+func TestPickFixedDim(t *testing.T) {
+	t.Parallel()
+	u, out, _ := testUI(t, "\r")
+	pickTerminal(u)
+	u.outStyle = style{on: true}
+	u.Pick(msg.MsgUnknown("x"), sections())
+	if s := out.String(); !strings.Contains(s, "\033["+sgrDim+"m  [x] x") || strings.Contains(s, "\033["+sgrDim+"m> [x] a") {
+		t.Errorf("output %q: fixed rows not dim, or a movable one dim", s)
+	}
+}
+
+// With every row fixed, enter confirms them as they are.
+func TestPickAllFixed(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI(t, " j\r")
+	pickTerminal(u)
+	got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: []Choice{{Name: "x", On: true, Fixed: true}}}})
+	if !slices.Equal(onOfAll(got), []string{"x"}) {
+		t.Errorf("chosen %q", onOfAll(got))
+	}
+}
+
+// CanPick is a terminal both ways, without --no-input.
+func TestCanPick(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	if u.CanPick() {
+		t.Error("CanPick without a terminal")
+	}
+	pickTerminal(u)
+	if !u.CanPick() {
+		t.Error("not CanPick in a terminal")
+	}
+	u.SetFlags(Flags{NoInput: true})
+	if u.CanPick() {
+		t.Error("CanPick with --no-input")
+	}
+}
+
 func TestPickOneWithoutTerminal(t *testing.T) {
 	t.Parallel()
 	u, out, _ := testUI(t, "j\r")
@@ -125,7 +223,7 @@ func TestPickOneWithoutTerminal(t *testing.T) {
 func TestPickWithoutTerminal(t *testing.T) {
 	t.Parallel()
 	u, out, _ := testUI(t, " \r")
-	got := u.Pick(msg.MsgUnknown("x"), choices())
+	got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}})[0].Choices
 	if !slices.Equal(onOf(got), []string{"a", "b"}) || out.Len() != 0 {
 		t.Errorf("chosen %q, printed %q: want the choices as given, nothing printed", onOf(got), out)
 	}
@@ -135,7 +233,7 @@ func TestPickCtrlC(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, "j\x03 \r")
 	restored := pickTerminal(u)
-	if code := exitCode(func() { u.Pick(msg.MsgUnknown("x"), choices()) }); code != InterruptedCode {
+	if code := exitCode(func() { u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}}) }); code != InterruptedCode {
 		t.Errorf("exit code %d, want %d", code, InterruptedCode)
 	}
 	if !u.Interrupted() || *restored != 1 {

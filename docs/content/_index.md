@@ -21,6 +21,8 @@ contextMenu: false
 {{< hextra/hero-button text="Install" link="docs/getting-started/install/" icon="download" >}}
 {{< hextra/hero-button text="Read the docs" link="docs/" icon="open-book" >}}
 
+{{< art "sandbox" >}}
+
 ## Quick start {icon="rocket"}
 
 {{< install step="1" >}}
@@ -28,11 +30,35 @@ contextMenu: false
 ```sh
 # 2. Go to a project folder
 cd ~/some-project
-# 3. Open its VM
+# 3. Make its VM, and check a coding agent in the list
 devvm
 ```
 
-For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your first VM](docs/getting-started/first-vm.md) walks you through it, including the Claude Code token.
+devvm lists what the new VM can get, with the toolchains your project's files call for already checked. Move with the arrow keys, press space to check Claude Code, Codex or opencode, and press enter:
+
+```text
+Toolchains
+> [x] node       for package.json
+  [ ] python
+  [ ] rust
+  [ ] go
+Coding agents, which you start in the VM's shell
+  [x] claude
+  [ ] codex
+  [ ] opencode
+Layers, which a VM gets only when devvm makes it
+  [ ] docker     Docker's engine, CLI, BuildKit and Compose
+  [ ] nix        Nix, direnv and nix-direnv
+```
+
+devvm makes the VM and opens a shell in it, whose prompt starts with `(devvm)`. You're in the VM now, so start your agent there:
+
+```sh
+# 4. Start the agent in the VM's shell
+claude
+```
+
+The agent runs in the VM, and it sees only your project folder. Claude Code needs a Claude Code token first, which [your first VM](docs/getting-started/first-vm.md#claude-codes-token) shows how to give it. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
 
 ## What's supported {icon="view-grid"}
 
@@ -40,13 +66,13 @@ For a VM with a coding agent, run `devvm claude` or `devvm codex` instead. [Your
 
 {{< feature title="Toolchains" icon="code" level="3" art="toolchains" >}}
 
-`devvm` picks the toolchain from the project's files, and you can combine them ([toolchains](docs/using/toolchains.md)).
+`devvm` checks the toolchains your project's files call for, and you can check more in the list or name them with `--tools` ([toolchains](docs/using/toolchains.md)).
 
 {{< /feature >}}
 
 {{< feature title="Coding agents" icon="robot" level="3" art="coding-agents" >}}
 
-Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/coding-agents.md)).
+Claude Code, Codex and opencode run in the VM. Check one in the list when devvm makes the VM, then start it in the VM's shell ([coding agents](docs/using/coding-agents.md)).
 
 {{< /feature >}}
 
@@ -99,14 +125,14 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 
 {{< feature title="Made for coding agents" icon="robot" art="agents" >}}
 
-- `devvm claude`, `devvm codex` and `devvm opencode` make a VM with that agent, which gets your settings, skills and MCP servers but never your history ([coding agents](docs/using/coding-agents.md)).
+- The agent runs in the VM, so an attack on it stays in the sandbox. You check Claude Code, Codex or opencode when devvm makes the VM and start it in the VM's shell, and it gets your settings, skills and MCP servers but never your history ([coding agents](docs/using/coding-agents.md)).
 - With network policy, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and devvm's proxy puts the real ones into its requests on the way out.
 
 {{< /feature >}}
 
 {{< feature title="Make it yours" icon="wrench" column="right" art="make-it-yours" >}}
 
-- Your own layers are setup scripts that `devvm` builds into an image: `devvm layer new mailpit` starts one, and `devvm node+mailpit` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
+- Your own layers are setup scripts that `devvm` builds into an image: `devvm layer new mailpit` starts one, and `devvm --layers mailpit` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
 - Your own features are scripts that run in the base image, so every VM gets your shell setup, aliases or dotfiles ([your own features](docs/using/customizing.md#your-own-features)).
 - `--from` starts the base image from a container image instead of Ubuntu's, such as `node:24` or your team's own ([starting from a container image](docs/using/from.md)).
 - When the project has a `devcontainer.json`, `devvm` sets up its VM from the file's container image, ports, environment and commands ([devcontainer.json](docs/using/devcontainer.md)).
@@ -120,6 +146,10 @@ Claude Code, Codex and opencode are ready in the VM ([coding agents](docs/using/
 ### What does it run on?
 
 `devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs one of the supported [backends](docs/backends/_index.md): Lima 2.0 or newer, the default, which Homebrew installs along with devvm and which on Linux also needs QEMU and access to `/dev/kvm`, or smolvm or Docker, which are {{< experimental >}}. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
+
+### Does the agent run on my machine?
+
+No. You start the agent in the VM's shell, so it runs in the VM. There it sees only your project folder, and your agents' config, such as their settings and skills, which it gets read-only.
 
 ### Is it free?
 

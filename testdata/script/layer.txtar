@@ -8,11 +8,17 @@ exec bash -n $LAYERS/pg.sh
 grep '^set -euo pipefail$' $LAYERS/pg.sh
 grep '^# Hosts a VM with the pg layer can reach' $LAYERS/pg.policy
 
-# It's a layer at once: images complete it, and it's among the environments.
+# It's a layer at once: images and --layers complete it, and it's among
+# the layers.
 exec devvm __complete build p
 stdout '^pg$'
+exec devvm __complete --layers p
+stdout '^pg$'
 ! exec devvm build nope
-stderr '^devvm: unknown_layer agents=.* envs=base node python rust go docker nix pg layer=nope$'
+stderr '^devvm: unknown_layer layer=nope layers=base docker nix pg$'
+# A shared tool is no layer: an image holds none.
+! exec devvm build node+pg
+stderr '^devvm: tool_not_layer tool=node$'
 
 # An existing script is kept; an existing allowlist is kept for a new script.
 ! exec devvm layer new pg
@@ -33,13 +39,6 @@ stderr '^devvm: layer_name_reserved layer=docker$'
 ! exec devvm layer new nix
 stderr '^devvm: layer_name_reserved layer=nix$'
 ! exists $LAYERS/nix.sh
-! exec devvm layer new stop
-stderr '^devvm: layer_name_command layer=stop$'
-! exec devvm layer new add
-stderr '^devvm: layer_name_command layer=add$'
-! exec devvm layer new link
-stderr '^devvm: layer_name_command layer=link$'
-! exists $LAYERS/stop.sh
 ! exec devvm layer new My_DB
 stderr '^devvm: layer_name_invalid layer=My_DB$'
 ! exec devvm layer new ../x
@@ -53,19 +52,19 @@ stderr '^devvm: no_subcommand command=devvm layer commands=new given=pg$'
 ! exists $LAYERS/node.sh
 ! exists $LAYERS/My_DB.sh
 
-# A layer file named with a word devvm keeps for its commands is refused
-# wherever an image names it, and images don't complete it; devvm stop
-# stays the command.
-cp $LAYERS/pg.sh $LAYERS/log.sh
-! exec devvm build log
-stderr '^devvm: layer_is_command file=\S*/devvm/layers/log\.sh layer=log$'
-! exec devvm build node+log
-stderr '^devvm: layer_is_command file=\S*/devvm/layers/log\.sh layer=log$'
-! exec devvm log
-stderr '^devvm: layer_is_command file=\S*/devvm/layers/log\.sh layer=log$'
+# A layer may have a command's name: devvm takes no image as a word, so
+# the layer is named only where a layer goes, and devvm stop stays the
+# command.
+exec devvm layer new log
+exists $LAYERS/log.sh
 exec devvm __complete build l
-! stdout '^log$'
-rm $LAYERS/log.sh
+stdout '^log$'
+! exec devvm log
+stderr '^devvm: no_command'
+exec devvm layer new stop
+exec devvm stop --help
+stdout 'devvm stop \[flags\]'
+rm $LAYERS/log.sh $LAYERS/log.policy $LAYERS/stop.sh $LAYERS/stop.policy
 
 # A layers folder that can't be written to fails it.
 rm $LAYERS

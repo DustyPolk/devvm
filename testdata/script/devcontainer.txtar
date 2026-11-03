@@ -49,14 +49,15 @@ exec ls -A
 cmp stdout $WORK/bad-ls
 
 # A new VM: made as the file says, its image's recorded digest standing in
-# for the registry's (offline), the docker layer for docker-in-docker, the
-# user's layer named on top, the localhost ports listed; what's ignored is
-# said, initializeCommand never runs.
+# for the registry's (offline), --layers the exact list of its layers (the
+# docker layer docker-in-docker calls for, and the user's on top), the
+# localhost ports listed; what's ignored is said, initializeCommand never
+# runs.
 mkdir $WORK/web/.devcontainer
 cd $WORK/web
 exec git init -q
 cp $WORK/web.json .devcontainer/devcontainer.json
-exec devvm --no-network-policy extra
+exec devvm --no-network-policy --layers docker,extra
 stdout '^==> devcontainer_using file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io$'
 stderr '^devvm: devcontainer_initialize file=\.devcontainer/devcontainer\.json$'
@@ -126,11 +127,13 @@ stdout 'echo started >> ~/started'
 ! stdout 'echo made'
 
 # A command that fails: a warning naming it, the rest of its group skipped,
-# the VM kept and opened; postStartCommand still runs at the start.
+# the VM kept and opened; postStartCommand still runs at the start. Without
+# --layers, the file's docker-in-docker gives it the docker layer.
 project fail
 cp $WORK/web.json .devcontainer.json
 exec sh -c 'echo "''echo a''" > "$STUB_DIR/shell-fails-on"'
-exec devvm --no-network-policy extra
+exec devvm --no-network-policy
+stdout '^==> new_vm_gets layers=docker tools=none vm=devvm-fail-[0-9a-f]{14}$'
 stderr '^devvm: devcontainer_command_failed command=postCreateCommand a vm=devvm-fail-[0-9a-f]{14}$'
 ! stdout 'running_script script=postCreateCommand b'
 stdout '^==> running_script script=postStartCommand vm=devvm-fail-[0-9a-f]{14}$'
@@ -142,7 +145,7 @@ rm $STUB_DIR/shell-fails-on
 # later changes aren't warned about.
 project skip
 cp $WORK/build.json .devcontainer.json
-exec devvm --no-network-policy --no-devcontainer base
+exec devvm --no-network-policy --no-devcontainer
 ! stdout devcontainer_using
 catg $VMS/devvm-skip-*
 stdout '^devcontainer=off$'
@@ -152,7 +155,7 @@ exec devvm
 
 # A VM made without a file: one that appears is warned about.
 project plain
-exec devvm --no-network-policy base
+exec devvm --no-network-policy
 catg $VMS/devvm-plain-*
 stdout '^devcontainer=none$'
 cp $WORK/web.json .devcontainer.json
@@ -163,7 +166,7 @@ stderr '^devvm: devcontainer_new file=\.devcontainer\.json vm=devvm-plain-[0-9a-
 # forwardPorts.
 project flags
 cp $WORK/web.json .devcontainer.json
-exec devvm --no-network-policy --from $PIN --ports 8080 extra
+exec devvm --no-network-policy --from $PIN --ports 8080
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=ports key=forwardPorts$'
 catg $VMS/devvm-flags-*

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -63,6 +65,7 @@ func TestFlagNames(t *testing.T) {
 		"global":  "each setting's -g says which setting new VMs get",
 		"json":    "devvm doctor's also says it succeeds whatever is missing",
 		"as":      "the name a VM reaches another by: devvm link add's for the link's target, devvm group join's for this VM in the others",
+		"agents":  "the coding agents a list of them gives: a new VM's, or with devvm setup new VMs' default",
 	}
 	u, _, _ := testUI()
 	root := NewRoot(u)
@@ -163,19 +166,67 @@ func TestFlagNamesHaveOneMeaning(t *testing.T) {
 	})
 }
 
-// devvm [IMAGE]'s flags are its own, and --cpus, --memory and --disk
-// are only its and devvm size's.
+// --tools, --agents and --layers each take none alone or a list of their
+// part's names, the user's layers among the layers; anything else is
+// refused, with a did-you-mean when a name is close. As flags, each
+// replaces its part, none with nothing, and left out it's nil.
+func TestPartFlags(t *testing.T) {
+	t.Setenv("DEVVM_MESSAGES", "names")
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	writeLayer(t, cfg, "mine")
+	for _, tc := range []struct{ flag, value, want string }{
+		{"tools", "node,go", ""},
+		{"tools", "none", ""},
+		{"tools", "claude", "unknown_part flag=--tools given=claude names=node python rust go"},
+		{"tools", "pyhton", "unknown_part_like flag=--tools given=pyhton like=python"},
+		{"tools", "node,none", "part_none_alone flag=--tools"},
+		{"tools", ",", "part_none_alone flag=--tools"},
+		{"agents", "claude,opencode", ""},
+		{"agents", "cladue", "unknown_part_like flag=--agents given=cladue like=claude"},
+		{"layers", "docker,mine", ""},
+		{"layers", "nix", ""},
+		{"layers", "base", "unknown_part flag=--layers given=base names=docker mine nix"},
+		{"layers", "node", "unknown_part flag=--layers given=node names=docker mine nix"},
+		{"layers", "mien", "unknown_part_like flag=--layers given=mien like=mine"},
+	} {
+		if got := msg.NamesOf(checkFlagValue(tc.flag, tc.value)); got != tc.want {
+			t.Errorf("--%s %s: %q, want %q", tc.flag, tc.value, got, tc.want)
+		}
+	}
+	if partFlag("") != nil || len(*partFlag("none")) != 0 || !slices.Equal(*partFlag("node,go"), []string{"node", "go"}) {
+		t.Error("partFlag")
+	}
+}
+
+// writeLayer writes a layer of the user's under the config folder cfg.
+func writeLayer(t *testing.T, cfg, name string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(cfg, "devvm", "layers"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "devvm", "layers", name+".sh"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// devvm's flags are its own, --cpus, --memory and --disk are only its and
+// devvm size's, and --agents only its and devvm setup's.
 func TestUpFlagsAreUpsAlone(t *testing.T) {
 	u, _, _ := testUI()
 	root := NewRoot(u)
 	sizeFlags := []string{"cpus", "memory", "disk"}
-	upOnly := []string{"network-policy", "no-network-policy", "ports", "clone", "here", "unsafe-folder", "no-git-protect", "ssh-agent", "no-devcontainer"}
+	upOnly := []string{
+		"network-policy", "no-network-policy", "ports", "clone", "here", "unsafe-folder", "no-git-protect", "ssh-agent", "no-devcontainer",
+		"tools", "agents", "layers",
+	}
 	eachCommand(root, func(c *cobra.Command) {
 		for _, name := range slices.Concat(sizeFlags, upOnly) {
 			if c.Flags().Lookup(name) == nil {
 				continue
 			}
-			ok := c == root || (c.Name() == "size" && slices.Contains(sizeFlags, name))
+			ok := c == root || (c.Name() == "size" && slices.Contains(sizeFlags, name)) || (c.Name() == "setup" && name == "agents")
 			if !ok {
 				t.Errorf("%s takes --%s", c.CommandPath(), name)
 			}

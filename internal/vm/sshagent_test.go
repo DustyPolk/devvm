@@ -22,7 +22,7 @@ func TestUpSSHAgent(t *testing.T) {
 		e, f, _ := upEnv(t, allNative())
 		var adds []string
 		e.SSHAdd = func(_ context.Context, args ...string) int { adds = append(adds, strings.Join(args, " ")); return 0 }
-		st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, SSHAgent: on})
+		st := existingVM(t, e, Options{NoNetworkPolicy: true, SSHAgent: on})
 		spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 		mode, sock := sshagent.Off, ""
 		if on {
@@ -50,7 +50,7 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
 	e.Agent.Run = (&agentCalls{}).run
-	st := existingVM(t, e, Options{Image: "base", NetworkPolicy: true, SSHAgent: true})
+	st := existingVM(t, e, Options{NetworkPolicy: true, SSHAgent: true})
 	vm := st.Name()
 	if err := st.Set(sshagent.Key, sshagent.Devvm); err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestOpenAgent(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	agent := &agentCalls{}
 	e.Agent.Run = agent.run
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := st.Set(sshagent.Key, sshagent.Devvm); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestOpenAgent(t *testing.T) {
 // choice.
 func TestRunningAgent(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true, SSHAgent: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true, SSHAgent: true})
 	vm := st.Name()
 	if err := st.Set(sshagent.Key, sshagent.Devvm); err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestSetSSHAgent(t *testing.T) {
 	if _, err := s.SSHAgent(t.Context()); msg.NamesOf(err) != "no_vm_ssh_agent dir="+e.Dir {
 		t.Errorf("no VM: %s", msg.NamesOf(err))
 	}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	shown := func(want string) {
 		t.Helper()
 		if mode, err := s.SSHAgent(t.Context()); err != nil || mode != want {
@@ -237,7 +237,7 @@ func TestSetSSHAgentRisk(t *testing.T) {
 		e.Agent.Run = (&agentCalls{}).run
 		var warned msg.Recorder
 		e.Warn = warned.Add
-		st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+		st := existingVM(t, e, Options{NoNetworkPolicy: true})
 		vm := st.Name()
 		in := f.Instances[vm]
 		in.AgentWhileRunning = whileRunning
@@ -269,7 +269,7 @@ func TestAgentToggleEmulated(t *testing.T) {
 	var warned msg.Recorder
 	e.Registry.Warn = warned.Add
 	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); !spec.AgentToggle || spec.AgentForwarding {
 		t.Errorf("spec = %+v", spec)
@@ -331,7 +331,7 @@ func (s *starterFake) AgentUnchosen(context.Context, string) (bool, error) { ret
 // uses the user's agent anyway; on other backends nothing is asked.
 func TestAgentUnchosen(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatalf("not an AgentStarter: %s", msg.NamesOf(err))
@@ -385,7 +385,7 @@ func TestAgentToggleRefused(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureAgentToggle] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
-	st := existingVM(t, e, Options{Image: "base", NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.AgentToggle || st.Get(KeyAgentToggle) != "" {
 		t.Errorf("spec = %+v, state %q", spec, st.Get(KeyAgentToggle))
 	}

@@ -30,7 +30,7 @@ func TestStartInterrupted(t *testing.T) {
 			e, f, _ := upEnv(t, allNative())
 			f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 			f.ExecFunc = noDirect
-			st := existingVM(t, e, Options{Image: "base", NetworkPolicy: tc.net, NoNetworkPolicy: !tc.net})
+			st := existingVM(t, e, Options{NetworkPolicy: tc.net, NoNetworkPolicy: !tc.net})
 			vm := st.Name()
 			if err := f.Stop(t.Context(), vm); err != nil {
 				t.Fatal(err)

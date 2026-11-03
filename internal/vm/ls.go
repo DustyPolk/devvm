@@ -19,11 +19,12 @@ import (
 // state doesn't record it (its creation didn't finish).
 type Listed struct {
 	Name    string
-	Status  string // as its backend reports it
-	Image   string // its image: node+claude, base
-	From    string // the container image its base started from (--from), if any
-	Git     string // its .git protection: on, off, or clone for a --clone VM
-	Net     string // its network policy: on, off or unenforced (netpolicy.Listed)
+	Status  string   // as its backend reports it
+	Image   string   // its image: base, or its layers joined with +
+	Tools   []string // its shared tools: node claude
+	From    string   // the container image its base started from (--from), if any
+	Git     string   // its .git protection: on, off, or clone for a --clone VM
+	Net     string   // its network policy: on, off or unenforced (netpolicy.Listed)
 	Backend string
 	// DockerLayer is the runtime it runs the docker layer under, where its
 	// backend makes VMs for it (KeyDockerLayer).
@@ -78,7 +79,7 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 		return Listed{}, err
 	}
 	l := Listed{
-		Name: in.Name, Status: string(in.Status), Image: st.Get(state.KeyImage),
+		Name: in.Name, Status: string(in.Status), Image: st.Get(state.KeyImage), Tools: st.ToolNames(),
 		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(), DockerLayer: st.Get(KeyDockerLayer),
 		Folder: st.Get(state.KeyDir), Links: len(strings.Fields(st.Get(KeyLinks))),
 	}

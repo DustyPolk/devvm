@@ -15,7 +15,7 @@ func TestTableLikeTabwriter(t *testing.T) {
 	rows := [][]string{
 		{"NAME", "STATE", "SIZE", "PATH"},
 		{"base", "current", "1.0G", "/a"},
-		{"node+claude", "stale", "-", "/über/long path"},
+		{"docker+foo", "stale", "-", "/über/long path"},
 		{"é", "unfinished", "12K", "-"},
 	}
 	var want strings.Builder
@@ -31,7 +31,7 @@ func TestTableLikeTabwriter(t *testing.T) {
 		tab := &Table{w: &out, st: style{on}}
 		tab.Header(rows[0]...)
 		tab.Row(Cell{"base", Plain}, Cell{"current", Good}, Cell{"1.0G", Plain}, Cell{"/a", Secondary})
-		tab.Row(Cell{"node+claude", Plain}, Cell{"stale", Attention}, Cell{"-", Plain}, Cell{"/über/long path", Plain})
+		tab.Row(Cell{"docker+foo", Plain}, Cell{"stale", Attention}, Cell{"-", Plain}, Cell{"/über/long path", Plain})
 		tab.Total(plainCells(rows[3]...)...)
 		if err := tab.Flush(); err != nil {
 			t.Fatal(err)

@@ -2,7 +2,7 @@
 
 One VM for every project: an isolated sandbox with your project's toolchain, ready for you or an agent to start coding.
 
-Each project folder gets a VM of its own. devvm detects the project's toolchain from its files, so a folder with `package.json` gets node, and the VM mounts only the project folder, at the same path as on your machine. New VMs get network policy by default, so they reach only the hosts you allow, and your secrets, such as your GitHub token and Claude Code token, stay on your machine. Claude Code, Codex and opencode are ready in the VM with your settings, skills and MCP servers. devvm runs its VMs on [Lima](https://lima-vm.io) by default, or on the experimental smolvm and Docker backends.
+Each project folder gets a VM of its own. devvm detects the project's toolchain from its files, so a folder with `package.json` gets node, and the VM mounts only the project folder, at the same path as on your machine. New VMs get network policy by default, so they reach only the hosts you allow, and your secrets, such as your GitHub token and Claude Code token, stay on your machine. Claude Code, Codex and opencode run in the VM, with your settings, skills and MCP servers, and you start them in the VM's shell. devvm runs its VMs on [Lima](https://lima-vm.io) by default, or on the experimental smolvm and Docker backends.
 
 ## Install
 
@@ -24,16 +24,22 @@ Then run `devvm doctor`, which checks what devvm needs on your machine and says 
 
 ## Your first VM
 
-In a project folder, run one of these:
+Go to a project folder and run devvm:
 
 ```sh
 cd ~/some-project
-devvm          # a VM with the project's toolchain
-devvm claude   # the same, with Claude Code
-devvm codex    # the same, with Codex
+devvm
 ```
 
-devvm asks whether each new VM gets network policy (answer yes, the default). The first time, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds. devvm then opens a shell in the VM, at the same path as on your machine, and running `devvm` in the folder again opens a shell in the same VM. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest, including Claude Code's token.
+devvm lists what the new VM can get, with the toolchains your project's files call for already checked. Check a coding agent, such as Claude Code, with the arrow keys and space, then press enter. devvm asks whether the VM gets network policy (answer yes, the default). The first time, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds.
+
+devvm then opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`. Start the agent there, so it runs in the VM:
+
+```sh
+claude
+```
+
+Running `devvm` in the folder again opens a shell in the same VM, and `devvm tools` adds an agent to it. [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest, including the Claude Code token, which Claude Code needs first.
 
 ## Working on a clone
 

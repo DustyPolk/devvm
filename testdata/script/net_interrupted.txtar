@@ -4,7 +4,7 @@
 # What tools add saved stays, and devvm ls shows the policy on.
 
 project net
-exec devvm --network-policy --no-git-protect base
+exec devvm --network-policy --no-git-protect
 vm_name NET net
 exec devvm stop
 exec sh -c ': > "$STUB_LOG" && echo "$NET" > "$STUB_DIR/start-hangs-running"'
@@ -22,7 +22,8 @@ exec sh -c 'pgrep -f "[_]proxy .* -vm $NET " || echo none'
 stdout '^none$'
 catg $VMS/devvm-net-*
 stdout '^net=on$'
-stdout '^image=claude$'
+stdout '^image=base$'
+stdout '^tool_names=claude$'
 stdout '^tools=claude-\S+$'
 exec devvm ls --json
 stdout '"net": "on"'

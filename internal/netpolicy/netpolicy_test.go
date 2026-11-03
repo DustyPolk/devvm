@@ -32,13 +32,13 @@ import (
 
 // sandbox returns devvm's folders in a temporary folder, and a VM's state
 // there with that image.
-func sandbox(t *testing.T, img string) (paths.Dirs, *state.VM) {
+func sandbox(t *testing.T, img string, tools ...string) (paths.Dirs, *state.VM) {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
 	root := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", root) // the run log
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	st, err := state.CreateVM(d, "devvm-web-0123456789abcd", state.NewVM{Image: img, Dir: "/w", Backend: "fake"})
+	st, err := state.CreateVM(d, "devvm-web-0123456789abcd", state.NewVM{Image: img, Tools: tools, Dir: "/w", Backend: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,24 +62,26 @@ func TestPolicies(t *testing.T) {
 	user := []string{"/c/policy", "/d/vms/vm1.policy", "/d/run/vm1.secrets.policy"}
 	for _, c := range []struct {
 		img           string
+		tools         []string
 		builtin, file []string
 	}{
-		{"node+claude", []string{"layers/base.policy", "shared-tools/node.policy", "shared-tools/claude.policy"}, user},
+		{"base", []string{"node", "claude"}, []string{"layers/base.policy", "shared-tools/node.policy", "shared-tools/claude.policy"}, user},
 		// A custom layer's allowlist is the user's, next to its script.
-		{"node+pg", []string{"layers/base.policy", "shared-tools/node.policy"}, slices.Concat([]string{"/c/layers/pg.policy"}, user)},
+		{"pg", []string{"node"}, []string{"layers/base.policy", "shared-tools/node.policy"}, slices.Concat([]string{"/c/layers/pg.policy"}, user)},
 		// A built-in layer's is devvm's.
-		{"node+docker", []string{"layers/base.policy", "shared-tools/node.policy", "layers/docker.policy"}, user},
-		{"base", []string{"layers/base.policy"}, user},
+		{"docker", []string{"node"}, []string{"layers/base.policy", "shared-tools/node.policy", "layers/docker.policy"}, user},
+		{"base", nil, []string{"layers/base.policy"}, user},
 	} {
-		builtin, files := Policies(d, "vm1", c.img)
+		builtin, files := Policies(d, "vm1", c.img, c.tools)
 		if !slices.Equal(builtin, c.builtin) || !slices.Equal(files, c.file) {
-			t.Errorf("Policies(%s) = %q, %q; want %q, %q", c.img, builtin, files, c.builtin, c.file)
+			t.Errorf("Policies(%s, %q) = %q, %q; want %q, %q", c.img, c.tools, builtin, files, c.builtin, c.file)
 		}
 	}
 	// A part that's no layer's name never names a file outside the
-	// user's layers.
-	for _, bad := range []string{"../x", "node+../../etc/x", "a/b", "X", ".x"} {
-		builtin, files := Policies(d, "vm1", bad)
+	// user's layers, and a name that's no shared tool's names none of
+	// devvm's.
+	for _, bad := range []string{"../x", "pg+../../etc/x", "a/b", "X", ".x"} {
+		builtin, files := Policies(d, "vm1", bad, []string{"../x", "X"})
 		if got := slices.Concat(builtin, files); slices.ContainsFunc(got, func(f string) bool {
 			return strings.Contains(f, "x.policy") || strings.Contains(f, "b.policy") || strings.Contains(f, "X.policy")
 		}) {
@@ -88,11 +90,16 @@ func TestPolicies(t *testing.T) {
 	}
 }
 
-// Every image part devvm has comes with its allowlist, in devvm's files.
+// Every image part and shared tool devvm has comes with its allowlist, in
+// devvm's files.
 func TestEveryPartHasAPolicy(t *testing.T) {
 	for _, p := range slices.Concat([]string{"base"}, image.Toolchains, image.Agents, image.Builtins) {
 		d := paths.Dirs{Data: "/d", Config: "/c"}
-		builtin, _ := Policies(d, "vm1", p)
+		img, tools := p, []string(nil)
+		if image.IsTool(p) {
+			img, tools = "base", []string{p}
+		}
+		builtin, _ := Policies(d, "vm1", img, tools)
 		if p != "base" {
 			builtin = builtin[1:]
 		}
@@ -351,7 +358,7 @@ func lifelined() *backendtest.Fake {
 // A VM about to start: the CA, its ports, the confinement its backend
 // gets, and its proxy, told the password in a file.
 func TestPrepare(t *testing.T) {
-	d, st := sandbox(t, "node+claude")
+	d, st := sandbox(t, "base", "node", "claude")
 	p, f := testProxy(t, d)
 	lima := backendtest.New("lima", nil)
 	lima.LifelineFile = "/lima/vm/ha.pid"
@@ -545,7 +552,7 @@ func TestPrepareSocket(t *testing.T) {
 // binary, holds a CA since replaced, or its allowlist files changed. A
 // stopped VM's always starts again.
 func TestPrepareRestartsTheProxy(t *testing.T) {
-	d, st := sandbox(t, "node")
+	d, st := sandbox(t, "base", "node")
 	p, f := testProxy(t, d)
 	prepare := func(running bool) {
 		t.Helper()
@@ -567,8 +574,8 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		},
 		// Its built-in policies change, then its files alone (a layer of
 		// the user's).
-		func() { _ = st.Set(state.KeyImage, "node+claude") },
-		func() { _ = st.Set(state.KeyImage, "node+claude+pg") },
+		func() { _ = st.Set(state.KeyToolNames, "node claude") },
+		func() { _ = st.Set(state.KeyImage, "pg") },
 	} {
 		change()
 		prepare(true)
@@ -851,13 +858,13 @@ func TestForget(t *testing.T) {
 // RefreshSecrets writes the secret files again only of VMs whose proxy has
 // them, so a token saved since gets its binding at once.
 func TestRefreshSecrets(t *testing.T) {
-	d, st := sandbox(t, "node")
+	d, st := sandbox(t, "base", "node")
 	p, _ := testProxy(t, d)
 	ctx := t.Context()
 	if err := st.Set(secrets.KeySecrets, "github"); err != nil {
 		t.Fatal(err)
 	}
-	other, err := state.CreateVM(d, "devvm-other-0123456789abcd", state.NewVM{Image: "node", Dir: "/o", Backend: "fake"})
+	other, err := state.CreateVM(d, "devvm-other-0123456789abcd", state.NewVM{Image: "base", Tools: []string{"node"}, Dir: "/o", Backend: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1053,7 +1060,7 @@ func TestNixCacheArgs(t *testing.T) {
 	if got := p.nixCacheArgs(st); got != nil {
 		t.Errorf("base: %q", got)
 	}
-	if err := st.Set(state.KeyImage, "node+nix"); err != nil {
+	if err := st.Set(state.KeyImage, "pg+nix"); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"-nix-cache", d.NixCache(), "-nix-cache-max", strconv.FormatInt(state.NixCacheDefault, 10)}

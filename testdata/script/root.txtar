@@ -1,7 +1,8 @@
 # devvm --help prints usage.
 exec devvm --help
 stdout '^Usage:'
-stdout 'devvm \[IMAGE\] \[flags\]'
+stdout '^  devvm \[flags\]$'
+! stdout 'IMAGE\]'
 ! stderr .
 cp stdout help.txt
 
@@ -31,7 +32,22 @@ cmp stderr build-args.txt
 ! stdout .
 ! stub_calls
 
-# Flags for a new VM are devvm [IMAGE]'s alone, so other commands refuse
+# devvm takes no word but a command's: an image's or a shared tool's name,
+# as devvm IMAGE once took, is an unknown command, a usage error naming
+# devvm's --help, with a did-you-mean when a command is close; nothing
+# runs.
+! exec devvm node
+stderr '^devvm: no_command_like command=code word=node$'
+stderr '^usage_help command=devvm$'
+! exec devvm node+claude
+stderr '^devvm: no_command word=node\+claude$'
+stderr '^usage_help command=devvm$'
+! exec devvm claude
+stderr '^devvm: no_command word=claude$'
+! stdout .
+! stub_calls
+
+# Flags for a new VM are devvm's alone, so other commands refuse
 # them, before or after the command's name.
 ! exec devvm ls --cpus 4
 stderr '^devvm: flag_unknown command=devvm ls flag=--cpus$'

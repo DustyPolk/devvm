@@ -27,18 +27,18 @@ type gcOpts struct {
 	// only is --backend as passed (never the default backend file): that
 	// backend alone.
 	only string
-	// tools is --tools: also the current tool images no VM has, of
+	// tools is --tool-images: also the current tool images no VM has, of
 	// toolNames when there are any.
 	tools     bool
 	toolNames []string
-	// recent is --recent, only with --tools: also the current tool images
+	// recent is --recent, only with --tool-images: also the current tool images
 	// no VM has that were built in the last hour, while no VM is being
 	// made.
 	recent bool
 	// force is --force: gc deletes without asking, which it needs without
 	// a terminal.
 	force bool
-	// making is set with --tools when a VM is being made: gc keeps every
+	// making is set with --tool-images when a VM is being made: gc keeps every
 	// current tool image no VM has, and says so.
 	making bool
 	// history is --history: also the exports of agents' history, only
@@ -63,16 +63,16 @@ type gcOpts struct {
 func newGCCmd(u *ui.UI) *cobra.Command {
 	var o gcOpts
 	c := &cobra.Command{
-		Use:   "gc [--tools [--recent] [TOOL...]]",
+		Use:   "gc [--tool-images [--recent] [TOOL...]]",
 		Short: "Delete stale images and unused tool images",
 		Long: "Delete the stale and unfinished images on every backend, the shared tools devvm images lists as unused, " +
 			"the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, " +
 			"after listing them and asking in a terminal. " +
-			"Its flags delete more, such as --tools for the current shared tools no VM has. " +
+			"Its flags delete more, such as --tool-images for the current shared tool images no VM has. " +
 			"gc never deletes a VM.",
 		Example: examples(
 			"devvm gc", "delete stale images and unused tools, after asking",
-			"devvm gc --tools", "also the current shared tools no VM has",
+			"devvm gc --tool-images", "also the current shared tool images no VM has",
 			"devvm gc --history --older-than 30d", "also the history exports 30 days old or more",
 			"devvm gc --backend smolvm", "delete every image and unused tool of the smolvm backend",
 			"devvm gc --force", "delete without asking, as a script must",
@@ -86,8 +86,8 @@ func newGCCmd(u *ui.UI) *cobra.Command {
 	}
 	f := c.Flags()
 	addBackendFilterFlag(f, &o.only)
-	f.BoolVar(&o.tools, "tools", false, "also delete the current shared tools no VM has, or only those of the TOOLs named")
-	f.BoolVar(&o.recent, "recent", false, "with --tools, also delete those built in the last hour")
+	f.BoolVar(&o.tools, "tool-images", false, "also delete the current shared tool images no VM has, or only those of the TOOLs named")
+	f.BoolVar(&o.recent, "recent", false, "with --tool-images, also delete those built in the last hour")
 	addForceFlag(f, &o.force)
 	f.BoolVar(&o.history, "history", false, "also delete the saved exports of agents' history")
 	f.StringVar(&o.olderThan, "older-than", "", "with --history, only those older than `DURATION`, such as 30d")
@@ -99,7 +99,7 @@ func newGCCmd(u *ui.UI) *cobra.Command {
 }
 
 // checkArgs takes tool names, by the names images have them by, only
-// with --tools, and an age only with --history.
+// with --tool-images, and an age only with --history.
 func (o *gcOpts) checkArgs(args []string) error {
 	if o.olderThan != "" {
 		if !o.history {
@@ -129,8 +129,8 @@ func (o *gcOpts) checkArgs(args []string) error {
 type gcPlan struct {
 	images  []listedImage  // stale and unfinished images, each with its backend's
 	tools   []tools.Listed // unused tool images
-	current []tools.Listed // with --tools, current tool images no VM has
-	// with --tools but not --force, those built in the last hour, which
+	current []tools.Listed // with --tool-images, current tool images no VM has
+	// with --tool-images but not --force, those built in the last hour, which
 	// gc keeps and says so; while a VM is being made (making), all of
 	// them
 	recent  []tools.Listed
@@ -172,7 +172,7 @@ func gc(ctx context.Context, u *ui.UI, o gcOpts) error {
 	return nil
 }
 
-// gcLocked is gcRun holding the share's lock throughout. With --tools it
+// gcLocked is gcRun holding the share's lock throughout. With --tool-images it
 // then tries the lock VMs being made hold (tools.Making), and holds it so
 // no VM picks its tools meanwhile. While one is being made, --recent
 // deletes nothing, and without it gc keeps every current tool no VM has.

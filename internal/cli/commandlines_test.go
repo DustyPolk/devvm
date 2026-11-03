@@ -15,8 +15,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/w3cj/devvm/internal/image"
 )
 
 // repoRoot is the repo's root, from this package's folder.
@@ -68,7 +66,7 @@ func TestCommandLines(t *testing.T) {
 	if err := os.MkdirAll(layers, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, l := range []string{"foo", "bar", "mailpit"} {
+	for _, l := range []string{"foo", "bar", "mailpit", "myteam", "extra"} {
 		if err := os.WriteFile(filepath.Join(layers, l+".sh"), nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -431,10 +429,28 @@ func proseAfter(c *cobra.Command, w string) error {
 	if !c.HasSubCommands() || slices.Contains(strings.FieldsFunc(c.Use, notWordRune), w) {
 		return nil
 	}
-	if (image.IsReserved(w) && !slices.Contains(englishCommands(), w)) || slices.Contains(notCommands(), w) {
+	if (isCommandName(c.Root(), w) && !slices.Contains(englishCommands(), w)) || slices.Contains(notCommands(), w) {
 		return fmt.Errorf("%s isn't one of %s's commands", w, c.CommandPath())
 	}
 	return nil
+}
+
+// isCommandName reports whether w is the name of a command anywhere in
+// root's tree, hidden ones and help included.
+func isCommandName(root *cobra.Command, w string) bool {
+	if w == "help" {
+		return true
+	}
+	found := false
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		for _, sub := range c.Commands() {
+			found = found || sub.Name() == w
+			walk(sub)
+		}
+	}
+	walk(root)
+	return found
 }
 
 func notWordRune(r rune) bool { return (r < 'a' || r > 'z') && r != '-' }

@@ -8,7 +8,7 @@ env CAS=$XDG_CONFIG_HOME/devvm/ca
 # tools at the CAs all the same, set when it's made: its start edits
 # nothing.
 project none
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^ca\.sh$'
 ! stdout '^ca/'
@@ -22,7 +22,7 @@ mkdir $CAS
 cp $WORK/company.pem $CAS/company.pem
 cp $WORK/notes.txt $CAS/notes.txt
 project one
-exec devvm --no-network-policy --no-git-protect base
+exec devvm --no-network-policy --no-git-protect
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^ca/devvm-extra-1\.crt$'
 ! stdout '^ca/devvm-extra-2'
@@ -33,11 +33,11 @@ cmp stdout $WORK/ca-only.pem
 # that isn't a CA's.
 cp $WORK/key.pem $CAS/key.pem
 project key
-! exec devvm --no-network-policy --no-git-protect base
+! exec devvm --no-network-policy --no-git-protect
 stderr '^devvm: ca_not_certificate file=\S*/config/devvm/ca/key\.pem$'
 rm $CAS/key.pem
 cp $WORK/leaf.pem $CAS/leaf.crt
-! exec devvm --no-network-policy --no-git-protect base
+! exec devvm --no-network-policy --no-git-protect
 stderr '^devvm: ca_not_ca file=\S*/config/devvm/ca/leaf\.crt$'
 rm $CAS/leaf.crt
 
