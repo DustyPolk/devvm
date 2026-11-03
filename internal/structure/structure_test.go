@@ -27,7 +27,7 @@ func devvm() rules {
 		largeTypes: map[string]large{
 			"internal/backend/lima.Lima":        {75, "a backend: backend.Backend's 28 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Forget, Strays, DevvmCache, DeleteCache and Lima's own"},
 			"internal/backend/backendtest.Fake": {34, "backend.Backend's 28 methods and what tests ask of it"},
-			"internal/paths.Dirs":               {43, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs":               {49, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":                    {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
@@ -71,6 +71,9 @@ func devvm() rules {
 		// over ssh only, without the environment's GIT_* and prompts.
 		commands: map[string]string{"git": "internal/hostgit"},
 		literals: devvmLiterals(),
+		// paths names every file and folder devvm keeps, so the layout,
+		// its golden listing and a VM's teardown miss none.
+		pathsOwner: "internal/paths",
 		// readOverrides reads a test build's stand-ins, and a release
 		// none.
 		envOwner:    "internal/cli/overrides.go",

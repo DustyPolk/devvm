@@ -176,7 +176,7 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 			return nil, env, nil
 		case backend.NetProxy, backend.NetNone:
 		}
-		w, err := writeWrapper(filepath.Join(l.Dirs.Run(), "qemu"), l.Self, l.Arch)
+		w, err := writeWrapper(l.Dirs.QEMUWrapper(), l.Self, l.Arch)
 		if err != nil {
 			return nil, nil, err
 		}

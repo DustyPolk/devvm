@@ -106,7 +106,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `vms/<hash>/logs/` | a VM's network log, `network.jsonl`, which holds its proxy's decisions, its proxy's own output, `proxy.log`, and its link session's output, `links.log`. Before the network log or the proxy's log would grow past 10 MiB, the proxy moves it to the same name with `.1` added, replacing the older one, so each of them takes at most about 20 MiB, and `devvm network log` reads both of the network log's files | `devvm rm` deletes them with the VM's folder, `.1` files included |
 | `ca/` | the certificate authority that VMs trust for their proxy | devvm makes a new one when the old one has less than a week of its 30 days left |
 | `cache/nix-cache/` | the [shared Nix cache](toolchains.md#nix-projects): the packages that VMs with network policy and the `nix` layer downloaded from Nix's binary cache, once for all of them | the VMs' proxies and `devvm gc` delete its least recently used files while it takes more than its cap, `nix-cache.size`, which is 10 GiB when it's off, and `devvm gc --nix-cache` deletes all of it |
-| `run/` | what running VMs need that isn't one VM's or whose path must be short, such as the QEMU wrapper on Linux hosts, the claims lock, `claims.lock`, which devvm holds while it chooses a new VM's ssh alias or a VM's host ports, and the sockets of port forwarders and link sessions, which are named by hashes, and in `builds/` a folder for each build VM, laid out as a VM's folder is | devvm deletes a VM's sockets when it deletes the VM, and a build VM's folder when it deletes the build VM |
+| `run/` | what running VMs need that isn't one VM's or whose path must be short, such as the QEMU wrapper on Linux hosts, the claims lock, `claims.lock`, which devvm holds while it chooses a new VM's ssh alias or a VM's host ports, and the sockets of port forwarders and link sessions, which are named by hashes, and in `builds/` a folder for each build VM, laid out as a VM's folder is | devvm deletes a VM's sockets when it deletes the VM, and a build VM's folder once its image is built, or else when it deletes the build VM |
 | `agent.sock` | the socket of [devvm's own SSH agent](ssh.md#devvms-own-agent) | it takes no space |
 | `oci-build.lock` | an empty file that the devvm building a base from a container image on Lima locks, so that one such build runs at a time | it stays, and takes no space |
 | `tools.lock` | an empty file that the devvm building shared tools or updating the tools lock locks, so that one at a time writes to `tools/` | it stays, and takes no space |
@@ -157,6 +157,7 @@ A VM whose project folder you deleted or moved still takes its disk, and it isn'
 
 - **An entry that isn't a VM's folder,** such as a file or a folder with another name, which devvm never uses. Move it out of `vms/` or delete it.
 - **A VM's folder without `vm.json`,** which a devvm that stopped while making or deleting a VM leaves, for example one holding only the VM's `lock`. No VM uses the folder, so delete it.
+- **A folder doctor can't read,** `vms/` itself or a VM's folder, so it can't check what's in it. Check that you own it and can read it, for example with `ls -ld`.
 
 These warnings never make doctor fail, and `devvm doctor --json` lists them in `warnings`.
 

@@ -727,6 +727,10 @@ other = "{{.path}} isn't a VM's folder, so devvm doesn't use it. Move it out of 
 description = "doctor's warning for a VM's folder without vm.json, which a devvm that stopped part way leaves"
 other = "A devvm that stopped while making or deleting a VM left {{.path}}, which has no vm.json, so no VM uses it. Delete the folder."
 
+[vms_unreadable]
+description = "doctor's warning for a path in the VMs' folder, or the folder itself, that it can't read; the error says why"
+other = "devvm doctor can't read {{.path}}, so it didn't check what's in it. Check that you own it and can read it."
+
 [retention_unreadable]
 other = "The retention settings can't be read, so devvm applies none. Fix or delete the line it names, then run devvm retention to check them."
 

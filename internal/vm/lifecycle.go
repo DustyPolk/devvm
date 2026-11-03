@@ -220,14 +220,8 @@ func (e Lifecycle) rmGone(ctx context.Context, t *found, o RmOptions) error {
 		return msg.RmGoneClone(st.Dir, vm)
 	}
 	export := !o.NoExport && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0
-	if export && !clone {
-		in, err := t.b.Inspect(ctx, vm)
-		if err != nil {
-			return err
-		}
-		if in.Status != backend.StatusRunning {
-			return msg.RmGoneStopped(st.Dir, vm)
-		}
+	if err := e.stillGone(ctx, t, export && !clone); err != nil {
+		return err
 	}
 	if !o.Force && !e.Terminal() {
 		return msg.ForceNeeded("devvm rm")
@@ -239,12 +233,43 @@ func (e Lifecycle) rmGone(ctx context.Context, t *found, o RmOptions) error {
 		e.Info(msg.Kept(vm))
 		return nil
 	}
+	// While it asked, the folder may have come back (a disk plugged in
+	// again), another devvm may have made the VM again there, or stopped
+	// it, which an export would start, making its folder again.
+	if err := e.stillGone(ctx, t, export && !clone); err != nil {
+		return err
+	}
 	if export {
 		if err := e.export(ctx, t, "", msg.RmVMExportFailed(vm)); err != nil {
 			return err
 		}
 	}
 	return e.delete(ctx, t)
+}
+
+// stillGone checks, for rmGone, that t's state is still the one it read
+// (its ID) and its folder still gone, and with running that the VM still
+// runs, so its export doesn't start it.
+func (e Lifecycle) stillGone(ctx context.Context, t *found, running bool) error {
+	vm := t.f.Name
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		return err
+	}
+	if st.ID != t.st.ID || !FolderGone(st) {
+		return msg.RmVMFolderThere(t.st.Dir, vm)
+	}
+	if !running {
+		return nil
+	}
+	in, err := t.b.Inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	if in.Status != backend.StatusRunning {
+		return msg.RmGoneStopped(t.st.Dir, vm)
+	}
+	return nil
 }
 
 // Export saves the folder's VM's agents' history to file (absolute), or

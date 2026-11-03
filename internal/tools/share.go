@@ -12,14 +12,11 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 )
-
-// shareLock is the share's lock file, in devvm's data folder beside the
-// share, which VMs mount.
-func (t *Env) shareLock() string { return filepath.Join(t.Dirs.Data, "tools.lock") }
 
 // LockShare holds the share's lock, for a build writing tool images or a
 // swap of the lock, until unlock is called or the process ends, however
@@ -29,13 +26,26 @@ func (t *Env) LockShare(ctx context.Context) (unlock func(), err error) {
 	if err := os.MkdirAll(t.Dirs.Tools(), 0o700); err != nil {
 		return nil, err
 	}
-	return platform.LockFileWaiting(ctx, t.shareLock(), t.ShareNote, func() { t.Info(msg.ShareWaiting(t.Dirs.Tools())) })
+	return platform.LockFileWaiting(ctx, t.Dirs.ShareLock(), t.ShareNote, func() { t.Info(msg.ShareWaiting(t.Dirs.Tools())) })
+}
+
+// ShareBusy reports whether another devvm holds the share's lock
+// (LockShare) now; false when it can't tell.
+func (t *Env) ShareBusy() bool {
+	unlock, ok, err := platform.TryLockFile(t.Dirs.ShareLock())
+	if err != nil {
+		return false
+	}
+	if ok {
+		unlock()
+	}
+	return !ok
 }
 
 // Built reports whether a tool image is in the share with the record
 // devvm wrote when it moved it in (FILE.json).
 func (t Share) Built(file string) bool {
-	if fi, err := os.Stat(filepath.Join(t.Dirs.Tools(), file)); err != nil || !fi.Mode().IsRegular() {
+	if fi, err := os.Stat(t.Dirs.ToolImage(file)); err != nil || !fi.Mode().IsRegular() {
 		return false
 	}
 	_, err := state.ReadToolImage(t.Dirs, file)
@@ -112,7 +122,7 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 // batch builds these tool images in one throwaway VM with a folder of its
 // own, for tg, then moves them into the share.
 func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Target, lock Lock, files []string) error {
-	out, err := os.MkdirTemp(t.Dirs.Data, "tools-build.")
+	out, err := os.MkdirTemp(t.Dirs.Data, paths.ToolsBuildPrefix)
 	if err != nil {
 		return err
 	}
@@ -176,7 +186,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		if err != nil {
 			return err
 		}
-		if err := os.Rename(src, filepath.Join(t.Dirs.Tools(), f)); err != nil {
+		if err := os.Rename(src, t.Dirs.ToolImage(f)); err != nil {
 			return err
 		}
 		// Its file name doesn't say what it's built for: the record does.
@@ -211,7 +221,7 @@ func (t Share) Delete(files []string) error {
 		}
 	}
 	for _, f := range files {
-		for _, name := range []string{filepath.Join(t.Dirs.Tools(), f), t.Dirs.ToolRecord(f)} {
+		for _, name := range []string{t.Dirs.ToolImage(f), t.Dirs.ToolRecord(f)} {
 			if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}

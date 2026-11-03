@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -113,7 +112,7 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 			})
 			for _, f := range have {
 				_, v, _ := image.ParseToolFile(f)
-				size, err := platform.DiskUsage(filepath.Join(t.Dirs.Tools(), f))
+				size, err := platform.DiskUsage(t.Dirs.ToolImage(f))
 				if err != nil {
 					return nil, err
 				}

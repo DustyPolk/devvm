@@ -2,10 +2,10 @@ package vm
 
 import (
 	"context"
-	"os"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // vmFolders finds and deletes VMs' folders in devvm's data folder: a
@@ -41,7 +41,7 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 			return err
 		}
 	}
-	if err := os.RemoveAll(e.Dirs.VM(vm).Dir); err != nil {
+	if err := state.RemoveFolder(ctx, e.Dirs, vm); err != nil {
 		return err
 	}
 	return e.sshConfig().Write(ctx)
@@ -53,5 +53,5 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 func (e vmFolders) clear(ctx context.Context, vm string) error {
 	e.Proxy.Stop(vm)
 	linkRuns(e).stop(ctx, vm)
-	return os.RemoveAll(e.Dirs.VM(vm).Dir)
+	return state.RemoveFolder(ctx, e.Dirs, vm)
 }

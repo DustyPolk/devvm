@@ -66,7 +66,7 @@ func TestRetainDueAndLock(t *testing.T) {
 	}
 	// However long a devvm has held it, another doesn't take it over.
 	old := now.Add(-time.Hour)
-	if err := os.Chtimes(retentionLock(d), old, old); err != nil {
+	if err := os.Chtimes(d.RetentionLock(), old, old); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := lockRetention(d); ok {

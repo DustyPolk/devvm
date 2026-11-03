@@ -408,6 +408,26 @@ func (v *VM) write() error {
 	return nil
 }
 
+// RemoveFolder deletes the whole folder of the VM named name
+// (paths.Dirs.VM), lock file and all, holding the VM's lock: a change
+// another devvm is making to its state lands first, and none lands after,
+// as one waiting for the lock takes it again on a new lock file, finding
+// no state. A missing folder is no error.
+func RemoveFolder(ctx context.Context, d paths.Dirs, name string) error {
+	f := d.VM(name)
+	if _, err := os.Lstat(f.Dir); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	unlock, err := platform.LockFile(ctx, f.Lock())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil // another devvm deleted it meanwhile
+	} else if err != nil {
+		return err
+	}
+	defer unlock()
+	return os.RemoveAll(f.Dir)
+}
+
 // Remove deletes the VM's state file under its lock, if it has one: the
 // rest of its folder is its teardown's.
 func (v *VM) Remove(ctx context.Context) error {

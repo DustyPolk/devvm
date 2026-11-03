@@ -123,6 +123,12 @@ func TestFiles(t *testing.T) {
 		{d.Secrets(), "/d/secrets"},
 		{d.SSHConfig(), "/d/ssh_config"},
 		{d.KnownHosts(), "/d/known_hosts"},
+		{d.QEMUWrapper(), "/d/run/qemu"},
+		{d.ToolImage("go-1.2.0-0123456789ab.erofs"), "/d/tools/go-1.2.0-0123456789ab.erofs"},
+		{d.ShareLock(), "/d/tools.lock"},
+		{d.RetentionLock(), "/d/retention.lock"},
+		{d.GroupsLock(), "/d/groups.lock"},
+		{d.DefaultLima(), "/d/lima"},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

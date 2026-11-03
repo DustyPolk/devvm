@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/w3cj/devvm/internal/backend"
 )
@@ -18,7 +17,7 @@ var (
 
 // Location is devvm's Lima home, which DEVVM_LIMA_HOME moves.
 func (l *Lima) Location() (string, bool) {
-	return l.Dirs.Lima, l.Dirs.Lima == filepath.Join(l.Dirs.Data, "lima")
+	return l.Dirs.Lima, l.Dirs.Lima == l.Dirs.DefaultLima()
 }
 
 // Forget deletes what devvm keeps for a VM its Lima home no longer has:

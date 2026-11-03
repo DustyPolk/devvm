@@ -123,6 +123,43 @@ func TestRm(t *testing.T) {
 	}
 }
 
+// rm VM checks again once it has asked: a folder that came back while it
+// asked keeps its VM, and so does an agent VM stopped meanwhile, which
+// its export would start.
+func TestRmVMChecksAgain(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	lc := Lifecycle{e}
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}).Name()
+	dir := e.Dir
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	e.Dir = t.TempDir()
+	answers(t, e, true)
+	e.Ask = func(msg.M) bool { return os.Mkdir(dir, 0o700) == nil }
+	if err := lc.RmVM(t.Context(), vm, RmOptions{}); msg.NamesOf(err) != "rm_vm_folder_there dir="+dir+" vm="+vm {
+		t.Errorf("a folder back: %v", msg.NamesOf(err))
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Fatal("deleted though its folder came back")
+	}
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	e.Ask = func(msg.M) bool {
+		in := f.Instances[vm]
+		in.Status = backend.StatusStopped
+		f.Instances[vm] = in
+		return true
+	}
+	if err := lc.RmVM(t.Context(), vm, RmOptions{}); msg.NamesOf(err) != "rm_gone_stopped dir="+dir+" vm="+vm {
+		t.Errorf("stopped meanwhile: %v", msg.NamesOf(err))
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Error("deleted though it stopped")
+	}
+}
+
 // export saves the history to the exports folder or a file of the user's,
 // which a failed export leaves as it was; the VM is kept either way.
 func TestExport(t *testing.T) {

@@ -251,6 +251,53 @@ func TestVMUpdateTogether(t *testing.T) {
 	}
 }
 
+// A VM's folder deleted while another devvm changes its state waits for
+// that change, so it lands before the folder goes, never after, and the
+// state of a VM made again in the folder survives it; a missing folder
+// is no error.
+func TestRemoveFolder(t *testing.T) {
+	d := testDirs(t)
+	if err := RemoveFolder(t.Context(), d, vmP); err != nil {
+		t.Fatalf("no folder: %v", err)
+	}
+	v, _ := New(d, vmP)
+	create(t, d, v, nil)
+	old := v.ID
+	inside, release := make(chan struct{}), make(chan struct{})
+	updated := make(chan error, 1)
+	go func() {
+		updated <- v.Update(t.Context(), func(v *VM) error {
+			close(inside)
+			<-release
+			v.Image = "stale"
+			return nil
+		})
+	}()
+	<-inside
+	removed := make(chan error, 1)
+	go func() { removed <- RemoveFolder(t.Context(), d, vmP) }()
+	select {
+	case err := <-removed:
+		t.Fatalf("removed while another devvm changes its state: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	if err := <-updated; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-removed; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(d.VM(vmP).Dir); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("its folder stayed: %v", err)
+	}
+	again, _ := New(d, vmP)
+	create(t, d, again, nil)
+	if got, err := ReadVM(d, vmP); err != nil || got.ID == old || got.Image != "base" {
+		t.Errorf("the VM made again: %+v, %v", got, err)
+	}
+}
+
 // Claims are made one at a time, across VMs: two VMs claiming at once
 // never choose the same value, as two VMs made at once never get one ssh
 // alias.

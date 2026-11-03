@@ -3064,6 +3064,11 @@ func VMsStray(path string, vms string) M {
 	return M{id: "vms_stray", vals: []val{{"path", path}, {"vms", vms}}}
 }
 
+// VMsUnreadable is [vms_unreadable]: "devvm doctor can't read {{.path}}, so it didn't check what's in it. Check that you own it and can read it."
+func VMsUnreadable(path string) M {
+	return M{id: "vms_unreadable", vals: []val{{"path", path}}}
+}
+
 // WidenParentVM is [widen_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside, and {{.cmd}} gives it more access. Change it?"
 func WidenParentVM(cmd string, dir string, vm string) M {
 	return M{id: "widen_parent_vm", vals: []val{{"cmd", cmd}, {"dir", dir}, {"vm", vm}}}
@@ -3688,6 +3693,7 @@ var specs = map[string]spec{
 	"vm_tools_now":                     {fields: []string{"tools", "vm"}},
 	"vm_unfinished":                    {fields: []string{"vm"}},
 	"vms_stray":                        {fields: []string{"path", "vms"}},
+	"vms_unreadable":                   {fields: []string{"path"}},
 	"widen_parent_vm":                  {fields: []string{"cmd", "dir", "vm"}},
 	"widen_parent_vm_refused":          {fields: []string{"cmd", "dir", "vm"}},
 }

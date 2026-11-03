@@ -63,6 +63,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"layout_unchecked":                 "using/troubleshooting#a-file-devvm-cant-read",
 	"vms_stray":                        "using/space#what-devvm-doctor-finds-in-vms",
 	"vm_folder_stateless":              "using/space#what-devvm-doctor-finds-in-vms",
+	"vms_unreadable":                   "using/space#what-devvm-doctor-finds-in-vms",
 	"retention_busy":                   "using/settings#retention",
 	"retention_unreadable":             "using/settings#retention",
 	"retention_failed":                 "using/settings#retention",

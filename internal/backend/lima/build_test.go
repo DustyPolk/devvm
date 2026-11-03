@@ -81,9 +81,19 @@ func checkLines(t *testing.T, got, want []string) {
 
 // base: a VM from Ubuntu's image with base.yaml on limactl create's
 // input, from devvm's files (none written out), nothing mounted, started
-// in its build sandbox, its script run, flushed and stopped.
+// in its build sandbox, its script run, flushed and stopped; then what
+// its run left is deleted.
 func TestBuildImageBase(t *testing.T) {
 	l, f := buildLima(t, "darwin", "")
+	inst := "devvm-img-" + baseKey
+	var profile []byte
+	do := f.do
+	f.do = func(c call) {
+		if c.argv[0] == "sandbox-exec" {
+			profile, _ = os.ReadFile(l.Dirs.VM(inst).Profile())
+		}
+		do(c)
+	}
 	built, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: baseKey, Net: backend.NetInternet,
 		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}},
@@ -94,7 +104,6 @@ func TestBuildImageBase(t *testing.T) {
 	if want := (backend.Built{Origin: "https://example.com/r/ubuntu.img sha256:1111", Libc: "gnu"}); built != want {
 		t.Errorf("Built = %+v, want %+v", built, want)
 	}
-	inst := "devvm-img-" + baseKey
 	checkLines(t, f.lines(), []string{
 		"limactl create --tty=false --mount-none --name=" + inst +
 			` --set .images = [{"location":"https://example.com/r/ubuntu.img","arch":"aarch64","digest":"sha256:1111"}]` +
@@ -113,8 +122,11 @@ func TestBuildImageBase(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.Dirs.Data, "assets")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("devvm's files written out: %v", err)
 	}
-	if p, err := os.ReadFile(l.Dirs.VM(inst).Profile()); err != nil || !strings.Contains(string(p), `(deny network-outbound (remote ip "localhost:*"))`) {
-		t.Errorf("the build's profile: %s, %v", p, err)
+	if !strings.Contains(string(profile), `(deny network-outbound (remote ip "localhost:*"))`) {
+		t.Errorf("the build's profile: %s", profile)
+	}
+	if _, err := os.Stat(l.Dirs.VM(inst).Dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the build VM's folder after its build: %v", err)
 	}
 }
 
@@ -189,6 +201,14 @@ func TestBuildImageHostProxy(t *testing.T) {
 			spawned, stopped := fakeProxy(t, l)
 			inst := "devvm-img-" + layerKey
 			writeTestFile(t, l.disk(inst), "qcow2")
+			var profile []byte
+			do := f.do
+			f.do = func(c call) {
+				if c.argv[0] == "sandbox-exec" {
+					profile, _ = os.ReadFile(l.Dirs.VM(inst).Profile())
+				}
+				do(c)
+			}
 			if _, err := l.BuildImage(t.Context(), backend.ImageSpec{
 				Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
 				Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
@@ -235,10 +255,9 @@ func TestBuildImageHostProxy(t *testing.T) {
 				t.Error("the build VM gets the host's proxy settings from Lima")
 			}
 			if goos == "darwin" {
-				b, err := os.ReadFile(l.Dirs.VM(inst).Profile())
-				if err != nil || !strings.Contains(string(b), `(deny network-outbound (remote ip "localhost:*"))`) ||
-					!strings.HasSuffix(strings.TrimSpace(string(b)), `(allow network-outbound (remote ip "localhost:40000"))`) {
-					t.Errorf("profile: %s %v", b, err)
+				if !strings.Contains(string(profile), `(deny network-outbound (remote ip "localhost:*"))`) ||
+					!strings.HasSuffix(strings.TrimSpace(string(profile)), `(allow network-outbound (remote ip "localhost:40000"))`) {
+					t.Errorf("profile: %s", profile)
 				}
 			}
 		})

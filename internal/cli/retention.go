@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -288,7 +287,7 @@ func autoRetain(ctx context.Context, u *ui.UI) {
 	}
 	// A build holding the share's lock isn't waited for: the tools wait
 	// for the next day's run.
-	if _, err := os.Stat(filepath.Join(b.Dirs.Tools(), ".lock")); err == nil {
+	if b.Tools.ShareBusy() {
 		r.ToolsAge = 0
 	}
 	done, err := retain(ctx, u, b, r, false)
@@ -320,18 +319,14 @@ func touchRetention(d paths.Dirs) {
 	}
 }
 
-// retentionLock is the file the devvm applying the retention settings
-// locks (lockRetention): retention.lock in devvm's data folder.
-func retentionLock(d paths.Dirs) string { return filepath.Join(d.Data, "retention.lock") }
-
-// lockRetention holds retention's lock (retentionLock) without waiting;
+// lockRetention holds retention's lock (paths.Dirs.RetentionLock) without waiting;
 // false when another devvm holds it. It's an OS file lock, so a devvm
 // that crashed or was killed never leaves it held.
 func lockRetention(d paths.Dirs) (unlock func(), ok bool) {
 	if err := os.MkdirAll(d.Data, 0o700); err != nil {
 		return nil, false
 	}
-	unlock, ok, err := platform.TryLockFile(retentionLock(d))
+	unlock, ok, err := platform.TryLockFile(d.RetentionLock())
 	if err != nil || !ok {
 		return nil, false
 	}

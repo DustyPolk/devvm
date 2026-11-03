@@ -165,6 +165,11 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		return backend.Built{}, err
 	}
 	proxyDone(true)
+	// What its runs left (its sandbox profile, the record of its start)
+	// is of no more use: an image's instance never starts again.
+	if err := os.RemoveAll(l.Dirs.VM(inst).Dir); err != nil {
+		return backend.Built{}, err
+	}
 	if l.overlays() {
 		// Project VMs' disks are overlays of this one: it never changes
 		// again.

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -171,11 +170,7 @@ func (e Groups) warnClashes(vm string, clashes []groupClash) {
 // groupsNote is how long lockGroups waits before it says it's waiting.
 const groupsNote = 200 * time.Millisecond
 
-// groupsLock is the groups lock's file (lockGroups): groups.lock in
-// devvm's data folder.
-func groupsLock(d paths.Dirs) string { return filepath.Join(d.Data, "groups.lock") }
-
-// lockGroups holds devvm's groups lock (groupsLock) until unlock is
+// lockGroups holds devvm's groups lock (paths.Dirs.GroupsLock) until unlock is
 // called or the process ends, waiting for another devvm that holds it
 // until ctx ends, and saying so with info (nil says nothing) after a
 // moment. Each join and leave, and each change that works a group's
@@ -188,7 +183,7 @@ func lockGroups(ctx context.Context, d paths.Dirs, info func(msg.M)) (unlock fun
 	if err := os.MkdirAll(d.Data, 0o700); err != nil {
 		return nil, err
 	}
-	return platform.LockFileWaiting(ctx, groupsLock(d), groupsNote, func() {
+	return platform.LockFileWaiting(ctx, d.GroupsLock(), groupsNote, func() {
 		if info != nil {
 			info(msg.GroupWaiting())
 		}

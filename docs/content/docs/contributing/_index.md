@@ -89,7 +89,7 @@ A fresh context elsewhere, such as for a cleanup that outlives a canceled run, o
 | `no-init` | no `func init()` |
 | `package-vars` | outside `internal/proxy`, a package-level `var` is a blank interface check, an `Err*`/`err*` sentinel from `errors.New` or `fmt.Errorf`, a `regexp.MustCompile`, `template.Must` or `sync.Once*` result, a `//go:embed` file, or listed in `allowedVars`; anything else becomes a field, a const or a local |
 | `layers` | which packages import which, in non-test files (tests may wire packages together) |
-| `owners` | in non-test files, only its owner runs a host command that `commands` lists, only `envOwner` reads a `DEVVM_` variable, but the settings `envSettings` lists, only its file in `envOwners` reads `HOME`, and only its owner's string literals hold a text that `literals` lists ([details](#the-checks-on-owners)) |
+| `owners` | in non-test files, only its owner runs a host command that `commands` lists, only `envOwner` reads a `DEVVM_` variable, but the settings `envSettings` lists, only its file in `envOwners` reads `HOME`, only its owner's string literals hold a text that `literals` lists, and only `pathsOwner` builds a path in devvm's data or config folder ([details](#the-checks-on-owners)) |
 
 The layers:
 
@@ -128,6 +128,7 @@ An owner gets a check only when a second copy would be a bug or a security hole,
 | the structure test's `owners`, `DEVVM_` variables | `readOverrides` in `internal/cli/overrides.go`, which reads a test build's stand-ins, while a release reads none | the settings in `envSettings`, and tests |
 | the structure test's `owners`, shell quoting | `internal/shell`, whose `Quote` and `QuoteJoin` quote words for a POSIX shell, so a value never runs as a command | tests |
 | the structure test's `owners`, the VM-name grammar | `internal/vmname`, whose `IsVM` tells a project VM's name from an image's, so gc never takes a project VM for an image | tests |
+| the structure test's `owners`, paths in devvm's folders | `internal/paths`, whose `Dirs` and `VM` name every file and folder devvm keeps, so the layout, its golden listing in `testdata/script/layout.txtar` and a VM's teardown miss none. A `filepath.Join` onto a `Data` or `Config` field fails, and so does an `os.MkdirTemp` or `os.CreateTemp` there whose name is a literal; a name from `paths`, such as `paths.ToolsBuildPrefix`, passes | tests |
 
 forbidigo matches only the function a call names, so the checks that look at a call's arguments are in the [structure test](#the-structure-test). It finds a host command in an `exec.Command` or `exec.CommandContext` call that names it, as a literal or as a constant, whatever name the file imports `os/exec` under. It finds a `DEVVM_` variable in a call to any function or field named `Getenv` or `LookupEnv`, in any case, so `t.Getenv` and a `getenv` parameter count as well as `os.Getenv`, and it finds `HOME` the same way. The settings `envSettings` lists are the ones users set, `DEVVM_NO_TOOL_CHECK`, `DEVVM_LIMA_HOME`, `DEVVM_SECRET_SERVICE` and `DEVVM_FROM`; names mode, `DEVVM_MESSAGES`, which any build has; and the variables devvm sets for its own processes, `DEVVM_LOGIN_SALT` for `devvm _proxy`, `DEVVM_GUESTFWD` for `devvm _qemu` and `DEVVM_DAEMON_STATUS` for each background process `internal/daemon` starts.
 

@@ -217,3 +217,37 @@ func checkLiterals(m *module, r rules) []violation {
 	}
 	return vs
 }
+
+// checkPaths: outside tests and pathsOwner, no path is built in devvm's
+// data or config folder: no filepath.Join onto a Data or Config field,
+// and no os.MkdirTemp or os.CreateTemp there with a name of its own (a
+// literal), as each would be a file the layout's owner doesn't list.
+func checkPaths(m *module, r rules) []violation {
+	var vs []violation
+	for _, f := range m.files {
+		if f.test || f.dir == r.pathsOwner {
+			continue
+		}
+		join, osName := importName(f, "path/filepath")+".Join", importName(f, "os")
+		calls(f, func(call *ast.CallExpr) {
+			name := callName(call)
+			if len(call.Args) == 0 || (name != join && name != osName+".MkdirTemp" && name != osName+".CreateTemp") {
+				return
+			}
+			sel, ok := call.Args[0].(*ast.SelectorExpr)
+			if !ok || (sel.Sel.Name != "Data" && sel.Sel.Name != "Config") {
+				return
+			}
+			if name != join {
+				if len(call.Args) < 2 {
+					return
+				}
+				if _, lit := literal(call.Args[1]); !lit {
+					return
+				}
+			}
+			vs = append(vs, violation{ruleOwners, m.pos(call), fmt.Sprintf("builds a path in %s: name it in %s", sel.Sel.Name, r.pathsOwner)})
+		})
+	}
+	return vs
+}

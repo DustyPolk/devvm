@@ -54,8 +54,7 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 					if err != nil {
 						return nil
 					}
-					ms, _ := state.VMFolderProblems(dirs)
-					return ms
+					return state.VMFolderProblems(dirs)
 				},
 			}
 			if asJSON {

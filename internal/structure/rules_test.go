@@ -406,11 +406,35 @@ func ownerCases() []ruleCase {
 	}
 }
 
+// pathCases break and keep pathsOwner.
+func pathCases() []ruleCase {
+	return []ruleCase{
+		{
+			name:  "a path in the data folder outside paths",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nimport \"path/filepath\"\n\nfunc f(d struct{ Data string }) string { return filepath.Join(d.Data, \"x.lock\") }\n"},
+			want:  &want{ruleOwners, "builds a path in Data: name it in internal/paths"},
+		},
+		{
+			name:  "a temp file of its own in the config folder",
+			files: map[string]string{"internal/cli/a.go": "package cli\n\nimport \"os\"\n\nfunc f(d struct{ Config string }) { _, _ = os.CreateTemp(d.Config, \"x.\") }\n"},
+			want:  &want{ruleOwners, "builds a path in Config"},
+		},
+		{
+			name:  "a temp folder named by paths",
+			files: map[string]string{"internal/tools/a.go": "package tools\n\nimport \"os\"\n\nconst prefix = \"x.\"\n\nfunc f(d struct{ Data string }) { _, _ = os.MkdirTemp(d.Data, prefix) }\n"},
+		},
+		{
+			name:  "paths in the data folder in paths",
+			files: map[string]string{"internal/paths/a.go": "package paths\n\nimport \"path/filepath\"\n\nfunc f(d struct{ Data string }) string { return filepath.Join(d.Data, \"x\") }\n"},
+		},
+	}
+}
+
 // Each rule fails on code that breaks it, naming the rule, and passes
 // what it allows.
 func TestRulesFail(t *testing.T) {
 	var broken []string // the layer violations' texts
-	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases()) {
+	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), pathCases()) {
 		t.Run(tc.name, func(t *testing.T) {
 			fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/m\n\ngo 1.27\n")}}
 			for name, src := range tc.files {
@@ -438,6 +462,9 @@ func TestRulesFail(t *testing.T) {
 			}
 			if r.literals == nil {
 				r.literals = devvm().literals
+			}
+			if r.pathsOwner == "" {
+				r.pathsOwner = devvm().pathsOwner
 			}
 			vs := check(m, r)
 			if tc.want == nil {

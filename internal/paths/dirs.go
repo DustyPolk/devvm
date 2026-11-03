@@ -51,7 +51,7 @@ func fromEnv(getenv func(string) string, goos string) (Dirs, error) {
 	if goos == "darwin" {
 		d.UserCache = filepath.Join(d.Home, "Library", "Caches")
 	}
-	d.Lima = filepath.Join(d.Data, "lima")
+	d.Lima = d.DefaultLima()
 	if l := getenv("DEVVM_LIMA_HOME"); l != "" {
 		abs, err := filepath.Abs(l)
 		if err != nil {
@@ -142,6 +142,10 @@ func (d Dirs) Run() string { return filepath.Join(d.Data, "run") }
 // after the VM's own lock (VM.Lock), never before.
 func (d Dirs) ClaimsLock() string { return filepath.Join(d.Run(), "claims.lock") }
 
+// QEMUWrapper is the folder of the wrapper a confined start on a Linux
+// host gives Lima as QEMU, which runs QEMU with the VM's network.
+func (d Dirs) QEMUWrapper() string { return filepath.Join(d.Run(), "qemu") }
+
 // SocketMax is the longest unix socket path macOS takes (Linux takes
 // 108). ssh adds 17 characters to a control socket's while it makes it.
 const SocketMax = 104
@@ -158,6 +162,19 @@ func (d Dirs) CA() string { return filepath.Join(d.Data, "ca") }
 
 // Tools is the shared tools folder, mounted read-only into VMs.
 func (d Dirs) Tools() string { return filepath.Join(d.Data, "tools") }
+
+// ToolImage is a tool image in the share, by its file's name.
+func (d Dirs) ToolImage(file string) string { return filepath.Join(d.Tools(), file) }
+
+// ShareLock is the lock file the devvm writing to the share (a tool
+// image build) or swapping the tools lock holds: beside the share, which
+// VMs mount, not in it.
+func (d Dirs) ShareLock() string { return filepath.Join(d.Data, "tools.lock") }
+
+// ToolsBuildPrefix starts the name of the folder of its own, in the data
+// folder, that a shared tools build writes its tool images into, with
+// os.MkdirTemp's random ending after it.
+const ToolsBuildPrefix = "tools-build."
 
 // ToolLock is the lock file the shared tools are resolved into.
 func (d Dirs) ToolLock() string { return filepath.Join(d.Data, "mise.lock") }
@@ -201,6 +218,9 @@ func (d Dirs) OCIBuildLock() string { return filepath.Join(d.Data, "oci-build.lo
 // shared tools, and tried exclusively by devvm gc --tool-images --force.
 func (d Dirs) MakingLock() string { return filepath.Join(d.Data, "making.lock") }
 
+// DefaultLima is devvm's Lima home when DEVVM_LIMA_HOME doesn't move it.
+func (d Dirs) DefaultLima() string { return filepath.Join(d.Data, "lima") }
+
 // LimaVM is a VM's folder in devvm's Lima home.
 func (d Dirs) LimaVM(vm string) string { return filepath.Join(d.Lima, vm) }
 
@@ -217,6 +237,15 @@ func (d Dirs) AgentKeys() string { return filepath.Join(d.Data, "agent-keys.json
 
 // RetentionRun is touched when retention last ran.
 func (d Dirs) RetentionRun() string { return filepath.Join(d.Data, "retention.run") }
+
+// RetentionLock is the lock file the devvm applying the retention
+// settings holds, so that one at a time applies them.
+func (d Dirs) RetentionLock() string { return filepath.Join(d.Data, "retention.lock") }
+
+// GroupsLock is the lock file each devvm joining or leaving a group, or
+// working a group's links out again, holds throughout, so that they take
+// turns.
+func (d Dirs) GroupsLock() string { return filepath.Join(d.Data, "groups.lock") }
 
 // Layers holds the user's own layers.
 func (d Dirs) Layers() string { return filepath.Join(d.Config, "layers") }

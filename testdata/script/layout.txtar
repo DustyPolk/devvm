@@ -33,8 +33,10 @@ exec devvm ls
 cmp $CFG/version want/version
 
 # A target VM that publishes a port, and a client VM with a link to it
-# and a secret, both with network policy and forwarding a port.
-exec devvm ports -g 3000
+# and a secret, both with network policy and forwarding a port, one free
+# on this host, so the forwarders start whatever else listens.
+free_port PORT
+exec devvm ports -g $PORT
 project db
 exec devvm --network-policy --no-git-protect
 exec devvm link publish 5432
@@ -94,10 +96,6 @@ logs/runs/X.log
 making.lock
 run
 run/builds
-run/builds/devvm-img-X
-run/builds/devvm-img-X/run
-run/builds/devvm-img-X/run/sandbox.sb
-run/builds/devvm-img-X/run/started
 run/claims.lock
 run/link-X.ctl
 run/link-X.sock
@@ -175,9 +173,6 @@ logs/runs/X.log
 making.lock
 run
 run/builds
-run/builds/devvm-img-X
-run/builds/devvm-img-X/run
-run/builds/devvm-img-X/run/started
 run/claims.lock
 run/link-X.ctl
 run/link-X.sock

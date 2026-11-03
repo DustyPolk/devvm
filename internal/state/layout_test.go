@@ -113,34 +113,55 @@ func TestCheckLayoutMigrationFails(t *testing.T) {
 }
 
 // doctor's findings in the VMs' folder: what isn't a VM's folder, and a
-// VM's folder without vm.json; a VM's folder with one is fine.
+// VM's folder without vm.json, and one it can't read, which it says
+// rather than leaving out; a VM's folder with one is fine.
 func TestVMFolderProblems(t *testing.T) {
-	d := testDirs(t)
-	if ms, err := VMFolderProblems(d); err != nil || len(ms) != 0 {
-		t.Fatalf("no VMs' folder: %v, %v", ms, err)
+	if os.Getuid() == 0 {
+		t.Skip("root reads any folder")
 	}
-	const good, lockOnly = "0123456789abcd", "0123456789abce"
+	d := testDirs(t)
+	if ms := VMFolderProblems(d); len(ms) != 0 {
+		t.Fatalf("no VMs' folder: %v", ms)
+	}
+	const good, lockOnly, locked = "0123456789abcd", "0123456789abce", "0123456789abcf"
 	write(t, d.VM("devvm-a-"+good).State(), "{}")
 	write(t, d.VM("devvm-b-"+lockOnly).Lock(), "")
+	write(t, d.VM("devvm-c-"+locked).State(), "{}")
 	write(t, filepath.Join(d.VMs(), "notes.txt"), "x")
 	if err := os.MkdirAll(filepath.Join(d.VMs(), "devvm-old"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	ms, err := VMFolderProblems(d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := make([]string, len(ms))
-	for i, m := range ms {
-		got[i] = m.Names()
-	}
+	unreadable(t, d.VMDir(locked))
 	want := []string{
 		"vm_folder_stateless path=" + d.VMDir(lockOnly),
 		"vms_stray path=" + filepath.Join(d.VMs(), "devvm-old") + " vms=" + d.VMs(),
 		"vms_stray path=" + filepath.Join(d.VMs(), "notes.txt") + " vms=" + d.VMs(),
+		"vms_unreadable path=" + d.VMDir(locked),
 	}
-	slices.Sort(got)
-	if !slices.Equal(got, want) {
+	if got := problemNames(VMFolderProblems(d)); !slices.Equal(got, want) {
 		t.Errorf("VMFolderProblems = %q, want %q", got, want)
 	}
+	unreadable(t, d.VMs())
+	if got, want := problemNames(VMFolderProblems(d)), []string{"vms_unreadable path=" + d.VMs()}; !slices.Equal(got, want) {
+		t.Errorf("an unreadable VMs' folder: VMFolderProblems = %q, want %q", got, want)
+	}
+}
+
+// unreadable takes every permission off dir until the test ends.
+func unreadable(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.Chmod(dir, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // a folder's mode, the one it had
+}
+
+// problemNames are ms in names mode, sorted.
+func problemNames(ms []msg.M) []string {
+	got := make([]string, len(ms))
+	for i, m := range ms {
+		got[i] = m.Names()
+	}
+	slices.Sort(got)
+	return got
 }

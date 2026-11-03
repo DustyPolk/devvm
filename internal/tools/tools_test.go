@@ -429,7 +429,7 @@ func TestRefresh(t *testing.T) {
 	if !bytes.Equal(read(t, e.Dirs.ToolLock()), newer) {
 		t.Error("the lock isn't the newer one")
 	}
-	if held, _ := platform.LockHeld(e.shareLock()); held {
+	if held, _ := platform.LockHeld(e.Dirs.ShareLock()); held {
 		t.Error("the share's lock is still held")
 	}
 	// Check says a failure, and carries on.
@@ -577,7 +577,7 @@ func (e env) noLeftovers(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(e.Dirs.Data, "tools-build.*")); len(left) > 0 {
 		t.Errorf("left %q", left)
 	}
-	if held, _ := platform.LockHeld(e.shareLock()); held {
+	if held, _ := platform.LockHeld(e.Dirs.ShareLock()); held {
 		t.Error("the share's lock is still held")
 	}
 }
@@ -631,7 +631,7 @@ func TestBuildFolder(t *testing.T) {
 			!bytes.Equal(read(t, filepath.Join(spec.Out, ".build", "mise.toml")), read(t, e.configFile())) {
 			t.Error("the build's .build folder isn't the lock and mise.toml")
 		}
-		if held, err := platform.LockHeld(e.shareLock()); !held || err != nil {
+		if held, err := platform.LockHeld(e.Dirs.ShareLock()); !held || err != nil {
 			t.Errorf("the share isn't locked during the build: %v", err)
 		}
 		return nil
@@ -769,15 +769,25 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 }
 
 // Another devvm holding the share is waited for, saying so, until it lets
-// go or the run ends; the lock is out of the share VMs mount.
+// go or the run ends; the lock is out of the share VMs mount, and
+// ShareBusy says whether another devvm holds it.
 func TestLockShare(t *testing.T) {
 	e := newEnv(t)
+	if err := os.MkdirAll(e.Dirs.Data, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if e.ShareBusy() {
+		t.Error("ShareBusy before anything holds it")
+	}
 	unlock, err := e.LockShare(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Dir(e.shareLock()) != e.Dirs.Data {
-		t.Errorf("lock %s", e.shareLock())
+	if filepath.Dir(e.Dirs.ShareLock()) != e.Dirs.Data {
+		t.Errorf("lock %s", e.Dirs.ShareLock())
+	}
+	if !e.ShareBusy() {
+		t.Error("ShareBusy while held = false")
 	}
 	soon, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
@@ -799,6 +809,9 @@ func TestLockShare(t *testing.T) {
 	unlock()
 	if err := <-got; err != nil {
 		t.Errorf("LockShare once let go = %v", err)
+	}
+	if e.ShareBusy() {
+		t.Error("ShareBusy once let go = true")
 	}
 }
 

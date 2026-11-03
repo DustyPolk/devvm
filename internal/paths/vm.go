@@ -8,8 +8,9 @@ import "path/filepath"
 //	          devvm made for it (state.VM)
 //	lock      held by each change to vm.json
 //	policy    its own network policy rules
-//	backend/  its backend's files: what it set (record.json), the ssh
-//	          key and host key it logs in with, its port forwarder's
+//	backend/  its backend's files: which ports Lima forwards (ports),
+//	          and its port forwarder's pid, status, log, lock and the
+//	          host key it pins (ports.*)
 //	run/      what its runs leave: pids, its proxy's files, its sandbox
 //	          profile, its secrets' bindings, its links' list
 //	logs/     its proxy's decisions and output, its link session's
@@ -28,7 +29,8 @@ func (v VM) Lock() string { return filepath.Join(v.Dir, "lock") }
 // Policy holds the VM's own network policy rules.
 func (v VM) Policy() string { return filepath.Join(v.Dir, "policy") }
 
-// Backend is the folder of the VM's backend's files.
+// Backend is the folder of the VM's backend's files: its port record
+// (Ports) and its port forwarder's (Forwarder).
 func (v VM) Backend() string { return filepath.Join(v.Dir, "backend") }
 
 // Run is the folder of what the VM's runs leave: pids, its proxy's files,
