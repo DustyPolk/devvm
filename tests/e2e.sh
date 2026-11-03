@@ -1039,7 +1039,7 @@ lk_policy_back() {
     lk_until 10 lk_resolves "$lk_vc" db && lk_until 20 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240"; }
 lk_alpine() { local pa va r=0
   pa=$(newproj "${lk_x}alp")
-  nd launch "$pa" exit --from alpine:3 --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none base; va=$vm
+  nd launch "$pa" exit --from alpine:3 --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none; va=$vm
   if ! { [[ -n $va ]] && grep -qx libc=musl "$(vmdir "$va")/state"; }; then echo "no Alpine VM"; tail -5 "$work/last.log"; return 1; fi
   lk_dv "$pa" link add "${lk_x}db" 80 && lk_said "==> link_added name=${lk_x}db port=80 target=$lk_v1 vm=$va" || r=1
   (( r == 0 )) && echo "its ip_unprivileged_port_start: $(lk_root "$va" 'cat /proc/sys/net/ipv4/ip_unprivileged_port_start')" &&
