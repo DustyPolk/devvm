@@ -136,6 +136,14 @@ while (( $# )); do
   shift
 done
 [[ -z $engines || $backend == docker ]] || usage
+# OpenSSL first on PATH, before anything is built: the CA checks' HTTPS server is openssl s_server,
+# and LibreSSL's (macOS's /usr/bin/openssl) cuts the VM's OpenSSL client off mid-request.
+ossl=$(openssl version 2>/dev/null)
+if [[ $ossl != OpenSSL* ]]; then
+  fix='brew install openssl@3, then put $(brew --prefix openssl@3)/bin first on PATH'
+  [[ "$(uname -s)" == Darwin ]] || fix="install your distribution's openssl package"
+  echo "e2e: openssl is ${ossl:-missing}, and e2e needs OpenSSL: $fix" >&2; exit 1
+fi
 # The Docker engines checked: this machine's on Linux; on macOS a Linux one in a VM, then Desktop's.
 if [[ $backend == docker && -z $engines ]]; then
   if [[ "$(uname -s)" == Darwin ]]; then engines="linux desktop"; else engines=linux; fi

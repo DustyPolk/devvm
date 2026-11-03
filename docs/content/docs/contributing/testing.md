@@ -22,6 +22,8 @@ The same code and tests run on macOS and Linux; what differs is behind build tag
 
 `tests/e2e.sh` checks each side where it runs: on Linux, the `.git` protection checks become one that it's off and devvm says so, and the Keychain check is left out.
 
+On macOS, `tests/e2e.sh` also needs OpenSSL as `openssl`, because its CA checks serve HTTPS with `openssl s_server`, and the LibreSSL that macOS ships as `/usr/bin/openssl` cuts the VM's OpenSSL client off mid-request. Install it with `brew install openssl@3`, then put `$(brew --prefix openssl@3)/bin` first on your `PATH`, because Homebrew doesn't link it into its own `bin`. e2e checks `openssl version` before it builds anything, and when `openssl` is LibreSSL or missing, it stops in one line that names the install command. On Linux, `openssl` is OpenSSL, and Ubuntu's images have it installed, as `ca-certificates` needs it.
+
 ## Linux hosts
 
 Test in a Lima VM with nested virtualization, which needs an M3 or newer and macOS 15 or newer. Give it a Lima home of its own, so its VMs stay apart from yours:
